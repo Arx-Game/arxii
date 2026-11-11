@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from django.test import TestCase
 
+from world.areas.constants import AreaLevel
 from world.areas.tests.test_worldmap import tiny_map
 from world.areas.worldmap.constants import Terrain
 from world.areas.worldmap.models import TerrainPip
@@ -21,13 +22,21 @@ from world.npc_services.models import NameCulture, NameCultureEntry, NamePart
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.almanach import chartered_extent, plant_rung, rung_area_for_title
 from world.societies.houses.constants import TitleStation, TitleTier
+from world.societies.houses.demography import prosperity_modifier_for
 from world.societies.houses.layout import (
     LayoutRefused,
     lay_out_realm,
     parse_layout,
     preview_layout,
 )
-from world.societies.houses.models import Domain, FealtyEdge, Title, TitleClaim
+from world.societies.houses.models import (
+    Domain,
+    DominionConfig,
+    FealtyEdge,
+    TerrainCalibration,
+    Title,
+    TitleClaim,
+)
 
 PLACE_NAMES = [
     "Ashford",
@@ -78,6 +87,15 @@ class LayOutRealmTests(TestCase):
         NameCulture.objects.create(name="Empty test")
         cls.region = create_region_map(name="Testland", anchor_x=0, anchor_y=0, width_cells=2)
         import_region_map_file(region=cls.region, file_name="t.map", data=tiny_map().encode())
+        # People fit the land (#5069 slice 2): the map's land is plain; a pip feeds 100,
+        # a seat ten times its pip, a fresh layout fills half.
+        TerrainCalibration.objects.create(
+            terrain=Terrain.PLAIN, capacity_per_pip=100, prosperity_modifier=5
+        )
+        dials = DominionConfig.load()
+        dials.barony_capacity_factor = 10
+        dials.layout_fill_pct = 50
+        dials.save()
         cls.kingdom = plant_rung(realm=cls.realm, tier=TitleTier.KINGDOM, name="Luxen")
         # the kingdom's outline: the map's land half, lake included, as the owner draws it
         cls.outline = {
@@ -143,13 +161,40 @@ class LayOutRealmTests(TestCase):
             seat_barony = Title.objects.get(seat_domain=county.seat_domain, tier=TitleTier.BARONY)
             assert len(footprint_of(rung_area_for_title(seat_barony))) == 1
             domain = Domain.objects.get(pk=rung_area_for_title(county).pk)
-            assert domain.population == 120 * len(county_pips)
+            # People fit the land (#5069 slice 2): the county's own plain pips (its seat
+            # barony's pip and any water excluded) at 100 a pip, filled to the dial.
+            county_area_pk = rung_area_for_title(county).pk
+            barony_pips = set().union(
+                *(
+                    footprint_of(rung_area_for_title(b))
+                    for b in Title.objects.filter(realm=self.realm, tier=TitleTier.BARONY)
+                    if rung_area_for_title(b).parent_id == county_area_pk
+                )
+            )
+            own_land = {p for p in county_pips if p not in self.water} - barony_pips
+            assert domain.population_capacity == 100 * len(own_land)
+            assert domain.population == domain.population_capacity * 50 // 100
+            barony_domain = Domain.objects.get(pk=rung_area_for_title(seat_barony).pk)
+            assert barony_domain.population_capacity == 100 * 10
+            assert barony_domain.population == 100 * 10 * 50 // 100
             assert domain.description.startswith("PLACEHOLDER:") or county == seat_county
         baronies = Title.objects.filter(realm=self.realm, tier=TitleTier.BARONY)
         assert baronies.count() == 16  # a seat barony and one more per county
-        assert Domain.objects.get(pk=rung_area_for_title(chain_duchy).pk).prosperity == 65
+        # A duchy is its counties (#5069): no Domain above county, so the capital rule
+        # shows on the counties and a duchy's figure prose lives on its Area.
+        assert not Domain.objects.filter(area__level__gt=AreaLevel.COUNTY).exists()
+        # the capital rule plus the terrain's pull (plain +5, diluted by any water pips)
+        seat_domain = Domain.objects.get(pk=rung_area_for_title(seat_county).pk)
+        seat_pull = prosperity_modifier_for(seat_domain)
+        assert 0 < seat_pull <= 5
+        assert seat_domain.prosperity == 65 + seat_pull
         other = next(d for d in duchies if d.pk != chain_duchy.pk)
-        assert Domain.objects.get(pk=rung_area_for_title(other).pk).prosperity == 45
+        other_county = next(
+            c for c in counties if rung_area_for_title(c).parent_id == rung_area_for_title(other).pk
+        )
+        other_domain = Domain.objects.get(pk=rung_area_for_title(other_county).pk)
+        assert other_domain.prosperity == 45 + prosperity_modifier_for(other_domain)
+        assert rung_area_for_title(other).description.startswith("PLACEHOLDER:")
         assert other.name in PLACE_NAMES
         names = [t.name for t in Title.objects.filter(realm=self.realm) if t.name]
         assert len(names) == len(set(names)), names
@@ -182,9 +227,8 @@ class LayOutRealmTests(TestCase):
         assert chartered_extent(old) == set().union(
             *(footprint_of(rung_area_for_title(f)) for f in fiefs)
         )
-        assert Domain.objects.get(pk=rung_area_for_title(old).pk).description == (
-            "The crown before the revolt."
-        )
+        # a titular crown has no Domain; its lore lives on its own Area (#5069)
+        assert rung_area_for_title(old).description == "The crown before the revolt."
         # the same titular line again is refused by name
         again = lay_out_realm(self.realm, parse_layout("kingdom Old Luxen | titular\n"))
         assert any("already on the ladder" in r for r in again.kingdoms[0].refusals)

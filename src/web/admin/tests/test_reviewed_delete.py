@@ -300,6 +300,11 @@ class DomainAndFealtyAdminTests(TestCase):
                 "holdings-INITIAL_FORMS": 0,
                 "holdings-MIN_NUM_FORMS": 0,
                 "holdings-MAX_NUM_FORMS": 1000,
+                # the terrain mix inline (#5069) is read-only but still a formset
+                "terrain_counts-TOTAL_FORMS": 0,
+                "terrain_counts-INITIAL_FORMS": 0,
+                "terrain_counts-MIN_NUM_FORMS": 0,
+                "terrain_counts-MAX_NUM_FORMS": 1000,
             },
         )
         self.assertEqual(resp.status_code, 302, resp.content[:500])

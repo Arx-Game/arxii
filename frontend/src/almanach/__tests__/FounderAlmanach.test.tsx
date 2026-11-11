@@ -30,6 +30,7 @@ const rows = [
     seat_domain_id: null,
     comes_with: '',
     chain_top_id: 1,
+    population: 0,
     claimant_name: '',
   },
   {
@@ -50,6 +51,7 @@ const rows = [
     seat_domain_id: null,
     comes_with: '',
     chain_top_id: 2,
+    population: 0,
     claimant_name: '',
   },
   // Fervor's own internal chain (its seat county Arsura, its seat barony
@@ -74,6 +76,7 @@ const rows = [
     seat_domain_id: 10,
     comes_with: 'Fervor',
     chain_top_id: 1,
+    population: 0,
     claimant_name: '',
   },
   {
@@ -94,6 +97,7 @@ const rows = [
     seat_domain_id: 10,
     comes_with: 'Fervor',
     chain_top_id: 1,
+    population: 0,
     claimant_name: '',
   },
   {
@@ -114,6 +118,7 @@ const rows = [
     seat_domain_id: 11,
     comes_with: '',
     chain_top_id: 5,
+    population: 0,
     claimant_name: '',
   },
 ] satisfies LadderRow[];

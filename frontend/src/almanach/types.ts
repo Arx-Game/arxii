@@ -102,6 +102,8 @@ export interface AlmanachHouseholdMember {
 /** A ladder-row summary the way `document.realm.demesne`/`.vassals` list it
  * (`_row_summary`, `almanach_reads.py`). */
 export interface AlmanachRealmRowSummary {
+  /** the people on the rung: land's own by formula, a duchy's or kingdom's the sum (#5069) */
+  population: number;
   title_id: number;
   name: string;
   held_by: string;
@@ -329,12 +331,19 @@ export interface RungDocument {
     station: string;
     pledged_liege: { title_id: number; name: string } | null;
   };
+  /** The rung's own land: a county's hinterland or a barony's seat; null above
+   * county, which is organization with no ground of its own (#5069). */
   demesne: {
     domain_id: number;
     name: string;
     description: string;
     hall: string;
+    /** the people now, by formula; `population_capacity` is what the terrain can feed */
     population: number;
+    population_capacity: number;
+    /** a staff figure standing in for the terrain's, or null */
+    capacity_override: number | null;
+    terrain: { terrain: string; label: string; pips: number }[];
     prosperity: number;
     unrest: number;
     defenses: number;
@@ -417,6 +426,7 @@ export type AlmanachActionKey =
   | 'almanach_edit_house'
   | 'almanach_swear'
   | 'almanach_describe_demesne'
+  | 'almanach_set_capacity'
   | 'almanach_add_holding'
   | 'almanach_plan_estate'
   | 'almanach_edit_kin'

@@ -555,9 +555,14 @@ class FounderJourneyTests(HouseCreatorTestData):
         ascua_domain = Domain.objects.get(area=_rung_area(self.ascua))
         assert ascua_domain.hall is not None
         assert ascua_domain.hall.name == "the Torre Accesa"
-        fervor_domain = Domain.objects.get(area=_rung_area(self.fervor))
-        assert fervor_domain.description == "the duchy"
-        assert [s.name for s in fervor_domain.land_shapes.all()] == ["Coast"]
+        # A duchy has no Domain (#5069): its prose lives on its Area, its land shapes on
+        # the county of its chain.
+        assert not Domain.objects.filter(area=_rung_area(self.fervor)).exists()
+        # read by pk: the fixture's cached area chain is a per-test copy, not the row
+        fervor_area = Area.objects.get(pk=_rung_area(self.fervor).pk)
+        assert fervor_area.description == "the duchy"
+        arsura_domain = Domain.objects.get(area=_rung_area(self.arsura))
+        assert [s.name for s in arsura_domain.land_shapes.all()] == ["Coast"]
 
         # The HEAD row holds the title.
         head = Kinsperson.objects.get(name="Estuosa")

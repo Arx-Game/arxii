@@ -279,7 +279,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `coefficient`, `cap`, `half_saturation`; one row each for DR and MAX_HEALTH;
     seeded via `seed_thread_survivability_tuning()`, staff-tunable in admin, #1175)
   - **Combat-side Spec A surface (in `world/combat`):** `CombatPull`,
-    `CombatPullResolvedEffect`
+    `CombatPullResolvedEffect`. A pull's per-use bonuses (FLAT_BONUS, INTENSITY_BUMP)
+    reach only the uses its threads relate to: `pull_helpers.round_pull_bonus` matches
+    each effect's thread with `_anchor_in_action` against the use's `pull_action_context`,
+    the context `commit_combat_pull` validates against (#5067)
   - **Combat AoE targeting (#1321, in `world/combat`):** `CombatRoundActionTarget` (join
     table; per-`CombatOpponent` row for AREA/FILTERED_GROUP technique actions)
   - **Dramatic moment tagging (#545 / #1139):**
@@ -2139,7 +2142,8 @@ Social structures, organizations, reputation, and legend tracking.
 Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 (`family` FK → `roster.Family`) on the kinship graph (#2062, ADR-0098).
 
-- **Models** (`world/societies/houses/`): `NobiliaryParticle`, `HouseRecognitionRule`, `FealtyEdge`, `SuccessionLaw`, `Title`, `LandShape`, `Domain`, `DomainGarrisonPost`, `HoldingKind`, `DomainHolding`, `DomainImprovementDetails`, `DomainCrisis`, `CrisisIntel`, `MarriagePact`, `PactCommitment`; plus `Organization.family` / `Organization.default_succession_law` / `Organization.house_state` / `Organization.published_at`
+- **Nobility is macro, the grid keeps developments (#5069, ADR-5069-A; slice 1 #5071):** a `Domain` exists only at BARONY and COUNTY (a barony is one pip, a county its baronies plus a rural-pool hinterland; a duchy and above are organization with no ground, their numbers sums on read, their prose on `Area.description`); `almanach.house_holding_area` answers who holds any rung; population is a read-time formula (`demography.population_now`, base + `population_rebased_at` toward `population_capacity`), capacity is terrain (`DomainTerrainCount` cached at every carve, times the authored `TerrainCalibration`, times `DominionConfig.barony_capacity_factor` on a barony); a Domain's TERRITORY gross is people times `DominionConfig.coppers_per_head` (ADR-0319 amended; a Turf still pays by rooms). Sited `DomainHolding`s (ADR-0320/0321/0322) are the grid layer and stay. **Dormancy (slice 3, #5078):** `Organization.dormant_since` marks a house (an organization with a family and income) nobody plays, stamped by one statement at the head of `run_weekly_economy` and cleared by a member's login or roster approval; the income, materials, interest and obligation phases skip it, the land keeps running by formula, every phase logs rows and wall time. Details: [houses.md](houses.md) Models and "House state / published lifecycle".
+- **Models** (`world/societies/houses/`): `NobiliaryParticle`, `HouseRecognitionRule`, `FealtyEdge`, `SuccessionLaw`, `Title`, `LandShape`, `Domain`, `DominionConfig`, `TerrainCalibration`, `DomainTerrainCount`, `DomainGarrisonPost`, `HoldingKind`, `DomainHolding`, `DomainImprovementDetails`, `DomainCrisis`, `CrisisIntel`, `MarriagePact`, `PactCommitment`; plus `Organization.family` / `Organization.default_succession_law` / `Organization.house_state` / `Organization.published_at`
 - **Charter options point at real things (#4205, ADR-4205; "aspects" until #4532):** `HouseCharterOption.being` /
   `being_nickname` (PROTECT, nullable) say an authored answer IS a god or a totem and
   what a house calls it; `codex_entry` stays the lore target; `target_entry_id` is the

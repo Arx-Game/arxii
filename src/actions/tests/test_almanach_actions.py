@@ -29,6 +29,7 @@ from actions.definitions.almanach import (
     AlmanachRecordClaimAction,
     AlmanachRemoveHoldingAction,
     AlmanachRenameHoldingAction,
+    AlmanachSetCapacityAction,
     AlmanachSetPledgedLiegeAction,
     AlmanachSetStationAction,
     AlmanachSiteHoldingAction,
@@ -92,6 +93,29 @@ class AlmanachActionTests(TestCase):
             parent_title_id=self.kingdom.pk,
         )
         assert not result.success
+
+    def test_staff_sets_and_clears_a_seats_capacity(self) -> None:
+        # A capital and a border fort sit on the same ground (#5069 slice 2): staff name
+        # the figure on the barony page; blank hands it back to the terrain.
+        seat = Domain.objects.get(pk=self.kingdom.seat_domain_id)
+        assert (
+            not AlmanachSetCapacityAction()
+            .run(self.player, domain_id=seat.pk, capacity=300000)
+            .success
+        )
+
+        result = AlmanachSetCapacityAction().run(self.staff, domain_id=seat.pk, capacity=300000)
+
+        assert result.success, result.message
+        seat.refresh_from_db()
+        assert seat.population_capacity == 300000
+        assert seat.capacity_override == 300000
+        result = AlmanachSetCapacityAction().run(self.staff, domain_id=seat.pk, capacity=None)
+        assert result.success, result.message
+        seat.refresh_from_db()
+        assert seat.capacity_override is None
+        assert seat.population_capacity == 0, "no terrain under a test seat"
+        assert not AlmanachSetCapacityAction().run(self.staff, domain_id=0, capacity=5).success
 
     def test_staff_plants_names_batches_edits_and_publishes(self) -> None:
         result = AlmanachPlantRungAction().run(

@@ -58,13 +58,37 @@ streams→treasury spine, and marriage pacts fire coded commitments. Lives in
   (→ `Organization`, exactly one; the house form carries what ADR-0313's
   `Title.claimant_org` held before migration 0369 dropped it), `basis`, `since`.
   A claim changes nothing about who holds the title.
-- **`Domain`** - decorates an `Area` at any level (the #1884 demo seed uses
-  `AreaLevel.REGION`; a ladder rung's own chain uses the tier-appropriate
-  `BARONY`/`COUNTY`/`DUCHY`/... level via `TIER_TO_AREA_LEVEL`, #3983; no
-  literal DOMAIN level exists) (OneToOne PK): owner org, `hall` (the seat's
-  own BUILDING-level Area — never a repeat of the demesne's own name,
-  #3983), `land_shapes` M2M (`LandShape`, below), + PLACEHOLDER civ stats
-  (population/prosperity/unrest/defenses). Abstract, no room grids yet.
+- **`Domain`** - the land a noble holds, decorating an `Area` (OneToOne PK): owner
+  org, `hall` (the seat's own BUILDING-level Area — never a repeat of the demesne's
+  own name, #3983), `land_shapes` M2M (`LandShape`, below), + PLACEHOLDER civ stats
+  (population/prosperity/unrest/defenses). **Since #5069 (ADR-5069-A) a Domain exists
+  only at BARONY and COUNTY:** a barony is one pip, a holding and its surroundings; a
+  county is its baronies plus a hinterland whose `population` is the rural pool, the
+  people outside every barony. A duchy, kingdom or empire is its counties, duchies or
+  kingdoms, organization with no ground of its own: `plant_rung` makes no Domain for
+  those chain Areas, their prose lives on their `Area.description`, and
+  `almanach.house_holding_area(area)` answers who holds any rung (a Domain's owner
+  where land has one, the `Title` standing on the area above county). **Population is
+  a formula, not a tick:** `population` is the base as of `population_rebased_at`;
+  `demography.population_now(domain, at=)` moves it toward `population_capacity` by
+  the in-character months elapsed (`DominionConfig.population_rate_pct_per_month`
+  of the remaining gap each month, in either direction); a read never writes, and a
+  write is a rebase (`demography.rebase_population`, a staff edit of `population` in
+  the admin, layout). Capacity is terrain: `DomainTerrainCount` (one row per
+  terrain the holding's own footprint pips are, written by
+  `demography.refresh_terrain_counts(area)` from every carve and layout, never read
+  back from the forty-thousand-pip terrain table) times the authored
+  `TerrainCalibration.capacity_per_pip`, times `DominionConfig.barony_capacity_factor`
+  on a barony; a terrain with no calibration row feeds nobody. The Domain admin's
+  "Recount terrain and capacity" action and the Terrain calibration admin's
+  "Recount every holding" rewrite the cache after a calibration change.
+- **`DominionConfig`** (#5069) - singleton of the noble layer's dials:
+  `population_rate_pct_per_month`, `coppers_per_head` (a Domain's TERRITORY gross is
+  `population_now` times this times `income_multiplier`; ADR-0319 amended, a Turf still
+  pays by rooms), `barony_capacity_factor`. Config values never gate.
+- **`TerrainCalibration`** (#5069) - authored, one row per `Terrain` (natural key
+  `terrain`, `CreditedContent`, in `CONTENT_MODELS`): `capacity_per_pip`,
+  `prosperity_modifier`. **`DomainTerrainCount`** - the cache above.
 - **`LandShape`** (#3983) — authored catalog of a demesne's ground (Coast,
   Reefs, Hills, Volcanic, Marsh, Forest). `NaturalKeyMixin` (`name`) +
   `CreditedContent`, registered in `CONTENT_MODELS`; see the Almanach de
@@ -697,7 +721,9 @@ kingdom | potential
   county took the `seat` name. A duchy the walk plants is a CG
   slot only when its line says `claimable` (`held` is the default); counties and baronies keep
   `plant_rung`'s default.
-- **Figures** — county population `120 * pips`, summed upward through duchy and kingdom;
+- **Figures** — county population `120 * pips` (slice 2 of #5069 replaces the constant
+  with terrain capacity); a duchy and above have no Domain (ADR-5069-A), so their numbers
+  are sums on read and only their figure prose is written, onto the rung's `Area.description`;
   prosperity 65 on the capital child, 45 on the others; every generated `Domain.description`
   starts with `PLACEHOLDER:` so the lore pass finds them; a `lore` word replaces it.
 - **Action** `almanach_lay_out` (`realm_id`, `layout`, `commit`; staff only): `commit=false`
@@ -772,9 +798,13 @@ and unavailable on the SQLite test tier. The graph also loads the realm's claims
 
 - **`rung_document(title) -> RungDocument`** (`almanach_pages.py`) gains `chartered_fiefs`,
   `chartered_by`, `claims` and `chain` (the realm first, then every chain top above, nearest
-  last) and the title block carries `station` and `pledged_liege` (#4983). On the title page
-  these are **Present Holdings** (the vassals table, "nothing" when a titular title holds no
-  land), **Historical Charter** (the chartered fiefs, whose charters hold this rung, and every
+  last) and the title block carries `station` and `pledged_liege` (#4983). Its `demesne` is
+  the rung's own Domain, so it is `None` above county (#5069) and, where present, its
+  `population` is `demography.population_now` (the people by formula, never the stored base)
+  beside a `population_capacity`. On the title page
+  these are **Holdings** (the rungs beneath, in two groups, **Held** by this house and held by
+  **Vassals**, each row with its people; "nothing" when a titular title holds no land; #5069
+  slice 2 replaced "Present Holdings"), **Historical Charter** (the chartered fiefs, whose charters hold this rung, and every
   "claimed by X" line), the chain rail above, and a globe beside the heading ("View on the
   map" to a screen reader) that opens the Atlas on the first region map with this title
   selected (`world-builder/atlas/mapFocus.ts`). The name field stands alone under the heading,
@@ -809,7 +839,9 @@ and unavailable on the SQLite test tier. The graph also loads the realm's claims
 - **Seat / demesne**: every rung's title carries a seat chain down to the barony at its bottom
   (`plant_rung`); "demesne" counts BARONY-tier titles a house holds anywhere in its own Area
   subtree — a barony seated inside a vassal's own county is still the house's own land (Decision
-  3), not only the baronies on its own top chain.
+  3), not only the baronies on its own top chain. Only the chain's county and barony carry a
+  `Domain` (#5069); the liege walk, the map's holder read and a tax levy's controller all go
+  through `house_holding_area`, which reads the `Title` standing on a rung above county.
 - **Vassals**: direct child rungs that don't sit on the row's own chain; an unclaimed row counts
   child rows, a held row counts the distinct houses among held children (one house holding two
   direct child chains counts once).
@@ -830,6 +862,20 @@ claim on a title another house holds is a `TitleClaim` row with `house` set (#49
 `Title.claimant_org`); no service presses a claim into a holder change yet. `Organization.published_at`
 (null = draft) is the Almanach's own visibility flag, set/cleared by `publish_house`/
 `unpublish_house` — see "Ladder rules" above for how a `for_founder` read hides unpublished rungs.
+
+**Dormancy (#5069 slice 3, ADR-5069-A).** `Organization.dormant_since` (null = awake) marks a
+house nobody plays. `houses.dormancy.mark_dormant_houses` runs first in `run_weekly_economy`:
+one set-based statement stamps every awake organization that has a `family`, has an income
+stream, and has no live member whose character sits on the roster under an account that logged
+in within `DominionConfig.dormancy_window_days`. Presence is the test, never actions: a house in
+a lull keeps accruing, uncapped; a staff-made house whose roster characters nobody has taken up
+(House Katta) sleeps. While dormant, the income, materials, interest and obligation phases skip
+the organization's side, so an apper finds the pool as the last player left it; the land under
+it keeps running by formula (dormancy freezes accumulators, never equilibria). Waking is
+event-driven: `wake_houses_for(account)` from `Account.at_post_login` and from
+`approve_application`, one statement each. An organization with no family (a guild, a temple) is
+never dormant: nobody can app into it and hoard. `dormant_since` is admin and staff API only.
+Every phase of the weekly run logs rows touched and wall time (the tick budget).
 
 ### Founder claims: kin placement + claim grants (Plan B, #3983)
 
@@ -1000,6 +1046,10 @@ held, #4614), `AlmanachVacateHolderAction` (`almanach_vacate_holder`, kwarg `tit
 `AlmanachRenameHoldingAction` (`almanach_rename_holding`) and `AlmanachRemoveHoldingAction`
 (`almanach_remove_holding`: `almanach.remove_holding` drops the holding and its income stream,
 refused while the stream has uncollected income or is still referenced) (#4616),
+`AlmanachSetCapacityAction` (`almanach_set_capacity`: `domain_id` plus `capacity`, a number or
+null; `demography.set_capacity_override` rebases the people, writes `Domain.capacity_override`
+and recounts, so a staff figure stands in for the terrain's until cleared; the barony page's
+capacity control, #5069 slice 2),
 `AlmanachDeleteRungAction` (`almanach_delete_rung`: `almanach.delete_rung` removes a
 chain's Titles, Domains and Areas, refused while held, with rungs, holdings or rooms beneath, or
 when something else still points at the land) and `AlmanachMoveRungAction` (`almanach_move_rung`,

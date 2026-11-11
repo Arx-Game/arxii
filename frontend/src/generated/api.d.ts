@@ -37720,6 +37720,7 @@ export interface components {
       sworn_to: string;
       demesne: number;
       vassals: number;
+      population: number;
       claimable: boolean;
       seat_domain_id: number | null;
       comes_with: string;

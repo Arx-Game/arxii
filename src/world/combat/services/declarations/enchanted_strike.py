@@ -267,7 +267,9 @@ class EnchantedStrikeCast:
         resolver = CombatTechniqueResolver(
             participant=self.participant,
             action=self.action,
-            pull_flat_bonus=_sum_active_flat_bonuses(self.participant, self.participant.encounter),
+            pull_flat_bonus=_sum_active_flat_bonuses(
+                self.participant, technique=technique, cast_check=self.cast_check
+            ),
             fatigue_category=ActionCategory.PHYSICAL,
             offense_check_type=self.cast_check.check_type,
             offense_check_fn=None,

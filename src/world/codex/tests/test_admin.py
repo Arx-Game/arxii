@@ -124,6 +124,20 @@ class CodexEntryAdminTests(TestCase):
         self.assertIn("organization_grants", body)
         self.assertIn("realm_grants", body)
 
+    def test_realm_grant_leads_the_grant_tables(self):
+        """#5062: realm-wide knowledge is the primary path, so its table comes first,
+        named for what it does, and the filings table (not a path) comes last."""
+        from world.codex.admin import CodexEntryAdmin, CodexEntryFilingInline, RealmGrantInline
+
+        self.assertIs(CodexEntryAdmin.inlines[0], RealmGrantInline)
+        self.assertIs(CodexEntryAdmin.inlines[-1], CodexEntryFilingInline)
+        response = self.client.get(reverse("admin:arxii_codexentry_change", args=[self.granted.pk]))
+        body = response.content.decode()
+        self.assertIn("Autogranted: Realm codex grants", body)
+        self.assertIn("Autogranted is everyone who began in the realm.", body)
+        self.assertLess(body.index("realm_grants"), body.index("beginnings_grants"))
+        self.assertLess(body.index("realm_grants"), body.index("filings-TOTAL_FORMS"))
+
     def test_change_form_clue_inline_shows_placements(self):
         RoomClueFactory(clue=self.clue)
         response = self.client.get(reverse("admin:arxii_codexentry_change", args=[self.clued.pk]))

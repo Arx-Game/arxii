@@ -5,7 +5,7 @@
  * seats. A vacant title offers Create Family, which takes it.
  */
 import { Globe } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import {
@@ -16,6 +16,7 @@ import {
   useTitleDocument,
 } from '../queries';
 import { RecordRail, type RecordRailDoor, type RecordRailRow } from '../document/RecordRail';
+import type { AlmanachRealmRowSummary } from '../types';
 import { HoldingRow } from './HoldingRow';
 import { RulerSlot } from './RulerSlot';
 import { PlantRungDialog } from '../ladder/PlantRungDialog';
@@ -44,6 +45,8 @@ export function TitlePage({ titleId }: { titleId: number }) {
   const vacateHolder = useAlmanachMutation('almanach_vacate_holder');
   const { data: housesPayload } = useAllHouses();
   const addHolding = useAlmanachMutation('almanach_add_holding');
+  const setCapacity = useAlmanachMutation('almanach_set_capacity');
+  const [capacityText, setCapacityText] = useState('');
   const { data: holdingKinds } = useHoldingKinds();
   const { data: regionMaps } = useRegionMapsQuery();
   const account = useAccount();
@@ -95,6 +98,20 @@ export function TitlePage({ titleId }: { titleId: number }) {
   }
   const { title, demesne, holdings, books, forces, vassals } = doc;
   const { chartered_fiefs: charteredFiefs, chartered_by: charteredBy, claims, chain } = doc;
+  // Land is a county or a barony (#5069): only land has a demesne, developments and
+  // forces; a duchy and above are organization, their holdings the rungs beneath.
+  const isBarony = title.tier === 'barony';
+  const isCounty = title.tier === 'county' || title.tier === 'march';
+  const heldHere = (v: AlmanachRealmRowSummary) => v.held_by !== '' && v.held_by === title.held_by;
+  const heldRows = vassals.filter(heldHere);
+  const vassalRows = vassals.filter((v) => !heldHere(v));
+  const people = (n: number) => n.toLocaleString('en-US');
+  const terrainWords = (demesne?.terrain ?? []).map((t) => t.label.toLowerCase()).join(', ');
+  const sendCapacity = (capacity: number | null) => {
+    if (demesne == null) return;
+    setCapacity.mutate({ domain_id: demesne.domain_id, capacity });
+    setCapacityText('');
+  };
   const parentRef = { title_id: title.title_id, name: title.name, tier: title.tier };
   const stationWords = { titular: STATES.titular, potential: STATES.potential } as const;
   const stationWord =
@@ -116,13 +133,19 @@ export function TitlePage({ titleId }: { titleId: number }) {
     { label: 'ruler', value: title.holder || 'undefined' },
     { label: 'sworn to', value: title.sworn_to || 'none' },
     { label: 'seat', value: title.seat || 'none' },
-    {
-      label: 'holdings',
-      value: `${holdings.length}, ${holdings.filter((h) => h.unsited).length} unsited`,
-    },
+    ...(demesne
+      ? [
+          { label: 'people', value: people(demesne.population) },
+          {
+            label: 'developments',
+            value: `${holdings.length}, ${holdings.filter((h) => h.unsited).length} unsited`,
+          },
+        ]
+      : []),
+    { label: 'held', value: `${heldRows.length}` },
     {
       label: 'vassals',
-      value: `${vassals.length}, ${vassals.filter((v) => !v.held_by).length} vacant`,
+      value: `${vassalRows.length}, ${vassalRows.filter((v) => !v.held_by).length} vacant`,
     },
   ];
   const doors: RecordRailDoor[] = [];
@@ -189,7 +212,7 @@ export function TitlePage({ titleId }: { titleId: number }) {
             </ol>
           </div>
           <div className="mv">
-            <span className="label">{SECTIONS.present_holdings}</span>
+            <span className="label">{SECTIONS.holdings}</span>
             <ol>
               {vassals.map((v) => (
                 <li key={v.title_id}>
@@ -431,123 +454,182 @@ export function TitlePage({ titleId }: { titleId: number }) {
           </div>
           {demesne && (
             <>
-              <div className="field">
-                <label htmlFor="d-desc">demesne</label>
-                <textarea
-                  id="d-desc"
-                  className="prose"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                />
+              {isCounty && <h4 className="sec">{SECTIONS.hinterland}</h4>}
+              <div className="land">
+                <div className="row3">
+                  <div className="field">
+                    <span className="label">population</span>
+                    <div className="val">{people(demesne.population)}</div>
+                  </div>
+                  <div className="field">
+                    <span className="label">capacity</span>
+                    <div className="val">
+                      {people(demesne.population_capacity)}
+                      {demesne.capacity_override != null && (
+                        <span className="meta"> set by hand</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="field">
+                    <span className="label">prosperity</span>
+                    <div className="val">{demesne.prosperity}</div>
+                  </div>
+                </div>
+                <div className="row3">
+                  <div className="field">
+                    <span className="label">terrain</span>
+                    <div className="val">{terrainWords || <span className="meta">none</span>}</div>
+                  </div>
+                  <div className="field">
+                    <span className="label">unrest</span>
+                    <div className="val">{demesne.unrest}</div>
+                  </div>
+                  <div className="field">
+                    <span className="label">hall</span>
+                    <div className="val">{demesne.hall || <span className="meta">none</span>}</div>
+                  </div>
+                </div>
+                {isBarony && (
+                  <div className="field">
+                    <div className="row3">
+                      <div className="field">
+                        <input
+                          id="d-capacity"
+                          type="number"
+                          min={0}
+                          aria-label="capacity"
+                          placeholder="capacity"
+                          value={capacityText}
+                          onChange={(e) => setCapacityText(e.target.value)}
+                        />
+                      </div>
+                      <div className="field">
+                        <button
+                          type="button"
+                          className="btn sm quiet"
+                          disabled={capacityText.trim() === ''}
+                          onClick={() => sendCapacity(Number(capacityText))}
+                        >
+                          Set
+                        </button>{' '}
+                        <button
+                          type="button"
+                          className="btn sm ghost"
+                          disabled={demesne.capacity_override == null}
+                          onClick={() => sendCapacity(null)}
+                        >
+                          Terrain
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div className="field">
+                  <label htmlFor="d-desc">description</label>
+                  <textarea
+                    id="d-desc"
+                    className="prose"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                </div>
               </div>
-              <div className="row3">
-                <div className="field">
-                  <span className="label">hall</span>
-                  <div className="val">{demesne.hall || <span className="meta">none</span>}</div>
-                </div>
-                <div className="field">
-                  <span className="label">population</span>
-                  <div className="val">{demesne.population}</div>
-                </div>
-                <div className="field">
-                  <span className="label">prosperity</span>
-                  <div className="val">{demesne.prosperity}</div>
-                </div>
-              </div>
+
+              <h4 className="sec">{SECTIONS.developments}</h4>
             </>
           )}
-
-          <h4 className="sec">Holdings</h4>
-          <div className="scroll">
-            <table className="lad">
-              <thead>
-                <tr>
-                  <th scope="col">holding</th>
-                  <th scope="col">type</th>
-                  <th scope="col">site</th>
-                  <th scope="col">state</th>
-                  <th scope="col">
-                    <span className="sr-only">actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {holdings.map((h) => (
-                  <HoldingRow
-                    key={h.holding_id}
-                    holding={h}
-                    kind={(holdingKinds?.results ?? []).find((k) => k.name === h.kind)}
-                  />
-                ))}
-                {holdings.length === 0 && (
+          {demesne && (
+            <div className="scroll">
+              <table className="lad">
+                <thead>
                   <tr>
-                    <td colSpan={5} className="meta">
-                      none
-                    </td>
+                    <th scope="col">holding</th>
+                    <th scope="col">type</th>
+                    <th scope="col">site</th>
+                    <th scope="col">state</th>
+                    <th scope="col">
+                      <span className="sr-only">actions</span>
+                    </th>
                   </tr>
-                )}
-                {demesne && (
-                  <tr>
-                    <td colSpan={5}>
-                      <div className="row3">
-                        <div className="field">
-                          <label htmlFor="h-kind">Add holding</label>
-                          <select
-                            id="h-kind"
-                            value={holdingKindId ?? ''}
-                            onChange={(e) =>
-                              setHoldingKindId(
-                                e.target.value === '' ? null : Number(e.target.value)
-                              )
-                            }
-                          >
-                            {(holdingKinds?.results ?? []).map((k) => (
-                              <option key={k.id} value={k.id}>
-                                {k.name}
-                              </option>
-                            ))}
-                          </select>
+                </thead>
+                <tbody>
+                  {holdings.map((h) => (
+                    <HoldingRow
+                      key={h.holding_id}
+                      holding={h}
+                      kind={(holdingKinds?.results ?? []).find((k) => k.name === h.kind)}
+                    />
+                  ))}
+                  {holdings.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="meta">
+                        none
+                      </td>
+                    </tr>
+                  )}
+                  {demesne && (
+                    <tr>
+                      <td colSpan={5}>
+                        <div className="row3">
+                          <div className="field">
+                            <label htmlFor="h-kind">Add holding</label>
+                            <select
+                              id="h-kind"
+                              value={holdingKindId ?? ''}
+                              onChange={(e) =>
+                                setHoldingKindId(
+                                  e.target.value === '' ? null : Number(e.target.value)
+                                )
+                              }
+                            >
+                              {(holdingKinds?.results ?? []).map((k) => (
+                                <option key={k.id} value={k.id}>
+                                  {k.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="field">
+                            <label htmlFor="h-name">name</label>
+                            <input
+                              id="h-name"
+                              type="text"
+                              value={holdingName}
+                              onChange={(e) => setHoldingName(e.target.value)}
+                            />
+                          </div>
+                          <div className="field">
+                            <span className="label">&nbsp;</span>
+                            <button
+                              type="button"
+                              className="btn sm quiet"
+                              disabled={holdingKindId == null}
+                              onClick={() => {
+                                addHolding.mutate({
+                                  domain_id: demesne.domain_id,
+                                  holding_kind_id: holdingKindId,
+                                  name: holdingName.trim(),
+                                  unsited: true,
+                                });
+                                setHoldingName('');
+                              }}
+                            >
+                              Add holding
+                            </button>
+                          </div>
                         </div>
-                        <div className="field">
-                          <label htmlFor="h-name">name</label>
-                          <input
-                            id="h-name"
-                            type="text"
-                            value={holdingName}
-                            onChange={(e) => setHoldingName(e.target.value)}
-                          />
-                        </div>
-                        <div className="field">
-                          <span className="label">&nbsp;</span>
-                          <button
-                            type="button"
-                            className="btn sm quiet"
-                            disabled={holdingKindId == null}
-                            onClick={() => {
-                              addHolding.mutate({
-                                domain_id: demesne.domain_id,
-                                holding_kind_id: holdingKindId,
-                                name: holdingName.trim(),
-                                unsited: true,
-                              });
-                              setHoldingName('');
-                            }}
-                          >
-                            Add holding
-                          </button>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           <Books books={books} />
-          <Forces forces={forces} />
+          {demesne && <Forces forces={forces} />}
 
-          <h4 className="sec">{SECTIONS.present_holdings}</h4>
+          <h4 className="sec">{SECTIONS.holdings}</h4>
           <div className="scroll">
             <table className="lad">
               <thead>
@@ -555,7 +637,7 @@ export function TitlePage({ titleId }: { titleId: number }) {
                   <th scope="col">title</th>
                   <th scope="col">held by</th>
                   <th scope="col" className="n">
-                    demesne
+                    population
                   </th>
                   <th scope="col" className="n">
                     vassals
@@ -563,16 +645,38 @@ export function TitlePage({ titleId }: { titleId: number }) {
                 </tr>
               </thead>
               <tbody>
-                {vassals.map((v) => (
-                  <tr key={v.title_id}>
-                    <td>
-                      <Link to={titleUrl(v.title_id)}>{v.name || 'unnamed'}</Link>
-                    </td>
-                    <td>{v.held_by || <span className="chip open">vacant</span>}</td>
-                    <td className="n">{v.demesne}</td>
-                    <td className="n">{v.vassals}</td>
-                  </tr>
-                ))}
+                {vassals.length > 0 &&
+                  (
+                    [
+                      [SECTIONS.held, heldRows],
+                      [SECTIONS.vassals, vassalRows],
+                    ] as const
+                  ).map(([word, group]) => (
+                    <Fragment key={word}>
+                      <tr className="grp">
+                        <th scope="rowgroup" colSpan={4}>
+                          {word}
+                        </th>
+                      </tr>
+                      {group.map((v) => (
+                        <tr key={v.title_id}>
+                          <td>
+                            <Link to={titleUrl(v.title_id)}>{v.name || 'unnamed'}</Link>
+                          </td>
+                          <td>{v.held_by || <span className="chip open">vacant</span>}</td>
+                          <td className="n">{people(v.population)}</td>
+                          <td className="n">{v.vassals}</td>
+                        </tr>
+                      ))}
+                      {group.length === 0 && (
+                        <tr>
+                          <td colSpan={4}>
+                            <span className="meta">none</span>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  ))}
                 {vassals.length === 0 && (
                   <tr>
                     <td colSpan={4}>

@@ -185,15 +185,22 @@ def ensure_territory_streams() -> int:
 
 
 def territory_gross(stream: OrgIncomeStream) -> int:
-    """This cycle's gross for a TERRITORY stream: units x base x the rung's multiplier."""
+    """This cycle's gross for a TERRITORY stream.
+
+    A Domain's is its people times coppers per head times the rung's multiplier
+    (#5069: nobility is macro, so a noble's land pays by population, and the rooms
+    under it are the grid layer's concern). A Turf's is its rooms times the base rate
+    times its grip (ADR-0319, unchanged for criminal control).
+    """
     from world.currency.constants import TERRITORY_BASE_PER_UNIT  # noqa: PLC0415
+    from world.societies.houses.demography import population_now  # noqa: PLC0415
+    from world.societies.houses.models import DominionConfig  # noqa: PLC0415
     from world.societies.turf_services import GRIP_MAX  # noqa: PLC0415
 
     domain = stream.territory_domain_or_none
     if domain is not None:
-        # Developments use up the land they stand on (#4060 slice 2): a farm's
-        # units pay through the farm's own stream, not the base rate as well.
-        return int(free_units(domain) * TERRITORY_BASE_PER_UNIT * domain.income_multiplier)
+        per_head = DominionConfig.load().coppers_per_head
+        return int(population_now(domain) * per_head * domain.income_multiplier)
     turf = stream.turf_or_none
     if turf is not None:
         units = territory_units(turf.site, ControlKind.CRIMINAL)

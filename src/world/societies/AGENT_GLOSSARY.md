@@ -216,7 +216,8 @@ containment tree (`Area.parent`) is the de facto rule; the charter is the histor
 title's chartered border is the union of its fiefs' footprints, derived on read
 (`chartered_extent`), never drawn. The fief ranks below the title and sits in the same realm
 unless the title is an empire. Player-facing copy: **Historical Charter** (the chartered fiefs)
-beside **Present Holdings** (what the title holds now, the vassals table).
+beside **Holdings** (the rungs beneath the title now, grouped **Held** by its house and held by
+its **Vassals**, each with its people; #5069 slice 2, which retired "Present Holdings").
 _Avoid_: extent, members, contains, claim (a claim is a person's wish to rule, see **Claim**),
 de jure (the charter is lore, not law).
 
@@ -263,8 +264,16 @@ The alliance bound to a `Union` (`MarriagePact`, senior/junior house) that dies 
 _Avoid_: alliance object, treaty, marriage contract (contracts are a different system).
 
 **Domain**:
-An org-owned decoration on an `Area` at any level (the #1884 demo seed uses `AreaLevel.BARONY`; a ladder rung's own chain uses its tier-appropriate `BARONY`/`COUNTY`/`DUCHY`/... level via `TIER_TO_AREA_LEVEL`, #3983; no literal DOMAIN level exists), PLACEHOLDER civ stats (population/prosperity/unrest/defenses) plus `DomainHolding` rows that each materialize an `OrgIncomeStream`, a `hall` FK (see **Hall** below), and a `land_shapes` M2M (see **Land Shape** below). Abstract by design; visitable grids are a later phase.
-_Avoid_: province model, land parcel, estate (that's buildings/dwellings); demesne (bare — that's the ladder's aggregate COUNT of held baronies, not this one row, see **Demesne** below).
+The land a noble holds: an org-owned decoration on a BARONY or COUNTY `Area` (#5069, ADR-5069-A; a duchy, kingdom or empire is organization with no ground of its own and has none). A barony's is one pip, a holding and its surroundings; a county's is its baronies plus the **hinterland**, whose `population` is the **rural pool**, the people outside every barony. Carries PLACEHOLDER civ stats (population as a base plus `population_rebased_at`, read through `demography.population_now` toward `population_capacity`; prosperity/unrest/defenses), `DomainTerrainCount` rows (the terrain mix of its own pips, cached at every carve), the `DomainHolding` rows of the grid layer that stand on it, a `hall` FK (see **Hall** below), and a `land_shapes` M2M (see **Land Shape** below). Who holds any rung, Domain or not, is `almanach.house_holding_area`.
+_Avoid_: province model, land parcel, estate (that's buildings/dwellings); demesne (bare — that's the ladder's aggregate COUNT of held baronies, not this one row, see **Demesne** below); a Domain on a duchy (none exists since #5069).
+
+**Dormant** (`Organization.dormant_since`, #5069):
+A house nobody plays: an organization with a family and an income stream whose live members' characters sit under no account that logged in within `DominionConfig.dormancy_window_days`. Stamped by `houses.dormancy.mark_dormant_houses` at the head of the weekly run; cleared by `wake_houses_for(account)` on a login or a roster approval. While dormant its coin stops accruing (income, materials, interest, obligations skip it); its land keeps running by formula. Presence is the test, never actions; pools stay uncapped while anyone plays.
+_Avoid_: inactive (the roster's activity states are a different axis, `world.roster.services.activity`), frozen (the land is not), abandoned (that is player-founded land's decay, #5070, not built).
+
+**Capacity** (#5069):
+The people a holding's ground can feed: its `DomainTerrainCount` pips times the authored `TerrainCalibration.capacity_per_pip` per terrain, times `DominionConfig.barony_capacity_factor` on a barony. Population moves toward it by formula; nothing ticks. A terrain with no calibration row feeds nobody.
+_Avoid_: max population, carrying capacity (fine in prose, not as a field name), pip count as a measure of anything.
 
 **Almanach de Catenys** (#3983):
 The staff feudal-ladder builder + house record: plant/name/batch rungs, edit a house's charter, swear fealty, describe a demesne, add holdings, plan an estate, author kin/household, and publish/unpublish — ten `almanach_*` REGISTRY actions (`actions/definitions/almanach.py`) over the write layer (`world.societies.houses.almanach`) and two shared reads (`almanach_reads.ladder_for_realm`/`document_for_house`), reachable through the staff-only `/api/almanach/` API and the React console at `frontend/src/almanach/`. See `docs/systems/houses.md`'s Almanach de Catenys section.

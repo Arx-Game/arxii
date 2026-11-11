@@ -150,7 +150,11 @@ only for fiddly parse/error paths. They do not replace operating the change.
 
 ### Scope / follow-ups
 
-- **In scope:** <what this PR delivers>
+- **In scope:** <what this PR delivers>. The approved spec ships as one PR that
+  closes this issue; number the items here as build order inside that PR, not as
+  child issues. Split into `Slice N of #M` children only when the parts can be
+  built in parallel (independent files, none needing another's output); say so
+  here if you do (ADR-5072).
 - **Deferred:** <out-of-scope items> — verify each deferral's premise against code
   before filing it as an issue (a deferral is a proposed future surface); file
   design-open items as `needs-design` questions, not asserted work.

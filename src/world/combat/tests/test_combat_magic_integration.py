@@ -351,15 +351,25 @@ class FlatBonusPullCheckTest(TestCase):
             CombatPullFactory,
             CombatPullResolvedEffectFactory,
         )
-        from world.magic.constants import EffectKind
+        from world.magic.constants import EffectKind, TargetKind
+        from world.magic.factories import ThreadFactory
 
         participant, action, _opponent, _, _, _ = _setup_pc_attacking_mook()
         pull = CombatPullFactory(
             participant=participant,
             round_number=participant.encounter.round_number,
         )
-        CombatPullResolvedEffectFactory(pull=pull, kind=EffectKind.FLAT_BONUS, scaled_value=3)
-        CombatPullResolvedEffectFactory(pull=pull, kind=EffectKind.FLAT_BONUS, scaled_value=1)
+        # A thread on the technique being cast, so the pull relates to this cast (#5066).
+        thread = ThreadFactory(
+            owner=participant.character_sheet,
+            target_kind=TargetKind.TECHNIQUE,
+            target_trait=None,
+            target_technique=action.focused_action,
+        )
+        for value in (3, 1):
+            CombatPullResolvedEffectFactory(
+                pull=pull, source_thread=thread, kind=EffectKind.FLAT_BONUS, scaled_value=value
+            )
 
         participant.character_sheet.character.combat_pulls.invalidate()
 

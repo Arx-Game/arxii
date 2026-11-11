@@ -98,6 +98,7 @@ FIRE_PART = 4
 ENCHANT_COST = 4
 ARCHER_SOAK = 1
 FIRE_WEAKNESS = 3
+PULL_BONUS = 2
 
 
 class _ThrowingField(_StrikeField):
@@ -382,6 +383,87 @@ class EnchantingTheStrike(_ThrowingField):
 
         self.assertEqual(lost, (THROWN_DAMAGE - ARCHER_SOAK) + (FIRE_PART + FIRE_WEAKNESS))
         self.assertEqual(self.anima(), 0)
+
+
+class APullReachesTheEnchantmentThroughItsThread(_ThrowingField):
+    """A pull committed this round adds its roll bonus to the enchantment only when its
+    thread relates to the technique cast into the Strike (#5067, slice 1 of #5066).
+
+    The Strike takes no pull of its own: a pull reaches it from what else she declared
+    that round, so the journey commits the round's pull at its service seam and reads the
+    technique roll the turn panel shows.
+    """
+
+    def pull_on_a_thread_for(self, technique) -> None:
+        from world.combat.models import CombatParticipant
+        from world.combat.pull_helpers import commit_combat_pull
+        from world.magic.constants import EffectKind, TargetKind
+        from world.magic.factories import (
+            CharacterResonanceFactory,
+            ResonanceFactory,
+            ThreadFactory,
+            ThreadPullCostFactory,
+            ThreadPullEffectFactory,
+        )
+        from world.magic.services.magic_skills import resolve_cast_check
+        from world.magic.types.pull import CastPullDeclaration
+
+        resonance = ResonanceFactory()
+        ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=0)
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.TECHNIQUE,
+            resonance=resonance,
+            tier=1,
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=PULL_BONUS,
+        )
+        CharacterResonanceFactory(
+            character_sheet=self.sheet, resonance=resonance, balance=5, lifetime_earned=5
+        )
+        thread = ThreadFactory(
+            owner=self.sheet,
+            resonance=resonance,
+            target_kind=TargetKind.TECHNIQUE,
+            target_trait=None,
+            target_technique=technique,
+            level=10,
+        )
+        commit_combat_pull(
+            CastPullDeclaration(resonance=resonance, tier=1, threads=(thread,)),
+            CombatParticipant.objects.get(encounter=self.encounter, character_sheet=self.sheet),
+            self.encounter,
+            technique_id=technique.pk,
+            cast_check=resolve_cast_check(self.hobb, technique),
+        )
+
+    def pull_lines(self) -> list[str]:
+        technique_row = self.shown_rolls()[0]
+        self.assertEqual(
+            technique_row["roll_breakdown"]["heading"], "Technique roll: Wreathe the blade"
+        )
+        return [
+            line["value"]
+            for line in technique_row["roll_breakdown"]["lines"]
+            if line["label"] == "Combat pull"
+        ]
+
+    def test_a_pull_on_the_enchanting_technique_adds_to_its_roll(self) -> None:
+        technique = self.wreathe_the_blade()
+        self.pull_on_a_thread_for(technique)
+
+        self.throw_at(self.archer, "Success", "Success", "Success", technique_id=technique.pk)
+
+        self.assertEqual(self.pull_lines(), [f"+{PULL_BONUS}"])
+
+    def test_a_pull_on_another_technique_adds_nothing(self) -> None:
+        technique = self.wreathe_the_blade()
+        other = TechniqueFactory(name="Quench", gift=GiftFactory(name="Tide"))
+        CharacterTechniqueFactory(character=self.sheet, technique=other)
+        self.pull_on_a_thread_for(other)
+
+        self.throw_at(self.archer, "Success", "Success", "Success", technique_id=technique.pk)
+
+        self.assertEqual(self.pull_lines(), [])
 
 
 class AKnifeStyleCountsOnAThrow(_ThrowingField):

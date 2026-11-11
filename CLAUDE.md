@@ -174,7 +174,8 @@ drafts the spec, flags the team, then **stops** until a human org member approve
   `<!-- discovery:lane=lightweight;state=complete -->` marker outside the spec
   markers. A slice of an approved spec: one `Slice N of #M` line before the spec
   markers, valid only while #M is open and carries `spec:approved` (the member
-  gate is on the parent; ADR-4447-A). The validator and issue-to-merged-pr skill
+  gate is on the parent; ADR-4447-A). Slices exist only for parallel builds; an
+  approved spec otherwise ships as one PR (ADR-5072). The validator and issue-to-merged-pr skill
   must accept no other marker-based bypass, and a slice never writes a lightweight
   marker to pass.
 
@@ -310,11 +311,18 @@ exceptions. File only for something substantial enough to need its own PR
 human call), with the reason stated in the issue body. Overrides any skill step
 that says to file a follow-up — see `issue-to-merged-pr`'s SKILL.md for detail.
 
+**An approved spec ships as one PR that closes its issue** (ADR-5072). The
+spec's numbered scope items are the build order inside that PR, not child
+issues. Slices (`Slice N of #M`, each its own PR) are used only when they can be
+built in parallel: independent files, and no slice needing another's output.
+Sequential slices buy nothing and slow us down (owner rulings 2026-11-08 and
+2026-11-11). A gate inside the work, such as a demo the maintainer approves
+before one part is built, is a pause inside the same PR, not a reason to split.
+
 **Work with no decision left in it never waits on the maintainer.** When the
 approved spec or recorded rulings already say what a piece of remaining scope
-is, it is the next slice (`Slice N of #M`, parent kept open), built straight
-after the current one without a new approval. The sequence stops only at a real
-design fork, and there the agent interviews the maintainer with the concrete
+is, it is built in the same PR without a new approval. The work stops only at a
+real design fork, and there the agent interviews the maintainer with the concrete
 choice instead of filing a question and walking away (owner ruling 2026-10-31,
 after #4822 and #4823). Detail in `issue-to-merged-pr` Steps 2 and 9.
 

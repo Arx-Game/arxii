@@ -56,11 +56,16 @@ from world.combat.types import (
     PreparedClashContribution,
 )
 from world.conditions.services import spend_contributing_conditions
-from world.magic.constants import AffinityInteractionAggressor, ResonanceValence
+from world.magic.constants import (
+    AffinityInteractionAggressor,
+    EffectKind,
+    PowerStage,
+    ResonanceValence,
+)
 from world.magic.models.resonance_environment import AffinityInteraction
 from world.magic.services import use_technique
 from world.magic.services.strain import strain_to_intensity as _strain_to_intensity
-from world.magic.types.power_ledger import PowerLedger
+from world.magic.types.power_ledger import PowerLedger, PowerLedgerBuilder
 from world.traits.models import CheckOutcome
 
 if TYPE_CHECKING:
@@ -69,8 +74,16 @@ if TYPE_CHECKING:
     from world.areas.positioning.models import Rampart
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import Consequence
-    from world.combat.models import Clash, CombatEncounter, CombatOpponentAction, CombatRoundAction
+    from world.checks.types import ModifierContribution
+    from world.combat.models import (
+        Clash,
+        CombatEncounter,
+        CombatOpponentAction,
+        CombatParticipant,
+        CombatRoundAction,
+    )
     from world.magic.models import Affinity, Technique
+    from world.magic.types.magic_skills import CastCheck
 
 
 def can_clash(
@@ -124,6 +137,34 @@ def outcome_to_delta(*, check_outcome: CheckOutcome, power: int, config: ClashCo
         # botch — committed power rebounds as negative delta
         return -round(power * config.botch_backfire_fraction * config.power_scale)
     return round(power * config.quality_multiplier_for(level) * config.power_scale)
+
+
+def _contribution_pull_bonuses(
+    participant: CombatParticipant | None,
+    technique: Technique,
+    cast_check: CastCheck,
+) -> tuple[int, list[ModifierContribution]]:
+    """What this round's pulls add to one clash contribution (#5067).
+
+    Returns the power bump and the "Combat pull" roll line (empty without a flat bonus).
+    Only the effects whose threads relate to the contribution count (``round_pull_bonus``,
+    the test the pull's threads passed when it was committed). Nothing without a
+    participant.
+    """
+    if participant is None:
+        return 0, []
+    from world.checks.constants import ModifierSourceKind  # noqa: PLC0415
+    from world.checks.types import ModifierContribution as _Line  # noqa: PLC0415
+    from world.combat.pull_helpers import round_pull_bonus  # noqa: PLC0415
+
+    def bonus(kind: str) -> int:
+        return round_pull_bonus(
+            participant, kind=kind, technique_id=technique.pk, cast_check=cast_check
+        )
+
+    flat = bonus(EffectKind.FLAT_BONUS)
+    line = _Line(source_kind=ModifierSourceKind.PULL, source_label="Combat pull", value=flat)
+    return bonus(EffectKind.INTENSITY_BUMP), [line] if flat else []
 
 
 def commit_to_clash(  # noqa: PLR0913, PLR0915
@@ -273,16 +314,24 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
 
     def resolve_fn(*, power: int, ledger: PowerLedger, extra_modifiers: int = 0) -> object:
         nonlocal captured_power, captured_ledger
-        captured_power = power
-        captured_ledger = ledger
-        # extra_modifiers carries FLAT_BONUS pull effects from use_technique; combat
-        # pulls already apply their flat bonus via the CombatAction offense path and
-        # cast_pull is never set in clash, so extra_modifiers will always be 0 here.
+        # This round's committed pulls reach the contribution through the threads that
+        # relate to it (#5067): their power bump on its power and ledger, their flat
+        # bonus as a "Combat pull" line on its roll. extra_modifiers carries a
+        # non-combat cast pull's flat bonus from use_technique; cast_pull is never set
+        # in a clash, so it is 0 here.
+        pull_bump, pull_lines = _contribution_pull_bonuses(participant, technique, cast_check)
+        captured_ledger = (
+            PowerLedgerBuilder.from_ledger(ledger)
+            .add(PowerStage.COMBAT_PULL, "combat pulls", pull_bump)
+            .build()
+        )
+        captured_power = power + pull_bump
+        contributions = [*extra_contributions, *pull_lines]
         breakdown = collect_check_modifiers(
             character_sheet,
             check_type,
             scene=clash.encounter.scene,
-            extra_contributions=extra_contributions,
+            extra_contributions=contributions,
             extra_traits=cast_check.extra_traits,
         )
         result = perform_check(

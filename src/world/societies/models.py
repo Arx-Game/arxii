@@ -330,6 +330,16 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
         blank=True,
         help_text="When the Almanach published this house; null = draft (#3983).",
     )
+    # Dormancy (#5069): an organization with income and no played character goes
+    # dormant on the weekly run and its coin stops accruing; a login or a roster
+    # approval by a member's player wakes it. Coin freezes; the land under it keeps
+    # running by formula. Null = awake. Set by ``houses.dormancy``, read by the
+    # weekly economy; admin and staff API only, never a player surface.
+    dormant_since = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the weekly run found nobody playing here; null = awake (#5069).",
+    )
     tradition = models.ForeignKey(
         "arxii.Tradition",
         on_delete=models.SET_NULL,
@@ -3482,12 +3492,12 @@ class Levy(SharedMemoryModel):
     def controller(self) -> Organization | None:
         """Who takes this levy right now: the rung's Domain owner or Turf holder."""
         if self.kind == LevyKind.TAX:
-            from world.societies.houses.models import Domain  # noqa: PLC0415
+            # Land answers from its Domain; a duchy and above from the title on it (#5069).
+            from world.societies.houses.almanach import house_holding_area  # noqa: PLC0415
 
             if self.area_id is None:
                 return None
-            domain = Domain.objects.filter(area_id=self.area_id).select_related("owner_org").first()
-            return domain.owner_org if domain is not None else None
+            return house_holding_area(self.area)
         turf = Turf.objects.filter(area=self.area, room_profile=self.room_profile).first()
         return turf.controlling_org if turf is not None else None
 

@@ -66259,6 +66259,8 @@ components:
           type: integer
         vassals:
           type: integer
+        population:
+          type: integer
         claimable:
           type: boolean
         seat_domain_id:
@@ -66283,6 +66285,7 @@ components:
       - level
       - name
       - parent_title_id
+      - population
       - seat_domain_id
       - state
       - sworn_to

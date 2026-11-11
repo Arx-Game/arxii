@@ -47,6 +47,7 @@ from world.societies.houses.almanach_reads import (
     claimant_label,
 )
 from world.societies.houses.constants import NPC_TIER_LABEL, NPC_TIER_NUMBER, KinLink, LifeStatus
+from world.societies.houses.demography import population_now
 from world.societies.houses.models import Domain, DomainGarrisonPost, DomainHolding, Title
 from world.societies.models import (
     CrewSlot,
@@ -789,7 +790,19 @@ def rung_document(title: Title) -> RungDocument:
                 "name": domain.area.name,
                 "description": domain.description,
                 "hall": domain.hall.name if domain.hall_id else "",
-                "population": domain.population,
+                # the people now, by formula (#5069), never the stored base
+                "population": population_now(domain),
+                "population_capacity": domain.population_capacity,
+                "capacity_override": domain.capacity_override,
+                # the terrain mix, most ground first, for the Hinterland block (#5069)
+                "terrain": [
+                    {
+                        "terrain": count.terrain,
+                        "label": count.get_terrain_display(),
+                        "pips": count.pips,
+                    }
+                    for count in domain.terrain_counts.order_by("-pips", "terrain")
+                ],
                 "prosperity": domain.prosperity,
                 "unrest": domain.unrest,
                 "defenses": domain.defenses,
