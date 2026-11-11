@@ -36,10 +36,8 @@ from world.channels.types import ChannelError
 from world.roster.models import RosterTenure
 from world.scenes.block_services import blocked_player_ids_for
 from world.scenes.interaction_services import WEB_PROTOCOL_KEYS
-from world.scenes.models import Mute
-from world.scenes.mute_services import muted_player_ids_for
+from world.scenes.mute_services import account_muter_player_ids, muted_player_ids_for
 from world.societies.houses.models import FealtyEdge
-from world.societies.houses.services import vassals_of
 from world.societies.models import Organization, OrganizationMembership
 
 if TYPE_CHECKING:
@@ -92,10 +90,23 @@ def _muted_author_player_ids(account: AccountDB) -> set[int]:
 
 
 def _org_cascade_ids(organization: Organization) -> list[int]:
-    """The org and its non-covert vassals, recursively (house cascade, #1884). A covert
-    vassal never contributes to its liege's channel."""
-    vassals = vassals_of(organization, recursive=True)
-    return [organization.pk, *(v.pk for v in vassals if not v.is_covert)]
+    """The org and its vassals, recursively (house cascade, #1884), with every covert
+    vassal's WHOLE branch cut: neither the covert vassal nor anything sworn beneath it
+    reaches the liege's channel (a sub-vassal's presence would hint at the covert link).
+    Mirrors ``_org_ids_reachable_for``, which walks the same edges upward."""
+    found = [organization.pk]
+    seen = {organization.pk}
+    frontier = {organization.pk}
+    while frontier:
+        vassal_ids = set(
+            FealtyEdge.objects.filter(liege_id__in=frontier, vassal__is_covert=False)
+            .exclude(vassal_id__in=seen)
+            .values_list("vassal_id", flat=True)
+        )
+        found.extend(sorted(vassal_ids))
+        seen |= vassal_ids
+        frontier = vassal_ids
+    return found
 
 
 def _membership_tenure_q(org_ids: list[int]) -> Q:
@@ -110,7 +121,8 @@ def _membership_tenure_q(org_ids: list[int]) -> Q:
 
 def _org_ids_reachable_for(account: AccountDB) -> set[int]:
     """Org ids whose channel this account's current tenures reach: each non-covert org a
-    current tenure holds an active membership in, plus every liege above it."""
+    current tenure holds an active membership in, plus every liege above it, stopping at a
+    covert liege (its branch is cut, as in ``_org_cascade_ids``)."""
     start = set(
         OrganizationMembership.objects.filter(
             left_at__isnull=True,
@@ -124,7 +136,9 @@ def _org_ids_reachable_for(account: AccountDB) -> set[int]:
     frontier = start
     while frontier:
         lieges = set(
-            FealtyEdge.objects.filter(vassal_id__in=frontier).values_list("liege_id", flat=True)
+            FealtyEdge.objects.filter(vassal_id__in=frontier, liege__is_covert=False).values_list(
+                "liege_id", flat=True
+            )
         )
         frontier = lieges - found
         found |= frontier
@@ -358,11 +372,7 @@ def deliver_channel_message(message: ChannelMessage) -> None:
     reader_ids = [s.account_id for s in subscriptions if s.account_id != author_player.pk]
     allowed = _account_ids_with_access(channel, reader_ids)
     blocked = blocked_player_ids_for(author_player)
-    muting = set(
-        Mute.objects.filter(
-            owner_id__in=reader_ids, account_level=True, muted_player=author_player
-        ).values_list("owner_id", flat=True)
-    )
+    muting = account_muter_player_ids(target_player=author_player)
     for subscription in subscriptions:
         is_own = subscription.account_id == author_player.pk
         if not is_own and (
@@ -453,7 +463,9 @@ def provision_org_channel(organization: Organization) -> Channel | None:
     if existing is not None:
         return existing
     name = organization.name[:_CHANNEL_NAME_MAX]
-    if Channel.objects.filter(name=name).exists():
+    # PUBLIC_CHANNEL_NAME is reserved for the public channel, so an org named "Public"
+    # takes the suffix and ensure_public_channel never meets an ORG row in that slot.
+    if name == PUBLIC_CHANNEL_NAME or Channel.objects.filter(name=name).exists():
         name = organization.name[: _CHANNEL_NAME_MAX - len(_ORG_NAME_SUFFIX)] + _ORG_NAME_SUFFIX
         if Channel.objects.filter(name=name).exists():
             suffix = f" (org {organization.pk})"
@@ -462,9 +474,21 @@ def provision_org_channel(organization: Organization) -> Channel | None:
 
 
 def ensure_public_channel() -> Channel:
+    """Get or create the PUBLIC channel. Matches on name AND kind, so a non-public row that
+    somehow holds the reserved name is never returned as the public channel."""
+    clash = (
+        Channel.objects.filter(name=PUBLIC_CHANNEL_NAME).exclude(kind=ChannelKind.PUBLIC).first()
+    )
+    if clash is not None:
+        msg = (
+            f"Channel {clash.pk} ({clash.kind}) holds the reserved public channel name "
+            f"{PUBLIC_CHANNEL_NAME!r}; rename it before provisioning the public channel."
+        )
+        raise ValueError(msg)
     channel, _ = Channel.objects.get_or_create(
         name=PUBLIC_CHANNEL_NAME,
-        defaults={"kind": ChannelKind.PUBLIC, "description": PUBLIC_CHANNEL_DESCRIPTION},
+        kind=ChannelKind.PUBLIC,
+        defaults={"description": PUBLIC_CHANNEL_DESCRIPTION},
     )
     return channel
 

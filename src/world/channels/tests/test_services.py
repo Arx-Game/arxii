@@ -9,7 +9,7 @@ from unittest import mock
 from django.test import TestCase
 from django.utils import timezone
 
-from world.channels.constants import ChannelKind
+from world.channels.constants import PUBLIC_CHANNEL_NAME, ChannelKind
 from world.channels.factories import (
     ChannelFactory,
     ChannelMessageFactory,
@@ -21,6 +21,7 @@ from world.channels.services import (
     can_access_channel,
     default_tenure_for,
     eligible_tenures,
+    ensure_public_channel,
     post_to_channel,
     provision_org_channel,
     prune_channel_history,
@@ -68,6 +69,9 @@ class OrgIdentityTests(TestCase):
         cls.covert_vassal = OrganizationFactory(is_covert=True)
         FealtyEdge.objects.create(vassal=cls.vassal, liege=cls.house)
         FealtyEdge.objects.create(vassal=cls.covert_vassal, liege=cls.house)
+        # A non-covert house sworn under the covert vassal: the whole covert branch is cut.
+        cls.under_covert = OrganizationFactory()
+        FealtyEdge.objects.create(vassal=cls.under_covert, liege=cls.covert_vassal)
         cls.channel = provision_org_channel(cls.house)
 
         player = PlayerDataFactory()
@@ -76,18 +80,29 @@ class OrgIdentityTests(TestCase):
         cls.alt = RosterTenureFactory(player_data=player, player_number=1)
         cls.vassal_member = RosterTenureFactory(player_data=player, player_number=1)
         cls.covert_member = RosterTenureFactory(player_data=player, player_number=1)
+        cls.under_covert_member = RosterTenureFactory(player_data=player, player_number=1)
         cls.ended = RosterTenureFactory(
             player_data=player, player_number=1, end_date=timezone.now()
         )
         _member(cls.member, cls.house)
         _member(cls.vassal_member, cls.vassal)
         _member(cls.covert_member, cls.covert_vassal)
+        _member(cls.under_covert_member, cls.under_covert)
         _member(cls.ended, cls.house)
 
     def test_only_member_and_vassal_member_tenures_are_eligible(self) -> None:
         eligible = set(eligible_tenures(self.account, self.channel))
 
         self.assertEqual(eligible, {self.member, self.vassal_member})
+
+    def test_member_only_under_a_covert_vassal_never_reaches_the_liege(self) -> None:
+        tenure = RosterTenureFactory(player_number=1)
+        _member(tenure, self.under_covert)
+        account = tenure.player_data.account
+
+        self.assertEqual(eligible_tenures(account, self.channel), [])
+        self.assertFalse(can_access_channel(account, self.channel))
+        self.assertNotIn(self.channel, accessible_channels_for(account))
 
     def test_default_tenure_is_none_when_puppet_is_ineligible(self) -> None:
         alt_character = self.alt.roster_entry.character_sheet.character
@@ -115,6 +130,15 @@ class ProvisionTests(TestCase):
         self.assertEqual(channel.name, f"{org.name} (org)")
         self.assertEqual(channel.kind, ChannelKind.ORG)
         self.assertEqual(channel.display_name, org.name)
+
+    def test_org_named_public_never_becomes_the_public_channel(self) -> None:
+        org_channel = provision_org_channel(OrganizationFactory(name=PUBLIC_CHANNEL_NAME))
+
+        public = ensure_public_channel()
+
+        self.assertNotEqual(public, org_channel)
+        self.assertEqual(public.kind, ChannelKind.PUBLIC)
+        self.assertEqual(org_channel.display_name, PUBLIC_CHANNEL_NAME)
 
 
 class LiveAccessTests(TestCase):
