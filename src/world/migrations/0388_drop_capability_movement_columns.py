@@ -2,7 +2,7 @@
 #
 # ADR-0237 disposition for these three authored-content columns: empty in production
 # (verified at PR review by a maintainer; no repo seed sets them). Applications now carry
-# the way of moving and the dodge (0385); nothing is copied across.
+# the way of moving and the dodge (0387); nothing is copied across.
 
 from django.db import migrations
 

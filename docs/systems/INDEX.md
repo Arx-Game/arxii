@@ -9462,7 +9462,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `reaction_difficulty_step` and, #5066, `reach_neighbour_at` / `reach_two_places_at` /
     `reach_anywhere_at` / `strength_per_success_level_percent`; `ThreatPoolEntry.covers_place`;
     `PendingOpponentAttack.covered_position` and `CombatOpponentAction.covered_position`.
-    Migrations 0384-0386 (0386 drops `CapabilityType.traversal`/`reaction_reach`/
+    Migrations 0386-0389 (0388 drops `CapabilityType.traversal`/`reaction_reach`/
     `reaction_cost_kind`; `ReactionCostKind` and `AIRBORNE` are gone).
   - Services (`world/combat/services/reactions.py`): `reaction_tuning`, `reaction_penalty`,
     `record_reaction`, `dodge_sources` (`DodgeSource` per source matching a dodging application,
@@ -9494,7 +9494,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `AreaTelegraphLayer`, `combat/dodging.ts`.
 - **Movement by capability and held ground (#4663, slice 2 of #4651, ADR-4663) [BUILT & WIRED]:**
   - A player's way of moving comes from the applications her sources match (#5066, ADR-5066;
-    before it, `CapabilityType.traversal`, dropped in migration 0386):
+    before it, `CapabilityType.traversal`, dropped in migration 0388):
     `Application.way_of_moving` / `dodges`, nullable `Application.target_property`
     (`ChallengeApproach.clean` refuses a null-target application);
     `source_matches_application(source, application)` (`world/mechanics/services.py`).

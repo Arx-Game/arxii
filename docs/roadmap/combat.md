@@ -462,7 +462,7 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   (`way_of_moving`, `dodges`, a nullable `target_property` for "anywhere she moves") matched
   against each capability source's properties (`source_matches_application`), not from the
   capability row: `CapabilityType.traversal`, `reaction_reach` and `reaction_cost_kind` are
-  dropped (migration 0386; disposition empty in production). A technique's effect properties
+  dropped (migration 0388; disposition empty in production). A technique's effect properties
   are its own `Technique.properties`, never its gift's resonances (the clash opposition reads
   them too); `GiftSubstance.property` only pre-ticks a new technique. So a `teleport` technique
   on any gift that grants `traversal` blinks and dodges by blinking, with no blink capability
