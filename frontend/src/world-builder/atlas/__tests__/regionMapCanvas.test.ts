@@ -12,6 +12,7 @@ import {
   PIP_PX,
   pipAt,
   regionBounds,
+  STRIKE_COLOR,
 } from '../regionMapCanvas';
 
 const region: RegionMapSummary = {
@@ -203,6 +204,19 @@ describe('region map drawing', () => {
     expect(context.setLineDash).toHaveBeenCalledWith([4, 3]);
     // the ghost is an outline only: every fill is the one the plain draw made
     expect(paints).toEqual(plain.paints);
+  });
+
+  it('tints the land under a regional event once per pip, after the holders (#5080)', () => {
+    const plain = recordingCanvas();
+    drawRegionMap(plain.ctx, drawingData, {});
+    const { ctx, context, paints } = recordingCanvas();
+    // the county and its barony share a pip: three pips struck, not four fills
+    drawRegionMap(ctx, drawingData, { struckAreaIds: new Set([10, 11]) });
+    expect(paints.slice(0, plain.paints.length)).toEqual(plain.paints);
+    const tint = paints.slice(plain.paints.length);
+    expect(tint).toHaveLength(3);
+    expect(tint.every((paint) => paint.style === STRIKE_COLOR)).toBe(true);
+    expect(context.stroke).toHaveBeenCalledTimes(plain.context.stroke.mock.calls.length);
   });
 
   it('draws a removal preview after the holdings', () => {

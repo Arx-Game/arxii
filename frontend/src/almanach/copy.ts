@@ -25,6 +25,8 @@ export const SECTIONS = {
   vassals: 'Vassals',
   hinterland: 'Hinterland',
   developments: 'Developments',
+  // #5080: the regional events over the land, a blight, a war, a famine.
+  events: 'Events',
   historical_charter: 'Historical Charter',
 } as const;
 

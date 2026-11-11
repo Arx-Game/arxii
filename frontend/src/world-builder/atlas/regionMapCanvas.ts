@@ -126,7 +126,15 @@ export interface DrawOptions {
   ghostPips?: ReadonlySet<string>;
   /** False hides the per-cell lines (zoomed far out, #5009); default true. */
   cellLines?: boolean;
+  /**
+   * Footprints under an open regional event (#5080): a blight, a war, a famine. Tinted
+   * over the holder shading after every fill, so the strike reads whoever holds the land.
+   */
+  struckAreaIds?: ReadonlySet<number>;
 }
+
+/** The regional-event tint (#5080): ash over the holder's colour. */
+export const STRIKE_COLOR = 'rgba(70, 20, 20, 0.45)';
 
 /**
  * Draw the whole map at zoom 1 onto a canvas sized to the region. Terrain first,
@@ -152,6 +160,7 @@ export function drawRegionMap(
   if (options.cellLines !== false) drawCellLines(ctx, b);
   const footprints = [...data.footprints].sort((a, c) => c.level - a.level);
   drawFootprints(ctx, footprints, b, options);
+  drawStruck(ctx, footprints, b, options);
   drawGhost(ctx, b, options);
   drawPendingPips(ctx, b, options);
 }
@@ -312,6 +321,28 @@ function drawFootprints(
     .sort((a, c) => options.borderWidths!.get(a.area_id)! - options.borderWidths!.get(c.area_id)!);
   for (const footprint of bordered) {
     drawFootprintOutline(ctx, footprint, b, options.borderWidths!.get(footprint.area_id)!);
+  }
+}
+
+function drawStruck(
+  ctx: CanvasRenderingContext2D,
+  footprints: RegionMapFootprint[],
+  b: RegionBounds,
+  options: DrawOptions
+) {
+  const struck = options.struckAreaIds;
+  if (!struck || struck.size === 0) return;
+  // one tint per pip, whichever footprints under the event share it
+  const done = new Set<string>();
+  ctx.fillStyle = STRIKE_COLOR;
+  for (const footprint of footprints) {
+    if (!struck.has(footprint.area_id)) continue;
+    for (const [x, y] of footprint.pips) {
+      const key = pipKey(x, y);
+      if (done.has(key)) continue;
+      done.add(key);
+      ctx.fillRect((x - b.x0) * PIP_PX, (y - b.y0) * PIP_PX, PIP_PX, PIP_PX);
+    }
   }
 }
 
