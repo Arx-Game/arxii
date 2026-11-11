@@ -52,7 +52,11 @@ import { isMoveAction, waitingStrikeTechniques } from '../roundActionHelpers';
 import { PendingAttacks } from '../components/PendingAttacks';
 import { SoulfrayAcceptGate } from '../components/SoulfrayAcceptGate';
 import { FuryDeclaration } from '../components/FuryDeclaration';
-import { ThreadPullDialog, type PullSelection } from '@/magic/components/threads/ThreadPullDialog';
+import {
+  ThreadPullDialog,
+  type PullSelection,
+  type ThreadPullDialogProps,
+} from '@/magic/components/threads/ThreadPullDialog';
 import { useCharacterAnima, usePullBurnPreview } from '@/magic/queries';
 import { burnResonanceFor, effectiveBurn } from '@/magic/burn';
 import type { PullPreviewRequest } from '@/magic/types';
@@ -1551,6 +1555,8 @@ function SubmitDeclarations({
 
 interface ThreadPullSectionProps {
   characterSheetId: number;
+  /** The fight and the techniques the pull rides, so its threads can be offered (#5066). */
+  combat: ThreadPullDialogProps['combat'];
   pullDialogOpen: boolean;
   selectedPull: PullSelection | null;
   isLocked: boolean;
@@ -1560,6 +1566,7 @@ interface ThreadPullSectionProps {
 
 function ThreadPullSection({
   characterSheetId,
+  combat,
   pullDialogOpen,
   selectedPull,
   isLocked,
@@ -1612,6 +1619,7 @@ function ThreadPullSection({
 
       <ThreadPullDialog
         characterSheetId={characterSheetId}
+        combat={combat}
         open={pullDialogOpen}
         onClose={() => setPullDialogOpen(false)}
         onSelect={(selection) => {
@@ -2458,6 +2466,11 @@ export function YourTurn({
       : (meleeTechniques.find((a) => a.ref.technique_id === heldTechniqueId)?.display_name ??
         'your strike');
 
+  // The techniques a cast pull rides: the focused cast and any chosen clash contribution, so
+  // the dialog offers the threads woven on them (#5066).
+  const castPullTechniqueIds = [focusedContext.techniqueId, selectedClashRef?.technique_id].filter(
+    (id): id is number => typeof id === 'number'
+  );
   // Every technique she can use this round: a round pull may draw on any of them (#5066).
   const knownTechniqueIds = [
     ...new Set(
@@ -3232,6 +3245,16 @@ export function YourTurn({
 
       <ThreadPullSection
         characterSheetId={characterSheetId}
+        combat={
+          myParticipantId !== null
+            ? {
+                encounterId,
+                participantId: myParticipantId,
+                involvedTraitIds: [],
+                involvedTechniqueIds: castPullTechniqueIds,
+              }
+            : undefined
+        }
         pullDialogOpen={pullDialogOpen}
         selectedPull={selectedPull}
         isLocked={isLocked}

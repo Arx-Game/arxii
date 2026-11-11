@@ -46,9 +46,11 @@ vi.mock('@/inventory/hooks/useInventory', () => ({
 vi.mock('@/magic/components/threads/ThreadPullDialog', () => ({
   ThreadPullDialog: ({
     open,
+    combat,
     onSelect,
   }: {
     open: boolean;
+    combat?: { involvedTechniqueIds: number[] };
     onClose: () => void;
     onSelect?: (sel: {
       tier: 1 | 2 | 3;
@@ -59,6 +61,9 @@ vi.mock('@/magic/components/threads/ThreadPullDialog', () => ({
     if (!open) return null;
     return (
       <div data-testid="thread-pull-dialog-stub">
+        <span data-testid="stub-pull-technique-ids">
+          {combat ? combat.involvedTechniqueIds.join(',') : 'no-combat'}
+        </span>
         <button
           type="button"
           data-testid="simulate-pull-select"
@@ -1818,6 +1823,18 @@ describe('YourTurn — combat pull dispatch kwargs (issue-1455, #4736)', () => {
     expect(focusedCalls[0][0].kwargs).toMatchObject({ pull_tier: 2, pull_burn: 3 });
     expect(focusedCalls[1][0].kwargs).not.toHaveProperty('pull_tier');
     expect(focusedCalls[1][0].kwargs).not.toHaveProperty('pull_burn');
+  });
+
+  it('offers the cast pull the threads of the technique it rides (#5066)', async () => {
+    setupMocks();
+    const encounter = makeEncounter({ participants: [makeParticipant(9, 'Me', 'active', 100)] });
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    await userEvent.click(screen.getByTestId('open-pull-dialog-btn'));
+
+    // This block's card stub picks technique 7 for the focused cast.
+    expect(screen.getByTestId('stub-pull-technique-ids')).toHaveTextContent(/^7$/);
   });
 
   it('shows selected pull summary after selection and clears on Clear click', async () => {
