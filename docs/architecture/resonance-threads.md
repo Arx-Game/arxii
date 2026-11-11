@@ -170,7 +170,7 @@ project; retirement flows through an explicit service, not cascades.
 ```
 tier             PositiveSmallIntegerField unique   # 1, 2, 3
 resonance_cost   PositiveSmallIntegerField          # 1, 3, 6 at launch
-anima_per_thread PositiveSmallIntegerField          # flat per extra thread
+anima_per_thread PositiveSmallIntegerField          # per thread pulled (#5066)
 label            CharField                          # "soft", "hard", "max"
 ```
 
@@ -868,20 +868,20 @@ def spend_resonance_for_pull(
 ) -> ResonancePullResult:
     """
     Atomically debit the matching CharacterResonance row's `balance` for
-    the chosen tier's `resonance_cost`, plus
-    `anima_per_thread * (len(threads) - 1)` anima from the character's
-    `CharacterAnima` row (the first thread is "free" beyond the resonance cost).
+    the chosen tier's `resonance_cost` times `len(threads)`, plus
+    `anima_per_thread * len(threads)` anima from the character's
+    `CharacterAnima` row: every thread pulled pays both, the first
+    included (#5066; computed once in `pull_cost_totals`).
 
     PULL-COST TUNING SURFACE (expected to churn in playtest):
       - Per-tier numbers (resonance_cost, anima_per_thread) live in
         ThreadPullCost rows — see Spec A §2.1 ThreadPullCost. Change
         values via admin / factory; no code edit needed.
-      - Cost formula shape (currently "flat resonance per tier" +
-        "anima_per_thread × max(0, n_threads − 1)") is implemented in
-        Spec A §5.4 steps 1 & 2. If the shape shifts (flat anima per
-        pull, scaled resonance per thread, etc.) edit both step 1
-        validation AND step 2 debit together — do NOT add a third
-        recomputation site.
+      - Cost formula shape (since #5066 "resonance_cost × n_threads" +
+        "anima_per_thread × n_threads") lives in one place,
+        `pull_cost_totals` (`world/magic/services/threads.py`), which the
+        commit, the preview and the auto-pull all read. Do NOT add a
+        second recomputation site.
 
     Validates:
       - all threads owned by `character`
@@ -1503,30 +1503,24 @@ and the list of threads to pull:
    - All pulled threads share the chosen resonance.
    - For non-relationship anchors: anchor is involved (per 5.2).
    - For relationship anchors: player has asserted involvement (no system check).
-   - character_resonance.balance >= ThreadPullCost(tier).resonance_cost.
+   - character_resonance.balance >= ThreadPullCost(tier).resonance_cost *
+     len(threads).
    - CharacterAnima.current >= ThreadPullCost(tier).anima_per_thread *
-     max(0, len(threads) - 1).
+     len(threads).
    # ── Pull-cost formula (TUNING KNOB — see §2.1 ThreadPullCost) ──
-   # Resonance cost: flat per-tier (one ThreadPullCost row per tier).
-   # Anima cost: anima_per_thread × max(0, n_threads − 1)
-   #   (i.e. the first thread is free beyond the resonance cost; each
-   #    additional thread costs the row's anima_per_thread).
+   # Since #5066 every thread pulled pays the tier's resonance_cost and
+   #   its anima_per_thread, the first included (`pull_cost_totals`).
    # Per-tier numbers are pure data in ThreadPullCost rows — change via
    #   admin / factory.
-   # Formula shape (e.g. "first thread free", scaling, cap) is
-   #   expressed here in this validation block AND in step 2's debit
-   #   block — change both together if the shape shifts.
+   # Formula shape is `pull_cost_totals`; validation and debit both
+   #   read it.
 
 2. Atomically debit (single transaction, in-memory mutation of the
    SharedMemoryModel-cached character_resonance and anima instances):
-   - CharacterResonance.balance -= ThreadPullCost(tier).resonance_cost
+   - CharacterResonance.balance -= resonance_total
    - CharacterAnima.current -= anima_total
-   # ── See step 1 cost-formula comment. anima_total uses the same
-   #    anima_per_thread × max(0, n_threads − 1) formula; if the
-   #    formula shifts (flat per pull, scaled per thread, etc.), edit
-   #    the validation in step 1 AND this debit together to keep them
-   #    consistent. The single-call-site discipline is intentional —
-   #    do NOT introduce a third place that recomputes pull cost.
+   # ── Both totals come from `pull_cost_totals(tier, n_threads)` (#5066),
+   #    the one place that computes pull cost. Do NOT introduce another.
 
 3. For each pulled thread:
    For each effect_tier in 0..tier:
@@ -1990,8 +1984,7 @@ discriminator-aware shape).
   `tier=2` (resonance_cost=3), `tier=3` (resonance_cost=6), each with a matching
   `anima_per_thread` value. **Staff-tunable defaults — exact numbers are
   expected to churn during playtest.** The factory is the data home; the
-  cost-formula shape lives in `spend_resonance_for_pull` per Spec A
-  §5.4. See §2.1 ThreadPullCost for the full tuning-surface callout.
+  cost-formula shape lives in `pull_cost_totals` (per thread, #5066). See §2.1 ThreadPullCost for the full tuning-surface callout.
 - `ThreadXPLockedLevelFactory` — preset rows at internal levels 20, 30, 40,
   50… with placeholder xp_costs (parallels skill XP-lock authoring)
 - `ThreadLevelUnlockFactory` — per-thread record of an XP-lock crossing;

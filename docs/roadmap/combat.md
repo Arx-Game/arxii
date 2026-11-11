@@ -395,9 +395,9 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   `src/integration_tests/test_npc_tactics_journeys.py`; the progress guarantee is fuzzed in
   `src/integration_tests/fuzz/test_npc_progress_fuzz.py`. This completes #4576.
 - **Movement by capability and held ground (#4663, slice 2 of #4651, ADR-4663).** A player
-  character moves by her capabilities: a capability row can name a way of moving
-  (`CapabilityType.traversal`), and holding it above baseline, from a technique, condition,
-  species, distinction or gear, lets her climb or leap a walled edge for its hops, take flight
+  character moves by her capabilities: a capability source matching an application with a way
+  of moving (since #5066; before it, `CapabilityType.traversal` on the capability row), from a
+  technique, condition, species or distinction, lets her climb or leap a walled edge for its hops, take flight
   and land (`take_flight`, `land`, telnet `position/fly`, `position/land`), with the roof rule
   on both. Ground a ready enemy holds stops a player character who enters it, however she moves
   on the ground (walking, climbing or leaping; landing in it too); NPCs do not roll, so an NPC
@@ -435,9 +435,9 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   use features and no prone condition is coded. Journeys: `test_features_and_stunts_journeys.py`.
   Not built: NPCs using features.
 - **Reactions and area attacks (#4676, slice 4 of #4651, ADR-4676) [BUILT & WIRED].** A
-  capability with a `reaction_reach` (or a Phase Step ward) makes a character dodge NPC attacks
-  automatically: the defense roll gets the capability's value as a bonus, the dodge costs anima
-  or physical fatigue (`MovementConfig.dodge_anima_cost`/`dodge_fatigue_cost`), and each
+  capability with a `reaction_reach` (or a Phase Step ward) made a character dodge NPC attacks
+  automatically (since #5066: a source matching a dodging application, each technique dodge a
+  cast of it, see below): the defense roll gets the dodge's strength as a bonus, and each
   reaction already made this round takes `reaction_difficulty_step` off the roll. The
   one-reaction-per-round cap is gone; guarding and catching count as reactions under the same
   step, and a guardian's repeat answer resolves a fresh Interpose challenge instance. While
@@ -455,6 +455,32 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   outside, not a reaction. One technique granting that capability gives both uses. The move
   list offers "Blink to X (2 anima)"; telnet `position X` blinks where walking cannot reach.
   Journeys: `test_blinking_journeys.py`. Not built (owner ruling): NPCs blinking.
+  Reworked by #5066 below: reach now follows each use's roll, and the free blink outside a
+  fight is gone.
+- **Movement powers through the four layers, each use a cast (#5066, ADR-5066) [BUILT &
+  WIRED].** How she moves and whether she dodges now come from `Application` rows
+  (`way_of_moving`, `dodges`, a nullable `target_property` for "anywhere she moves") matched
+  against each capability source's properties (`source_matches_application`), not from the
+  capability row: `CapabilityType.traversal`, `reaction_reach` and `reaction_cost_kind` are
+  dropped (migration 0386; disposition empty in production). A technique's effect properties
+  are its own `Technique.properties`, never its gift's resonances (the clash opposition reads
+  them too); `GiftSubstance.property` only pre-ticks a new technique. So a `teleport` technique
+  on any gift that grants `traversal` blinks and dodges by blinking, with no blink capability
+  authored. Every use of a technique-granted movement power (each automatic dodge, a blink, a
+  wall phased or climbed, a take-off) is a `use_technique` cast of that technique, in a fight
+  or out of one (`use_movement_source`): its own anima through the deficit and Soulfray path,
+  its own check, its power and the round's related pulls; the roll's strength is the dodge's
+  bonus and sets how far she lands through one shared set of `MovementConfig` reach bands. Any
+  other source costs physical fatigue in a fight. A new way of moving, Phases, crosses a wall
+  whose challenge carries a Phase Through application's target. Her dodge settings
+  (`dodge_settings`; telnet `combat dodgewith`, `combat dodgedefault`, `combat autopull`) pick
+  the technique that answers her dodges (this fight, else her saved default), whether to keep
+  dodging into Soulfray (asked on her turn by the Soulfray check-in; telnet `accept|decline
+  dodgesoulfray`), and an automatic defensive pull. A thread pull may be declared on its own
+  (`combat_pull`, telnet `combat pull`), lasts the round and boosts only the uses its threads
+  relate to; every pulled thread now pays its tier's resonance and anima, the first included.
+  Journeys: `test_dodging_journeys.py`, `test_blinking_journeys.py`,
+  `test_moving_by_capability_journeys.py`, `test_pulls_for_the_round_journeys.py`.
 - **3-PC party vs. a factory boss — the full break-bar/phase/enrage journey (#2095).**
   One `resolve_round`-driven test proves the whole boss-anatomy chain (#2016, ADR-0102)
   in order: solo attacks fully soaked while the guard is unbroken → a landed combo chips

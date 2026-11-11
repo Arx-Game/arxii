@@ -92,38 +92,76 @@ The PC rolls a defense check; the success level scales incoming damage.
 
 ## Dodging and area attacks (#4676, slice 4 of #4651)
 
-**The automatic dodge [BUILT & WIRED].** A character dodges an NPC attack that carries a
-defense check when a capability she holds above its innate baseline has a
-`CapabilityType.reaction_reach` other than `none`, or a Phase Step ward is on her
-(`world/combat/services/reactions.py`, called from `resolve_npc_attack`). The dodge is her
-defense roll with that capability's value added as a bonus (as a challenge adds its
-capability source, ADR-0145), so the roll's normal degrees decide the hit. It costs
-`MovementConfig.dodge_anima_cost` anima, or `dodge_fatigue_cost` physical fatigue when the
-capability's `reaction_cost_kind` is `fatigue`; a Phase Step ward charges through its own
-payer rule (`_try_spend_reactive`, #2208). If she cannot pay she does not dodge. Each
-reaction she has already made this round takes `MovementConfig.reaction_difficulty_step`
-off the roll (`reaction_penalty`); there is no cap. With no MovementConfig row the field
-defaults apply (2 anima, 1 fatigue, step 2).
+**The automatic dodge [BUILT & WIRED] (#4676, #5066, ADR-5066).** A character dodges an NPC
+attack that carries a defense check when one of her capability sources matches an
+`Application` with `dodges` set (`source_matches_application`: the application's capability,
+held above its innate baseline, carrying its required effect property), or a Phase Step ward is
+on her (`world/combat/services/reactions.py`, called from `resolve_npc_attack`). A technique
+matches by its own `Technique.properties`, so a `teleport` technique that grants `traversal`
+dodges by blinking on any gift. Each dodge is one use of that source
+(`make_dodge` through `use_movement_source`, `world/combat/services/movement_use.py`):
 
-**The same power on her turn [BUILT & WIRED] (#5019, ADR-5019).** A dodging capability whose
-`traversal` is Blinks also moves her on her turn: to any place that dodge could land, past walls
-and enemies, for one hop plus one dodge's cost. It is not a reaction, so it does not make her later
-dodges that round harder. Unlike the dodge, it is never refused for lack of anima: she chose it on
-her turn, so it pays through the cast's anima-and-Soulfray path (`spend_capability_use`:
-`deduct_anima` then `accumulate_soulfray`, owner ruling 2026-11-08). The automatic dodge still
-skips when she cannot pay (`pay_for_dodge` through `charge_capability_use`).
-Staff author one capability (Traversal Blinks, a dodge reach, a cost) and grant it from one
-technique; see `docs/systems/areas.md` "Blinking".
+- **With a technique** it is a `use_technique` cast of it: the technique's own anima cost, paid
+  through the deficit and Soulfray path (never skipped for lack of anima), its own cast check
+  rolled unopposed with the round's related FLAT_BONUS pulls, and its power plus related
+  INTENSITY_BUMP pulls. The roll sets the use's strength (`scaled_strength`: the grant's
+  `calculate_value` at that power, plus `MovementConfig.strength_per_success_level_percent` per
+  success level above a bare success; a failure gives none and the dodge does not go off).
+  The strength is added to her defense roll and, through `reach_for_strength`, sets how far she
+  may land; a roll that falls short of her planned landing dodges in place.
+- **With anything else** (trained ability, a condition, species, a distinction) it costs
+  `MovementConfig.dodge_fatigue_cost` physical fatigue and its value is the bonus.
+- **A Phase Step ward** keeps its own payer rule (`_try_spend_reactive`, #2208).
+
+Two answers protect her. With `CombatParticipant.dodge_into_soulfray` off, a technique dodge that
+would overspend her anima or deepen her Soulfray does not go off and costs nothing; the Soulfray
+check-in on her turn asks her to set it (`world/combat/services/dodge_check_in.py`). And an
+automatic dodge is never lethal for a player who is not connected: the cast runs non-lethal.
+Each reaction she has already made this round takes `MovementConfig.reaction_difficulty_step`
+off the roll (`reaction_penalty`); there is no cap. The defense roll's "Dodge" line names the
+source, its roll, strength, anima and any Soulfray (`dodge_label`). With no MovementConfig row
+the field defaults apply.
+
+**Auto-pull for defense [BUILT & WIRED] (#5066).** With `CombatParticipant.auto_pull_defense` on,
+the first time she is attacked in a round with no pull of her own, her saved defensive pull
+(`defense_pull_resonance`, `defense_pull_tier`) is committed before a technique dodge rolls
+(`world/combat/services/auto_pull.py`). It pulls only threads that relate to the dodge and are
+not already working for her on the defense roll; when nothing is left it commits and charges
+nothing.
+
+**The same power on her turn [BUILT & WIRED] (#5019, #5066).** A source matching an application
+with `way_of_moving` Blinks (and no `dodges`) moves her on her turn, past walls and enemies, for
+one hop (`MoveToPositionAction` blinks when walking cannot reach the place: `blink_source_to`,
+`_blink` in `actions/definitions/positioning.py`). It is one use of that source like a dodge: a technique blink
+is a cast of it, in a fight or out of one, and its roll's strength sets which places she can
+reach; she lands on her choice when it is in reach, else at the reachable place nearest it, and a
+failed roll leaves her in place, paid. Too little anima never stops her: the cast overspends into
+Soulfray. It is not a reaction, so it does not make her later dodges that round harder. Another
+source pays physical fatigue in a fight and nothing outside one. Staff need no blink capability:
+a technique marked `teleport` that grants `traversal` reaches the Blink applications; see
+`docs/systems/areas.md` "Blinking".
 
 **The dodge plan.** `CombatParticipant.dodge_enabled` and `dodge_landing`, set while
 declaring through `combat_dodge` (`DodgePlanAction`; telnet `combat dodge [<place>|here|off]`;
-web Your Turn "If you're attacked this round"). A landing must be a place her strongest
-reach covers (`dodge_landing_options`: in place; adjacent over open edges; airborne adds the
-air above her place when that layer exists and the place is not roofed; any place). A dodge
-whose roll at least partly succeeds (`DEFENSE_REDUCED_THRESHOLD`) moves her there
-(`force_move_to_position`); otherwise she stays. With no landing she dodges in place. An away
-player dodges in place too. The plan resets each round in `begin_declaration_phase`. The
-participant payload's `dodge_plan` reaches its owner only.
+web Your Turn "If you're attacked this round"). A landing must be a place one of her dodge
+sources reaches at its standing strength (`dodge_landing_options`, through `reach_for_strength`
+and `reachable_landings(current, reach, way=...)`: in place; a neighbouring place, two places or
+anywhere in the room; a blinking or phasing source crosses walls within reach, a flying one adds
+the air above an unroofed place). A dodge whose roll at least partly succeeds
+(`DEFENSE_REDUCED_THRESHOLD`) moves her there (`force_move_to_position`); otherwise she stays.
+With no landing she dodges in place, and an away player, who sets nothing, dodges in place too.
+Each round `begin_declaration_phase` turns dodging back on and clears the landing; the settings
+below stand for the whole fight.
+
+Beside it sit her standing dodge settings (`dodge_settings`, `DodgeSettingsAction` in
+`actions/definitions/dodge_settings.py`; telnet `combat dodgewith <technique>|default`,
+`combat dodgedefault <technique>`, `combat autopull <resonance> <tier>|off`, and
+`accept|decline dodgesoulfray` for the check-in): which technique answers her dodges in this
+fight (`dodge_technique`; unset falls back to her saved `CharacterTechnique.default_dodge`, at
+most one per character, then her strongest source), `dodge_into_soulfray`, and the auto-pull
+with its saved resonance and tier. The participant payload's `dodge_plan` carries all of it
+(`techniques` with each one's `cost_line`, `technique_id`, `into_soulfray`, `auto_pull`,
+`auto_pull_resonance_id`, `auto_pull_tier`, `soulfray_check_in`) and reaches its owner only.
 
 **Area attacks.** `ThreatPoolEntry.covers_place` hits everyone in the target's place
 (`world/combat/services/npc/area_attacks.cover_place`, run before reach in
@@ -230,7 +268,7 @@ ACTIVE participant of the same fight (by participant id) who can act, shares an 
 covenant with her, holds an engaged vow with a `CovenantRoleTechniqueSpecialty` for
 `TechniqueFunction.MEND` (resolved role or its anchor) and knows a technique tagged Mend,
 and can pay, softens it. The gate is that capability, never a vow name; holding it is the
-opt-in, as a dodging capability is (no per-round toggle). The blow is cut to leave the ally
+opt-in, as a dodging power is (no per-round toggle). The blow is cut to leave the ally
 one point above the knockout line, by at most `MovementConfig.reactive_save_max_cut` percent
 (default 50) of the blow. It is a reaction: `record_reaction` counts it, it
 takes nothing from her declaration, it counts against `ABSORPTION_CAP_PER_MOMENT`, and it

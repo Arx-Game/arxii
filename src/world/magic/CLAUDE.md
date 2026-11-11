@@ -21,7 +21,11 @@ The magic system for Arx II. Power flows from identity and connection.
   `magic_learning_ap_cost` modifier as technique learning, #2467) or
   `spend_resonance_for_pull` (low-level spend called by the pull helpers).
   `lifetime_earned` is monotonic audit. **Thread pulls are declaration modifiers**
-  on `cast`/`clash` — the shared commit path lives in `world/combat/pull_helpers.py`:
+  on `cast`/`clash`, or declared on their own for the round (`combat_pull`, #5066), or
+  committed by the automatic defensive pull (`world/combat/services/auto_pull.py`). Every
+  pulled thread pays its tier's resonance and anima (`threads.pull_cost_totals`, #5066), and a
+  pull boosts only the uses its threads relate to (`round_pull_bonus`). The shared commit path
+  lives in `world/combat/pull_helpers.py`:
   `commit_combat_pull` (combat contexts), `build_cast_pull_declaration`,
   `resolve_pull_from_kwargs`. Non-combat cast uses `request_technique_cast(cast_pull=…)`.
   Preview: `preview_resonance_pull` (`POST /api/magic/thread-pull-preview/`) — read-only,
@@ -324,8 +328,12 @@ skips ineligible targets rather than hard-blocking the whole cast (ADR-0045). Th
 precondition layered on the existing target-resolution machinery — it does not build the
 still-deferred general targeting model (AoE constraints, frontend target picker) noted above.
 
-`Technique.properties` (M2M to `mechanics.Property`) carries neutral descriptive tags
-on the technique itself (e.g. cursed) via `Technique.has_property(name)`; this is
+`Technique.properties` (M2M to `mechanics.Property`) are the technique's own marks: the
+properties that say how it works (a blink carries `teleport`, #5066, ADR-5066). They are its
+effect properties for capability sources, applications and clash opposition
+(`services/technique_marks.py`, `effect_property_ids_by_technique`); the gift's resonances
+never count, and `GiftSubstance.property` only pre-ticks one on a new technique
+(`tick_substance_mark`). `Technique.has_property(name)` reads them too; this is
 separate from `Character.has_property`, which checks a *character's* Property
 attachments (both the primary persona's authored identity tags and runtime
 `ObjectProperty` rows, #1793) and backs the `has_property` reactive-trigger DSL op.
@@ -766,7 +774,7 @@ admin all converge on the same service layer.
 **Authored catalogs (lookup, SharedMemoryModel):**
 - `ThreadPullCost` - Per-tier pull cost knobs (tier 1/2/3: `resonance_cost`,
   `anima_per_thread`, `label`). Tuning surface — values here are data; cost
-  *shape* lives in `spend_resonance_for_pull`.
+  *shape* lives in `pull_cost_totals` (each thread pays both, #5066).
 - `ThreadXPLockedLevel` - XP-locked boundary price list (`level` on the
   internal 10/20/30... scale, `xp_cost`). Mirrors skills' XP locks.
 - `ThreadPullEffect` - Authored pull-effect template keyed

@@ -21,6 +21,18 @@
   `GET /api/action-requests/call-up-offers/`; combat participant `call_up`.
   `Restriction.surroundings_stat/min/max` + `services/surroundings.py` (heavy named
   penalty, never a refusal). Details: [magic.md](magic.md) "A gift's substance".
+- **Technique marks (#5066, ADR-5066):** a technique's effect properties are its own
+  `Technique.properties`, never its gift's resonances. `world/magic/services/technique_marks.py`:
+  `effect_property_ids_by_technique` (read by capability sources, applications and clash
+  opposition: `_get_technique_sources`, `world/combat/clash.py` `_technique_effect_property_ids`,
+  `CharacterTechniqueHandler.effect_property_ids_for`), `substance_mark_for`,
+  `tick_substance_mark` (`GiftSubstance.property` pre-ticks a new technique, from
+  `create_technique` and the Technique admin add form opened with `?gift=`). Capability sources
+  carry their marks (`CapabilitySource.effect_property_ids`): a technique its own, a condition
+  its template's and stage's (`_get_condition_sources`, one source per condition instance),
+  trained ability, species and distinctions none; `source_matches_application`
+  (`world/mechanics/services.py`) is the one match test for movement, dodging and challenge
+  approaches.
 - **Defense piercing (#4575):** shared damage profiles author `ignores_soak`,
   per-hit signed-point `resistance_shift`, and `bypasses_wards`. Soak stops at zero;
   resistance can become more vulnerable; a ward-bypassing cast carries its
@@ -282,7 +294,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `CombatPullResolvedEffect`. A pull's per-use bonuses (FLAT_BONUS, INTENSITY_BUMP)
     reach only the uses its threads relate to: `pull_helpers.round_pull_bonus` matches
     each effect's thread with `_anchor_in_action` against the use's `pull_action_context`,
-    the context `commit_combat_pull` validates against (#5067)
+    the context `commit_combat_pull` validates against (#5067); dodges and blinks read it too
+    (#5066). A pull declared on its own: `combat_pull` (`PullForTheRoundAction`,
+    `actions/definitions/round_pull.py`; telnet `combat pull`), matched against
+    `pull_helpers.pull_alone_context`; `commit_combat_pull(action_context=)` takes it. The
+    automatic defensive pull: `world/combat/services/auto_pull.py`. Pull cost is per thread
+    (`threads.pull_cost_totals`: every thread pays the tier's resonance and anima, #5066)
   - **Combat AoE targeting (#1321, in `world/combat`):** `CombatRoundActionTarget` (join
     table; per-`CombatOpponent` row for AREA/FILTERED_GROUP technique actions)
   - **Dramatic moment tagging (#545 / #1139):**
@@ -9430,38 +9447,71 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     (interpose fatigue); `world/combat/services/damage/reactive_save.py` (`try_reactive_save`,
     `can_make_reactive_save`, `reactive_save_anima_cost`), see COMBAT_DEFENSES.md "The healer's
     reactive save".
-  - Models: `CapabilityType.reaction_reach`/`reaction_cost_kind` (`ReactionReach`,
-    `ReactionCostKind` in `world/areas/positioning/constants.py`); `CombatParticipant.dodge_enabled`/
-    `dodge_landing`; `MovementConfig.dodge_anima_cost`/`dodge_fatigue_cost`/`reaction_difficulty_step`;
-    `ThreatPoolEntry.covers_place`; `PendingOpponentAttack.covered_position` and
-    `CombatOpponentAction.covered_position`.
+  - Models: `Application.dodges` / `way_of_moving` (#5066; a source matching a dodging
+    application dodges); `ReactionReach` (`world/areas/positioning/constants.py`: NONE, IN_PLACE,
+    ADJACENT, TWO_PLACES, ANY_PLACE, set by a use's strength); `CombatParticipant.dodge_enabled`/
+    `dodge_landing` (per round) and, #5066, `dodge_technique` (FK Technique, null),
+    `dodge_into_soulfray`, `auto_pull_defense`, `defense_pull_resonance`, `defense_pull_tier`;
+    `CharacterTechnique.default_dodge` (at most one per character);
+    `MovementConfig.dodge_anima_cost` (the healer's reactive save) / `dodge_fatigue_cost` /
+    `reaction_difficulty_step` and, #5066, `reach_neighbour_at` / `reach_two_places_at` /
+    `reach_anywhere_at` / `strength_per_success_level_percent`; `ThreatPoolEntry.covers_place`;
+    `PendingOpponentAttack.covered_position` and `CombatOpponentAction.covered_position`.
+    Migrations 0384-0386 (0386 drops `CapabilityType.traversal`/`reaction_reach`/
+    `reaction_cost_kind`; `ReactionCostKind` and `AIRBORNE` are gone).
   - Services (`world/combat/services/reactions.py`): `reaction_tuning`, `reaction_penalty`,
-    `record_reaction`, `dodge_sources`, `dodge_landing_options`,
-    `choose_dodge`, `pay_for_dodge`, `land_dodge`, `covered_place`, `dodge_cost_line`,
-    `capability_use_cost`, `can_pay_capability_use`, `charge_capability_use` (the dodge's
-    charge, refused when short), `spend_capability_use` (a turn blink's charge, never refused:
-    `deduct_anima` then `accumulate_soulfray`, #5019); `reachable_landings` lives in positioning
-    services,
+    `record_reaction`, `dodge_sources` (`DodgeSource` per source matching a dodging application,
+    her plan's technique first, the Phase Step ward last), `dodge_landing_options`,
+    `choose_dodge`, `make_dodge` (one use of the source: a technique's cast, else fatigue;
+    returns the `Dodge` with its `MovementUse`), `dodge_label`, `land_dodge`, `covered_place`,
+    `movement_use_cost` (what one use costs now: a technique's cast cost, else fatigue in a
+    fight), `dodge_cost_line`; `reachable_landings` lives in positioning services,
     `dodge_roll_active`/`DODGE_ROLL_ACTIVE`. `world/combat/services/npc/area_attacks.py`:
     `cover_place`, `place_of_participant`. `world.mechanics.reactions._fresh_reaction_instance`.
+  - One use of a movement power (#5066, `world/combat/services/movement_use.py`):
+    `use_movement_source` -> `MovementUse` (a technique source is a `use_technique` cast with
+    `MovementCast` as its resolve function; any other source is physical fatigue in a fight and
+    free outside one; an automatic use runs non-lethal for a player not connected),
+    `scaled_strength`, `roll_technique`. The Soulfray check-in
+    (`world/combat/services/dodge_check_in.py`: `soulfray_check_in`,
+    `announce_soulfray_check_ins`, `DodgeSoulfrayHandler`). The automatic defensive pull
+    (`world/combat/services/auto_pull.py`: `auto_pull_for_defense`).
   - Action `combat_dodge` (`DodgePlanAction`, kwargs `dodge`, `position_id` or `place`); telnet
-    `combat dodge [<place>|here|off]`. Payload: participant `dodge_plan` (owner only),
+    `combat dodge [<place>|here|off]`. Action `dodge_settings` (`DodgeSettingsAction`,
+    `actions/definitions/dodge_settings.py`, #5066; kwargs `technique_id`, `save_default`,
+    `into_soulfray`, `auto_pull`, `pull_resonance_id`, `pull_tier`); telnet `combat dodgewith
+    <technique>|default`, `combat dodgedefault <technique>`, `combat autopull <resonance>
+    <tier>|off`, `accept|decline dodgesoulfray`. Payload: participant `dodge_plan` (owner only;
+    #5066 adds `techniques`, `technique_id`, `into_soulfray`, `auto_pull`,
+    `auto_pull_resonance_id`, `auto_pull_tier`, `soulfray_check_in`),
     `pending_attacks[].attack_name/covered_position_id/covered_position_name`;
     `reactions_remaining` removed. Frontend: `DodgePlanPanel`, `AreaAttackWarning`,
     `AreaTelegraphLayer`, `combat/dodging.ts`.
 - **Movement by capability and held ground (#4663, slice 2 of #4651, ADR-4663) [BUILT & WIRED]:**
-  - A player's way of moving is a capability: `CapabilityType.traversal` (`CreatureTraversal`,
-    blank for none; migration 0294); `player_traversals(sheet)`, `traversals_of(objectdb)`,
-    `cheapest_crossing`, `best_crossing_cost` (`world/areas/positioning/traversal.py`) read it
-    from `get_effective_capability_value` above `innate_baseline`. `move_to_position(...,
-    traversals=)` and `check_move_to_position(...)` (positioning services) take it; a crossing
-    costs its hops via `spend_combat_hop(participant, hops=)` (`movement_budget.py`).
-  - Blinking (#5019, ADR-5019): `CreatureTraversal.BLINKS` (migration 0379; PCs only, bestiary
-    `traversal` uses `NPC_TRAVERSAL_CHOICES`). `blink_capabilities`, `blink_capability_to`
-    (`traversal.py`); `blink_landings`, `check_blink_to_position`, `blink_to_position`
-    (positioning services). `MoveToPositionAction` blinks where the walk is refused; one hop plus
-    `spend_capability_use` in a fight (never refused for lack of anima: it pays through Soulfray),
-    free outside; "Blink to X (2 anima)" in the move list, with her Soulfray stage warning.
+  - A player's way of moving comes from the applications her sources match (#5066, ADR-5066;
+    before it, `CapabilityType.traversal`, dropped in migration 0386):
+    `Application.way_of_moving` / `dodges`, nullable `Application.target_property`
+    (`ChallengeApproach.clean` refuses a null-target application);
+    `source_matches_application(source, application)` (`world/mechanics/services.py`).
+    `world/areas/positioning/traversal.py`: `MovementSource`, `movement_applications`,
+    `matched_movement`, `player_traversals(sheet)`, `traversals_from`, `traversals_of(objectdb)`,
+    `turn_movement_sources(objectdb, way)`, `reach_for_strength(strength)`,
+    `cheapest_crossing`, `best_crossing_cost`. `move_to_position(..., traversals=)` and
+    `check_move_to_position(...)` (positioning services) take it; a crossing costs its hops via
+    `spend_combat_hop(participant, hops=)` (`movement_budget.py`), and a wall crossed only by a
+    power is one use of its source (`_pay_for_crossing`).
+  - Blinking (#5019, ADR-5019, reworked by #5066): `CreatureTraversal.BLINKS` (migration 0379;
+    PCs only, bestiary `traversal` uses `NPC_TRAVERSAL_CHOICES`). `blink_source_to`, `_blink`
+    (`actions/definitions/positioning.py`); `blink_landings`, `check_blink_to_position`,
+    `blink_to_position`, `reachable_landings(current, reach, *, way)` (positioning services).
+    `MoveToPositionAction` blinks where the walk is refused; each blink is one use of its source
+    (`use_movement_source`: a technique's cast in a fight or out of one, its roll setting the
+    reach; else fatigue in a fight) plus one hop in a fight; never refused for lack of anima;
+    "Blink to X (<cost>)" in the move list (`movement_use_cost`), with her Soulfray stage
+    warning.
+  - Phasing (#5066): `CreatureTraversal.PHASES` (PCs only), `phase_target_property_ids`,
+    `_phases_through` (positioning services): crosses a wall whose gating challenge's template
+    carries a Phase Through application's target property.
   - Actions `take_flight`, `land` (roof rule: "A roof is in the way."), `pass_held_ground`
     (`actions/definitions/positioning.py`); telnet `position/fly`, `position/land`,
     `position/pass <name>`. `enter_aerial` draws a missing aerial twin.

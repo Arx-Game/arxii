@@ -12,8 +12,9 @@ the ``combat_dodge`` plan. These are the standing answers that sit beside it:
 - ``auto_pull``: pull threads for defense the first time she is attacked in a round, with
   ``pull_resonance_id`` and ``pull_tier`` naming the saved pull.
 
-Dispatch: REGISTRY ``registry_key="dodge_settings"``. Telnet: ``combat dodge/with``,
-``dodge/default``, ``dodge/soulfray``, ``dodge/autopull`` (``commands/combat_maneuvers.py``).
+Dispatch: REGISTRY ``registry_key="dodge_settings"``. Telnet: ``combat dodgewith``,
+``combat dodgedefault`` and ``combat autopull`` (``commands/combat_maneuvers.py``); the
+Soulfray answer is ``accept|decline dodgesoulfray`` (``world.combat.services.dodge_check_in``).
 """
 
 from __future__ import annotations

@@ -450,7 +450,7 @@ caller. Feeds `CharacterThreadHandler.contextual_thread_power`, one of the two t
 (with `context_free_power`) composing the `power` figure that curves a technique's
 `TechniqueCapabilityGrant`. See `docs/systems/conditions.md`'s "Capability magnitude
 curve" section for the full nine-arm breakdown and the deferred ORGANIZATION arm.
-_Avoid_: "passive anchor check", "auto-pull".
+_Avoid_: "passive anchor check", "auto-pull" (that names the automatic defensive pull in combat, #5066).
 
 **Thread carry** (#4097):
 A thread woven into a technique also empowers, at the thread's full level, every
@@ -580,7 +580,10 @@ Moving one thread to another resonance by performing the retune rite (the SERVIC
 _Avoid_: reweave (weaving makes a new thread), thread conversion (the full Fall re-anchors every thread), respec.
 
 **Gift substance**:
-What a gift works through, named once per gift as a room reading and a direction (`GiftSubstance`): shadow is the room's lighting falling, water its wet rising. Every cast of the gift needs it present; the room after any call-up adds or takes power by her gift thread's level (#5018, ADR-5018). A child gift with none uses its parent's. _Avoid_: element, medium, resonance (a resonance is identity and currency; a substance is a reading of the room).
+What a gift works through, named once per gift as a room reading and a direction (`GiftSubstance`): shadow is the room's lighting falling, water its wet rising. Every cast of the gift needs it present; the room after any call-up adds or takes power by her gift thread's level (#5018, ADR-5018). A child gift with none uses its parent's. Its optional `property` (#5066) only pre-ticks that mark on a new technique of the gift; nothing reads it at play time. _Avoid_: element, medium, resonance (a resonance is identity and currency; a substance is a reading of the room).
+
+**Technique marks** (#5066, ADR-5066):
+A technique's own `Technique.properties`: the properties that say how it works (a blink carries `teleport`, a smoke form `incorporeal`), ticked per technique by staff. They are the technique's effect properties for capability sources, applications and clash opposition (`effect_property_ids_by_technique`, `world/magic/services/technique_marks.py`). The gift's resonances never count. _Avoid_: technique tags, resonance properties (those belong to the resonance).
 
 **Calling up**:
 Making a gift's substance present in the room: automatically as part of a cast where it is missing, or with no technique (`call_up_substance`, telnet `callup`). Priced through the cast's anima formula, so control covers small amounts, with the uncovered share spending her gift resonance; it writes her own room row, lasting while she stays, and an unattributed room line. Never refused for anima. _Avoid_: summon, conjure, generate.

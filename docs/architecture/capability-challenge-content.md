@@ -97,8 +97,8 @@ door has `locked` — it's the terrain different social capabilities operate on.
 ### Applications (~42 total)
 
 Capability + target_property = eligibility. No `required_effect_property` in the
-starter set — effect property filtering is tested separately when techniques carry
-elemental resonance properties.
+starter set — effect property filtering is tested separately; a technique's effect
+properties are its own `Technique.properties` (#5066), never its gift's resonances.
 
 **generation:**
 - Ignite — generation + flammable
@@ -339,8 +339,10 @@ and Resonance has M2M to Property (`Resonance.properties`). The builder creates:
 4. Wire each Resonance to its Property via M2M
 5. Wire each Gift to its Resonances via M2M
 
-This means Flame Lance (in a Gift with fire Resonance) carries `fire` effect Properties,
-which will matter for `required_effect_property` filtering in future phases.
+Since #5066 (ADR-5066) this no longer gives a technique its effect Properties: a
+technique's effect Properties are its own `Technique.properties`, ticked per technique, and
+the Gift's resonances never count. Content that needs Flame Lance to carry `fire` ticks
+`fire` on the technique itself.
 
 ## Content Builder Structure
 
