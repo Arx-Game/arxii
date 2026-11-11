@@ -36,6 +36,7 @@ import world.boundaries.models
 import world.buildings.models
 import world.captivity.models
 import world.ceremonies.models
+import world.channels.models
 import world.character_creation.models
 import world.character_sheets.models
 import world.checks.models

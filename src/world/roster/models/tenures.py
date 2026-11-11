@@ -15,6 +15,17 @@ from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.roster.managers import RosterTenureManager
 
 
+def _ordinal(number: int) -> str:
+    """1 -> '1st', 2 -> '2nd', 11 -> '11th', 22 -> '22nd'."""
+    special_ordinal_start = 10
+    special_ordinal_end = 13
+    if special_ordinal_start <= number % 100 <= special_ordinal_end:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(number % 10, "th")
+    return f"{number}{suffix}"
+
+
 class RosterTenure(RelatedCacheClearingMixin, SharedMemoryModel):
     """
     Tracks when a player plays a character with built-in anonymity.
@@ -89,30 +100,25 @@ class RosterTenure(RelatedCacheClearingMixin, SharedMemoryModel):
     @property
     def display_name(self) -> str:
         """Returns anonymous display like '2nd player of Ariel'"""
-        character_name = (
-            self.roster_entry.character_sheet.character.name
-            if self.roster_entry
-            else "Unknown Character"
-        )
-
+        character_name = self._character_name
         if self.player_number is None:
             return f"Player of {character_name}"
+        return f"{_ordinal(cast(int, self.player_number))} player of {character_name}"
 
-        player_number = cast(int, self.player_number)
+    @property
+    def speaker_name(self) -> str:
+        """The name a player speaks under in a channel: the bare character name for the
+        first player of a character, else the anonymous '2nd player of Ariel' form.
+        Never carries the account name."""
+        if self.player_number == 1:
+            return self._character_name
+        return self.display_name
 
-        # Ordinal suffix constants
-        SPECIAL_ORDINAL_START = 10
-        SPECIAL_ORDINAL_END = 13
-        ORDINAL_BASE = 100
-        ORDINAL_DIVISOR = 10
-
-        # Handle special cases for 11th, 12th, 13th
-        if SPECIAL_ORDINAL_START <= player_number % ORDINAL_BASE <= SPECIAL_ORDINAL_END:
-            suffix = "th"
-        else:
-            suffixes = {1: "st", 2: "nd", 3: "rd"}
-            suffix = suffixes.get(player_number % ORDINAL_DIVISOR, "th")
-        return f"{player_number}{suffix} player of {character_name}"
+    @property
+    def _character_name(self) -> str:
+        if not self.roster_entry:
+            return "Unknown Character"
+        return self.roster_entry.character_sheet.character.name
 
     @property
     def is_current(self) -> bool:
