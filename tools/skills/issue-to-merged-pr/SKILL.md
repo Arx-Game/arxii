@@ -71,7 +71,7 @@ A complete lightweight marker is the only path to `status:implementing` without
 `spec:approved`. A standard/heavyweight packet still requires the member-only
 spec gate after its product brief and technical design are complete.
 
-**Slices of an approved spec.** A slice issue declares its parent with one line `Slice N of #M` before `<!-- spec:start -->` (or at the top of a body without spec markers). `validate-discovery.sh` then passes `status:implementing` only if #M is open and carries `spec:approved`, and fails closed on a fetch error, a closed or missing parent, or more than one parent line. The slice's marker is its honest lane (`heavyweight` or `standard`, `state=complete`). Never write a lightweight marker to get past the check; that marker is for genuinely bounded work only, and a dispatch for a slice must say so.
+**Slices of an approved spec.** Slices are only for parallel builds; an approved spec otherwise ships as one PR that closes its issue (ADR-5072, Step 2). A slice issue declares its parent with one line `Slice N of #M` before `<!-- spec:start -->` (or at the top of a body without spec markers). `validate-discovery.sh` then passes `status:implementing` only if #M is open and carries `spec:approved`, and fails closed on a fetch error, a closed or missing parent, or more than one parent line. The slice's marker is its honest lane (`heavyweight` or `standard`, `state=complete`). Never write a lightweight marker to get past the check; that marker is for genuinely bounded work only, and a dispatch for a slice must say so.
 
 **The agent MUST NEVER apply `spec:approved` itself.** Only a human org member
 applies it — GitHub restricts label-writes to Triage+, so outsiders can't, but
@@ -289,21 +289,30 @@ nothing to decide):
 - **Decided extension.** The spec or the maintainer's recorded rulings already
   say what it is, it reuses a pattern the spec builds or the code has, and it adds
   no player- or staff-facing surface the spec hasn't shown. A missing tuning
-  number does not make it undecided (config values never gate). These are
-  **slices**, numbered in the spec's Scope section, and they are built one after
-  another without a new spec approval (Step 9, "Next slice"). Never park one as
-  a follow-up for the maintainer to pick up.
+  number does not make it undecided (config values never gate). It is **in
+  scope**: list it in the spec's Scope section as a numbered build step and build
+  it in the same PR, without a new spec approval. Never park one as a follow-up
+  for the maintainer to pick up.
 - **Design question.** A real fork only the maintainer can call. It becomes a
-  `needs-design` issue and a **checkpoint**: the slice sequence stops there and
-  the agent interviews the maintainer (Step 9).
+  **checkpoint**: the build pauses there and the agent interviews the maintainer
+  (Step 9), then carries on in the same PR. File a `needs-design` issue only when
+  the maintainer is not in the session to answer.
 - **New capability.** Something nothing in the game promises yet: ask first,
   as below.
 
-The parent issue stays open while slices remain, because a slice skips the spec
-gate only while its parent is open and carries `spec:approved`. Each slice gets
-its own child issue (`Slice N of #M`, filed with `file-followup.sh` when
-implementation starts, slice 1 included) and its PR closes that child, never the
-parent. #4813 → #4827 (slice 2) → #4828 is the shape.
+**An approved spec ships as one PR that closes its issue** (ADR-5072; owner
+rulings 2026-11-08 and 2026-11-11: "We should only use slices if we can do
+parallel implementations - if they're sequential, then they buy us nothing").
+The numbered Scope items are build order inside that PR. A gate inside the work,
+such as a demo the maintainer approves before one part is built, is a pause in
+the same PR, not a reason to split. **Slices are only for parallel builds:** split
+when two or more parts touch independent files and none needs another's output,
+so separate implementers can build them at once. Then the parent stays open while
+slices remain, because a slice skips the spec gate only while its parent is open
+and carries `spec:approved`. Each slice gets its own child issue (`Slice N of #M`,
+filed with `file-followup.sh` when implementation starts, slice 1 included) and
+its PR closes that child, never the parent. Never slice a sequence where each
+part builds on the last; that is one PR.
 
 Then hand off for **spec review** and exit:
 
@@ -508,9 +517,8 @@ and address (or consciously drop) these findings directly.
 Only file a follow-up for something that genuinely needs its own PR — a
 separable system, scope well beyond this issue, or an open design question
 needing a human call — and say what the blocker is in the issue body.
-**A decided extension of the approved spec is not a follow-up**: it is the next
-slice (Step 2's three kinds). File it as `Slice N of #M` and build it next
-(Step 9); it does not wait on anyone.
+**A decided extension of the approved spec is not a follow-up**: it is in scope
+(Step 2's three kinds) and is built in this PR; it does not wait on anyone.
 For each such follow-up, call
 `scripts/file-followup.sh <title> <body-path> <labels...>` NOW (before
 opening the PR) and collect the issue numbers.
@@ -814,21 +822,25 @@ Run `scripts/post-merge-cleanup.sh <branch> <pr-N>`. Read the JSON:
   file with `scripts/file-followup.sh` only for a genuine, stated blocker
   (CLAUDE.md "Fold In, Don't File" — the same default as Step 5).
 
-#### Next slice
+#### Checkpoints and parallel slices
 
-If the merged PR closed a `Slice N of #M` issue, read #M's Scope section and
-its open slice children. Then, without asking:
+Most specs ship as one PR (Step 2), so this applies in two cases: a checkpoint
+the build paused at, and a parallel slice set. If the merged PR closed a
+`Slice N of #M` issue, read #M's Scope section and its open slice children.
+Then, without asking:
 
-- **The next slice is a decided extension:** run `scripts/start-work.sh` on it
-  and carry it through this same lifecycle (no spec gate: the validator passes it
-  while #M is open with `spec:approved`). Tell the maintainer in one line what
-  you are starting; they can stop it, but nothing waits for a reply.
-- **The next item is a checkpoint (a design question):** interview the
-  maintainer. Show the concrete choice first (a demo, a trace, or two options
-  and how each plays), ask in a later turn with `AskUserQuestion`, record the
-  ruling on the `needs-design` issue and in #M, and carry on: the ruling turns
-  it into a decided slice. If the maintainer is not in the session, post the
-  choice on the issue and exit; that is the only stop.
+- **Open parallel slices remain:** run `scripts/start-work.sh` on each one not
+  yet started and carry it through this same lifecycle (no spec gate: the
+  validator passes it while #M is open with `spec:approved`). Tell the
+  maintainer in one line what you are starting; they can stop it, but nothing
+  waits for a reply.
+- **A checkpoint (a design question), whether met mid-build or after a merge:**
+  interview the maintainer. Show the concrete choice first (a demo, a trace, or
+  two options and how each plays), ask in a later turn with `AskUserQuestion`,
+  record the ruling on the issue, and carry on: the ruling turns it into a
+  decided build step in the same PR. If the maintainer is not in the session,
+  post the choice on the issue (a `needs-design` issue if it outlives this PR)
+  and exit; that is the only stop.
 - **Nothing remains:** close #M with a comment listing the slices and their
   PRs.
 
