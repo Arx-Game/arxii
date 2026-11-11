@@ -111,7 +111,7 @@ from world.societies.houses.constants import (
     TitleStation,
     TitleTier,
 )
-from world.societies.houses.demography import population_now
+from world.societies.houses.demography import populations_now
 from world.societies.houses.models import (
     Domain,
     DomainHolding,
@@ -392,10 +392,7 @@ def _realm_graph(realm_id: int) -> _RealmGraph | None:
     }
     # The people on every piece of land, once, by formula (#5069): a county's and a
     # barony's own, summed on read for the rungs above them.
-    population_by_area = {
-        domain.pk: population_now(domain)
-        for domain in Domain.objects.filter(area__realm_id=realm_id)
-    }
+    population_by_area = populations_now(Domain.objects.filter(area__realm_id=realm_id))
 
     return _RealmGraph(
         population_by_area=population_by_area,
