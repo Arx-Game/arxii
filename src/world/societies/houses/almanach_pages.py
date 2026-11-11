@@ -793,6 +793,16 @@ def rung_document(title: Title) -> RungDocument:
                 # the people now, by formula (#5069), never the stored base
                 "population": population_now(domain),
                 "population_capacity": domain.population_capacity,
+                "capacity_override": domain.capacity_override,
+                # the terrain mix, most ground first, for the Hinterland block (#5069)
+                "terrain": [
+                    {
+                        "terrain": count.terrain,
+                        "label": count.get_terrain_display(),
+                        "pips": count.pips,
+                    }
+                    for count in domain.terrain_counts.order_by("-pips", "terrain")
+                ],
                 "prosperity": domain.prosperity,
                 "unrest": domain.unrest,
                 "defenses": domain.defenses,

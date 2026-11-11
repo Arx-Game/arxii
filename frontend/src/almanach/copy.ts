@@ -13,10 +13,18 @@ export const STATES = {
   potential: 'Potential',
 } as const;
 
-/** The two faces of a title a reader is shown (#4983, owner's words): what it holds
- * now, and what its charter says it held. */
+/** The faces of a title a reader is shown. Holdings are the rungs beneath it, the
+ * ones its house holds directly and the ones its vassals hold (#5069, owner's words:
+ * "these are the baronies under your family control in this chain, and these are
+ * the baronies under your vassals"); the charter is what it held once (#4983). A
+ * county's own land is its hinterland; a barony's or county's grid businesses are
+ * its developments. Short words, never sentences. */
 export const SECTIONS = {
-  present_holdings: 'Present Holdings',
+  holdings: 'Holdings',
+  held: 'Held',
+  vassals: 'Vassals',
+  hinterland: 'Hinterland',
+  developments: 'Developments',
   historical_charter: 'Historical Charter',
 } as const;
 

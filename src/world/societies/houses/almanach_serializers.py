@@ -43,6 +43,7 @@ class LadderRowSerializer(serializers.Serializer):
     sworn_to = serializers.CharField(allow_blank=True)
     demesne = serializers.IntegerField()
     vassals = serializers.IntegerField()
+    population = serializers.IntegerField()
     claimable = serializers.BooleanField()
     seat_domain_id = serializers.IntegerField(allow_null=True)
     comes_with = serializers.CharField(allow_blank=True)

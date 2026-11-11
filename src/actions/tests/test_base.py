@@ -757,6 +757,7 @@ class ActionRegistryTests(TestCase):
             "almanach_assign_holder",
             "almanach_site_holding",
             "almanach_rename_holding",
+            "almanach_set_capacity",
             "almanach_remove_holding",
             "almanach_delete_rung",
             "almanach_move_rung",

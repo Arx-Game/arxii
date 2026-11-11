@@ -15,7 +15,12 @@ from world.areas.worldmap.models import AreaFootprintPip, RegionMap, TerrainPip
 from world.areas.worldmap.services import create_region_map, restore_pips, set_footprint
 from world.game_clock.factories import GameClockFactory
 from world.societies.factories import OrganizationFactory
-from world.societies.houses.demography import population_now, refresh_terrain_counts
+from world.societies.houses.demography import (
+    population_now,
+    prosperity_modifier_for,
+    refresh_terrain_counts,
+    set_capacity_override,
+)
 from world.societies.houses.models import DomainTerrainCount, DominionConfig, TerrainCalibration
 from world.societies.houses.services import create_domain
 from world.societies.territory import ensure_domain_stream, territory_gross
@@ -176,6 +181,30 @@ class TerrainCapacityTests(TestCase):
 
         self.assertEqual(refresh_terrain_counts(duchy), 0)
         self.assertFalse(DomainTerrainCount.objects.filter(domain__area=duchy).exists())
+
+    def test_a_staff_override_stands_in_for_the_terrain_until_cleared(self):
+        # A capital and a border fort sit on the same ground (#5069 slice 2).
+        set_capacity_override(self.barony_domain, 300000)
+        self.barony_domain.refresh_from_db()
+        self.assertEqual(self.barony_domain.population_capacity, 300000)
+        refresh_terrain_counts(self.barony)
+        self.barony_domain.refresh_from_db()
+        self.assertEqual(self.barony_domain.population_capacity, 300000, "a carve keeps it")
+
+        set_capacity_override(self.barony_domain, None)
+
+        self.barony_domain.refresh_from_db()
+        self.assertEqual(self.barony_domain.population_capacity, 100 * 50)
+
+    def test_the_terrains_pull_on_prosperity_is_the_pip_weighted_modifier(self):
+        for terrain, modifier in ((Terrain.PLAIN, 10), (Terrain.HILL, -4)):
+            row = TerrainCalibration.objects.get(terrain=terrain)
+            row.prosperity_modifier = modifier
+            row.save(update_fields=["prosperity_modifier"])
+        refresh_terrain_counts(self.county)
+
+        # 3 plain at +10, 2 hill at -4, 1 forest with no row: 22 over 6 pips
+        self.assertEqual(prosperity_modifier_for(self.county_domain), round(22 / 6))
 
 
 class CarveRecountsTests(TestCase):
