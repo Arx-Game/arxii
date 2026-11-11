@@ -193,14 +193,18 @@ def _use_non_technique(
     return MovementUse(went_off=True, strength=movement.standing_strength, fatigue_paid=fatigue)
 
 
-def _would_overspend(character: ObjectDB, technique: Technique, *, lethal: bool) -> bool:  # noqa: OBJECTDB_PARAM
-    """Whether a cast now would draw past her anima or she is already in Soulfray."""
+def _would_overspend(character: ObjectDB, technique: Technique) -> bool:  # noqa: OBJECTDB_PARAM
+    """Whether a cast now would cost more anima than she holds, or she is already in Soulfray.
+
+    Priced at the full cost: a non-lethal fight caps what a cast takes at what she holds,
+    but the cast still drains her toward Soulfray, which is what her answer is about.
+    """
     from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
     from world.magic.services.techniques import preview_technique_anima_cost  # noqa: PLC0415
 
     if get_soulfray_warning(character) is not None:
         return True
-    cost = preview_technique_anima_cost(character, technique, lethal=lethal)
+    cost = preview_technique_anima_cost(character, technique, lethal=True)
     return cost.effective_cost > cost.current_anima
 
 
@@ -224,7 +228,7 @@ def _cast_technique(
     if grant is None or cast_check is None:
         # A technique with no check to roll cannot be cast; the use does not happen.
         return MovementUse(went_off=False, strength=0, technique=technique)
-    if not confirm_soulfray_risk and _would_overspend(character, technique, lethal=lethal):
+    if not confirm_soulfray_risk and _would_overspend(character, technique):
         return MovementUse(went_off=False, strength=0, technique=technique)
     cast = MovementCast(
         character=character,
