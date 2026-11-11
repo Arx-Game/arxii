@@ -58,14 +58,31 @@ def population_now(domain: Domain, *, at: datetime | None = None) -> int:
     the people and the capacity goes away, in either direction, so a holding above its
     capacity shrinks toward it by the same curve a holding below grows.
     """
+    return populations_now([domain], at=at)[domain.pk]
+
+
+def populations_now(domains: Iterable[Domain], *, at: datetime | None = None) -> dict[int, int]:
+    """``population_now`` for many holdings with one clock read and one dials read:
+    the realm graph calls this once per realm, never the single form per row."""
+    from world.game_clock.models import GameClock  # noqa: PLC0415
+
     moment = at if at is not None else timezone.now()
-    months = ic_months_between(domain.population_rebased_at, moment)
-    if months <= 0:
-        return domain.population
+    clock = GameClock.get_active()
     rate = DominionConfig.load().population_rate_pct_per_month / 100
-    capacity = domain.population_capacity
-    gap = capacity - domain.population
-    return max(0, round(capacity - gap * math.exp(-rate * months)))
+    figures: dict[int, int] = {}
+    for domain in domains:
+        months = 0.0
+        if clock is not None:
+            ic_then = clock.get_ic_now(real_now=domain.population_rebased_at)
+            ic_now = clock.get_ic_now(real_now=moment)
+            months = max(0.0, (ic_now - ic_then).total_seconds() / _SECONDS_PER_IC_MONTH)
+        if months <= 0:
+            figures[domain.pk] = domain.population
+            continue
+        capacity = domain.population_capacity
+        gap = capacity - domain.population
+        figures[domain.pk] = max(0, round(capacity - gap * math.exp(-rate * months)))
+    return figures
 
 
 def rebase_population(domain: Domain, *, at: datetime | None = None) -> Domain:
