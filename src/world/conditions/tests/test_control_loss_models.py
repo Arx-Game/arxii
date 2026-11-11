@@ -67,7 +67,9 @@ class ControlLossTriggerTests(TestCase):
 
 
 class BandValidatorTests(TestCase):
-    """The monotonic-order rule over a whole band set, which only the admin formsets submit."""
+    """The monotonic-order rule and the control-for-power trade rule (#4887) over a band set.
+
+    No journey authors bands; the admin formsets and model ``clean()`` are the only seams."""
 
     def test_validate_compulsion_bands_rejects_better_outcome_with_worse_result(self) -> None:
         compulsion = CompulsionFactory()
@@ -142,6 +144,18 @@ class BandValidatorTests(TestCase):
         )
         band.control_change = -5
         self.assertEqual(validate_control_loss_bands([band]), [])
+
+    def test_model_clean_refuses_a_failure_that_gains_more_than_it_loses(self) -> None:
+        """The band's own ``clean()`` (any ``full_clean`` save) runs the trade rule too."""
+        band = ControlLossBandFactory.build(
+            trigger=ControlLossTriggerFactory(wound=True),
+            outcome=CheckOutcomeFactory(name="Slip", success_level=-1),
+            intensity=5,
+            control_change=-1,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            band.clean()
+        self.assertIn("'Slip' is a failure", " ".join(ctx.exception.messages))
 
     def test_a_middling_band_is_neither_success_nor_failure(self) -> None:
         band = ControlLossBandFactory.build(

@@ -407,8 +407,7 @@ class ATalkedDownSelfStaysUntilSheChangesBack(_ATalkedDownSelf):
 
 
 class AFriendRalliesHerOutOfTheFury(_ATalkedDownSelf):
-    """Hobb talks her down: his rally backs her break-free, and once the fury is broken
-    `form revert` works."""
+    """Hobb's rally backs her break-free of the fury; she changes back afterwards."""
 
     def setUp(self) -> None:
         super().setUp()

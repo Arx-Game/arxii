@@ -1793,6 +1793,7 @@ class TomasTalksTheBeastDown(_ATalkedDownBeast):
             told = self.telnet(self.mira, "form revert")
 
         self.assertIn("You revert to your true self.", told)
+        self.assertNotIn("Resist compulsion", told)
         self.assertEqual(spy.call_count, 0)
         self.assertFalse(self.wearing_the_beast())
         self.assertTrue(has_condition(self.mira, self.fury))
@@ -1805,9 +1806,11 @@ class TomasTalksTheBeastDown(_ATalkedDownBeast):
         )
 
         self.assertEqual(response.status_code, 200, response.data)
+        self.assertIsNone(response.data["active_alternate_self_id"])
         self.assertFalse(self.wearing_the_beast())
 
     def test_still_raging_she_rolls_to_change_back(self) -> None:
+        """Beast Fury holds the talked-down self, but Berserk's compulsion still rolls."""
         with force_check_outcome(self.success):
             told = self.telnet(self.mira, "form revert")
 
