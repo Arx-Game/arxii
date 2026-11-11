@@ -47,9 +47,9 @@ function createWrapper() {
  *   id=2 → resonance 10  (same resonance as thread 1)
  *   id=3 → resonance 20  (different resonance)
  */
-const THREAD_1 = { id: 1, resonance: 10, name: 'Alpha' };
-const THREAD_2 = { id: 2, resonance: 10, name: 'Beta' };
-const THREAD_3 = { id: 3, resonance: 20, name: 'Gamma' };
+const THREAD_1 = { id: 1, resonance: 10, resonance_name: 'Dawnlight', name: 'Alpha' };
+const THREAD_2 = { id: 2, resonance: 10, resonance_name: 'Dawnlight', name: 'Beta' };
+const THREAD_3 = { id: 3, resonance: 20, resonance_name: 'Gloam', name: 'Gamma' };
 
 function setupThreads(threads = [THREAD_1, THREAD_2, THREAD_3]) {
   mockUseThreads.mockReturnValue({
@@ -103,57 +103,37 @@ describe('useCastPullSelection', () => {
   // -------------------------------------------------------------------------
   // Case 1: grouping revert + notice
   // -------------------------------------------------------------------------
-  describe('handlePullsChange — single (resonance, tier) group enforcement', () => {
-    it('reverts conflicting paid pulls to one (resonance, tier) group', () => {
+  describe('handlePullsChange — one tier, any resonances (#5066)', () => {
+    it('keeps threads of different resonances at the same tier together', () => {
       const wrapper = createWrapper();
       const { result } = renderHook(() => useCastPullSelection(baseParams), { wrapper });
 
-      // Raise thread 1 at tier 2 first
       act(() => result.current.handlePullsChange({ 1: 2, 2: 0, 3: 0 }));
-      expect(result.current.selectedPulls).toEqual({ 1: 2, 2: 0, 3: 0 });
-
-      // Newly raise thread 3 (different resonance 20) — thread 3 is the anchor,
-      // thread 1 (resonance 10) disagrees so thread 1 is reverted.
+      // Thread 3 is of another resonance (20) at the same tier: no conflict.
       act(() => result.current.handlePullsChange({ 1: 2, 2: 0, 3: 2 }));
-      expect(result.current.selectedPulls).toEqual({ 1: 0, 2: 0, 3: 2 });
-      expect(result.current.pullNotice).toMatch(/single resonance and tier/i);
-    });
-
-    it('reverts pulls with a different tier in the same resonance', () => {
-      const wrapper = createWrapper();
-      const { result } = renderHook(() => useCastPullSelection(baseParams), { wrapper });
-
-      // Thread 1 at tier 2 (resonance 10)
-      act(() => result.current.handlePullsChange({ 1: 2, 2: 0, 3: 0 }));
-      // Thread 2 (same resonance 10) newly raised at tier 3 — different tier.
-      // Thread 2 is the anchor; thread 1 disagrees on tier so thread 1 is reverted.
-      act(() => result.current.handlePullsChange({ 1: 2, 2: 3, 3: 0 }));
-      expect(result.current.selectedPulls).toEqual({ 1: 0, 2: 3, 3: 0 });
-      expect(result.current.pullNotice).toMatch(/single resonance and tier/i);
-    });
-
-    it('allows same resonance and same tier to coexist', () => {
-      const wrapper = createWrapper();
-      const { result } = renderHook(() => useCastPullSelection(baseParams), { wrapper });
-
-      // Thread 1 at tier 2
-      act(() => result.current.handlePullsChange({ 1: 2, 2: 0, 3: 0 }));
-      // Thread 2 (same resonance 10, same tier 2) — no conflict
-      act(() => result.current.handlePullsChange({ 1: 2, 2: 2, 3: 0 }));
-      expect(result.current.selectedPulls).toEqual({ 1: 2, 2: 2, 3: 0 });
+      expect(result.current.selectedPulls).toEqual({ 1: 2, 2: 0, 3: 2 });
       expect(result.current.pullNotice).toBeNull();
+    });
+
+    it('reverts pulls at a different tier', () => {
+      const wrapper = createWrapper();
+      const { result } = renderHook(() => useCastPullSelection(baseParams), { wrapper });
+
+      act(() => result.current.handlePullsChange({ 1: 2, 2: 0, 3: 0 }));
+      // Thread 3 newly raised at tier 3; thread 1 disagrees on tier and is reverted.
+      act(() => result.current.handlePullsChange({ 1: 2, 2: 0, 3: 3 }));
+      expect(result.current.selectedPulls).toEqual({ 1: 0, 2: 0, 3: 3 });
+      expect(result.current.pullNotice).toMatch(/single tier/i);
     });
 
     it('clears pullNotice when all paid pulls are deselected', () => {
       const wrapper = createWrapper();
       const { result } = renderHook(() => useCastPullSelection(baseParams), { wrapper });
 
-      // Create a conflict to set a notice
       act(() => result.current.handlePullsChange({ 1: 2, 2: 0, 3: 0 }));
-      act(() => result.current.handlePullsChange({ 1: 2, 2: 0, 3: 2 }));
+      act(() => result.current.handlePullsChange({ 1: 2, 2: 3, 3: 0 }));
       expect(result.current.pullNotice).not.toBeNull();
 
-      // Deselect all
       act(() => result.current.handlePullsChange({ 1: 0, 2: 0, 3: 0 }));
       expect(result.current.pullNotice).toBeNull();
     });
@@ -189,7 +169,6 @@ describe('useCastPullSelection', () => {
       const payload = result.current.buildPullPayload();
       expect(payload).toEqual({
         pull: {
-          resonance_id: 10,
           tier: 2,
           thread_ids: [1, 2],
         },
@@ -374,7 +353,24 @@ describe('useCastPullSelection', () => {
       act(() => result.current.handlePullsChange({ 1: 2 }));
       act(() => result.current.setBurn(9));
       expect(result.current.buildPullPayload()).toEqual({
-        pull: { resonance_id: 10, tier: 2, thread_ids: [1], burn: 4 },
+        pull: { tier: 2, thread_ids: [1], burn: 4, burn_resonance_id: 10 },
+      });
+    });
+
+    it('on a mixed pull, burns only the resonance the player picks (#5066)', () => {
+      mockUsePullBurnPreview.mockReturnValue(burnData(4));
+      const wrapper = createWrapper();
+      const { result } = renderHook(() => useCastPullSelection(baseParams), { wrapper });
+      act(() => result.current.handlePullsChange({ 1: 2, 3: 2 }));
+      expect(result.current.pulledResonances).toEqual([
+        { id: 10, name: 'Dawnlight' },
+        { id: 20, name: 'Gloam' },
+      ]);
+      expect(result.current.burnResonanceId).toBeNull();
+      act(() => result.current.setBurnResonanceId(20));
+      act(() => result.current.setBurn(3));
+      expect(result.current.buildPullPayload()).toEqual({
+        pull: { tier: 2, thread_ids: [1, 3], burn: 3, burn_resonance_id: 20 },
       });
     });
 
@@ -384,7 +380,7 @@ describe('useCastPullSelection', () => {
       const { result } = renderHook(() => useCastPullSelection(baseParams), { wrapper });
       act(() => result.current.handlePullsChange({ 1: 2 }));
       expect(result.current.buildPullPayload()).toEqual({
-        pull: { resonance_id: 10, tier: 2, thread_ids: [1] },
+        pull: { tier: 2, thread_ids: [1] },
       });
       act(() => result.current.setBurn(3));
       act(() => result.current.reset());

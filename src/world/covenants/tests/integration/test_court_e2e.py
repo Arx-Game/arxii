@@ -343,7 +343,6 @@ class CourtJourneyEndToEndTests(TestCase):
         anima_before = CharacterAnima.objects.get(character=self.servant).current
 
         cast_pull = CastPullDeclaration(
-            resonance=self.resonance,
             tier=1,
             threads=(thread, companion_thread),
         )

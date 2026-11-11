@@ -575,7 +575,7 @@ class TestEnhancedActionPaidPullFollowsTheActionCheck(SceneMagicTestMixin, TestC
         ThreadPullEffectFactory(
             target_kind=TargetKind.TRAIT, resonance=resonance, tier=1, flat_bonus_amount=1
         )
-        pull = CastPullDeclaration(resonance=resonance, tier=1, threads=(thread,))
+        pull = CastPullDeclaration(tier=1, threads=(thread,))
 
         from world.magic.services.resonance import spend_resonance_for_pull
 
@@ -595,7 +595,7 @@ class TestEnhancedActionPaidPullFollowsTheActionCheck(SceneMagicTestMixin, TestC
                 cast_pull=pull,
             )
 
-        context = spend.call_args.args[4]
+        context = spend.call_args.args[3]
         assert presence.pk in context.involved_traits
         character_resonance.refresh_from_db()
         assert character_resonance.balance == 7

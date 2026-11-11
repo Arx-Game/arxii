@@ -58,6 +58,11 @@ from web.admin.game_setup_views import game_setup
 from web.admin.import_hub.place_names import place_name_paste
 from web.admin.import_hub.views import import_hub
 from web.admin.kit_view.views import kit_view, kit_view_pick
+from web.admin.power_builder.views import (
+    power_builder,
+    power_builder_pick,
+    power_builder_review,
+)
 from web.admin.seed_views import seed_confirm, seed_run
 from web.admin.soulfray_builder.views import (
     soulfray_builder,
@@ -279,6 +284,14 @@ urlpatterns = [
     path("_vow_builder/pick/", vow_builder_pick, name="admin_vow_builder_pick"),
     path("_vow_builder/<int:pk>/", vow_builder, name="admin_vow_builder"),
     path("_vow_builder/<int:pk>/review/", vow_builder_review, name="admin_vow_builder_review"),
+    path("_power_builder/pick/", power_builder_pick, name="admin_power_builder_pick"),
+    path("_power_builder/new/", power_builder, name="admin_power_builder_new"),
+    path("_power_builder/<int:pk>/", power_builder, name="admin_power_builder"),
+    path(
+        "_power_builder/<int:pk>/review/",
+        power_builder_review,
+        name="admin_power_builder_review",
+    ),
     path(
         "_combo_map/property/pick/",
         combo_map_property_pick,

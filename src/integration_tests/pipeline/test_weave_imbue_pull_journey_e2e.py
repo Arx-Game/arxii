@@ -331,7 +331,6 @@ class WeaveImbulePullJourneyE2ETests(TestCase):
         )
         spend_resonance_for_pull(
             character_sheet=self.sheet,
-            resonance=self.resonance,
             tier=1,
             threads=[pulled_thread],
             action_context=pull_ctx,

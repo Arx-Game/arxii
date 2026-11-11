@@ -601,7 +601,7 @@ class TechniqueAdmin(admin.ModelAdmin):
         "has_perceptible_effect",
         TechniqueAuthoringGapFilter,
     ]
-    filter_horizontal = ["restrictions", "target_prerequisites"]
+    filter_horizontal = ["restrictions", "target_prerequisites", "properties"]
     search_fields = ["name", "description"]
     readonly_fields = ["get_tier", "get_effect_summary"]
     autocomplete_fields = ["creator", "effect_type", "gift", "skill"]
@@ -677,6 +677,21 @@ class TechniqueAdmin(admin.ModelAdmin):
     def get_effect_summary(self, obj: Technique) -> str:
         """The same plain-words line players read on every surface."""
         return obj.cached_effect_summary["summary"]
+
+    def get_changeform_initial_data(self, request):
+        """A new technique opened on a gift (``?gift=<pk>``) starts with that gift's
+        substance mark ticked (#5066); staff untick it where it does not belong."""
+        from world.magic.services.technique_marks import substance_mark_for  # noqa: PLC0415
+
+        initial = super().get_changeform_initial_data(request)
+        marks_field = "properties"  # noqa: STRING_LITERAL - the form field the marks fill
+        gift_pk = initial.get("gift")
+        if gift_pk and marks_field not in initial:
+            gift = Gift.objects.filter(pk=gift_pk).first()
+            mark = substance_mark_for(gift)
+            if mark is not None:
+                initial[marks_field] = [mark.pk]
+        return initial
 
     def save_related(self, request, form, formsets, change):
         """Rebuild the derived effect caches after an inline payload edit (#2898).
@@ -996,7 +1011,16 @@ class GiftSubstanceInline(admin.StackedInline):
     can_delete = True
     verbose_name = "Substance"
     verbose_name_plural = "Substance"
-    fields = ["label", "stat_key", "direction", "full_at", "opposed_by", "arrival_line"]
+    fields = [
+        "label",
+        "stat_key",
+        "direction",
+        "full_at",
+        "opposed_by",
+        "arrival_line",
+        "property",
+    ]
+    autocomplete_fields = ["property"]
 
 
 @admin.register(Gift)

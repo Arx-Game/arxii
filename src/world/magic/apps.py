@@ -50,6 +50,9 @@ def ready() -> None:
     register_offer_handler(CrossingOfferHandler())
     register_offer_handler(SoulfrayPendingHandler())
     register_offer_handler(UltimateRevealHandler())
+    from world.combat.services.dodge_check_in import DodgeSoulfrayHandler  # noqa: PLC0415
+
+    register_offer_handler(DodgeSoulfrayHandler())
 
     # Register crossing-ceremony handlers (ADR-0094, #1987).
     # Each TargetKind dispatches to a handler when a thread crosses a

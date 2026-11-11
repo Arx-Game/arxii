@@ -305,6 +305,20 @@ class GiftSubstance(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         ),
     )
 
+    property = models.ForeignKey(
+        "arxii.Property",
+        verbose_name="Mark on new techniques",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="gift_substances",
+        help_text=(
+            "The mark a new technique on this gift starts with ticked (#5066), such as "
+            "'shadow'. Only a convenience: staff untick it on a technique where it does "
+            "not belong, and nothing reads it in play. Blank: new techniques start unmarked."
+        ),
+    )
+
     objects = GiftSubstanceManager()
 
     class NaturalKeyConfig:

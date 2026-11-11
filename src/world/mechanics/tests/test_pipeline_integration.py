@@ -155,9 +155,11 @@ class PipelineTestMixin:
             category=cls.elemental_category,
         )
 
-        # Link resonances to their effect properties via M2M
+        # The technique's own properties are its effect properties (#5066); the
+        # resonances carry them too, which must not matter.
         cls.flame_resonance.properties.add(cls.flame_property)
         cls.heat_resonance.properties.add(cls.heat_property)
+        cls.technique.properties.add(cls.flame_property, cls.heat_property)
 
         # === 4. Capabilities and grants ===
         cls.generation_cap = CapabilityTypeFactory(name="generation")
@@ -383,7 +385,7 @@ class ChallengePathTests(PipelineTestMixin, TestCase):
         self,
         mock_diff: object,
     ) -> None:
-        """A technique without heat resonance cannot use Heat Manipulation."""
+        """A technique without the heat property cannot use Heat Manipulation."""
         mock_diff.return_value = DifficultyIndicator.MODERATE
 
         # Create second technique with Flame only (no Heat)
@@ -402,6 +404,7 @@ class ChallengePathTests(PipelineTestMixin, TestCase):
             base_value=3,
             intensity_multiplier=Decimal("1.0"),
         )
+        flame_technique.properties.add(self.flame_property)
         CharacterTechniqueFactory(
             character=self.sheet,
             technique=flame_technique,

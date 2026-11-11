@@ -367,10 +367,11 @@ once at the top of `resolve_round` and threaded through).
 #### `CharacterTechniqueHandler`
 
 Lives on the `Character` typeclass (alongside `character.combat_pulls`).
-Caches the character's full technique inventory with effect properties
-pre-resolved. Replaces the per-call walks of
-`mechanics.services._get_technique_effect_property_ids` from inside the
-clash-eligibility paths.
+Caches the character's full technique inventory. Its
+`effect_property_ids_for(technique)` returns the technique's own marks
+(`Technique.properties`, #5066), read fresh from the marks table so a mark
+staff tick or untick reaches the next read; the gift's resonances never
+count.
 
 ```python
 class CharacterTechniqueHandler:
@@ -384,9 +385,8 @@ class CharacterTechniqueHandler:
         """ONE prefetched queryset.
 
         Each entry: (Technique instance, frozenset[Property.pk]).
-        Effect property IDs derive from technique.gift.cached_resonances
-        × cached_properties via the existing prefetch chain in
-        mechanics.services.
+        Effect property IDs are the technique's own marks
+        (Technique.properties, #5066), never its gift's resonances.
         """
         ...
 
@@ -711,13 +711,14 @@ and consume both in `_detect_clash_flavor`.
 is the authored taxonomy. Categories already cover the relevant axes —
 elemental, physical, social. Per-target attachments exist via
 `ChallengeTemplateProperty` (per-challenge-template) and `ObjectProperty`
-(per-runtime-object). Techniques already derive effect-property IDs through
-`mechanics.services._get_technique_effect_property_ids(technique)`, which
-walks `technique.gift.cached_resonances[*].cached_properties` — a
-prefetch-chain-friendly path.
+(per-runtime-object). A technique's effect properties are its own
+`Technique.properties` (#5066, ADR-5066), read by `_technique_effect_property_ids`
+(`world/combat/clash.py`) and `CharacterTechniqueHandler.effect_property_ids_for`,
+so a clash opposes substance against substance. The gift's resonances never
+count (resonance is how she feels when she casts, not what the magic does).
 
-So a technique authoring its opposition surface is just authoring the
-right `Property` rows on its Gift's Resonance. No new model.
+So a technique authoring its opposition surface is just ticking the right
+`Property` rows on the technique itself. No new model.
 
 #### What's new — `ThreatPoolEntry.effect_properties`
 

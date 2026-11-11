@@ -324,8 +324,8 @@ class CombatRoundContext(RoundContext):
     ) -> None:
         """Commit the web form's thread pull (and any burn) with a focused cast (#4736).
 
-        The web declaration card sends ``pull_resonance_id`` / ``pull_tier`` /
-        ``pull_thread_ids`` (and ``pull_burn``) on the COMBAT backend, which records the
+        The web declaration card sends ``pull_tier`` / ``pull_thread_ids`` (and
+        ``pull_burn``, ``pull_burn_resonance_id``) on the COMBAT backend, which records the
         declaration here rather than through ``CastTechniqueAction.round_declaration``;
         without this the pull was dropped. Same commit as the telnet seam.
         """
@@ -393,8 +393,7 @@ class CombatRoundContext(RoundContext):
             return False
         expected_burned_for = PullBurnAction.CAST if cast_pull.burn > 0 else ""
         same = (
-            existing.resonance_id == cast_pull.resonance.pk
-            and existing.tier == cast_pull.tier
+            existing.tier == cast_pull.tier
             and set(existing.threads.values_list("pk", flat=True))
             == {thread.pk for thread in cast_pull.threads}
             and existing.burned_for == expected_burned_for

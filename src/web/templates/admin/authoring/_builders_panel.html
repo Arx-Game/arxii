@@ -10,7 +10,8 @@ Each row is a small GET form: the picker (a labelled select) posts nothing of it
 only names which existing row to open, and its own `*_pick` view (a plain
 redirect, 400 on a missing/unknown pk) does the rest. Takes `builders`, a
 dict of `distinctions`/`beginnings`/`upbringings`/`soulfray_stages`/
-`glimpse_tag_count` built by `web.admin.authoring.views._builders_context`.
+`glimpse_tag_count`/`power_applications` built by
+`web.admin.authoring.views._builders_context`.
 {% endcomment %}
 <style>
   #panel-authoring-builders .ab-picker {
@@ -83,6 +84,26 @@ dict of `distinctions`/`beginnings`/`upbringings`/`soulfray_stages`/
           <button type="submit">New Upbringing</button>
         </form>
         <p class="help">Author one Upbringing's questions, answers and offers.</p>
+      </td>
+    </tr>
+    <tr>
+      <th>Power Builder</th>
+      <td>
+        <form method="get" action="{% url 'admin_power_builder_pick' %}" class="ab-picker">
+          <label for="power-builder-select">Let people</label>
+          <select id="power-builder-select" name="pk">
+            {% for capability_name, applications in builders.power_applications %}
+            <optgroup label="{{ capability_name }}">
+              {% for pk, label in applications %}
+              <option value="{{ pk }}">{{ label }}</option>
+              {% endfor %}
+            </optgroup>
+            {% endfor %}
+          </select>
+          <button type="submit">Open</button>
+        </form>
+        <a href="{% url 'admin_power_builder_new' %}">New application</a>
+        <p class="help">Start from what people should be able to do: the application, its capability and the property it needs, and every technique and other source that does it or nearly does.</p>
       </td>
     </tr>
     <tr>

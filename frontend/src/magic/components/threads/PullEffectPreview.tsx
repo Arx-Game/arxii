@@ -72,7 +72,6 @@ export function PullEffectPreview({ thread }: PullEffectPreviewProps) {
 
       previewPull({
         character_sheet_id: thread.owner,
-        resonance_id: thread.resonance,
         tier: selectedTier,
         thread_ids: [thread.id],
       })
@@ -85,7 +84,7 @@ export function PullEffectPreview({ thread }: PullEffectPreviewProps) {
           setLoadingPreview(false);
         });
     },
-    [thread.id, thread.owner, thread.resonance]
+    [thread.id, thread.owner]
   );
 
   // Debounced fetch on tier change.

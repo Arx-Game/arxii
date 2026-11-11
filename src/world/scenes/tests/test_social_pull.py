@@ -104,7 +104,6 @@ class ChargeSocialPullTests(TestCase):
     def _make_request_with_pull(self, thread, *, tier=1):
         """Create a PENDING action request with a persisted pull declaration."""
         cast_pull = CastPullDeclaration(
-            resonance=self.resonance,
             tier=tier,
             threads=(thread,),
         )
@@ -238,7 +237,7 @@ class DenyPathCleanupTests(TestCase):
 
     def test_deny_deletes_pull_declaration(self):
         """On DENY, the pull declaration row is cleaned up and no charge fires."""
-        cast_pull = CastPullDeclaration(resonance=self.resonance, tier=1, threads=(self.thread,))
+        cast_pull = CastPullDeclaration(tier=1, threads=(self.thread,))
         request = create_action_request(
             scene=self.scene,
             initiator_persona=self.initiator_persona,
@@ -283,7 +282,7 @@ class EndToEndSocialPullTests(TestCase):
 
     def test_accept_charges_pull_and_resolves(self):
         """Full flow: create with pull → accept → resonance debited, request RESOLVED."""
-        cast_pull = CastPullDeclaration(resonance=self.resonance, tier=1, threads=(self.thread,))
+        cast_pull = CastPullDeclaration(tier=1, threads=(self.thread,))
         request = create_action_request(
             scene=self.scene,
             initiator_persona=self.initiator_persona,

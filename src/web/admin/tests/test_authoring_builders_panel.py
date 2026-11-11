@@ -95,15 +95,17 @@ class BuildersPanelRenderTest(BuildersPanelTestCase):
 class BuildersContextQueryCountTest(BuildersPanelTestCase):
     """``_builders_context()`` stays at one query per option list (#3675 review).
 
-    Five lists, five queries: distinctions, beginnings, upbringings (one query
+    Six lists, six queries: distinctions, beginnings, upbringings (one query
     even with the ``select_related("beginning")`` label-building comprehension),
-    the Soulfray stages (#4089), and the glimpse tag count. A regression here is
-    an N+1 hiding behind the docstring's "one query each" claim.
+    the Soulfray stages (#4089), the glimpse tag count, and the sixth, the Power
+    Builder's application list (#5066, one query with its capability and target
+    property joined). A regression here is an N+1 hiding behind the docstring's
+    "one query each" claim.
     """
 
-    def test_builders_context_runs_five_queries(self):
+    def test_builders_context_runs_six_queries(self):
         SoulfrayConfig.objects.cached_singleton()  # the config read is cached in play
-        with self.assertNumQueries(5):
+        with self.assertNumQueries(6):
             _builders_context()
 
 

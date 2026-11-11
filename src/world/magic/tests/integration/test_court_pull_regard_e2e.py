@@ -134,7 +134,7 @@ class CourtPullRegardModulationJourneyTests(TestCase):
             character_sheet=servant,
             status=ParticipantStatus.ACTIVE,
         )
-        cast_pull = CastPullDeclaration(resonance=self.resonance, tier=1, threads=(thread,))
+        cast_pull = CastPullDeclaration(tier=1, threads=(thread,))
 
         commit_combat_pull(
             cast_pull=cast_pull,

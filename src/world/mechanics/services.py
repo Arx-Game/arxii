@@ -19,14 +19,16 @@ from django.db.models import Prefetch, Q, Sum
 from typeclasses.characters import Character
 from world.checks.modifier_values import ValueTable, load_value_table
 from world.checks.services import chart_has_success_outcomes, preview_check_difficulty
-from world.conditions.services import get_all_capability_values
+from world.conditions.services import (
+    condition_capability_contributions,
+    thread_passive_capability_grants,
+)
 from world.distinctions.models import CharacterDistinction
 from world.magic.constants import EffectKind, TargetKind
 from world.magic.models import (
     FacetEffectBonus,
     Motif,
     MotifResonance,
-    Resonance,
     StylePresentationEndorsement,
     TechniqueCapabilityGrant,
     ThreadPullEffect,
@@ -466,7 +468,9 @@ def get_modifier_total(
     return eager_total + equipment_total + crafted_total + fashion_total
 
 
-def power_flat_bonus_for_resonance(sheet: object, resonance_id: int) -> int:
+def power_flat_bonus_for_resonance(
+    sheet: object, resonance_id: int | None, *, scoped_only: bool = False
+) -> int:
     """Sum POWER-category flat modifiers (distinctions) applicable to ``resonance_id``.
 
     A distinction expresses "potency" for a resonance by authoring a ``DistinctionEffect`` on
@@ -485,16 +489,28 @@ def power_flat_bonus_for_resonance(sheet: object, resonance_id: int) -> int:
     side. ``_derive_power``'s FLAT stage also sums condition-sourced POWER contributions
     (``get_condition_modifier_breakdown``), which a standalone pull never sees.
 
+    A pull may mix resonances (#5066): its caller sums the unscoped targets once
+    (``resonance_id=None``) and each pulled resonance's scoped targets
+    (``scoped_only=True``), so an unscoped bonus never counts once per resonance.
+
     Args:
         sheet: CharacterSheet instance.
-        resonance_id: PK of the Resonance the pull is keyed to.
+        resonance_id: PK of the Resonance the pull is keyed to; None for the unscoped
+            targets alone.
+        scoped_only: Sum only the targets scoped to ``resonance_id``.
 
     Returns:
         Integer total (0 if no matching POWER-category target or no modifier).
     """
+    if resonance_id is None:
+        scope = Q(target_resonance_id__isnull=True)
+    elif scoped_only:
+        scope = Q(target_resonance_id=resonance_id)
+    else:
+        scope = Q(target_resonance_id=resonance_id) | Q(target_resonance_id__isnull=True)
     targets = (
         ModifierTarget.objects.filter(category__name=POWER_CATEGORY_NAME)
-        .filter(Q(target_resonance_id=resonance_id) | Q(target_resonance_id__isnull=True))
+        .filter(scope)
         .exclude(name=POWER_MULTIPLIER_TARGET_NAME)
     )
     return sum(get_modifier_total(sheet, target) for target in targets)
@@ -1498,26 +1514,12 @@ def _get_technique_sources(
     grants = list(
         TechniqueCapabilityGrant.objects.filter(
             technique__character_grants__character__character=character,
-        )
-        .select_related(
+        ).select_related(
             "technique",
             "technique__gift",
             "capability",
             "prerequisite",
             "prerequisite__property",
-        )
-        .prefetch_related(
-            Prefetch(
-                "technique__gift__resonances",
-                queryset=Resonance.objects.prefetch_related(
-                    Prefetch(
-                        "properties",
-                        queryset=Property.objects.all(),
-                        to_attr="cached_properties",
-                    ),
-                ),
-                to_attr="cached_resonances",
-            ),
         )
     )
     if not grants:
@@ -1525,9 +1527,13 @@ def _get_technique_sources(
 
     from world.magic.services.capability_curve import get_capability_power_config  # noqa: PLC0415
     from world.magic.services.resonance import resolve_gift_ids_by_technique  # noqa: PLC0415
+    from world.magic.services.technique_marks import (  # noqa: PLC0415
+        effect_property_ids_by_technique,
+    )
     from world.magic.types.pull import PullActionContext  # noqa: PLC0415
 
     power_config = get_capability_power_config()
+    marks = effect_property_ids_by_technique(grant.technique_id for grant in grants)
     if power_config is None:
         # Inert invariant (#2708 C1): no config row means the curve is disabled
         # EVERYWHERE. Skip the thread/power derivation entirely — see the sibling
@@ -1535,7 +1541,7 @@ def _get_technique_sources(
         # agency oracle this availability oracle must agree with in the inert
         # state. See ``_inert_technique_capability_sources`` for why bare
         # ``calculate_value()`` reproduces the pre-#2708 output exactly.
-        return _inert_technique_capability_sources(grants)
+        return _inert_technique_capability_sources(grants, marks)
 
     try:
         handler = character.threads
@@ -1569,8 +1575,8 @@ def _get_technique_sources(
         if value <= 0:
             continue
 
-        # Effect property IDs come from the Gift's resonances' modifier_target links
-        effect_property_ids = _get_technique_effect_property_ids(grant.technique)
+        # Effect property IDs are the technique's own marks (#5066).
+        effect_property_ids = list(marks[technique_id])
 
         sources.append(
             CapabilitySource(
@@ -1590,6 +1596,7 @@ def _get_technique_sources(
 
 def _inert_technique_capability_sources(
     grants: list[TechniqueCapabilityGrant],
+    marks: dict[int, frozenset[int]],
 ) -> list[CapabilitySource]:
     """Availability-oracle sources with ``calculate_value()`` called bare.
 
@@ -1606,7 +1613,7 @@ def _inert_technique_capability_sources(
         value = grant.calculate_value(config=None)
         if value <= 0:
             continue
-        effect_property_ids = _get_technique_effect_property_ids(grant.technique)
+        effect_property_ids = list(marks[grant.technique_id])
         sources.append(
             CapabilitySource(
                 capability_name=grant.capability.name,
@@ -1620,31 +1627,6 @@ def _inert_technique_capability_sources(
             )
         )
     return sources
-
-
-def _get_technique_effect_property_ids(technique: object) -> list[int]:
-    """
-    Derive effect Property IDs from a Technique's Gift resonances.
-
-    Each Resonance has a M2M to Property. Collects all Property IDs
-    from the technique's gift's resonances via prefetched cached_properties.
-
-    Expects technique.gift.cached_resonances[*].cached_properties to be
-    pre-populated via the _get_technique_sources() prefetch chain.
-
-    Intentionally reads the authored supported set (cached_resonances), NOT
-    the per-character cast-time resonance. The cast-time value is resolved via
-    gift_resonances_for(character, gift) at the cast sites (ADR-0052); this is
-    the inventory/capability walk that enumerates what the technique *can* do,
-    not what it *does* for a specific character.
-    """
-    if not hasattr(technique, "gift_id") or not technique.gift_id:
-        return []
-
-    property_ids: list[int] = []
-    for resonance in technique.gift.cached_resonances:
-        property_ids.extend(p.id for p in resonance.cached_properties)
-    return property_ids
 
 
 def _get_trait_sources(character: ObjectDB) -> list[CapabilitySource]:
@@ -1687,7 +1669,15 @@ def _get_trait_sources(character: ObjectDB) -> list[CapabilitySource]:
 
 
 def _get_condition_sources(character: ObjectDB) -> list[CapabilitySource]:
-    """Get Capability sources from active conditions."""
+    """One source per active condition per capability it raises, with its marks (#5066).
+
+    A condition reaches an application by what it carries: its template's and current
+    stage's properties ride the source as ``effect_property_ids``. Thread-passive
+    capability grants (engaged tier-0 CAPABILITY_GRANT rows) follow as one source per
+    capability with no marks. A condition that lowers a capability (a debuff) is not a
+    source: its total is taken off each of these sources of that capability, so it
+    impairs them as the summed value did before (#5066 review).
+    """
     try:
         sheet = character.sheet_data
     except ObjectDoesNotExist:
@@ -1695,37 +1685,52 @@ def _get_condition_sources(character: ObjectDB) -> list[CapabilitySource]:
         # capabilities are character-specific and conditions on a sheet-less
         # object don't materialize as CharacterModifier rows.
         return []
-    cap_values = get_all_capability_values(sheet)
-
-    sources: list[CapabilitySource] = []
-    for cap_id, value in cap_values.items():
-        if value <= 0:
-            continue
-
-        sources.append(
-            CapabilitySource(
-                capability_name="",  # Not needed for PK-based matching
-                capability_id=cap_id,
-                value=value,
-                source_type=CapabilitySourceType.CONDITION,
-                source_name="",  # Conditions aggregate; no single source name
-                source_id=0,
+    contributions = condition_capability_contributions(sheet)
+    debuffs: dict[int, int] = {}
+    for contribution in contributions:
+        if contribution.value < 0:
+            debuffs[contribution.capability_id] = (
+                debuffs.get(contribution.capability_id, 0) + contribution.value
             )
+    sources = [
+        CapabilitySource(
+            capability_name="",  # Not needed for PK-based matching
+            capability_id=contribution.capability_id,
+            value=contribution.value + debuffs.get(contribution.capability_id, 0),
+            source_type=CapabilitySourceType.CONDITION,
+            source_name=contribution.condition_name,
+            source_id=contribution.instance_id,
+            effect_property_ids=sorted(contribution.property_ids),
         )
-
-    return sources
+        for contribution in contributions
+        if contribution.value > 0
+    ]
+    sources.extend(
+        CapabilitySource(
+            capability_name="",
+            capability_id=cap_id,
+            value=value + debuffs.get(cap_id, 0),
+            source_type=CapabilitySourceType.CONDITION,
+            source_name="",  # thread grants aggregate; no single source name
+            source_id=0,
+        )
+        for cap_id, value in thread_passive_capability_grants(sheet).items()
+        if value > 0
+    )
+    return [source for source in sources if source.value > 0]
 
 
 def _get_modifier_sources(character: ObjectDB) -> list[CapabilitySource]:
     """One source per capability raised by the sheet's CharacterModifier rows (#4663).
 
-    A species gift, a distinction or worn gear raises a capability through a
-    ``CharacterModifier`` aimed at that capability's ``ModifierTarget``; the agency oracle
+    A species gift, a distinction or an alternate form raises a capability through a
+    ``CharacterModifier`` aimed at that capability's ``ModifierTarget`` (worn gear has no
+    capability path: no ``ModifierSource`` names an item); the agency oracle
     (``get_effective_capability_value``) already counts these, and this is the same
     reading for the availability oracle, so the capability is offered as an approach.
     Rows are summed per capability in one query (all modifiers stack), expired rows left
-    out; a sum above zero is one MODIFIER source. ``get_all_capability_values`` (the
-    condition source) does not read these rows, so nothing is counted twice.
+    out; a sum above zero is one MODIFIER source, carrying no marks (#5066). The condition
+    sources do not read these rows, so nothing is counted twice.
     """
     try:
         sheet = character.sheet_data
@@ -2224,16 +2229,37 @@ def _evaluate_prerequisites(  # noqa: PLR0913
     return all_met
 
 
+def source_carries_required_mark(source: CapabilitySource, app: Application) -> bool:
+    """Whether ``source`` carries the effect property ``app`` needs (or it needs none)."""
+    return (
+        not app.required_effect_property_id
+        or app.required_effect_property_id in source.effect_property_ids
+    )
+
+
+def source_matches_application(source: CapabilitySource, app: Application) -> bool:
+    """Whether ``source`` reaches ``app`` (#5066): the same capability, held above the
+    capability's innate baseline (a source's value is what it adds on top of it), and
+    carrying the effect property the application needs, if any.
+
+    The one test movement, dodging and challenge approaches share; a technique's effect
+    properties are its own marks, a condition's its template's and stage's, and trained
+    ability, species and distinctions carry none.
+    """
+    return (
+        source.capability_id == app.capability_id
+        and source.value > 0
+        and source_carries_required_mark(source, app)
+    )
+
+
 def _source_meets_effect_requirements(
     app: Application,
     approach: ChallengeApproach,
     source: CapabilitySource,
 ) -> bool:
     """Check if a source meets the effect property requirements of app and approach."""
-    if (
-        app.required_effect_property_id
-        and app.required_effect_property_id not in source.effect_property_ids
-    ):
+    if not source_carries_required_mark(source, app):
         return False
 
     if (

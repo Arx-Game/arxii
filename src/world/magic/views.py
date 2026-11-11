@@ -1170,7 +1170,8 @@ class ThreadPullPreviewView(APIView):
 
     POST /api/magic/thread-pull-preview/
 
-    Request body: ``{resonance_id, tier, thread_ids[], action_context?, technique_id?}``.
+    Request body: ``{tier, thread_ids[], burn_resonance_id?, action_context?, technique_id?}``
+    (the threads may mix resonances, #5066).
     Response: ``{resonance_cost, anima_cost, affordable, resolved_effects[],
     capped_intensity, burn}``; ``burn`` is null without ``technique_id`` (#4736).
     Never mutates state.
@@ -1192,7 +1193,9 @@ class ThreadPullPreviewView(APIView):
         data = serializer.validated_data
         sheet: CharacterSheet = data["character_sheet_id"]
 
-        resonance = get_object_or_404(Resonance, pk=data["resonance_id"])
+        burn_resonance = None
+        if data.get("burn_resonance_id") is not None:
+            burn_resonance = get_object_or_404(Resonance, pk=data["burn_resonance_id"])
 
         thread_ids: list[int] = data["thread_ids"]
         threads = list(
@@ -1253,13 +1256,13 @@ class ThreadPullPreviewView(APIView):
             result = preview_resonance_pull(
                 technique=technique,
                 character_sheet=sheet,
-                resonance=resonance,
                 tier=data["tier"],
                 threads=threads,
                 combat_encounter=combat_encounter,
                 scene_id=data.get("scene_id"),
                 excluded_kinds=frozenset({TargetKind.GIFT}) if data.get("exclude_gift") else None,
                 target=target,
+                burn_resonance=burn_resonance,
             )
         except InvalidImbueAmount as exc:
             return Response(

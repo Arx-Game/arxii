@@ -287,19 +287,18 @@ class CombatPullAdmin(admin.ModelAdmin):
         "participant",
         "encounter",
         "round_number",
-        "resonance",
         "tier",
         "resonance_spent",
         "anima_spent",
         "resonance_burned",
         "committed_at",
     ]
-    list_filter = ["tier", "resonance"]
+    list_filter = ["tier"]
     search_fields = [
         "participant__character_sheet__display_name",
         "encounter__id",
     ]
-    raw_id_fields = ["participant", "encounter", "resonance", "threads"]
+    raw_id_fields = ["participant", "encounter", "burned_resonance", "threads"]
     inlines = [CombatPullResolvedEffectInline]
 
 
@@ -654,6 +653,10 @@ class MovementConfigAdmin(admin.ModelAdmin):
         "held_ground_challenge",
         "dodge_anima_cost",
         "dodge_fatigue_cost",
+        "reach_neighbour_at",
+        "reach_two_places_at",
+        "reach_anywhere_at",
+        "strength_per_success_level_percent",
         "reaction_difficulty_step",
         "mitigation_level_gap_cap",
         "mitigation_leak_percent",

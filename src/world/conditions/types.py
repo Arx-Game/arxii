@@ -169,6 +169,21 @@ class DamageInteractionResult:
     fired_interactions: list["ConditionDamageInteraction"] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class ConditionCapabilityContribution:
+    """What one active condition adds to one capability, and the marks it carries (#5066).
+
+    ``property_ids`` are the condition template's and its current stage's properties: how
+    the condition works, which decides the applications its capability reaches.
+    """
+
+    instance_id: int
+    condition_name: str
+    capability_id: int
+    value: int
+    property_ids: frozenset[int]
+
+
 @dataclass
 class CapabilityStatus:
     """Status of a capability for a target, computed from active conditions."""

@@ -119,14 +119,14 @@ class ResonancePullResult:
 
 @dataclass(frozen=True)
 class CastPullDeclaration:
-    """A paid thread pull declared as part of an out-of-combat technique cast (#768).
+    """A paid thread pull declared with a cast, a clash, or on its own (#768, #5066).
 
-    The caster commits ``resonance`` at ``tier`` across ``threads``; charged via
-    ``spend_resonance_for_pull`` only after the cast clears its soulfray/pre-cast
-    gates. All threads must share ``resonance`` and pass anchor-in-action checks.
+    The caster pulls ``threads`` at ``tier``; charged via ``spend_resonance_for_pull``
+    only after the cast clears its soulfray/pre-cast gates. The threads may be of
+    different resonances: each is paid from its own resonance at the tier's cost
+    (maintainer ruling 2026-11-11). Every thread must pass the anchor-in-action check.
     """
 
-    resonance: Resonance
     tier: int
     threads: tuple[Thread, ...]
     beseech_bonus: int = 0
@@ -136,6 +136,31 @@ class CastPullDeclaration:
     burn: int = 0
     """Resonance points the caster asks to burn on top of the pull, for strain (#4736).
     0 (default) means no burn. The reached amount is resolved at cast time."""
+    burn_resonance: Resonance | None = None
+    """The pulled resonance the burn comes from, when the player named one (#5066). A pull
+    of one resonance burns that one without naming it; see ``burned_resonance``."""
+
+    @property
+    def resonances(self) -> tuple[Resonance, ...]:
+        """The distinct resonances of the pulled threads, in thread order."""
+        seen: dict[int, Resonance] = {}
+        for thread in self.threads:
+            seen.setdefault(thread.resonance_id, thread.resonance)
+        return tuple(seen.values())
+
+    @property
+    def burned_resonance(self) -> Resonance | None:
+        """The resonance a burn on this pull comes from, or None when it cannot say.
+
+        The named ``burn_resonance`` when it is one of the pulled resonances; the only
+        pulled resonance when there is one; otherwise None (a burn on a mixed pull must
+        name which resonance burns).
+        """
+        pulled = self.resonances
+        if self.burn_resonance is not None:
+            named = self.burn_resonance.pk
+            return next((r for r in pulled if r.pk == named), None)
+        return pulled[0] if len(pulled) == 1 else None
 
 
 @dataclass(frozen=True)

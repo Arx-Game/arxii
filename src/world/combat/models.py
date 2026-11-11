@@ -1581,6 +1581,39 @@ class CombatParticipant(EncounterPayloadRowMixin, SharedMemoryModel):
             "Null dodges in place. Private to her; reset each round."
         ),
     )
+    dodge_technique = models.ForeignKey(
+        "arxii.Technique",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Which of her techniques answers her automatic dodges in this fight (#5066). "
+            "Null: her saved default (CharacterTechnique.default_dodge), else her strongest "
+            "matching source. Set from her dodge plan; private to her."
+        ),
+    )
+    dodge_into_soulfray = models.BooleanField(
+        default=True,
+        help_text=(
+            "Keep dodging with a technique when the cast would overspend her anima into "
+            "Soulfray or deepen it (#5066). Off: such a dodge is skipped and costs nothing. "
+            "Set from her dodge plan and the Soulfray check-in on her turn."
+        ),
+    )
+    auto_pull_defense = models.BooleanField(
+        default=False,
+        help_text=(
+            "Pull threads for defense the first time she is attacked in a round with no pull "
+            "of her own (#5066): every related thread, of any resonance, not already "
+            "working for her, at her saved tier. Set from her dodge plan."
+        ),
+    )
+    defense_pull_tier = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="The tier (1 to 3) of her automatic defensive pull (#5066).",
+    )
     hops_used = models.PositiveSmallIntegerField(
         default=0,
         help_text=(
@@ -2375,10 +2408,12 @@ class SustainedAction(SharedMemoryModel):
 class CombatPull(SharedMemoryModel):
     """Per-(participant, round) commit envelope for a thread pull in combat.
 
-    Captures the resonance/tier/threads spent for a participant's pull in a
-    specific round. Resolved effects are snapshotted into CombatPullResolvedEffect
-    rows so that mid-round edits to authoring (or Thread.level) cannot
-    retroactively change a committed pull. Spec §2.1 lines 459-466.
+    Captures the tier/threads spent for a participant's pull in a specific round. A pull
+    may mix threads of several resonances; each thread is paid from its own resonance
+    at the tier's cost (maintainer ruling 2026-11-11, #5066), so what each resonance
+    paid is derived from the threads, not stored. Resolved effects are snapshotted into
+    CombatPullResolvedEffect rows so that mid-round edits to authoring (or Thread.level)
+    cannot retroactively change a committed pull. Spec §2.1 lines 459-466.
     """
 
     participant = models.ForeignKey(
@@ -2392,11 +2427,6 @@ class CombatPull(SharedMemoryModel):
         related_name="combat_pulls",
     )
     round_number = models.PositiveIntegerField()
-    resonance = models.ForeignKey(
-        "arxii.Resonance",
-        on_delete=models.PROTECT,
-        related_name="combat_pulls",
-    )
     tier = models.PositiveSmallIntegerField()  # 1, 2, or 3
     threads = models.ManyToManyField(
         "arxii.Thread",
@@ -2407,6 +2437,17 @@ class CombatPull(SharedMemoryModel):
     resonance_burned = models.PositiveIntegerField(
         default=0,
         help_text="Resonance burned on top of the pull for strain; 0 when none was.",
+    )
+    burned_resonance = models.ForeignKey(
+        "arxii.Resonance",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The pulled resonance the burn came from (#5066: a pull may mix resonances, "
+            "and the player names which one burns); null when nothing was burned."
+        ),
     )
     burn_valued_points = models.PositiveIntegerField(
         default=0,
@@ -3121,11 +3162,40 @@ class MovementConfig(SharedMemoryModel):
     )
     dodge_anima_cost = models.PositiveSmallIntegerField(
         default=2,
-        help_text="Anima each dodge costs with a capability that dodges for anima (#4676).",
+        help_text=(
+            "Anima the first reactive save costs (#4676). A dodge or a move with a technique "
+            "costs that technique's own cast instead (#5066)."
+        ),
     )
     dodge_fatigue_cost = models.PositiveSmallIntegerField(
         default=1,
-        help_text="Base fatigue each dodge costs with a physical capability (#4676).",
+        help_text=(
+            "Base physical fatigue each dodge or move costs when it comes from anything but "
+            "a technique: training, gear, a condition, species or a distinction (#4676, #5066)."
+        ),
+    )
+    reach_neighbour_at = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            "The strength a dodge or a move needs to reach a neighbouring place (#5066). "
+            "Below it she stays in place. One set of bands for every movement power."
+        ),
+    )
+    reach_two_places_at = models.PositiveSmallIntegerField(
+        default=5,
+        help_text="The strength a dodge or a move needs to reach two places away (#5066).",
+    )
+    reach_anywhere_at = models.PositiveSmallIntegerField(
+        default=10,
+        help_text="The strength a dodge or a move needs to reach anywhere in the room (#5066).",
+    )
+    strength_per_success_level_percent = models.PositiveSmallIntegerField(
+        default=50,
+        help_text=(
+            "For a dodge or a move with a technique: how much stronger each success level "
+            "above a bare success makes it, in percent of the technique's grant (#5066). A "
+            "failed roll gives no strength."
+        ),
     )
     reaction_difficulty_step = models.PositiveSmallIntegerField(
         default=2,

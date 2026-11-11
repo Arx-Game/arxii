@@ -511,9 +511,7 @@ class SpeciesGiftFullJourneyPostgresTest(_SpeciesGiftJourneyBase):
         sheet.character.threads.invalidate()
         encounter, participant = self._make_participant(sheet)
         ctx = PullActionContext(combat_encounter=encounter, participant=participant)
-        spend_resonance_for_pull(
-            sheet, self.resonance, tier=1, threads=[thread], action_context=ctx
-        )
+        spend_resonance_for_pull(sheet, tier=1, threads=[thread], action_context=ctx)
         # A tier-1 pull snapshots a RESISTANCE row for EVERY effect tier 0..tier, so
         # both the tier-0 passive and the tier-1 paid row land in CombatPullResolvedEffect;
         # disambiguate by source_tier to assert against the paid row specifically (an

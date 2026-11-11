@@ -21,7 +21,7 @@ from world.conditions.models import ConditionStage, ConditionTemplate
 from world.covenants.models import CharacterVowFocusPick, CovenantRole
 from world.distinctions.models import Distinction
 from world.magic.services.soulfray import is_soulfray_stage
-from world.mechanics.models import Property
+from world.mechanics.models import Application, Property
 from world.missions.constants import OptionKind
 from world.missions.models import MissionOption, MissionOptionOpponentLine
 from world.societies.models import Organization, Society
@@ -40,6 +40,7 @@ _BUILDER_ROUTES: tuple[tuple[type[Model], str], ...] = (
     (WorshippedBeing, "admin_being_service"),
     (MissionOption, "admin_trial_builder"),
     (CovenantRole, "admin_vow_builder"),
+    (Application, "admin_power_builder"),
 )
 
 
@@ -57,7 +58,8 @@ def builder_url(obj: object) -> str:
     or ``Society`` opens on its Faction Rules page, and a mission option opponent line on
     its Placement page (#4361). A ``WorshippedBeing`` opens on the Being Service
     builder (#4333). A CHECK ``MissionOption`` opens on the Trial builder (#4513). A
-    ``CovenantRole`` opens on its vow page (#4880).
+    ``CovenantRole`` opens on its vow page (#4880). An ``Application`` opens on the Power
+    Builder (#5066).
     """
     if isinstance(obj, ConditionStage):
         if obj.pk and is_soulfray_stage(obj):
@@ -83,6 +85,7 @@ _BUILDER_LABELS: tuple[tuple[type[Model] | tuple[type[Model], ...], str], ...] =
     (MissionOptionOpponentLine, "Open the Placement page"),
     (MissionOption, "Open in Trial builder"),
     (CovenantRole, "Open the vow page"),
+    (Application, "Open in the Power Builder"),
 )
 
 

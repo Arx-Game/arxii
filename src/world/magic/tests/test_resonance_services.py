@@ -619,7 +619,7 @@ class ProtagonismLockResonanceSpendTests(TestCase):
         ctx = PullActionContext()
 
         with self.assertRaises(ProtagonismLockedError):
-            spend_resonance_for_pull(sheet, res, 1, [thread], ctx)
+            spend_resonance_for_pull(sheet, 1, [thread], ctx)
 
 
 # =============================================================================

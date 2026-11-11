@@ -1513,7 +1513,7 @@ describe('ActionPanel', () => {
         expect.objectContaining({
           initiator_persona: 77,
           technique_id: 10,
-          pull: { resonance_id: 4, tier: 2, thread_ids: [7] },
+          pull: { tier: 2, thread_ids: [7] },
         })
       );
     });
@@ -1565,7 +1565,7 @@ describe('ActionPanel', () => {
         expect(castTechnique).toHaveBeenCalledWith(
           '42',
           expect.objectContaining({
-            pull: { resonance_id: 4, tier: 2, thread_ids: [7], burn: 4 },
+            pull: { tier: 2, thread_ids: [7], burn: 4, burn_resonance_id: 4 },
           })
         );
       });
@@ -1576,7 +1576,7 @@ describe('ActionPanel', () => {
     }
   });
 
-  it('reverts conflicting paid pulls to a single (resonance, tier) group', async () => {
+  it('reverts conflicting paid pulls to a single tier', async () => {
     vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
     const user = userEvent.setup();
 
@@ -1589,9 +1589,7 @@ describe('ActionPanel', () => {
     // Threads 7 (tier 2) and 9 (tier 3) disagree on tier — thread 7 is the
     // newly-changed entry, so thread 9 reverts and a notice is shown.
     await user.click(screen.getByRole('button', { name: 'stub-pull-conflict' }));
-    expect(
-      screen.getByText('Pulls in one cast share a single resonance and tier.')
-    ).toBeInTheDocument();
+    expect(screen.getByText('Pulls in one cast share a single tier.')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /cast ember touch/i }));
 
@@ -1599,7 +1597,7 @@ describe('ActionPanel', () => {
       expect(castTechnique).toHaveBeenCalledWith(
         '42',
         expect.objectContaining({
-          pull: { resonance_id: 4, tier: 2, thread_ids: [7] },
+          pull: { tier: 2, thread_ids: [7] },
         })
       );
     });

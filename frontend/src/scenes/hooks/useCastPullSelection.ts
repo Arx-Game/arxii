@@ -21,7 +21,7 @@ import type {
   PullPreviewRequest,
 } from '@/magic/types';
 import type { CastableTechnique, CastPullRequestBody } from '@/scenes/actionTypes';
-import { effectiveBurn } from '@/magic/burn';
+import { burnResonanceFor, effectiveBurn, pulledResonances } from '@/magic/burn';
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -37,6 +37,11 @@ export interface CastPullSelection {
   /** Resonance to burn for strain on this cast (#4736). */
   burn: number;
   setBurn: (next: number) => void;
+  /** The pulled resonances, for picking which one burns on a mixed pull (#5066). */
+  pulledResonances: { id: number; name: string }[];
+  /** The resonance the burn comes from; null on a mixed pull until one is picked. */
+  burnResonanceId: number | null;
+  setBurnResonanceId: (id: number) => void;
   /** Burn numbers from the pull preview; null until a pull is chosen. */
   burnPreview: BurnPreview | null;
   /** The chosen pull's tier, for the ceiling line; null with no paid pull. */
@@ -69,6 +74,7 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
   const [showInapplicable, setShowInapplicable] = useState(false);
   const [pullNotice, setPullNotice] = useState<string | null>(null);
   const [burn, setBurn] = useState(0);
+  const [chosenBurnResonanceId, setBurnResonanceId] = useState<number | null>(null);
 
   // A burn is sized against the technique's ceiling; a new technique starts over.
   const selectedTechniqueId = selectedTechnique?.id ?? null;
@@ -110,34 +116,34 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
   const pullGroup = useMemo(() => {
     const paid = Object.entries(selectedPulls).filter(([, tier]) => tier > 0);
     if (paid.length === 0) return null;
-    const thread = threadById.get(Number(paid[0][0]));
-    if (!thread) return null;
+    const threads = paid.map(([id]) => threadById.get(Number(id)));
+    if (threads.some((thread) => thread === undefined)) return null;
     return {
-      resonanceId: thread.resonance,
+      resonances: pulledResonances(threads as Thread[]),
       tier: paid[0][1] as 1 | 2 | 3,
       threadIds: paid.map(([id]) => Number(id)),
     };
   }, [selectedPulls, threadById]);
   const pullTier = pullGroup?.tier ?? null;
+  const pulled = useMemo(() => pullGroup?.resonances ?? [], [pullGroup]);
+  const burnResonanceId = burnResonanceFor(pulled, chosenBurnResonanceId);
   const previewRequest = useMemo<PullPreviewRequest | null>(() => {
     if (!castOpen || !selectedTechnique || characterId === null || !pullGroup) return null;
     return {
       character_sheet_id: characterId,
-      resonance_id: pullGroup.resonanceId,
       tier: pullGroup.tier,
       thread_ids: pullGroup.threadIds,
       technique_id: selectedTechnique.id,
+      burn_resonance_id: burnResonanceId,
     };
-  }, [castOpen, selectedTechnique, characterId, pullGroup]);
+  }, [castOpen, selectedTechnique, characterId, pullGroup, burnResonanceId]);
   const { data: burnPreviewData } = usePullBurnPreview(previewRequest);
   const burnPreview = previewRequest ? (burnPreviewData?.burn ?? null) : null;
 
   /**
-   * Constrain pull selection to a single (resonance, tier) group — the cast
-   * payload's pull declaration is singular, so any newly raised pull reverts
-   * every other paid pull that disagrees on resonance or tier.
-   *
-   * Lifted verbatim from ActionPanel.tsx:282-315.
+   * Constrain pull selection to a single tier — the cast payload's pull declaration is
+   * singular, so any newly raised pull reverts every other paid pull at another tier.
+   * The threads may mix resonances; each is paid from its own (#5066).
    */
   function handlePullsChange(next: Record<number, 0 | 1 | 2 | 3>): void {
     const changed = Object.entries(next).find(
@@ -146,24 +152,17 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
     if (changed) {
       const changedId = Number(changed[0]);
       const changedTier = changed[1];
-      const changedResonance = threadById.get(changedId)?.resonance;
-      if (changedResonance === undefined) {
-        // Threads cache not resolved yet — can't group by resonance; pass
-        // through unconstrained rather than reverting on undefined matches.
-        setSelectedPulls(next);
-        return;
-      }
       let reverted = 0;
       const constrained = { ...next };
       for (const [idStr, tier] of Object.entries(next)) {
         const id = Number(idStr);
         if (id === changedId || tier === 0) continue;
-        if (tier !== changedTier || threadById.get(id)?.resonance !== changedResonance) {
+        if (tier !== changedTier) {
           constrained[id] = 0;
           reverted++;
         }
       }
-      setPullNotice(reverted > 0 ? 'Pulls in one cast share a single resonance and tier.' : null);
+      setPullNotice(reverted > 0 ? 'Pulls in one cast share a single tier.' : null);
       setSelectedPulls(constrained);
       return;
     }
@@ -189,18 +188,19 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
   function buildPullPayload(): { pull?: CastPullRequestBody } | { error: string } {
     const paid = Object.entries(selectedPulls).filter(([, tier]) => tier > 0);
     if (paid.length === 0) return {};
-    const firstThread = threadById.get(Number(paid[0][0]));
-    if (!firstThread) {
+    if (pullGroup === null) {
       return { error: 'Thread data is still loading; try again in a moment.' };
     }
     const pull: CastPullRequestBody = {
-      resonance_id: firstThread.resonance,
       tier: paid[0][1] as 1 | 2 | 3,
       thread_ids: paid.map(([id]) => Number(id)),
     };
     // The ceiling can shrink when the pull changes; never send past it.
     const burnToSend = effectiveBurn(burnPreview, burn);
-    if (burnToSend > 0) pull.burn = burnToSend;
+    if (burnToSend > 0) {
+      pull.burn = burnToSend;
+      if (burnResonanceId !== null) pull.burn_resonance_id = burnResonanceId;
+    }
     return { pull };
   }
 
@@ -208,6 +208,7 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
     setSelectedPulls({});
     setPullNotice(null);
     setBurn(0);
+    setBurnResonanceId(null);
   }
 
   return {
@@ -219,6 +220,9 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
     pullsContext,
     burn,
     setBurn,
+    pulledResonances: pulled,
+    burnResonanceId,
+    setBurnResonanceId,
     burnPreview,
     pullTier,
     balanceByResonanceId,

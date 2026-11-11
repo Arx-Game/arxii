@@ -24,6 +24,7 @@ from django.db.models import Q
 
 from world.areas.positioning.constants import (
     AERIAL_PROPERTY_NAME,
+    EDGELESS_TRAVERSALS,
     CreatureTraversal,
     PositionKind,
     RampartSignature,
@@ -45,14 +46,13 @@ from world.areas.positioning.models import (
     RampartElementProfile,
     invalidate_position_graph_caches,
 )
-from world.mechanics.models import ChallengeInstance
+from world.mechanics.models import ChallengeInstance, ChallengeTemplate
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
     from world.conditions.models import DamageType
-    from world.mechanics.models import ChallengeTemplate
 
 
 @dataclass(frozen=True)
@@ -1040,17 +1040,56 @@ def adjacent_open_positions(position: Position) -> list[PositionEdge]:
 REACH_ORDER = {
     ReactionReach.IN_PLACE: 1,
     ReactionReach.ADJACENT: 2,
-    ReactionReach.AIRBORNE: 3,
+    ReactionReach.TWO_PLACES: 3,
     ReactionReach.ANY_PLACE: 4,
 }
 
+#: How many steps out each stepping reach goes.
+_REACH_STEPS = {ReactionReach.ADJACENT: 1, ReactionReach.TWO_PLACES: 2}
 
-def reachable_landings(current: Position | None, reach: str) -> list[Position]:
-    """The places a dodge or a blink with this reach may land in, her own place first.
 
-    ADJACENT and AIRBORNE add the places next door across an open edge; AIRBORNE also
-    the air above her place when it has no roof; ANY_PLACE the whole room (#4676). A
-    turn blink reads the same list (#5019), so one reach governs both uses.
+def _touching_edges(position: Position) -> list[PositionEdge]:
+    """Every edge touching ``position``, open or not, in one query."""
+    return list(
+        PositionEdge.objects.filter(Q(position_a=position) | Q(position_b=position)).select_related(
+            "position_a", "position_b", "gating_challenge"
+        )
+    )
+
+
+def _neighbours(position: Position, *, edgeless: bool) -> list[Position]:
+    """The places next to ``position``: across any edge for a blink or a phase, else across
+    an edge a walker can cross."""
+    edges = _touching_edges(position) if edgeless else adjacent_open_positions(position)
+    return [
+        edge.position_b if edge.position_a_id == position.pk else edge.position_a for edge in edges
+    ]
+
+
+def _stepped_places(current: Position, steps: int, *, edgeless: bool) -> dict[int, Position]:
+    """The places within ``steps`` steps of ``current`` (not ``current`` itself)."""
+    found: dict[int, Position] = {}
+    frontier = [current]
+    for _ in range(steps):
+        nxt: list[Position] = []
+        for place in frontier:
+            for other in _neighbours(place, edgeless=edgeless):
+                if other.pk == current.pk or other.pk in found:
+                    continue
+                found[other.pk] = other
+                nxt.append(other)
+        frontier = nxt
+    return found
+
+
+def reachable_landings(current: Position | None, reach: str, *, way: str = "") -> list[Position]:
+    """The places one use of a movement power with this reach may land in, her place first.
+
+    ADJACENT reaches the places one step away, TWO_PLACES two steps, ANY_PLACE the whole
+    room (#4676, #5066). Blinks and Phases step across any edge, walls included: within
+    reach she lands without walking there. Every other way of moving (and a dodge that
+    lands by walking, ``way`` blank) steps across open edges only. Flies also reaches the
+    air above her place when it has no roof. A turn blink reads the same list (#5019).
     """
     if current is None or reach == ReactionReach.NONE:
         return []
@@ -1059,18 +1098,16 @@ def reachable_landings(current: Position | None, reach: str) -> list[Position]:
     if reach == ReactionReach.ANY_PLACE:
         others = Position.objects.filter(room_id=current.room_id).exclude(pk=current.pk)
         return [current, *sorted(others, key=lambda p: p.name)]
-    neighbours = []
-    for edge in adjacent_open_positions(current):
-        other = edge.position_b if edge.position_a_id == current.pk else edge.position_a
-        neighbours.append(other)
-    if reach == ReactionReach.AIRBORNE:
+    found = _stepped_places(
+        current, _REACH_STEPS.get(reach, 0), edgeless=way in EDGELESS_TRAVERSALS
+    )
+    if way == CreatureTraversal.FLIES:
         above = Position.objects.filter(
             room_id=current.room_id, kind=PositionKind.AERIAL, elevation_anchor=current
         ).first()
         if above is not None and not current.is_roofed:
-            neighbours.append(above)
-    unique = {p.pk: p for p in neighbours if p.pk != current.pk}
-    return [current, *sorted(unique.values(), key=lambda p: p.name)]
+            found.setdefault(above.pk, above)
+    return [current, *sorted(found.values(), key=lambda p: p.name)]
 
 
 def reachable_positions(objectdb: ObjectDB) -> set[Position]:
@@ -1127,8 +1164,39 @@ def _crossing_cost(
     if traversal in _CROSSERS_OF_GATES and edge.gating_challenge_id is not None:
         # edge_blocks_crossing only blocks a gated edge while its challenge is active.
         return GATED_CROSSING_HOPS
+    if traversal == CreatureTraversal.PHASES and _phases_through(edge):
+        return 1
     # A hard seal, or a walker or flier at any wall (a flier goes over by the aerial layer).
     return None
+
+
+def phase_target_property_ids() -> frozenset[int]:
+    """The properties a wall's challenge must carry for a phaser to pass through (#5066).
+
+    The target properties of every Phase Through application (way of moving Phases).
+    """
+    from world.mechanics.models import Application
+
+    return frozenset(
+        Application.objects.filter(
+            way_of_moving=CreatureTraversal.PHASES, target_property__isnull=False
+        ).values_list("target_property_id", flat=True)
+    )
+
+
+def _phases_through(edge: PositionEdge) -> bool:
+    """Whether a phaser passes through ``edge``: a wall whose active gating challenge's
+    template carries a Phase Through application's target property (``solid``). A hard
+    seal with no challenge carries nothing, so it stays shut (#5066)."""
+    if edge.gating_challenge_id is None:
+        return False
+    targets = phase_target_property_ids()
+    if not targets:
+        return False
+    template_id = edge.gating_challenge.template_id
+    return ChallengeTemplate.properties.through.objects.filter(
+        challenge_template_id=template_id, property_id__in=targets
+    ).exists()
 
 
 def edge_crossing_cost(edge: PositionEdge, traversal: str) -> int | None:
@@ -1664,7 +1732,7 @@ _ERR_BLINK_LAND_FIRST = "You are in the air; land first."
 
 
 def blink_landings(objectdb: ObjectDB, reach: str) -> list[Position]:
-    """Where a turn blink with ``reach`` can take ``objectdb`` from her place (#5019).
+    """Where a turn blink with ``reach`` can take ``objectdb`` from her place (#5019, #5066).
 
     ``reachable_landings`` less her own place, kept to her layer: a mover on the ground
     blinks to ground places, one in the air to places in the air (taking off and landing
@@ -1673,7 +1741,7 @@ def blink_landings(objectdb: ObjectDB, reach: str) -> list[Position]:
     current = position_of(objectdb)
     airborne = current is not None and current.kind == PositionKind.AERIAL
     landings = []
-    for place in reachable_landings(current, reach):
+    for place in reachable_landings(current, reach, way=CreatureTraversal.BLINKS):
         if place.pk == current.pk or (place.kind == PositionKind.AERIAL) != airborne:
             continue
         anchor = place.elevation_anchor if airborne else None

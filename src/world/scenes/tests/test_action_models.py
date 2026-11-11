@@ -245,7 +245,6 @@ class SceneActionPullDeclarationTests(TestCase):
     def test_declaration_round_trip(self) -> None:
         decl = SceneActionPullDeclaration.objects.create(
             request=self.request,
-            resonance=self.resonance,
             tier=CastPullTier.TIER_2,
         )
         decl.threads.set([self.thread])

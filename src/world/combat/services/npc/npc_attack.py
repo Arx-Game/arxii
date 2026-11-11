@@ -20,6 +20,7 @@ from world.combat.models import (
     CombatParticipant,
     ThreatPoolEntry,
 )
+from world.combat.services.auto_pull import auto_pull_for_defense
 from world.combat.services.combos.combo_outcome import _damage_multiplier_for_success
 from world.combat.services.npc.defense_roll import defense_result_line, record_defense_roll
 from world.combat.services.npc.npc_movement import strike_pool_key
@@ -28,9 +29,10 @@ from world.combat.services.npc.windup import _declare_windup_attack
 from world.combat.services.reactions import (
     choose_dodge,
     covered_place,
+    dodge_label,
     dodge_roll_active,
     land_dodge,
-    pay_for_dodge,
+    make_dodge,
     reaction_penalty,
     record_reaction,
 )
@@ -306,17 +308,21 @@ def resolve_npc_attack(
         level=opponent_action.opponent.level,
         character=opponent_action.opponent.objectdb,
     )
-    # The automatic dodge (#4676): a capability that dodges adds its value to this
-    # roll, costs anima or fatigue, and each reaction already made this round takes
-    # a step off. A place-covering attack is escaped only by landing outside it.
+    # The automatic dodge (#4676, #5066): a source matching a dodging application adds
+    # its strength to this roll. With a technique the dodge is a cast of it (its anima,
+    # its roll, which sets the strength and how far she lands); anything else costs
+    # physical fatigue. Each reaction already made this round takes a step off. A
+    # place-covering attack is escaped only by landing outside it.
     covered = covered_place(opponent_action, participant)
     dodge = choose_dodge(participant, covered_position=covered)
     dodge_modifier = 0
-    if dodge is not None and pay_for_dodge(participant, dodge):
-        dodge_modifier = dodge.source.value - reaction_penalty(participant)
+    if dodge is not None:
+        # Her saved defensive pull, the first time she is attacked this round (#5066).
+        auto_pull_for_defense(participant, dodge, check_type)
+        dodge = make_dodge(participant, dodge)
+    if dodge is not None:
+        dodge_modifier = dodge.strength - reaction_penalty(participant)
         record_reaction(participant)
-    else:
-        dodge = None
     result: CheckResult = perform_check_fn(
         character,
         check_type,
@@ -386,6 +392,7 @@ def resolve_npc_attack(
             interaction=interaction_factory(),
             combat_round=opponent_action.round_number,
             dodge_modifier=dodge_modifier,
+            dodge_line=dodge_label(dodge) if dodge is not None else "",
         )
 
     return DefenseResult(

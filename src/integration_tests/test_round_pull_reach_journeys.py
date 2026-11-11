@@ -301,7 +301,7 @@ class APullBoostsOnlyWhatItRelatesTo(JourneyCase):
 
     def test_a_pull_boosts_a_cast_of_the_technique_its_thread_is_on(self) -> None:
         self.cast(self.shadow_step, with_pull=True)
-        self.assertTrue(CombatPull.objects.filter(resonance=self.resonance).exists())
+        self.assertTrue(CombatPull.objects.filter(threads__resonance=self.resonance).exists())
 
         rolled = self.resolve(self.shadow_step)
 
@@ -312,7 +312,7 @@ class APullBoostsOnlyWhatItRelatesTo(JourneyCase):
         """The pull rides her Shadow Step clash contribution: that gets it, Ember Lash not."""
         self.cast(self.ember_lash, with_pull=False)
         self.clash_with_pull(self.shadow_step)
-        self.assertTrue(CombatPull.objects.filter(resonance=self.resonance).exists())
+        self.assertTrue(CombatPull.objects.filter(threads__resonance=self.resonance).exists())
 
         rolled = self.resolve(self.ember_lash, self.shadow_step)
 

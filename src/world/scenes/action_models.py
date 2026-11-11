@@ -453,12 +453,6 @@ class SceneActionPullDeclaration(SharedMemoryModel):
         related_name="pull_declaration",
         help_text="The action request this pull was declared with.",
     )
-    resonance = models.ForeignKey(
-        "arxii.Resonance",
-        on_delete=models.PROTECT,
-        related_name="+",
-        help_text="Resonance committed by the pull (all threads must share it).",
-    )
     tier = models.PositiveSmallIntegerField(
         choices=CastPullTier.choices,
         help_text="Paid pull tier (1-3).",
@@ -470,10 +464,21 @@ class SceneActionPullDeclaration(SharedMemoryModel):
             "resolved when the pending cast resolves. 0 = no burn."
         ),
     )
+    burn_resonance = models.ForeignKey(
+        "arxii.Resonance",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The pulled resonance the burn comes from (#5066: a pull may mix resonances); "
+            "null when there is no burn."
+        ),
+    )
     threads = models.ManyToManyField(
         "arxii.Thread",
         related_name="action_pull_declarations",
-        help_text="Threads pulled; owned by the actor, sharing ``resonance``.",
+        help_text="Threads pulled, owned by the actor; each is paid from its own resonance.",
     )
     charged_at = models.DateTimeField(
         null=True,

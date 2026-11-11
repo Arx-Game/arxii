@@ -1007,7 +1007,7 @@ def _dispatch_clash_contribution(
     # cast_pull into declare_clash_contribution (avoids double-charge).
     # resolve_pull_from_kwargs normalises both the telnet path (pre-built
     # CastPullDeclaration in kwargs["cast_pull"]) and the web path (raw IDs:
-    # pull_resonance_id / pull_tier / pull_thread_ids) into one optional declaration.
+    # pull_tier / pull_thread_ids, of any resonances) into one optional declaration.
     from world.combat.constants import PullBurnAction  # noqa: PLC0415
     from world.combat.pull_helpers import (  # noqa: PLC0415
         commit_combat_pull,
@@ -1204,7 +1204,11 @@ def _hops_left_note(character: ObjectDB) -> str:
     return f"{left} hop left this round." if left == 1 else f"{left} hops left this round."
 
 
-_CROSSING_VERB = {CreatureTraversal.CLIMBS: "Climb over", CreatureTraversal.LEAPS: "Leap over"}
+_CROSSING_VERB = {
+    CreatureTraversal.CLIMBS: "Climb over",
+    CreatureTraversal.LEAPS: "Leap over",
+    CreatureTraversal.PHASES: "Phase through",
+}
 
 
 _HELD_BY_NOTE = "Held by {name}: you'd stop there."
@@ -1278,7 +1282,7 @@ def _crossing_entry(  # noqa: PLR0913 - the list's shared refusal state rides al
         met, reasons = False, [f"That crossing takes {cost} hops; you have {hops} left."]
     return PlayerAction(
         backend=ActionBackend.REGISTRY,
-        display_name=f"{verb} to {neighbor.name} ({cost} hops)",
+        display_name=f"{verb} to {neighbor.name} ({cost} hop{'' if cost == 1 else 's'})",
         ref=ActionRef(
             backend=ActionBackend.REGISTRY,
             registry_key="move_to_position",
@@ -1375,40 +1379,43 @@ def _stunt_entries(character: ObjectDB, move_met: bool, move_reason: str) -> lis
 def _blink_entries(
     character: ObjectDB, offered: set[int], context: _PositionMoveContext
 ) -> list[PlayerAction]:
-    """One "Blink to <place>" entry per place only her blink reaches this step (#5019).
+    """One "Blink to <place>" entry per place only her blink reaches this step (#5019, #5066).
 
     ``offered`` holds the places the list already offers a walk, climb or leap to; walking
-    wins there. In a declaring round the label names the cost (a dodge's); outside a fight a
-    blink is free. Lack of anima never greys it out (owner ruling 2026-11-08): an anima blink
-    carries her Soulfray stage warning, as a cast does, and pays through Soulfray. It costs
-    one hop, so it carries the step's refusal too, and a held place's note.
+    wins there. Each of her blink sources (a source matching a turn-move application that
+    blinks) offers the places its standing strength reaches; the roll on the blink itself
+    may land her short. The label names what one blink costs: a technique's cast cost
+    (out of a fight her control usually makes it free), else physical fatigue in a fight.
+    Lack of anima never greys it out (owner ruling 2026-11-08): a technique blink carries
+    her Soulfray stage warning, as a cast does. It costs one hop in a fight, so it carries
+    the step's refusal too, and a held place's note.
     """
-    from world.areas.positioning.constants import (  # noqa: PLC0415
-        BLINK_ENTRY,
-        BLINK_ENTRY_PAID,
-        ReactionCostKind,
-    )
+    from world.areas.positioning.constants import BLINK_ENTRY, BLINK_ENTRY_PAID  # noqa: PLC0415
     from world.areas.positioning.services import blink_landings  # noqa: PLC0415
-    from world.areas.positioning.traversal import blink_capabilities  # noqa: PLC0415
-    from world.combat.services.reactions import capability_use_cost  # noqa: PLC0415
+    from world.areas.positioning.traversal import (  # noqa: PLC0415
+        reach_for_strength,
+        turn_movement_sources,
+    )
+    from world.combat.services.reactions import FREE_USE, movement_use_cost  # noqa: PLC0415
     from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
 
     if CreatureTraversal.BLINKS not in context.traversals:
-        return []  # her traversals already say no capability of hers blinks
+        return []  # her traversals already say no source of hers blinks
     in_fight = context.hops is not None
     entries = []
     seen = set(offered)
-    stage_warning = get_soulfray_warning(character) if in_fight else None
+    stage_warning = get_soulfray_warning(character)
     met, reasons = context.move_met, [] if context.move_met else [context.move_reason]
-    for capability in blink_capabilities(character):
-        cost = capability_use_cost(capability.reaction_cost_kind)
-        pays_anima = capability.reaction_cost_kind == ReactionCostKind.ANIMA
-        warning = stage_warning if pays_anima else None
-        for place in blink_landings(character, capability.reaction_reach):
+    for movement in turn_movement_sources(character, CreatureTraversal.BLINKS):
+        cost = movement_use_cost(character, movement, in_fight=in_fight)
+        warning = stage_warning if movement.technique_id is not None else None
+        free = cost in (FREE_USE, "0 anima")  # noqa: STRING_LITERAL - a zero-cost cast
+        reach = reach_for_strength(movement.standing_strength)
+        for place in blink_landings(character, reach):
             if place.pk in seen:
                 continue
             seen.add(place.pk)
-            label = BLINK_ENTRY_PAID if in_fight else BLINK_ENTRY
+            label = BLINK_ENTRY if free else BLINK_ENTRY_PAID
             entries.append(
                 PlayerAction(
                     backend=ActionBackend.REGISTRY,

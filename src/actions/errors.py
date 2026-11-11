@@ -29,6 +29,7 @@ class ActionDispatchError(Exception):
     BURN_UNAVAILABLE = "burn_unavailable"
     BURN_NO_FALL_RATE = "burn_no_fall_rate"
     BURN_INVALID = "burn_invalid"
+    BURN_NAMES_NO_RESONANCE = "burn_names_no_resonance"
     PULL_NEEDS_SOULFRAY_CONSENT = "pull_needs_soulfray_consent"
     FURY_OVER_CAP = "fury_over_cap"
     TARGET_REQUIRED = "target_required"
@@ -55,6 +56,7 @@ class ActionDispatchError(Exception):
         BURN_UNAVAILABLE: ResonanceBurnUnavailable.user_message,
         BURN_NO_FALL_RATE: "No Fall rate is set up for burning that resonance.",
         BURN_INVALID: ResonanceBurnInvalid.user_message,
+        BURN_NAMES_NO_RESONANCE: "Name which of the pulled resonances to burn.",
         PULL_NEEDS_SOULFRAY_CONSENT: (
             "Accept the Soulfray risk before pulling a thread on this cast."
         ),

@@ -140,7 +140,8 @@ def _berserk_of(character):
 
 # Two of these name the roster by persona (ruling 39), once for every participant.
 # One reads the attack check types behind the viewer's own Strike weapons (#4858).
-COMPELLED_READ_QUERIES = 29
+# One reads the applications about moving, for the viewer's own dodge plan (#5066).
+COMPELLED_READ_QUERIES = 30
 
 
 def knock_out_condition():

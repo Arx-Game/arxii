@@ -1776,7 +1776,7 @@ All SharedMemoryModel lookups.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ThreadPullCost` | Per-tier pull pricing knobs | `tier` (unique: 1/2/3), `resonance_cost`, `anima_per_thread`, `label`. Cost *shape* lives in `spend_resonance_for_pull`; this table only holds the per-tier numbers |
+| `ThreadPullCost` | Per-tier pull pricing knobs | `tier` (unique: 1/2/3), `resonance_cost`, `anima_per_thread`, `label`. Cost *shape* lives in `pull_cost_totals` (every thread pays `resonance_cost` and `anima_per_thread`, #5066); this table only holds the per-tier numbers |
 | `ThreadXPLockedLevel` | XP-locked-boundary price list | `level` (unique; 20/30/40 on the internal scale), `xp_cost` |
 | `SoulTetherConfig` | Singleton (pk=1) tuning surface for Soul Tether | sineating: `anima_cost_per_unit`, `fatigue_cost_per_unit`, `per_scene_cap_hard_max`, `per_scene_cap_level_mult`, `per_scene_cap_base`, `hollow_max_level_mult`. Rescue thresholds: `rescue_strain_stage3/4/5`. Rescue resonance costs: `rescue_resonance_stage3/4/5`. Rescue budget bases and multipliers (integer-encoded). Lazy-created via `get_soul_tether_config()`. |
 | `ThreadPullEffect` | Authored pull-effect template | `target_kind`, `resonance` FK, `tier` (0..3), `min_thread_level`, `effect_kind`, + mutually-exclusive payload columns: `flat_bonus_amount`, `intensity_bump_amount`, `vital_bonus_amount` (+ `vital_target`), `capability_grant` FK to `CapabilityType`, `narrative_snippet`, `target_form` FK to `forms.CharacterForm` (nullable; set only for `ASSUME_ALTERNATE_SELF`, which names the form whose profiles to assume on cast), `resistance_amount` (+ `resistance_damage_type` FK to `conditions.DamageType`; null = all types — `RESISTANCE` effect kind, #1580). `target_gift` (nullable FK to `magic.Gift`) — when set, this pull-effect applies only to GIFT threads anchored to that specific gift (species-gift-specific tier-0 passives); null rows serve as the generic fallback for that kind. `regard_polarity` (`RegardPolarity`: OFFENSIVE / PROTECTIVE / NEUTRAL, default NEUTRAL, #1831) — how Court-role (COVENANT_ROLE) pull modulation responds to the Court leader's signed regard for the live target; ignored for every other `target_kind`. Tier 0 = passive always-on; tiers 1–3 = paid pulls. Unique per (target_kind, resonance, tier, min_thread_level) — with two partial `UniqueConstraint`s for GIFT kind (one with `target_gift` set, one without). CheckConstraints enforce payload/effect_kind alignment — `ASSUME_ALTERNATE_SELF` requires `target_form` set and all numeric/capability/snippet payload empty; `RESISTANCE` requires `resistance_amount` set and all other payload null; all other kinds require `target_form__isnull=True`. `get_pull_effects_for_thread(thread, **filters)` (`world/magic/services/pull_effects.py`) resolves the correct rows: for GIFT kind, tries `target_gift`-specific rows first, falls back to `target_gift IS NULL` |
@@ -1946,8 +1946,23 @@ web clients but does not run through `PurchaseUnlockAction`.
 
 ### Thread Pull — Declaration Modifier (#1455) [BUILT & WIRED]
 
-A thread pull is a **modifier carried by a `cast` or `clash` declaration**, not a
-standalone action. Both telnet and web converge on the same commit paths.
+A thread pull is usually a **modifier carried by a `cast` or `clash` declaration**. Since
+#5066 it may also be declared **on its own** for the round (`PullForTheRoundAction`,
+`registry_key="combat_pull"`, `actions/definitions/round_pull.py`; telnet `combat pull
+<resonance> <tier>=<thread>[,<thread>...]`): it takes no action slot, and its threads must
+relate to something she can do (`pull_alone_context`: every technique she knows and the traits
+they roll). It may also be committed by the **automatic defensive pull**
+(`CombatParticipant.auto_pull_defense`, `world/combat/services/auto_pull.py`), which the first
+time she is attacked in a round with no pull of her own commits her saved resonance and tier,
+pulling only threads that relate to her dodge and are not already working for her on the
+defense roll (vow, stat and skill threads whose tier-0 passive already applies); with nothing
+left it commits and charges nothing. Both telnet and web converge on the same commit paths.
+
+**Cost is per thread (#5066).** Every pulled thread pays the tier's `resonance_cost` and its
+`anima_per_thread`, the first thread included (`pull_cost_totals(tier, n_threads)` in
+`world/magic/services/threads.py`, read by `spend_resonance_for_pull`,
+`preview_resonance_pull` and the auto-pull). Before #5066 the resonance cost was paid once per
+pull and anima was `anima_per_thread x (n - 1)`.
 
 **Telnet surface:** `cast`/`clash` accept `pull=<thread>[,…] resonance=<name> [tier=<1-3>]`
 parsed by the shared `_CombatCommandMixin` pull parser. The pull rides the declaration;
@@ -1955,14 +1970,36 @@ one pull per combat round (cap → `PULL_ALREADY_COMMITTED`).
 
 **Web surface:**
 - Non-combat cast: `CastPullRequestSerializer` nested inside the cast request body.
-- Combat cast/clash: `pull_resonance_id` / `pull_tier` / `pull_thread_ids` in the dispatch
-  kwargs (passed alongside the `ActionRef`).
+- Combat cast/clash: `pull_tier` / `pull_thread_ids` in the dispatch kwargs (passed
+  alongside the `ActionRef`), and `pull_burn` with `pull_burn_resonance_id` for a burn.
+
+**A pull may mix resonances (#5066, maintainer ruling 2026-11-11) [BUILT & WIRED].** No pull is
+limited to one resonance: the threads are any of hers, and each thread pays its tier's
+resonance cost from its own `CharacterResonance` (`pull_resonance_costs(tier, threads)` in
+`services/threads.py`). `spend_resonance_for_pull(character_sheet, tier, threads, ...)` locks
+every resonance it spends in resonance order and debits all of them or none
+(`_lock_pull_resonances`; a short resonance refuses with "Need N {Resonance} resonance, have
+M."). Anima is still the per-thread total and is never refused for lack of anima on the
+cast's own overspend path. Pull effects already key on each thread's resonance
+(`resolve_pull_effects` reads each thread's own rows). A distinction's resonance-scoped POWER
+bonus applies once per distinct pulled resonance, and an unscoped POWER target once per pull
+(`_fold_distinction_pull_bonus`, one folded entry for the pull as a whole). A burn
+(#4736) comes from one pulled resonance the player names (`burn_resonance` on
+`CastPullDeclaration`, `burn_resonance_id` on the web, `resonance=<name>` on telnet); a pull of
+one resonance burns that one without naming it (`CastPullDeclaration.burned_resonance`).
+`CombatPull` no longer stores a resonance: what each resonance paid is derived from the pull's
+threads (`techniques._add_thread_spends`, for corruption per resonance), and
+`CombatPull.burned_resonance` records a burn's. `SceneActionPullDeclaration.burn_resonance`
+does the same for a pending scene pull. The same rule covers every pull: combat casts and
+clashes, a pull on its own, the automatic defensive pull, scene casts and social actions.
 
 **Shared commit paths (`world/combat/pull_helpers.py`):**
 - `build_cast_pull_declaration(...)` — builds the pull declaration from kwargs.
 - `resolve_pull_from_kwargs(...)` — resolves thread ids + resonance + tier from kwargs.
 - `commit_combat_pull(...)` — the authoritative commit entry point for all combat contexts
-  (combat cast and clash).
+  (combat cast and clash, a pull declared on its own, the automatic defensive pull).
+  `action_context=` overrides the action the threads are matched against
+  (`pull_alone_context`, or the dodge's context for the auto-pull).
 - Non-combat cast calls `request_technique_cast(cast_pull=…)`.
 
 **Inert-effect rule:** effects that don't apply to the current context are applied as far
@@ -1985,7 +2022,10 @@ stale rows on round advance and invalidates the per-character
 `CharacterCombatPullHandler` cache.
 
 **What an active pull reaches (#5067, slice 1 of #5066) [BUILT & WIRED].** A pull lasts
-the round, but its per-use bonuses reach only the uses its threads relate to.
+the round (until her next turn), but its per-use bonuses reach only the uses its threads relate
+to, each use matched on its own. Since #5066 the uses include each automatic dodge and each
+movement use with a technique (`MovementCast` in `world/combat/services/movement_use.py` reads
+`round_pull_bonus` for its roll and its power).
 `round_pull_bonus(participant, kind=, technique_id=, cast_check=)`
 (`world/combat/pull_helpers.py`) sums the active pull's `FLAT_BONUS` or `INTENSITY_BUMP`
 effects whose `source_thread` passes `_anchor_in_action` against that use's
@@ -2003,8 +2043,8 @@ focused cast). A distinction's resonance bonus folded into a pull
 (`_fold_distinction_pull_bonus`, filed under the first thread with no `authored_value`)
 counts when any of that pull's threads relates to the use. `VITAL_BONUS`, `RESISTANCE` and `CAPABILITY_GRANT` are standing effects on the
 character for the round, not bonuses on a use, and are read unfiltered by the
-`CharacterCombatPullHandler` methods; the pull's resonance on the focus roll
-(`round_pull_resonance`) and its spend on corruption read the pull itself and are unchanged.
+`CharacterCombatPullHandler` methods; the pull's resonances on the focus roll
+(`round_pull_resonances`) and its spend on corruption read the pull's threads.
 
 ### Non-Combat Ephemeral Pull CAPABILITY_GRANT (#2840) [BUILT & WIRED]
 
@@ -2104,7 +2144,7 @@ push the cast harder. The burn rides the pull: no pull, no burn (`ResonanceBurnN
   that reached nothing, and is blank when none was.
 - **Idempotent resubmit.** A submit is several dispatches; when a later one fails, the player
   submits again. `_commit_focused_pull` first checks this round's committed pull
-  (`_focused_pull_already_committed`): the same resonance, tier and threads, with
+  (`_focused_pull_already_committed`): the same tier and threads, with
   `burned_for` CAST when a burn is asked (blank when not) and a stored reach no more than the
   request, is a no-op (no second charge, no second burn line); any other pull is refused with
   `PULL_ALREADY_COMMITTED`. The client also leaves the pull off a retried submit once the job
@@ -2124,7 +2164,8 @@ push the cast harder. The burn rides the pull: no pull, no burn (`ResonanceBurnN
   asked for: " then "your burn ceiling is 0 at this intensity", "you have no {Resonance}
   resonance left once the pull is paid", or "your strain check reached none of it".
 - **Surfaces.** Telnet `cast` and `clash` take `burn=<n>`, valid only beside `pull=`. Web combat
-  dispatch takes `pull_burn` beside `pull_resonance_id` / `pull_tier` / `pull_thread_ids`
+  dispatch takes `pull_burn` (and `pull_burn_resonance_id` on a mixed pull) beside
+  `pull_tier` / `pull_thread_ids`
   (`_parse_pull_burn` in `world/combat/pull_helpers.py`). Web scene cast
   `POST /api/action-requests/cast/` takes `pull.burn` (`CastPullWithBurnRequestSerializer`); the
   social action endpoint takes none. The pull preview (`POST /api/magic/thread-pull-preview/`)
@@ -3299,15 +3340,16 @@ her for the template's duration (authored as the scene). All of it lives in `wor
   dominant affinity) the reading is all zero; with an aura and no off-aura balance the
   dominant affinity is set, the threshold is `threshold_floor`, and only `drift` and
   `steps_past` are 0.
-- `check_resonance_focus(character, technique, *, pulled_resonance=None) -> FocusOutcome | None`
+- `check_resonance_focus(character, technique, *, pulled_resonances=()) -> FocusOutcome | None`
   runs once per cast, inside `_complete_technique_cast` in `use_technique`
   (`services/techniques.py`), after anima is deducted and before `resolve_fn` runs. That one
   seam means every cast path rolls it: scene, combat, clash, battles, standoffs and
   technique-enhanced social actions. A pull is part of its cast with no separate roll: the
-  pulled resonance is `cast_pull`'s when the cast charges one, else the
-  `use_technique(pulled_resonance=...)` its caller names. The combat round resolver and the
-  clash contribution pass the round's committed `CombatPull` resonance
-  (`world/combat/pull_helpers.py` `round_pull_resonance`); no other cast reads combat pulls.
+  pulled resonances are `cast_pull`'s threads' when the cast charges one, else the
+  `use_technique(pulled_resonances=...)` its caller names; the off-aura steps apply once when
+  ANY of them differs from her dominant affinity (#5066). The combat round resolver and the
+  clash contribution pass the round's committed `CombatPull` threads' resonances
+  (`world/combat/pull_helpers.py` `round_pull_resonances`); no other cast reads combat pulls.
   Whether the penalty lands on the same roll depends on where each path gathers modifiers:
   scene casts, combat casts, clash contributions and standoffs gather them inside
   `resolve_fn`, so the conflict counts on the roll that triggered it. Scene casts gather them
@@ -5345,7 +5387,7 @@ Telnet parity: `train <technique> [=<ap>]` / bare `train` for the meter list (`C
 | `/threads/` | POST | Weave a new thread. Body must include `character_sheet_id`; serializer delegates to `weave_thread`. For `target_kind=RELATIONSHIP_TRACK`, `target_id` is the `RelationshipType` **catalog** id (not a relationship row pk) and `target_persona_id` (required, that kind only) names the partner — see the RELATIONSHIP_TRACK contract note below (#2159, #3957) |
 | `/threads/{id}/` | GET | Thread detail with anchor + resonance |
 | `/threads/{id}/` | DELETE | Soft-retire (stamps `retired_at`; row remains for historical references) |
-| `/thread-pull-preview/` | POST | Read-only preview; body `{character_sheet_id, resonance_id, tier, thread_ids[], action_context?}`; returns resonance/anima cost + `affordable` + `resolved_effects[]` |
+| `/thread-pull-preview/` | POST | Read-only preview; body `{character_sheet_id, tier, thread_ids[] (any resonances), burn_resonance_id?, action_context?}`; returns resonance/anima cost + `affordable` + `resolved_effects[]` |
 | `/rituals/perform/` | POST | Dispatch a Ritual via `PerformRitualAction.run()` (`actions/definitions/ritual.py`, key `perform_ritual`; shared with telnet `CmdRitual`, #1331). Body `{character_sheet_id, ritual_id, kwargs, components[]}`; Imbuing takes `{thread_id}` in kwargs (view resolves into Thread instance) |
 | `/teaching-offers/` | GET | Read-only list of `ThreadWeavingTeachingOffer` records |
 
@@ -5506,7 +5548,7 @@ execute_flow("cast_power", context={
   an explicit `components` list of the caller's own `ItemInstance` pks
   (`SanctifyActionSerializer.components`).
 - **Currency has no cap** - `CharacterResonance.balance` grows freely; the strategic tension is over allocation, not over a ceiling.
-- **Pull-cost tuning surface** - `ThreadPullCost` rows hold per-tier numbers; the cost *formula shape* lives in `spend_resonance_for_pull`. Both the model docstring and service docstring cross-reference this split.
+- **Pull-cost tuning surface** - `ThreadPullCost` rows hold per-tier numbers; the cost *formula shape* lives in `pull_cost_totals` (per thread, #5066). Both the model docstring and service docstring cross-reference this split.
 - **SoulTetherConfig tuning** - `SoulTetherConfig` singleton (pk=1) holds all Soul Tether tuning knobs (sineating costs, rescue budgets/thresholds). Read via `get_soul_tether_config()`. Staff-tunable via admin.
 - **SOUL_TETHER_DISSOLVED** - Emitted by `dissolve_soul_tether` in `flows/constants.py` after bond dissolution.
 - **CharacterSheet.get_tether_strain_stage()** - Returns the Sineater's current Tether Strain stage. Used by sineating offer payloads.

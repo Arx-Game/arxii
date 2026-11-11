@@ -91,7 +91,6 @@ function useRowTierPreviews(
     for (const tier of PAID_TIERS) {
       previewPull({
         character_sheet_id: characterSheetId,
-        resonance_id: thread.resonance,
         tier,
         thread_ids: [thread.id],
         // #2035: thread the currently-selected cast/clash target through so a
@@ -114,7 +113,7 @@ function useRowTierPreviews(
     return () => {
       ignore = true;
     };
-  }, [thread.id, thread.resonance, characterSheetId, targetPersonaId]);
+  }, [thread.id, characterSheetId, targetPersonaId]);
 
   return previews;
 }

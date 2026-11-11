@@ -1,21 +1,28 @@
-"""Journeys for dodging attacks and getting clear of area attacks (#4676, slice 4 of #4651).
+"""Journeys for dodging attacks and getting clear of area attacks (#4676, #5066).
 
 The cellar is four places in a row, Doorway - Floor - Stage - Gallery, joined by open edges.
-Ondrelle has a teleport capability (reach: any place, costs anima) at 4 above its baseline;
-Malvaine has acrobatics (reach: an adjacent place, costs fatigue) at 3; Bram has neither.
-Blades are spawned beside them with a 10-damage strike that carries a defence check.
+Every power here is the capability ``traversal``. Staff have authored two applications of
+it that dodge: **Evade** (needs the ``teleport`` property, lands by blinking) and **Tumble**
+(needs nothing, lands by walking). Ondrelle knows Blink Step, a technique marked
+``teleport`` that grants traversal 4 and costs 2 anima; Malvaine's trained acrobatics raise
+traversal by 3 (a modifier on her sheet, no properties); Bram has neither. Blades are
+spawned beside them with a 10-damage strike that carries a defence check.
 
-- Shot at three times in one round, Ondrelle dodges each time automatically: each dodge costs
-  2 anima, adds her teleport (4) to the roll, and each one after the first is 2 harder
-  (bonus 4, then 2, then 0). No cap: all three fire.
+- Shot at three times in one round, Ondrelle dodges each time automatically: each dodge is
+  a cast of Blink Step, so each costs its 2 anima, and each technique roll (forced to a bare
+  success) gives strength 4, added to her defence roll; each one after the first is 2
+  harder (bonus 4, then 2, then 0). No cap: all three fire.
 - She sets where to land while declaring ("If you're attacked, you'll dodge to Gallery."),
   and a dodge that at least partly succeeds puts her there; a failed one leaves her in place.
   Turned off ("You won't dodge this round.") she pays nothing and gets no bonus. The plan
   resets each round.
-- Her plan can only name a place her capability reaches: Malvaine (adjacent) cannot plan the
-  Gallery from the Doorway ("Your dodge can't reach Gallery."). Bram cannot plan at all
-  ("Nothing you have lets you dodge.").
-- Malvaine's acrobatic dodge costs fatigue, not anima.
+- Strength 4 reaches a neighbouring place (the MovementConfig bands: 1 a neighbour, 5 two
+  places, 10 anywhere), so her plan offers the Floor and the Gallery beside her Stage.
+  A failed technique roll still pays and gives no strength: she dodges in place.
+- Malvaine (strength 3, a neighbour) cannot plan the Gallery from the Doorway ("Your dodge
+  can't reach Gallery."). Bram cannot plan at all ("Nothing you have lets you dodge.").
+- Malvaine's acrobatic dodge reaches Tumble, not Evade (she carries no teleport), and costs
+  physical fatigue, not anima.
 - Typed on telnet: ``combat dodge Gallery``, ``combat dodge off``.
 - The plan is private: the encounter payload shows it to its owner only.
 - A wound-up fire flask covering the Floor shows a round ahead, with its place in the
@@ -23,19 +30,21 @@ Blades are spawned beside them with a 10-damage strike that carries a defence ch
   and stands on the Stage; Bram, who braced, is hit. Someone who walked out of the Floor on
   their turn is not hit; dodging in place does not escape it.
 
-Expected values come from the spec (#4651 decisions 5 to 8, assumptions C and D) and the
-MovementConfig field defaults: 2 anima or 1 base fatigue per dodge, a step of 2 per reaction.
-A recording defence roll stands in for perform_check, so the bonus and penalty it was handed
-can be read back.
+Expected values come from the spec (#4651 decisions 5 to 8; #5066 decisions 3, 4, 11, 17)
+and the MovementConfig field defaults: 1 base fatigue per non-technique dodge, a step of 2
+per reaction, strength bands 1 / 5 / 10. A recording defence roll stands in for
+perform_check, so the bonus and penalty it was handed can be read back; the technique roll
+is forced (``roll_technique``).
 """
 
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.test import override_settings
 
+from actions.factories import ActionTemplateFactory
 from flows.constants import EventName
 from flows.consts import FlowActionChoices
 from flows.factories import (
@@ -44,7 +53,7 @@ from flows.factories import (
     TriggerDefinitionFactory,
 )
 from integration_tests.harness import JourneyCase
-from world.areas.positioning.constants import ReactionCostKind, ReactionReach
+from world.areas.positioning.constants import CreatureTraversal
 from world.areas.positioning.factories import PositionFactory
 from world.areas.positioning.services import connect_positions, place_in_position, position_of
 from world.checks.factories import CheckTypeFactory
@@ -70,13 +79,29 @@ from world.conditions.constants import BLINK_CONDITION_NAME
 from world.conditions.factories import (
     CapabilityTypeFactory,
     ConditionInstanceFactory,
+    ConditionStageFactory,
     ConditionTemplateFactory,
+    SoulfrayTemplateFactory,
 )
+from world.conditions.models import ConditionInstance
 from world.fatigue.models import FatiguePool
-from world.magic.factories import CharacterAnimaFactory
+from world.magic.factories import (
+    CharacterAnimaFactory,
+    CharacterTechniqueFactory,
+    GiftFactory,
+    TechniqueCapabilityGrantFactory,
+    TechniqueFactory,
+    ensure_soulfray_config,
+)
+from world.magic.models import CharacterTechnique
 from world.magic.models.anima import CharacterAnima
 from world.magic.services.effect_handlers import BLINK_DODGE_HANDLER_PATH
-from world.mechanics.factories import CharacterEngagementFactory, ModifierCategoryFactory
+from world.mechanics.factories import (
+    CharacterEngagementFactory,
+    ModifierCategoryFactory,
+    MovementApplicationFactory,
+    PropertyFactory,
+)
 from world.mechanics.models import CharacterModifier, ModifierSource, ModifierTarget
 from world.scenes.constants import RoundStatus
 from world.seeds.checks import seed_check_resolution_tables
@@ -145,21 +170,34 @@ class _TheCellar(JourneyCase):
             status=RoundStatus.DECLARING, round_number=1, room=self.room
         )
         self.defense = CheckTypeFactory(name="Evade")
-        self.teleport = CapabilityTypeFactory(
-            name="teleport",
-            innate_baseline=0,
-            reaction_reach=ReactionReach.ANY_PLACE,
-            reaction_cost_kind=ReactionCostKind.ANIMA,
+        self.traversal = CapabilityTypeFactory(name="traversal", innate_baseline=0)
+        self.teleport = PropertyFactory(name="teleport")
+        MovementApplicationFactory(
+            name="Evade",
+            capability=self.traversal,
+            required_effect_property=self.teleport,
+            dodges=True,
+            way_of_moving=CreatureTraversal.BLINKS,
         )
-        self.acrobatics = CapabilityTypeFactory(
-            name="acrobatics",
-            innate_baseline=0,
-            reaction_reach=ReactionReach.ADJACENT,
-            reaction_cost_kind=ReactionCostKind.FATIGUE,
+        MovementApplicationFactory(name="Tumble", capability=self.traversal, dodges=True)
+        self.blink_step = TechniqueFactory(
+            name="Blink Step",
+            anima_cost=2,
+            intensity=1,
+            control=1,
+            action_template=ActionTemplateFactory(check_type=CheckTypeFactory(name="Blink Cast")),
         )
+        self.blink_step.properties.add(self.teleport)
+        TechniqueCapabilityGrantFactory(
+            technique=self.blink_step,
+            capability=self.traversal,
+            base_value=4,
+            intensity_multiplier=0,
+        )
+        self.technique_level = 1
         self.participants: dict[int, CombatParticipant] = {}
 
-    def fighter(self, name: str, *, at, capability=None, value: int = 0):
+    def fighter(self, name: str, *, at, capability=None, value: int = 0, blinks: bool = False):
         character = self.make_player(name, room=self.room)
         sheet = character.sheet_data
         CharacterVitals.objects.create(
@@ -171,6 +209,8 @@ class _TheCellar(JourneyCase):
             encounter=self.encounter, character_sheet=sheet, status=ParticipantStatus.ACTIVE
         )
         place_in_position(character, at)
+        if blinks:
+            CharacterTechniqueFactory(character=sheet, technique=self.blink_step)
         if capability is not None:
             target, _ = ModifierTarget.objects.get_or_create(
                 name=f"capability_{capability.pk}",
@@ -206,7 +246,11 @@ class _TheCellar(JourneyCase):
         return spawn_from_creature_template(self.encounter, template, position=at)
 
     def resolve(self, roll: RecordingRoll) -> None:
-        resolve_round(self.encounter, defense_check_fn=roll, offense_check_fn=_clean_hit)
+        technique_roll = MagicMock(success_level=self.technique_level)
+        with patch(
+            "world.combat.services.movement_use.roll_technique", return_value=technique_roll
+        ):
+            resolve_round(self.encounter, defense_check_fn=roll, offense_check_fn=_clean_hit)
 
     def participant(self, character) -> CombatParticipant:
         return CombatParticipant.objects.get(pk=self.participants[character.pk].pk)
@@ -221,7 +265,7 @@ class _TheCellar(JourneyCase):
 class DodgingAutomatically(_TheCellar):
     def setUp(self) -> None:
         super().setUp()
-        self.ondrelle = self.fighter("Ondrelle", at=self.stage, capability=self.teleport, value=4)
+        self.ondrelle = self.fighter("Ondrelle", at=self.stage, blinks=True)
 
     def test_three_shots_three_dodges_each_paid_and_harder(self) -> None:
         for name in ("Archer", "Bowman", "Slinger"):
@@ -252,8 +296,37 @@ class DodgingAutomatically(_TheCellar):
         self.assertEqual(row["modifier_total"], 4)
         self.assertEqual(
             row["roll_breakdown"]["lines"],
-            [{"label": "Dodge", "value": "+4", "detail": "Character", "lapsed": False}],
+            [
+                {
+                    "label": "Dodge (Blink Step: roll +1, strength 4, 2 anima)",
+                    "value": "+4",
+                    "detail": "Character",
+                    "lapsed": False,
+                }
+            ],
         )
+
+    def test_a_failed_technique_roll_still_pays_and_dodges_in_place(self) -> None:
+        self.web(self.ondrelle, "combat_dodge", position_id=self.gallery.pk)
+        self.blade("Archer", at=self.doorway)
+        self.technique_level = 0
+        roll = RecordingRoll(2)
+
+        self.resolve(roll)
+
+        self.assertEqual(roll.extras(), [0])  # no strength: no bonus
+        self.assertEqual(self.anima(self.ondrelle), 18)
+        self.assertEqual(position_of(self.ondrelle), self.stage)
+
+    def test_a_stronger_roll_is_a_bigger_bonus(self) -> None:
+        """Each success level above a bare success adds half the grant (the default 50%)."""
+        self.blade("Archer", at=self.doorway)
+        self.technique_level = 3
+        roll = RecordingRoll(2)
+
+        self.resolve(roll)
+
+        self.assertEqual(roll.extras(), [8])  # 4 x (100 + 50 x 2) / 100
 
     def test_a_planned_landing_is_where_a_good_dodge_puts_her(self) -> None:
         told = self.web(self.ondrelle, "combat_dodge", position_id=self.gallery.pk)
@@ -323,19 +396,30 @@ class DodgingAutomatically(_TheCellar):
         own = plan_of(mine, self.ondrelle)
         self.assertTrue(own["enabled"])
         self.assertEqual(own["landing_id"], self.gallery.pk)
-        self.assertEqual(
-            {o["name"] for o in own["options"]}, {"Stage", "Doorway", "Floor", "Gallery"}
-        )
+        self.assertEqual({o["name"] for o in own["options"]}, {"Stage", "Floor", "Gallery"})
         self.assertEqual(
             own["cost_line"],
-            "Each dodge costs 2 anima. Each dodge after the first this round is harder.",
+            "Each dodge casts Blink Step: 2 anima and a roll whose strength is the bonus. "
+            "Each dodge after the first this round is harder.",
         )
+        self.assertEqual(
+            own["techniques"],
+            [
+                {
+                    "id": self.blink_step.pk,
+                    "name": "Blink Step",
+                    "cost_line": own["cost_line"],
+                    "is_default": False,
+                }
+            ],
+        )
+        self.assertTrue(own["into_soulfray"])
         self.assertIsNone(plan_of(theirs, self.ondrelle))
 
 
 class ReachAndCost(_TheCellar):
     def test_an_adjacent_dodge_cannot_plan_a_far_place(self) -> None:
-        malvaine = self.fighter("Malvaine", at=self.doorway, capability=self.acrobatics, value=3)
+        malvaine = self.fighter("Malvaine", at=self.doorway, capability=self.traversal, value=3)
 
         told = self.web(malvaine, "combat_dodge", position_id=self.gallery.pk)
 
@@ -355,7 +439,7 @@ class ReachAndCost(_TheCellar):
         self.assertEqual(self.anima(bram), 20)
 
     def test_an_acrobatic_dodge_costs_fatigue_not_anima(self) -> None:
-        malvaine = self.fighter("Malvaine", at=self.floor, capability=self.acrobatics, value=3)
+        malvaine = self.fighter("Malvaine", at=self.floor, capability=self.traversal, value=3)
         self.blade("Archer", at=self.gallery)
         before = FatiguePool.objects.filter(character_sheet=malvaine.sheet_data).first()
         before_total = 0 if before is None else before.physical_current
@@ -370,7 +454,7 @@ class ReachAndCost(_TheCellar):
 class GettingClearOfAnAreaAttack(_TheCellar):
     def setUp(self) -> None:
         super().setUp()
-        self.malvaine = self.fighter("Malvaine", at=self.floor, capability=self.acrobatics, value=3)
+        self.malvaine = self.fighter("Malvaine", at=self.floor, capability=self.traversal, value=3)
         self.bram = self.fighter("Bram", at=self.floor)
         self.captain = self.blade(
             "Captain",
@@ -457,3 +541,145 @@ class PhaseStepFollowsTheDodgePlan(_TheCellar):
         self.assertEqual(position_of(self.bram), self.floor)
         self.assertLess(self.health(self.bram), 100)
         self.assertEqual(self.anima(self.bram), 17)  # paid for the attempt
+
+
+class TwoGiftsOneProperty(_TheCellar):
+    """A light-gift technique marked teleport dodges by blinking with nothing else authored,
+    at its own price (#5066 verification 1); she picks which answers, and saves a default."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.light_step = TechniqueFactory(
+            name="Light Step",
+            gift=GiftFactory(name="Radiance"),
+            anima_cost=5,
+            intensity=1,
+            control=1,
+            action_template=ActionTemplateFactory(check_type=CheckTypeFactory(name="Light Cast")),
+        )
+        self.light_step.properties.add(self.teleport)
+        TechniqueCapabilityGrantFactory(
+            technique=self.light_step,
+            capability=self.traversal,
+            base_value=3,
+            intensity_multiplier=0,
+        )
+        self.ondrelle = self.fighter("Ondrelle", at=self.stage, blinks=True)
+        CharacterTechniqueFactory(character=self.ondrelle.sheet_data, technique=self.light_step)
+
+    def test_her_strongest_answers_until_she_picks_another(self) -> None:
+        self.blade("Archer", at=self.gallery)
+        roll = RecordingRoll(2)
+
+        self.resolve(roll)
+
+        self.assertEqual(roll.extras(), [4])  # Blink Step's 4 beats Light Step's 3
+        self.assertEqual(self.anima(self.ondrelle), 18)  # Blink Step's own 2
+
+    def test_she_picks_light_step_and_pays_its_own_price(self) -> None:
+        told = self.web(self.ondrelle, "dodge_settings", technique_id=self.light_step.pk)
+        self.assertTrue(told.detail.success, told.detail.message)
+        self.assertEqual(told.detail.message, "You'll dodge with Light Step.")
+        self.blade("Archer", at=self.gallery)
+        roll = RecordingRoll(2)
+
+        self.resolve(roll)
+
+        self.assertEqual(roll.extras(), [3])
+        self.assertEqual(self.anima(self.ondrelle), 15)  # Light Step's own 5
+
+    def test_typed_on_telnet_she_picks_and_returns_to_her_default(self) -> None:
+        told = self.telnet(self.ondrelle, "combat dodgewith Light Step")
+        self.assertIn("You'll dodge with Light Step.", told)
+        self.assertEqual(self.participant(self.ondrelle).dodge_technique, self.light_step)
+        told = self.telnet(self.ondrelle, "combat dodgewith default")
+        self.assertIn("You'll dodge with your default.", told)
+        self.assertIsNone(self.participant(self.ondrelle).dodge_technique)
+
+    def test_a_saved_default_answers_in_every_fight(self) -> None:
+        told = self.telnet(self.ondrelle, "combat dodgedefault Light Step")
+        self.assertIn("Light Step is your default dodge.", told)
+        hold = CharacterTechnique.objects.get(
+            character=self.ondrelle.sheet_data, technique=self.light_step
+        )
+        self.assertTrue(hold.default_dodge)
+        self.web(self.ondrelle, "dodge_settings", technique_id="")  # back to the default
+        self.blade("Archer", at=self.gallery)
+        roll = RecordingRoll(2)
+
+        self.resolve(roll)
+
+        self.assertEqual(roll.extras(), [3])
+
+    def test_a_technique_that_does_not_dodge_cannot_be_picked(self) -> None:
+        other = TechniqueFactory(name="Ember Lash")
+        CharacterTechniqueFactory(character=self.ondrelle.sheet_data, technique=other)
+
+        told = self.web(self.ondrelle, "dodge_settings", technique_id=other.pk)
+
+        self.assertFalse(told.detail.success)
+        self.assertEqual(told.detail.message, "None of your techniques that dodge is that one.")
+
+
+class DodgingIntoSoulfray(_TheCellar):
+    """At zero anima her dodge still casts and overspends into Soulfray while her box is
+    ticked; in Soulfray her turn asks her to keep or stop (#5066 decision 13)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.soulfray = SoulfrayTemplateFactory()
+        self.fraying = ConditionStageFactory(
+            condition=self.soulfray, stage_order=1, name="Fraying", severity_threshold=1
+        )
+        ensure_soulfray_config()
+        self.ondrelle = self.fighter("Ondrelle", at=self.stage, blinks=True)
+        pool = CharacterAnima.objects.get(character=self.ondrelle.sheet_data)
+        pool.current = 0
+        pool.save(update_fields=["current"])
+
+    def soulfray_on(self, character) -> ConditionInstance | None:
+        return ConditionInstance.objects.filter(target=character, condition=self.soulfray).first()
+
+    def test_with_no_anima_she_still_dodges_and_soulfray_rises(self) -> None:
+        for name in ("Archer", "Bowman"):
+            self.blade(name, at=self.gallery)
+        roll = RecordingRoll(2, 2)
+
+        self.resolve(roll)
+
+        self.assertEqual(roll.extras(), [4, 2])  # both dodges happened
+        self.assertIsNotNone(self.soulfray_on(self.ondrelle))
+
+    def test_in_soulfray_her_turn_asks_and_her_answer_holds(self) -> None:
+        ConditionInstanceFactory(
+            target=self.ondrelle, condition=self.soulfray, current_stage=self.fraying, severity=1
+        )
+        url = f"/api/combat/{self.encounter.pk}/"
+        payload = self.api(self.account_of(self.ondrelle)).get(url).json()
+        seat = self.participant(self.ondrelle).pk
+        plan = next(p for p in payload["participants"] if p["id"] == seat)["dodge_plan"]
+        self.assertEqual(plan["soulfray_check_in"]["stage_name"], "Fraying")
+
+        told = self.telnet(self.ondrelle, "decline dodgesoulfray")
+        self.assertIn("You won't dodge when it would cost you Soulfray.", told)
+        self.assertFalse(self.participant(self.ondrelle).dodge_into_soulfray)
+        self.blade("Archer", at=self.gallery)
+        roll = RecordingRoll(2)
+
+        self.resolve(roll)
+
+        self.assertEqual(roll.extras(), [0])  # no dodge
+        self.assertEqual(self.participant(self.ondrelle).reactions_used, 0)
+
+    def test_she_can_choose_to_keep_dodging_into_it(self) -> None:
+        ConditionInstanceFactory(
+            target=self.ondrelle, condition=self.soulfray, current_stage=self.fraying, severity=1
+        )
+        told = self.web(self.ondrelle, "dodge_settings", into_soulfray=True)
+        self.assertEqual(told.detail.message, "You'll keep dodging into Soulfray.")
+        self.blade("Archer", at=self.gallery)
+        roll = RecordingRoll(2)
+
+        self.resolve(roll)
+
+        self.assertEqual(roll.extras(), [4])

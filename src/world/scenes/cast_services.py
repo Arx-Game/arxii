@@ -813,7 +813,6 @@ def _resolve_cast_pull(
     preview = (
         preview_resonance_pull(
             initiator_persona.character_sheet,
-            declaration.resonance,
             declaration.tier,
             threads,
         )
@@ -822,10 +821,10 @@ def _resolve_cast_pull(
     )
     if preview is not None and preview.affordable:
         cast_pull = CastPullDeclaration(
-            resonance=declaration.resonance,
             tier=declaration.tier,
             threads=tuple(threads),
             burn=declaration.burn,
+            burn_resonance=declaration.burn_resonance,
         )
         return cast_pull, None
     return None, _PULL_FIZZLE_NOTE
@@ -1490,9 +1489,9 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
         if cast_pull is not None:
             declaration = SceneActionPullDeclaration.objects.create(
                 request=request,
-                resonance=cast_pull.resonance,
                 tier=cast_pull.tier,
                 burn=cast_pull.burn,
+                burn_resonance=cast_pull.burned_resonance if cast_pull.burn else None,
             )
             declaration.threads.set(cast_pull.threads)
     return CastResult(request=request)

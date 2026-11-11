@@ -748,8 +748,8 @@ class ThreadPullPreviewTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(response.data["resonance_cost"], 3)
-        # n_threads - 1 = 0 → anima_cost = 0
-        self.assertEqual(response.data["anima_cost"], 0)
+        # Every pulled thread pays its tier's anima share, the first included (#5066).
+        self.assertEqual(response.data["anima_cost"], 2)
         self.assertTrue(response.data["affordable"])
         self.assertGreaterEqual(len(response.data["resolved_effects"]), 1)
 

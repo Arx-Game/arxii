@@ -10,6 +10,7 @@ from drf_spectacular.utils import extend_schema_field
 from evennia.accounts.models import AccountDB
 from rest_framework import serializers
 
+from actions.serializers import SoulfrayWarningSerializer
 from world.areas.positioning.serializers import (
     HeldPositionSerializer,
     PositionAdjacencyItemSerializer,
@@ -500,13 +501,49 @@ class DodgeLandingSerializer(serializers.Serializer):
     name = serializers.CharField()
 
 
+def _warning_payload(warning: Any) -> dict[str, Any] | None:
+    """A ``SoulfrayWarning`` as the wire carries it, or None."""
+    if warning is None:
+        return None
+    return {
+        "stage_name": warning.stage_name,
+        "stage_description": warning.stage_description,
+        "has_death_risk": warning.has_death_risk,
+    }
+
+
+class DodgeTechniqueSerializer(serializers.Serializer):
+    """One technique of hers that can answer her dodges (#5066)."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    cost_line = serializers.CharField(help_text="What one dodge with it costs now.")
+    is_default = serializers.BooleanField(help_text="Her saved default for every fight.")
+
+
 class DodgePlanSerializer(serializers.Serializer):
-    """Schema-only shape of the viewer's own dodge plan (#4676). Private to its owner."""
+    """Schema-only shape of the viewer's own dodge plan (#4676, #5066). Private to its owner."""
 
     enabled = serializers.BooleanField()
     landing_id = serializers.IntegerField(allow_null=True)
     options = DodgeLandingSerializer(many=True)
     cost_line = serializers.CharField()
+    techniques = DodgeTechniqueSerializer(many=True)
+    technique_id = serializers.IntegerField(
+        allow_null=True, help_text="The technique answering her dodges this fight, if any."
+    )
+    into_soulfray = serializers.BooleanField(
+        help_text="Keep dodging when a dodge's cast would overspend into Soulfray."
+    )
+    auto_pull = serializers.BooleanField(help_text="Pull threads for defense when attacked.")
+    auto_pull_tier = serializers.IntegerField(allow_null=True)
+    soulfray_check_in = SoulfrayWarningSerializer(
+        allow_null=True,
+        help_text=(
+            "Her Soulfray stage when her technique dodges would cast into it: the turn's "
+            "check-in to keep or stop dodging into Soulfray (#5066)."
+        ),
+    )
 
 
 class StrikeWeaponOptionSerializer(serializers.Serializer):
@@ -785,20 +822,43 @@ class ParticipantSerializer(serializers.ModelSerializer):
         """
         if not self._is_viewers_own(obj):
             return None
+        from world.combat.services.dodge_check_in import soulfray_check_in  # noqa: PLC0415
         from world.combat.services.reactions import (  # noqa: PLC0415
             dodge_cost_line,
             dodge_landing_options,
             dodge_sources,
         )
+        from world.magic.models import CharacterTechnique  # noqa: PLC0415
 
         sources = dodge_sources(obj)
         if not sources:
             return None
+        default_ids = set(
+            CharacterTechnique.objects.filter(
+                character_id=obj.character_sheet_id, default_dodge=True
+            ).values_list("technique_id", flat=True)
+        )
+        techniques = [
+            {
+                "id": source.technique_id,
+                "name": source.name,
+                "cost_line": dodge_cost_line(obj, source),
+                "is_default": source.technique_id in default_ids,
+            }
+            for source in sources
+            if source.technique_id is not None
+        ]
         return {
             "enabled": obj.dodge_enabled,
             "landing_id": obj.dodge_landing_id,
             "options": [{"id": p.pk, "name": p.name} for p in dodge_landing_options(obj)],
-            "cost_line": dodge_cost_line(sources[0]),
+            "cost_line": dodge_cost_line(obj, sources[0]),
+            "techniques": techniques,
+            "technique_id": sources[0].technique_id,
+            "into_soulfray": obj.dodge_into_soulfray,
+            "auto_pull": obj.auto_pull_defense,
+            "auto_pull_tier": obj.defense_pull_tier,
+            "soulfray_check_in": _warning_payload(soulfray_check_in(obj)),
         }
 
     @extend_schema_field(CompulsionSerializer(allow_null=True))

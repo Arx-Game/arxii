@@ -144,7 +144,6 @@ def _make_clash_pull_setup(
     ctx = CombatRoundContext(participant)
 
     pull_decl = CastPullDeclaration(
-        resonance=resonance,
         tier=tier,
         threads=(thread,),
     )
@@ -187,7 +186,7 @@ class ClashRoundDeclarationPullTests(TestCase):
             "A CombatPull row must be created when a clash carries a pull.",
         )
         pull = pull_qs.get()
-        self.assertEqual(pull.resonance, data["resonance"])
+        self.assertEqual({t.resonance for t in pull.threads.all()}, {data["resonance"]})
         self.assertEqual(pull.tier, 1)
         self.assertIn(data["thread"], pull.threads.all())
 
@@ -338,22 +337,21 @@ class CmdClashCommitPullParsingTests(TestCase):
     def setUp(self) -> None:
         idmapper_models.flush_cache()
 
-    def test_pull_without_resonance_raises_command_error(self) -> None:
-        """pull= without resonance= must raise CommandError immediately in _parse_args."""
+    def test_pull_without_resonance_parses(self) -> None:
+        """pull= alone parses: a pull may mix resonances, so none is named (#5066)."""
         from unittest.mock import MagicMock
 
         from commands.combat import CmdClashCommit
-        from commands.exceptions import CommandError
 
         cmd = CmdClashCommit.__new__(CmdClashCommit)
-        # Minimal caller mock — _parse_args does not call .caller for this error path.
         cmd.caller = MagicMock()
         cmd.args = "Goblin with Fireball pull=EmberStrand"
         cmd._parsed = False
 
-        with self.assertRaises(CommandError) as cm:
-            cmd._parse_args()
-        self.assertIn("resonance=", str(cm.exception))
+        cmd._parse_args()
+
+        self.assertEqual(cmd._pull_thread_str, "EmberStrand")
+        self.assertIsNone(cmd._pull_resonance_str)
 
     def test_pull_with_resonance_sets_parsed_state(self) -> None:
         """pull= with resonance= must populate _pull_thread_str and _pull_resonance_str."""

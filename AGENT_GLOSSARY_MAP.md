@@ -9,7 +9,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 ## Per-app glossaries
 
 - [character_sheets](src/world/character_sheets/AGENT_GLOSSARY.md)
-- [magic](src/world/magic/AGENT_GLOSSARY.md) - also holds Gift substance, Calling up and Present (#5018), Acting aura (#4731), and the Ultimates terms (#4098):
+- [magic](src/world/magic/AGENT_GLOSSARY.md) - also holds Gift substance, Calling up and Present (#5018), technique marks (#5066), Acting aura (#4731), and the Ultimates terms (#4098):
   Ultimate, Known ultimate, Readied ultimate, Reveal, Owned ultimate, Bond ultimate, Gift
   ultimate (#4118); the manifestation terms (#4118): Manifestation option, Character
   manifestation; the creation-personalization terms (#4099): Hold, Price, Early form,
@@ -21,7 +21,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   (_Avoid_: vow rider, vow switch); and Focus pick and Combat style (#4759, ADR-4759)
 - [scenes](src/world/scenes/AGENT_GLOSSARY.md), also holds the #4418 playing-the-cast terms (ADR-4418):
   Cast list, Crowd voice, Resist card, Flipped roll (_Avoid_: "cast" alone for the list, which is a technique cast)
-- [combat](src/world/combat/AGENT_GLOSSARY.md), also holds the #4091 allegiance terms, and hop budget, tactics level and move plan (#4607), the waiting strike (#4608), unanswerable attacker, progress guarantee and bash (#4609), the encounter state ping (#4644), and dodge, dodge plan and area attack (#4676), and rolled surge, surge tuning, degree band and taunt potency (#4737, ADR-4737), and feeding condition (#4739), and steadying and compulsion resist (#4802), and Strike and strike skill (#4858), and turn blink (#5019), and thrown Strike, enchanted Strike, technique roll and wall (#5026)
+- [combat](src/world/combat/AGENT_GLOSSARY.md), also holds the #4091 allegiance terms, and hop budget, tactics level and move plan (#4607), the waiting strike (#4608), unanswerable attacker, progress guarantee and bash (#4609), the encounter state ping (#4644), and dodge, dodge plan and area attack (#4676), and rolled surge, surge tuning, degree band and taunt potency (#4737, ADR-4737), and feeding condition (#4739), and steadying and compulsion resist (#4802), and Strike and strike skill (#4858), and turn blink (#5019), and dodge settings (#5066), and thrown Strike, enchanted Strike, technique roll and wall (#5026)
   (ADR-4091): Allegiance (stored vs effective), Turned, Won over, Bind window; (ADR-4120)
   Settled round; (ADR-4147) Spectacle, Spectacle kind; and (#4581, ADR-4581-A) Added-effect firing
   (the once-per-round / once-per-fight vow effect ledger)
@@ -48,7 +48,8 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [estates](src/world/estates/AGENT_GLOSSARY.md)
 - [checks](src/world/checks/AGENT_GLOSSARY.md) - also holds Favor as a modifier source (#4333); band position, the slide and own standing (#4601; the hopeless pin was removed by #4723); and modifier level, size, value table, level baseline, taper and lane (#4594), with worn items' level from quality (#4628) and distinctions' from their holder (#4638); the stat lane (#4726)
 - [mechanics](src/world/mechanics/AGENT_GLOSSARY.md) - also holds the favor categories and
-  `ModifierTarget.target_being` (#4333), and maneuver effects and effect kinds (#4783)
+  `ModifierTarget.target_being` (#4333), and maneuver effects and effect kinds (#4783), and
+  Application (way of moving, dodges), movement source, strength and reach band (#5066)
 - [progression](src/world/progression/AGENT_GLOSSARY.md)
 - [classes](src/world/classes/AGENT_GLOSSARY.md)
 - [societies](src/world/societies/AGENT_GLOSSARY.md) - also holds the Almanach de Catenys, and title station, chartered fief, claim and pledged liege (#4983), layout and place-name bank (#4986), and Domain (land at barony and county only), hinterland, rural pool, Capacity and Dormant (#5069)

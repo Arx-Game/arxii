@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
     from world.mechanics.types import PrerequisiteEvaluation
     from world.traits.models import Trait
+from world.areas.positioning.constants import CreatureTraversal
 from world.contributors.models import CreditedContent
 from world.magic.constants import TechniqueFunction
 from world.mechanics.constants import (
@@ -1138,6 +1139,12 @@ class Application(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     Applications carry no check type, narrative, or difficulty — those come
     from the delivery mechanism (Technique/tool/trait) and the Situation.
+
+    An application also says what a capability means for moving (#5066): a source that
+    matches it (``source_matches_application``) moves this way on her turn
+    (``way_of_moving``), or dodges attacks automatically (``dodges``), landing by
+    ``way_of_moving``. A null ``target_property`` means anywhere she moves; challenge
+    matching never offers such an application (it has nothing to aim at).
     """
 
     name = models.CharField(max_length=100)
@@ -1149,8 +1156,15 @@ class Application(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     target_property = models.ForeignKey(
         Property,
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="applications",
-        help_text="The Property on a Challenge or target that this Application addresses.",
+        help_text=(
+            "The Property on a Challenge or target that this Application addresses. Blank: "
+            "anywhere she moves (a dodge or a turn move); a blank one is never offered "
+            "against a challenge. For Phases, the property a wall's challenge must carry "
+            "for her to pass through it."
+        ),
     )
     required_effect_property = models.ForeignKey(
         Property,
@@ -1171,6 +1185,25 @@ class Application(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "against a bare object; null = no bare-object affordance"
         ),
     )
+    way_of_moving = models.CharField(
+        max_length=20,
+        choices=CreatureTraversal.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "How a source matching this moves (#5066). Without Dodges: on her turn she can "
+            "move this way (Climbs, Leaps, Flies, Blinks, Phases). With Dodges: how she lands "
+            "when she dodges (blank = in place or by walking). Blank and no Dodges: not about "
+            "moving."
+        ),
+    )
+    dodges = models.BooleanField(
+        default=False,
+        help_text=(
+            "A source matching this dodges attacks automatically (#5066). Each dodge with a "
+            "technique is a cast of it; any other source pays physical fatigue."
+        ),
+    )
     description = models.TextField(blank=True)
 
     objects = NaturalKeyManager()
@@ -1182,13 +1215,34 @@ class Application(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                 fields=["capability", "target_property", "name"],
                 name="application_unique_cap_prop_name",
             ),
+            # The constraint above treats a null target as distinct; an "anywhere"
+            # application is unique by capability and name (#5066).
+            models.UniqueConstraint(
+                fields=["capability", "name"],
+                condition=models.Q(target_property__isnull=True),
+                name="application_unique_cap_name_anywhere",
+            ),
+            # A null target means "anywhere she moves", so it is only meaningful for an
+            # application about moving (#5066).
+            models.CheckConstraint(
+                condition=models.Q(target_property__isnull=False)
+                | ~models.Q(way_of_moving="")
+                | models.Q(dodges=True),
+                name="application_anywhere_only_for_moving",
+            ),
         ]
 
     class NaturalKeyConfig:
         fields = ["name"]
 
     def __str__(self) -> str:
-        return f"{self.name} ({self.capability.name} + {self.target_property.name})"
+        where = self.target_property.name if self.target_property_id else "anywhere"
+        return f"{self.name} ({self.capability.name} + {where})"
+
+    @property
+    def is_movement(self) -> bool:
+        """Whether this application is about moving: a way of moving, or a dodge."""
+        return bool(self.way_of_moving) or self.dodges
 
 
 # ---------------------------------------------------------------------------
@@ -1512,6 +1566,20 @@ class ChallengeApproach(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.display_name or self.application.name
+
+    def clean(self) -> None:
+        """An approach needs an application with a target: one with none has nothing to
+        aim at on a challenge (#5066)."""
+        super().clean()
+        if self.application_id and self.application.target_property_id is None:
+            raise ValidationError(
+                {
+                    "application": (
+                        "This application has no target property (it applies anywhere she "
+                        "moves), so it cannot be an approach to a challenge."
+                    )
+                }
+            )
 
 
 class ApproachConsequence(SharedMemoryModel):

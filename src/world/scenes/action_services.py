@@ -677,7 +677,6 @@ def create_action_request(  # noqa: PLR0913 - the one dispatch orchestrator
     if pull is not None:
         decl = SceneActionPullDeclaration.objects.create(
             request=request,
-            resonance=pull.resonance,
             tier=pull.tier,
         )
         decl.threads.set(pull.threads)
@@ -1203,7 +1202,6 @@ def _charge_social_pull(
 
     pull_result = spend_resonance_for_pull(
         sheet,
-        declaration.resonance,
         declaration.tier,
         threads,
         PullActionContext(

@@ -343,6 +343,19 @@ class ApplicationFactory(DjangoModelFactory):
     default_template = None
 
 
+class MovementApplicationFactory(ApplicationFactory):
+    """An application about moving (#5066): anywhere she moves, no property needed.
+
+    Pass ``way_of_moving`` for a turn move, ``dodges=True`` for a dodge, and
+    ``required_effect_property`` for one only a source carrying that property reaches.
+    """
+
+    name = factory.Sequence(lambda n: f"Movement{n}")
+    target_property = None
+    way_of_moving = ""
+    dodges = False
+
+
 # ---------------------------------------------------------------------------
 # Trait → Capability derivation
 # ---------------------------------------------------------------------------

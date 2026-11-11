@@ -146,3 +146,35 @@ class TechniqueCastTemplateActionTests(TestCase):
         technique.refresh_from_db()
         self.assertEqual(technique.action_template.name, "Technique Cast")
         invalidate.assert_called_once()
+
+
+class SubstancePropertyPreTickTests(TestCase):
+    """A new technique opened on a gift starts with the gift's substance property ticked
+    (#5066 decision 10); staff can untick it before saving."""
+
+    def test_the_add_form_on_a_gift_ticks_its_substance_property(self):
+        from world.locations.constants import StatKey
+        from world.magic.constants import SubstanceDirection
+        from world.magic.factories import GiftFactory
+        from world.magic.models import GiftSubstance
+        from world.mechanics.factories import PropertyFactory
+
+        staff = AccountDB.objects.create_superuser("pretick5066", "p@example.com", "pw-5066")
+        self.client.force_login(staff)
+        gift = GiftFactory(name="Umbra")
+        shadow = PropertyFactory(name="shadow-pretick")
+        other = PropertyFactory(name="flame-pretick")
+        GiftSubstance.objects.create(
+            gift=gift,
+            label="shadow",
+            stat_key=StatKey.LIGHTING,
+            direction=SubstanceDirection.FALLING,
+            property=shadow,
+        )
+
+        response = self.client.get(reverse("admin:arxii_technique_add"), {"gift": gift.pk})
+
+        self.assertEqual(response.status_code, 200)
+        form = response.context["adminform"].form
+        self.assertEqual(list(form.initial["properties"]), [shadow.pk])
+        self.assertNotIn(other.pk, form.initial["properties"])

@@ -12,6 +12,7 @@ Covers:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import Decimal
 import logging
 from typing import TYPE_CHECKING
@@ -47,6 +48,8 @@ from world.magic.models import (
 from world.magic.types import ThreadSurvivabilitySaves, ThreadXPLockProspect
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
@@ -307,6 +310,40 @@ def compute_effective_cap(thread: Thread) -> int:
 # =============================================================================
 # Resonance Pivot Spec A — per-target-kind IMBUE premium (ADR-0051); pull cost is uniform
 # =============================================================================
+
+
+@dataclass(frozen=True)
+class PullCostTotals:
+    """What a pull of ``n`` threads costs in all: every thread pays its tier's share (#5066).
+
+    A pull lasts until her next turn and boosts every use it relates to, so each pulled
+    thread pays the tier's resonance cost and its anima share, the first one included.
+    """
+
+    resonance: int
+    anima: int
+
+
+def pull_cost_totals(tier: int, n_threads: int) -> PullCostTotals:
+    """The resonance and anima a pull of ``n_threads`` threads at ``tier`` costs."""
+    cost = get_pull_cost(tier, None)
+    return PullCostTotals(
+        resonance=cost.resonance_cost * n_threads,
+        anima=cost.anima_per_thread * n_threads,
+    )
+
+
+def pull_resonance_costs(tier: int, threads: Iterable[Thread]) -> dict[int, int]:
+    """What a pull at ``tier`` costs each resonance, keyed by resonance id (#5066).
+
+    A pull may mix threads of several resonances; each thread pays the tier's resonance
+    cost from its own resonance (maintainer ruling 2026-11-11).
+    """
+    each = get_pull_cost(tier, None).resonance_cost
+    costs: dict[int, int] = {}
+    for thread in threads:
+        costs[thread.resonance_id] = costs.get(thread.resonance_id, 0) + each
+    return costs
 
 
 def get_pull_cost(tier: int, target_kind: str | None) -> ThreadPullCost:

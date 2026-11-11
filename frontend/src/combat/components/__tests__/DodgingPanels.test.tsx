@@ -1,15 +1,57 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+
+// Stub ThreadPullDialog the way YourTurn's tests do: a button stands in for a chosen pull.
+vi.mock('@/magic/components/threads/ThreadPullDialog', () => ({
+  ThreadPullDialog: ({
+    open,
+    combat,
+    onSelect,
+  }: {
+    open: boolean;
+    combat?: { involvedTechniqueIds: number[] };
+    onSelect: (sel: {
+      tier: 1 | 2 | 3;
+      thread_ids: number[];
+      resonances: { id: number; name: string }[];
+    }) => void;
+  }) =>
+    open ? (
+      <div data-testid="thread-pull-dialog-stub">
+        <span data-testid="stub-technique-ids">{combat?.involvedTechniqueIds.join(',')}</span>
+        <button
+          type="button"
+          data-testid="simulate-pull-select"
+          onClick={() =>
+            onSelect({
+              tier: 2,
+              thread_ids: [10, 11],
+              resonances: [
+                { id: 5, name: 'Veil' },
+                { id: 6, name: 'Ember' },
+              ],
+            })
+          }
+        >
+          Simulate Select Pull
+        </button>
+      </div>
+    ) : null,
+}));
 
 import { AreaAttackWarning } from '../AreaAttackWarning';
 import { AreaTelegraphLayer } from '../AreaTelegraphLayer';
 import { attacksCoveringPlace, telegraphLine } from '../../dodging';
 import { CommitmentPanel } from '../CommitmentPanel';
 import { DodgePlanPanel } from '../DodgePlanPanel';
+import { RoundThreadPull } from '../RoundThreadPull';
+import type { components } from '@/generated/api';
 import type { EncounterDetail, PendingAttack } from '../../types';
 
-const PLAN = {
+type DodgePlan = components['schemas']['DodgePlan'];
+
+const PLAN: DodgePlan = {
   enabled: true,
   landing_id: null,
   options: [
@@ -17,7 +59,34 @@ const PLAN = {
     { id: 14, name: 'Gallery' },
   ],
   cost_line: 'Each dodge costs 2 anima. Each dodge after the first this round is harder.',
+  techniques: [],
+  technique_id: null,
+  into_soulfray: false,
+  auto_pull: false,
+  auto_pull_tier: null,
+  soulfray_check_in: null,
 };
+
+const TECHNIQUE_PLAN: DodgePlan = {
+  ...PLAN,
+  techniques: [
+    {
+      id: 31,
+      name: 'Shadow Step',
+      cost_line: 'Each dodge casts Shadow Step: 3 anima.',
+      is_default: true,
+    },
+    {
+      id: 32,
+      name: 'Wind Leap',
+      cost_line: 'Each dodge casts Wind Leap: 5 anima.',
+      is_default: false,
+    },
+  ],
+  technique_id: 31,
+};
+
+const SETTINGS_REF = { backend: 'registry', registry_key: 'dodge_settings' };
 
 function ok() {
   return vi.fn().mockResolvedValue({ success: true, message: null });
@@ -76,6 +145,162 @@ describe('DodgePlanPanel', () => {
       ref: { backend: 'registry', registry_key: 'combat_dodge' },
       kwargs: { dodge: false },
     });
+  });
+});
+
+describe('DodgePlanPanel dodge settings', () => {
+  function renderPanel(plan: DodgePlan, dispatch = ok(), isLocked = false) {
+    render(
+      <DodgePlanPanel
+        plan={plan}
+        currentPositionId={13}
+        isLocked={isLocked}
+        dispatchAction={dispatch}
+      />
+    );
+    return dispatch;
+  }
+
+  it('picks the technique that answers her dodges, marking her default', async () => {
+    const dispatch = renderPanel({
+      ...TECHNIQUE_PLAN,
+      cost_line: 'Each dodge casts Shadow Step: 3 anima.',
+    });
+    // One cost line: the server's plan line is the answering technique's own.
+    expect(screen.getAllByText('Each dodge casts Shadow Step: 3 anima.')).toHaveLength(1);
+    expect(screen.queryByTestId('dodge-technique-save-default')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('combobox', { name: 'Dodge with' }));
+    expect(
+      await screen.findByRole('option', { name: 'Shadow Step (default)' })
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('option', { name: 'Wind Leap' }));
+    expect(dispatch).toHaveBeenLastCalledWith({ ref: SETTINGS_REF, kwargs: { technique_id: 32 } });
+  });
+
+  it('saves the chosen technique as her default', async () => {
+    const dispatch = renderPanel({ ...TECHNIQUE_PLAN, technique_id: 32 });
+    await userEvent.click(screen.getByRole('button', { name: 'Save as my default' }));
+    expect(dispatch).toHaveBeenLastCalledWith({
+      ref: SETTINGS_REF,
+      kwargs: { technique_id: 32, save_default: true },
+    });
+  });
+
+  it('hides the technique picker when no technique can answer her dodges', () => {
+    renderPanel(PLAN);
+    expect(screen.queryByTestId('dodge-technique')).not.toBeInTheDocument();
+  });
+
+  it('turns dodging into Soulfray on', async () => {
+    const dispatch = renderPanel(TECHNIQUE_PLAN);
+    const toggle = screen.getByRole('switch', { name: 'Dodge even into Soulfray' });
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await userEvent.click(toggle);
+    expect(dispatch).toHaveBeenLastCalledWith({
+      ref: SETTINGS_REF,
+      kwargs: { into_soulfray: true },
+    });
+  });
+
+  it('checks in when her dodges would cast into Soulfray', async () => {
+    const dispatch = renderPanel({
+      ...TECHNIQUE_PLAN,
+      into_soulfray: true,
+      soulfray_check_in: {
+        stage_name: 'Fraying',
+        stage_description: 'Your soul thins at the edges.',
+        has_death_risk: true,
+      },
+    });
+    const gate = screen.getByTestId('dodge-soulfray-check-in');
+    expect(gate).toHaveTextContent('DANGER: Soulfray Warning: Fraying');
+    expect(gate).toHaveTextContent('Your soul thins at the edges.');
+    expect(gate).toHaveTextContent('Your automatic dodges cast into Soulfray.');
+    const keep = screen.getByRole('checkbox', { name: 'Keep dodging into Soulfray' });
+    expect(keep).toBeChecked();
+    await userEvent.click(keep);
+    expect(dispatch).toHaveBeenLastCalledWith({
+      ref: SETTINGS_REF,
+      kwargs: { into_soulfray: false },
+    });
+  });
+
+  it('turns the defensive pull on with a tier, drawing on any resonance', async () => {
+    const dispatch = renderPanel(TECHNIQUE_PLAN);
+    await userEvent.click(screen.getByRole('combobox', { name: 'Tier' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Tier 3' }));
+    expect(dispatch).not.toHaveBeenCalled();
+    await userEvent.click(
+      screen.getByRole('switch', { name: 'Pull threads for defense when attacked' })
+    );
+    expect(dispatch).toHaveBeenLastCalledWith({
+      ref: SETTINGS_REF,
+      kwargs: { auto_pull: true, pull_tier: 3 },
+    });
+  });
+
+  it('turns a saved defensive pull off', async () => {
+    const dispatch = renderPanel({
+      ...TECHNIQUE_PLAN,
+      auto_pull: true,
+      auto_pull_tier: 2,
+    });
+    await userEvent.click(
+      screen.getByRole('switch', { name: 'Pull threads for defense when attacked' })
+    );
+    expect(dispatch).toHaveBeenLastCalledWith({ ref: SETTINGS_REF, kwargs: { auto_pull: false } });
+  });
+
+  it('locks every setting once her turn is locked', () => {
+    renderPanel(TECHNIQUE_PLAN, ok(), true);
+    expect(screen.getByRole('combobox', { name: 'Dodge with' })).toBeDisabled();
+    expect(screen.getByRole('switch', { name: 'Dodge even into Soulfray' })).toBeDisabled();
+    expect(
+      screen.getByRole('switch', { name: 'Pull threads for defense when attacked' })
+    ).toBeDisabled();
+  });
+});
+
+describe('RoundThreadPull', () => {
+  function renderPull(dispatch: ReturnType<typeof ok>) {
+    return render(
+      <RoundThreadPull
+        characterSheetId={100}
+        encounterId={1}
+        participantId={2}
+        techniqueIds={[31, 32]}
+        roundNumber={4}
+        isLocked={false}
+        dispatchAction={dispatch}
+      />
+    );
+  }
+
+  it('opens the pull dialog with her techniques and sends combat_pull, then hides', async () => {
+    const dispatch = vi
+      .fn()
+      .mockResolvedValue({ success: true, message: 'You pull 2 threads for the round.' });
+    renderPull(dispatch);
+    await userEvent.click(screen.getByRole('button', { name: 'Pull threads for the round' }));
+    expect(screen.getByTestId('stub-technique-ids')).toHaveTextContent('31,32');
+    await userEvent.click(screen.getByTestId('simulate-pull-select'));
+    expect(dispatch).toHaveBeenCalledWith({
+      ref: { backend: 'registry', registry_key: 'combat_pull' },
+      kwargs: { pull_tier: 2, pull_thread_ids: [10, 11] },
+    });
+    await waitFor(() => expect(screen.queryByTestId('round-pull-btn')).not.toBeInTheDocument());
+  });
+
+  it('keeps the button when the pull is refused', async () => {
+    const dispatch = vi.fn().mockResolvedValue({
+      success: false,
+      message: 'You have already pulled a thread this round.',
+    });
+    renderPull(dispatch);
+    await userEvent.click(screen.getByRole('button', { name: 'Pull threads for the round' }));
+    await userEvent.click(screen.getByTestId('simulate-pull-select'));
+    await waitFor(() => expect(dispatch).toHaveBeenCalled());
+    expect(screen.getByTestId('round-pull-btn')).toBeInTheDocument();
   });
 });
 

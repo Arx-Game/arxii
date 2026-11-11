@@ -29,6 +29,7 @@ from world.magic.models import (
     TechniqueTreatment,
 )
 from world.magic.services.technique_effects import invalidate_technique_payload_caches
+from world.magic.services.technique_marks import tick_substance_mark
 from world.magic.types.technique_builder import (
     TechniqueCostBreakdown,
     TechniqueCostLine,
@@ -165,7 +166,8 @@ def create_technique(  # noqa: PLR0913
     action_template=None,
 ) -> Technique:
     """Low-level Technique row writer. Shared by build_technique and the CG
-    starter-gift catalog seed. Does NOT create a CharacterTechnique.
+    starter-gift catalog seed. Does NOT create a CharacterTechnique. Ticks the gift's
+    substance mark on the new technique (#5066).
 
     Defaults action_template to the shared 'Technique Cast' template so every
     technique is castable standalone; pass an explicit template to override.
@@ -183,7 +185,7 @@ def create_technique(  # noqa: PLR0913
     with transaction.atomic():
         if Technique.objects.filter(gift=gift, name=name).exists():
             raise DuplicateTechniqueName
-        return Technique.objects.create(
+        technique = Technique.objects.create(
             name=name,
             gift=gift,
             effect_type=effect_type,
@@ -196,6 +198,9 @@ def create_technique(  # noqa: PLR0913
             creator=creator,
             action_template=action_template,
         )
+        # A new technique starts with its gift's substance mark ticked (#5066).
+        tick_substance_mark(technique)
+        return technique
 
 
 def price_design(
