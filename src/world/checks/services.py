@@ -11,6 +11,7 @@ from django.db.models import Max, Q
 from world.checks.constants import (
     BOTCH_SUCCESS_LEVEL_MAX,
     LEVEL_POINTS_PER_LEVEL,
+    MODIFIER_SOURCE_LABEL_MAX_LENGTH,
     ModifierLane,
     ModifierSourceKind,
 )
@@ -884,15 +885,15 @@ def botch_immunity_sources(
 ) -> list[ModifierContribution]:
     """Every source the character holds on the botch_immunity targets for ``check_type``.
 
-    #4386. One contribution per source with its real value, across the active targets
-    scoped to the check type or its category (``ModifierTarget.botch_immunity_targets_for``):
-    CHARACTER rows (distinctions, achievements, forms) and worn crafted pieces through
+    #4386. One contribution per source, across the active targets scoped to the check type
+    or its category (``ModifierTarget.botch_immunity_targets_for``): CHARACTER rows
+    (distinctions, achievements, forms) and worn crafted pieces through
     ``modifier_target_contributions``, conditions through
-    ``get_condition_modifier_breakdown``. Their sum agrees with ``get_modifier_total +
-    get_condition_modifier_total`` in sign (botch_immunity is outside the equipment walk's
-    categories, so the walk adds 0; a sized distinction row is priced from the check
-    lane's table here, signed like its flat value). No query once the target cache is
-    built and no target is authored.
+    ``get_condition_modifier_breakdown``. This list only NAMES the sources on the "Cannot
+    botch" lines; whether the character is immune is ``is_botch_immune``'s spec sum, never
+    this list's (a sized distinction is priced from the check lane's table here, so the
+    two sums can differ). No query once the target cache is built and no target is
+    authored.
     """
     from world.conditions.services import get_condition_modifier_breakdown  # noqa: PLC0415
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
@@ -913,9 +914,22 @@ def botch_immunity_sources(
 
 
 def is_botch_immune(character_sheet: "CharacterSheet", check_type: "CheckType") -> bool:
-    """Whether the character cannot botch at ``check_type`` (#4386): a positive total
-    across ``botch_immunity_sources``. The amount does not matter."""
-    return sum(source.value for source in botch_immunity_sources(character_sheet, check_type)) > 0
+    """Whether the character cannot botch at ``check_type`` (#4386).
+
+    The spec's sum: ``get_modifier_total + get_condition_modifier_total`` over the active
+    botch_immunity targets scoped to the check type or its category, positive. The amount
+    does not matter. No query once the target cache is built and no target is authored.
+    """
+    from world.conditions.services import get_condition_modifier_total  # noqa: PLC0415
+    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+    from world.mechanics.services import get_modifier_total  # noqa: PLC0415
+
+    total = sum(
+        get_modifier_total(character_sheet, target)
+        + get_condition_modifier_total(character_sheet, target)
+        for target in ModifierTarget.botch_immunity_targets_for(check_type)
+    )
+    return total > 0
 
 
 def _botch_immunity_contributions(
@@ -925,18 +939,18 @@ def _botch_immunity_contributions(
     """The "Cannot botch: <source>" breakdown lines for an immune character (#4386).
 
     One value-0 BOTCH_IMMUNITY line per positive source, so the roll's totals, taper and
-    ``extra_modifiers_total`` are unchanged. Empty when the character is not immune.
+    ``extra_modifiers_total`` are unchanged. Empty when ``is_botch_immune`` says the
+    character is not immune. A label is cut to what a recorded modifier row holds.
     """
-    sources = botch_immunity_sources(character_sheet, check_type)
-    if sum(source.value for source in sources) <= 0:
+    if not is_botch_immune(character_sheet, check_type):
         return []
     return [
         ModifierContribution(
             source_kind=ModifierSourceKind.BOTCH_IMMUNITY,
-            source_label=f"Cannot botch: {source.source_label}",
+            source_label=f"Cannot botch: {source.source_label}"[:MODIFIER_SOURCE_LABEL_MAX_LENGTH],
             value=0,
         )
-        for source in sources
+        for source in botch_immunity_sources(character_sheet, check_type)
         if source.value > 0
     ]
 

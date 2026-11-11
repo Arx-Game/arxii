@@ -17,11 +17,26 @@ from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.checks.constants import ModifierSourceKind
+from world.checks.constants import (
+    MODIFIER_SOURCE_LABEL_MAX_LENGTH,
+    CombatRollKind,
+    ModifierLane,
+    ModifierSize,
+    ModifierSourceKind,
+)
 from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
+from world.checks.modifier_models import ModifierValue
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
-from world.checks.services import collect_check_modifiers, perform_check
+from world.checks.services import (
+    botch_immunity_sources,
+    collect_check_modifiers,
+    is_botch_immune,
+    perform_check,
+    record_consequence_outcome,
+)
 from world.checks.test_helpers import force_check_outcome
+from world.checks.types import ModifierContribution
+from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
 from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionModifierEffectFactory,
@@ -87,9 +102,13 @@ class NicheBotchImmunityTests(TestCase):
         ModifierTarget.clear_trait_cache()
         return target
 
-    def _distinction(self, target: ModifierTarget, *, name: str, value: int = 1) -> None:
+    def _distinction(
+        self, target: ModifierTarget, *, name: str, value: int = 1, size: int | None = None
+    ) -> None:
         distinction = DistinctionFactory(name=name)
-        DistinctionEffectFactory(distinction=distinction, target=target, value_per_rank=value)
+        DistinctionEffectFactory(
+            distinction=distinction, target=target, value_per_rank=value, modifier_size=size
+        )
         create_distinction_modifiers(
             CharacterDistinctionFactory(character=self.sheet, distinction=distinction)
         )
@@ -147,6 +166,77 @@ class NicheBotchImmunityTests(TestCase):
         breakdown = collect_check_modifiers(self.sheet, self.riding)
         kinds = [c.source_kind for c in breakdown.contributions]
         self.assertNotIn(ModifierSourceKind.BOTCH_IMMUNITY, kinds)
+
+    def test_the_verdict_is_the_flat_sum_even_when_a_sized_source_prices_higher(self) -> None:
+        """A sized +1 distinction priced at 10 by the check lane's table, against a -1
+        condition: the spec sum (flat 1 - 1 = 0) says not immune, though the lane-priced
+        sources (10 - 1) are positive."""
+        CharacterClassLevelFactory(
+            character=self.sheet, character_class=CharacterClassFactory(), level=1
+        )
+        self.sheet.invalidate_class_level_cache()
+        ModifierValue.objects.create(
+            lane=ModifierLane.CHECK, level=1, size=ModifierSize.LARGE, value=10
+        )
+        target = self._target(target_check_category=self.wilderness)
+        self._distinction(target, name="Born in the Saddle", size=ModifierSize.LARGE)
+        shaken = ConditionTemplateFactory(name="Niche Shaken Sized")
+        ConditionModifierEffectFactory(condition=shaken, modifier_target=target, value=-1)
+        ConditionInstanceFactory(target=self.character, condition=shaken)
+
+        priced = sum(s.value for s in botch_immunity_sources(self.sheet, self.riding))
+        self.assertEqual(priced, 9)  # the two pricings really disagree here
+        self.assertFalse(is_botch_immune(self.sheet, self.riding))
+        self.assertEqual(self._roll(self.riding, -2).outcome, self.outcomes[-2])
+        kinds = [
+            c.source_kind for c in collect_check_modifiers(self.sheet, self.riding).contributions
+        ]
+        self.assertNotIn(ModifierSourceKind.BOTCH_IMMUNITY, kinds)
+
+    def test_a_long_source_name_is_cut_to_the_recorded_label_length(self) -> None:
+        target = self._target(target_check_category=self.wilderness)
+        self._distinction(target, name="Born in the Saddle")
+        long_source = ModifierContribution(
+            source_kind=ModifierSourceKind.EQUIPMENT, source_label="x" * 200, value=1
+        )
+        with patch("world.checks.services.botch_immunity_sources", return_value=[long_source]):
+            breakdown = collect_check_modifiers(self.sheet, self.riding)
+
+        (line,) = [
+            c for c in breakdown.contributions if c.source_kind == ModifierSourceKind.BOTCH_IMMUNITY
+        ]
+        self.assertEqual(len(line.source_label), MODIFIER_SOURCE_LABEL_MAX_LENGTH)
+        self.assertTrue(line.source_label.startswith("Cannot botch: xxx"))
+
+    def test_a_recorded_outcome_keeps_the_line_and_still_sums_to_its_total(self) -> None:
+        target = self._target(target_check_category=self.wilderness)
+        self._distinction(target, name="Born in the Saddle")
+        breakdown = collect_check_modifiers(
+            self.sheet,
+            self.riding,
+            extra_contributions=[
+                ModifierContribution(
+                    source_kind=ModifierSourceKind.EFFORT, source_label="Effort", value=3
+                )
+            ],
+        )
+
+        outcome = record_consequence_outcome(
+            self.sheet,
+            self.riding,
+            None,
+            None,
+            breakdown,
+            combat_interaction=InteractionFactory(),
+        )
+
+        rows = list(outcome.modifiers.all())
+        self.assertIn(
+            ("Cannot botch: Born in the Saddle", 0),
+            [(row.source_label, row.value) for row in rows],
+        )
+        self.assertEqual(sum(row.value for row in rows), outcome.modifier_total)
+        self.assertEqual(outcome.modifier_total, 3)
 
     def test_vow_and_modifier_immunity_give_one_floor_and_the_vow_still_announces(self) -> None:
         target = self._target(target_check_category=self.wilderness)
@@ -232,14 +322,36 @@ class BotchImmunityLineVisibilityTests(TestCase):
         )
         cls.onlooker = AccountFactory()
         SceneParticipationFactory(scene=scene, account=cls.onlooker)
+        # A Strike damage roll: its sources are laid out as rows (roll_breakdown).
+        damage_interaction = InteractionFactory(scene=scene)
+        cls.damage_roll = ConsequenceOutcome.objects.create(
+            character=cls.sheet,
+            check_type=CheckTypeFactory(),
+            modifier_total=0,
+            combat_interaction=damage_interaction,
+            combat_interaction_timestamp=damage_interaction.timestamp,
+            combat_roll_kind=CombatRollKind.DAMAGE,
+        )
+        ConsequenceOutcomeModifier.objects.create(
+            outcome=cls.damage_roll,
+            source_kind=ModifierSourceKind.BOTCH_IMMUNITY,
+            source_label="Cannot botch: Born in the Saddle",
+            value=0,
+        )
 
-    def _row(self, account) -> dict:
+    def _row(self, account, outcome=None) -> dict:
+        outcome = outcome or self.outcome
         client = APIClient()
         client.force_authenticate(user=account)
         response = client.get("/api/checks/consequence-outcomes/")
         self.assertEqual(response.status_code, 200)
-        (row,) = [r for r in response.json()["results"] if r["id"] == self.outcome.pk]
+        (row,) = [r for r in response.json()["results"] if r["id"] == outcome.pk]
         return row
+
+    def test_the_roll_breakdown_shows_the_line_with_no_number(self) -> None:
+        row = self._row(self.owner, self.damage_roll)
+        lines = {line["label"]: line["value"] for line in row["roll_breakdown"]["lines"]}
+        self.assertEqual(lines["Cannot botch: Born in the Saddle"], "")
 
     def test_the_roller_sees_the_line(self) -> None:
         row = self._row(self.owner)

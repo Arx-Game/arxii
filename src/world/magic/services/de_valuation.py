@@ -33,6 +33,7 @@ from world.magic.types.technique_power import (
 
 if TYPE_CHECKING:
     from world.conditions.models import ConditionTemplate
+    from world.traits.models import ResultChartOutcome
 
 #: The synthetic "reference attack" profile used by both the technique generic-modifier
 #: valuator and (#3390) the standalone condition/capability valuators to measure how much
@@ -119,7 +120,7 @@ def matchup_bands(context: EvalContext) -> list[MatchupBand]:
 
 
 def _fold_botch_bands(
-    outcome_rows: list,
+    outcome_rows: list[ResultChartOutcome],
     counts: dict[int, int],
     levels: dict[int, int],
 ) -> list[MatchupBand]:

@@ -575,6 +575,24 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         if not has_category and not has_type:
             msg = "A botch immunity target needs the check category or check type it covers."
             raise ValidationError({"target_check_category": msg})
+        stray = self._set_fields_outside_botch_scope()
+        if stray:
+            # One authored value would otherwise move a stat, an aspect or a maneuver as
+            # well as granting the guarantee.
+            msg = "A botch immunity target names only its check category or check type."
+            raise ValidationError(dict.fromkeys(stray, msg))
+
+    def _set_fields_outside_botch_scope(self) -> list[str]:
+        """Every set ``target_*``/``scope_*`` field other than the two botch-immunity scopes
+        (#4386), in field order."""
+        botch_scopes = {"target_check_category", "target_scope_check_type"}
+        return [
+            field.name
+            for field in self._meta.concrete_fields
+            if field.name.startswith(("target_", "scope_"))
+            and field.name not in botch_scopes
+            and getattr(self, field.attname) not in (None, "")
+        ]
 
     def _clean_technique_scope(self, *, has_effect: bool, has_kind: bool) -> None:
         """A technique scope narrows a kind of effect (#4822), never one maneuver's effect."""

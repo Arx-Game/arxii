@@ -63,8 +63,6 @@ from world.magic.services.technique_effects import technique_catalog_revision
 from world.species.models import Species
 
 _DEFAULT_ROLLER_POINTS = 25
-# What a ticked HTML checkbox with no value attribute submits (#4386's "cannot botch").
-_CHECKBOX_ON = "on"
 _DEFAULT_TARGET_DIFFICULTY = 25
 # Modifier pile defaults (#4594): one Large buff cast at level 6 on a level-6 character.
 _DEFAULT_PILE_LEVEL = 6
@@ -81,6 +79,10 @@ _SIMULATION_CACHE_TIMEOUT = 60 * 60 * 24
 # up whichever exact-param key was last written here, rather than trying to
 # guess which of many possible param tuples the admin last ran.
 _SIMULATION_LAST_KEY = "tuning-sim:last"
+
+
+# What a ticked HTML checkbox with no value attribute submits (#4386's "cannot botch").
+_CHECKBOX_ON = "on"
 
 
 def _int_query_param(request: HttpRequest, name: str, default: int) -> int:

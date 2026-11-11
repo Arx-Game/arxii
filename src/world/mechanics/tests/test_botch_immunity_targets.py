@@ -8,7 +8,7 @@ from django.test import TestCase
 from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.mechanics.admin import ModifierTargetAdmin
-from world.mechanics.constants import BOTCH_IMMUNITY_CATEGORY_NAME
+from world.mechanics.constants import BOTCH_IMMUNITY_CATEGORY_NAME, EffectKind
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.mechanics.models import ModifierTarget
 
@@ -66,6 +66,29 @@ class BotchImmunityTargetTests(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             by_type.clean()
         self.assertIn("target_scope_check_type", ctx.exception.message_dict)
+
+    def test_clean_refuses_another_target_or_scope_field(self) -> None:
+        """One authored value must not move a stat or a maneuver as well (#4386)."""
+        from world.traits.factories import TraitFactory
+
+        with_trait = ModifierTarget(
+            name="also a stat",
+            category=self.botch,
+            target_scope_check_type=self.riding,
+            target_trait=TraitFactory(name="Botch Test Strength"),
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            with_trait.clean()
+        self.assertIn("target_trait", ctx.exception.message_dict)
+        with_kind = ModifierTarget(
+            name="also a maneuver",
+            category=self.botch,
+            target_check_category=self.check_category,
+            scope_effect_kind=EffectKind.DAMAGE,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            with_kind.clean()
+        self.assertIn("scope_effect_kind", ctx.exception.message_dict)
 
     def test_clean_accepts_one_scope(self) -> None:
         ModifierTarget(name="ok", category=self.botch, target_scope_check_type=self.riding).clean()

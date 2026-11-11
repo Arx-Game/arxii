@@ -3,6 +3,9 @@
 from django.db import models
 
 BOTCH_SUCCESS_LEVEL_MAX = -2
+
+# The longest recorded modifier label (``ConsequenceOutcomeModifier.source_label``).
+MODIFIER_SOURCE_LABEL_MAX_LENGTH = 120
 """Canonical -10..+10 outcome scale: a CheckOutcome whose success_level is at or
 below this is a botch / critical failure. Single source for the boundary that
 world.magic.services.sanctum_install previously declared locally."""

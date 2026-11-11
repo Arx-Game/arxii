@@ -7,11 +7,19 @@ thin integration test for the fragment view that renders it.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+import re
+
 from django.test import TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
-from web.admin.tuning.checks_analytics import compute_chart_distributions, compute_matchup
+from web.admin.tuning.checks_analytics import (
+    OutcomeBand,
+    compute_chart_distributions,
+    compute_matchup,
+)
+from world.magic.services.de_valuation import MatchupBand
 from world.traits.factories import (
     CheckOutcomeFactory,
     CheckRankFactory,
@@ -19,6 +27,14 @@ from world.traits.factories import (
     ResultChartOutcomeFactory,
 )
 from world.traits.models import ResultChart
+
+
+def _by_level(bands: Iterable[OutcomeBand | MatchupBand]) -> dict[int, float]:
+    """Each success level's total probability, so two bands at one level both count."""
+    totals: dict[int, float] = {}
+    for band in bands:
+        totals[band.success_level] = totals.get(band.success_level, 0.0) + band.probability
+    return totals
 
 
 class ComputeChartDistributionsTests(TestCase):
@@ -284,8 +300,8 @@ class SlideAnalyticsTests(TestCase):
         """#4386: no botch band, and Failure grew by exactly the botch probability."""
         plain = compute_matchup(roller_points=20, target_difficulty=250)
         immune = compute_matchup(roller_points=20, target_difficulty=250, botch_immune=True)
-        plain_by_level = {band.success_level: band.probability for band in plain.bands}
-        immune_by_level = {band.success_level: band.probability for band in immune.bands}
+        plain_by_level = _by_level(plain.bands)
+        immune_by_level = _by_level(immune.bands)
         assert plain_by_level[-2] > 0
         assert -2 not in immune_by_level
         assert abs(immune_by_level[-1] - (plain_by_level[-1] + plain_by_level[-2])) < 1e-9
@@ -302,12 +318,8 @@ class SlideAnalyticsTests(TestCase):
         immune = matchup_bands(
             EvalContext(roller_points=20, target_difficulty=250, botch_immune=True)
         )
-        plain_by_level: dict[int, float] = {}
-        for band in plain:
-            plain_by_level[band.success_level] = (
-                plain_by_level.get(band.success_level, 0) + band.probability
-            )
-        immune_by_level = {band.success_level: band.probability for band in immune}
+        plain_by_level = _by_level(plain)
+        immune_by_level = _by_level(immune)
         assert plain_by_level[-2] > 0
         assert -2 not in immune_by_level
         assert abs(immune_by_level[-1] - (plain_by_level[-1] + plain_by_level[-2])) < 1e-9
@@ -321,8 +333,15 @@ class SlideAnalyticsTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         body = resp.content.decode()
-        assert 'name="botch_immune"' in body
-        assert "checked" in body
+        checkbox = re.search(r'<input type="checkbox" id="checks-botch-immune"[^>]*>', body)
+        assert checkbox is not None
+        assert "checked" in checkbox.group(0)
+        plain = self.client.get(
+            reverse("admin_tuning_checks"), {"roller_points": "20", "target_difficulty": "250"}
+        ).content.decode()
+        unticked = re.search(r'<input type="checkbox" id="checks-botch-immune"[^>]*>', plain)
+        assert unticked is not None
+        assert "checked" not in unticked.group(0)
 
     def test_panel_shows_ranks_with_numbers_and_the_lifted_chart(self) -> None:
         self.client.force_login(self.super)
