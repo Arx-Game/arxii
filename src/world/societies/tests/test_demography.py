@@ -12,7 +12,7 @@ from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.areas.worldmap.constants import PipSource, Terrain
 from world.areas.worldmap.models import AreaFootprintPip, RegionMap, TerrainPip
-from world.areas.worldmap.services import create_region_map, set_footprint
+from world.areas.worldmap.services import create_region_map, restore_pips, set_footprint
 from world.game_clock.factories import GameClockFactory
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.demography import population_now, refresh_terrain_counts
@@ -212,6 +212,18 @@ class CarveRecountsTests(TestCase):
         set_footprint(area=self.county, add=[(0, 0), (1, 0), (0, 1)])
 
         set_footprint(area=self.barony, add=[(1, 0)])
+
+        self.county_domain.refresh_from_db()
+        self.barony_domain.refresh_from_db()
+        self.assertEqual(self.county_domain.population_capacity, 100 + 40)
+        self.assertEqual(self.barony_domain.population_capacity, 100 * 10)
+
+    def test_restoring_a_pip_recounts_the_holder_that_loses_it(self):
+        # The staff undo hands a pip to a named holder; the holder it leaves is recounted
+        # too, or it keeps the pip's capacity (review on PR #5075).
+        set_footprint(area=self.county, add=[(0, 0), (1, 0), (0, 1)])
+
+        restore_pips(pips=[(1, 0, self.barony.pk)])
 
         self.county_domain.refresh_from_db()
         self.barony_domain.refresh_from_db()

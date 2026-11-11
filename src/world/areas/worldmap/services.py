@@ -444,6 +444,8 @@ def restore_pips(*, pips: Iterable[PipHolder]) -> int:
         return 0
     with transaction.atomic():
         held = _rows_at(set(wanted))
+        # the holders these pips leave, read before the loop repoints any row (#5069)
+        previous_holders = {row.area_id for row in held.values()}
         to_delete: list[int] = []
         to_move: list[AreaFootprintPip] = []
         fresh: list[AreaFootprintPip] = []
@@ -467,7 +469,7 @@ def restore_pips(*, pips: Iterable[PipHolder]) -> int:
                 reason="restore moves rows loaded in this transaction",
             )
         AreaFootprintPip.objects.bulk_create(fresh, batch_size=5000)
-        touched = set(wanted.values()) | {row.area_id for row in held.values()}
+        touched = set(wanted.values()) | previous_holders
         _recount_terrain((), *(pk for pk in touched if pk is not None))
     return len(to_delete) + len(to_move) + len(fresh)
 
