@@ -326,6 +326,13 @@ never a fill (`drawRegionMap`'s `ghostPips`; the viewport exposes `data-ghost-pi
 Almanach title page's globe ("View on the map", #5017) writes the Atlas's last-location key
 and a one-shot `sessionStorage` focus (`mapFocus.ts`), which the region map page takes on mount.
 
+**Regional events (#5080).** The region map page reads the picked realm's open events
+(`GET /api/almanach/regional-events/?realm=&active=true`) and tints every footprint under a
+struck area (`mapViews.struckFootprints`, walked through `parent_id` within the map's rows)
+with `STRIKE_COLOR` over the holder's colour, after every fill and before the charter ghost
+(`drawRegionMap`'s `struckAreaIds`; the viewport exposes `data-struck`). The legend names each
+event, "Blight over Vampa", with the tint's swatch.
+
 **Border tools (#4988, slice 3 of #4983).** `set_footprint(..., take_from_siblings=True)` is
 the map's **Adjust**: a pip held by a sibling rung under the same ladder parent, or by one of
 that sibling's counties, moves sideways into the carved area instead of being skipped, so a
