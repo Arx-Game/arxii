@@ -129,9 +129,7 @@ class EmergencyDrawE2ETests(TestCase):
         )
 
     def test_over_ceiling_draw_applies_bonus_and_incurs_debt(self) -> None:
-        declaration = CastPullDeclaration(
-            resonance=self.resonance, tier=1, threads=(self.thread,), beseech_bonus=8
-        )
+        declaration = CastPullDeclaration(tier=1, threads=(self.thread,), beseech_bonus=8)
         success_outcome = CheckOutcomeFactory(name="beseech_success", success_level=1)
         with force_check_outcome(success_outcome):
             commit_combat_pull(declaration, self.participant, self.encounter, technique_id=0)
@@ -156,9 +154,7 @@ class EmergencyDrawE2ETests(TestCase):
 
     def test_failed_draw_commits_the_pull_with_no_bonus(self) -> None:
         """A failed petition check still commits the base pull, but with no bonus applied."""
-        declaration = CastPullDeclaration(
-            resonance=self.resonance, tier=1, threads=(self.thread,), beseech_bonus=8
-        )
+        declaration = CastPullDeclaration(tier=1, threads=(self.thread,), beseech_bonus=8)
         failure_outcome = CheckOutcomeFactory(name="beseech_failure", success_level=0)
         with force_check_outcome(failure_outcome):
             commit_combat_pull(declaration, self.participant, self.encounter, technique_id=0)
@@ -203,9 +199,7 @@ class EmergencyDrawE2ETests(TestCase):
         from world.combat.round_context import CombatRoundContext
         from world.covenants.perks.context import SituationContext
 
-        declaration = CastPullDeclaration(
-            resonance=self.resonance, tier=1, threads=(self.thread,), beseech_bonus=8
-        )
+        declaration = CastPullDeclaration(tier=1, threads=(self.thread,), beseech_bonus=8)
         success_outcome = CheckOutcomeFactory(name="beseech_ctx_success", success_level=1)
         real_perform_check = checks_services.perform_check
         with (
@@ -267,9 +261,7 @@ class EmergencyDrawE2ETests(TestCase):
             update_fields=["petition_failure_escalation_threshold", "escalation_consequence_pool"]
         )
 
-        declaration = CastPullDeclaration(
-            resonance=self.resonance, tier=1, threads=(self.thread,), beseech_bonus=8
-        )
+        declaration = CastPullDeclaration(tier=1, threads=(self.thread,), beseech_bonus=8)
         with force_check_outcome(failure_outcome):
             commit_combat_pull(declaration, self.participant, self.encounter, technique_id=0)
 

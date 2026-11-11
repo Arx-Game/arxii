@@ -183,7 +183,7 @@ class UseTechniqueCastPullChargeTests(_CastPullChargeTestBase):
             character=self.character,
             technique=self.technique,
             resolve_fn=resolve_fn,
-            cast_pull=CastPullDeclaration(resonance=self.resonance, tier=1, threads=(self.thread,)),
+            cast_pull=CastPullDeclaration(tier=1, threads=(self.thread,)),
         )
 
         cr.refresh_from_db()
@@ -207,9 +207,7 @@ class UseTechniqueUnaffordablePullTests(_CastPullChargeTestBase):
                 character=self.character,
                 technique=self.technique,
                 resolve_fn=resolve_fn,
-                cast_pull=CastPullDeclaration(
-                    resonance=self.resonance, tier=1, threads=(self.thread,)
-                ),
+                cast_pull=CastPullDeclaration(tier=1, threads=(self.thread,)),
             )
 
         # The pull charge precedes deduct_anima, so the technique's own anima
@@ -279,7 +277,7 @@ class UseTechniqueIntensityPullTests(_CastPullIntensityTestBase):
             character=char2,
             technique=self.technique,
             resolve_fn=pulled_resolve,
-            cast_pull=CastPullDeclaration(resonance=self.resonance, tier=1, threads=(thread2,)),
+            cast_pull=CastPullDeclaration(tier=1, threads=(thread2,)),
         )
         pulled_power = pulled_captured["power"]
 
@@ -311,7 +309,7 @@ class UseTechniqueFlatPullTests(_CastPullChargeTestBase):
             character=self.character,
             technique=self.technique,
             resolve_fn=resolve_fn,
-            cast_pull=CastPullDeclaration(resonance=self.resonance, tier=1, threads=(self.thread,)),
+            cast_pull=CastPullDeclaration(tier=1, threads=(self.thread,)),
         )
 
         # flat_bonus_amount=2, level=0 → multiplier=max(1,0//10)=1 → scaled_value=2.
@@ -362,7 +360,7 @@ class UseTechniqueCancelledPreCastPullTests(_CastPullChargeTestBase):
             character=self.character,
             technique=self.technique,
             resolve_fn=MagicMock(return_value="result"),
-            cast_pull=CastPullDeclaration(resonance=self.resonance, tier=1, threads=(self.thread,)),
+            cast_pull=CastPullDeclaration(tier=1, threads=(self.thread,)),
         )
 
         self.assertFalse(result.confirmed, "cast should be cancelled, not confirmed")

@@ -1970,8 +1970,27 @@ one pull per combat round (cap → `PULL_ALREADY_COMMITTED`).
 
 **Web surface:**
 - Non-combat cast: `CastPullRequestSerializer` nested inside the cast request body.
-- Combat cast/clash: `pull_resonance_id` / `pull_tier` / `pull_thread_ids` in the dispatch
-  kwargs (passed alongside the `ActionRef`).
+- Combat cast/clash: `pull_tier` / `pull_thread_ids` in the dispatch kwargs (passed
+  alongside the `ActionRef`), and `pull_burn` with `pull_burn_resonance_id` for a burn.
+
+**A pull may mix resonances (#5066, maintainer ruling 2026-11-11) [BUILT & WIRED].** No pull is
+limited to one resonance: the threads are any of hers, and each thread pays its tier's
+resonance cost from its own `CharacterResonance` (`pull_resonance_costs(tier, threads)` in
+`services/threads.py`). `spend_resonance_for_pull(character_sheet, tier, threads, ...)` locks
+every resonance it spends in resonance order and debits all of them or none
+(`_lock_pull_resonances`; a short resonance refuses with "Need N {Resonance} resonance, have
+M."). Anima is still the per-thread total and is never refused for lack of anima on the
+cast's own overspend path. Pull effects already key on each thread's resonance
+(`resolve_pull_effects` reads each thread's own rows). A distinction's resonance-scoped POWER
+bonus folds in once per distinct pulled resonance (`_fold_distinction_pull_bonus`). A burn
+(#4736) comes from one pulled resonance the player names (`burn_resonance` on
+`CastPullDeclaration`, `burn_resonance_id` on the web, `resonance=<name>` on telnet); a pull of
+one resonance burns that one without naming it (`CastPullDeclaration.burned_resonance`).
+`CombatPull` no longer stores a resonance: what each resonance paid is derived from the pull's
+threads (`techniques._add_thread_spends`, for corruption per resonance), and
+`CombatPull.burned_resonance` records a burn's. `SceneActionPullDeclaration.burn_resonance`
+does the same for a pending scene pull. The same rule covers every pull: combat casts and
+clashes, a pull on its own, the automatic defensive pull, scene casts and social actions.
 
 **Shared commit paths (`world/combat/pull_helpers.py`):**
 - `build_cast_pull_declaration(...)` — builds the pull declaration from kwargs.
@@ -2023,8 +2042,10 @@ focused cast). A distinction's resonance bonus folded into a pull
 (`_fold_distinction_pull_bonus`, filed under the first thread with no `authored_value`)
 counts when any of that pull's threads relates to the use. `VITAL_BONUS`, `RESISTANCE` and `CAPABILITY_GRANT` are standing effects on the
 character for the round, not bonuses on a use, and are read unfiltered by the
-`CharacterCombatPullHandler` methods; the pull's resonance on the focus roll
-(`round_pull_resonance`) and its spend on corruption read the pull itself and are unchanged.
+`CharacterCombatPullHandler` methods; the pull's resonances on the focus roll
+(`round_pull_resonances`) and its spend on corruption read the pull's threads. The folded
+distinction bonus is one per pulled resonance and counts when a thread of its own resonance
+relates to the use (`_effect_reaches`).
 
 ### Non-Combat Ephemeral Pull CAPABILITY_GRANT (#2840) [BUILT & WIRED]
 
@@ -2124,7 +2145,7 @@ push the cast harder. The burn rides the pull: no pull, no burn (`ResonanceBurnN
   that reached nothing, and is blank when none was.
 - **Idempotent resubmit.** A submit is several dispatches; when a later one fails, the player
   submits again. `_commit_focused_pull` first checks this round's committed pull
-  (`_focused_pull_already_committed`): the same resonance, tier and threads, with
+  (`_focused_pull_already_committed`): the same tier and threads, with
   `burned_for` CAST when a burn is asked (blank when not) and a stored reach no more than the
   request, is a no-op (no second charge, no second burn line); any other pull is refused with
   `PULL_ALREADY_COMMITTED`. The client also leaves the pull off a retried submit once the job
@@ -2144,7 +2165,8 @@ push the cast harder. The burn rides the pull: no pull, no burn (`ResonanceBurnN
   asked for: " then "your burn ceiling is 0 at this intensity", "you have no {Resonance}
   resonance left once the pull is paid", or "your strain check reached none of it".
 - **Surfaces.** Telnet `cast` and `clash` take `burn=<n>`, valid only beside `pull=`. Web combat
-  dispatch takes `pull_burn` beside `pull_resonance_id` / `pull_tier` / `pull_thread_ids`
+  dispatch takes `pull_burn` (and `pull_burn_resonance_id` on a mixed pull) beside
+  `pull_tier` / `pull_thread_ids`
   (`_parse_pull_burn` in `world/combat/pull_helpers.py`). Web scene cast
   `POST /api/action-requests/cast/` takes `pull.burn` (`CastPullWithBurnRequestSerializer`); the
   social action endpoint takes none. The pull preview (`POST /api/magic/thread-pull-preview/`)
@@ -3319,15 +3341,16 @@ her for the template's duration (authored as the scene). All of it lives in `wor
   dominant affinity) the reading is all zero; with an aura and no off-aura balance the
   dominant affinity is set, the threshold is `threshold_floor`, and only `drift` and
   `steps_past` are 0.
-- `check_resonance_focus(character, technique, *, pulled_resonance=None) -> FocusOutcome | None`
+- `check_resonance_focus(character, technique, *, pulled_resonances=()) -> FocusOutcome | None`
   runs once per cast, inside `_complete_technique_cast` in `use_technique`
   (`services/techniques.py`), after anima is deducted and before `resolve_fn` runs. That one
   seam means every cast path rolls it: scene, combat, clash, battles, standoffs and
   technique-enhanced social actions. A pull is part of its cast with no separate roll: the
-  pulled resonance is `cast_pull`'s when the cast charges one, else the
-  `use_technique(pulled_resonance=...)` its caller names. The combat round resolver and the
-  clash contribution pass the round's committed `CombatPull` resonance
-  (`world/combat/pull_helpers.py` `round_pull_resonance`); no other cast reads combat pulls.
+  pulled resonances are `cast_pull`'s threads' when the cast charges one, else the
+  `use_technique(pulled_resonances=...)` its caller names; the off-aura steps apply once when
+  ANY of them differs from her dominant affinity (#5066). The combat round resolver and the
+  clash contribution pass the round's committed `CombatPull` threads' resonances
+  (`world/combat/pull_helpers.py` `round_pull_resonances`); no other cast reads combat pulls.
   Whether the penalty lands on the same roll depends on where each path gathers modifiers:
   scene casts, combat casts, clash contributions and standoffs gather them inside
   `resolve_fn`, so the conflict counts on the roll that triggered it. Scene casts gather them
@@ -5365,7 +5388,7 @@ Telnet parity: `train <technique> [=<ap>]` / bare `train` for the meter list (`C
 | `/threads/` | POST | Weave a new thread. Body must include `character_sheet_id`; serializer delegates to `weave_thread`. For `target_kind=RELATIONSHIP_TRACK`, `target_id` is the `RelationshipType` **catalog** id (not a relationship row pk) and `target_persona_id` (required, that kind only) names the partner — see the RELATIONSHIP_TRACK contract note below (#2159, #3957) |
 | `/threads/{id}/` | GET | Thread detail with anchor + resonance |
 | `/threads/{id}/` | DELETE | Soft-retire (stamps `retired_at`; row remains for historical references) |
-| `/thread-pull-preview/` | POST | Read-only preview; body `{character_sheet_id, resonance_id, tier, thread_ids[], action_context?}`; returns resonance/anima cost + `affordable` + `resolved_effects[]` |
+| `/thread-pull-preview/` | POST | Read-only preview; body `{character_sheet_id, tier, thread_ids[] (any resonances), burn_resonance_id?, action_context?}`; returns resonance/anima cost + `affordable` + `resolved_effects[]` |
 | `/rituals/perform/` | POST | Dispatch a Ritual via `PerformRitualAction.run()` (`actions/definitions/ritual.py`, key `perform_ritual`; shared with telnet `CmdRitual`, #1331). Body `{character_sheet_id, ritual_id, kwargs, components[]}`; Imbuing takes `{thread_id}` in kwargs (view resolves into Thread instance) |
 | `/teaching-offers/` | GET | Read-only list of `ThreadWeavingTeachingOffer` records |
 

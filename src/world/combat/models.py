@@ -1605,17 +1605,9 @@ class CombatParticipant(EncounterPayloadRowMixin, SharedMemoryModel):
         default=False,
         help_text=(
             "Pull threads for defense the first time she is attacked in a round with no pull "
-            "of her own (#5066): the saved defensive pull, with only related threads not "
-            "already working for her. Set from her dodge plan."
+            "of her own (#5066): every related thread, of any resonance, not already "
+            "working for her, at her saved tier. Set from her dodge plan."
         ),
-    )
-    defense_pull_resonance = models.ForeignKey(
-        "arxii.Resonance",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-        help_text="The resonance her automatic defensive pull draws on (#5066).",
     )
     defense_pull_tier = models.PositiveSmallIntegerField(
         null=True,
@@ -2416,10 +2408,12 @@ class SustainedAction(SharedMemoryModel):
 class CombatPull(SharedMemoryModel):
     """Per-(participant, round) commit envelope for a thread pull in combat.
 
-    Captures the resonance/tier/threads spent for a participant's pull in a
-    specific round. Resolved effects are snapshotted into CombatPullResolvedEffect
-    rows so that mid-round edits to authoring (or Thread.level) cannot
-    retroactively change a committed pull. Spec §2.1 lines 459-466.
+    Captures the tier/threads spent for a participant's pull in a specific round. A pull
+    may mix threads of several resonances; each thread is paid from its own resonance
+    at the tier's cost (maintainer ruling 2026-11-11, #5066), so what each resonance
+    paid is derived from the threads, not stored. Resolved effects are snapshotted into
+    CombatPullResolvedEffect rows so that mid-round edits to authoring (or Thread.level)
+    cannot retroactively change a committed pull. Spec §2.1 lines 459-466.
     """
 
     participant = models.ForeignKey(
@@ -2433,11 +2427,6 @@ class CombatPull(SharedMemoryModel):
         related_name="combat_pulls",
     )
     round_number = models.PositiveIntegerField()
-    resonance = models.ForeignKey(
-        "arxii.Resonance",
-        on_delete=models.PROTECT,
-        related_name="combat_pulls",
-    )
     tier = models.PositiveSmallIntegerField()  # 1, 2, or 3
     threads = models.ManyToManyField(
         "arxii.Thread",
@@ -2448,6 +2437,17 @@ class CombatPull(SharedMemoryModel):
     resonance_burned = models.PositiveIntegerField(
         default=0,
         help_text="Resonance burned on top of the pull for strain; 0 when none was.",
+    )
+    burned_resonance = models.ForeignKey(
+        "arxii.Resonance",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The pulled resonance the burn came from (#5066: a pull may mix resonances, "
+            "and the player names which one burns); null when nothing was burned."
+        ),
     )
     burn_valued_points = models.PositiveIntegerField(
         default=0,

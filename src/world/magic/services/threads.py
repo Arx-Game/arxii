@@ -48,6 +48,8 @@ from world.magic.models import (
 from world.magic.types import ThreadSurvivabilitySaves, ThreadXPLockProspect
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
@@ -329,6 +331,19 @@ def pull_cost_totals(tier: int, n_threads: int) -> PullCostTotals:
         resonance=cost.resonance_cost * n_threads,
         anima=cost.anima_per_thread * n_threads,
     )
+
+
+def pull_resonance_costs(tier: int, threads: Iterable[Thread]) -> dict[int, int]:
+    """What a pull at ``tier`` costs each resonance, keyed by resonance id (#5066).
+
+    A pull may mix threads of several resonances; each thread pays the tier's resonance
+    cost from its own resonance (maintainer ruling 2026-11-11).
+    """
+    each = get_pull_cost(tier, None).resonance_cost
+    costs: dict[int, int] = {}
+    for thread in threads:
+        costs[thread.resonance_id] = costs.get(thread.resonance_id, 0) + each
+    return costs
 
 
 def get_pull_cost(tier: int, target_kind: str | None) -> ThreadPullCost:

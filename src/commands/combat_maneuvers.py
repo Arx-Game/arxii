@@ -160,12 +160,12 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat dodgewith <technique>|default - which technique answers your dodges
                                      this fight (default: your saved one)
         combat dodgedefault <technique> - save it as your dodge in every fight
-        combat autopull <resonance> <tier>|off - pull threads for defense when attacked
+        combat autopull <tier>|off   - pull threads for defense when attacked
                                      (answer the Soulfray check-in: accept/decline
                                      dodgesoulfray)
-        combat pull <resonance> <tier>=<thread>[,<thread>...] - pull threads for the
-                                     round on their own; they boost every use they
-                                     relate to until your next turn
+        combat pull <tier>=<thread>[,<thread>...] - pull threads (of any resonances)
+                                     for the round on their own; they boost every use
+                                     they relate to until your next turn
         combat steady [on|off] - steady an ally who loses their nerve
         combat charge <opp> with <technique> - mounted charge: close distance, then attack
         combat strike <opp> [with <weapon> [thrown]] [using <technique> [soulfray]]
@@ -257,7 +257,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
 
     def _resolve_dodge_setting_args(self) -> dict[str, Any]:
         """``dodgewith <technique>|default``, ``dodgedefault <technique>``,
-        ``autopull <resonance> <tier>|off`` (#5066)."""
+        ``autopull <tier>|off`` (#5066)."""
         text = self._rest.strip()
         if self._subverb == "autopull":  # noqa: STRING_LITERAL
             return self._resolve_autopull_args(text)
@@ -274,47 +274,40 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         return kwargs
 
     def _resolve_round_pull_args(self, text: str) -> dict[str, Any]:
-        """``<resonance> <tier>=<thread>[,<thread>...]``: a pull on its own (#5066)."""
-        from world.magic.models import Resonance, Thread  # noqa: PLC0415
+        """``<tier>=<thread>[,<thread>...]``: a pull on its own (#5066).
+
+        The threads may be of any resonances; each is paid from its own.
+        """
+        from world.magic.models import Thread  # noqa: PLC0415
         from world.magic.types.pull import CastPullDeclaration  # noqa: PLC0415
 
-        usage = "Usage: combat pull <resonance> <tier>=<thread>[,<thread>...]."
-        head, _, names = text.partition("=")
-        name, _, tier = head.strip().rpartition(" ")
-        resonance = Resonance.objects.filter(name__iexact=name.strip()).first()
+        usage = "Usage: combat pull <tier>=<thread>[,<thread>...]."
+        tier, _, names = text.partition("=")
+        tier = tier.strip()
         wanted = [n.strip() for n in names.split(",") if n.strip()]
-        if resonance is None or not tier.isdigit() or not wanted:
+        if not tier.isdigit() or not wanted:
             raise CommandError(usage)
         threads = []
         for thread_name in wanted:
             thread = Thread.objects.filter(
                 owner=self.caller.sheet_data,
-                resonance=resonance,
                 name__iexact=thread_name,
                 retired_at__isnull=True,
             ).first()
             if thread is None:
-                msg = f"You have no {resonance.name} thread called '{thread_name}'."
+                msg = f"You have no thread called '{thread_name}'."
                 raise CommandError(msg)
             threads.append(thread)
-        return {
-            "cast_pull": CastPullDeclaration(
-                resonance=resonance, tier=int(tier), threads=tuple(threads)
-            )
-        }
+        return {"cast_pull": CastPullDeclaration(tier=int(tier), threads=tuple(threads))}
 
     def _resolve_autopull_args(self, text: str) -> dict[str, Any]:
-        """``off``, or ``<resonance> <tier>`` naming the saved defensive pull."""
-        from world.magic.models import Resonance  # noqa: PLC0415
-
+        """``off``, or ``<tier>`` naming the saved defensive pull's tier."""
         if text.lower() == _OFF_WORD:
             return {"auto_pull": False}
-        name, _, tier = text.rpartition(" ")
-        resonance = Resonance.objects.filter(name__iexact=name.strip()).first()
-        if resonance is None or not tier.isdigit():
-            msg = "Usage: combat autopull <resonance> <tier>, or combat autopull off."
+        if not text.isdigit():
+            msg = "Usage: combat autopull <tier>, or combat autopull off."
             raise CommandError(msg)
-        return {"auto_pull": True, "pull_resonance_id": resonance.pk, "pull_tier": int(tier)}
+        return {"auto_pull": True, "pull_tier": int(text)}
 
     @staticmethod
     def _resolve_dodge_args(text: str) -> dict[str, Any]:

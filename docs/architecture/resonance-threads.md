@@ -1170,7 +1170,8 @@ to that one action only:
    display. Same caching benefits (§3.7) apply.
 2. **Commit.** Whatever endpoint the action layer exposes for
    submitting an RP/social action accepts an optional pull payload
-   (`{resonance_id, tier, thread_ids}`). When present,
+   (`{tier, thread_ids}`; the threads may mix resonances, each paid
+   from its own, #5066). When present,
    `spend_resonance_for_pull(...)` runs in the same transaction as
    the action's resolution: validates, debits resonance/anima,
    resolves effects, and returns the `ResonancePullResult` to the

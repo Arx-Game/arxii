@@ -31,7 +31,6 @@ export function roundPullRequest(selection: PullSelection): DispatchActionReques
   return {
     ref: { backend: 'registry', registry_key: ROUND_PULL_REGISTRY_KEY },
     kwargs: {
-      pull_resonance_id: selection.resonance_id,
       pull_tier: selection.tier,
       pull_thread_ids: selection.thread_ids,
     },

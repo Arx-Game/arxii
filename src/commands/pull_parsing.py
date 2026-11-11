@@ -169,10 +169,6 @@ class PullParsingMixin:
 
         pull_tier = cls._validate_pull_tier(tier_val)
         beseech_bonus = cls._validate_pull_beseech(beseech_val)
-        if pull_val is not None and resonance_val is None:
-            msg = "pull= requires resonance=<name> to be specified as well."
-            raise CommandError(msg)
-
         return remainder, pull_val, resonance_val, pull_tier, beseech_bonus
 
     @staticmethod
@@ -213,21 +209,22 @@ class PullParsingMixin:
     ) -> CastPullDeclaration | None:
         """Return a ``CastPullDeclaration`` if *pull_thread_str* is set, else ``None``.
 
-        Resolves threads by name/id owned by the caller's character sheet
-        (same resonance, active only) and the resonance by name.
+        Resolves threads by name/id owned by the caller's character sheet (active only).
+        The threads may be of different resonances; each is paid from its own (#5066,
+        maintainer ruling 2026-11-11). ``resonance=`` is needed only to say which pulled
+        resonance a burn comes from when the pull mixes resonances.
 
         Args:
             pull_thread_str: Comma-separated thread names/ids, or ``None``.
-            pull_resonance_str: Resonance name string, or ``None``.
+            pull_resonance_str: The resonance a burn comes from, or ``None``.
             pull_tier: Integer tier (1–3).
             beseech_bonus: Emergency thread-bond draw bonus (#1718); 0 means
                 no emergency draw was invoked. Social commands always pass 0.
             burn: Resonance to burn with the pull for strain (#4736); 0 for none.
 
         Raises:
-            CommandError: If resonance is unknown, any thread is not found /
-                does not match the resonance / is retired, or pull= is present
-                without resonance=.
+            CommandError: If any thread is not found or is retired, ``resonance=`` names
+                no resonance, or a burn on a mixed pull names none of its resonances.
         """
         if pull_thread_str is None:
             return None
@@ -235,16 +232,13 @@ class PullParsingMixin:
         from world.magic.models import Resonance, Thread  # noqa: PLC0415
         from world.magic.types.pull import CastPullDeclaration  # noqa: PLC0415
 
+        burn_resonance = None
         resonance_val = (pull_resonance_str or "").strip()
-        if not resonance_val:
-            msg = "pull= requires resonance=<name> to be specified as well."
-            raise CommandError(msg)
-
-        resonance_qs = Resonance.objects.filter(name__iexact=resonance_val)
-        resonance = resonance_qs.first()
-        if resonance is None:
-            msg = f"No resonance named '{resonance_val}' found."
-            raise CommandError(msg)
+        if resonance_val:
+            burn_resonance = Resonance.objects.filter(name__iexact=resonance_val).first()
+            if burn_resonance is None:
+                msg = f"No resonance named '{resonance_val}' found."
+                raise CommandError(msg)
 
         sheet = self.caller.sheet_data
         thread_vals = [t.strip() for t in pull_thread_str.split(",") if t.strip()]
@@ -254,23 +248,24 @@ class PullParsingMixin:
 
         threads: list[Thread] = []
         for val in thread_vals:
-            qs = Thread.objects.filter(owner=sheet, resonance=resonance, retired_at__isnull=True)
+            qs = Thread.objects.filter(owner=sheet, retired_at__isnull=True)
             if val.isdigit():
                 thread = qs.filter(pk=int(val)).first()
             else:
                 thread = qs.filter(name__iexact=val).first()
             if thread is None:
-                msg = (
-                    f"No active thread '{val}' found for resonance '{resonance_val}'. "
-                    "Check that the thread exists, is active, and matches the resonance."
-                )
+                msg = f"No active thread '{val}' found. Check that the thread exists and is active."
                 raise CommandError(msg)
             threads.append(thread)
 
-        return CastPullDeclaration(
-            resonance=resonance,
+        declaration = CastPullDeclaration(
             tier=pull_tier,
             threads=tuple(threads),
             beseech_bonus=beseech_bonus,
             burn=burn,
+            burn_resonance=burn_resonance,
         )
+        if burn > 0 and declaration.burned_resonance is None:
+            msg = "Name which of the pulled resonances to burn with resonance=<name>."
+            raise CommandError(msg)
+        return declaration

@@ -8,7 +8,7 @@ The web path (JSON dispatch) sends pull IDs rather than a pre-built
    (unknown resonance, thread owned by a different sheet, retired thread).
 3. ``resolve_pull_from_kwargs`` normalises both forms:
    - pre-built ``CastPullDeclaration`` (telnet) → returned as-is.
-   - raw ``pull_resonance_id`` / ``pull_tier`` / ``pull_thread_ids`` IDs (web) →
+   - raw ``pull_tier`` / ``pull_thread_ids`` IDs (web) →
      builds via ``build_cast_pull_declaration``.
    - absent → ``None``.
 4. A combat cast ``round_declaration`` carrying web-form IDs commits a
@@ -63,7 +63,7 @@ def _make_web_pull_setup(
     """Build a full pull-enabled combat scene and return a dict of useful objects.
 
     Mirrors ``_make_pull_setup`` from Task 4/5 tests but also exposes the raw IDs
-    that the web path would send (``resonance_id``, ``thread_ids``).
+    that the web path would send (``thread_ids``).
 
     Creates:
     - A CharacterSheet with resonance, anima, and a TECHNIQUE-anchored Thread.
@@ -135,14 +135,12 @@ def _make_web_pull_setup(
 
     # Pre-built form (telnet).
     pull_decl = CastPullDeclaration(
-        resonance=resonance,
         tier=tier,
         threads=(thread,),
     )
 
     # Raw ID form (web).
     web_kwargs = {
-        "pull_resonance_id": resonance.pk,
         "pull_tier": tier,
         "pull_thread_ids": [thread.pk],
     }
@@ -178,17 +176,16 @@ class BuildCastPullDeclarationTests(TestCase):
         data = _make_web_pull_setup()
         decl = build_cast_pull_declaration(
             data["sheet"].pk,
-            resonance_id=data["resonance"].pk,
             tier=1,
             thread_ids=[data["thread"].pk],
         )
         self.assertIsInstance(decl, CastPullDeclaration)
-        self.assertEqual(decl.resonance, data["resonance"])
+        self.assertEqual(decl.resonances, (data["resonance"],))
         self.assertEqual(decl.tier, 1)
         self.assertIn(data["thread"], decl.threads)
 
-    def test_unknown_resonance_raises_invalid_imbue(self) -> None:
-        """An unknown resonance_id raises InvalidImbueAmount."""
+    def test_a_burn_naming_an_unpulled_resonance_raises_invalid_imbue(self) -> None:
+        """A burn must come from one of the pulled resonances (#5066)."""
         from world.combat.pull_helpers import build_cast_pull_declaration
         from world.magic.exceptions import InvalidImbueAmount
 
@@ -196,9 +193,10 @@ class BuildCastPullDeclarationTests(TestCase):
         with self.assertRaises(InvalidImbueAmount):
             build_cast_pull_declaration(
                 data["sheet"].pk,
-                resonance_id=999999,
                 tier=1,
                 thread_ids=[data["thread"].pk],
+                burn=1,
+                burn_resonance_id=ResonanceFactory().pk,
             )
 
     def test_thread_owned_by_other_sheet_raises_invalid_imbue(self) -> None:
@@ -211,7 +209,6 @@ class BuildCastPullDeclarationTests(TestCase):
         with self.assertRaises(InvalidImbueAmount):
             build_cast_pull_declaration(
                 other_sheet.pk,
-                resonance_id=data["resonance"].pk,
                 tier=1,
                 thread_ids=[data["thread"].pk],
             )
@@ -232,7 +229,6 @@ class BuildCastPullDeclarationTests(TestCase):
         with self.assertRaises(InvalidImbueAmount):
             build_cast_pull_declaration(
                 data["sheet"].pk,
-                resonance_id=data["resonance"].pk,
                 tier=1,
                 thread_ids=[thread.pk],
             )
@@ -261,13 +257,13 @@ class ResolvePullFromKwargsTests(TestCase):
         self.assertIs(result, data["pull_decl"])
 
     def test_web_id_form_builds_declaration(self) -> None:
-        """Raw pull_resonance_id / pull_tier / pull_thread_ids produce a CastPullDeclaration."""
+        """Raw pull_tier / pull_thread_ids produce a CastPullDeclaration."""
         from world.combat.pull_helpers import resolve_pull_from_kwargs
 
         data = _make_web_pull_setup()
         result = resolve_pull_from_kwargs(data["sheet"], data["web_kwargs"])
         self.assertIsInstance(result, CastPullDeclaration)
-        self.assertEqual(result.resonance, data["resonance"])
+        self.assertEqual(result.resonances, (data["resonance"],))
         self.assertIn(data["thread"], result.threads)
 
     def test_empty_kwargs_returns_none(self) -> None:
@@ -285,7 +281,7 @@ class ResolvePullFromKwargsTests(TestCase):
         data = _make_web_pull_setup()
         result = resolve_pull_from_kwargs(
             data["sheet"],
-            {"pull_resonance_id": data["resonance"].pk, "pull_tier": 1},
+            {"pull_tier": 1},
         )
         self.assertIsNone(result)
 
@@ -324,7 +320,7 @@ class CombatCastWebPullTests(TestCase):
             "A CombatPull row must be created when web-form IDs are declared.",
         )
         pull = pull_qs.get()
-        self.assertEqual(pull.resonance, data["resonance"])
+        self.assertEqual({t.resonance for t in pull.threads.all()}, {data["resonance"]})
         self.assertEqual(pull.tier, 1)
         self.assertIn(data["thread"], pull.threads.all())
 
@@ -493,7 +489,7 @@ class ClashWebPullTests(TestCase):
             "A CombatPull row must be created when clash carries web-form pull IDs.",
         )
         pull = pull_qs.get()
-        self.assertEqual(pull.resonance, data["resonance"])
+        self.assertEqual({t.resonance for t in pull.threads.all()}, {data["resonance"]})
         self.assertIn(data["thread"], pull.threads.all())
 
     def test_clash_web_pull_visible_to_flat_bonus_read_path(self) -> None:

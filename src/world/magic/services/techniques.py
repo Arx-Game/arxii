@@ -60,7 +60,7 @@ if TYPE_CHECKING:
     from world.checks.types import CheckResult
     from world.combat.models import CombatPull
     from world.forms.models import FormCombatProfile
-    from world.magic.models import Resonance, Restriction, Technique
+    from world.magic.models import Resonance, Restriction, Technique, Thread
     from world.magic.services.fury import FuryCast
     from world.magic.services.power_terms import ApplicableThread
     from world.magic.services.resonance_environment import ResonanceEnvironmentEffect
@@ -219,25 +219,48 @@ def _pull_spends_for_cast(  # noqa: PLR0913 - the cast, its charged pull, the re
             # Character has no CharacterSheet (e.g., NPCs); treat as no active pulls.
             active_pulls = []
     for pull in active_pulls:
-        spend = spends.setdefault(pull.resonance_id, (pull.resonance, _PullSpend()))[1]
-        spend.raw += pull.resonance_spent
-        if pull.resonance_burned > 0 and combat_burn_for and pull.burned_for == combat_burn_for:
-            spend.add_burn(
+        _add_thread_spends(spends, pull.resonance_spent, list(pull.threads.all()))
+        if (
+            pull.resonance_burned > 0
+            and combat_burn_for
+            and pull.burned_for == combat_burn_for
+            and pull.burned_resonance is not None
+        ):
+            burned = pull.burned_resonance
+            spends.setdefault(burned.pk, (burned, _PullSpend()))[1].add_burn(
                 points=pull.resonance_burned,
                 valued_points=pull.burn_valued_points,
                 hasty_fall=pull.burn_hasty_fall,
             )
     if cast_pull is not None:
-        spend = spends.setdefault(cast_pull.resonance.pk, (cast_pull.resonance, _PullSpend()))[1]
-        spend.raw += cast_pull_spent
+        _add_thread_spends(spends, cast_pull_spent, list(cast_pull.threads))
         if burn_result is not None:
             valuation = burn_result.valuation
-            spend.add_burn(
+            burned = burn_result.resonance
+            spends.setdefault(burned.pk, (burned, _PullSpend()))[1].add_burn(
                 points=valuation.points,
                 valued_points=valuation.valued_points,
                 hasty_fall=valuation.hasty_fall,
             )
     return spends
+
+
+def _add_thread_spends(
+    spends: dict[int, tuple[Resonance, _PullSpend]], spent: int, threads: list[Thread]
+) -> None:
+    """Add what a pull paid to each of its threads' own resonances (#5066).
+
+    A pull may mix resonances; each thread paid the same tier cost from its own resonance
+    (maintainer ruling 2026-11-11), so the pull's recorded ``spent`` is split evenly over
+    its threads (any remainder to the first) and charged to each thread's resonance.
+    """
+    if not threads or spent <= 0:
+        return
+    each, remainder = divmod(spent, len(threads))
+    for index, thread in enumerate(threads):
+        share = each + (remainder if index == 0 else 0)
+        entry = spends.setdefault(thread.resonance_id, (thread.resonance, _PullSpend()))
+        entry[1].raw += share
 
 
 def _combat_burn_strain_units(character: ObjectDB, combat_burn_for: str) -> int:
@@ -1184,7 +1207,6 @@ def _charge_cast_pull(  # noqa: PLR0913 - one pull charge, each argument is a di
         cast_check = resolve_cast_check(character, technique)
     pull_result = spend_resonance_for_pull(
         pull_sheet,
-        cast_pull.resonance,
         cast_pull.tier,
         list(cast_pull.threads),
         PullActionContext(
@@ -1198,6 +1220,7 @@ def _charge_cast_pull(  # noqa: PLR0913 - one pull charge, each argument is a di
         beseech_bonus_thread_id=beseech_bonus_thread_id,
         beseech_bonus=applied_bonus,
         burn=burn_result.reached if burn_result is not None else 0,
+        burn_resonance=burn_result.resonance if burn_result is not None else None,
     )
     if burn_result is not None:
         from world.magic.services.burn import announce_burn  # noqa: PLC0415
@@ -1399,9 +1422,15 @@ def _resolve_cast_burn(
     if sheet is None:
         return None
     from world.covenants.perks.context import SituationContext  # noqa: PLC0415
+    from world.magic.exceptions import InvalidImbueAmount  # noqa: PLC0415
     from world.magic.services.burn import resolve_resonance_burn  # noqa: PLC0415
-    from world.magic.services.threads import get_pull_cost  # noqa: PLC0415
+    from world.magic.services.threads import pull_resonance_costs  # noqa: PLC0415
 
+    burned = cast_pull.burned_resonance
+    if burned is None:
+        # A mixed pull's burn must name one of the pulled resonances (#5066).
+        msg = "Name which of the pulled resonances to burn."
+        raise InvalidImbueAmount(msg)
     burn_ctx = (
         situation_ctx
         if isinstance(situation_ctx, SituationContext)
@@ -1409,10 +1438,10 @@ def _resolve_cast_burn(
     )
     return resolve_resonance_burn(
         sheet=sheet,
-        resonance=cast_pull.resonance,
+        resonance=burned,
         requested=cast_pull.burn,
         runtime_intensity=runtime_intensity,
-        pull_cost=get_pull_cost(cast_pull.tier, None).resonance_cost,
+        pull_cost=pull_resonance_costs(cast_pull.tier, cast_pull.threads)[burned.pk],
         situation_ctx=burn_ctx,
     )
 
@@ -1565,7 +1594,7 @@ def _complete_technique_cast(  # noqa: PLR0913
     price_payment=None,
     defer_soulfray_reveal: bool = False,
     cast_pull: CastPullDeclaration | None = None,
-    pulled_resonance: Resonance | None = None,
+    pulled_resonances: tuple[Resonance, ...] = (),
     substance_plan: SubstancePlan | None = None,
 ) -> TechniqueUseResult:
     """Deduct anima, resolve the cast, and emit all post-cast effects."""
@@ -1600,7 +1629,7 @@ def _complete_technique_cast(  # noqa: PLR0913
     check_resonance_focus(
         character,
         technique,
-        pulled_resonance=cast_pull.resonance if cast_pull is not None else pulled_resonance,
+        pulled_resonances=(cast_pull.resonances if cast_pull is not None else pulled_resonances),
     )
     resolution_result, price_payment = _resolve_and_settle_price(
         character=character,
@@ -1730,7 +1759,7 @@ def use_technique(  # noqa: PLR0913
     defer_soulfray_reveal: bool = False,
     cast_check: CastCheck | None = None,
     combat_burn_for: str = "",
-    pulled_resonance: Resonance | None = None,
+    pulled_resonances: tuple[Resonance, ...] = (),
     fury: FuryCast | None = None,
 ) -> TechniqueUseResult:
     """Orchestrate technique use from cost validation through post-cast events.
@@ -1747,7 +1776,7 @@ def use_technique(  # noqa: PLR0913
     it resolves as ``combat_burn_for`` (``PullBurnAction``) and only a burn declared
     for that action strains it, once.
 
-    ``pulled_resonance`` is the resonance a pull committed before this cast works,
+    ``pulled_resonances`` are the resonances a pull committed before this cast works,
     for a caller whose pull is not ``cast_pull`` (a combat round's committed
     ``CombatPull``); the carried-drift focus roll reads it (#4732). A ``cast_pull``
     charged by this cast takes precedence.
@@ -1869,6 +1898,6 @@ def use_technique(  # noqa: PLR0913
         price_payment=price_payment,
         defer_soulfray_reveal=defer_soulfray_reveal,
         cast_pull=cast_pull,
-        pulled_resonance=pulled_resonance,
+        pulled_resonances=pulled_resonances,
         substance_plan=substance_plan,
     )

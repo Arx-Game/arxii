@@ -100,7 +100,6 @@ class DistinctionResonancePotencyTests(TestCase):
 
         result = spend_resonance_for_pull(
             self.sheet,
-            self.resonance,
             tier=1,
             threads=[thread],
             action_context=ctx,
@@ -118,7 +117,6 @@ class DistinctionResonancePotencyTests(TestCase):
 
         preview = preview_resonance_pull(
             self.sheet,
-            self.resonance,
             tier=1,
             threads=[thread],
         )
@@ -143,7 +141,6 @@ class DistinctionResonancePotencyTests(TestCase):
 
         preview = preview_resonance_pull(
             self.sheet,
-            other_resonance,
             tier=1,
             threads=[thread],
         )
@@ -197,7 +194,6 @@ class DistinctionResonancePotencyUnscopedTests(TestCase):
 
         preview = preview_resonance_pull(
             self.sheet,
-            self.resonance,
             tier=1,
             threads=[thread],
         )

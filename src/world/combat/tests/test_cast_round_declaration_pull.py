@@ -129,7 +129,6 @@ def _make_pull_setup(
     ctx = CombatRoundContext(participant)
 
     pull_decl = CastPullDeclaration(
-        resonance=resonance,
         tier=tier,
         threads=(thread,),
     )
@@ -198,7 +197,7 @@ class CombatCastRoundDeclarationPullTests(TestCase):
             "A CombatPull row must be created when cast_pull is declared into a combat round.",
         )
         pull = pull_qs.get()
-        self.assertEqual(pull.resonance, data["resonance"])
+        self.assertEqual({t.resonance for t in pull.threads.all()}, {data["resonance"]})
         self.assertEqual(pull.tier, 1)
         self.assertIn(data["thread"], pull.threads.all())
 

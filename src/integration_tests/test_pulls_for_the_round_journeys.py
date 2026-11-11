@@ -12,8 +12,11 @@ pull costs 1 resonance and 1 anima for every thread pulled.
   technique roll with the +2; the next round it is gone.
 - Two threads pulled cost twice: each thread pays its tier's share, the first included
   (maintainer, after approval, 2026-11-10).
-- Typed on telnet: ``combat pull Veil 1=Step Strand``.
-- With her defensive pull saved (Veil, tier 1) and auto-pull on, the first attack of a
+- Typed on telnet: ``combat pull 1=Step Strand``.
+- A pull may mix resonances (maintainer ruling 2026-11-11): Step Strand (Veil) with Ember
+  Strand (Ember, balance 6) costs 1 Veil, 1 Ember and 2 anima, each thread from its own
+  resonance; when Ember cannot cover its own thread nothing is debited at all.
+- With her defensive pull saved (tier 1, any resonance) and auto-pull on, the first attack of a
   round commits it before her dodge rolls ("You pull 1 thread for defense."): the dodge's
   technique roll carries the +2. A second attack that round pulls nothing more.
 - When her only related thread already works for her on the defence roll (a thread on the
@@ -107,7 +110,6 @@ class _PullsInTheCellar(_TheCellar):
         return self.web(
             self.ondrelle,
             "combat_pull",
-            pull_resonance_id=self.veil.pk,
             pull_tier=1,
             pull_thread_ids=[thread.pk for thread in threads],
         )
@@ -161,7 +163,6 @@ class APullOnItsOwn(_PullsInTheCellar):
         told = self.web(
             self.ondrelle,
             "combat_pull",
-            pull_resonance_id=self.veil.pk,
             pull_tier=1,
             pull_thread_ids=[self.strand.pk],
             pull_burn=2,
@@ -174,7 +175,7 @@ class APullOnItsOwn(_PullsInTheCellar):
         self.assertEqual(self.balance(), 10)
 
     def test_typed_on_telnet(self) -> None:
-        told = self.telnet(self.ondrelle, "combat pull Veil 1=Step Strand")
+        told = self.telnet(self.ondrelle, "combat pull 1=Step Strand")
 
         self.assertIn("You pull 1 thread for the round.", told)
         self.assertTrue(
@@ -186,11 +187,11 @@ class APullOnItsOwn(_PullsInTheCellar):
 
 class TypingTheDefensivePull(_PullsInTheCellar):
     def test_autopull_typed_on_and_off(self) -> None:
-        told = self.telnet(self.ondrelle, "combat autopull Veil 1")
+        told = self.telnet(self.ondrelle, "combat autopull 1")
         self.assertIn("You'll pull threads for defense when attacked.", told)
         seat = self.participant(self.ondrelle)
         self.assertTrue(seat.auto_pull_defense)
-        self.assertEqual((seat.defense_pull_resonance, seat.defense_pull_tier), (self.veil, 1))
+        self.assertEqual(seat.defense_pull_tier, 1)
 
         told = self.telnet(self.ondrelle, "combat autopull off")
 
@@ -198,9 +199,9 @@ class TypingTheDefensivePull(_PullsInTheCellar):
         self.assertFalse(self.participant(self.ondrelle).auto_pull_defense)
 
     def test_a_tier_out_of_range_is_refused(self) -> None:
-        told = self.telnet(self.ondrelle, "combat autopull Veil 4")
+        told = self.telnet(self.ondrelle, "combat autopull 4")
 
-        self.assertIn("Pick a resonance you hold and a tier from 1 to 3", told)
+        self.assertIn("Pick a tier from 1 to 3", told)
         self.assertFalse(self.participant(self.ondrelle).auto_pull_defense)
 
 
@@ -211,7 +212,6 @@ class PullingForDefense(_PullsInTheCellar):
             self.ondrelle,
             "dodge_settings",
             auto_pull=True,
-            pull_resonance_id=self.veil.pk,
             pull_tier=1,
         )
         self.assertTrue(told.detail.success, told.detail.message)
@@ -250,3 +250,84 @@ class PullingForDefense(_PullsInTheCellar):
             self.ondrelle,
             "Your defensive pull finds no thread that is not already working for you.",
         )
+
+
+class APullMixingResonances(_PullsInTheCellar):
+    """Each thread is paid from its own resonance (maintainer ruling 2026-11-11)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.ember = ResonanceFactory(name="Ember")
+        self.ember_hold = CharacterResonanceFactory(
+            character_sheet=self.ondrelle.sheet_data,
+            resonance=self.ember,
+            balance=6,
+            lifetime_earned=6,
+        )
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.TECHNIQUE,
+            resonance=self.ember,
+            tier=1,
+            min_thread_level=0,
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=FLAT_BONUS,
+        )
+        self.ember_strand = ThreadFactory(
+            owner=self.ondrelle.sheet_data,
+            resonance=self.ember,
+            target_kind=TargetKind.TECHNIQUE,
+            target_trait=None,
+            target_technique=self.blink_step,
+            level=10,
+            name="Ember Strand",
+        )
+
+    def ember_balance(self) -> int:
+        return CharacterResonance.objects.get(
+            character_sheet=self.ondrelle.sheet_data, resonance=self.ember
+        ).balance
+
+    def test_each_thread_pays_from_its_own_resonance(self) -> None:
+        told = self.pull(self.strand, self.ember_strand)
+
+        self.assertTrue(told.detail.success, told.detail.message)
+        self.assertEqual(told.detail.message, "You pull 2 threads for the round.")
+        self.assertEqual((self.balance(), self.ember_balance()), (9, 5))
+        self.assertEqual(self.anima(self.ondrelle), 18)
+        pull = CombatPull.objects.get(participant=self.participant(self.ondrelle))
+        self.assertEqual(
+            set(pull.threads.values_list("pk", flat=True)),
+            {self.strand.pk, self.ember_strand.pk},
+        )
+        self.blade("Archer", at=self.gallery)
+
+        self.resolve(RecordingRoll(2))
+
+        # Both threads relate to Blink Step: its dodge roll carries both +2s.
+        self.assertEqual(self.technique_rolls.extras, [FLAT_BONUS * 2])
+
+    def test_typed_on_telnet_with_threads_of_two_resonances(self) -> None:
+        told = self.telnet(self.ondrelle, "combat pull 1=Step Strand,Ember Strand")
+
+        self.assertIn("You pull 2 threads for the round.", told)
+        self.assertEqual((self.balance(), self.ember_balance()), (9, 5))
+
+    def test_one_resonance_short_debits_nothing(self) -> None:
+        self.ember_hold.balance = 0
+        self.ember_hold.save(update_fields=["balance"])
+
+        told = self.pull(self.strand, self.ember_strand)
+
+        self.assertFalse(told.detail.success)
+        self.assertEqual((self.balance(), self.ember_balance()), (10, 0))
+        self.assertEqual(self.anima(self.ondrelle), 20)
+        self.assertFalse(CombatPull.objects.exists())
+
+    def test_the_defensive_pull_takes_threads_of_every_resonance(self) -> None:
+        self.web(self.ondrelle, "dodge_settings", auto_pull=True, pull_tier=1)
+        self.blade("Archer", at=self.gallery)
+
+        self.resolve(RecordingRoll(2))
+
+        self.assertEqual((self.balance(), self.ember_balance()), (9, 5))
+        self.assertTold(self.ondrelle, "You pull 2 threads for defense.")

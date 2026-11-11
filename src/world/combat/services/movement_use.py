@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from world.areas.positioning.traversal import MovementSource
     from world.checks.types import CheckResult
     from world.combat.models import CombatParticipant
-    from world.magic.models import Technique, TechniqueCapabilityGrant
+    from world.magic.models import Resonance, Technique, TechniqueCapabilityGrant
     from world.magic.types.magic_skills import CastCheck
     from world.magic.types.power_ledger import PowerLedger
 
@@ -293,13 +293,13 @@ def _cast(  # noqa: PLR0913 - one cast and what it scales
         base_value=base_value,
     )
     situation_ctx = None
-    pulled_resonance = None
+    pulled_resonances: tuple[Resonance, ...] = ()
     if participant is not None:
-        from world.combat.pull_helpers import round_pull_resonance  # noqa: PLC0415
+        from world.combat.pull_helpers import round_pull_resonances  # noqa: PLC0415
         from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
 
         situation_ctx = CombatRoundContext(participant)
-        pulled_resonance = round_pull_resonance(participant)
+        pulled_resonances = round_pull_resonances(participant)
     use = use_technique(
         character=character,
         technique=technique,
@@ -308,7 +308,7 @@ def _cast(  # noqa: PLR0913 - one cast and what it scales
         lethal=lethal,
         cast_check=cast_check,
         situation_ctx=situation_ctx,
-        pulled_resonance=pulled_resonance,
+        pulled_resonances=pulled_resonances,
     )
     if not use.confirmed or cast.check_result is None:
         return MovementUse(went_off=False, strength=0, technique=technique)

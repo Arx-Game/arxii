@@ -46,7 +46,7 @@ class BuildCastApplicableThreadsTests(TestCase):
         from world.magic.types.pull import CastPullDeclaration
 
         thread = self._technique_thread(self.technique)
-        pull = CastPullDeclaration(resonance=self.resonance, tier=2, threads=(thread,))
+        pull = CastPullDeclaration(tier=2, threads=(thread,))
         result = build_cast_applicable_threads(self.sheet, self.technique, cast_pull=pull)
         self.assertEqual([(a.thread.pk, a.pull_tier) for a in result], [(thread.pk, 2)])
 

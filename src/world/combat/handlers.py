@@ -30,6 +30,7 @@ from world.combat.models import (
     CombatRoundAction,
 )
 from world.magic.constants import EffectKind
+from world.magic.models import Thread
 
 if TYPE_CHECKING:
     from typeclasses.characters import Character
@@ -52,8 +53,13 @@ class CharacterCombatPullHandler:
                 participant__character_sheet=sheet,
                 round_number=F("encounter__round_number"),
             )
-            .select_related("encounter", "participant", "resonance")
+            .select_related("encounter", "participant", "burned_resonance")
             .prefetch_related(
+                # A pull may mix resonances (#5066): what each paid, and which resonances
+                # a round's cast pulled, are read off the threads.
+                Prefetch(  # noqa: PREFETCH_STRING - read as pull.threads.all() by every reader
+                    "threads", queryset=Thread.objects.select_related("resonance")
+                ),
                 Prefetch(
                     "resolved_effects",
                     queryset=CombatPullResolvedEffect.objects.select_related(

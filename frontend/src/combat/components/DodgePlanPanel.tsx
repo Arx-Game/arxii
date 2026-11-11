@@ -22,7 +22,6 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import type { components } from '@/generated/api';
-import { useCharacterResonances } from '@/magic/queries';
 import { isDispatchFailure, type DispatchActionRequest, type DispatchResult } from '@/combat/types';
 import { dodgeRequest, dodgeSettingsRequest, steadyRequest } from '@/combat/dodging';
 import { SoulfrayAcceptGate } from '@/combat/components/SoulfrayAcceptGate';
@@ -32,8 +31,6 @@ type SteadyPlan = components['schemas']['SteadyPlan'];
 
 export interface DodgePlanPanelProps {
   plan: DodgePlan | null;
-  /** Her sheet: the defensive pull picks from her resonances. */
-  characterSheetId: number;
   /** Her steady plan, sent only when she holds the steadying capability. */
   steadyPlan?: SteadyPlan | null;
   /** The viewer's own place now: the first option is always where she stands. */
@@ -45,7 +42,6 @@ export interface DodgePlanPanelProps {
 
 export function DodgePlanPanel({
   plan,
-  characterSheetId,
   steadyPlan = null,
   currentPositionId,
   isLocked,
@@ -78,7 +74,6 @@ export function DodgePlanPanel({
       {plan && (
         <DodgeSection
           plan={plan}
-          characterSheetId={characterSheetId}
           currentPositionId={currentPositionId}
           isLocked={isLocked}
           send={send}
@@ -113,14 +108,12 @@ type Send = (kwargs: Record<string, unknown>) => void;
 
 function DodgeSection({
   plan,
-  characterSheetId,
   currentPositionId,
   isLocked,
   send,
   sendSettings,
 }: {
   plan: DodgePlan;
-  characterSheetId: number;
   currentPositionId: number | null;
   isLocked: boolean;
   send: Send;
@@ -183,12 +176,7 @@ function DodgeSection({
         />
         <label htmlFor="dodge-into-soulfray">Dodge even into Soulfray</label>
       </div>
-      <AutoPullControls
-        plan={plan}
-        characterSheetId={characterSheetId}
-        isLocked={isLocked}
-        sendSettings={sendSettings}
-      />
+      <AutoPullControls plan={plan} isLocked={isLocked} sendSettings={sendSettings} />
     </div>
   );
 }
@@ -253,23 +241,14 @@ const PULL_TIERS = [1, 2, 3] as const;
 
 function AutoPullControls({
   plan,
-  characterSheetId,
   isLocked,
   sendSettings,
 }: {
   plan: DodgePlan;
-  characterSheetId: number;
   isLocked: boolean;
   sendSettings: Send;
 }) {
-  const { data: resonances } = useCharacterResonances(characterSheetId);
-  const [resonanceId, setResonanceId] = useState<number | null>(plan.auto_pull_resonance_id);
   const [tier, setTier] = useState<number>(plan.auto_pull_tier ?? 1);
-
-  const sendPull = (nextResonanceId: number | null, nextTier: number) => {
-    if (nextResonanceId === null) return;
-    sendSettings({ auto_pull: true, pull_resonance_id: nextResonanceId, pull_tier: nextTier });
-  };
 
   return (
     <div className="space-y-1" data-testid="dodge-auto-pull">
@@ -278,42 +257,17 @@ function AutoPullControls({
           id="dodge-auto-pull"
           data-testid="dodge-auto-pull-toggle"
           checked={plan.auto_pull}
-          disabled={isLocked || (!plan.auto_pull && resonanceId === null)}
+          disabled={isLocked}
           onCheckedChange={(on) =>
-            on ? sendPull(resonanceId, tier) : sendSettings({ auto_pull: false })
+            sendSettings(on ? { auto_pull: true, pull_tier: tier } : { auto_pull: false })
           }
         />
         <label htmlFor="dodge-auto-pull">Pull threads for defense when attacked</label>
-      </div>
-      <div className="flex gap-2">
-        <Select
-          value={resonanceId === null ? '' : String(resonanceId)}
-          onValueChange={(value) => {
-            setResonanceId(Number(value));
-            if (plan.auto_pull) sendPull(Number(value), tier);
-          }}
-          disabled={isLocked}
-        >
-          <SelectTrigger
-            data-testid="dodge-auto-pull-resonance"
-            aria-label="Resonance"
-            className="h-8 flex-1 text-xs"
-          >
-            <SelectValue placeholder="Resonance" />
-          </SelectTrigger>
-          <SelectContent>
-            {(resonances ?? []).map((r) => (
-              <SelectItem key={r.resonance} value={String(r.resonance)}>
-                {r.resonance_name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         <Select
           value={String(tier)}
           onValueChange={(value) => {
             setTier(Number(value));
-            if (plan.auto_pull) sendPull(resonanceId, Number(value));
+            if (plan.auto_pull) sendSettings({ auto_pull: true, pull_tier: Number(value) });
           }}
           disabled={isLocked}
         >

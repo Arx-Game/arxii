@@ -50,7 +50,11 @@ vi.mock('@/magic/components/threads/ThreadPullDialog', () => ({
   }: {
     open: boolean;
     onClose: () => void;
-    onSelect?: (sel: { resonance_id: number; tier: 1 | 2 | 3; thread_ids: number[] }) => void;
+    onSelect?: (sel: {
+      tier: 1 | 2 | 3;
+      thread_ids: number[];
+      resonances: { id: number; name: string }[];
+    }) => void;
   }) => {
     if (!open) return null;
     return (
@@ -58,7 +62,9 @@ vi.mock('@/magic/components/threads/ThreadPullDialog', () => ({
         <button
           type="button"
           data-testid="simulate-pull-select"
-          onClick={() => onSelect?.({ resonance_id: 5, tier: 2, thread_ids: [10, 11] })}
+          onClick={() =>
+            onSelect?.({ tier: 2, thread_ids: [10, 11], resonances: [{ id: 5, name: 'Veil' }] })
+          }
         >
           Simulate Select Pull
         </button>
@@ -1746,10 +1752,10 @@ describe('YourTurn — combat pull dispatch kwargs (issue-1455, #4736)', () => {
 
     const focusedCall = mockMutateAsync.mock.calls[0] as DispatchCall;
     expect(focusedCall[0].kwargs).toMatchObject({
-      pull_resonance_id: 5,
       pull_tier: 2,
       pull_thread_ids: [10, 11],
       pull_burn: 3,
+      pull_burn_resonance_id: 5,
     });
   });
 
@@ -1771,13 +1777,13 @@ describe('YourTurn — combat pull dispatch kwargs (issue-1455, #4736)', () => {
     const clashCall = calls.find((c) => c[0].ref.clash_id === 99);
     const focusedCall = calls.find((c) => c[0].ref.action_slot === 'focused');
     expect(clashCall![0].kwargs).toMatchObject({
-      pull_resonance_id: 5,
       pull_tier: 2,
       pull_thread_ids: [10, 11],
       pull_burn: 3,
+      pull_burn_resonance_id: 5,
     });
     // A pull is one per round: the focused cast carries none of it.
-    expect(focusedCall![0].kwargs).not.toHaveProperty('pull_resonance_id');
+    expect(focusedCall![0].kwargs).not.toHaveProperty('pull_tier');
     expect(focusedCall![0].kwargs).not.toHaveProperty('pull_burn');
   });
 
@@ -1809,8 +1815,8 @@ describe('YourTurn — combat pull dispatch kwargs (issue-1455, #4736)', () => {
       (c) => c[0].ref.action_slot === 'focused'
     );
     expect(focusedCalls).toHaveLength(2);
-    expect(focusedCalls[0][0].kwargs).toMatchObject({ pull_resonance_id: 5, pull_burn: 3 });
-    expect(focusedCalls[1][0].kwargs).not.toHaveProperty('pull_resonance_id');
+    expect(focusedCalls[0][0].kwargs).toMatchObject({ pull_tier: 2, pull_burn: 3 });
+    expect(focusedCalls[1][0].kwargs).not.toHaveProperty('pull_tier');
     expect(focusedCalls[1][0].kwargs).not.toHaveProperty('pull_burn');
   });
 

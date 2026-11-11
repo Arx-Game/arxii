@@ -3,8 +3,8 @@
  *
  * Shown once a pull is chosen and the preview has answered with burn numbers. The
  * ceiling comes from the server (already capped by the balance left after the pull);
- * the input is clamped to it, and the server checks again. One burn per pull: a pull
- * draws on one resonance, so the row is labelled with that resonance.
+ * the input is clamped to it, and the server checks again. One burn per pull, from one
+ * resonance: when the pull mixes resonances the player picks which one burns (#5066).
  */
 
 import { Input } from '@/components/ui/input';
@@ -37,12 +37,39 @@ export function PullBurnInput({
   tier,
   powerBonus,
   disabled,
+  resonances = [],
+  resonanceId = null,
+  onResonanceChange,
 }: PullBurnInputProps) {
-  if (!preview || !preview.available) return null;
+  const picker =
+    resonances.length > 1 && onResonanceChange ? (
+      <div className="flex flex-wrap items-center gap-1.5" data-testid="pull-burn-resonance">
+        <span className="text-xs text-muted-foreground">Burn</span>
+        {resonances.map((r) => (
+          <button
+            key={r.id}
+            type="button"
+            disabled={disabled}
+            aria-pressed={resonanceId === r.id}
+            onClick={() => onResonanceChange(r.id)}
+            data-testid={`pull-burn-resonance-${r.id}`}
+            className={`rounded-md border px-2 py-0.5 text-xs ${
+              resonanceId === r.id
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border bg-background hover:bg-muted'
+            }`}
+          >
+            {r.name}
+          </button>
+        ))}
+      </div>
+    ) : null;
+  if (!preview || !preview.available) return picker;
   const burning = effectiveBurn(preview, value);
   const corruption = preview.corruption_affinity_name;
   return (
     <div className="space-y-1" data-testid="pull-burn">
+      {picker}
       <div className="flex items-center gap-2">
         <Label htmlFor="pull-burn-input" className="text-xs" data-testid="pull-burn-label">
           {preview.resonance_name}{' '}

@@ -88,7 +88,7 @@ def resolve_combat_technique(
     - NARRATIVE_ONLY: cosmetic surfacing
     - VITAL_BONUS: already wired through recompute_max_health_with_threads
     """
-    from world.combat.pull_helpers import round_pull_resonance  # noqa: PLC0415
+    from world.combat.pull_helpers import round_pull_resonances  # noqa: PLC0415
     from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
     from world.magic.services import use_technique  # noqa: PLC0415
     from world.magic.services.fury import fury_cast_for  # noqa: PLC0415
@@ -155,7 +155,7 @@ def resolve_combat_technique(
         # TARGET_FOCUSED_ELSEWHERE/TARGET_FAVORABLY_DISPOSED) can fire.
         target_sheet=_resolve_primary_target_sheet(action),
         # #4732: the round's committed pull counts toward the cast's focus roll.
-        pulled_resonance=round_pull_resonance(participant),
+        pulled_resonances=round_pull_resonances(participant),
     )
 
     return _build_combat_result(

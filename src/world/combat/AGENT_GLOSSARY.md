@@ -170,8 +170,8 @@ round. Beside it stand her **dodge settings** for the whole fight (`dodge_settin
 `dodge_technique` (which technique answers; unset falls back to her saved
 `CharacterTechnique.default_dodge`, then her strongest source), `dodge_into_soulfray` (keep
 dodging when the cast would overspend into Soulfray; the turn's Soulfray check-in asks it), and
-`auto_pull_defense` with its saved `defense_pull_resonance` / `defense_pull_tier` (the
-automatic defensive pull). Private to her. _Avoid_: dodge target, escape route.
+`auto_pull_defense` with its saved `defense_pull_tier` (the automatic defensive pull, of
+every related thread of any resonance). Private to her. _Avoid_: dodge target, escape route.
 
 **Area attack** (#4676):
 An NPC attack whose `ThreatPoolEntry.covers_place` is set: it hits everyone standing in its

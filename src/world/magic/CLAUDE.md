@@ -1757,10 +1757,10 @@ Tether and the sheet display keep the true `CharacterAura`. See `docs/systems/ma
 **Drift and Resonance Conflict (#4732):** `services/drift.py` holds `drift_for(sheet)` (weighted
 off-aura balance against `acting_aura(sheet).dominant_affinity`, via
 `AffinityInteraction.conflict_weight`) and `check_resonance_focus(character, technique, *,
-pulled_resonance=None)`, called once per cast from `_complete_technique_cast` inside
+pulled_resonances=())`, called once per cast from `_complete_technique_cast` inside
 `use_technique` (after anima, before `resolve_fn` runs), so every cast path rolls it; a pull is
-part of its cast. The pulled resonance is the cast's own `cast_pull`, else the
-`use_technique(pulled_resonance=...)` the combat round resolver and clash pass from the round's
+part of its cast. The pulled resonances are the cast's own `cast_pull` threads', else the
+`use_technique(pulled_resonances=...)` the combat round resolver and clash pass from the round's
 committed pull; nothing else reads combat pulls. Scene casts, combat casts, clash
 contributions and standoffs gather modifiers inside `resolve_fn` (scene casts after the
 PRE_CAST triggers too), so the conflict counts on the same roll. Technique-enhanced social

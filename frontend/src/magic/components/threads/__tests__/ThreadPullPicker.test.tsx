@@ -311,13 +311,13 @@ describe('ThreadPullPicker — all-tier previews on mount (Fix 1)', () => {
       expect(mockedPreviewPull).toHaveBeenCalledTimes(3);
     });
     expect(mockedPreviewPull).toHaveBeenCalledWith(
-      expect.objectContaining({ tier: 1, resonance_id: 5 })
+      expect.objectContaining({ tier: 1, thread_ids: [7] })
     );
     expect(mockedPreviewPull).toHaveBeenCalledWith(
-      expect.objectContaining({ tier: 2, resonance_id: 5 })
+      expect.objectContaining({ tier: 2, thread_ids: [7] })
     );
     expect(mockedPreviewPull).toHaveBeenCalledWith(
-      expect.objectContaining({ tier: 3, resonance_id: 5 })
+      expect.objectContaining({ tier: 3, thread_ids: [7] })
     );
   });
 

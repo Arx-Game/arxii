@@ -287,19 +287,18 @@ class CombatPullAdmin(admin.ModelAdmin):
         "participant",
         "encounter",
         "round_number",
-        "resonance",
         "tier",
         "resonance_spent",
         "anima_spent",
         "resonance_burned",
         "committed_at",
     ]
-    list_filter = ["tier", "resonance"]
+    list_filter = ["tier"]
     search_fields = [
         "participant__character_sheet__display_name",
         "encounter__id",
     ]
-    raw_id_fields = ["participant", "encounter", "resonance", "threads"]
+    raw_id_fields = ["participant", "encounter", "burned_resonance", "threads"]
     inlines = [CombatPullResolvedEffectInline]
 
 

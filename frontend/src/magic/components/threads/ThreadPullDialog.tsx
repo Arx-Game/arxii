@@ -1,7 +1,7 @@
 /**
  * ThreadPullDialog — thread pull selector (select-only surface).
  *
- * Calls `onSelect` with the chosen resonance/tier/threads so the caller
+ * Calls `onSelect` with the chosen tier/threads so the caller
  * (e.g. combat cast dispatch or clash commit) can include the pull inline
  * in its own request. Pull no longer commits standalone — it rides
  * cast/clash everywhere.
@@ -9,6 +9,10 @@
  * Ephemeral mode (no `combat` prop): only ALWAYS_IN_ACTION_KINDS are eligible.
  * Combat mode (`combat` prop set): TRAIT/TECHNIQUE threads additionally
  * eligible when their anchor appears in the involved-ID lists.
+ *
+ * The threads may be of different resonances; each is paid from its own (#5066), so
+ * there is no resonance to pick first. A thread whose resonance has no balance is not
+ * offered.
  *
  * Live preview: every change debounces a previewPull call (250ms).
  */
@@ -24,6 +28,7 @@ import {
   NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { previewPull } from '../../api';
+import { pulledResonances } from '../../burn';
 import { useCharacterResonances, useThreads } from '../../queries';
 import type { PullPreviewResponse, Thread } from '../../types';
 
@@ -32,9 +37,10 @@ import type { PullPreviewResponse, Thread } from '../../types';
 // ---------------------------------------------------------------------------
 
 export interface PullSelection {
-  resonance_id: number;
   tier: 1 | 2 | 3;
   thread_ids: number[];
+  /** The distinct resonances of the chosen threads (a burn picks one when several). */
+  resonances: { id: number; name: string }[];
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +111,6 @@ export function ThreadPullDialog({
   const { data: allThreads } = useThreads();
   const { data: resonances } = useCharacterResonances(characterSheetId);
 
-  const [selectedResonanceId, setSelectedResonanceId] = useState<number | null>(null);
   const [selectedTier, setSelectedTier] = useState<1 | 2 | 3>(1);
   const [selectedThreadIds, setSelectedThreadIds] = useState<number[]>([]);
   const [preview, setPreview] = useState<PullPreviewResponse | null>(null);
@@ -117,7 +122,6 @@ export function ThreadPullDialog({
   // Reset state when dialog opens.
   useEffect(() => {
     if (open) {
-      setSelectedResonanceId(null);
       setSelectedTier(1);
       setSelectedThreadIds([]);
       setPreview(null);
@@ -131,20 +135,13 @@ export function ThreadPullDialog({
     (t) => t.retired_at == null && isThreadEligible(t, combat)
   );
 
-  // Resonances that have ≥1 eligible thread and balance > 0.
-  const eligibleResonanceIds = new Set(eligibleThreads.map((t) => t.resonance));
-  const selectableResonances = (resonances ?? []).filter(
-    (r) => eligibleResonanceIds.has(r.resonance) && (r.balance ?? 0) > 0
-  );
-
-  // Threads filtered to the selected resonance.
-  const threadsForResonance = selectedResonanceId
-    ? eligibleThreads.filter((t) => t.resonance === selectedResonanceId)
-    : [];
+  // A thread is offered when its resonance has a balance to pay from.
+  const balanceOf = new Map((resonances ?? []).map((r) => [r.resonance, r.balance ?? 0]));
+  const offeredThreads = eligibleThreads.filter((t) => (balanceOf.get(t.resonance) ?? 0) > 0);
 
   // Debounced live preview.
   const runPreview = useCallback(() => {
-    if (selectedResonanceId === null || selectedThreadIds.length === 0) {
+    if (selectedThreadIds.length === 0) {
       setPreview(null);
       setPreviewLoading(false);
       return;
@@ -153,7 +150,6 @@ export function ThreadPullDialog({
     setPreviewError(null);
     previewPull({
       character_sheet_id: characterSheetId,
-      resonance_id: selectedResonanceId,
       tier: selectedTier,
       thread_ids: selectedThreadIds,
     })
@@ -165,7 +161,7 @@ export function ThreadPullDialog({
         setPreviewError(err instanceof Error ? err.message : 'Failed to load preview.');
         setPreviewLoading(false);
       });
-  }, [characterSheetId, selectedResonanceId, selectedTier, selectedThreadIds]);
+  }, [characterSheetId, selectedTier, selectedThreadIds]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -182,17 +178,16 @@ export function ThreadPullDialog({
   }
 
   function handleSelect() {
-    if (selectedResonanceId === null || selectedThreadIds.length === 0) return;
+    if (selectedThreadIds.length === 0) return;
     onSelect({
-      resonance_id: selectedResonanceId,
       tier: selectedTier,
       thread_ids: selectedThreadIds,
+      resonances: pulledResonances(offeredThreads.filter((t) => selectedThreadIds.includes(t.id))),
     });
     onClose();
   }
 
-  const canSelect =
-    selectedResonanceId !== null && selectedThreadIds.length > 0 && (preview?.affordable ?? false);
+  const canSelect = selectedThreadIds.length > 0 && (preview?.affordable ?? false);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -202,40 +197,6 @@ export function ThreadPullDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* Resonance selector */}
-          <fieldset className="space-y-1">
-            <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Resonance
-            </legend>
-            <div className="flex flex-wrap gap-2" data-testid="resonance-selector">
-              {selectableResonances.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  No eligible resonances with balance.
-                </p>
-              )}
-              {selectableResonances.map((r) => (
-                <button
-                  key={r.resonance}
-                  type="button"
-                  onClick={() => {
-                    setSelectedResonanceId(r.resonance);
-                    setSelectedThreadIds([]);
-                    setPreview(null);
-                  }}
-                  data-testid={`resonance-btn-${r.resonance}`}
-                  className={`rounded-md border px-3 py-1 text-sm font-medium transition-colors ${
-                    selectedResonanceId === r.resonance
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : 'border-border bg-background hover:bg-muted'
-                  }`}
-                >
-                  {r.resonance_name ?? `Resonance ${r.resonance}`}
-                  <span className="ml-1.5 text-xs tabular-nums opacity-70">{r.balance}</span>
-                </button>
-              ))}
-            </div>
-          </fieldset>
-
           {/* Tier selector */}
           <div className="space-y-1">
             <span
@@ -265,42 +226,39 @@ export function ThreadPullDialog({
             </div>
           </div>
 
-          {/* Thread checkboxes */}
-          {selectedResonanceId !== null && (
-            <fieldset className="space-y-1">
-              <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Threads
-              </legend>
-              <div className="space-y-1.5" data-testid="thread-checklist">
-                {threadsForResonance.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    No eligible threads for this resonance.
-                  </p>
-                )}
-                {threadsForResonance.map((thread) => {
-                  const checked = selectedThreadIds.includes(thread.id);
-                  return (
-                    <label
-                      key={thread.id}
-                      className="flex cursor-pointer items-center gap-2 rounded border border-border bg-card/60 px-3 py-2 text-sm hover:bg-muted"
-                      data-testid={`thread-checkbox-${thread.id}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleThread(thread.id)}
-                        className="accent-primary"
-                      />
-                      <span>{thread.name || `Thread #${thread.id}`}</span>
-                      <span className="ml-auto text-xs text-muted-foreground">
-                        {thread.target_kind}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </fieldset>
-          )}
+          {/* Thread checkboxes: any resonances, each paid from its own */}
+          <fieldset className="space-y-1">
+            <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Threads
+            </legend>
+            <div className="space-y-1.5" data-testid="thread-checklist">
+              {offeredThreads.length === 0 && (
+                <p className="text-sm text-muted-foreground">No threads to pull.</p>
+              )}
+              {offeredThreads.map((thread) => {
+                const checked = selectedThreadIds.includes(thread.id);
+                return (
+                  <label
+                    key={thread.id}
+                    className="flex cursor-pointer items-center gap-2 rounded border border-border bg-card/60 px-3 py-2 text-sm hover:bg-muted"
+                    data-testid={`thread-checkbox-${thread.id}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleThread(thread.id)}
+                      className="accent-primary"
+                    />
+                    <span>{thread.name || `Thread #${thread.id}`}</span>
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {thread.resonance_name}{' '}
+                      <span className="tabular-nums">{balanceOf.get(thread.resonance)}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
 
           {/* Live preview */}
           {previewLoading && (

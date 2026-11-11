@@ -326,9 +326,7 @@ class AnOffAuraPullAddsAStep(_Drifting):
         unpulled = self.cast(focus="Success")
         pulled = self.cast(
             focus="Success",
-            cast_pull=CastPullDeclaration(
-                resonance=self.abyssal_resonance, tier=1, threads=(thread,)
-            ),
+            cast_pull=CastPullDeclaration(tier=1, threads=(thread,)),
         )
         self.assertEqual(unpulled.focus_difficulties, [12])
         self.assertEqual(pulled.focus_difficulties, [14])

@@ -12,6 +12,10 @@ strike her for 10 slashing each. She has no dodge.
   a passive's condition, and the condition her technique's price inflicts on her all stay
   flat and cost nothing (maintainer ruling 2026-11-11). Ticks and hazards read the form's
   resistance flat too; only blows are cast.
+- Her baseline defenses are free (maintainer, 2026-11-11: "I don't want those bonuses to
+  charge anima: they're always there"): a ward her covenant vow's added effect put on her
+  while riding a cast of hers, and a thread's standing tier-0 resistance she is not
+  pulling, each soften the blow by their full amount with no roll and no anima.
 
 Expected values come from the spec (decision 18) and the rows built here: a full hit is the
 strike's 10 at the defence roll's multiplier, so each case compares her health lost against
@@ -34,13 +38,23 @@ from world.conditions.factories import (
     ConditionTemplateFactory,
     DamageTypeFactory,
 )
-from world.magic.constants import RestrictionKind
+from world.covenants.added_effects import apply_vow_effect_payloads
+from world.covenants.factories import (
+    VowAddedEffectAppliedConditionFactory,
+    VowAddedEffectFactory,
+)
+from world.covenants.types import FiredVowEffect
+from world.magic.constants import EffectKind, RestrictionKind, TargetKind
 from world.magic.factories import (
     CharacterTechniqueFactory,
     RestrictionFactory,
+    TechniqueAppliedConditionFactory,
     TechniqueFactory,
+    ThreadFactory,
+    ThreadPullEffectFactory,
 )
 from world.magic.models import CharacterTechnique
+from world.magic.models.techniques import ConditionTargetKind
 from world.scenes.constants import RoundStatus
 
 FORM_COST = 3
@@ -61,6 +75,10 @@ class _SmokeInTheCellar(_TheCellar):
         self.form = ConditionTemplateFactory(name="Smoke Form")
         ConditionResistanceModifierFactory(
             condition=self.form, damage_type=self.slashing, modifier_value=FORM_RESISTANCE
+        )
+        # Drifting Smoke's own authored condition: the form she casts on herself.
+        TechniqueAppliedConditionFactory(
+            technique=self.smoke, condition=self.form, target_kind=ConditionTargetKind.SELF
         )
         self.ysolde = self.fighter("Ysolde", at=self.stage)
         CharacterTechniqueFactory(character=self.ysolde.sheet_data, technique=self.smoke)
@@ -97,6 +115,17 @@ class _SmokeInTheCellar(_TheCellar):
             )
         return before - self.health(self.ysolde)
 
+    def lost_without_form(self) -> int:
+        self.slashers(1)
+        return self.hit(0)
+
+    def ysolde_health_reset(self) -> None:
+        from world.vitals.models import CharacterVitals
+
+        vitals = CharacterVitals.objects.get(character_sheet=self.ysolde.sheet_data)
+        vitals.health = 100
+        vitals.save(update_fields=["health"])
+
 
 class EachBlowIsACast(_SmokeInTheCellar):
     def test_three_blows_three_casts(self) -> None:
@@ -109,10 +138,6 @@ class EachBlowIsACast(_SmokeInTheCellar):
 
 
 class TheRollSetsHowMuch(_SmokeInTheCellar):
-    def lost_without_form(self) -> int:
-        self.slashers(1)
-        return self.hit(0)
-
     def test_a_bare_success_softens_the_authored_amount(self) -> None:
         unformed = self.lost_without_form()
         self.wear_the_form()
@@ -184,9 +209,68 @@ class TheRollSetsHowMuch(_SmokeInTheCellar):
         self.assertEqual(lost, unformed - FORM_RESISTANCE)
         self.assertEqual(self.anima(self.ysolde), 20)
 
-    def ysolde_health_reset(self) -> None:
-        from world.vitals.models import CharacterVitals
 
-        vitals = CharacterVitals.objects.get(character_sheet=self.ysolde.sheet_data)
-        vitals.health = 100
-        vitals.save(update_fields=["health"])
+class BaselineDefensesAreFree(_SmokeInTheCellar):
+    """Vow defenses and standing thread bonuses are her baseline: never a cast per blow."""
+
+    def test_a_vow_ward_riding_her_cast_softens_a_blow_for_free(self) -> None:
+        unformed = self.lost_without_form()
+        oath = TechniqueFactory(name="Oathbound Guard", anima_cost=2)
+        ward = ConditionTemplateFactory(name="Oath Ward")
+        ConditionResistanceModifierFactory(
+            condition=ward, damage_type=self.slashing, modifier_value=FORM_RESISTANCE
+        )
+        effect = VowAddedEffectFactory()
+        VowAddedEffectAppliedConditionFactory(
+            effect=effect, condition=ward, target_kind=ConditionTargetKind.SELF
+        )
+        # The vow's added effect fires on her cast of Oathbound Guard: the ward carries the
+        # cast as provenance, the way every cast path applies a vow row's conditions.
+        apply_vow_effect_payloads(
+            [
+                FiredVowEffect(
+                    effect=effect,
+                    holder=self.ysolde.sheet_data,
+                    is_secondary=False,
+                    severity_bonus=0,
+                    duration_bonus=0,
+                    damage_bonus=0,
+                )
+            ],
+            technique=oath,
+            success_level=1,
+            eff_intensity=1,
+            targets_by_kind={},
+            source_character=self.ysolde,
+            scene=None,
+        )
+        self.ysolde.conditions.invalidate()
+        self.ysolde_health_reset()
+        self.form_level = 0  # a roll would soften nothing; there is no roll
+
+        lost = self.hit(0)
+
+        self.assertEqual(lost, unformed - FORM_RESISTANCE)
+        self.assertEqual(self.anima(self.ysolde), 20)
+
+    def test_a_threads_standing_resistance_softens_a_blow_for_free(self) -> None:
+        unformed = self.lost_without_form()
+        thread = ThreadFactory(owner=self.ysolde.sheet_data, level=10, name="Ashen Skin")
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.TRAIT,
+            resonance=thread.resonance,
+            tier=0,
+            min_thread_level=0,
+            effect_kind=EffectKind.RESISTANCE,
+            flat_bonus_amount=None,
+            resistance_amount=FORM_RESISTANCE,
+            resistance_damage_type=self.slashing,
+        )
+        self.ysolde.threads.invalidate()
+        self.ysolde_health_reset()
+        self.form_level = 0
+
+        lost = self.hit(0)
+
+        self.assertEqual(lost, unformed - FORM_RESISTANCE)
+        self.assertEqual(self.anima(self.ysolde), 20)

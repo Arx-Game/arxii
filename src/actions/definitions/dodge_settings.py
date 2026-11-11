@@ -10,7 +10,8 @@ the ``combat_dodge`` plan. These are the standing answers that sit beside it:
 - ``into_soulfray``: keep dodging when a dodge's cast would overspend into Soulfray. The
   Soulfray check-in on her turn writes this.
 - ``auto_pull``: pull threads for defense the first time she is attacked in a round, with
-  ``pull_resonance_id`` and ``pull_tier`` naming the saved pull.
+  ``pull_tier`` naming the saved tier. It pulls every related thread of any resonance, each
+  paid from its own resonance (maintainer ruling 2026-11-11).
 
 Dispatch: REGISTRY ``registry_key="dodge_settings"``. Telnet: ``combat dodgewith``,
 ``combat dodgedefault`` and ``combat autopull`` (``commands/combat_maneuvers.py``); the
@@ -35,13 +36,12 @@ TECHNIQUE_KWARG = "technique_id"
 SAVE_DEFAULT_KWARG = "save_default"
 INTO_SOULFRAY_KWARG = "into_soulfray"
 AUTO_PULL_KWARG = "auto_pull"
-PULL_RESONANCE_KWARG = "pull_resonance_id"
 PULL_TIER_KWARG = "pull_tier"
 
 _NO_SUCH_TECHNIQUE = "None of your techniques that dodge is that one."
 _NOT_IN_FIGHT = "You are not in a fight; only a saved default can be set."
 _NOTHING_SET = "Say which dodge setting to change."
-_BAD_PULL = "Pick a resonance you hold and a tier from 1 to 3 for the defensive pull."
+_BAD_PULL = "Pick a tier from 1 to 3 for the defensive pull."
 _TIERS = (1, 2, 3)
 
 
@@ -110,7 +110,7 @@ class DodgeSettingsAction(Action):
         if any(key in kwargs for key in in_fight_keys):
             if participant is None:
                 return ActionResult(success=False, message=_NOT_IN_FIGHT)
-            refusal = self._set_fight_answers(participant, sheet, kwargs, messages)
+            refusal = self._set_fight_answers(participant, kwargs, messages)
             if refusal is not None:
                 return ActionResult(success=False, message=refusal)
         if not messages:
@@ -161,7 +161,6 @@ class DodgeSettingsAction(Action):
     @staticmethod
     def _set_fight_answers(
         participant: CombatParticipant,
-        sheet: object,
         kwargs: dict[str, Any],
         messages: list[str],
     ) -> str | None:
@@ -179,7 +178,7 @@ class DodgeSettingsAction(Action):
         if AUTO_PULL_KWARG in kwargs:
             on = truthy_kwarg(kwargs[AUTO_PULL_KWARG])
             if on:
-                refusal = _set_defense_pull(participant, sheet, kwargs, fields)
+                refusal = _set_defense_pull(participant, kwargs, fields)
                 if refusal is not None:
                     return refusal
             participant.auto_pull_defense = on
@@ -195,28 +194,17 @@ class DodgeSettingsAction(Action):
 
 def _set_defense_pull(
     participant: CombatParticipant,
-    sheet: object,
     kwargs: dict[str, Any],
     fields: list[str],
 ) -> str | None:
-    """Read the saved defensive pull from ``kwargs``; keep the saved one when absent."""
-    from world.magic.models import CharacterResonance  # noqa: PLC0415
-
-    resonance_id = kwargs.get(PULL_RESONANCE_KWARG, participant.defense_pull_resonance_id)
+    """Read the saved defensive pull's tier from ``kwargs``; keep the saved one when absent."""
     tier = kwargs.get(PULL_TIER_KWARG, participant.defense_pull_tier)
     try:
-        resonance_id = int(resonance_id)
         tier = int(tier)
     except (TypeError, ValueError):
         return _BAD_PULL
     if tier not in _TIERS:
         return _BAD_PULL
-    held = CharacterResonance.objects.filter(
-        character_sheet=sheet, resonance_id=resonance_id
-    ).exists()
-    if not held:
-        return _BAD_PULL
-    participant.defense_pull_resonance_id = resonance_id
     participant.defense_pull_tier = tier
-    fields.extend(["defense_pull_resonance", "defense_pull_tier"])
+    fields.append("defense_pull_tier")
     return None

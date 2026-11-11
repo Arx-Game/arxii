@@ -1007,7 +1007,7 @@ def _dispatch_clash_contribution(
     # cast_pull into declare_clash_contribution (avoids double-charge).
     # resolve_pull_from_kwargs normalises both the telnet path (pre-built
     # CastPullDeclaration in kwargs["cast_pull"]) and the web path (raw IDs:
-    # pull_resonance_id / pull_tier / pull_thread_ids) into one optional declaration.
+    # pull_tier / pull_thread_ids, of any resonances) into one optional declaration.
     from world.combat.constants import PullBurnAction  # noqa: PLC0415
     from world.combat.pull_helpers import (  # noqa: PLC0415
         commit_combat_pull,

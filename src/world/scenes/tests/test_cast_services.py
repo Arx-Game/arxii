@@ -671,7 +671,7 @@ class TestCastPullThroughCastServices(CastScenarioMixin):
         Returns (technique, character_resonance, pull). Fresh rows per test so
         balance mutations cannot leak across tests via the identity map.
         """
-        technique, character_resonance, resonance, thread = make_cast_pull_fixture(
+        technique, character_resonance, _resonance, thread = make_cast_pull_fixture(
             self.caster.character_sheet,
             hostile=hostile,
             tier=self.PULL_TIER,
@@ -679,7 +679,7 @@ class TestCastPullThroughCastServices(CastScenarioMixin):
             starting_balance=self.STARTING_BALANCE,
         )
         grant_technique(self.caster, technique)
-        pull = CastPullDeclaration(resonance=resonance, tier=self.PULL_TIER, threads=(thread,))
+        pull = CastPullDeclaration(tier=self.PULL_TIER, threads=(thread,))
         return technique, character_resonance, pull
 
     def test_immediate_cast_with_pull_charges_resonance(self) -> None:
@@ -798,11 +798,10 @@ class TestCastPullThroughCastServices(CastScenarioMixin):
         technique, character_resonance, pull = self._make_pull_fixture()
         trait_thread = ThreadFactory(
             owner=self.caster.character_sheet,
-            resonance=pull.resonance,
+            resonance=pull.resonances[0],
             level=0,
         )
         trait_pull = CastPullDeclaration(
-            resonance=pull.resonance,
             tier=self.PULL_TIER,
             threads=(trait_thread,),
         )
@@ -1074,9 +1073,7 @@ class TestCastPullCourtRegardModulationE2E(CastScenarioMixin):
             target_kind=ConditionTargetKind.ALLY,
         )
         grant_technique(servant, technique)
-        cast_pull = CastPullDeclaration(
-            resonance=self.resonance, tier=self.PULL_TIER, threads=(thread,)
-        )
+        cast_pull = CastPullDeclaration(tier=self.PULL_TIER, threads=(thread,))
 
         cast = request_technique_cast(
             scene=self.scene,

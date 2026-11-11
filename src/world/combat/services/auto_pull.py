@@ -1,12 +1,13 @@
 """The automatic defensive pull (#5066 decision 12).
 
 With ``CombatParticipant.auto_pull_defense`` on, the first time she is attacked in a round
-with no pull of her own, her saved defensive pull (``defense_pull_resonance`` and
-``defense_pull_tier``) is committed before her dodge rolls. It pulls only the threads that
-relate to the dodge (a cast of her dodging technique) and are not already working for her on
-the defence roll: a thread whose tier-0 passive already applies there (a vow, her stat or
-skill threads) adds nothing by being pulled. When nothing is left it commits nothing and
-charges nothing. Like any pull it lasts the round and boosts every use it relates to.
+with no pull of her own, her saved defensive pull (``defense_pull_tier``) is committed
+before her dodge rolls. It pulls the threads, of any resonance, that relate to the dodge (a
+cast of her dodging technique) and are not already working for her on the defence roll: a
+thread whose tier-0 passive already applies there (a vow, her stat or skill threads) adds
+nothing by being pulled. When nothing is left it commits nothing and charges nothing. Each
+thread is paid from its own resonance (maintainer ruling 2026-11-11). Like any pull it lasts
+the round and boosts every use it relates to.
 
 A pull is one row per participant per round (``CombatPull``), so a pull she declared herself
 this round, with a cast or on its own, means there is nothing more to pull.
@@ -36,7 +37,7 @@ def auto_pull_for_defense(
     """Commit her saved defensive pull before this dodge, if she asked for one; True if pulled."""
     if not participant.auto_pull_defense:
         return False
-    if participant.defense_pull_resonance_id is None or participant.defense_pull_tier is None:
+    if participant.defense_pull_tier is None:
         return False
     if dodge is None or dodge.source.technique_id is None:
         return False
@@ -56,7 +57,7 @@ def _pullable_threads(
     dodge: Dodge,
     defense_check_type: CheckType,
 ) -> tuple[list[Thread], PullActionContext, CastCheck | None]:
-    """Her threads in the saved resonance that relate to the dodge's cast and are not
+    """Her threads, of any resonance, that relate to the dodge's cast and are not
     already working for her on the defence roll."""
     from world.combat.pull_helpers import _with_style_skill, pull_action_context  # noqa: PLC0415
     from world.magic.models import Technique  # noqa: PLC0415
@@ -88,8 +89,7 @@ def _pullable_threads(
     threads = [
         thread
         for thread in character.threads.all()
-        if thread.resonance_id == participant.defense_pull_resonance_id
-        and _anchor_in_action(thread, use)
+        if _anchor_in_action(thread, use)
         and not _anchor_ambiently_active(thread, defense, character=character)
     ]
     return threads, use, cast_check
@@ -107,7 +107,6 @@ def _commit(
     from world.magic.types.pull import CastPullDeclaration  # noqa: PLC0415
 
     declaration = CastPullDeclaration(
-        resonance=participant.defense_pull_resonance,
         tier=participant.defense_pull_tier,
         threads=tuple(threads),
     )

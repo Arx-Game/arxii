@@ -1650,12 +1650,15 @@ class ThreadPullPreviewRequestSerializer(serializers.Serializer):
     """
 
     character_sheet_id = serializers.IntegerField(required=True)
-    resonance_id = serializers.IntegerField(required=True)
     tier = serializers.IntegerField(required=True, min_value=1, max_value=3)
+    # The threads may mix resonances; each is paid from its own (#5066).
     thread_ids = serializers.ListField(
         child=serializers.IntegerField(),
         allow_empty=False,
     )
+    # #5066: which pulled resonance a burn would come from; the burn preview uses it, and
+    # a pull of one resonance needs none.
+    burn_resonance_id = serializers.IntegerField(required=False, allow_null=True)
     action_context = PullActionContextSerializer(required=False)
     # #1919: Optional scene-scoped params for social-action pull previews.
     # scene_id: when provided, the preview computes the combat/DANGER state

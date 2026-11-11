@@ -429,7 +429,7 @@ class APullReachesTheEnchantmentThroughItsThread(_ThrowingField):
             level=10,
         )
         commit_combat_pull(
-            CastPullDeclaration(resonance=resonance, tier=1, threads=(thread,)),
+            CastPullDeclaration(tier=1, threads=(thread,)),
             CombatParticipant.objects.get(encounter=self.encounter, character_sheet=self.sheet),
             self.encounter,
             technique_id=technique.pk,

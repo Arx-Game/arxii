@@ -30294,7 +30294,6 @@ export interface components {
     };
     /** @description Nested pull declaration on the cast endpoint (#854). */
     CastPullRequestRequest: {
-      resonance_id: number;
       tier: number;
       thread_ids: number[];
     };
@@ -30304,11 +30303,12 @@ export interface components {
      *     The burn lives inside the pull, so a burn without a pull cannot be sent.
      */
     CastPullWithBurnRequestRequest: {
-      resonance_id: number;
       tier: number;
       thread_ids: number[];
       /** @default 0 */
       burn: number;
+      /** @description Which pulled resonance the burn comes from (#5066); needed only when the pull's threads mix resonances. */
+      burn_resonance_id?: number | null;
     };
     /**
      * @description Serializes a Technique for the castable-techniques list endpoint.
@@ -33054,7 +33054,6 @@ export interface components {
       into_soulfray: boolean;
       /** @description Pull threads for defense when attacked. */
       auto_pull: boolean;
-      auto_pull_resonance_id: number | null;
       auto_pull_tier: number | null;
       /** @description Her Soulfray stage when her technique dodges would cast into it: the turn's check-in to keep or stop dodging into Soulfray (#5066). */
       soulfray_check_in: components['schemas']['SoulfrayWarning'] | null;
@@ -53611,9 +53610,9 @@ export interface components {
      */
     ThreadPullPreviewRequestRequest: {
       character_sheet_id: number;
-      resonance_id: number;
       tier: number;
       thread_ids: number[];
+      burn_resonance_id?: number | null;
       action_context?: components['schemas']['PullActionContextRequest'];
       scene_id?: number | null;
       /** @default false */

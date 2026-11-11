@@ -50168,8 +50168,6 @@ components:
       type: object
       description: Nested pull declaration on the cast endpoint (#854).
       properties:
-        resonance_id:
-          type: integer
         tier:
           type: integer
           maximum: 3
@@ -50180,7 +50178,6 @@ components:
             type: integer
           maxItems: 20
       required:
-      - resonance_id
       - thread_ids
       - tier
     CastPullWithBurnRequestRequest:
@@ -50190,8 +50187,6 @@ components:
 
         The burn lives inside the pull, so a burn without a pull cannot be sent.
       properties:
-        resonance_id:
-          type: integer
         tier:
           type: integer
           maximum: 3
@@ -50206,8 +50201,12 @@ components:
           maximum: 2147483647
           minimum: 0
           default: 0
+        burn_resonance_id:
+          type: integer
+          nullable: true
+          description: Which pulled resonance the burn comes from (#5066); needed
+            only when the pull's threads mix resonances.
       required:
-      - resonance_id
       - thread_ids
       - tier
     CastableTechnique:
@@ -56314,9 +56313,6 @@ components:
         auto_pull:
           type: boolean
           description: Pull threads for defense when attacked.
-        auto_pull_resonance_id:
-          type: integer
-          nullable: true
         auto_pull_tier:
           type: integer
           nullable: true
@@ -56328,7 +56324,6 @@ components:
             it: the turn''s check-in to keep or stop dodging into Soulfray (#5066).'
       required:
       - auto_pull
-      - auto_pull_resonance_id
       - auto_pull_tier
       - cost_line
       - enabled
@@ -96889,8 +96884,6 @@ components:
       properties:
         character_sheet_id:
           type: integer
-        resonance_id:
-          type: integer
         tier:
           type: integer
           maximum: 3
@@ -96899,6 +96892,9 @@ components:
           type: array
           items:
             type: integer
+        burn_resonance_id:
+          type: integer
+          nullable: true
         action_context:
           $ref: '#/components/schemas/PullActionContextRequest'
         scene_id:
@@ -96912,7 +96908,6 @@ components:
           nullable: true
       required:
       - character_sheet_id
-      - resonance_id
       - thread_ids
       - tier
     ThreadPullPreviewResponse:

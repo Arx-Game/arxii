@@ -115,7 +115,7 @@ class CommitCombatPullCourtRegardAmplificationTests(TestCase):
             character_sheet=servant,
             status=ParticipantStatus.ACTIVE,
         )
-        cast_pull = CastPullDeclaration(resonance=self.resonance, tier=1, threads=(thread,))
+        cast_pull = CastPullDeclaration(tier=1, threads=(thread,))
 
         commit_combat_pull(
             cast_pull=cast_pull,
@@ -175,7 +175,7 @@ class CastCommitCombatPullTargetWiringTests(TestCase):
             encounter=encounter,
             persona=enemy_sheet.primary_persona,
         )
-        cast_pull = CastPullDeclaration(resonance=ResonanceFactory(), tier=1, threads=())
+        cast_pull = CastPullDeclaration(tier=1, threads=())
         technique = TechniqueFactory(action_template=ActionTemplateFactory(), skill=SkillFactory())
 
         with patch("world.combat.pull_helpers.commit_combat_pull", autospec=True) as mock_commit:
@@ -200,7 +200,7 @@ class CastCommitCombatPullTargetWiringTests(TestCase):
             character_sheet=ally_sheet,
             status=ParticipantStatus.ACTIVE,
         )
-        cast_pull = CastPullDeclaration(resonance=ResonanceFactory(), tier=1, threads=())
+        cast_pull = CastPullDeclaration(tier=1, threads=())
 
         with patch("world.combat.pull_helpers.commit_combat_pull", autospec=True) as mock_commit:
             CastTechniqueAction._commit_combat_pull(
@@ -215,7 +215,7 @@ class CastCommitCombatPullTargetWiringTests(TestCase):
 
     def test_no_focused_target_kwargs_forwards_none(self) -> None:
         ctx, _encounter = self._ctx()
-        cast_pull = CastPullDeclaration(resonance=ResonanceFactory(), tier=1, threads=())
+        cast_pull = CastPullDeclaration(tier=1, threads=())
 
         with patch("world.combat.pull_helpers.commit_combat_pull", autospec=True) as mock_commit:
             CastTechniqueAction._commit_combat_pull(
@@ -251,7 +251,7 @@ class DispatchClashContributionTargetWiringTests(TestCase):
         clash.npc_opponent.save(update_fields=["objectdb"])
 
         technique = TechniqueFactory(action_template=ActionTemplateFactory(), skill=SkillFactory())
-        cast_pull = CastPullDeclaration(resonance=ResonanceFactory(), tier=1, threads=())
+        cast_pull = CastPullDeclaration(tier=1, threads=())
         ref = ActionRef(
             backend=ActionBackend.COMBAT,
             clash_id=clash.pk,

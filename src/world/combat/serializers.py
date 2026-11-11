@@ -536,7 +536,6 @@ class DodgePlanSerializer(serializers.Serializer):
         help_text="Keep dodging when a dodge's cast would overspend into Soulfray."
     )
     auto_pull = serializers.BooleanField(help_text="Pull threads for defense when attacked.")
-    auto_pull_resonance_id = serializers.IntegerField(allow_null=True)
     auto_pull_tier = serializers.IntegerField(allow_null=True)
     soulfray_check_in = SoulfrayWarningSerializer(
         allow_null=True,
@@ -858,7 +857,6 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "technique_id": sources[0].technique_id,
             "into_soulfray": obj.dodge_into_soulfray,
             "auto_pull": obj.auto_pull_defense,
-            "auto_pull_resonance_id": obj.defense_pull_resonance_id,
             "auto_pull_tier": obj.defense_pull_tier,
             "soulfray_check_in": _warning_payload(soulfray_check_in(obj)),
         }

@@ -978,20 +978,24 @@ export function ActionPanel({ sceneId }: Props) {
 
                       {/* Strain (#4736): the scene cast has no anima strain control, so
                           the pull's resonance burn is its whole Strain area. */}
-                      {pull.pullTier !== null && pull.burnPreview?.available && (
-                        <div
-                          className="space-y-1 border-t border-border/50 pt-2"
-                          data-testid="cast-strain"
-                        >
-                          <span className="text-xs font-medium">Strain</span>
-                          <PullBurnInput
-                            preview={pull.burnPreview}
-                            value={effectiveBurn(pull.burnPreview, pull.burn)}
-                            onChange={pull.setBurn}
-                            tier={pull.pullTier}
-                          />
-                        </div>
-                      )}
+                      {pull.pullTier !== null &&
+                        (pull.burnPreview?.available || pull.pulledResonances.length > 1) && (
+                          <div
+                            className="space-y-1 border-t border-border/50 pt-2"
+                            data-testid="cast-strain"
+                          >
+                            <span className="text-xs font-medium">Strain</span>
+                            <PullBurnInput
+                              preview={pull.burnPreview}
+                              value={effectiveBurn(pull.burnPreview, pull.burn)}
+                              onChange={pull.setBurn}
+                              tier={pull.pullTier}
+                              resonances={pull.pulledResonances}
+                              resonanceId={pull.burnResonanceId}
+                              onResonanceChange={pull.setBurnResonanceId}
+                            />
+                          </div>
+                        )}
 
                       <Button
                         size="sm"

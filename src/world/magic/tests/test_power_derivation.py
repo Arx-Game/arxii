@@ -895,9 +895,9 @@ class CastPullDeclarationTests(TestCase):
 
         res = ResonanceFactory()
         thread = ThreadFactory(resonance=res)
-        decl = CastPullDeclaration(resonance=res, tier=2, threads=(thread,))
+        decl = CastPullDeclaration(tier=2, threads=(thread,))
         self.assertEqual(decl.tier, 2)
-        self.assertEqual(decl.resonance, res)
+        self.assertEqual(decl.resonances, (res,))
         self.assertEqual(decl.threads, (thread,))
         with self.assertRaises(dataclasses.FrozenInstanceError):
             decl.tier = 3  # frozen

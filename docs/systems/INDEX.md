@@ -144,8 +144,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
 - **Drift and Resonance Conflict (#4732):** `DriftConfig` (singleton, `get_drift_config()`),
   `AffinityInteraction.conflict_weight`, `drift_for(sheet)`, and `check_resonance_focus` (once per
   cast, inside `use_technique`'s `_complete_technique_cast`, so every cast path rolls it; the combat
-  round and clash name their committed pull through `use_technique(pulled_resonance=...)`, read by
-  `world/combat/pull_helpers.py` `round_pull_resonance`); the conflict condition is authored and
+  round and clash name their committed pull through `use_technique(pulled_resonances=...)`, read
+  by `world/combat/pull_helpers.py` `round_pull_resonances`); the conflict condition is authored and
   `ConditionCategory.self_shakeable` lets `breakfree`/`rally` reach it. See magic.md.
 - **Audere control step and Soulfray anima-0 stage (#4740):**
   `AudereThreshold.control_per_stage_earlier` + `required_stage_order(threshold,
@@ -518,9 +518,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     a hasty fall for an Abyssal acting aura burning another affinity converts at the Fall pair
     rate, corruption x `CorruptionConfig.hasty_fall_multiplier`), `preview_burn`, `announce_burn`;
     types `BurnValuation`, `ResonanceBurnResult`, `BurnPreview`. Rides the pull:
-    `spend_resonance_for_pull(burn=, burn_valuation=, burned_for=)`, `CombatPull.resonance_burned`
-    (+ `burn_valued_points`, `burn_strain_units`, `burn_hasty_fall`, `burned_for`),
-    `SceneActionPullDeclaration.burn`; one burn strains only the declared action
+    `spend_resonance_for_pull(burn=, burn_resonance=, burn_valuation=, burned_for=)`,
+    `CombatPull.resonance_burned` (+ `burned_resonance`, `burn_valued_points`,
+    `burn_strain_units`, `burn_hasty_fall`, `burned_for`), `SceneActionPullDeclaration.burn`
+    (+ `burn_resonance`); a pull may mix resonances, each thread paid from its own, and a
+    burn names which pulled resonance it comes from (#5066); one burn strains only the declared action
     (`use_technique(combat_burn_for=)`); `StrainConfig.engagement_share_percent` feeds a share of
     the strain bonus into `CharacterEngagement.intensity_modifier`. Telnet `burn=<n>` on `cast`
     and `clash`; web `pull_burn` (combat dispatch) and `pull.burn` (scene cast); the pull
@@ -9456,7 +9458,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     application dodges); `ReactionReach` (`world/areas/positioning/constants.py`: NONE, IN_PLACE,
     ADJACENT, TWO_PLACES, ANY_PLACE, set by a use's strength); `CombatParticipant.dodge_enabled`/
     `dodge_landing` (per round) and, #5066, `dodge_technique` (FK Technique, null),
-    `dodge_into_soulfray`, `auto_pull_defense`, `defense_pull_resonance`, `defense_pull_tier`;
+    `dodge_into_soulfray`, `auto_pull_defense`, `defense_pull_tier`;
     `CharacterTechnique.default_dodge` (at most one per character);
     `MovementConfig.dodge_anima_cost` (the healer's reactive save) / `dodge_fatigue_cost` /
     `reaction_difficulty_step` and, #5066, `reach_neighbour_at` / `reach_two_places_at` /
@@ -9484,11 +9486,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - Action `combat_dodge` (`DodgePlanAction`, kwargs `dodge`, `position_id` or `place`); telnet
     `combat dodge [<place>|here|off]`. Action `dodge_settings` (`DodgeSettingsAction`,
     `actions/definitions/dodge_settings.py`, #5066; kwargs `technique_id`, `save_default`,
-    `into_soulfray`, `auto_pull`, `pull_resonance_id`, `pull_tier`); telnet `combat dodgewith
-    <technique>|default`, `combat dodgedefault <technique>`, `combat autopull <resonance>
+    `into_soulfray`, `auto_pull`, `pull_tier`); telnet `combat dodgewith
+    <technique>|default`, `combat dodgedefault <technique>`, `combat autopull
     <tier>|off`, `accept|decline dodgesoulfray`. Payload: participant `dodge_plan` (owner only;
     #5066 adds `techniques`, `technique_id`, `into_soulfray`, `auto_pull`,
-    `auto_pull_resonance_id`, `auto_pull_tier`, `soulfray_check_in`),
+    `auto_pull_tier`, `soulfray_check_in`),
     `pending_attacks[].attack_name/covered_position_id/covered_position_name`;
     `reactions_remaining` removed. Frontend: `DodgePlanPanel`, `AreaAttackWarning`,
     `AreaTelegraphLayer`, `combat/dodging.ts`.

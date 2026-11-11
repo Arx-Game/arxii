@@ -2,15 +2,6 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/magic/queries', () => ({
-  useCharacterResonances: () => ({
-    data: [
-      { resonance: 7, resonance_name: 'Ember' },
-      { resonance: 8, resonance_name: 'Tide' },
-    ],
-  }),
-}));
-
 // Stub ThreadPullDialog the way YourTurn's tests do: a button stands in for a chosen pull.
 vi.mock('@/magic/components/threads/ThreadPullDialog', () => ({
   ThreadPullDialog: ({
@@ -20,7 +11,11 @@ vi.mock('@/magic/components/threads/ThreadPullDialog', () => ({
   }: {
     open: boolean;
     combat?: { involvedTechniqueIds: number[] };
-    onSelect: (sel: { resonance_id: number; tier: 1 | 2 | 3; thread_ids: number[] }) => void;
+    onSelect: (sel: {
+      tier: 1 | 2 | 3;
+      thread_ids: number[];
+      resonances: { id: number; name: string }[];
+    }) => void;
   }) =>
     open ? (
       <div data-testid="thread-pull-dialog-stub">
@@ -28,7 +23,16 @@ vi.mock('@/magic/components/threads/ThreadPullDialog', () => ({
         <button
           type="button"
           data-testid="simulate-pull-select"
-          onClick={() => onSelect({ resonance_id: 5, tier: 2, thread_ids: [10, 11] })}
+          onClick={() =>
+            onSelect({
+              tier: 2,
+              thread_ids: [10, 11],
+              resonances: [
+                { id: 5, name: 'Veil' },
+                { id: 6, name: 'Ember' },
+              ],
+            })
+          }
         >
           Simulate Select Pull
         </button>
@@ -59,7 +63,6 @@ const PLAN: DodgePlan = {
   technique_id: null,
   into_soulfray: false,
   auto_pull: false,
-  auto_pull_resonance_id: null,
   auto_pull_tier: null,
   soulfray_check_in: null,
 };
@@ -113,13 +116,7 @@ function fire(overrides: Partial<PendingAttack> = {}): PendingAttack {
 describe('DodgePlanPanel', () => {
   it('offers dodging in place, each other reachable place and not dodging, with the cost', () => {
     render(
-      <DodgePlanPanel
-        plan={PLAN}
-        characterSheetId={100}
-        currentPositionId={13}
-        isLocked={false}
-        dispatchAction={ok()}
-      />
+      <DodgePlanPanel plan={PLAN} currentPositionId={13} isLocked={false} dispatchAction={ok()} />
     );
     expect(screen.getByTestId('dodge-in-place')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('Dodge to Gallery')).toBeInTheDocument();
@@ -133,7 +130,6 @@ describe('DodgePlanPanel', () => {
     render(
       <DodgePlanPanel
         plan={PLAN}
-        characterSheetId={100}
         currentPositionId={13}
         isLocked={false}
         dispatchAction={dispatch}
@@ -157,7 +153,6 @@ describe('DodgePlanPanel dodge settings', () => {
     render(
       <DodgePlanPanel
         plan={plan}
-        characterSheetId={100}
         currentPositionId={13}
         isLocked={isLocked}
         dispatchAction={dispatch}
@@ -229,19 +224,17 @@ describe('DodgePlanPanel dodge settings', () => {
     });
   });
 
-  it('turns the defensive pull on with a resonance and tier', async () => {
+  it('turns the defensive pull on with a tier, drawing on any resonance', async () => {
     const dispatch = renderPanel(TECHNIQUE_PLAN);
-    const toggle = screen.getByRole('switch', { name: 'Pull threads for defense when attacked' });
-    expect(toggle).toBeDisabled();
-    await userEvent.click(screen.getByRole('combobox', { name: 'Resonance' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'Tide' }));
     await userEvent.click(screen.getByRole('combobox', { name: 'Tier' }));
     await userEvent.click(await screen.findByRole('option', { name: 'Tier 3' }));
     expect(dispatch).not.toHaveBeenCalled();
-    await userEvent.click(toggle);
+    await userEvent.click(
+      screen.getByRole('switch', { name: 'Pull threads for defense when attacked' })
+    );
     expect(dispatch).toHaveBeenLastCalledWith({
       ref: SETTINGS_REF,
-      kwargs: { auto_pull: true, pull_resonance_id: 8, pull_tier: 3 },
+      kwargs: { auto_pull: true, pull_tier: 3 },
     });
   });
 
@@ -249,7 +242,6 @@ describe('DodgePlanPanel dodge settings', () => {
     const dispatch = renderPanel({
       ...TECHNIQUE_PLAN,
       auto_pull: true,
-      auto_pull_resonance_id: 7,
       auto_pull_tier: 2,
     });
     await userEvent.click(
@@ -293,7 +285,7 @@ describe('RoundThreadPull', () => {
     await userEvent.click(screen.getByTestId('simulate-pull-select'));
     expect(dispatch).toHaveBeenCalledWith({
       ref: { backend: 'registry', registry_key: 'combat_pull' },
-      kwargs: { pull_resonance_id: 5, pull_tier: 2, pull_thread_ids: [10, 11] },
+      kwargs: { pull_tier: 2, pull_thread_ids: [10, 11] },
     });
     await waitFor(() => expect(screen.queryByTestId('round-pull-btn')).not.toBeInTheDocument());
   });
@@ -384,7 +376,6 @@ describe('CommitmentPanel reactions', () => {
     render(
       <DodgePlanPanel
         plan={null}
-        characterSheetId={100}
         steadyPlan={{
           enabled: false,
           cost_line: '4 anima each',

@@ -88,7 +88,7 @@ class ChargeCastPullCourtRegardAmplificationTests(TestCase):
         )
         CharacterResonanceFactory(character_sheet=servant, resonance=self.resonance, balance=20)
         CharacterAnimaFactory(character=servant, current=10, maximum=20)
-        cast_pull = CastPullDeclaration(resonance=self.resonance, tier=1, threads=(thread,))
+        cast_pull = CastPullDeclaration(tier=1, threads=(thread,))
 
         pull_flat_bonus, _effective_power, _resolved, _spent = _charge_cast_pull(
             character=servant.character,
@@ -134,7 +134,7 @@ class UseTechniqueForwardsFirstTargetTests(TestCase):
     def test_forwards_first_target_when_present(self) -> None:
         character = self._character()
         technique = TechniqueFactory()
-        cast_pull = CastPullDeclaration(resonance=ResonanceFactory(), tier=1, threads=())
+        cast_pull = CastPullDeclaration(tier=1, threads=())
         target = CharacterSheetFactory().character
 
         with patch(
@@ -155,7 +155,7 @@ class UseTechniqueForwardsFirstTargetTests(TestCase):
     def test_forwards_none_when_no_targets(self) -> None:
         character = self._character()
         technique = TechniqueFactory()
-        cast_pull = CastPullDeclaration(resonance=ResonanceFactory(), tier=1, threads=())
+        cast_pull = CastPullDeclaration(tier=1, threads=())
 
         with patch(
             "world.magic.services.techniques._charge_cast_pull",

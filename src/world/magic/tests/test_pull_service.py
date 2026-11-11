@@ -97,7 +97,6 @@ class SpendResonanceForPullCombatTests(TestCase):
         pre = CombatPull.objects.count()
         result = spend_resonance_for_pull(
             self.sheet,
-            self.resonance,
             tier=1,
             threads=[thread],
             action_context=ctx,
@@ -122,7 +121,6 @@ class SpendResonanceForPullCombatTests(TestCase):
 
         spend_resonance_for_pull(
             self.sheet,
-            self.resonance,
             tier=1,
             threads=[thread, thread2],
             action_context=ctx,
@@ -146,7 +144,6 @@ class SpendResonanceForPullCombatTests(TestCase):
 
         spend_resonance_for_pull(
             self.sheet,
-            self.resonance,
             tier=1,
             threads=[thread],
             action_context=ctx,
@@ -154,7 +151,6 @@ class SpendResonanceForPullCombatTests(TestCase):
         with self.assertRaises(IntegrityError):
             spend_resonance_for_pull(
                 self.sheet,
-                self.resonance,
                 tier=1,
                 threads=[thread],
                 action_context=ctx,
@@ -176,7 +172,6 @@ class SpendResonanceForPullCombatTests(TestCase):
         with self.assertRaises(InvalidImbueAmount):
             spend_resonance_for_pull(
                 self.sheet,
-                self.resonance,
                 tier=1,
                 threads=[thread],
                 action_context=ctx,
@@ -202,7 +197,6 @@ class SpendResonanceForPullCombatTests(TestCase):
         pre = CombatPull.objects.count()
         spend_resonance_for_pull(
             self.sheet,
-            self.resonance,
             tier=1,
             threads=[thread],
             action_context=ctx,
@@ -221,13 +215,13 @@ class SpendResonanceForPullCombatTests(TestCase):
         with self.assertRaises(InvalidImbueAmount):
             spend_resonance_for_pull(
                 self.sheet,
-                self.resonance,
                 tier=1,
                 threads=[thread],
                 action_context=ctx,
             )
 
-    def test_resonance_mismatch_rejected(self) -> None:
+    def test_a_thread_of_a_resonance_she_does_not_hold_refuses(self) -> None:
+        """Each thread pays from its own resonance (#5066): with none held, nothing is paid."""
         other_resonance = ResonanceFactory()
         thread = ThreadFactory(owner=self.sheet, resonance=other_resonance)
         ctx = _setup_combat_context(sheet=self.sheet)
@@ -236,10 +230,9 @@ class SpendResonanceForPullCombatTests(TestCase):
             participant=ctx.participant,
             involved_traits=(thread.target_trait_id,),
         )
-        with self.assertRaises(InvalidImbueAmount):
+        with self.assertRaises(ResonanceInsufficient):
             spend_resonance_for_pull(
                 self.sheet,
-                self.resonance,
                 tier=1,
                 threads=[thread],
                 action_context=ctx,
@@ -250,7 +243,6 @@ class SpendResonanceForPullCombatTests(TestCase):
         with self.assertRaises(InvalidImbueAmount):
             spend_resonance_for_pull(
                 self.sheet,
-                self.resonance,
                 tier=1,
                 threads=[],
                 action_context=ctx,
@@ -271,7 +263,6 @@ class SpendResonanceForPullCombatTests(TestCase):
         with self.assertRaises(ResonanceInsufficient):
             spend_resonance_for_pull(
                 self.sheet,
-                self.resonance,
                 tier=1,
                 threads=[thread],
                 action_context=ctx,
@@ -295,7 +286,6 @@ class SpendResonanceForPullCombatTests(TestCase):
         with self.assertRaises(ResonanceInsufficient):
             spend_resonance_for_pull(
                 self.sheet,
-                self.resonance,
                 tier=1,
                 threads=[t1, t2],
                 action_context=ctx,
@@ -323,7 +313,6 @@ class SpendResonanceForPullCombatTests(TestCase):
 
         result = spend_resonance_for_pull(
             self.sheet,
-            self.resonance,
             tier=1,
             threads=[thread],
             action_context=ctx,
@@ -390,7 +379,6 @@ class SpendResonanceForPullEphemeralTests(TestCase):
         pre = CombatPull.objects.count()
         result = spend_resonance_for_pull(
             self.sheet,
-            self.resonance,
             tier=1,
             threads=[self.thread],
             action_context=self.ctx,
@@ -401,7 +389,6 @@ class SpendResonanceForPullEphemeralTests(TestCase):
     def test_ephemeral_still_debits_resonance(self) -> None:
         spend_resonance_for_pull(
             self.sheet,
-            self.resonance,
             tier=1,
             threads=[self.thread],
             action_context=self.ctx,
@@ -413,7 +400,6 @@ class SpendResonanceForPullEphemeralTests(TestCase):
     def test_ephemeral_marks_vital_bonus_inactive(self) -> None:
         result = spend_resonance_for_pull(
             self.sheet,
-            self.resonance,
             tier=1,
             threads=[self.thread],
             action_context=self.ctx,
@@ -429,7 +415,6 @@ class SpendResonanceForPullEphemeralTests(TestCase):
         # inactive (no max-health / damage-reduction consumer outside combat).
         result = spend_resonance_for_pull(
             self.sheet,
-            self.resonance,
             tier=1,
             threads=[self.thread],
             action_context=self.ctx,
@@ -620,7 +605,6 @@ class FacetWornItemsGateTests(TestCase):
         with self.assertRaises(NoMatchingWornFacetItemsError):
             spend_resonance_for_pull(
                 self.sheet,
-                self.resonance,
                 tier=1,
                 threads=[thread],
                 action_context=ctx,
@@ -653,7 +637,6 @@ class FacetWornItemsGateTests(TestCase):
         ctx = PullActionContext(combat_encounter=None, participant=None)
         result = spend_resonance_for_pull(
             self.sheet,
-            self.resonance,
             tier=1,
             threads=[thread],
             action_context=ctx,
@@ -837,7 +820,6 @@ class SpendResonanceForPullInertEffectsTests(TestCase):
         with self.assertRaises(InvalidImbueAmount):
             spend_resonance_for_pull(
                 self.sheet,
-                self.resonance,
                 tier=1,
                 threads=[self.vital_only_thread],
                 action_context=PullActionContext(
@@ -890,7 +872,6 @@ class NonCombatCapabilityGrantPullTest(TestCase):
 
         spend_resonance_for_pull(
             self.sheet,
-            self.resonance,
             tier=1,
             threads=[self.thread],
             action_context=PullActionContext(
@@ -918,7 +899,6 @@ class NonCombatCapabilityGrantPullTest(TestCase):
         )
         spend_resonance_for_pull(
             self.sheet,
-            self.resonance,
             tier=1,
             threads=[self.thread],
             action_context=pull_ctx,

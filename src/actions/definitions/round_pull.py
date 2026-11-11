@@ -4,10 +4,11 @@ A pull lasts until her next turn and boosts every use it relates to (each cast, 
 dodge or blink is matched on its own, ``round_pull_bonus``), so she may declare one with no
 cast at all. It takes no action slot: like a mark, it rides beside whatever she does this
 round. The threads must relate to something she can do (``pull_alone_context``); a pull is
-one per round, paid once when declared, every thread paying its tier's share.
+one per round, paid once when declared, every thread paying its tier's share from its own
+resonance (the threads may mix resonances, maintainer ruling 2026-11-11).
 
-Dispatch: REGISTRY ``registry_key="combat_pull"`` with ``pull_resonance_id``, ``pull_tier``
-and ``pull_thread_ids`` (web), or a pre-built ``cast_pull`` (telnet ``combat pull``).
+Dispatch: REGISTRY ``registry_key="combat_pull"`` with ``pull_tier`` and
+``pull_thread_ids`` (web), or a pre-built ``cast_pull`` (telnet ``combat pull``).
 """
 
 from __future__ import annotations

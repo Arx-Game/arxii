@@ -60,7 +60,8 @@ reads the soak for the hit's own type, so a "target's soak" damage input agrees.
 
 ## A form's resistance is paid per blow (#5066 decision 18)
 
-A resistance condition a technique she cast put on herself (a smoke form) is not a standing
+A resistance condition a technique she cast put on herself, one of that technique's own
+authored applied conditions (a smoke form), is not a standing
 buff: each blow it softens in `apply_damage_to_participant` is a `use_technique` cast of that
 technique (`world/combat/services/damage/form_resistance.py`, `cast_forms_for_blow`), paid
 through the deficit and Soulfray path behind her "dodge even into Soulfray" answer and never
@@ -68,7 +69,11 @@ lethal for an away player. The roll scales the condition's authored resistance f
 (`scaled_strength`: failure 0, bare success the authored amount, +50% a level by default); the
 difference rides `resistance_shift`. `paid_per_blow` excludes a passive's condition (source
 description `PASSIVE_SOURCE_PREFIX`), the condition a price inflicts on its payer, and
-anyone else's ward: those stay flat. Damage-over-time ticks, hazards and battle damage read
+anyone else's ward, and a condition a covenant vow's added effect applied while riding her
+cast (it carries the cast technique as provenance but is not the technique's own condition,
+`_is_technique_own_condition`): those stay flat and free. So do covenant role defenses and
+every thread's standing tier-0 bonus she is not pulling: they are her baseline, always there
+(maintainer, 2026-11-11), and nothing charges anima or rolls for them per blow. Damage-over-time ticks, hazards and battle damage read
 even the form flat, because only blows are cast (maintainer ruling 2026-11-11). NPC
 resistance is flat. Revisit note: if per-blow payment makes barrier and mitigation types too
 weak against swarms, pay them by damage absorbed instead.
@@ -139,9 +144,10 @@ the field defaults apply.
 
 **Auto-pull for defense [BUILT & WIRED] (#5066).** With `CombatParticipant.auto_pull_defense` on,
 the first time she is attacked in a round with no pull of her own, her saved defensive pull
-(`defense_pull_resonance`, `defense_pull_tier`) is committed before a technique dodge rolls
-(`world/combat/services/auto_pull.py`). It pulls only threads that relate to the dodge and are
-not already working for her on the defense roll; when nothing is left it commits and charges
+(`defense_pull_tier`) is committed before a technique dodge rolls
+(`world/combat/services/auto_pull.py`). It pulls every thread, of any resonance, that relates to
+the dodge and is not already working for her on the defense roll, each paid from its own
+resonance (maintainer ruling 2026-11-11); when nothing is left it commits and charges
 nothing.
 
 **The same power on her turn [BUILT & WIRED] (#5019, #5066).** A source matching an application
@@ -170,13 +176,13 @@ below stand for the whole fight.
 
 Beside it sit her standing dodge settings (`dodge_settings`, `DodgeSettingsAction` in
 `actions/definitions/dodge_settings.py`; telnet `combat dodgewith <technique>|default`,
-`combat dodgedefault <technique>`, `combat autopull <resonance> <tier>|off`, and
+`combat dodgedefault <technique>`, `combat autopull <tier>|off`, and
 `accept|decline dodgesoulfray` for the check-in): which technique answers her dodges in this
 fight (`dodge_technique`; unset falls back to her saved `CharacterTechnique.default_dodge`, at
 most one per character, then her strongest source), `dodge_into_soulfray`, and the auto-pull
-with its saved resonance and tier. The participant payload's `dodge_plan` carries all of it
+with its saved tier. The participant payload's `dodge_plan` carries all of it
 (`techniques` with each one's `cost_line`, `technique_id`, `into_soulfray`, `auto_pull`,
-`auto_pull_resonance_id`, `auto_pull_tier`, `soulfray_check_in`) and reaches its owner only.
+`auto_pull_tier`, `soulfray_check_in`) and reaches its owner only.
 
 **Area attacks.** `ThreatPoolEntry.covers_place` hits everyone in the target's place
 (`world/combat/services/npc/area_attacks.cover_place`, run before reach in

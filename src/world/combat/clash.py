@@ -239,7 +239,7 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
     #     isolated unit tests that do not wire a CombatParticipant degrade
     #     gracefully (situation_ctx=None, exactly as a non-combat cast).
     from world.combat.models import CombatParticipant  # noqa: PLC0415
-    from world.combat.pull_helpers import round_pull_resonance  # noqa: PLC0415
+    from world.combat.pull_helpers import round_pull_resonances  # noqa: PLC0415
 
     participant = CombatParticipant.objects.filter(
         encounter_id=clash.encounter_id,
@@ -376,7 +376,7 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
         # CHECK_BONUS threading, #2536 Task 5) rather than re-resolving it.
         situation_ctx=round_ctx,
         # #4732: the contribution's committed pull counts toward its focus roll.
-        pulled_resonance=round_pull_resonance(participant) if participant is not None else None,
+        pulled_resonances=round_pull_resonances(participant) if participant is not None else (),
     )
 
     # 5. Guard against unconfirmed result (confirm_soulfray_risk=True should

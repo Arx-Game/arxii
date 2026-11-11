@@ -54,7 +54,7 @@ import { SoulfrayAcceptGate } from '../components/SoulfrayAcceptGate';
 import { FuryDeclaration } from '../components/FuryDeclaration';
 import { ThreadPullDialog, type PullSelection } from '@/magic/components/threads/ThreadPullDialog';
 import { useCharacterAnima, usePullBurnPreview } from '@/magic/queries';
-import { effectiveBurn } from '@/magic/burn';
+import { burnResonanceFor, effectiveBurn } from '@/magic/burn';
 import type { PullPreviewRequest } from '@/magic/types';
 import {
   Select,
@@ -247,6 +247,8 @@ interface RoundScopedState {
   selectedPull: PullSelection | null;
   /** Resonance to burn with the pull (#4736); entered in the Strain area. */
   pullBurn: number;
+  /** Which pulled resonance burns, when the pull mixes several (#5066). */
+  pullBurnResonanceId: number | null;
   /**
    * True once the dispatch carrying the pull succeeded this round. A retried submit
    * (a later job failed) then leaves the pull off, so it is never sent twice.
@@ -298,6 +300,7 @@ function initialRoundState(): RoundScopedState {
     pullDialogOpen: false,
     selectedPull: null,
     pullBurn: 0,
+    pullBurnResonanceId: null,
     pullCommitted: false,
     soulfrayAccepted: false,
     furyTierId: null,
@@ -361,16 +364,23 @@ async function markReadyIfNeeded(
 interface PullDispatch {
   selection: PullSelection;
   burn: number;
+  /** The pulled resonance the burn comes from; null with no burn. */
+  burnResonanceId: number | null;
 }
 
-/** pull_resonance_id / pull_tier / pull_thread_ids (and pull_burn) for one dispatch. */
+/**
+ * pull_tier / pull_thread_ids (of any resonances, #5066), and pull_burn with
+ * pull_burn_resonance_id, for one dispatch.
+ */
 function pullKwargsFor(pull: PullDispatch | null): Record<string, number | number[]> {
   const pullKwargs: Record<string, number | number[]> = {};
   if (pull === null) return pullKwargs;
-  pullKwargs.pull_resonance_id = pull.selection.resonance_id;
   pullKwargs.pull_tier = pull.selection.tier;
   pullKwargs.pull_thread_ids = pull.selection.thread_ids;
-  if (pull.burn > 0) pullKwargs.pull_burn = pull.burn;
+  if (pull.burn > 0) {
+    pullKwargs.pull_burn = pull.burn;
+    if (pull.burnResonanceId !== null) pullKwargs.pull_burn_resonance_id = pull.burnResonanceId;
+  }
   return pullKwargs;
 }
 
@@ -2076,6 +2086,7 @@ export function YourTurn({
     pullDialogOpen,
     selectedPull,
     pullBurn,
+    pullBurnResonanceId,
     pullCommitted,
     soulfrayAccepted,
     furyTierId,
@@ -2129,15 +2140,17 @@ export function YourTurn({
   const setPullDialogOpen = useMemo(() => makeFieldSetter('pullDialogOpen'), []);
   const setSelectedPullField = useMemo(() => makeFieldSetter('selectedPull'), []);
   const setPullBurn = useMemo(() => makeFieldSetter('pullBurn'), []);
+  const setPullBurnResonanceId = useMemo(() => makeFieldSetter('pullBurnResonanceId'), []);
   const setPullCommitted = useMemo(() => makeFieldSetter('pullCommitted'), []);
   // A new or cleared pull starts with no burn and has not been committed yet.
   const setSelectedPull = useMemo(
     () => (value: PullSelection | null) => {
       setSelectedPullField(value);
       setPullBurn(0);
+      setPullBurnResonanceId(null);
       setPullCommitted(false);
     },
-    [setSelectedPullField, setPullBurn, setPullCommitted]
+    [setSelectedPullField, setPullBurn, setPullBurnResonanceId, setPullCommitted]
   );
   const setSoulfrayAccepted = useMemo(() => makeFieldSetter('soulfrayAccepted'), []);
   const setFuryTierId = useMemo(() => makeFieldSetter('furyTierId'), []);
@@ -2482,16 +2495,18 @@ export function YourTurn({
   // gives the burn ceiling and labels the Strain area shows.
   // ---------------------------------------------------------------------------
 
+  const burnResonanceId =
+    selectedPull !== null ? burnResonanceFor(selectedPull.resonances, pullBurnResonanceId) : null;
   const burnPreviewRequest = useMemo<PullPreviewRequest | null>(() => {
     if (selectedPull === null || focusedContext.techniqueId === undefined) return null;
     return {
       character_sheet_id: characterSheetId,
-      resonance_id: selectedPull.resonance_id,
       tier: selectedPull.tier,
       thread_ids: selectedPull.thread_ids,
       technique_id: focusedContext.techniqueId,
+      burn_resonance_id: burnResonanceId,
     };
-  }, [characterSheetId, selectedPull, focusedContext.techniqueId]);
+  }, [characterSheetId, selectedPull, focusedContext.techniqueId, burnResonanceId]);
   const { data: burnPreviewData } = usePullBurnPreview(burnPreviewRequest);
   const burnPreview = burnPreviewRequest !== null ? (burnPreviewData?.burn ?? null) : null;
   const burnToSend = effectiveBurn(burnPreview, pullBurn);
@@ -2529,7 +2544,7 @@ export function YourTurn({
     // a retried submit leaves the pull off.
     const pull: PullDispatch | null =
       selectedPull !== null && !pullCommitted
-        ? { selection: selectedPull, burn: burnToSend }
+        ? { selection: selectedPull, burn: burnToSend, burnResonanceId }
         : null;
     const pullRidesClash = selectedClashRef !== null && selectedClashRef.clash_id != null;
     const focusedJob = buildFocusedJob(
@@ -2926,6 +2941,9 @@ export function YourTurn({
                     value: burnToSend,
                     onChange: setPullBurn,
                     tier: selectedPull.tier,
+                    resonances: selectedPull.resonances,
+                    resonanceId: burnResonanceId,
+                    onResonanceChange: setPullBurnResonanceId,
                   }
                 : undefined
             }
@@ -3047,7 +3065,6 @@ export function YourTurn({
       {(myParticipantSelf?.dodge_plan || myParticipantSelf?.steady_plan) && (
         <DodgePlanPanel
           plan={myParticipantSelf.dodge_plan}
-          characterSheetId={characterSheetId}
           steadyPlan={myParticipantSelf.steady_plan}
           currentPositionId={actorPositionId}
           isLocked={isLocked}

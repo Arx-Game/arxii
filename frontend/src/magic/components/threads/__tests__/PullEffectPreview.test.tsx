@@ -93,7 +93,6 @@ describe('PullEffectPreview', () => {
         expect(magicApi.previewPull).toHaveBeenCalledOnce();
         expect(magicApi.previewPull).toHaveBeenCalledWith({
           character_sheet_id: 100,
-          resonance_id: 1,
           tier: 1,
           thread_ids: [1],
         });

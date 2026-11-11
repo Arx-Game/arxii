@@ -11,8 +11,10 @@ movement use's strength). Her "dodge even into Soulfray" answer is the cast's co
 a blow she did not choose is never lethal for a player who is not connected.
 
 Any other resistance (a species vulnerability, armor-like conditions, a ward an ally cast, a
-passive's condition, a price's inflicted condition, gift threads) stays flat in
-``resolve_damage_type_resistance``. So does the form's own resistance outside a blow:
+passive's condition, a price's inflicted condition, a condition a covenant vow's added
+effect put on her while riding her cast, gift threads and every other thread's standing
+tier-0 bonus) stays flat and free in ``resolve_damage_type_resistance``: those are her
+baseline, always there (maintainer, 2026-11-11). So does the form's own resistance outside a blow:
 damage-over-time ticks, hazards and battle damage read it flat, with no cast. Only player
 characters' blows reach this (``apply_damage_to_participant``); an NPC's resistance is flat.
 
@@ -43,8 +45,11 @@ class FormBlow:
 def paid_per_blow(instance: ConditionInstance, character_pk: int) -> bool:
     """Whether ``instance`` is a form whose resistance is a cast on each blow (#5066
     decision 18, maintainer ruling 2026-11-11): a condition a technique she CAST put on
-    herself. Not a passive's condition (applied with no roll), and not the condition a
-    personal price inflicts on its payer (a drawback she chose, not a buff)."""
+    herself, one of that technique's own authored applied conditions. Not a passive's
+    condition (applied with no roll), not the condition a personal price inflicts on its
+    payer (a drawback she chose, not a buff), and not a condition a covenant vow's added
+    effect applied while riding the cast: it carries the cast technique as provenance but
+    is not the technique's own, and vow defenses are free (maintainer, 2026-11-11)."""
     from world.combat.services.damage.passive_techniques import (  # noqa: PLC0415
         PASSIVE_SOURCE_PREFIX,
     )
@@ -53,7 +58,18 @@ def paid_per_blow(instance: ConditionInstance, character_pk: int) -> bool:
         return False
     if instance.source_description.startswith(PASSIVE_SOURCE_PREFIX):
         return False
+    if not _is_technique_own_condition(instance):
+        return False
     return not _is_price_condition(instance)
+
+
+def _is_technique_own_condition(instance: ConditionInstance) -> bool:
+    """Whether the technique that applied ``instance`` authors that condition itself."""
+    from world.magic.models import TechniqueAppliedCondition  # noqa: PLC0415
+
+    return TechniqueAppliedCondition.objects.filter(
+        technique_id=instance.source_technique_id, condition_id=instance.condition_id
+    ).exists()
 
 
 def _is_price_condition(instance: ConditionInstance) -> bool:

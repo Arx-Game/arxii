@@ -76,12 +76,12 @@ They do not use the command system, dispatchers, or handlers.
   `combat dodge [<place>|here|off]`, web Your Turn "If you're attacked this round"; not in the
   available-actions list, dispatched by key)/
   `PullForTheRoundAction` (key `combat_pull`, #5066, `definitions/round_pull.py`: a thread
-  pull declared on its own for the round, no action slot; kwargs `pull_resonance_id`,
-  `pull_tier`, `pull_thread_ids`; telnet `combat pull`) (keys
+  pull declared on its own for the round, no action slot; kwargs `pull_tier`,
+  `pull_thread_ids` (any resonances, each thread paid from its own); telnet
+  `combat pull <tier>=<thread>[,...]`) (keys
   prefixed `combat_`). `DodgeSettingsAction` (key `dodge_settings`, #5066,
   `definitions/dodge_settings.py`: her standing dodge answers for the fight, kwargs
-  `technique_id`, `save_default`, `into_soulfray`, `auto_pull`, `pull_resonance_id`,
-  `pull_tier`; telnet `combat dodgewith|dodgedefault|autopull`, and `accept|decline
+  `technique_id`, `save_default`, `into_soulfray`, `auto_pull`, `pull_tier`; telnet `combat dodgewith|dodgedefault|autopull`, and `accept|decline
   dodgesoulfray` for the Soulfray check-in).
   `SuccorAction` (key `combat_succor`) wraps `declare_succor` — always
   names a specific ally (no "any ally" path, unlike Interpose). `UseItemManeuverAction`

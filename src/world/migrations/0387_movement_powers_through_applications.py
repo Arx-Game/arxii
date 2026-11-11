@@ -49,19 +49,40 @@ class Migration(migrations.Migration):
             name="auto_pull_defense",
             field=models.BooleanField(
                 default=False,
-                help_text="Pull threads for defense the first time she is attacked in a round with no pull of her own (#5066): the saved defensive pull, with only related threads not already working for her. Set from her dodge plan.",
+                help_text="Pull threads for defense the first time she is attacked in a round with no pull of her own (#5066): every related thread, of any resonance, not already working for her, at her saved tier. Set from her dodge plan.",
             ),
         ),
         migrations.AddField(
-            model_name="combatparticipant",
-            name="defense_pull_resonance",
+            model_name="combatpull",
+            name="burned_resonance",
             field=models.ForeignKey(
                 blank=True,
-                help_text="The resonance her automatic defensive pull draws on (#5066).",
+                help_text="The pulled resonance the burn came from (#5066: a pull may mix resonances, and the player names which one burns); null when nothing was burned.",
                 null=True,
-                on_delete=django.db.models.deletion.SET_NULL,
+                on_delete=django.db.models.deletion.PROTECT,
                 related_name="+",
                 to="arxii.resonance",
+            ),
+        ),
+        migrations.AddField(
+            model_name="sceneactionpulldeclaration",
+            name="burn_resonance",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="The pulled resonance the burn comes from (#5066: a pull may mix resonances); null when there is no burn.",
+                null=True,
+                on_delete=django.db.models.deletion.PROTECT,
+                related_name="+",
+                to="arxii.resonance",
+            ),
+        ),
+        migrations.AlterField(
+            model_name="sceneactionpulldeclaration",
+            name="threads",
+            field=models.ManyToManyField(
+                help_text="Threads pulled, owned by the actor; each is paid from its own resonance.",
+                related_name="action_pull_declarations",
+                to="arxii.thread",
             ),
         ),
         migrations.AddField(

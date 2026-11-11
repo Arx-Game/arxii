@@ -19,6 +19,7 @@ from world.magic.factories import (
     GiftFactory,
     ResonanceFactory,
     TechniqueFactory,
+    ThreadFactory,
 )
 from world.magic.services import use_technique
 from world.magic.types import ResonanceInvolvement, TechniqueUseResult
@@ -212,7 +213,7 @@ class TechniqueUseResultFieldTests(TestCase):
             assert inv.stat_bonus_contribution == 3
 
     def test_use_technique_resonance_involvements_includes_combat_pull_spent(self) -> None:
-        """thread_pull_resonance_spent sums active CombatPull.resonance_spent per resonance."""
+        """thread_pull_resonance_spent sums what active CombatPulls spent, per thread resonance."""
         from world.character_sheets.factories import CharacterSheetFactory
         from world.combat.factories import (
             CombatEncounterFactory,
@@ -226,13 +227,14 @@ class TechniqueUseResultFieldTests(TestCase):
             encounter=encounter,
             character_sheet=sheet,
         )
-        CombatPullFactory(
+        pull = CombatPullFactory(
             participant=participant,
             encounter=encounter,
             round_number=1,
-            resonance=self.resonance,
             resonance_spent=7,
         )
+        # What a pull spent is charged to its threads' own resonances (#5066).
+        pull.threads.add(ThreadFactory(owner=sheet, resonance=self.resonance))
 
         # Invalidate cached_property so the new pull is visible
         self.character.combat_pulls.__dict__.pop("_active", None)

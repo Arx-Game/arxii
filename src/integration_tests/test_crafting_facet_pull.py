@@ -120,7 +120,6 @@ class CraftedFacetPowersFacetPullTest(TestCase):
         ctx = PullActionContext(combat_encounter=None, participant=None)
         pull_result = spend_resonance_for_pull(
             self.sheet,
-            self.resonance,
             tier=1,
             threads=[thread],
             action_context=ctx,
