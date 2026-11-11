@@ -63,6 +63,8 @@ from world.magic.services.technique_effects import technique_catalog_revision
 from world.species.models import Species
 
 _DEFAULT_ROLLER_POINTS = 25
+# What a ticked HTML checkbox with no value attribute submits (#4386's "cannot botch").
+_CHECKBOX_ON = "on"
 _DEFAULT_TARGET_DIFFICULTY = 25
 # Modifier pile defaults (#4594): one Large buff cast at level 6 on a level-6 character.
 _DEFAULT_PILE_LEVEL = 6
@@ -133,6 +135,8 @@ def tuning_checks_fragment(request: HttpRequest) -> HttpResponse:
     target_difficulty = _int_query_param(request, "target_difficulty", _DEFAULT_TARGET_DIFFICULTY)
     modifier_points = _int_query_param(request, "modifier_points", 0)
     target_modifier_points = _int_query_param(request, "target_modifier_points", 0)
+    # #4386: the matchup's odds for a character who cannot botch at the check.
+    botch_immune = request.GET.get("botch_immune") == _CHECKBOX_ON
 
     pile_character_level = _clamp(
         _int_query_param(request, "pile_character_level", _DEFAULT_PILE_LEVEL), 1, _MAX_PILE_LEVEL
@@ -168,6 +172,7 @@ def tuning_checks_fragment(request: HttpRequest) -> HttpResponse:
             roll_modifier=roll_modifier,
             modifier_points=modifier_points,
             target_modifier_points=target_modifier_points,
+            botch_immune=botch_immune,
         ),
         "slide_table": compute_slide_table(roll_modifier=roll_modifier),
         "chart_checks": compute_chart_checks(),
@@ -177,6 +182,7 @@ def tuning_checks_fragment(request: HttpRequest) -> HttpResponse:
         "target_difficulty": target_difficulty,
         "modifier_points": modifier_points,
         "target_modifier_points": target_modifier_points,
+        "botch_immune": botch_immune,
     }
     return render(request, "admin/tuning/_checks_panel.html", context)
 
@@ -439,6 +445,8 @@ class TechniqueAnalyticsForm(forms.Form):
     roller_points = forms.IntegerField()
     target_difficulty = forms.IntegerField()
     roll_modifier = forms.IntegerField()
+    # #4386: price every roll for a character who cannot botch at it.
+    botch_immune = forms.BooleanField(required=False)
     sort = forms.ChoiceField(
         choices=[(key, _SORT_LABELS[key]) for key in sorted(technique_analytics.SORT_KEYS)]
     )
@@ -556,6 +564,7 @@ def _technique_form_defaults() -> dict[str, Any]:
         "roller_points": defaults.roller_points,
         "target_difficulty": defaults.target_difficulty,
         "roll_modifier": defaults.roll_modifier,
+        "botch_immune": defaults.botch_immune,
         "sort": defaults.sort,
     }
 
@@ -579,6 +588,7 @@ def _technique_form_initial(
         "roller_points": params.roller_points,
         "target_difficulty": params.target_difficulty,
         "roll_modifier": params.roll_modifier,
+        "botch_immune": params.botch_immune,
         "sort": params.sort,
     }
 
@@ -593,7 +603,7 @@ def _technique_cache_key(params: technique_analytics.TechniqueAnalyticsParams) -
     return (
         f"tuning-tech-power:{technique_catalog_revision()}:"
         f"{params.level}:{params.thread_level}:{params.roller_points}:"
-        f"{params.target_difficulty}:{params.roll_modifier}:{params.sort}"
+        f"{params.target_difficulty}:{params.roll_modifier}:{params.botch_immune}:{params.sort}"
     )
 
 
@@ -668,6 +678,7 @@ def _technique_evaluate_post(
                     "roller_points",
                     "target_difficulty",
                     "roll_modifier",
+                    "botch_immune",
                     "sort",
                 )
             }

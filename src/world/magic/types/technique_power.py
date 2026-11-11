@@ -69,6 +69,10 @@ class EvalContext:
     that requires combat-slot context this evaluator doesn't have — so this
     field exists as a documented seam only; it defaults False and nothing reads
     it yet.
+
+    ``botch_immune`` (#4386) prices the roll for a character who cannot botch at it
+    (niche botch immunity): ``de_valuation.matchup_bands`` counts every botch band as the
+    chart's least-bad non-botch outcome, as ``_apply_outcome_guarantees`` resolves it.
     """
 
     level: int = 10
@@ -77,6 +81,7 @@ class EvalContext:
     target_difficulty: int = 25
     roll_modifier: int = 0
     passive: bool = False
+    botch_immune: bool = False
 
 
 @dataclass(frozen=True, slots=True)

@@ -280,6 +280,50 @@ class SlideAnalyticsTests(TestCase):
         assert by_difference[-7].impossible
         assert all(step.success_probability == 0 for step in by_difference[-7].steps)
 
+    def test_an_immune_matchup_counts_every_botch_as_a_failure(self) -> None:
+        """#4386: no botch band, and Failure grew by exactly the botch probability."""
+        plain = compute_matchup(roller_points=20, target_difficulty=250)
+        immune = compute_matchup(roller_points=20, target_difficulty=250, botch_immune=True)
+        plain_by_level = {band.success_level: band.probability for band in plain.bands}
+        immune_by_level = {band.success_level: band.probability for band in immune.bands}
+        assert plain_by_level[-2] > 0
+        assert -2 not in immune_by_level
+        assert abs(immune_by_level[-1] - (plain_by_level[-1] + plain_by_level[-2])) < 1e-9
+        assert immune.success_probability == plain.success_probability
+        failure_names = {band.name for band in immune.bands if band.success_level == -1}
+        assert failure_names == {band.name for band in plain.bands if band.success_level == -1}
+
+    def test_an_immune_magic_preview_counts_every_botch_as_a_failure(self) -> None:
+        """#4386: ``matchup_bands`` folds the botch band into Failure the same way."""
+        from world.magic.services.de_valuation import matchup_bands
+        from world.magic.types.technique_power import EvalContext
+
+        plain = matchup_bands(EvalContext(roller_points=20, target_difficulty=250))
+        immune = matchup_bands(
+            EvalContext(roller_points=20, target_difficulty=250, botch_immune=True)
+        )
+        plain_by_level: dict[int, float] = {}
+        for band in plain:
+            plain_by_level[band.success_level] = (
+                plain_by_level.get(band.success_level, 0) + band.probability
+            )
+        immune_by_level = {band.success_level: band.probability for band in immune}
+        assert plain_by_level[-2] > 0
+        assert -2 not in immune_by_level
+        assert abs(immune_by_level[-1] - (plain_by_level[-1] + plain_by_level[-2])) < 1e-9
+        assert abs(sum(immune_by_level.values()) - 1) < 1e-9
+
+    def test_the_panel_carries_the_cannot_botch_checkbox(self) -> None:
+        self.client.force_login(self.super)
+        resp = self.client.get(
+            reverse("admin_tuning_checks"),
+            {"roller_points": "20", "target_difficulty": "250", "botch_immune": "on"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        assert 'name="botch_immune"' in body
+        assert "checked" in body
+
     def test_panel_shows_ranks_with_numbers_and_the_lifted_chart(self) -> None:
         self.client.force_login(self.super)
         resp = self.client.get(
