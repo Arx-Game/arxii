@@ -472,11 +472,8 @@ export function SceneDetailPage() {
             className={cn(
               'min-h-0 flex-1',
               showCombatRail || showStoryRail
-                ? 'grid grid-cols-1 gap-4 px-4 pb-4'
-                : 'flex flex-col',
-              // Its own string: prettier's class sort cannot place this variant stably
-              // (the mixed-unit screens warning) and flips the order on each run.
-              (showCombatRail || showStoryRail) && 'min-[860px]:grid-cols-[1fr_360px]'
+                ? 'grid grid-cols-1 gap-4 px-4 pb-4 rail:grid-cols-[1fr_360px]'
+                : 'flex flex-col'
             )}
           >
             <div className="flex min-h-0 flex-1 flex-col" data-testid="scene-detail-left">
