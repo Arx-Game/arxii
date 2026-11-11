@@ -848,19 +848,19 @@ class _Walk:
         return line.station if line is not None else TitleStation.SEATED
 
     def _write_figures(self, rung: _Rung) -> None:
+        """Seed a rung's figures. Land (a county, a barony) carries them on its
+        Domain; a duchy and above have no Domain (#5069), so only the figure prose
+        is written, onto the rung's own Area, and their numbers are sums on read."""
         if rung.title is None:
             return
-        domain = Domain.objects.filter(pk=rung_area_for_title(rung.title).pk).first()
+        area = rung_area_for_title(rung.title)
+        domain = Domain.objects.filter(pk=area.pk).first()
         if domain is None:
+            area.description = self._figure_description(rung, area.description)
+            area.save(update_fields=["description"])
             return
         if rung.tier == TitleTier.COUNTY:
             domain.population = COUNTY_POPULATION_PER_PIP * len(rung.pips)
-        elif rung.children and rung.tier != TitleTier.BARONY:
-            domain.population = sum(
-                Domain.objects.get(pk=rung_area_for_title(c.title).pk).population
-                for c in rung.children
-                if c.title is not None and c.tier != TitleTier.BARONY
-            )
         if rung.parent is not None and rung.tier != TitleTier.BARONY:
             domain.prosperity = PROSPERITY_CAPITAL if rung.capital else PROSPERITY_CHILD
         domain.description = self._figure_description(rung, domain.description)

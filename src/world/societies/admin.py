@@ -11,6 +11,7 @@ from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from django.http import HttpRequest
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.html import format_html
 
 from web.admin.reviewed_delete import ReviewedDeleteMixin
@@ -1301,6 +1302,8 @@ from world.societies.houses.models import (  # noqa: E402
     DomainCrisisTypeOption,
     DomainGarrisonPost,
     DomainHolding,
+    DomainTerrainCount,
+    DominionConfig,
     EdictKind,
     FealtyEdge,
     HoldingKind,
@@ -1320,6 +1323,7 @@ from world.societies.houses.models import (  # noqa: E402
     PrestigeRankBand,
     StatureBand,
     SuccessionLaw,
+    TerrainCalibration,
     Title,
     TitleClaim,
 )
@@ -1765,6 +1769,21 @@ class DomainHoldingInline(admin.TabularInline):
     show_change_link = False
 
 
+class DomainTerrainCountInline(admin.TabularInline):
+    """The holding's terrain mix, counted when its footprint last changed (#5069).
+    Read-only here: the Recount action rewrites it from the map."""
+
+    model = DomainTerrainCount
+    formset = OneRowPerFormSet
+    extra = 0
+    fields = ["terrain", "pips"]
+    readonly_fields = ["terrain", "pips"]
+    can_delete = False
+
+    def has_add_permission(self, request: HttpRequest, obj: object = None) -> bool:  # noqa: ARG002
+        return False
+
+
 @admin.register(Domain)
 class DomainAdmin(admin.ModelAdmin):
     """A landholding on an area (#1884, #3983); page added in #4064.
@@ -1772,25 +1791,111 @@ class DomainAdmin(admin.ModelAdmin):
     Until this page existed a domain blocked its owner's deletion with nothing to
     click, and land could change hands only through a shell. ``owner_org`` is the
     field that matters: set it, clear it, or delete the domain from here.
+
+    Population is a base and a stamp (#5069): a staff edit of ``population`` here is a
+    rebase, so the stamp moves to now and the formula starts from the new figure.
     """
 
-    list_display = ["name", "area", "owner_org", "population", "prosperity", "unrest"]
+    list_display = [
+        "name",
+        "area",
+        "owner_org",
+        "population",
+        "population_capacity",
+        "prosperity",
+        "unrest",
+    ]
     list_select_related = ["area", "owner_org"]
     search_fields = ["name", "area__name", "owner_org__name"]
     autocomplete_fields = ["owner_org", "hall"]
     raw_id_fields = ["territory_stream"]
     filter_horizontal = ["land_shapes"]
-    readonly_fields = ["area"]
-    inlines = [DomainHoldingInline]
+    # Capacity is the terrain's (the Recount action rewrites it); the stamp is the formula's.
+    readonly_fields = ["area", "population_capacity", "population_rebased_at"]
+    inlines = [DomainTerrainCountInline, DomainHoldingInline]
+    actions = ["recount_terrain"]
     fieldsets = (
         (None, {"fields": ("area", "name", "description", "owner_org", "hall", "land_shapes")}),
-        ("Civ stats (PLACEHOLDER)", {"fields": ("population", "prosperity", "unrest", "defenses")}),
+        (
+            "Civ stats (PLACEHOLDER)",
+            {
+                "fields": (
+                    "population",
+                    "population_capacity",
+                    "population_rebased_at",
+                    "prosperity",
+                    "unrest",
+                    "defenses",
+                )
+            },
+        ),
         ("Territory", {"fields": ("territory_stream",)}),
     )
 
     def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002
         """A domain is minted by ``create_domain``/``plant_rung`` on an area; not typed in."""
         return False
+
+    def save_model(self, request: HttpRequest, obj: Domain, form, change: bool) -> None:
+        if change and "population" in form.changed_data:  # noqa: STRING_LITERAL - a form field name
+            obj.population_rebased_at = timezone.now()
+        super().save_model(request, obj, form, change)
+
+    @admin.action(description="Recount terrain and capacity from the map")
+    def recount_terrain(self, request: HttpRequest, queryset) -> None:
+        from world.societies.houses.demography import refresh_terrain_counts  # noqa: PLC0415
+
+        for domain in queryset.select_related("area"):
+            refresh_terrain_counts(domain.area)
+        self.message_user(request, f"Recounted {queryset.count()} holdings.", messages.SUCCESS)
+
+
+@admin.register(DominionConfig)
+class DominionConfigAdmin(admin.ModelAdmin):
+    """The noble layer's dials (single row, #5069)."""
+
+    list_display = [
+        "__str__",
+        "population_rate_pct_per_month",
+        "coppers_per_head",
+        "barony_capacity_factor",
+    ]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002
+        """Prevent adding if the settings row already exists. Django asks this on every
+        admin page for the sidebar; one constant query a page, the same as the other
+        settings singletons (a once-loaded cache made two renders of one page cost
+        different amounts, which the admin query pins refuse)."""
+        return not DominionConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: HttpRequest,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the settings row."""
+        return False
+
+
+@admin.register(TerrainCalibration)
+class TerrainCalibrationAdmin(admin.ModelAdmin):
+    """What a pip of each terrain can feed (#5069). Capacities already counted do not
+    move on their own when a row changes: run Recount on the holdings, or the action
+    here over every holding at once."""
+
+    list_display = ["terrain", "capacity_per_pip", "prosperity_modifier", "written_by"]
+    ordering = ["terrain"]
+    actions = ["recount_every_holding"]
+
+    @admin.action(description="Recount every holding's terrain and capacity")
+    def recount_every_holding(self, request: HttpRequest, queryset) -> None:  # noqa: ARG002
+        from world.societies.houses.demography import refresh_terrain_counts  # noqa: PLC0415
+
+        count = 0
+        for domain in Domain.objects.select_related("area"):
+            refresh_terrain_counts(domain.area)
+            count += 1
+        self.message_user(request, f"Recounted {count} holdings.", messages.SUCCESS)
 
 
 @admin.register(FealtyEdge)

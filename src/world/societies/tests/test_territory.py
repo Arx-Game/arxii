@@ -152,7 +152,9 @@ class TerritoryStreamTests(TestCase):
         self.assertEqual(stream.uncollected_pool, 2 * TERRITORY_BASE_PER_UNIT * 50 // 100)
         self.assertEqual(stream.gross_amount, 2 * TERRITORY_BASE_PER_UNIT * 50 // 100)
 
-    def test_a_domain_gets_a_territory_stream_that_accrues_by_prosperity(self):
+    def test_a_domain_gets_a_territory_stream_that_accrues_by_people_and_prosperity(self):
+        # A noble's land pays by its people, not its rooms (#5069): the two outdoor
+        # rooms under the ward are the grid layer's concern and do not enter the gross.
         baron = OrganizationFactory(name="House Orisant")
         domain = create_domain(area=self.ward, name="Orisant Ward", owner_org=baron)
         domain.prosperity = 100
@@ -165,7 +167,7 @@ class TerritoryStreamTests(TestCase):
         self.assertEqual(stream.organization, baron)
         accrue_income_stream(stream)
         stream.refresh_from_db()
-        self.assertEqual(stream.uncollected_pool, 2 * TERRITORY_BASE_PER_UNIT * 2)
+        self.assertEqual(stream.uncollected_pool, domain.population * 1 * 2)
 
     def test_a_flip_retargets_the_territory_stream(self):
         turf = apply_turf_push(self.gang, self.neighborhood, 30)
@@ -210,7 +212,7 @@ class TerritoryStreamIdentityTests(TestCase):
             stream = domain.territory_stream
             accrue_income_stream(stream)
             stream.refresh_from_db()
-            self.assertEqual(stream.uncollected_pool, TERRITORY_BASE_PER_UNIT)
+            self.assertEqual(stream.uncollected_pool, domain.population)
             streams.append(stream)
         self.assertNotEqual(streams[0].pk, streams[1].pk)
         self.assertEqual(org.income_streams.count(), 2)
