@@ -296,4 +296,6 @@ class KitViewStylingTest(KitPageCase):
 #: session and user, the sheet, the kit reads (``test_kit_view_live.KIT_QUERIES``, 25) and
 #: the admin chrome (``each_context``'s one existence check per config singleton). See
 #: ``KitPageTest.test_query_count_stays_flat_as_the_kit_grows``.
-PAGE_QUERIES = 77
+# #5069: one more, the Dominion settings singleton's add check the sidebar asks on every
+# admin page, the same constant query the other settings singletons already cost.
+PAGE_QUERIES = 78
