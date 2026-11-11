@@ -22,12 +22,14 @@ from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.checks.models import CheckType
     from world.mechanics.types import PrerequisiteEvaluation
     from world.traits.models import Trait
 from world.areas.positioning.constants import CreatureTraversal
 from world.contributors.models import CreditedContent
 from world.magic.constants import TechniqueFunction
 from world.mechanics.constants import (
+    BOTCH_IMMUNITY_CATEGORY_NAME,
     EFFECT_KIND_LANE,
     FAVOR_CATEGORY_NAMES,
     MANEUVER_EFFECT_CATEGORY_NAME,
@@ -60,6 +62,7 @@ OBJECTDB_MODEL = "objects.ObjectDB"
 TRAIT_MODEL = "arxii.Trait"
 CAPABILITY_TYPE_MODEL = "arxii.CapabilityType"
 CHECK_TYPE_MODEL = "arxii.CheckType"
+CHECK_CATEGORY_MODEL = "arxii.CheckCategory"
 ASPECT_MODEL = "arxii.Aspect"
 CONSEQUENCE_MODEL = "arxii.Consequence"
 
@@ -329,6 +332,33 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         verbose_name="Scope - opponent condition",
         help_text="Only while the opponent has this condition.",
     )
+    # #4386: a botch-immunity target names one check category or one check type, never
+    # both. A plain FK, not one-to-one: each scope has at most one target in the
+    # botch_immunity category (the partial unique constraints below), and other
+    # categories may come to scope by check later. CASCADE, not SET_NULL: clearing it
+    # would leave a target that scopes to nothing (or, read loosely, to everything).
+    target_check_category = models.ForeignKey(
+        CHECK_CATEGORY_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="modifier_targets",
+        help_text=(
+            "Characters with a positive total for this target cannot botch at checks of "
+            "this type or category. Set exactly one."
+        ),
+    )
+    target_scope_check_type = models.ForeignKey(
+        CHECK_TYPE_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="scoped_modifier_targets",
+        help_text=(
+            "Characters with a positive total for this target cannot botch at checks of "
+            "this type or category. Set exactly one."
+        ),
+    )
     # Future target FKs — added when their systems are built:
     # target_condition: FK to conditions.ConditionTemplate — condition modifier system
     # See TECH_DEBT.md §"Future Target FKs" for full tracking list.
@@ -348,6 +378,11 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     _trait_cache_built = False
     _trait_to_target_map: dict[int, "ModifierTarget"] = {}
     _aspect_to_target_map: dict[int, "ModifierTarget"] = {}
+    # The botch-immunity maps (#4386) come from the same query: every check asks which
+    # active botch_immunity targets scope to its type or its category, so a game with
+    # none authored pays no query per roll.
+    _botch_immunity_by_check_type: dict[int, list["ModifierTarget"]] = {}
+    _botch_immunity_by_check_category: dict[int, list["ModifierTarget"]] = {}
 
     class Meta:
         unique_together = ["category", "name"]
@@ -393,6 +428,24 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                 | models.Q(scope_effect_kind=EffectKind.DAMAGE),
                 name="modifier_target_damage_type_scope_is_damage",
             ),
+            # A botch-immunity target scopes to a check category or a check type, not
+            # both (#4386). "Exactly one, and only in botch_immunity" is held by clean():
+            # a constraint cannot read the category's name.
+            models.CheckConstraint(
+                condition=models.Q(target_check_category__isnull=True)
+                | models.Q(target_scope_check_type__isnull=True),
+                name="modifier_target_one_check_scope",
+            ),
+            models.UniqueConstraint(
+                fields=["category", "target_check_category"],
+                condition=models.Q(target_check_category__isnull=False),
+                name="unique_modifier_target_category_check_category",
+            ),
+            models.UniqueConstraint(
+                fields=["category", "target_scope_check_type"],
+                condition=models.Q(target_scope_check_type__isnull=False),
+                name="unique_modifier_target_category_scope_check_type",
+            ),
         ]
 
     class NaturalKeyConfig:
@@ -406,6 +459,8 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "arxii.Resonance",
             "arxii.Property",
             "arxii.ConditionTemplate",
+            "arxii.CheckCategory",
+            "arxii.CheckType",
         ]
 
     def __str__(self):
@@ -418,6 +473,7 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         if not self.category_id:
             return
         self._clean_maneuver_effect_scope()
+        self._clean_botch_immunity_scope()
         is_favor = self.category.name in FAVOR_CATEGORY_NAMES
         if self.target_being_id and not is_favor:
             msg = "Only a favor invocation or favor earning target names a being."
@@ -502,6 +558,24 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             msg = "A maneuver effect target needs the effect or the kind of effect it scopes to."
             raise ValidationError({"scope_maneuver_effect": msg})
 
+    def _clean_botch_immunity_scope(self) -> None:
+        """A botch-immunity target (#4386) names exactly one of a check category or a check
+        type; no other category names either."""
+        has_category = self.target_check_category_id is not None
+        has_type = self.target_scope_check_type_id is not None
+        if self.category.name != BOTCH_IMMUNITY_CATEGORY_NAME:
+            if has_category or has_type:
+                msg = "Only a botch immunity target names a check category or check type."
+                field = "target_check_category" if has_category else "target_scope_check_type"
+                raise ValidationError({field: msg})
+            return
+        if has_category and has_type:
+            msg = "Set the check category or the check type, not both."
+            raise ValidationError({"target_scope_check_type": msg})
+        if not has_category and not has_type:
+            msg = "A botch immunity target needs the check category or check type it covers."
+            raise ValidationError({"target_check_category": msg})
+
     def _clean_technique_scope(self, *, has_effect: bool, has_kind: bool) -> None:
         """A technique scope narrows a kind of effect (#4822), never one maneuver's effect."""
         if has_effect:
@@ -535,26 +609,58 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     @classmethod
     def _build_trait_cache(cls) -> None:
-        """Build the target_trait_id and target_aspect_id -> ModifierTarget maps, one query."""
+        """Build the target_trait_id and target_aspect_id -> ModifierTarget maps and the
+        botch-immunity maps (#4386), one query."""
         trait_map: dict[int, ModifierTarget] = {}
         aspect_map: dict[int, ModifierTarget] = {}
+        botch_by_type: dict[int, list[ModifierTarget]] = {}
+        botch_by_category: dict[int, list[ModifierTarget]] = {}
         for target in cls.objects.filter(
-            models.Q(target_trait__isnull=False) | models.Q(target_aspect__isnull=False)
-        ):
+            models.Q(target_trait__isnull=False)
+            | models.Q(target_aspect__isnull=False)
+            | models.Q(target_check_category__isnull=False)
+            | models.Q(target_scope_check_type__isnull=False)
+        ).select_related("category"):
             if target.target_trait_id is not None:
                 trait_map[target.target_trait_id] = target
             if target.target_aspect_id is not None:
                 aspect_map[target.target_aspect_id] = target
+            if not target.is_active or target.category.name != BOTCH_IMMUNITY_CATEGORY_NAME:
+                continue
+            if target.target_scope_check_type_id is not None:
+                botch_by_type.setdefault(target.target_scope_check_type_id, []).append(target)
+            if target.target_check_category_id is not None:
+                botch_by_category.setdefault(target.target_check_category_id, []).append(target)
         cls._trait_to_target_map = trait_map
         cls._aspect_to_target_map = aspect_map
+        cls._botch_immunity_by_check_type = botch_by_type
+        cls._botch_immunity_by_check_category = botch_by_category
         cls._trait_cache_built = True
 
     @classmethod
     def clear_trait_cache(cls) -> None:
-        """Clear the target_trait and target_aspect caches (call when targets change)."""
+        """Clear the target_trait, target_aspect and botch-immunity caches (call when
+        targets change)."""
         cls._trait_cache_built = False
         cls._trait_to_target_map = {}
         cls._aspect_to_target_map = {}
+        cls._botch_immunity_by_check_type = {}
+        cls._botch_immunity_by_check_category = {}
+
+    @classmethod
+    def botch_immunity_targets_for(cls, check_type: "CheckType") -> list["ModifierTarget"]:
+        """The active botch_immunity targets (#4386) scoped to ``check_type`` or to its
+        check category, type-scoped first.
+
+        Served from the same map build as ``get_for_trait``, so a roll on a game with no
+        botch-immunity target authored runs no query here.
+        """
+        if not cls._trait_cache_built:
+            cls._build_trait_cache()
+        return [
+            *cls._botch_immunity_by_check_type.get(check_type.pk, ()),
+            *cls._botch_immunity_by_check_category.get(check_type.category_id, ()),
+        ]
 
     @classmethod
     def get_for_aspect(cls, aspect_id: int) -> "ModifierTarget | None":
@@ -575,27 +681,50 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             cls._build_trait_cache()
         return bool(cls._aspect_to_target_map)
 
+    def _points_at_cached_field(self) -> bool:
+        """Whether this row sets a field one of the cached maps is keyed by: a trait, an
+        Aspect, or a botch-immunity check category or check type (#4386)."""
+        return (
+            self.target_trait_id is not None
+            or self.target_aspect_id is not None
+            or self.target_check_category_id is not None
+            or self.target_scope_check_type_id is not None
+        )
+
     def _touches_target_caches(self) -> bool:
-        """Whether saving or deleting this row can change the trait or aspect map: it
-        points at a trait or an Aspect now, or the built map still holds it from before.
-        A resonance, affinity or favor target saved mid-roll (#4827: the check seam reads
-        the aspect map on every roll) must not throw the maps away for nothing.
+        """Whether saving or deleting this row can change the trait, aspect or
+        botch-immunity maps: it points at a trait, an Aspect, a check category or a check
+        type now, or the built maps still hold it from before. A resonance, affinity or
+        favor target saved mid-roll (#4827: the check seam reads the aspect map on every
+        roll) must not throw the maps away for nothing.
         """
-        if self.target_trait_id is not None or self.target_aspect_id is not None:
+        if self._points_at_cached_field():
             return True
         cls = type(self)
         if not cls._trait_cache_built:
             return False
+        held_botch = (
+            target
+            for targets in (
+                *cls._botch_immunity_by_check_type.values(),
+                *cls._botch_immunity_by_check_category.values(),
+            )
+            for target in targets
+        )
         return any(
             held.pk == self.pk
-            for held in (*cls._trait_to_target_map.values(), *cls._aspect_to_target_map.values())
+            for held in (
+                *cls._trait_to_target_map.values(),
+                *cls._aspect_to_target_map.values(),
+                *held_botch,
+            )
         )
 
     def save(self, *args: object, **kwargs: object) -> None:
         """Invalidate the target caches when a mutation can change them."""
         touches = self._touches_target_caches()
         super().save(*args, **kwargs)
-        if touches or self.target_trait_id is not None or self.target_aspect_id is not None:
+        if touches or self._points_at_cached_field():
             type(self).clear_trait_cache()
 
     def delete(self, *args: object, **kwargs: object) -> object:

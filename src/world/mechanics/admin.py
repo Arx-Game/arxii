@@ -9,8 +9,12 @@ from typing import Any
 from django.contrib import admin
 from django.forms import ModelForm
 from django.http import HttpRequest
+from django.utils.html import format_html_join
 
 from world.admin_utils import OneRowPerFormSet
+from world.conditions.models import ConditionModifierEffect
+from world.distinctions.models import DistinctionEffect
+from world.items.crafting.models import CraftingRecipeModifier
 from world.mechanics.constants import MANEUVER_EFFECT_BASE_HELP, EffectKind
 from world.mechanics.models import (
     AestheticAxisConfig,
@@ -75,12 +79,16 @@ class ModifierTargetAdmin(admin.ModelAdmin):
         "scope_resonance",
         "scope_opponent_property",
         "scope_opponent_condition",
+        "target_check_category",
+        "target_scope_check_type",
         "display_order",
         "is_active",
     ]
     list_filter = ["category", "is_active"]
     autocomplete_fields = [
         "target_trait",
+        "target_check_category",
+        "target_scope_check_type",
         "scope_technique",
         "scope_gift",
         "scope_damage_type",
@@ -105,7 +113,42 @@ class ModifierTargetAdmin(admin.ModelAdmin):
         "scope_resonance",
         "scope_opponent_property",
         "scope_opponent_condition",
+        "target_check_category",
+        "target_scope_check_type",
     ]
+    # #4386: staff see which distinctions, conditions and crafting recipes hand out a
+    # target (e.g. which grant "cannot botch at Riding") without leaving the page.
+    readonly_fields = ["granted_by"]
+
+    @admin.display(description="Granted by")
+    def granted_by(self, obj: ModifierTarget) -> str:
+        """The distinction effects, condition effects and crafting recipe modifiers that
+        point at this target."""
+        if obj.pk is None:
+            return "-"
+        labels = [
+            *(
+                f"Distinction: {effect}"
+                for effect in DistinctionEffect.objects.filter(target=obj).select_related(
+                    "distinction", "target"
+                )
+            ),
+            *(
+                f"Condition: {effect}"
+                for effect in ConditionModifierEffect.objects.filter(
+                    modifier_target=obj
+                ).select_related("condition", "stage__condition", "modifier_target")
+            ),
+            *(
+                f"Crafting recipe: {row}"
+                for row in CraftingRecipeModifier.objects.filter(target=obj).select_related(
+                    "recipe", "target"
+                )
+            ),
+        ]
+        if not labels:
+            return "Nothing grants this target yet."
+        return format_html_join("", "<div>{}</div>", ((label,) for label in labels))
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """Correct the trait help text for language traits (model text says stat only)."""

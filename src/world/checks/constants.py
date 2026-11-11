@@ -117,6 +117,9 @@ class ModifierSourceKind(models.TextChoices):
     # #5026: what a technique cast into a Strike adds to that Strike's hit roll, set by
     # the technique roll and labelled with the technique.
     TECHNIQUE = "technique", "Technique roll"
+    # #4386: a zero-value provenance row naming what makes the roller unable to botch at
+    # this check (a botch-immunity target with a positive total). Shown to the roller only.
+    BOTCH_IMMUNITY = "botch_immunity", "Cannot botch"
 
 
 # Kinds ``perform_check`` already counts on its own, so a caller never feeds them back in

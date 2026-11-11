@@ -58,6 +58,11 @@ FATIGUE_COST_TARGET_NAME = "fatigue_cost"
 # rather than imported because forms depends on mechanics, never the reverse.
 DISGUISE_SIGHT_CATEGORY_NAME = "disguise_sight"
 DISGUISE_SIGHT_TARGET_NAMES: tuple[str, ...] = ("mundane", "magical")
+# Niche checks cannot backfire (#4386): a target in this category names one check type
+# (``ModifierTarget.target_scope_check_type``) or one check category
+# (``ModifierTarget.target_check_category``). A positive total on it, from any modifier
+# source, means the character cannot botch at checks of that type or category.
+BOTCH_IMMUNITY_CATEGORY_NAME = "botch_immunity"
 LEVER_TARGETS: tuple[tuple[str, str], ...] = (
     (INCOME_CATEGORY_NAME, INCOME_TARGET_NAME),
     (REPUTATION_GAIN_CATEGORY_NAME, REPUTATION_GAIN_TARGET_NAME),
