@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 import gzip
 from typing import TYPE_CHECKING
 
-from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -777,12 +777,12 @@ def _landless_titles(
 
 
 def _holder_of(area: Area) -> Organization | None:
-    """The house holding an area's domain, or None for an unclaimed or undecorated area."""
-    try:
-        domain = area.domain_profile
-    except ObjectDoesNotExist:
-        return None
-    return domain.owner_org
+    """The house holding an area's rung, or None for an unclaimed or undecorated area.
+    Land answers from its Domain; a duchy and above, which have none (#5069), from the
+    title standing on them."""
+    from world.societies.houses.almanach import house_holding_area  # noqa: PLC0415
+
+    return house_holding_area(area)
 
 
 def _title_by_area(areas: Iterable[Area]) -> dict[int, int]:

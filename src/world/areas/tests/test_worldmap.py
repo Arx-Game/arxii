@@ -326,8 +326,16 @@ class FootprintServiceTests(TestCase):
         charter_fief(title=old_crown, fief=brittany)
         charter_fief(title=empire, fief=brittany)
         set_footprint(area=rung_area_for_title(brittany), add=[(1, 1), (2, 1)])
+        # A duchy has no Domain (#5069): the map names its holder off the title.
+        from world.societies.factories import OrganizationFactory
+        from world.societies.houses.almanach import assign_holder
+
+        duke = OrganizationFactory(name="House Brittany")
+        assign_holder(brittany, duke)
         read = region_read(self.region)
         duchy = next(f for f in read.footprints if f.name == "Brittany")
+        assert duchy.holder_org_id == duke.pk
+        assert duchy.holder_name == "House Brittany"
         assert sorted(duchy.charters) == sorted([old_crown.pk, empire.pk])
         landless = {t.title_id: t for t in read.landless_titles}
         assert landless[old_crown.pk].name == "Kingdom of Luxen"

@@ -18,14 +18,15 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
+from world.areas.constants import AreaLevel
 from world.areas.models import Area
 from world.roster.constants import MembershipBasis
 from world.roster.models import Family, Kinsperson, UnionKind
 from world.seeds.kinship import MARRIAGE_KIND_NAME
 from world.societies.houses.almanach import (
     _require_chain_top,
-    _rung_area,
     assign_holder,
+    chain_land_domain,
     claim_grants,
     describe_demesne,
     liege_for_title,
@@ -33,6 +34,7 @@ from world.societies.houses.almanach import (
     open_household_position,
     plan_estate,
     record_kin,
+    rung_area_for_title,
 )
 from world.societies.houses.constants import (
     IC_DAY_MAX,
@@ -876,14 +878,30 @@ def _materialize_claim_land_writing(claim: HouseClaim, grants: list[Title]) -> N
             continue
         if row.land_name and not granted.name:
             name_rung(granted, row.land_name)
-        domain = Domain.objects.filter(area=_rung_area(granted)).first()
-        has_writing = row.description or row.hall_name or row.land_shapes.exists()
-        if domain is not None and has_writing:
+        shape_names = [shape.name for shape in row.land_shapes.all()]
+        domain = chain_land_domain(granted)
+        own_area = rung_area_for_title(granted)
+        if own_area.level > AreaLevel.COUNTY:
+            # A granted duchy has no Domain of its own (#5069): its prose lives on its
+            # Area, as the layout's and the title page's do; its hall and land shapes,
+            # which need ground, go to the county of its chain, where the duke sits.
+            if row.description:
+                own_area.description = row.description
+                own_area.save(update_fields=["description"])
+            if domain is not None and (row.hall_name or shape_names):
+                describe_demesne(
+                    domain=domain,
+                    description=domain.description,
+                    hall_name=row.hall_name,
+                    land_shape_names=shape_names,
+                )
+            continue
+        if domain is not None and (row.description or row.hall_name or shape_names):
             describe_demesne(
                 domain=domain,
                 description=row.description,
                 hall_name=row.hall_name,
-                land_shape_names=[shape.name for shape in row.land_shapes.all()],
+                land_shape_names=shape_names,
             )
 
 

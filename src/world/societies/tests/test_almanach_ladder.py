@@ -9,12 +9,15 @@ from world.societies.factories import OrganizationFactory
 from world.societies.houses.almanach import (
     assign_holder,
     batch_unclaimed,
+    house_holding_area,
     liege_for_title,
     name_rung,
     plant_rung,
+    rung_area_for_title,
+    vacate_holder,
 )
 from world.societies.houses.constants import TitleTier
-from world.societies.houses.models import FealtyEdge, Title
+from world.societies.houses.models import Domain, FealtyEdge, Title
 from world.societies.houses.services import HousesServiceError, add_holding, swear_fealty
 
 
@@ -39,6 +42,51 @@ class PlantRungTests(TestCase):
         assert tiers == {TitleTier.KINGDOM, TitleTier.DUCHY, TitleTier.COUNTY, TitleTier.BARONY}
         for t in chain:
             assert t.house_id == self.crown.pk
+        # Land is a barony or a county (#5069): the duchy and the kingdom above them are
+        # organization only, so neither chain Area carries a Domain.
+        levels = sorted(
+            Domain.objects.filter(area__in=[rung_area_for_title(t) for t in chain]).values_list(
+                "area__level", flat=True
+            )
+        )
+        assert levels == [AreaLevel.BARONY, AreaLevel.COUNTY]
+        for t in chain:
+            assert house_holding_area(rung_area_for_title(t)) == self.crown
+
+    def test_vacate_and_reseat_a_crown_whose_upper_rungs_have_no_domain(self) -> None:
+        vacate_holder(self.kingdom)
+
+        self.kingdom.refresh_from_db()
+        assert self.kingdom.house is None
+        assert not Domain.objects.filter(
+            pk=self.kingdom.seat_domain_id, owner_org__isnull=False
+        ).exists()
+        assert house_holding_area(rung_area_for_title(self.kingdom)) is None
+        heir = OrganizationFactory(name="Piropa the Younger")
+
+        assign_holder(self.kingdom, heir)
+
+        self.kingdom.refresh_from_db()
+        assert self.kingdom.house == heir
+        assert Domain.objects.get(pk=self.kingdom.seat_domain_id).owner_org == heir
+        assert house_holding_area(rung_area_for_title(self.kingdom)) == heir
+
+    def test_liege_walk_crosses_an_unheld_duchy_to_the_crown(self) -> None:
+        fervor = plant_rung(
+            realm=self.realm, tier=TitleTier.DUCHY, name="Fervor", parent_title=self.kingdom
+        )
+        barony = plant_rung(
+            realm=self.realm,
+            tier=TitleTier.BARONY,
+            name="Cinder Gate",
+            parent_title=Title.objects.get(tier=TitleTier.COUNTY, seat_domain=fervor.seat_domain),
+        )
+
+        # The duchy has no Domain (nor does the kingdom); the walk reads the titles.
+        assert liege_for_title(barony) == self.crown
+        duke = OrganizationFactory(name="Candela")
+        assign_holder(fervor, duke)
+        assert liege_for_title(barony) == duke
 
     def test_duchy_under_the_crown_is_unclaimed_with_its_chain(self) -> None:
         fervor = plant_rung(

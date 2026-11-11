@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from django.test import TestCase
 
+from world.areas.constants import AreaLevel
 from world.areas.tests.test_worldmap import tiny_map
 from world.areas.worldmap.constants import Terrain
 from world.areas.worldmap.models import TerrainPip
@@ -147,9 +148,16 @@ class LayOutRealmTests(TestCase):
             assert domain.description.startswith("PLACEHOLDER:") or county == seat_county
         baronies = Title.objects.filter(realm=self.realm, tier=TitleTier.BARONY)
         assert baronies.count() == 16  # a seat barony and one more per county
-        assert Domain.objects.get(pk=rung_area_for_title(chain_duchy).pk).prosperity == 65
+        # A duchy is its counties (#5069): no Domain above county, so the capital rule
+        # shows on the counties and a duchy's figure prose lives on its Area.
+        assert not Domain.objects.filter(area__level__gt=AreaLevel.COUNTY).exists()
+        assert Domain.objects.get(pk=rung_area_for_title(seat_county).pk).prosperity == 65
         other = next(d for d in duchies if d.pk != chain_duchy.pk)
-        assert Domain.objects.get(pk=rung_area_for_title(other).pk).prosperity == 45
+        other_county = next(
+            c for c in counties if rung_area_for_title(c).parent_id == rung_area_for_title(other).pk
+        )
+        assert Domain.objects.get(pk=rung_area_for_title(other_county).pk).prosperity == 45
+        assert rung_area_for_title(other).description.startswith("PLACEHOLDER:")
         assert other.name in PLACE_NAMES
         names = [t.name for t in Title.objects.filter(realm=self.realm) if t.name]
         assert len(names) == len(set(names)), names
@@ -182,9 +190,8 @@ class LayOutRealmTests(TestCase):
         assert chartered_extent(old) == set().union(
             *(footprint_of(rung_area_for_title(f)) for f in fiefs)
         )
-        assert Domain.objects.get(pk=rung_area_for_title(old).pk).description == (
-            "The crown before the revolt."
-        )
+        # a titular crown has no Domain; its lore lives on its own Area (#5069)
+        assert rung_area_for_title(old).description == "The crown before the revolt."
         # the same titular line again is refused by name
         again = lay_out_realm(self.realm, parse_layout("kingdom Old Luxen | titular\n"))
         assert any("already on the ladder" in r for r in again.kingdoms[0].refusals)

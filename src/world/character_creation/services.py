@@ -1670,7 +1670,17 @@ def _home_domain(draft: CharacterDraft) -> Domain | None:
     capital = Area.objects.filter(realm=starting_area.realm, is_capital=True).first()
     if capital is None:
         return None
-    return Domain.objects.filter(area=capital, owner_org__isnull=False).first()
+    domain = Domain.objects.filter(area=capital, owner_org__isnull=False).first()
+    if domain is not None:
+        return domain
+    # A capital that is a kingdom's or a duchy's rung has no Domain of its own (#5069):
+    # the family's businesses stand on the crown's seat barony, the grid they can reach.
+    from world.societies.houses.almanach import title_on_area  # noqa: PLC0415
+
+    title = title_on_area(capital)
+    if title is None or title.house_id is None or title.seat_domain_id is None:
+        return None
+    return title.seat_domain
 
 
 def _derive_ic_birth_year(draft: CharacterDraft) -> int | None:
