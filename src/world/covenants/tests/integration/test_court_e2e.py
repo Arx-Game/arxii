@@ -326,7 +326,8 @@ class CourtJourneyEndToEndTests(TestCase):
         )
 
         # Baseline: no pull yet → the offense read-path sees no flat bonus. The cast it
-        # reads for is any technique: both threads are always in a cast's action.
+        # reads for is any technique: the Court role is engaged and the companion is a
+        # relationship-track thread, so both threads are in any cast's action.
         cast = TechniqueFactory()
         self.servant.character.combat_pulls.invalidate()
         self.assertEqual(

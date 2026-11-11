@@ -89,3 +89,40 @@ class ComputeIntensityForClashTests(EvenniaTestCase):
         )
         participant.character_sheet.character.combat_pulls.invalidate()
         self.assertEqual(compute_intensity_for_clash(participant, action), 3)
+
+    def test_a_pull_on_another_technique_leaves_the_floor(self) -> None:
+        """An unrelated pull does not lift the clash-open gate (#5066 decision 14).
+
+        The clash floor is read only while a clash is opening, which the round
+        journeys do not reach, so it is checked here.
+        """
+        from world.combat.factories import (
+            CombatParticipantFactory,
+            CombatPullFactory,
+            CombatPullResolvedEffectFactory,
+            CombatRoundActionFactory,
+        )
+        from world.combat.services import compute_intensity_for_clash
+        from world.magic.constants import EffectKind, TargetKind
+        from world.magic.factories import TechniqueFactory, ThreadFactory
+
+        tech = TechniqueFactory(intensity=3)
+        participant = CombatParticipantFactory()
+        encounter = participant.encounter
+        action = CombatRoundActionFactory(participant=participant, focused_action=tech)
+        pull = CombatPullFactory(
+            participant=participant, encounter=encounter, round_number=encounter.round_number
+        )
+        CombatPullResolvedEffectFactory(
+            pull=pull,
+            source_thread=ThreadFactory(
+                owner=participant.character_sheet,
+                target_kind=TargetKind.TECHNIQUE,
+                target_trait=None,
+                target_technique=TechniqueFactory(),
+            ),
+            kind=EffectKind.INTENSITY_BUMP,
+            scaled_value=2,
+        )
+        participant.character_sheet.character.combat_pulls.invalidate()
+        self.assertEqual(compute_intensity_for_clash(participant, action), 3)

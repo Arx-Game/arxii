@@ -754,6 +754,46 @@ class SumActiveFlatBonusesTests(TestCase):
         )
 
 
+class PullWideBonusTests(TestCase):
+    """A distinction's bonus folded into a pull follows the pull, not its filed thread.
+
+    ``_fold_distinction_pull_bonus`` files the bonus under the pull's first thread with
+    no ``authored_value``; it reaches a use when any of the pull's threads relates to it
+    (#5067). Unit-kept: no journey authors the distinction modifier that makes the row.
+    """
+
+    def test_counts_when_any_thread_of_the_pull_relates(self) -> None:
+        from world.combat.factories import CombatPullFactory, CombatPullResolvedEffectFactory
+        from world.combat.services import _sum_active_flat_bonuses
+        from world.magic.constants import EffectKind
+        from world.magic.factories import ThreadFactory
+
+        # (has a related thread too, expected total): the bonus alone on an unrelated
+        # thread reaches nothing; beside a related thread it reaches the cast.
+        for with_related, expected in ((False, 0), (True, 7)):
+            resolver = _build_resolver()
+            pull = CombatPullFactory(
+                participant=resolver.participant,
+                round_number=resolver.participant.encounter.round_number,
+            )
+            CombatPullResolvedEffectFactory(
+                pull=pull,
+                source_thread=ThreadFactory(owner=resolver.participant.character_sheet),
+                kind=EffectKind.FLAT_BONUS,
+                authored_value=None,
+                scaled_value=5,
+            )
+            if with_related:
+                _related_pull_effect(resolver, pull, kind=EffectKind.FLAT_BONUS, scaled_value=2)
+            resolver.participant.character_sheet.character.combat_pulls.invalidate()
+
+            total = _sum_active_flat_bonuses(
+                resolver.participant, technique=resolver.action.focused_action, cast_check=None
+            )
+
+            self.assertEqual(total, expected, with_related)
+
+
 class ResolverConsumesPowerTests(TestCase):
     """CombatTechniqueResolver.__call__(power=N) uses injected power for scaling.
 

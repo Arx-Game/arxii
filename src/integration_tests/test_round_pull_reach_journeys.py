@@ -17,7 +17,9 @@ to the modifier seam.
   "combat pulls" +3 and its roll carries "Combat pull" +2.
 - Unrelated: she casts Ember Lash and puts the same pull on a clash contribution with
   Shadow Step (as the client sends it when a clash is chosen). Ember Lash's ledger has no
-  "combat pulls" line and its roll no "Combat pull" line. Before the fix it had both.
+  "combat pulls" line and its roll no "Combat pull" line (before the fix it had both);
+  the Shadow Step contribution the pull rode in with gets both (before, it got neither).
+- Through the check: a thread on the stat Shadow Step's check rolls reaches its cast.
 """
 
 from __future__ import annotations
@@ -26,7 +28,9 @@ from unittest.mock import patch
 
 from actions.factories import ActionTemplateFactory
 from integration_tests.harness import JourneyCase
+from world.checks import services as checks_services
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
+from world.checks.models import CheckTypeTrait
 from world.combat import services as combat_services
 from world.combat.constants import ActionCategory, ClashActionSlot, ClashStatus, OpponentTier
 from world.combat.factories import (
@@ -38,7 +42,7 @@ from world.combat.factories import (
     ThreatPoolEntryFactory,
     ThreatPoolFactory,
 )
-from world.combat.models import CombatPull, CombatRoundAction
+from world.combat.models import ClashContribution, CombatPull, CombatRoundAction
 from world.combat.services import resolve_round
 from world.fatigue.constants import EffortLevel
 from world.magic.constants import EffectKind, PowerStage, TargetKind
@@ -106,22 +110,23 @@ class APullBoostsOnlyWhatItRelatesTo(JourneyCase):
 
         self.resonance = ResonanceFactory()
         ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=0)
-        ThreadPullEffectFactory(
-            target_kind=TargetKind.TECHNIQUE,
-            resonance=self.resonance,
-            tier=1,
-            min_thread_level=0,
-            effect_kind=EffectKind.FLAT_BONUS,
-            flat_bonus_amount=FLAT_BONUS,
-        )
-        ThreadPullEffectFactory(
-            target_kind=TargetKind.TECHNIQUE,
-            resonance=self.resonance,
-            tier=1,
-            min_thread_level=1,
-            as_intensity_bump=True,
-            intensity_bump_amount=INTENSITY_BUMP,
-        )
+        for kind in (TargetKind.TECHNIQUE, TargetKind.TRAIT):
+            ThreadPullEffectFactory(
+                target_kind=kind,
+                resonance=self.resonance,
+                tier=1,
+                min_thread_level=0,
+                effect_kind=EffectKind.FLAT_BONUS,
+                flat_bonus_amount=FLAT_BONUS,
+            )
+            ThreadPullEffectFactory(
+                target_kind=kind,
+                resonance=self.resonance,
+                tier=1,
+                min_thread_level=1,
+                as_intensity_bump=True,
+                intensity_bump_amount=INTENSITY_BUMP,
+            )
         CharacterResonanceFactory(
             character_sheet=sheet, resonance=self.resonance, balance=10, lifetime_earned=10
         )
@@ -172,6 +177,22 @@ class APullBoostsOnlyWhatItRelatesTo(JourneyCase):
             "pull_thread_ids": [self.thread.pk],
         }
 
+    def thread_on_the_stat_of(self, technique) -> None:
+        """Swap her thread for one on the stat ``technique``'s check rolls (a TRAIT thread).
+
+        It relates to a cast only through the check that cast rolls, so it reaches the
+        cast only when the cast's check is carried from declaration to resolution.
+        """
+        stat = CheckTypeTrait.objects.get(check_type=technique.action_template.check_type).trait
+        self.thread = ThreadFactory(
+            owner=self.ysmay.sheet_data,
+            resonance=self.resonance,
+            target_kind=TargetKind.TRAIT,
+            target_trait=stat,
+            level=10,
+            name="Steady Strand",
+        )
+
     def cast(self, technique, *, with_pull: bool) -> None:
         kwargs = {
             "effort_level": EffortLevel.MEDIUM,
@@ -203,40 +224,60 @@ class APullBoostsOnlyWhatItRelatesTo(JourneyCase):
 
     # -- what the round did --------------------------------------------------------
 
-    def resolve(self, technique) -> tuple[list[dict], list[int]]:
-        """Resolve the round; return her cast's ledger rows and its roll's pull lines.
+    def resolve(self, *techniques) -> dict[int, list[int]]:
+        """Resolve the round; return the "Combat pull" roll lines per technique rolled.
 
-        The ledger is read from the outcome panel's endpoint. The pull lines are the
-        "Combat pull" contributions handed to the modifier seam for ``technique``'s roll.
+        The lines are the contributions handed to the modifier seam (the round's casts
+        reach it through ``world.combat.services``, a clash contribution through
+        ``world.checks.services``) for each technique's check. Each of ``techniques``
+        must have rolled, so an empty list means "rolled, with no pull line".
         """
-        check_type = technique.action_template.check_type
-        pull_lines: list[int] = []
-        real_collect = combat_services.collect_check_modifiers
+        lines: dict[int, list[int]] = {}
+        real_collect = checks_services.collect_check_modifiers
 
         def collect(sheet, rolled_check_type, **kwargs):
-            if rolled_check_type == check_type:
-                pull_lines.extend(
-                    line.value
-                    for line in kwargs.get("extra_contributions") or ()
-                    if line.source_label == "Combat pull"
-                )
+            lines.setdefault(rolled_check_type.pk, []).extend(
+                line.value
+                for line in kwargs.get("extra_contributions") or ()
+                if line.source_label == "Combat pull"
+            )
             return real_collect(sheet, rolled_check_type, **kwargs)
 
-        with patch.object(combat_services, "collect_check_modifiers", side_effect=collect):
+        with (
+            patch.object(combat_services, "collect_check_modifiers", side_effect=collect),
+            patch.object(checks_services, "collect_check_modifiers", side_effect=collect),
+        ):
             resolve_round(self.encounter)
+        rolled = {}
+        for technique in techniques:
+            check_pk = technique.action_template.check_type.pk
+            self.assertIn(check_pk, lines, f"{technique.name}'s roll never reached the seam.")
+            rolled[technique.pk] = lines[check_pk]
+        return rolled
 
-        action = CombatRoundAction.objects.get(
-            participant__character_sheet=self.ysmay.sheet_data, round_number=1
-        )
-        self.assertIsNotNone(action.interaction_id, "Her cast left no log entry.")
+    def ledger(self, interaction_id: int | None) -> list[dict]:
+        """The power ledger the combat log's outcome panel shows her for one entry."""
+        self.assertIsNotNone(interaction_id, "Her action left no log entry.")
         response = self.api(self.account_of(self.ysmay)).get(
             "/api/combat/action-outcome-details/",
-            {"action_interaction_ids": str(action.interaction_id)},
+            {"action_interaction_ids": str(interaction_id)},
         )
         self.assertEqual(response.status_code, 200, response.data)
         ledger = response.data[0]["power_ledger"]
-        self.assertIsNotNone(ledger, "Her cast's power ledger is not shown to her.")
-        return ledger["entries"], pull_lines
+        self.assertIsNotNone(ledger, "Her power ledger is not shown to her.")
+        self.assertIn(PowerStage.BASE, [row["stage"] for row in ledger["entries"]])
+        return ledger["entries"]
+
+    def cast_ledger(self) -> list[dict]:
+        action = CombatRoundAction.objects.get(
+            participant__character_sheet=self.ysmay.sheet_data, round_number=1
+        )
+        return self.ledger(action.interaction_id)
+
+    def contribution_ledger(self) -> list[dict]:
+        return self.ledger(
+            ClashContribution.objects.get(character=self.ysmay.sheet_data).interaction_id
+        )
 
     @staticmethod
     def pull_ledger_rows(entries: list[dict]) -> list[int]:
@@ -248,17 +289,29 @@ class APullBoostsOnlyWhatItRelatesTo(JourneyCase):
         self.cast(self.shadow_step, with_pull=True)
         self.assertTrue(CombatPull.objects.filter(resonance=self.resonance).exists())
 
-        entries, pull_lines = self.resolve(self.shadow_step)
+        rolled = self.resolve(self.shadow_step)
 
-        self.assertEqual(self.pull_ledger_rows(entries), [INTENSITY_BUMP])
-        self.assertEqual(pull_lines, [FLAT_BONUS])
+        self.assertEqual(self.pull_ledger_rows(self.cast_ledger()), [INTENSITY_BUMP])
+        self.assertEqual(rolled[self.shadow_step.pk], [FLAT_BONUS])
 
     def test_a_pull_never_boosts_a_cast_its_threads_do_not_relate_to(self) -> None:
+        """The pull rides her Shadow Step clash contribution: that gets it, Ember Lash not."""
         self.cast(self.ember_lash, with_pull=False)
         self.clash_with_pull(self.shadow_step)
         self.assertTrue(CombatPull.objects.filter(resonance=self.resonance).exists())
 
-        entries, pull_lines = self.resolve(self.ember_lash)
+        rolled = self.resolve(self.ember_lash, self.shadow_step)
 
-        self.assertEqual(self.pull_ledger_rows(entries), [])
-        self.assertEqual(pull_lines, [])
+        self.assertEqual(self.pull_ledger_rows(self.cast_ledger()), [])
+        self.assertEqual(rolled[self.ember_lash.pk], [])
+        self.assertEqual(self.pull_ledger_rows(self.contribution_ledger()), [INTENSITY_BUMP])
+        self.assertEqual(rolled[self.shadow_step.pk], [FLAT_BONUS])
+
+    def test_a_pull_on_the_stat_a_cast_rolls_boosts_that_cast(self) -> None:
+        self.thread_on_the_stat_of(self.shadow_step)
+        self.cast(self.shadow_step, with_pull=True)
+
+        rolled = self.resolve(self.shadow_step)
+
+        self.assertEqual(self.pull_ledger_rows(self.cast_ledger()), [INTENSITY_BUMP])
+        self.assertEqual(rolled[self.shadow_step.pk], [FLAT_BONUS])
