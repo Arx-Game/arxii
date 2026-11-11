@@ -547,6 +547,12 @@ def _seed_roster() -> None:
     ensure_starter_npc_presets()
 
 
+def _seed_channels() -> None:
+    from world.channels.services import ensure_public_channel  # noqa: PLC0415
+
+    ensure_public_channel()
+
+
 def _seed_traits() -> None:
     """No-op cluster (#2266): Trait rows are created by other clusters already —
 
@@ -814,6 +820,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # inventory can show a Trait row count for the #944 content-pipeline domain,
     # which had zero inventory visibility before #2266.
     "traits": _seed_traits,
+    # Channels: the game-wide PUBLIC player channel (#3299). ORG channels are made
+    # with their organizations, not here. No dependencies on any other cluster.
+    "channels": _seed_channels,
 }
 
 
@@ -865,6 +874,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         PropertyGrantProfile,
     )
     from world.ceremonies.models import CeremonyType  # noqa: PLC0415
+    from world.channels.models import Channel  # noqa: PLC0415
     from world.character_creation.models import (  # noqa: PLC0415
         Beginnings,
         CGExplanation,
@@ -1157,4 +1167,6 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Traits: no-op seeder — see _seed_traits (#2266). Row count for the #944
         # content-pipeline domain (stats/skills), previously invisible in this hub.
         "traits": [Trait],
+        # Channels: the PUBLIC player channel (#3299).
+        "channels": [Channel],
     }
