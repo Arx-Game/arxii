@@ -791,8 +791,9 @@ and unavailable on the SQLite test tier. The graph also loads the realm's claims
   the rung's own Domain, so it is `None` above county (#5069) and, where present, its
   `population` is `demography.population_now` (the people by formula, never the stored base)
   beside a `population_capacity`. On the title page
-  these are **Present Holdings** (the vassals table, "nothing" when a titular title holds no
-  land), **Historical Charter** (the chartered fiefs, whose charters hold this rung, and every
+  these are **Holdings** (the rungs beneath, in two groups, **Held** by this house and held by
+  **Vassals**, each row with its people; "nothing" when a titular title holds no land; #5069
+  slice 2 replaced "Present Holdings"), **Historical Charter** (the chartered fiefs, whose charters hold this rung, and every
   "claimed by X" line), the chain rail above, and a globe beside the heading ("View on the
   map" to a screen reader) that opens the Atlas on the first region map with this title
   selected (`world-builder/atlas/mapFocus.ts`). The name field stands alone under the heading,
@@ -1020,6 +1021,10 @@ held, #4614), `AlmanachVacateHolderAction` (`almanach_vacate_holder`, kwarg `tit
 `AlmanachRenameHoldingAction` (`almanach_rename_holding`) and `AlmanachRemoveHoldingAction`
 (`almanach_remove_holding`: `almanach.remove_holding` drops the holding and its income stream,
 refused while the stream has uncollected income or is still referenced) (#4616),
+`AlmanachSetCapacityAction` (`almanach_set_capacity`: `domain_id` plus `capacity`, a number or
+null; `demography.set_capacity_override` rebases the people, writes `Domain.capacity_override`
+and recounts, so a staff figure stands in for the terrain's until cleared; the barony page's
+capacity control, #5069 slice 2),
 `AlmanachDeleteRungAction` (`almanach_delete_rung`: `almanach.delete_rung` removes a
 chain's Titles, Domains and Areas, refused while held, with rungs, holdings or rooms beneath, or
 when something else still points at the land) and `AlmanachMoveRungAction` (`almanach_move_rung`,

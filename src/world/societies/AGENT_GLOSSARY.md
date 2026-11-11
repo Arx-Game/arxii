@@ -216,7 +216,8 @@ containment tree (`Area.parent`) is the de facto rule; the charter is the histor
 title's chartered border is the union of its fiefs' footprints, derived on read
 (`chartered_extent`), never drawn. The fief ranks below the title and sits in the same realm
 unless the title is an empire. Player-facing copy: **Historical Charter** (the chartered fiefs)
-beside **Present Holdings** (what the title holds now, the vassals table).
+beside **Holdings** (the rungs beneath the title now, grouped **Held** by its house and held by
+its **Vassals**, each with its people; #5069 slice 2, which retired "Present Holdings").
 _Avoid_: extent, members, contains, claim (a claim is a person's wish to rule, see **Claim**),
 de jure (the charter is lore, not law).
 
