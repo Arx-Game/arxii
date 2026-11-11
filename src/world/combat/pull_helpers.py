@@ -267,7 +267,8 @@ def round_pull_bonus(
 
     A distinction's resonance bonus folded into the pull (``_fold_distinction_pull_bonus``,
     stored with no ``authored_value``) belongs to the pull as a whole, not to the thread
-    it is filed under, so it counts when any of the pull's threads relates to the use.
+    it is filed under, so it counts when any of the pull's threads (``CombatPull.threads``,
+    read only for such a row) relates to the use.
 
     Reads the prefetched active-pull list, and builds the use's context only when an
     effect of ``kind`` is there to match.
@@ -288,13 +289,13 @@ def round_pull_bonus(
     )
     total = 0
     for pull in pulls:
-        threads = {eff.source_thread_id: eff.source_thread for eff in pull.resolved_effects_cached}
-        related = {pk for pk, thread in threads.items() if _anchor_in_action(thread, use)}
         for eff in pull.resolved_effects_cached:
             if eff.kind != kind or not eff.scaled_value:
                 continue
-            pull_wide = eff.authored_value is None
-            if related if pull_wide else eff.source_thread_id in related:
+            if eff.authored_value is None:  # pull-wide: any of its threads will do
+                if any(_anchor_in_action(thread, use) for thread in pull.threads.all()):
+                    total += eff.scaled_value
+            elif _anchor_in_action(eff.source_thread, use):
                 total += eff.scaled_value
     return total
 

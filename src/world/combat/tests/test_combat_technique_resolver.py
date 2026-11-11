@@ -776,15 +776,20 @@ class PullWideBonusTests(TestCase):
                 participant=resolver.participant,
                 round_number=resolver.participant.encounter.round_number,
             )
+            unrelated = ThreadFactory(owner=resolver.participant.character_sheet)
+            pull.threads.add(unrelated)
             CombatPullResolvedEffectFactory(
                 pull=pull,
-                source_thread=ThreadFactory(owner=resolver.participant.character_sheet),
+                source_thread=unrelated,
                 kind=EffectKind.FLAT_BONUS,
                 authored_value=None,
                 scaled_value=5,
             )
             if with_related:
-                _related_pull_effect(resolver, pull, kind=EffectKind.FLAT_BONUS, scaled_value=2)
+                related = _related_pull_effect(
+                    resolver, pull, kind=EffectKind.FLAT_BONUS, scaled_value=2
+                )
+                pull.threads.add(related.source_thread)
             resolver.participant.character_sheet.character.combat_pulls.invalidate()
 
             total = _sum_active_flat_bonuses(

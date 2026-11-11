@@ -44,6 +44,11 @@ from world.combat.factories import (
 )
 from world.combat.models import ClashContribution, CombatPull, CombatRoundAction
 from world.combat.services import resolve_round
+from world.distinctions.factories import (
+    CharacterDistinctionFactory,
+    DistinctionEffectFactory,
+    DistinctionFactory,
+)
 from world.fatigue.constants import EffortLevel
 from world.magic.constants import EffectKind, PowerStage, TargetKind
 from world.magic.factories import (
@@ -58,7 +63,10 @@ from world.magic.factories import (
     ThreadPullCostFactory,
     ThreadPullEffectFactory,
 )
-from world.mechanics.factories import CharacterEngagementFactory
+from world.mechanics.constants import POWER_CATEGORY_NAME
+from world.mechanics.factories import CharacterEngagementFactory, ModifierTargetFactory
+from world.mechanics.models import ModifierCategory
+from world.mechanics.services import create_distinction_modifiers
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
@@ -140,6 +148,7 @@ class APullBoostsOnlyWhatItRelatesTo(JourneyCase):
             level=10,
             name="Shadow Strand",
         )
+        self.also_pulled: list = []
 
     @staticmethod
     def technique(name: str):
@@ -174,8 +183,13 @@ class APullBoostsOnlyWhatItRelatesTo(JourneyCase):
         return {
             "pull_resonance_id": self.resonance.pk,
             "pull_tier": 1,
-            "pull_thread_ids": [self.thread.pk],
+            "pull_thread_ids": [thread.pk for thread in self.pulled],
         }
+
+    @property
+    def pulled(self) -> list:
+        """The threads her pull names, in the order the client sends them."""
+        return [self.thread, *self.also_pulled]
 
     def thread_on_the_stat_of(self, technique) -> None:
         """Swap her thread for one on the stat ``technique``'s check rolls (a TRAIT thread).
@@ -315,3 +329,38 @@ class APullBoostsOnlyWhatItRelatesTo(JourneyCase):
 
         self.assertEqual(self.pull_ledger_rows(self.cast_ledger()), [INTENSITY_BUMP])
         self.assertEqual(rolled[self.shadow_step.pk], [FLAT_BONUS])
+
+    def test_a_distinction_bonus_on_the_pull_follows_any_related_thread(self) -> None:
+        """A distinction's resonance bonus rides the pull as a whole (+6 here).
+
+        The pull names her Shadow Step thread first (the bonus is filed under it) and a
+        relationship thread second, which is in every cast's action. Ember Lash is not
+        Shadow Step, but the relationship thread relates to it, so the bonus reaches
+        Ember Lash's roll; the Shadow Step thread's own +2 does not.
+        """
+        power = ModifierCategory.objects.get_or_create(name=POWER_CATEGORY_NAME)[0]
+        target = ModifierTargetFactory(
+            category=power, name="power_shadow", target_resonance=self.resonance
+        )
+        instinct = DistinctionFactory(name="Shade-touched")
+        DistinctionEffectFactory(distinction=instinct, target=target, value_per_rank=6)
+        create_distinction_modifiers(
+            CharacterDistinctionFactory(
+                character=self.ysmay.sheet_data, distinction=instinct, rank=1
+            )
+        )
+        self.also_pulled = [
+            ThreadFactory(
+                owner=self.ysmay.sheet_data,
+                resonance=self.resonance,
+                as_track_thread=True,
+                name="Bond Strand",
+            )
+        ]
+        self.cast(self.ember_lash, with_pull=False)
+        self.clash_with_pull(self.shadow_step)
+
+        rolled = self.resolve(self.ember_lash, self.shadow_step)
+
+        self.assertEqual(rolled[self.ember_lash.pk], [6])
+        self.assertEqual(rolled[self.shadow_step.pk], [FLAT_BONUS + 6])
