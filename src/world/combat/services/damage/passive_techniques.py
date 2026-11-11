@@ -22,6 +22,11 @@ if TYPE_CHECKING:
     from world.magic.models.techniques import TechniqueAppliedCondition
 
 
+#: The source description a passive's conditions carry; a form paid per blow is never one
+#: (``form_resistance.paid_per_blow``, #5066).
+PASSIVE_SOURCE_PREFIX = "passive: "
+
+
 def _passive_row_targets(
     row: TechniqueAppliedCondition,
     actor: ObjectDB,  # noqa: OBJECTDB_PARAM - the caster's character
@@ -158,7 +163,7 @@ def _apply_passive_technique(
         applications,
         source_character=actor,
         source_technique=technique,
-        source_description=f"passive: {technique.name}",
+        source_description=f"{PASSIVE_SOURCE_PREFIX}{technique.name}",
     )
 
 

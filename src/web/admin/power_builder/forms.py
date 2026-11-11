@@ -134,6 +134,10 @@ class TechniqueRowForm(forms.Form):
                 label="per power",
             )
         if grant == GrantMode.OFFER:
+            # Blank, as the demo draws it: a grant offered with no numbers is refused, never
+            # saved at the model defaults.
+            self.fields["grant_base"].initial = None
+            self.fields["grant_per_power"].initial = None
             self.fields["grant_it"] = forms.BooleanField(required=False, label="grant it")
         else:
             self.fields["remove_grant"] = forms.BooleanField(required=False, label="remove grant")

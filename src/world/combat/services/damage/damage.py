@@ -387,8 +387,19 @@ def apply_damage_to_participant(  # noqa: PLR0913
     # A fully absorbed hit stays absorbed; vulnerability must not recreate damage
     # after the thread survivability baseline has reduced it to zero.
     if effective_damage > 0:
+        # A form she cast on herself is paid and rolled on every blow it softens (#5066
+        # decision 18): its flat resistance gives way to what this blow's roll made of it.
+        from world.combat.services.damage.form_resistance import (  # noqa: PLC0415
+            cast_forms_for_blow,
+            resistance_shift_for,
+        )
+
+        form_shift = resistance_shift_for(cast_forms_for_blow(participant, damage_type))
         effective_damage = resolve_damage_type_resistance(
-            character, effective_damage, damage_type, resistance_shift=resistance_shift
+            character,
+            effective_damage,
+            damage_type,
+            resistance_shift=resistance_shift + form_shift,
         )
 
     # Deliberate ordering: the on-hit pool (knockback/trap) fires only for a hit that

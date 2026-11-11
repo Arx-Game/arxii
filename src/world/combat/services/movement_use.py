@@ -106,9 +106,11 @@ class MovementCast:
 
     character: ObjectDB
     technique: Technique
-    grant: TechniqueCapabilityGrant
+    grant: TechniqueCapabilityGrant | None
     cast_check: CastCheck
     participant: CombatParticipant | None = None
+    #: The value a use with no grant scales (a form's authored resistance).
+    base_value: int = 0
     check_result: CheckResult | None = None
     strength: int = 0
 
@@ -124,7 +126,11 @@ class MovementCast:
         flat = self._pull(EffectKind.FLAT_BONUS)
         effective_power = ledger.total + self._pull(EffectKind.INTENSITY_BUMP)
         self.check_result = roll_technique(self.character, self.cast_check, extra_modifiers=flat)
-        value = self.grant.calculate_value(effective_power=effective_power)
+        value = (
+            self.grant.calculate_value(effective_power=effective_power)
+            if self.grant is not None
+            else self.base_value
+        )
         self.strength = scaled_strength(value, self.check_result.success_level)
         return self
 
@@ -217,15 +223,63 @@ def _cast_technique(
     confirm_soulfray_risk: bool,
 ) -> MovementUse:
     from world.magic.models import Technique, TechniqueCapabilityGrant  # noqa: PLC0415
-    from world.magic.services import use_technique  # noqa: PLC0415
-    from world.magic.services.magic_skills import resolve_cast_check  # noqa: PLC0415
 
     technique = Technique.objects.get(pk=movement.technique_id)
     grant = TechniqueCapabilityGrant.objects.filter(
         technique=technique, capability_id=movement.application.capability_id
     ).first()
+    if grant is None:
+        return MovementUse(went_off=False, strength=0, technique=technique)
+    return _cast(
+        character,
+        technique,
+        grant=grant,
+        base_value=0,
+        participant=participant,
+        lethal=lethal,
+        confirm_soulfray_risk=confirm_soulfray_risk,
+    )
+
+
+def use_technique_for_strength(  # noqa: PLR0913 - one use and its consent answers
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - the caster's game object
+    technique: Technique,
+    *,
+    base_value: int,
+    participant: CombatParticipant | None,
+    lethal: bool,
+    confirm_soulfray_risk: bool,
+    chosen_by_player: bool = True,
+) -> MovementUse:
+    """One cast of ``technique`` whose roll scales ``base_value`` (a form softening a blow,
+    #5066 decision 18): the same cast, consent and away-player rule as a movement use."""
+    lethal = lethal and (chosen_by_player or player_is_present(character))
+    return _cast(
+        character,
+        technique,
+        grant=None,
+        base_value=base_value,
+        participant=participant,
+        lethal=lethal,
+        confirm_soulfray_risk=confirm_soulfray_risk,
+    )
+
+
+def _cast(  # noqa: PLR0913 - one cast and what it scales
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - the caster's game object
+    technique: Technique,
+    *,
+    grant: TechniqueCapabilityGrant | None,
+    base_value: int,
+    participant: CombatParticipant | None,
+    lethal: bool,
+    confirm_soulfray_risk: bool,
+) -> MovementUse:
+    from world.magic.services import use_technique  # noqa: PLC0415
+    from world.magic.services.magic_skills import resolve_cast_check  # noqa: PLC0415
+
     cast_check = resolve_cast_check(character, technique)
-    if grant is None or cast_check is None:
+    if cast_check is None:
         # A technique with no check to roll cannot be cast; the use does not happen.
         return MovementUse(went_off=False, strength=0, technique=technique)
     if not confirm_soulfray_risk and _would_overspend(character, technique):
@@ -236,6 +290,7 @@ def _cast_technique(
         grant=grant,
         cast_check=cast_check,
         participant=participant,
+        base_value=base_value,
     )
     situation_ctx = None
     pulled_resonance = None

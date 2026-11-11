@@ -58,6 +58,21 @@ that wall only the way it did before: probing, combos (`bypass_soak`, `wall_brea
 and the break bar's vulnerability window, which zeroes soak and resistance. `target_soak_of`
 reads the soak for the hit's own type, so a "target's soak" damage input agrees.
 
+## A form's resistance is paid per blow (#5066 decision 18)
+
+A resistance condition a technique she cast put on herself (a smoke form) is not a standing
+buff: each blow it softens in `apply_damage_to_participant` is a `use_technique` cast of that
+technique (`world/combat/services/damage/form_resistance.py`, `cast_forms_for_blow`), paid
+through the deficit and Soulfray path behind her "dodge even into Soulfray" answer and never
+lethal for an away player. The roll scales the condition's authored resistance for that blow
+(`scaled_strength`: failure 0, bare success the authored amount, +50% a level by default); the
+difference rides `resistance_shift`. `paid_per_blow` excludes a passive's condition (source
+description `PASSIVE_SOURCE_PREFIX`), the condition a price inflicts on its payer, and
+anyone else's ward: those stay flat. Damage-over-time ticks, hazards and battle damage read
+even the form flat, because only blows are cast (maintainer ruling 2026-11-11). NPC
+resistance is flat. Revisit note: if per-blow payment makes barrier and mitigation types too
+weak against swarms, pay them by damage absorbed instead.
+
 ## Evasion (check → multiplier)
 
 The PC rolls a defense check; the success level scales incoming damage.
