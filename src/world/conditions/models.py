@@ -24,7 +24,6 @@ from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import RelatedCacheClearingMixin
-from world.areas.positioning.constants import CreatureTraversal, ReactionCostKind, ReactionReach
 from world.checks.constants import ModifierSize
 from world.checks.models import OutcomeTierAward
 from world.conditions.constants import (
@@ -167,33 +166,6 @@ class CapabilityType(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "limb_use) and the senses (sight, hearing) set this to 5; "
             "granted/specialty capabilities leave it 0."
         ),
-    )
-    traversal = models.CharField(
-        max_length=20,
-        choices=CreatureTraversal.choices,
-        blank=True,
-        default="",
-        help_text=(
-            "If set, a character with this capability above its innate baseline moves this way. "
-            "Blinks: on her turn she can also blink to any place her dodge with this "
-            "capability could land, past walls and enemies (#5019)."
-        ),
-    )
-    reaction_reach = models.CharField(
-        max_length=20,
-        choices=ReactionReach.choices,
-        default=ReactionReach.NONE,
-        help_text=(
-            "If not 'No dodge', a character with this capability above its innate baseline "
-            "dodges attacks automatically and may land this far away (#4676). With Way of "
-            "moving set to Blinks, this is also how far she blinks on her turn (#5019)."
-        ),
-    )
-    reaction_cost_kind = models.CharField(
-        max_length=20,
-        choices=ReactionCostKind.choices,
-        default=ReactionCostKind.ANIMA,
-        help_text="What each dodge with this capability costs: anima, or fatigue if physical.",
     )
     prerequisite = models.ForeignKey(
         "arxii.Prerequisite",

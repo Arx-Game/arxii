@@ -19,7 +19,10 @@ from django.db.models import Prefetch, Q, Sum
 from typeclasses.characters import Character
 from world.checks.modifier_values import ValueTable, load_value_table
 from world.checks.services import chart_has_success_outcomes, preview_check_difficulty
-from world.conditions.services import get_all_capability_values
+from world.conditions.services import (
+    condition_capability_contributions,
+    thread_passive_capability_grants,
+)
 from world.distinctions.models import CharacterDistinction
 from world.magic.constants import EffectKind, TargetKind
 from world.magic.models import (
@@ -1652,7 +1655,13 @@ def _get_trait_sources(character: ObjectDB) -> list[CapabilitySource]:
 
 
 def _get_condition_sources(character: ObjectDB) -> list[CapabilitySource]:
-    """Get Capability sources from active conditions."""
+    """One source per active condition per capability it raises, with its marks (#5066).
+
+    A condition reaches an application by what it carries: its template's and current
+    stage's properties ride the source as ``effect_property_ids``. Thread-passive
+    capability grants (engaged tier-0 CAPABILITY_GRANT rows) follow as one source per
+    capability with no marks.
+    """
     try:
         sheet = character.sheet_data
     except ObjectDoesNotExist:
@@ -1660,37 +1669,45 @@ def _get_condition_sources(character: ObjectDB) -> list[CapabilitySource]:
         # capabilities are character-specific and conditions on a sheet-less
         # object don't materialize as CharacterModifier rows.
         return []
-    cap_values = get_all_capability_values(sheet)
-
-    sources: list[CapabilitySource] = []
-    for cap_id, value in cap_values.items():
-        if value <= 0:
-            continue
-
-        sources.append(
-            CapabilitySource(
-                capability_name="",  # Not needed for PK-based matching
-                capability_id=cap_id,
-                value=value,
-                source_type=CapabilitySourceType.CONDITION,
-                source_name="",  # Conditions aggregate; no single source name
-                source_id=0,
-            )
+    sources = [
+        CapabilitySource(
+            capability_name="",  # Not needed for PK-based matching
+            capability_id=contribution.capability_id,
+            value=contribution.value,
+            source_type=CapabilitySourceType.CONDITION,
+            source_name=contribution.condition_name,
+            source_id=contribution.instance_id,
+            effect_property_ids=sorted(contribution.property_ids),
         )
-
+        for contribution in condition_capability_contributions(sheet)
+        if contribution.value > 0
+    ]
+    sources.extend(
+        CapabilitySource(
+            capability_name="",
+            capability_id=cap_id,
+            value=value,
+            source_type=CapabilitySourceType.CONDITION,
+            source_name="",  # thread grants aggregate; no single source name
+            source_id=0,
+        )
+        for cap_id, value in thread_passive_capability_grants(sheet).items()
+        if value > 0
+    )
     return sources
 
 
 def _get_modifier_sources(character: ObjectDB) -> list[CapabilitySource]:
     """One source per capability raised by the sheet's CharacterModifier rows (#4663).
 
-    A species gift, a distinction or worn gear raises a capability through a
-    ``CharacterModifier`` aimed at that capability's ``ModifierTarget``; the agency oracle
+    A species gift, a distinction or an alternate form raises a capability through a
+    ``CharacterModifier`` aimed at that capability's ``ModifierTarget`` (worn gear has no
+    capability path: no ``ModifierSource`` names an item); the agency oracle
     (``get_effective_capability_value``) already counts these, and this is the same
     reading for the availability oracle, so the capability is offered as an approach.
     Rows are summed per capability in one query (all modifiers stack), expired rows left
-    out; a sum above zero is one MODIFIER source. ``get_all_capability_values`` (the
-    condition source) does not read these rows, so nothing is counted twice.
+    out; a sum above zero is one MODIFIER source, carrying no marks (#5066). The condition
+    sources do not read these rows, so nothing is counted twice.
     """
     try:
         sheet = character.sheet_data
@@ -2189,16 +2206,37 @@ def _evaluate_prerequisites(  # noqa: PLR0913
     return all_met
 
 
+def source_carries_required_mark(source: CapabilitySource, app: Application) -> bool:
+    """Whether ``source`` carries the effect property ``app`` needs (or it needs none)."""
+    return (
+        not app.required_effect_property_id
+        or app.required_effect_property_id in source.effect_property_ids
+    )
+
+
+def source_matches_application(source: CapabilitySource, app: Application) -> bool:
+    """Whether ``source`` reaches ``app`` (#5066): the same capability, held above the
+    capability's innate baseline (a source's value is what it adds on top of it), and
+    carrying the effect property the application needs, if any.
+
+    The one test movement, dodging and challenge approaches share; a technique's effect
+    properties are its own marks, a condition's its template's and stage's, and trained
+    ability, species and distinctions carry none.
+    """
+    return (
+        source.capability_id == app.capability_id
+        and source.value > 0
+        and source_carries_required_mark(source, app)
+    )
+
+
 def _source_meets_effect_requirements(
     app: Application,
     approach: ChallengeApproach,
     source: CapabilitySource,
 ) -> bool:
     """Check if a source meets the effect property requirements of app and approach."""
-    if (
-        app.required_effect_property_id
-        and app.required_effect_property_id not in source.effect_property_ids
-    ):
+    if not source_carries_required_mark(source, app):
         return False
 
     if (

@@ -100,12 +100,14 @@ def record_defense_roll(  # noqa: PLR0913 - one record, its parts
     interaction: Interaction,
     combat_round: int,
     dodge_modifier: int = 0,
+    dodge_line: str = "",
 ) -> ConsequenceOutcome:
     """Record ``participant``'s defense roll on the NPC action's ``interaction``.
 
-    ``dodge_modifier`` is what an automatic dodge added to the roll (its source's value
-    less the reaction penalty); it is recorded as a "Dodge" contribution, so the card
-    shows what the dice used.
+    ``dodge_modifier`` is what an automatic dodge added to the roll (its strength less the
+    reaction penalty); it is recorded as a "Dodge" contribution, so the card shows what
+    the dice used. ``dodge_line`` labels it with what answered: a technique's roll, the
+    strength it gave and the anima and Soulfray it cost (#5066).
     """
     from dataclasses import replace  # noqa: PLC0415
 
@@ -113,14 +115,14 @@ def record_defense_roll(  # noqa: PLR0913 - one record, its parts
     from world.checks.services import record_consequence_outcome  # noqa: PLC0415
     from world.checks.types import ModifierContribution, RollSnapshot  # noqa: PLC0415
 
-    if dodge_modifier:
+    if dodge_modifier or dodge_line:
         breakdown = replace(
             breakdown,
             contributions=[
                 *breakdown.contributions,
                 ModifierContribution(
                     source_kind=ModifierSourceKind.CHARACTER,
-                    source_label=DODGE_LABEL,
+                    source_label=dodge_line or DODGE_LABEL,
                     value=dodge_modifier,
                 ),
             ],

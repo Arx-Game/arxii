@@ -185,6 +185,7 @@ from actions.definitions.distinctions import (
     SubmitSheetUpdateRequestAction,
 )
 from actions.definitions.divorce import InitiateDivorceAction
+from actions.definitions.dodge_settings import DodgeSettingsAction
 from actions.definitions.domains import (
     AddDomainHoldingAction,
     AppointDomainOfficeAction,
@@ -909,6 +910,7 @@ _ALL_ACTIONS: list[Action] = [
     MarkAction(),
     DodgePlanAction(),
     SteadyPlanAction(),
+    DodgeSettingsAction(),
     StandoffReadAction(),
     StandoffPressAction(),
     StandoffTermsAction(),

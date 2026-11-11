@@ -1581,6 +1581,47 @@ class CombatParticipant(EncounterPayloadRowMixin, SharedMemoryModel):
             "Null dodges in place. Private to her; reset each round."
         ),
     )
+    dodge_technique = models.ForeignKey(
+        "arxii.Technique",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Which of her techniques answers her automatic dodges in this fight (#5066). "
+            "Null: her saved default (CharacterTechnique.default_dodge), else her strongest "
+            "matching source. Set from her dodge plan; private to her."
+        ),
+    )
+    dodge_into_soulfray = models.BooleanField(
+        default=True,
+        help_text=(
+            "Keep dodging with a technique when the cast would overspend her anima into "
+            "Soulfray or deepen it (#5066). Off: such a dodge is skipped and costs nothing. "
+            "Set from her dodge plan and the Soulfray check-in on her turn."
+        ),
+    )
+    auto_pull_defense = models.BooleanField(
+        default=False,
+        help_text=(
+            "Pull threads for defense the first time she is attacked in a round with no pull "
+            "of her own (#5066): the saved defensive pull, with only related threads not "
+            "already working for her. Set from her dodge plan."
+        ),
+    )
+    defense_pull_resonance = models.ForeignKey(
+        "arxii.Resonance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The resonance her automatic defensive pull draws on (#5066).",
+    )
+    defense_pull_tier = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="The tier (1 to 3) of her automatic defensive pull (#5066).",
+    )
     hops_used = models.PositiveSmallIntegerField(
         default=0,
         help_text=(
@@ -3121,11 +3162,40 @@ class MovementConfig(SharedMemoryModel):
     )
     dodge_anima_cost = models.PositiveSmallIntegerField(
         default=2,
-        help_text="Anima each dodge costs with a capability that dodges for anima (#4676).",
+        help_text=(
+            "Anima the first reactive save costs (#4676). A dodge or a move with a technique "
+            "costs that technique's own cast instead (#5066)."
+        ),
     )
     dodge_fatigue_cost = models.PositiveSmallIntegerField(
         default=1,
-        help_text="Base fatigue each dodge costs with a physical capability (#4676).",
+        help_text=(
+            "Base physical fatigue each dodge or move costs when it comes from anything but "
+            "a technique: training, gear, a condition, species or a distinction (#4676, #5066)."
+        ),
+    )
+    reach_neighbour_at = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            "The strength a dodge or a move needs to reach a neighbouring place (#5066). "
+            "Below it she stays in place. One set of bands for every movement power."
+        ),
+    )
+    reach_two_places_at = models.PositiveSmallIntegerField(
+        default=5,
+        help_text="The strength a dodge or a move needs to reach two places away (#5066).",
+    )
+    reach_anywhere_at = models.PositiveSmallIntegerField(
+        default=10,
+        help_text="The strength a dodge or a move needs to reach anywhere in the room (#5066).",
+    )
+    strength_per_success_level_percent = models.PositiveSmallIntegerField(
+        default=50,
+        help_text=(
+            "For a dodge or a move with a technique: how much stronger each success level "
+            "above a bare success makes it, in percent of the technique's grant (#5066). A "
+            "failed roll gives no strength."
+        ),
     )
     reaction_difficulty_step = models.PositiveSmallIntegerField(
         default=2,

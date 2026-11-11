@@ -1,16 +1,20 @@
-"""Reactions: the automatic dodge, what it costs, and the roll that gets harder (#4676).
+"""Reactions: the automatic dodge, what it costs, and the roll that gets harder (#4676, #5066).
 
-A character dodges an NPC attack automatically when a capability she holds above its
-innate baseline has a ``reaction_reach``, or a Phase Step ward is on her. The dodge is
-her defense roll with that capability's value as a bonus; it costs anima, or fatigue
-for a physical capability, and each reaction she has already made this round takes
-``MovementConfig.reaction_difficulty_step`` off the roll. There is no cap. Her plan
-(``CombatParticipant.dodge_enabled`` / ``dodge_landing``) says whether to dodge and
-where to land; with no landing she dodges in place.
+A character dodges an NPC attack automatically when one of her capability sources matches
+an application that dodges (``Application.dodges``, matched by
+``source_matches_application`` in ``world.areas.positioning.traversal``), or a Phase Step
+ward is on her. Each dodge is one use of that source (``movement_use``): with a technique it
+is a cast of it, paid, rolled and powered as a cast, and the roll's strength is added to her
+defense roll and sets how far she may land (the shared bands); with anything else it costs
+physical fatigue and its value is the bonus. Each reaction she has already made this round
+takes ``MovementConfig.reaction_difficulty_step`` off the roll. There is no cap.
 
-Movement reads capabilities only (#4651 decision 2): the source of a capability
-never matters here. The Phase Step ward keeps its own payer rule (a ward someone
-else cast charges its caster, #2208).
+Her plan (``CombatParticipant.dodge_enabled`` / ``dodge_landing`` / ``dodge_technique`` /
+``dodge_into_soulfray``) says whether to dodge, where to land, which technique answers
+(else her saved ``CharacterTechnique.default_dodge``, else her strongest source) and whether
+to keep dodging when the cast would overspend into Soulfray. With no landing she dodges in
+place. The Phase Step ward keeps its own payer rule (a ward someone else cast charges its
+caster, #2208).
 """
 
 from __future__ import annotations
@@ -18,10 +22,10 @@ from __future__ import annotations
 from collections.abc import Iterator
 import contextlib
 import contextvars
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from world.areas.positioning.constants import ReactionCostKind, ReactionReach
+from world.areas.positioning.constants import ReactionReach
 from world.areas.positioning.models import Position
 from world.areas.positioning.services import (
     REACH_ORDER,
@@ -29,7 +33,8 @@ from world.areas.positioning.services import (
     position_of,
     reachable_landings,
 )
-from world.combat.constants import DEFENSE_REDUCED_THRESHOLD, ActionCategory
+from world.areas.positioning.traversal import MovementSource, matched_movement, reach_for_strength
+from world.combat.constants import DEFENSE_REDUCED_THRESHOLD
 from world.combat.models import MovementConfig
 from world.combat.types import Steadier, SteadyResult
 
@@ -38,13 +43,18 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatOpponentAction, CombatParticipant
-    from world.conditions.models import CapabilityType, Compulsion, ConditionInstance
+    from world.combat.services.movement_use import MovementUse
+    from world.conditions.models import Compulsion, ConditionInstance
 
 #: True while an NPC attack is resolving through the automatic dodge, so the Phase
 #: Step interceptor (``blink_dodge``) leaves the hit to the roll (#4676).
 DODGE_ROLL_ACTIVE: contextvars.ContextVar[bool] = contextvars.ContextVar(
     "dodge_roll_active", default=False
 )
+
+
+#: What a use costs when it costs nothing (a non-technique use outside a fight).
+FREE_USE = "free"
 
 
 @dataclass(frozen=True)
@@ -60,21 +70,44 @@ class ReactionTuning:
 
 @dataclass(frozen=True)
 class DodgeSource:
-    """What lets her dodge: a capability with a reach, or a Phase Step ward."""
+    """What lets her dodge: one of her sources matching a dodging application, or a ward.
+
+    ``value`` is its standing strength (a technique's grant before any roll) and ``reach``
+    how far that strength lands her; a technique dodge rolls its own strength each time.
+    """
 
     reach: str
-    cost_kind: str
     value: int
-    capability: CapabilityType | None = None
+    way: str = ""
+    movement: MovementSource | None = None
     ward: ConditionInstance | None = None
+
+    @property
+    def technique_id(self) -> int | None:
+        """The technique a dodge with this source casts, or None."""
+        return self.movement.technique_id if self.movement is not None else None
+
+    @property
+    def name(self) -> str:
+        """What the dodge plan calls this source."""
+        if self.ward is not None:
+            return self.ward.condition.name
+        return self.movement.name if self.movement is not None else ""
 
 
 @dataclass(frozen=True)
 class Dodge:
-    """A dodge she will make: its source and where she lands (None stays put)."""
+    """A dodge she will make: its source, where she lands (None stays put), and once made,
+    the use it was (its strength and what it cost)."""
 
     source: DodgeSource
     landing: Position | None
+    use: MovementUse | None = None
+
+    @property
+    def strength(self) -> int:
+        """What the dodge adds to her defense roll before the reaction penalty."""
+        return self.use.strength if self.use is not None else self.source.value
 
 
 @contextlib.contextmanager
@@ -134,48 +167,74 @@ def _phase_step_ward(sheet: CharacterSheet) -> ConditionInstance | None:
     )
 
 
-def dodge_sources(participant: CombatParticipant) -> list[DodgeSource]:
-    """Every way she can dodge right now, strongest first."""
-    from world.conditions.models import CapabilityType  # noqa: PLC0415
-    from world.conditions.services import get_effective_capability_value  # noqa: PLC0415
+def _preferred_technique_id(participant: CombatParticipant) -> int | None:
+    """The technique her plan picks: this fight's choice, else her saved default."""
+    if participant.dodge_technique_id is not None:
+        return participant.dodge_technique_id
+    from world.magic.models import CharacterTechnique  # noqa: PLC0415
 
+    return (
+        CharacterTechnique.objects.filter(
+            character_id=participant.character_sheet_id, default_dodge=True
+        )
+        .values_list("technique_id", flat=True)
+        .first()
+    )
+
+
+def dodge_sources(participant: CombatParticipant) -> list[DodgeSource]:
+    """Every way she can dodge right now, the one her plan picks first, then strongest.
+
+    One entry per source: a source matching several dodging applications keeps the first
+    (the authored order). The Phase Step ward comes last.
+    """
     sheet = participant.character_sheet
+    seen: set[tuple[str, int, int]] = set()
     sources: list[DodgeSource] = []
-    dodging = [
-        capability
-        for capability in CapabilityType.objects.cached_all()
-        if capability.reaction_reach != ReactionReach.NONE
-    ]
-    for capability in dodging:
-        above = get_effective_capability_value(sheet, capability) - capability.innate_baseline
-        if above > 0:
-            sources.append(
-                DodgeSource(
-                    reach=capability.reaction_reach,
-                    cost_kind=capability.reaction_cost_kind,
-                    value=above,
-                    capability=capability,
-                )
-            )
-    ward = _phase_step_ward(sheet)
-    if ward is not None:
+    for ms in matched_movement(sheet.character):
+        if not ms.application.dodges:
+            continue
+        key = (ms.source.source_type, ms.source.source_id, ms.source.capability_id)
+        if key in seen:
+            continue
+        seen.add(key)
         sources.append(
             DodgeSource(
-                reach=ReactionReach.ANY_PLACE, cost_kind=ReactionCostKind.ANIMA, value=0, ward=ward
+                reach=reach_for_strength(ms.standing_strength),
+                value=ms.standing_strength,
+                way=ms.way,
+                movement=ms,
             )
         )
-    sources.sort(key=lambda s: (s.value, REACH_ORDER.get(s.reach, 0)), reverse=True)
+    preferred = _preferred_technique_id(participant)
+    sources.sort(
+        key=lambda s: (
+            s.technique_id is None or s.technique_id != preferred,
+            -s.value,
+            -REACH_ORDER.get(s.reach, 0),
+        )
+    )
+    ward = _phase_step_ward(sheet)
+    if ward is not None:
+        sources.append(DodgeSource(reach=ReactionReach.ANY_PLACE, value=0, ward=ward))
     return sources
 
 
 def dodge_landing_options(participant: CombatParticipant) -> list[Position]:
-    """Every place her strongest-reaching dodge can land in this round (her plan's choices)."""
+    """Every place her dodges can land in this round at their standing strength (her plan's
+    choices), her own place first."""
     sources = dodge_sources(participant)
     if not sources:
         return []
     current = position_of(participant.character_sheet.character)
-    widest = max(sources, key=lambda s: REACH_ORDER.get(s.reach, 0))
-    return reachable_landings(current, widest.reach)
+    found: dict[int, Position] = {}
+    for source in sources:
+        for place in reachable_landings(current, source.reach, way=source.way):
+            found.setdefault(place.pk, place)
+    if current is None:
+        return []
+    others = sorted((p for pk, p in found.items() if pk != current.pk), key=lambda p: p.name)
+    return [current, *others]
 
 
 def _reachable_dodge_source(
@@ -183,18 +242,24 @@ def _reachable_dodge_source(
 ) -> DodgeSource | None:
     """Find the first source that reaches the planned landing."""
     return next(
-        (source for source in sources if landing in reachable_landings(current, source.reach)), None
+        (
+            source
+            for source in sources
+            if landing in reachable_landings(current, source.reach, way=source.way)
+        ),
+        None,
     )
 
 
 def choose_dodge(
     participant: CombatParticipant, *, covered_position: Position | None = None
 ) -> Dodge | None:
-    """The dodge she makes against this attack, or None (plain defense roll).
+    """The dodge she means to make against this attack, or None (plain defense roll).
 
-    A planned landing is used when some source reaches it; otherwise she dodges in
-    place with her strongest source. Against a place-covering attack only a landing
-    outside the covered place helps, so with no such landing she does not dodge.
+    A planned landing is used when some source reaches it at its standing strength;
+    otherwise she dodges in place with her first source. Against a place-covering attack
+    only a landing outside the covered place helps, so with no such landing she does not
+    dodge. A technique dodge's own roll may still land her short (``make_dodge``).
     """
     if not participant.dodge_enabled:
         return None
@@ -216,92 +281,59 @@ def choose_dodge(
     return Dodge(source=sources[0], landing=None)
 
 
-def pay_for_dodge(participant: CombatParticipant, dodge: Dodge) -> bool:
-    """Charge the dodge's cost; False when she cannot pay (then she does not dodge)."""
+def make_dodge(participant: CombatParticipant, dodge: Dodge) -> Dodge | None:
+    """Make the dodge: pay for it and, for a technique, cast and roll it (#5066).
+
+    None when it does not happen: a ward that cannot pay, or a technique cast stopped
+    before it went off (her "dodge even into Soulfray" box unticked and the cast would
+    overspend, or no check to roll); nothing is paid then. A technique dodge whose roll
+    does not reach the planned landing dodges in place. An automatic dodge is never
+    lethal for a player who is not connected (``movement_use``).
+    """
     if dodge.source.ward is not None:
         from world.conditions.services import spend_condition_use  # noqa: PLC0415
         from world.magic.services.effect_handlers import _try_spend_reactive  # noqa: PLC0415
 
         if not _try_spend_reactive(dodge.source.ward):
-            return False
+            return None
         spend_condition_use(dodge.source.ward)
-        return True
-    return charge_capability_use(participant.character_sheet, dodge.source.cost_kind)
+        return dodge
+    from world.combat.services.movement_use import use_movement_source  # noqa: PLC0415
 
-
-def capability_use_cost(cost_kind: str) -> str:
-    """What one use of a capability with this cost kind costs, e.g. "2 anima" (#4676, #5019).
-
-    A dodge and a turn blink with the same capability cost the same.
-    """
-    tuning = reaction_tuning()
-    if cost_kind == ReactionCostKind.FATIGUE:
-        return f"{tuning.dodge_fatigue_cost} fatigue"
-    return f"{tuning.dodge_anima_cost} anima"
-
-
-def can_pay_capability_use(sheet: CharacterSheet, cost_kind: str) -> bool:
-    """Whether she can pay for one use now: fatigue always can, anima needs enough left."""
-    if cost_kind == ReactionCostKind.FATIGUE:
-        return True
-    from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
-
-    anima = CharacterAnima.objects.filter(character_id=sheet.pk).first()
-    return anima is not None and anima.current >= reaction_tuning().dodge_anima_cost
-
-
-def charge_capability_use(sheet: CharacterSheet, cost_kind: str) -> bool:
-    """Charge one use of a capability (a dodge or a turn blink); False when she cannot pay.
-
-    Fatigue for a physical capability, else anima, in the ``MovementConfig`` amounts.
-    """
-    tuning = reaction_tuning()
-    if cost_kind == ReactionCostKind.FATIGUE:
-        from world.fatigue.constants import EffortLevel  # noqa: PLC0415
-        from world.fatigue.services import apply_fatigue  # noqa: PLC0415
-
-        apply_fatigue(sheet, ActionCategory.PHYSICAL, tuning.dodge_fatigue_cost, EffortLevel.LOW)
-        return True
-    if not can_pay_capability_use(sheet, cost_kind):
-        return False
-    from world.magic.services.anima import deduct_anima  # noqa: PLC0415
-
-    deduct_anima(sheet.character, tuning.dodge_anima_cost, lethal=False)
-    return True
-
-
-def spend_capability_use(sheet: CharacterSheet, cost_kind: str, *, lethal: bool) -> None:
-    """Pay for a use she chooses on her own turn (a turn blink, #5019); never refused.
-
-    Fatigue for a physical capability. Anima goes through the cast's own path: ``deduct_anima``
-    may run past her pool into a deficit (in a lethal encounter), and ``accumulate_soulfray``
-    turns the strain into Soulfray, exactly as an unaffordable technique cast does. Pushing
-    past her limits is the point of the magic, so lack of anima never stops her.
-    """
-    tuning = reaction_tuning()
-    if cost_kind == ReactionCostKind.FATIGUE:
-        from world.fatigue.constants import EffortLevel  # noqa: PLC0415
-        from world.fatigue.services import apply_fatigue  # noqa: PLC0415
-
-        apply_fatigue(sheet, ActionCategory.PHYSICAL, tuning.dodge_fatigue_cost, EffortLevel.LOW)
-        return
-    from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
-    from world.magic.models.soulfray import SoulfrayConfig  # noqa: PLC0415
-    from world.magic.services.anima import deduct_anima  # noqa: PLC0415
-    from world.magic.services.soulfray import accumulate_soulfray  # noqa: PLC0415
-
-    anima = CharacterAnima.objects.filter(character_id=sheet.pk).first()
-    if anima is None:
-        return  # no anima pool to draw on
-    deficit = deduct_anima(sheet.character, tuning.dodge_anima_cost, lethal=lethal)
-    accumulate_soulfray(
-        character=sheet.character,
-        anima=anima,
-        deficit=deficit,
-        soulfray_config=SoulfrayConfig.objects.cached_singleton(),
-        check_result=None,
-        lethal=lethal,
+    character = participant.character_sheet.character
+    movement = dodge.source.movement
+    if movement is None:
+        return None
+    use = use_movement_source(
+        character,
+        movement,
+        participant=participant,
+        lethal=participant.encounter.is_lethal,
+        confirm_soulfray_risk=participant.dodge_into_soulfray,
+        chosen_by_player=False,
     )
+    if not use.went_off:
+        return None
+    landing = dodge.landing
+    if landing is not None:
+        current = position_of(character)
+        if landing not in reachable_landings(current, use.reach, way=dodge.source.way):
+            landing = None
+    return replace(dodge, landing=landing, use=use)
+
+
+def dodge_label(dodge: Dodge) -> str:
+    """The defense roll's "Dodge" line: what answered, what its roll gave, what it cost."""
+    use = dodge.use
+    if use is None or use.technique is None:
+        return f"Dodge ({dodge.source.name})" if dodge.source.name else "Dodge"
+    parts = [f"strength {use.strength}"]
+    if use.roll is not None:
+        parts.insert(0, f"roll {use.roll.success_level:+d}")
+    parts.append(f"{use.anima_paid} anima")
+    if use.soulfray_added:
+        parts.append(f"Soulfray +{use.soulfray_added}")
+    return f"Dodge ({dodge.source.name}: {', '.join(parts)})"
 
 
 def land_dodge(participant: CombatParticipant, dodge: Dodge, success_level: int) -> bool:
@@ -327,12 +359,40 @@ def covered_place(
     return position_of(participant.character_sheet.character)
 
 
-def dodge_cost_line(source: DodgeSource) -> str:
+def movement_use_cost(character: ObjectDB, movement: MovementSource, *, in_fight: bool) -> str:  # noqa: OBJECTDB_PARAM - the caster's game object
+    """What one use of ``movement`` costs now, e.g. "4 anima" or "1 fatigue" (#5066).
+
+    A technique's own cast cost, priced as ``use_technique`` charges it (out of a fight her
+    control often brings it to 0); anything else costs physical fatigue in a fight and
+    nothing outside one. A dodge and a turn move with the same source cost the same.
+    """
+    if movement.technique_id is None:
+        if not in_fight:
+            return FREE_USE
+        return f"{reaction_tuning().dodge_fatigue_cost} fatigue"
+    from world.magic.models import Technique  # noqa: PLC0415
+    from world.magic.services.techniques import preview_technique_anima_cost  # noqa: PLC0415
+
+    technique = Technique.objects.get(pk=movement.technique_id)
+    cost = preview_technique_anima_cost(character, technique)
+    return f"{cost.effective_cost} anima"
+
+
+def dodge_cost_line(participant: CombatParticipant, source: DodgeSource) -> str:
     """The bare cost of a dodge with this source, for the dodge plan."""
     if source.ward is not None:
         cost = f"{source.ward.condition.reactive_anima_cost} anima"
+    elif source.movement is not None:
+        cost = movement_use_cost(
+            participant.character_sheet.character, source.movement, in_fight=True
+        )
     else:
-        cost = capability_use_cost(source.cost_kind)
+        cost = ""
+    if source.technique_id is not None:
+        return (
+            f"Each dodge casts {source.name}: {cost} and a roll whose strength is the bonus. "
+            "Each dodge after the first this round is harder."
+        )
     return f"Each dodge costs {cost}. Each dodge after the first this round is harder."
 
 

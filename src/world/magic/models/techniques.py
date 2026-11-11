@@ -1634,11 +1634,24 @@ class CharacterTechnique(SharedMemoryModel):
         "its level (#4099). Applies at its own resonance only.",
     )
 
+    default_dodge = models.BooleanField(
+        default=False,
+        help_text=(
+            "Her saved default: this technique answers her automatic dodges in a fight "
+            "unless her dodge plan picks another (#5066). At most one per character."
+        ),
+    )
+
     class Meta:
         unique_together = ["character", "technique"]
         verbose_name = "Character Technique"
         verbose_name_plural = "Character Techniques"
         constraints = [
+            models.UniqueConstraint(
+                fields=["character"],
+                condition=models.Q(default_dodge=True),
+                name="character_technique_one_default_dodge",
+            ),
             # Computed (not literal) dash characters: the identifier-dashes linter flags
             # a literal em/en-dash in a `*name*` kwarg as a likely typo, but this
             # constraint's whole job is detecting that exact character, not naming

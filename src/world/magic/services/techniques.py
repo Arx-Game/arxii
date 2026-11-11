@@ -1311,6 +1311,29 @@ def _calculate_technique_cost(  # noqa: PLR0913
     return stats, anima, cost, effective_strain, plan
 
 
+def preview_technique_anima_cost(
+    character: ObjectDB,
+    technique: Technique,
+    *,
+    lethal: bool = True,
+) -> AnimaCostResult:
+    """What one cast of ``technique`` would cost ``character`` now, with no side effects.
+
+    The same pricing ``use_technique`` charges (``_calculate_technique_cost``): out of a
+    fight her control is higher and the cost is often 0 (#5066). Read by the move list and
+    the dodge plan to show a movement power's per-use cost.
+    """
+    _stats, _anima, cost, _strain, _plan = _calculate_technique_cost(
+        character=character,
+        technique=technique,
+        strain_commitment=0,
+        lethal=lethal,
+        apply_variant=True,
+        preferred_resonance=None,
+    )
+    return cost
+
+
 def _strain_power_bonus(effective_strain: int, strain_config, strain_power_enabled: bool) -> int:
     """Convert effective strain to power using the authored curve."""
     if effective_strain <= 0:
