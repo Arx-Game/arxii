@@ -10,6 +10,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from world.channels.services import provision_org_channel
 from world.character_sheets.models import CharacterSheet
 from world.covenants.constants import CommandTier, MembershipStanding
 from world.covenants.exceptions import (
@@ -280,6 +281,8 @@ def create_covenant(  # noqa: PLR0913
         campaign_story=campaign_story,
         leader=leader,
     )
+    # The covenant's backing Organization gets its ORG channel (#3299).
+    provision_org_channel(cov.organization)
 
     # Build rank ladder and determine which rank each founder gets.
     top_rank, base_rank = _build_default_ladder(cov, flat=flat)

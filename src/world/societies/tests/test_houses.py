@@ -808,17 +808,18 @@ class HousesSeedTests(TestCase):
 
 
 class HouseChannelTests(TestCase):
-    """The house channel connects the playing household, vassals cascaded."""
+    """A house's ORG channel (#3299) reaches its playing household, vassals cascaded."""
 
-    def test_sync_connects_member_and_vassal_accounts(self):
+    def test_house_channel_reaches_member_and_vassal_accounts(self):
         from evennia_extensions.factories import AccountFactory
+        from world.channels.models import Channel
+        from world.channels.services import can_access_channel, provision_org_channel
         from world.roster.factories import (
             PlayerDataFactory,
             RosterEntryFactory,
             RosterTenureFactory,
         )
         from world.scenes.factories import PersonaFactory
-        from world.societies.houses.services import sync_house_channel
         from world.societies.membership_services import (
             ensure_default_rank_ladder,
             join_organization,
@@ -842,12 +843,16 @@ class HouseChannelTests(TestCase):
 
         member_account = playing_member(house)
         vassal_account = playing_member(vassal)
+        outsider = AccountFactory()
 
-        channel = sync_house_channel(house)
-        self.assertTrue(channel.has_connection(member_account))
-        self.assertTrue(channel.has_connection(vassal_account))
-        # Idempotent re-run.
-        self.assertEqual(sync_house_channel(house).pk, channel.pk)
+        channel = provision_org_channel(house)
+        self.assertEqual(channel.organization, house)
+        self.assertTrue(can_access_channel(member_account, channel))
+        self.assertTrue(can_access_channel(vassal_account, channel))
+        self.assertFalse(can_access_channel(outsider, channel))
+        # Idempotent re-run: still the one channel.
+        self.assertEqual(provision_org_channel(house).pk, channel.pk)
+        self.assertEqual(Channel.objects.filter(organization=house).count(), 1)
 
 
 class TreeNamesTests(TestCase):

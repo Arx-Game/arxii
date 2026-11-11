@@ -20,6 +20,7 @@ from web.admin.reviewed_delete import ReviewedDeleteMixin
 # Inline Classes
 # =============================================================================
 from world.admin_utils import OneRowPerFormSet
+from world.channels.services import provision_org_channel
 from world.codex.admin import GrantReachOnSaveMixin
 from world.codex.models import OrganizationCodexGrant
 from world.codex.services import apply_organization_codex_grants
@@ -550,6 +551,13 @@ class OrganizationAdmin(ReviewedDeleteMixin, GrantReachOnSaveMixin, admin.ModelA
         return obj.memberships.count()
 
     member_count.short_description = "Members"
+
+    def save_model(self, request: HttpRequest, obj: Organization, form, change: bool) -> None:
+        """A staff-made organization gets its ORG channel (#3299). Run on every save, not
+        only on add: provisioning is idempotent and skips covert orgs, so an org staff
+        un-cover later gets its channel too."""
+        super().save_model(request, obj, form, change)
+        provision_org_channel(obj)
 
     def save_related(self, request: HttpRequest, form, formsets, change: bool) -> None:
         """A new grant row reaches current members; a new membership learns the

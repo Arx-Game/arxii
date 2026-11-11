@@ -20,6 +20,7 @@ from django.utils import timezone
 
 from world.areas.constants import AreaLevel
 from world.areas.models import Area
+from world.channels.services import provision_org_channel
 from world.roster.constants import MembershipBasis
 from world.roster.models import Family, Kinsperson, UnionKind
 from world.seeds.kinship import MARRIAGE_KIND_NAME
@@ -66,7 +67,6 @@ from world.societies.houses.services import (
     HousesServiceError,
     add_holding,
     swear_fealty,
-    sync_house_channel,
 )
 from world.societies.houses.types import ClaimKinDraft, ClaimLandDraft, ClaimObservanceDraft
 from world.societies.models import Organization
@@ -662,6 +662,7 @@ def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
         family=family,
         default_succession_law=template.default_succession_law,
     )
+    provision_org_channel(org)
     ensure_default_rank_ladder(org)
     if crew_slot is not None:
         # A crew takes its corner (#4061): the slot's gang is the liege, chosen by
@@ -1064,7 +1065,7 @@ def materialize_house_claim(claim: HouseClaim, *, sheet: CharacterSheet) -> Orga
                 district=claim.estate_district,
             )
 
-    sync_house_channel(org)
+    provision_org_channel(org)
     return org
 
 

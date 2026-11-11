@@ -205,10 +205,13 @@ MOST_POWERFUL_GIFTED plug. `HousesServiceError.user_message` on refusals.
   members-only org page.
 - **Telnet:** `sheet/house` (house, particle name, fealty chain, titles,
   tidings).
-- **Channel:** `sync_house_channel(org)` — Evennia channel `house_<pk>`
-  (aliased to the house name); audience = accounts currently playing active
-  members, vassal houses cascaded. Idempotent explicit call (no signals) —
-  run it after membership or fealty changes.
+- **Channel:** the house's ORG player channel (#3299,
+  `world.channels.services.provision_org_channel`), made when the org is built
+  (`build_family_org`) and re-checked on claim materialization and
+  `publish_house`. Access is derived live: accounts currently playing an active
+  member of the house or of a non-covert vassal (`vassals_of(...,
+  include_covert=False)`, a covert vassal's whole branch cut). The Evennia
+  `house_<pk>` channel and `sync_house_channel` are retired.
 - **Seeds:** cluster `houses` (rides `kinship`) — the demo house made a landed
   peer: org, recognition rules, succession law, crown fealty, ducal title,
   domain + farmland holding; plus `seed_nobiliary_particles()` upserting the
@@ -1022,7 +1025,7 @@ itself.
   | `Kinsperson`/`FamilyMembership`/parentage/union edges | `record_kin`, head first, then parents, grandparents, spouse, siblings, children, household — then the founder's own node, by `founder_relation` |
   | `Title.holder` | the placed head-of-house node |
   | `Area` (+ `LocationOwnership`) for an optional estate | `plan_estate`, under the draft's (or sheet's) realm capital |
-  | House channel audience | `sync_house_channel` |
+  | House ORG channel | `provision_org_channel` (#3299) |
 - **Admin review** (`HouseClaimAdmin`, `world/societies/admin.py`) — `HouseClaimFacetInline`/
   `HouseClaimKinInline`/`HouseClaimLandInline` render the founder's whole write-up read-only on the
   review queue (`can_delete=False`, no add permission); `approve_claims`/`reject_claims` actions run

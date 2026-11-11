@@ -38,6 +38,7 @@ from world.scenes.block_services import blocked_player_ids_for
 from world.scenes.interaction_services import WEB_PROTOCOL_KEYS
 from world.scenes.mute_services import account_muter_player_ids, muted_player_ids_for
 from world.societies.houses.models import FealtyEdge
+from world.societies.houses.services import vassals_of
 from world.societies.models import Organization, OrganizationMembership
 
 if TYPE_CHECKING:
@@ -94,19 +95,8 @@ def _org_cascade_ids(organization: Organization) -> list[int]:
     vassal's WHOLE branch cut: neither the covert vassal nor anything sworn beneath it
     reaches the liege's channel (a sub-vassal's presence would hint at the covert link).
     Mirrors ``_org_ids_reachable_for``, which walks the same edges upward."""
-    found = [organization.pk]
-    seen = {organization.pk}
-    frontier = {organization.pk}
-    while frontier:
-        vassal_ids = set(
-            FealtyEdge.objects.filter(liege_id__in=frontier, vassal__is_covert=False)
-            .exclude(vassal_id__in=seen)
-            .values_list("vassal_id", flat=True)
-        )
-        found.extend(sorted(vassal_ids))
-        seen |= vassal_ids
-        frontier = vassal_ids
-    return found
+    vassals = vassals_of(organization, recursive=True, include_covert=False)
+    return [organization.pk, *(vassal.pk for vassal in vassals)]
 
 
 def _membership_tenure_q(org_ids: list[int]) -> Q:
