@@ -69,7 +69,12 @@ class SeeingThroughAMask(JourneyCase):
 
 class AMaskInTheScenesPersonaList(JourneyCase):
     """Ysmay poses barefaced, then masks and poses again; the scene's persona list ties the
-    mask to her only for Ysmay, staff and Hobb, who has uncovered it in play (#4888)."""
+    mask to her only for Ysmay, staff, the scene's GM and Hobb, who has uncovered it (#4888).
+
+    Hobb's discovery is written with ``record_persona_discovery``, the one writer both play
+    paths (an identification roll, a GM's clue) go through; the roll itself is covered by the
+    "Seeing who is under the mask" journey.
+    """
 
     def setUp(self) -> None:
         super().setUp()
@@ -89,13 +94,14 @@ class AMaskInTheScenesPersonaList(JourneyCase):
         self.mask = Persona.objects.get(name="Stag Mask")
         self.face = self.ysmay.sheet_data.primary_persona
 
-    def _scene_personas(self, account) -> dict[str, dict]:
+    def _scene(self, account) -> tuple[dict[str, dict], dict[int, dict | None]]:
+        """The scene's personas by name, and where each persona stands, as ``account`` sees."""
         response = self.api(account).get(f"/api/scenes/{self.scene.pk}/")
         self.assertEqual(response.status_code, 200, response.content)
-        self.positions = {
+        positions = {
             row["persona_id"]: row["position"] for row in response.data["persona_positions"]
         }
-        return {row["name"]: row for row in response.data["personas"]}
+        return {row["name"]: row for row in response.data["personas"]}, positions
 
     def _listed(self, account, query: str) -> dict[str, dict]:
         response = self.api(account).get(f"/api/personas/?{query}")
@@ -104,7 +110,7 @@ class AMaskInTheScenesPersonaList(JourneyCase):
 
     def test_a_stranger_sees_the_mask_with_nothing_tying_it_to_her(self) -> None:
         wat = self.account_of(self.wat)
-        personas = self._scene_personas(wat)
+        personas, positions = self._scene(wat)
         self.assertIsNone(personas["Stag Mask"]["character_sheet"])
         self.assertIsNone(personas["Stag Mask"]["roster_entry"])
         # Her barefaced face is unchanged, and so is Wat's own.
@@ -112,8 +118,8 @@ class AMaskInTheScenesPersonaList(JourneyCase):
         self.assertEqual(personas["Ysmay"]["roster_entry"]["name"], "Ysmay")
         self.assertEqual(personas["Wat"]["character_sheet"], self.wat.pk)
         # She stands at the hearth as the mask; her own face stands nowhere beside it.
-        self.assertEqual(self.positions[self.mask.pk]["name"], "Hearth")
-        self.assertIsNone(self.positions[self.face.pk])
+        self.assertEqual(positions[self.mask.pk]["name"], "Hearth")
+        self.assertIsNone(positions[self.face.pk])
 
         listed = self._listed(wat, f"scene={self.scene.pk}")
         self.assertIsNone(listed["Stag Mask"]["character_sheet"])
@@ -121,13 +127,16 @@ class AMaskInTheScenesPersonaList(JourneyCase):
         # Asking for her faces by character does not hand him the mask.
         self.assertEqual(set(self._listed(wat, f"character_sheet={self.ysmay.pk}")), {"Ysmay"})
         self.assertEqual(set(self._listed(wat, f"character={self.ysmay.pk}")), {"Ysmay"})
+        # Looking the mask up on its own is refused outright.
+        mask = self.api(wat).get(f"/api/personas/{self.mask.pk}/")
+        self.assertEqual(mask.status_code, 403, mask.content)
 
     def test_she_staff_and_the_one_who_uncovered_it_see_the_link(self) -> None:
         staff = AccountFactory(is_staff=True)
         record_persona_discovery(self.mask, self.face, self.hobb.sheet_data)
         for account in (self.account_of(self.ysmay), staff, self.account_of(self.hobb)):
             with self.subTest(account=account.username):
-                personas = self._scene_personas(account)
+                personas, _positions = self._scene(account)
                 self.assertEqual(personas["Stag Mask"]["character_sheet"], self.ysmay.pk)
                 self.assertEqual(personas["Stag Mask"]["roster_entry"]["name"], "Ysmay")
                 listed = self._listed(account, f"scene={self.scene.pk}")
@@ -141,5 +150,12 @@ class AMaskInTheScenesPersonaList(JourneyCase):
     def test_the_scenes_gm_sees_the_link(self) -> None:
         gm = AccountFactory()
         SceneParticipationFactory(scene=self.scene, account=gm, is_gm=True)
-        personas = self._scene_personas(gm)
+        personas, _positions = self._scene(gm)
         self.assertEqual(personas["Stag Mask"]["character_sheet"], self.ysmay.pk)
+
+    def test_a_mask_she_puts_on_from_the_web_comes_back_tied_to_her(self) -> None:
+        response = self.api(self.account_of(self.ysmay)).post(
+            "/api/personas/create-mask/", {"name": "Owl Mask"}, format="json"
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.data["character_sheet"], self.ysmay.pk)
