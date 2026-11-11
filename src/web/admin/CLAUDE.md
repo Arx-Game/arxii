@@ -1354,6 +1354,60 @@ slice 7 (#4932).
   Deliberate no-ADR: the page layout and the warn-then-confirm save follow the approved
   #4843 spec and its 2026-11-01 rulings.
 
+## Power Builder (#5066 item 8)
+
+A superuser admin page for "I want people to be able to do X": one page per `Application`.
+`web/admin/power_builder/` (`views.py`: `power_builder`, `power_builder_pick`,
+`power_builder_review`; `forms.py`; `live.py`, pure reads; `constants.py`: `SourceKind`,
+`GrantMode`), templates in `web/templates/admin/power_builder/` (`page.html`, `_rail.html`,
+`_css.html`). URLs: `_power_builder/pick/` (`?pk=`, 400 on a missing or unknown pk),
+`_power_builder/new/` (`?capability=` preselects the capability), `_power_builder/<pk>/`,
+`_power_builder/<pk>/review/` (POST).
+
+- **What people can do** - the Application's own fields (name, capability, needs the property,
+  where, way of moving, dodges, description) edited in place, and a plain sentence of what it
+  means (`live.plain_words`).
+- **Compare at** - a GET form (`?power=&trait=&rank=&severity=`, defaults 6 / 3 / 2 / 1),
+  never stored. Strength at reference: a technique is
+  `TechniqueCapabilityGrant.calculate_value(effective_power=power)` and one level better
+  `scaled_strength(value, 2)`; trained ability `TraitCapabilityDerivation.calculate_value(trait)`;
+  a condition its value times severity when it scales with severity, else its value; a
+  distinction `DistinctionEffect.get_value_at_rank(rank)`.
+- **Techniques that do it** - every technique granting the capability and carrying the needed
+  property: gift and path (the paths whose `PathGiftGrant.starter_techniques` list it, else "no
+  path"; a minor gift is labelled), its properties as ticks, the grant's base and per power,
+  strength, "a cast: N anima, its own roll" (the technique's own `anima_cost`), "edit all",
+  and a "remove grant" tick (also on the near misses that grant it) that deletes the
+  `TechniqueCapabilityGrant` on save.
+- **Other ways to do it** - every `TraitCapabilityDerivation`, every `ConditionCapabilityEffect`
+  with a positive value (its condition template's properties as ticks, once per condition) and
+  every `DistinctionEffect` whose target's `target_capability` is the capability, with
+  strength, "N physical fatigue" (`MovementConfig.dodge_fatigue_cost`, field default without a
+  row), and whether it does the application ("no property", or no strength at this reference).
+- **One step away** - techniques granting the capability without the property (tick it), and
+  techniques carrying the property without a grant ("grant it" plus base and per power).
+- **Add a technique that does this** - gift, path (only paths with a `PathGiftGrant` for that
+  gift, or "no path"), name, the application's property and the gift's substance property
+  (`substance_mark_for`) pre-ticked, grant base and per power. Created through
+  `create_technique` (shared cast template, level 1, intensity 1, control 1, physical, the effect
+  type of the first technique that does it, else the first by name, and that type's
+  `base_anima_cost`), then the grant, then added to the path grant's techniques.
+- **Rail** - the capability's other applications (way of moving, where, needed property, how
+  many sources do it) and "+ New application of <capability>"; the `MovementConfig` reach bands
+  with a link to Movement settings; Credit with "Mark reviewed".
+- **Save** - one `transaction.atomic()`; writes only what changed, credits the Application and
+  each credited row it touched (a technique, a condition template, a distinction effect) with
+  `stamp_written`, one admin `LogEntry`. Source rows are plain forms; the Application's
+  `ModelForm` and every row the save can write are kept in a `CacheGuard` before validating
+  and restored on every path that does not commit (refusal, setup gate, an error).
+- **Ways in** - the Authoring Workbench's Builders panel ("Let people", every Application by
+  capability labelled by `live.picker_label`, e.g. "Evade (dodges, lands by blinking)", Open,
+  "New application"), and "Open in the Power Builder" on the Application change
+  form (`links.builder_url`).
+- Journey: `src/integration_tests/test_power_builder_journeys.py`.
+
+Full reference: `docs/systems/mechanics.md` "Power Builder".
+
 ## Combo map (#4891, slice 3 of #4843)
 
 **Purpose:** one read-only page per condition property and per condition template: the
