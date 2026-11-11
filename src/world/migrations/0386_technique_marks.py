@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0383_item_template_family_proxies"),
+        ("arxii", "0385_domains_only_on_land"),
     ]
 
     operations = [

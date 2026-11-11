@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0386_drop_capability_movement_columns"),
+        ("arxii", "0388_drop_capability_movement_columns"),
     ]
 
     operations = [

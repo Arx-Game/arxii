@@ -205,6 +205,58 @@ def rung_area_for_title(title: Title) -> Area:
     return _rung_area(title)
 
 
+def _tiers_at_level(level: int) -> tuple[str, ...]:
+    """The title tiers whose own rung sits at an Atlas ``level`` (MARCH shares COUNTY's)."""
+    return tuple(tier for tier, tier_level in TIER_TO_AREA_LEVEL.items() if tier_level == level)
+
+
+def title_on_area(area: Area) -> Title | None:
+    """The Title whose own rung is ``area``: the one of ``area``'s tier whose seat
+    barony lies inside it. Areas never overlap and a chain climbs one tier per Area,
+    so at most one qualifies; ``None`` for ground no rung decorates."""
+    from world.areas.services import area_subtree_pks  # noqa: PLC0415
+
+    tiers = _tiers_at_level(area.level)
+    if not tiers:
+        return None
+    return (
+        Title.objects.filter(tier__in=tiers, seat_domain__area_id__in=area_subtree_pks(area))
+        .select_related("house")
+        .first()
+    )
+
+
+def house_holding_area(area: Area) -> Organization | None:
+    """The house holding the rung on ``area``. Land (a county, a barony) answers from
+    its Domain's owner; a duchy and above have no Domain (#5069) and answer from the
+    Title standing on them. ``None`` for an unclaimed rung or undecorated ground."""
+    domain = (
+        Domain.objects.filter(pk=area.pk, owner_org__isnull=False)
+        .select_related("owner_org")
+        .first()
+    )
+    if domain is not None:
+        return domain.owner_org
+    title = title_on_area(area)
+    return title.house if title is not None else None
+
+
+def chain_land_domain(title: Title) -> Domain | None:
+    """The Domain a title's land writing lands on: its own rung's when the rung is
+    land, else the county of its own chain (a duke's demesne prose, hall and land
+    shapes describe the county he sits in, #5069)."""
+    own = _rung_area(title)
+    if own.level <= AreaLevel.COUNTY:
+        return Domain.objects.filter(pk=own.pk).first()
+    # The seat barony's ancestors are the chain; the first at county level is its county.
+    area: Area | None = title.seat_domain.area
+    while area is not None and area.level < AreaLevel.COUNTY:
+        area = area.parent
+    if area is None or area.level != AreaLevel.COUNTY:
+        return None
+    return Domain.objects.filter(pk=area.pk).first()
+
+
 def _make_area(*, name: str, tier: str, parent: Area | None, realm: Realm | None) -> Area:
     area = Area(
         name=_area_name(name),
@@ -228,10 +280,12 @@ def plant_rung(  # noqa: PLR0913 - keyword-only; one arg per thing a rung is
     held_by: Organization | None = None,
     station: str = TitleStation.SEATED,
 ) -> Title:
-    """Plant a rung: its Area, a Domain per chain Area, and a Title per
-    chain tier, all sharing one seat Domain (the barony at the chain's
-    bottom). An unheld seated rung below the crown is left ``is_claimable``;
-    a crown (KINGDOM, EMPIRE), a titular or a potential rung never is (#4983).
+    """Plant a rung: its Area, a Domain for each chain Area that is land (the
+    county and the barony, #5069: a duchy is its counties and a kingdom its
+    duchies, organization with no ground of their own), and a Title per chain
+    tier, all sharing one seat Domain (the barony at the chain's bottom). An
+    unheld seated rung below the crown is left ``is_claimable``; a crown
+    (KINGDOM, EMPIRE), a titular or a potential rung never is (#4983).
     """
     parent_area = _rung_area(parent_title) if parent_title is not None else None
     if parent_area is not None and TIER_TO_AREA_LEVEL[tier] >= parent_area.level:
@@ -255,6 +309,8 @@ def plant_rung(  # noqa: PLR0913 - keyword-only; one arg per thing a rung is
         owner_org=held_by,
     )
     for area in chain_areas[:-1]:
+        if area.level > AreaLevel.COUNTY:
+            continue
         Domain.objects.create(area=area, name=name if area is top_area else "", owner_org=held_by)
     tiers = (tier, *_CHAIN_BELOW[tier])
     claimable = (
@@ -562,13 +618,9 @@ def liege_for_title(title: Title) -> Organization | None:
     _require_chain_top(title)
     area = _rung_area(title).parent
     while area is not None:
-        domain = (
-            Domain.objects.filter(pk=area.pk, owner_org__isnull=False)
-            .select_related("owner_org")
-            .first()
-        )
-        if domain is not None:
-            return domain.owner_org
+        holder = house_holding_area(area)
+        if holder is not None:
+            return holder
         area = area.parent
     return None
 
@@ -609,8 +661,8 @@ def assign_holder(title: Title, house: Organization) -> Title:
         member.house = house
         member.is_claimable = False
         member.save(update_fields=["house", "is_claimable"])
-    for area in family_areas:
-        domain = Domain.objects.get(pk=area.pk)
+    # Only the chain's land (county, barony) has a Domain to own (#5069).
+    for domain in Domain.objects.filter(pk__in=[area.pk for area in family_areas]):
         domain.owner_org = house
         domain.save(update_fields=["owner_org"])
     title.refresh_from_db()
@@ -660,8 +712,7 @@ def vacate_holder(title: Title) -> Title:
         member.house = None
         member.is_claimable = True
         member.save(update_fields=["house", "is_claimable"])
-    for area in family_areas:
-        domain = Domain.objects.get(pk=area.pk)
+    for domain in Domain.objects.filter(pk__in=[area.pk for area in family_areas]):
         domain.owner_org = None
         domain.save(update_fields=["owner_org"])
     title.refresh_from_db()
