@@ -588,6 +588,14 @@ class TwoGiftsOneProperty(_TheCellar):
         self.assertEqual(roll.extras(), [3])
         self.assertEqual(self.anima(self.ondrelle), 15)  # Light Step's own 5
 
+    def test_typed_on_telnet_she_picks_and_returns_to_her_default(self) -> None:
+        told = self.telnet(self.ondrelle, "combat dodgewith Light Step")
+        self.assertIn("You'll dodge with Light Step.", told)
+        self.assertEqual(self.participant(self.ondrelle).dodge_technique, self.light_step)
+        told = self.telnet(self.ondrelle, "combat dodgewith default")
+        self.assertIn("You'll dodge with your default.", told)
+        self.assertIsNone(self.participant(self.ondrelle).dodge_technique)
+
     def test_a_saved_default_answers_in_every_fight(self) -> None:
         told = self.telnet(self.ondrelle, "combat dodgedefault Light Step")
         self.assertIn("Light Step is your default dodge.", told)

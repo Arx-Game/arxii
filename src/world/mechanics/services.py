@@ -1660,7 +1660,9 @@ def _get_condition_sources(character: ObjectDB) -> list[CapabilitySource]:
     A condition reaches an application by what it carries: its template's and current
     stage's properties ride the source as ``effect_property_ids``. Thread-passive
     capability grants (engaged tier-0 CAPABILITY_GRANT rows) follow as one source per
-    capability with no marks.
+    capability with no marks. A condition that lowers a capability (a debuff) is not a
+    source: its total is taken off each of these sources of that capability, so it
+    impairs them as the summed value did before (#5066 review).
     """
     try:
         sheet = character.sheet_data
@@ -1669,24 +1671,31 @@ def _get_condition_sources(character: ObjectDB) -> list[CapabilitySource]:
         # capabilities are character-specific and conditions on a sheet-less
         # object don't materialize as CharacterModifier rows.
         return []
+    contributions = condition_capability_contributions(sheet)
+    debuffs: dict[int, int] = {}
+    for contribution in contributions:
+        if contribution.value < 0:
+            debuffs[contribution.capability_id] = (
+                debuffs.get(contribution.capability_id, 0) + contribution.value
+            )
     sources = [
         CapabilitySource(
             capability_name="",  # Not needed for PK-based matching
             capability_id=contribution.capability_id,
-            value=contribution.value,
+            value=contribution.value + debuffs.get(contribution.capability_id, 0),
             source_type=CapabilitySourceType.CONDITION,
             source_name=contribution.condition_name,
             source_id=contribution.instance_id,
             effect_property_ids=sorted(contribution.property_ids),
         )
-        for contribution in condition_capability_contributions(sheet)
+        for contribution in contributions
         if contribution.value > 0
     ]
     sources.extend(
         CapabilitySource(
             capability_name="",
             capability_id=cap_id,
-            value=value,
+            value=value + debuffs.get(cap_id, 0),
             source_type=CapabilitySourceType.CONDITION,
             source_name="",  # thread grants aggregate; no single source name
             source_id=0,
@@ -1694,7 +1703,7 @@ def _get_condition_sources(character: ObjectDB) -> list[CapabilitySource]:
         for cap_id, value in thread_passive_capability_grants(sheet).items()
         if value > 0
     )
-    return sources
+    return [source for source in sources if source.value > 0]
 
 
 def _get_modifier_sources(character: ObjectDB) -> list[CapabilitySource]:

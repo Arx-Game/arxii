@@ -1215,6 +1215,21 @@ class Application(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                 fields=["capability", "target_property", "name"],
                 name="application_unique_cap_prop_name",
             ),
+            # The constraint above treats a null target as distinct; an "anywhere"
+            # application is unique by capability and name (#5066).
+            models.UniqueConstraint(
+                fields=["capability", "name"],
+                condition=models.Q(target_property__isnull=True),
+                name="application_unique_cap_name_anywhere",
+            ),
+            # A null target means "anywhere she moves", so it is only meaningful for an
+            # application about moving (#5066).
+            models.CheckConstraint(
+                condition=models.Q(target_property__isnull=False)
+                | ~models.Q(way_of_moving="")
+                | models.Q(dodges=True),
+                name="application_anywhere_only_for_moving",
+            ),
         ]
 
     class NaturalKeyConfig:

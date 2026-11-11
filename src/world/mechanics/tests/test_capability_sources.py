@@ -363,3 +363,35 @@ class TechniqueSourceQueryCountTests(TestCase):
             f"exists — #2708 C1); got no_config={no_config_count}, "
             f"with_config={with_config_count}.",
         )
+
+
+class ConditionSourceTests(TestCase):
+    """A condition is a source carrying its own properties; a debuff lowers it (#5066)."""
+
+    def test_one_source_per_condition_with_its_properties_and_the_debuff_netted(self) -> None:
+        from world.conditions.factories import (
+            ConditionCapabilityEffectFactory,
+            ConditionInstanceFactory,
+            ConditionTemplateFactory,
+        )
+
+        sheet = CharacterSheetFactory()
+        traversal = CapabilityTypeFactory(name="traversal_condsrc")
+        incorporeal = PropertyFactory(name="incorporeal_condsrc")
+        smoke = ConditionTemplateFactory(name="Smoke Form condsrc")
+        smoke.properties.add(incorporeal)
+        ConditionCapabilityEffectFactory(condition=smoke, capability=traversal, value=5)
+        mired = ConditionTemplateFactory(name="Mired condsrc")
+        ConditionCapabilityEffectFactory(condition=mired, capability=traversal, value=-3)
+        ConditionInstanceFactory(target=sheet.character, condition=smoke)
+        ConditionInstanceFactory(target=sheet.character, condition=mired)
+
+        sources = [
+            s
+            for s in get_capability_sources_for_character(sheet.character)
+            if s.source_type == CapabilitySourceType.CONDITION and s.capability_id == traversal.pk
+        ]
+
+        assert [(s.source_name, s.value, s.effect_property_ids) for s in sources] == [
+            ("Smoke Form condsrc", 2, [incorporeal.pk])
+        ]

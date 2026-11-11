@@ -168,6 +168,26 @@ class APullOnItsOwn(_PullsInTheCellar):
         )
 
 
+class TypingTheDefensivePull(_PullsInTheCellar):
+    def test_autopull_typed_on_and_off(self) -> None:
+        told = self.telnet(self.ondrelle, "combat autopull Veil 1")
+        self.assertIn("You'll pull threads for defense when attacked.", told)
+        seat = self.participant(self.ondrelle)
+        self.assertTrue(seat.auto_pull_defense)
+        self.assertEqual((seat.defense_pull_resonance, seat.defense_pull_tier), (self.veil, 1))
+
+        told = self.telnet(self.ondrelle, "combat autopull off")
+
+        self.assertIn("You won't pull threads for defense on your own.", told)
+        self.assertFalse(self.participant(self.ondrelle).auto_pull_defense)
+
+    def test_a_tier_out_of_range_is_refused(self) -> None:
+        told = self.telnet(self.ondrelle, "combat autopull Veil 4")
+
+        self.assertIn("Pick a resonance you hold and a tier from 1 to 3", told)
+        self.assertFalse(self.participant(self.ondrelle).auto_pull_defense)
+
+
 class PullingForDefense(_PullsInTheCellar):
     def setUp(self) -> None:
         super().setUp()
@@ -183,10 +203,14 @@ class PullingForDefense(_PullsInTheCellar):
     def test_the_first_attack_pulls_before_her_dodge_rolls(self) -> None:
         for name in ("Archer", "Bowman"):
             self.blade(name, at=self.gallery)
+        defence = RecordingRoll(2, 2)
 
-        self.resolve(RecordingRoll(2, 2))
+        self.resolve(defence)
 
         self.assertEqual(self.technique_rolls.extras, [FLAT_BONUS, FLAT_BONUS])
+        # The pull reaches the defence roll only through the dodge's strength (4, then 4
+        # less the second reaction's step of 2), never as its own +2 on that roll.
+        self.assertEqual(defence.extras(), [4, 2])
         self.assertEqual(CombatPull.objects.filter(round_number=1).count(), 1)
         self.assertEqual(self.balance(), 9)
         self.assertTold(self.ondrelle, "You pull 1 thread for defense.")
