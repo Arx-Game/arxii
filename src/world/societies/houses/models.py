@@ -1356,6 +1356,89 @@ class CrisisIntel(SharedMemoryModel):
         return f"{self.org.name} knows of {self.crisis}"
 
 
+class RegionalEventKind(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """A kind of disaster that strikes a region (#5069 slice 4): a blight, a war, a
+    famine. Authored content, one row per kind. ``capacity_cut_pct`` is what the
+    formula reads while an event of this kind is open over a holding; the deltas land
+    on the holding's prosperity and unrest at open and come off at close;
+    ``crisis_type`` is the per-house crisis an awake house inside the footprint gets
+    to judge (the player-facing half), or nothing.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    capacity_cut_pct = models.PositiveSmallIntegerField(
+        default=0,
+        validators=[MaxValueValidator(100)],
+        help_text="Percent of a holding's capacity the event takes while it is open.",
+    )
+    prosperity_delta = models.SmallIntegerField(
+        default=0,
+        validators=[MinValueValidator(-100), MaxValueValidator(100)],
+        help_text="Added to each holding's prosperity at open, removed at close.",
+    )
+    unrest_delta = models.SmallIntegerField(
+        default=0,
+        validators=[MinValueValidator(-100), MaxValueValidator(100)],
+        help_text="Added to each holding's unrest at open, removed at close.",
+    )
+    crisis_type = models.ForeignKey(
+        DomainCrisisType,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="regional_event_kinds",
+        help_text="The crisis an awake house inside the footprint gets; blank = none.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class RegionalEvent(SharedMemoryModel):
+    """One disaster over one area, open until closed (#5069 slice 4). The formula reads
+    every open event over a holding's area or its ancestors as a capacity cut scaled by
+    ``severity_pct``; the Atlas shades the area for the duration. Opening and closing
+    rebase the holdings beneath once each, so writes are bounded by the footprint.
+    """
+
+    kind = models.ForeignKey(RegionalEventKind, on_delete=models.PROTECT, related_name="events")
+    area = models.ForeignKey("arxii.Area", on_delete=models.CASCADE, related_name="regional_events")
+    severity_pct = models.PositiveSmallIntegerField(
+        default=100,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text="Scales the kind's capacity cut: 100 is the full cut.",
+    )
+    started_at = models.DateTimeField(default=timezone.now)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    opened_by = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    note = models.TextField(blank=True, help_text="Staff's own note; never shown to players.")
+
+    class Meta:
+        ordering = ["-started_at", "pk"]
+
+    def __str__(self) -> str:
+        return f"{self.kind.name} over {self.area.name}"
+
+    @property
+    def is_active(self) -> bool:
+        return self.ended_at is None
+
+
 class MarriagePact(SharedMemoryModel):
     """A union-bound alliance between a senior and junior house (#1884).
 
