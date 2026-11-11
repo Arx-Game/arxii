@@ -40,6 +40,7 @@ from world.worship.factories import (
     PrayerFactory,
     ShrineDetailsFactory,
     WorshippedBeingFactory,
+    make_chosen,
 )
 from world.worship.models import DevotionStanding, Miracle, Prayer, Vision
 from world.worship.prayer_services import dire_straits_for, pray, send_vision
@@ -97,18 +98,9 @@ class HolySitePrayerTests(PrayerTestBase):
 
     def test_a_chosen_records_the_credited_devotion(self) -> None:
         """#4333: the Chosen earn at 200%; the prayer records what landed."""
-        from django.utils import timezone
-
-        from world.worship.factories import DevotionStandingFactory
-        from world.worship.models import PatronageValence
 
         ShrineDetailsFactory(feature_instance__room_profile=self.profile, being=self.being)
-        DevotionStandingFactory(
-            character_sheet=self.sheet,
-            being=self.being,
-            valence=PatronageValence.DEVOTIONAL,
-            established_at=timezone.now(),
-        )
+        make_chosen(self.sheet, self.being)
 
         outcome = pray(self.sheet, self.being, "Keep this house.")
 

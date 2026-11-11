@@ -695,8 +695,10 @@ class ChosenFavorConfig(SharedMemoryModel):
     """Staff-tunable favor thresholds for Chosen benefits (#2550).
 
     Singleton (pk=1), lazy-created via ``get_chosen_favor_config()``.
-    Only ``anima_recovery_*`` fields are wired; ``ceremony_edge_*`` fields are
-    defined for shape stability but inert until a future issue wires them.
+    ``anima_recovery_*`` and ``chosen_distinction`` are wired; ``ceremony_edge_*``
+    fields are defined for shape stability but inert until a future issue wires them.
+    The Chosen earning bonus and invocation ease are effects of ``chosen_distinction`` on
+    the patron favor targets (#4341), so they reach only a Chosen, never a pact holder.
     """
 
     anima_recovery_threshold = models.PositiveIntegerField(
@@ -715,18 +717,17 @@ class ChosenFavorConfig(SharedMemoryModel):
         default=1,
         help_text="DEFERRED — bonus weight added to the Devotion aspect. Inert until wired.",
     )
-    earn_bonus_percent = models.PositiveIntegerField(
-        default=100,
+    chosen_distinction = models.ForeignKey(
+        "arxii.Distinction",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="chosen_favor_configs",
         help_text=(
-            "Added to the 100% base rate for a character whose active patronage is this "
-            "being. Adds with favor earning modifiers."
-        ),
-    )
-    invocation_ease_points = models.PositiveIntegerField(
-        default=30,
-        help_text=(
-            "Points eased when invoking the character's own patron (30 is two bands). "
-            "Adds with favor eases and favor invocation modifiers."
+            'The distinction every Chosen holds (#4341). Its effects on the "Your patron" '
+            "favor targets are the Chosen earning bonus and invocation ease. Character "
+            "creation grants it with the patronage; saving a change here grants it to "
+            "every Chosen who lacks it."
         ),
     )
 

@@ -70,7 +70,6 @@ from world.worship.exceptions import (
 from world.worship.factories import (
     BeingFacetFactory,
     BeingResonanceFactory,
-    DevotionStandingFactory,
     FavorOutcomeAwardFactory,
     PledgeFactory,
     RiteKindFactory,
@@ -78,11 +77,11 @@ from world.worship.factories import (
     WorshippedBeingFactory,
     WorshipRiteFactory,
     WorshipRiteTierAwardFactory,
+    make_chosen,
 )
 from world.worship.invocation_services import get_devotion_config, invocation_difficulty
 from world.worship.models import (
     DevotionStanding,
-    PatronageValence,
     Pledge,
     PledgeCredit,
     PledgeDetails,
@@ -161,12 +160,7 @@ class PledgeTestBase(TestCase):
             resonance=cls.associated,
         )
         ShrineDetailsFactory(feature_instance__room_profile=cls.profile, being=cls.being)
-        DevotionStandingFactory(
-            character_sheet=cls.sheet,
-            being=cls.being,
-            valence=PatronageValence.DEVOTIONAL,
-            established_at=timezone.now(),
-        )
+        make_chosen(cls.sheet, cls.being)
         cls.pledge = PledgeFactory(
             being=cls.being, favor_target=20, span_weeks=2, closing_rite=cls.rite
         )

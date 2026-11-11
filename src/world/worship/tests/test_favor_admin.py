@@ -205,11 +205,21 @@ class ChosenAndBeingAdminTests(TestCase):
             "chosenadmin", "ca@example.com", "pw-1234567"
         )
         cls.being = WorshippedBeingFactory(name="Ombrin")
+        cls.chosen_sheet = CharacterSheetFactory()
         DevotionStandingFactory(
-            character_sheet=CharacterSheetFactory(),
+            character_sheet=cls.chosen_sheet,
             being=cls.being,
             favor=1,
             valence=PatronageValence.DEVOTIONAL,
+            established_at=timezone.now(),
+        )
+        # A pact holder (#4341) is not a Chosen: not counted, never granted the distinction.
+        cls.pact_sheet = CharacterSheetFactory()
+        DevotionStandingFactory(
+            character_sheet=cls.pact_sheet,
+            being=cls.being,
+            favor=1,
+            valence=PatronageValence.PACT,
             established_at=timezone.now(),
         )
 
@@ -224,12 +234,48 @@ class ChosenAndBeingAdminTests(TestCase):
             reverse("admin:arxii_chosenfavorconfig_change", args=(config.pk,))
         ).content.decode()
         for text in (
-            "Earn bonus percent",
-            "Invocation ease points",
+            "Chosen distinction",
             "Chosen per being",
             "Ombrin 1",
         ):
             self.assertIn(text, body, text)
+        self.assertNotIn("Earn bonus percent", body)
+        # #4341: opening the page creates the patron targets the distinction's effects use.
+        from world.mechanics.models import ModifierTarget
+
+        self.assertEqual(
+            sorted(
+                ModifierTarget.objects.filter(targets_patron=True).values_list("name", flat=True)
+            ),
+            ["Your patron favor earning", "Your patron favor invocation"],
+        )
+
+    def test_saving_the_chosen_distinction_grants_it_to_the_chosen(self) -> None:
+        """#4341: staff designate the Chosen distinction; every Chosen lacking it gets it."""
+        from world.distinctions.factories import DistinctionFactory
+        from world.distinctions.models import CharacterDistinction
+        from world.worship.services import get_chosen_favor_config
+
+        config = get_chosen_favor_config()
+        distinction = DistinctionFactory(name="Chosen", slug="chosen-admin")
+        response = self.client.post(
+            reverse("admin:arxii_chosenfavorconfig_change", args=(config.pk,)),
+            {
+                "anima_recovery_threshold": config.anima_recovery_threshold,
+                "anima_recovery_bonus": config.anima_recovery_bonus,
+                "ceremony_edge_threshold": config.ceremony_edge_threshold,
+                "ceremony_edge_bonus": config.ceremony_edge_bonus,
+                "chosen_distinction": distinction.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        holders = set(
+            CharacterDistinction.objects.filter(distinction=distinction).values_list(
+                "character_id", flat=True
+            )
+        )
+        self.assertEqual(holders, {self.chosen_sheet.pk})
 
     def test_being_change_form_has_the_check_type_override(self) -> None:
         body = self.client.get(

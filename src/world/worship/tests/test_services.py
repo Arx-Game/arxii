@@ -15,7 +15,11 @@ from world.worship.constants import (
     GODS_FAVORITE_PRINCE,
     GODS_FAVORITE_PRINCESS,
 )
-from world.worship.factories import WorshippedBeingFactory
+from world.worship.factories import (
+    WorshippedBeingFactory,
+    designate_chosen_distinction,
+    make_chosen,
+)
 from world.worship.models import (
     DevotionStanding,
     PatronageValence,
@@ -29,6 +33,7 @@ from world.worship.services import (
     convert_public_worship,
     establish_patronage,
     get_chosen_favor_config,
+    grant_chosen_distinction_to_chosen,
     grant_worship,
     is_birth_favored_by,
     release_patronage,
@@ -248,10 +253,17 @@ class ActivePatronageTests(TestCase):
         self.assertEqual(patronages[1].being, self.being_a)
 
     def test_best_patronage_favor_returns_highest(self) -> None:
-        establish_patronage(self.sheet, self.being_a, valence=PatronageValence.DEVOTIONAL)
+        make_chosen(self.sheet, self.being_a)
         bump_devotion(self.sheet, self.being_a, 20)
-        # #4333: the Chosen earn at 200% (100% + the default Chosen bonus of 100%).
+        # #4333: the Chosen earn at 200% (100% + the Chosen distinction's 100%, #4341).
         self.assertEqual(best_patronage_favor(self.sheet), 40)
+
+    def test_best_patronage_favor_ignores_a_pact(self) -> None:
+        """#4341: the anima ritual's Chosen favor reads Chosen patronages only."""
+        establish_patronage(self.sheet, self.being_a, valence=PatronageValence.PACT)
+        bump_devotion(self.sheet, self.being_a, 20)
+        self.assertEqual(best_patronage_favor(self.sheet), 0)
+        self.assertEqual(len(active_patronage_for(self.sheet)), 1)
 
     def test_best_patronage_favor_zero_when_no_patronage(self) -> None:
         self.assertEqual(best_patronage_favor(self.sheet), 0)
@@ -293,6 +305,32 @@ class ChosenFavorConfigTests(TestCase):
         self.assertEqual(config.pk, 1)
         self.assertEqual(config.anima_recovery_threshold, 10)
         self.assertEqual(config.anima_recovery_bonus, 5)
+
+    def test_grant_chosen_distinction_to_chosen(self) -> None:
+        """#4341: designating the Chosen distinction grants it to every Chosen lacking it,
+        never to a pact holder or an ordinary worshipper."""
+        from world.distinctions.models import CharacterDistinction
+
+        being = WorshippedBeingFactory()
+        chosen = CharacterSheetFactory()
+        pact = CharacterSheetFactory()
+        worshipper = CharacterSheetFactory()
+        establish_patronage(chosen, being, valence=PatronageValence.DEVOTIONAL)
+        establish_patronage(pact, being, valence=PatronageValence.PACT)
+        bump_devotion(worshipper, being, 5)
+        config = get_chosen_favor_config()
+        self.assertEqual(grant_chosen_distinction_to_chosen(config), 0)
+
+        distinction = designate_chosen_distinction()
+
+        self.assertEqual(grant_chosen_distinction_to_chosen(config), 1)
+        self.assertEqual(grant_chosen_distinction_to_chosen(config), 0)
+        holders = set(
+            CharacterDistinction.objects.filter(distinction=distinction).values_list(
+                "character_id", flat=True
+            )
+        )
+        self.assertEqual(holders, {chosen.pk})
 
     def test_get_chosen_favor_config_idempotent(self) -> None:
         first = get_chosen_favor_config()

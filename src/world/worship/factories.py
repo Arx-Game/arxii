@@ -403,3 +403,57 @@ class BeingStewardFactory(factory.django.DjangoModelFactory):
 
     being = factory.SubFactory(WorshippedBeingFactory)
     table = factory.SubFactory("world.gm.factories.GMTableFactory", gm__level="senior")
+
+
+#: The Chosen distinction's test values (#4341): the numbers the retired
+#: ``ChosenFavorConfig.earn_bonus_percent`` and ``invocation_ease_points`` held.
+CHOSEN_TEST_EARNING_PERCENT = 100
+CHOSEN_TEST_INVOCATION_EASE = 30
+
+
+def designate_chosen_distinction(
+    *,
+    earning_percent: int = CHOSEN_TEST_EARNING_PERCENT,
+    invocation_ease: int = CHOSEN_TEST_INVOCATION_EASE,
+):
+    """The designated Chosen distinction (#4341), creating and designating one with effects
+    on the two patron favor targets when none is designated yet."""
+    from world.distinctions.factories import (
+        DistinctionEffectFactory,
+        DistinctionFactory,
+    )
+    from world.worship.favor_services import ensure_patron_modifier_targets
+    from world.worship.services import get_chosen_favor_config
+
+    config = get_chosen_favor_config()
+    if config.chosen_distinction_id is not None:
+        return config.chosen_distinction
+    invocation_target, earning_target = ensure_patron_modifier_targets()
+    distinction = DistinctionFactory(name="Chosen", slug="chosen", cost_per_rank=0)
+    DistinctionEffectFactory(
+        distinction=distinction, target=earning_target, value_per_rank=earning_percent
+    )
+    DistinctionEffectFactory(
+        distinction=distinction, target=invocation_target, value_per_rank=invocation_ease
+    )
+    config.chosen_distinction = distinction
+    config.save(update_fields=["chosen_distinction"])
+    return distinction
+
+
+def make_chosen(sheet, being, *, favor: int = 0) -> DevotionStanding:
+    """Make ``sheet`` ``being``'s Chosen (#4341): a DEVOTIONAL patronage with ``favor`` and
+    the designated Chosen distinction granted, as character creation does."""
+    from world.worship.models import PatronageValence
+    from world.worship.services import (
+        establish_patronage,
+        grant_chosen_distinction,
+    )
+
+    designate_chosen_distinction()
+    standing = establish_patronage(sheet, being, valence=PatronageValence.DEVOTIONAL)
+    if favor:
+        standing.favor = favor
+        standing.save(update_fields=["favor"])
+    grant_chosen_distinction(sheet)
+    return standing

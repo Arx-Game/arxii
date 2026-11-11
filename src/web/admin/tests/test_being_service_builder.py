@@ -31,6 +31,7 @@ from world.worship.factories import (
     RiteKindFactory,
     WorshippedBeingFactory,
     WorshipRiteFactory,
+    designate_chosen_distinction,
 )
 from world.worship.models import BeingFacet, Pledge, RequestedItem
 
@@ -124,6 +125,8 @@ class ServiceBuilderTestCase(TestCase):
 
 class ServiceBuilderPageTests(ServiceBuilderTestCase):
     def test_the_page_shows_the_beings_service_and_its_context(self) -> None:
+        # The Chosen column reads the designated Chosen distinction's earning effect (#4341).
+        designate_chosen_distinction()
         body = self.body()
         self.assertIn("Being Service builder: Ombrin", body)
         self.assertIn("100% of amount", body)  # deed favor for the favored resonance
@@ -133,6 +136,9 @@ class ServiceBuilderPageTests(ServiceBuilderTestCase):
             body,
         )
         self.assertIn("Ombrin favor invocation", body)  # the targets exist once it opens
+        # The patron targets list the Chosen distinction under their own names.
+        self.assertIn("Your patron favor earning", body)
+        self.assertIn("Distinction effect: Chosen", body)
         self.assertIn("Every pledge type has an active closing rite.", body)
 
     def test_the_favored_facets_table_shows_the_worn_rates_and_the_side_panel_who_supplies_them(

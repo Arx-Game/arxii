@@ -24,6 +24,7 @@ from web.admin.authoring.links import builder_url
 from world.mechanics.constants import FAVOR_EARNING_CATEGORY_NAME, FAVOR_INVOCATION_CATEGORY_NAME
 from world.projects.constants import ProjectStatus
 from world.worship.constants import FAVOR_EARNING_BASE_PERCENT, BeingResonanceTier
+from world.worship.favor_services import chosen_distinction_patron_value, chosen_standing_q
 from world.worship.models import (
     Answer,
     BeingResonance,
@@ -108,7 +109,9 @@ class ModifierRow:
 
 
 def favor_modifier_rows(being: WorshippedBeing) -> list[ModifierRow]:
-    """Every source authored against ``being``'s favor targets or the any-being ones."""
+    """Every source authored against ``being``'s favor targets, the any-being ones and the
+    patron ones (#4341; those reach only the being's Chosen, listed under their own
+    "Your patron" target names, never as any-being)."""
     from world.conditions.models import ConditionInstance, ConditionModifierEffect  # noqa: PLC0415
     from world.covenants.models import CovenantRoleBonus  # noqa: PLC0415
     from world.distinctions.models import CharacterDistinction, DistinctionEffect  # noqa: PLC0415
@@ -121,7 +124,7 @@ def favor_modifier_rows(being: WorshippedBeing) -> list[ModifierRow]:
         )
         .filter(Q(target_being=being) | Q(target_being__isnull=True))
         .select_related("category")
-        .order_by("target_being", "category__name")
+        .order_by("targets_patron", "target_being", "category__name")
     )
     rows: list[ModifierRow] = []
     for target in targets:
@@ -192,10 +195,9 @@ def weeks_from_deeds(target: int, rate_percent: int, weekly_cap: int) -> int | N
 def pledge_pacing(pledge: Pledge) -> str:
     """ "At the weekly deed cap, from deeds alone: stranger N weeks · ..." for one pledge."""
     from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
-    from world.worship.services import get_chosen_favor_config  # noqa: PLC0415
 
     cap = get_devotion_config().weekly_deed_favor_cap
-    chosen = get_chosen_favor_config().earn_bonus_percent
+    chosen = chosen_distinction_patron_value(FAVOR_EARNING_CATEGORY_NAME)
     columns = (
         ("stranger", FAVOR_EARNING_BASE_PERCENT),
         (
@@ -401,9 +403,7 @@ def being_stats(being: WorshippedBeing) -> BeingStats:
     return BeingStats(
         domains=being.domains,
         worshippers_with_favor=DevotionStanding.objects.filter(being=being, favor__gt=0).count(),
-        chosen=DevotionStanding.objects.filter(
-            being=being, valence__isnull=False, released_at__isnull=True
-        ).count(),
+        chosen=DevotionStanding.objects.filter(chosen_standing_q(), being=being).count(),
         open_pledges=pledges.filter(project__status=ProjectStatus.ACTIVE).count(),
         closed_pledges=pledges.filter(
             project__status__in=[ProjectStatus.COMPLETED, ProjectStatus.FAILED]

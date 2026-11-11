@@ -12,7 +12,6 @@ from decimal import Decimal
 
 from django.db import IntegrityError, transaction
 from django.test import TestCase
-from django.utils import timezone
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -49,6 +48,8 @@ from world.worship.factories import (
     FavorOutcomeAwardFactory,
     WorshipDeclarationFactory,
     WorshippedBeingFactory,
+    designate_chosen_distinction,
+    make_chosen,
 )
 from world.worship.favor_services import (
     earning_rate,
@@ -61,7 +62,7 @@ from world.worship.invocation_services import (
     invoke_favor,
 )
 from world.worship.models import DevotionStanding, FavorInvocation, PatronageValence
-from world.worship.services import bump_devotion, get_chosen_favor_config
+from world.worship.services import best_patronage_favor, bump_devotion, establish_patronage
 
 
 def _target(being, category_name: str) -> ModifierTarget:
@@ -69,17 +70,14 @@ def _target(being, category_name: str) -> ModifierTarget:
 
 
 def _any_target(category_name: str) -> ModifierTarget:
-    return ModifierTarget.objects.get(category__name=category_name, target_being__isnull=True)
+    return ModifierTarget.objects.get(
+        category__name=category_name, target_being__isnull=True, targets_patron=False
+    )
 
 
 def _make_chosen(sheet, being, favor: int) -> DevotionStanding:
-    return DevotionStandingFactory(
-        character_sheet=sheet,
-        being=being,
-        favor=favor,
-        valence=PatronageValence.DEVOTIONAL,
-        established_at=timezone.now(),
-    )
+    """A Chosen of ``being`` through the Chosen distinction (#4341)."""
+    return make_chosen(sheet, being, favor=favor)
 
 
 class FavorTargetTests(TestCase):
@@ -96,7 +94,7 @@ class FavorTargetTests(TestCase):
             ModifierTarget.objects.filter(
                 category__name__in=[FAVOR_INVOCATION_CATEGORY_NAME, FAVOR_EARNING_CATEGORY_NAME]
             ).count(),
-            4,
+            6,
         )
 
     def test_any_being_target_unique(self) -> None:
@@ -106,7 +104,13 @@ class FavorTargetTests(TestCase):
         for category_name in (FAVOR_INVOCATION_CATEGORY_NAME, FAVOR_EARNING_CATEGORY_NAME):
             self.assertEqual(
                 ModifierTarget.objects.filter(
-                    category__name=category_name, target_being__isnull=True
+                    category__name=category_name, target_being__isnull=True, targets_patron=False
+                ).count(),
+                1,
+            )
+            self.assertEqual(
+                ModifierTarget.objects.filter(
+                    category__name=category_name, targets_patron=True
                 ).count(),
                 1,
             )
@@ -118,6 +122,46 @@ class FavorTargetTests(TestCase):
             ModifierTarget.objects.create(
                 category=target.category, name="A second one", target_being=being
             )
+
+    def test_patron_target_rules(self) -> None:
+        """#4341: a patron target is favor-only, names no being, one per favor category."""
+        from django.core.exceptions import ValidationError
+
+        from world.mechanics.factories import ModifierCategoryFactory
+
+        being = WorshippedBeingFactory()
+        own_target = ensure_being_modifier_targets(being)[0]
+        category = own_target.category
+        with self.assertRaises(ValidationError):
+            ModifierTarget(category=category, name="Second patron", targets_patron=True).clean()
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ModifierTarget.objects.create(
+                category=category, name="Second patron", targets_patron=True
+            )
+        with self.assertRaises(ValidationError):
+            ModifierTarget(
+                category=category,
+                name="Patron and being",
+                targets_patron=True,
+                target_being=being,
+            ).clean()
+        ModifierTarget.objects.filter(category=category, targets_patron=True).delete()
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ModifierTarget.objects.create(
+                category=category,
+                name="Patron and being",
+                targets_patron=True,
+                target_being=WorshippedBeingFactory(),
+            )
+        other = ModifierCategoryFactory(name="not_favor")
+        with self.assertRaises(ValidationError):
+            ModifierTarget(category=other, name="Patron stat", targets_patron=True).clean()
+        # The patron target is not the category's any-being target: a second any-being
+        # target is still refused, the patron one is not mistaken for it.
+        ModifierTarget.objects.filter(
+            category=category, target_being__isnull=True, targets_patron=False
+        ).delete()
+        ModifierTarget(category=category, name="Any being again").clean()
 
     def test_a_target_that_lost_its_being_is_linked_again(self) -> None:
         """A rolled-back release drops target_being and leaves the named targets."""
@@ -258,11 +302,35 @@ class EarningRateTests(TestCase):
         self.assertEqual(earning_rate(self.sheet, self.being), 250)
 
     def test_chosen_bonus_of_zero_restores_todays_rate(self) -> None:
+        designate_chosen_distinction(earning_percent=0)
         _make_chosen(self.sheet, self.being, favor=0)
-        config = get_chosen_favor_config()
-        config.earn_bonus_percent = 0
-        config.save()
         self.assertEqual(earning_rate(self.sheet, self.being), 100)
+
+    def test_pact_patron_gets_no_chosen_bonus(self) -> None:
+        """#4341: a PACT patronage is not a Chosen's, so even a character holding the
+        Chosen distinction earns at the base rate with a pact patron, gets no Chosen
+        invocation ease and no anima ritual favor."""
+        pact_being = WorshippedBeingFactory(name="Vashtar")
+        ensure_being_modifier_targets(pact_being)
+        designate_chosen_distinction()
+        standing = establish_patronage(self.sheet, pact_being, valence=PatronageValence.PACT)
+        standing.favor = 40
+        standing.save(update_fields=["favor"])
+
+        self.assertEqual(earning_rate(self.sheet, pact_being), 100)
+        labels = [ease.label for ease in invocation_difficulty(self.sheet, pact_being).eases]
+        self.assertNotIn("You are Vashtar's Chosen", labels)
+        self.assertEqual(best_patronage_favor(self.sheet), 0)
+
+    def test_chosen_holding_a_pact_keeps_bonus_with_her_own_patron_only(self) -> None:
+        _make_chosen(self.sheet, self.being, favor=12)
+        pact_being = WorshippedBeingFactory(name="Vashtar")
+        ensure_being_modifier_targets(pact_being)
+        establish_patronage(self.sheet, pact_being, valence=PatronageValence.PACT)
+
+        self.assertEqual(earning_rate(self.sheet, self.being), 200)
+        self.assertEqual(earning_rate(self.sheet, pact_being), 100)
+        self.assertEqual(best_patronage_favor(self.sheet), 12)
 
     def test_bump_devotion_scales_positive_amounts(self) -> None:
         _make_chosen(self.sheet, self.being, favor=0)

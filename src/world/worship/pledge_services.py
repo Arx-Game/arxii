@@ -462,24 +462,22 @@ def resolve_pledge_project(project: Project, outcome_tier: CheckOutcome | None) 
 
 def earning_rate_breakdown(sheet: CharacterSheet, being: WorshippedBeing) -> EarningRateBreakdown:
     """The earning rate's parts: the base, the Chosen bonus, favor earning modifiers and
-    what the worn pieces add (#4520)."""
+    what the worn pieces add (#4520).
+
+    The Chosen bonus is the patron-target part of the favor earning total (the Chosen
+    distinction's effect, #4341), 0 unless she is the being's Chosen; ``modifiers`` is
+    the rest, so the two never count the same point."""
     from world.mechanics.constants import FAVOR_EARNING_CATEGORY_NAME  # noqa: PLC0415
     from world.worship.favor_services import (  # noqa: PLC0415
-        active_patronage_of,
-        favor_modifier_total,
+        general_favor_modifier_total,
+        patron_modifier_total,
     )
-    from world.worship.services import get_chosen_favor_config  # noqa: PLC0415
     from world.worship.worn_services import worn_meaning  # noqa: PLC0415
 
-    chosen = (
-        get_chosen_favor_config().earn_bonus_percent
-        if active_patronage_of(sheet, being) is not None
-        else 0
-    )
     return EarningRateBreakdown(
         base=FAVOR_EARNING_BASE_PERCENT,
-        chosen_bonus=chosen,
-        modifiers=favor_modifier_total(sheet, being, FAVOR_EARNING_CATEGORY_NAME),
+        chosen_bonus=patron_modifier_total(sheet, being, FAVOR_EARNING_CATEGORY_NAME),
+        modifiers=general_favor_modifier_total(sheet, being, FAVOR_EARNING_CATEGORY_NAME),
         worn_bonus=worn_meaning(sheet, being).earning_percent,
     )
 

@@ -121,8 +121,8 @@ def bump_devotion(
     theirs; ``grant_achievement`` is idempotent per sheet).
 
     A positive ``amount`` is scaled by the character's earning rate with the
-    being (#4333, design 1a): 100%, plus the Chosen bonus for an active patronage,
-    plus favor earning modifiers. Every favor source writes through here, so all
+    being (#4333, design 1a): 100%, plus favor earning modifiers (a Chosen's bonus is
+    one, on the patron target, #4341). Every favor source writes through here, so all
     of them are scaled. A negative amount is applied as given. Returns the
     standing and the amount actually credited.
 
@@ -581,13 +581,74 @@ def active_patronage_for(sheet: "CharacterSheet") -> list[DevotionStanding]:
 
 
 def best_patronage_favor(sheet: "CharacterSheet") -> int:
-    """Return the favor of the highest-favor active patronage, or 0.
+    """Return the favor of the highest-favor Chosen patronage, or 0.
 
-    Returns 0 when the character has no active patronage — a non-Chosen or a
-    Chosen who has lost all their patrons.
+    Returns 0 when the character is no being's Chosen: a non-Chosen, a Chosen who has
+    lost all their patrons, or a character whose only patron is a pact (#4341). Read by
+    the anima ritual's Chosen bonus.
     """
-    patronages = active_patronage_for(sheet)
+    from world.worship.favor_services import chosen_patronages_for  # noqa: PLC0415
+
+    patronages = chosen_patronages_for(sheet)
     return patronages[0].favor if patronages else 0
+
+
+def grant_chosen_distinction_to_chosen(config: ChosenFavorConfig) -> int:
+    """Grant the designated Chosen distinction to every Chosen who lacks it (#4341).
+
+    Called by the Chosen favor admin when staff set or change
+    ``config.chosen_distinction``; character creation grants it with the patronage
+    (``establish_chosen_patronage``). Returns how many characters received it. Does
+    nothing when no distinction is designated.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
+    from world.distinctions.services import grant_distinction  # noqa: PLC0415
+    from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
+    from world.worship.favor_services import chosen_standing_q  # noqa: PLC0415
+
+    distinction = config.chosen_distinction
+    if distinction is None:
+        return 0
+    holders = CharacterDistinction.objects.filter(distinction=distinction).values("character_id")
+    sheet_ids = (
+        DevotionStanding.objects.filter(chosen_standing_q())
+        .exclude(character_sheet_id__in=holders)
+        .values_list("character_sheet_id", flat=True)
+        .distinct()
+    )
+    granted = 0
+    for sheet in CharacterSheet.objects.filter(pk__in=list(sheet_ids)):
+        grant_distinction(
+            sheet,
+            distinction,
+            origin=DistinctionOrigin.GAMEPLAY,
+            rank=1,
+            source_description="Chosen of a being",
+        )
+        granted += 1
+    return granted
+
+
+def grant_chosen_distinction(sheet: "CharacterSheet") -> None:
+    """Grant ``sheet`` the designated Chosen distinction at character creation (#4341),
+    unless none is designated or she already holds it."""
+    from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
+    from world.distinctions.services import grant_distinction  # noqa: PLC0415
+    from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
+
+    distinction = get_chosen_favor_config().chosen_distinction
+    if distinction is None:
+        return
+    if CharacterDistinction.objects.filter(character=sheet, distinction=distinction).exists():
+        return
+    grant_distinction(
+        sheet,
+        distinction,
+        origin=DistinctionOrigin.CHARACTER_CREATION,
+        rank=1,
+        source_description="Path of the Chosen",
+    )
 
 
 def establish_patronage(
