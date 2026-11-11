@@ -83,6 +83,7 @@ from world.conditions.services import (
     advance_condition_stage,
     apply_condition,
     get_active_conditions,
+    has_condition,
 )
 from world.forms.constants import AlternateSelfRevertKind
 from world.forms.factories import (
@@ -100,6 +101,7 @@ from world.magic.factories import (
     CharacterGiftFactory,
     EffectTypeFactory,
     GiftFactory,
+    RestoreToSenseActionTemplateFactory,
     TechniqueFactory,
     ThreadFactory,
 )
@@ -1760,14 +1762,57 @@ class _ATalkedDownBeast(_AltSelfMira):
         }
 
 
-class ATalkedDownSelfWithNoCompulsion(_ATalkedDownBeast):
-    def test_changing_back_stays_blocked_while_the_condition_holds(self) -> None:
+class TomasTalksTheBeastDown(_ATalkedDownBeast):
+    """Berserk drives Mira in the Beast; Tomas talks her down and she changes back at
+    once, though Beast Fury still runs its clock (ruled 2026-11-01, #4887)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        apply_condition(self.mira, self.berserk, severity=3, duration_rounds=3)
+        self.tomas = self.make_player("Tomas", room=self.road)
+        SceneFactory(
+            room=self.road,
+            participants=[self.account_of(self.mira), self.account_of(self.tomas)],
+        )
+        RestoreToSenseActionTemplateFactory(check_type=CheckTypeFactory(name="Willpower"))
+
+    def talk_her_down(self) -> None:
+        self.telnet(self.tomas, "restore_sense Mira")
+        with patch("world.checks.services.random.randint", return_value=95):
+            self.telnet(self.mira, "accept")
+        self.assertFalse(has_condition(self.mira, self.berserk))
+
+    def test_once_calmed_she_changes_back_with_no_roll_and_no_wait(self) -> None:
+        with force_check_outcome(self.failure):
+            refused = self.telnet(self.mira, "form revert")
+        self.assertIn("You cannot change back.", refused)
+        self.assertTrue(self.wearing_the_beast())
+
+        self.talk_her_down()
         with self.resist_rolls() as spy:
             told = self.telnet(self.mira, "form revert")
 
-        self.assertIn("You can't revert while not in control of yourself.", told)
+        self.assertIn("You revert to your true self.", told)
         self.assertEqual(spy.call_count, 0)
-        self.assertTrue(self.wearing_the_beast())
+        self.assertFalse(self.wearing_the_beast())
+        self.assertTrue(has_condition(self.mira, self.fury))
+
+    def test_through_the_web_client_too(self) -> None:
+        self.talk_her_down()
+
+        response = self.api(self.account_of(self.mira)).post(
+            "/api/forms/alternate-selves/revert/", format="json"
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(self.wearing_the_beast())
+
+    def test_still_raging_she_rolls_to_change_back(self) -> None:
+        with force_check_outcome(self.success):
+            told = self.telnet(self.mira, "form revert")
+
+        self.assertIn("the Beast tries to change back against Berserk.", told)
+        self.assertFalse(self.wearing_the_beast())
 
 
 class ATalkedDownSelfWhoseConditionCompels(_ATalkedDownBeast):

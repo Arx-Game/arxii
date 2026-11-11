@@ -4,7 +4,8 @@ Each alternate self that carries ultimates is a bond source in the reveal, besid
 patrons and companions: its cards appear after the surge, and choosing one readies the
 ultimate and puts her in that self. When Audere or the fight ends, an AUTOMATIC self
 taken on this way drops away; a TALKED_DOWN self stays, holding a behavior-altering
-condition that blocks `form revert` until she breaks free of it. A self she put on
+condition, until she changes back herself: with no compulsion on her, `form revert`
+works while the condition still runs (ruled 2026-11-01, #4887). A self she put on
 herself beforehand is never reverted by Audere. Choosing a card while another self is
 worn swaps them, unless she is not in control. Names are invented.
 
@@ -387,8 +388,10 @@ class _ATalkedDownSelf(_AudereSelfJourney):
         ).exists()
 
 
-class ATalkedDownSelfStaysUntilSheBreaksFree(_ATalkedDownSelf):
-    def test_she_stays_transformed_until_the_fury_is_broken(self) -> None:
+class ATalkedDownSelfStaysUntilSheChangesBack(_ATalkedDownSelf):
+    def test_the_self_outlasts_the_fight_and_she_changes_back_while_the_fury_runs(
+        self,
+    ) -> None:
         self._surge()
         self._choose(1)
         self.assertEqual(self._worn(), self.alt)
@@ -398,16 +401,9 @@ class ATalkedDownSelfStaysUntilSheBreaksFree(_ATalkedDownSelf):
         self.assertFalse(self._audere_held())
         self.assertEqual(self._worn(), self.alt)
 
-        refused = self.telnet(self.character, "form revert")
-        self.assertIn("You can't revert while not in control of yourself.", refused)
-        self.assertEqual(self._worn(), self.alt)
-
-        with force_check_outcome(CheckOutcomeFactory(name="Broke Free", success_level=2)):
-            self.telnet(self.character, "breakfree")
-        self.assertFalse(self._fury_held())
-
         self.assertIn("You revert to your true self.", self.telnet(self.character, "form revert"))
         self.assertIsNone(self._worn())
+        self.assertTrue(self._fury_held())
 
 
 class AFriendRalliesHerOutOfTheFury(_ATalkedDownSelf):
@@ -424,8 +420,6 @@ class AFriendRalliesHerOutOfTheFury(_ATalkedDownSelf):
         self._surge()
         self._choose(1)
         self._end_the_fight()
-        refused = self.telnet(self.character, "form revert")
-        self.assertIn("You can't revert while not in control of yourself.", refused)
 
         with patch("world.checks.services.random.randint", return_value=95):
             rallied = self.telnet(self.hobb, "rally Ysmay")
