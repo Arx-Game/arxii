@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
 NO_PULL = "Say which resonance, tier and threads to pull."
+NO_BURN_ALONE = "A burn rides a cast or a clash; a pull on its own cannot burn."
 PULLED = "You pull {count} thread{s} for the round."
 
 
@@ -67,6 +68,9 @@ class PullForTheRoundAction(Action):
             return ActionResult(success=False, message=refusal.user_message)
         if declaration is None:
             return ActionResult(success=False, message=NO_PULL)
+        if declaration.burn > 0:
+            # A burn strains the action it was declared with; a pull on its own has none.
+            return ActionResult(success=False, message=NO_BURN_ALONE)
         try:
             commit_combat_pull(
                 declaration,

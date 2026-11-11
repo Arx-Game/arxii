@@ -157,6 +157,22 @@ class APullOnItsOwn(_PullsInTheCellar):
         self.assertEqual(self.balance(), 8)
         self.assertEqual(self.anima(self.ondrelle), 18)
 
+    def test_a_burn_cannot_ride_a_pull_on_its_own(self) -> None:
+        told = self.web(
+            self.ondrelle,
+            "combat_pull",
+            pull_resonance_id=self.veil.pk,
+            pull_tier=1,
+            pull_thread_ids=[self.strand.pk],
+            pull_burn=2,
+        )
+
+        self.assertFalse(told.detail.success)
+        self.assertEqual(
+            told.detail.message, "A burn rides a cast or a clash; a pull on its own cannot burn."
+        )
+        self.assertEqual(self.balance(), 10)
+
     def test_typed_on_telnet(self) -> None:
         told = self.telnet(self.ondrelle, "combat pull Veil 1=Step Strand")
 
