@@ -324,6 +324,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         # unordered.
         "societies.successionlaw",
         "societies.holdingkind",
+        "societies.terraincalibration",
         "societies.housefeature",
         "societies.housetemplate",
         "societies.housecharterquestion",
