@@ -508,6 +508,7 @@ from actions.definitions.room_features import (
     StartDefenseInstallationAction,
     StartRoomFeatureProjectAction,
 )
+from actions.definitions.round_pull import PullForTheRoundAction
 from actions.definitions.rounds import (
     EndRoundAction,
     ForceResolveRoundAction,
@@ -911,6 +912,7 @@ _ALL_ACTIONS: list[Action] = [
     DodgePlanAction(),
     SteadyPlanAction(),
     DodgeSettingsAction(),
+    PullForTheRoundAction(),
     StandoffReadAction(),
     StandoffPressAction(),
     StandoffTermsAction(),

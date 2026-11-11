@@ -255,6 +255,36 @@ def pull_action_context(
     )
 
 
+def pull_alone_context(participant: CombatParticipant) -> PullActionContext:
+    """The action a pull declared on its own is matched against (#5066).
+
+    No one use: every technique she knows and every trait those techniques roll (and her
+    combat style's skill while it counts). A thread that relates to any of her uses may
+    be pulled; each use it then boosts is still matched on its own
+    (``round_pull_bonus``).
+    """
+    from world.magic.models import CharacterTechnique  # noqa: PLC0415
+    from world.magic.services.magic_skills import (  # noqa: PLC0415
+        cast_involved_trait_ids,
+        resolve_cast_check,
+    )
+    from world.magic.types.pull import PullActionContext as _PullActionContext  # noqa: PLC0415
+
+    sheet = participant.character_sheet
+    character = sheet.character
+    technique_ids: list[int] = []
+    trait_ids: set[int] = set()
+    for hold in CharacterTechnique.objects.filter(character=sheet).select_related("technique"):
+        technique_ids.append(hold.technique_id)
+        trait_ids.update(cast_involved_trait_ids(resolve_cast_check(character, hold.technique)))
+    return _PullActionContext(
+        combat_encounter=participant.encounter,
+        participant=participant,
+        involved_techniques=tuple(technique_ids),
+        involved_traits=_with_style_skill(sheet, tuple(sorted(trait_ids))),
+    )
+
+
 def round_pull_bonus(
     participant: CombatParticipant,
     *,
@@ -322,8 +352,13 @@ def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belo
     target: ObjectDB | None = None,
     cast_check: CastCheck | None = None,
     burned_for: str = "",
+    action_context: PullActionContext | None = None,
 ) -> None:
     """Commit *cast_pull* as a ``CombatPull`` row for the current round.
+
+    ``action_context`` overrides the action the threads are matched against: a pull
+    declared on its own (``pull_alone_context``) or an automatic defensive pull
+    (``auto_pull_for_defense``) has no one technique use (#5066).
 
     Calls ``spend_resonance_for_pull`` with a ``PullActionContext`` so:
 
@@ -375,13 +410,14 @@ def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belo
     from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
 
     sheet = participant.character_sheet
-    action_context = pull_action_context(
-        participant,
-        encounter=encounter,
-        technique_id=technique_id,
-        cast_check=cast_check,
-        target=target,
-    )
+    if action_context is None:
+        action_context = pull_action_context(
+            participant,
+            encounter=encounter,
+            technique_id=technique_id,
+            cast_check=cast_check,
+            target=target,
+        )
 
     beseech_bonus_thread_id = None
     applied_bonus = 0

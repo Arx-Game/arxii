@@ -35,7 +35,7 @@ from world.magic.services.threads import (
     compute_effective_cap,
     compute_level_cap,
     get_imbue_cost_multiplier,
-    get_pull_cost,
+    pull_cost_totals,
     recompute_max_health_with_threads,
     relationship_side_from_row,
     shown_thread_level,
@@ -1209,9 +1209,8 @@ def preview_resonance_pull(  # noqa: PLR0913
 
     _validate_pull_threads(threads, character_sheet, resonance, excluded_kinds)
 
-    cost = get_pull_cost(tier, None)
-    n_threads = len(threads)
-    anima_cost = cost.anima_per_thread * max(0, n_threads - 1)
+    totals = pull_cost_totals(tier, len(threads))
+    anima_cost = totals.anima
 
     # #1919: Anima waiver for social-action previews. When scene_id is provided,
     # check whether the scene is high-stakes (active combat or DANGER round).
@@ -1227,7 +1226,7 @@ def preview_resonance_pull(  # noqa: PLR0913
     anima = CharacterAnima.objects.filter(character=character_sheet).first()
     current_anima = anima.current if anima else 0
 
-    affordable = balance >= cost.resonance_cost and current_anima >= anima_cost
+    affordable = balance >= totals.resonance and current_anima >= anima_cost
 
     in_combat = combat_encounter is not None
     resolved = resolve_pull_effects(
@@ -1250,10 +1249,10 @@ def preview_resonance_pull(  # noqa: PLR0913
     if technique is not None:
         from world.magic.services.burn import preview_burn  # noqa: PLC0415
 
-        burn = preview_burn(character_sheet, resonance, technique, cost.resonance_cost)
+        burn = preview_burn(character_sheet, resonance, technique, totals.resonance)
 
     return PullPreviewResult(
-        resonance_cost=cost.resonance_cost,
+        resonance_cost=totals.resonance,
         anima_cost=anima_cost,
         affordable=affordable,
         resolved_effects=resolved,
@@ -1423,8 +1422,7 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         msg = "Must pull at least one thread."
         raise InvalidImbueAmount(msg)
 
-    cost = get_pull_cost(tier, None)
-    n_threads = len(threads)
+    totals = pull_cost_totals(tier, len(threads))
 
     _validate_pull_threads_for_commit(threads, character_sheet, resonance, action_context)
 
@@ -1437,16 +1435,17 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         resonance=resonance,
     )
     burn = max(burn, 0)
-    if cr.balance < cost.resonance_cost + burn:
-        needed = cost.resonance_cost + burn
+    if cr.balance < totals.resonance + burn:
+        needed = totals.resonance + burn
         msg = "Need " + str(needed) + " resonance, have " + str(cr.balance) + "."
         raise ResonanceInsufficient(msg)
 
-    # Anima cost: per-spec §5.4 lines 1452–1458, anima_per_thread × max(0, n-1).
+    # Anima cost: every pulled thread pays its tier's share, the first included (#5066:
+    # a pull lasts until her next turn and boosts every use it relates to).
     # #1919: social-action pulls may waive anima entirely when no combat encounter
     # or DANGER round is active — anima_cost_override=0 zeroes the cost before the
     # balance check and skips the lock query entirely.
-    anima_total = cost.anima_per_thread * max(0, n_threads - 1)
+    anima_total = totals.anima
     if anima_cost_override is not None:
         anima_total = anima_cost_override
     if anima_total > 0:
@@ -1490,7 +1489,7 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
             tier=tier,
             threads=threads,
             resolved=resolved,
-            resonance_cost=cost.resonance_cost,
+            resonance_cost=totals.resonance,
             anima_total=anima_total,
             resonance_burned=burn,
             burn_valuation=burn_valuation,
@@ -1498,7 +1497,7 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         )
     # Debit only after persistence succeeded (mutates SharedMemoryModel-cached
     # instances in place).
-    cr.balance -= cost.resonance_cost + burn
+    cr.balance -= totals.resonance + burn
     cr.save(update_fields=["balance"])
     if anima_total:
         anima.current -= anima_total
@@ -1527,7 +1526,7 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
     # exists (spec §5.4 step 7). Currently a no-op.
 
     return ResonancePullResult(
-        resonance_spent=cost.resonance_cost,
+        resonance_spent=totals.resonance,
         anima_spent=anima_total,
         resolved_effects=resolved,
         resonance_burned=burn,

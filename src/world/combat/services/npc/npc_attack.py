@@ -20,6 +20,7 @@ from world.combat.models import (
     CombatParticipant,
     ThreatPoolEntry,
 )
+from world.combat.services.auto_pull import auto_pull_for_defense
 from world.combat.services.combos.combo_outcome import _damage_multiplier_for_success
 from world.combat.services.npc.defense_roll import defense_result_line, record_defense_roll
 from world.combat.services.npc.npc_movement import strike_pool_key
@@ -316,6 +317,8 @@ def resolve_npc_attack(
     dodge = choose_dodge(participant, covered_position=covered)
     dodge_modifier = 0
     if dodge is not None:
+        # Her saved defensive pull, the first time she is attacked this round (#5066).
+        auto_pull_for_defense(participant, dodge, check_type)
         dodge = make_dodge(participant, dodge)
     if dodge is not None:
         dodge_modifier = dodge.strength - reaction_penalty(participant)

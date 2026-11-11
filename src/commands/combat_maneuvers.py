@@ -47,6 +47,7 @@ _SUBVERBS: dict[str, str] = {
     "dodgewith": "dodge_settings",
     "dodgedefault": "dodge_settings",
     "autopull": "dodge_settings",
+    "pull": "combat_pull",
     "steady": "combat_steady",
     "charge": "combat_charge",
     "strike": "combat_strike",
@@ -59,7 +60,7 @@ _SUBVERBS: dict[str, str] = {
 # subverbs that set a reaction plan for the round.
 _PLAN_SUBVERBS = {"dodge", "steady"}
 # subverbs that set her standing dodge answers (#5066): which technique, the defensive pull.
-_DODGE_SETTING_SUBVERBS = frozenset({"dodgewith", "dodgedefault", "autopull"})
+_DODGE_SETTING_SUBVERBS = frozenset({"dodgewith", "dodgedefault", "autopull", "pull"})
 _DEFAULT_WORD = "default"
 _OFF_WORD = "off"
 # subverbs that declare the round's focused action (#4802), so a compulsion may warn.
@@ -162,6 +163,9 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat autopull <resonance> <tier>|off - pull threads for defense when attacked
                                      (answer the Soulfray check-in: accept/decline
                                      dodgesoulfray)
+        combat pull <resonance> <tier>=<thread>[,<thread>...] - pull threads for the
+                                     round on their own; they boost every use they
+                                     relate to until your next turn
         combat steady [on|off] - steady an ally who loses their nerve
         combat charge <opp> with <technique> - mounted charge: close distance, then attack
         combat strike <opp> [with <weapon> [thrown]] [using <technique> [soulfray]]
@@ -257,6 +261,8 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         text = self._rest.strip()
         if self._subverb == "autopull":  # noqa: STRING_LITERAL
             return self._resolve_autopull_args(text)
+        if self._subverb == "pull":  # noqa: STRING_LITERAL
+            return self._resolve_round_pull_args(text)
         if not text:
             msg = f"Usage: combat {self._subverb} <technique>."
             raise CommandError(msg)
@@ -266,6 +272,36 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         if self._subverb == "dodgedefault":  # noqa: STRING_LITERAL
             kwargs["save_default"] = True
         return kwargs
+
+    def _resolve_round_pull_args(self, text: str) -> dict[str, Any]:
+        """``<resonance> <tier>=<thread>[,<thread>...]``: a pull on its own (#5066)."""
+        from world.magic.models import Resonance, Thread  # noqa: PLC0415
+        from world.magic.types.pull import CastPullDeclaration  # noqa: PLC0415
+
+        usage = "Usage: combat pull <resonance> <tier>=<thread>[,<thread>...]."
+        head, _, names = text.partition("=")
+        name, _, tier = head.strip().rpartition(" ")
+        resonance = Resonance.objects.filter(name__iexact=name.strip()).first()
+        wanted = [n.strip() for n in names.split(",") if n.strip()]
+        if resonance is None or not tier.isdigit() or not wanted:
+            raise CommandError(usage)
+        threads = []
+        for thread_name in wanted:
+            thread = Thread.objects.filter(
+                owner=self.caller.sheet_data,
+                resonance=resonance,
+                name__iexact=thread_name,
+                retired_at__isnull=True,
+            ).first()
+            if thread is None:
+                msg = f"You have no {resonance.name} thread called '{thread_name}'."
+                raise CommandError(msg)
+            threads.append(thread)
+        return {
+            "cast_pull": CastPullDeclaration(
+                resonance=resonance, tier=int(tier), threads=tuple(threads)
+            )
+        }
 
     def _resolve_autopull_args(self, text: str) -> dict[str, Any]:
         """``off``, or ``<resonance> <tier>`` naming the saved defensive pull."""
