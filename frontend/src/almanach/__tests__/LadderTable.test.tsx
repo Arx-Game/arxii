@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 
@@ -22,6 +22,7 @@ const rows = [
     sworn_to: 'Piropa (crown)',
     demesne: 1,
     vassals: 2,
+    population: 4200,
     claimable: true,
     seat_domain_id: null,
     comes_with: '',
@@ -42,6 +43,7 @@ const rows = [
     sworn_to: 'Fervor',
     demesne: 1,
     vassals: 0,
+    population: 1000,
     claimable: true,
     seat_domain_id: null,
     comes_with: 'Fervor',
@@ -62,6 +64,7 @@ const rows = [
     sworn_to: 'County of Inferna',
     demesne: 1,
     vassals: 0,
+    population: 1000,
     claimable: false,
     seat_domain_id: null,
     comes_with: '',
@@ -84,6 +87,7 @@ const contestedRow = {
   sworn_to: 'Piropa (crown)',
   demesne: 2,
   vassals: 2,
+  population: 2500,
   claimable: false,
   seat_domain_id: null,
   comes_with: '',
@@ -97,6 +101,7 @@ test('a titular or potential rung shows its state where the holder would be', ()
     title_id: 90,
     name: 'Old Inferna',
     state: 'Titular',
+    population: 1000,
     claimable: false,
   };
   const potential = {
@@ -105,6 +110,7 @@ test('a titular or potential rung shows its state where the holder would be', ()
     name: '',
     is_defined: false,
     state: 'Potential',
+    population: 1000,
     claimable: false,
   };
   renderWithProviders(<LadderTable rows={[titular, potential]} />);
@@ -120,6 +126,13 @@ test('renders states before names, seat marks, and collapses children', async ()
   expect(screen.getAllByText('Unclaimed').length).toBe(2);
   await userEvent.click(screen.getByRole('button', { name: /collapse fervor/i }));
   expect(screen.queryByText('comes with Fervor')).not.toBeInTheDocument();
+});
+
+test('every row carries its people, summed over the land beneath a duchy (#5069)', () => {
+  renderWithProviders(<LadderTable rows={rows} />);
+  expect(screen.getByRole('columnheader', { name: /population/ })).toBeInTheDocument();
+  const fervor = screen.getByRole('button', { name: /collapse fervor/i }).closest('tr')!;
+  expect(within(fervor).getByText('4,200')).toBeInTheDocument();
 });
 
 test(`a contested title gets the plate's cl row and "claimed by <name>" replaces sworn to`, () => {

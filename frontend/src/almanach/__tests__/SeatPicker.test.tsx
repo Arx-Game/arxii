@@ -26,6 +26,7 @@ const rows = [
     seat_domain_id: null,
     comes_with: '',
     chain_top_id: 1,
+    population: 0,
     claimant_name: '',
   },
   {
@@ -46,6 +47,7 @@ const rows = [
     seat_domain_id: null,
     comes_with: 'Fervor',
     chain_top_id: 1,
+    population: 0,
     claimant_name: '',
   },
   {
@@ -66,6 +68,7 @@ const rows = [
     seat_domain_id: null,
     comes_with: '',
     chain_top_id: 3,
+    population: 0,
     claimant_name: '',
   },
 ] satisfies LadderRow[];
@@ -94,6 +97,7 @@ const undefinedTopRows = [
     seat_domain_id: null,
     comes_with: '',
     chain_top_id: 10,
+    population: 0,
     claimant_name: '',
   },
   {
@@ -114,6 +118,7 @@ const undefinedTopRows = [
     seat_domain_id: null,
     comes_with: '',
     chain_top_id: 10,
+    population: 0,
     claimant_name: '',
   },
 ] satisfies LadderRow[];

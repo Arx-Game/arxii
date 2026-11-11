@@ -304,6 +304,7 @@ import zlib  # noqa: E402 - the grammar above stands on its own; the walk's impo
 
 from django.core.exceptions import ValidationError  # noqa: E402
 from django.db import IntegrityError, transaction  # noqa: E402
+from django.utils import timezone  # noqa: E402
 
 from world.areas.models import Area  # noqa: E402
 from world.areas.worldmap.constants import Terrain  # noqa: E402
@@ -324,7 +325,8 @@ from world.societies.houses.almanach import (  # noqa: E402
     rung_area_for_title,
     set_pledged_liege,
 )
-from world.societies.houses.models import Domain, Title  # noqa: E402
+from world.societies.houses.demography import prosperity_modifier_for  # noqa: E402
+from world.societies.houses.models import Domain, DominionConfig, Title  # noqa: E402
 from world.societies.houses.partition import (  # noqa: E402
     Pip,
     capital_seed,
@@ -334,7 +336,6 @@ from world.societies.houses.partition import (  # noqa: E402
 from world.societies.houses.services import HousesServiceError  # noqa: E402
 
 CROWN_TIERS = (TitleTier.KINGDOM, TitleTier.EMPIRE)
-COUNTY_POPULATION_PER_PIP = 120
 PROSPERITY_CAPITAL = 65
 PROSPERITY_CHILD = 45
 PLACEHOLDER = "PLACEHOLDER:"
@@ -859,12 +860,19 @@ class _Walk:
             area.description = self._figure_description(rung, area.description)
             area.save(update_fields=["description"])
             return
-        if rung.tier == TitleTier.COUNTY:
-            domain.population = COUNTY_POPULATION_PER_PIP * len(rung.pips)
+        # People fit the land (#5069 slice 2): the carve above recounted the terrain and
+        # wrote the capacity; a fresh holding starts at the fill dial's share of it,
+        # rebased to now, and the terrain pulls its prosperity by the modifier.
+        dials = DominionConfig.load()
+        domain.population = domain.population_capacity * dials.layout_fill_pct // 100
+        domain.population_rebased_at = timezone.now()
         if rung.parent is not None and rung.tier != TitleTier.BARONY:
-            domain.prosperity = PROSPERITY_CAPITAL if rung.capital else PROSPERITY_CHILD
+            base = PROSPERITY_CAPITAL if rung.capital else PROSPERITY_CHILD
+            domain.prosperity = max(0, min(100, base + prosperity_modifier_for(domain)))
         domain.description = self._figure_description(rung, domain.description)
-        domain.save(update_fields=["population", "prosperity", "description"])
+        domain.save(
+            update_fields=["population", "population_rebased_at", "prosperity", "description"]
+        )
 
     def _figure_description(self, rung: _Rung, current: str) -> str:
         if rung.lore:

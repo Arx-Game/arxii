@@ -62,6 +62,14 @@ function NumCell({ value }: { value: number }) {
   return <td className="n">{value > 0 ? value : <abbr title="none">—</abbr>}</td>;
 }
 
+/** The people on a rung (#5069): land's own by formula, a duchy's or kingdom's the
+ * sum over the land beneath; grouped digits, since these run to the hundreds of thousands. */
+function PeopleCell({ value }: { value: number }) {
+  return (
+    <td className="n">{value > 0 ? value.toLocaleString('en-US') : <abbr title="none">—</abbr>}</td>
+  );
+}
+
 function SwornToCell({ row }: { row: LadderRow }) {
   if (row.claimant_name !== '') {
     return <td>claimed by {row.claimant_name}</td>;
@@ -224,6 +232,7 @@ export function LadderTable({
           <SwornToCell row={node.row} />
           <NumCell value={node.row.demesne} />
           <NumCell value={node.row.vassals} />
+          <PeopleCell value={node.row.population} />
           {trailingCell && <td>{trailingCell(node.row)}</td>}
         </tr>
       );
@@ -257,6 +266,9 @@ export function LadderTable({
                   houses and unclaimed seats sworn beneath
                 </span>
               </button>
+            </th>
+            <th scope="col" className="n">
+              population
             </th>
             {trailingCell && (
               <th scope="col">

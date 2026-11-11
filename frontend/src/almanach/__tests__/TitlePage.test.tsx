@@ -13,8 +13,8 @@ import type { RungDocument } from '../types';
 const doc: RungDocument = {
   title: {
     title_id: 3,
-    name: 'Duchy of Katta',
-    tier: 'duchy',
+    name: 'County of Katta',
+    tier: 'county',
     realm_id: 1,
     realm: 'Umbros',
     house_id: 9,
@@ -29,12 +29,19 @@ const doc: RungDocument = {
     station: 'seated',
     pledged_liege: { title_id: 8, name: 'Kingdom of Umbros' },
   },
+  // a county's own land: its hinterland (#5069)
   demesne: {
     domain_id: 30,
     name: 'the Katta lands',
     description: '',
     hall: 'the Katta hall',
     population: 1000,
+    population_capacity: 2400,
+    capacity_override: null,
+    terrain: [
+      { terrain: 'plain', label: 'Plain', pips: 5 },
+      { terrain: 'hill', label: 'Hill', pips: 2 },
+    ],
     prosperity: 50,
     unrest: 0,
     defenses: 10,
@@ -55,7 +62,7 @@ const doc: RungDocument = {
       posted_here: true,
     },
   ],
-  vassals: [{ title_id: 4, name: '', held_by: '', demesne: 2, vassals: 0 }],
+  vassals: [{ title_id: 4, name: '', held_by: '', demesne: 2, vassals: 0, population: 3200 }],
   chartered_fiefs: [
     { title_id: 5, name: 'County of Ash', tier: 'county', basis: 'By the old charter' },
   ],
@@ -154,9 +161,9 @@ vi.mock('../queries', () => ({
   useAlmanachMutation: () => ({ mutate, mutateAsync: vi.fn() }),
 }));
 
-test('the rung page: holder, location, holdings, books, forces, vassals', () => {
+test('the county page: holder, location, hinterland, developments, books, forces, holdings', () => {
   renderWithProviders(<TitlePage titleId={3} />);
-  expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('Duchy of Katta');
+  expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('County of Katta');
   expect(screen.getAllByRole('link', { name: 'House Katta' })[0]).toHaveAttribute(
     'href',
     '/staff/almanach/houses/9'
@@ -166,15 +173,103 @@ test('the rung page: holder, location, holdings, books, forces, vassals', () => 
     '/staff/almanach/people/11'
   );
   expect(screen.getByRole('heading', { name: 'Location' })).toBeInTheDocument();
+  // the county's own land (#5069): its people by formula, the terrain's capacity, the mix
+  const hinterland = screen.getByRole('heading', { name: 'Hinterland' }).nextElementSibling!;
+  expect(within(hinterland as HTMLElement).getByText('1,000')).toBeInTheDocument();
+  expect(within(hinterland as HTMLElement).getByText('2,400')).toBeInTheDocument();
+  expect(within(hinterland as HTMLElement).getByText('plain, hill')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Developments' })).toBeInTheDocument();
+  expect(screen.getByText('unsited')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Books' })).toBeInTheDocument();
   expect(screen.getByText('1,900 c / week')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Forces' })).toBeInTheDocument();
   expect(screen.getByText('Katta household guard')).toBeInTheDocument();
-  const vassals = screen.getByRole('heading', { name: 'Present Holdings' }).nextElementSibling!;
-  expect(within(vassals as HTMLElement).getByText('vacant')).toBeInTheDocument();
+  // Holdings are the rungs beneath, held directly or by vassals, with their people
+  const holdings = screen.getByRole('heading', { name: 'Holdings' }).nextElementSibling!;
+  expect(within(holdings as HTMLElement).getByText('vacant')).toBeInTheDocument();
+  expect(within(holdings as HTMLElement).getByText('3,200')).toBeInTheDocument();
+  expect(within(holdings as HTMLElement).getByText('Vassals')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Create vassal domain' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Add vacant seats' })).toBeInTheDocument();
-  expect(screen.getByText('unsited')).toBeInTheDocument();
+});
+
+test('a duchy is its counties (#5069): no land block, no developments, no forces', () => {
+  currentDoc = {
+    ...doc,
+    title: { ...doc.title, name: 'Duchy of Katta', tier: 'duchy' },
+    demesne: null,
+    holdings: [],
+    vassals: [
+      {
+        title_id: 4,
+        name: 'County of Katta',
+        held_by: 'House Katta',
+        demesne: 1,
+        vassals: 0,
+        population: 1000,
+      },
+      {
+        title_id: 5,
+        name: 'County of Ash',
+        held_by: 'House Ash',
+        demesne: 1,
+        vassals: 0,
+        population: 700,
+      },
+      { title_id: 6, name: '', held_by: '', demesne: 1, vassals: 0, population: 300 },
+    ],
+  };
+  try {
+    renderWithProviders(<TitlePage titleId={3} />);
+    expect(screen.queryByRole('heading', { name: 'Hinterland' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Developments' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Forces' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Books' })).toBeInTheDocument();
+    const holdings = screen.getByRole('heading', { name: 'Holdings' }).nextElementSibling!;
+    const held = within(holdings as HTMLElement)
+      .getByText('Held')
+      .closest('tr')!;
+    // the house's own county sits under Held; the other house's and the vacant one under Vassals
+    expect(held.nextElementSibling).toHaveTextContent('County of Katta');
+    const vassals = within(holdings as HTMLElement)
+      .getByText('Vassals')
+      .closest('tr')!;
+    expect(vassals.nextElementSibling).toHaveTextContent('County of Ash');
+    expect(vassals.nextElementSibling!.nextElementSibling).toHaveTextContent('vacant');
+  } finally {
+    currentDoc = doc;
+  }
+});
+
+test('a barony page: its people and capacity, and staff name the capacity or hand it back', async () => {
+  currentDoc = {
+    ...doc,
+    title: { ...doc.title, name: 'Katta Seat', tier: 'barony' },
+    // a seat whose capacity staff already set by hand, so Terrain has something to clear
+    demesne: {
+      ...doc.demesne!,
+      population_capacity: 5000,
+      capacity_override: 5000,
+      terrain: [{ terrain: 'plain', label: 'Plain', pips: 1 }],
+    },
+    vassals: [],
+  };
+  try {
+    renderWithProviders(<TitlePage titleId={3} />);
+    expect(screen.queryByRole('heading', { name: 'Hinterland' })).toBeNull();
+    expect(screen.getByText('5,000')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Developments' })).toBeInTheDocument();
+    const capacity = screen.getByLabelText('capacity');
+    await userEvent.clear(capacity);
+    await userEvent.type(capacity, '300000');
+    await userEvent.click(screen.getByRole('button', { name: 'Set' }));
+    expect(mutate).toHaveBeenCalledWith({ domain_id: 30, capacity: 300000 });
+    mutate.mockClear();
+    await userEvent.click(screen.getByRole('button', { name: 'Terrain' }));
+    expect(mutate).toHaveBeenCalledWith({ domain_id: 30, capacity: null });
+  } finally {
+    currentDoc = doc;
+  }
 });
 
 test('the rung page: Historical Charter, the claims, the chain up and the door to the map', () => {
@@ -226,7 +321,7 @@ test('a titular rung says so and shows its charter even with nothing held', () =
   try {
     renderWithProviders(<TitlePage titleId={3} />);
     expect(screen.getByText('Titular')).toBeInTheDocument();
-    const holdings = screen.getByRole('heading', { name: 'Present Holdings' }).nextElementSibling!;
+    const holdings = screen.getByRole('heading', { name: 'Holdings' }).nextElementSibling!;
     expect(within(holdings as HTMLElement).getByText('nothing')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Historical Charter' })).toBeInTheDocument();
   } finally {
@@ -261,7 +356,7 @@ test('a named rung is renamed when the field loses focus, and an unchanged field
   expect(mutate).not.toHaveBeenCalled();
   await userEvent.type(field, ' II');
   await userEvent.tab();
-  expect(mutate).toHaveBeenCalledWith({ title_id: 3, name: 'Duchy of Katta II' });
+  expect(mutate).toHaveBeenCalledWith({ title_id: 3, name: 'County of Katta II' });
   // Enter after blur saved it dispatches nothing more: the field already matches.
   mutate.mockClear();
   await userEvent.type(field, '{enter}');
@@ -345,7 +440,7 @@ test('a vacant rung is deleted only after a second press', async () => {
     renderWithProviders(<TitlePage titleId={3} />);
     await userEvent.click(screen.getByRole('button', { name: 'Delete rung' }));
     expect(mutate).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: 'Confirm delete Duchy of Katta' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm delete County of Katta' }));
     expect(mutate).toHaveBeenCalledWith({ title_id: 3 }, expect.anything());
   } finally {
     currentDoc = doc;
@@ -487,6 +582,6 @@ test('the trail over the page is the way up, every step a link but the title its
     'href',
     '/staff/almanach/titles/8'
   );
-  expect(within(trail).queryByRole('link', { name: 'Duchy of Katta' })).toBeNull();
-  expect(trail).toHaveTextContent('Duchy of Katta');
+  expect(within(trail).queryByRole('link', { name: 'County of Katta' })).toBeNull();
+  expect(trail).toHaveTextContent('County of Katta');
 });

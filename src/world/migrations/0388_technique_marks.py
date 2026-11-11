@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0385_domains_only_on_land"),
+        ("arxii", "0387_dormancy"),
     ]
 
     operations = [

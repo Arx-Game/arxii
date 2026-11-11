@@ -330,6 +330,16 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
         blank=True,
         help_text="When the Almanach published this house; null = draft (#3983).",
     )
+    # Dormancy (#5069): an organization with income and no played character goes
+    # dormant on the weekly run and its coin stops accruing; a login or a roster
+    # approval by a member's player wakes it. Coin freezes; the land under it keeps
+    # running by formula. Null = awake. Set by ``houses.dormancy``, read by the
+    # weekly economy; admin and staff API only, never a player surface.
+    dormant_since = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the weekly run found nobody playing here; null = awake (#5069).",
+    )
     tradition = models.ForeignKey(
         "arxii.Tradition",
         on_delete=models.SET_NULL,

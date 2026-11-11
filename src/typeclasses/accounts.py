@@ -637,6 +637,15 @@ class Account(DefaultAccount):
             return available[0]
         return None
 
+    def _wake_dormant_houses(self) -> None:
+        """A login is presence (#5069): every dormant house a character of this account
+        is a live member of wakes and accrues again. Guarded, so a failure is logged
+        and never stops the login."""
+        from world.player_submissions.services import run_safely
+        from world.societies.houses.dormancy import wake_houses_for
+
+        run_safely("wake dormant houses", lambda: wake_houses_for(self))
+
     def at_post_login(self, session=None, **kwargs):
         """Finish login by puppeting the account's character (#3812, ADR-0294).
 
@@ -666,6 +675,7 @@ class Account(DefaultAccount):
         if session:
             session.msg(logged_in={})
         self._send_to_connect_channel(f"|G{self.key} connected|n")
+        self._wake_dormant_houses()
 
         if session is None:
             return

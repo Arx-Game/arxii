@@ -30,6 +30,7 @@ const rows = [
     seat_domain_id: null,
     comes_with: '',
     chain_top_id: 3,
+    population: 0,
     claimant_name: '',
   },
   {
@@ -50,6 +51,7 @@ const rows = [
     seat_domain_id: null,
     comes_with: '',
     chain_top_id: 1,
+    population: 0,
     claimant_name: '',
   },
 ] satisfies LadderRow[];
