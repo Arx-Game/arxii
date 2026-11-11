@@ -1809,7 +1809,8 @@ class DomainAdmin(admin.ModelAdmin):
     autocomplete_fields = ["owner_org", "hall"]
     raw_id_fields = ["territory_stream"]
     filter_horizontal = ["land_shapes"]
-    readonly_fields = ["area", "population_rebased_at"]
+    # Capacity is the terrain's (the Recount action rewrites it); the stamp is the formula's.
+    readonly_fields = ["area", "population_capacity", "population_rebased_at"]
     inlines = [DomainTerrainCountInline, DomainHoldingInline]
     actions = ["recount_terrain"]
     fieldsets = (
