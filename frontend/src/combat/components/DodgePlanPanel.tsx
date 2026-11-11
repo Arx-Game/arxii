@@ -228,11 +228,6 @@ function DodgeTechniquePicker({
           </button>
         )}
       </div>
-      {chosen && (
-        <p className="text-xs text-muted-foreground" data-testid="dodge-technique-cost">
-          {chosen.cost_line}
-        </p>
-      )}
     </div>
   );
 }

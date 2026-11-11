@@ -340,18 +340,13 @@ def _effect_reaches(
     """Whether one committed pull effect reaches the use ``use`` describes (#5067).
 
     A per-thread effect reaches it when its own thread is in the use's action; a
-    resonance-wide one (no ``authored_value``: a folded distinction bonus, one per pulled
-    resonance) when any thread the pull names of that resonance is.
+    pull-wide one (no ``authored_value``: a folded distinction bonus) when any thread
+    the pull names is.
     """
     from world.magic.services.resonance import _anchor_in_action  # noqa: PLC0415
 
     if effect.authored_value is None:
-        resonance_id = effect.source_thread.resonance_id
-        return any(
-            _anchor_in_action(thread, use)
-            for thread in pull.threads.all()
-            if thread.resonance_id == resonance_id
-        )
+        return any(_anchor_in_action(thread, use) for thread in pull.threads.all())
     return _anchor_in_action(effect.source_thread, use)
 
 

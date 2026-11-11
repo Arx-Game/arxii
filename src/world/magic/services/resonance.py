@@ -1033,16 +1033,16 @@ def _fold_distinction_pull_bonus(
     character_sheet: CharacterSheet,
     threads: list[Thread],
 ) -> list[ResolvedPullEffect]:
-    """Append a synthetic FLAT_BONUS entry for each pulled resonance a distinction powers.
+    """Append a synthetic FLAT_BONUS for a distinction's POWER modifier on the pulled resonances.
 
     A distinction expresses potency for a resonance by authoring a ``DistinctionEffect`` on
     a POWER-category ``ModifierTarget`` gated by ``target_resonance`` — the same modifier a
     technique cast already reads via ``_derive_power``'s FLAT stage
-    (``magic/services/techniques.py``). Folds that modifier into the pull's own magnitude
-    once per distinct resonance the pull draws on (not per thread/tier) (#1834 Task 7; a
-    pull may mix resonances since #5066, and each resonance's potency applies once,
-    maintainer ruling 2026-11-11). No-op (returns ``resolved`` unchanged) when there is no
-    matching modifier.
+    (``magic/services/techniques.py``) (#1834 Task 7). A pull may mix resonances (#5066,
+    maintainer ruling 2026-11-11): each distinct pulled resonance's scoped potency applies
+    once, and an unscoped POWER target (no ``target_resonance``) once for the whole pull, so
+    the bonus is folded once per pull, not per thread or tier. No-op (returns ``resolved``
+    unchanged) when there is no matching modifier.
 
     Not full parity with a cast: ``_derive_power``'s FLAT stage also sums condition-sourced
     POWER contributions (``get_condition_modifier_breakdown``), which this fold does not
@@ -1050,36 +1050,36 @@ def _fold_distinction_pull_bonus(
     """
     from world.mechanics.services import power_flat_bonus_for_resonance  # noqa: PLC0415
 
-    first_of: dict[int, Thread] = {}
-    for thread in threads:
-        first_of.setdefault(thread.resonance_id, thread)
-    folded = list(resolved)
-    for resonance_id, thread in first_of.items():
-        bonus = power_flat_bonus_for_resonance(character_sheet, resonance_id)
-        if not bonus:
-            continue
-        folded.append(
-            ResolvedPullEffect(
-                kind=EffectKind.FLAT_BONUS,
-                authored_value=None,
-                level_multiplier=1,
-                scaled_value=bonus,
-                vital_target=None,
-                # The first pulled thread of this resonance: the entry belongs to the
-                # resonance, not to that thread, but it IS serialized as source_thread_id
-                # over the wire (ResolvedPullEffectSerializer.get_source_thread_id, the
-                # pull-preview API), and ``round_pull_bonus`` reads its resonance. Any
-                # future consumer must not treat it as per-thread attribution.
-                source_thread=thread,
-                source_thread_level=thread.level,
-                source_tier=0,
-                granted_capability=None,
-                narrative_snippet="",
-                target_form=None,
-                resistance_damage_type=None,
-            )
-        )
-    return folded
+    resonance_ids = list(dict.fromkeys(thread.resonance_id for thread in threads))
+    bonus = power_flat_bonus_for_resonance(character_sheet, None) + sum(
+        power_flat_bonus_for_resonance(character_sheet, rid, scoped_only=True)
+        for rid in resonance_ids
+    )
+    if not bonus:
+        return resolved
+    return [
+        *resolved,
+        ResolvedPullEffect(
+            kind=EffectKind.FLAT_BONUS,
+            authored_value=None,
+            level_multiplier=1,
+            scaled_value=bonus,
+            vital_target=None,
+            # threads[0] is an arbitrary pick (the bonus belongs to the pull as a whole, so
+            # there's no real per-thread attribution for this synthetic entry) — but it IS
+            # serialized as source_thread_id over the wire
+            # (ResolvedPullEffectSerializer.get_source_thread_id, the pull-preview API).
+            # Any future consumer of that field on this row must not treat it as real
+            # attribution.
+            source_thread=threads[0],
+            source_thread_level=threads[0].level,
+            source_tier=0,
+            granted_capability=None,
+            narrative_snippet="",
+            target_form=None,
+            resistance_damage_type=None,
+        ),
+    ]
 
 
 def _validate_pull_threads(

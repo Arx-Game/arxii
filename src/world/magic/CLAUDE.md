@@ -2215,8 +2215,9 @@ resonance-category skip above). Two consumers read it:
   resonance_id)` mirrors cast scope semantics: sums POWER-category targets whose
   `target_resonance` is null (unscoped) or matches `resonance_id` (excluding the unscoped
   `power_multiplier` target) via `get_modifier_total`. `world.magic.services.resonance
-  ._fold_distinction_pull_bonus` calls it once per pull (not per thread/tier, since every
-  pulled thread shares one resonance) and appends a synthetic `FLAT_BONUS`
+  ._fold_distinction_pull_bonus` folds it once per pull (not per thread/tier): the unscoped
+  targets once, plus each distinct pulled resonance's scoped targets (a pull may mix
+  resonances, #5066), and appends a synthetic `FLAT_BONUS`
   `ResolvedPullEffect`; wired into both `spend_resonance_for_pull` (the charge/commit path —
   persists into `CombatPullResolvedEffect` for combat, returned ephemerally otherwise) and
   `preview_resonance_pull` (so the read-only preview matches the eventual commit).

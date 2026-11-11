@@ -468,7 +468,9 @@ def get_modifier_total(
     return eager_total + equipment_total + crafted_total + fashion_total
 
 
-def power_flat_bonus_for_resonance(sheet: object, resonance_id: int) -> int:
+def power_flat_bonus_for_resonance(
+    sheet: object, resonance_id: int | None, *, scoped_only: bool = False
+) -> int:
     """Sum POWER-category flat modifiers (distinctions) applicable to ``resonance_id``.
 
     A distinction expresses "potency" for a resonance by authoring a ``DistinctionEffect`` on
@@ -487,16 +489,28 @@ def power_flat_bonus_for_resonance(sheet: object, resonance_id: int) -> int:
     side. ``_derive_power``'s FLAT stage also sums condition-sourced POWER contributions
     (``get_condition_modifier_breakdown``), which a standalone pull never sees.
 
+    A pull may mix resonances (#5066): its caller sums the unscoped targets once
+    (``resonance_id=None``) and each pulled resonance's scoped targets
+    (``scoped_only=True``), so an unscoped bonus never counts once per resonance.
+
     Args:
         sheet: CharacterSheet instance.
-        resonance_id: PK of the Resonance the pull is keyed to.
+        resonance_id: PK of the Resonance the pull is keyed to; None for the unscoped
+            targets alone.
+        scoped_only: Sum only the targets scoped to ``resonance_id``.
 
     Returns:
         Integer total (0 if no matching POWER-category target or no modifier).
     """
+    if resonance_id is None:
+        scope = Q(target_resonance_id__isnull=True)
+    elif scoped_only:
+        scope = Q(target_resonance_id=resonance_id)
+    else:
+        scope = Q(target_resonance_id=resonance_id) | Q(target_resonance_id__isnull=True)
     targets = (
         ModifierTarget.objects.filter(category__name=POWER_CATEGORY_NAME)
-        .filter(Q(target_resonance_id=resonance_id) | Q(target_resonance_id__isnull=True))
+        .filter(scope)
         .exclude(name=POWER_MULTIPLIER_TARGET_NAME)
     )
     return sum(get_modifier_total(sheet, target) for target in targets)

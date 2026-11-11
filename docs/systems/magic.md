@@ -1982,7 +1982,8 @@ every resonance it spends in resonance order and debits all of them or none
 M."). Anima is still the per-thread total and is never refused for lack of anima on the
 cast's own overspend path. Pull effects already key on each thread's resonance
 (`resolve_pull_effects` reads each thread's own rows). A distinction's resonance-scoped POWER
-bonus folds in once per distinct pulled resonance (`_fold_distinction_pull_bonus`). A burn
+bonus applies once per distinct pulled resonance, and an unscoped POWER target once per pull
+(`_fold_distinction_pull_bonus`, one folded entry for the pull as a whole). A burn
 (#4736) comes from one pulled resonance the player names (`burn_resonance` on
 `CastPullDeclaration`, `burn_resonance_id` on the web, `resonance=<name>` on telnet); a pull of
 one resonance burns that one without naming it (`CastPullDeclaration.burned_resonance`).
@@ -2043,9 +2044,7 @@ focused cast). A distinction's resonance bonus folded into a pull
 counts when any of that pull's threads relates to the use. `VITAL_BONUS`, `RESISTANCE` and `CAPABILITY_GRANT` are standing effects on the
 character for the round, not bonuses on a use, and are read unfiltered by the
 `CharacterCombatPullHandler` methods; the pull's resonances on the focus roll
-(`round_pull_resonances`) and its spend on corruption read the pull's threads. The folded
-distinction bonus is one per pulled resonance and counts when a thread of its own resonance
-relates to the use (`_effect_reaches`).
+(`round_pull_resonances`) and its spend on corruption read the pull's threads.
 
 ### Non-Combat Ephemeral Pull CAPABILITY_GRANT (#2840) [BUILT & WIRED]
 

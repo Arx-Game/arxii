@@ -202,3 +202,18 @@ class DistinctionResonancePotencyUnscopedTests(TestCase):
             r.scaled_value or 0 for r in preview.resolved_effects if r.kind == EffectKind.FLAT_BONUS
         )
         self.assertEqual(flat_bonus_total, 4)
+
+    def test_a_pull_of_two_resonances_counts_the_unscoped_bonus_once(self) -> None:
+        """A pull may mix resonances (#5066): the unscoped potency applies once per pull,
+        never once per pulled resonance."""
+        ThreadPullCostFactory(tier=1, resonance_cost=2, anima_per_thread=1)
+        other = ResonanceFactory(name="Tidal")
+        threads = [
+            ThreadFactory(owner=self.sheet, resonance=self.resonance, level=1),
+            ThreadFactory(owner=self.sheet, resonance=other, level=1),
+        ]
+
+        preview = preview_resonance_pull(self.sheet, tier=1, threads=threads)
+
+        folded = [r for r in preview.resolved_effects if r.authored_value is None]
+        self.assertEqual([r.scaled_value for r in folded], [4])

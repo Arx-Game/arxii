@@ -162,10 +162,12 @@ describe('DodgePlanPanel dodge settings', () => {
   }
 
   it('picks the technique that answers her dodges, marking her default', async () => {
-    const dispatch = renderPanel(TECHNIQUE_PLAN);
-    expect(screen.getByTestId('dodge-technique-cost')).toHaveTextContent(
-      'Each dodge casts Shadow Step: 3 anima.'
-    );
+    const dispatch = renderPanel({
+      ...TECHNIQUE_PLAN,
+      cost_line: 'Each dodge casts Shadow Step: 3 anima.',
+    });
+    // One cost line: the server's plan line is the answering technique's own.
+    expect(screen.getAllByText('Each dodge casts Shadow Step: 3 anima.')).toHaveLength(1);
     expect(screen.queryByTestId('dodge-technique-save-default')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('combobox', { name: 'Dodge with' }));
     expect(
@@ -177,7 +179,6 @@ describe('DodgePlanPanel dodge settings', () => {
 
   it('saves the chosen technique as her default', async () => {
     const dispatch = renderPanel({ ...TECHNIQUE_PLAN, technique_id: 32 });
-    expect(screen.getByTestId('dodge-technique-cost')).toHaveTextContent('Wind Leap: 5 anima');
     await userEvent.click(screen.getByRole('button', { name: 'Save as my default' }));
     expect(dispatch).toHaveBeenLastCalledWith({
       ref: SETTINGS_REF,

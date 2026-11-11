@@ -14,7 +14,8 @@ what each resonance paid is derived from the pull's threads, so corruption is st
 resonance. Four things were keyed on the one resonance, and each was ruled: a burn comes from
 one pulled resonance the player names (a pull of one resonance burns it without naming it;
 `burn_resonance`, `CombatPull.burned_resonance`); a distinction's resonance-scoped POWER bonus
-folds in once per distinct pulled resonance; the drift focus roll adds its off-aura steps when
+applies once per distinct pulled resonance (an unscoped POWER target once per pull, so it
+never counts once per resonance); the drift focus roll adds its off-aura steps when
 ANY pulled resonance's affinity differs from her dominant one; and the saved defensive pull
 keeps only a tier (`CombatParticipant.defense_pull_resonance` is gone) and takes every related
 thread of any resonance. **Rejected:** keeping the column as "the pull's single resonance, null
