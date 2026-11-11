@@ -58,7 +58,7 @@ class CharacterTechniqueHandlerCachingTests(TestCase):
 
 
 class CharacterTechniqueHandlerEffectPropertyTests(TestCase):
-    """Effect properties resolve via the Gift → Resonance → Property chain."""
+    """Effect properties are the technique's own marks, never its gift's resonances (#5066)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -76,15 +76,16 @@ class CharacterTechniqueHandlerEffectPropertyTests(TestCase):
             category_id=self._category_pk(),
         )
 
+        # The gift's resonance carries charm; the technique's own marks are fire and
+        # lightning. Only the marks count.
         self.resonance = ResonanceFactory()
-        self.resonance.properties.add(self.prop_fire, self.prop_lightning)
-
-        # Gift with the resonance attached, Technique linked to the Gift.
+        self.resonance.properties.add(self.prop_charm)
         self.gift = GiftFactory()
         self.gift.resonances.add(self.resonance)
 
         self.sheet = CharacterSheetFactory()
         self.technique = TechniqueFactory(gift=self.gift, clash_capable=True)
+        self.technique.properties.add(self.prop_fire, self.prop_lightning)
         CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
 
     def _category_pk(self) -> int:
@@ -96,7 +97,7 @@ class CharacterTechniqueHandlerEffectPropertyTests(TestCase):
         )
         return cat.pk
 
-    def test_effect_property_ids_for_walks_gift_resonance_chain(self) -> None:
+    def test_effect_property_ids_for_reads_the_techniques_own_marks(self) -> None:
         handler = CharacterTechniqueHandler(self.sheet.character)
         ids = handler.effect_property_ids_for(self.technique)
         self.assertEqual(ids, frozenset({self.prop_fire.pk, self.prop_lightning.pk}))
@@ -122,6 +123,7 @@ class CharacterTechniqueHandlerEffectPropertyTests(TestCase):
 
     def test_helper_eligible_for_excludes_non_clash_capable(self) -> None:
         non_clash_tech = TechniqueFactory(gift=self.gift, clash_capable=False)
+        non_clash_tech.properties.add(self.prop_fire)
         CharacterTechniqueFactory(character=self.sheet, technique=non_clash_tech)
 
         handler = CharacterTechniqueHandler(self.sheet.character)

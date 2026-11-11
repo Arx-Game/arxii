@@ -91,6 +91,39 @@ class CreateTechniqueHelperTests(TestCase):
         assert tech.creator_id == sheet.pk
         # helper does NOT bind a CharacterTechnique
         assert not CharacterTechnique.objects.filter(technique=tech).exists()
+        # no substance on the gift: the technique starts unmarked (#5066)
+        assert not tech.properties.exists()
+
+    def test_create_technique_ticks_the_gift_substance_mark(self):
+        """A new technique starts with its gift's substance mark ticked (#5066)."""
+        from world.locations.constants import StatKey
+        from world.magic.constants import SubstanceDirection
+        from world.magic.models import GiftSubstance
+        from world.mechanics.factories import PropertyFactory
+
+        sheet = CharacterSheetFactory()
+        gift = GiftFactory(creator=sheet)
+        shadow = PropertyFactory(name="shadow-mark-test")
+        GiftSubstance.objects.create(
+            gift=gift,
+            label="shadow",
+            stat_key=StatKey.LIGHTING,
+            direction=SubstanceDirection.FALLING,
+            property=shadow,
+        )
+        tech = create_technique(
+            creator=sheet,
+            name="Umbral Step",
+            gift=gift,
+            effect_type=EffectTypeFactory(),
+            intensity=3,
+            control=2,
+            anima_cost=2,
+            level=1,
+            action_category="physical",
+            description="",
+        )
+        assert list(tech.properties.all()) == [shadow]
 
     def test_duplicate_name_under_same_gift_raises_clean(self):
         """A second technique reusing (gift, name) raises DuplicateTechniqueName

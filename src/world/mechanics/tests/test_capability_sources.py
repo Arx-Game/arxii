@@ -31,12 +31,14 @@ class TechniqueSourceTests(TestCase):
         cls.gift = GiftFactory(name="Pyromancy")
         cls.gift.resonances.add(cls.resonance)
         cls.flame_property = PropertyFactory(name="flame")
-        cls.resonance.properties.add(cls.flame_property)
+        # The resonance carries a property too; it must never reach the source (#5066).
+        cls.resonance.properties.add(PropertyFactory(name="ardour"))
         cls.technique = TechniqueFactory(
             name="Flame Lance",
             gift=cls.gift,
             intensity=10,
         )
+        cls.technique.properties.add(cls.flame_property)
         cls.grant = TechniqueCapabilityGrantFactory(
             technique=cls.technique,
             capability=cls.capability,
@@ -61,7 +63,7 @@ class TechniqueSourceTests(TestCase):
         assert src.value == 15
         assert src.source_name == "Flame Lance"
         assert src.source_id == self.technique.id
-        # effect_property_ids are derived from resonance M2M to Property
+        # effect_property_ids are the technique's own marks, not its gift's resonance's
         assert src.effect_property_ids == [self.flame_property.id]
 
     def test_zero_value_excluded(self) -> None:

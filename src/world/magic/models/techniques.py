@@ -786,8 +786,10 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
         "arxii.Property",
         related_name="techniques",
         blank=True,
-        help_text="Neutral descriptive tags on this technique (e.g. cursed), used by "
-        "reactive trigger filters via the has_property op.",
+        help_text="The technique's marks: how it works (e.g. teleport, incorporeal, "
+        "shadow), ticked per technique. Its capability grants reach the applications that "
+        "need these marks, clashes oppose by them, and reactive trigger filters read them "
+        "via the has_property op. Its gift's resonances never count (#5066).",
     )
     target_prerequisites = models.ManyToManyField(
         "arxii.Prerequisite",

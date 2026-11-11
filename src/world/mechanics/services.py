@@ -26,7 +26,6 @@ from world.magic.models import (
     FacetEffectBonus,
     Motif,
     MotifResonance,
-    Resonance,
     StylePresentationEndorsement,
     TechniqueCapabilityGrant,
     ThreadPullEffect,
@@ -1498,26 +1497,12 @@ def _get_technique_sources(
     grants = list(
         TechniqueCapabilityGrant.objects.filter(
             technique__character_grants__character__character=character,
-        )
-        .select_related(
+        ).select_related(
             "technique",
             "technique__gift",
             "capability",
             "prerequisite",
             "prerequisite__property",
-        )
-        .prefetch_related(
-            Prefetch(
-                "technique__gift__resonances",
-                queryset=Resonance.objects.prefetch_related(
-                    Prefetch(
-                        "properties",
-                        queryset=Property.objects.all(),
-                        to_attr="cached_properties",
-                    ),
-                ),
-                to_attr="cached_resonances",
-            ),
         )
     )
     if not grants:
@@ -1525,9 +1510,13 @@ def _get_technique_sources(
 
     from world.magic.services.capability_curve import get_capability_power_config  # noqa: PLC0415
     from world.magic.services.resonance import resolve_gift_ids_by_technique  # noqa: PLC0415
+    from world.magic.services.technique_marks import (  # noqa: PLC0415
+        effect_property_ids_by_technique,
+    )
     from world.magic.types.pull import PullActionContext  # noqa: PLC0415
 
     power_config = get_capability_power_config()
+    marks = effect_property_ids_by_technique(grant.technique_id for grant in grants)
     if power_config is None:
         # Inert invariant (#2708 C1): no config row means the curve is disabled
         # EVERYWHERE. Skip the thread/power derivation entirely — see the sibling
@@ -1535,7 +1524,7 @@ def _get_technique_sources(
         # agency oracle this availability oracle must agree with in the inert
         # state. See ``_inert_technique_capability_sources`` for why bare
         # ``calculate_value()`` reproduces the pre-#2708 output exactly.
-        return _inert_technique_capability_sources(grants)
+        return _inert_technique_capability_sources(grants, marks)
 
     try:
         handler = character.threads
@@ -1569,8 +1558,8 @@ def _get_technique_sources(
         if value <= 0:
             continue
 
-        # Effect property IDs come from the Gift's resonances' modifier_target links
-        effect_property_ids = _get_technique_effect_property_ids(grant.technique)
+        # Effect property IDs are the technique's own marks (#5066).
+        effect_property_ids = list(marks[technique_id])
 
         sources.append(
             CapabilitySource(
@@ -1590,6 +1579,7 @@ def _get_technique_sources(
 
 def _inert_technique_capability_sources(
     grants: list[TechniqueCapabilityGrant],
+    marks: dict[int, frozenset[int]],
 ) -> list[CapabilitySource]:
     """Availability-oracle sources with ``calculate_value()`` called bare.
 
@@ -1606,7 +1596,7 @@ def _inert_technique_capability_sources(
         value = grant.calculate_value(config=None)
         if value <= 0:
             continue
-        effect_property_ids = _get_technique_effect_property_ids(grant.technique)
+        effect_property_ids = list(marks[grant.technique_id])
         sources.append(
             CapabilitySource(
                 capability_name=grant.capability.name,
@@ -1620,31 +1610,6 @@ def _inert_technique_capability_sources(
             )
         )
     return sources
-
-
-def _get_technique_effect_property_ids(technique: object) -> list[int]:
-    """
-    Derive effect Property IDs from a Technique's Gift resonances.
-
-    Each Resonance has a M2M to Property. Collects all Property IDs
-    from the technique's gift's resonances via prefetched cached_properties.
-
-    Expects technique.gift.cached_resonances[*].cached_properties to be
-    pre-populated via the _get_technique_sources() prefetch chain.
-
-    Intentionally reads the authored supported set (cached_resonances), NOT
-    the per-character cast-time resonance. The cast-time value is resolved via
-    gift_resonances_for(character, gift) at the cast sites (ADR-0052); this is
-    the inventory/capability walk that enumerates what the technique *can* do,
-    not what it *does* for a specific character.
-    """
-    if not hasattr(technique, "gift_id") or not technique.gift_id:
-        return []
-
-    property_ids: list[int] = []
-    for resonance in technique.gift.cached_resonances:
-        property_ids.extend(p.id for p in resonance.cached_properties)
-    return property_ids
 
 
 def _get_trait_sources(character: ObjectDB) -> list[CapabilitySource]:

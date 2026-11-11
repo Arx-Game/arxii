@@ -352,3 +352,63 @@ class ImpossibleApproachListedTests(TestCase):
             "Gap door 200": DifficultyIndicator.IMPOSSIBLE,
             "Gap door 250": DifficultyIndicator.IMPOSSIBLE,
         }
+
+
+class TechniqueMarksReachApproachTests(TestCase):
+    """A technique reaches an approach that needs a mark by its own marks only (#5066)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import (
+            CharacterTechniqueFactory,
+            GiftFactory,
+            ResonanceFactory,
+            TechniqueCapabilityGrantFactory,
+            TechniqueFactory,
+        )
+
+        cls.sheet = CharacterSheetFactory()
+        cls.location = ObjectDBFactory(db_key="MarksRoom")
+        cls.prop_flammable = PropertyFactory(name="flammable_marks")
+        cls.prop_fire = PropertyFactory(name="fire_marks")
+        cls.capability = CapabilityTypeFactory(name="elemental_control_marks")
+        application = ApplicationFactory(
+            name="Fire Blast Marks",
+            capability=cls.capability,
+            target_property=cls.prop_flammable,
+            required_effect_property=cls.prop_fire,
+        )
+        template = ChallengeTemplateFactory(name="Wooden Wall Marks", severity=5)
+        template.properties.add(cls.prop_flammable)
+        ChallengeApproachFactory(
+            challenge_template=template, application=application, display_name="Burn it"
+        )
+        ChallengeInstance.objects.create(
+            template=template,
+            location=cls.location,
+            target_object=cls.location,
+            is_active=True,
+            is_revealed=True,
+        )
+        # The gift's resonance carries fire; the technique itself is not marked.
+        resonance = ResonanceFactory()
+        resonance.properties.add(cls.prop_fire)
+        gift = GiftFactory()
+        gift.resonances.add(resonance)
+        cls.technique = TechniqueFactory(gift=gift, intensity=5)
+        TechniqueCapabilityGrantFactory(
+            technique=cls.technique, capability=cls.capability, base_value=10
+        )
+        CharacterTechniqueFactory(character=cls.sheet, technique=cls.technique)
+
+    @patch(
+        "world.mechanics.services._get_difficulty_indicator_for_check",
+        return_value=DifficultyIndicator.MODERATE,
+    )
+    def test_resonance_mark_is_not_enough_and_own_mark_is(self, _mock: object) -> None:  # noqa: PT019
+        character = self.sheet.character
+        assert get_available_actions(character, self.location) == []
+        self.technique.properties.add(self.prop_fire)
+        actions = get_available_actions(character, self.location)
+        assert [a.application_name for a in actions] == ["Fire Blast Marks"]
