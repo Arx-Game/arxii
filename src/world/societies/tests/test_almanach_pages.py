@@ -202,6 +202,9 @@ class AlmanachPagesTests(TestCase):
 
         county_doc = rung_document(self.county)
         self.assertEqual(county_doc.demesne["domain_id"], self.domain.pk)
+        # the people by formula and the capacity terrain set (#5069)
+        self.assertEqual(county_doc.demesne["population"], self.domain.population)
+        self.assertEqual(county_doc.demesne["population_capacity"], 0)
         self.assertEqual(len(county_doc.holdings), 1)
         self.assertTrue(county_doc.holdings[0]["unsited"])
         self.assertTrue(county_doc.forces[0]["posted_here"])

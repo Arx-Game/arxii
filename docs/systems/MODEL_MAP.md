@@ -10073,6 +10073,7 @@
   - food_transfers_out <- agriculture.FoodTransfer
   - food_transfers_in <- agriculture.FoodTransfer
   - seat_of <- societies.Title
+  - terrain_counts <- societies.DomainTerrainCount
   - garrison_posts <- societies.DomainGarrisonPost
   - holdings <- societies.DomainHolding
   - improvement_details <- societies.DomainImprovementDetails
@@ -10135,6 +10136,12 @@
   - project -> projects.Project [OneToOne]
   - domain -> societies.Domain [FK]
   - holding -> societies.DomainHolding [FK] (nullable)
+
+### DomainTerrainCount
+**Foreign Keys:**
+  - domain -> societies.Domain [FK]
+
+### DominionConfig
 
 ### EdictKind
 **Foreign Keys:**
@@ -10760,6 +10767,11 @@
   - houses_defaulting <- societies.Organization
   - titles <- societies.Title
   - house_templates <- societies.HouseTemplate
+
+### TerrainCalibration
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 
 ### Title
 **Foreign Keys:**
