@@ -3482,12 +3482,12 @@ class Levy(SharedMemoryModel):
     def controller(self) -> Organization | None:
         """Who takes this levy right now: the rung's Domain owner or Turf holder."""
         if self.kind == LevyKind.TAX:
-            from world.societies.houses.models import Domain  # noqa: PLC0415
+            # Land answers from its Domain; a duchy and above from the title on it (#5069).
+            from world.societies.houses.almanach import house_holding_area  # noqa: PLC0415
 
             if self.area_id is None:
                 return None
-            domain = Domain.objects.filter(area_id=self.area_id).select_related("owner_org").first()
-            return domain.owner_org if domain is not None else None
+            return house_holding_area(self.area)
         turf = Turf.objects.filter(area=self.area, room_profile=self.room_profile).first()
         return turf.controlling_org if turf is not None else None
 

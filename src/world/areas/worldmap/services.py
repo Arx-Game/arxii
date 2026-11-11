@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 import gzip
 from typing import TYPE_CHECKING
 
-from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -357,6 +357,7 @@ def set_footprint(
             else 0
         )
         removed = _release(area, to_remove, skipped, changed) if to_remove else 0
+        _recount_terrain(changed)
     return FootprintChange(
         added=added,
         removed=removed,
@@ -364,6 +365,19 @@ def set_footprint(
         skipped_holders=tuple(sorted(skipped)),
         changed=tuple(changed),
     )
+
+
+def _recount_terrain(changed: Iterable[PipChange], *extra_area_ids: int) -> None:
+    """Recount the terrain of every holder a write moved ground from or to (#5069):
+    a carve is where a footprint changes, so it is where a holding's terrain mix and
+    capacity are written; nothing reads the pip table after this."""
+    from world.societies.houses.demography import refresh_terrain_counts_for  # noqa: PLC0415
+
+    area_ids = {holder for _x, _y, before, after in changed for holder in (before, after)}
+    area_ids.update(extra_area_ids)
+    area_ids.discard(None)
+    if area_ids:
+        refresh_terrain_counts_for(Area.objects.filter(pk__in=area_ids))
 
 
 _NO_FOOTPRINT_BELOW_BARONY = "Only a barony or a larger domain has a footprint."
@@ -396,6 +410,7 @@ def clear_footprint(*, area: Area) -> FootprintChange:
             changed.extend((row.x, row.y, area.pk, None) for row in rows)
             if rows:
                 AreaFootprintPip.objects.filter(pk__in=[row.pk for row in rows]).delete()
+        _recount_terrain(changed)
     return FootprintChange(removed=len(rows), changed=tuple(changed))
 
 
@@ -452,6 +467,8 @@ def restore_pips(*, pips: Iterable[PipHolder]) -> int:
                 reason="restore moves rows loaded in this transaction",
             )
         AreaFootprintPip.objects.bulk_create(fresh, batch_size=5000)
+        touched = set(wanted.values()) | {row.area_id for row in held.values()}
+        _recount_terrain((), *(pk for pk in touched if pk is not None))
     return len(to_delete) + len(to_move) + len(fresh)
 
 
@@ -545,6 +562,7 @@ def move_seat(*, area: Area, pip: Pip) -> FootprintChange:
     with transaction.atomic():
         removed = _release(area, own, skipped, changed) if own else 0
         added = _claim(area, {(x, y)}, skipped, changed)
+        _recount_terrain(changed)
     return FootprintChange(added=added, removed=removed, changed=tuple(changed))
 
 
@@ -777,12 +795,12 @@ def _landless_titles(
 
 
 def _holder_of(area: Area) -> Organization | None:
-    """The house holding an area's domain, or None for an unclaimed or undecorated area."""
-    try:
-        domain = area.domain_profile
-    except ObjectDoesNotExist:
-        return None
-    return domain.owner_org
+    """The house holding an area's rung, or None for an unclaimed or undecorated area.
+    Land answers from its Domain; a duchy and above, which have none (#5069), from the
+    title standing on them."""
+    from world.societies.houses.almanach import house_holding_area  # noqa: PLC0415
+
+    return house_holding_area(area)
 
 
 def _title_by_area(areas: Iterable[Area]) -> dict[int, int]:

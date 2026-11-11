@@ -12,9 +12,12 @@ union-bound (CK2 rule: a spouse dies, the pact dies) with coded commitments.
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
 
+from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.areas.worldmap.constants import Terrain
 from world.contributors.models import CreditedContent
 from world.currency.constants import IncomeStreamKind
 from world.items.constants import MaterialSourceKind
@@ -534,7 +537,20 @@ class Domain(SharedMemoryModel):
         blank=True,
         related_name="domains",
     )
+    # Population is a formula, not a tick (#5069 rule 2): ``population`` is the base as
+    # of ``population_rebased_at`` and ``demography.population_now`` moves it toward
+    # ``population_capacity`` by the in-character months since. On a county it is the
+    # rural pool, the people outside every barony; on a barony, the seat's own people.
+    # Written only on a rebase (a regional event, a staff edit, layout), never by a read.
     population = models.PositiveIntegerField(default=1000)
+    population_capacity = models.PositiveIntegerField(
+        default=0,
+        help_text="People the land can feed: terrain counts times calibration (#5069).",
+    )
+    population_rebased_at = models.DateTimeField(
+        default=timezone.now,
+        help_text="When ``population`` was last written as a base (#5069).",
+    )
     prosperity = models.PositiveSmallIntegerField(default=50, help_text="0-100 PLACEHOLDER.")
     unrest = models.PositiveSmallIntegerField(default=10, help_text="0-100 PLACEHOLDER.")
     defenses = models.PositiveSmallIntegerField(default=10, help_text="0-100 PLACEHOLDER.")
@@ -580,6 +596,105 @@ class Domain(SharedMemoryModel):
         if open_crisis is not None:
             base *= open_crisis.income_factor
         return base
+
+
+class DominionConfig(SharedMemoryModel):
+    """Singleton (pk=1): the dials of the noble layer (#5069). Read by
+    ``demography`` (the population curve, a barony's capacity) and by the territory
+    yield (coppers per head). Config values never gate; the numbers are PLACEHOLDER
+    tuning, the shape is the rule.
+    """
+
+    population_rate_pct_per_month = models.PositiveSmallIntegerField(
+        default=5,
+        validators=[MaxValueValidator(100)],
+        help_text=(
+            "Percent of the gap between a holding's people and its capacity that closes "
+            "each in-character month."
+        ),
+    )
+    coppers_per_head = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Coppers a holding's TERRITORY stream grosses per person per cycle.",
+    )
+    barony_capacity_factor = models.PositiveSmallIntegerField(
+        default=50,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "A barony's capacity is its one pip's terrain capacity times this: a seat holds "
+            "a town's worth of people on a farm's worth of ground."
+        ),
+    )
+
+    objects = ArxSharedMemoryManager()
+
+    class Meta:
+        verbose_name = "Dominion settings"
+        verbose_name_plural = "Dominion settings"
+
+    @classmethod
+    def load(cls) -> "DominionConfig":
+        """Fetch (or lazily create) the singleton row."""
+        config = cls.objects.cached_singleton()
+        if config is None:
+            config, _created = cls.objects.get_or_create(pk=1)
+        return config
+
+    def __str__(self) -> str:
+        return "Dominion settings"
+
+
+class TerrainCalibration(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """What a ten-mile pip of one terrain can feed (#5069 rule 3). Authored content:
+    one row per ``Terrain`` member, keyed by it. A terrain with no row feeds nobody,
+    which the required-content panel surfaces rather than a silent default.
+    """
+
+    terrain = models.CharField(max_length=16, choices=Terrain.choices, unique=True)
+    capacity_per_pip = models.PositiveIntegerField(
+        default=0, help_text="People one pip of this terrain can feed. PLACEHOLDER."
+    )
+    prosperity_modifier = models.SmallIntegerField(
+        default=0,
+        validators=[MinValueValidator(-50), MaxValueValidator(50)],
+        help_text="Added to a laid-out county's prosperity per share of this terrain.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["terrain"]
+
+    class Meta:
+        ordering = ["terrain"]
+
+    def __str__(self) -> str:
+        return self.get_terrain_display()
+
+
+class DomainTerrainCount(SharedMemoryModel):
+    """How many of a holding's own footprint pips are each terrain (#5069 rule 3).
+
+    A cache of ``AreaFootprintPip`` joined to ``TerrainPip`` on ``(x, y)``, written by
+    ``demography.refresh_terrain_counts`` whenever a footprint changes (the carve actions,
+    the layout tool) so no read ever joins the forty-thousand-pip terrain table. A
+    county's rows cover its own ground, never its baronies' (ADR-0328).
+    """
+
+    domain = models.ForeignKey(Domain, on_delete=models.CASCADE, related_name="terrain_counts")
+    terrain = models.CharField(max_length=16, choices=Terrain.choices)
+    pips = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["domain", "terrain"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["domain", "terrain"], name="houses_one_terrain_count_per_domain"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.domain_id}: {self.pips} {self.terrain}"
 
 
 class DomainGarrisonPost(SharedMemoryModel):

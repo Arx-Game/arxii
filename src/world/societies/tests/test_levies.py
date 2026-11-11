@@ -5,12 +5,14 @@ from django.test import TestCase
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
+from world.character_creation.factories import RealmFactory
 from world.currency.constants import IncomeStreamKind
 from world.currency.models import OrgIncomeStream
 from world.currency.services import accrue_income_stream
 from world.societies.constants import LevyKind
 from world.societies.factories import OrganizationFactory
-from world.societies.houses.constants import HoldingSiteKind
+from world.societies.houses.almanach import assign_holder, plant_rung, rung_area_for_title
+from world.societies.houses.constants import HoldingSiteKind, TitleTier
 from world.societies.houses.factories import HoldingKindFactory
 from world.societies.houses.services import add_holding, create_domain
 from world.societies.levies import ensure_levy_streams, set_levy
@@ -116,3 +118,17 @@ class LevyTests(TestCase):
 
         levy.income_stream.refresh_from_db()
         self.assertEqual(levy.income_stream.uncollected_pool, 0)
+
+    def test_a_tax_on_a_duchy_is_taken_by_the_duchys_house(self):
+        # A duchy has no Domain (#5069); the taker is read off the title standing on it.
+        realm = RealmFactory(name="Luxen")
+        crown = OrganizationFactory(name="House Luxen")
+        kingdom = plant_rung(realm=realm, tier=TitleTier.KINGDOM, name="Luxen", held_by=crown)
+        duchy = plant_rung(realm=realm, tier=TitleTier.DUCHY, name="Brittany", parent_title=kingdom)
+        levy = set_levy(rung_area_for_title(duchy), LevyKind.TAX, 10)
+        self.assertIsNone(levy.controller)
+
+        assign_holder(duchy, self.baron)
+
+        self.assertEqual(levy.controller, self.baron)
+        self.assertEqual(set_levy(rung_area_for_title(kingdom), LevyKind.TAX, 5).controller, crown)

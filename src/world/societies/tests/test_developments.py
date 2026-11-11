@@ -8,7 +8,6 @@ from world.agriculture.seeds import ensure_field_kind
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.buildings.factories import BuildingFactory
-from world.currency.constants import TERRITORY_BASE_PER_UNIT
 from world.currency.services import accrue_income_stream
 from world.room_features.factories import RoomFeatureInstanceFactory
 from world.societies.constants import ControlKind
@@ -21,7 +20,12 @@ from world.societies.houses.services import (
     create_domain,
     site_holding,
 )
-from world.societies.territory import ensure_domain_stream, territory_gross, territory_units
+from world.societies.territory import (
+    ensure_domain_stream,
+    free_units,
+    territory_gross,
+    territory_units,
+)
 
 
 def _room(area, *, outdoor=True):
@@ -62,14 +66,18 @@ class HoldingSiteTests(TestCase):
         with self.assertRaises(HousesServiceError):
             add_holding(domain=self.domain, kind=self.land_kind, room_profile=self.commons)
 
-    def test_occupied_units_come_out_of_the_territory_gross(self):
+    def test_occupied_units_come_out_of_the_land_budget_not_the_gross(self):
+        # A LAND development uses up the domain's land units (ADR-0320), but a noble's
+        # gross follows people, not rooms (#5069), so the stream is unmoved by it.
         stream = ensure_domain_stream(self.domain)
         self.assertEqual(territory_units(self.ward, ControlKind.LEGITIMATE), 2)
-        self.assertEqual(territory_gross(stream), 2 * TERRITORY_BASE_PER_UNIT)
+        self.assertEqual(free_units(self.domain), 2)
+        before = territory_gross(stream)
 
         add_holding(domain=self.domain, kind=self.land_kind, room_profile=self.commons)
 
-        self.assertEqual(territory_gross(stream), 1 * TERRITORY_BASE_PER_UNIT)
+        self.assertEqual(free_units(self.domain), 1)
+        self.assertEqual(territory_gross(stream), before)
 
     def test_a_farm_needs_a_field_in_the_domain(self):
         farm_kind = HoldingKindFactory(
@@ -110,9 +118,7 @@ class HoldingSiteTests(TestCase):
         holding = add_holding(domain=self.domain, kind=inn_kind, building=inn)
 
         self.assertEqual(holding.building, inn)
-        self.assertEqual(
-            territory_gross(ensure_domain_stream(self.domain)), 2 * TERRITORY_BASE_PER_UNIT
-        )
+        self.assertEqual(free_units(self.domain), 2, "a building takes no land units")
         with self.assertRaises(HousesServiceError):
             add_holding(domain=self.domain, kind=inn_kind, building=elsewhere_inn)
 

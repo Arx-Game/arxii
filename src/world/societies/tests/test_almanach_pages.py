@@ -84,7 +84,9 @@ class AlmanachPagesTests(TestCase):
         cls.vacant_county = plant_rung(
             realm=cls.realm, tier=TitleTier.COUNTY, name="", parent_title=cls.duchy
         )
-        cls.domain = Domain.objects.get(pk=_rung_area(cls.duchy).pk)
+        # A duchy has no Domain (#5069): the house's land is the county of its chain.
+        cls.county = Title.objects.get(tier=TitleTier.COUNTY, seat_domain=cls.duchy.seat_domain)
+        cls.domain = Domain.objects.get(pk=_rung_area(cls.county).pk)
         add_holding(domain=cls.domain, kind=HoldingKindFactory(name="Quarry"), unsited=True)
         OrgIncomeStream.objects.create(
             organization=cls.house,
@@ -186,9 +188,9 @@ class AlmanachPagesTests(TestCase):
         self.assertEqual(doc.title["held_by"], "House Katta")
         self.assertEqual(doc.title["holder"], "Kathryn mar Katta")
         self.assertEqual(doc.title["sworn_to"], "The Umbral Crown")
-        self.assertEqual(doc.demesne["domain_id"], self.domain.pk)
-        self.assertEqual(len(doc.holdings), 1)
-        self.assertTrue(doc.holdings[0]["unsited"])
+        # A duchy is organization, not land (#5069): no demesne, no developments.
+        self.assertIsNone(doc.demesne)
+        self.assertEqual(doc.holdings, [])
         expected = OrgIncomeStream.objects.filter(organization=self.house, active=True).aggregate(
             g=Sum("gross_amount"), p=Sum("uncollected_pool")
         )
@@ -196,8 +198,16 @@ class AlmanachPagesTests(TestCase):
         self.assertEqual(doc.books["uncollected"], expected["p"])
         self.assertEqual(doc.books["treasury"], 42000)
         self.assertEqual(len(doc.forces), 1)
-        self.assertTrue(doc.forces[0]["posted_here"])
         self.assertEqual(doc.forces[0]["men"], 120)
+
+        county_doc = rung_document(self.county)
+        self.assertEqual(county_doc.demesne["domain_id"], self.domain.pk)
+        # the people by formula and the capacity terrain set (#5069)
+        self.assertEqual(county_doc.demesne["population"], self.domain.population)
+        self.assertEqual(county_doc.demesne["population_capacity"], 0)
+        self.assertEqual(len(county_doc.holdings), 1)
+        self.assertTrue(county_doc.holdings[0]["unsited"])
+        self.assertTrue(county_doc.forces[0]["posted_here"])
         self.assertEqual(len(doc.vassals), 1)
         self.assertEqual(doc.vassals[0]["held_by"], "")
 

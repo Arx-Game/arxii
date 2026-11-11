@@ -5,6 +5,7 @@ from evennia.accounts.models import AccountDB
 
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
+from world.areas.models import Area
 from world.character_creation.constants import QuestionKind
 from world.character_creation.factories import (
     OriginTemplateFactory,
@@ -12,12 +13,14 @@ from world.character_creation.factories import (
     OriginTemplateSlotFactory,
 )
 from world.character_creation.questionnaire import picked_family_standing
-from world.character_creation.services import finalize_character
+from world.character_creation.services import _home_domain, finalize_character
 from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
 from world.roster.constants import COMMONER_KIND_NAME
 from world.roster.factories import FamilyKindFactory
 from world.roster.models import Family
 from world.societies.factories import OrganizationFactory, OrganizationTypeFactory
+from world.societies.houses.almanach import plant_rung, rung_area_for_title
+from world.societies.houses.constants import TitleTier
 from world.societies.houses.factories import HoldingKindFactory, HouseTemplateFactory
 from world.societies.houses.models import DomainHolding
 from world.societies.houses.services import create_domain, house_for_family
@@ -83,3 +86,18 @@ class FamilyStandingTests(FinalizationTestMixin, TestCase):
 
         org = house_for_family(Family.objects.get(name="Cisternwrights"))
         self.assertEqual(DomainHolding.objects.get(owner_org=org).standing, 50)
+
+    def test_a_capital_that_is_a_kingdom_rung_homes_the_family_on_its_seat_barony(self):
+        # A kingdom has no Domain of its own (#5069): the businesses of a family that
+        # starts in the capital stand on the crown's seat barony, the grid they can reach.
+        for old_capital in Area.objects.filter(is_capital=True):
+            old_capital.is_capital = False
+            old_capital.save(update_fields=["is_capital"])
+        kingdom = plant_rung(
+            realm=self.area.realm, tier=TitleTier.KINGDOM, name="Luxen", held_by=self.mayor
+        )
+        crown_area = rung_area_for_title(kingdom)
+        crown_area.is_capital = True
+        crown_area.save(update_fields=["is_capital"])
+
+        self.assertEqual(_home_domain(self._named_draft()), kingdom.seat_domain)

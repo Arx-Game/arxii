@@ -1,6 +1,10 @@
 # 0319 — Territory yields at the lowest controlled rung; higher rungs earn by tithe
 
-**Status:** accepted (2026-09-29, #4060 slice 1)
+**Status:** accepted (2026-09-29, #4060 slice 1); amended by ADR-5069-A (2026-11-11): a
+`Domain`'s units are its people (`demography.population_now` times coppers per head), not
+its outdoor rooms, and a Domain exists only at barony and county, so the four-times-over
+yield this ADR excluded can no longer arise. A `Turf`'s units stay its outdoor rooms, and
+the lowest-rung rule and the tithe stand.
 
 Held ground has a base value: staff-built outdoor rooms are the land units, and each held
 rung (a `Domain` for legitimate control, a `Turf` for criminal control) carries one

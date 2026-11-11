@@ -51,7 +51,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   `ModifierTarget.target_being` (#4333), and maneuver effects and effect kinds (#4783)
 - [progression](src/world/progression/AGENT_GLOSSARY.md)
 - [classes](src/world/classes/AGENT_GLOSSARY.md)
-- [societies](src/world/societies/AGENT_GLOSSARY.md) - also holds the Almanach de Catenys, and title station, chartered fief, claim and pledged liege (#4983), and layout and place-name bank (#4986)
+- [societies](src/world/societies/AGENT_GLOSSARY.md) - also holds the Almanach de Catenys, and title station, chartered fief, claim and pledged liege (#4983), layout and place-name bank (#4986), and Domain (land at barony and county only), hinterland, rural pool and Capacity (#5069)
   feudal-ladder builder terms (#3983): Almanach de Catenys, Rung (stub, canonical in areas),
   Seat, Hall, Land Shape, Demesne, House State, Household, Contested Title, and (#3983 Plan B
   Task 7) Claim Grants, Founder Place, Capital (canonical; areas holds a stub), Claim Tier
