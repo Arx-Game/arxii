@@ -161,7 +161,8 @@ class TheRollSetsHowMuch(_SmokeInTheCellar):
 
     def test_someone_elses_ward_stays_flat_and_free(self) -> None:
         unformed = self.lost_without_form()
-        warder = self.fighter("Warder", at=self.floor)
+        # Not in the fight: a second fighter would split the blade's targeting with her.
+        warder = self.make_player("Warder", room=self.room)
         self.wear_the_form(cast_by=warder)
         self.ysolde_health_reset()
         self.form_level = 0  # a roll would soften nothing; there is no roll
