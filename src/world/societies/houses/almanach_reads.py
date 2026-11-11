@@ -115,6 +115,8 @@ from world.societies.houses.demography import populations_now
 from world.societies.houses.models import (
     Domain,
     DomainHolding,
+    HouseCharterOption,
+    HouseCharterQuestion,
     HouseTemplate,
     NobiliaryParticle,
     Title,
@@ -606,11 +608,50 @@ def facet_payload(facet) -> dict:
     option = facet.option
     return {
         "definition": facet.definition.name,
+        "definition_id": facet.definition_id,
         "option": option.name,
+        "option_id": option.pk,
         "description": option.description,
         "being_name": option.being.name if option.being_id is not None else "",
         "target_entry_id": option.target_entry_id,
     }
+
+
+def charter_questions_for_house(house: Organization) -> list[dict]:
+    """The charter questions a staff house may answer from its page (#5064): every
+    question attached to a Family Template of the house's realm, with its active
+    options. A founder answers these at creation; a staff-made house answers them
+    here. A house whose society has no realm, or a realm with no templates, gets
+    an empty list."""
+    realm = realm_for_house(house)
+    if realm is None:
+        return []
+    questions = list(HouseCharterQuestion.objects.filter(templates__realm_id=realm.pk).distinct())
+    options_by_question: dict[int, list[HouseCharterOption]] = defaultdict(list)
+    for option in HouseCharterOption.objects.filter(
+        definition__in=questions, is_active=True
+    ).select_related("being", "codex_entry"):
+        options_by_question[option.definition_id].append(option)
+    return [
+        {
+            "id": question.pk,
+            "name": question.name,
+            "prompt": question.prompt,
+            "min_picks": question.min_picks,
+            "max_picks": question.max_picks,
+            "sets_patron": question.sets_patron,
+            "options": [
+                {
+                    "id": option.pk,
+                    "name": option.name,
+                    "description": option.description,
+                    "target_entry_id": option.target_entry_id,
+                }
+                for option in options_by_question[question.pk]
+            ],
+        }
+        for question in questions
+    ]
 
 
 def patron_payload(house: Organization) -> dict | None:
@@ -648,6 +689,7 @@ def _house_payload(house: Organization) -> dict:
             facet_payload(facet)
             for facet in house.facets.select_related("definition", "option", "option__being").all()
         ],
+        "charter_questions": charter_questions_for_house(house),
         "features": [
             {
                 "name": stamped.feature.name,

@@ -410,9 +410,11 @@ two shapes; see Recipe 7 in `docs/systems/family-authoring-recipes.md`.
     pick names the house's patron: `build_family_org` writes
     `Organization.patron_nickname` from it (`_stamp_facets` /
     `patron_option_from_picks`), on the title path and the name path alike, in
-    the same transaction as the `OrganizationFacet` rows. Fixed at founding;
-    staff change it in the org admin; nothing else writes the column. Whether
-    the question is required is the definition's own `min_picks`.
+    the same transaction as the `OrganizationFacet` rows. Fixed at founding; after
+    it, `almanach_edit_house` writes it from a pick on the patron question
+    (`_patron_from_facets`, #5064: the House chapter's picker), and staff can
+    overwrite it in the org admin. Whether the question is required is the
+    definition's own `min_picks`.
   - **Reads.** Every house surface emits a pick through one reader,
     `almanach_reads.facet_payload` (`definition`, `option`, `description`,
     `being_name`, `target_entry_id`): the org payload's house block, the
@@ -462,8 +464,17 @@ two shapes; see Recipe 7 in `docs/systems/family-authoring-recipes.md`.
   features (CG panel renders option cards + a features orientation panel and
   gates submit on completeness); the org payload carries stylings + house-block
   `facets`/`features`; `sheet/house` lists words, colors, facets, features;
-  admin registers definitions (options inline), features, and a read-only
-  picks inline on the claim review queue.
+  admin registers definitions (options inline), features, a read-only
+  picks inline on the claim review queue, and a Facets inline on the Organization
+  admin (#5064, the staff fallback). **A staff-made house answers its charter
+  questions on its Almanach page (#5064):** the house document's `house` section
+  carries `charter_questions` (`charter_questions_for_house`: every
+  `HouseCharterQuestion` attached to a Family Template of the house's realm, with
+  its active options and their `target_entry_id`) beside `facets` (each now with
+  `definition_id`/`option_id`); the House chapter renders a select for a
+  single-pick question and pressed chips capped at `max_picks` for a several-pick
+  one, and the savebar sends the whole list as `facet_option_ids`. A house whose
+  realm has no templates shows its answers read-only.
 - **Content:** per-region catalogs (deities, vices, virtues, totems, geasa,
   traditions) arrive from later per-region brainstorms — targets: 2 charter questions
   per region (3 only if genuinely fun), ≥1 advantageous RP-usable feature.
@@ -1055,7 +1066,8 @@ realm" above) (#4986),
 `AlmanachEditHouseAction` (`almanach_edit_house` — charter fields, house
 state, succession law default, and a wholesale `OrganizationFacet`/`OrganizationFeature`/
 `OrganizationObservance` replace; an `observances` row is `{ic_month, ic_day, name, lore}`,
-#4206), `AlmanachSwearAction` (`almanach_swear`), `AlmanachDescribeDemesneAction`
+#4206; a `facet_option_ids` list that answers a `sets_patron` question also writes
+`patron_nickname`, two such picks refused, #5064), `AlmanachSwearAction` (`almanach_swear`), `AlmanachDescribeDemesneAction`
 (`almanach_describe_demesne`), `AlmanachAddHoldingAction` (`almanach_add_holding`),
 `AlmanachPlanEstateAction` (`almanach_plan_estate`), `AlmanachEditKinAction`
 (`almanach_edit_kin`), `AlmanachPublishAction` (`almanach_publish`).

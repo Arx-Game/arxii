@@ -7,26 +7,29 @@
  * `AlmanachEditHouseAction.execute`, `almanach.py`: an absent kwarg leaves
  * the column untouched, unlike `almanach_edit_kin`'s full-overwrite update).
  *
- * Three ABSENT-catalog omissions share one root cause: nothing in the wire
- * payload lists the pickable options.
- * - Quiddity: `house.facets` gives only the house's OWN chosen
- *   definition/option/description triples, never the full
- *   `HouseCharterOption` catalog a "change" picker would need — the
- *   `.entries.compact` list renders the chosen options with their
- *   description folded in (only shown on `.on`) and an inert `⊕ change` door.
- * - Features: same shape (`HouseFeature` has no list endpoint here) — the
- *   chips render `house.features`, and the plate's own `⊕` add-a-feature
- *   chip is inert for the same reason.
+ * Charter answers (#5064): `house.charter_questions` is the catalog the house may
+ * answer from, every question attached to a Family Template of its realm with
+ * its options; `house.facets` is what it has answered. A single-pick question is
+ * a select, a several-pick one is pressed chips capped at `max_picks`; the chosen
+ * options list beneath with their blurb and codex link. The picks are staged like
+ * the state toggle and the savebar sends `facet_option_ids`, the house's whole
+ * list, only when it changed (the action replaces the rows wholesale). An answer
+ * whose question is not in the catalog (a house whose realm has no templates)
+ * renders read-only.
+ *
+ * Two ABSENT-catalog omissions remain, same root cause: nothing in the wire
+ * payload lists the pickable rows.
+ * - Features: `HouseFeature` has no list endpoint here — the chips render
+ *   `house.features`, and the plate's own `⊕` add-a-feature chip is inert.
  * - Succession: `default_succession_law` gives only the CURRENT law's
  *   name/codex id, never a `SuccessionLaw` catalog to pick a different one
  *   from — it renders as a read-only name + codex link, no editing control.
  *
- * The Quiddity/feature inert doors are plain `disabled aria-disabled`
- * buttons with no `title` (review fix round 1, Finding I4 — a native
- * `title` tooltip is reserved for the `.tip`/`.bub` pattern on the
- * particle/succession fields per the global constraints; `disabled` +
- * `aria-disabled` alone already communicates "not available" without a
- * second, unapproved hover-text channel).
+ * The feature inert door is a plain `disabled aria-disabled` button with no
+ * `title` (review fix round 1, Finding I4 — a native `title` tooltip is
+ * reserved for the `.tip`/`.bub` pattern on the particle/succession fields per
+ * the global constraints; `disabled` + `aria-disabled` alone already
+ * communicates "not available" without a second, unapproved hover-text channel).
  *
  * Gentry is the one exception, ordered explicitly: it is a live option of
  * the state select when `realmTheme === 'luxen'` (`_realm_payload`'s
@@ -55,6 +58,42 @@ export interface EditHouseFields {
   house_state?: string;
   /** The whole list, replacing the house's days of remembrance (#4206). */
   observances?: ObservanceRow[];
+  /** The whole list of charter answers, replacing the house's facets (#5064). */
+  facet_option_ids?: number[];
+}
+
+/** The house's answers by question id, the shape the pickers edit. */
+type Picks = Record<number, number[]>;
+
+function initialPicks(house: AlmanachHouseDocumentHouse): Picks {
+  const picks: Picks = {};
+  for (const facet of house.facets) {
+    (picks[facet.definition_id] ??= []).push(facet.option_id);
+  }
+  return picks;
+}
+
+/** Every chosen option id, the catalog's questions first in their order, then any
+ * answer to a question outside it (kept, since the action replaces the list). */
+function flattenPicks(picks: Picks, house: AlmanachHouseDocumentHouse): number[] {
+  const seen = new Set<number>();
+  const out: number[] = [];
+  const questionIds = [
+    ...house.charter_questions.map((q) => q.id),
+    ...Object.keys(picks).map(Number),
+  ];
+  for (const id of questionIds) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(...(picks[id] ?? []));
+  }
+  return out;
+}
+
+function sameSet(a: number[], b: number[]): boolean {
+  return (
+    JSON.stringify([...a].sort((x, y) => x - y)) === JSON.stringify([...b].sort((x, y) => x - y))
+  );
 }
 
 /** The document's rows as the editor holds them: the spelled `when` dropped,
@@ -101,7 +140,23 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
   // Staged like the state toggle, not a per-field draft: the list is one value
   // and the action replaces it wholesale (#4206).
   const [observances, setObservances] = useState<ObservanceRow[]>(() => editableObservances(house));
+  const [picks, setPicks] = useState<Picks>(() => initialPicks(house));
+  const catalogIds = new Set(house.charter_questions.map((q) => q.id));
+  const readOnlyGroups = facetGroups.filter(
+    ([, facets]) => !catalogIds.has(facets[0].definition_id)
+  );
   const particleGlossId = `house-particle-gloss-${house.id}`;
+
+  const togglePick = (questionId: number, optionId: number, maxPicks: number) => {
+    setPicks((prev) => {
+      const current = prev[questionId] ?? [];
+      if (current.includes(optionId)) {
+        return { ...prev, [questionId]: current.filter((id) => id !== optionId) };
+      }
+      if (current.length >= maxPicks) return prev;
+      return { ...prev, [questionId]: [...current, optionId] };
+    });
+  };
 
   const save = () => {
     const fields: EditHouseFields = {};
@@ -112,6 +167,14 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
     if (description.value !== house.description) fields.description = description.value;
     if (JSON.stringify(observances) !== JSON.stringify(editableObservances(house)))
       fields.observances = observances;
+    const chosen = flattenPicks(picks, house);
+    if (
+      !sameSet(
+        chosen,
+        house.facets.map((facet) => facet.option_id)
+      )
+    )
+      fields.facet_option_ids = chosen;
     if (Object.keys(fields).length === 0) return;
     onSave(fields);
     if (fields.words !== undefined) words.clearDraft();
@@ -235,7 +298,79 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
         />
       </div>
       <ObservanceRows idPrefix={`house-${house.id}`} rows={observances} onChange={setObservances} />
-      {facetGroups.map(([definition, facets]) => (
+      {house.charter_questions.map((question) => {
+        const chosen = picks[question.id] ?? [];
+        const chosenOptions = question.options.filter((option) => chosen.includes(option.id));
+        const controlId = `house-facet-${house.id}-${question.id}`;
+        return (
+          <div className="field" key={question.id}>
+            {question.max_picks === 1 ? (
+              <>
+                <label htmlFor={controlId}>{question.name}</label>
+                <select
+                  id={controlId}
+                  value={chosen[0] ?? ''}
+                  onChange={(event) =>
+                    setPicks((prev) => ({
+                      ...prev,
+                      [question.id]: event.target.value === '' ? [] : [Number(event.target.value)],
+                    }))
+                  }
+                >
+                  <option value="">pick</option>
+                  {question.options.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : (
+              <>
+                <span className="label" id={`${controlId}-label`}>
+                  {question.name}
+                </span>
+                <div className="chips" role="group" aria-labelledby={`${controlId}-label`}>
+                  {question.options.map((option) => {
+                    const on = chosen.includes(option.id);
+                    return (
+                      <button
+                        type="button"
+                        key={option.id}
+                        className={on ? 'chip acc' : 'chip'}
+                        aria-pressed={on}
+                        onClick={() => togglePick(question.id, option.id, question.max_picks)}
+                      >
+                        {option.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+            {chosenOptions.length > 0 && (
+              <ul className="entries compact">
+                {chosenOptions.map((option) => (
+                  <li key={option.id} className="on">
+                    <span className="mark">◆</span>
+                    <span>
+                      {option.target_entry_id != null ? (
+                        <Link to={urls.codexEntry(option.target_entry_id)} className="nm">
+                          {option.name}
+                        </Link>
+                      ) : (
+                        <span className="nm">{option.name}</span>
+                      )}
+                      <span className="ds">{option.description}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      })}
+      {readOnlyGroups.map(([definition, facets]) => (
         <div className="field" key={definition}>
           <span className="label">{definition}</span>
           <ul className="entries compact">
@@ -251,11 +386,6 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
                     <span className="nm">{aspect.option}</span>
                   )}
                   <span className="ds">{aspect.description}</span>
-                </span>
-                <span className="rt">
-                  <button type="button" disabled aria-disabled>
-                    ⊕ change
-                  </button>
                 </span>
               </li>
             ))}

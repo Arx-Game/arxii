@@ -45664,6 +45664,56 @@ components:
           minimum: 0
       required:
       - ap_amount
+    AlmanachCharterOption:
+      type: object
+      description: |-
+        One answer a staff house may pick (#5064; mirrors
+        ``almanach_reads.charter_questions_for_house``).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        target_entry_id:
+          type: integer
+          nullable: true
+      required:
+      - description
+      - id
+      - name
+      - target_entry_id
+    AlmanachCharterQuestion:
+      type: object
+      description: |-
+        A charter question of the house's realm with its active options (#5064):
+        what the House chapter's picker offers.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        prompt:
+          type: string
+        min_picks:
+          type: integer
+        max_picks:
+          type: integer
+        sets_patron:
+          type: boolean
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlmanachCharterOption'
+      required:
+      - id
+      - max_picks
+      - min_picks
+      - name
+      - options
+      - prompt
+      - sets_patron
     AlmanachFamilyKind:
       type: object
       description: The family types Create Family offers (``FamilyKind`` rows, ADR-0268).
@@ -45779,6 +45829,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AlmanachHouseFacet'
+        charter_questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlmanachCharterQuestion'
         features:
           type: array
           items:
@@ -45792,6 +45846,7 @@ components:
           items:
             $ref: '#/components/schemas/AlmanachHouseObservance'
       required:
+      - charter_questions
       - colors
       - default_succession_law
       - description
@@ -45816,8 +45871,12 @@ components:
       properties:
         definition:
           type: string
+        definition_id:
+          type: integer
         option:
           type: string
+        option_id:
+          type: integer
         description:
           type: string
         being_name:
@@ -45828,8 +45887,10 @@ components:
       required:
       - being_name
       - definition
+      - definition_id
       - description
       - option
+      - option_id
       - target_entry_id
     AlmanachHouseFeature:
       type: object
