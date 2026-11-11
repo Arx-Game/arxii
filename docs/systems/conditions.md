@@ -811,7 +811,10 @@ Berserk of ADR-0183. Everything below is a `ConditionTemplate`-hung model in
   (below 0) may not add more Intensity than the Control it takes away. A level-0 band is
   neither. The refusal names the band, for example "'Failure' is a failure, so it cannot
   add more Intensity than the Control it takes away (it has Intensity +5, Control -4).",
-  and the admin inline shows it above the bands.
+  and the admin inline shows it above the bands. The Required content row
+  `control-loss-band-trade` lists any stored band that breaks either rule (a row authored
+  before the rule, a fixture or shell edit), since that trigger's next admin save is
+  refused until the band is fixed.
 - **Engine** (`world/conditions/control_loss.py`): `fire_control_loss_triggers(character,
   fires_on, *, moon_pull=0, stage=None)` rolls `perform_check_with_modifiers` (so authored
   condition and equipment modifiers count) and applies the band. Callers: the moon sweep

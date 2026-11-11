@@ -240,8 +240,9 @@ and the web share the same `action.run()` path:
   and surfaces each `user_message` as a failure result — a cross-sheet
   `form`/`persona` FK never propagates uncaught (`Action.run` calls `execute`
   bare, so an uncaught exception would 500 on web).
-- `RevertFormAction` (key `"revert_form"`) — wraps `revert_alternate_self`.
-  Catches `RevertBlockedError`, `ActivePersonaError`, `FormOwnershipError`, and
+- `RevertFormAction` (key `"revert_form"`) — wraps `attempt_revert_form` (the player
+  path; a refused compulsion roll comes back as the roll line plus "You cannot change
+  back."). Catches `ActivePersonaError`, `FormOwnershipError`, and
   `AlternateSelfActiveError` (each → `exc.user_message`); the no-active case uses a
   safe constant. Never surfaces `str(exc)` — the viewset maps every failure to a
   safe 400 via `detail.message`.
@@ -286,7 +287,7 @@ the resist) is deferred to #1578 (the specialization engine).
 "True self") and lets the player shift or revert. `frontend/src/game/formQueries.ts`
 holds the React Query hooks (`useAlternateSelvesQuery`, `useShiftFormMutation`,
 `useRevertFormMutation`) that hit the endpoints above. Revert errors from the action
-(e.g. "You can't revert while not in control of yourself.") are surfaced inline.
+(e.g. the compulsion roll line ending "You cannot change back.") are surfaced inline.
 
 ### Telnet surface
 

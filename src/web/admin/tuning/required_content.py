@@ -1942,6 +1942,38 @@ def _probe_plummeting_condition() -> ProbeResult:
     )
 
 
+def _probe_control_loss_band_trade() -> ProbeResult:
+    """No control-loss band makes calm cost power (#4887, ruled 2026-11-01).
+
+    A successful band may not lower Control, and a failed band may not add more Intensity
+    than the Control it takes away. ``validate_control_loss_bands`` refuses both at save
+    time; this lists any stored band that predates the rule or got past it (a fixture
+    load, a shell edit), so staff fix it before the trigger's next save is refused. One
+    query.
+    """
+    from django.db.models import F, Q  # noqa: PLC0415
+
+    from world.conditions.models import ControlLossBand  # noqa: PLC0415
+
+    rows = (
+        ControlLossBand.objects.filter(
+            Q(outcome__success_level__gt=0, control_change__lt=0)
+            | Q(outcome__success_level__lt=0, intensity__gt=-F("control_change"))
+        )
+        .select_related("trigger__vulnerability", "outcome")
+        .order_by("trigger_id", "outcome__success_level")
+    )
+    missing = tuple(
+        f"{band.trigger.vulnerability.name} ({band.trigger.get_fires_on_display()}) / "
+        f"{band.outcome.name}: Intensity +{band.intensity}, Control {band.control_change:+d}"
+        for band in rows
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = "Control-loss band(s) where calm costs power: " + "; ".join(missing) + "."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
 def _probe_emotional_condition_on_failure_band() -> ProbeResult:
     """No surge band hands out a feeding condition on a failed roll (#4739, Ruling 6).
 
@@ -3104,6 +3136,22 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consequence="Rally has no check to roll, so rallying an ally does nothing.",
             probe=CustomProbe(fn=_probe_rallied_tuning_check),
             admin_model="SurgeTuning",
+        ),
+        ContentDependency(
+            key="control-loss-band-trade",
+            label="No control-loss band where calm costs power",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/conditions/control_loss_bands.py validate_control_loss_bands(), "
+                "ControlLossBand.clean() and the trigger admin's band inline"
+            ),
+            consequence=(
+                "A success that lowers Control, or a failure that gains more Intensity than "
+                "the Control it costs, pays a character for losing control; the trigger's "
+                "next save in the admin is refused until the band is fixed."
+            ),
+            probe=CustomProbe(fn=_probe_control_loss_band_trade),
+            admin_model="ControlLossTrigger",
         ),
         ContentDependency(
             key="emotional-condition-on-failure-band",

@@ -2177,6 +2177,38 @@ class TestDesignationProbes(TestCase):
         for key in keys:
             self.assertTrue(self._present(key), key)
 
+    def test_a_control_loss_band_where_calm_costs_power_is_listed(self) -> None:
+        """Only a stored band breaking the #4887 trade rules is reported."""
+        from world.conditions.factories import ControlLossBandFactory, ControlLossTriggerFactory
+        from world.traits.factories import CheckOutcomeFactory
+
+        key = "control-loss-band-trade"
+        trigger = ControlLossTriggerFactory(
+            wound=True, vulnerability=ConditionTemplateFactory(name="Probe Rage")
+        )
+        slip = CheckOutcomeFactory(name="Probe Slip", success_level=-1)
+        win = CheckOutcomeFactory(name="Probe Win", success_level=1)
+        # factory create() skips clean(), as a fixture load or shell edit would.
+        fair = ControlLossBandFactory(trigger=trigger, outcome=slip, intensity=4, control_change=-4)
+        good = ControlLossBandFactory(trigger=trigger, outcome=win)
+        self.assertTrue(self._present(key))
+
+        fair.intensity = 5
+        fair.save()
+        good.control_change = -1
+        good.save()
+        result = _probe_for(key).resolve(None)
+        self.assertFalse(result.present)
+        self.assertEqual(
+            result.missing,
+            (
+                "Probe Rage (Wounded below a health threshold) / Probe Slip: "
+                "Intensity +5, Control -4",
+                "Probe Rage (Wounded below a health threshold) / Probe Win: "
+                "Intensity +0, Control -1",
+            ),
+        )
+
     def test_emotional_condition_on_a_failure_band_is_listed(self) -> None:
         """Only a stored failed-roll band carrying a feeding condition is reported."""
         from world.combat.constants import SurgeTriggerKind
