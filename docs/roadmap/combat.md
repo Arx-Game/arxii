@@ -620,7 +620,10 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   an attack, a middling one applies a penalty. Leaving the encounter and changing form back roll
   too; the old refusals (`reject_leave_if_berserk`, the revert block for a compulsion) are gone.
   A failed leave or revert waits before the next try: the next round in a fight, the
-  compulsion's `retry_wait_minutes` outside one. An ally who can act and holds the steadying
+  compulsion's `retry_wait_minutes` outside one. Once an ally talks the character down and the
+  compulsion ends, they change back at once, even while a talked-down self's emergence
+  condition still runs; and staff cannot author a band where a success lowers Control or a
+  failure gains more Intensity than the Control it costs (#4887). An ally who can act and holds the steadying
   capability (`MovementConfig.steadying_capability`) can give a second roll, costing anima and
   a reaction, scaled by bond depth. Stage triggers fire however the stage is reached (severity,
   round tick, flow step); no trigger rolls for a character already compelled; a wound trigger

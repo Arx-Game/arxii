@@ -803,8 +803,15 @@ Berserk of ADR-0183. Everything below is a `ConditionTemplate`-hung model in
   Berserk) at `severity` for `duration_rounds`, and `forces_form` (moon triggers only). A
   better outcome may never give a lower `control_change` or a higher `severity` or
   `duration_rounds` (`control_loss_bands.py`, the same monotonic rule `validate_surge_bands`
-  uses; model `clean()` and the admin formsets both call it). `intensity` is exempt: losing
-  control trades control for power, so a worse roll may raise it.
+  uses; model `clean()` and the admin formsets both call it). `intensity` is exempt from
+  that order: losing control trades control for power, so a worse roll may raise it. The
+  trade has two rules of its own, checked band by band in the same validator (ruled
+  2026-11-01, #4887): a successful band (success level above 0) may not lower Control
+  (it cannot lower Intensity either, since `intensity` only adds), and a failed band
+  (below 0) may not add more Intensity than the Control it takes away. A level-0 band is
+  neither. The refusal names the band, for example "'Failure' is a failure, so it cannot
+  add more Intensity than the Control it takes away (it has Intensity +5, Control -4).",
+  and the admin inline shows it above the bands.
 - **Engine** (`world/conditions/control_loss.py`): `fire_control_loss_triggers(character,
   fires_on, *, moon_pull=0, stage=None)` rolls `perform_check_with_modifiers` (so authored
   condition and equipment modifiers count) and applies the band. Callers: the moon sweep
@@ -861,8 +868,8 @@ Berserk of ADR-0183. Everything below is a `ConditionTemplate`-hung model in
   (`resist_compulsion_now`). A failed roll cannot be retried at once: in a fight the next
   try is next round, outside one it waits `retry_wait_minutes`, and a try inside the wait
   rolls nothing and says when to try again. Charmed and Calm (`alters_behavior`, no compulsion) revert
-  freely; a `TALKED_DOWN` alternate self held by its emergence condition stays blocked
-  (see `docs/systems/forms.md`).
+  freely, and so does a `TALKED_DOWN` alternate self once its compulsion has ended, while
+  its emergence condition still runs (#4887; see `docs/systems/forms.md`).
 - **Seeded content.** `world/conditions/berserk_content.py` seeds Berserk's compulsion
   (wants an attack; forbids flee, parley, leave and revert) and the "Resist compulsion"
   check type. Migration `0348_control_loss_content` carries the moon's old constants into

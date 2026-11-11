@@ -163,7 +163,7 @@ active = assume_alternate_self(sheet, alt_self)  # Raises AlternateSelfActiveErr
 revert_alternate_self(sheet)                     # System path: RevertBlockedError while not
                                                  # in_control; ValueError if none active.
 attempt_revert_form(sheet)                       # Player path (#4802): rolls a compulsion,
-                                                 # else free (talked-down self stays blocked).
+                                                 # else free, a talked-down self included (#4887).
 ```
 
 ### Alternate-self services
@@ -186,11 +186,14 @@ attempt_revert_form(sheet)                       # Player path (#4802): rolls a 
   roll waits before the next try (the next round in a fight, the compulsion's
   `retry_wait_minutes` outside one), and a try inside the wait rolls nothing and says
   when to try again;
-  (2) otherwise a `TALKED_DOWN` self whose emergence condition is still active stays
-  blocked with `RevertBlockedError`, the ratified "must be talked down" rule, which is
-  not a compulsion refusal; (3) anything else (Charmed, Calm, any other
-  `alters_behavior` condition) changes back freely. A compulsion is cleared by the
-  existing `RestoreSenseAction` (`restore_sense`) calm-down action.
+  (2) with no compulsion the character changes back at once (Charmed, Calm, any other
+  `alters_behavior` condition). That includes a `TALKED_DOWN` self whose emergence
+  condition is still active: once an ally has talked the character down and the
+  compulsion has ended, they change back without waiting out the condition (ruled
+  2026-11-01, #4887; this replaced #4802's Ruling 16 block). A talked-down self still
+  never drops away on its own: Audere's end skips it and the system path stays blocked
+  while not in control. A compulsion is cleared by the existing `RestoreSenseAction`
+  (`restore_sense`) calm-down action.
 - `trigger_transformation(sheet, alt, *, cause, instance_value=1.0)` (in
   `world/forms/services/transformation.py`) — the single seam both non-command
   cause-paths call. Wraps `assume_alternate_self(sheet, alt, instance_value=...)`;
@@ -204,7 +207,7 @@ attempt_revert_form(sheet)                       # Player path (#4802): rolls a 
   sharing a form-template get differently-tuned stat-suites (#1604), and how a
   strong cast / violent onset scales a single assumption.
 - `RevertBlockedError(user_message=...)`, the exception surfaced when the system
-  revert is blocked, or a talked-down self is held by its emergence condition.
+  revert (`revert_alternate_self`) is blocked. The player path never raises it.
 - `AlternateSelfActiveError(user_message=...)` — raised when a different alt-self is
   already active (strictly-one-active).
 - `FormOwnershipError(user_message=...)` — raised by `switch_form` on a cross-sheet
@@ -336,8 +339,7 @@ The decoupling of control from the shift and the stacking guard are documented i
 - `POST /api/forms/alternate-selves/revert/` - Revert the active alternate self.
   Dispatches `RevertFormAction` (key `"revert_form"`) through the same action seam.
   Returns the compulsion roll line when a compulsion makes it a roll (400 with the
-  line when the roll fails), and 400 with `RevertBlockedError.user_message` only for a
-  talked-down self its emergence condition still holds.
+  line when the roll fails).
 
 All endpoints require `IsAuthenticated`.
 
