@@ -81,6 +81,7 @@ from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterResonanceFactory,
     RitualFactory,
+    TechniqueFactory,
     ThreadFactory,
     ThreadPullCostFactory,
 )
@@ -324,10 +325,12 @@ class CourtJourneyEndToEndTests(TestCase):
             status=ParticipantStatus.ACTIVE,
         )
 
-        # Baseline: no pull yet → the offense read-path sees no flat bonus.
+        # Baseline: no pull yet → the offense read-path sees no flat bonus. The cast it
+        # reads for is any technique: both threads are always in a cast's action.
+        cast = TechniqueFactory()
         self.servant.character.combat_pulls.invalidate()
         self.assertEqual(
-            _sum_active_flat_bonuses(participant, encounter),
+            _sum_active_flat_bonuses(participant, technique=cast, cast_check=None),
             0,
             "Before any pull, the offense flat-bonus read-path must be zero.",
         )
@@ -371,7 +374,7 @@ class CourtJourneyEndToEndTests(TestCase):
         # value fed into the offense check as extra_modifiers. With-pull (>0)
         # vs without-pull (0 baseline above) is the outcome change.
         self.servant.character.combat_pulls.invalidate()
-        with_pull = _sum_active_flat_bonuses(participant, encounter)
+        with_pull = _sum_active_flat_bonuses(participant, technique=cast, cast_check=None)
         self.assertGreater(
             with_pull,
             0,

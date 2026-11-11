@@ -374,7 +374,9 @@ class CombatCastPullFlatBonusReadPathE2ETests(TestCase):
         This is the OUTCOME mechanism: the bonus feeds into the attack roll at resolution.
         """
         # Baseline: no pull → flat bonus is 0.
-        bonus_before = _sum_active_flat_bonuses(self.participant, self.encounter)
+        bonus_before = _sum_active_flat_bonuses(
+            self.participant, technique=self.technique, cast_check=None
+        )
         self.assertEqual(
             bonus_before,
             0,
@@ -392,7 +394,9 @@ class CombatCastPullFlatBonusReadPathE2ETests(TestCase):
         # Invalidate handler cache (same pattern as test_cast_round_declaration_pull.py).
         self.character.combat_pulls.invalidate()
 
-        bonus_after = _sum_active_flat_bonuses(self.participant, self.encounter)
+        bonus_after = _sum_active_flat_bonuses(
+            self.participant, technique=self.technique, cast_check=None
+        )
         self.assertGreater(
             bonus_after,
             0,

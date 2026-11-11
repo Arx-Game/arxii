@@ -366,7 +366,9 @@ class CombatCastWebPullTests(TestCase):
         )
 
         data["sheet"].character.combat_pulls.invalidate()
-        bonus = _sum_active_flat_bonuses(data["participant"], data["encounter"])
+        bonus = _sum_active_flat_bonuses(
+            data["participant"], technique=data["technique"], cast_check=None
+        )
         self.assertGreater(
             bonus,
             0,
@@ -509,7 +511,9 @@ class ClashWebPullTests(TestCase):
         )
 
         data["sheet"].character.combat_pulls.invalidate()
-        bonus = _sum_active_flat_bonuses(data["participant"], data["encounter"])
+        bonus = _sum_active_flat_bonuses(
+            data["participant"], technique=data["technique"], cast_check=None
+        )
         self.assertGreater(
             bonus,
             0,

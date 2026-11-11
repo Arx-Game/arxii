@@ -28,8 +28,8 @@ class ComputeIntensityForClashTests(EvenniaTestCase):
             CombatRoundActionFactory,
         )
         from world.combat.services import compute_intensity_for_clash
-        from world.magic.constants import EffectKind
-        from world.magic.factories import TechniqueFactory
+        from world.magic.constants import EffectKind, TargetKind
+        from world.magic.factories import TechniqueFactory, ThreadFactory
 
         tech = TechniqueFactory(intensity=3)
         participant = CombatParticipantFactory()
@@ -43,8 +43,15 @@ class ComputeIntensityForClashTests(EvenniaTestCase):
             encounter=encounter,
             round_number=encounter.round_number,
         )
+        # A pull reaches the clash floor only through a thread on its technique (#5066).
         CombatPullResolvedEffectFactory(
             pull=pull,
+            source_thread=ThreadFactory(
+                owner=participant.character_sheet,
+                target_kind=TargetKind.TECHNIQUE,
+                target_trait=None,
+                target_technique=tech,
+            ),
             kind=EffectKind.INTENSITY_BUMP,
             scaled_value=2,
         )
