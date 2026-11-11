@@ -52,6 +52,9 @@ def compute_intensity_for_clash(
     technique = action.focused_action
     if technique is None:
         return 0
+    character = participant.character_sheet.character
+    if not character.combat_pulls.active_for_encounter(participant.encounter):
+        return technique.intensity  # no pull this round: no cast check to resolve
     pull_bonus = round_pull_bonus(
         participant,
         kind=EffectKind.INTENSITY_BUMP,
