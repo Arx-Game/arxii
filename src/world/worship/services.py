@@ -129,7 +129,10 @@ def bump_devotion(
     While the character holds an open pledge to ``being`` (#4333 slice 2), the
     credited amount also advances the pledge's ``Project.current_progress`` and
     is recorded as a ``PledgeCredit`` of ``source``'s kind with its calculation.
+    While she holds an active pact with ``being`` (#4341), it also counts toward each
+    open period of the pact (``record_pact_credit``).
     """
+    from world.pacts.services import record_pact_credit  # noqa: PLC0415
     from world.worship.favor_services import earning_rate  # noqa: PLC0415
     from world.worship.pledge_services import record_pledge_credit  # noqa: PLC0415
 
@@ -172,6 +175,7 @@ def bump_devotion(
         pledge_credit = record_pledge_credit(
             character_sheet, being, base=base, rate=rate, credited=amount, source=source
         )
+        record_pact_credit(character_sheet, being, amount, source)
     return DevotionBump(
         standing=standing,
         credited=amount,

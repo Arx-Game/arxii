@@ -243,28 +243,51 @@ def record_pledge_credit(  # noqa: PLR0913 - the calculation's parts are keyword
 
 
 def deed_favor_used_this_week(sheet: CharacterSheet) -> int:
-    """Base favor ``sheet`` has earned from deeds in the current game week."""
-    from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
+    """Base favor ``sheet`` has earned from deeds in the current game week.
 
-    total = PledgeCredit.objects.filter(
+    Deeds for a pledge's being are counted on their ``PledgeCredit``; deeds for a being
+    she holds only a pact with (#4341) on their ``PactCredit``. A deed credited to both
+    a pledge and a pact with the same being is counted once, on the pledge.
+    """
+    from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
+    from world.pacts.services import pact_deed_favor_this_week  # noqa: PLC0415
+
+    pledged = PledgeCredit.objects.filter(
         pledge_details__character_sheet=sheet,
         source=PledgeCreditSource.DEED,
         game_week=get_current_game_week(),
-    ).aggregate(total=Sum("base"))["total"]
-    return total or 0
+    )
+    total = pledged.aggregate(total=Sum("base"))["total"] or 0
+    pledge_being_ids = set(pledged.values_list("pledge_details__pledge__being_id", flat=True))
+    open_details = open_pledge_for(sheet)
+    if open_details is not None:
+        pledge_being_ids.add(open_details.pledge.being_id)
+    return total + pact_deed_favor_this_week(sheet, exclude_being_ids=pledge_being_ids)
+
+
+def _deed_beings(sheet: CharacterSheet, details: PledgeDetails | None) -> list[WorshippedBeing]:
+    """The beings a deed can earn favor with: the open pledge's, then each pact's (#4341)."""
+    from world.pacts.services import pact_beings_for  # noqa: PLC0415
+
+    beings = [details.pledge.being] if details is not None else []
+    for being in pact_beings_for(sheet):
+        if all(being.pk != seen.pk for seen in beings):
+            beings.append(being)
+    return beings
 
 
 def credit_pledge_deed(grant: ResonanceGrant) -> PledgeCredit | None:
-    """Turn a resonance grant into deed favor for an open pledge (design 2).
+    """Turn a resonance grant into deed favor for an open pledge or a pact (design 2).
 
-    Counts only while the character holds an open pledge, and only for a
-    resonance the pledge's being holds as FAVORED or ASSOCIATED. Base favor is
-    the grant's amount times the configured percentage for that tier, rounded
-    down, at least 1, then held to what is left of the weekly deed cap (base
-    favor, before the earning rate). A worship rite's own grant is skipped: the
+    Counts for the being of her open pledge and for every being she holds an active pact
+    with (#4341), each only for a resonance that being holds as FAVORED or ASSOCIATED.
+    Base favor is the grant's amount times the configured percentage for that tier,
+    rounded down, at least 1, then held to what is left of the weekly deed cap (base
+    favor, before the earning rate). The cap is shared: each being's base is taken from
+    what is left, the pledge's being first. A worship rite's own grant is skipped: the
     rite already pays favor. So is a passive grant (``PASSIVE_DEED_SOURCES``): favor
     comes only from a character's actions, never from a trickle, a distinction or a
-    staff grant.
+    staff grant. Returns the pledge's credit, if the pledge's being earned any.
     """
     from world.magic.constants import GainSource  # noqa: PLC0415
     from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
@@ -274,32 +297,41 @@ def credit_pledge_deed(grant: ResonanceGrant) -> PledgeCredit | None:
         return None
     sheet = grant.character_sheet
     details = open_pledge_for(sheet)
-    if details is None:
+    beings = _deed_beings(sheet, details)
+    if not beings:
         return None
-    being = details.pledge.being
-    tier = (
-        BeingResonance.objects.filter(being=being, resonance_id=grant.resonance_id)
-        .values_list("tier", flat=True)
-        .first()
+    tiers = dict(
+        BeingResonance.objects.filter(
+            being__in=beings, resonance_id=grant.resonance_id
+        ).values_list("being_id", "tier")
     )
-    if tier is None:
+    if not tiers:
         return None
     config = get_devotion_config()
-    percent = (
-        config.favored_deed_percent
-        if tier == BeingResonanceTier.FAVORED
-        else config.associated_deed_percent
-    )
-    base = max(grant.amount * percent // 100, 1)
-    base = min(base, config.weekly_deed_favor_cap - deed_favor_used_this_week(sheet))
-    if base <= 0:
-        return None
-    return bump_devotion(
-        sheet,
-        being,
-        base,
-        source=FavorSource(kind=PledgeCreditSource.DEED, resonance_grant=grant),
-    ).pledge_credit
+    remaining = config.weekly_deed_favor_cap - deed_favor_used_this_week(sheet)
+    pledge_credit = None
+    for being in beings:
+        tier = tiers.get(being.pk)
+        if tier is None:
+            continue
+        if remaining <= 0:
+            break
+        percent = (
+            config.favored_deed_percent
+            if tier == BeingResonanceTier.FAVORED
+            else config.associated_deed_percent
+        )
+        base = min(max(grant.amount * percent // 100, 1), remaining)
+        remaining -= base
+        bump = bump_devotion(
+            sheet,
+            being,
+            base,
+            source=FavorSource(kind=PledgeCreditSource.DEED, resonance_grant=grant),
+        )
+        if details is not None and being.pk == details.pledge.being_id:
+            pledge_credit = bump.pledge_credit
+    return pledge_credit
 
 
 # ---------------------------------------------------------------------------

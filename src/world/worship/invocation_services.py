@@ -106,6 +106,27 @@ def favor_with(sheet: CharacterSheet, being: WorshippedBeing) -> int:
     return standing.favor if standing is not None else 0
 
 
+def favor_ease_for(
+    sheet: CharacterSheet, being: WorshippedBeing, *, config: DevotionConfig | None = None
+) -> InvocationEase | None:
+    """The favor band's ease for ``sheet`` with ``being``, or None below the low band.
+
+    The configured high band eases more than the low band. Read by the invocation check
+    and by a pact's resist check (#4341), which eases by the same band.
+    """
+    config = config or get_devotion_config()
+    favor = favor_with(sheet, being)
+    if favor >= config.favor_ease_high_threshold:
+        threshold, points = config.favor_ease_high_threshold, config.favor_ease_high_points
+    elif favor >= config.favor_ease_low_threshold:
+        threshold, points = config.favor_ease_low_threshold, config.favor_ease_low_points
+    else:
+        return None
+    return InvocationEase(
+        label=FAVOR_EASE_LABEL.format(favor=favor, threshold=threshold), points=points
+    )
+
+
 def invocation_difficulty(
     sheet: CharacterSheet,
     being: WorshippedBeing,
@@ -131,25 +152,9 @@ def invocation_difficulty(
                 points=patron_modifier_total(sheet, being, FAVOR_INVOCATION_CATEGORY_NAME),
             )
         )
-    favor = favor_with(sheet, being)
-    if favor >= config.favor_ease_high_threshold:
-        eases.append(
-            InvocationEase(
-                label=FAVOR_EASE_LABEL.format(
-                    favor=favor, threshold=config.favor_ease_high_threshold
-                ),
-                points=config.favor_ease_high_points,
-            )
-        )
-    elif favor >= config.favor_ease_low_threshold:
-        eases.append(
-            InvocationEase(
-                label=FAVOR_EASE_LABEL.format(
-                    favor=favor, threshold=config.favor_ease_low_threshold
-                ),
-                points=config.favor_ease_low_points,
-            )
-        )
+    favor_ease = favor_ease_for(sheet, being, config=config)
+    if favor_ease is not None:
+        eases.append(favor_ease)
     eases.append(
         InvocationEase(
             label=MODIFIER_EASE_LABEL.format(being=being.name),
