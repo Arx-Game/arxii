@@ -58,14 +58,31 @@ def population_now(domain: Domain, *, at: datetime | None = None) -> int:
     the people and the capacity goes away, in either direction, so a holding above its
     capacity shrinks toward it by the same curve a holding below grows.
     """
+    return populations_now([domain], at=at)[domain.pk]
+
+
+def populations_now(domains: Iterable[Domain], *, at: datetime | None = None) -> dict[int, int]:
+    """``population_now`` for many holdings with one clock read and one dials read:
+    the realm graph calls this once per realm, never the single form per row."""
+    from world.game_clock.models import GameClock  # noqa: PLC0415
+
     moment = at if at is not None else timezone.now()
-    months = ic_months_between(domain.population_rebased_at, moment)
-    if months <= 0:
-        return domain.population
+    clock = GameClock.get_active()
     rate = DominionConfig.load().population_rate_pct_per_month / 100
-    capacity = domain.population_capacity
-    gap = capacity - domain.population
-    return max(0, round(capacity - gap * math.exp(-rate * months)))
+    figures: dict[int, int] = {}
+    for domain in domains:
+        months = 0.0
+        if clock is not None:
+            ic_then = clock.get_ic_now(real_now=domain.population_rebased_at)
+            ic_now = clock.get_ic_now(real_now=moment)
+            months = max(0.0, (ic_now - ic_then).total_seconds() / _SECONDS_PER_IC_MONTH)
+        if months <= 0:
+            figures[domain.pk] = domain.population
+            continue
+        capacity = domain.population_capacity
+        gap = capacity - domain.population
+        figures[domain.pk] = max(0, round(capacity - gap * math.exp(-rate * months)))
+    return figures
 
 
 def rebase_population(domain: Domain, *, at: datetime | None = None) -> Domain:
@@ -120,9 +137,35 @@ def refresh_terrain_counts(area: Area) -> int:
             for terrain, pips in counts.items()
         ]
     )
-    domain.population_capacity = capacity_from(counts, level=area.level)
+    # A staff figure stands in for the terrain's (a capital and a fort on the same ground).
+    if domain.capacity_override is not None:
+        domain.population_capacity = domain.capacity_override
+    else:
+        domain.population_capacity = capacity_from(counts, level=area.level)
     domain.save(update_fields=["population_capacity"])
     return domain.population_capacity
+
+
+def set_capacity_override(domain: Domain, capacity: int | None) -> Domain:
+    """Set (or clear, with ``None``) the staff figure a holding's capacity reads instead
+    of its terrain, rebasing first so the curve starts from today's people."""
+    rebase_population(domain)
+    domain.capacity_override = capacity
+    domain.save(update_fields=["capacity_override"])
+    refresh_terrain_counts(domain.area)
+    return domain
+
+
+def prosperity_modifier_for(domain: Domain) -> int:
+    """The terrain's pull on a laid-out holding's prosperity: each calibration's
+    modifier weighted by the share of the holding's pips that terrain is, rounded."""
+    counts = dict(domain.terrain_counts.values_list("terrain", "pips"))
+    total = sum(counts.values())
+    if total == 0:
+        return 0
+    modifiers = {row.terrain: row.prosperity_modifier for row in TerrainCalibration.objects.all()}
+    weighted = sum(pips * modifiers.get(terrain, 0) for terrain, pips in counts.items())
+    return round(weighted / total)
 
 
 def refresh_terrain_counts_for(areas: Iterable[Area]) -> int:

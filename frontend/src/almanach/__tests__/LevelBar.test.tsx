@@ -23,6 +23,7 @@ const rows = [
     seat_domain_id: null,
     comes_with: '',
     chain_top_id: 1,
+    population: 0,
     claimant_name: '',
   },
   {
@@ -43,6 +44,7 @@ const rows = [
     seat_domain_id: null,
     comes_with: 'Fervor',
     chain_top_id: 1,
+    population: 0,
     claimant_name: '',
   },
   {
@@ -63,6 +65,7 @@ const rows = [
     seat_domain_id: null,
     comes_with: '',
     chain_top_id: 3,
+    population: 0,
     claimant_name: '',
   },
 ] satisfies LadderRow[];
@@ -100,6 +103,7 @@ test('folds a march row into the County button instead of a separate March butto
       seat_domain_id: null,
       comes_with: '',
       chain_top_id: 4,
+      population: 0,
       claimant_name: '',
     },
   ];

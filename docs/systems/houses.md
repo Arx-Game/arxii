@@ -791,8 +791,9 @@ and unavailable on the SQLite test tier. The graph also loads the realm's claims
   the rung's own Domain, so it is `None` above county (#5069) and, where present, its
   `population` is `demography.population_now` (the people by formula, never the stored base)
   beside a `population_capacity`. On the title page
-  these are **Present Holdings** (the vassals table, "nothing" when a titular title holds no
-  land), **Historical Charter** (the chartered fiefs, whose charters hold this rung, and every
+  these are **Holdings** (the rungs beneath, in two groups, **Held** by this house and held by
+  **Vassals**, each row with its people; "nothing" when a titular title holds no land; #5069
+  slice 2 replaced "Present Holdings"), **Historical Charter** (the chartered fiefs, whose charters hold this rung, and every
   "claimed by X" line), the chain rail above, and a globe beside the heading ("View on the
   map" to a screen reader) that opens the Atlas on the first region map with this title
   selected (`world-builder/atlas/mapFocus.ts`). The name field stands alone under the heading,
@@ -850,6 +851,20 @@ claim on a title another house holds is a `TitleClaim` row with `house` set (#49
 `Title.claimant_org`); no service presses a claim into a holder change yet. `Organization.published_at`
 (null = draft) is the Almanach's own visibility flag, set/cleared by `publish_house`/
 `unpublish_house` — see "Ladder rules" above for how a `for_founder` read hides unpublished rungs.
+
+**Dormancy (#5069 slice 3, ADR-5069-A).** `Organization.dormant_since` (null = awake) marks a
+house nobody plays. `houses.dormancy.mark_dormant_houses` runs first in `run_weekly_economy`:
+one set-based statement stamps every awake organization that has a `family`, has an income
+stream, and has no live member whose character sits on the roster under an account that logged
+in within `DominionConfig.dormancy_window_days`. Presence is the test, never actions: a house in
+a lull keeps accruing, uncapped; a staff-made house whose roster characters nobody has taken up
+(House Katta) sleeps. While dormant, the income, materials, interest and obligation phases skip
+the organization's side, so an apper finds the pool as the last player left it; the land under
+it keeps running by formula (dormancy freezes accumulators, never equilibria). Waking is
+event-driven: `wake_houses_for(account)` from `Account.at_post_login` and from
+`approve_application`, one statement each. An organization with no family (a guild, a temple) is
+never dormant: nobody can app into it and hoard. `dormant_since` is admin and staff API only.
+Every phase of the weekly run logs rows touched and wall time (the tick budget).
 
 ### Founder claims: kin placement + claim grants (Plan B, #3983)
 
@@ -1020,6 +1035,10 @@ held, #4614), `AlmanachVacateHolderAction` (`almanach_vacate_holder`, kwarg `tit
 `AlmanachRenameHoldingAction` (`almanach_rename_holding`) and `AlmanachRemoveHoldingAction`
 (`almanach_remove_holding`: `almanach.remove_holding` drops the holding and its income stream,
 refused while the stream has uncollected income or is still referenced) (#4616),
+`AlmanachSetCapacityAction` (`almanach_set_capacity`: `domain_id` plus `capacity`, a number or
+null; `demography.set_capacity_override` rebases the people, writes `Domain.capacity_override`
+and recounts, so a staff figure stands in for the terrain's until cleared; the barony page's
+capacity control, #5069 slice 2),
 `AlmanachDeleteRungAction` (`almanach_delete_rung`: `almanach.delete_rung` removes a
 chain's Titles, Domains and Areas, refused while held, with rungs, holdings or rooms beneath, or
 when something else still points at the land) and `AlmanachMoveRungAction` (`almanach_move_rung`,
