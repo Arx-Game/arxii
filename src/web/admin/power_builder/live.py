@@ -215,6 +215,25 @@ def application_summary(app: Application) -> str:
     return ", ".join(parts)
 
 
+def picker_label(app: Application) -> str:
+    """The Builders panel's option text: the name, and what it does in brackets.
+
+    "Evade (dodges, lands by blinking)", "Blink (moves by blinking)", "Phase Through
+    (phases through solid)", "Climb (climbs)"; the plain name when it is not about moving.
+    """
+    if app.dodges:
+        does = f"dodges, lands by {way_phrase(app)}" if app.way_of_moving else "dodges"
+    elif app.way_of_moving == CreatureTraversal.BLINKS:
+        does = "moves by blinking"
+    elif app.way_of_moving == CreatureTraversal.PHASES and app.target_property_id:
+        does = f"phases through {app.target_property.name}"
+    elif app.way_of_moving:
+        does = app.get_way_of_moving_display().lower()
+    else:
+        return app.name
+    return f"{app.name} ({does})"
+
+
 def bands() -> list[Band]:
     """How far a use reaches, from the movement settings' three thresholds."""
     row = movement_config()

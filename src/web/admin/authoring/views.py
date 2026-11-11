@@ -107,6 +107,7 @@ from web.admin.authoring.links import admin_change_url, workbench_page_url
 from web.admin.authoring.reference import db_search, file_search, reference_roots
 from web.admin.authoring.relations import RelatedEntry, prose_mentions, related_entries
 from web.admin.constants import DEFAULT_BACKLOG_STATUS, BacklogStatusFilter
+from web.admin.power_builder.live import picker_label
 from web.admin.tuning.views import superuser_required
 from world.character_creation.models import Beginnings, OriginTemplate
 from world.contributors.models import ContentContributor
@@ -201,13 +202,14 @@ def _builders_context() -> dict[str, object]:
     }
 
 
-def _applications_by_capability() -> list[tuple[str, list[Application]]]:
-    """Every Application grouped by its capability's name, for the Power Builder picker."""
-    groups: dict[str, list[Application]] = {}
-    for app in Application.objects.select_related("capability").order_by(
+def _applications_by_capability() -> list[tuple[str, list[tuple[int, str]]]]:
+    """Every Application grouped by its capability's name, for the Power Builder picker:
+    (pk, "Evade (dodges, lands by blinking)") pairs, one query."""
+    groups: dict[str, list[tuple[int, str]]] = {}
+    for app in Application.objects.select_related("capability", "target_property").order_by(
         "capability__name", "name"
     ):
-        groups.setdefault(app.capability.name, []).append(app)
+        groups.setdefault(app.capability.name, []).append((app.pk, picker_label(app)))
     return list(groups.items())
 
 

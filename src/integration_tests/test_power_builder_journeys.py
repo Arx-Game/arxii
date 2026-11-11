@@ -260,7 +260,10 @@ class PowerBuilder(JourneyCase):
 
         self.assertIn("Power Builder", body)
         self.assertIn("Let people", body)
-        self.assertIn(f'<option value="{self.evade.pk}">Evade</option>', body)
+        self.assertIn(
+            f'<option value="{self.evade.pk}">Evade (dodges, lands by blinking)</option>', body
+        )
+        self.assertIn(">Climb (climbs)</option>", body)
         self.assertIn(reverse("admin_power_builder_new"), body)
         self.assertIn("Open in the Power Builder", change_form)
         self.assertIn(self.url, change_form)
@@ -319,6 +322,26 @@ class PowerBuilder(JourneyCase):
         evade = Application.objects.get(pk=self.evade.pk)
         self.assertEqual(evade.written_by, self.writer)
         self.assertEqual(Technique.objects.get(pk=self.walk.pk).written_by, self.writer)
+
+    def test_removing_a_grant_moves_the_technique_one_step_away(self) -> None:
+        response = self._post(
+            {
+                f"t{self.step.pk}-remove_grant": ["on"],
+                f"t{self.walk.pk}-remove_grant": ["on"],
+            }
+        )
+
+        self.assertEqual(response.status_code, 302, response.content.decode()[:2000])
+        self.assertFalse(TechniqueCapabilityGrant.objects.filter(pk=self.step_grant.pk).exists())
+        body = self._page()
+        self.assertNotIn("Shadow Step", _module(body, "techniques-module"))
+        near = _module(body, "near-module")
+        lacks_grant = near[near.index("but do not grant") :]
+        self.assertIn("Radiant Mark", lacks_grant)
+        self.assertIn("Shadow Step", lacks_grant)
+        # Shadow Walk carries neither teleport nor a grant now: it leaves the page.
+        self.assertNotIn("Shadow Walk", body)
+        self.assertEqual(Technique.objects.get(pk=self.step.pk).written_by, self.writer)
 
     def test_adding_a_technique_on_a_gift_and_path(self) -> None:
         response = self._post(

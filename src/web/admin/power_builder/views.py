@@ -243,7 +243,12 @@ def _save_techniques(page: live.PowerPage, forms: _Forms) -> list[Technique]:
         wanted = (row.property_ids - candidate_ids) | set(data["properties"])
         changed = _set_properties(row.technique, row.property_ids, wanted)
         grant = row.grant
-        if form.grant_mode == GrantMode.EDIT and grant is not None:
+        if grant is not None and data.get("remove_grant"):
+            # The technique stops doing this capability; with the property it lists under
+            # "Carry the property but do not grant" on the next load.
+            grant.delete()
+            changed = True
+        elif form.grant_mode == GrantMode.EDIT and grant is not None:
             base, per_power = data["grant_base"], data["grant_per_power"]
             if grant.base_value != base or grant.intensity_multiplier != per_power:
                 grant.base_value = base

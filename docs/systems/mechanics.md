@@ -578,7 +578,9 @@ A superuser admin page for "I want people to be able to do X": one page per `App
 - **Techniques that do it** - every technique granting the capability and carrying the needed
   property: gift and path (the paths whose `PathGiftGrant.starter_techniques` list it, else "no
   path"; a minor gift is labelled), its properties as ticks, the grant's base and per power,
-  strength, "a cast: N anima, its own roll" (the technique's own `anima_cost`), "edit all".
+  strength, "a cast: N anima, its own roll" (the technique's own `anima_cost`), "edit all",
+  and a "remove grant" tick (also on the near misses that grant it) that deletes the
+  `TechniqueCapabilityGrant` on save.
 - **Other ways to do it** - every `TraitCapabilityDerivation`, every `ConditionCapabilityEffect`
   with a positive value (its condition template's properties as ticks, once per condition) and
   every `DistinctionEffect` whose target's `target_capability` is the capability, with
@@ -601,7 +603,8 @@ A superuser admin page for "I want people to be able to do X": one page per `App
   `ModelForm` and every row the save can write are kept in a `CacheGuard` before validating
   and restored on every path that does not commit (refusal, setup gate, an error).
 - **Ways in** - the Authoring Workbench's Builders panel ("Let people", every Application by
-  capability, Open, "New application"), and "Open in the Power Builder" on the Application change
+  capability labelled by `live.picker_label`, e.g. "Evade (dodges, lands by blinking)", Open,
+  "New application"), and "Open in the Power Builder" on the Application change
   form (`links.builder_url`).
 - Journey: `src/integration_tests/test_power_builder_journeys.py`.
 

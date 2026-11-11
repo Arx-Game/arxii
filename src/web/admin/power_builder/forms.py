@@ -123,25 +123,36 @@ class TechniqueRowForm(forms.Form):
         self.fields["properties"].choices = _property_choices(candidates)
         self.grant_mode = grant
         if grant in (GrantMode.EDIT, GrantMode.OFFER):
-            required = grant == GrantMode.EDIT
+            # Required only when kept or granted (``clean``): a removed grant needs none.
             self.fields["grant_base"] = _model_field(
-                TechniqueCapabilityGrant, "base_value", required=required, label="base"
+                TechniqueCapabilityGrant, "base_value", required=False, label="base"
             )
             self.fields["grant_per_power"] = _model_field(
                 TechniqueCapabilityGrant,
                 "intensity_multiplier",
-                required=required,
+                required=False,
                 label="per power",
             )
         if grant == GrantMode.OFFER:
             self.fields["grant_it"] = forms.BooleanField(required=False, label="grant it")
+        else:
+            self.fields["remove_grant"] = forms.BooleanField(required=False, label="remove grant")
 
     def clean(self) -> dict[str, object]:
         data = super().clean()
-        if self.grant_mode == GrantMode.OFFER and data.get("grant_it"):
+        if self.grant_mode == GrantMode.OFFER:
+            needs_numbers = bool(data.get("grant_it"))
+        else:
+            needs_numbers = self.grant_mode == GrantMode.EDIT and not data.get("remove_grant")
+        message = (
+            "Give a number to grant it."
+            if self.grant_mode == GrantMode.OFFER
+            else "Give a number, or remove the grant."
+        )
+        if needs_numbers:
             for name in ("grant_base", "grant_per_power"):
                 if data.get(name) is None and name not in self.errors:
-                    self.add_error(name, "Give a number to grant it.")
+                    self.add_error(name, message)
         return data
 
 

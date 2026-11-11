@@ -94,8 +94,8 @@ dict of `distinctions`/`beginnings`/`upbringings`/`soulfray_stages`/
           <select id="power-builder-select" name="pk">
             {% for capability_name, applications in builders.power_applications %}
             <optgroup label="{{ capability_name }}">
-              {% for application in applications %}
-              <option value="{{ application.pk }}">{{ application.name }}</option>
+              {% for pk, label in applications %}
+              <option value="{{ pk }}">{{ label }}</option>
               {% endfor %}
             </optgroup>
             {% endfor %}
