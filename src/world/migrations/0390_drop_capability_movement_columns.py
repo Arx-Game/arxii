@@ -2,13 +2,13 @@
 #
 # ADR-0237 disposition for these three authored-content columns: empty in production
 # (verified at PR review by a maintainer; no repo seed sets them). Applications now carry
-# the way of moving and the dodge (0387); nothing is copied across.
+# the way of moving and the dodge (0389); nothing is copied across.
 #
 # Also drops CombatPull.resonance and SceneActionPullDeclaration.resonance (play state,
 # resettable per ADR-0237): a pull may now mix resonances, each thread paid from its own
 # (maintainer ruling 2026-11-11), so the column says nothing the threads do not. A pull's
 # burn names its resonance in CombatPull.burned_resonance and
-# SceneActionPullDeclaration.burn_resonance (0387). A pending scene pull with a burn loses
+# SceneActionPullDeclaration.burn_resonance (0389). A pending scene pull with a burn loses
 # which resonance burns; such a pull was of one resonance under the old rule, and a pull of
 # one resonance burns that one without naming it, so nothing is carried.
 #
