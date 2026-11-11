@@ -47359,10 +47359,11 @@ export interface components {
         [key: string]: unknown;
       };
     };
+    /** @description A persona as a list or a profile shows it. */
     Persona: {
       readonly id: number;
-      /** @description The character sheet this persona belongs to. */
-      character_sheet: number;
+      /** @description The character behind this face. Null for a disguise the viewer has not uncovered, unless they play it, are staff or GM the scene. */
+      readonly character_sheet: number | null;
       /** @description Display name for this persona */
       name: string;
       /**

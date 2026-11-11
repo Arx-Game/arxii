@@ -6,13 +6,16 @@ from __future__ import annotations
 
 from evennia.utils.ansi import strip_ansi
 
+from evennia_extensions.factories import AccountFactory
 from integration_tests.harness import JourneyCase
+from world.areas.positioning.factories import ObjectPositionFactory, PositionFactory
 from world.forms.factories import CharacterFormFactory
 from world.forms.models import FormType
 from world.mechanics.constants import DISGUISE_SIGHT_CATEGORY_NAME
 from world.mechanics.test_helpers import grant_lever
-from world.scenes.models import PersonaDiscovery
-from world.scenes.services import create_mask
+from world.scenes.factories import SceneParticipationFactory
+from world.scenes.models import Persona, PersonaDiscovery, Scene
+from world.scenes.services import create_mask, record_persona_discovery
 
 
 class SeeingThroughAMask(JourneyCase):
@@ -62,3 +65,81 @@ class SeeingThroughAMask(JourneyCase):
         self.assertEqual(self._sheet_name_seen_by(self.hobb), "a person wearing a Glamour")
         self.assertEqual(self._sheet_name_seen_by(self.maud), "Glamour (Ysmay)")
         self.assertEqual(PersonaDiscovery.objects.count(), 0)
+
+
+class AMaskInTheScenesPersonaList(JourneyCase):
+    """Ysmay poses barefaced, then masks and poses again; the scene's persona list ties the
+    mask to her only for Ysmay, staff and Hobb, who has uncovered it in play (#4888)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.lantern = self.make_room("The Lantern")
+        self.ysmay = self.make_player("Ysmay", room=self.lantern)
+        self.hobb = self.make_player("Hobb", room=self.lantern)
+        self.wat = self.make_player("Wat", room=self.lantern)
+        ObjectPositionFactory(
+            objectdb=self.ysmay, position=PositionFactory(room=self.lantern, name="Hearth")
+        )
+        self.telnet(self.ysmay, "scene start")
+        self.telnet(self.ysmay, "pose warms her hands.")
+        self.telnet(self.wat, "pose nods.")
+        self.telnet(self.ysmay, "persona mask Stag Mask")
+        self.telnet(self.ysmay, "pose watches the door.")
+        self.scene = Scene.objects.get()
+        self.mask = Persona.objects.get(name="Stag Mask")
+        self.face = self.ysmay.sheet_data.primary_persona
+
+    def _scene_personas(self, account) -> dict[str, dict]:
+        response = self.api(account).get(f"/api/scenes/{self.scene.pk}/")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.positions = {
+            row["persona_id"]: row["position"] for row in response.data["persona_positions"]
+        }
+        return {row["name"]: row for row in response.data["personas"]}
+
+    def _listed(self, account, query: str) -> dict[str, dict]:
+        response = self.api(account).get(f"/api/personas/?{query}")
+        self.assertEqual(response.status_code, 200, response.content)
+        return {row["name"]: row for row in response.data["results"]}
+
+    def test_a_stranger_sees_the_mask_with_nothing_tying_it_to_her(self) -> None:
+        wat = self.account_of(self.wat)
+        personas = self._scene_personas(wat)
+        self.assertIsNone(personas["Stag Mask"]["character_sheet"])
+        self.assertIsNone(personas["Stag Mask"]["roster_entry"])
+        # Her barefaced face is unchanged, and so is Wat's own.
+        self.assertEqual(personas["Ysmay"]["character_sheet"], self.ysmay.pk)
+        self.assertEqual(personas["Ysmay"]["roster_entry"]["name"], "Ysmay")
+        self.assertEqual(personas["Wat"]["character_sheet"], self.wat.pk)
+        # She stands at the hearth as the mask; her own face stands nowhere beside it.
+        self.assertEqual(self.positions[self.mask.pk]["name"], "Hearth")
+        self.assertIsNone(self.positions[self.face.pk])
+
+        listed = self._listed(wat, f"scene={self.scene.pk}")
+        self.assertIsNone(listed["Stag Mask"]["character_sheet"])
+        self.assertEqual(listed["Ysmay"]["character_sheet"], self.ysmay.pk)
+        # Asking for her faces by character does not hand him the mask.
+        self.assertEqual(set(self._listed(wat, f"character_sheet={self.ysmay.pk}")), {"Ysmay"})
+        self.assertEqual(set(self._listed(wat, f"character={self.ysmay.pk}")), {"Ysmay"})
+
+    def test_she_staff_and_the_one_who_uncovered_it_see_the_link(self) -> None:
+        staff = AccountFactory(is_staff=True)
+        record_persona_discovery(self.mask, self.face, self.hobb.sheet_data)
+        for account in (self.account_of(self.ysmay), staff, self.account_of(self.hobb)):
+            with self.subTest(account=account.username):
+                personas = self._scene_personas(account)
+                self.assertEqual(personas["Stag Mask"]["character_sheet"], self.ysmay.pk)
+                self.assertEqual(personas["Stag Mask"]["roster_entry"]["name"], "Ysmay")
+                listed = self._listed(account, f"scene={self.scene.pk}")
+                self.assertEqual(listed["Stag Mask"]["character_sheet"], self.ysmay.pk)
+        # Her own faces by character include the mask, for her and for staff.
+        for account in (self.account_of(self.ysmay), staff):
+            with self.subTest(account=account.username):
+                listed = self._listed(account, f"character_sheet={self.ysmay.pk}")
+                self.assertEqual(set(listed), {"Ysmay", "Stag Mask"})
+
+    def test_the_scenes_gm_sees_the_link(self) -> None:
+        gm = AccountFactory()
+        SceneParticipationFactory(scene=self.scene, account=gm, is_gm=True)
+        personas = self._scene_personas(gm)
+        self.assertEqual(personas["Stag Mask"]["character_sheet"], self.ysmay.pk)

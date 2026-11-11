@@ -1,4 +1,7 @@
+from typing import Any
+
 from django.core.exceptions import ObjectDoesNotExist
+from django.db.models.manager import BaseManager
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
@@ -32,7 +35,69 @@ from world.societies.constants import RenownRisk
 from world.societies.houses.constants import NameDegree, TitleSuffixMode
 
 
+def _sheet_linked_persona_ids(personas: list[Persona], context: dict[str, Any]) -> frozenset[int]:
+    """The personas whose character this viewer may see linked to them (#4888).
+
+    A face that hides its owner (``is_fake_name``) is tied to its character sheet only for
+    the account that plays that character, staff, the GM of the scene being listed
+    (``context["scene"]``; the same viewers combat gives a fighter's sheet id, #4802) and a
+    viewer the shared reveal rule lets through: a ``PersonaDiscovery`` of the viewing
+    character's, or a sight that pierces that kind of disguise
+    (``build_persona_display_map``'s ``reveal_allowed``). Every other face is linked for
+    everyone. One discovery query for the whole list.
+    """
+    from world.relationships.reads import resolve_viewer_sheet  # noqa: PLC0415
+    from world.scenes.persona_display import build_persona_display_map  # noqa: PLC0415
+
+    everyone = frozenset(persona.pk for persona in personas)
+    hiding = [persona for persona in personas if persona.is_fake_name]
+    if not hiding:
+        return everyone
+    request = context.get("request")
+    user = request.user if request is not None else None
+    if user is None or not user.is_authenticated:
+        return everyone - {persona.pk for persona in hiding}
+    scene = context.get("scene")
+    if user.is_staff or (scene is not None and scene.is_gm(user)):
+        return everyone
+    try:
+        played = user.played_character_sheet_ids
+    except AttributeError:
+        played = frozenset()
+    display_map = build_persona_display_map(hiding, viewer_sheet=resolve_viewer_sheet(request))
+    hidden = {
+        persona.pk
+        for persona in hiding
+        if persona.character_sheet_id not in played and not display_map[persona.pk][2]
+    }
+    return everyone - hidden
+
+
+class _PersonaListSerializer(serializers.ListSerializer):
+    """Resolves which listed faces may show their character, once for the list (#4888)."""
+
+    def to_representation(self, data: Any) -> list[Any]:
+        personas = list(data.all() if isinstance(data, BaseManager) else data)
+        self.context["sheet_linked_persona_ids"] = _sheet_linked_persona_ids(personas, self.context)
+        return super().to_representation(personas)
+
+
 class PersonaSerializer(serializers.ModelSerializer):
+    """A persona as a list or a profile shows it."""
+
+    # ``character_sheet`` and ``roster_entry`` name the character behind the face, so for a
+    # disguise they reach only the viewers ``_sheet_linked_persona_ids`` allows and are null
+    # for everyone else (#4888). Pass the request (and, for a scene's list, the scene) in
+    # context; without a request a disguise is never linked.
+
+    character_sheet = serializers.PrimaryKeyRelatedField(
+        read_only=True,
+        allow_null=True,
+        help_text=(
+            "The character behind this face. Null for a disguise the viewer has not "
+            "uncovered, unless they play it, are staff or GM the scene."
+        ),
+    )
     roster_entry = serializers.SerializerMethodField()
     thumbnail_media_url = serializers.SerializerMethodField()
     allow_social_actions = serializers.SerializerMethodField()
@@ -52,6 +117,7 @@ class PersonaSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Persona
+        list_serializer_class = _PersonaListSerializer
         fields = [
             "id",
             "character_sheet",
@@ -80,6 +146,16 @@ class PersonaSerializer(serializers.ModelSerializer):
             "display_name",
             "believed_deceased",
         ]
+
+    def to_representation(self, instance: Persona) -> dict[str, Any]:
+        data = super().to_representation(instance)
+        linked = self.context.get("sheet_linked_persona_ids")
+        if linked is None:
+            linked = _sheet_linked_persona_ids([instance], self.context)
+        if instance.pk not in linked:
+            data["character_sheet"] = None
+            data["roster_entry"] = None
+        return data
 
     def get_display_name(self, obj: Persona) -> str:
         """The particled name at the persona's preferred degree (#3261).
@@ -411,7 +487,8 @@ class SceneDetailSerializer(SceneListSerializer):
 
     def get_personas(self, obj: Scene) -> list[dict]:
         personas = self._collect_personas(obj, only_real_names=False)
-        return PersonaSerializer(personas, many=True).data
+        context = {"request": self.context.get("request"), "scene": obj}
+        return PersonaSerializer(personas, many=True, context=context).data
 
     def get_participants(self, obj):
         return super().get_participants(obj)
@@ -477,18 +554,24 @@ class SceneDetailSerializer(SceneListSerializer):
         """Return [{persona_id, position: {id, name} | null}] for each persona in the scene.
 
         Resolves position via persona.character_sheet.character → position_of(character).
+        Only the face the character presents now stands anywhere; its other scene faces get
+        null, so a mask and the face behind it never share a square (#4888). A sheet with no
+        presented face at all (no active and no PRIMARY persona) keeps every face positioned.
         Returns an empty list when the scene has no location.
         """
         if obj.location is None:
             return []
         from world.areas.positioning.services import position_of, square_of  # noqa: PLC0415
+        from world.scenes.services import personas_for_sheets  # noqa: PLC0415
 
         personas = self._collect_personas(obj, only_real_names=False)
+        presented = personas_for_sheets({persona.character_sheet_id for persona in personas})
         result = []
         for persona in personas:
             position = None
             square = None
-            if persona.character_sheet is not None:
+            face = presented.get(persona.character_sheet_id)
+            if face is None or face.pk == persona.pk:
                 character = persona.character_sheet.character
                 if character is not None:
                     pos = position_of(character)
