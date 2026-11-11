@@ -5,6 +5,7 @@ from django.test import TestCase
 
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
+from world.areas.services import area_subtree_pks
 from world.character_creation.factories import RealmFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.constants import NOBLE_KIND_NAME, MembershipBasis
@@ -21,6 +22,7 @@ from world.societies.houses.almanach import (
     plant_rung,
     publish_house,
     record_claim,
+    rung_area_for_title,
     set_pledged_liege,
 )
 from world.societies.houses.almanach_pages import rung_document
@@ -31,6 +33,7 @@ from world.societies.houses.almanach_reads import (
 )
 from world.societies.houses.constants import SuccessionDerivation, TitleStation, TitleTier
 from world.societies.houses.models import (
+    Domain,
     HouseCharterQuestion,
     HouseTemplate,
     NobiliaryParticle,
@@ -88,6 +91,28 @@ class LadderReadTests(TestCase):
         # ``comes_with`` (a NAME) it survives an undefined top.
         assert fervor.chain_top_id == fervor.title_id
         assert all(r.chain_top_id == fervor.title_id for r in chain_rows)
+
+    def test_rows_carry_population_summed_over_the_land_beneath(self) -> None:
+        # Land (a county, a barony) reads its own people; a duchy and a kingdom have
+        # no Domain (#5069) and read the sum over every Domain beneath them.
+        fervor_area = rung_area_for_title(self.fervor)
+        for domain in Domain.objects.filter(area__in=area_subtree_pks(fervor_area)):
+            domain.population = 300
+            domain.save(update_fields=["population"])
+        arsura_domain = Domain.objects.get(pk=rung_area_for_title(self.arsura).pk)
+        arsura_domain.population = 1200
+        arsura_domain.save(update_fields=["population"])
+
+        payload = ladder_for_realm(self.realm)
+
+        by_name = {r.name: r for r in payload.rows if r.name}
+        assert by_name["Arsura"].population == 1200
+        under_fervor = Domain.objects.filter(area__in=area_subtree_pks(fervor_area))
+        assert by_name["Fervor"].population == sum(d.population for d in under_fervor)
+        everything = Domain.objects.filter(area__realm=self.realm)
+        assert by_name["Inferna"].population == sum(d.population for d in everything)
+        doc = rung_document(self.kingdom)
+        assert [v["population"] for v in doc.vassals] == [by_name["Fervor"].population]
 
     def test_an_undefined_chain_top_still_groups_its_own_chain(self) -> None:
         """#3983 review I5: ``comes_with`` is the top's name, so it is "" for

@@ -547,6 +547,14 @@ class Domain(SharedMemoryModel):
         default=0,
         help_text="People the land can feed: terrain counts times calibration (#5069).",
     )
+    capacity_override = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "A staff figure that stands in for the terrain's: a capital city and a border fort "
+            "sit on the same ground (#5069). Blank reads the terrain."
+        ),
+    )
     population_rebased_at = models.DateTimeField(
         default=timezone.now,
         help_text="When ``population`` was last written as a base (#5069).",
@@ -624,6 +632,11 @@ class DominionConfig(SharedMemoryModel):
             "A barony's capacity is its one pip's terrain capacity times this: a seat holds "
             "a town's worth of people on a farm's worth of ground."
         ),
+    )
+    layout_fill_pct = models.PositiveSmallIntegerField(
+        default=60,
+        validators=[MaxValueValidator(100)],
+        help_text="Percent of its capacity a freshly laid-out county or barony starts with.",
     )
 
     objects = ArxSharedMemoryManager()
