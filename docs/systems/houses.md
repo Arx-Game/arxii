@@ -852,6 +852,20 @@ claim on a title another house holds is a `TitleClaim` row with `house` set (#49
 (null = draft) is the Almanach's own visibility flag, set/cleared by `publish_house`/
 `unpublish_house` — see "Ladder rules" above for how a `for_founder` read hides unpublished rungs.
 
+**Dormancy (#5069 slice 3, ADR-5069-A).** `Organization.dormant_since` (null = awake) marks a
+house nobody plays. `houses.dormancy.mark_dormant_houses` runs first in `run_weekly_economy`:
+one set-based statement stamps every awake organization that has a `family`, has an income
+stream, and has no live member whose character sits on the roster under an account that logged
+in within `DominionConfig.dormancy_window_days`. Presence is the test, never actions: a house in
+a lull keeps accruing, uncapped; a staff-made house whose roster characters nobody has taken up
+(House Katta) sleeps. While dormant, the income, materials, interest and obligation phases skip
+the organization's side, so an apper finds the pool as the last player left it; the land under
+it keeps running by formula (dormancy freezes accumulators, never equilibria). Waking is
+event-driven: `wake_houses_for(account)` from `Account.at_post_login` and from
+`approve_application`, one statement each. An organization with no family (a guild, a temple) is
+never dormant: nobody can app into it and hoard. `dormant_since` is admin and staff API only.
+Every phase of the weekly run logs rows touched and wall time (the tick budget).
+
 ### Founder claims: kin placement + claim grants (Plan B, #3983)
 
 A founder's claim writes more than a title now — a whole kin tree and land

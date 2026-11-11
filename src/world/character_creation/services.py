@@ -3288,6 +3288,10 @@ def approve_application(
         approved_date=timezone.now(),
         approved_by=reviewer_data,
     )
+    # An approval is presence (#5069): a dormant house this character belongs to wakes.
+    from world.societies.houses.dormancy import wake_houses_for  # noqa: PLC0415
+
+    wake_houses_for(player_account)
 
     from world.character_creation.email_service import CGEmailService  # noqa: PLC0415
 

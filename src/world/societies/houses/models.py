@@ -638,6 +638,14 @@ class DominionConfig(SharedMemoryModel):
         validators=[MaxValueValidator(100)],
         help_text="Percent of its capacity a freshly laid-out county or barony starts with.",
     )
+    dormancy_window_days = models.PositiveSmallIntegerField(
+        default=30,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "Real days since a member's player last logged in before a house with income "
+            "goes dormant and its coin stops accruing (#5069). Presence, not actions."
+        ),
+    )
 
     objects = ArxSharedMemoryManager()
 
