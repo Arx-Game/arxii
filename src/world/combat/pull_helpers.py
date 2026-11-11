@@ -38,7 +38,12 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.combat.models import CombatEncounter, CombatParticipant
+    from world.combat.models import (
+        CombatEncounter,
+        CombatParticipant,
+        CombatPull,
+        CombatPullResolvedEffect,
+    )
     from world.covenants.perks.context import SituationContext
     from world.magic.models import Resonance
     from world.magic.types.burn import ResonanceBurnResult
@@ -273,8 +278,6 @@ def round_pull_bonus(
     Reads the prefetched active-pull list, and builds the use's context only when an
     effect of ``kind`` is there to match.
     """
-    from world.magic.services.resonance import _anchor_in_action  # noqa: PLC0415
-
     character = participant.character_sheet.character
     encounter = participant.encounter
     pulls = [
@@ -287,17 +290,28 @@ def round_pull_bonus(
     use = pull_action_context(
         participant, encounter=encounter, technique_id=technique_id, cast_check=cast_check
     )
-    total = 0
-    for pull in pulls:
-        for eff in pull.resolved_effects_cached:
-            if eff.kind != kind or not eff.scaled_value:
-                continue
-            if eff.authored_value is None:  # pull-wide: any of its threads will do
-                if any(_anchor_in_action(thread, use) for thread in pull.threads.all()):
-                    total += eff.scaled_value
-            elif _anchor_in_action(eff.source_thread, use):
-                total += eff.scaled_value
-    return total
+    return sum(
+        eff.scaled_value
+        for pull in pulls
+        for eff in pull.resolved_effects_cached
+        if eff.kind == kind and eff.scaled_value and _effect_reaches(eff, pull, use)
+    )
+
+
+def _effect_reaches(
+    effect: CombatPullResolvedEffect, pull: CombatPull, use: PullActionContext
+) -> bool:
+    """Whether one committed pull effect reaches the use ``use`` describes (#5067).
+
+    A per-thread effect reaches it when its own thread is in the use's action; a
+    pull-wide one (no ``authored_value``: a folded distinction bonus) when any thread
+    the pull names is.
+    """
+    from world.magic.services.resonance import _anchor_in_action  # noqa: PLC0415
+
+    if effect.authored_value is None:
+        return any(_anchor_in_action(thread, use) for thread in pull.threads.all())
+    return _anchor_in_action(effect.source_thread, use)
 
 
 def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belongs to
