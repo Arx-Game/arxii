@@ -6088,7 +6088,8 @@ paths:
       - in: path
         name: id
         schema:
-          type: string
+          type: integer
+        description: A unique integer value identifying this title.
         required: true
       tags:
       - character-creation
