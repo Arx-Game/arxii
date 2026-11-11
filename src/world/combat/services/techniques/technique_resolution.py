@@ -94,7 +94,9 @@ def resolve_combat_technique(
     from world.magic.services.fury import fury_cast_for  # noqa: PLC0415
 
     encounter = participant.encounter
-    pull_flat_bonus = _sum_active_flat_bonuses(participant, encounter)
+    pull_flat_bonus = _sum_active_flat_bonuses(
+        participant, technique=action.focused_action, cast_check=cast_check
+    )
 
     resolver = CombatTechniqueResolver(
         participant=participant,

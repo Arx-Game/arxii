@@ -1984,6 +1984,28 @@ A CombatPull is considered *active* while `round_number == encounter.round_numbe
 stale rows on round advance and invalidates the per-character
 `CharacterCombatPullHandler` cache.
 
+**What an active pull reaches (#5067, slice 1 of #5066) [BUILT & WIRED].** A pull lasts
+the round, but its per-use bonuses reach only the uses its threads relate to.
+`round_pull_bonus(participant, kind=, technique_id=, cast_check=)`
+(`world/combat/pull_helpers.py`) sums the active pull's `FLAT_BONUS` or `INTENSITY_BUMP`
+effects whose `source_thread` passes `_anchor_in_action` against that use's
+`pull_action_context` (the technique, the traits its cast check rolls, and the combat
+style's skill while it counts), the same context `commit_combat_pull` validates the pulled
+threads against. So a pull committed with a clash contribution on one technique adds
+nothing to a cast of an unrelated technique that round, and the reverse; a GIFT,
+relationship, facet or organization thread is always in a cast's action and reaches every
+cast. The readers that go through it: `_sum_active_flat_bonuses` (technique resolution and
+the enchanted Strike's technique roll), `CombatTechniqueResolver._sum_intensity_bump_pulls`
+(the cast's `COMBAT_PULL` power-ledger stage), `compute_intensity_for_clash` (the clash
+floor), and a clash contribution's own roll and power (`commit_to_clash`, which before
+#5067 read no pull at all, so a pull declared with a clash only leaked into the round's
+focused cast). A distinction's resonance bonus folded into a pull
+(`_fold_distinction_pull_bonus`, filed under the first thread with no `authored_value`)
+counts when any of that pull's threads relates to the use. `VITAL_BONUS`, `RESISTANCE` and `CAPABILITY_GRANT` are standing effects on the
+character for the round, not bonuses on a use, and are read unfiltered by the
+`CharacterCombatPullHandler` methods; the pull's resonance on the focus roll
+(`round_pull_resonance`) and its spend on corruption read the pull itself and are unchanged.
+
 ### Non-Combat Ephemeral Pull CAPABILITY_GRANT (#2840) [BUILT & WIRED]
 
 Non-combat (ephemeral) thread pulls that resolve a `CAPABILITY_GRANT` effect

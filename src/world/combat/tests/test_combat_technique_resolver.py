@@ -98,6 +98,25 @@ def _build_resolver(
     )
 
 
+def _related_pull_effect(resolver: CombatTechniqueResolver, pull, **kwargs):
+    """A committed pull effect whose thread is on the resolver's technique (#5066).
+
+    A pull's bonus reaches only the uses its threads relate to, so the thread is a
+    TECHNIQUE thread of the participant's on the technique being cast.
+    """
+    from world.combat.factories import CombatPullResolvedEffectFactory
+    from world.magic.constants import TargetKind
+    from world.magic.factories import ThreadFactory
+
+    thread = ThreadFactory(
+        owner=resolver.participant.character_sheet,
+        target_kind=TargetKind.TECHNIQUE,
+        target_trait=None,
+        target_technique=resolver.action.focused_action,
+    )
+    return CombatPullResolvedEffectFactory(pull=pull, source_thread=thread, **kwargs)
+
+
 class CombatTechniqueResolverRollCheckTests(TestCase):
     def test_pull_bonus_added_to_extra_modifiers(self) -> None:
         """A pull_flat_bonus of 3 must reach perform_check via extra_modifiers."""
@@ -670,14 +689,17 @@ class SumActiveFlatBonusesTests(TestCase):
 
         resolver = _build_resolver()
         self.assertEqual(
-            _sum_active_flat_bonuses(resolver.participant, resolver.participant.encounter),
+            _sum_active_flat_bonuses(
+                resolver.participant,
+                technique=resolver.action.focused_action,
+                cast_check=None,
+            ),
             0,
         )
 
     def test_sums_flat_bonus_scaled_values_across_active_pulls(self) -> None:
         from world.combat.factories import (
             CombatPullFactory,
-            CombatPullResolvedEffectFactory,
         )
         from world.combat.services import _sum_active_flat_bonuses
         from world.magic.constants import EffectKind
@@ -687,13 +709,17 @@ class SumActiveFlatBonusesTests(TestCase):
             participant=resolver.participant,
             round_number=resolver.participant.encounter.round_number,
         )
-        CombatPullResolvedEffectFactory(pull=pull, kind=EffectKind.FLAT_BONUS, scaled_value=4)
-        CombatPullResolvedEffectFactory(pull=pull, kind=EffectKind.FLAT_BONUS, scaled_value=2)
+        _related_pull_effect(resolver, pull, kind=EffectKind.FLAT_BONUS, scaled_value=4)
+        _related_pull_effect(resolver, pull, kind=EffectKind.FLAT_BONUS, scaled_value=2)
 
         resolver.participant.character_sheet.character.combat_pulls.invalidate()
 
         self.assertEqual(
-            _sum_active_flat_bonuses(resolver.participant, resolver.participant.encounter),
+            _sum_active_flat_bonuses(
+                resolver.participant,
+                technique=resolver.action.focused_action,
+                cast_check=None,
+            ),
             6,
         )
 
@@ -719,9 +745,58 @@ class SumActiveFlatBonusesTests(TestCase):
         resolver.participant.character_sheet.character.combat_pulls.invalidate()
 
         self.assertEqual(
-            _sum_active_flat_bonuses(resolver.participant, resolver.participant.encounter),
+            _sum_active_flat_bonuses(
+                resolver.participant,
+                technique=resolver.action.focused_action,
+                cast_check=None,
+            ),
             0,
         )
+
+
+class PullWideBonusTests(TestCase):
+    """A distinction's bonus folded into a pull follows the pull, not its filed thread.
+
+    ``_fold_distinction_pull_bonus`` files the bonus under the pull's first thread with
+    no ``authored_value``; it reaches a use when any of the pull's threads relates to it
+    (#5067). Unit-kept: no journey authors the distinction modifier that makes the row.
+    """
+
+    def test_counts_when_any_thread_of_the_pull_relates(self) -> None:
+        from world.combat.factories import CombatPullFactory, CombatPullResolvedEffectFactory
+        from world.combat.services import _sum_active_flat_bonuses
+        from world.magic.constants import EffectKind
+        from world.magic.factories import ThreadFactory
+
+        # (has a related thread too, expected total): the bonus alone on an unrelated
+        # thread reaches nothing; beside a related thread it reaches the cast.
+        for with_related, expected in ((False, 0), (True, 7)):
+            resolver = _build_resolver()
+            pull = CombatPullFactory(
+                participant=resolver.participant,
+                round_number=resolver.participant.encounter.round_number,
+            )
+            unrelated = ThreadFactory(owner=resolver.participant.character_sheet)
+            pull.threads.add(unrelated)
+            CombatPullResolvedEffectFactory(
+                pull=pull,
+                source_thread=unrelated,
+                kind=EffectKind.FLAT_BONUS,
+                authored_value=None,
+                scaled_value=5,
+            )
+            if with_related:
+                related = _related_pull_effect(
+                    resolver, pull, kind=EffectKind.FLAT_BONUS, scaled_value=2
+                )
+                pull.threads.add(related.source_thread)
+            resolver.participant.character_sheet.character.combat_pulls.invalidate()
+
+            total = _sum_active_flat_bonuses(
+                resolver.participant, technique=resolver.action.focused_action, cast_check=None
+            )
+
+            self.assertEqual(total, expected, with_related)
 
 
 class ResolverConsumesPowerTests(TestCase):
@@ -1163,7 +1238,7 @@ class CombatPullLedgerTests(TestCase):
 
     def test_intensity_bump_pull_appends_combat_pull_entry(self) -> None:
         """An INTENSITY_BUMP pull appends a COMBAT_PULL entry with the correct amount."""
-        from world.combat.factories import CombatPullFactory, CombatPullResolvedEffectFactory
+        from world.combat.factories import CombatPullFactory
         from world.magic.constants import EffectKind, PowerStage
 
         resolver = _build_resolver(base_power=10)
@@ -1171,7 +1246,7 @@ class CombatPullLedgerTests(TestCase):
             participant=resolver.participant,
             round_number=resolver.participant.encounter.round_number,
         )
-        CombatPullResolvedEffectFactory(pull=pull, kind=EffectKind.INTENSITY_BUMP, scaled_value=5)
+        _related_pull_effect(resolver, pull, kind=EffectKind.INTENSITY_BUMP, scaled_value=5)
         resolver.participant.character_sheet.character.combat_pulls.invalidate()
 
         result = self._call_resolver(resolver, power=10)
@@ -1185,7 +1260,7 @@ class CombatPullLedgerTests(TestCase):
 
     def test_intensity_bump_pull_total_equals_power_plus_bump(self) -> None:
         """power_ledger.total == power + sum(INTENSITY_BUMP scaled_values)."""
-        from world.combat.factories import CombatPullFactory, CombatPullResolvedEffectFactory
+        from world.combat.factories import CombatPullFactory
         from world.magic.constants import EffectKind
 
         resolver = _build_resolver(base_power=10)
@@ -1193,8 +1268,8 @@ class CombatPullLedgerTests(TestCase):
             participant=resolver.participant,
             round_number=resolver.participant.encounter.round_number,
         )
-        CombatPullResolvedEffectFactory(pull=pull, kind=EffectKind.INTENSITY_BUMP, scaled_value=3)
-        CombatPullResolvedEffectFactory(pull=pull, kind=EffectKind.INTENSITY_BUMP, scaled_value=7)
+        _related_pull_effect(resolver, pull, kind=EffectKind.INTENSITY_BUMP, scaled_value=3)
+        _related_pull_effect(resolver, pull, kind=EffectKind.INTENSITY_BUMP, scaled_value=7)
         resolver.participant.character_sheet.character.combat_pulls.invalidate()
 
         result = self._call_resolver(resolver, power=10)
@@ -1210,7 +1285,7 @@ class CombatPullLedgerTests(TestCase):
         """
         from decimal import Decimal
 
-        from world.combat.factories import CombatPullFactory, CombatPullResolvedEffectFactory
+        from world.combat.factories import CombatPullFactory
         from world.magic.constants import EffectKind
         from world.magic.factories import TechniqueDamageProfileFactory
 
@@ -1227,7 +1302,7 @@ class CombatPullLedgerTests(TestCase):
             participant=resolver.participant,
             round_number=resolver.participant.encounter.round_number,
         )
-        CombatPullResolvedEffectFactory(pull=pull, kind=EffectKind.INTENSITY_BUMP, scaled_value=8)
+        _related_pull_effect(resolver, pull, kind=EffectKind.INTENSITY_BUMP, scaled_value=8)
         resolver.participant.character_sheet.character.combat_pulls.invalidate()
 
         result = self._call_resolver(resolver, power=0)

@@ -279,7 +279,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `coefficient`, `cap`, `half_saturation`; one row each for DR and MAX_HEALTH;
     seeded via `seed_thread_survivability_tuning()`, staff-tunable in admin, #1175)
   - **Combat-side Spec A surface (in `world/combat`):** `CombatPull`,
-    `CombatPullResolvedEffect`
+    `CombatPullResolvedEffect`. A pull's per-use bonuses (FLAT_BONUS, INTENSITY_BUMP)
+    reach only the uses its threads relate to: `pull_helpers.round_pull_bonus` matches
+    each effect's thread with `_anchor_in_action` against the use's `pull_action_context`,
+    the context `commit_combat_pull` validates against (#5067)
   - **Combat AoE targeting (#1321, in `world/combat`):** `CombatRoundActionTarget` (join
     table; per-`CombatOpponent` row for AREA/FILTERED_GROUP technique actions)
   - **Dramatic moment tagging (#545 / #1139):**

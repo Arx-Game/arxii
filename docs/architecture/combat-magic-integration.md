@@ -32,7 +32,8 @@ a conditions-from-techniques resolver.
 - Mishap rolls fire when the technique's roll triggers them.
 - Active `CombatPull` rows for the caster contribute their **FLAT_BONUS**
   scaled values to the offense check's `extra_modifiers` (per Resonance
-  Pivot Spec A §5.8).
+  Pivot Spec A §5.8), but only the effects whose thread relates to this cast
+  (`round_pull_bonus`, `world/combat/pull_helpers.py`, #5067).
 - Damage delivered to the opponent matches the magic-pipeline-derived value.
 
 ### Out of scope (deferred)

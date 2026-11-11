@@ -230,7 +230,9 @@ class ClashRoundDeclarationPullTests(TestCase):
         # Invalidate handler cache so the next read reflects the new DB row.
         data["sheet"].character.combat_pulls.invalidate()
 
-        bonus = _sum_active_flat_bonuses(data["participant"], data["encounter"])
+        bonus = _sum_active_flat_bonuses(
+            data["participant"], technique=data["technique"], cast_check=None
+        )
         self.assertGreater(
             bonus,
             0,

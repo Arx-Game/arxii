@@ -38,12 +38,17 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.combat.models import CombatEncounter, CombatParticipant
+    from world.combat.models import (
+        CombatEncounter,
+        CombatParticipant,
+        CombatPull,
+        CombatPullResolvedEffect,
+    )
     from world.covenants.perks.context import SituationContext
     from world.magic.models import Resonance
     from world.magic.types.burn import ResonanceBurnResult
     from world.magic.types.magic_skills import CastCheck
-    from world.magic.types.pull import CastPullDeclaration
+    from world.magic.types.pull import CastPullDeclaration, PullActionContext
 
 
 def build_cast_pull_declaration(
@@ -218,6 +223,97 @@ def round_pull_resonance(participant: CombatParticipant) -> Resonance | None:
     return pulls[0].resonance if pulls else None
 
 
+def pull_action_context(
+    participant: CombatParticipant,
+    *,
+    encounter: CombatEncounter,
+    technique_id: int,
+    cast_check: CastCheck | None,
+    target: ObjectDB | None = None,
+) -> PullActionContext:
+    """The action one combat use of a technique is, for matching threads to it (#5066).
+
+    The traits the use rolls (#4450) are in its action, so a TRAIT thread on the
+    caster's stat, a skill or the technique skill relates to it; so does the combat
+    style's skill while it counts on the hit roll (#4884); and so does a TECHNIQUE
+    thread on the technique (or a prerequisite of it). ``commit_combat_pull`` decides
+    which threads may be pulled with this context, and ``round_pull_bonus`` decides
+    which committed pull effects reach a use with the same one, so a pull is matched
+    by one test at both ends.
+    """
+    from world.magic.services.magic_skills import cast_involved_trait_ids  # noqa: PLC0415
+    from world.magic.types.pull import PullActionContext as _PullActionContext  # noqa: PLC0415
+
+    return _PullActionContext(
+        combat_encounter=encounter,
+        participant=participant,
+        involved_techniques=(technique_id,),
+        involved_traits=_with_style_skill(
+            participant.character_sheet, cast_involved_trait_ids(cast_check)
+        ),
+        target=target,
+    )
+
+
+def round_pull_bonus(
+    participant: CombatParticipant,
+    *,
+    kind: str,
+    technique_id: int,
+    cast_check: CastCheck | None,
+) -> int:
+    """What this round's committed pulls add of ``kind`` to one use of a technique (#5066).
+
+    A pull lasts the round, but it boosts only the uses its threads relate to: an
+    effect counts when its source thread is in this use's action
+    (``_anchor_in_action`` over ``pull_action_context``, the test the pull passed when
+    it was committed). A pull committed with a clash contribution on one technique
+    adds nothing to a cast of an unrelated technique that round, and the reverse.
+
+    A distinction's resonance bonus folded into the pull (``_fold_distinction_pull_bonus``,
+    stored with no ``authored_value``) belongs to the pull as a whole, not to the thread
+    it is filed under, so it counts when any of the pull's threads (``CombatPull.threads``,
+    read only for such a row) relates to the use.
+
+    Reads the prefetched active-pull list, and builds the use's context only when an
+    effect of ``kind`` is there to match.
+    """
+    character = participant.character_sheet.character
+    encounter = participant.encounter
+    pulls = [
+        pull
+        for pull in character.combat_pulls.active_for_encounter(encounter)
+        if any(eff.kind == kind and eff.scaled_value for eff in pull.resolved_effects_cached)
+    ]
+    if not pulls:
+        return 0
+    use = pull_action_context(
+        participant, encounter=encounter, technique_id=technique_id, cast_check=cast_check
+    )
+    return sum(
+        eff.scaled_value
+        for pull in pulls
+        for eff in pull.resolved_effects_cached
+        if eff.kind == kind and eff.scaled_value and _effect_reaches(eff, pull, use)
+    )
+
+
+def _effect_reaches(
+    effect: CombatPullResolvedEffect, pull: CombatPull, use: PullActionContext
+) -> bool:
+    """Whether one committed pull effect reaches the use ``use`` describes (#5067).
+
+    A per-thread effect reaches it when its own thread is in the use's action; a
+    pull-wide one (no ``authored_value``: a folded distinction bonus) when any thread
+    the pull names is.
+    """
+    from world.magic.services.resonance import _anchor_in_action  # noqa: PLC0415
+
+    if effect.authored_value is None:
+        return any(_anchor_in_action(thread, use) for thread in pull.threads.all())
+    return _anchor_in_action(effect.source_thread, use)
+
+
 def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belongs to
     cast_pull: CastPullDeclaration,
     participant: CombatParticipant,
@@ -276,20 +372,14 @@ def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belo
 
     from actions.errors import ActionDispatchError  # noqa: PLC0415
     from world.magic.exceptions import MagicError  # noqa: PLC0415
-    from world.magic.services.magic_skills import cast_involved_trait_ids  # noqa: PLC0415
     from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
-    from world.magic.types.pull import PullActionContext  # noqa: PLC0415
 
     sheet = participant.character_sheet
-
-    # The traits this cast rolls (#4450) are in its action, so a TRAIT thread on the
-    # caster's stat, a skill or the technique skill can be pulled; so is the combat
-    # style's skill while it counts on the hit roll (#4884).
-    action_context = PullActionContext(
-        combat_encounter=encounter,
-        participant=participant,
-        involved_techniques=(technique_id,),
-        involved_traits=_with_style_skill(sheet, cast_involved_trait_ids(cast_check)),
+    action_context = pull_action_context(
+        participant,
+        encounter=encounter,
+        technique_id=technique_id,
+        cast_check=cast_check,
         target=target,
     )
 
