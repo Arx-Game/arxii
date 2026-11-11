@@ -96751,6 +96751,14 @@ components:
             * `SANCTUM` - Sanctum
             * `GIFT` - Gift
             * `ORGANIZATION` - Organization
+        target_trait_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        target_technique_id:
+          type: integer
+          readOnly: true
+          nullable: true
         name:
           type: string
           default: ''
@@ -96805,6 +96813,8 @@ components:
       - resonance_name
       - retired_at
       - target_kind
+      - target_technique_id
+      - target_trait_id
       - updated_at
     ThreadApplicability:
       type: object

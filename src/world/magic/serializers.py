@@ -1017,6 +1017,10 @@ class ThreadSerializer(serializers.ModelSerializer):
 
     resonance_name = serializers.CharField(source=_SOURCE_RESONANCE_NAME, read_only=True)
     target_id = serializers.IntegerField(write_only=True, required=True)
+    # The anchor of a TRAIT / TECHNIQUE thread, read back so a combat pull dialog can offer
+    # the threads related to what she is using (#5066); null for every other kind.
+    target_trait_id = serializers.IntegerField(read_only=True, allow_null=True)
+    target_technique_id = serializers.IntegerField(read_only=True, allow_null=True)
     # RELATIONSHIP_TRACK only (#2159, #3957): names the partner persona. target_id for
     # that kind is the RelationshipType CATALOG id — resolved against the caller's OWN
     # side (CharacterRelationship) toward that persona, which must hold an open label
@@ -1040,6 +1044,8 @@ class ThreadSerializer(serializers.ModelSerializer):
             "resonance_name",
             "target_kind",
             "target_id",
+            "target_trait_id",
+            "target_technique_id",
             "target_persona_id",
             "character_sheet_id",
             "name",

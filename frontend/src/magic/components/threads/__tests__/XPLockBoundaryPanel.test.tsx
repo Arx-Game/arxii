@@ -34,6 +34,8 @@ const makeThread = (overrides: Partial<Thread> = {}): Thread => ({
   resonance: 1,
   resonance_name: 'Bene',
   target_kind: 'TRAIT',
+  target_trait_id: null,
+  target_technique_id: null,
   name: 'Test Thread',
   description: '',
   level: 10,

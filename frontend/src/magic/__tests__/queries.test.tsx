@@ -153,6 +153,8 @@ const mockThread = {
   resonance: 3,
   resonance_name: 'Starfire',
   target_kind: 'RELATIONSHIP_CAPSTONE' as const,
+  target_trait_id: null,
+  target_technique_id: null,
   name: 'Bond of Stars',
   description: '',
   level: 10,
@@ -542,6 +544,8 @@ const mockTeachingOffer = {
 const mockWeaveBody = {
   resonance: 3,
   target_kind: 'TRAIT' as const,
+  target_trait_id: null,
+  target_technique_id: null,
   target_id: 1,
   character_sheet_id: 10,
 };

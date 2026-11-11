@@ -53553,6 +53553,8 @@ export interface components {
        *     * `ORGANIZATION` - Organization
        */
       target_kind: components['schemas']['ThreadTargetKindEnum'];
+      readonly target_trait_id: number | null;
+      readonly target_technique_id: number | null;
       /** @default  */
       name: string;
       /** @default  */

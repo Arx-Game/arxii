@@ -27,6 +27,28 @@ const mockThreads = {
       level: 3,
     },
     {
+      id: 4,
+      name: 'Step Strand',
+      target_kind: 'TECHNIQUE',
+      target_technique_id: 41,
+      target_trait_id: null,
+      resonance: 7,
+      owner: 12,
+      retired_at: null,
+      level: 10,
+    },
+    {
+      id: 5,
+      name: 'Lash Strand',
+      target_kind: 'TECHNIQUE',
+      target_technique_id: 99,
+      target_trait_id: null,
+      resonance: 7,
+      owner: 12,
+      retired_at: null,
+      level: 10,
+    },
+    {
       id: 3,
       name: 'Fire Retired',
       target_kind: 'FACET',
@@ -95,6 +117,26 @@ describe('ThreadPullDialog', () => {
     await waitFor(() => {
       expect(screen.getByTestId('thread-checkbox-1')).toBeInTheDocument();
     });
+    expect(screen.queryByTestId('thread-checkbox-2')).not.toBeInTheDocument();
+  });
+
+  it('in combat, offers a technique thread only when its technique is involved (#5066)', async () => {
+    render(
+      <ThreadPullDialog
+        {...defaultProps}
+        combat={{
+          encounterId: 1,
+          participantId: 1,
+          involvedTraitIds: [],
+          involvedTechniqueIds: [41],
+        }}
+      />
+    );
+    fireEvent.click(screen.getByTestId('resonance-btn-7'));
+    await waitFor(() => {
+      expect(screen.getByTestId('thread-checkbox-4')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('thread-checkbox-5')).not.toBeInTheDocument();
     expect(screen.queryByTestId('thread-checkbox-2')).not.toBeInTheDocument();
   });
 

@@ -82,9 +82,12 @@ export interface ThreadPullDialogProps {
 function isThreadEligible(thread: Thread, combat: ThreadPullDialogProps['combat']): boolean {
   if (ALWAYS_IN_ACTION_KINDS.has(thread.target_kind)) return true;
   if (!combat) return false;
-  // For TRAIT/TECHNIQUE eligibility in combat we'd check thread.target_id
-  // against the involved lists — target_id is not in the Thread response shape
-  // (write-only field), so v1 leaves these disabled until target_id is exposed.
+  if (thread.target_kind === 'TECHNIQUE' && thread.target_technique_id != null) {
+    return combat.involvedTechniqueIds.includes(thread.target_technique_id);
+  }
+  if (thread.target_kind === 'TRAIT' && thread.target_trait_id != null) {
+    return combat.involvedTraitIds.includes(thread.target_trait_id);
+  }
   return false;
 }
 
