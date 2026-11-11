@@ -4,36 +4,49 @@
  * SoulfrayWarningData shape + danger styling as <SoulfrayWarning>) plus an
  * "Accept the risk" toggle whose state lives in YourTurn until submit.
  *
+ * The dodge plan reuses it as its Soulfray check-in (#5066), with its own body line and
+ * toggle label in place of the cast line.
+ *
  * Distinct from scenes' <SoulfrayWarning>, which is a momentary
  * Cancel/Proceed block; combat needs a persistent accept that holds with the
  * rest of the declaration state.
  */
+import type { ReactNode } from 'react';
 import type { SoulfrayWarningData } from '@/scenes/actionTypes';
 import { cn } from '@/lib/utils';
 
 interface SoulfrayAcceptGateProps {
   warning: SoulfrayWarningData;
-  techniqueName: string;
+  techniqueName?: string;
   /** The cast's server-computed anima cost (`cast_preview`, #4799); null when unknown. */
-  animaCost: number | null;
+  animaCost?: number | null;
   accepted: boolean;
   onAcceptChange: (v: boolean) => void;
   disabled?: boolean;
+  /** Replaces the cast line under the stage description. */
+  body?: ReactNode;
+  acceptLabel?: string;
+  testId?: string;
+  checkboxTestId?: string;
 }
 
 export function SoulfrayAcceptGate({
   warning,
-  techniqueName,
-  animaCost,
+  techniqueName = 'Cast',
+  animaCost = null,
   accepted,
   onAcceptChange,
   disabled = false,
+  body,
+  acceptLabel = 'Accept the risk',
+  testId = 'soulfray-accept-gate',
+  checkboxTestId = 'soulfray-accept-checkbox',
 }: SoulfrayAcceptGateProps) {
   const isDangerous = warning.has_death_risk;
 
   return (
     <div
-      data-testid="soulfray-accept-gate"
+      data-testid={testId}
       className={cn(
         'rounded-lg border p-3',
         isDangerous
@@ -51,25 +64,29 @@ export function SoulfrayAcceptGate({
       </h3>
       <p className="mb-1 text-xs text-gray-700 dark:text-gray-300">{warning.stage_description}</p>
       <p className="mb-2 text-xs text-gray-700 dark:text-gray-400">
-        Casting <strong>{techniqueName}</strong>{' '}
-        {animaCost !== null && (
+        {body ?? (
           <>
-            will cost <strong>{animaCost} anima</strong> and{' '}
+            Casting <strong>{techniqueName}</strong>{' '}
+            {animaCost !== null && (
+              <>
+                will cost <strong>{animaCost} anima</strong> and{' '}
+              </>
+            )}
+            may worsen your condition.
           </>
         )}
-        may worsen your condition.
       </p>
       <label className="flex items-center gap-2 text-xs">
         <input
           type="checkbox"
-          aria-label="Accept the risk"
+          aria-label={acceptLabel}
           checked={accepted}
           disabled={disabled}
           onChange={(e) => onAcceptChange(e.target.checked)}
-          data-testid="soulfray-accept-checkbox"
+          data-testid={checkboxTestId}
           className="accent-amber-500"
         />
-        Accept the risk
+        {acceptLabel}
       </label>
     </div>
   );

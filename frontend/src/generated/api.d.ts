@@ -33041,12 +33041,32 @@ export interface components {
       id: number;
       name: string;
     };
-    /** @description Schema-only shape of the viewer's own dodge plan (#4676). Private to its owner. */
+    /** @description Schema-only shape of the viewer's own dodge plan (#4676, #5066). Private to its owner. */
     DodgePlan: {
       enabled: boolean;
       landing_id: number | null;
       options: components['schemas']['DodgeLanding'][];
       cost_line: string;
+      techniques: components['schemas']['DodgeTechnique'][];
+      /** @description The technique answering her dodges this fight, if any. */
+      technique_id: number | null;
+      /** @description Keep dodging when a dodge's cast would overspend into Soulfray. */
+      into_soulfray: boolean;
+      /** @description Pull threads for defense when attacked. */
+      auto_pull: boolean;
+      auto_pull_resonance_id: number | null;
+      auto_pull_tier: number | null;
+      /** @description Her Soulfray stage when her technique dodges would cast into it: the turn's check-in to keep or stop dodging into Soulfray (#5066). */
+      soulfray_check_in: components['schemas']['SoulfrayWarning'] | null;
+    };
+    /** @description One technique of hers that can answer her dodges (#5066). */
+    DodgeTechnique: {
+      id: number;
+      name: string;
+      /** @description What one dodge with it costs now. */
+      cost_line: string;
+      /** @description Her saved default for every fight. */
+      is_default: boolean;
     };
     /**
      * @description * `BEAST` - Beast
@@ -60613,8 +60633,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this title. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };

@@ -29,6 +29,7 @@ import type {
 import type { PlayerAction, SoulfrayWarningData } from '@/scenes/actionTypes';
 import { AreaAttackWarning } from '@/combat/components/AreaAttackWarning';
 import { DodgePlanPanel } from '@/combat/components/DodgePlanPanel';
+import { RoundThreadPull } from '@/combat/components/RoundThreadPull';
 import {
   CompulsionBanner,
   CompulsionChosenLine,
@@ -2444,6 +2445,14 @@ export function YourTurn({
       : (meleeTechniques.find((a) => a.ref.technique_id === heldTechniqueId)?.display_name ??
         'your strike');
 
+  // Every technique she can use this round: a round pull may draw on any of them (#5066).
+  const knownTechniqueIds = [
+    ...new Set(
+      availableActions
+        .map((a) => a.ref.technique_id)
+        .filter((id): id is number => id !== null && id !== undefined)
+    ),
+  ];
   const physicalTechniques = availableActions.filter(
     (a) =>
       a.ref.backend === 'combat' && a.ref.technique_id != null && a.action_category === 'physical'
@@ -3038,8 +3047,23 @@ export function YourTurn({
       {(myParticipantSelf?.dodge_plan || myParticipantSelf?.steady_plan) && (
         <DodgePlanPanel
           plan={myParticipantSelf.dodge_plan}
+          characterSheetId={characterSheetId}
           steadyPlan={myParticipantSelf.steady_plan}
           currentPositionId={actorPositionId}
+          isLocked={isLocked}
+          dispatchAction={dispatchAction}
+          onDispatched={refreshEncounter}
+        />
+      )}
+
+      {/* A thread pull on its own for the round, no action slot (#5066) */}
+      {isDeclaringPhase && myParticipantId !== null && (
+        <RoundThreadPull
+          characterSheetId={characterSheetId}
+          encounterId={encounterId}
+          participantId={myParticipantId}
+          techniqueIds={knownTechniqueIds}
+          roundNumber={encounter?.round_number ?? null}
           isLocked={isLocked}
           dispatchAction={dispatchAction}
           onDispatched={refreshEncounter}

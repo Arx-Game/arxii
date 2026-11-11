@@ -5972,8 +5972,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this title.
+          type: string
         required: true
       tags:
       - character-creation
@@ -56286,8 +56285,8 @@ components:
       - name
     DodgePlan:
       type: object
-      description: Schema-only shape of the viewer's own dodge plan (#4676). Private
-        to its owner.
+      description: 'Schema-only shape of the viewer''s own dodge plan (#4676, #5066).
+        Private to its owner.'
       properties:
         enabled:
           type: boolean
@@ -56300,11 +56299,63 @@ components:
             $ref: '#/components/schemas/DodgeLanding'
         cost_line:
           type: string
+        techniques:
+          type: array
+          items:
+            $ref: '#/components/schemas/DodgeTechnique'
+        technique_id:
+          type: integer
+          nullable: true
+          description: The technique answering her dodges this fight, if any.
+        into_soulfray:
+          type: boolean
+          description: Keep dodging when a dodge's cast would overspend into Soulfray.
+        auto_pull:
+          type: boolean
+          description: Pull threads for defense when attacked.
+        auto_pull_resonance_id:
+          type: integer
+          nullable: true
+        auto_pull_tier:
+          type: integer
+          nullable: true
+        soulfray_check_in:
+          allOf:
+          - $ref: '#/components/schemas/SoulfrayWarning'
+          nullable: true
+          description: 'Her Soulfray stage when her technique dodges would cast into
+            it: the turn''s check-in to keep or stop dodging into Soulfray (#5066).'
       required:
+      - auto_pull
+      - auto_pull_resonance_id
+      - auto_pull_tier
       - cost_line
       - enabled
+      - into_soulfray
       - landing_id
       - options
+      - soulfray_check_in
+      - technique_id
+      - techniques
+    DodgeTechnique:
+      type: object
+      description: One technique of hers that can answer her dodges (#5066).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        cost_line:
+          type: string
+          description: What one dodge with it costs now.
+        is_default:
+          type: boolean
+          description: Her saved default for every fight.
+      required:
+      - cost_line
+      - id
+      - is_default
+      - name
     DomainEnum:
       enum:
       - BEAST
