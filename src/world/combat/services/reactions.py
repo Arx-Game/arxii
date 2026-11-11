@@ -22,7 +22,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 import contextlib
 import contextvars
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from world.areas.positioning.constants import ReactionReach
@@ -206,7 +206,12 @@ def dodge_sources(participant: CombatParticipant) -> list[DodgeSource]:
                 movement=ms,
             )
         )
-    preferred = _preferred_technique_id(participant)
+    # Her pick is read only when a technique of hers can answer at all.
+    preferred = (
+        _preferred_technique_id(participant)
+        if any(source.technique_id is not None for source in sources)
+        else None
+    )
     sources.sort(
         key=lambda s: (
             s.technique_id is None or s.technique_id != preferred,
@@ -319,7 +324,7 @@ def make_dodge(participant: CombatParticipant, dodge: Dodge) -> Dodge | None:
         current = position_of(character)
         if landing not in reachable_landings(current, use.reach, way=dodge.source.way):
             landing = None
-    return replace(dodge, landing=landing, use=use)
+    return Dodge(source=dodge.source, landing=landing, use=use)
 
 
 def dodge_label(dodge: Dodge) -> str:

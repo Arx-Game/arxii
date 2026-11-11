@@ -1066,6 +1066,22 @@ def _neighbours(position: Position, *, edgeless: bool) -> list[Position]:
     ]
 
 
+def _stepped_places(current: Position, steps: int, *, edgeless: bool) -> dict[int, Position]:
+    """The places within ``steps`` steps of ``current`` (not ``current`` itself)."""
+    found: dict[int, Position] = {}
+    frontier = [current]
+    for _ in range(steps):
+        nxt: list[Position] = []
+        for place in frontier:
+            for other in _neighbours(place, edgeless=edgeless):
+                if other.pk == current.pk or other.pk in found:
+                    continue
+                found[other.pk] = other
+                nxt.append(other)
+        frontier = nxt
+    return found
+
+
 def reachable_landings(current: Position | None, reach: str, *, way: str = "") -> list[Position]:
     """The places one use of a movement power with this reach may land in, her place first.
 
@@ -1082,18 +1098,9 @@ def reachable_landings(current: Position | None, reach: str, *, way: str = "") -
     if reach == ReactionReach.ANY_PLACE:
         others = Position.objects.filter(room_id=current.room_id).exclude(pk=current.pk)
         return [current, *sorted(others, key=lambda p: p.name)]
-    edgeless = way in EDGELESS_TRAVERSALS
-    found: dict[int, Position] = {}
-    frontier = [current]
-    for _ in range(_REACH_STEPS.get(reach, 0)):
-        nxt: list[Position] = []
-        for place in frontier:
-            for other in _neighbours(place, edgeless=edgeless):
-                if other.pk == current.pk or other.pk in found:
-                    continue
-                found[other.pk] = other
-                nxt.append(other)
-        frontier = nxt
+    found = _stepped_places(
+        current, _REACH_STEPS.get(reach, 0), edgeless=way in EDGELESS_TRAVERSALS
+    )
     if way == CreatureTraversal.FLIES:
         above = Position.objects.filter(
             room_id=current.room_id, kind=PositionKind.AERIAL, elevation_anchor=current

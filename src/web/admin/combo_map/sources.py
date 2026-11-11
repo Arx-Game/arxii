@@ -83,6 +83,7 @@ from world.magic.models.alterations import MagicalAlterationTemplate
 from world.magic.models.crossing import CrossingOption
 from world.magic.models.drift import DriftConfig
 from world.magic.models.fury import FuryConfig
+from world.magic.models.gifts import GiftSubstance
 from world.magic.models.resonance_environment import ResonanceAlignmentBoonTier
 from world.magic.models.rituals import Ritual
 from world.magic.models.signature import SignatureMotifBonusAppliedCondition
@@ -726,6 +727,9 @@ EXCLUDED_FIELDS: tuple[ExcludedField, ...] = (
     ExcludedField(ConditionTemplate, "parent_condition", "aftermath link to its parent"),
     ExcludedField(Technique, "applied_conditions", "listed through TechniqueAppliedCondition"),
     ExcludedField(Technique, "properties", "tags on the technique itself"),
+    ExcludedField(
+        GiftSubstance, "property", "pre-ticked on a new technique; never read in play (#5066)"
+    ),
     ExcludedField(TechniqueRemovedCondition, "condition", _REMOVER),
     ExcludedField(VowAddedEffectRemovedCondition, "condition", _REMOVER),
     ExcludedField(RemoveConditionOnCheckConfig, "condition", _REMOVER),

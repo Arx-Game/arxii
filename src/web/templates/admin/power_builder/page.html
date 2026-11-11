@@ -71,18 +71,14 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
             <span class="pb-chips"><span class="pb-chip">reference character, not saved</span></span>
           </h2>
           {% if reference.errors %}<p class="errornote">Numbers only, 0 or more (rank 1 or more). Using the defaults.</p>{% endif %}
-          <table class="tuning-table pb-table">
-            <tbody>
-              <tr>
-                {% for field in reference %}
-                <td><label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                  <input type="number" form="pb-compare" class="pb-num" name="{{ field.html_name }}" id="{{ field.id_for_label }}"
-                         value="{{ field.value|default_if_none:field.initial }}" min="0"></td>
-                {% endfor %}
-                <td><input type="submit" form="pb-compare" value="Compare"></td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="pb-compare">
+            {% for field in reference %}
+            <span class="pb-compare-field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>
+              <input type="number" form="pb-compare" class="pb-num" name="{{ field.html_name }}" id="{{ field.id_for_label }}"
+                     value="{{ field.value|default_if_none:field.initial }}" min="0"></span>
+            {% endfor %}
+            <input type="submit" form="pb-compare" value="Compare">
+          </div>
           <p class="help pb-sentence">Change these to see every row's strength at another level. The defaults are a mid-level character; they are page controls only. Strength sets the dodge bonus and how far she lands (the bands in the rail).</p>
         </div>
 
@@ -100,10 +96,10 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
               <tr>
                 <td>{{ row.technique.name }}</td>
                 <td>{{ row.gift_label }} &middot; {{ row.path_label }}</td>
-                <td>{{ row.form.properties.errors }}<span class="pb-boxes">{% for box in row.form.properties %}<label class="pb-box">{{ box.tag }} {{ box.choice_label }}</label>{% endfor %}</span></td>
+                <td>{{ row.form.properties.errors }}<span class="pb-boxes">{% for box in row.form.properties %}<label class="pb-box" for="{{ box.id_for_label }}">{{ box.tag }} {{ box.choice_label }}</label>{% endfor %}</span></td>
                 <td>{{ row.form.grant_base.errors }}{{ row.form.grant_per_power.errors }}
                   base {{ row.form.grant_base }} per power {{ row.form.grant_per_power }}
-                  <label class="pb-box">{{ row.form.remove_grant }} remove grant</label></td>
+                  <label class="pb-box" for="{{ row.form.remove_grant.id_for_label }}">{{ row.form.remove_grant }} remove grant</label></td>
                 <td>{{ row.strength }}; {{ row.better }} one level better</td>
                 <td>{{ row.cost }}</td>
                 <td><a href="{{ row.edit_url }}">edit all</a></td>
@@ -138,14 +134,14 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
                     base {{ row.form.base_value }} + {{ row.form.trait_multiplier }} per point
                   {% elif row.kind == "condition" %}
                     {{ row.form.value.errors }}{{ row.form.value }}
-                    <label class="pb-box">{{ row.form.scales_with_severity }} scales with severity</label>
+                    <label class="pb-box" for="{{ row.form.scales_with_severity.id_for_label }}">{{ row.form.scales_with_severity }} scales with severity</label>
                   {% else %}
                     {{ row.form.value_per_rank.errors }}{{ row.form.value_per_rank }} per rank
                   {% endif %}
                 </td>
                 <td>
                   {% if row.template %}
-                    {{ row.form.properties.errors }}<span class="pb-boxes">{% for box in row.form.properties %}<label class="pb-box">{{ box.tag }} {{ box.choice_label }}</label>{% endfor %}</span>
+                    {{ row.form.properties.errors }}<span class="pb-boxes">{% for box in row.form.properties %}<label class="pb-box" for="{{ box.id_for_label }}">{{ box.tag }} {{ box.choice_label }}</label>{% endfor %}</span>
                   {% elif row.property_names %}
                     {{ row.property_names|join:", " }}
                   {% else %}
@@ -181,9 +177,9 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
               <tr>
                 <td>{{ row.technique.name }}</td>
                 <td>{{ row.gift_label }} &middot; {{ row.path_label }}</td>
-                <td>{{ row.form.properties.errors }}<span class="pb-boxes">{% for box in row.form.properties %}<label class="pb-box">{{ box.tag }} {{ box.choice_label }}</label>{% endfor %}</span></td>
+                <td>{{ row.form.properties.errors }}<span class="pb-boxes">{% for box in row.form.properties %}<label class="pb-box" for="{{ box.id_for_label }}">{{ box.tag }} {{ box.choice_label }}</label>{% endfor %}</span></td>
                 <td>base {{ row.grant.base_value }} per power {{ row.grant.intensity_multiplier|floatformat:"-2" }}
-                  <label class="pb-box">{{ row.form.remove_grant }} remove grant</label></td>
+                  <label class="pb-box" for="{{ row.form.remove_grant.id_for_label }}">{{ row.form.remove_grant }} remove grant</label></td>
                 <td><a href="{{ row.edit_url }}">edit all</a></td>
               </tr>
               {% endfor %}
@@ -203,9 +199,9 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
               <tr>
                 <td>{{ row.technique.name }}</td>
                 <td>{{ row.gift_label }} &middot; {{ row.path_label }}</td>
-                <td>{{ row.form.properties.errors }}<span class="pb-boxes">{% for box in row.form.properties %}<label class="pb-box">{{ box.tag }} {{ box.choice_label }}</label>{% endfor %}</span></td>
+                <td>{{ row.form.properties.errors }}<span class="pb-boxes">{% for box in row.form.properties %}<label class="pb-box" for="{{ box.id_for_label }}">{{ box.tag }} {{ box.choice_label }}</label>{% endfor %}</span></td>
                 <td>{{ row.form.grant_base.errors }}{{ row.form.grant_per_power.errors }}
-                  <label class="pb-box">{{ row.form.grant_it }} grant it</label>
+                  <label class="pb-box" for="{{ row.form.grant_it.id_for_label }}">{{ row.form.grant_it }} grant it</label>
                   base {{ row.form.grant_base }} per power {{ row.form.grant_per_power }}</td>
                 <td><a href="{{ row.edit_url }}">edit all</a></td>
               </tr>
@@ -251,8 +247,8 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
               <tr><th scope="row">{{ new.name.label_tag }}</th><td>{{ new.name.errors }}{{ new.name }}</td></tr>
               <tr><th scope="row">Properties</th>
                 <td>
-                  {% if page.required %}<label class="pb-box">{{ new.with_app_property }} {{ page.required.name }}</label><span class="pb-pre">from this application</span>{% endif %}
-                  <span data-substance-row><label class="pb-box">{{ new.with_substance }} <span data-substance-label></span></label><span class="pb-pre">gift's substance</span></span>
+                  {% if page.required %}<label class="pb-box" for="{{ new.with_app_property.id_for_label }}">{{ new.with_app_property }} {{ page.required.name }}</label><span class="pb-pre">from this application</span>{% endif %}
+                  <span data-substance-row><label class="pb-box" for="{{ new.with_substance.id_for_label }}">{{ new.with_substance }} <span data-substance-label>substance property</span></label><span class="pb-pre">gift's substance</span></span>
                 </td></tr>
               <tr><th scope="row">Grants {{ page.capability.name }}</th>
                 <td>{{ new.grant_base.errors }}{{ new.grant_per_power.errors }}

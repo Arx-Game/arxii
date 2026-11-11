@@ -78,8 +78,10 @@ class _Forms:
 
     def is_valid(self) -> bool:
         # Every form validates (no short-circuit), so every error shows at once.
-        results = [form.is_valid() for form in self.all()]
-        return all(results)
+        valid = True
+        for form in self.all():
+            valid = form.is_valid() and valid
+        return valid
 
 
 def _reference(params: QueryDict) -> tuple[ReferenceForm, live.Reference]:
@@ -269,31 +271,38 @@ def _save_techniques(page: live.PowerPage, forms: _Forms) -> list[Technique]:
     return touched
 
 
+def _other_form_data(row: live.OtherRow, forms: _Forms) -> tuple[dict, tuple[str, ...]]:
+    """The cleaned numbers of one other-source row, and which model fields they are."""
+    pk = row.row.pk
+    if row.kind == SourceKind.TRAINED:
+        return forms.traits[pk].cleaned_data, ("base_value", "trait_multiplier")
+    if row.kind == SourceKind.CONDITION:
+        return forms.conditions[pk].cleaned_data, ("value", "scales_with_severity")
+    return forms.distinctions[pk].cleaned_data, ("value_per_rank",)
+
+
+def _save_condition_properties(row: live.OtherRow, forms: _Forms, data: dict) -> bool:
+    """Set a condition's template properties from its ticks; True when they changed."""
+    if row.kind != SourceKind.CONDITION or row.template is None:
+        return False
+    form = forms.conditions[row.row.pk]
+    current = row.template_property_ids
+    candidate_ids = {pk for pk, _label in form.fields["properties"].choices}
+    wanted = (current - candidate_ids) | set(data["properties"])
+    return _set_properties(row.template, current, wanted)
+
+
 def _save_others(page: live.PowerPage, forms: _Forms) -> list[CreditedContent]:
     touched: list[CreditedContent] = []
     for row in page.others:
         source = row.row
-        if row.kind == SourceKind.TRAINED:
-            data = forms.traits[source.pk].cleaned_data
-            fields = ("base_value", "trait_multiplier")
-        elif row.kind == SourceKind.CONDITION:
-            data = forms.conditions[source.pk].cleaned_data
-            fields = ("value", "scales_with_severity")
-        else:
-            data = forms.distinctions[source.pk].cleaned_data
-            fields = ("value_per_rank",)
+        data, fields = _other_form_data(row, forms)
         changed = [name for name in fields if getattr(source, name) != data[name]]
         for name in changed:
             setattr(source, name, data[name])
         if changed:
             source.save(update_fields=changed)
-        props_changed = False
-        if row.kind == SourceKind.CONDITION and row.template is not None:
-            form = forms.conditions[source.pk]
-            current = row.template_property_ids
-            candidate_ids = {pk for pk, _label in form.fields["properties"].choices}
-            wanted = (current - candidate_ids) | set(data["properties"])
-            props_changed = _set_properties(row.template, current, wanted)
+        props_changed = _save_condition_properties(row, forms, data)
         if row.kind == SourceKind.CONDITION and (changed or props_changed):
             touched.append(source.get_condition_template())
         elif row.kind == SourceKind.DISTINCTION and changed:
