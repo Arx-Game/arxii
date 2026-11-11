@@ -12,6 +12,7 @@ from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.areas.worldmap.constants import PipSource, Terrain
 from world.areas.worldmap.models import AreaFootprintPip, RegionMap, TerrainPip
+from world.areas.worldmap.services import create_region_map, set_footprint
 from world.game_clock.factories import GameClockFactory
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.demography import population_now, refresh_terrain_counts
@@ -175,6 +176,58 @@ class TerrainCapacityTests(TestCase):
 
         self.assertEqual(refresh_terrain_counts(duchy), 0)
         self.assertFalse(DomainTerrainCount.objects.filter(domain__area=duchy).exists())
+
+
+class CarveRecountsTests(TestCase):
+    """A carve is where a footprint changes, so it is where the terrain is recounted
+    (#5069 tick budget: pips never tick; counts are written where the ground moves)."""
+
+    def setUp(self):
+        _config(barony_capacity_factor=10)
+        TerrainCalibration.objects.create(terrain=Terrain.PLAIN, capacity_per_pip=100)
+        TerrainCalibration.objects.create(terrain=Terrain.HILL, capacity_per_pip=40)
+        self.region = create_region_map(name="Carveland", anchor_x=0, anchor_y=0, width_cells=1)
+        for (x, y), kind in {
+            (0, 0): Terrain.PLAIN,
+            (1, 0): Terrain.PLAIN,
+            (0, 1): Terrain.HILL,
+            (1, 1): Terrain.HILL,
+        }.items():
+            TerrainPip.objects.create(
+                region=self.region, x=x, y=y, terrain=kind, source=PipSource.GENERATOR
+            )
+        self.county = AreaFactory(level=AreaLevel.COUNTY)
+        self.barony = AreaFactory(level=AreaLevel.BARONY, parent=self.county)
+        house = OrganizationFactory(name="House Carve")
+        self.county_domain = create_domain(area=self.county, name="Carve", owner_org=house)
+        self.barony_domain = create_domain(area=self.barony, name="Carvehold", owner_org=house)
+
+    def test_growing_a_county_recounts_it(self):
+        set_footprint(area=self.county, add=[(0, 0), (1, 0), (0, 1)])
+
+        self.county_domain.refresh_from_db()
+        self.assertEqual(self.county_domain.population_capacity, 2 * 100 + 40)
+
+    def test_carving_a_barony_moves_the_pip_and_recounts_both(self):
+        set_footprint(area=self.county, add=[(0, 0), (1, 0), (0, 1)])
+
+        set_footprint(area=self.barony, add=[(1, 0)])
+
+        self.county_domain.refresh_from_db()
+        self.barony_domain.refresh_from_db()
+        self.assertEqual(self.county_domain.population_capacity, 100 + 40)
+        self.assertEqual(self.barony_domain.population_capacity, 100 * 10)
+
+    def test_shrinking_a_barony_hands_the_pip_back_and_recounts_both(self):
+        set_footprint(area=self.county, add=[(0, 0), (1, 0), (0, 1)])
+        set_footprint(area=self.barony, add=[(1, 0)])
+
+        set_footprint(area=self.barony, remove=[(1, 0)])
+
+        self.county_domain.refresh_from_db()
+        self.barony_domain.refresh_from_db()
+        self.assertEqual(self.county_domain.population_capacity, 2 * 100 + 40)
+        self.assertEqual(self.barony_domain.population_capacity, 0)
 
 
 class IncomeByPeopleTests(TestCase):
