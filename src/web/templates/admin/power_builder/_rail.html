@@ -1,0 +1,46 @@
+{% comment %}
+The Power Builder's rail (item 8 of #5066): the capability's other applications, the
+distance bands every movement power shares, and credit. Outside the main form, since
+"Mark reviewed" is its own POST.
+{% endcomment %}
+{% if page %}
+<div class="module" id="other-applications-module">
+  <h2>Other applications of {{ page.capability.name }}</h2>
+  {% for other in page.rail %}
+  <div class="pb-stat"><span><a href="{{ other.url }}">{{ other.application.name }}</a> ({{ other.summary }})</span><b>{{ other.count }}</b></div>
+  {% empty %}
+  <p class="pb-muted">No other applications.</p>
+  {% endfor %}
+  <p>The number is how many sources do it. <a href="{{ new_application_url }}">+ New application of {{ page.capability.name }}</a></p>
+</div>
+
+<div class="module" id="reach-module">
+  <h2>How far a use reaches</h2>
+  {% for band in bands %}
+  <div class="pb-stat"><span>{{ band.label }}</span><b>{{ band.reach }}</b></div>
+  {% endfor %}
+  <p>One set for every movement power. <a href="{{ settings_url }}">Edit in Movement settings</a></p>
+</div>
+{% endif %}
+
+{% if application.pk %}
+<div class="module" id="credit-module">
+  <h2>Credit</h2>
+  <div class="pb-stat">
+    <span>Written by</span>
+    <b>{% if application.written_by %}{{ application.written_by.name }} on {{ application.written_on }}
+      {% else %}Not yet written{% endif %}</b>
+  </div>
+  <div class="pb-stat">
+    <span>Reviewed by</span>
+    <b>{% if application.reviewed_by %}{{ application.reviewed_by.name }} on {{ application.reviewed_on }}
+      {% else %}Not yet reviewed{% endif %}</b>
+  </div>
+  <form method="post" action="{% url 'admin_power_builder_review' application.pk %}">
+    {% csrf_token %}
+    <div class="submit-row">
+      <input type="submit" value="Mark reviewed">
+    </div>
+  </form>
+</div>
+{% endif %}

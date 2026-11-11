@@ -1,0 +1,101 @@
+{% comment %}
+The Power Builder's own stylesheet (item 8 of #5066), in the vow page's shape: admin's
+own classes (`.module`, `.help`, `.errornote`, `.submit-row`, `table.tuning-table`) carry
+the structure, and this sheet adds only what admin has no class for: the two-column
+shell, the header chips, the inline property ticks, the yes and no marks and the rail's
+stat rows. Every colour is an admin variable or a token set against admin's light and
+dark selectors, so the page follows the theme toggle.
+{% endcomment %}
+<style>
+  #power-builder-root {
+    --pb-warn: #b4541b;
+    --pb-ok: #2e7d32;
+  }
+  @media (prefers-color-scheme: dark) {
+    #power-builder-root { --pb-warn: #d8a06a; --pb-ok: #8bc48e; }
+  }
+  html[data-theme="light"] #power-builder-root { --pb-warn: #b4541b; --pb-ok: #2e7d32; }
+  html[data-theme="dark"] #power-builder-root { --pb-warn: #d8a06a; --pb-ok: #8bc48e; }
+
+  /* The page on the left, the rail on the right; the rail carries its own
+     "Mark reviewed" form, so it sits beside the main form, not inside it. */
+  #power-builder-root .pb-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 18rem;
+    gap: 1.25rem;
+    align-items: start;
+  }
+  @media (max-width: 1100px) {
+    #power-builder-root .pb-columns { grid-template-columns: minmax(0, 1fr); }
+  }
+  #power-builder-root .pb-main { min-width: 0; overflow-x: auto; }
+
+  #power-builder-root .module > h2 {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    align-items: baseline;
+  }
+  #power-builder-root .pb-chips { display: inline-flex; gap: 0.4rem; flex-wrap: wrap; }
+  #power-builder-root .pb-chip {
+    display: inline-block;
+    padding: 0.05rem 0.45rem;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.18);
+    font-size: 0.6875rem;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+  }
+
+  #power-builder-root .pb-table th { text-align: left; white-space: nowrap; }
+  #power-builder-root .pb-table td { vertical-align: top; padding: 0.4rem 0.5rem; }
+  #power-builder-root .pb-table td .help { margin: 0.2rem 0 0; }
+  #power-builder-root .pb-table td input[type="text"],
+  #power-builder-root .pb-table td textarea {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  #power-builder-root .pb-table td input[type="number"],
+  #power-builder-root .pb-num { width: 4.5rem; }
+  #power-builder-root .pb-sentence { padding: 0 10px 8px; margin: 0.4rem 0 0; }
+  #power-builder-root .pb-sub {
+    margin: 0.75rem 10px 0.25rem;
+    font-weight: 600;
+    font-size: 0.75rem;
+    color: var(--body-quiet-color);
+  }
+
+  /* Property ticks: one inline box per property, wrapping as a row. */
+  #power-builder-root .pb-boxes { display: inline-flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; }
+  #power-builder-root .pb-box { white-space: nowrap; display: inline-block; margin-right: 0.4rem; }
+  #power-builder-root .pb-box ul,
+  #power-builder-root .pb-box li { display: inline; margin: 0; padding: 0; }
+  #power-builder-root .pb-pre {
+    color: var(--body-quiet-color);
+    font-size: 0.6875rem;
+    margin-right: 1rem;
+  }
+  #power-builder-root .pb-muted { color: var(--body-quiet-color); }
+  #power-builder-root .pb-yes { color: var(--pb-ok); font-weight: 600; }
+  #power-builder-root .pb-no { color: var(--pb-warn); font-weight: 600; }
+
+  /* The rail */
+  #power-builder-root .pb-rail .module { margin-bottom: 1rem; }
+  #power-builder-root .pb-stat {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--hairline-color);
+    font-size: 0.75rem;
+  }
+  #power-builder-root .pb-stat:last-child { border-bottom: none; }
+  #power-builder-root .pb-stat b {
+    color: var(--link-fg);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+  #power-builder-root .pb-rail p { font-size: 0.75rem; padding: 0 10px; }
+  #power-builder-root .pb-rail .submit-row { margin: 10px; }
+</style>
