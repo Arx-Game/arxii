@@ -1996,8 +1996,12 @@ nothing to a cast of an unrelated technique that round, and the reverse; a GIFT,
 relationship, facet or organization thread is always in a cast's action and reaches every
 cast. The readers that go through it: `_sum_active_flat_bonuses` (technique resolution and
 the enchanted Strike's technique roll), `CombatTechniqueResolver._sum_intensity_bump_pulls`
-(the cast's `COMBAT_PULL` power-ledger stage) and `compute_intensity_for_clash` (the clash
-floor). `VITAL_BONUS`, `RESISTANCE` and `CAPABILITY_GRANT` are standing effects on the
+(the cast's `COMBAT_PULL` power-ledger stage), `compute_intensity_for_clash` (the clash
+floor), and a clash contribution's own roll and power (`commit_to_clash`, which before
+#5067 read no pull at all, so a pull declared with a clash only leaked into the round's
+focused cast). A distinction's resonance bonus folded into a pull
+(`_fold_distinction_pull_bonus`, filed under the first thread with no `authored_value`)
+counts when any of that pull's threads relates to the use. `VITAL_BONUS`, `RESISTANCE` and `CAPABILITY_GRANT` are standing effects on the
 character for the round, not bonuses on a use, and are read unfiltered by the
 `CharacterCombatPullHandler` methods; the pull's resonance on the focus roll
 (`round_pull_resonance`) and its spend on corruption read the pull itself and are unchanged.
