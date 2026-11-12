@@ -14954,6 +14954,23 @@ export interface paths {
     patch: operations['magic_gifts_partial_update'];
     trace?: never;
   };
+  '/api/magic/manifest-choices/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Each manifesting technique a character knows, its options and the current pick. */
+    get: operations['magic_manifest_choices_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/motif-styles/': {
     parameters: {
       query?: never;
@@ -38077,6 +38094,21 @@ export interface components {
      * @enum {string}
      */
     ManagerTenancyKindEnum: 'guest' | 'tenant' | 'trustee';
+    /** @description One manifesting technique the character knows, its options and the current pick. */
+    ManifestChoice: {
+      technique_id: number;
+      technique_name: string;
+      chosen_option_id?: number | null;
+      options: components['schemas']['ManifestOptionChoice'][];
+    };
+    /** @description One option a technique can bring: its label, whether its bond holds, why not. */
+    ManifestOptionChoice: {
+      option_id: number;
+      label: string;
+      available: boolean;
+      reason: string;
+      companion_id?: number | null;
+    };
     MarketSquare: {
       readonly id: number;
       readonly name: string;
@@ -42765,6 +42797,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['LivePrompt'][];
+    };
+    PaginatedManifestChoiceList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ManifestChoice'][];
     };
     PaginatedMediaList: {
       /** @example 123 */
@@ -75244,6 +75291,30 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['GiftCreate'];
+        };
+      };
+    };
+  };
+  magic_manifest_choices_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedManifestChoiceList'];
         };
       };
     };

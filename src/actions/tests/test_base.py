@@ -648,6 +648,7 @@ class ActionRegistryTests(TestCase):
             "sacrifice",
             # #4341 — renouncing a pact with a being.
             "pact_renounce",
+            "manifest_set",
             # #4333 slice 4 — a stewarded being's table GM answers a closed pledge.
             "gm_being_answer",
             # #4530 — keeping an item as a keepsake, and letting go.
