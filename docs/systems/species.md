@@ -338,7 +338,7 @@ species.is_subspecies  # Returns True if parent_id is not None
 
 # Get stat bonuses as a dict
 species.get_stat_bonuses_dict()
-# Returns: {"strength": 1, "charm": -1}
+# Returns: {"strength": 10, "charm": -10}  (stored units, one stat point is 10, #5091)
 
 # Access children (subspecies)
 species.children.all()
@@ -366,7 +366,7 @@ from world.species.models import SpeciesStatBonus
 species.stat_bonuses.all()
 
 # String includes sign
-str(bonus)  # "Infernal: -1 Charm"
+str(bonus)  # "Infernal: -10 Charm"
 ```
 
 ---

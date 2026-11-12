@@ -187,7 +187,7 @@ class CombatStyleArmorShareTests(TestCase):
         parent = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
         resonance = ResonanceFactory()
         subrole = SubroleCovenantRoleFactory(
-            parent_role=parent, resonance=resonance, unlock_thread_level=3
+            parent_role=parent, resonance=resonance, unlock_thread_level=30
         )
         membership = CharacterCovenantRoleFactory(
             character_sheet=sheet, covenant=covenant, covenant_role=parent
@@ -210,7 +210,7 @@ class CombatStyleArmorShareTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=parent,
             resonance=resonance,
-            level=30,  # stored; shows 3, the sub-role's unlock level (#4585)
+            level=30,  # the sub-role's unlock level
         )
 
         set_engaged_membership(membership=membership)

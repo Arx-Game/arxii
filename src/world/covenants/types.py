@@ -30,7 +30,7 @@ class CovenantFounder:
 
 @dataclass(frozen=True)
 class VowEffectBonuses:
-    """The thread-level bonuses one ``VowAddedEffect`` carries at one shown level (#4930).
+    """The thread-level bonuses one ``VowAddedEffect`` carries at one thread level (#4930).
 
     ``vow_effect_bonuses`` builds it; the cast (``FiredVowEffect``) and the technique
     power evaluator read the same three figures, so a preview prices what a cast adds.
@@ -51,7 +51,8 @@ class FiredVowEffect:
     is True when the row came from the holder's SECONDARY vow (#2641); its
     bonuses are then already scaled by ``SecondaryVowConfig.potency_tenths``.
 
-    Each bonus is ``max(0, shown thread level - unlock_thread_level)`` times the
+    Each bonus is the number of 10-level steps the thread is above
+    ``unlock_thread_level`` (``thread_rung``, #5091) times the
     row's matching ``*_per_thread_level`` column, read off the holder's
     COVENANT_ROLE thread on the vow's anchor role. ``severity_bonus`` and
     ``duration_bonus`` add to every applied condition; ``damage_bonus`` adds to
@@ -89,7 +90,7 @@ class VowPickEntry:
     ``effects`` are the plain-words lines of the payload rows the pick carries and
     ``limits`` its limits in one line ("no limits" when it has none). ``locked_reason``
     is blank when the pick can be chosen now, else why not: its level is above the
-    shown vow level, or it costs more than its level has left. ``vow`` names the
+    vow level, or it costs more than its level has left. ``vow`` names the
     catalog the pick comes from: the anchor vow, or the sub-role a holder holds or has
     grown into.
     """

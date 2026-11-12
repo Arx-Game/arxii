@@ -22,7 +22,7 @@ character-creation/
 │   ├── PageTurn.tsx         # Back/next doors between chapters
 │   ├── NightPlate.tsx       # Full-bleed night moment (arrival, submission)
 │   ├── ChapterLeaf.tsx      # Wraps a stage's old internals in the leaf frame
-│   ├── RecordRail.tsx       # Marginalia: record-so-far rows + a Note aside
+│   ├── RecordRail.tsx       # Marginalia: the "CG selections" rows + a Note aside
 │   ├── Entry.tsx            # EntryList/Entry/EntryDoors: choosable record entries (an
 │   │                        #   optional `tags` list prints extra `.tag`s beside `tag`). Since
 │   │                        #   #4022 the name row carries a square Select mark (Selected
@@ -34,17 +34,22 @@ character-creation/
 │   ├── Field.tsx            # Inscription label over a serif control on a hairline (#3630)
 │   ├── Paragraphs.tsx       # Blank-line-separated prose split into <p> tags (#3630)
 │   ├── CodexWord.tsx        # In-world term linked via CodexTerm when a codex entry exists
-│   ├── CodexLine.tsx        # "Codex: {name}" ledger line in an entry body; nothing without an id
+│   ├── CodexLine.tsx        # "Codex: {name}" ledger line in an entry body (solid link; an
+│   │                        #   optional `note` such as a cost reads after it); nothing without either
 │   └── ConfirmDialog.tsx    # Native <dialog> confirm for record-clearing choices
 └── components/
     ├── index.ts             # Component exports
     ├── OriginStage.tsx      # Stage 1: Area selection; since #4874 the first name is asked
-    │                        #   here too (a Field above the realms, saved on blur by itself,
-    │                        #   listed first in the rail), so the life reads the name
-    ├── HeritageStage.tsx    # Stage 2: Heritage, species, gender, pronouns, age
+    │                        #   here too (a Field above the realms, boxed while empty, saved
+    │                        #   on blur by itself, listed first in the rail), so the life
+    │                        #   reads the name; the letters-only rule shows only under a
+    │                        #   refused name, and a refused name is not saved
+    ├── HeritageStage.tsx    # Stage 2: beginnings (station on the closed row, cost on the
+    │                        #   codex line), species, gender
     ├── LineageStage.tsx     # Stage 3: the beginning's route (#3617; the Upbringing pick
     │                        #   retired in #4395, the route comes with the beginning),
-    │                        #   family selection, kin rows, the life grids; keeps
+    │                        #   family selection, the life grids (no spouse, child or
+    │                        #   twin: those come after creation, ADR-5102-A); keeps
     │                        #   InventedParentsCard, FamilyNamePreview, KinSlotPicker,
     │                        #   TarotNamingRitual, TarotCardItem, FamilyCard (exported
     │                        #   for lineage/). HouseFoundingPanel retired (#3983 Plan B
@@ -146,14 +151,8 @@ character-creation/
     │                            #   headingTag ("optional"); a route-closed distinction is
     │                            #   absent and named nowhere (#4979).
     └── lineage/             # LineageStage subsections (#3617, #3648, #4395)
-        ├── KinRows.tsx           # The people seated beside the parents (#4395, #4870): a
-        │                         #   twin (alive, dead), a spouse (alive, dead, divorced,
-        │                         #   separated, missing), a betrothed (promised, dead,
-        │                         #   missing, broken off), children (raised, fostered away,
-        │                         #   lost), each with a fate ChoiceRow, the whole list at
-        │                         #   draft_data.kin_rows; finalize seats them in the
-        │                         #   kinship graph. The named parents' fates (#4870) are a
-        │                         #   select under each parent's gender in LineageStage
+        ├── (KinRows.tsx retired, #5102) The named parents' fates (#4870) are a select
+        │                         #   under each parent's gender in LineageStage
         │                         #   (ParentFateRow; draft_data.line_parent_fate /
         │                         #   other_parent_fate)
         ├── LifeGrids.tsx         # The life as an accordion (#4874, slice 9 of #4813, built
@@ -162,8 +161,9 @@ character-creation/
         │                         #   folds it), one section per beat inside (a closed one reads
         │                         #   its answers with signed points or the prompt with the
         │                         #   first name; Next walks down and into the next stage);
-        │                         #   Unknown is a mark on the stage (every beat unknown in one
-        │                         #   PATCH); the secret marks under a grid, the Cover story box
+        │                         #   every grid ends on an Amnesiac card (#5102: no cost, not a
+        │                         #   distinction, copy life_amnesiac_name/_text) that marks
+        │                         #   its own beat unknown; the secret marks under a grid, the Cover story box
         │                         #   on a one-of row (the no-cost card is saved as the cover when
         │                         #   the secret is marked, until a click on another card;
         │                         #   clicking the real pick drops both)
@@ -181,7 +181,7 @@ character-creation/
         │                         #   whose `allowance_is_points` is on (#4829: a ranked
         │                         #   card shows pips, `ChapterOffers` `pointsPicks`), any),
         │                         #   a line of the player's own once a card
-        │                         #   is picked, the unknown mark; the footer counts the
+        │                         #   is picked; the footer counts the
         │                         #   taken beats and the purse. Every life ends on the
         │                         #   Recent History box (#4831), a textarea saved on blur
         │                         #   to draft_data.recent_history; a beginning that
@@ -242,7 +242,9 @@ character-creation/
 ## ChapterOffers, the life page's props (#4874)
 
 `ChapterOffers` (`components/offers/`) grew five props for the life page and keeps every
-default for the other chapters: `groupBy` splits a grid under `.group-h` headings
+default for the other chapters. A `layout="grid"` card (the life page's only layout) reads
+the distinction's description under its name, not the offer's `player_line` (#5099).
+`groupBy` splits a grid under `.group-h` headings
 ("Group (count)", the ungrouped cards last); `pricing="signed"` prints a grid card's price
 as a bare `−N`/`+N` in its bottom-left corner and nothing on a free card; `terms` builds the
 mechanics line from `offer.effects` with each term a `.term` role-button (the card is a

@@ -229,7 +229,7 @@ class ProfileIdentityPrivacyTests(APITestCase):
             character=sheet, trait=StatTraitFactory(name="strength"), value=50
         )
         data = self._get(sheet, owner).data
-        assert data["stats"] == {"strength": 5}
+        assert data["stats"] == {"strength": 50}
         assert data["story"]["background"] == "Born in the undercity"
 
     def test_covenant_roles_are_withheld_from_a_non_revealed_anonymous_figure(self) -> None:

@@ -50,7 +50,6 @@ interface StatRowBaseProps {
   value: number;
   /** Bonus shown beside the value as "+1"; never folded into the number. */
   bonus?: number;
-  max: number;
   /** When set, the name is a button that opens the gloss in the margin. */
   onWhy?: () => void;
   whyOpen?: boolean;
@@ -75,9 +74,7 @@ type StatRowProps = StatRowBaseProps &
   );
 
 export function StatRow(props: StatRowProps) {
-  const { id, name, sub, value, bonus, max, onWhy, whyOpen, gloss, spec, step = 1 } = props;
-  const pipCount = Math.max(0, Math.min(max, Math.round(value / step)));
-  const pipMax = Math.round(max / step);
+  const { id, name, sub, value, bonus, onWhy, whyOpen, gloss, spec, step = 1 } = props;
   return (
     <div className={spec ? 'stat-row spec' : 'stat-row'}>
       <span className="stat-name" id={id}>
@@ -95,11 +92,6 @@ export function StatRow(props: StatRowProps) {
           name
         )}
         {sub && <small>{sub}</small>}
-      </span>
-      <span className={props.readOnly ? 'stat-pips granted' : 'stat-pips'} aria-hidden="true">
-        {Array.from({ length: pipMax }, (_, i) => (
-          <i key={i} className={i < pipCount ? 'on' : undefined} />
-        ))}
       </span>
       <output className="stat-val" aria-labelledby={id}>
         {value}

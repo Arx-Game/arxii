@@ -7,10 +7,11 @@ own damage, 5 with no modifier anywhere.
 The owner ruled on 2026-11-01 that the facet itself names the effect it boosts, whatever the
 thread's resonance. Staff give the Wolf facet "+2 Charge: damage" on the Facet admin page. It
 counts while Hobb wears an item carrying Wolf and has a facet thread on Wolf, scaled like a
-facet passive: amount x item quality x attachment quality x the thread level he sees. So at
-shown level 3 on plain quality the charge deals 5 + 2 x 3 = 11; on an item of quality 2.00
-with an attachment of 1.50 at shown level 1 it deals 5 + 2 x 2 x 1.5 x 1 = 11. Taking the item
-off, a thread on another facet, or no thread at all leaves it at 5.
+facet passive: amount x item quality x attachment quality x each whole 10 levels of the
+thread. So at thread level 30 on plain quality the charge deals 5 + 2 x 3 = 11; on an item
+of quality 2.00 with an attachment of 1.50 at thread level 10 it deals
+5 + 2 x 2 x 1.5 x 1 = 11. Taking the item off, a thread on another facet, or no thread
+at all leaves it at 5.
 """
 
 from __future__ import annotations
@@ -80,15 +81,15 @@ class _WolfFangField(_ChargeField):
         self.hobb.equipped_items.invalidate()
         return worn
 
-    def thread_on(self, facet, *, shown_level: int) -> None:
-        """Hobb weaves a facet thread on ``facet`` (stored levels are x10)."""
+    def thread_on(self, facet, *, level: int) -> None:
+        """Hobb weaves a facet thread on ``facet`` at thread ``level``."""
         ThreadFactory(
             owner=self.sheet,
             resonance=ResonanceFactory(),
             target_kind=TargetKind.FACET,
             target_facet=facet,
             target_trait=None,
-            level=shown_level * 10,
+            level=level,
         )
         self.hobb.threads.invalidate()
 
@@ -98,9 +99,9 @@ class AFacetBoostsTheChargeItNames(_WolfFangField):
         super().setUp()
         FacetEffectBonus.objects.create(facet=self.wolf, target=self.charge_damage, amount=BONUS)
 
-    def test_a_worn_threaded_wolf_fang_adds_its_bonus_per_shown_level(self) -> None:
+    def test_a_worn_threaded_wolf_fang_adds_its_bonus_per_10_levels(self) -> None:
         self.wear(self.wolf)
-        self.thread_on(self.wolf, shown_level=3)
+        self.thread_on(self.wolf, level=30)
 
         _to_hit, damage = self.charge_and_resolve()
 
@@ -108,7 +109,7 @@ class AFacetBoostsTheChargeItNames(_WolfFangField):
 
     def test_item_and_attachment_quality_scale_the_bonus(self) -> None:
         self.wear(self.wolf, item_quality="2.00", attachment_quality="1.50")
-        self.thread_on(self.wolf, shown_level=1)
+        self.thread_on(self.wolf, level=10)
 
         _to_hit, damage = self.charge_and_resolve()
 
@@ -116,7 +117,7 @@ class AFacetBoostsTheChargeItNames(_WolfFangField):
 
     def test_taking_the_item_off_ends_the_bonus(self) -> None:
         worn = self.wear(self.wolf)
-        self.thread_on(self.wolf, shown_level=3)
+        self.thread_on(self.wolf, level=30)
         worn.delete()
         self.hobb.equipped_items.invalidate()
 
@@ -128,7 +129,7 @@ class AFacetBoostsTheChargeItNames(_WolfFangField):
         # He wears Wolf, but his thread is on Silk, and Silk boosts nothing.
         self.wear(self.wolf)
         self.wear(self.silk, layer=EquipmentLayer.BASE)
-        self.thread_on(self.silk, shown_level=3)
+        self.thread_on(self.silk, level=30)
 
         _to_hit, damage = self.charge_and_resolve()
 
@@ -172,7 +173,7 @@ class StaffAuthorTheBonusOnTheFacetPage(_WolfFangField):
         self.assertEqual((saved.target_id, saved.amount), (self.charge_damage.pk, BONUS))
 
         self.wear(self.wolf)
-        self.thread_on(self.wolf, shown_level=2)
+        self.thread_on(self.wolf, level=20)
         _to_hit, damage = self.charge_and_resolve()
 
         self.assertEqual(damage, DAMAGE + BONUS * 2)

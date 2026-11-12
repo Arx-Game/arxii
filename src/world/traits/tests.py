@@ -73,8 +73,7 @@ class TraitModelTests(TestCase):
         )
 
         assert trait_value.value == 25
-        # strength is a STAT: display ÷10, floored (ADR-0193)
-        assert trait_value.display_value == 2
+        assert str(trait_value).endswith("strength = 25")
 
     def test_trait_rank_description(self):
         """Test trait rank descriptions."""
@@ -85,8 +84,7 @@ class TraitModelTests(TestCase):
             description="Someone with exceptional physical strength",
         )
 
-        assert rank_desc.display_value == 3
-        assert "Powerful Warrior" in str(rank_desc)
+        assert "Powerful Warrior (30)" in str(rank_desc)
 
     def test_trait_case_insensitive_lookup(self):
         """Test case-insensitive trait lookup."""
@@ -295,12 +293,6 @@ class TraitHandlerTests(TestCase):
         value = self.handler.get_trait_value("swords")
         assert value == 35
 
-    def test_get_display_value(self):
-        """Skills display their true stored value (ADR-0193) — never divided."""
-        self.handler.set_trait_value("swords", 25)
-        display = self.handler.get_trait_display_value("swords")
-        assert display == 25
-
     def test_calculate_check_points(self):
         """Test calculating check points."""
         self.handler.set_trait_value("swords", 20)
@@ -442,80 +434,6 @@ class StatHandlerTests(TestCase):
         # All stats should default to 0 if not set
         for value in all_stats.values():
             assert value == 0
-
-    def test_stat_display_value_conversion(self):
-        """Test internal value to display value conversion."""
-        # Set internal value to 20 (should display as 2)
-        self.stat_handler.set_stat("strength", 20)
-        self.stat_handler.traits.clear_cache()
-        display_value = self.stat_handler.get_stat_display("strength")
-
-        assert display_value == 2
-
-        # Set internal value to 50 (should display as 5)
-        self.stat_handler.set_stat("agility", 50)
-        self.stat_handler.traits.clear_cache()
-        display_value = self.stat_handler.get_stat_display("agility")
-
-        assert display_value == 5
-
-        # Set internal value to 10 (should display as 1)
-        self.stat_handler.set_stat("stamina", 10)
-        self.stat_handler.traits.clear_cache()
-        display_value = self.stat_handler.get_stat_display("stamina")
-
-        assert display_value == 1
-
-    def test_stat_display_value_rounding(self):
-        """Test that display values round down correctly."""
-        # Internal value 25 should display as 2 (not 2.5 or 3)
-        CharacterTraitValue.objects.create(
-            character=self.sheet,
-            trait=self.stats["strength"],
-            value=25,
-        )
-
-        # Clear cache to pick up new value
-        self.stat_handler.traits.clear_cache()
-
-        display_value = self.stat_handler.get_stat_display("strength")
-        assert display_value == 2  # Integer division: 25 // 10 = 2
-
-        # Internal value 56 should display as 5 (not 5.6 or 6)
-        CharacterTraitValue.objects.create(
-            character=self.sheet,
-            trait=self.stats["agility"],
-            value=56,
-        )
-
-        self.stat_handler.traits.clear_cache()
-
-        display_value = self.stat_handler.get_stat_display("agility")
-        assert display_value == 5  # Integer division: 56 // 10 = 5
-
-    def test_get_all_stats_display(self):
-        """Test get_all_stats_display returns proper format."""
-        # Set some stat values
-        self.stat_handler.set_stat("strength", 20)
-        self.stat_handler.set_stat("agility", 30)
-
-        all_stats_display = self.stat_handler.get_all_stats_display()
-
-        assert len(all_stats_display) == 12
-
-        # Check strength
-        assert all_stats_display["strength"].value == 20
-        assert all_stats_display["strength"].display == 2
-        assert all_stats_display["strength"].modifiers == []
-
-        # Check agility
-        assert all_stats_display["agility"].value == 30
-        assert all_stats_display["agility"].display == 3
-        assert all_stats_display["agility"].modifiers == []
-
-        # Check unset stat defaults to 0
-        assert all_stats_display["stamina"].value == 0
-        assert all_stats_display["stamina"].display == 0
 
     def test_set_stat(self):
         """Test setting stat values."""
@@ -732,7 +650,7 @@ class TraitHandlerStatModifierTests(TestCase):
         CharacterTraitValueFactory(
             character=self.sheet,
             trait=self.strength_trait,
-            value=30,  # 3.0 display
+            value=30,
         )
         self._grant_giants_blood()
         handler = TraitHandler(self.character)
@@ -747,14 +665,14 @@ class TraitHandlerStatModifierTests(TestCase):
         CharacterTraitValueFactory(
             character=self.sheet,
             trait=self.strength_trait,
-            value=30,  # 3.0 display
+            value=30,
         )
         self._grant_giants_blood()
         handler = TraitHandler(self.character)
 
         modified_value = handler.get_trait_value("strength")
 
-        # 30 base + 10 (Giant's Blood = +1.0 display = +10 internal) = 40
+        # 30 base + 10 (Giant's Blood) = 40
         assert modified_value == 40
 
     def test_trait_value_without_distinction_unmodified(self):
@@ -786,20 +704,17 @@ class TraitHandlerStatModifierTests(TestCase):
 
         assert value == 25
 
-    def test_trait_display_value_includes_modifier(self):
-        """get_trait_display_value includes modifiers in display format."""
+    def test_trait_value_includes_modifier(self):
+        """A stat reads its stored value with modifiers, the number a sheet shows."""
         CharacterTraitValueFactory(
             character=self.sheet,
             trait=self.strength_trait,
-            value=30,  # 3.0 display
+            value=30,
         )
         self._grant_giants_blood()
         handler = TraitHandler(self.character)
 
-        display_value = handler.get_trait_display_value("strength")
-
-        # (30 + 10) / 10 = 4.0
-        assert display_value == 4.0
+        assert handler.get_trait_value("strength") == 40
 
     def test_trait_value_case_insensitive(self):
         """Stat modifiers work with case-insensitive trait lookup."""
@@ -941,7 +856,7 @@ class GiantsBloodModifierCreationTests(TestCase):
             target__category__name="stat",
         )
         assert strength_modifiers.exists()
-        assert strength_modifiers.first().value == 10  # +1.0 display = +10 internal
+        assert strength_modifiers.first().value == 10
 
     def test_giants_blood_creates_height_band_modifier(self):
         """Giant's Blood creates a height band modifier."""
@@ -1005,7 +920,6 @@ class TraitHandlerSkillModifierTests(TestCase):
         assert handler.get_base_trait_value("sailing") == 25
         assert handler.get_trait_modifier(self.sailing) == 10
         assert handler.get_trait_value("sailing") == 35
-        assert handler.get_trait_display_value("sailing") == 35
 
     def test_a_skill_with_no_bonus_reads_its_stored_value(self):
         CharacterTraitValueFactory(character=self.sheet, trait=self.sailing, value=25)

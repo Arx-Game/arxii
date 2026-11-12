@@ -91,12 +91,12 @@ class VowAddedEffectsTestBase(TestCase):
         self.hobb = CharacterSheetFactory()
         self.unsworn = CharacterSheetFactory()
         self.hold = _technique_tagged(TechniqueFunction.HOLD)
-        engage_vow_with_thread(self.ysmay, self.role, covenant=self.covenant, thread_level=5)
+        engage_vow_with_thread(self.ysmay, self.role, covenant=self.covenant, thread_level=50)
 
     def _engage_hobb(self, *, engaged: bool = True) -> None:
         if engaged:
             engage_vow_with_thread(
-                self.hobb, self.hobb_role, covenant=self.covenant, thread_level=1
+                self.hobb, self.hobb_role, covenant=self.covenant, thread_level=10
             )
             return
         CharacterCovenantRoleFactory(
@@ -148,7 +148,7 @@ def _technique_tagged(function: str) -> Technique:
 class OwnCastTests(VowAddedEffectsTestBase):
     def test_own_cast_scales_severity_per_level_above_unlock(self) -> None:
         VowAddedEffectFactory(
-            covenant_role=self.role, unlock_thread_level=2, severity_per_thread_level=2
+            covenant_role=self.role, unlock_thread_level=20, severity_per_thread_level=2
         )
         [fired] = self._cast(self.ysmay)
         self.assertEqual((fired.holder, fired.severity_bonus), (self.ysmay, 6))
@@ -158,7 +158,7 @@ class OwnCastTests(VowAddedEffectsTestBase):
         VowAddedEffectFactory(
             covenant_role=self.role,
             cast_context=VowEffectContext.ANY,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             duration_per_thread_level=1,
             damage_per_thread_level=4,
         )
@@ -166,7 +166,7 @@ class OwnCastTests(VowAddedEffectsTestBase):
         self.assertEqual((fired.duration_bonus, fired.damage_bonus), (2, 8))
 
     def test_below_unlock_nothing_fires(self) -> None:
-        VowAddedEffectFactory(covenant_role=self.role, unlock_thread_level=6)
+        VowAddedEffectFactory(covenant_role=self.role, unlock_thread_level=60)
         self.assertEqual(self._cast(self.ysmay), [])
 
     def test_a_different_function_does_not_fire(self) -> None:
@@ -178,15 +178,15 @@ class OwnCastTests(VowAddedEffectsTestBase):
         VowAddedEffectFactory(
             covenant_role=self.role,
             technique=_technique_tagged(TechniqueFunction.HOLD),
-            unlock_thread_level=1,
+            unlock_thread_level=10,
         )
         self.assertEqual(self._cast(self.ysmay), [])
 
         matching = VowAddedEffectFactory(
-            covenant_role=self.role, gift=self.hold.gift, unlock_thread_level=2
+            covenant_role=self.role, gift=self.hold.gift, unlock_thread_level=20
         )
         own = VowAddedEffectFactory(
-            covenant_role=self.role, technique=self.hold, unlock_thread_level=3
+            covenant_role=self.role, technique=self.hold, unlock_thread_level=30
         )
         self.assertEqual({f.effect for f in self._cast(self.ysmay)}, {matching, own})
 
@@ -207,7 +207,7 @@ class OwnCastTests(VowAddedEffectsTestBase):
             self.ysmay,
             secondary_role,
             covenant=CovenantFactory(covenant_type=CovenantType.DURANCE),
-            thread_level=5,
+            thread_level=50,
             is_secondary=True,
         )
         VowAddedEffectFactory(
@@ -249,7 +249,7 @@ class AllyCastTests(VowAddedEffectsTestBase):
 
     def test_two_holders_of_one_vow_each_fire(self) -> None:
         wren = CharacterSheetFactory()
-        engage_vow_with_thread(wren, self.role, covenant=self.covenant, thread_level=2)
+        engage_vow_with_thread(wren, self.role, covenant=self.covenant, thread_level=20)
         self._engage_hobb()
         _, participants = self._fight(self.hobb, self.ysmay, wren)
         fired = self._cast(self.hobb, resolution=CombatRoundContext(participants[self.hobb.pk]))
@@ -265,7 +265,7 @@ class AllyCastTests(VowAddedEffectsTestBase):
             self.hobb,
             CovenantRoleFactory(covenant_type=CovenantType.DURANCE),
             covenant=second_covenant,
-            thread_level=1,
+            thread_level=10,
             is_secondary=True,
         )
         CharacterCovenantRoleFactory(
@@ -337,25 +337,25 @@ class UpgradeTests(VowAddedEffectsTestBase):
         super().setUp()
         self.resonance = ResonanceFactory()
         self.sub_role = SubroleCovenantRoleFactory(
-            parent_role=self.role, resonance=self.resonance, unlock_thread_level=3
+            parent_role=self.role, resonance=self.resonance, unlock_thread_level=30
         )
         self.wren = CharacterSheetFactory()
         self.base = VowAddedEffectFactory(covenant_role=self.role)
 
     def _engage_wren(self, resonance: object) -> None:
         engage_vow_with_thread(
-            self.wren, self.role, covenant=self.covenant, thread_level=3, resonance=resonance
+            self.wren, self.role, covenant=self.covenant, thread_level=30, resonance=resonance
         )
 
     def test_the_matching_resonance_upgrade_replaces_the_base(self) -> None:
         upgrade = VowAddedEffectFactory(covenant_role=self.sub_role, upgrades=self.base)
-        extra = VowAddedEffectFactory(covenant_role=self.sub_role, unlock_thread_level=1)
+        extra = VowAddedEffectFactory(covenant_role=self.sub_role, unlock_thread_level=10)
         self._engage_wren(self.resonance)
         self.assertEqual({f.effect for f in self._cast(self.wren)}, {upgrade, extra})
 
     def test_another_resonance_keeps_the_base(self) -> None:
         VowAddedEffectFactory(covenant_role=self.sub_role, upgrades=self.base)
-        VowAddedEffectFactory(covenant_role=self.sub_role, unlock_thread_level=1)
+        VowAddedEffectFactory(covenant_role=self.sub_role, unlock_thread_level=10)
         self._engage_wren(ResonanceFactory())
         self.assertEqual({f.effect for f in self._cast(self.wren)}, {self.base})
 
@@ -460,7 +460,7 @@ class QueryDisciplineTests(VowAddedEffectsTestBase):
 class PayloadTests(VowAddedEffectsTestBase):
     def test_payloads_apply_with_the_bonus_and_self_means_the_caster(self) -> None:
         effect = VowAddedEffectFactory(
-            covenant_role=self.role, unlock_thread_level=2, severity_per_thread_level=2
+            covenant_role=self.role, unlock_thread_level=20, severity_per_thread_level=2
         )
         condition = ConditionTemplateFactory()
         VowAddedEffectAppliedConditionFactory(
@@ -644,7 +644,7 @@ class PayloadTests(VowAddedEffectsTestBase):
         effect = VowAddedEffectFactory(
             covenant_role=self.role,
             cast_context=_IN_COMBAT,
-            unlock_thread_level=4,
+            unlock_thread_level=40,
             damage_per_thread_level=3,
         )
         profile = VowAddedEffectDamageProfileFactory(effect=effect)
@@ -670,7 +670,7 @@ class DedupeTests(VowAddedEffectsTestBase):
             covenant_role=self.role, unlock_thread_level=0, severity_per_thread_level=10
         )
         primary, secondary = (
-            _LiveRow(candidate=self._candidate(is_secondary=flag), effect=effect, thread_level=5)
+            _LiveRow(candidate=self._candidate(is_secondary=flag), effect=effect, thread_level=50)
             for flag in (False, True)
         )
         for live in ([secondary, primary], [primary, secondary]):
@@ -685,34 +685,34 @@ class VowEffectBonusesTests(TestCase):
 
     def _effect(self) -> VowAddedEffect:
         return VowAddedEffectFactory.build(
-            unlock_thread_level=2,
+            unlock_thread_level=20,
             severity_per_thread_level=3,
             duration_per_thread_level=1,
             damage_per_thread_level=4,
         )
 
     def test_each_level_above_the_unlock_adds_each_column(self) -> None:
-        bonuses = vow_effect_bonuses(self._effect(), 5)
+        bonuses = vow_effect_bonuses(self._effect(), 50)
         self.assertEqual((bonuses.severity, bonuses.duration, bonuses.damage), (9, 3, 12))
 
     def test_at_or_below_the_unlock_adds_nothing(self) -> None:
-        for level in (0, 2):
+        for level in (0, 20):
             with self.subTest(level=level):
                 bonuses = vow_effect_bonuses(self._effect(), level)
                 self.assertEqual((bonuses.severity, bonuses.duration, bonuses.damage), (0, 0, 0))
 
     def test_a_secondary_vow_scales_by_potency_and_floors(self) -> None:
-        bonuses = vow_effect_bonuses(self._effect(), 5, potency_tenths=5)
+        bonuses = vow_effect_bonuses(self._effect(), 50, potency_tenths=5)
         self.assertEqual((bonuses.severity, bonuses.duration, bonuses.damage), (4, 1, 6))
 
 
 class StaticViewTests(VowAddedEffectsTestBase):
     def test_lists_matching_rows_without_the_cast_time_gates(self) -> None:
         locked = VowAddedEffectFactory(
-            covenant_role=self.role, unlock_thread_level=9, cast_context=_IN_COMBAT
+            covenant_role=self.role, unlock_thread_level=90, cast_context=_IN_COMBAT
         )
         boss = VowAddedEffectFactory(covenant_role=self.role, situation=Situation.TARGET_IS_BOSS)
-        VowAddedEffectFactory(covenant_role=self.role, gift=GiftFactory(), unlock_thread_level=1)
+        VowAddedEffectFactory(covenant_role=self.role, gift=GiftFactory(), unlock_thread_level=10)
         VowAddedEffectFactory(covenant_role=self.role, function=TechniqueFunction.STRIKE)
         VowAddedEffectFactory(covenant_role=self.hobb_role)
         self.assertEqual(set(vow_added_effects_on_technique(self.ysmay, self.hold)), {locked, boss})
@@ -724,12 +724,12 @@ class StaticViewTests(VowAddedEffectsTestBase):
     def test_gift_and_technique_narrowing_through_the_shared_matcher(self) -> None:
         by_gift = VowAddedEffectFactory(covenant_role=self.role, gift=self.hold.gift)
         by_technique = VowAddedEffectFactory(
-            covenant_role=self.role, technique=self.hold, unlock_thread_level=1
+            covenant_role=self.role, technique=self.hold, unlock_thread_level=10
         )
         VowAddedEffectFactory(
             covenant_role=self.role,
             technique=_technique_tagged(TechniqueFunction.HOLD),
-            unlock_thread_level=2,
+            unlock_thread_level=20,
         )
         self.assertEqual(
             set(vow_added_effects_on_technique(self.ysmay, self.hold)), {by_gift, by_technique}

@@ -15,7 +15,7 @@ def setup_stat(
     Args:
         character: ObjectDB character instance.
         stat_name: Name of the stat (e.g. "stamina").
-        internal_value: Internal scale value (e.g. 30 for display value 3).
+        internal_value: The stored stat value (e.g. 30).
         category: TraitCategory for the stat.
     """
     trait = StatTraitFactory(name=stat_name, category=category)

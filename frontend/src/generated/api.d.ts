@@ -884,6 +884,84 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/almanach/regional-event-kinds/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The authored disasters, for the title page's Open control (#5080). */
+    get: operations['almanach_regional_event_kinds_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/regional-event-kinds/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The authored disasters, for the title page's Open control (#5080). */
+    get: operations['almanach_regional_event_kinds_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/regional-events/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Regional events (#5080): the Atlas reads the open ones over a realm and shades
+     *     their areas; the title page lists the ones over its land. Opening and closing go
+     *     through the ``almanach_open_regional_event`` / ``almanach_close_regional_event``
+     *     actions, never a write here.
+     */
+    get: operations['almanach_regional_events_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/regional-events/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Regional events (#5080): the Atlas reads the open ones over a realm and shades
+     *     their areas; the title page lists the ones over its land. Opening and closing go
+     *     through the ``almanach_open_regional_event`` / ``almanach_close_regional_event``
+     *     actions, never a write here.
+     */
+    get: operations['almanach_regional_events_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/almanach/search/': {
     parameters: {
       query?: never;
@@ -5190,7 +5268,7 @@ export interface paths {
     delete?: never;
     options?: never;
     head?: never;
-    /** @description Set stats at display scale (1 to 5); missing rows are created. */
+    /** @description Set stats (10 to 50, in steps of 10); missing rows are created. */
     patch: operations['character_sheets_staff_stats_partial_update'];
     trace?: never;
   };
@@ -15117,6 +15195,23 @@ export interface paths {
     patch: operations['magic_gifts_partial_update'];
     trace?: never;
   };
+  '/api/magic/manifest-choices/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Each manifesting technique a character knows, its options and the current pick. */
+    get: operations['magic_manifest_choices_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/motif-styles/': {
     parameters: {
       query?: never;
@@ -19354,6 +19449,48 @@ export interface paths {
      *       the ``respond`` action.
      */
     post: operations['npc_services_summons_respond_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/pacts/cards/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Characters' pacts with beings as their cards show them, newest first: active pacts
+     *     and ended pacts still easing out. The owner reads their own characters', staff read
+     *     anyone's; a pact with a secret faith is never shown to anyone else.
+     */
+    get: operations['pacts_cards_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/pacts/cards/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Characters' pacts with beings as their cards show them, newest first: active pacts
+     *     and ended pacts still easing out. The owner reads their own characters', staff read
+     *     anyone's; a pact with a secret faith is never shown to anyone else.
+     */
+    get: operations['pacts_cards_retrieve'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -28383,7 +28520,7 @@ export interface components {
       house_state: string;
       /** Format: date-time */
       published_at: string | null;
-      particle_example: string;
+      particle: components['schemas']['RealmCharterParticle'];
       default_succession_law: components['schemas']['AlmanachSuccessionLaw'] | null;
       patron: components['schemas']['AlmanachHousePatron'] | null;
       facets: components['schemas']['AlmanachHouseFacet'][];
@@ -28503,6 +28640,40 @@ export interface components {
       readonly unclaimed_by_tier: {
         [key: string]: number;
       };
+    };
+    /**
+     * @description One regional event (#5080): what the Atlas shades and the title page lists. The
+     *     GM's ``note`` rides along because the whole viewset is staff-only.
+     */
+    AlmanachRegionalEvent: {
+      readonly id: number;
+      readonly kind: string;
+      readonly kind_id: number;
+      readonly area_id: number;
+      readonly area: string;
+      readonly realm_id: number | null;
+      /** @description Scales the kind's capacity cut: 100 is the full cut. */
+      severity_pct?: number;
+      /** Format: date-time */
+      started_at?: string;
+      /** Format: date-time */
+      ended_at?: string | null;
+      /** @description Staff's own note; never shown to players. */
+      note?: string;
+    };
+    /** @description The authored disasters staff can open (#5080). */
+    AlmanachRegionalEventKind: {
+      readonly id: number;
+      name: string;
+      description?: string;
+      /** @description Percent of a holding's capacity the event takes while it is open. */
+      capacity_cut_pct?: number;
+      /** @description Added to each holding's prosperity at open, removed at close. */
+      prosperity_delta?: number;
+      /** @description Added to each holding's unrest at open, removed at close. */
+      unrest_delta?: number;
+      /** @description The crisis an awake house inside the footprint gets; blank = none. */
+      readonly crisis_type_id: number | null;
     };
     /**
      * @description ``house.default_succession_law`` on the document (mirrors
@@ -33464,9 +33635,11 @@ export interface components {
      *     ``offer_ids``/``sources``/``arrivals`` (#3675) name an entry's contributing
      *     ``DistinctionOffer`` rows, their display labels, and how each arrived
      *     (choice/bundled/carried) -- ``world.distinctions.types.DraftDistinctionEntry``
-     *     carries them on every offer-tracked entry. ``required=False`` mirrors runtime
-     *     reality: a legacy entry saved before the offers system landed (0106) has no
-     *     ``offer_ids`` key at all (see ``offers._drop_vanished_sources``). ``offer_ids``
+     *     carries them on every offer-tracked entry. A legacy entry saved before the offers
+     *     system landed (0106) has no ``offer_ids`` key at all (see
+     *     ``offers._drop_vanished_sources``); the three lists default to empty so every entry
+     *     the API returns carries them, and the leaf never meets a missing list (#5102: the
+     *     Lineage step crashed on ``offer_ids is not iterable`` for such a draft). ``offer_ids``
      *     has no declared item type because it mixes ``int`` (a real ``DistinctionOffer``
      *     row) and ``str`` (a tradition-state-carried drawback's synthetic
      *     ``"state:<TraditionState>"`` key).
@@ -38294,6 +38467,21 @@ export interface components {
      * @enum {string}
      */
     ManagerTenancyKindEnum: 'guest' | 'tenant' | 'trustee';
+    /** @description One manifesting technique the character knows, its options and the current pick. */
+    ManifestChoice: {
+      technique_id: number;
+      technique_name: string;
+      chosen_option_id?: number | null;
+      options: components['schemas']['ManifestOptionChoice'][];
+    };
+    /** @description One option a technique can bring: its label, whether its bond holds, why not. */
+    ManifestOptionChoice: {
+      option_id: number;
+      label: string;
+      available: boolean;
+      reason: string;
+      companion_id?: number | null;
+    };
     MarketSquare: {
       readonly id: number;
       readonly name: string;
@@ -39952,8 +40140,8 @@ export interface components {
     /** @description One STAT line, named by the trait rather than its id (#3427). */
     NPCPresetTraitLine: {
       readonly trait_name: string;
-      /** @description Display-scale value (1-10), mirroring CG's stat-allocation scale. */
-      readonly display_value: number;
+      /** @description Stat value (10-100), the number a sheet shows; CG allocates 10-50. */
+      readonly value: number;
     };
     /** @description Staff CRUD for banded NPC reaction lines (#2632). */
     NPCReactionLine: {
@@ -41441,6 +41629,74 @@ export interface components {
      * @enum {string}
      */
     PaceModeEnum: 'timed' | 'ready' | 'manual';
+    /**
+     * @description A character's pact as her card shows it. Read by her own player and staff only:
+     *     a pact with a secret faith is hers alone.
+     *
+     *     ``earned``/``required``/``time_limit`` describe the open period; after the pact
+     *     ended (``is_active`` false) that is an ease-out period, whose condition eases by
+     *     ``severity_per_miss`` when it ends.
+     */
+    PactCard: {
+      id: number;
+      character_sheet: number;
+      being_id: number;
+      being_name: string;
+      offer_name: string;
+      period_weeks: number;
+      severity_per_miss: number;
+      earned: number;
+      required: number;
+      /** Format: date-time */
+      time_limit: string | null;
+      sources: components['schemas']['PactSourceLine'][];
+      stage_name: string;
+      severity: number;
+      next_stage_threshold: number | null;
+      promises: string[];
+      condition_effects: string[];
+      stages: components['schemas']['PactStageLine'][];
+      is_active: boolean;
+      dissolution_reason: string;
+    };
+    /**
+     * @description One commitment of an offer: FAVOR_EARNED (``amount`` per period) or CUSTOM (a
+     *     promise in ``notes``, never checked).
+     */
+    PactCommitmentLine: {
+      kind: string;
+      amount: number;
+      notes: string;
+    };
+    /**
+     * @description The pact a pledge offers at its close, built from the offer's rows.
+     *     ``condition_effects`` apply at every stage.
+     */
+    PactOfferSummary: {
+      being_name: string;
+      offer_name: string;
+      offer_text: string;
+      period_weeks: number;
+      commitments: components['schemas']['PactCommitmentLine'][];
+      promises: string[];
+      condition_effects: string[];
+      stages: components['schemas']['PactStageLine'][];
+    };
+    /** @description Favor credited toward the open period from one kind of source. */
+    PactSourceLine: {
+      label: string;
+      favor: number;
+    };
+    /**
+     * @description One stage of a pact's condition, best to worst, with the stage's own effects;
+     *     ``is_last`` marks the stage whose arrival ends the pact.
+     */
+    PactStageLine: {
+      name: string;
+      threshold: number;
+      effects: string[];
+      is_last: boolean;
+    };
     PaginatedAccountInviteList: {
       /** @example 123 */
       count: number;
@@ -41560,6 +41816,36 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['AlmanachRealm'][];
+    };
+    PaginatedAlmanachRegionalEventKindList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['AlmanachRegionalEventKind'][];
+    };
+    PaginatedAlmanachRegionalEventList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['AlmanachRegionalEvent'][];
     };
     PaginatedAlmanachTemplateList: {
       /** @example 123 */
@@ -42930,6 +43216,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['LivePrompt'][];
     };
+    PaginatedManifestChoiceList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ManifestChoice'][];
+    };
     PaginatedMediaList: {
       /** @example 123 */
       count: number;
@@ -43470,6 +43771,21 @@ export interface components {
       /** Format: uri */
       previous: string | null;
       results: components['schemas']['OutfitSlotRead'][];
+    };
+    PaginatedPactCardList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PactCard'][];
     };
     PaginatedPendingAlterationList: {
       /** @example 123 */
@@ -46528,7 +46844,7 @@ export interface components {
         [key: string]: number;
       };
     };
-    /** @description ``{"stats": {"<trait id>": <1 to 5>}}``. */
+    /** @description ``{"stats": {"<trait id>": <10 to 50, in steps of 10>}}``. */
     PatchedStaffStatsRequest: {
       stats?: {
         [key: string]: number;
@@ -48240,7 +48556,10 @@ export interface components {
       location?: number | null;
       status?: components['schemas']['StatusD66Enum'];
     };
-    /** @description A pledge type a being offers (#4333 slice 2): the staff-authored text and terms. */
+    /**
+     * @description A pledge type a being offers (#4333 slice 2): the staff-authored text and terms.
+     *     ``pact_offer`` is the pact accepted at its close (#4341), null when it offers none.
+     */
     Pledge: {
       readonly id: number;
       readonly being: number;
@@ -48253,6 +48572,7 @@ export interface components {
       /** @description Game weeks the character has to earn the target and close. */
       readonly span_weeks: number;
       readonly closing_rite_name: string;
+      readonly pact_offer: components['schemas']['PactOfferSummary'] | null;
     };
     /**
      * @description One character's pledge as its card shows it (#4333 slice 2). Read by the
@@ -50137,6 +50457,9 @@ export interface components {
       chain: {
         [key: string]: unknown;
       }[];
+      events: {
+        [key: string]: unknown;
+      }[];
     };
     /**
      * @description Read-shape for SanctumDetails surfaced on the player's "My Sanctums" view.
@@ -51183,7 +51506,7 @@ export interface components {
       readonly sineater_sheet_id: number | null;
       /** @description Return the Sinner's current Hollow capacity (from the capstone Thread). */
       readonly hollow_current: number;
-      /** @description Return the Sinner's Hollow maximum (``_compute_hollow_max``, shown level × mult). */
+      /** @description Return the Sinner's Hollow maximum (``_compute_hollow_max``, thread rung × mult). */
       readonly hollow_max: number;
       /** @description Return the Sineater's total lifetime_helped across all resonances for this bond. */
       readonly sineater_lifetime_helped: number;
@@ -55226,6 +55549,7 @@ export interface components {
       distinction_id: number;
       name: string;
       distinction_name: string;
+      distinction_description: string;
       player_line: string;
       chapter: string;
       arrives_as: string;
@@ -56042,7 +56366,7 @@ export interface components {
       trait_id: number;
       name: string;
       trait_type: string;
-      display_value: number;
+      value: number;
     };
   };
   responses: never;
@@ -57147,6 +57471,99 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['LadderPayload'];
+        };
+      };
+    };
+  };
+  almanach_regional_event_kinds_list: {
+    parameters: {
+      query?: {
+        name?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAlmanachRegionalEventKindList'];
+        };
+      };
+    };
+  };
+  almanach_regional_event_kinds_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this regional event kind. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AlmanachRegionalEventKind'];
+        };
+      };
+    };
+  };
+  almanach_regional_events_list: {
+    parameters: {
+      query?: {
+        active?: boolean;
+        area?: number;
+        kind?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        realm?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAlmanachRegionalEventList'];
+        };
+      };
+    };
+  };
+  almanach_regional_events_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this regional event. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AlmanachRegionalEvent'];
         };
       };
     };
@@ -75717,6 +76134,30 @@ export interface operations {
       };
     };
   };
+  magic_manifest_choices_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedManifestChoiceList'];
+        };
+      };
+    };
+  };
   magic_motif_styles_retrieve: {
     parameters: {
       query?: never;
@@ -82318,6 +82759,51 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  pacts_cards_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPactCardList'];
+        };
+      };
+    };
+  };
+  pacts_cards_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PactCard'];
+        };
       };
     };
   };

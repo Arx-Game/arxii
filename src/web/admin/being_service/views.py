@@ -1,6 +1,7 @@
 """The Being Service builder (#4333 slice 2, design 10): one being's favored
-resonances, favored facets (with their worn rates, #4520), pledge types and the items its
-pledges and rites ask for (#4530), written together.
+resonances, favored facets (with their worn rates, #4520), pledge types, the items its
+pledges and rites ask for (#4530) and its pact offers with their commitments (#4341),
+written together.
 
 Pattern: the Standoff Profile and Distinction Builders. One page writes every
 ``BeingResonance``, the being's ``BeingFacet`` rows and every ``Pledge`` in one
@@ -28,14 +29,18 @@ from django.views.decorators.http import require_POST
 
 from web.admin.authoring.contributors import current_contributor
 from web.admin.authoring.credit import stamp_reviewed, stamp_written
+from web.admin.authoring.identity_map import CacheGuard
 from web.admin.being_service import live
 from web.admin.being_service.forms import (
     BeingFacetFormSet,
     BeingResonanceFormSet,
+    PactOfferCommitmentFormSet,
+    PactOfferFormSet,
     PledgeFormSet,
     RequestedItemFormSet,
 )
 from web.admin.tuning.views import superuser_required
+from world.pacts.models import PactOffer, PactOfferCommitment
 from world.worship.favor_services import ensure_being_modifier_targets
 from world.worship.invocation_services import get_devotion_config
 from world.worship.models import (
@@ -57,20 +62,33 @@ class _ServiceForms:
     facets: BeingFacetFormSet
     pledges: PledgeFormSet
     requests: RequestedItemFormSet
+    offers: PactOfferFormSet
+    commitments: PactOfferCommitmentFormSet
+
+    @property
+    def all(self) -> tuple:
+        return (
+            self.resonances,
+            self.facets,
+            self.pledges,
+            self.requests,
+            self.offers,
+            self.commitments,
+        )
 
     @property
     def media(self) -> Media:
-        return self.resonances.media + self.facets.media + self.pledges.media + self.requests.media
+        media = Media()
+        for formset in self.all:
+            media += formset.media
+        return media
 
     def is_valid(self) -> bool:
-        return all(
-            (
-                self.resonances.is_valid(),
-                self.facets.is_valid(),
-                self.pledges.is_valid(),
-                self.requests.is_valid(),
-            )
-        )
+        # Every formset validates (no short-circuit) so each shows its own errors.
+        valid = True
+        for formset in self.all:
+            valid = formset.is_valid() and valid
+        return valid
 
 
 def _build_forms(request: HttpRequest, being: WorshippedBeing) -> _ServiceForms:
@@ -103,6 +121,20 @@ def _build_forms(request: HttpRequest, being: WorshippedBeing) -> _ServiceForms:
             .select_related("item_template", "facet")
             .order_by("pk"),
         ),
+        offers=PactOfferFormSet(
+            data,
+            instance=being,
+            prefix="pact_offers",
+            queryset=PactOffer.objects.select_related("condition").order_by("pk"),
+        ),
+        commitments=PactOfferCommitmentFormSet(
+            data,
+            being=being,
+            prefix="pact_commitments",
+            queryset=PactOfferCommitment.objects.filter(offer__being=being).order_by(
+                "offer__pk", "pk"
+            ),
+        ),
     )
 
 
@@ -128,8 +160,15 @@ def _render_page(
             form,
             live.pledge_pacing(form.instance) if form.instance.pk else "",
             live.pledge_answers(form.instance) if form.instance.pk else None,
+            live.pact_offer_brief(form.instance.pact_offer)
+            if form.instance.pk and form.instance.pact_offer_id is not None
+            else None,
         )
         for form in forms.pledges.forms
+    ]
+    offer_rows = [
+        (form, live.pact_offer_context(form.instance) if form.instance.pk else None)
+        for form in forms.offers.forms
     ]
     active_pledges = Pledge.objects.filter(being=being, is_active=True).count()
     return render(
@@ -151,6 +190,10 @@ def _render_page(
             "request_max_points": get_devotion_config().requested_item_max_points,
             "request_max_value": get_devotion_config().requested_item_max_value,
             "active_pledges": active_pledges,
+            "offers": forms.offers,
+            "offer_rows": offer_rows,
+            "commitments": forms.commitments,
+            "favored_chips": live.favored_resonance_chips(being),
             "modifier_rows": live.favor_modifier_rows(being),
             "media": forms.media,
             "needs_setup": needs_setup,
@@ -164,24 +207,30 @@ def _render_page(
     )
 
 
-def _forget_refused_edits(being: WorshippedBeing, forms: _ServiceForms) -> None:
-    """Validating a ModelForm writes the posted values onto its instance, and those
-    instances are the identity-mapped ones every other reader shares: drop them so
-    the next reader loads what the database holds, not this refused edit."""
-    for form in (
-        *forms.resonances.forms,
-        *forms.facets.forms,
-        *forms.pledges.forms,
-        *forms.requests.forms,
-    ):
-        if form.instance.pk is not None:
-            form.instance.flush_from_cache(force=True)
-    being.flush_from_cache(force=True)
+def _cache_guard(being: WorshippedBeing, forms: _ServiceForms) -> CacheGuard:
+    """A guard over every cached row these forms validate onto. Take it before validating.
+
+    Validating a ModelForm writes the posted values onto its instance, and those
+    instances are the identity-mapped ones other readers hold too (a signed pact's
+    ``offer``, a period's ``commitment``, which the weekly grading reads). Dropping them
+    from the map would leave those holders on the refused values, so a path that does
+    not commit puts the kept values back onto the same objects and evicts any row a
+    rolled-back save created.
+    """
+    guard = CacheGuard()
+    guard.watch_created(
+        BeingResonance, BeingFacet, Pledge, RequestedItem, PactOffer, PactOfferCommitment
+    )
+    guard.keep(being)
+    for formset in forms.all:
+        guard.keep(*(form.instance for form in formset.forms))
+    return guard
 
 
 @superuser_required
 def being_service(request: HttpRequest, being_pk: int) -> HttpResponse:
-    """GET renders the page; POST saves resonances, facets and pledge types together."""
+    """GET renders the page; POST saves resonances, facets, pledge types, requests and
+    pact offers with their commitments together."""
     being = get_object_or_404(WorshippedBeing, pk=being_pk)
     ensure_being_modifier_targets(being)
     contributor = current_contributor(request.user)
@@ -190,17 +239,29 @@ def being_service(request: HttpRequest, being_pk: int) -> HttpResponse:
         return _render_page(request, being, forms, needs_setup=contributor is None)
     if contributor is None:
         return _render_page(request, being, forms, needs_setup=True)
-    if not forms.is_valid():
-        response = _render_page(request, being, forms)
-        _forget_refused_edits(being, forms)
-        return response
-    with transaction.atomic():
-        forms.resonances.save()
-        forms.facets.save()
-        saved_pledges = forms.pledges.save()
-        for pledge in saved_pledges:
-            stamp_written(pledge, contributor)
-        forms.requests.save()
+    guard = _cache_guard(being, forms)
+    committed = False
+    try:
+        if not forms.is_valid():
+            return _render_page(request, being, forms)
+        with transaction.atomic():
+            forms.resonances.save()
+            forms.facets.save()
+            saved_pledges = forms.pledges.save()
+            for pledge in saved_pledges:
+                stamp_written(pledge, contributor)
+            forms.requests.save()
+            # Commitments first: a row may belong to an offer this same save deletes.
+            forms.commitments.save()
+            for offer in forms.offers.save():
+                stamp_written(offer, contributor)
+        committed = True
+    finally:
+        # A refusal, or anything raised before or inside the transaction: nothing was
+        # written, so every bound row gets its kept values back, after the page (which
+        # shows the posted values) has rendered.
+        if not committed:
+            guard.restore()
     messages.success(request, "Saved and credited to you.")
     if CONTINUE_BUTTON in request.POST:
         return redirect(reverse("admin_being_service", args=[being.pk]))
@@ -210,7 +271,7 @@ def being_service(request: HttpRequest, being_pk: int) -> HttpResponse:
 @superuser_required
 @require_POST
 def being_service_review(request: HttpRequest, being_pk: int) -> HttpResponse:
-    """Mark every pledge type of this being reviewed; authorship untouched."""
+    """Mark every pledge type and pact offer of this being reviewed; authorship untouched."""
     being = get_object_or_404(WorshippedBeing, pk=being_pk)
     contributor = current_contributor(request.user)
     if contributor is None:
@@ -218,5 +279,7 @@ def being_service_review(request: HttpRequest, being_pk: int) -> HttpResponse:
     else:
         for pledge in Pledge.objects.filter(being=being):
             stamp_reviewed(pledge, contributor)
+        for offer in PactOffer.objects.filter(being=being):
+            stamp_reviewed(offer, contributor)
         messages.success(request, "Marked reviewed.")
     return redirect(reverse("admin_being_service", args=[being.pk]))

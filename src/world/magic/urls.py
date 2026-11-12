@@ -168,6 +168,11 @@ from world.magic.views_technique_progress import TechniqueProgressViewSet  # noq
 
 router.register("technique-progress", TechniqueProgressViewSet, basename="technique-progress")
 
+# #4341 - the technique picker: what a manifesting technique brings into a fight
+from world.magic.views_manifestation import ManifestChoiceViewSet  # noqa: E402
+
+router.register("manifest-choices", ManifestChoiceViewSet, basename="manifest-choice")
+
 
 urlpatterns = [
     # Literal paths MUST come before *router.urls so that "rituals/perform/" is

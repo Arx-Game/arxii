@@ -646,6 +646,9 @@ class ActionRegistryTests(TestCase):
             "pledge_take",
             "pledge_close",
             "sacrifice",
+            # #4341 — renouncing a pact with a being.
+            "pact_renounce",
+            "manifest_set",
             # #4333 slice 4 — a stewarded being's table GM answers a closed pledge.
             "gm_being_answer",
             # #4530 — keeping an item as a keepsake, and letting go.
@@ -760,6 +763,8 @@ class ActionRegistryTests(TestCase):
             "almanach_site_holding",
             "almanach_rename_holding",
             "almanach_set_capacity",
+            "almanach_open_regional_event",
+            "almanach_close_regional_event",
             "almanach_remove_holding",
             "almanach_delete_rung",
             "almanach_move_rung",

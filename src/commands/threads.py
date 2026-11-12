@@ -84,8 +84,7 @@ class CmdThreads(ArxCommand):
         for thread in threads:
             anchor = anchor_label_for(thread, open_labels)
             res_name = thread.resonance.name if thread.resonance else "???"
-            display_level = thread.level // 10
-            lines.append(f"  {res_name} {anchor} (level {display_level})")
+            lines.append(f"  {res_name} {anchor} (level {thread.level})")
         self.msg("\n".join(lines))
 
     def _list_crossing_offers(self, sheet: object) -> None:

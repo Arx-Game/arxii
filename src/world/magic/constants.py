@@ -507,11 +507,11 @@ class RestrictionKind(models.TextChoices):
     PRICE = "price", "Price a caster pays"
 
 
-#: Highest shown thread level a creation pick may start a thread at, or unlock early.
-#: A new character is level 1 and a thread never exceeds its character's level
-#: (``compute_level_cap``, #4585), so a creation pick stops at 1. That also keeps it below
-#: the first crossing (level 3, ``world.classes.services.is_crossing_level``, #4099).
-CREATION_PERSONALIZATION_MAX_LEVEL = 1
+#: Highest thread level a creation pick may start a thread at, or unlock early.
+#: A new character is level 1 and a thread never exceeds ten times its character's level
+#: (``compute_level_cap``, #4585), so a creation pick stops at 10. That also keeps it below
+#: the first crossing (thread level 30, ``is_thread_crossing_level``, #4099, #5091).
+CREATION_PERSONALIZATION_MAX_LEVEL = 10
 CUSTOM_TECHNIQUE_NAME_MAX_LENGTH = 80
 CUSTOM_TECHNIQUE_DESCRIPTION_MAX_LENGTH = 2000
 
@@ -895,8 +895,8 @@ class SubstanceDirection(models.TextChoices):
     Shadow grows as lighting FALLS; water, wind and fire grow as wet, wind and heat RISE.
     """
 
-    RISING = "rising", "rises"
-    FALLING = "falling", "falls"
+    RISING = "rising", "Higher (wetter, windier or hotter, e.g. water, wind or fire)"
+    FALLING = "falling", "Lower (darker, e.g. shadow)"
 
 
 #: The power-ledger label of a place's resonance reaction (#639). Narration reads it to say

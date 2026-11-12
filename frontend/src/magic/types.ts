@@ -726,3 +726,12 @@ export interface TrainTechniqueResult {
   technique_acquired: boolean;
   self_study: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Technique picker (#4341): what a manifesting technique brings into a fight.
+// ---------------------------------------------------------------------------
+
+/** One manifesting technique the character knows, its options and the current pick. */
+export type ManifestChoice = components['schemas']['ManifestChoice'];
+/** One option: label, whether its bond holds, and why not when it does not. */
+export type ManifestOptionChoice = components['schemas']['ManifestOptionChoice'];

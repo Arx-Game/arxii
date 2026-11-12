@@ -131,7 +131,7 @@ class APullBoostsOnlyWhatItRelatesTo(JourneyCase):
                 target_kind=kind,
                 resonance=self.resonance,
                 tier=1,
-                min_thread_level=1,
+                min_thread_level=10,
                 as_intensity_bump=True,
                 intensity_bump_amount=INTENSITY_BUMP,
             )

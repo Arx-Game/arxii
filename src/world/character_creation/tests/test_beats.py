@@ -341,6 +341,21 @@ class BeatsEndpointTests(TestCase):
             ],
         )
 
+    def test_a_backgrounds_offer_carries_its_distinctions_description(self):
+        # The life page's card reads this, not the offer's player_line (#5099).
+        dist = self.patient.distinction
+        dist.description = "You learned to wait out every storm."
+        dist.save(update_fields=["description"])
+        resp = self.client.get(
+            f"/api/character-creation/drafts/{self.draft.id}/offers/?chapter=backgrounds"
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        by_id = {o["offer_id"]: o for o in resp.json()["offers"]}
+        self.assertEqual(
+            by_id[self.patient.pk]["distinction_description"],
+            "You learned to wait out every storm.",
+        )
+
     def test_taking_a_beat_is_a_draft_patch_and_the_sync_refuses_two_answers_on_one_of(self):
         resp = self.client.patch(
             f"/api/character-creation/drafts/{self.draft.id}/",

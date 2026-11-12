@@ -16,7 +16,14 @@ from world.realms.models import Realm
 from world.roster.models import Family, FamilyKind, Kinsperson, UnionKind
 from world.societies.houses.almanach_reads import ladder_for_realm
 from world.societies.houses.constants import TitleTier
-from world.societies.houses.models import HoldingKind, HouseTemplate, LandShape, Title
+from world.societies.houses.models import (
+    HoldingKind,
+    HouseTemplate,
+    LandShape,
+    RegionalEvent,
+    RegionalEventKind,
+    Title,
+)
 from world.societies.models import Organization
 
 
@@ -178,6 +185,15 @@ class AlmanachHouseObservanceSerializer(serializers.Serializer):
     when = serializers.CharField()
 
 
+class RealmCharterParticleSerializer(serializers.Serializer):
+    """Mirrors ``almanach_reads.charter_for_realm``'s ``particle`` dict."""
+
+    # the house document's ``particle`` (``_particle_payload``) has the same shape
+
+    born = serializers.CharField(allow_blank=True)
+    taken_in = serializers.CharField(allow_blank=True)
+
+
 class AlmanachHouseDocumentHouseSerializer(serializers.Serializer):
     """The document's ``house`` section (mirrors ``_house_payload``) — the
     only section given its own nested serializer, per the #3983 Task 5
@@ -191,7 +207,7 @@ class AlmanachHouseDocumentHouseSerializer(serializers.Serializer):
     sigil_description = serializers.CharField(allow_blank=True)
     house_state = serializers.CharField()
     published_at = serializers.DateTimeField(allow_null=True)
-    particle_example = serializers.CharField(allow_blank=True)
+    particle = RealmCharterParticleSerializer()
     default_succession_law = AlmanachSuccessionLawSerializer(allow_null=True)
     patron = AlmanachHousePatronSerializer(allow_null=True)
     facets = AlmanachHouseFacetSerializer(many=True)
@@ -228,13 +244,6 @@ class LandShapeSerializer(serializers.ModelSerializer):
     class Meta:
         model = LandShape
         fields = ["id", "name", "description", "sort_order"]
-
-
-class RealmCharterParticleSerializer(serializers.Serializer):
-    """Mirrors ``almanach_reads.charter_for_realm``'s ``particle`` dict."""
-
-    born = serializers.CharField(allow_blank=True)
-    taken_in = serializers.CharField(allow_blank=True)
 
 
 class RealmCharterSerializer(serializers.Serializer):
@@ -334,6 +343,8 @@ class RungDocumentSerializer(serializers.Serializer):
     chartered_by = serializers.ListField(child=serializers.DictField())
     claims = serializers.ListField(child=serializers.DictField())
     chain = serializers.ListField(child=serializers.DictField())
+    # #5080: the open regional events over this rung's land.
+    events = serializers.ListField(child=serializers.DictField())
 
 
 class FamilyDocumentSerializer(serializers.Serializer):
@@ -380,3 +391,45 @@ class AlmanachHoldingKindSerializer(serializers.ModelSerializer):
     class Meta:
         model = HoldingKind
         fields = ["id", "name", "description", "site_kind", "requires_field"]
+
+
+class AlmanachRegionalEventKindSerializer(serializers.ModelSerializer):
+    """The authored disasters staff can open (#5080)."""
+
+    class Meta:
+        model = RegionalEventKind
+        fields = [
+            "id",
+            "name",
+            "description",
+            "capacity_cut_pct",
+            "prosperity_delta",
+            "unrest_delta",
+            "crisis_type_id",
+        ]
+
+
+class AlmanachRegionalEventSerializer(serializers.ModelSerializer):
+    """One regional event (#5080): what the Atlas shades and the title page lists. The
+    GM's ``note`` rides along because the whole viewset is staff-only."""
+
+    kind = serializers.CharField(source="kind.name", read_only=True)
+    kind_id = serializers.IntegerField(read_only=True)
+    area_id = serializers.IntegerField(read_only=True)
+    area = serializers.CharField(source="area.name", read_only=True)
+    realm_id = serializers.IntegerField(source="area.realm_id", read_only=True, allow_null=True)
+
+    class Meta:
+        model = RegionalEvent
+        fields = [
+            "id",
+            "kind",
+            "kind_id",
+            "area_id",
+            "area",
+            "realm_id",
+            "severity_pct",
+            "started_at",
+            "ended_at",
+            "note",
+        ]

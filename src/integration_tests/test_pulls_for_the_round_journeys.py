@@ -4,7 +4,7 @@
 The cellar and Ondrelle are the dodging journeys' (``_TheCellar``): she knows Blink Step, a
 technique marked ``teleport`` that grants traversal 4 and costs 2 anima, so each automatic
 dodge is a cast of it. She holds the resonance Veil (balance 10) and a thread woven on
-Blink Step ("Step Strand", shown level 1) whose tier-1 pull adds 2 to the roll. The tier-1
+Blink Step ("Step Strand", level 10) whose tier-1 pull adds 2 to the roll. The tier-1
 pull costs 1 resonance and 1 anima for every thread pulled.
 
 - Declared on its own ("You pull 1 thread for the round."), with no cast, the pull costs
@@ -86,7 +86,7 @@ class _PullsInTheCellar(_TheCellar):
             target_kind=TargetKind.TECHNIQUE,
             target_trait=None,
             target_technique=self.blink_step,
-            level=10,  # shown level 1
+            level=10,
             name="Step Strand",
         )
         self.technique_rolls = TechniqueRolls()

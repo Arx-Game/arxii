@@ -220,18 +220,18 @@ describe('ThreadDetailPage', () => {
     render(<ThreadDetailPage />, { wrapper: createWrapper() });
     expect(screen.getByTestId('thread-stats-card')).toBeInTheDocument();
     // level 10 / 10 = 1
-    expect(screen.getByTestId('thread-stat-level')).toHaveTextContent('1');
+    expect(screen.getByTestId('thread-stat-level')).toHaveTextContent('10');
     expect(screen.getByTestId('thread-stat-dp')).toHaveTextContent('25');
   });
 
   it('renders cap fields in stats card', () => {
     render(<ThreadDetailPage />, { wrapper: createWrapper() });
     // level_cap 20 / 10 = 2
-    expect(screen.getByTestId('thread-stat-level-cap')).toHaveTextContent('2');
+    expect(screen.getByTestId('thread-stat-level-cap')).toHaveTextContent('20');
     // anchor_cap 20 / 10 = 2
-    expect(screen.getByTestId('thread-stat-anchor-cap')).toHaveTextContent('2');
+    expect(screen.getByTestId('thread-stat-anchor-cap')).toHaveTextContent('20');
     // effective_cap 20 / 10 = 2
-    expect(screen.getByTestId('thread-stat-effective-cap')).toHaveTextContent('2');
+    expect(screen.getByTestId('thread-stat-effective-cap')).toHaveTextContent('20');
   });
 
   it('renders ImbuePanel for non-retired thread below cap', () => {

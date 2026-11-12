@@ -330,6 +330,83 @@ def ensure_favor_terms(check_type) -> None:
         ensure_being_modifier_targets(being)
 
 
+#: The seeded Chosen distinction (#4341) and what it adds on the two patron targets: the
+#: values the retired ``ChosenFavorConfig.earn_bonus_percent`` and
+#: ``invocation_ease_points`` defaulted to.
+CHOSEN_DISTINCTION_SLUG = "chosen"
+CHOSEN_EARNING_PERCENT = 100
+CHOSEN_INVOCATION_EASE = 30
+
+
+def ensure_chosen_distinction() -> None:
+    """Seed the "Chosen" distinction, the patron favor targets its two effects sit on,
+    and designate it on ``ChosenFavorConfig`` (#4341). Idempotent; a designation
+    staff already set stands."""
+    from world.distinctions.models import (  # noqa: PLC0415
+        Distinction,
+        DistinctionCategory,
+        DistinctionEffect,
+    )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.worship.favor_services import ensure_patron_modifier_targets  # noqa: PLC0415
+    from world.worship.services import get_chosen_favor_config  # noqa: PLC0415
+
+    category = authored_or_sample(
+        DistinctionCategory,
+        {
+            "name": "Arcane",
+            "description": (
+                "Distinctions tied to a character's magical tradition, practice, or gifts."
+            ),
+        },
+        slug="arcane",
+    )
+    if category is None:
+        return
+    distinction = authored_or_sample(
+        Distinction,
+        {
+            "name": "Chosen",
+            "category": category,
+            "description": (
+                "PLACEHOLDER: a being chose you as its own. Favor with your patron comes "
+                "faster, and calling on it comes easier."
+            ),
+            "cost_per_rank": 0,
+            "max_rank": 1,
+            "is_automatic": True,
+        },
+        slug=CHOSEN_DISTINCTION_SLUG,
+    )
+    if distinction is None:
+        return
+    # Only now: the patron targets are content rows, so a seed that authors nothing (sample
+    # content off, no Chosen distinction to carry) must not create them either (#2698).
+    invocation_target, earning_target = ensure_patron_modifier_targets()
+    for target, value, line in (
+        (
+            earning_target,
+            CHOSEN_EARNING_PERCENT,
+            f"+{CHOSEN_EARNING_PERCENT}% favor earned with your patron.",
+        ),
+        (
+            invocation_target,
+            CHOSEN_INVOCATION_EASE,
+            f"Calling on your patron is {CHOSEN_INVOCATION_EASE} points easier.",
+        ),
+    ):
+        authored_or_sample(
+            DistinctionEffect,
+            {"value_per_rank": value, "description": line},
+            distinction=distinction,
+            target=target,
+        )
+    config = get_chosen_favor_config()
+    if config.chosen_distinction_id is None:
+        config.chosen_distinction = distinction
+        config.save(update_fields=["chosen_distinction"])
+
+
 def ensure_shrine_kind():
     """Get-or-create the Shrine ``RoomFeatureKind`` (#3778): persona-owned,
     level 1 only, installed in place by ``found_shrine`` (RITUAL mechanism, no
@@ -395,6 +472,7 @@ def seed_worship_content() -> None:
     ensure_traditions_and_beings(seeded["specs"])
     ensure_rite_kinds_and_awards()
     ensure_favor_terms(ceremony_check)
+    ensure_chosen_distinction()
     ensure_shrine_kind()
     ensure_consecration_tiers()
 

@@ -42,7 +42,7 @@ catalog technique the whole party casts instead of the synthetic basic attack
 (fetched once per batch; combat reads no ``CharacterTechnique`` for it, so none is
 made). ``covenant_role_id`` gives every party member that vow as a live, engaged
 primary membership of one shared synthetic covenant, with its COVENANT_ROLE thread
-at shown level ``avg_level`` (the thread cap is character level x 10, so the
+at ``avg_level`` x 10 (the thread cap is character level x 10, so the
 party's level is the honest level), so the cast path fires the vow's added effects
 and power terms as it would for a real holder. Both are ids so the params stay
 hashable for the dashboard's cache key, and both roll back with everything else.
@@ -340,7 +340,7 @@ def _build_party(
     """Create ``params.party_size`` locationless PC participants for *encounter*.
 
     With ``role``, each member holds it as an engaged primary vow of one shared
-    covenant, its thread at shown level ``params.avg_level`` (#4930).
+    covenant, its thread at ``params.avg_level`` x 10, the level cap (#4930).
     """
     covenant = (
         cast("Covenant", CovenantFactory(covenant_type=role.covenant_type))
@@ -364,7 +364,9 @@ def _build_party(
         CharacterAnimaFactory(character=sheet, current=_PC_ANIMA, maximum=_PC_ANIMA)
         CharacterEngagementFactory(character=sheet)
         if role is not None and covenant is not None:
-            engage_vow_with_thread(sheet, role, covenant=covenant, thread_level=params.avg_level)
+            engage_vow_with_thread(
+                sheet, role, covenant=covenant, thread_level=params.avg_level * 10
+            )
         participants.append(
             cast(
                 "CombatParticipant",

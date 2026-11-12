@@ -4,11 +4,13 @@
 tradition name) — safe anywhere; it never exposes pools or avatar links.
 """
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.character_sheets.models import CharacterSheet
 from world.clues.models import Clue
 from world.items.types import MeaningSignal
+from world.pacts.serializers import PactOfferSummarySerializer
 from world.stories.models import Episode
 from world.worship.models import Miracle, Pledge, Prayer, Vision, WorshippedBeing, WorshipRite
 from world.worship.types import InvocationDifficulty
@@ -282,10 +284,19 @@ class InvocationOptionsSerializer(serializers.Serializer):
 
 
 class PledgeSerializer(serializers.ModelSerializer):
-    """A pledge type a being offers (#4333 slice 2): the staff-authored text and terms."""
+    """A pledge type a being offers (#4333 slice 2): the staff-authored text and terms.
+    ``pact_offer`` is the pact accepted at its close (#4341), null when it offers none."""
 
     being_name = serializers.CharField(source="being.name", read_only=True)
     closing_rite_name = serializers.CharField(source="closing_rite.name", read_only=True)
+    pact_offer = serializers.SerializerMethodField()
+
+    @extend_schema_field(PactOfferSummarySerializer(allow_null=True))
+    def get_pact_offer(self, pledge: Pledge) -> dict | None:
+        from world.pacts.services import offered_pact_summary  # noqa: PLC0415
+
+        summary = offered_pact_summary(pledge)
+        return PactOfferSummarySerializer(summary).data if summary is not None else None
 
     class Meta:
         model = Pledge
@@ -298,6 +309,7 @@ class PledgeSerializer(serializers.ModelSerializer):
             "favor_target",
             "span_weeks",
             "closing_rite_name",
+            "pact_offer",
         ]
         read_only_fields = fields
 

@@ -17,9 +17,9 @@ class SoulTetherConfig(NaturalKeyMixin, SharedMemoryModel):
     - ``anima_cost_per_unit``: Sineater anima cost per unit eaten (default 2).
     - ``fatigue_cost_per_unit``: Sineater fatigue cost per unit eaten (default 1).
     - ``per_scene_cap_hard_max``: Hard ceiling on units accepted per scene (default 20).
-    - ``per_scene_cap_level_mult``: Hollow-level multiplier for the per-scene cap (default 2).
+    - ``per_scene_cap_level_mult``: per-scene cap added per 10 thread levels (default 2).
     - ``per_scene_cap_base``: Base per-scene cap before level scaling (default 5).
-    - ``hollow_max_level_mult``: Multiplier on Hollow-level for max Hollow capacity (default 10).
+    - ``hollow_max_level_mult``: max Hollow capacity per 10 thread levels (default 10).
 
     Rescue thresholds (minimum Hollow strain to trigger each stage):
     - ``rescue_strain_stage3`` / ``_stage4`` / ``_stage5``: strain thresholds (5/10/18).
@@ -45,9 +45,13 @@ class SoulTetherConfig(NaturalKeyMixin, SharedMemoryModel):
     anima_cost_per_unit = models.PositiveSmallIntegerField(default=2)
     fatigue_cost_per_unit = models.PositiveSmallIntegerField(default=1)
     per_scene_cap_hard_max = models.PositiveSmallIntegerField(default=20)
-    per_scene_cap_level_mult = models.PositiveSmallIntegerField(default=2)
+    per_scene_cap_level_mult = models.PositiveSmallIntegerField(
+        default=2, help_text="Per-scene cap added per 10 levels of the Sinner's thread."
+    )
     per_scene_cap_base = models.PositiveSmallIntegerField(default=5)
-    hollow_max_level_mult = models.PositiveSmallIntegerField(default=10)
+    hollow_max_level_mult = models.PositiveSmallIntegerField(
+        default=10, help_text="Hollow capacity per 10 levels of the Sinner's thread."
+    )
 
     # --- Rescue strain thresholds ---
     rescue_strain_stage3 = models.PositiveSmallIntegerField(default=5)

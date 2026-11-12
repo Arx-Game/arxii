@@ -14,7 +14,7 @@ class NPCPresetTraitLineSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = NPCPresetTraitLine
-        fields = ["trait_name", "display_value"]
+        fields = ["trait_name", "value"]
         read_only_fields = fields
 
 

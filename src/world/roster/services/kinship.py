@@ -266,8 +266,9 @@ def separate_union(union: Union, *, separated_at: object | None = None) -> Union
     """Mark a living union's members as living apart (#4870, slice 8 of #4813).
 
     The union stands in law: ``ended_at`` stays null, marital status still reads married;
-    only ``separated_at`` is set. The first writer is character creation's separated spouse
-    (``_seat_spouse``). Idempotent, like ``end_union``.
+    only ``separated_at`` is set. Character creation wrote it for a separated spouse until
+    kin rows left creation (ADR-5102-A); a player's own family, built after creation
+    (#5103), is its next writer. Idempotent, like ``end_union``.
     """
     if union.separated_at is not None:
         return union

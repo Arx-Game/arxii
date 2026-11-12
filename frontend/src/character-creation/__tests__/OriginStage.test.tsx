@@ -73,6 +73,37 @@ describe('OriginStage', () => {
     });
   });
 
+  it('boxes the empty name field and speaks the name rule only when it is broken', async () => {
+    const user = userEvent.setup();
+    renderOrigin();
+    const name = screen.getByLabelText('First name');
+    // Empty: boxed, so it reads as a place to write, with no rule under it.
+    expect(name).toHaveClass('awaiting');
+    expect(screen.queryByText(/letters only/i)).toBeNull();
+    // A name the rule refuses shows the rule and is not saved.
+    await user.type(name, 'X1');
+    await user.tab();
+    expect(screen.getByText(/letters only/i)).toBeInTheDocument();
+    expect(name).toHaveAttribute('aria-invalid', 'true');
+    expect(mutate).not.toHaveBeenCalled();
+    // A good name clears the rule and saves.
+    await user.clear(name);
+    await user.type(name, 'Élodie');
+    await user.tab();
+    expect(screen.queryByText(/letters only/i)).toBeNull();
+    expect(mutate).toHaveBeenCalledWith({
+      draftId: mockEmptyDraft.id,
+      data: { draft_data: { first_name: 'Élodie' } },
+    });
+  });
+
+  it('drops the box once a name is saved, and carries no note about changing realm', () => {
+    renderOrigin({ ...mockDraftWithArea, draft_data: { first_name: 'Marisol' } });
+    expect(screen.getByLabelText('First name')).not.toHaveClass('awaiting');
+    // The confirm dialog is the one warning; the margin does not repeat it.
+    expect(screen.queryByText(/you will be asked first/i)).toBeNull();
+  });
+
   it('opens with the one question and no other copy before the entries', async () => {
     renderOrigin();
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(

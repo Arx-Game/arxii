@@ -1344,6 +1344,8 @@ from world.societies.houses.models import (  # noqa: E402
     OrganizationObservance,
     PactKind,
     PrestigeRankBand,
+    RegionalEvent,
+    RegionalEventKind,
     StatureBand,
     SuccessionLaw,
     TerrainCalibration,
@@ -1919,6 +1921,81 @@ class TerrainCalibrationAdmin(admin.ModelAdmin):
             refresh_terrain_counts(domain.area)
             count += 1
         self.message_user(request, f"Recounted {count} holdings.", messages.SUCCESS)
+
+
+@admin.register(RegionalEventKind)
+class RegionalEventKindAdmin(admin.ModelAdmin):
+    """An authored disaster (#5080): what it takes from the land while it is open and
+    the crisis an awake house inside gets."""
+
+    list_display = [
+        "name",
+        "capacity_cut_pct",
+        "prosperity_delta",
+        "unrest_delta",
+        "crisis_type",
+        "written_by",
+    ]
+    list_select_related = ["crisis_type"]
+    search_fields = ["name", "description"]
+    autocomplete_fields = ["crisis_type"]
+
+
+@admin.register(RegionalEvent)
+class RegionalEventAdmin(admin.ModelAdmin):
+    """One regional event (#5080). Adding a row here opens it through
+    ``open_regional_event`` (the land beneath is rebased, awake houses get their
+    crisis); the Close action ends it through ``close_regional_event``. The dates are
+    the service's to write."""
+
+    list_display = ["kind", "area", "severity_pct", "started_at", "ended_at", "opened_by"]
+    list_select_related = ["kind", "area", "opened_by"]
+    list_filter = ["kind", ("ended_at", admin.EmptyFieldListFilter)]
+    search_fields = ["area__name", "kind__name", "note"]
+    autocomplete_fields = ["area", "kind"]
+    readonly_fields = ["started_at", "ended_at", "opened_by"]
+    # read-only: the service stamps it from the request, never a picker
+    large_table_widget_exempt = ["opened_by"]
+    actions = ["close_events"]
+
+    def get_readonly_fields(
+        self, _request: HttpRequest, obj: RegionalEvent | None = None
+    ) -> list[str]:
+        """Once an event is open only its note is editable. Opening applied this
+        kind's deltas to this area's land and rebased it, and closing takes the
+        row's kind and area as what to undo: an edit in between would leave the
+        struck land hurt for good and credit land that was never struck, and a new
+        severity would rewrite the cut back to each holding's last rebase."""
+        if obj is None:
+            return list(self.readonly_fields)
+        return [*self.readonly_fields, "kind", "area", "severity_pct"]
+
+    def save_model(self, request: HttpRequest, obj: RegionalEvent, form, change: bool) -> None:
+        from world.societies.houses.regional_events import open_regional_event  # noqa: PLC0415
+
+        if change:
+            super().save_model(request, obj, form, change)
+            return
+        opened = open_regional_event(
+            kind=obj.kind,
+            area=obj.area,
+            severity_pct=obj.severity_pct,
+            note=obj.note,
+            opened_by=request.user,
+        )
+        # Django's add view goes on to log and redirect by ``obj.pk``.
+        obj.pk = opened.pk
+        obj.started_at = opened.started_at
+
+    @admin.action(description="Close the selected events")
+    def close_events(self, request: HttpRequest, queryset) -> None:
+        from world.societies.houses.regional_events import close_regional_event  # noqa: PLC0415
+
+        count = 0
+        for event in queryset.filter(ended_at__isnull=True).select_related("kind", "area"):
+            close_regional_event(event)
+            count += 1
+        self.message_user(request, f"Closed {count} events.", messages.SUCCESS)
 
 
 @admin.register(FealtyEdge)

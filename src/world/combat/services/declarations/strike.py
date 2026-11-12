@@ -52,7 +52,6 @@ if TYPE_CHECKING:
     from world.checks.types import (
         CheckResult,
         ModifierBreakdown,
-        ModifierContribution,
         RollBreakdown,
         RollLine,
         RollSnapshot,
@@ -456,14 +455,17 @@ def _roll_hit(
     action: CombatRoundAction,
     check_type: CheckType,
     style_fit: StyleFit,
-    extra_contributions: tuple[ModifierContribution, ...] = (),
+    enchantment: StrikeEnchantment | None = None,
 ) -> tuple[CheckResult, ModifierBreakdown]:
     """The hit roll through the shared attack-roll seam, with its modifiers.
 
     ``style_fit`` is the striker's combat style for this weapon (#4884): its hit stat
-    replaces the weapon's, and its skill adds while it fits. ``extra_contributions`` is
-    the one labelled line a technique cast into the Strike adds to hit (#5026).
+    replaces the weapon's, and its skill adds while it fits. ``enchantment`` is a
+    technique cast into the Strike (#5026): its to-hit line is the one labelled line it
+    adds to hit, and its technique roll, not this one, is the attack roll a perk scoped to
+    attack rolls boosts (#5092).
     """
+    extra = (enchantment.to_hit_contribution,) if enchantment and enchantment.to_hit else ()
     from world.combat.services.techniques.technique_resolver import (  # noqa: PLC0415
         CombatTechniqueResolver,
     )
@@ -477,7 +479,8 @@ def _roll_hit(
         offense_check_fn=None,
         strike_weapon=_weapon_of(action),
         style_fit=style_fit,
-        extra_hit_contributions=extra_contributions,
+        extra_hit_contributions=extra,
+        enchanted_hit=enchantment is not None,
     )
     return resolver.roll_check_with_breakdown()
 
@@ -707,8 +710,7 @@ def land_strike(  # noqa: PLR0913 - the Strike's parts and its enchantment
     style_fit = strike_style_fit(character, weapon)
     rating = _skill_rating(participant, check_type)
     snapshot = _roll_snapshot(weapon, check_type, style_fit, participant)
-    extra = (enchantment.to_hit_contribution,) if enchantment and enchantment.to_hit else ()
-    hit, hit_breakdown = _roll_hit(participant, action, check_type, style_fit, extra)
+    hit, hit_breakdown = _roll_hit(participant, action, check_type, style_fit, enchantment)
     missed = is_miss(hit.success_level)
     landing = StrikeLanding(hit=hit)
     if enchantment is not None:

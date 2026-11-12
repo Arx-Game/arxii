@@ -71,6 +71,7 @@ import world.military.models
 import world.missions.models
 import world.narrative.models
 import world.npc_services.models
+import world.pacts.models
 import world.player_submissions.models
 import world.predators.models
 import world.progression.models

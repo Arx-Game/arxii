@@ -8,8 +8,7 @@
  * `useCharacterSheetQuery` returns — it does NOT re-implement visibility client-side, and it
  * can't distinguish "hidden" from "genuinely no data" (neither can the API response).
  *
- * Stat values arrive already converted to the single-digit display scale (÷10 from the ×10
- * internal storage, ADR-0193) — this component renders them as-is.
+ * Stat values arrive as stored (a stat of 2 dots is 20; #5091) and render as-is.
  */
 
 import type { CharacterSheetSkill } from '@/character_sheets/api';

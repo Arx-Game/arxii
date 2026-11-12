@@ -21,7 +21,7 @@
  * never wraps this component in a second div of its own.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useDraftDistinctions, useSyncDistinctions } from '@/hooks/useDistinctions';
 import { cn } from '@/lib/utils';
@@ -150,6 +150,12 @@ interface ChapterOffersProps {
   secretOfferIds?: number[];
   wordSecret?: string;
   wordCover?: string;
+  /**
+   * One more card drawn last in the block's grid (#5102): the life page's Amnesiac card. It
+   * keeps the grid on the page even when the block has no offers open, so a section whose
+   * answers the card closed can still un-pick it.
+   */
+  trailing?: ReactNode;
 }
 
 interface PriceWords {
@@ -165,6 +171,14 @@ const FOLD_UNDER = 5;
 
 /** A signed price (#4874): the number a life card wears in its corner. `-N` when you
  * pay, `+N` when the world pays you, nothing for a free card. */
+/**
+ * The line under a card's name. A life-page (grid) card reads the distinction's own
+ * description (#5099): the backgrounds offers' `player_line` is only the card's name again.
+ */
+function cardLine(offer: VisibleOffer, layout: 'list' | 'grid'): string {
+  return layout === 'grid' ? offer.distinction_description : offer.player_line;
+}
+
 function SignedPrice({ cost, rank }: { cost: number; rank: number }) {
   const total = cost * Math.max(rank, 1);
   if (total === 0) return null;
@@ -353,6 +367,7 @@ export function ChapterOffers({
   secretOfferIds = [],
   wordSecret,
   wordCover,
+  trailing,
 }: ChapterOffersProps) {
   const { data: offersData, isLoading } = useDraftOffers(draft.id, chapter);
   const { data: draftDistinctions } = useDraftDistinctions(draft.id);
@@ -463,7 +478,7 @@ export function ChapterOffers({
   // the beginning, so there is nothing to swap and nothing to explain (#4979).
   const offers = (offersData?.offers ?? []).filter((offer) => (filter ? filter(offer) : true));
 
-  if (offers.length === 0 && bundled.length === 0) return null;
+  if (offers.length === 0 && bundled.length === 0 && !trailing) return null;
 
   // The allowance (#4395): once this block holds as many picks as it allows, the rest
   // wait; an exclusive block swaps instead, so it never counts as full. A block that
@@ -528,7 +543,7 @@ export function ChapterOffers({
           </b>
           {showsDistinction && <span className="g">{offer.distinction_name}</span>}
           <span className="g">
-            {offer.player_line}
+            {cardLine(offer, layout)}
             {showOpener && offer.opener_label && <i> From {offer.opener_label}.</i>}
           </span>
           {terms ? (
@@ -649,6 +664,7 @@ export function ChapterOffers({
                 </li>
               ))}
             {members.map(renderOffer)}
+            {group === groups.at(-1)?.[0] && trailing}
           </ul>
         </div>
       ))}

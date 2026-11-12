@@ -282,27 +282,27 @@ class Restriction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     # #5018: a technique that needs surroundings its own gift does not make (wet air for a
     # storm technique). Never a refusal: unmet, the cast takes a heavy named roll penalty.
     surroundings_stat = models.CharField(
-        verbose_name="Room reading",
+        verbose_name="Which room condition it needs",
         max_length=20,
         choices=StatKey.choices,
         blank=True,
         help_text=(
-            "DESIGN only: the room reading this technique needs. Blank = none. On a technique "
-            "whose own gift's substance is this reading it does nothing and refunds nothing, "
-            "since that gift already needs it."
+            "DESIGN only: the room condition this technique needs, such as Wet exposure for "
+            "a storm technique. Leave blank for none. If its own gift already draws on this "
+            "condition, this does nothing and refunds nothing."
         ),
     )
     surroundings_min = models.SmallIntegerField(
         verbose_name="At least",
         null=True,
         blank=True,
-        help_text="DESIGN only: the reading must be at least this. Blank = no floor.",
+        help_text="DESIGN only: the room condition must be at least this. Blank = no floor.",
     )
     surroundings_max = models.SmallIntegerField(
         verbose_name="At most",
         null=True,
         blank=True,
-        help_text="DESIGN only: the reading must be at most this. Blank = no ceiling.",
+        help_text="DESIGN only: the room condition must be at most this. Blank = no ceiling.",
     )
 
     objects = RestrictionManager()
@@ -369,7 +369,7 @@ class Restriction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         if not self.surroundings_stat:
             if has_bound:
                 raise ValidationError(
-                    {"surroundings_stat": "Pick the room reading these bounds are for."}
+                    {"surroundings_stat": "Pick the room condition these bounds are for."}
                 )
             return
         errors: dict[str, str] = {}
@@ -382,10 +382,10 @@ class Restriction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             raise ValidationError(errors)
 
     def _surroundings_bound_errors(self) -> dict[str, str]:
-        """Each bound inside the reading's range, and at least no higher than at most."""
+        """Each bound inside the room condition's range, and at least no higher than at most."""
         low, high = STAT_CLAMPS[StatKey(self.surroundings_stat)]
         errors = {
-            field: f"This reading runs from {low} to {high}."
+            field: f"This room condition runs from {low} to {high}."
             for field, value in (
                 ("surroundings_min", self.surroundings_min),
                 ("surroundings_max", self.surroundings_max),

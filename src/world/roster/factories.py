@@ -304,7 +304,7 @@ class NPCPresetTraitLineFactory(factory_django.DjangoModelFactory):
 
     preset = factory.SubFactory(NPCStatlinePresetFactory)
     trait = factory.SubFactory("world.traits.factories.StatTraitFactory")
-    display_value = 3
+    value = 30
 
 
 class NPCPresetSkillLineFactory(factory_django.DjangoModelFactory):

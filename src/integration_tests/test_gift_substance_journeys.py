@@ -513,7 +513,7 @@ class AuthoringShapes(JourneyCase):
         )
         with self.assertRaises(ValidationError) as raised:
             falling_wet.full_clean()
-        self.assertIn("cannot go below ordinary", raised.exception.message_dict["direction"][0])
+        self.assertIn("below an ordinary room", raised.exception.message_dict["direction"][0])
 
         too_far = GiftSubstance(
             gift=GiftFactory(),
@@ -525,7 +525,7 @@ class AuthoringShapes(JourneyCase):
         )
         with self.assertRaises(ValidationError) as raised:
             too_far.full_clean()
-        self.assertIn("only goes 2 steps", raised.exception.message_dict["full_at"][0])
+        self.assertIn("only goes 2 from an", raised.exception.message_dict["full_at"][0])
 
     def test_a_surroundings_restriction_needs_sane_bounds(self) -> None:
         restriction = RestrictionFactory(name="Needs dark", kind=RestrictionKind.DESIGN)
@@ -535,7 +535,8 @@ class AuthoringShapes(JourneyCase):
         with self.assertRaises(ValidationError) as raised:
             restriction.full_clean()
         self.assertEqual(
-            raised.exception.message_dict["surroundings_min"], ["This reading runs from -2 to 2."]
+            raised.exception.message_dict["surroundings_min"],
+            ["This room condition runs from -2 to 2."],
         )
         self.assertEqual(
             raised.exception.message_dict["surroundings_max"],
@@ -549,7 +550,7 @@ class TheThreadLevelScalesIt(_ShadowField):
     def setUp(self) -> None:
         super().setUp()
         thread = Thread.objects.get(owner=self.sheet, target_gift=self.gift)
-        thread.level = 10  # stored x10: shown level 1
+        thread.level = 10
         thread.save(update_fields=["level"])
         self.mira.threads.invalidate()
 

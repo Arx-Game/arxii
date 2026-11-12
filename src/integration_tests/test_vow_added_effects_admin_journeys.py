@@ -57,7 +57,7 @@ class VowAddedEffectSummaryTests(TestCase):
 
     def test_the_summary_reads_in_plain_words(self) -> None:
         effect = VowAddedEffectFactory(
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             beneficiary=PerkBeneficiary.COVENANT_ALLIES,
             function=TechniqueFunction.WEAKEN,
             cast_context=VowEffectContext.IN_COMBAT,
@@ -70,7 +70,7 @@ class VowAddedEffectSummaryTests(TestCase):
 
         self.assertEqual(
             effect.cached_effect_summary,
-            "From thread 3. On covenant allies' Weaken casts, in a fight, "
+            "From thread 30. On covenant allies' Weaken casts, in a fight, "
             "when Target Is a Boss, once a fight: Deals Fire damage.",
         )
 

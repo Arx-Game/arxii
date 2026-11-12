@@ -36,8 +36,7 @@ def get_pull_effects_for_thread(thread: Thread, **filters: object) -> list[Threa
             and—for GIFT kind—``target_gift``).
         **filters: Additional ORM filter kwargs forwarded to the query
             (e.g. ``tier=0``, ``effect_kind=EffectKind.FLAT_BONUS``,
-            ``min_thread_level__lte=shown_thread_level(t.level)``; the field is
-            on the shown scale, #4585).
+            ``min_thread_level__lte=t.level``).
 
     Returns:
         A list (possibly empty) of matching ThreadPullEffect rows.

@@ -89,6 +89,23 @@ streams→treasury spine, and marriage pacts fire coded commitments. Lives in
 - **`TerrainCalibration`** (#5069) - authored, one row per `Terrain` (natural key
   `terrain`, `CreditedContent`, in `CONTENT_MODELS`): `capacity_per_pip`,
   `prosperity_modifier`. **`DomainTerrainCount`** - the cache above.
+- **`RegionalEventKind`** / **`RegionalEvent`** (#5069 slice 4, #5080) - a disaster over a
+  region is one row the formula and the map both read. The kind is authored (natural key
+  `name`, `CreditedContent`, in `CONTENT_MODELS`): `capacity_cut_pct`, `prosperity_delta`,
+  `unrest_delta`, a nullable `crisis_type` (the `DomainCrisisType` an awake house inside
+  gets). The event is play state: `kind`, `area`, `severity_pct` (scales the cut),
+  `started_at`, `ended_at` (null = open), `opened_by`, a staff-only `note`.
+  `houses.regional_events.open_regional_event(kind=, area=, severity_pct=, note=,
+  opened_by=, now=)` rebases every Domain in the area's subtree to the moment (the cut
+  starts from today's people), lands the deltas, writes the row, and opens one
+  `DomainCrisis` (`CrisisOrigin.REGIONAL`, the kind's type) per awake house on its highest
+  holding inside; a dormant or unclaimed holding takes the ambient hit silently.
+  `populations_now` multiplies capacity by `active_capacity_multipliers()` (the product of
+  `1 - cut * severity` over the open events whose area contains the Domain's), so every
+  reader sees the cut while the row is open. `close_regional_event(event)` rebases to the
+  hurt figure, reverses the deltas and sets `ended_at`; the people climb back by formula.
+  Writes are bounded by the footprint, twice per event. Systemic spawners come later and
+  write the same row.
 - **`LandShape`** (#3983) — authored catalog of a demesne's ground (Coast,
   Reefs, Hills, Volcanic, Marsh, Forest). `NaturalKeyMixin` (`name`) +
   `CreditedContent`, registered in `CONTENT_MODELS`; see the Almanach de
@@ -805,8 +822,11 @@ and unavailable on the SQLite test tier. The graph also loads the realm's claims
   last) and the title block carries `station` and `pledged_liege` (#4983). Its `demesne` is
   the rung's own Domain, so it is `None` above county (#5069) and, where present, its
   `population` is `demography.population_now` (the people by formula, never the stored base)
-  beside a `population_capacity`. On the title page
-  these are **Holdings** (the rungs beneath, in two groups, **Held** by this house and held by
+  beside a `population_capacity`. Its `events` are the open regional events over the rung's
+  land, over it or beneath it (kind, area, severity; never the GM note), and the title block
+  carries `area_id` so staff can open one here (#5080). On the title page
+  these are **Events** (each open event with Close; a picker of the authored kinds, a severity
+  and Open, which strikes this rung's own area; #5080), **Holdings** (the rungs beneath, in two groups, **Held** by this house and held by
   **Vassals**, each row with its people; "nothing" when a titular title holds no land; #5069
   slice 2 replaced "Present Holdings"), **Historical Charter** (the chartered fiefs, whose charters hold this rung, and every
   "claimed by X" line), the chain rail above, and a globe beside the heading ("View on the
@@ -1053,7 +1073,10 @@ refused while the stream has uncollected income or is still referenced) (#4616),
 `AlmanachSetCapacityAction` (`almanach_set_capacity`: `domain_id` plus `capacity`, a number or
 null; `demography.set_capacity_override` rebases the people, writes `Domain.capacity_override`
 and recounts, so a staff figure stands in for the terrain's until cleared; the barony page's
-capacity control, #5069 slice 2),
+capacity control, #5069 slice 2), `AlmanachOpenRegionalEventAction` (`almanach_open_regional_event`:
+`kind_id`, `area_id`, optional `severity_pct` 1-100 and `note`; `regional_events.open_regional_event`,
+#5080) and `AlmanachCloseRegionalEventAction` (`almanach_close_regional_event`: `event_id`;
+refused when the event is already closed),
 `AlmanachDeleteRungAction` (`almanach_delete_rung`: `almanach.delete_rung` removes a
 chain's Titles, Domains and Areas, refused while held, with rungs, holdings or rooms beneath, or
 when something else still points at the land) and `AlmanachMoveRungAction` (`almanach_move_rung`,
@@ -1132,6 +1155,13 @@ Directives": this section previously read staff-only across the board):
   /api/almanach/houses/` (`?realm=<id>` filters through the family's own `origin_realm` — an
   `Organization` has no realm column of its own) and `GET /api/almanach/houses/{id}/document/`.
 - `LandShapeViewSet` — `IsAuthenticated`: `GET /api/almanach/land-shapes/`.
+- `AlmanachRegionalEventViewSet` — staff-only: `GET /api/almanach/regional-events/`
+  (`?realm=<id>` through the struck area's realm, `?active=true` for the open ones, `?kind=`,
+  `?area=`; kind, area, realm, severity, dates and the GM note); the Atlas shades the open
+  events' land. `AlmanachRegionalEventKindViewSet` — staff-only: `GET
+  /api/almanach/regional-event-kinds/`, the title page's picker (#5080). Both are reads;
+  opening and closing go through the two actions above, or the admin (its add form and
+  Close action call the same service).
 
 Founder-facing house-claim endpoints live under `/api/character-creation/` instead (see "Founder
 mode" above): `GET`/`POST /api/character-creation/drafts/{id}/house-claim/` and `GET

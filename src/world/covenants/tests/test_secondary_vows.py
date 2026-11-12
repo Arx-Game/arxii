@@ -249,7 +249,7 @@ class SecondaryVowHandlerTests(TestCase):
         ``currently_engaged_roles`` and ``currently_engaged_roles_with_flags``."""
         resonance = ResonanceFactory()
         sub_role = SubroleCovenantRoleFactory(
-            parent_role=self.secondary_role, resonance=resonance, unlock_thread_level=3
+            parent_role=self.secondary_role, resonance=resonance, unlock_thread_level=30
         )
         _covenant_role_thread(
             sheet=self.sheet, role=self.secondary_role, resonance=resonance, level=3
@@ -352,7 +352,7 @@ class SecondaryVowChassisIsolationTests(TestCase):
             sheet=self.sheet, role=self.primary_role, resonance=ResonanceFactory(), level=10
         )
         baseline = effect_value(self.sheet, key)
-        self.assertEqual(baseline, 51)  # base 50 + shown level 1 x 1
+        self.assertEqual(baseline, 51)  # base 50 + 1 per 10 levels at level 10
 
         secondary_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
         VowStatScaling.objects.create(
@@ -400,7 +400,7 @@ class SecondaryVowPerkSubRoleSuppressionTests(TestCase):
         self.covenant = CovenantFactory(covenant_type=CovenantType.DURANCE)
         self.parent_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
         self.sub_role = SubroleCovenantRoleFactory(
-            parent_role=self.parent_role, resonance=self.resonance, unlock_thread_level=3
+            parent_role=self.parent_role, resonance=self.resonance, unlock_thread_level=30
         )
         self.subject_sheet = CharacterSheetFactory()
         CharacterCovenantRoleFactory(

@@ -426,7 +426,7 @@ export type StaffProseField =
  */
 /** Mirrors `world.character_sheets.types.StaffEditRows` (#4221): the CG rows by id. */
 export interface CharacterSheetStaffRows {
-  /** Display scale (1 to 5) by stat trait id. */
+  /** Stored value (10 to 50 for a CG-built character) by stat trait id. */
   stats: Record<string, number>;
   skills: Record<string, number>;
   specializations: Record<string, number>;
@@ -554,8 +554,13 @@ export interface CharacterSheetPayload {
   staff_edit: CharacterSheetStaffEdit | null;
   identity: CharacterSheetIdentity;
   appearance: CharacterSheetAppearance;
-  /** Stat name -> display value (already ÷10 from the ×10 internal storage, ADR-0193). */
+  /** Stat name -> stored value (a stat of 2 dots is 20; #5091). */
   stats: Record<string, number>;
+  /**
+   * #4730 — stat name -> the value the game uses, display scale, only for a stat whose
+   * buffed value differs from the stored one in `stats`.
+   */
+  buffed_stats: Record<string, number>;
   skills: CharacterSheetSkill[];
   path: CharacterSheetPath | null;
   distinctions: CharacterSheetDistinction[];

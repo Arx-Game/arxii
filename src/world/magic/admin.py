@@ -317,10 +317,10 @@ class RestrictionAdmin(admin.ModelAdmin):
                 {
                     "fields": list(self._SURROUNDINGS_FIELDS),
                     "description": (
-                        "A room reading this technique needs, such as wet air for a storm "
+                        "A room condition this technique needs, such as wet air for a storm "
                         "technique. Unmet, the cast takes a very heavy roll penalty; it is "
-                        "never refused. On a technique whose own gift's substance is this "
-                        "reading it does nothing and refunds nothing."
+                        "never refused. If the technique's own gift already draws on this "
+                        "condition, it does nothing and refunds nothing."
                     ),
                 },
             ),
@@ -1003,7 +1003,7 @@ class GiftAdminForm(forms.ModelForm):
 
 
 class GiftSubstanceInline(admin.StackedInline):
-    """What the gift is made of (#5018): the room reading every cast of it reads."""
+    """What the gift is made of (#5018): the room condition every cast of it draws on."""
 
     model = GiftSubstance
     extra = 0

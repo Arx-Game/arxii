@@ -330,7 +330,7 @@ class AVowTheStyleDoesNotListChangesOnlyTheArmorBucket(_TheYard):
             sheet,
             vow,
             covenant=CovenantFactory(covenant_type=CovenantType.DURANCE),
-            thread_level=1,
+            thread_level=10,
         )
         return character
 

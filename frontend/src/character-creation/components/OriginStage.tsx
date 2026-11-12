@@ -5,8 +5,8 @@
  * of its realm, prose verbatim from the StartingArea row). Reading is free;
  * the realm enters when the player chooses (never on hover, Decision 6), and
  * choosing a different realm asks first when it would clear a stage that
- * depended on it (#4022: no dependent choice, no question). The record rail lists the choice; it says nothing else
- * (Decision 8). The first name is asked here too (#4874, ruled 2026-10-19): the rail and
+ * depended on it (#4022: no dependent choice, no question). The record rail lists the
+ * choice; it says nothing else (Decision 8), and no marginal note repeats the confirm. The first name is asked here too (#4874, ruled 2026-10-19): the rail and
  * the life then read "Marisol was born" instead of "you"; it saves on blur by itself.
  */
 
@@ -20,8 +20,6 @@ import {
   EntryDoors,
   EntryList,
   Field,
-  Marginalia,
-  Note,
   PageTurn,
   Paragraphs,
   RecordRail,
@@ -31,6 +29,9 @@ import { useCGExplanations, useStartingAreas, useUpdateDraft } from '../queries'
 import { Stage, STAGE_LABELS } from '../types';
 import type { CharacterDraft, StartingArea } from '../types';
 import { getRealmTheme } from '../utils';
+
+/** Letters only (any script), 2 to 20 of them. */
+const FIRST_NAME_PATTERN = /^\p{L}{2,20}$/u;
 
 interface OriginStageProps {
   draft: CharacterDraft;
@@ -46,9 +47,14 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
 
   const chosen = draft.selected_area;
   const firstName = draft.draft_data.first_name ?? '';
+  // The rule speaks only when it is broken: no hint under a valid or empty name.
+  const [nameInvalid, setNameInvalid] = useState(false);
   const saveFirstName = (value: string) => {
-    if (value.trim() === firstName) return;
-    updateDraft.mutate({ draftId: draft.id, data: { draft_data: { first_name: value.trim() } } });
+    const trimmed = value.trim();
+    const invalid = trimmed !== '' && !FIRST_NAME_PATTERN.test(trimmed);
+    setNameInvalid(invalid);
+    if (invalid || trimmed === firstName) return;
+    updateDraft.mutate({ draftId: draft.id, data: { draft_data: { first_name: trimmed } } });
   };
 
   const apply = (area: StartingArea | null) => {
@@ -96,32 +102,34 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
         stage={Stage.ORIGIN}
         title={copy?.origin_heading ?? 'Where does the story begin?'}
         aside={
-          <>
-            <RecordRail
-              rows={[
-                // Absent (not "not yet chosen") until a first name exists (#3630).
-                ...(firstName ? [{ label: 'Name', value: firstName }] : []),
-                { label: 'Origin', value: chosen?.name },
-              ]}
-              ledger={stageEyebrow(draft.current_stage)}
-            />
-            <Marginalia id="note-change">
-              <Note lead="Changing your starting realm">
-                clears the stages that depended on it. You will be asked first.
-              </Note>
-            </Marginalia>
-          </>
+          // No marginal note about changing realm: the confirm dialog already says it,
+          // and the player is never warned twice.
+          <RecordRail
+            rows={[
+              // Absent (not "not yet chosen") until a first name exists (#3630).
+              ...(firstName ? [{ label: 'Name', value: firstName }] : []),
+              { label: 'Origin', value: chosen?.name },
+            ]}
+            ledger={stageEyebrow(draft.current_stage)}
+          />
         }
       >
         <Field
           id="first_name"
           label={copy?.origin_first_name_label ?? 'First name'}
-          hint={copy?.origin_first_name_hint ?? '2-20 characters, letters only.'}
+          hint={
+            nameInvalid
+              ? (copy?.origin_first_name_hint ?? '2-20 characters, letters only.')
+              : undefined
+          }
         >
+          {/* Boxed until a name is saved, so the empty line reads as a place to write. */}
           <input
             id="first_name"
             type="text"
             maxLength={20}
+            className={firstName && !nameInvalid ? undefined : 'awaiting'}
+            aria-invalid={nameInvalid || undefined}
             defaultValue={firstName}
             onBlur={(e) => saveFirstName(e.target.value)}
           />

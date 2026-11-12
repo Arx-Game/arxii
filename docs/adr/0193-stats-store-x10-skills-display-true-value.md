@@ -1,6 +1,6 @@
 # 0193 — Stats store ×10 under the hood; skills store and display true value
 
-**Status:** Accepted (2026-08-03, Apostate's ruling on #2894)
+**Status:** Superseded by ADR-5091 (#5091, 2026-11-12): every trait now shows its stored value; the display divisor below is gone. Originally accepted 2026-08-03, Apostate's ruling on #2894.
 
 `CharacterTraitValue` holds one storage scale — the fine-grained 1-100 range —
 but the two trait families *display* differently. **Skills show their true

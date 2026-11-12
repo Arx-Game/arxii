@@ -29,7 +29,7 @@ class CovenantRoleGiftGrantNaturalKeyTests(TestCase):
         role = CovenantRoleFactory()
         gift = GiftFactory()
         grant = CovenantRoleGiftGrant.objects.create(
-            covenant_role=role, gift=gift, unlock_thread_level=3
+            covenant_role=role, gift=gift, unlock_thread_level=30
         )
         resolved = CovenantRoleGiftGrant.objects.get_by_natural_key(*grant.natural_key())
         self.assertEqual(resolved.pk, grant.pk)

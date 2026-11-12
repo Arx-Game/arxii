@@ -2757,7 +2757,7 @@ class ThreadHubSummaryView(APIView):
                             "trait_id": trait.pk,
                             "name": trait.name,
                             "trait_type": trait.trait_type,
-                            "display_value": tv.display_value,
+                            "value": tv.value,
                         }
                     )
             elif kind == TargetKind.TECHNIQUE and unlock.unlock_gift_id:

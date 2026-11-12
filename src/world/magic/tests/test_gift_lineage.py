@@ -249,7 +249,7 @@ class InheritedTechniqueCastTests(TestCase):
             resonance=cls.thread_resonance,
             target_kind=TargetKind.GIFT,
             target_gift=cls.kind,
-            level=50,  # stored; shows 5 (#4585)
+            level=50,
         )
         cls.umbrella_tech = TechniqueFactory(gift=cls.umbrella)
 
@@ -262,7 +262,7 @@ class InheritedTechniqueCastTests(TestCase):
         variant = TechniqueVariantFactory(
             parent_technique=self.umbrella_tech,
             resonance=self.thread_resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Fox-Touched Sense",
         )
         resolved = resolve_specialized_variant(

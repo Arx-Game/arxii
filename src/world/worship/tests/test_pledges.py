@@ -45,6 +45,14 @@ from world.magic.services.gain import (
     tag_room_resonance,
 )
 from world.magic.services.resonance import grant_resonance
+from world.pacts.constants import CharacterPactCommitmentKind
+from world.pacts.factories import (
+    CharacterPactFactory,
+    PactOfferCommitmentFactory,
+    PactOfferFactory,
+    make_pact_condition,
+)
+from world.pacts.models import CharacterPact
 from world.projects.constants import ProjectKind, ProjectStatus
 from world.projects.services import scan_active_projects
 from world.roster.factories import grant_test_tenure
@@ -70,7 +78,6 @@ from world.worship.exceptions import (
 from world.worship.factories import (
     BeingFacetFactory,
     BeingResonanceFactory,
-    DevotionStandingFactory,
     FavorOutcomeAwardFactory,
     PledgeFactory,
     RiteKindFactory,
@@ -78,11 +85,11 @@ from world.worship.factories import (
     WorshippedBeingFactory,
     WorshipRiteFactory,
     WorshipRiteTierAwardFactory,
+    make_chosen,
 )
 from world.worship.invocation_services import get_devotion_config, invocation_difficulty
 from world.worship.models import (
     DevotionStanding,
-    PatronageValence,
     Pledge,
     PledgeCredit,
     PledgeDetails,
@@ -161,12 +168,7 @@ class PledgeTestBase(TestCase):
             resonance=cls.associated,
         )
         ShrineDetailsFactory(feature_instance__room_profile=cls.profile, being=cls.being)
-        DevotionStandingFactory(
-            character_sheet=cls.sheet,
-            being=cls.being,
-            valence=PatronageValence.DEVOTIONAL,
-            established_at=timezone.now(),
-        )
+        make_chosen(cls.sheet, cls.being)
         cls.pledge = PledgeFactory(
             being=cls.being, favor_target=20, span_weeks=2, closing_rite=cls.rite
         )
@@ -864,3 +866,86 @@ class WebDispatchTests(PledgeTestBase):
             " Success: 4 base, at 200% = +8 favor.",
             given.message,
         )
+
+
+class AcceptPactAtCloseTests(PledgeTestBase):
+    """Accepting at the close (#4341) on the branches no journey reaches: a pact
+    already held, a pledge with no offer, and the offer on the pledge card. Closing
+    without accepting, a Partial Success refusal and signing are journeys
+    (``world.pacts.tests.test_accept_at_close``,
+    ``integration_tests.test_pacts_with_beings_journeys``)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.offer = PactOfferFactory(
+            being=cls.being, offer_text="[offer text]", condition=make_pact_condition()
+        )
+        PactOfferCommitmentFactory(offer=cls.offer, amount=8)
+        PactOfferCommitmentFactory(
+            offer=cls.offer, kind=CharacterPactCommitmentKind.CUSTOM, amount=0, notes="[promise]"
+        )
+        cls.pledge.pact_offer = cls.offer
+        cls.pledge.save(update_fields=["pact_offer"])
+
+    def _close(self, outcome_name: str, *, accept_pact: bool):
+        details = take_pledge(self.sheet, self.pledge)
+        self._reach_target(details)
+        with force_check_outcome(self.outcomes[outcome_name]):
+            return close_pledge(self.sheet, scene=self.scene, accept_pact=accept_pact)
+
+    def test_an_already_held_pact_is_refused_and_the_pledge_still_resolves(self) -> None:
+        standing = DevotionStanding.objects.get(character_sheet=self.sheet, being=self.being)
+        CharacterPactFactory(
+            character_sheet=self.sheet,
+            offer=PactOfferFactory(being=self.being),
+            devotion_standing=standing,
+        )
+
+        outcome = self._close("Success", accept_pact=True)
+
+        self.assertTrue(outcome.resolved)
+        self.assertEqual(outcome.pact_refusal, "You already hold a pact with Ombrin.")
+        self.assertEqual(outcome.details.project.status, ProjectStatus.COMPLETED)
+        self.assertEqual(outcome.award, 10)
+        self.assertEqual(CharacterPact.objects.count(), 1)
+
+    def test_accepting_a_pledge_with_no_offer_still_closes_it(self) -> None:
+        self.pledge.pact_offer = None
+        self.pledge.save(update_fields=["pact_offer"])
+
+        outcome = self._close("Success", accept_pact=True)
+
+        self.assertTrue(outcome.resolved)
+        self.assertEqual(outcome.pact_refusal, "This pledge offers no pact.")
+
+    def test_the_pledge_card_carries_the_offer_summary(self) -> None:
+        from rest_framework.test import APIClient
+
+        take_pledge(self.sheet, self.pledge)
+        client = APIClient()
+        client.force_authenticate(user=self.account)
+        url = f"/api/worship/pledge-cards/?character_sheet={self.sheet.pk}"
+
+        offer = client.get(url).json()["results"][0]["pledge"]["pact_offer"]
+        self.offer.is_active = False
+        self.offer.save(update_fields=["is_active"])
+        withdrawn = client.get(url).json()["results"][0]["pledge"]["pact_offer"]
+
+        self.assertEqual((offer["being_name"], offer["offer_text"]), ("Ombrin", "[offer text]"))
+        self.assertEqual(offer["period_weeks"], 2)
+        self.assertEqual(
+            [(row["kind"], row["amount"]) for row in offer["commitments"]],
+            [("favor_earned", 8), ("custom", 0)],
+        )
+        self.assertEqual(offer["promises"], ["[promise]"])
+        self.assertEqual(
+            [(stage["name"], stage["threshold"], stage["is_last"]) for stage in offer["stages"]],
+            [
+                ("Sworn", 1, False),
+                ("Strained", 11, False),
+                ("Soured", 21, False),
+                ("Breached", 31, True),
+            ],
+        )
+        self.assertIsNone(withdrawn)

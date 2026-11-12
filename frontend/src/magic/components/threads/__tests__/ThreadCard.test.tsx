@@ -60,11 +60,11 @@ describe('ThreadCard', () => {
     expect(screen.getByText('TECHNIQUE')).toBeInTheDocument();
   });
 
-  it('renders level divided by 10', () => {
+  it('renders the stored level', () => {
     render(
       <ThreadCard thread={makeThread({ level: 30 })} summary={makeSummary()} onClick={vi.fn()} />
     );
-    expect(screen.getByText('Level 3')).toBeInTheDocument();
+    expect(screen.getByText('Level 30')).toBeInTheDocument();
   });
 
   it('renders resonance name', () => {

@@ -1250,7 +1250,7 @@ def outfit_daily_trickle_for_character(sheet: CharacterSheet) -> int:
     """
     from world.magic.constants import GainSource  # noqa: PLC0415
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
-    from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
+    from world.magic.services.threads import thread_rung  # noqa: PLC0415
 
     config = get_resonance_gain_config()
     base = config.outfit_daily_trickle_per_item_resonance
@@ -1265,8 +1265,8 @@ def outfit_daily_trickle_for_character(sheet: CharacterSheet) -> int:
         if thread is None:
             continue
 
-        # Shown level (stored // 10, #4585): shown 0 = ×1, shown 5 (stored 50) = ×5.
-        level_factor = max(1, shown_thread_level(thread.level))
+        # Per 10 thread levels (thread_rung, #5091): level 0-19 = ×1, level 50 = ×5.
+        level_factor = max(1, thread_rung(thread.level))
         amount = int(base * item_q_mult * attach_q_mult * level_factor)
         if amount <= 0:
             continue

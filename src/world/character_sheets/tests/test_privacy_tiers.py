@@ -48,7 +48,7 @@ class PrivacyTierTests(APITestCase):
         sheet = self._sheet_with_stat(AccountFactory(), stats_visibility=SheetVisibility.PUBLIC)
         viewer = AccountFactory()
         self._player(viewer)
-        assert self._stats(sheet, viewer) == {"strength": 5}
+        assert self._stats(sheet, viewer) == {"strength": 50}
 
     def test_friends_tier_shows_only_to_the_owners_allow_list(self) -> None:
         owner = AccountFactory()
@@ -62,12 +62,12 @@ class PrivacyTierTests(APITestCase):
         stranger = AccountFactory()
         self._player(stranger)
 
-        assert self._stats(sheet, friend) == {"strength": 5}  # on the allow list
+        assert self._stats(sheet, friend) == {"strength": 50}  # on the allow list
         assert self._stats(sheet, stranger) == {}  # not on the allow list
 
     def test_owner_and_staff_always_see_regardless_of_tier(self) -> None:
         owner = AccountFactory()
         sheet = self._sheet_with_stat(owner)  # SELF
         staff = AccountFactory(is_staff=True)
-        assert self._stats(sheet, owner) == {"strength": 5}
-        assert self._stats(sheet, staff) == {"strength": 5}
+        assert self._stats(sheet, owner) == {"strength": 50}
+        assert self._stats(sheet, staff) == {"strength": 50}

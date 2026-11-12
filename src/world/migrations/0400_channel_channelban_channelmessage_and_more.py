@@ -7,7 +7,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0392_conditioninstance_rallied"),
+        ("arxii", "0399_one_scale_values"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

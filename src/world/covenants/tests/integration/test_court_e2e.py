@@ -258,9 +258,9 @@ class CourtJourneyEndToEndTests(TestCase):
         # STEP 3 — Capped pull changes the offense read-path.
         # ==============================================================
         # The founding servant joined as a founder (no fealty induction), so swear
-        # a pact directly with a grant that BINDS at stored 10 (shown 1, #4585): the
-        # Court FLAT_BONUS is authored at shown level 1, so the servant needs a
-        # thread shown at 1 to pull it. The level-1 servant's level cap is also 10,
+        # a pact directly with a grant that BINDS at 10: the
+        # Court FLAT_BONUS is authored at thread level 10, so the servant needs a
+        # thread at 10 to pull it. The level-1 servant's level cap is also 10,
         # so the cap is equal, not lower, and the refusal stays the anchor's.
         granted = 10
         swear_court_pact(

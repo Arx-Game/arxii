@@ -30,8 +30,7 @@ SQLite vs Postgres split (project policy: verify SQLite locally, let CI gate PG)
   On the SQLite tier it is *collected but skipped* — it imports cleanly so the file
   loads.
 
-Thread levels are stored ×10 and thresholds are shown levels (#4585), so crossing the
-shown-3 variant unlock means imbuing to stored 30. That raise goes through the real
+Crossing the variant unlock at thread level 30 means imbuing to 30. That raise goes through the real
 imbue path: ``_imbue_to`` makes the owner level 3 (the GIFT anchor cap is the level
 cap), pre-unlocks the XP boundaries and funds the dp. The pull-scaling beat still sets
 ``Thread.level`` directly (the documented #1578 ceremony-direct pattern).
@@ -78,7 +77,7 @@ def _non_cancelling(event_name: str, payload: object, **kwargs: object) -> _Fake
     return _FakeStack()
 
 
-# Shown levels (#4585): the variant unlocks at 3, passive resistance switches on at 1.
+# The variant unlocks at 30, passive resistance switches on at 10.
 # _IMBUE_TARGET is the stored level the journey imbues to, past both.
 _VARIANT_UNLOCK_LEVEL = 3
 _RESISTANCE_THRESHOLD = 1
@@ -254,7 +253,7 @@ class _SpeciesGiftJourneyBase(TestCase):
         cov_res = ResonanceFactory()
         parent_role = CovenantRoleFactory()
         sub_role = SubroleCovenantRoleFactory(
-            parent_role=parent_role, resonance=cov_res, unlock_thread_level=3
+            parent_role=parent_role, resonance=cov_res, unlock_thread_level=30
         )
         membership = CharacterCovenantRoleFactory(
             covenant=CovenantFactory(covenant_type=parent_role.covenant_type),
@@ -267,7 +266,7 @@ class _SpeciesGiftJourneyBase(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=parent_role,
             target_trait=None,
-            level=30,  # stored; shows 3 (#4585)
+            level=30,
         )
         character.threads.invalidate()
         self.assertEqual(
@@ -458,7 +457,7 @@ class SpeciesGiftFullJourneyPostgresTest(_SpeciesGiftJourneyBase):
         )
 
         # Beats 3b/5: raise the thread past the resistance threshold via the REAL
-        # imbue path (this crossing also fires the variant discovery at shown 3).
+        # imbue path (this crossing also fires the variant discovery at 30).
         self._imbue_to(sheet, thread, _IMBUE_TARGET)
         self._assert_variant_and_discovery(sheet)
 
@@ -488,7 +487,7 @@ class SpeciesGiftFullJourneyPostgresTest(_SpeciesGiftJourneyBase):
         high = self._commit_pull_at_level(sheet, thread, 30)
         # active_pull_resistance sums BOTH RESISTANCE snapshots a tier-1 pull writes:
         # resolve_pull_effects iterates effect tiers 0..tier, so the always-on tier-0
-        # passive (amount 3, min_thread_level=1, shown) AND the paid tier-1 row (amount 4) are
+        # passive (amount 3, min_thread_level=10) AND the paid tier-1 row (amount 4) are
         # each snapshotted and scaled by level_multiplier = max(1, level // 10). The
         # returned value is therefore (passive + paid) × multiplier, NOT the paid row
         # alone — that is why it is 7, not 4:

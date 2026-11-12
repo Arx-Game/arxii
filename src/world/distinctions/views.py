@@ -155,6 +155,23 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
         return context
 
 
+_ENTRY_LISTS = ("offer_ids", "sources", "arrivals")
+
+
+def _entries(draft: CharacterDraft) -> list[dict]:
+    """The draft's distinction entries with every list present (#5102).
+
+    A legacy entry stored before the offers system (0106) has no ``offer_ids``,
+    ``sources`` or ``arrivals``; the leaf iterates them, and the Lineage step crashed on
+    ``offer_ids is not iterable`` for such a draft. Only the missing lists are filled; the
+    rest of each entry is returned as stored.
+    """
+    return [
+        {**{key: [] for key in _ENTRY_LISTS}, **entry}
+        for entry in draft.draft_data.get("distinctions", [])
+    ]
+
+
 @extend_schema(tags=["distinctions"])
 class DraftDistinctionViewSet(viewsets.ViewSet):
     """
@@ -373,8 +390,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         Returns the distinctions array from draft.draft_data.
         """
         draft = self._get_draft(draft_id)
-        distinctions = draft.draft_data.get("distinctions", [])
-        return Response(distinctions)
+        return Response(_entries(draft))
 
     @extend_schema(
         request=DraftDistinctionCreateSerializer,
@@ -534,7 +550,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
             draft.draft_data["distinctions"] = []
             draft.save(update_fields=["draft_data", "updated_at"])
             reconcile_offer_picks(draft)
-            return Response({"distinctions": draft.draft_data.get("distinctions", [])})
+            return Response({"distinctions": _entries(draft)})
 
         by_id = self._fetch_sync_distinctions(distinction_entries)
         self._validate_sync_ranks(distinction_entries, by_id)
@@ -552,7 +568,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         draft.save(update_fields=["draft_data", "updated_at"])
         reconcile_offer_picks(draft)
 
-        return Response({"distinctions": draft.draft_data.get("distinctions", [])})
+        return Response({"distinctions": _entries(draft)})
 
     def _validate_beat_allowances(self, entries: list[dict], draft) -> None:
         """A beat takes no more answers than it allows (#4124, #4395): one on a one-of

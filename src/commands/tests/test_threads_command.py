@@ -172,11 +172,11 @@ class CmdThreadsCrossingTests(TestCase):
         cls.option = CrossingOption.objects.create(
             target_kind=TargetKind.TRAIT,
             resonance=cls.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Burning vigor",
             condition_template=cls.condition_template,
         )
-        PendingCrossingOffer.objects.create(thread=cls.thread, crossing_level=3)
+        PendingCrossingOffer.objects.create(thread=cls.thread, crossing_level=30)
 
     def test_crossing_list_shows_offers(self) -> None:
         from commands.threads import CmdThreads

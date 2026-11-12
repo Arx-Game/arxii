@@ -691,7 +691,7 @@ class TechniqueVariantFactory(factory.django.DjangoModelFactory):
 
     parent_technique = factory.SubFactory(TechniqueFactory, damage_profile=False)
     resonance = factory.SubFactory(ResonanceFactory)
-    unlock_thread_level = 3
+    unlock_thread_level = 30
     name_override = ""
     intensity_delta = 0
     control_delta = 0
@@ -708,7 +708,7 @@ class SignatureMotifBonusFactory(factory.django.DjangoModelFactory):
     required_resonance = factory.SubFactory(ResonanceFactory)
     required_facet = None
     flat_intensity_delta = 1
-    min_crossing_level = 1
+    min_crossing_level = 10
     creation_point_cost = None
 
 

@@ -252,6 +252,9 @@ export type AlmanachTemplate = components['schemas']['AlmanachTemplate'];
 export type AlmanachUnionKind = components['schemas']['AlmanachUnionKind'];
 export type AlmanachTitleSummary = components['schemas']['AlmanachTitleSummary'];
 export type AlmanachHoldingKind = components['schemas']['AlmanachHoldingKind'];
+// #5080: regional events, what the Atlas shades and the title page lists.
+export type AlmanachRegionalEvent = components['schemas']['AlmanachRegionalEvent'];
+export type AlmanachRegionalEventKind = components['schemas']['AlmanachRegionalEventKind'];
 
 export interface PersonDocument {
   person: {
@@ -330,6 +333,8 @@ export interface RungDocument {
     /** #4983: seated, titular or potential; the crown a future holder swears to. */
     station: string;
     pledged_liege: { title_id: number; name: string } | null;
+    /** the rung's Area, what a regional event is opened over (#5080) */
+    area_id: number;
   };
   /** The rung's own land: a county's hinterland or a barony's seat; null above
    * county, which is organization with no ground of its own (#5069). */
@@ -364,6 +369,15 @@ export interface RungDocument {
   chartered_by: AlmanachCharterRow[];
   claims: AlmanachClaimRow[];
   chain: AlmanachChainLink[];
+  /** the open regional events over this rung's land, over it or beneath it (#5080) */
+  events: {
+    event_id: number;
+    kind: string;
+    area_id: number;
+    area: string;
+    severity_pct: number;
+    started_at: string;
+  }[];
 }
 
 export interface AlmanachCharterRow {
@@ -427,6 +441,8 @@ export type AlmanachActionKey =
   | 'almanach_swear'
   | 'almanach_describe_demesne'
   | 'almanach_set_capacity'
+  | 'almanach_open_regional_event'
+  | 'almanach_close_regional_event'
   | 'almanach_add_holding'
   | 'almanach_plan_estate'
   | 'almanach_edit_kin'

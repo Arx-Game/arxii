@@ -20,7 +20,7 @@ from world.progression.exceptions import (
 from world.progression.models import LevelStatPointSpend
 from world.progression.services.maturation import stat_cap_for
 from world.progression.services.skill_development import get_character_path_level
-from world.traits.constants import STAT_DISPLAY_DIVISOR
+from world.traits.constants import STAT_POINT_VALUE
 from world.traits.models import (
     CharacterTraitChange,
     CharacterTraitValue,
@@ -77,13 +77,12 @@ def spend_level_stat_point(sheet: "CharacterSheet", trait: Trait) -> LevelStatPo
     trait_value, _ = CharacterTraitValue.objects.get_or_create(
         character=sheet, trait=trait, defaults={"value": 0}
     )
-    # Caps are authored in display dots; stat storage is internal ×10 (#2894).
     cap = stat_cap_for(sheet)
-    if cap is not None and trait_value.value >= cap * STAT_DISPLAY_DIVISOR:
+    if cap is not None and trait_value.value >= cap:
         raise StatPointCapReachedError(StatPointCapReachedError.user_message)
 
     old_value = trait_value.value
-    trait_value.value += STAT_DISPLAY_DIVISOR
+    trait_value.value += STAT_POINT_VALUE
     trait_value.save()
     CharacterTraitChange.objects.create(
         character_sheet=sheet,
@@ -114,7 +113,7 @@ def sync_level_stat_point_spends(sheet: "CharacterSheet") -> int:
         should_be_active = spend.level_granted <= level
         if spend.is_active == should_be_active:
             continue
-        delta = STAT_DISPLAY_DIVISOR if should_be_active else -STAT_DISPLAY_DIVISOR
+        delta = STAT_POINT_VALUE if should_be_active else -STAT_POINT_VALUE
         trait_value, _ = CharacterTraitValue.objects.get_or_create(
             character=sheet, trait=spend.trait, defaults={"value": 0}
         )

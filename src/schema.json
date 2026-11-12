@@ -1367,6 +1367,122 @@ paths:
               schema:
                 $ref: '#/components/schemas/LadderPayload'
           description: ''
+  /api/almanach/regional-event-kinds/:
+    get:
+      operationId: almanach_regional_event_kinds_list
+      description: The authored disasters, for the title page's Open control (#5080).
+      parameters:
+      - in: query
+        name: name
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAlmanachRegionalEventKindList'
+          description: ''
+  /api/almanach/regional-event-kinds/{id}/:
+    get:
+      operationId: almanach_regional_event_kinds_retrieve
+      description: The authored disasters, for the title page's Open control (#5080).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this regional event kind.
+        required: true
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlmanachRegionalEventKind'
+          description: ''
+  /api/almanach/regional-events/:
+    get:
+      operationId: almanach_regional_events_list
+      description: |-
+        Regional events (#5080): the Atlas reads the open ones over a realm and shades
+        their areas; the title page lists the ones over its land. Opening and closing go
+        through the ``almanach_open_regional_event`` / ``almanach_close_regional_event``
+        actions, never a write here.
+      parameters:
+      - in: query
+        name: active
+        schema:
+          type: boolean
+      - in: query
+        name: area
+        schema:
+          type: integer
+      - in: query
+        name: kind
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: realm
+        schema:
+          type: number
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAlmanachRegionalEventList'
+          description: ''
+  /api/almanach/regional-events/{id}/:
+    get:
+      operationId: almanach_regional_events_retrieve
+      description: |-
+        Regional events (#5080): the Atlas reads the open ones over a realm and shades
+        their areas; the title page lists the ones over its land. Opening and closing go
+        through the ``almanach_open_regional_event`` / ``almanach_close_regional_event``
+        actions, never a write here.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this regional event.
+        required: true
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlmanachRegionalEvent'
+          description: ''
   /api/almanach/search/:
     get:
       operationId: almanach_search_list
@@ -7687,7 +7803,7 @@ paths:
   /api/character-sheets/{id}/staff-stats/:
     patch:
       operationId: character_sheets_staff_stats_partial_update
-      description: Set stats at display scale (1 to 5); missing rows are created.
+      description: Set stats (10 to 50, in steps of 10); missing rows are created.
       parameters:
       - in: path
         name: id
@@ -23281,6 +23397,35 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/magic/manifest-choices/:
+    get:
+      operationId: magic_manifest_choices_list
+      description: Each manifesting technique a character knows, its options and the
+        current pick.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedManifestChoiceList'
+          description: ''
   /api/magic/motif-styles/:
     get:
       operationId: magic_motif_styles_retrieve
@@ -30988,6 +31133,61 @@ paths:
           description: Summons is not pending or risk acknowledgement required.
         '404':
           description: Summons not found.
+  /api/pacts/cards/:
+    get:
+      operationId: pacts_cards_list
+      description: |-
+        Characters' pacts with beings as their cards show them, newest first: active pacts
+        and ended pacts still easing out. The owner reads their own characters', staff read
+        anyone's; a pact with a secret faith is never shown to anyone else.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - pacts
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPactCardList'
+          description: ''
+  /api/pacts/cards/{id}/:
+    get:
+      operationId: pacts_cards_retrieve
+      description: |-
+        Characters' pacts with beings as their cards show them, newest first: active pacts
+        and ended pacts still easing out. The owner reads their own characters', staff read
+        anyone's; a pact with a secret faith is never shown to anyone else.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - pacts
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PactCard'
+          description: ''
   /api/personas/:
     get:
       operationId: personas_list
@@ -46119,8 +46319,8 @@ components:
           type: string
           format: date-time
           nullable: true
-        particle_example:
-          type: string
+        particle:
+          $ref: '#/components/schemas/RealmCharterParticle'
         default_succession_law:
           allOf:
           - $ref: '#/components/schemas/AlmanachSuccessionLaw'
@@ -46161,7 +46361,7 @@ components:
       - name
       - observances
       - offices
-      - particle_example
+      - particle
       - patron
       - published_at
       - sigil_description
@@ -46375,6 +46575,91 @@ components:
       - id
       - name
       - unclaimed_by_tier
+    AlmanachRegionalEvent:
+      type: object
+      description: |-
+        One regional event (#5080): what the Atlas shades and the title page lists. The
+        GM's ``note`` rides along because the whole viewset is staff-only.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        kind:
+          type: string
+          readOnly: true
+        kind_id:
+          type: integer
+          readOnly: true
+        area_id:
+          type: integer
+          readOnly: true
+        area:
+          type: string
+          readOnly: true
+        realm_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        severity_pct:
+          type: integer
+          maximum: 100
+          minimum: 1
+          description: 'Scales the kind''s capacity cut: 100 is the full cut.'
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+        note:
+          type: string
+          description: Staff's own note; never shown to players.
+      required:
+      - area
+      - area_id
+      - id
+      - kind
+      - kind_id
+      - realm_id
+    AlmanachRegionalEventKind:
+      type: object
+      description: The authored disasters staff can open (#5080).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+        capacity_cut_pct:
+          type: integer
+          maximum: 100
+          minimum: 0
+          description: Percent of a holding's capacity the event takes while it is
+            open.
+        prosperity_delta:
+          type: integer
+          maximum: 100
+          minimum: -100
+          description: Added to each holding's prosperity at open, removed at close.
+        unrest_delta:
+          type: integer
+          maximum: 100
+          minimum: -100
+          description: Added to each holding's unrest at open, removed at close.
+        crisis_type_id:
+          type: integer
+          nullable: true
+          description: The crisis an awake house inside the footprint gets; blank
+            = none.
+          readOnly: true
+      required:
+      - crisis_type_id
+      - id
+      - name
     AlmanachSuccessionLaw:
       type: object
       description: |-
@@ -57192,9 +57477,11 @@ components:
         ``offer_ids``/``sources``/``arrivals`` (#3675) name an entry's contributing
         ``DistinctionOffer`` rows, their display labels, and how each arrived
         (choice/bundled/carried) -- ``world.distinctions.types.DraftDistinctionEntry``
-        carries them on every offer-tracked entry. ``required=False`` mirrors runtime
-        reality: a legacy entry saved before the offers system landed (0106) has no
-        ``offer_ids`` key at all (see ``offers._drop_vanished_sources``). ``offer_ids``
+        carries them on every offer-tracked entry. A legacy entry saved before the offers
+        system landed (0106) has no ``offer_ids`` key at all (see
+        ``offers._drop_vanished_sources``); the three lists default to empty so every entry
+        the API returns carries them, and the leaf never meets a missing list (#5102: the
+        Lineage step crashed on ``offer_ids is not iterable`` for such a draft). ``offer_ids``
         has no declared item type because it mixes ``int`` (a real ``DistinctionOffer``
         row) and ``str`` (a tradition-state-carried drawback's synthetic
         ``"state:<TraditionState>"`` key).
@@ -67472,6 +67759,47 @@ components:
         * `guest` - Guest
         * `tenant` - Tenant
         * `trustee` - Trustee
+    ManifestChoice:
+      type: object
+      description: One manifesting technique the character knows, its options and
+        the current pick.
+      properties:
+        technique_id:
+          type: integer
+        technique_name:
+          type: string
+        chosen_option_id:
+          type: integer
+          nullable: true
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManifestOptionChoice'
+      required:
+      - options
+      - technique_id
+      - technique_name
+    ManifestOptionChoice:
+      type: object
+      description: 'One option a technique can bring: its label, whether its bond
+        holds, why not.'
+      properties:
+        option_id:
+          type: integer
+        label:
+          type: string
+        available:
+          type: boolean
+        reason:
+          type: string
+        companion_id:
+          type: integer
+          nullable: true
+      required:
+      - available
+      - label
+      - option_id
+      - reason
     MarketSquare:
       type: object
       properties:
@@ -70690,14 +71018,14 @@ components:
         trait_name:
           type: string
           readOnly: true
-        display_value:
+        value:
           type: integer
           readOnly: true
-          description: Display-scale value (1-10), mirroring CG's stat-allocation
-            scale.
+          description: Stat value (10-100), the number a sheet shows; CG allocates
+            10-50.
       required:
-      - display_value
       - trait_name
+      - value
     NPCReactionLine:
       type: object
       description: Staff CRUD for banded NPC reaction lines (#2632).
@@ -73682,6 +74010,172 @@ components:
         * `timed` - Timed
         * `ready` - Ready
         * `manual` - Manual
+    PactCard:
+      type: object
+      description: |-
+        A character's pact as her card shows it. Read by her own player and staff only:
+        a pact with a secret faith is hers alone.
+
+        ``earned``/``required``/``time_limit`` describe the open period; after the pact
+        ended (``is_active`` false) that is an ease-out period, whose condition eases by
+        ``severity_per_miss`` when it ends.
+      properties:
+        id:
+          type: integer
+        character_sheet:
+          type: integer
+        being_id:
+          type: integer
+        being_name:
+          type: string
+        offer_name:
+          type: string
+        period_weeks:
+          type: integer
+        severity_per_miss:
+          type: integer
+        earned:
+          type: integer
+        required:
+          type: integer
+        time_limit:
+          type: string
+          format: date-time
+          nullable: true
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/PactSourceLine'
+        stage_name:
+          type: string
+        severity:
+          type: integer
+        next_stage_threshold:
+          type: integer
+          nullable: true
+        promises:
+          type: array
+          items:
+            type: string
+        condition_effects:
+          type: array
+          items:
+            type: string
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/PactStageLine'
+        is_active:
+          type: boolean
+        dissolution_reason:
+          type: string
+      required:
+      - being_id
+      - being_name
+      - character_sheet
+      - condition_effects
+      - dissolution_reason
+      - earned
+      - id
+      - is_active
+      - next_stage_threshold
+      - offer_name
+      - period_weeks
+      - promises
+      - required
+      - severity
+      - severity_per_miss
+      - sources
+      - stage_name
+      - stages
+      - time_limit
+    PactCommitmentLine:
+      type: object
+      description: |-
+        One commitment of an offer: FAVOR_EARNED (``amount`` per period) or CUSTOM (a
+        promise in ``notes``, never checked).
+      properties:
+        kind:
+          type: string
+        amount:
+          type: integer
+        notes:
+          type: string
+      required:
+      - amount
+      - kind
+      - notes
+    PactOfferSummary:
+      type: object
+      description: |-
+        The pact a pledge offers at its close, built from the offer's rows.
+        ``condition_effects`` apply at every stage.
+      properties:
+        being_name:
+          type: string
+        offer_name:
+          type: string
+        offer_text:
+          type: string
+        period_weeks:
+          type: integer
+        commitments:
+          type: array
+          items:
+            $ref: '#/components/schemas/PactCommitmentLine'
+        promises:
+          type: array
+          items:
+            type: string
+        condition_effects:
+          type: array
+          items:
+            type: string
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/PactStageLine'
+      required:
+      - being_name
+      - commitments
+      - condition_effects
+      - offer_name
+      - offer_text
+      - period_weeks
+      - promises
+      - stages
+    PactSourceLine:
+      type: object
+      description: Favor credited toward the open period from one kind of source.
+      properties:
+        label:
+          type: string
+        favor:
+          type: integer
+      required:
+      - favor
+      - label
+    PactStageLine:
+      type: object
+      description: |-
+        One stage of a pact's condition, best to worst, with the stage's own effects;
+        ``is_last`` marks the stage whose arrival ends the pact.
+      properties:
+        name:
+          type: string
+        threshold:
+          type: integer
+        effects:
+          type: array
+          items:
+            type: string
+        is_last:
+          type: boolean
+      required:
+      - effects
+      - is_last
+      - name
+      - threshold
     PaginatedAccountInviteList:
       type: object
       required:
@@ -73866,6 +74360,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AlmanachRealm'
+    PaginatedAlmanachRegionalEventKindList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlmanachRegionalEventKind'
+    PaginatedAlmanachRegionalEventList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlmanachRegionalEvent'
     PaginatedAlmanachTemplateList:
       type: object
       required:
@@ -76009,6 +76549,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LivePrompt'
+    PaginatedManifestChoiceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManifestChoice'
     PaginatedMediaList:
       type: object
       required:
@@ -76858,6 +77421,29 @@ components:
       - next
       - previous
       - results
+    PaginatedPactCardList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PactCard'
     PaginatedPendingAlterationList:
       type: object
       required:
@@ -81884,7 +82470,7 @@ components:
             type: integer
     PatchedStaffStatsRequest:
       type: object
-      description: '``{"stats": {"<trait id>": <1 to 5>}}``.'
+      description: '``{"stats": {"<trait id>": <10 to 50, in steps of 10>}}``.'
       properties:
         stats:
           type: object
@@ -85194,8 +85780,9 @@ components:
       - reporter_persona
     Pledge:
       type: object
-      description: 'A pledge type a being offers (#4333 slice 2): the staff-authored
-        text and terms.'
+      description: |-
+        A pledge type a being offers (#4333 slice 2): the staff-authored text and terms.
+        ``pact_offer`` is the pact accepted at its close (#4341), null when it offers none.
       properties:
         id:
           type: integer
@@ -85225,6 +85812,11 @@ components:
         closing_rite_name:
           type: string
           readOnly: true
+        pact_offer:
+          allOf:
+          - $ref: '#/components/schemas/PactOfferSummary'
+          nullable: true
+          readOnly: true
       required:
       - being
       - being_name
@@ -85233,6 +85825,7 @@ components:
       - favor_target
       - id
       - name
+      - pact_offer
       - span_weeks
     PledgeCard:
       type: object
@@ -89271,6 +89864,11 @@ components:
           items:
             type: object
             additionalProperties: {}
+        events:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
       required:
       - books
       - chain
@@ -89278,6 +89876,7 @@ components:
       - chartered_fiefs
       - claims
       - demesne
+      - events
       - forces
       - holdings
       - title
@@ -91538,7 +92137,7 @@ components:
         hollow_max:
           type: integer
           description: Return the Sinner's Hollow maximum (``_compute_hollow_max``,
-            shown level × mult).
+            thread rung × mult).
           readOnly: true
         sineater_lifetime_helped:
           type: integer
@@ -99862,6 +100461,8 @@ components:
           type: string
         distinction_name:
           type: string
+        distinction_description:
+          type: string
         player_line:
           type: string
         chapter:
@@ -99908,6 +100509,7 @@ components:
       - cg_max_rank
       - chapter
       - cost_per_rank
+      - distinction_description
       - distinction_id
       - distinction_name
       - effect_line
@@ -102074,13 +102676,13 @@ components:
           type: string
         trait_type:
           type: string
-        display_value:
+        value:
           type: integer
       required:
-      - display_value
       - name
       - trait_id
       - trait_type
+      - value
   securitySchemes:
     cookieAuth:
       type: apiKey

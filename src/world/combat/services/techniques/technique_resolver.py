@@ -248,6 +248,9 @@ class CombatTechniqueResolver:
     # Labelled lines a Strike adds to its hit roll (#5026): what a technique cast into it
     # adds to hit, set by the technique roll. Nothing else adds them.
     extra_hit_contributions: tuple[ModifierContribution, ...] = ()
+    # The hit roll of an enchanted Strike (#5092): its technique roll is the attack's
+    # attack roll for a perk's "Applies to", so this roll takes none (counted once).
+    enchanted_hit: bool = False
 
     def _roll_check(self) -> CheckResult:
         """Roll the offense check with effort + pull-bonus modifiers."""
@@ -292,6 +295,23 @@ class CombatTechniqueResolver:
                 GearArchetype.THROWN if self.strike_weapon.thrown else None,
             )
         return weapon_stat_override(character)
+
+    def _roll_kind(self) -> str:
+        """What kind of roll this offense roll is, for a perk's "Applies to" (#5092).
+
+        An attack on an opponent (``is_attack_on_opponent``: a Strike, a technique cast
+        at an opponent, a joust pass) is an attack roll, once per attack: an enchanted
+        Strike's hit roll is not, because its technique roll (``EnchantedStrikeCast``)
+        already took the attack-roll perks.
+        """
+        from world.combat.services.techniques.intensity import (  # noqa: PLC0415
+            is_attack_on_opponent,
+        )
+        from world.covenants.perks.constants import PerkRollKind  # noqa: PLC0415
+
+        if not self.enchanted_hit and is_attack_on_opponent(self.action):
+            return PerkRollKind.ATTACK
+        return PerkRollKind.ANY
 
     def roll_check_with_breakdown(self) -> tuple[CheckResult, ModifierBreakdown]:
         """Roll the offense check; return it and the modifiers it was rolled with."""
@@ -442,6 +462,7 @@ class CombatTechniqueResolver:
             subject=self.participant.character_sheet,
             target=_resolve_primary_target_sheet(self.action),
             resolution=CombatRoundContext(self.participant),
+            roll_kind=self._roll_kind(),
         )
         # #2707: the first time an attack has been rolled against anything but
         # zero. The focused opponent's level (and its aspect match on this

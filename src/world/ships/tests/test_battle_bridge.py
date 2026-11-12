@@ -92,7 +92,7 @@ class MaterializeShipAsBattleVehicleTests(TestCase):
         sanctum = _sanctum_for_ship(ship)
         resonance = ResonanceFactory()
         capability = CapabilityTypeFactory(name="traversal")
-        # Stored 30 shows 3, the capability row's authored minimum (#4585); the hull
+        # 30 is the capability row's authored minimum; the hull
         # row's 1 scales by thread_level_multiplier(30) = 3 to the +3 below.
         _weave(sanctum, resonance, level=30)
         _author_stat_row(resonance, VitalBonusTarget.SHIP_HULL, 1)

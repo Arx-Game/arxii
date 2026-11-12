@@ -275,22 +275,22 @@ def _replace(plan: SubstancePlan, **changes: object) -> SubstancePlan:
 def substance_power(plan: SubstancePlan) -> int:
     """The power line a cast reads from its plan: richness after any call-up, by thread level.
 
-    Scaled by her GIFT thread's shown level through ``thread_level_multiplier``: 0.1 at
-    level 1, 1.0 at level 10. The shown level is floored at 1 (the multiplier returns full
-    strength at 0).
+    Scaled by her GIFT thread's rung (``thread_rung``, whole steps of 10 thread levels,
+    #5091) through ``thread_level_multiplier``: 0.1 at rung 1, 1.0 at rung 10. The rung is
+    floored at 1 (the multiplier returns full strength at 0).
     """
     from world.magic.services.resonance_environment import (  # noqa: PLC0415
         get_resonance_environment_config,
     )
     from world.magic.services.threads import (  # noqa: PLC0415
-        shown_thread_level,
         thread_level_multiplier,
+        thread_rung,
     )
 
     if plan.is_empty or plan.richness_after == 0:
         return 0
     config = get_resonance_environment_config()
-    level = max(shown_thread_level(plan.thread_level), 1)
+    level = max(thread_rung(plan.thread_level), 1)
     return round(
         plan.richness_after
         * Decimal(config.substance_power_at_full)

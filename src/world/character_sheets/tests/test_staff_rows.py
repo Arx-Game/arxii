@@ -47,8 +47,8 @@ class BareSheetServiceTests(TestCase):
 
     def test_stats_create_then_update_with_staff_provenance(self) -> None:
         strength = StatTraitFactory(name="strength_b")
-        set_stat_values(self.sheet, {strength: 3}, source=TraitChangeSource.STAFF_EDIT)
-        set_stat_values(self.sheet, {strength: 4}, source=TraitChangeSource.STAFF_EDIT)
+        set_stat_values(self.sheet, {strength: 30}, source=TraitChangeSource.STAFF_EDIT)
+        set_stat_values(self.sheet, {strength: 40}, source=TraitChangeSource.STAFF_EDIT)
         row = CharacterTraitValue.objects.get(character=self.sheet, trait=strength)
         assert row.value == 40
         sources = set(
@@ -62,7 +62,7 @@ class BareSheetServiceTests(TestCase):
         with self.assertRaises(SheetWriteError):
             set_stat_values(
                 self.sheet,
-                {StatTraitFactory(name="wits_b"): 9},
+                {StatTraitFactory(name="wits_b"): 90},
                 source=TraitChangeSource.STAFF_EDIT,
             )
 
@@ -157,7 +157,7 @@ class StaffRowEndpointTests(TestCase):
         strength = StatTraitFactory(name="strength_e")
         self.client.force_authenticate(user=self.staff)
         response = self.client.patch(
-            f"{self.base}/staff-stats/", {"stats": {str(strength.pk): 2}}, format="json"
+            f"{self.base}/staff-stats/", {"stats": {str(strength.pk): 20}}, format="json"
         )
         assert response.status_code == 200, response.content[:800]
         assert response.data["id"] == self.sheet.pk
@@ -206,13 +206,13 @@ class StaffRowsPayloadTests(TestCase):
         staff = AccountFactory(is_staff=True)
         sheet = RosterEntryFactory().character_sheet
         strength = StatTraitFactory(name="strength_p")
-        set_stat_values(sheet, {strength: 3}, source=TraitChangeSource.STAFF_EDIT)
+        set_stat_values(sheet, {strength: 30}, source=TraitChangeSource.STAFF_EDIT)
         held = staff_add_distinction(sheet, DistinctionFactory())
         client = APIClient()
         client.force_authenticate(user=staff)
 
         rows = client.get(f"/api/character-sheets/{sheet.pk}/").data["staff_edit"]["rows"]
-        assert rows["stats"] == {strength.pk: 3}
+        assert rows["stats"] == {strength.pk: 30}
         assert [row["id"] for row in rows["distinctions"]] == [held.pk]
         assert rows["has_vitals"] is False
 

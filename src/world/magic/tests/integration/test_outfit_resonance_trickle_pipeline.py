@@ -24,7 +24,7 @@ def _build_sheet_with_equipped_facet_item(
     *,
     item_quality_multiplier: str = "2.00",
     attachment_quality_multiplier: str = "3.00",
-    thread_level: int = 20,  # stored; shows 2 (#4585)
+    thread_level: int = 20,
 ):
     """Compose a CharacterSheet with an equipped item bearing a facet and a matching Thread.
 
@@ -116,7 +116,7 @@ class OutfitResonanceTricklePipelineTests(TestCase):
     def test_orchestrator_grants_resonance_to_outfit_wearing_character(self) -> None:
         """Pipeline: resonance_daily_tick → ResonanceGrant + CharacterResonance updated.
 
-        Algorithm: base(1) × item_quality(2.0) × attach_quality(3.0) × shown level(2) = 12.
+        Algorithm: base(1) × item_quality(2.0) × attach_quality(3.0) × rung(2, at level 20) = 12.
         """
         from world.magic.constants import GainSource
         from world.magic.models import CharacterResonance, ResonanceGrant

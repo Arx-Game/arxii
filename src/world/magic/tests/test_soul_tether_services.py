@@ -1022,7 +1022,7 @@ class PerSceneCapTests(TestCase):
         )
 
         # Manually advance thread level to test cap formula.
-        thread.level = 50  # stored; the formula reads the shown level 5 (#4585)
+        thread.level = 50  # the formula reads rung 5 (thread_rung)
         thread.save(update_fields=["level"])
 
         cap = _compute_per_scene_sineating_cap(sinner_thread=thread, relationship=rel)

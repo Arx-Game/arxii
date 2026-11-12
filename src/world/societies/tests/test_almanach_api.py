@@ -67,6 +67,41 @@ class AlmanachApiTests(TestCase):
         assert law_payload["name"] == self.law.name
         assert law_payload["codex_entry_id"] is None
 
+    def test_regional_events_list_and_kinds(self) -> None:
+        """#5080: the Atlas reads the realm's open events; the title page reads the kinds."""
+        from world.societies.houses.almanach import rung_area_for_title
+        from world.societies.houses.models import RegionalEventKind
+        from world.societies.houses.regional_events import (
+            close_regional_event,
+            open_regional_event,
+        )
+
+        blight = RegionalEventKind.objects.create(name="Blight", capacity_cut_pct=50)
+        area = rung_area_for_title(self.kingdom)
+        event = open_regional_event(kind=blight, area=area, note="GM only")
+        closed = close_regional_event(open_regional_event(kind=blight, area=area))
+        client = APIClient()
+        client.force_authenticate(self.staff)
+        res = client.get(f"/api/almanach/regional-events/?realm={self.realm.pk}&active=true")
+        assert res.status_code == 200, res.content
+        rows = {r["id"]: r for r in res.data["results"]}
+        assert set(rows) == {event.pk}
+        assert rows[event.pk]["kind"] == "Blight"
+        assert rows[event.pk]["kind_id"] == blight.pk
+        assert rows[event.pk]["area_id"] == area.pk
+        assert rows[event.pk]["area"] == area.name
+        assert rows[event.pk]["realm_id"] == self.realm.pk
+        assert rows[event.pk]["severity_pct"] == 100
+        assert rows[event.pk]["ended_at"] is None
+        res = client.get(f"/api/almanach/regional-events/?realm={self.realm.pk}")
+        assert {r["id"] for r in res.data["results"]} == {event.pk, closed.pk}
+        res = client.get("/api/almanach/regional-event-kinds/")
+        assert res.status_code == 200
+        assert [r["name"] for r in res.data["results"]] == ["Blight"]
+        player = APIClient()
+        player.force_authenticate(self.player)
+        assert player.get("/api/almanach/regional-events/").status_code == 403
+
     def test_a_title_with_no_seat_reads_as_its_own_chain_top(self) -> None:
         """#4237: ``Title.seat_domain`` is nullable, and goes null when the seat's
         domain is deleted. A seatless title shares its seat with nothing, so it is
@@ -96,6 +131,25 @@ class AlmanachApiTests(TestCase):
         assert rows[held.pk]["is_seat_of"] == ""
         assert res.data["unclaimed_by_tier"]["barony"] == 1
         assert client.get(f"/api/almanach/houses/{house.pk}/document/").status_code == 200
+
+    def test_document_carries_the_houses_particle_pair(self) -> None:
+        """#5090: the house page shows the particles themselves, born and taken-in."""
+        client = APIClient()
+        client.force_authenticate(self.staff)
+        url = f"/api/almanach/houses/{self.crown.pk}/document/"
+        assert client.get(url).data["house"]["particle"] == {"born": "", "taken_in": ""}
+
+        # a house's realm is its society's (``realm_for_house``)
+        NobiliaryParticle.objects.create(
+            realm=self.crown.society.realm,
+            kind=self.crown.family.kind,
+            particle="aza",
+            taken_in_particle="azas",
+        )
+
+        house = client.get(url).data["house"]
+        assert house["particle"] == {"born": "aza", "taken_in": "azas"}
+        assert "particle_example" not in house
 
     def test_document_carries_the_houses_days_of_remembrance(self) -> None:
         """#4206: the house section lists its observances in calendar order,

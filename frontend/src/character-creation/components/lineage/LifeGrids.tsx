@@ -11,8 +11,11 @@
  * its answers, or the beat's own prompt in plain text when nothing is picked. Next
  * closes a section and opens the one below; the last Next opens the next stage.
  *
- * Unknown is a mark on the stage: it sets every beat of the stage unknown in one save
- * and folds the sections away. A pick can be marked secret; on a one-of row a secret
+ * Every section's grid ends on an Amnesiac card (#5102): no cost, not a distinction,
+ * its text a staff copy row. Picking it marks that one beat unknown, which drops its
+ * picks and closes its other cards, so the grid then shows the Amnesiac card alone,
+ * selected; picking it again brings the cards back. A stage every one of whose sections
+ * is Amnesiac reads Unknown. A pick can be marked secret; on a one-of row a secret
  * pick opens the Cover story box and the next click on another card sets that card as
  * the cover (the public sheet shows it in the secret's place). A person card takes the
  * figure's name once picked. Every stage ends on Description (Optional), one paragraph
@@ -155,6 +158,12 @@ export function LifeGrids({ draft, copy }: Props) {
   const stateOf = (beat: BeatPoolEntry): DraftBeatState => states[String(beat.beat_id)] ?? {};
   const firstName = draft.draft_data.first_name?.trim() || (copy?.life_name_fallback ?? 'you');
   const named = (text: string) => text.replace(/\{name\}/g, firstName);
+  // The Amnesiac card (#5102). Its text is the staff copy row; the default is the line
+  // the stage-wide Unknown mark it replaces carried.
+  const amnesiacName = copy?.life_amnesiac_name ?? 'Amnesiac';
+  const amnesiacText =
+    copy?.life_amnesiac_text ??
+    'No idea what happened in this part of your life. No memory of it at all.';
   const beginning = draft.selected_beginnings;
   const stages = LIFE_STAGE_ORDER.filter((stage) => (byStage.get(stage) ?? []).length > 0);
   const currentStage = openStage === undefined ? (stages[0] ?? null) : openStage;
@@ -267,7 +276,7 @@ export function LifeGrids({ draft, copy }: Props) {
     (pick.offer.max_rank > 1 ? ` (rank ${pick.rank})` : '') +
     (pick.secret ? ` (${copy?.life_secret_word ?? 'secret'}; cover: ${coverName(beat)})` : '');
   const summaryOf = (beat: BeatPoolEntry): { text: string; none: boolean; cost: number } => {
-    if (beat.unknown) return { text: copy?.beats_unknown_word ?? 'Unknown', none: true, cost: 0 };
+    if (beat.unknown) return { text: amnesiacName, none: true, cost: 0 };
     const picks = picksOf(beat);
     if (picks.length === 0) return { text: named(beat.prompt), none: true, cost: 0 };
     return {
@@ -278,8 +287,6 @@ export function LifeGrids({ draft, copy }: Props) {
   };
   const stageUnknown = (pool: BeatPoolEntry[]) => pool.length > 0 && pool.every((b) => b.unknown);
 
-  const setStageUnknown = (pool: BeatPoolEntry[], on: boolean) =>
-    patchBeats(new Map(pool.map((b) => [b.beat_id, { unknown: on }])));
   const toggleSecret = (beat: BeatPoolEntry, offerId: number) => {
     const state = stateOf(beat);
     const current = state.secret_offer_ids ?? [];
@@ -355,6 +362,24 @@ export function LifeGrids({ draft, copy }: Props) {
     .map((stage) => `${stageLabel(stage)}: ${unknownWord}`);
   const testamentLines = [...unknownStages, ...told];
 
+  const amnesiacCard = (beat: BeatPoolEntry) => (
+    <li>
+      <button
+        type="button"
+        className="stance amnesiac"
+        aria-pressed={beat.unknown}
+        onClick={() => patch(beat, { unknown: !beat.unknown })}
+      >
+        <span className={isOneOf(beat) ? 'dot' : 'dot sq'} />
+        <span>
+          <b>{amnesiacName}</b>
+          <span className="g">{amnesiacText}</span>
+        </span>
+        <span className="price" />
+      </button>
+    </li>
+  );
+
   const renderSection = (stage: string, beat: BeatPoolEntry) => {
     const open = currentBeat(stage) === beat.beat_id;
     const summary = summaryOf(beat);
@@ -412,6 +437,7 @@ export function LifeGrids({ draft, copy }: Props) {
               secretOfferIds={secretIds}
               wordSecret={copy?.life_card_secret ?? 'Secret: select a cover story below'}
               wordCover={copy?.life_cover_label ?? 'Cover story'}
+              trailing={amnesiacCard(beat)}
               syncErrorHint={copy?.offers_sync_error}
               wordPerRank={copy?.offers_word_per_rank}
               wordSpent={copy?.offers_word_spent}
@@ -530,25 +556,7 @@ export function LifeGrids({ draft, copy }: Props) {
         </h3>
         {open && (
           <div className="stage-body">
-            <div className="beat-foot">
-              <button
-                type="button"
-                className="entry-mark"
-                aria-pressed={unknown}
-                aria-label={`${copy?.beats_unknown_word ?? 'Unknown'}: ${label}`}
-                onClick={() => setStageUnknown(pool, !unknown)}
-              >
-                <span className="mark-box" aria-hidden="true">
-                  {unknown ? '✓' : ''}
-                </span>
-                {copy?.beats_unknown_word ?? 'Unknown'}
-              </button>
-              <span className="hint">
-                {copy?.life_stage_unknown_help ??
-                  'No idea what happened in this part of your life. No memory of it at all.'}
-              </span>
-            </div>
-            {!unknown && pool.map((beat) => renderSection(stage, beat))}
+            {pool.map((beat) => renderSection(stage, beat))}
             {!unknown && (
               <div className="field stage-description">
                 <label htmlFor={`stage-desc-${stage}`}>

@@ -40,7 +40,7 @@ from world.character_creation.constants import (
     REQUIRED_STATS,
     STARTING_TECHNIQUE_PICKS_TARGET,
     STAT_DEFAULT_VALUE,
-    STAT_DISPLAY_DIVISOR,
+    STAT_POINT_VALUE,
     TECHNIQUE_PERSONALIZATIONS_KEY,
     ActorSheetPrompt,
     AnchorSource,
@@ -2211,7 +2211,7 @@ class CharacterDraft(SharedMemoryModel):
         Get stat bonuses from selected species.
 
         Returns:
-            Dict mapping stat names to bonus values (e.g., {"strength": 1})
+            Dict mapping stat names to bonus values (e.g., {"strength": 10})
         """
         if not self.selected_species:
             return {}
@@ -2224,8 +2224,8 @@ class CharacterDraft(SharedMemoryModel):
         and returns bonuses for effects targeting the 'stat' category.
 
         Returns:
-            Dict mapping stat names to display-scale bonus values
-            (e.g., {"strength": 1} for +10 internal).
+            Dict mapping stat names to bonus values in stored units
+            (e.g., {"strength": 10}).
         """
         from world.distinctions.models import DistinctionEffect  # noqa: PLC0415
         from world.mechanics.constants import STAT_CATEGORY_NAME  # noqa: PLC0415
@@ -2254,9 +2254,11 @@ class CharacterDraft(SharedMemoryModel):
         for effect in effects:
             stat_name = effect.target.name
             for rank in ranks_by_id.get(effect.distinction_id, [1]):
+                # CG allocates whole stat points, so a bonus counts in whole points
+                # (a +15 effect adds 10 to the budget), as it always has.
                 value = effect.get_value_at_rank(rank)
-                display_value = value // STAT_DISPLAY_DIVISOR
-                bonuses[stat_name] = bonuses.get(stat_name, 0) + display_value
+                whole_points = value // STAT_POINT_VALUE * STAT_POINT_VALUE
+                bonuses[stat_name] = bonuses.get(stat_name, 0) + whole_points
 
         return bonuses
 
@@ -2266,7 +2268,7 @@ class CharacterDraft(SharedMemoryModel):
         Aggregates bonuses from heritage (species) and distinctions.
 
         Returns:
-            Dict mapping stat names to total display-scale values.
+            Dict mapping stat names to total bonus values (stored units).
         """
         heritage = self.get_stat_bonuses_from_heritage()
         distinctions = self.get_stat_bonuses_from_distinctions()
@@ -2278,7 +2280,7 @@ class CharacterDraft(SharedMemoryModel):
         return combined
 
     def calculate_final_stats(self) -> dict[str, int]:
-        """Return allocated stats (already in 1-5 scale). No bonuses applied on top."""
+        """Return allocated stats (stored units, 10-50). No bonuses applied on top."""
         stats = self.draft_data.get("stats", {})
         return {name: stats.get(name, STAT_DEFAULT_VALUE) for name in REQUIRED_STATS}
 
