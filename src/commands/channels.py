@@ -162,10 +162,13 @@ class CmdChannel(ArxCommand):
             self._list_identities(rest)
             return
         name, choice = (part.strip() for part in rest.split("=", 1))
-        if not choice.isdigit():
+        # int(), not str.isdigit(): "\u00b2" passes isdigit() and int() refuses it.
+        try:
+            number = int(choice)
+        except ValueError:
             self._post(args)
             return
-        self._run(SetChannelIdentityAction(), channel_name=name, choice=int(choice))
+        self._run(SetChannelIdentityAction(), channel_name=name, choice=number)
 
     def _list_identities(self, name: str) -> None:
         from world.channels.services import channel_named, eligible_tenures  # noqa: PLC0415

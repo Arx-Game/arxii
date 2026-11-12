@@ -229,6 +229,8 @@ class TalkingOnPublic(ChannelJourneyCase):
         )
         self.assertFalse(result.success)
         self.assertEqual(result.message, "No such channel.")
+        # The telnet picker reads it as a post to a channel named "as Public", and refuses.
+        self.assertIn("No such channel.", self.telnet(self.hobb, "channel as Public=\u00b2"))
 
     def test_the_stock_evennia_channel_command_is_gone(self) -> None:
         listing = self.telnet(self.ysmay, "channel")
