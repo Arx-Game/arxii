@@ -228,6 +228,35 @@ were deleted rather than kept alongside the new page; see ADR-0227.
 
 Details: ADR-0227, `docs/systems/realms.md`.
 
+## Built - Player Channels (#3299)
+
+Persistent named OOC channels replace the Evennia channels the game had
+inherited by accident (the stock `@channel` command, an unconfigured Public
+channel, and the #1884 `house_<pk>` channels):
+
+- **One PUBLIC channel and one ORG channel per non-covert organization**
+  (`world.channels`), provisioned by explicit calls where orgs are made. Covert
+  and covenant-backed orgs get none. A house's ORG channel keeps the vassal
+  cascade: members of a non-covert vassal house reach the liege's channel.
+- **Speaker = a roster tenure chosen per channel**, shown as the character
+  name or "2nd player of Y", frozen on each message; account names are never
+  shown, so alts are never outed.
+- **Per-channel controls:** join/leave, speak as, mute (no push, no badge),
+  collapse, notification level (every message / unread count / nothing),
+  order. Blocked authors show as an "N hidden" divider; account-muted authors
+  are dropped.
+- **Staff moderation:** delete a message (gone from every open screen) and
+  ban an author from a channel; staff can read every non-covert channel.
+- **Surfaces:** the right-hand "Channels" mode in the play sidebar, a
+  `/channels` page, and telnet `channel`. History keeps the newest 500
+  messages per channel (placeholder cap, pruned hourly).
+- **Old Evennia data discarded:** migration 0393 deleted the Evennia Public
+  and house channels and their nicks; players join again.
+
+Deferred: covert-org channels, covenant channels, player-made channels,
+reactions, paging to older history. Details: `docs/systems/channels.md`,
+ADR-3299.
+
 ## What's Needed for MVP
 - ~~Friend list system~~ — SHIPPED (#1727): `FriendsTab`/`FriendButton` over
   `world/scenes/friend_views.py`

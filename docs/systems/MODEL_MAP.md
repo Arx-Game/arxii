@@ -1388,6 +1388,63 @@
 - `write_offering_signals(offering: world.ceremonies.models.CeremonyOffering, reading: world.ceremonies.services.ItemReading) -> None - Snapshot the item's meaning signals onto its offering record (#4500).`
 
 
+## world.channels
+
+### Channel
+**Foreign Keys:**
+  - organization -> societies.Organization [OneToOne] (nullable)
+**Pointed to by:**
+  - messages <- channels.ChannelMessage
+  - subscriptions <- channels.ChannelSubscription
+  - bans <- channels.ChannelBan
+
+### ChannelBan
+**Foreign Keys:**
+  - channel -> channels.Channel [FK]
+  - account -> evennia.AccountDB [FK]
+  - banned_by -> evennia.AccountDB [FK] (nullable)
+
+### ChannelMessage
+**Foreign Keys:**
+  - channel -> channels.Channel [FK]
+  - author_tenure -> roster.RosterTenure [FK]
+
+### ChannelSubscription
+**Foreign Keys:**
+  - account -> evennia.AccountDB [FK]
+  - channel -> channels.Channel [FK]
+  - display_tenure -> roster.RosterTenure [FK] (nullable)
+
+### Service Functions
+- `accessible_channels_for(account: 'AccountDB') -> 'QuerySet[Channel]' - Active channels this account may read right now (and post in, given an eligible`
+- `account_muter_player_ids(*, target_player: 'PlayerData') -> 'set[int]' - Player ids holding an account-level Mute on ``target_player``: the speaker-side twin of`
+- `ban_channel_author(*, message: 'ChannelMessage', staff_account: 'AccountDB', reason: 'str' = '') -> 'ChannelBan' - Ban the message author's account from the channel and drop its subscription.`
+- `blocked_player_ids_for(player: 'PlayerData') -> 'set[int]' - Account-level Block partner ids for this player, either direction (#2996).`
+- `can_access_channel(account: 'AccountDB', channel: 'Channel') -> 'bool'`
+- `channel_named(account: 'AccountDB', name: 'str') -> 'Channel | None' - The active channel this account names, matched case-insensitively on`
+- `default_tenure_for(account: 'AccountDB', channel: 'Channel') -> 'RosterTenure | None' - The tenure of the puppeted character (else of the selected character), if it is`
+- `delete_channel_message(*, message: 'ChannelMessage', staff_account: 'AccountDB') -> 'None' - Delete ``message`` and tell every subscriber's web sessions to drop it.`
+- `deliver_channel_message(message: 'ChannelMessage') -> 'None' - Push ``message`` live to every subscriber who may see it, the author included.`
+- `eligible_tenures(account: 'AccountDB', channel: 'Channel') -> 'list[RosterTenure]' - The account's current tenures that may speak in ``channel``, by character name.`
+- `ensure_public_channel() -> 'Channel' - Get or create the PUBLIC channel. Matches on name AND kind, so a non-public row that`
+- `findable_channels_for(account: 'AccountDB') -> 'QuerySet[Channel]' - Active channels this account may name, by name or id: those it can reach, is`
+- `hidden_author_player_ids(account: 'AccountDB') -> 'set[int]' - Players whose channel rows this account sees hidden: account blocks, either way.`
+- `history_for(account: 'AccountDB', channel: 'Channel') -> 'QuerySet[ChannelMessage]' - The channel's messages for this reader, OOC-muted authors dropped. Blocked authors`
+- `mark_read(subscription: 'ChannelSubscription') -> 'None'`
+- `muted_player_ids_for(*, viewer_player: 'PlayerData') -> 'set[int]' - Account-level Mute target ids for this viewer (#2996).`
+- `post_to_channel(*, account: 'AccountDB', channel: 'Channel', body: 'str') -> 'ChannelMessage' - Post ``body`` as the subscription's chosen tenure and deliver it live.`
+- `provision_missing_org_channels() -> 'int' - Provision the ORG channel of every org that should have one and lacks it (seed and`
+- `provision_org_channel(organization: 'Organization') -> 'Channel | None' - Get or create the ORG channel for ``organization``.`
+- `prune_channel_history(*, cap: 'int' = 500) -> 'int' - Delete every message beyond the newest ``cap`` in each channel; return the count.`
+- `subscribe(account: 'AccountDB', channel: 'Channel') -> 'ChannelSubscription' - Join ``channel`` (idempotent), pre-filling the speaking identity.`
+- `subscriptions_by_channel(account: 'AccountDB') -> 'dict[int, ChannelSubscription]' - The account's own subscriptions keyed by channel pk, with what a listing shows.`
+- `unread_count(subscription: 'ChannelSubscription') -> 'int' - Unread messages since ``last_read_at``; 0 for a muted channel or level NONE.`
+- `unread_counts(account: 'AccountDB', subscriptions: 'list[ChannelSubscription]') -> 'dict[int, int]' - Unread messages per subscription pk (one query for the lot): messages after`
+- `unsubscribe(account: 'AccountDB', channel: 'Channel') -> 'None'`
+- `update_subscription(subscription: 'ChannelSubscription', *, display_tenure: 'RosterTenure | None | Unset' = <world.channels.services.Unset object>, muted: 'bool | Unset' = <world.channels.services.Unset object>, collapsed: 'bool | Unset' = <world.channels.services.Unset object>, notification_level: 'str | Unset' = <world.channels.services.Unset object>, sort_order: 'int | Unset' = <world.channels.services.Unset object>) -> 'ChannelSubscription' - Change any subset of a subscription's preferences.`
+- `vassals_of(liege: 'Organization', *, recursive: 'bool' = False, include_covert: 'bool' = True) -> 'list[Organization]' - Direct vassals, or the whole subtree with ``recursive=True`` (BFS).`
+
+
 ## world.character_creation
 
 ### AppearanceSection
@@ -7522,7 +7579,7 @@
 - `passive_mantle_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum tier-0 FLAT_BONUS contributions from attuned mantle threads (Spec D §5.2).`
 - `passive_mantle_crossing_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum ConditionModifierEffect from MANTLE thread crossing choices (always-on).`
 - `passive_motif_style_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' - Coherence bonus for ``target``'s resonance (Spec D §5.3). Thin wrapper over`
-- `power_flat_bonus_for_resonance(sheet: 'object', resonance_id: 'int') -> 'int' - Sum POWER-category flat modifiers (distinctions) applicable to ``resonance_id``.`
+- `power_flat_bonus_for_resonance(sheet: 'object', resonance_id: 'int | None', *, scoped_only: 'bool' = False) -> 'int' - Sum POWER-category flat modifiers (distinctions) applicable to ``resonance_id``.`
 - `prerequisites_met(prereqs: 'Iterable[Prerequisite]', caster: 'ObjectDB', target: 'ObjectDB') -> 'bool' - True if target satisfies every one of prereqs (all() semantics; empty = True).`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, *, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> int - Preview the rank difference for a check without rolling.`
 - `property_damage_bonus(target: 'ObjectDB', damage_type: 'DamageType | None') -> 'int' - Sum PropertyDamageModifier.modifier_value for target's active Properties.`
@@ -9143,6 +9200,7 @@
   - treasured_subjects <- boundaries.TreasuredSubject
   - treasuredsubject_visible <- boundaries.TreasuredSubject
   - treasuredsubject_excluded <- boundaries.TreasuredSubject
+  - channel_messages <- channels.ChannelMessage
   - granted_trait_changes <- traits.CharacterTraitChange
   - codex_taught <- codex.CharacterCodexKnowledge
   - codex_teaching_offers <- codex.CodexTeachingOffer
@@ -10451,6 +10509,7 @@
   - boards <- boards.Board
   - building_listings <- buildings.BuildingListing
   - captives <- captivity.Captivity
+  - ooc_channel <- channels.Channel
   - beginning_enemy_offers <- character_creation.BeginningEnemyOffer
   - anchor_prompts <- character_creation.OriginTemplateSlot
   - connection_rows <- character_creation.CharacterOriginSlot

@@ -6847,6 +6847,50 @@ table-scoped) - see `docs/adr/0228-board-posts-are-authored-by-persona.md`.
 - **Source:** `src/world/boards/` (see the app's `AGENT_GLOSSARY.md` and
   `docs/systems/boards.md` for the full write-up).
 
+### Channels (player OOC channels - #3299)
+Persistent named out-of-character chat: one PUBLIC channel, one ORG channel per
+non-covert, non-covenant organization, optional STAFF channels. Our own models;
+Evennia's `@channel`, bridge commands, `DEFAULT_CHANNELS` and `house_<pk>`
+channels are retired (migration 0393 deleted the old rows, history discarded).
+A speaker is a `RosterTenure` chosen per channel, never an account name
+(ADR-3299).
+
+- **Models** (`world.channels.models`): `Channel` (`kind` PUBLIC/ORG/STAFF,
+  nullable O2O `organization`, check constraint ORG iff organization;
+  `display_name` reads the org name live), `ChannelMessage` (`author_tenure`
+  frozen at post time), `ChannelSubscription` (per account: `display_tenure`,
+  `muted`, `collapsed`, `notification_level`, `sort_order`, `last_read_at`),
+  `ChannelBan`. `RosterTenure.speaker_name` renders the speaker.
+- **Services** (`world.channels.services`): `accessible_channels_for` /
+  `can_access_channel` / `findable_channels_for`, `eligible_tenures` /
+  `default_tenure_for`, `subscribe` / `update_subscription` / `unsubscribe`,
+  `post_to_channel`, `deliver_channel_message`, `history_for`,
+  `unread_counts` / `mark_read`, `delete_channel_message` /
+  `ban_channel_author` (staff), `provision_org_channel`,
+  `ensure_public_channel`, `prune_channel_history` (hourly
+  `channels.prune_history` task). Raises `ChannelError`.
+- **Access:** ORG = account-union of active memberships in the org or a
+  non-covert vassal house (the #1884 house vassal cascade; a covert vassal cuts
+  its branch). Staff read every non-covert channel; posting stays
+  identity-gated. Blocked authors are hidden rows ("N hidden"), account-muted
+  authors dropped.
+- **Actions** (`actions/definitions/channels.py`, account-authorized,
+  `actor=None`): `post_to_channel`, `join_channel`, `leave_channel`,
+  `set_channel_mute`, `set_channel_identity`, `delete_channel_message`,
+  `ban_channel_author`. `account` is in `SERVER_SUPPLIED_KWARGS`
+  (`actions/player_interface.py`), stripped from client dispatch kwargs, so web
+  writes go through REST.
+- **Telnet:** `CmdChannel` (`commands/channels.py`, `channel`/`chan`/`channels`,
+  AccountCmdSet).
+- **API:** `/api/channels/channels/` (+ `identities/`), `subscriptions/`
+  (+ `mark-read/`), `messages/?channel=` (POST to post; staff DELETE and `ban/`).
+- **Frames:** `channel_message`, `channel_message_removed`
+  (`web/webclient/message_types.py`).
+- **Web:** `frontend/src/channels/` - the `PlaySidebar` "Channels" mode on
+  `/game` and the `/channels` page; never the center IC feed or the rail.
+- **Source:** `src/world/channels/` (see its `AGENT_GLOSSARY.md` and
+  `docs/systems/channels.md`).
+
 ### Sanctum (Plan 4 §F — first Room Feature kind)
 Plan 4 §F (#669 §F, shipped via #703). Per-resonance per-room
 generation surface installed via the Ritual of Sanctification. Two
