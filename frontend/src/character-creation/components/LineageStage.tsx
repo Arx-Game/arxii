@@ -125,10 +125,15 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
 
         {template && (
           <>
+            {/* The beginning's parentage note at body size under the beginning's name, so it
+                reads as that beginning's and not as loose small print (#5102). */}
             {template.parentage_note && (
-              <div className="space-y-3 text-sm">
-                <Paragraphs text={template.parentage_note} />
-              </div>
+              <section aria-label={draft.selected_beginnings.name}>
+                <h2 className="section-h">{draft.selected_beginnings.name}</h2>
+                <div className="leaf-body">
+                  <Paragraphs text={template.parentage_note} />
+                </div>
+              </section>
             )}
             {/* The house and the parents come first (#4124); a general write-in never
                 renders. */}
