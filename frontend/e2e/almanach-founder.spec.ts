@@ -228,7 +228,38 @@ const TEMPLATE = {
   allegiance_max: 5,
   power_min: -5,
   power_max: 5,
-  charter_questions: [] as unknown[],
+  // #5110: the realm's one charter question is its patron, answered with a god.
+  // The ids are gods' ids, as `patron_choice_rows` sends them.
+  charter_questions: [
+    {
+      id: 77,
+      name: 'Umbral Patron Deity',
+      prompt: 'Which temple does your house stand behind?',
+      min_picks: 1,
+      max_picks: 1,
+      sets_patron: true,
+      options: [
+        {
+          id: 31,
+          name: 'Calyx',
+          description: 'Honorable combat, just war',
+          codex_entry_id: null,
+          being_id: 31,
+          being_name: 'Calyx',
+          target_entry_id: 501,
+        },
+        {
+          id: 32,
+          name: 'Veil',
+          description: 'Secrets kept',
+          codex_entry_id: null,
+          being_id: 32,
+          being_name: 'Veil',
+          target_entry_id: 502,
+        },
+      ],
+    },
+  ] as unknown[],
   features: [] as unknown[],
   holdings: [] as unknown[],
   default_succession_law: null,
@@ -517,6 +548,27 @@ test('a founder claims the demo duchy and submits a house claim', async ({ page 
   await page.locator('#founder-house-colors').fill('Grey and gold');
   await page.locator('#founder-house-sigil').fill('A grey tower on a gold field.');
   await page.locator('#founder-house-backstory').fill('A frontier house carved from the hills.');
+
+  // #5110: the charter's question reads under its own name, not as a Quiddity, and
+  // its choices are gods. Picking one marks it; it goes up as `patron_being_id`.
+  const patronField = page.locator('.field', { hasText: 'Umbral Patron Deity' });
+  await expect(patronField).toContainText('Which temple does your house stand behind?');
+  await expect(page.getByText('House Quiddity')).toHaveCount(0);
+  await expect(patronField.getByRole('button')).toHaveText([
+    /Calyx.*Honorable combat, just war/,
+    /Veil.*Secrets kept/,
+  ]);
+  const veil = patronField.getByRole('button', { name: /Veil/ });
+  await safeClick(veil);
+  await expect(veil).toHaveAttribute('aria-pressed', 'true');
+  await expect(patronField.getByRole('button', { name: /Calyx/ })).toHaveAttribute(
+    'aria-pressed',
+    'false'
+  );
+  await page.screenshot({
+    path: path.join(REPO_ROOT_5106, 'docs', 'reviews', '5110', '3-cg-patron-question.png'),
+    fullPage: true,
+  });
   await safeClick(page.getByRole('button', { name: 'Next', exact: true }));
 
   // Family chapter (plate F-III): add a spouse to the founder's own node
@@ -555,6 +607,9 @@ test('a founder claims the demo duchy and submits a house claim', async ({ page 
   const posted = postedPayload as unknown as Record<string, unknown>;
   expect(posted.title).toBe(DUCHY_ID);
   expect(posted.founder_relation).toBe('head');
+  // #5110: the god picked on the patron question, on its own; no option picks.
+  expect(posted.patron_being_id).toBe(32);
+  expect(posted.facets).toEqual([]);
   expect(Array.isArray(posted.kin)).toBe(true);
   expect((posted.kin as Record<string, unknown>[]).some((k) => k.relation === 'spouse')).toBe(true);
   expect(Array.isArray(posted.lands)).toBe(true);
