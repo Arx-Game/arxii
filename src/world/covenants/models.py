@@ -1406,7 +1406,7 @@ class CharacterVowFocusPick(SharedMemoryModel):
     one in the admin. ``clean()`` runs the rules in
     ``world.covenants.focus_picks.validate_character_focus_pick``: the pick
     belongs to the held vow (or its anchor, for a sub-role), the membership is
-    not a secondary vow, the pick's level is no higher than the shown vow level,
+    not a secondary vow, the pick's level is no higher than the vow level,
     and the level's picks fit the budget.
     """
 

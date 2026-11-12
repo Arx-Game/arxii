@@ -143,7 +143,7 @@ class CrossingChoiceModelTests(TestCase):
             option=self.option,
         )
         self.assertEqual(choice.option, self.option)
-        self.assertEqual(choice.crossing_level, 3)
+        self.assertEqual(choice.crossing_level, 30)
 
     def test_unique_choice_per_thread_per_crossing(self) -> None:
         from django.db import IntegrityError
@@ -183,7 +183,7 @@ class PendingCrossingOfferModelTests(TestCase):
             thread=self.thread,
             crossing_level=30,
         )
-        self.assertEqual(offer.crossing_level, 3)
+        self.assertEqual(offer.crossing_level, 30)
 
     def test_one_pending_per_thread(self) -> None:
         from django.db import IntegrityError
