@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { toast } from 'sonner';
+import { renderHook } from '@testing-library/react';
 import {
   handleChannelMessagePayload,
+  handleChannelMessageRemovedPayload,
   resetChannelMessageDedupe,
 } from '@/hooks/handleChannelMessagePayload';
-import { channelKeys } from '@/channels/queries';
+import { channelKeys, useOpenLaneRegistration } from '@/channels/queries';
 import type { Channel, ChannelMessagePage } from '@/channels/types';
 import type { ChannelMessagePayload } from '@/hooks/types';
 import { queryClient } from '@/queryClient';
@@ -90,6 +92,28 @@ describe('handleChannelMessagePayload', () => {
     expect(unread()).toBe(1);
     expect(toast).not.toHaveBeenCalled();
     expect(messages()).toHaveLength(2);
+  });
+
+  it('a lane on screen gets the row but no bump and no toast', () => {
+    const lane = renderHook(() => useOpenLaneRegistration(CHANNEL_ID, true));
+    handleChannelMessagePayload(payload());
+    lane.unmount();
+    expect(messages()).toHaveLength(1);
+    expect(unread()).toBe(0);
+    expect(toast).not.toHaveBeenCalled();
+  });
+
+  it('clips a long body in the toast', () => {
+    handleChannelMessagePayload(payload({ body: 'x'.repeat(400) }));
+    const text = vi.mocked(toast).mock.calls[0][0] as string;
+    expect(text.length).toBeLessThan(200);
+  });
+
+  it('channel_message_removed drops the row', () => {
+    handleChannelMessagePayload(payload({ message_id: 7 }));
+    handleChannelMessagePayload(payload({ message_id: 8 }));
+    handleChannelMessageRemovedPayload({ message_id: 7, channel_id: CHANNEL_ID });
+    expect(messages().map((row) => row.id)).toEqual([8]);
   });
 
   it('refuses a malformed frame', () => {

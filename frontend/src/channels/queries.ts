@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { toast } from 'sonner';
 import { useAccount } from '@/store/hooks';
 import {
+  banChannelAuthor,
+  deleteChannelMessage,
   fetchChannelIdentities,
   fetchChannelMessages,
   fetchChannels,
@@ -61,6 +63,22 @@ export function addMessageToCache(client: QueryClient, message: ChannelMessage):
     return { ...page, count: page.count + 1, results: [message, ...page.results] };
   });
   return added;
+}
+
+/** Drops a message from a channel's cached history. */
+export function removeMessageFromCache(
+  client: QueryClient,
+  channelId: number,
+  messageId: number
+): void {
+  client.setQueryData<ChannelMessagePage>(channelKeys.messages(channelId), (page) => {
+    if (!page || !page.results.some((row) => row.id === messageId)) return page;
+    return {
+      ...page,
+      count: page.count - 1,
+      results: page.results.filter((row) => row.id !== messageId),
+    };
+  });
 }
 
 /** Replaces one channel's subscription in the cached channel list. */
@@ -183,5 +201,25 @@ export function useMarkChannelRead(channelId: number) {
   return useMutation({
     mutationFn: (subscriptionId: number) => markChannelRead(subscriptionId),
     onSuccess: (subscription) => patchCachedSubscription(client, channelId, () => subscription),
+  });
+}
+
+/** Staff: delete a message; the row leaves this cache at once (the push covers other tabs). */
+export function useDeleteChannelMessage(channelId: number) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (messageId: number) => deleteChannelMessage(messageId),
+    onSuccess: (_data, messageId) => removeMessageFromCache(client, channelId, messageId),
+    onError: showError,
+  });
+}
+
+/** Staff: ban a message's author from the channel. */
+export function useBanChannelAuthor() {
+  return useMutation({
+    mutationFn: ({ messageId, reason }: { messageId: number; reason: string }) =>
+      banChannelAuthor(messageId, reason),
+    onSuccess: (detail) => toast.success(detail),
+    onError: showError,
   });
 }

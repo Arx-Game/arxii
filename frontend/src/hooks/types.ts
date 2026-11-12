@@ -41,6 +41,8 @@ export const WS_MESSAGE_TYPE = {
   MAIL_ARRIVED: 'mail_arrived',
   /** Inbound: a message in a channel the account joined; never enters the IC feed (#3299). */
   CHANNEL_MESSAGE: 'channel_message',
+  /** Inbound: staff deleted a channel message; drop the row (#3299). */
+  CHANNEL_MESSAGE_REMOVED: 'channel_message_removed',
   /** Inbound: an environmental hazard entered a damaging stage; show the response card (#2846). */
   HAZARD_PROMPT: 'hazard_prompt',
   REQUEST_ROOM_STATE: 'request_room_state',
@@ -321,6 +323,12 @@ export interface ChannelMessagePayload {
   created_at: string;
   is_own: boolean;
   notification_level: 'all' | 'badge' | 'none';
+}
+
+/** Staff deleted a channel message (#3299); ids only. */
+export interface ChannelMessageRemovedPayload {
+  message_id: number;
+  channel_id: number;
 }
 
 /**

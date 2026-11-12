@@ -33,6 +33,7 @@ class WebsocketMessageType(str, Enum):
     GM_PROMPT = "gm_prompt"
     INTERACTION_CHANGED = "interaction_changed"
     CHANNEL_MESSAGE = "channel_message"
+    CHANNEL_MESSAGE_REMOVED = "channel_message_removed"
 
 
 @dataclass
@@ -220,6 +221,15 @@ class ChannelMessagePayload:
     created_at: str
     is_own: bool
     notification_level: str
+
+
+@dataclass
+class ChannelMessageRemovedPayload:
+    """Payload for ``channel_message_removed`` messages (#3299): staff deleted a channel
+    message; open readers drop the row. Ids only."""
+
+    message_id: int
+    channel_id: int
 
 
 @dataclass

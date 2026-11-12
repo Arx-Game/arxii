@@ -471,8 +471,17 @@ class StaffModeration(ChannelJourneyCase):
 
     def test_a_deleted_message_is_gone_for_every_reader(self) -> None:
         self.assertEqual(len(self.history(self.hobb_account, self.public)), 1)
+        hobb_tab = self.connect_session(self.hobb_account, "websocket")
+        hobb_client = self.connect_session(self.hobb_account, "telnet")
         deleted = self.api(self.staff).delete(f"{MESSAGES}{self.message_id}/")
         self.assertEqual(deleted.status_code, 204)
+        # An open browser tab drops the row at once; a MUD client is told nothing.
+        removed = self.session_frames(hobb_tab, "channel_message_removed")
+        self.assertEqual(len(removed), 1)
+        self.assertEqual(removed[0][1]["message_id"], self.message_id)
+        self.assertEqual(removed[0][1]["channel_id"], self.public.pk)
+        self.assertEqual(self.session_frames(hobb_client, "channel_message_removed"), [])
+        self.assertEqual(self.session_frames(hobb_client, "text"), [])
         self.assertEqual(self.history(self.hobb_account, self.public), [])
         self.assertEqual(self.history(self.ysmay_account, self.public), [])
 

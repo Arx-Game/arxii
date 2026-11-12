@@ -104,3 +104,24 @@ export async function markChannelRead(subscriptionId: number): Promise<ChannelSu
   );
   return res.json();
 }
+
+/** Staff: delete one message. */
+export async function deleteChannelMessage(messageId: number): Promise<void> {
+  await ensureOk(
+    await apiFetch(`${BASE}/messages/${messageId}/`, { method: 'DELETE' }),
+    'Failed to delete'
+  );
+}
+
+/** Staff: ban a message's author from its channel; returns the server's line. */
+export async function banChannelAuthor(messageId: number, reason: string): Promise<string> {
+  const res = await ensureOk(
+    await apiFetch(`${BASE}/messages/${messageId}/ban/`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+    'Failed to ban'
+  );
+  const data: { detail: string } = await res.json();
+  return data.detail;
+}

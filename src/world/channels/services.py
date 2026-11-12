@@ -13,7 +13,9 @@ proof of access.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import asdict
+from functools import partial
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -23,7 +25,7 @@ from django.db.models.functions import RowNumber
 from django.utils import timezone
 from evennia.utils.logger import log_trace
 
-from web.webclient.message_types import ChannelMessagePayload
+from web.webclient.message_types import ChannelMessagePayload, ChannelMessageRemovedPayload
 from world.channels.constants import (
     CHANNEL_HISTORY_CAP,
     CHANNEL_MESSAGE_MAX_LENGTH,
@@ -412,6 +414,21 @@ def _send(subscription: ChannelSubscription, message: ChannelMessage, *, is_own:
             session.msg(text=(line, {"type": "channel"}))
 
 
+def _push_best_effort(push: Callable[[], None], failure: str) -> None:
+    """Run one live push; a failure is logged, never raised (the row write already
+    happened, and one bad session must not stop the rest)."""
+    try:
+        push()
+    except Exception:  # noqa: BLE001 - best-effort push; the database change is already made
+        log_trace(failure)
+
+
+def _send_removed(subscription: ChannelSubscription, payload: dict[str, int]) -> None:
+    for session in subscription.account.sessions.all():
+        if str(session.protocol_key or "") in WEB_PROTOCOL_KEYS:
+            session.msg(channel_message_removed=((), payload))
+
+
 def deliver_channel_message(message: ChannelMessage) -> None:
     """Push ``message`` live to every subscriber who may see it, the author included."""
     channel = message.channel
@@ -430,12 +447,10 @@ def deliver_channel_message(message: ChannelMessage) -> None:
             or subscription.account_id in muting
         ):
             continue
-        try:
-            _send(subscription, message, is_own=is_own)
-        except Exception:  # noqa: BLE001 - best-effort push; the message row is already saved
-            log_trace(
-                f"channel push failed for message={message.pk} subscription={subscription.pk}"
-            )
+        _push_best_effort(
+            partial(_send, subscription, message, is_own=is_own),
+            f"channel push failed for message={message.pk} subscription={subscription.pk}",
+        )
 
 
 # ---------------------------------------------------------------- reading
@@ -505,8 +520,17 @@ def _require_staff(staff_account: AccountDB) -> None:
 
 
 def delete_channel_message(*, message: ChannelMessage, staff_account: AccountDB) -> None:
+    """Delete ``message`` and tell every subscriber's web sessions to drop it."""
     _require_staff(staff_account)
+    channel = message.channel
+    payload = asdict(ChannelMessageRemovedPayload(message_id=message.pk, channel_id=channel.pk))
     message.delete()
+    for subscription in channel.subscriptions.select_related("account"):
+        _push_best_effort(
+            partial(_send_removed, subscription, payload),
+            f"channel removal push failed for message={payload['message_id']} "
+            f"subscription={subscription.pk}",
+        )
 
 
 def ban_channel_author(

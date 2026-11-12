@@ -1,6 +1,11 @@
 import { toast } from 'sonner';
-import type { ChannelMessagePayload } from './types';
-import { addMessageToCache, isChannelLaneOpen, patchCachedSubscription } from '@/channels/queries';
+import type { ChannelMessagePayload, ChannelMessageRemovedPayload } from './types';
+import {
+  addMessageToCache,
+  isChannelLaneOpen,
+  patchCachedSubscription,
+  removeMessageFromCache,
+} from '@/channels/queries';
 import { queryClient } from '@/queryClient';
 
 /**
@@ -11,6 +16,11 @@ import { queryClient } from '@/queryClient';
  */
 const seenMessageIds = new Set<number>();
 const SEEN_LIMIT = 500;
+const TOAST_BODY_LIMIT = 140;
+
+function clip(text: string): string {
+  return text.length > TOAST_BODY_LIMIT ? `${text.slice(0, TOAST_BODY_LIMIT - 1)}…` : text;
+}
 
 function remember(messageId: number): boolean {
   if (seenMessageIds.has(messageId)) return false;
@@ -67,7 +77,17 @@ export function handleChannelMessagePayload(
     unread_count: sub.unread_count + 1,
   }));
   if (payload.notification_level === 'all') {
-    toast(`${payload.channel_name} - ${payload.speaker}: ${payload.body}`);
+    toast(`${payload.channel_name} - ${payload.speaker}: ${clip(payload.body)}`);
   }
+  return undefined;
+}
+
+/** Staff deleted a channel message (#3299): drop it from that channel's cached history. */
+export function handleChannelMessageRemovedPayload(
+  payload: ChannelMessageRemovedPayload | undefined
+): false | undefined {
+  if (!payload || !Number.isInteger(payload.message_id) || !Number.isInteger(payload.channel_id))
+    return false;
+  removeMessageFromCache(queryClient, payload.channel_id, payload.message_id);
   return undefined;
 }
