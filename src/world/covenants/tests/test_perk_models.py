@@ -257,14 +257,9 @@ class VowSituationalPerkModelTests(TestCase):
         )
         perk.full_clean()
 
-    def test_applies_to_attack_rolls_is_a_check_bonus_scope_only(self) -> None:
-        """#5092: "Applies to" narrows a check bonus; on any other effect clean() refuses
-        it. It combines with a check type (AND), like every other scope column."""
-        VowSituationalPerkFactory(
-            effect_kind=PerkEffectKind.CHECK_BONUS,
-            check_type=CheckTypeFactory(),
-            roll_kind=PerkRollKind.ATTACK,
-        ).full_clean()
+    def test_applies_to_attack_rolls_is_refused_off_a_check_bonus(self) -> None:
+        """#5092: "Applies to" narrows only a check bonus; clean() refuses it on any other
+        effect. A unit, because staff authoring is admin validation no journey reaches."""
         perk = VowSituationalPerkFactory.build(
             covenant_role=CovenantRoleFactory(covenant_type=CovenantType.DURANCE),
             effect_kind=PerkEffectKind.POWER_BONUS,
