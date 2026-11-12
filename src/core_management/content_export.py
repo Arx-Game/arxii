@@ -433,14 +433,14 @@ EXPORT_FIELD_EXCLUSIONS: dict[str, frozenset[str]] = {
     # #3648: which staff houses a Family Template lists as served is installation
     # state (those orgs are not corpus rows), same rationale as faction_affiliation.
     "societies.housetemplate": frozenset({"served_house_choices"}),
-    # #4205: a god or totem an aspect option IS, and the name a house calls it by,
-    # are installation rows (beings and nicknames carry no natural key), so the
-    # catalog exports without them and staff re-bind both in admin elsewhere. The
-    # question's patron flag travels with the bindings, not the catalog: exported
-    # alone it would mark a question whose options name no god, and every founding
-    # on it would refuse until the rebind.
-    "societies.housecharteroption": frozenset({"being", "being_nickname"}),
-    "societies.housecharterquestion": frozenset({"sets_patron"}),
+    # #4205: a god or totem an aspect option IS is an installation row (beings carry
+    # no natural key), so the catalog exports without it and staff re-bind it in
+    # admin elsewhere. #5110: the same for the worship a patron question draws its
+    # gods from. The question's patron flag travels with that binding, not the
+    # catalog: exported alone it would mark a patron question that offers no gods,
+    # and every founding on it would refuse until the rebind.
+    "societies.housecharteroption": frozenset({"being"}),
+    "societies.housecharterquestion": frozenset({"sets_patron", "patron_tradition"}),
 }
 
 

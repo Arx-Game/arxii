@@ -185,21 +185,35 @@ class HouseClaimApiTests(TestCase):
         # the identity map may spare a query on the second read; it never adds one per title
         self.assertLessEqual(len(seven), len(one))
 
-    def test_house_titles_say_what_a_god_option_is_and_where_it_opens(self):
-        """#4205: an option that IS a god carries the being and opens its page."""
+    def _patron_question(self):
+        """A patron question on the template, with one public liturgy god and one
+        the question must not offer (its page is not public)."""
         from world.codex.factories import CodexEntryFactory
-        from world.worship.factories import BeingNicknameFactory, WorshippedBeingFactory
+        from world.worship.factories import WorshippedBeingFactory, WorshipTraditionFactory
 
-        entry = CodexEntryFactory(name="Calyx API")
-        calyx = WorshippedBeingFactory(name="Calyx API", codex_entry=entry)
-        knight = BeingNicknameFactory(being=calyx, name="The One True Knight")
-        patron = HouseCharterQuestion.objects.create(
-            name="Patron API", prompt="Whom does the house serve?", sets_patron=True
+        liturgy = WorshipTraditionFactory(name="Church Liturgy API")
+        entry = CodexEntryFactory(name="Calyx API", is_public=True)
+        calyx = WorshippedBeingFactory(
+            name="Calyx API", tradition=liturgy, codex_entry=entry, domains="Honorable combat"
         )
-        HouseCharterOption.objects.create(
-            definition=patron, name="Calyx API", being=calyx, being_nickname=knight
+        hidden = WorshippedBeingFactory(
+            name="Hidden API",
+            tradition=liturgy,
+            codex_entry=CodexEntryFactory(name="Hidden API", is_public=False),
+        )
+        patron = HouseCharterQuestion.objects.create(
+            name="Patron API",
+            prompt="Whom does the house serve?",
+            sets_patron=True,
+            patron_tradition=liturgy,
         )
         self.template.charter_questions.add(patron)
+        return patron, calyx, hidden, entry
+
+    def test_house_titles_offer_the_gods_of_the_patron_questions_worship(self):
+        """#5110: the patron question's choices are the active, public gods of its
+        worship, each carrying the god and opening its page; a hidden god is absent."""
+        _patron, calyx, _hidden, entry = self._patron_question()
 
         response = self.client.get("/api/character-creation/house-titles/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -207,10 +221,29 @@ class HouseClaimApiTests(TestCase):
         title = next(t for t in titles if t["id"] == self.title.pk)
         template = next(t for t in title["templates"] if t["id"] == self.template.pk)
         definition = next(d for d in template["charter_questions"] if d["name"] == "Patron API")
+        self.assertTrue(definition["sets_patron"])
+        self.assertEqual([option["name"] for option in definition["options"]], ["Calyx API"])
         option = definition["options"][0]
+        self.assertEqual(option["id"], calyx.pk)
         self.assertEqual(option["being_id"], calyx.pk)
-        self.assertEqual(option["being_name"], "Calyx API")
+        self.assertEqual(option["description"], "Honorable combat")
         self.assertEqual(option["target_entry_id"], entry.pk)
+
+    def test_post_claim_carries_the_patron_and_refuses_a_god_not_offered(self):
+        """#5110: the claim is refused without a patron and with a god the question
+        does not offer; with one it offers, the claim holds the god."""
+        _patron, calyx, hidden, _entry = self._patron_question()
+        url = f"/api/character-creation/drafts/{self.draft.pk}/house-claim/"
+
+        missing = self.client.post(url, self._payload(), format="json")
+        self.assertEqual(missing.status_code, status.HTTP_400_BAD_REQUEST, missing.data)
+        refused = self.client.post(url, self._payload(patron_being_id=hidden.pk), format="json")
+        self.assertEqual(refused.status_code, status.HTTP_400_BAD_REQUEST, refused.data)
+
+        response = self.client.post(url, self._payload(patron_being_id=calyx.pk), format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["patron_being_id"], calyx.pk)
+        self.assertEqual(response.data["patron_name"], "Calyx API")
 
     def test_post_full_claim_persists_picks_and_stylings(self):
         response = self.client.post(

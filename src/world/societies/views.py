@@ -101,7 +101,7 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
             "org_type",
             "stature__band",
             "stature__previous_band",
-            "patron_nickname__being",  # the patron line (#4205, get_house)
+            "patron__codex_entry",  # the patron line (#4205, #5110, get_house)
         )
         .prefetch_related(
             "ranks",  # noqa: PREFETCH_STRING

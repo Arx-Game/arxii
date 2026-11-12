@@ -396,19 +396,18 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
             "shown to its own player only."
         ),
     )
-    patron_nickname = models.ForeignKey(
-        "arxii.BeingNickname",
+    patron = models.ForeignKey(
+        "arxii.WorshippedBeing",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        related_name="patron_organizations",
+        related_name="sworn_organizations",
         help_text=(
-            "This org's own name for its patron deity (#3776) — reached transitively via "
-            "patron_nickname.being. FK direction is Org -> Nickname -> Being, never a "
-            "direct FK to WorshippedBeing, and never nickname -> many orgs."
+            "The god this organization stands behind (#5110), shown by the god's own "
+            "name. A house's is picked at founding from the gods its charter's patron "
+            "question allows, and changed afterwards only by staff."
         ),
     )
-
     # Principle overrides - if null, inherit from society
     mercy_override = models.IntegerField(
         null=True,

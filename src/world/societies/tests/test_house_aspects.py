@@ -324,41 +324,25 @@ class DisplaySurfaceTests(AspectTestData):
 
 
 class AspectTargetTests(TestCase):
-    """#4205: an option is one typed thing, and a patron question's options always
-    carry a god and a name for it."""
+    """#4205: an option is one typed thing. #5110: a patron question takes no options,
+    since its choices are gods."""
 
     @classmethod
     def setUpTestData(cls):
         from django.core.exceptions import ValidationError
 
-        from world.worship.factories import BeingNicknameFactory, WorshippedBeingFactory
+        from world.worship.factories import WorshippedBeingFactory, WorshipTraditionFactory
 
         cls.ValidationError = ValidationError
         cls.calyx_entry = CodexEntryFactory(name="Calyx")
         cls.calyx = WorshippedBeingFactory(name="Calyx", codex_entry=cls.calyx_entry)
-        cls.knight = BeingNicknameFactory(being=cls.calyx, name="The One True Knight")
-        cls.other = WorshippedBeingFactory(name="The Fleshreaper")
-        cls.other_name = BeingNicknameFactory(being=cls.other, name="The Gory Goddess")
         cls.patron = HouseCharterQuestion.objects.create(
-            name="Patron", prompt="Whom does the house serve?", sets_patron=True
+            name="Patron",
+            prompt="Whom does the house serve?",
+            sets_patron=True,
+            patron_tradition=WorshipTraditionFactory(name="Church Liturgy"),
         )
         cls.plain = HouseCharterQuestion.objects.create(name="Virtue", prompt="Which?")
-
-    def test_a_nickname_must_be_the_beings_own(self):
-        option = HouseCharterOption(
-            definition=self.plain, name="Calyx", being=self.calyx, being_nickname=self.other_name
-        )
-        with self.assertRaises(self.ValidationError) as caught:
-            option.full_clean()
-        self.assertIn("being_nickname", caught.exception.message_dict)
-        option.being_nickname = self.knight
-        option.full_clean()
-
-    def test_a_nickname_without_its_being_is_refused(self):
-        option = HouseCharterOption(definition=self.plain, name="X", being_nickname=self.knight)
-        with self.assertRaises(self.ValidationError) as caught:
-            option.full_clean()
-        self.assertIn("being_nickname", caught.exception.message_dict)
 
     def test_a_being_and_a_lore_entry_are_not_both_claimed(self):
         option = HouseCharterOption(
@@ -371,14 +355,11 @@ class AspectTargetTests(TestCase):
             option.full_clean()
         self.assertIn("codex_entry", caught.exception.message_dict)
 
-    def test_a_patron_question_needs_a_being_and_a_name(self):
-        option = HouseCharterOption(definition=self.patron, name="Nobody")
+    def test_a_patron_question_takes_no_options(self):
+        option = HouseCharterOption(definition=self.patron, name="Calyx", being=self.calyx)
         with self.assertRaises(self.ValidationError) as caught:
             option.full_clean()
-        self.assertIn("being", caught.exception.message_dict)
-        option.being = self.calyx
-        option.being_nickname = self.knight
-        option.full_clean()
+        self.assertIn("definition", caught.exception.message_dict)
 
     def test_the_target_entry_is_the_options_own_else_the_beings_page(self):
         lore = CodexEntryFactory(name="The Battle of the Ford")
@@ -405,30 +386,46 @@ class AspectTargetTests(TestCase):
 
 
 class PatronFoundingTests(AspectTestData):
-    """#4205: the pick on the patron question becomes the house's patron, once, at founding."""
+    """#4205: the pick on the patron question becomes the house's patron, once, at
+    founding. #5110: the pick is a god the question offers, the active and public gods
+    of its worship, and the house shows it by the god's own name."""
 
     @classmethod
     def setUpTestData(cls):
-        from world.worship.factories import BeingNicknameFactory, WorshippedBeingFactory
+        from world.worship.factories import WorshippedBeingFactory, WorshipTraditionFactory
 
         super().setUpTestData()
-        cls.calyx_entry = CodexEntryFactory(name="Calyx")
-        cls.calyx = WorshippedBeingFactory(name="Calyx", codex_entry=cls.calyx_entry)
-        cls.knight = BeingNicknameFactory(being=cls.calyx, name="The One True Knight")
-        cls.patron = HouseCharterQuestion.objects.create(
-            name="Patron", prompt="Whom does the house serve?", sets_patron=True
+        cls.liturgy = WorshipTraditionFactory(name="Church Liturgy")
+        cls.calyx_entry = CodexEntryFactory(name="Calyx", is_public=True)
+        cls.calyx = WorshippedBeingFactory(
+            name="Calyx", tradition=cls.liturgy, codex_entry=cls.calyx_entry
         )
-        cls.calyx_option = HouseCharterOption.objects.create(
-            definition=cls.patron, name="Calyx", being=cls.calyx, being_nickname=cls.knight
+        # Three gods the question must never offer: one whose page is not public, one
+        # with no page at all, one retired, and one of another worship.
+        cls.hidden = WorshippedBeingFactory(
+            name="The Veiled One",
+            tradition=cls.liturgy,
+            codex_entry=CodexEntryFactory(name="The Veiled One", is_public=False),
+        )
+        cls.pageless = WorshippedBeingFactory(name="Nameless", tradition=cls.liturgy)
+        cls.retired_god = WorshippedBeingFactory(
+            name="Old Zircon",
+            tradition=cls.liturgy,
+            is_active=False,
+            codex_entry=CodexEntryFactory(name="Old Zircon", is_public=True),
+        )
+        cls.occult = WorshippedBeingFactory(
+            name="The Fleshreaper",
+            tradition=WorshipTraditionFactory(name="Occultism"),
+            codex_entry=CodexEntryFactory(name="The Fleshreaper", is_public=True),
+        )
+        cls.patron = HouseCharterQuestion.objects.create(
+            name="Patron",
+            prompt="Whom does the house serve?",
+            sets_patron=True,
+            patron_tradition=cls.liturgy,
         )
         cls.template.charter_questions.add(cls.patron)
-
-    def _picks(self):
-        return {
-            self.virtue.pk: [self.fortitude.pk],
-            self.traditions.pk: [self.trad_a.pk, self.trad_b.pk],
-            self.patron.pk: [self.calyx_option.pk],
-        }
 
     def _found(self, name, **overrides):
         """Submit, approve and materialize on a method-local title: ``assign_holder``
@@ -449,46 +446,85 @@ class PatronFoundingTests(AspectTestData):
         approve_house_claim(claim, reviewer=AccountFactory())
         return materialize_house_claim(claim, sheet=CharacterSheetFactory())
 
-    def test_founding_writes_the_patron_by_the_houses_own_name(self):
+    def test_the_question_offers_the_active_public_gods_of_its_worship(self):
+        from world.societies.houses.creator import patron_choices
+
+        self.assertEqual([being.name for being in patron_choices(self.patron)], ["Calyx"])
+        # with no worship set it offers nobody
+        unset = HouseCharterQuestion.objects.create(name="Totem", prompt="Which?")
+        self.assertEqual(patron_choices(unset), [])
+
+    def test_founding_writes_the_patron_by_the_gods_own_name(self):
         from world.roster.services.kinship import OMNISCIENT
         from world.societies.houses.almanach import publish_house
         from world.societies.houses.almanach_reads import document_for_house
         from world.societies.serializers import OrganizationSerializer
 
-        org = self._found("Knightsmere", facet_picks=self._picks())
-        self.assertEqual(org.patron_nickname, self.knight)
+        org = self._found("Knightsmere", patron_being_id=self.calyx.pk)
+        self.assertEqual(org.patron, self.calyx)
 
-        # Every read says what the pick is and where it opens.
+        expected = {
+            "being_id": self.calyx.pk,
+            "being_name": "Calyx",
+            "codex_entry_id": self.calyx_entry.pk,
+        }
         house = OrganizationSerializer(org).data["house"]
+        self.assertEqual(house["patron"], expected)
+        # the patron is the house's own line, never one of its option picks
         self.assertEqual(
-            house["patron"],
-            {
-                "nickname": "The One True Knight",
-                "being_name": "Calyx",
-                "codex_entry_id": self.calyx_entry.pk,
-            },
+            sorted(facet["option"] for facet in house["facets"]), ["Fortitude", "Tithe", "Vigil"]
         )
-        calyx_facet = next(a for a in house["facets"] if a["option"] == "Calyx")
-        self.assertEqual(calyx_facet["being_name"], "Calyx")
-        self.assertEqual(calyx_facet["target_entry_id"], self.calyx_entry.pk)
-        plain_facet = next(a for a in house["facets"] if a["option"] == "Fortitude")
-        self.assertEqual(plain_facet["being_name"], "")
-        self.assertIsNone(plain_facet["target_entry_id"])
         publish_house(org)
         document = document_for_house(org, viewer=OMNISCIENT, staff=True)
-        self.assertEqual(document.house["patron"]["nickname"], "The One True Knight")
-        self.assertEqual(
-            next(a for a in document.house["facets"] if a["option"] == "Calyx")["target_entry_id"],
-            self.calyx_entry.pk,
-        )
+        self.assertEqual(document.house["patron"], expected)
+
+    def test_a_patron_whose_page_stops_being_public_is_not_named_to_a_player(self):
+        """The house keeps its patron; a reader who is not staff is not told a god
+        whose Codex page is no longer public. Staff still read it."""
+        from world.societies.houses.almanach_reads import patron_payload
+        from world.societies.serializers import OrganizationSerializer
+
+        org = self._found("Shroudmere", patron_being_id=self.calyx.pk)
+        self.calyx_entry.is_public = False
+        self.calyx_entry.save(update_fields=["is_public"])
+        try:
+            self.assertEqual(org.patron, self.calyx)
+            self.assertIsNone(OrganizationSerializer(org).data["house"]["patron"])
+            self.assertEqual(patron_payload(org)["being_name"], "Calyx")
+        finally:
+            # the entry is identity-mapped and class-shared: put it back for the rest
+            self.calyx_entry.is_public = True
+            self.calyx_entry.save(update_fields=["is_public"])
+
+    def test_a_required_patron_left_unpicked_is_refused(self):
+        with self.assertRaises(HousesServiceError) as caught:
+            self._submit_full()
+        self.assertIn("choose one", caught.exception.user_message)
+
+    def test_a_god_the_question_does_not_offer_is_refused(self):
+        for god in (self.hidden, self.pageless, self.retired_god, self.occult):
+            with self.subTest(god=god.name), self.assertRaises(HousesServiceError) as caught:
+                self._submit_full(patron_being_id=god.pk)
+            self.assertIn("not one of the choices", caught.exception.user_message)
+
+    def test_the_patron_question_is_not_answered_with_an_option(self):
+        picks = {
+            self.virtue.pk: [self.fortitude.pk],
+            self.traditions.pk: [self.trad_a.pk, self.trad_b.pk],
+            self.patron.pk: [self.fortitude.pk],
+        }
+        with self.assertRaises(HousesServiceError):
+            self._submit_full(facet_picks=picks, patron_being_id=self.calyx.pk)
 
     def test_a_charter_without_a_patron_question_writes_none(self):
         from world.societies.serializers import OrganizationSerializer
 
         self.template.charter_questions.remove(self.patron)
         org = self._found("Godlessmere")
-        self.assertIsNone(org.patron_nickname)
+        self.assertIsNone(org.patron)
         self.assertIsNone(OrganizationSerializer(org).data["house"]["patron"])
+        with self.assertRaises(HousesServiceError):
+            self._submit_full(patron_being_id=self.calyx.pk)
 
 
 class PatronQuestionShapeTests(TestCase):
@@ -498,11 +534,33 @@ class PatronQuestionShapeTests(TestCase):
     def test_a_patron_question_takes_exactly_one_pick(self):
         from django.core.exceptions import ValidationError
 
-        wide = HouseCharterQuestion(name="Patrons", prompt="Whom?", sets_patron=True, max_picks=2)
+        from world.worship.factories import WorshipTraditionFactory
+
+        liturgy = WorshipTraditionFactory(name="Church Liturgy")
+        wide = HouseCharterQuestion(
+            name="Patrons", prompt="Whom?", sets_patron=True, max_picks=2, patron_tradition=liturgy
+        )
         with self.assertRaises(ValidationError) as caught:
             wide.full_clean()
         self.assertIn("max_picks", caught.exception.message_dict)
-        HouseCharterQuestion(name="Patron", prompt="Whom?", sets_patron=True).full_clean()
+        HouseCharterQuestion(
+            name="Patron", prompt="Whom?", sets_patron=True, patron_tradition=liturgy
+        ).full_clean()
+
+    def test_a_patron_question_says_which_worship_its_gods_are_of(self):
+        """#5110: the worship is what makes the choices; only a patron question has one."""
+        from django.core.exceptions import ValidationError
+
+        from world.worship.factories import WorshipTraditionFactory
+
+        with self.assertRaises(ValidationError) as caught:
+            HouseCharterQuestion(name="Patron", prompt="Whom?", sets_patron=True).full_clean()
+        self.assertIn("patron_tradition", caught.exception.message_dict)
+        with self.assertRaises(ValidationError) as caught:
+            HouseCharterQuestion(
+                name="Virtue", prompt="Which?", patron_tradition=WorshipTraditionFactory()
+            ).full_clean()
+        self.assertIn("patron_tradition", caught.exception.message_dict)
 
     def test_the_template_admin_refuses_two_patron_questions_before_the_m2m_save(self):
         from world.societies.admin import HouseTemplateAdminForm

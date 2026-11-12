@@ -451,7 +451,7 @@ class OrganizationAdmin(ReviewedDeleteMixin, GrantReachOnSaveMixin, admin.ModelA
     search_fields = ["name", "description", "society__name", "family__name"]
     ordering = ["society", "name"]
     raw_id_fields = ["tradition"]
-    autocomplete_fields = ["family", "parent_org", "default_succession_law", "patron_nickname"]
+    autocomplete_fields = ["family", "parent_org", "default_succession_law", "patron"]
     inlines = [
         OrganizationRankInline,
         OrganizationMembershipInline,
@@ -487,7 +487,7 @@ class OrganizationAdmin(ReviewedDeleteMixin, GrantReachOnSaveMixin, admin.ModelA
                     "house_state",
                     "published_at",
                     "default_succession_law",
-                    "patron_nickname",
+                    "patron",
                     "words",
                     "colors",
                     "sigil_description",
@@ -1551,24 +1551,39 @@ class HouseCharterOptionInline(admin.TabularInline):
         "description",
         "codex_entry",
         "being",
-        "being_nickname",
         "is_active",
         "display_order",
     )
     raw_id_fields = ("codex_entry",)
-    # What the option IS (#4205): a god or totem, and the name a house calls it by.
-    autocomplete_fields = ("being", "being_nickname")
+    # What the option IS (#4205): a god or totem.
+    autocomplete_fields = ("being",)
 
 
 @admin.register(HouseCharterQuestion)
 class HouseCharterQuestionAdmin(admin.ModelAdmin):
     """#2079 — authored, catalog-only required choices (ADR-0101). ``sets_patron``
-    (#4205) marks the one question whose pick names the house's patron."""
+    (#4205) marks the one question whose pick names the house's patron; that
+    question's choices are the gods of ``patron_tradition`` (#5110), so it has no
+    options table."""
 
-    list_display = ("name", "min_picks", "max_picks", "sets_patron", "display_order")
+    list_display = (
+        "name",
+        "min_picks",
+        "max_picks",
+        "sets_patron",
+        "patron_tradition",
+        "display_order",
+    )
     list_filter = ("sets_patron",)
+    list_select_related = ("patron_tradition",)
     search_fields = ("name", "prompt")
     inlines = (HouseCharterOptionInline,)
+
+    def get_inline_instances(self, request: HttpRequest, obj: HouseCharterQuestion | None = None):
+        """A patron question has no options to author: its choices are the gods."""
+        if obj is not None and obj.sets_patron:
+            return []
+        return super().get_inline_instances(request, obj)
 
 
 @admin.register(HouseFeature)

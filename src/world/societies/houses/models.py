@@ -1748,6 +1748,17 @@ class HouseClaim(SharedMemoryModel):
         help_text="Where the founder's own character sits relative to the head of house (#3983).",
     )
     founder_is_heir = models.BooleanField(default=False)
+    patron_being = models.ForeignKey(
+        "arxii.WorshippedBeing",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The god picked on the template's patron question (#5110); becomes the "
+            "house's patron when the claim is built."
+        ),
+    )
     mercy = models.SmallIntegerField(default=0)
     method = models.SmallIntegerField(default=0)
     status_principle = models.SmallIntegerField(default=0)
@@ -1800,9 +1811,22 @@ class HouseCharterQuestion(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     sets_patron = models.BooleanField(
         default=False,
         help_text=(
-            "A pick on this question makes the option's being the house's patron "
-            "(Organization.patron_nickname), fixed at founding (#4205). Every option "
-            "then needs a being and a nickname; at most one such question per template."
+            "The pick on this question is the house's patron (Organization.patron), "
+            "fixed at founding (#4205). Its choices are the gods of patron_tradition "
+            "(#5110), not options; at most one such question per template."
+        ),
+    )
+
+    patron_tradition = models.ForeignKey(
+        "arxii.WorshipTradition",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="patron_questions",
+        help_text=(
+            "The kind of worship a patron question's gods come from (#5110): its "
+            "choices are the active, public gods of this tradition, not authored "
+            "options. Required when the question sets the patron."
         ),
     )
 
@@ -1818,12 +1842,20 @@ class HouseCharterQuestion(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return self.name
 
     def clean(self) -> None:
-        """A patron question names one god (#4205): a single pick, never a list."""
+        """A patron question names one god (#4205): a single pick, never a list, from
+        the gods of one kind of worship (#5110)."""
         from django.core.exceptions import ValidationError  # noqa: PLC0415
 
         super().clean()
+        errors: dict[str, str] = {}
         if self.sets_patron and (self.max_picks != 1 or self.min_picks > 1):
-            raise ValidationError({"max_picks": "A patron question takes exactly one pick."})
+            errors["max_picks"] = "A patron question takes exactly one pick."
+        if self.sets_patron and self.patron_tradition_id is None:
+            errors["patron_tradition"] = "A patron question says which worship its gods are of."
+        if not self.sets_patron and self.patron_tradition_id is not None:
+            errors["patron_tradition"] = "Only a patron question draws its choices from gods."
+        if errors:
+            raise ValidationError(errors)
 
 
 class HouseCharterOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
@@ -1865,17 +1897,6 @@ class HouseCharterOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="house_charter_options",
         help_text="The god or totem this option is (#4205).",
     )
-    being_nickname = models.ForeignKey(
-        "arxii.BeingNickname",
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="house_charter_options",
-        help_text=(
-            "The name a house on this option calls the being by; one of the being's "
-            "own nicknames. Becomes the house's patron_nickname on a patron question."
-        ),
-    )
     is_active = models.BooleanField(default=True)
     display_order = models.PositiveSmallIntegerField(default=0)
 
@@ -1906,28 +1927,18 @@ class HouseCharterOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return None
 
     def clean(self) -> None:
-        """A typed target is one thing (#4205): the nickname is the being's own, a god
-        and a lore entry are not both claimed, and a patron question's options always
-        carry a being and a name for it."""
+        """A typed target is one thing (#4205): a god and a lore entry are not both
+        claimed. A patron question takes no options (#5110): its choices are gods."""
         from django.core.exceptions import ValidationError  # noqa: PLC0415
 
         super().clean()
         errors: dict[str, str] = {}
-        if self.being_nickname_id is not None:
-            if self.being_id is None:
-                errors["being_nickname"] = "A nickname needs the being it names."
-            elif self.being_nickname.being_id != self.being_id:
-                errors["being_nickname"] = "That nickname belongs to another being."
         if self.being_id is not None and self.codex_entry_id is not None:
             errors["codex_entry"] = (
                 "A being's option opens the being's own page; leave the lore entry blank."
             )
-        if (
-            self.definition_id is not None
-            and self.definition.sets_patron
-            and (self.being_id is None or self.being_nickname_id is None)
-        ):
-            errors["being"] = "An option on a patron question needs a being and a nickname."
+        if self.definition_id is not None and self.definition.sets_patron:
+            errors["definition"] = "A patron question's choices are the gods of its worship."
         if errors:
             raise ValidationError(errors)
 
