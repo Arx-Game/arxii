@@ -1,6 +1,6 @@
 """The "botch_immunity" ModifierCategory (#4386).
 
-Data only (the ModifierTarget check-scope columns come from 0393).
+Data only (the ModifierTarget check-scope columns come from 0394).
 
 Get-or-create the category the check seam reads by name, so production has it without a
 seeder run. It is a prose-light mechanical catalog row (owner ruling 2026-10-22: such rows
@@ -8,7 +8,7 @@ may ship by data migration); staff author its targets, one per check category or
 type. An existing row keeps its description.
 
 The name is copied here, never imported from app code. Reversing is a no-op: reversing
-0393 drops the scope columns, and an empty category does nothing.
+0394 drops the scope columns, and an empty category does nothing.
 """
 
 from django.db import migrations
