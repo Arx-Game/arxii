@@ -64,6 +64,7 @@ from world.covenants.factories import (
     CovenantFactory,
     CovenantRoleFactory,
     VowSituationalPerkFactory,
+    VowSituationalPerkRungFactory,
     VowSituationalPerkSituationFactory,
     engage_vow_with_thread,
 )
@@ -343,7 +344,10 @@ class TheAnnounceNamesTheAllyAndTheFoe(JourneyCase):
             roll_kind=PerkRollKind.ATTACK,
             announce_template="{ally} holds {target} for {holder} to strike!",
         )
-        VowSituationalPerkSituationFactory(perk=perk, situation=Situation.ENEMY_HELD_BY_ALLY)
+        self.situation = VowSituationalPerkSituationFactory(
+            perk=perk, situation=Situation.ENEMY_HELD_BY_ALLY
+        )
+        self.perk = perk
         self.mira_participant = participants["Mira"]
         self.watch(self.tomas, self.ilse)
 
@@ -379,6 +383,27 @@ class TheAnnounceNamesTheAllyAndTheFoe(JourneyCase):
         self.bolt_the_captain()
 
         self.assertNotTold(self.ilse, "Press the Held Foe")
+
+    def test_below_the_rung_that_names_the_ally_the_line_says_an_ally(self) -> None:
+        """Held by an ally as a rung (owner's shape): base "the target is a boss", rung 1
+        "enemy held by ally". Nobody holds the boss, so it fires at its base and the line
+        has no ally to name; it says "an ally", never a raw brace."""
+        self.captain.tier = OpponentTier.BOSS
+        self.captain.save(update_fields=["tier"])
+        self.situation.situation = Situation.TARGET_IS_BOSS
+        self.situation.save(update_fields=["situation"])
+        VowSituationalPerkRungFactory(
+            perk=self.perk,
+            rung_number=1,
+            extra_situation=Situation.ENEMY_HELD_BY_ALLY,
+            magnitude_tenths=20,
+        )
+
+        self.bolt_the_captain()
+
+        self.assertTold(
+            self.ilse, "Press the Held Foe: an ally holds Bandit Captain for Tomas to strike!"
+        )
 
 
 def _forced_success(*args: Any, **kwargs: Any):
