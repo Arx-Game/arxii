@@ -24,7 +24,11 @@ Core game interface for real-time RPG interaction with WebSocket communication a
   (`findText`, cleared on every character or scene change) and the rail's
   per-person information-flow actions (the #4128 batch reducers over every line of
   theirs the session holds). The slice resets the selection on scene change, the
-  room row excepted. It also owns `sidebarMode`/`hereActiveTab` and
+  room row excepted. **Channels (#3299):** `GamePage` reads `channelsInSidebar`; while it is
+  off it builds the rail's Channels rows from `useChannelsQuery` and merges
+  `useChannelFeedNotes`'s notes into `feedNotes` for All (a `channel:<id>` row narrows to that
+  channel's notes and no interactions, and locks the composer through `channelRowComposerMode`);
+  a selected row is registered as an open lane and marks its channel read. It also owns `sidebarMode`/`hereActiveTab` and
   `jumpToCombat()` (#3761) — the whole cross-mode encounter-reachability
   mechanism that routes both the top-bar banner and the sidebar's Combat nav
   button to the same Here-mode Room-tab destination where `CombatRail`
@@ -82,12 +86,15 @@ active`), since its attention already surfaces on the conversation rail's
   activity on its own already-highlighted tab.
 - **`railRows.ts`**: The conversation rail's rows as pure data (#4129).
   `buildRailRows({threads, ambientInteractions, notes, roomName, viewerPersonaId,
-lastSeenByThread, sceneBaselineId})` returns `{here, pages}`: **Here** is the
+lastSeenByThread, sceneBaselineId, channels})` returns `{here, pages, channels}`: **Here** is the
   room row (always, once there is a room), then every scene thread and every
   quiet-room conversation (`groupThreads`, the hook's grouping run over
   `session.ambientInteractions`, a key held by both merged into one row), newest
   first; **OOC Pages** is one row per correspondent from the session's `page`
-  notes (`pageRowKey`, `isPageRowKey`). A whisper row is named after the other
+  notes (`pageRowKey`, `isPageRowKey`); **Channels** (#3299) is one row per
+  joined, unmuted channel in the player's order (`channelRowKey`,
+  `isChannelRowKey`; `input.channels`, empty while the sidebar holds channels),
+  carrying its `JoinedChannel` so the rail can show the Speak as picker. A whisper row is named after the other
   party and carries their face; a page row's unread mark is a time, not an id.
 - **`feedFind.ts`**: Find in this session (#4129). `findInteractions`/`findNotes`
   narrow a list to lines containing the needle (the shown `line`, the recorded
@@ -116,12 +123,18 @@ lastSeenByThread, sceneBaselineId})` returns `{here, pages}`: **Here** is the
   category, which is the `vision` kind (#3779); `page` and `ooc` as themselves, `ooc` being
   `ooc <message>`, a player talking out of character to the room (#4337); anything else
   `system`) and `classifyInteraction(mode)`
-  maps an interaction's mode. A new kind is a deliberate addition here, never an ad
+  maps an interaction's mode. `channel` (#3299) is a player channel line; it has no wire
+  type, since `channels/feedLines.ts`'s `useChannelFeedNotes` builds it from the channel
+  message query caches (`FeedNote.channel` carries the channel and speaker label). A new kind is a deliberate addition here, never an ad
   hoc string.
 - **`feedChips.ts`**: The filter chips' pure model (#3856 PR 2). `FeedChip {id, label,
 kinds, on, wake, custom}`; a kind belongs to at most one chip; `DEFAULT_FEED_CHIPS`
   are the demo's five plus Visions (#3779) and OOC (#4337) (Roleplay, Whispers, Visions
-  and OOC carry the wake flag; Movement, Ambience, System do not). **Wake only reaches
+  and OOC carry the wake flag; Movement, Ambience, System do not). The OOC chip owns
+  `ooc` and `channel` (#3299): channel lines are OOC feed lines, and a player can move
+  `channel` to a custom chip. `normalizeFeedChips` gives `channel` to whichever chip owns
+  `ooc` in a layout saved before it existed, so channel lines are never lost or left
+  outside the OOC chip. **Wake only reaches
   interactions today:** `attention.ts` classifies interactions alone, so the flag on a
   note kind (`vision`, `ooc`) lights nothing yet. A layout stored before OOC existed
   has no chip owning `ooc`, so it shows (an unowned kind always does). **System owns the `system` kind** (#3933): it is
@@ -185,9 +198,9 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   explicitly toggles between Story and Sidebar panes rather than losing either.
 - **`ConversationRail.tsx`**: The conversation rail (#4129), the play shell's
   far-left column (`GameLayout`'s `rail` prop). **All** at the top, then the
-  groups `railRows.ts` builds (Here, OOC Pages; Channels is reserved for #3299 and
-  not drawn), each row with its name, a kind word, its unread count and, for a
-  person's conversation, their face. One row is selected at a time
+  groups `railRows.ts` builds (Here, OOC Pages, Channels (#3299)), each row with its name, a
+  kind word, its unread count and, for a person's conversation, their face. A channel
+  row with no speaker chosen carries the Speak as picker (`IdentitySelect`) beneath it. One row is selected at a time
   (`aria-current`): left-click the face for `PersonaMenu` (play flow), left-click
   the row to select it, right-click the row for the information-flow menu
   (Minimize all from them, Hide all from them, Expand all, Unhide all, the
@@ -202,10 +215,14 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   whole edge and sat over the battle map's zoom buttons (#4641).
 - **`PlaySidebar.tsx`**: The single contextual sidebar — Here / History / Channels mode
   tabs sharing one scroll container (Conversations mode left for the rail, #4129).
-  Channels (#3299) is `GamePage`'s `<ChannelsPanel active={sidebarMode === 'channels'} />`
-  passed as the `channels` prop; its button carries `channelsUnread`
+  Channels (#3299) is an **opt-in** (`PlayPreferences.channelsInSidebar`, the Display
+  settings checkbox "Channels in sidebar", off by default; owner ruling 2026-11-12, PR #5095):
+  only while it is on does `GamePage` pass `<ChannelsPanel active={sidebarMode === 'channels'} />`
+  as the `channels` prop, which draws the mode button with `channelsUnread`
   (`useChannelUnreadTotal`: the sum of `unread_count` over unmuted subscriptions not set
-  to Nothing). Channel messages never enter the center feed, the rail or its All row.
+  to Nothing); turning it off while the mode is open falls back to Here. Off, there is no
+  Channels button and the channel lines are in the main column and the rail (see
+  `feedKinds.ts`, `feedChips.ts`, `railRows.ts`).
   Both mode bodies stay mounted (`hidden` attribute, not conditional unmount) so
   switching modes preserves each one's scroll position and in-flight state
   (#3759). A "Combat" nav button (#3761) appears only while `hasActiveEncounter` is true
@@ -353,7 +370,8 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   for Chronological's inner container. A caller that places the reader itself
   (a tab switch, a restored anchor) writes `pinnedRef`. Tests fire the observer
   by hand through `test/utils/resizeObserver.ts`, since jsdom lays nothing out.
-- **`DisplaySettings.tsx`**: The per-account reading controls in the sidebar; it
+- **`DisplaySettings.tsx`**: The per-account reading controls in the sidebar, including the
+  "Channels in sidebar" checkbox (#3299, `channelsInSidebar`, off by default); it
   writes the preferences to CSS variables on `<html>`. **The text fills the story
   pane by default**: `--play-reading-measure` is `none` unless the player sets
   Line length to Limited (`limitMeasure`), which caps the column at `measure`
@@ -398,7 +416,9 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   prose body), `item` and `system`; the destructive tokens and `role="alert"` for
   `error`; a bare italic line for `arrive`/`move`; the italic line with a hairline
   for `ambience`; full ink with a sky rule for `ooc` (#4337), a person talking, so
-  never muted like a system note. Every body renders through `EvenniaMessage` in prose
+  never muted like a system note; `channel` (#3299) the same sky rule and ink, led by the
+  channel's name and the speaker's label (plain text, find-marked), the "N hidden" rule for a
+  run of a blocked author's lines, and staff Delete/Ban (`MessageModeration`). Every other body renders through `EvenniaMessage` in prose
   presentation, since the server sends Evennia's HTML (colour spans, `<br>`).
   There is no separate system strip any more: `SystemLane` was removed with
   #3856, since every text frame is a note in the column now. **No note sets its
@@ -427,7 +447,9 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   else is **held**: nothing is sent, the line stays, and a `line-held` note in
   `tagRefusal`'s style says why (a lone `@word` at the end of the line waits for a
   send attempt, since it may be mid-word). A page, a whisper or a say never holds
-  for a name. A person present wins over a command of the same name; `/` still
+  for a name. A `channel` mode (a Channels rail row, #3299, `ComposerMode.channelId`) posts
+  through `POST /api/channels/messages/` (`postChannelMessage`), ack-gated like the companion
+  emote, and with no `channelId` (no speaker chosen) refuses with a toast. A person present wins over a command of the same name; `/` still
   reaches the command. `//`, `@@` and `++` post one literal character (`@@` stays
   doubled only where the server's target parser opens the arguments: pose, emit
   or say with no picked target). A typed speech verb or `page` (`KNOWN_COMMANDS`)

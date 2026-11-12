@@ -250,8 +250,11 @@ channel, and the #1884 `house_<pk>` channels):
   are dropped.
 - **Staff moderation:** delete a message (gone from every open screen) and
   ban an author from a channel; staff can read every non-covert channel.
-- **Surfaces:** the right-hand "Channels" mode in the play sidebar, a
-  `/channels` page, and telnet `channel`. History keeps the newest 500
+- **Surfaces:** channel lines in the play page's main column under the OOC
+  chip (a `channel` feed kind), a Channels group in the conversation rail to
+  post from, the `/channels` page with every control, telnet `channel`, and an
+  opt-in "Channels in sidebar" display setting for the old side lane (owner
+  ruling 2026-11-12, PR #5095). History keeps the newest 500
   messages per channel (placeholder cap, pruned hourly).
 - **Old Evennia data discarded:** migration 0393 deleted the Evennia Public
   and house channels and their nicks; players join again.

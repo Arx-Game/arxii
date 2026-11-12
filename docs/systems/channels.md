@@ -2,11 +2,13 @@
 
 Persistent named out-of-character chat: one curated PUBLIC channel, one ORG
 channel for each non-covert organization, and optional STAFF channels. A player
-reads and posts from a right-hand "Channels" mode in the play sidebar, from a
-standalone `/channels` page, or from telnet. Each player speaks as a roster
-tenure they choose per channel; an account name is never stored on a message or
-shown anywhere. Each player tunes each channel (join, mute, collapse,
-notification level, order), so channels never crowd IC play.
+reads channel lines in the play page's main column, as OOC feed lines under the
+OOC chip, and posts from a Channels row in the conversation rail, from a
+standalone `/channels` page, or from telnet. A sidebar "Channels" mode is an
+opt-in display setting. Each player speaks as a roster tenure they choose per
+channel; an account name is never stored on a message or shown anywhere. Each
+player tunes each channel (join, mute, collapse, notification level, order) on
+the `/channels` page, and the OOC chip filters the lines.
 
 Channels are **OOC only.** IC speech (say, pose, whisper) lives in scenes and
 never touches this system. The decisions and their rejected alternatives are in
@@ -139,8 +141,8 @@ channel and one ORG channel per existing non-covert, non-covenant org.
   (`WEB_PROTOCOL_KEYS`) get one `channel_message` frame
   (`ChannelMessagePayload`: `message_id`, `channel_id`, `channel_name`,
   `speaker`, `body`, `created_at`, `is_own`, and the recipient's
-  `notification_level`), never a `text` line, so a channel message never lands
-  in the IC feed. Other sessions get the text line
+  `notification_level`), never a `text` line: the client files it in the
+  channel's query cache and the feed derives its lines from there. Other sessions get the text line
   `[<channel>] <speaker>: <body>`. The author always gets the echo. Hidden-mode
   (`private_mode`) players still get channels.
 - **Muted channel** = no push and no unread badge; still readable when opened.
@@ -198,11 +200,35 @@ channel and one ORG channel per existing non-covert, non-covenant org.
 collapse; history with the hidden divider; composer, or the Speak as picker
 when no identity is set), `ChannelControls` (Speak as, Mute, Collapse,
 Notifications, Move up/down, Leave), `MessageModeration` (staff Delete/Ban on
-each row), `ChannelsPage` at `/channels`. The panel is the right-hand
-`PlaySidebar` "Channels" mode on `/game`, with an unread badge on the mode
-button. Channels never render in the center IC feed or the conversation rail.
-The socket handler (`hooks/handleChannelMessagePayload.ts`) writes a pushed row
-into that channel's cached history and bumps the badge unless the lane is open.
+each row), `ChannelsPage` at `/channels` (the lanes and every control;
+polling when no game socket is open).
+
+**Where channel lines show on `/game` (owner ruling, ApostateCD 2026-11-12,
+PR #5095).** By default in the main column of both readers, interleaved by time
+with the other feed notes, as the `channel` `FeedKind` (`game/feedKinds.ts`).
+The default OOC chip owns it (`feedChips.ts`); a player can move it to a custom
+chip, and a layout stored before it existed gets it on whichever chip owns
+`ooc` (`normalizeFeedChips`). `useChannelFeedNotes` (`channels/feedLines.ts`)
+builds the notes from the same per-channel message caches the socket handler
+(`hooks/handleChannelMessagePayload.ts`) and the lanes use: joined, unmuted
+channels only, a run of a blocked author's lines folded into one "N hidden"
+note, staff Delete/Ban on each line. `FeedNoteBlock` draws a line like an OOC
+note, led by the channel name and the speaker label.
+
+Posting is the conversation rail's **Channels** group (`railRows.ts`,
+`channelRowKey`): one row per joined, unmuted channel in the player's order. A
+row selects that channel's lines and addresses the composer to it
+(`channelRowComposerMode`; `CommandInput` posts through
+`POST /api/channels/messages/`, the same call a lane makes). A channel with no
+speaker chosen shows the Speak as picker on its row, and the composer refuses
+to send with a toast until one is picked. A selected row counts as an open lane:
+no unread bump, and its count clears. Unread counts live on the rail rows.
+
+**Opt-in sidebar.** The Display settings checkbox "Channels in sidebar"
+(`PlayPreferences.channelsInSidebar`, off by default, per account per browser)
+gives `PlaySidebar` its "Channels" mode (the lanes, with an unread badge on the
+mode button) and, while on, leaves channel lines out of the main column and the
+rail.
 
 ## Tests
 

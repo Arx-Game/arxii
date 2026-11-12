@@ -6888,8 +6888,10 @@ A speaker is a `RosterTenure` chosen per channel, never an account name
   (+ `mark-read/`), `messages/?channel=` (POST to post; staff DELETE and `ban/`).
 - **Frames:** `channel_message`, `channel_message_removed`
   (`web/webclient/message_types.py`).
-- **Web:** `frontend/src/channels/` - the `PlaySidebar` "Channels" mode on
-  `/game` and the `/channels` page; never the center IC feed or the rail.
+- **Web:** `frontend/src/channels/` - channel lines are `channel` feed lines in
+  the `/game` main column under the OOC chip (`useChannelFeedNotes`), posted from
+  the rail's Channels group; the `/channels` page holds the controls; the
+  `PlaySidebar` "Channels" mode is the opt-in "Channels in sidebar" setting.
 - **Source:** `src/world/channels/` (see its `AGENT_GLOSSARY.md` and
   `docs/systems/channels.md`).
 
