@@ -20,22 +20,12 @@
  * other five, dropping the rail entirely, matches the plate better than
  * inventing a sixth contents-rail row the plate doesn't draw.
  *
- * Every `RecordRail` row below either reuses a REAL field the document
- * carries or is a plate-labeled row with a stated dash — see each leaf's
- * own top comment for the specific field-level gaps (house "kind"/
- * nobility-tier, realm tier/treasury/pacts, family kind/influence/
- * recognition/kin-slots, barony unrest/defenses/garrison — none of these
- * has a field anywhere in `HouseDocument`). Every leaf's plate also gets its
- * "doors" section now (review fix round 1, Finding I2): a door with a real
- * destination is a working `Link`/button; one with none yet (the house on
- * the roster, the public tree, the secret editor, Estate's Atlas link)
- * renders as a labeled dash via `RecordRail`'s `doors` support for door
- * entries with neither `to` nor `onClick` — "the ladder" now links to
- * `realm.realm_id`'s own ladder page (final review deferred item 3) and
- * only dashes when a house's realm carries no id. Family
- * additionally gets the plate's "linked houses" section (`extraSection`) —
- * present on the page per the plate, its rows dashed for the same reason
- * (no secondary-membership data on the wire).
+ * Every `RecordRail` row below reads a real field of the document, and every
+ * link goes somewhere (#5090): the rows and entries the plate drew for data the
+ * document does not carry (stature, family type/influence/recognition/kin
+ * slots, linked houses, realm tier/treasury/pacts, the secret editor, an
+ * Estate's Atlas link) are not drawn. "the ladder" links to `realm.realm_id`'s
+ * ladder page and is left out when a house's realm carries no id.
  */
 import { useState, type ReactNode } from 'react';
 
@@ -57,12 +47,7 @@ import { PlantRungDialog } from '../ladder/PlantRungDialog';
 import { BatchUnclaimedDialog } from '../ladder/BatchUnclaimedDialog';
 import { CreateFamilyForm } from '../front/CreateFamilyForm';
 import { orgUrl } from '../shared/tier';
-import {
-  RecordRail,
-  type RecordRailDoor,
-  type RecordRailRow,
-  type RecordRailSection,
-} from './RecordRail';
+import { RecordRail, type RecordRailDoor, type RecordRailRow } from './RecordRail';
 import { Crumbs } from '../shared/Crumbs';
 import '../almanach.css';
 
@@ -112,7 +97,6 @@ function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: L
   } = actions;
   let chapter: ReactNode = null;
   let recordRows: RecordRailRow[] = [];
-  let recordExtraSection: RecordRailSection | undefined;
   let recordDoors: RecordRailDoor[] = [];
   // Links are named for where they go (#5090). The family page is what players
   // read; a house with no family has none to open.
@@ -133,7 +117,6 @@ function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: L
           value: `${realm.demesne.length} · seat ${stringOr(lands.seat, 'none')}`,
         },
         { label: 'vassals', value: valueOrDash(realm.vassals.length) },
-        { label: 'stature', value: <Dash /> },
       ];
       recordDoors = [orgDoor, ...familyDoors];
       break;
@@ -150,20 +133,7 @@ function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: L
           staff
         />
       );
-      recordRows = [
-        { label: 'type', value: <Dash /> },
-        { label: 'influence', value: <Dash /> },
-        { label: 'recognition', value: <Dash /> },
-        { label: 'kin slots', value: <Dash /> },
-      ];
-      recordExtraSection = {
-        heading: 'linked houses',
-        rows: [{ label: 'none on record', value: <Dash /> }],
-      };
-      recordDoors = [
-        ...familyDoors,
-        { label: '✎ the secret', small: 'who knows, what reveals it' },
-      ];
+      recordDoors = familyDoors;
       break;
     case 'realm':
       chapter = (
@@ -175,16 +145,10 @@ function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: L
           extra={actions.titlesExtra}
         />
       );
-      recordRows = [
-        { label: 'tier', value: <Dash /> },
-        { label: 'treasury', value: <Dash /> },
-        { label: 'pacts', value: <Dash /> },
-      ];
-      recordDoors = [
+      recordDoors =
         realm.realm_id != null
-          ? { label: 'the ladder', to: `/staff/almanach/realms/${realm.realm_id}` }
-          : { label: 'the ladder' },
-      ];
+          ? [{ label: 'the ladder', to: `/staff/almanach/realms/${realm.realm_id}` }]
+          : [];
       break;
     case 'lands':
       chapter = <LandsLeaf houseName={house.name} lands={lands} onDescribe={onDescribeDemesne} />;
@@ -201,8 +165,6 @@ function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: L
       break;
     case 'estate':
       chapter = <EstateLeaf estate={estate} onPlan={onPlanEstate} />;
-      recordRows = [{ label: 'kind', value: <Dash /> }];
-      recordDoors = [{ label: 'open on the Atlas' }];
       break;
     case 'books':
       chapter = (
@@ -258,7 +220,7 @@ function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: L
       break;
   }
 
-  return { chapter, recordRows, recordExtraSection, recordDoors };
+  return { chapter, recordRows, recordDoors };
 }
 
 export function HouseDocument({ houseId }: { houseId: number }) {
@@ -381,22 +343,17 @@ export function HouseDocument({ houseId }: { houseId: number }) {
     </>
   );
 
-  const { chapter, recordRows, recordExtraSection, recordDoors } = leafPresentation(
-    leaf,
-    houseId,
-    doc,
-    {
-      onSaveHouse,
-      onEditKin,
-      onCreateKin,
-      onSwear,
-      onDescribeDemesne,
-      onPlanEstate,
-      onPublish,
-      familyFooter,
-      titlesExtra,
-    }
-  );
+  const { chapter, recordRows, recordDoors } = leafPresentation(leaf, houseId, doc, {
+    onSaveHouse,
+    onEditKin,
+    onCreateKin,
+    onSwear,
+    onDescribeDemesne,
+    onPlanEstate,
+    onPublish,
+    familyFooter,
+    titlesExtra,
+  });
 
   return (
     <div className="almanach">
@@ -502,9 +459,7 @@ export function HouseDocument({ houseId }: { houseId: number }) {
           </div>
         </aside>
         {chapter}
-        {leaf !== 'publish' && (
-          <RecordRail rows={recordRows} extraSection={recordExtraSection} doors={recordDoors} />
-        )}
+        {leaf !== 'publish' && <RecordRail rows={recordRows} doors={recordDoors} />}
       </div>
       {batchOpen && doc.realm.holds_title_id != null && (
         <BatchUnclaimedDialog

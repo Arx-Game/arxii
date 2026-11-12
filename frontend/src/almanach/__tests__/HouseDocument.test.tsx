@@ -124,6 +124,25 @@ test('the record links are named for where they go, and the family page link wor
   expect(screen.queryByText('the organization')).not.toBeInTheDocument();
 });
 
+test('the record rail draws no row or link the document has nothing for (#5090)', async () => {
+  vi.mocked(queries.useHouseDocument).mockReturnValue({ data: doc, isLoading: false } as never);
+  vi.mocked(queries.useAllHouses).mockReturnValue({ data: { results: [] } } as never);
+  renderWithProviders(<HouseDocument houseId={9} />);
+  expect(screen.queryByText('stature')).not.toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: 'The Family' }));
+  for (const gone of ['kin slots', 'influence', 'recognition', 'linked houses', /the secret/]) {
+    expect(screen.queryByText(gone)).not.toBeInTheDocument();
+  }
+  expect(screen.getByRole('link', { name: 'Piropa family page' })).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: 'Titles' }));
+  for (const gone of ['treasury', 'pacts']) {
+    expect(screen.queryByText(gone)).not.toBeInTheDocument();
+  }
+  expect(screen.getByRole('link', { name: 'the ladder' })).toBeInTheDocument();
+});
+
 test('a house with no family has no family page link (#5090)', () => {
   vi.mocked(queries.useHouseDocument).mockReturnValue({
     data: { ...doc, family: { ...doc.family, family_id: null } },
@@ -346,7 +365,7 @@ test("the ladder record door links to the realm's own ladder page when realm_id 
   expect(door).toHaveAttribute('href', '/staff/almanach/realms/1');
 });
 
-test("the ladder record door renders a labeled dash when the house's realm carries no id", async () => {
+test("the ladder record door is absent when the house's realm carries no id", async () => {
   const noRealmIdDoc: HouseDocumentPayload = { ...doc, realm: { ...doc.realm, realm_id: null } };
   vi.mocked(queries.useHouseDocument).mockReturnValue({
     data: noRealmIdDoc,
@@ -355,8 +374,7 @@ test("the ladder record door renders a labeled dash when the house's realm carri
   vi.mocked(queries.useAllHouses).mockReturnValue({ data: { results: [] } } as never);
   renderWithProviders(<HouseDocument houseId={9} />);
   await userEvent.click(screen.getByRole('button', { name: 'Titles' }));
-  expect(screen.queryByRole('link', { name: 'the ladder' })).not.toBeInTheDocument();
-  expect(screen.getByText('the ladder')).toBeInTheDocument();
+  expect(screen.queryByText('the ladder')).not.toBeInTheDocument();
 });
 
 test('swearing a house prefills the tithe percent from the realm default', async () => {

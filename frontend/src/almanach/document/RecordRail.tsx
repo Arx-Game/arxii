@@ -1,22 +1,12 @@
 /**
- * RecordRail (#3983 Task 9, plates S-III to S-VII's `aside.record`) — the
- * generic "on record" `<dl>`, an optional second named section (Family's
- * "linked houses"), and an optional "doors" list, shared by every leaf.
- * Each leaf builds its own `rows`/`extraSection`/`doors` from what the
- * House Document payload actually carries — several of the plate's own
- * record-rail facts (house nobility "kind", influence, recognition-rule
- * text, remaining kin slots, secondary "linked houses" memberships,
- * treasury, pacts, unrest, defenses, garrison) have no field anywhere in
- * `HouseDocument` to read them off, so those rows show a dash rather than
- * fabricated content — see each leaf's own comment for exactly which plate
- * row that is and why.
+ * RecordRail (#3983 Task 9, plates S-III to S-VII's `aside.record`): the
+ * "on record" `<dl>` and a "links" list, shared by every leaf. Each leaf
+ * builds its `rows` and `doors` from what its document carries; a fact the
+ * document has no field for gets no row.
  *
- * A door with neither `to` nor `onClick` (review fix round 1, Finding I2)
- * renders as a labeled dash instead — present on the page (the plate draws
- * it), but inert: nothing this app can link to or act on exists for it yet
- * ("✎ the secret", "the ladder" with no realm id to link back to, "open on the
- * Atlas" for an Estate with no area picker). A door with `to`/`onClick` set
- * renders as a real, working control, same as before.
+ * A door always goes somewhere (#5090): it carries a route or a same-page
+ * action, and a leaf with nowhere to send it leaves it out. An "on record"
+ * section with no rows is not drawn.
  */
 import { Fragment, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
@@ -26,25 +16,21 @@ export interface RecordRailRow {
   value: ReactNode;
 }
 
-export interface RecordRailDoor {
+export type RecordRailDoor = {
   label: string;
   small?: string;
-  /** A route to link to; omit (with `onClick` too) for a same-page action,
-   * or omit both for a not-yet-built destination (renders as a labeled dash). */
-  to?: string;
-  onClick?: () => void;
-}
+} & (
+  | { /** A route to link to. */ to: string; onClick?: undefined }
+  | { /** A same-page action. */ onClick: () => void; to?: undefined }
+);
 
-export interface RecordRailSection {
+interface RecordRailSection {
   heading: string;
   rows: RecordRailRow[];
 }
 
 export interface RecordRailProps {
   rows: RecordRailRow[];
-  /** A second named `<dl>` section between "on record" and "doors" — only
-   * Family's "linked houses" block uses this today. */
-  extraSection?: RecordRailSection;
   doors?: RecordRailDoor[];
 }
 
@@ -57,19 +43,11 @@ function DoorItem({ door }: { door: RecordRailDoor }) {
       </Link>
     );
   }
-  if (door.onClick) {
-    return (
-      <button type="button" onClick={door.onClick}>
-        {door.label}
-        {door.small && <small>{door.small}</small>}
-      </button>
-    );
-  }
   return (
-    <span className="faint">
+    <button type="button" onClick={door.onClick}>
       {door.label}
-      {door.small && <small>{door.small}</small>} <abbr title="none">—</abbr>
-    </span>
+      {door.small && <small>{door.small}</small>}
+    </button>
   );
 }
 
@@ -89,11 +67,10 @@ function Section({ heading, rows }: RecordRailSection) {
   );
 }
 
-export function RecordRail({ rows, extraSection, doors = [] }: RecordRailProps) {
+export function RecordRail({ rows, doors = [] }: RecordRailProps) {
   return (
     <aside className="record">
-      <Section heading="on record" rows={rows} />
-      {extraSection && <Section heading={extraSection.heading} rows={extraSection.rows} />}
+      {rows.length > 0 && <Section heading="on record" rows={rows} />}
       {doors.length > 0 && (
         <>
           <h4>links</h4>
