@@ -8,7 +8,7 @@ edges, and a raw level compared against a shown-scale number was an easy bug to 
 decided every surface (web, telnet, admin, narration, character creation) shows a stat, a
 skill or a thread at its stored value: a stat of 20 reads 20, a thread at 30 reads 30. Storage
 did not change; instead every authored or config number written in the old shown unit was
-restated in stored units (data migration `0394_one_scale_values`, code constants in place), so
+restated in stored units (data migration `0395_one_scale_values`, code constants in place), so
 every gate fires exactly where it did: band caps 5/6/11/16/21/25 became 50/60/110/160/210/250,
 crossings 3/6/11/16/21 became thread levels 30/60/110/160/210, CG allocates stats 10 to 50 in
 steps of 10, vow focus picks sit at levels 10/20/30. `display_trait_value`,

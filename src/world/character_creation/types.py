@@ -69,6 +69,9 @@ class VisibleOffer:
     #: The distinction's own name (#4395): a grid card reads the offer's label and,
     #: when the label is the author's own words, the distinction under it.
     distinction_name: str = ""
+    #: The distinction's own description (#5099): the text a life-page card reads under
+    #: its name, in place of ``player_line``.
+    distinction_description: str = ""
     #: The distinction is already in the draft from a different offer (#3709): the
     #: leaf prints it held, never offers it twice.
     held: bool = False
