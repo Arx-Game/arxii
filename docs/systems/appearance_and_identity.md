@@ -98,10 +98,12 @@ artist changes persona with an *identical* body; a curse changes the body and
 - **The persona list never ties a mask to its character for a stranger** (#4888).
   `PersonaSerializer` (the scene detail's `personas` and `/api/personas/`) sends
   `character_sheet` and `roster_entry` for an `is_fake_name` face only to the account that
-  plays it, staff, the GM of the scene being listed, and a viewer the batched
-  `build_persona_display_map` `reveal_allowed` predicate lets through (their
-  `PersonaDiscovery`, or a sight that pierces that kind); everyone else gets null, and
-  `allow_social_actions` (the real character's own setting) reads the default True.
+  plays it, staff, and a viewer the batched `build_persona_display_map` `reveal_allowed`
+  predicate lets through (their `PersonaDiscovery`, or a sight that pierces that kind);
+  everyone else gets null, and `allow_social_actions` (the real character's own setting)
+  reads the default True. The scene's GM also gets the link, but only in the scene detail
+  (`GET /api/scenes/<id>/`, which passes the scene in context and is what the GM panels
+  read); on `/api/personas/?scene=` a GM is treated like any other viewer.
   `/api/personas/?character_sheet=` / `?character=` return a character's masks only to its
   player and staff. The scene's `persona_positions` place only the face a character presents
   now, so a mask never shares a square with the face behind it. Combat's roster applies the
