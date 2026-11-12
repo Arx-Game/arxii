@@ -167,7 +167,7 @@ class Migration(migrations.Migration):
                     models.TextField(
                         blank=True,
                         default="",
-                        help_text="Shown to the room when the pact ends in breach. Blank = nothing is shown.",
+                        help_text="Shown to the room when the pact ends (breach or renouncement). Never states the reason. Blank = nothing is shown.",
                     ),
                 ),
                 (

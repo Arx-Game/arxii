@@ -29,8 +29,7 @@ Chosen bonuses.
   follower pacts issue adds a second party column and widens the check), `name` (unique per
   being), `offer_text` (shown on the pledge), `closing_text` (shown to the holder on breach),
   `onlooker_line` (shown to the room when the pact ends, by breach or renouncing; blank shows
-  nothing; the model's help text still says "on breach" until a migration touches the field), `period_weeks` (game
-  weeks per period, default 2), `condition` FK `ConditionTemplate` (PROTECT; `clean()` requires
+  nothing), `period_weeks` (game weeks per period, default 2), `condition` FK `ConditionTemplate` (PROTECT; `clean()` requires
   a progressing condition with at least `MIN_PACT_CONDITION_STAGES` = 2 severity-threshold
   stages), `severity_per_miss` (severity a wholly missed period adds, default 10), `is_active`.
 - `PactOfferCommitment` - one thing every holder of the offer owes. `offer` FK, `kind`

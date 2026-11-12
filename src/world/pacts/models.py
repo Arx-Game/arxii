@@ -57,7 +57,10 @@ class PactOffer(CreditedContent, SharedMemoryModel):
     onlooker_line = models.TextField(
         blank=True,
         default="",
-        help_text="Shown to the room when the pact ends in breach. Blank = nothing is shown.",
+        help_text=(
+            "Shown to the room when the pact ends (breach or renouncement). Never states the "
+            "reason. Blank = nothing is shown."
+        ),
     )
     period_weeks = models.PositiveSmallIntegerField(
         default=2,
