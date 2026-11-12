@@ -10,7 +10,8 @@ The suite protects three things, in this order (#3657, ADR-3657):
    signed-in REST client, `watch()` / `assertTold()` read what each character
    was told, and `connect_session()` / `session_frames()` give an account a
    browser (`websocket`) or MUD (`telnet`) session and read what was pushed to
-   it (channel frames and lines go to account sessions, not characters).
+   it in the form the Server puts on the wire (channel frames and lines go to
+   account sessions, not characters).
    Journeys are PostgreSQL-only by construction.
 2. **Fuzz.** Malformed, hostile and boundary input at those same seams, generated
    by Hypothesis (`src/integration_tests/fuzz/`, profiles `ci` and `dev`).

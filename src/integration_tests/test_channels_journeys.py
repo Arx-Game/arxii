@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from evennia.comms.models import ChannelDB
 
+from actions.definitions.channels import PostToChannelAction
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from integration_tests.harness import JourneyCase
 from world.channels.models import Channel, ChannelMessage, ChannelSubscription
@@ -117,6 +118,10 @@ class TalkingOnPublic(ChannelJourneyCase):
     def test_a_telnet_greeting_reaches_a_browser_as_one_frame(self) -> None:
         ysmay_client = self.connect_session(self.ysmay_account, "telnet")
         hobb_tab = self.connect_session(self.hobb_account, "websocket")
+        # Hobb plays in hidden mode, which the settings page promises keeps channels.
+        hobb_player = self.hobb_account.player_data
+        hobb_player.private_mode = True
+        hobb_player.save(update_fields=["private_mode"])
         # Hobb has no puppet: he joins and speaks from the web as his selected character.
         joined = self.subscribe_web(self.hobb_account, self.public)
         self.assertEqual(joined.json()["display_label"], "Hobb")
@@ -132,6 +137,22 @@ class TalkingOnPublic(ChannelJourneyCase):
 
         frames = self.frames(hobb_tab)
         self.assertEqual(len(frames), 1)
+        self.assertEqual(
+            set(frames[0]),
+            {
+                "message_id",
+                "channel_id",
+                "channel_name",
+                "speaker",
+                "body",
+                "created_at",
+                "is_own",
+                "notification_level",
+                # Evennia's send path adds the message options to every frame's kwargs.
+                "options",
+            },
+        )
+        self.assertEqual(frames[0]["channel_id"], self.public.pk)
         self.assertEqual(frames[0]["speaker"], "Ysmay")
         self.assertEqual(frames[0]["body"], "Hello all")
         self.assertEqual(frames[0]["channel_name"], "Public")
@@ -139,13 +160,14 @@ class TalkingOnPublic(ChannelJourneyCase):
         self.assertEqual(self.session_frames(hobb_tab, "text"), [])
         # Her own MUD client hears the echo as a line, never a frame.
         self.assertEqual(
-            [text for text, _kind in self.session_frames(ysmay_client, "text")],
-            ["[Public] Ysmay: Hello all"],
+            self.session_frames(ysmay_client, "text"),
+            [(["[Public] Ysmay: Hello all"], {"type": "channel", "options": {}})],
         )
         self.assertEqual(self.session_frames(ysmay_client, "channel_message"), [])
 
         rows = self.history(self.hobb_account, self.public)
         self.assertEqual([(r["speaker"], r["body"]) for r in rows], [("Ysmay", "Hello all")])
+        self.assertNotIn("author_tenure", rows[0])
 
         # Hobb answers from the web with no puppet; her client hears him by character name.
         reply = self.post_web(self.hobb_account, self.public, "Evening, Ysmay.")
@@ -153,7 +175,7 @@ class TalkingOnPublic(ChannelJourneyCase):
         self.assertEqual(reply.json()["speaker"], "Hobb")
         self.assertIn(
             "[Public] Hobb: Evening, Ysmay.",
-            [text for text, _kind in self.session_frames(ysmay_client, "text")],
+            [args[0] for args, _options in self.session_frames(ysmay_client, "text")],
         )
 
         # No surface names either account.
@@ -172,23 +194,39 @@ class TalkingOnPublic(ChannelJourneyCase):
             for frame in frames:
                 self.assertNotIn(username, str(frame))
 
-    def test_a_web_dispatch_cannot_post_as_another_account(self) -> None:
+    def test_a_web_dispatch_cannot_act_as_another_account(self) -> None:
+        # Ysmay is joined and has a speaking identity, so her real account object, slipped
+        # into Hobb's dispatch kwargs, would act for her if dispatch let it through.
+        ysmay_tab = self.connect_session(self.ysmay_account, "websocket")
         self.subscribe_web(self.ysmay_account, self.public)
-        hobb_tab = self.connect_session(self.hobb_account, "websocket")
-        self.subscribe_web(self.hobb_account, self.public)
+        forged = {"account": self.ysmay_account, "channel_id": self.public.pk}
 
-        result = self.web(
-            self.hobb,
-            "post_to_channel",
-            account=self.ysmay_account.pk,
-            channel_id=self.public.pk,
-            body="forged",
-        )
+        for key, extra in (
+            ("post_to_channel", {"body": "forged"}),
+            ("set_channel_mute", {"muted": True}),
+            ("leave_channel", {}),
+        ):
+            result = self.web(self.hobb, key, **forged, **extra)
+            self.assertFalse(result.detail.success, key)
+            self.assertEqual(result.detail.message, "You must be logged in to use channels.")
 
-        self.assertFalse(result.detail.success)
-        self.assertEqual(result.detail.message, "You must be logged in to use channels.")
         self.assertFalse(ChannelMessage.objects.filter(body="forged").exists())
-        self.assertEqual(self.frames(hobb_tab), [])
+        self.assertEqual(self.frames(ysmay_tab), [])
+        subscription = ChannelSubscription.objects.get(
+            account=self.ysmay_account, channel=self.public
+        )
+        self.assertFalse(subscription.muted)
+
+    def test_a_channel_id_that_is_not_a_number_answers_as_missing(self) -> None:
+        # Not through web(): dispatch drops ``account``, so every channel action refuses
+        # there before it reads a channel. The action runs with the signed-in account, as
+        # the REST view and the telnet command run it. "\u00b2" (superscript two) passes
+        # str.isdigit() but int() refuses it.
+        result = PostToChannelAction().run(
+            actor=None, account=self.hobb_account, channel_id="\u00b2", body="hi"
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, "No such channel.")
 
     def test_the_stock_evennia_channel_command_is_gone(self) -> None:
         listing = self.telnet(self.ysmay, "channel")
@@ -221,7 +259,9 @@ class TalkingInYourOrganization(ChannelJourneyCase):
         sub = self.subscribe_web(self.ysmay_account, self.channel).json()
         self.assertEqual(sub["display_label"], "Ysmay")
         identities = self.api(self.ysmay_account).get(f"{CHANNELS}{self.channel.pk}/identities/")
-        self.assertEqual([row["label"] for row in identities.json()], ["Ysmay"])
+        self.assertEqual(
+            identities.json(), [{"id": self.tenure_of(self.ysmay).pk, "label": "Ysmay"}]
+        )
 
         refused = self.api(self.ysmay_account).patch(
             f"{SUBSCRIPTIONS}{sub['id']}/",
@@ -232,6 +272,21 @@ class TalkingInYourOrganization(ChannelJourneyCase):
         self.assertEqual(
             refused.json()["display_tenure"], ["That character can't speak in this channel."]
         )
+        # Another account's tenure is refused as an unknown id, confirming nothing about it.
+        foreign = self.api(self.ysmay_account).patch(
+            f"{SUBSCRIPTIONS}{sub['id']}/",
+            {"display_tenure": self.tenure_of(self.hobb).pk},
+            format="json",
+        )
+        self.assertEqual(foreign.status_code, 400)
+        self.assertIn("display_tenure", foreign.json())
+        self.assertNotIn("Hobb", foreign.content.decode())
+        self.assertEqual(
+            self.api(self.ysmay_account)
+            .get(f"{SUBSCRIPTIONS}{sub['id']}/")
+            .json()["display_label"],
+            "Ysmay",
+        )
 
         posted = self.post_web(self.ysmay_account, self.channel, "Muster at dusk.")
         self.assertEqual(posted.status_code, 201, posted.content)
@@ -239,8 +294,6 @@ class TalkingInYourOrganization(ChannelJourneyCase):
 
     def test_a_non_member_is_told_nothing_exists(self) -> None:
         hobb_account = self.account_of(self.hobb)
-        hobb_tab = self.connect_session(hobb_account, "websocket")
-        self.subscribe_web(self.ysmay_account, self.channel)
 
         self.assertNotIn("Lantern Wardens", self.listed_names(hobb_account))
         joined = self.api(hobb_account).post(
@@ -253,14 +306,13 @@ class TalkingInYourOrganization(ChannelJourneyCase):
         self.assertIn("No such channel.", self.telnet(self.hobb, "channel join Lantern Wardens"))
         self.assertEqual(self.history(hobb_account, self.channel), [])
 
-        self.post_web(self.ysmay_account, self.channel, "Members only.")
-        self.assertEqual(self.frames(hobb_tab), [])
-
     def test_leaving_the_organization_loses_the_channel_at_once(self) -> None:
         ysmay_tab = self.connect_session(self.ysmay_account, "websocket")
         self.subscribe_web(self.ysmay_account, self.channel)
         corin_account = self.account_of(self.corin)
         self.subscribe_web(corin_account, self.channel)
+        self.assertEqual(self.post_web(corin_account, self.channel, "Muster.").status_code, 201)
+        self.assertEqual([f["body"] for f in self.frames(ysmay_tab)], ["Muster."])
 
         leave_organization(self.ysmay_membership)
 
@@ -271,7 +323,7 @@ class TalkingInYourOrganization(ChannelJourneyCase):
         self.assertEqual(refused.status_code, 400)
         self.assertEqual(refused.json()["detail"], "You don't have access to that channel.")
         self.assertEqual(self.post_web(corin_account, self.channel, "She's gone.").status_code, 201)
-        self.assertEqual(self.frames(ysmay_tab), [])
+        self.assertEqual([f["body"] for f in self.frames(ysmay_tab)], ["Muster."])
         # Her row survives, so she can still leave it.
         self.assertIn(
             "You leave Lantern Wardens.", self.telnet(self.ysmay, "channel leave Lantern Wardens")
@@ -423,6 +475,33 @@ class StaffModeration(ChannelJourneyCase):
         self.assertEqual(deleted.status_code, 204)
         self.assertEqual(self.history(self.hobb_account, self.public), [])
         self.assertEqual(self.history(self.ysmay_account, self.public), [])
+
+    def test_staff_read_an_org_channel_a_non_member_cannot_find(self) -> None:
+        order = OrganizationFactory(name="Lantern Wardens")
+        channel = provision_org_channel(order)
+        self.join(self.ysmay, order)
+        self.subscribe_web(self.ysmay_account, channel)
+        self.post_web(self.ysmay_account, channel, "Muster at dusk.")
+
+        self.assertIn("Lantern Wardens", self.listed_names(self.staff))
+        self.assertEqual(
+            [row["body"] for row in self.history(self.staff, channel)], ["Muster at dusk."]
+        )
+
+        self.assertNotIn("Lantern Wardens", self.listed_names(self.hobb_account))
+        self.assertEqual(self.history(self.hobb_account, channel), [])
+        # Joining a real org channel he can't reach reads exactly like joining a missing one.
+        real = self.api(self.hobb_account).post(
+            SUBSCRIPTIONS, {"channel": channel.pk}, format="json"
+        )
+        missing = self.api(self.hobb_account).post(
+            SUBSCRIPTIONS, {"channel": 999999}, format="json"
+        )
+        self.assertEqual((real.status_code, missing.status_code), (400, 400))
+        self.assertEqual(
+            real.json()["channel"][0].replace(str(channel.pk), "N"),
+            missing.json()["channel"][0].replace("999999", "N"),
+        )
 
     def test_a_banned_author_cannot_rejoin_or_post(self) -> None:
         banned = self.api(self.staff).post(

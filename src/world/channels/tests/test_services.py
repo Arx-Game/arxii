@@ -1,7 +1,9 @@
 """Unit tests for player channel services (#3299).
 
-Only what the Task 5 journeys cannot reach directly: the prune cap, the ORG identity
-cascade edge cases, covert provisioning, the default identity and post-time revalidation.
+Only what the journeys in ``integration_tests/test_channels_journeys.py`` cannot reach
+through a player's seam: the prune cap, the ORG identity cascade edge cases, covenant and
+name-clash provisioning, an ineligible puppet's default identity and post-time
+revalidation after a tenure ends or an org turns covert.
 """
 
 from unittest import mock
@@ -113,16 +115,8 @@ class OrgIdentityTests(TestCase):
         ):
             self.assertIsNone(default_tenure_for(self.account, self.channel))
 
-    def test_default_tenure_is_the_puppet_when_eligible(self) -> None:
-        character = self.member.roster_entry.character_sheet.character
-        with mock.patch.object(self.account, "get_puppeted_characters", return_value=[character]):
-            self.assertEqual(default_tenure_for(self.account, self.channel), self.member)
-
 
 class ProvisionTests(TestCase):
-    def test_covert_org_gets_no_channel(self) -> None:
-        self.assertIsNone(provision_org_channel(OrganizationFactory(is_covert=True)))
-
     def test_covenant_org_gets_no_channel_and_backfill_skips_it(self) -> None:
         # Covenant membership is CharacterCovenantRole, so its org channel would be
         # unreachable (ruling, #3299); the seed backfill gives the plain org its channel.

@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import sys
 from typing import TYPE_CHECKING, Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 from django.test import TestCase, tag
 from rest_framework.test import APIClient
@@ -212,25 +212,48 @@ class JourneyCase(TestCase):
         For what the game pushes to an account's sessions rather than to a
         character (``account.sessions.all()``): channel lines and frames. A
         ``"websocket"`` session is a browser tab, ``"telnet"`` a MUD client. Read
-        what it was sent from the mock's ``msg`` calls (``session_frames``). Keyed
-        by the session, so an account and a character sharing a pk never collide
-        the way ``watch`` would.
+        what it was sent with ``session_frames``. ``AccountSessionHandler.all`` is
+        patched on the class and answers by the handler's account pk, so it holds
+        whichever Python instance of the account the game reaches, and an account
+        and a character sharing a pk never collide the way ``watch`` would.
         """
-        # Signed in, puppeting nothing (a MagicMock's own ``puppet`` would read as one).
-        session = MagicMock(protocol_key=protocol_key, puppet=None)
-        sessions = self._account_sessions.setdefault(account.pk, [])
-        if not sessions:
-            sessions_patch = patch.object(account.sessions, "all", return_value=sessions)
+        from evennia.accounts.accounts import AccountSessionHandler  # noqa: PLC0415
+        from evennia.server.serversession import ServerSession  # noqa: PLC0415
+
+        if not self._account_sessions:
+            sessions_by_account = self._account_sessions
+
+            def all_sessions(handler: AccountSessionHandler) -> list[ServerSession]:
+                return list(sessions_by_account.get(handler.account.pk, []))
+
+            sessions_patch = patch.object(
+                AccountSessionHandler, "all", autospec=True, side_effect=all_sessions
+            )
             sessions_patch.start()
             self.addCleanup(sessions_patch.stop)
-        sessions.append(session)
+        session = create_autospec(ServerSession, instance=True)
+        session.protocol_key = protocol_key
+        session.protocol_flags = {"ENCODING": "utf-8"}
+        session.puppet = None  # signed in, puppeting nothing
+        self._account_sessions.setdefault(account.pk, []).append(session)
         return session
 
     @staticmethod
-    def session_frames(session: MagicMock, kind: str) -> list[Any]:
-        """The values ``session.msg`` was sent under keyword ``kind`` (``"text"``,
-        ``"channel_message"``, ...), in order."""
-        return [call.kwargs[kind] for call in session.msg.call_args_list if kind in call.kwargs]
+    def session_frames(session: MagicMock, kind: str) -> list[tuple[list[Any], dict[str, Any]]]:
+        """What ``session`` was sent under message type ``kind`` (``"text"``,
+        ``"channel_message"``, ...), in order, as ``(args, kwargs)`` in the form the
+        Server puts on the wire (``ServerSessionHandler.clean_senddata``), which is
+        what the Portal hands the client."""
+        from evennia.server.sessionhandler import ServerSessionHandler  # noqa: PLC0415
+
+        wire = ServerSessionHandler()
+        frames = []
+        for call in session.msg.call_args_list:
+            cleaned = wire.clean_senddata(session, dict(call.kwargs))
+            if kind in cleaned:
+                args, kwargs = cleaned[kind]
+                frames.append((list(args), dict(kwargs)))
+        return frames
 
     def assertNotTold(self, obj: ObjectDB, needle: str) -> None:  # noqa: N802
         """``obj`` was told nothing containing ``needle``."""
