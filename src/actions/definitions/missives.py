@@ -205,6 +205,7 @@ def _send(
     kwargs: dict[str, Any],
     in_reply_to: Missive | None = None,
 ) -> ActionResult:
+    from world.messengers.display import shown_name  # noqa: PLC0415
     from world.messengers.services import send_missive  # noqa: PLC0415
 
     missive = send_missive(
@@ -247,34 +248,10 @@ def _guarded(run: Any) -> ActionResult:
         return ActionResult(success=False, message=NO_FACE)
 
 
-def shown_name(persona: Persona, sheet: CharacterSheet) -> str:
-    """How ``persona`` reads to this character: real for its own faces and named faces, the
-    discovered name or the composed description for a mask it has not seen through."""
-    from world.scenes.persona_display import resolve_display_for_viewer  # noqa: PLC0415
-
-    return resolve_display_for_viewer(persona, viewer_sheet=sheet)[0]
-
-
-def missive_correspondents(sheet: CharacterSheet, missive: Missive) -> tuple[str, str]:
-    """``(from, to)`` names of a missive as this character reads them.
-
-    The sender always reads through the viewer's eyes. The recipient reads as addressed
-    when this character wrote a fresh letter (it typed that name), and through its eyes
-    otherwise: a reply to a masked writer must not name what the mask hides.
-    """
-    from world.messengers.services import sent_by  # noqa: PLC0415
-
-    recipient = missive.recipient_persona
-    if sent_by(sheet, missive) and missive.in_reply_to_id is None:
-        to_name = recipient.name
-    else:
-        to_name = shown_name(recipient, sheet)
-    return shown_name(missive.sender_persona, sheet), to_name
-
-
 def render_missive(missive: Missive, sheet: CharacterSheet) -> str:
     """The letter as ``sheet``'s character reads it: header, body, and what came with it."""
     from world.game_clock.services import format_ic_date  # noqa: PLC0415
+    from world.messengers.display import missive_correspondents  # noqa: PLC0415
     from world.messengers.models import MissiveAttachment  # noqa: PLC0415
 
     when = format_ic_date(missive.ic_sent_at) if missive.ic_sent_at is not None else UNDATED

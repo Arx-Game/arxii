@@ -377,6 +377,11 @@ def sent_by(sheet: CharacterSheet, missive: Missive) -> bool:
     )
 
 
+def sent_by_q(sheet: CharacterSheet) -> Q:
+    """``sent_by`` as a queryset filter: the same rule, for filtering a list in the database."""
+    return Q(sender_persona__character_sheet=sheet) & ~Q(recipient_persona__character_sheet=sheet)
+
+
 def reply_sender_for(missive: Missive) -> Persona:
     """The face a reply goes out under: the one that was written to (decision 3).
 

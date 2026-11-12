@@ -137,7 +137,7 @@ class CmdMissive(ArxCommand):
 
 def _render_missives(sheet: CharacterSheet) -> str:
     """One line per visible missive, newest first: ``* #12 From Ada - Come at once...``."""
-    from actions.definitions.missives import missive_correspondents  # noqa: PLC0415
+    from world.messengers.display import missive_correspondents  # noqa: PLC0415
     from world.messengers.services import sent_by, visible_missives_for  # noqa: PLC0415
 
     missives = list(visible_missives_for(sheet).order_by("-sent_at", "-pk"))

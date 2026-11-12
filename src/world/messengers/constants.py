@@ -11,3 +11,17 @@ class AttachmentResolution(models.TextChoices):
     PENDING = "pending", "Waiting"
     ACCEPTED = "accepted", "Accepted"
     REFUSED = "refused", "Refused"
+
+
+class MissiveDirection(models.TextChoices):
+    """Which side of a missive the reading character is on (REST list, #3289)."""
+
+    RECEIVED = "received", "Received"
+    SENT = "sent", "Sent"
+
+
+class AttachmentKind(models.TextChoices):
+    """What rides on a missive attachment, as the REST list names it (#3289)."""
+
+    ITEM = "item", "Item"
+    COIN = "coin", "Coin"
