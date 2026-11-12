@@ -1,0 +1,6 @@
+>>> ic Corwen
+Already controlling Corwen.
+
+>>> pact
+Pact: Hesk - 3 of 8 favor this period, 1 week left. Stage: Sworn (severity 1; next at 11).
+  You promised: Never let a debt owed to Hesk go unspoken.
