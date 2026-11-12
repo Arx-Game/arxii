@@ -28,6 +28,7 @@ from actions.constants import ActionBackend
 from actions.factories import ActionTemplateFactory
 from actions.player_interface import dispatch_player_action
 from actions.types import ActionRef
+from integration_tests.harness import JourneyCase
 from integration_tests.test_thrown_and_enchanted_strike_journeys import _ThrowingField
 from world.areas.positioning.models import Position
 from world.areas.positioning.services import place_in_position
@@ -36,13 +37,19 @@ from world.checks.services import perform_check
 from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import (
     ActionCategory,
+    EngagementLockStatus,
     OpponentTier,
+    ParticipantStatus,
     StrikeDelivery,
     TargetingMode,
     TargetSelection,
 )
 from world.combat.factories import (
+    CombatEncounterFactory,
+    CombatOpponentFactory,
+    CombatParticipantFactory,
     CreatureTemplateFactory,
+    EngagementLockFactory,
     OpponentTierTemplateFactory,
     ThreatPoolEntryFactory,
     ThreatPoolFactory,
@@ -51,12 +58,19 @@ from world.combat.services import begin_declaration_phase, resolve_round
 from world.combat.services.boss.creature_spawn import spawn_from_creature_template
 from world.covenants.constants import CovenantType
 from world.covenants.factories import (
+    CharacterCovenantRoleFactory,
     CovenantFactory,
     CovenantRoleFactory,
     VowSituationalPerkFactory,
+    VowSituationalPerkSituationFactory,
     engage_vow_with_thread,
 )
-from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, PerkRollKind
+from world.covenants.perks.constants import (
+    PerkBeneficiary,
+    PerkEffectKind,
+    PerkRollKind,
+    Situation,
+)
 from world.fatigue.constants import EffortLevel
 from world.fatigue.services import get_or_create_fatigue_pool
 from world.magic.factories import (
@@ -67,7 +81,10 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.magic.models.modifier_level import CastPowerLevel
+from world.scenes.constants import RoundStatus
+from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
 from world.traits.models import CheckOutcome, Trait
+from world.vitals.models import CharacterVitals
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -255,3 +272,110 @@ class AnAttackTechniqueTakesItAndADodgeDoesNot(_AttackRollPerkField):
         added = self.added(self.cast_bolt, check_type=self.thrown_check)
 
         self.assertEqual(sorted(added), [("Bolt Cast", 0), ("Parry", 0)])
+
+
+class TheAnnounceNamesTheAllyAndTheFoe(JourneyCase):
+    """Mira holds the Bandit Captain; Tomas's vow answers his bolt at it, aloud (#5092).
+
+    Tomas's engaged vow carries "Press the Held Foe", a check bonus on attack rolls when an
+    enemy is held by an ally, whose line reads "{ally} holds {target} for {holder} to
+    strike!". Mira, his covenant-mate, holds the captain; Ilse watches from the road.
+    """
+
+    LINE = "Press the Held Foe: Mira holds Bandit Captain for Tomas to strike!"
+
+    def setUp(self) -> None:
+        super().setUp()
+        CheckSystemSetupFactory.create()
+        road = self.make_room("The Road")
+        self.mira = self.make_player("Mira", room=road)
+        self.tomas = self.make_player("Tomas", room=road)
+        self.ilse = self.make_player("Ilse", room=road)
+        check_type = CheckTypeFactory(name="Bolt Cast")
+        CheckTypeTraitFactory(check_type=check_type, trait=StatTraitFactory(), weight=1)
+        self.bolt = TechniqueFactory(
+            name="Ember bolt",
+            gift=GiftFactory(),
+            anima_cost=1,
+            effect_type=EffectTypeFactory(base_power=10),
+            damage_profile=False,
+            action_category=ActionCategory.PHYSICAL,
+            action_template=ActionTemplateFactory(check_type=check_type),
+        )
+        self.encounter = CombatEncounterFactory(
+            status=RoundStatus.DECLARING, round_number=1, room=road
+        )
+        participants = {}
+        for player in (self.mira, self.tomas, self.ilse):
+            sheet = player.sheet_data
+            CharacterVitals.objects.create(
+                character_sheet=sheet, health=100, max_health=100, base_max_health=100
+            )
+            CharacterTechniqueFactory(character=sheet, technique=self.bolt)
+            CharacterAnimaFactory(character=sheet, current=20, maximum=30)
+            participants[player.key] = CombatParticipantFactory(
+                encounter=self.encounter, character_sheet=sheet, status=ParticipantStatus.ACTIVE
+            )
+        self.captain = CombatOpponentFactory(
+            encounter=self.encounter, name="Bandit Captain", health=500, max_health=500
+        )
+        covenant = CovenantFactory(covenant_type=CovenantType.DURANCE)
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        engage_vow_with_thread(self.tomas.sheet_data, role, covenant=covenant, thread_level=3)
+        CharacterCovenantRoleFactory(
+            character_sheet=self.mira.sheet_data,
+            covenant=covenant,
+            covenant_role=CovenantRoleFactory(covenant_type=CovenantType.DURANCE),
+        )
+        self.mira.covenant_roles.invalidate()
+        perk = VowSituationalPerkFactory(
+            covenant_role=role,
+            name="Press the Held Foe",
+            beneficiary=PerkBeneficiary.SELF,
+            effect_kind=PerkEffectKind.CHECK_BONUS,
+            magnitude_tenths=10,
+            check_type=None,
+            roll_kind=PerkRollKind.ATTACK,
+            announce_template="{ally} holds {target} for {holder} to strike!",
+        )
+        VowSituationalPerkSituationFactory(perk=perk, situation=Situation.ENEMY_HELD_BY_ALLY)
+        self.mira_participant = participants["Mira"]
+        self.watch(self.tomas, self.ilse)
+
+    def bolt_the_captain(self) -> None:
+        declared = dispatch_player_action(
+            self.tomas,
+            ActionRef(
+                backend=ActionBackend.COMBAT, technique_id=self.bolt.pk, action_slot="focused"
+            ),
+            {"effort_level": EffortLevel.MEDIUM, "focused_opponent_target_id": self.captain.pk},
+        )
+        self.assertTrue(declared.deferred, declared)
+        with patch(
+            "world.combat.services.perform_check",
+            side_effect=lambda *a, **kw: _forced_success(*a, **kw),
+        ):
+            resolve_round(self.encounter)
+
+    def test_the_room_hears_who_holds_which_foe(self) -> None:
+        EngagementLockFactory(
+            encounter=self.encounter,
+            participant=self.mira_participant,
+            opponent=self.captain,
+            status=EngagementLockStatus.ACTIVE,
+        )
+
+        self.bolt_the_captain()
+
+        self.assertTold(self.ilse, self.LINE)
+        self.assertTold(self.tomas, self.LINE)
+
+    def test_with_nobody_holding_it_the_vow_stays_quiet(self) -> None:
+        self.bolt_the_captain()
+
+        self.assertNotTold(self.ilse, "Press the Held Foe")
+
+
+def _forced_success(*args: Any, **kwargs: Any):
+    with force_check_outcome(CheckOutcome.objects.get(name="Success")):
+        return perform_check(*args, **kwargs)

@@ -144,7 +144,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `BOTCH_IMMUNITY` fire in `perform_check`'s outcome resolution as of slice 2, see "Outcome
   guarantees" below), `magnitude_tenths` (integer-tenths, `PositiveIntegerField` — no negative
   magnitudes anywhere in this table; a vow's weakness is the absence of a perk, never a malus),
-  `announce_template` (player-facing line with `{holder}`/`{subject}` placeholders), an optional
+  `announce_template` (player-facing line with `{holder}`/`{subject}`/`{target}`/`{ally}` placeholders, #5092: `{target}` is the subject's declared opponent this round in combat, else the action's target; `{ally}` is the covenant-mate whose action made a held situation true, named by that situation's ally finder in `perks.evaluators.SITUATION_ALLY_FINDERS` (ENEMY_HELD_BY_ALLY, TARGET_SWAYED_BY_ALLY, SHIELDED_BY_ALLY, TARGET_IS_MARKED_BY_ALLY, ALLY_INTERCEPTED_FOR_ME, ALLY_SENT_FLYING; deliberately not ALLY_LOW_HEALTH or BARRIER_CONTESTED). `clean()` refuses any other placeholder or a stray brace; the perk admin's situation inline refuses `{ally}` when no situation supplies one; `render_announce` never raises and falls back to "an ally" / "the foe". The admin edits it in a three-row, full-width box), an optional
   `check_type` FK (`CHECK_BONUS` scope; null = any check — `clean()` rejects a `check_type` on a
   non-`CHECK_BONUS` row), and an optional `floor_success_level` (`SmallIntegerField`, canonical
   −10..+10 `success_level` scale — `TIER_FLOOR`-only, `clean()`-required on `TIER_FLOOR` rows and

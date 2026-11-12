@@ -182,6 +182,13 @@ CHECK_BONUS only, #5092) is a fourth: blank is any roll, `ATTACK` is an **Attack
 _Avoid_: filter, condition (both are used elsewhere for different mechanisms — Scope is
 specifically these typed columns, not a general predicate).
 
+**Ally finder**:
+The function a situation about an ally registers in `SITUATION_ALLY_FINDERS`
+(`world.covenants.perks.evaluators`) that names WHICH covenant-mate made it true (their sheet id);
+the situation's yes/no evaluator is "the finder found someone". It fills a perk announce line's
+`{ally}`. (#5092.)
+_Avoid_: ally resolver, helper.
+
 **Attack roll**:
 The one roll per attack on an opponent that a perk scoped "Applies to: Attack rolls" boosts: a
 plain Strike's hit roll, an attack technique's roll (a cast at an opponent, a joust pass), and an

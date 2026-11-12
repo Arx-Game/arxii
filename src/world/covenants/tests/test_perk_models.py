@@ -37,6 +37,7 @@ from world.covenants.perks.constants import (
     SituationOriginSide,
 )
 from world.covenants.perks.context import SituationParams
+from world.covenants.perks.services import FiredPerk, render_announce
 from world.magic.factories import ensure_canonical_affinities
 from world.missions.factories import MissionCategoryFactory, MissionTemplateFactory
 
@@ -268,6 +269,37 @@ class VowSituationalPerkModelTests(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             perk.full_clean()
         self.assertIn("roll_kind", ctx.exception.message_dict)
+
+    def test_announce_line_takes_only_the_four_placeholders(self) -> None:
+        """#5092: {holder}/{subject}/{target}/{ally} are fine; anything else, or a stray
+        brace, is refused in plain words (admin validation no journey reaches)."""
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        VowSituationalPerkFactory.build(
+            covenant_role=role,
+            announce_template="{ally} holds {target} for {holder}, and {subject} strikes",
+        ).full_clean()
+        for line, needle in (("{enemy} reels", "{enemy}"), ("{holder strikes", "stray brace")):
+            perk = VowSituationalPerkFactory.build(covenant_role=role, announce_template=line)
+            with self.assertRaises(ValidationError) as ctx:
+                perk.full_clean()
+            self.assertIn(needle, ctx.exception.message_dict["announce_template"][0])
+
+    def test_an_unfilled_placeholder_renders_plain_words(self) -> None:
+        """#5092: with no ally or foe to name, the line says "an ally" / "the foe", never a
+        raw brace, and never raises."""
+        perk = VowSituationalPerkFactory.build(
+            name="Press", announce_template="{ally} holds {target} for {holder}!"
+        )
+        firing = FiredPerk(perk=perk, holder=None, magnitude_tenths=10, rung_number=None)
+        self.assertEqual(
+            render_announce(firing, holder_name="Tomas", subject_name="Tomas"),
+            "an ally holds the foe for Tomas!",
+        )
+        perk.announce_template = "{holder} strikes {"
+        self.assertEqual(
+            render_announce(firing, holder_name="Tomas", subject_name="Tomas"),
+            "holder strikes ",
+        )
 
 
 class VowSituationalPerkSituationModelTests(TestCase):

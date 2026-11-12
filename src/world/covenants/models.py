@@ -54,6 +54,7 @@ from world.covenants.perks.constants import (
     PerkRollKind,
     Situation,
     SituationOriginSide,
+    announce_placeholder_error,
 )
 from world.covenants.perks.context import SituationParams
 from world.items.constants import ARMOR_ARCHETYPES, WEAPON_ARCHETYPES, GearArchetype
@@ -2321,7 +2322,12 @@ class VowSituationalPerk(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     )
     announce_template = models.CharField(
         max_length=200,
-        help_text="Player-facing announce line; {holder}/{subject} placeholders.",
+        help_text=(
+            "Player-facing announce line. It can name {holder} (whose vow it is), {subject} "
+            "(whose roll it helps), {target} (the foe it is about) and {ally} (the "
+            "covenant-mate whose action made the situation true; needs a situation about an "
+            "ally, such as Enemy Held by Ally)."
+        ),
     )
     check_type = models.ForeignKey(
         "arxii.CheckType",
@@ -2443,6 +2449,9 @@ class VowSituationalPerk(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                     )
                 }
             )
+        template_error = announce_placeholder_error(self.announce_template)
+        if template_error is not None:
+            raise ValidationError({"announce_template": template_error})
         if self.roll_kind and self.effect_kind != PerkEffectKind.CHECK_BONUS:
             raise ValidationError({"roll_kind": "Applies to only works on a Check Bonus perk."})
         if self.battle_action_kind and self.effect_kind not in (
