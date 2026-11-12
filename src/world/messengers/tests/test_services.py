@@ -15,7 +15,12 @@ from django.utils import timezone
 from evennia_extensions.factories import AccountFactory
 from evennia_extensions.models import PlayerData
 from world.messengers.factories import MissiveFactory, TransmissionMethodFactory
-from world.messengers.services import deliver_due_missives, send_missive, visible_missives_for
+from world.messengers.services import (
+    deliver_due_missives,
+    send_missive,
+    unread_count_for,
+    visible_missives_for,
+)
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.block_services import create_block
 
@@ -80,7 +85,7 @@ class DeliverDueMissivesTests(TestCase):
         self.assertEqual(due.arrival_notified_at, now)
         self.assertIsNone(later.arrival_notified_at)
 
-    def test_a_block_placed_in_transit_suppresses_the_missive(self) -> None:
+    def _send_arriving_at(self, available_at):
         missive = send_missive(
             sender_persona=self.sender,
             recipient_persona=self.recipient,
@@ -88,22 +93,41 @@ class DeliverDueMissivesTests(TestCase):
             method=self.method,
         )
         self.assertFalse(missive.undeliverable)
+        missive.available_at = available_at
+        missive.save(update_fields=["available_at"])
+        return missive
+
+    def test_a_block_placed_in_transit_suppresses_the_missive(self) -> None:
+        now = timezone.now()
+        # One letter has arrived before any sweep runs; the other arrives later, at a sweep.
+        arrived_unswept = self._send_arriving_at(now - timedelta(minutes=1))
+        arrives_at_sweep = self._send_arriving_at(now + timedelta(minutes=10))
         create_block(
             blocker_account=self.recipient_account,
             blocker_persona=self.recipient,
             blocked_persona=self.sender,
             reason="They keep writing.",
         )
-        arrived = missive.available_at + timedelta(minutes=1)
 
+        # Lazy availability: with no sweep yet, the recipient already cannot see it.
+        self.assertNotIn(arrived_unswept, visible_missives_for(self.recipient_sheet, now=now))
+        self.assertEqual(unread_count_for(self.recipient_sheet), 0)
+        arrived_unswept.refresh_from_db()
+        self.assertTrue(arrived_unswept.undeliverable)
+
+        later = now + timedelta(minutes=11)
         character_class = type(self.recipient_sheet.character)
         with patch.object(character_class, "msg") as msg_mock:
-            self.assertEqual(self._sweep(now=arrived), 0)
+            self.assertEqual(self._sweep(now=later), 0)
 
         self.assertEqual(_arrival_pushes(msg_mock), [])
-        missive.refresh_from_db()
-        self.assertTrue(missive.undeliverable)
-        self.assertIsNone(missive.arrival_notified_at)
-        self.assertNotIn(missive, visible_missives_for(self.recipient_sheet, now=arrived))
-        # Write-then-suppress: the sender still sees the letter they sent.
-        self.assertIn(missive, visible_missives_for(self.sender_sheet, now=arrived))
+        arrives_at_sweep.refresh_from_db()
+        self.assertTrue(arrives_at_sweep.undeliverable)
+        self.assertIsNone(arrives_at_sweep.arrival_notified_at)
+        recipient_view = visible_missives_for(self.recipient_sheet, now=later)
+        self.assertNotIn(arrived_unswept, recipient_view)
+        self.assertNotIn(arrives_at_sweep, recipient_view)
+        # Write-then-suppress: the sender still sees the letters they sent.
+        sender_view = visible_missives_for(self.sender_sheet, now=later)
+        self.assertIn(arrived_unswept, sender_view)
+        self.assertIn(arrives_at_sweep, sender_view)

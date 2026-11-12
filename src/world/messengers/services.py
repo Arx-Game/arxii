@@ -18,6 +18,7 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q, QuerySet
 from django.utils import timezone
@@ -50,6 +51,7 @@ if TYPE_CHECKING:
 _ADDRESSABLE_TYPES = (PersonaType.PRIMARY, PersonaType.ESTABLISHED)
 
 NO_METHOD = "No messenger can carry a missive for you."
+METHOD_NOT_YOURS = "You cannot send by that means."
 NO_SUCH_PERSONA = "There is no one by that name to send to."
 AMBIGUOUS_PERSONA = "More than one person goes by that name."
 EMPTY_BODY = "Write something first."
@@ -199,7 +201,7 @@ def _method_for_sending(
             raise MissiveError(NO_METHOD)
         method = available[0]
     elif method not in available:
-        raise MissiveError(NO_METHOD)
+        raise MissiveError(METHOD_NOT_YOURS)
     if carries_coin and not method.can_carry_coin:
         message = f"A {method.name} cannot carry coin."
         raise MissiveError(message)
@@ -255,7 +257,12 @@ def send_missive(  # noqa: PLR0913 - every argument is a distinct part of the le
         in_reply_to=in_reply_to,
     )
     if purse is not None:
-        transfer(amount=coin_amount, reason=f"Missive {missive.pk} sent", from_purse=purse)
+        try:
+            transfer(amount=coin_amount, reason=f"Missive {missive.pk} sent", from_purse=purse)
+        except ValidationError as exc:
+            # The amount is known positive and there is one source, so the only refusal
+            # left is insufficient funds (the purse drained since the check above).
+            raise MissiveError(NOT_ENOUGH_COIN) from exc
         MissiveAttachment.objects.create(missive=missive, coin_amount=coin_amount)
     for item in locked_items:
         _take_into_transit(item)
@@ -266,6 +273,40 @@ def send_missive(  # noqa: PLR0913 - every argument is a distinct part of the le
 # ---------------------------------------------------------------------------
 # Reading
 # ---------------------------------------------------------------------------
+
+
+def _suppress_if_blocked(missive: Missive) -> bool:
+    """Re-check a block at arrival; a blocked missive turns ``undeliverable`` silently."""
+    if not _blocked(missive.sender_persona, missive.recipient_persona):
+        return False
+    missive.undeliverable = True
+    missive.save(update_fields=["undeliverable"])
+    return True
+
+
+def _awaiting_arrival_check(missive: Missive, now: datetime) -> bool:
+    return (
+        missive.arrival_notified_at is None
+        and not missive.undeliverable
+        and missive.available_at <= now
+    )
+
+
+def _settle_arrivals_for(sheet: CharacterSheet, now: datetime) -> None:
+    """Apply the arrival block re-check to this character's due, unannounced missives.
+
+    Availability is lazy (it holds when the sweep is down), so the check a sweep would make
+    is made here too, before anything is shown: a block placed in transit must never let the
+    letter through in the window before the next sweep.
+    """
+    due = Missive.objects.filter(
+        recipient_persona__character_sheet=sheet,
+        available_at__lte=now,
+        arrival_notified_at__isnull=True,
+        undeliverable=False,
+    ).select_related("sender_persona", "recipient_persona")
+    for missive in due:
+        _suppress_if_blocked(missive)
 
 
 def _delivered_to(sheet: CharacterSheet, now: datetime) -> Q:
@@ -282,6 +323,7 @@ def visible_missives_for(
     """Missives this character may see: everything any of its faces sent, and what any of
     its faces received once it has arrived and was not suppressed by a block."""
     now = now or timezone.now()
+    _settle_arrivals_for(sheet, now)
     return (
         Missive.objects.filter(Q(sender_persona__character_sheet=sheet) | _delivered_to(sheet, now))
         # No attachments prefetch: a bare-string or plain to_attr prefetch onto these
@@ -292,9 +334,9 @@ def visible_missives_for(
 
 def unread_count_for(sheet: CharacterSheet) -> int:
     """Arrived, unsuppressed, unread missives addressed to any of this character's faces."""
-    return Missive.objects.filter(
-        _delivered_to(sheet, timezone.now()), read_at__isnull=True
-    ).count()
+    now = timezone.now()
+    _settle_arrivals_for(sheet, now)
+    return Missive.objects.filter(_delivered_to(sheet, now), read_at__isnull=True).count()
 
 
 def get_visible_missive(sheet: CharacterSheet, missive_id: int) -> Missive:
@@ -306,11 +348,13 @@ def get_visible_missive(sheet: CharacterSheet, missive_id: int) -> Missive:
 
 
 def _is_delivered_to(sheet: CharacterSheet, missive: Missive) -> bool:
-    return (
-        missive.recipient_persona.character_sheet_id == sheet.pk
-        and not missive.undeliverable
-        and missive.available_at <= timezone.now()
-    )
+    """Whether this missive has reached this character, after the arrival block re-check."""
+    now = timezone.now()
+    if missive.recipient_persona.character_sheet_id != sheet.pk:
+        return False
+    if _awaiting_arrival_check(missive, now) and _suppress_if_blocked(missive):
+        return False
+    return not missive.undeliverable and missive.available_at <= now
 
 
 def read_missive(*, sheet: CharacterSheet, missive: Missive) -> Missive:
@@ -335,9 +379,11 @@ def reply_sender_for(missive: Missive) -> Persona:
 
 
 def _lock_pending_attachments(sheet: CharacterSheet, missive: Missive) -> list[MissiveAttachment]:
-    if missive.recipient_persona.character_sheet_id != sheet.pk:
-        raise MissiveError(NOT_YOURS)
     if not _is_delivered_to(sheet, missive):
+        # Visibility first: a missive this character cannot see gets the same copy as a
+        # nonexistent one; only a letter it sent (and so sees) is "not sent to you".
+        if missive.sender_persona.character_sheet_id == sheet.pk:
+            raise MissiveError(NOT_YOURS)
         raise MissiveError(NO_SUCH_MISSIVE)
     pending = list(
         MissiveAttachment.objects.select_for_update()
@@ -446,11 +492,17 @@ def deliver_due_missives(*, now: datetime | None = None) -> int:
         available_at__lte=now, arrival_notified_at__isnull=True, undeliverable=False
     ).select_related("sender_persona", "recipient_persona")
     announced = 0
-    for missive in due:
+    for candidate in due:
         with transaction.atomic():
-            if _blocked(missive.sender_persona, missive.recipient_persona):
-                missive.undeliverable = True
-                missive.save(update_fields=["undeliverable"])
+            # Lock and re-read: an overlapping sweep holding this row skips it, and one that
+            # already announced it no longer matches, so no letter is pushed twice.
+            missive = (
+                Missive.objects.select_for_update(skip_locked=True)
+                .filter(pk=candidate.pk, arrival_notified_at__isnull=True, undeliverable=False)
+                .select_related("sender_persona", "recipient_persona")
+                .first()
+            )
+            if missive is None or _suppress_if_blocked(missive):
                 continue
             missive.arrival_notified_at = now
             missive.save(update_fields=["arrival_notified_at"])
