@@ -24,8 +24,7 @@ import { useQuery } from '@tanstack/react-query';
 import { listInventory } from '@/inventory/api';
 import { inventoryKeys } from '@/inventory/hooks/useInventory';
 import { parseCoppers } from '@/lib/currency';
-import { usePersonaSearch } from '@/roster/usePersonaSearch';
-import { useMissiveAction } from '../queries';
+import { useMissiveAction, useMissiveAddresseeSearch } from '../queries';
 import type { Missive } from '../types';
 
 export interface MissiveRecipient {
@@ -115,7 +114,7 @@ function ComposeForm({
 
   const [to, setTo] = useState<MissiveRecipient | null>(recipient);
   const [term, setTerm] = useState('');
-  const { results } = usePersonaSearch(term, { enabled: !recipient && !replyTo && !to });
+  const results = useMissiveAddresseeSearch(term, !recipient && !replyTo && !to);
   const [chosenFrom, setChosenFrom] = useState<number | null>(null);
   const [body, setBody] = useState('');
   const [coin, setCoin] = useState('');

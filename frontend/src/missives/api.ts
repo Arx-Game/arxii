@@ -1,13 +1,15 @@
 /**
  * IC missives (#3289). Reads hit the read-only `/api/missives/` viewset with the
  * tab's `?entry_id=` (per-tab identity); every write dispatches a REGISTRY action
- * for the acting character (`actions/definitions/missives.py`).
+ * for the acting character (`actions/definitions/missives.py`). The compose "To"
+ * search reads `/api/missives/addressees/`, which answers with a face's id and name
+ * only (never the general persona search, which carries who plays each face).
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
 import { parseDispatchBody } from '@/lib/errors';
 import type { PaginatedResponse } from '@/shared/types';
-import type { Missive, MissiveActionKey } from './types';
+import type { Missive, MissiveActionKey, MissiveAddressee } from './types';
 
 const MISSIVES_URL = '/api/missives/';
 
@@ -25,6 +27,12 @@ export async function fetchMissiveUnreadCount(entryId: number): Promise<number> 
   if (!res.ok) throw new Error('Failed to load unread missives');
   const data = (await res.json()) as { count: number };
   return data.count;
+}
+
+export async function searchMissiveAddressees(search: string): Promise<MissiveAddressee[]> {
+  const res = await apiFetch(`${MISSIVES_URL}addressees/?search=${encodeURIComponent(search)}`);
+  if (!res.ok) throw new Error('Failed to search for addressees');
+  return res.json() as Promise<MissiveAddressee[]>;
 }
 
 export async function dispatchMissiveAction(

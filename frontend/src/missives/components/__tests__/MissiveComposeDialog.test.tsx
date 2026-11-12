@@ -11,6 +11,7 @@ vi.mock('@/missives/api', () => ({
   dispatchMissiveAction: vi.fn(),
   fetchMissives: vi.fn(),
   fetchMissiveUnreadCount: vi.fn(),
+  searchMissiveAddressees: vi.fn(),
 }));
 vi.mock('@/game/personaQueries', () => ({
   useCharacterPersonasQuery: vi.fn(),
@@ -18,11 +19,7 @@ vi.mock('@/game/personaQueries', () => ({
 vi.mock('@/inventory/api', () => ({
   listInventory: vi.fn(),
 }));
-vi.mock('@/roster/usePersonaSearch', () => ({
-  usePersonaSearch: vi.fn(() => ({ results: [], isFetching: false })),
-}));
-
-import { dispatchMissiveAction } from '@/missives/api';
+import { dispatchMissiveAction, searchMissiveAddressees } from '@/missives/api';
 import { useCharacterPersonasQuery } from '@/game/personaQueries';
 import { listInventory } from '@/inventory/api';
 
@@ -82,6 +79,26 @@ describe('MissiveComposeDialog', () => {
       sender_persona_id: 1,
       coin_amount: 50,
       item_ids: [5],
+      recipient_persona_id: 9,
+    });
+  });
+
+  it('finds the addressee through the missives search and sends to them', async () => {
+    vi.mocked(searchMissiveAddressees).mockResolvedValue([{ id: 9, name: 'Alice' }]);
+    const onClose = vi.fn();
+    renderWithProviders(
+      <MissiveComposeDialog open onClose={onClose} characterId={12} activePersonaId={1} />
+    );
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: 'Ali' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Hello.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(searchMissiveAddressees).toHaveBeenCalledWith('Ali');
+    expect(mockDispatch).toHaveBeenCalledWith(12, 'send_missive', {
+      body: 'Hello.',
+      sender_persona_id: 1,
       recipient_persona_id: 9,
     });
   });

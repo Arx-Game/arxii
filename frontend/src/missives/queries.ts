@@ -1,7 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { dispatchMissiveAction, fetchMissives, fetchMissiveUnreadCount } from './api';
+import {
+  dispatchMissiveAction,
+  fetchMissives,
+  fetchMissiveUnreadCount,
+  searchMissiveAddressees,
+} from './api';
 import type { MissiveActionKey } from './types';
 import { inventoryKeys } from '@/inventory/hooks/useInventory';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 
 /** Prefix of `useCharacterPurse`'s key (`@/status/queries`). */
 const PURSE_KEY = ['status', 'purse'] as const;
@@ -10,7 +16,28 @@ export const missiveKeys = {
   all: ['missives'] as const,
   list: (entryId: number, page: number) => [...missiveKeys.all, 'list', entryId, page] as const,
   unreadCount: (entryId: number) => [...missiveKeys.all, 'unread-count', entryId] as const,
+  addressees: (search: string) => [...missiveKeys.all, 'addressees', search] as const,
 };
+
+/** The server's minimum; a shorter search finds nobody, so it is never sent. */
+const ADDRESSEE_MIN_SEARCH = 2;
+
+/**
+ * Debounced "To" search over the faces a missive can be addressed to. Fails quiet (a
+ * transient failure clears the list, never the form).
+ */
+export function useMissiveAddresseeSearch(term: string, enabledOpt = true) {
+  const debounced = useDebouncedValue(term.trim(), 300);
+  const enabled = enabledOpt && debounced.length >= ADDRESSEE_MIN_SEARCH;
+  const { data } = useQuery({
+    queryKey: missiveKeys.addressees(debounced),
+    queryFn: () => searchMissiveAddressees(debounced),
+    enabled,
+    throwOnError: false,
+    staleTime: 30_000,
+  });
+  return enabled ? (data ?? []) : [];
+}
 
 export function useMissivesQuery(entryId: number | null, page: number, enabled = true) {
   return useQuery({

@@ -32,5 +32,11 @@ export interface Missive {
   attachments: MissiveAttachment[];
 }
 
+/** A face a missive can be addressed to (`GET /api/missives/addressees/`). */
+export interface MissiveAddressee {
+  id: number;
+  name: string;
+}
+
 export type MissiveActionKey =
   'send_missive' | 'reply_missive' | 'read_missive' | 'accept_missive' | 'refuse_missive';

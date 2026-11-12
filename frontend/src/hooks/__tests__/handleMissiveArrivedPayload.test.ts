@@ -13,7 +13,7 @@ describe('handleMissiveArrivedPayload', () => {
     vi.clearAllMocks();
   });
 
-  it('names the sender and refetches every missive query', () => {
+  it('names the face written to and the sender, and refetches every missive query', () => {
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue();
 
     handleMissiveArrivedPayload({
@@ -22,7 +22,7 @@ describe('handleMissiveArrivedPayload', () => {
       sender_display: 'a person wearing an owl mask',
     });
 
-    expect(toast).toHaveBeenCalledWith('A missive from a person wearing an owl mask');
+    expect(toast).toHaveBeenCalledWith('A missive for Hobb from a person wearing an owl mask');
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: missiveKeys.all });
     invalidateSpy.mockRestore();
   });
