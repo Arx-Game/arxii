@@ -158,6 +158,15 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `POWER_BONUS` — `clean()` rejects it on `TIER_FLOOR`/`BOTCH_IMMUNITY`). Every non-empty scope
   column on a row must match (AND); an empty scope always matches — see `perk_scope_matches`
   below.
+  A fourth, `roll_kind` (admin label **"Applies to"**, `PerkRollKind`: blank "Any roll" or
+  `ATTACK` "Attack rolls", #5092), narrows a `CHECK_BONUS` perk (`clean()` rejects it on any other
+  `effect_kind`) to the roll of an attack on an opponent, **once per attack**: a plain Strike's
+  hit roll, an attack technique's roll (a cast at an opponent, a joust pass) and an enchanted
+  Strike's technique roll, never that Strike's hit roll (ADR-5026's counted-once table). Dodges,
+  defense rolls, casts at oneself or an ally, clash contributions, penetration rolls and damage
+  rolls never take it. It ANDs with `check_type` like every other scope column. The roll's
+  caller marks it: `CombatTechniqueResolver._roll_kind` (from `is_attack_on_opponent`, skipping an
+  enchanted Strike's hit roll) and `EnchantedStrikeCast._roll_technique`.
 - **`SituationRequirementMixin`** (#2623, ADR-0154) — abstract mixin shared by
   `VowSituationalPerkSituation`/`VowSituationalPerkRung`/`VowAddedEffect`; carries five typed,
   nullable/blank parameter columns (Situation Parameters): `condition_property` (#4759, nullable
@@ -220,7 +229,10 @@ modules import combat/checks contexts at function level, never the reverse):
   `MissionInstance` for a mission-driven check, Court scoping), `battle_action_kind` (the
   declared `BattleActionKind` for a warfare roll, Battle scoping), and `attacker` (the attacking
   entity — a `CombatOpponent` or ObjectDB-backed attacker — populated ONLY on a defense-side
-  resolution; `None` on every offense-side one, the defense-side seam). See the class docstring
+  resolution; `None` on every offense-side one, the defense-side seam), plus `roll_kind` (#5092,
+  the `PerkRollKind` of this roll, blank unless the caller marks an attack roll) and
+  `roll_kind_perks_only` (only `roll_kind`-scoped perks reach the roll and outcome guarantees
+  skip it: an enchanted Strike's technique roll, whose other terms stay the hit roll's). See the class docstring
   for the full field contract and the missing-field-returns-False convention.
 - **`evaluators.py`** — `SITUATION_EVALUATORS` registry (`register(situation)` decorator,
   mirrors `magic.services.power_terms`'s `_PROVIDERS` registry pattern) + one evaluator per
@@ -243,7 +255,8 @@ modules import combat/checks contexts at function level, never the reverse):
   `mission_category_ids` kwarg. `announce_fired_perks(fired, *, subject, location)`, the
   dual-dispatch presentation-contract seam (see "Presentation contract" below).
   `dormant_perk_firings(subject, *, effect_kind, resolution, target, mission=None,
-  battle_action_kind=None, attacker=None) -> list[FiredPerk]` / `announce_dormant_perks(dormant,
+  battle_action_kind=None, attacker=None, roll_kind="", roll_kind_perks_only=False) ->
+  list[FiredPerk]` / `announce_dormant_perks(dormant,
   *, subject)` (slice 3, Task 7, ruling 2) — see "Dormant-vow messaging" below.
 
 **Delivery seams:** `POWER_BONUS` (slice 1) rides a conditional power-term provider
