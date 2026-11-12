@@ -2513,17 +2513,27 @@ def condition_target_contributions(
     (#4747) adds the caster's size step as the contribution's untapered ``vow_part``.
     ``inputs`` (#4892) reaches a derived amount, as on ``modifier_target_contributions``.
     """
-    matched: list[tuple[ConditionInstance, ConditionModifierEffect]] = []
-    for instance in get_active_conditions(character_sheet.character):
-        query = Q(condition=instance.condition)
-        if instance.current_stage:
-            query |= Q(stage=instance.current_stage)
-        matched.extend(
-            (instance, effect)
-            for effect in ConditionModifierEffect.objects.filter(
-                query, modifier_target=modifier_target
+    instances = list(get_active_conditions(character_sheet.character))
+    # One query for every active instance's condition and stage (#4730): a sheet reads this
+    # once per buffed stat, so a query per instance would grow with the conditions carried.
+    effects = (
+        list(
+            ConditionModifierEffect.objects.filter(
+                Q(condition__in=[instance.condition_id for instance in instances])
+                | Q(stage__in=[i.current_stage_id for i in instances if i.current_stage_id]),
+                modifier_target=modifier_target,
             )
         )
+        if instances
+        else []
+    )
+    matched: list[tuple[ConditionInstance, ConditionModifierEffect]] = [
+        (instance, effect)
+        for instance in instances
+        for effect in effects
+        if effect.condition_id == instance.condition_id
+        or (instance.current_stage_id and effect.stage_id == instance.current_stage_id)
+    ]
 
     value_table = None
     if any(_is_sized(instance) for instance, _effect in matched):
