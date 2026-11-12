@@ -122,12 +122,12 @@ class PactCardJourneys(JourneyCase):
         self.assertIn("Hesk (ended). Sworn eases by 10 each period until it is gone.", told)
 
         told = self.telnet(self.mira, "pact/renounce hesk")
-        self.assertIn("You hold no pact with Hesk.", told)
+        self.assertIn("You hold no pact with that being.", told)
 
     def test_web_renounce_by_being_id(self) -> None:
         result = self.web(self.mira, "pact_renounce", being_id=self.being.pk).detail
         self.assertTrue(result.success, result.message)
-        self.assertIn("Its cost eases each period until it is gone.", result.message)
+        self.assertIn("Sworn eases by 10 each period until it is gone.", result.message)
 
         response = self.api(self.account_of(self.mira)).get(
             CARDS_URL, {"character_sheet": self.sheet.pk}

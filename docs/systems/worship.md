@@ -225,7 +225,11 @@ issue bodies; the model decision is ADR-0132.
   (a pact patronage does not count, #4341). Read by `apply_anima_ritual_outcome` to gate
   the anima recovery bonus.
 - `grant_chosen_distinction(sheet)` / `grant_chosen_distinction_to_chosen(config)` (#4341)
-  → grant the designated Chosen distinction at creation / to every Chosen lacking it.
+  → grant the designated Chosen distinction at creation / to every Chosen lacking it. A
+  Chosen whose distinctions exclude it (`DistinctionExclusionError`) is logged and skipped:
+  creation still succeeds, and `grant_chosen_distinction_to_chosen` returns
+  `ChosenDistinctionGrants(granted, skipped)` so the Chosen favor admin names the skipped
+  characters in a warning.
 - `establish_patronage(sheet, being, *, valence)` → get-or-create a
   DevotionStanding and mark it as patronage (sets valence/established_at;
   idempotent; preserves existing favor). Called at CG when Path of the Chosen.

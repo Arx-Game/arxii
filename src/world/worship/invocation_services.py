@@ -146,12 +146,14 @@ def invocation_difficulty(
     base_points = DIFFICULTY_VALUES[config.base_difficulty]
     eases: list[InvocationEase] = []
     if chosen_patronage_of(sheet, being) is not None:
-        eases.append(
-            InvocationEase(
-                label=CHOSEN_EASE_LABEL.format(being=being.name),
-                points=patron_modifier_total(sheet, being, FAVOR_INVOCATION_CATEGORY_NAME),
+        # No row when nothing eases it (no Chosen distinction designated or held).
+        chosen_points = patron_modifier_total(sheet, being, FAVOR_INVOCATION_CATEGORY_NAME)
+        if chosen_points:
+            eases.append(
+                InvocationEase(
+                    label=CHOSEN_EASE_LABEL.format(being=being.name), points=chosen_points
+                )
             )
-        )
     favor_ease = favor_ease_for(sheet, being, config=config)
     if favor_ease is not None:
         eases.append(favor_ease)

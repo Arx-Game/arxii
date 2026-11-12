@@ -512,3 +512,15 @@ class SacrificeDetail:
     ease_points: int
     difficulty_points: int | None
     odds: SacrificeOdds | None
+
+
+@dataclass(frozen=True)
+class ChosenDistinctionGrants:
+    """What granting the designated Chosen distinction to every Chosen did (#4341).
+
+    ``skipped`` are the Chosen whose distinctions exclude it; they keep their
+    patronage without the bonus.
+    """
+
+    granted: int
+    skipped: tuple[CharacterSheet, ...]

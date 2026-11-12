@@ -16,7 +16,7 @@ raises severity. A second short period crosses into Strained, so the stage's res
 check rolls (pinned at Failure) and Strained applies. A met period eases severity.
 ``pact/renounce Hesk`` ends the pact and releases her, and one more tick eases the
 condition until it is gone. Only Corwen is told any of this; the onlooker in the room
-hears nothing.
+hears only the offer's authored line when the pact ends.
 
 Ilse is Morrow's Chosen through the designated Chosen distinction. She keeps her
 Chosen invocation line and earning rate with Morrow and, holding a pact with Hesk as
@@ -264,7 +264,9 @@ class PactJourneyBase(JourneyCase):
         for project in projects:
             project.time_limit = timezone.now() - timedelta(minutes=1)
             project.save(update_fields=["time_limit"])
-        scan_active_projects()
+        # The holder's lines and the room line go out when the tick commits.
+        with self.captureOnCommitCallbacks(execute=True):
+            scan_active_projects()
         advance_game_week()
 
     def condition(self, character: ObjectDB) -> ConditionInstance | None:
@@ -439,10 +441,15 @@ class ServingThePact(PactJourneyBase):
         instance.refresh_from_db()
         self.assertEqual((instance.severity, instance.current_stage.name), (5, "Sworn"))
 
-        # She renounces: released, and the card shows the cost easing out.
-        told = self.telnet(self.corwen, "pact/renounce Hesk")
-        self.assertIn("You renounce your pact with Hesk.", told)
-        self.assertTold(self.corwen, "Hesk is no longer your patron.")
+        # She renounces: released, told once, and the card shows the cost easing out.
+        with self.captureOnCommitCallbacks(execute=True):
+            told = self.telnet(self.corwen, "pact/renounce Hesk")
+        self.assertIn(
+            "You renounce your pact with Hesk. Hesk is no longer your patron. Codex entries "
+            "and clues you gained are kept. Sworn eases by 10 each period until it is gone.",
+            told,
+        )
+        self.assertEqual(told.count("no longer your patron"), 1)
         self.pact.refresh_from_db()
         self.assertEqual(self.pact.dissolution_reason, CharacterPactEnding.RENOUNCED)
         self.assertIsNotNone(self.standing(self.corwen).released_at)
@@ -459,9 +466,10 @@ class ServingThePact(PactJourneyBase):
         self.assertIsNone(self.condition(self.corwen))
         self.assertEqual(self.cards(self.corwen), [])
 
-        # The room heard none of it.
+        # The room heard only the author's line when the pact ended.
         self.assertNotTold(self.hobb, "Hesk")
-        self.assertEqual(self.mailbox(self.hobb).rows, [])
+        self.assertShownRow(self.hobb, "[onlooker line]")
+        self.assertEqual(len(self.mailbox(self.hobb).rows), 1)
 
 
 class AChosenAndAPactHolder(PactJourneyBase):

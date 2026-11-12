@@ -303,6 +303,13 @@ class DistinctionBuilderFavorTargetTests(TestCase):
                 target=ModifierTarget.objects.get(category__name=category, target_being=cls.being),
                 value_per_rank=15,
             )
+        DistinctionEffectFactory(
+            distinction=cls.distinction,
+            target=ModifierTarget.objects.get(
+                category__name=FAVOR_INVOCATION_CATEGORY_NAME, targets_patron=True
+            ),
+            value_per_rank=30,
+        )
 
     def test_effect_rows_name_the_being_and_the_unit(self) -> None:
         self.client.force_login(self.staff)
@@ -311,6 +318,11 @@ class DistinctionBuilderFavorTargetTests(TestCase):
         ).content.decode()
         self.assertIn("Being: Ombrin. Value is difficulty points eased; 15 is one band.", body)
         self.assertIn("Being: Ombrin. Value is percent added to the earning rate.", body)
+        self.assertIn(
+            "Being: Your patron (only for a being she is the Chosen of). Value is difficulty "
+            "points eased; 15 is one band.",
+            body,
+        )
         self.assertIn('two "any being" targets', body)
 
     def test_target_picker_finds_favor_targets_by_being(self) -> None:

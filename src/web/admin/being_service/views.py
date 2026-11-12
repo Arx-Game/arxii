@@ -29,6 +29,7 @@ from django.views.decorators.http import require_POST
 
 from web.admin.authoring.contributors import current_contributor
 from web.admin.authoring.credit import stamp_reviewed, stamp_written
+from web.admin.authoring.identity_map import CacheGuard
 from web.admin.being_service import live
 from web.admin.being_service.forms import (
     BeingFacetFormSet,
@@ -204,14 +205,24 @@ def _render_page(
     )
 
 
-def _forget_refused_edits(being: WorshippedBeing, forms: _ServiceForms) -> None:
-    """Validating a ModelForm writes the posted values onto its instance, and those
-    instances are the identity-mapped ones every other reader shares: drop them so
-    the next reader loads what the database holds, not this refused edit."""
-    for form in (form for formset in forms.all for form in formset.forms):
-        if form.instance.pk is not None:
-            form.instance.flush_from_cache(force=True)
-    being.flush_from_cache(force=True)
+def _cache_guard(being: WorshippedBeing, forms: _ServiceForms) -> CacheGuard:
+    """A guard over every cached row these forms validate onto. Take it before validating.
+
+    Validating a ModelForm writes the posted values onto its instance, and those
+    instances are the identity-mapped ones other readers hold too (a signed pact's
+    ``offer``, a period's ``commitment``, which the weekly grading reads). Dropping them
+    from the map would leave those holders on the refused values, so a path that does
+    not commit puts the kept values back onto the same objects and evicts any row a
+    rolled-back save created.
+    """
+    guard = CacheGuard()
+    guard.watch_created(
+        BeingResonance, BeingFacet, Pledge, RequestedItem, PactOffer, PactOfferCommitment
+    )
+    guard.keep(being)
+    for formset in forms.all:
+        guard.keep(*(form.instance for form in formset.forms))
+    return guard
 
 
 @superuser_required
@@ -226,21 +237,29 @@ def being_service(request: HttpRequest, being_pk: int) -> HttpResponse:
         return _render_page(request, being, forms, needs_setup=contributor is None)
     if contributor is None:
         return _render_page(request, being, forms, needs_setup=True)
-    if not forms.is_valid():
-        response = _render_page(request, being, forms)
-        _forget_refused_edits(being, forms)
-        return response
-    with transaction.atomic():
-        forms.resonances.save()
-        forms.facets.save()
-        saved_pledges = forms.pledges.save()
-        for pledge in saved_pledges:
-            stamp_written(pledge, contributor)
-        forms.requests.save()
-        # Commitments first: a row may belong to an offer this same save deletes.
-        forms.commitments.save()
-        for offer in forms.offers.save():
-            stamp_written(offer, contributor)
+    guard = _cache_guard(being, forms)
+    committed = False
+    try:
+        if not forms.is_valid():
+            return _render_page(request, being, forms)
+        with transaction.atomic():
+            forms.resonances.save()
+            forms.facets.save()
+            saved_pledges = forms.pledges.save()
+            for pledge in saved_pledges:
+                stamp_written(pledge, contributor)
+            forms.requests.save()
+            # Commitments first: a row may belong to an offer this same save deletes.
+            forms.commitments.save()
+            for offer in forms.offers.save():
+                stamp_written(offer, contributor)
+        committed = True
+    finally:
+        # A refusal, or anything raised before or inside the transaction: nothing was
+        # written, so every bound row gets its kept values back, after the page (which
+        # shows the posted values) has rendered.
+        if not committed:
+            guard.restore()
     messages.success(request, "Saved and credited to you.")
     if CONTINUE_BUTTON in request.POST:
         return redirect(reverse("admin_being_service", args=[being.pk]))

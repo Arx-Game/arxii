@@ -27,8 +27,10 @@
 
 * **Breach**: when the last stage applies the pact dissolves (BREACH), a PACT patronage
   is released, the stage's settle pool fires against the holder, she sees the closing
-  text and the room the onlooker line, and an ease-out period opens.
-* **Renouncing** (:func:`renounce_pact`): RENOUNCED, the same release, an ease-out period.
+  text and the room the onlooker line, and an ease-out period opens. Every holder line
+  and room line goes out when the transaction commits.
+* **Renouncing** (:func:`renounce_pact`): RENOUNCED, the same release, the onlooker line,
+  an ease-out period; the holder's text is returned for the action to deliver once.
 * **Ease-out**: a period with no commitment eases the condition by
   ``severity_per_miss``; at zero the condition is removed and nothing more opens.
 """
@@ -55,6 +57,7 @@ from world.pacts.types import (
     PactSourceLine,
     PactStageLine,
     PeriodGrade,
+    RenouncedPact,
 )
 from world.projects.constants import CompletionMode, ProjectKind, ProjectStatus
 from world.worship.constants import DAYS_PER_GAME_WEEK, PledgeCreditSource
@@ -250,8 +253,6 @@ def _source_label(source: str, being_name: str) -> str:
 def pact_card(pact: CharacterPact) -> PactCard:
     """One pact as its holder's card shows it: the open period, its favor by source,
     the condition's stage and severity, and the offer's promises."""
-    from world.worship.invocation_services import is_secret_faith  # noqa: PLC0415
-
     offer = pact.offer
     being_name = offer.being.name
     period = next(iter(_open_periods(pact)), None)
@@ -268,7 +269,6 @@ def pact_card(pact: CharacterPact) -> PactCard:
     return PactCard(
         pact=pact,
         being_name=being_name,
-        being_is_secret=is_secret_faith(pact.character_sheet, offer.being),
         offer_name=offer.name,
         period_weeks=offer.period_weeks,
         earned=project.current_progress if project is not None else 0,
@@ -491,10 +491,21 @@ def record_pact_credit(
 
 
 def pact_beings_for(sheet: CharacterSheet) -> list[WorshippedBeing]:
-    """The beings she holds an active pact with, oldest pact first."""
+    """The beings whose active pact with her has an open commitment period, oldest first.
+
+    A pact with no FAVOR_EARNED commitment has no period to credit, so a deed favor
+    write for its being would land in no ``PactCredit`` and escape the weekly deed cap;
+    such a pact earns no deed favor.
+    """
     return [
         pact.offer.being
-        for pact in CharacterPact.objects.filter(character_sheet=sheet, dissolved_at__isnull=True)
+        for pact in CharacterPact.objects.filter(
+            character_sheet=sheet,
+            dissolved_at__isnull=True,
+            periods__commitment__isnull=False,
+            periods__project__status=ProjectStatus.ACTIVE,
+        )
+        .distinct()
         .select_related("offer__being")
         .order_by("signed_at", "pk")
     ]
@@ -559,13 +570,36 @@ def grade_pact_period(project: Project, outcome_tier: CheckOutcome | None) -> No
 
 
 def _tell(sheet: CharacterSheet, lines: list[str]) -> None:
-    """One system message to the holder alone, kept for her if she is offline."""
+    """One system message to the holder alone, kept for her if she is offline.
+
+    Sent when the surrounding transaction commits: grading runs inside the project
+    tick's atomic block, and a later raise there rolls the grading back, so a line sent
+    at once would report a roll the next tick makes again.
+    """
     from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
     from world.narrative.services import send_narrative_message  # noqa: PLC0415
 
     body = "\n".join(line for line in lines if line)
     if body:
-        send_narrative_message(recipients=[sheet], body=body, category=NarrativeCategory.SYSTEM)
+        transaction.on_commit(
+            lambda: send_narrative_message(
+                recipients=[sheet], body=body, category=NarrativeCategory.SYSTEM
+            )
+        )
+
+
+def _tell_room(pact: CharacterPact) -> None:
+    """The offer's onlooker line to the holder's room when the pact ends, if written.
+
+    Sent on commit, as the holder's lines are. The authored line is all the room
+    hears; it never names a secret being itself.
+    """
+    from world.scenes.narrator import narrate_room_outcome  # noqa: PLC0415
+
+    line = pact.offer.onlooker_line.strip()
+    room = pact.character_sheet.character.location
+    if line and room is not None:
+        transaction.on_commit(lambda: narrate_room_outcome(room, line))
 
 
 def _next_worse_stage(
@@ -814,17 +848,13 @@ def _fire_settle_pool(pact: CharacterPact, check_result: CheckResult | None) -> 
 def _breach(
     pact: CharacterPact, details: PactPeriodDetails, check_result: CheckResult | None
 ) -> None:
-    from world.scenes.narrator import narrate_room_outcome  # noqa: PLC0415
-
     released = _end_pact(pact, CharacterPactEnding.BREACH, keep=details)
     _fire_settle_pool(pact, check_result)
-    sheet = pact.character_sheet
-    offer = pact.offer
-    _tell(sheet, [offer.closing_text.strip(), *_ended_lines(pact, released=released)])
-    room = sheet.character.location
-    if offer.onlooker_line.strip() and room is not None:
-        # The authored line is all the room hears; it never names a secret being itself.
-        narrate_room_outcome(room, offer.onlooker_line.strip())
+    _tell(
+        pact.character_sheet,
+        [pact.offer.closing_text.strip(), *_ended_lines(pact, released=released)],
+    )
+    _tell_room(pact)
     _open_ease_out(pact)
 
 
@@ -864,13 +894,20 @@ def _grade_ease_out_period(details: PactPeriodDetails) -> None:
 # ---------------------------------------------------------------------------
 
 
-def renounce_pact(sheet: CharacterSheet, being: WorshippedBeing) -> CharacterPact:
-    """End her active pact with ``being`` (RENOUNCED): release (D5) and ease out."""
+def renounce_pact(sheet: CharacterSheet, being: WorshippedBeing) -> RenouncedPact:
+    """End her active pact with ``being`` (RENOUNCED): release (D5) and ease out.
+
+    The room hears the offer's onlooker line on commit. What she is told is returned
+    for the caller to deliver once (the action's own message), not sent here.
+    """
     with transaction.atomic():
         pact = active_pact_with(sheet, being)
         if pact is None:
             raise NoActivePact(MSG_NO_PACT.format(being=being.name))
         released = _end_pact(pact, CharacterPactEnding.RENOUNCED)
         _open_ease_out(pact)
-    _tell(sheet, _ended_lines(pact, released=released))
-    return pact
+        _tell_room(pact)
+    message = " ".join(
+        [f"You renounce your pact with {being.name}.", *_ended_lines(pact, released=released)]
+    )
+    return RenouncedPact(pact=pact, message=message)

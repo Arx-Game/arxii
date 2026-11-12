@@ -23,12 +23,13 @@ from world.mechanics.constants import FAVOR_INVOCATION_CATEGORY_NAME
 from world.mechanics.models import ModifierTarget
 from world.pacts.constants import CharacterPactCommitmentKind
 from world.pacts.factories import (
+    CharacterPactFactory,
     PactOfferCommitmentFactory,
     PactOfferFactory,
     PactPeriodDetailsFactory,
     make_pact_condition,
 )
-from world.pacts.models import PactOffer, PactOfferCommitment
+from world.pacts.models import CharacterPact, PactOffer, PactOfferCommitment
 from world.scenes.factories import PersonaFactory
 from world.worship.constants import BeingResonanceTier, RiteTier
 from world.worship.factories import (
@@ -503,6 +504,34 @@ class ServiceBuilderPactTests(ServiceBuilderTestCase):
         self.assertContains(response, "holders have periods graded against it")
         cached = PactOfferCommitment.objects.get(pk=self.favor.pk)
         self.assertEqual(cached.amount, 8)
+
+    def test_a_refused_save_leaves_a_signed_pact_reading_the_stored_offer(self) -> None:
+        # The weekly grading reads ``pact.offer.severity_per_miss`` through the FK cache.
+        pact = CharacterPact.objects.get(pk=CharacterPactFactory(offer=self.offer).pk)
+        cached_offer = pact.offer
+        self.client.force_login(self.author)
+        data = self.post_data(
+            **{
+                **self._commitment_rows(),
+                "pact_offers-TOTAL_FORMS": "1",
+                "pact_offers-INITIAL_FORMS": "1",
+                "pact_offers-0-id": str(self.offer.pk),
+                "pact_offers-0-being": str(self.being.pk),
+                "pact_offers-0-name": "",
+                "pact_offers-0-offer_text": "[staff-authored offer text]",
+                "pact_offers-0-period_weeks": "2",
+                "pact_offers-0-condition": str(self.offer.condition_id),
+                "pact_offers-0-severity_per_miss": "3",
+                "pact_offers-0-is_active": "on",
+            },
+        )
+
+        response = self.client.post(self.url(), data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIs(pact.offer, cached_offer)
+        self.assertEqual(pact.offer.severity_per_miss, 10)
+        self.assertEqual(pact.offer.name, "Ombrin's bargain")
 
     def test_the_pacts_rules_reach_the_page(self) -> None:
         css = reachable_css(self.body())

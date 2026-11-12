@@ -17,6 +17,10 @@ if TYPE_CHECKING:
     from world.societies.models import Organization
 
 _SWITCH_RENOUNCE = "renounce"
+MSG_USAGE = (
+    "Usage: pact [list|propose|ratify|dissolve|betroth|breakvow|divorce] ... "
+    "or pact/renounce <being>"
+)
 
 
 class CmdPact(ArxCommand):
@@ -55,7 +59,10 @@ class CmdPact(ArxCommand):
             self.msg(str(exc))
 
     def _dispatch(self) -> None:
-        if _SWITCH_RENOUNCE in {switch.lower() for switch in self.switches}:
+        switches = {switch.lower() for switch in self.switches}
+        if switches and switches != {_SWITCH_RENOUNCE}:
+            raise CommandError(MSG_USAGE)
+        if switches:
             self._renounce()
             return
         tokens = (self.args or "").strip().split()
@@ -74,8 +81,7 @@ class CmdPact(ArxCommand):
         }
         handler = handlers.get(first)
         if handler is None:
-            msg = "Usage: pact [list|propose|ratify|dissolve|betroth|breakvow|divorce] ..."
-            raise CommandError(msg)
+            raise CommandError(MSG_USAGE)
         handler(rest)
 
     # ------------------------------------------------------------------

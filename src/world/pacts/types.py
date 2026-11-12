@@ -33,6 +33,14 @@ class PactSourceLine:
 
 
 @dataclass(frozen=True)
+class RenouncedPact:
+    """A renounced pact and the one message its holder is told about it."""
+
+    pact: CharacterPact
+    message: str
+
+
+@dataclass(frozen=True)
 class PeriodGrade:
     """What grading one pact period did.
 
@@ -86,7 +94,6 @@ class PactCard:
 
     pact: CharacterPact
     being_name: str
-    being_is_secret: bool
     offer_name: str
     period_weeks: int
     earned: int

@@ -24,7 +24,7 @@ from world.worship.models import (
     WorshipGrant,
     WorshippedBeing,
 )
-from world.worship.types import DevotionBump
+from world.worship.types import ChosenDistinctionGrants, DevotionBump
 
 if TYPE_CHECKING:
     from datetime import date
@@ -604,15 +604,17 @@ def best_patronage_favor(sheet: "CharacterSheet") -> int:
     return patronages[0].favor if patronages else 0
 
 
-def grant_chosen_distinction_to_chosen(config: ChosenFavorConfig) -> int:
+def grant_chosen_distinction_to_chosen(config: ChosenFavorConfig) -> ChosenDistinctionGrants:
     """Grant the designated Chosen distinction to every Chosen who lacks it (#4341).
 
     Called by the Chosen favor admin when staff set or change
     ``config.chosen_distinction``; character creation grants it with the patronage
-    (``establish_chosen_patronage``). Returns how many characters received it. Does
-    nothing when no distinction is designated.
+    (``establish_chosen_patronage``). A Chosen whose distinctions exclude it is skipped
+    and returned, so the admin can name her. Does nothing when no distinction is
+    designated.
     """
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.distinctions.exceptions import DistinctionExclusionError  # noqa: PLC0415
     from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
     from world.distinctions.services import grant_distinction  # noqa: PLC0415
     from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
@@ -620,7 +622,7 @@ def grant_chosen_distinction_to_chosen(config: ChosenFavorConfig) -> int:
 
     distinction = config.chosen_distinction
     if distinction is None:
-        return 0
+        return ChosenDistinctionGrants(granted=0, skipped=())
     holders = CharacterDistinction.objects.filter(distinction=distinction).values("character_id")
     sheet_ids = (
         DevotionStanding.objects.filter(chosen_standing_q())
@@ -629,21 +631,33 @@ def grant_chosen_distinction_to_chosen(config: ChosenFavorConfig) -> int:
         .distinct()
     )
     granted = 0
-    for sheet in CharacterSheet.objects.filter(pk__in=list(sheet_ids)):
-        grant_distinction(
-            sheet,
-            distinction,
-            origin=DistinctionOrigin.GAMEPLAY,
-            rank=1,
-            source_description="Chosen of a being",
-        )
+    skipped: list[CharacterSheet] = []
+    for sheet in CharacterSheet.objects.filter(pk__in=list(sheet_ids)).order_by("pk"):
+        try:
+            grant_distinction(
+                sheet,
+                distinction,
+                origin=DistinctionOrigin.GAMEPLAY,
+                rank=1,
+                source_description="Chosen of a being",
+            )
+        except DistinctionExclusionError:
+            logger.warning(
+                "Chosen distinction %s skipped for sheet %s (exclusion conflict)",
+                distinction.pk,
+                sheet.pk,
+            )
+            skipped.append(sheet)
+            continue
         granted += 1
-    return granted
+    return ChosenDistinctionGrants(granted=granted, skipped=tuple(skipped))
 
 
 def grant_chosen_distinction(sheet: "CharacterSheet") -> None:
     """Grant ``sheet`` the designated Chosen distinction at character creation (#4341),
-    unless none is designated or she already holds it."""
+    unless none is designated or she already holds it. A distinction she holds that
+    excludes it is logged and skipped; creation goes on."""
+    from world.distinctions.exceptions import DistinctionExclusionError  # noqa: PLC0415
     from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
     from world.distinctions.services import grant_distinction  # noqa: PLC0415
     from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
@@ -653,13 +667,22 @@ def grant_chosen_distinction(sheet: "CharacterSheet") -> None:
         return
     if CharacterDistinction.objects.filter(character=sheet, distinction=distinction).exists():
         return
-    grant_distinction(
-        sheet,
-        distinction,
-        origin=DistinctionOrigin.CHARACTER_CREATION,
-        rank=1,
-        source_description="Path of the Chosen",
-    )
+    try:
+        grant_distinction(
+            sheet,
+            distinction,
+            origin=DistinctionOrigin.CHARACTER_CREATION,
+            rank=1,
+            source_description="Path of the Chosen",
+        )
+    except DistinctionExclusionError:
+        # Creation still succeeds: she is Chosen, without the bonus her distinctions
+        # exclude (the achievements reward grant handles the conflict the same way).
+        logger.warning(
+            "Chosen distinction %s skipped at creation for sheet %s (exclusion conflict)",
+            distinction.pk,
+            sheet.pk,
+        )
 
 
 def establish_patronage(

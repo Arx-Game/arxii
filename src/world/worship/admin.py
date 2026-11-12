@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.db.models import Count
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.urls import reverse
@@ -391,9 +391,19 @@ class ChosenFavorConfigAdmin(admin.ModelAdmin):
 
         super().save_model(request, obj, form, change)
         if "chosen_distinction" in form.changed_data:  # noqa: STRING_LITERAL - a form field name
-            granted = grant_chosen_distinction_to_chosen(obj)
-            if granted:
-                self.message_user(request, f"Granted {obj.chosen_distinction} to {granted} Chosen.")
+            grants = grant_chosen_distinction_to_chosen(obj)
+            if grants.granted:
+                self.message_user(
+                    request, f"Granted {obj.chosen_distinction} to {grants.granted} Chosen."
+                )
+            if grants.skipped:
+                names = ", ".join(sheet.character.key for sheet in grants.skipped)
+                self.message_user(
+                    request,
+                    f"Not granted to {names}: a distinction they hold excludes "
+                    f"{obj.chosen_distinction}.",
+                    level=messages.WARNING,
+                )
 
     @admin.display(description="Chosen per being")
     def chosen_per_being(self, obj: ChosenFavorConfig) -> str:

@@ -8,8 +8,10 @@ Breached); a wholly missed period adds 10. Resist rolls are forced through
 
 from __future__ import annotations
 
+from contextlib import suppress
 from datetime import timedelta
 
+from django.db import transaction
 from django.test import TestCase, tag
 from django.utils import timezone
 
@@ -44,6 +46,11 @@ from world.worship.invocation_services import get_devotion_config
 from world.worship.models import DevotionStanding, PatronageValence, PledgeCredit
 from world.worship.pledge_services import deed_favor_used_this_week, take_pledge
 from world.worship.services import bump_devotion
+
+
+class _RolledBack(Exception):
+    """Raised to roll a test's transaction back."""
+
 
 _OUTCOMES = (
     ("Critical Success", 2),
@@ -94,7 +101,9 @@ class PactTestBase(TestCase):
         project.current_progress = earned
         project.time_limit = timezone.now() - timedelta(minutes=1)
         project.save(update_fields=["current_progress", "time_limit"])
-        scan_active_projects()
+        # The holder's lines and the room line go out when the tick commits.
+        with self.captureOnCommitCallbacks(execute=True):
+            scan_active_projects()
 
     def _graded(self, pact: CharacterPact) -> PactPeriodDetails:
         return PactPeriodDetails.objects.filter(pact=pact, severity_change__isnull=False).latest(
@@ -210,8 +219,39 @@ class CreditTests(PactTestBase):
             deed_favor_used_this_week(self.sheet), get_devotion_config().weekly_deed_favor_cap
         )
 
+    def test_a_pact_with_no_favor_commitment_earns_no_deed_favor(self) -> None:
+        """A promise-only pact has no period to credit, so the cap could not count it."""
+        offer = PactOfferFactory(being=self.being, name="Promise only")
+        PactOfferCommitmentFactory(
+            offer=offer, kind=CharacterPactCommitmentKind.CUSTOM, amount=0, notes="[promise]"
+        )
+        sign_being_pact(self.sheet, offer)
+
+        self._deed(5)
+
+        standing = DevotionStanding.objects.get(character_sheet=self.sheet, being=self.being)
+        self.assertEqual(standing.favor, 0)
+        self.assertEqual(deed_favor_used_this_week(self.sheet), 0)
+
 
 class PeriodCheckTests(PactTestBase):
+    def test_a_rolled_back_tick_tells_her_nothing(self) -> None:
+        """Her lines wait for the commit: a rolled-back grading reported no roll."""
+        pact = self._sign()
+        project = self._period(pact).project
+        project.time_limit = timezone.now() - timedelta(minutes=1)
+        project.save(update_fields=["time_limit"])
+
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            with suppress(_RolledBack), transaction.atomic():
+                scan_active_projects()
+                self.assertEqual(self._told(), "")
+                raise _RolledBack
+
+        self.assertEqual(callbacks, [])
+        self.assertEqual(self._told(), "")
+        self.assertEqual(self._period(pact).project.pk, project.pk)
+
     def test_a_met_period_eases_capped_at_twice_per_miss_and_floored_at_the_first_stage(
         self,
     ) -> None:

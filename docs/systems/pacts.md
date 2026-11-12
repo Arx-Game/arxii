@@ -28,7 +28,8 @@ Chosen bonuses.
   (nullable column, but a check constraint `pact_offer_has_one_party` requires it today; the
   follower pacts issue adds a second party column and widens the check), `name` (unique per
   being), `offer_text` (shown on the pledge), `closing_text` (shown to the holder on breach),
-  `onlooker_line` (shown to the room on breach; blank shows nothing), `period_weeks` (game
+  `onlooker_line` (shown to the room when the pact ends, by breach or renouncing; blank shows
+  nothing; the model's help text still says "on breach" until a migration touches the field), `period_weeks` (game
   weeks per period, default 2), `condition` FK `ConditionTemplate` (PROTECT; `clean()` requires
   a progressing condition with at least `MIN_PACT_CONDITION_STAGES` = 2 severity-threshold
   stages), `severity_per_miss` (severity a wholly missed period adds, default 10), `is_active`.
@@ -90,7 +91,9 @@ yet).
 - `pact_card(pact) -> PactCard` and `pact_cards_for(sheet) -> list[PactCard]` - the open period's
   favor against its requirement and time limit, its favor by source, the condition's stage,
   severity and next threshold, the promises, and whether the being is her secret faith.
-- `pact_beings_for(sheet)` - beings she holds an active pact with (deeds credit them).
+- `pact_beings_for(sheet)` - beings whose active pact with her has an open commitment period
+  (deeds credit them). A pact with no FAVOR_EARNED commitment earns no deed favor: there is no
+  `PactCredit` for the weekly cap to count.
 - `pact_deed_favor_this_week(sheet)` - base deed favor her pact credits took from this week's
   deed cap; `pledge_services` adds it to the pledge credits' base, so the cap counts each deed
   once.
@@ -163,12 +166,16 @@ released (`release_patronage`, its first caller); the stage's settle pool, if au
 against the holder only, at the failed resist roll's tier (a breach reached with no roll fires
 no pool); the holder sees the offer's `closing_text` and the ending lines; the room sees the
 `onlooker_line` if one is written; an ease-out period opens. Codex entries and clues she gained
-are kept; nothing is deleted.
+are kept; nothing is deleted. Every holder line and room line from grading (met, short, breach,
+ease-out) is sent with `transaction.on_commit`: grading runs inside the project tick's atomic
+block, and a rollback there must not leave her holding a roll result the next tick rolls again.
 
 ### Renouncing
 
-`renounce_pact(sheet, being) -> CharacterPact` ends her active pact with RENOUNCED, cancels its
-open commitment periods, releases a `PACT` patronage the same way and opens an ease-out period.
+`renounce_pact(sheet, being) -> RenouncedPact` ends her active pact with RENOUNCED, cancels its
+open commitment periods, releases a `PACT` patronage the same way, sends the room the offer's
+`onlooker_line` on commit and opens an ease-out period. It returns the pact and the one message
+she is told (the action delivers it; the service sends her nothing, so she reads it once).
 Raises `NoActivePact` when she holds none.
 
 ### Release rule (D5)
@@ -202,10 +209,12 @@ The pledge pays its award and its answer either way.
   (`/api/worship/pledges/`) and pledge cards carry `pact_offer` (`PactOfferSummarySerializer`,
   null when none).
 - **Actions**: `pact_renounce` (`RenouncePactAction`, `actions/definitions/pacts.py`; kwargs
-  `being_id` or `being_name`); `pledge_close` (`ClosePledgeAction`) takes `accept_pact` (True or
+  `being_id` or `being_name`, resolved only among her own carded pacts; every refusal reads "You
+  hold no pact with that being." and names nothing); `pledge_close` (`ClosePledgeAction`) takes `accept_pact` (True or
   `"true"`) and returns `pact_signed` in its data.
 - **Telnet**: `pact` (no args or `pact list`) shows the caller's being pact cards first, then the
-  existing organization pacts; `pact/renounce <being>`; `pledge/close/accept[=<item>,...]`
+  existing organization pacts; `pact/renounce <being>` (any other switch refuses with the usage
+  line); `pledge/close/accept[=<item>,...]`
   closes the pledge and accepts its pact (`commands/pacts.py`, `commands/worship.py`).
 - **Web**: `PactCard` (`frontend/src/worship/components/PactCard.tsx`) in the sheet's
   `WorshipSection`; the pledge card shows the offer and the close dialog offers "close and
