@@ -302,33 +302,33 @@ class CharacterDraftStatsValidationTests(TestCase):
     def test_calculate_points_remaining_redistributed(self):
         """Redistributed stats still sum to budget = 0 remaining."""
         stats = self._all_stats_at(STAT_DEFAULT_VALUE)
-        # Move 1 point from first stat to second
+        # Move one stat point (10) from first stat to second
         stat_names = list(stats.keys())
-        stats[stat_names[0]] = 1
-        stats[stat_names[1]] = 3
+        stats[stat_names[0]] = 10
+        stats[stat_names[1]] = 30
         self.draft.draft_data = {"stats": stats}
         self.draft.save()
         assert self.draft.calculate_points_remaining() == 0
 
     def test_calculate_points_remaining_under_allocated(self):
         """Under-allocated stats return positive remaining."""
-        stats = self._all_stats_at(1)  # 12 * 1 = 12, budget = 24, remaining = 12
+        stats = self._all_stats_at(10)  # 12 * 10 = 120, budget = 240, remaining = 120
         self.draft.draft_data = {"stats": stats}
         self.draft.save()
-        assert self.draft.calculate_points_remaining() == 12
+        assert self.draft.calculate_points_remaining() == 120
 
     def test_calculate_points_remaining_over_allocated(self):
         """Over-allocated stats return negative remaining."""
-        stats = self._all_stats_at(3)  # 12 * 3 = 36, budget = 24, remaining = -12
+        stats = self._all_stats_at(30)  # 12 * 30 = 360, budget = 240, remaining = -120
         self.draft.draft_data = {"stats": stats}
         self.draft.save()
-        assert self.draft.calculate_points_remaining() == -12
+        assert self.draft.calculate_points_remaining() == -120
 
     # --- Validation via _is_attributes_complete ---
 
     def test_validation_missing_stats(self):
         """Validation fails with missing stats."""
-        self.draft.draft_data = {"stats": {"strength": 2, "agility": 2}}
+        self.draft.draft_data = {"stats": {"strength": 20, "agility": 20}}
         self.draft.save()
         assert not self.draft._is_attributes_complete()
 
@@ -646,7 +646,7 @@ class DistinctionStatBonusTests(TestCase):
         assert bonuses == {}
 
     def test_get_stat_bonuses_from_distinctions_with_effect(self):
-        """Distinction with stat effect returns bonus in display scale."""
+        """Distinction with stat effect returns its bonus in stored units."""
         distinction = DistinctionFactory()
         DistinctionEffectFactory(
             distinction=distinction,
@@ -657,7 +657,7 @@ class DistinctionStatBonusTests(TestCase):
         draft = CharacterDraftFactory()
         self._add_distinction_to_draft(draft, distinction)
         bonuses = draft.get_stat_bonuses_from_distinctions()
-        assert bonuses == {"strength": 1}
+        assert bonuses == {"strength": 10}
 
     def test_get_all_stat_bonuses_combines_heritage_and_distinctions(self):
         """All bonuses aggregated from both species and distinctions."""
@@ -671,10 +671,10 @@ class DistinctionStatBonusTests(TestCase):
         draft = CharacterDraftFactory()
         self._add_distinction_to_draft(draft, distinction)
         bonuses = draft.get_all_stat_bonuses()
-        assert bonuses["strength"] == 1
+        assert bonuses["strength"] == 10
 
     def test_budget_increases_with_positive_distinction_bonus(self):
-        """Budget = 24 + 1 = 25 with a +1 distinction bonus."""
+        """Budget = 240 + 10 = 250 with a +10 distinction bonus."""
         distinction = DistinctionFactory()
         DistinctionEffectFactory(
             distinction=distinction,
@@ -685,10 +685,10 @@ class DistinctionStatBonusTests(TestCase):
         draft = CharacterDraftFactory()
         self._add_distinction_to_draft(draft, distinction)
         base = STAT_DEFAULT_VALUE * len(REQUIRED_STATS)
-        assert draft.calculate_stat_budget() == base + 1
+        assert draft.calculate_stat_budget() == base + 10
 
     def test_budget_decreases_with_negative_distinction_bonus(self):
-        """Budget = 24 - 1 = 23 with a -1 distinction penalty."""
+        """Budget = 240 - 10 = 230 with a -10 distinction penalty."""
         distinction = DistinctionFactory()
         DistinctionEffectFactory(
             distinction=distinction,
@@ -699,7 +699,7 @@ class DistinctionStatBonusTests(TestCase):
         draft = CharacterDraftFactory()
         self._add_distinction_to_draft(draft, distinction)
         base = STAT_DEFAULT_VALUE * len(REQUIRED_STATS)
-        assert draft.calculate_stat_budget() == base - 1
+        assert draft.calculate_stat_budget() == base - 10
 
     def test_stacking_bonuses_increase_budget(self):
         """Multiple distinction bonuses stack and increase budget."""
@@ -721,7 +721,7 @@ class DistinctionStatBonusTests(TestCase):
         self._add_distinction_to_draft(draft, d1)
         self._add_distinction_to_draft(draft, d2)
         base = STAT_DEFAULT_VALUE * len(REQUIRED_STATS)
-        assert draft.calculate_stat_budget() == base + 2
+        assert draft.calculate_stat_budget() == base + 20
 
 
 class CGPointsCalculationTests(TestCase):

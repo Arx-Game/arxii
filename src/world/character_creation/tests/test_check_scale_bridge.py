@@ -95,10 +95,10 @@ class CgCheckScaleBridgeTests(FinalizationTestMixin, TestCase):
         row = CharacterTraitValue.objects.get(character_id=character.pk, trait=skill)
         assert row.value == 30
 
-    def test_finalize_stores_stats_internal_scale(self):
+    def test_finalize_stores_stats_as_allocated(self):
         draft = self._create_base_draft()
         character = finalize_character(draft, add_to_roster=True)
 
         strength = Trait.objects.get(name="strength", trait_type=TraitType.STAT)
         row = CharacterTraitValue.objects.get(character_id=character.pk, trait=strength)
-        assert row.value == DEFAULT_STATS["strength"] * 10
+        assert row.value == DEFAULT_STATS["strength"]
