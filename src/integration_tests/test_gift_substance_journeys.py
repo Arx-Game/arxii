@@ -535,7 +535,8 @@ class AuthoringShapes(JourneyCase):
         with self.assertRaises(ValidationError) as raised:
             restriction.full_clean()
         self.assertEqual(
-            raised.exception.message_dict["surroundings_min"], ["This reading runs from -2 to 2."]
+            raised.exception.message_dict["surroundings_min"],
+            ["This room condition runs from -2 to 2."],
         )
         self.assertEqual(
             raised.exception.message_dict["surroundings_max"],

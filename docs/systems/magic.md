@@ -4683,7 +4683,10 @@ from ordinary, a reading opposing itself, and a falling substance on a reading t
 below ordinary. The admin speaks plain play terms, never "reading", "step" or "measure"
 (#5088): `stat_key` is "Which room condition feeds it", `direction` is "Stronger when it is"
 (Higher / Lower), `full_at` is "Full strength at", `opposed_by` is "Weakened by" and
-`property` is "Property new techniques start with". Exported with the catalog (`CONTENT_MODELS` `magic.giftsubstance`, natural key
+`property` is "Property new techniques start with". The same plain wording covers a
+technique restriction's Surroundings section (`surroundings_stat` is "Which room condition
+it needs") and the "Gift substance" tuning group on the resonance-environment config ("Power
+at full strength", "Anima to call it up to full strength", and so on). Exported with the catalog (`CONTENT_MODELS` `magic.giftsubstance`, natural key
 `gift`).
 
 Only a caster with a GIFT thread covering the gift is affected (`gift_thread_for`, via
