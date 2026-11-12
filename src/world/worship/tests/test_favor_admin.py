@@ -277,6 +277,52 @@ class ChosenAndBeingAdminTests(TestCase):
         )
         self.assertEqual(holders, {self.chosen_sheet.pk})
 
+    def test_a_chosen_whose_distinction_excludes_it_is_skipped_and_named(self) -> None:
+        """#4341: an exclusion conflict skips that Chosen; the save names her."""
+        from django.contrib.messages import get_messages
+
+        from world.distinctions.factories import CharacterDistinctionFactory
+        from world.distinctions.models import CharacterDistinction
+        from world.worship.services import get_chosen_favor_config
+
+        config = get_chosen_favor_config()
+        distinction = DistinctionFactory(name="Chosen", slug="chosen-excluded")
+        rival = DistinctionFactory(name="Faithless", slug="faithless")
+        distinction.mutually_exclusive_with.add(rival)
+        excluded = CharacterSheetFactory()
+        DevotionStandingFactory(
+            character_sheet=excluded,
+            being=self.being,
+            valence=PatronageValence.DEVOTIONAL,
+            established_at=timezone.now(),
+        )
+        CharacterDistinctionFactory(character=excluded, distinction=rival)
+
+        response = self.client.post(
+            reverse("admin:arxii_chosenfavorconfig_change", args=(config.pk,)),
+            {
+                "anima_recovery_threshold": config.anima_recovery_threshold,
+                "anima_recovery_bonus": config.anima_recovery_bonus,
+                "ceremony_edge_threshold": config.ceremony_edge_threshold,
+                "ceremony_edge_bonus": config.ceremony_edge_bonus,
+                "chosen_distinction": distinction.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        holders = set(
+            CharacterDistinction.objects.filter(distinction=distinction).values_list(
+                "character_id", flat=True
+            )
+        )
+        self.assertEqual(holders, {self.chosen_sheet.pk})
+        told = [str(message) for message in get_messages(response.wsgi_request)]
+        self.assertIn("Granted Chosen to 1 Chosen.", told)
+        self.assertIn(
+            f"Not granted to {excluded.character.key}: a distinction they hold excludes Chosen.",
+            told,
+        )
+
     def test_being_change_form_has_the_check_type_override(self) -> None:
         body = self.client.get(
             reverse("admin:arxii_worshippedbeing_change", args=(self.being.pk,))

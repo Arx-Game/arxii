@@ -1,4 +1,7 @@
-"""Being pact services (#4341): signing, crediting, the period check, breach, ease-out.
+"""Being pact services (#4341): the branches no journey reaches.
+
+Signing, serving, a short period, a breach and renouncing are journeys
+(``integration_tests.test_pacts_with_beings_journeys``).
 
 The numbers follow the demo: a pact with Hesk owes 8 favor every 2 game weeks; its
 condition has four stages from severity 1, 11, 21 and 31 (Sworn, Strained, Soured,
@@ -23,13 +26,9 @@ from world.magic.constants import GainSource
 from world.magic.services.resonance import grant_resonance
 from world.narrative.models import NarrativeMessageDelivery
 from world.pacts.constants import CharacterPactCommitmentKind, CharacterPactEnding
-from world.pacts.exceptions import NoActivePact, PactAlreadyHeld
 from world.pacts.factories import PactOfferCommitmentFactory, PactOfferFactory, make_pact_condition
 from world.pacts.models import CharacterPact, PactCredit, PactPeriodDetails
 from world.pacts.services import (
-    pact_cards_for,
-    pact_offer_summary,
-    renounce_pact,
     sign_being_pact,
 )
 from world.projects.constants import ProjectStatus
@@ -119,20 +118,8 @@ class PactTestBase(TestCase):
 
 
 class SigningTests(PactTestBase):
-    def test_sign_marks_a_pact_patronage_applies_the_first_stage_and_opens_a_period(self) -> None:
-        pact = self._sign()
-
-        standing = DevotionStanding.objects.get(character_sheet=self.sheet, being=self.being)
-        self.assertEqual(standing.valence, PatronageValence.PACT)
-        self.assertIsNotNone(standing.established_at)
-        self.assertEqual(pact.condition_instance.current_stage.name, "Sworn")
-        self.assertEqual(pact.condition_instance.severity, 1)
-        project = self._period(pact).project
-        self.assertEqual(project.threshold_target, 8)
-        self.assertEqual(project.time_limit.date(), (timezone.now() + timedelta(days=14)).date())
-        with self.assertRaises(PactAlreadyHeld) as raised:
-            self._sign()
-        self.assertIn("Hesk", raised.exception.user_message)
+    """A Chosen signing a pact with her own patron keeps her DEVOTIONAL valence. The
+    journeys sign only for a character with no patron, so this branch has no journey."""
 
     def test_a_chosen_keeps_her_devotional_patronage(self) -> None:
         chosen = CharacterSheetFactory()
@@ -143,26 +130,12 @@ class SigningTests(PactTestBase):
         standing = DevotionStanding.objects.get(character_sheet=chosen, being=self.being)
         self.assertEqual(standing.valence, PatronageValence.DEVOTIONAL)
 
-    def test_offer_summary_and_card(self) -> None:
-        summary = pact_offer_summary(self.offer)
-        self.assertEqual(summary.favor_per_period, (8,))
-        self.assertEqual(summary.promises, ("[promise]",))
-        self.assertEqual(
-            [(s.name, s.threshold) for s in summary.stages],
-            [("Sworn", 1), ("Strained", 11), ("Soured", 21), ("Breached", 31)],
-        )
-
-        self._sign()
-        bump_devotion(self.sheet, self.being, 3, source=None)
-
-        (card,) = pact_cards_for(self.sheet)
-        self.assertEqual((card.earned, card.required, card.severity), (3, 8, 1))
-        self.assertEqual((card.stage_name, card.next_stage_threshold), ("Sworn", 11))
-        self.assertEqual([(s.label, s.favor) for s in card.sources], [("Other", 3)])
-        self.assertTrue(card.is_active)
-
 
 class CreditTests(PactTestBase):
+    """How favor and the weekly deed cap split between a pledge and a pact, and a pact
+    with no commitment earning nothing. The journeys serve one pact alone, inside the
+    cap, so none of these branches is reached by one."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
@@ -235,6 +208,10 @@ class CreditTests(PactTestBase):
 
 
 class PeriodCheckTests(PactTestBase):
+    """The grading arithmetic and its delivery: the ease's cap and floor, the resist
+    tier table, a Chosen's breach and a rolled-back tick. A journey walks one path
+    through each; the boundaries and the other tiers are reached only here."""
+
     def test_a_rolled_back_tick_tells_her_nothing(self) -> None:
         """Her lines wait for the commit: a rolled-back grading reported no roll."""
         pact = self._sign()
@@ -270,18 +247,6 @@ class PeriodCheckTests(PactTestBase):
                 self.assertEqual(graded.project.status, ProjectStatus.COMPLETED)
                 self.assertEqual(self._period(pact).project.threshold_target, 8)
 
-    def test_a_short_period_inside_the_stage_rolls_nothing(self) -> None:
-        pact = self._sign()
-
-        self._tick(pact, earned=1)  # 7 short: rise 9 (8.75 up), to 10, still Sworn
-
-        graded = self._graded(pact)
-        self.assertEqual((graded.severity_change, graded.stage_after.name), (9, "Sworn"))
-        self.assertIsNone(graded.resist_outcome)
-        self.assertEqual(graded.project.status, ProjectStatus.FAILED)
-        self.assertIn("1 of 8 favor this period, 7 short.", self._told())
-        self.assertIn("Severity rises by 9 (to 10). No stage change.", self._told())
-
     def test_a_short_period_reaching_a_worse_stage_rolls_its_resist_by_tier(self) -> None:
         # From severity 5, 5 short is a rise of 7 (to 12), reaching Strained at 11.
         cases = (
@@ -309,21 +274,6 @@ class PeriodCheckTests(PactTestBase):
                 self.assertEqual(graded.resist_outcome.name, recorded)
                 self.assertIn("reach Strained", self._told(sheet))
 
-    def test_breach_on_the_last_stage_ends_the_pact_and_eases_out(self) -> None:
-        pact = self._sign()
-
-        with force_check_outcome(self.outcomes["Failure"]):
-            self._tick(pact, earned=0, severity=25)
-
-        pact.refresh_from_db()
-        self.assertEqual(pact.dissolution_reason, CharacterPactEnding.BREACH)
-        self.assertEqual(pact.condition_instance.current_stage.name, "Breached")
-        self.assertIsNotNone(pact.devotion_standing.released_at)
-        period = self._period(pact)
-        self.assertIsNone(period.commitment)
-        self.assertIn("Hesk is no longer your patron.", self._told())
-        self.assertIn("Breached eases by 10 each period", self._told())
-
     def test_a_chosen_who_breaches_keeps_her_patronage(self) -> None:
         chosen = CharacterSheetFactory()
         make_chosen(chosen, self.being)
@@ -336,34 +286,3 @@ class PeriodCheckTests(PactTestBase):
         self.assertEqual(pact.dissolution_reason, CharacterPactEnding.BREACH)
         self.assertIsNone(pact.devotion_standing.released_at)
         self.assertIn("Your pact with Hesk has ended.", self._told(chosen))
-
-
-class RenounceTests(PactTestBase):
-    def test_renounce_releases_and_the_condition_eases_out_to_nothing(self) -> None:
-        pact = self._sign()
-        commitment_period = self._period(pact)
-        advance_condition_severity(pact.condition_instance, 11)  # to 12, Strained
-
-        renounce_pact(self.sheet, self.being)
-
-        pact.refresh_from_db()
-        self.assertEqual(pact.dissolution_reason, CharacterPactEnding.RENOUNCED)
-        self.assertIsNotNone(pact.devotion_standing.released_at)
-        commitment_period.project.refresh_from_db()
-        self.assertEqual(commitment_period.project.status, ProjectStatus.CANCELLED)
-        self.assertEqual(len(pact_cards_for(self.sheet)), 1)
-        with self.assertRaises(NoActivePact):
-            renounce_pact(self.sheet, self.being)
-
-        self._tick(pact)  # 12 -> 2
-        self.assertEqual(pact.condition_instance.severity, 2)
-        self._tick(pact)  # 2 -> gone
-
-        pact.refresh_from_db()
-        self.assertIsNone(pact.condition_instance)
-        self.assertFalse(
-            PactPeriodDetails.objects.filter(
-                pact=pact, project__status=ProjectStatus.ACTIVE
-            ).exists()
-        )
-        self.assertEqual(pact_cards_for(self.sheet), [])

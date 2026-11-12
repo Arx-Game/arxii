@@ -3,7 +3,8 @@ companion her manifesting technique brings into a fight, on telnet (``manifest``
 web (``manifest_set`` dispatch) and reads her options through the API.
 
 The patronage is a PACT-valence standing built from a factory, the bond a pact signing
-leaves behind; how it is signed is ``world.pacts``' to prove.
+leaves behind, for isolation; signing is proven in
+``integration_tests.test_pacts_with_beings_journeys``.
 """
 
 from __future__ import annotations

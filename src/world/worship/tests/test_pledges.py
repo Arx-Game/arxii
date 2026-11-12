@@ -869,9 +869,11 @@ class WebDispatchTests(PledgeTestBase):
 
 
 class AcceptPactAtCloseTests(PledgeTestBase):
-    """Accepting the pledge's pact offer at the close (#4341) where nothing is signed,
-    and the offer on the pledge card. Signing itself needs the parity tier (its
-    condition apply is a DISTINCT ON): ``world.pacts.tests.test_accept_at_close``."""
+    """Accepting at the close (#4341) on the branches no journey reaches: a pact
+    already held, a pledge with no offer, and the offer on the pledge card. Closing
+    without accepting, a Partial Success refusal and signing are journeys
+    (``world.pacts.tests.test_accept_at_close``,
+    ``integration_tests.test_pacts_with_beings_journeys``)."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -891,21 +893,6 @@ class AcceptPactAtCloseTests(PledgeTestBase):
         self._reach_target(details)
         with force_check_outcome(self.outcomes[outcome_name]):
             return close_pledge(self.sheet, scene=self.scene, accept_pact=accept_pact)
-
-    def test_closing_without_accepting_signs_nothing(self) -> None:
-        outcome = self._close("Success", accept_pact=False)
-
-        self.assertTrue(outcome.resolved)
-        self.assertEqual((outcome.pact, outcome.pact_refusal), (None, ""))
-        self.assertFalse(CharacterPact.objects.exists())
-
-    def test_accepting_at_partial_success_signs_nothing(self) -> None:
-        outcome = self._close("Partial Success", accept_pact=True)
-
-        self.assertTrue(outcome.resolved)
-        self.assertIsNone(outcome.pact)
-        self.assertIn("did not resolve at Success or better", outcome.pact_refusal)
-        self.assertFalse(CharacterPact.objects.exists())
 
     def test_an_already_held_pact_is_refused_and_the_pledge_still_resolves(self) -> None:
         standing = DevotionStanding.objects.get(character_sheet=self.sheet, being=self.being)
@@ -931,18 +918,6 @@ class AcceptPactAtCloseTests(PledgeTestBase):
 
         self.assertTrue(outcome.resolved)
         self.assertEqual(outcome.pact_refusal, "This pledge offers no pact.")
-
-    def test_the_web_dispatch_reports_the_refusal(self) -> None:
-        from actions.definitions.worship import ClosePledgeAction
-
-        details = take_pledge(self.sheet, self.pledge)
-        self._reach_target(details)
-        with force_check_outcome(self.outcomes["Partial Success"]):
-            result = ClosePledgeAction().run(actor=self.sheet.character, accept_pact="true")
-
-        self.assertTrue(result.success, result.message)
-        self.assertFalse(result.data["pact_signed"])
-        self.assertIn("so no pact was signed.", result.message)
 
     def test_the_pledge_card_carries_the_offer_summary(self) -> None:
         from rest_framework.test import APIClient

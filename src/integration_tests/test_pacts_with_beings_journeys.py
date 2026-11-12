@@ -305,6 +305,7 @@ class AcceptingAPactAtTheClose(PactJourneyBase):
 
         told = self.close(kell, "pledge/close")
 
+        self.assertIn("You close your pledge with Hesk's rite: Success.", told)
         self.assertNotIn("Your pact begins", told)
         self.assertFalse(CharacterPact.objects.filter(character_sheet=kell.sheet_data).exists())
         self.assertFalse(
@@ -318,6 +319,18 @@ class AcceptingAPactAtTheClose(PactJourneyBase):
         self.assertIsNone(self.condition(kell))
         self.assertNotIn("Hesk - ", self.telnet(kell, "pact"))
         self.assertEqual(self.cards(kell), [])
+
+    def test_accepting_at_partial_success_closes_the_pledge_and_signs_nothing(self) -> None:
+        self.pledged(self.corwen)
+
+        told = self.close(self.corwen, "pledge/close/accept", "Partial Success")
+
+        self.assertIn("You close your pledge with Hesk's rite: Partial Success.", told)
+        self.assertIn("The rite did not resolve at Success or better, so no pact was signed.", told)
+        self.assertFalse(
+            CharacterPact.objects.filter(character_sheet=self.corwen.sheet_data).exists()
+        )
+        self.assertEqual(self.cards(self.corwen), [])
 
 
 class ServingThePact(PactJourneyBase):

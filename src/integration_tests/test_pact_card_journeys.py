@@ -1,10 +1,9 @@
 """Journeys for the pact card (#4341): a character reads her pact with a being on the
 web and through ``pact`` on telnet, and renounces it on either.
 
-The pact is built from factories with its condition at the first stage, not signed:
-signing applies the condition through a PostgreSQL ``DISTINCT ON`` (ADR-0012), and the
-card and renouncing are what these journeys prove. The sign path has its own tests in
-``world.pacts.tests``.
+The pact is built from factories with its condition at the first stage, not signed,
+for isolation: the card and renouncing are what these journeys prove; signing is proven
+in ``integration_tests.test_pacts_with_beings_journeys``.
 """
 
 from __future__ import annotations
@@ -111,7 +110,6 @@ class PactCardJourneys(JourneyCase):
         self.assertIn("Hesk - 6 of 8 favor this period", told)
         self.assertIn("Stage: Sworn (severity 1; next at 11).", told)
         self.assertIn("You promised: Never refuse shelter", told)
-        self.assertIn("No pacts stand.", told)
 
         told = self.telnet(self.mira, "pact/renounce hesk")
         self.assertIn("You renounce your pact with Hesk.", told)

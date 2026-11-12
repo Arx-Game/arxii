@@ -17,7 +17,6 @@ from world.worship.constants import (
 )
 from world.worship.factories import (
     WorshippedBeingFactory,
-    designate_chosen_distinction,
     make_chosen,
 )
 from world.worship.models import (
@@ -33,7 +32,6 @@ from world.worship.services import (
     convert_public_worship,
     establish_patronage,
     get_chosen_favor_config,
-    grant_chosen_distinction_to_chosen,
     grant_worship,
     is_birth_favored_by,
     release_patronage,
@@ -305,32 +303,6 @@ class ChosenFavorConfigTests(TestCase):
         self.assertEqual(config.pk, 1)
         self.assertEqual(config.anima_recovery_threshold, 10)
         self.assertEqual(config.anima_recovery_bonus, 5)
-
-    def test_grant_chosen_distinction_to_chosen(self) -> None:
-        """#4341: designating the Chosen distinction grants it to every Chosen lacking it,
-        never to a pact holder or an ordinary worshipper."""
-        from world.distinctions.models import CharacterDistinction
-
-        being = WorshippedBeingFactory()
-        chosen = CharacterSheetFactory()
-        pact = CharacterSheetFactory()
-        worshipper = CharacterSheetFactory()
-        establish_patronage(chosen, being, valence=PatronageValence.DEVOTIONAL)
-        establish_patronage(pact, being, valence=PatronageValence.PACT)
-        bump_devotion(worshipper, being, 5)
-        config = get_chosen_favor_config()
-        self.assertEqual(grant_chosen_distinction_to_chosen(config), 0)
-
-        distinction = designate_chosen_distinction()
-
-        self.assertEqual(grant_chosen_distinction_to_chosen(config), 1)
-        self.assertEqual(grant_chosen_distinction_to_chosen(config), 0)
-        holders = set(
-            CharacterDistinction.objects.filter(distinction=distinction).values_list(
-                "character_id", flat=True
-            )
-        )
-        self.assertEqual(holders, {chosen.pk})
 
     def test_get_chosen_favor_config_idempotent(self) -> None:
         first = get_chosen_favor_config()

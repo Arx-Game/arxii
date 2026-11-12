@@ -6,8 +6,8 @@ telnet ``pledge/close[/accept]`` or the web's ``pledge_close`` dispatch. The rit
 roll is pinned through ``force_check_outcome``.
 
 Journeys run on the parity tier (``JourneyCase`` is PostgreSQL-only, and signing
-applies a staged condition through DISTINCT ON). The paths that sign nothing are
-also covered on SQLite in ``world.worship.tests.test_pledges.AcceptPactAtCloseTests``.
+applies a staged condition through DISTINCT ON). A pact already held and a pledge
+with no offer are covered in ``world.worship.tests.test_pledges.AcceptPactAtCloseTests``.
 """
 
 from __future__ import annotations
@@ -111,7 +111,7 @@ class AcceptAtCloseBase(JourneyCase):
 
     def _close_by_web(self, outcome: str, **kwargs):
         with force_check_outcome(self.outcomes[outcome]):
-            return self.web(self.corwen, "pledge_close", **kwargs)
+            return self.web(self.corwen, "pledge_close", **kwargs).detail
 
 
 class ReadingTheOfferTests(AcceptAtCloseBase):
@@ -139,6 +139,19 @@ class AcceptingThePactTests(AcceptAtCloseBase):
         pact = CharacterPact.objects.get(character_sheet=self.sheet)
         self.assertEqual(pact.offer, self.offer)
         self.assertIsNone(pact.dissolved_at)
+        self.assertEqual(self._status(), ProjectStatus.COMPLETED)
+
+    def test_accepting_at_partial_success_tells_her_no_pact_was_signed(self) -> None:
+        result = self._close_by_web("Partial Success", accept_pact=True)
+
+        self.assertTrue(result.success, result.message)
+        self.assertFalse(result.data["pact_signed"])
+        self.assertIn("You close your pledge with Hesk's rite: Partial Success.", result.message)
+        self.assertIn(
+            "The rite did not resolve at Success or better, so no pact was signed.",
+            result.message,
+        )
+        self.assertFalse(CharacterPact.objects.filter(character_sheet=self.sheet).exists())
         self.assertEqual(self._status(), ProjectStatus.COMPLETED)
 
     def test_accepting_on_the_retry_signs_the_pact(self) -> None:
