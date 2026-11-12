@@ -118,9 +118,10 @@ class ShiftFormAction(Action):
 class RevertFormAction(Action):
     """Revert the active alternate self — restore return anchors, delete the
     granted stat + ability suites. A character under a compulsion (rage) rolls its
-    resist check to change back and stays as they are on a failed roll; a talked-down
-    self whose emergence condition still holds them stays blocked
-    (``RevertBlockedError``); anyone else, charmed or calmed, changes back freely (#4802).
+    resist check to change back and stays as they are on a failed roll; a self Audere
+    brought out that must be talked down holds her until an ally rallies her or she
+    breaks free (``RevertBlockedError``); anyone else, including a character whose
+    compulsion has ended, changes back freely (#4802, #4887).
     """
 
     key: str = "revert_form"

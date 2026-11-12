@@ -8,7 +8,7 @@ import django.utils.timezone
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0392_chosen_distinction_patron_targets"),
+        ("arxii", "0393_chosen_distinction_patron_targets"),
     ]
 
     operations = [

@@ -1059,22 +1059,20 @@ describe('CombatTacticalMap', () => {
     expect(screen.queryByTitle('Wanderer (bystander)')).not.toBeInTheDocument();
   });
 
-  it('keys another, masked fighter on the persona it presents, never a sheet id (#4802)', async () => {
+  it('keys another, masked fighter on the persona it presents, never a sheet id (#4802, #4888)', async () => {
+    // What a stranger is sent: the mask carries no sheet, and only the face Aerande
+    // presents now is positioned; his own face stands nowhere.
     vi.mocked(fetchScene).mockResolvedValue(
       makeScene({
         personas: [
           { id: 100, name: 'Aerande', persona_type: 'primary', character_sheet: 10 },
-          { id: 400, name: 'a hooded man', persona_type: 'temporary', character_sheet: 10 },
+          { id: 400, name: 'a hooded man', persona_type: 'temporary', character_sheet: null },
           { id: 200, name: 'Onlooker', persona_type: 'primary', character_sheet: 20 },
           { id: 300, name: 'Wanderer', persona_type: 'primary', character_sheet: 30 },
+          { id: 500, name: 'a veiled woman', persona_type: 'temporary', character_sheet: null },
         ],
         persona_positions: [
-          {
-            persona_id: 100,
-            square_x: null,
-            square_y: null,
-            position: { id: 101, name: 'North Wall' },
-          },
+          { persona_id: 100, square_x: null, square_y: null, position: null },
           {
             persona_id: 400,
             square_x: null,
@@ -1088,6 +1086,12 @@ describe('CombatTacticalMap', () => {
             position: { id: 101, name: 'North Wall' },
           },
           { persona_id: 300, square_x: null, square_y: null, position: null },
+          {
+            persona_id: 500,
+            square_x: null,
+            square_y: null,
+            position: { id: 101, name: 'North Wall' },
+          },
         ],
       })
     );
@@ -1161,14 +1165,16 @@ describe('CombatTacticalMap', () => {
 
     const nodeEl = await screen.findByTestId('tactical-map-node-101');
     await vi.waitFor(() => {
-      expect(within(nodeEl).getAllByTestId('occupant-token')).toHaveLength(2);
+      expect(within(nodeEl).getAllByTestId('occupant-token')).toHaveLength(3);
     });
     const avatars = within(nodeEl).getAllByTestId('occupant-token');
     // The masked fighter's row carries no sheet id; matched by the mask persona, the
-    // mask and his own face are both skipped as bystanders, so he is drawn once.
+    // mask is skipped as a bystander, so he is drawn once. A disguise that is not
+    // fighting still stands as a bystander with no sheet to key on.
     expect(avatars[0]).not.toHaveAttribute('data-bystander');
     expect(avatars[1]).toHaveAttribute('data-bystander', 'true');
     expect(avatars[1].querySelector('title')).toHaveTextContent('Onlooker (bystander)');
+    expect(avatars[2].querySelector('title')).toHaveTextContent('a veiled woman (bystander)');
     // Wanderer has no position: not drawn anywhere.
     expect(screen.queryByTitle('Aerande (bystander)')).not.toBeInTheDocument();
     expect(screen.queryByTitle('a hooded man (bystander)')).not.toBeInTheDocument();

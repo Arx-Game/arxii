@@ -69,8 +69,14 @@ surface label shown to players. _Avoid_: activate, transform.
 
 **Revert**:
 To restore the return anchors captured at assume time and remove the granted stat/ability
-rows. Under a compulsion it rolls; a talked-down self held by its emergence condition is
-blocked (`RevertBlockedError`); otherwise free. _Avoid_: shift back.
+rows. Under a compulsion it rolls; a talked-down self Audere brought out is refused
+(`RevertBlockedError`) until she is talked down (an ally's rally, or her own break-free);
+otherwise free, a character whose compulsion ended included (#4887). _Avoid_: shift back.
+
+**Talked down**:
+An ally has reached a character held in a talked-down self: a rally (out of combat, or
+the combat Rally maneuver) landed on its emergence condition (`ConditionInstance.rallied`), or she broke free of that condition. From then on she may change back. _Avoid_: calmed (Calm is a
+condition).
 
 **Revert Form**:
 Player-facing verb for the revert action (registry key `"revert_form"`,
