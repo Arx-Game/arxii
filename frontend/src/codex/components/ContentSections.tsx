@@ -1,6 +1,8 @@
 import { Info, ScrollText } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { cn } from '@/lib/utils';
+import { markdownProse } from '@/lib/markdownProse';
 import type { CodexLinkRef } from '../types';
 import { CodexInlineLink } from './CodexInlineLink';
 
@@ -14,78 +16,85 @@ interface ContentSectionProps {
 // brackets cannot be re-scanned from every position looking for a closing pair.
 const WIKILINK_RE = /\[\[([^[\]]+)\]\]/g;
 
+/** Where a wikilink sits in the Markdown source: a link to this fragment plus its index. */
+const WIKILINK_HREF = '#codex-link-';
+
+/** One `[[wikilink]]`: a link the reader may follow, a "???" they may not, or the raw text. */
+function Wikilink({
+  matchText,
+  links,
+  onNavigate,
+}: {
+  matchText: string;
+  links: CodexLinkRef[];
+  onNavigate?: (entryId: number) => void;
+}) {
+  const linkRef = links.find((l) => l.match_text === matchText);
+  if (linkRef && linkRef.accessible && linkRef.entry_id !== null && onNavigate) {
+    return (
+      <CodexInlineLink entryId={linkRef.entry_id} onNavigate={onNavigate}>
+        {linkRef.display_text}
+      </CodexInlineLink>
+    );
+  }
+  if (linkRef && linkRef.accessible && linkRef.entry_id !== null) {
+    // Accessible but no navigation callback: styled text
+    return (
+      <span className="text-primary underline decoration-dotted underline-offset-2">
+        {linkRef.display_text}
+      </span>
+    );
+  }
+  if (linkRef) {
+    return (
+      <span
+        className="cursor-help italic text-muted-foreground"
+        title="You have not yet discovered this."
+      >
+        ???
+      </span>
+    );
+  }
+  // No matching link ref: the raw text
+  return <span>{matchText}</span>;
+}
+
 /**
- * Split content into text and link segments based on [[wikilink]] syntax.
- * Text segments are rendered through ReactMarkdown; link segments are
- * rendered as CodexInlineLink (accessible) or "???" (inaccessible).
+ * The entry's text as one Markdown document, so the author's paragraphs stay
+ * whole (#5090). Each `[[wikilink]]` is swapped for a Markdown link to a
+ * numbered fragment before parsing and drawn by `Wikilink` where that link
+ * lands, inside its sentence. Splitting the text at the links and rendering
+ * each piece on its own, as this used to, broke a paragraph in two at every link.
  */
 function renderContent(
   content: string,
   links: CodexLinkRef[],
   onNavigate?: (entryId: number) => void
-): React.ReactNode[] {
-  const segments: React.ReactNode[] = [];
-  let lastIndex = 0;
-  let key = 0;
-
-  for (const match of content.matchAll(WIKILINK_RE)) {
-    const matchText = match[0];
-    const start = match.index ?? 0;
-
-    // Text before the link
-    if (start > lastIndex) {
-      const textSegment = content.slice(lastIndex, start);
-      segments.push(
-        <ReactMarkdown key={key++} remarkPlugins={[remarkGfm]}>
-          {textSegment}
-        </ReactMarkdown>
-      );
-    }
-
-    // Find the matching link ref
-    const linkRef = links.find((l) => l.match_text === matchText);
-    if (linkRef && linkRef.accessible && linkRef.entry_id !== null && onNavigate) {
-      segments.push(
-        <CodexInlineLink key={key++} entryId={linkRef.entry_id} onNavigate={onNavigate}>
-          {linkRef.display_text}
-        </CodexInlineLink>
-      );
-    } else if (linkRef && linkRef.accessible && linkRef.entry_id !== null) {
-      // Accessible but no navigation callback — render as styled text
-      segments.push(
-        <span key={key++} className="text-primary underline decoration-dotted underline-offset-2">
-          {linkRef.display_text}
-        </span>
-      );
-    } else if (linkRef) {
-      segments.push(
-        <span
-          key={key++}
-          className="cursor-help italic text-muted-foreground"
-          title="You have not yet discovered this."
-        >
-          ???
-        </span>
-      );
-    } else {
-      // No matching link ref — render the raw text
-      segments.push(<span key={key++}>{matchText}</span>);
-    }
-
-    lastIndex = start + matchText.length;
-  }
-
-  // Remaining text after the last link
-  if (lastIndex < content.length) {
-    const textSegment = content.slice(lastIndex);
-    segments.push(
-      <ReactMarkdown key={key++} remarkPlugins={[remarkGfm]}>
-        {textSegment}
-      </ReactMarkdown>
-    );
-  }
-
-  return segments;
+): React.ReactNode {
+  const matches: string[] = [];
+  const source = content.replace(WIKILINK_RE, (matchText) => {
+    matches.push(matchText);
+    return `[link](${WIKILINK_HREF}${matches.length - 1})`;
+  });
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        a: ({ href, children }) => {
+          const matchText = href?.startsWith(WIKILINK_HREF)
+            ? matches[Number(href.slice(WIKILINK_HREF.length))]
+            : undefined;
+          return matchText ? (
+            <Wikilink matchText={matchText} links={links} onNavigate={onNavigate} />
+          ) : (
+            <a href={href}>{children}</a>
+          );
+        },
+      }}
+    >
+      {source}
+    </ReactMarkdown>
+  );
 }
 
 export function LoreSection({ content, links, onNavigate }: ContentSectionProps) {
@@ -95,7 +104,7 @@ export function LoreSection({ content, links, onNavigate }: ContentSectionProps)
         <ScrollText className="h-3.5 w-3.5" />
         Lore
       </div>
-      <div className="prose prose-sm dark:prose-invert max-w-none text-amber-950 dark:text-amber-100">
+      <div className={cn('max-w-none text-sm text-amber-950 dark:text-amber-100', markdownProse)}>
         {renderContent(content, links ?? [], onNavigate)}
       </div>
     </div>
@@ -109,7 +118,7 @@ export function OOCSection({ content, links, onNavigate }: ContentSectionProps) 
         <Info className="h-3.5 w-3.5" />
         OOC
       </div>
-      <div className="prose prose-sm dark:prose-invert max-w-none">
+      <div className={cn('max-w-none text-sm', markdownProse)}>
         {renderContent(content, links ?? [], onNavigate)}
       </div>
     </div>

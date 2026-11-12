@@ -1,7 +1,7 @@
 /**
  * HouseDocument (#3983 Task 9) — smoke test: it opens on The House with the
  * contents rail (House/Family, Realm/Lands/Estate) and the record rail
- * around it, and the particle-example gloss carries the house's real value.
+ * around it, and the particle field shows the house's own pair.
  * Plus final review I11/deferred item 3: `realm.realm_theme` gates the
  * Gentry toggle, `realm.default_tithe_pct` prefills the swear dialog's
  * tithe, and `realm.realm_id` makes "the ladder" record door a real link.
@@ -32,7 +32,7 @@ const doc: HouseDocumentPayload = {
     sigil_description: '',
     house_state: 'standing',
     published_at: null,
-    particle_example: 'Océane aza Piropa · Raffaele azas Piropa',
+    particle: { born: 'aza', taken_in: 'azas' },
     default_succession_law: { name: 'Infernal Enatic - Durance', codex_entry_id: null },
     patron: { nickname: 'The One True Knight', being_name: 'Calyx', codex_entry_id: 77 },
     facets: [
@@ -96,9 +96,61 @@ test('opens on The House with the contents rail and the record rail', () => {
   expect(screen.getByRole('heading', { name: /house piropa/i })).toBeInTheDocument();
   expect(screen.getByText('The Family')).toBeInTheDocument();
   expect(screen.getByText('Lands')).toBeInTheDocument();
-  expect(screen.getByText('Océane aza Piropa · Raffaele azas Piropa')).toBeInTheDocument();
+  // The particles themselves, born then taken-in, with nothing to hover (#5090).
+  expect(screen.getByText('aza / azas')).toBeInTheDocument();
+  expect(screen.queryByText(/worked example/i)).not.toBeInTheDocument();
   // The record rail (aside.record) opens alongside The House.
   expect(screen.getByText('on record')).toBeInTheDocument();
+});
+
+test('the state control calls a house in its normal state Active (#5090)', () => {
+  vi.mocked(queries.useHouseDocument).mockReturnValue({ data: doc, isLoading: false } as never);
+  renderWithProviders(<HouseDocument houseId={9} />);
+  const state = screen.getByLabelText('State') as HTMLSelectElement;
+  expect(state.value).toBe('standing');
+  expect(state.selectedOptions[0]).toHaveTextContent('Active');
+  expect(screen.queryByRole('option', { name: 'Standing' })).not.toBeInTheDocument();
+});
+
+test('the record links are named for where they go, and the family page link works (#5090)', () => {
+  vi.mocked(queries.useHouseDocument).mockReturnValue({ data: doc, isLoading: false } as never);
+  renderWithProviders(<HouseDocument houseId={9} />);
+  expect(screen.getByRole('link', { name: 'Piropa org page' })).toHaveAttribute('href', '/orgs/9');
+  expect(screen.getByRole('link', { name: 'Piropa family page' })).toHaveAttribute(
+    'href',
+    '/families/4'
+  );
+  expect(screen.queryByText(/house on the roster/i)).not.toBeInTheDocument();
+  expect(screen.queryByText('the organization')).not.toBeInTheDocument();
+});
+
+test('the record rail draws no row or link the document has nothing for (#5090)', async () => {
+  vi.mocked(queries.useHouseDocument).mockReturnValue({ data: doc, isLoading: false } as never);
+  vi.mocked(queries.useAllHouses).mockReturnValue({ data: { results: [] } } as never);
+  renderWithProviders(<HouseDocument houseId={9} />);
+  expect(screen.queryByText('stature')).not.toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: 'The Family' }));
+  for (const gone of ['kin slots', 'influence', 'recognition', 'linked houses', /the secret/]) {
+    expect(screen.queryByText(gone)).not.toBeInTheDocument();
+  }
+  expect(screen.getByRole('link', { name: 'Piropa family page' })).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: 'Titles' }));
+  for (const gone of ['treasury', 'pacts']) {
+    expect(screen.queryByText(gone)).not.toBeInTheDocument();
+  }
+  expect(screen.getByRole('link', { name: 'the ladder' })).toBeInTheDocument();
+});
+
+test('a house with no family has no family page link (#5090)', () => {
+  vi.mocked(queries.useHouseDocument).mockReturnValue({
+    data: { ...doc, family: { ...doc.family, family_id: null } },
+    isLoading: false,
+  } as never);
+  renderWithProviders(<HouseDocument houseId={9} />);
+  expect(screen.getByRole('link', { name: 'Piropa org page' })).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: /family page/i })).not.toBeInTheDocument();
 });
 
 test('Gentry toggles like any other state when the realm theme is luxen', async () => {
@@ -313,7 +365,7 @@ test("the ladder record door links to the realm's own ladder page when realm_id 
   expect(door).toHaveAttribute('href', '/staff/almanach/realms/1');
 });
 
-test("the ladder record door renders a labeled dash when the house's realm carries no id", async () => {
+test("the ladder record door is absent when the house's realm carries no id", async () => {
   const noRealmIdDoc: HouseDocumentPayload = { ...doc, realm: { ...doc.realm, realm_id: null } };
   vi.mocked(queries.useHouseDocument).mockReturnValue({
     data: noRealmIdDoc,
@@ -322,8 +374,7 @@ test("the ladder record door renders a labeled dash when the house's realm carri
   vi.mocked(queries.useAllHouses).mockReturnValue({ data: { results: [] } } as never);
   renderWithProviders(<HouseDocument houseId={9} />);
   await userEvent.click(screen.getByRole('button', { name: 'Titles' }));
-  expect(screen.queryByRole('link', { name: 'the ladder' })).not.toBeInTheDocument();
-  expect(screen.getByText('the ladder')).toBeInTheDocument();
+  expect(screen.queryByText('the ladder')).not.toBeInTheDocument();
 });
 
 test('swearing a house prefills the tithe percent from the realm default', async () => {
