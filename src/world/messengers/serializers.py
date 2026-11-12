@@ -5,8 +5,9 @@ Privacy boundary: a row names the counterpart only as the reader knows them
 the other side, and nothing that tells a sender a block suppressed the letter
 (``undeliverable``, the recipient's ``read_at``).
 
-Context: ``viewer_sheet`` (the reading character's sheet) and ``attachments_by_missive``
-(missive pk -> its attachments, loaded once per page by the view).
+Context: ``viewer_sheet`` (the reading character's sheet), ``attachments_by_missive``
+(missive pk -> its attachments) and ``names`` (``display.display_map_for`` over the page),
+both loaded once per page by the view.
 """
 
 from __future__ import annotations
@@ -90,7 +91,9 @@ class MissiveSerializer(serializers.ModelSerializer):
         return MissiveDirection.SENT if self._is_sent(obj) else MissiveDirection.RECEIVED
 
     def get_counterpart_name(self, obj: Missive) -> str:
-        from_name, to_name = missive_correspondents(self._viewer_sheet, obj)
+        from_name, to_name = missive_correspondents(
+            self._viewer_sheet, obj, self.context.get("names")
+        )
         return to_name if self._is_sent(obj) else from_name
 
     def get_own_persona_id(self, obj: Missive) -> int:

@@ -145,6 +145,9 @@ def _blocked(a: Persona, b: Persona) -> bool:
 
 def _arrival_time(ic_sent_at: datetime | None, delay_minutes: int) -> datetime:
     """Real time the letter arrives: the IC delay through the clock, else real minutes."""
+    if delay_minutes == 0:
+        # No clock round trip: a method with no delay is due the moment it is sent.
+        return timezone.now()
     delay = timedelta(minutes=delay_minutes)
     if ic_sent_at is not None:
         try:
@@ -449,7 +452,7 @@ def _hand_over(
 def _notify_sender(missive: Missive, text: str) -> None:
     """One line to the sender's character, only if someone is playing it right now."""
     character = missive.sender_persona.character_sheet.character
-    if character is not None and character.sessions.count():
+    if character is not None and character.sessions.all():
         character.msg(text)
 
 

@@ -8,7 +8,9 @@ resolves exactly as it does for a browser.
 
 from __future__ import annotations
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
@@ -21,6 +23,8 @@ from world.messengers.services import deliver_due_missives, read_missive, send_m
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.roster.services.selection import set_selected_entry
 from world.scenes.block_services import create_block
+from world.scenes.constants import PersonaType
+from world.scenes.factories import PersonaFactory
 
 LIST_URL = "/api/missives/"
 UNREAD_URL = "/api/missives/unread-count/"
@@ -183,3 +187,50 @@ class MissiveApiSmokeTests(TestCase):
             self.assertEqual(row["own_persona_id"], own_face.pk)
             self.assertNotIn("undeliverable", row)
             self.assertNotIn("read_at", row)
+
+    def test_masked_writers_cost_the_same_however_many_letters_they_send(self) -> None:
+        masks = []
+        for player, mask in (("Maud", "owl mask"), ("Pell", "fox mask")):
+            character, _ = _player(player)
+            masks.append(
+                PersonaFactory(
+                    character_sheet=character.character_sheet,
+                    name=mask,
+                    persona_type=PersonaType.TEMPORARY,
+                    is_fake_name=True,
+                )
+            )
+
+        def write_one_each() -> None:
+            for mask in masks:
+                self._send(mask, self.hobb_face, "From behind a mask.", method=self.runner)
+            deliver_due_missives()  # the scheduler's sweep, so no row waits on a settle
+
+        def page_queries() -> tuple[int, list[dict]]:
+            with CaptureQueriesContext(connection) as queries:
+                rows = self._rows(self.hobb_account)
+            return len(queries), rows
+
+        write_one_each()
+        page_queries()  # warm the request's own lookups
+        two_rows, rows = page_queries()
+        self.assertEqual(len(rows), 2)
+        write_one_each()
+        write_one_each()
+        six_rows, rows = page_queries()
+        self.assertEqual(len(rows), 6)
+        self.assertLessEqual(six_rows, two_rows)
+        for row in rows:
+            self.assertNotIn("Maud", row["counterpart_name"])
+            self.assertNotIn("Pell", row["counterpart_name"])
+        self.assertEqual(
+            {row["counterpart_name"] for row in rows},
+            {"a person wearing an owl mask", "a person wearing a fox mask"},
+        )
+        # One missive by id goes through the same rule.
+        client = APIClient()
+        client.force_authenticate(user=self.hobb_account)
+        detail = client.get(f"{LIST_URL}{rows[0]['id']}/")
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.data, rows[0])
+        self.assertEqual(client.get(f"{LIST_URL}nope/").status_code, 404)

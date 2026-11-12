@@ -19,12 +19,14 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serial
 from rest_framework import mixins, serializers
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
+from rest_framework.generics import get_object_or_404
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
+from world.messengers.display import display_map_for
 from world.messengers.filters import VIEWER_SENT, MissiveFilterSet
 from world.messengers.models import Missive, MissiveAttachment
 from world.messengers.serializers import MissiveSerializer
@@ -107,7 +109,13 @@ class MissiveViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
     pagination_class = MissivePagination
 
     def get_queryset(self) -> QuerySet[Missive]:
-        sheet = _viewer_sheet(self.request)
+        # For the generic machinery (schema generation); list and retrieve resolve the
+        # viewer once and call _missives_for themselves.
+        return self._missives_for(_viewer_sheet(self.request))
+
+    @staticmethod
+    def _missives_for(sheet: CharacterSheet | None) -> QuerySet[Missive]:
+        """What ``sheet`` may see, newest first; one arrival settle per call."""
         if sheet is None:
             return Missive.objects.none().annotate(**{VIEWER_SENT: Value(False)})
         return (
@@ -118,24 +126,31 @@ class MissiveViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
             .order_by("-sent_at", "-pk")
         )
 
-    def _serialize(self, missives: Sequence[Missive], *, many: bool) -> Any:
+    def _serialize(
+        self, missives: Sequence[Missive], sheet: CharacterSheet | None, *, many: bool
+    ) -> Any:
         context = self.get_serializer_context()
-        context["viewer_sheet"] = _viewer_sheet(self.request)
+        context["viewer_sheet"] = sheet
         context["attachments_by_missive"] = _attachments_by_missive(missives)
+        context["names"] = display_map_for(sheet, missives) if sheet is not None else {}
         instance = missives if many else missives[0]
         return MissiveSerializer(instance, many=many, context=context).data
 
     def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        queryset = self.filter_queryset(self.get_queryset())
+        sheet = _viewer_sheet(request)
+        queryset = self.filter_queryset(self._missives_for(sheet))
         page = self.paginate_queryset(queryset)
         missives = list(page) if page is not None else list(queryset)
-        data = self._serialize(missives, many=True)
+        data = self._serialize(missives, sheet, many=True)
         if page is not None:
             return self.get_paginated_response(data)
         return Response(data)
 
     def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        return Response(self._serialize([self.get_object()], many=False))
+        sheet = _viewer_sheet(request)
+        missive = get_object_or_404(self._missives_for(sheet), pk=kwargs["pk"])
+        self.check_object_permissions(request, missive)
+        return Response(self._serialize([missive], sheet, many=False))
 
     @extend_schema(
         responses=inline_serializer(

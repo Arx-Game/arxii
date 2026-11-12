@@ -7,10 +7,11 @@ name it typed.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from world.messengers.services import sent_by
-from world.scenes.persona_display import resolve_display_for_viewer
+from world.scenes.persona_display import build_persona_display_map, resolve_display_for_viewer
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -18,13 +19,39 @@ if TYPE_CHECKING:
     from world.scenes.models import Persona
 
 
-def shown_name(persona: Persona, sheet: CharacterSheet) -> str:
+# persona pk -> (display_name, is_discovered, reveal_allowed), from build_persona_display_map.
+DisplayMap = dict[int, tuple[str, bool, bool]]
+
+
+def display_map_for(sheet: CharacterSheet, missives: Iterable[Missive]) -> DisplayMap:
+    """Every correspondent on these missives as this character reads them, in one batch.
+
+    The list surfaces (telnet ``missive``, the REST page) build this once per page so a
+    page of masked writers costs one discovery query, not one per row.
+    """
+    personas = [
+        persona
+        for missive in missives
+        for persona in (missive.sender_persona, missive.recipient_persona)
+    ]
+    return build_persona_display_map(personas, viewer_sheet=sheet)
+
+
+def shown_name(persona: Persona, sheet: CharacterSheet, names: DisplayMap | None = None) -> str:
     """How ``persona`` reads to this character: real for its own faces and named faces, the
-    discovered name or the composed description for a mask it has not seen through."""
+    discovered name or the composed description for a mask it has not seen through.
+
+    ``names`` is a ``display_map_for`` batch over the same viewer; the single-persona
+    resolver is the same rule for one face.
+    """
+    if names is not None and persona.pk in names:
+        return names[persona.pk][0]
     return resolve_display_for_viewer(persona, viewer_sheet=sheet)[0]
 
 
-def missive_correspondents(sheet: CharacterSheet, missive: Missive) -> tuple[str, str]:
+def missive_correspondents(
+    sheet: CharacterSheet, missive: Missive, names: DisplayMap | None = None
+) -> tuple[str, str]:
     """``(from, to)`` names of a missive as this character reads them.
 
     The sender always reads through the viewer's eyes. The recipient reads as addressed
@@ -35,5 +62,5 @@ def missive_correspondents(sheet: CharacterSheet, missive: Missive) -> tuple[str
     if sent_by(sheet, missive) and missive.in_reply_to_id is None:
         to_name = recipient.name
     else:
-        to_name = shown_name(recipient, sheet)
-    return shown_name(missive.sender_persona, sheet), to_name
+        to_name = shown_name(recipient, sheet, names)
+    return shown_name(missive.sender_persona, sheet, names), to_name

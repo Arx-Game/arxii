@@ -10,8 +10,6 @@ where the scheduler would run it.
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 from evennia_extensions.factories import ObjectDBFactory
 from integration_tests.harness import JourneyCase
 from world.currency.services import get_or_create_purse, transfer
@@ -26,6 +24,20 @@ from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
 
 MISSIVES_URL = "/api/missives/"
+ROW_FIELDS = {
+    "id",
+    "direction",
+    "counterpart_name",
+    "own_persona_id",
+    "own_persona_name",
+    "method_name",
+    "body",
+    "ic_date",
+    "sent_at",
+    "is_read",
+    "in_reply_to",
+    "attachments",
+}
 UNREAD_URL = "/api/missives/unread-count/"
 
 
@@ -166,11 +178,10 @@ class RefusingByTheWeb(MissiveJourneyCase):
         letter_id = result.detail.data["missive_id"]
         self.sweep()
 
+        # The notice reaches a sender someone is playing right now.
+        self.connect_telnet(self.ysmay)
         self.watch(self.ysmay)
-        with (
-            patch.object(self.ysmay.sessions, "count", return_value=1),
-            self.captureOnCommitCallbacks(execute=True),
-        ):
+        with self.captureOnCommitCallbacks(execute=True):
             result = self.web(self.hobb, "refuse_missive", missive_id=letter_id)
         self.assertTrue(result.detail.success, result.detail.message)
         self.assertIn("You refuse it; the messenger takes it back.", result.detail.message)
@@ -227,10 +238,26 @@ class WritingToAMask(MissiveJourneyCase):
         self.assertEqual(rows[answer.pk]["direction"], "received")
         self.assertEqual(rows[answer.pk]["counterpart_name"], "the Gray Fox")
         self.assertEqual(rows[answer.pk]["in_reply_to"], question.pk)
+        # Every field that holds an id is pinned to what it must be: the row itself, the
+        # letter it answers, and the reader's own face. With the field set exact, no other
+        # field can carry the Fox's persona, Ysmay's sheet or her character.
+        # (A raw value-intersection would be wrong: pks of different tables can coincide.)
         for row in rows.values():
+            self.assertEqual(set(row), ROW_FIELDS)
+            self.assertIn(row["id"], {question.pk, answer.pk})
+            self.assertIn(row["in_reply_to"], {None, question.pk})
+            self.assertEqual(row["attachments"], [])
             self.assertEqual(row["own_persona_id"], face_of(self.hobb).pk)
+            self.assertNotEqual(row["own_persona_id"], fox.pk)
             self.assertEqual(row["own_persona_name"], "Hobb")
             self.assertNotIn("Ysmay", str(row))
+
+        # Her own rows show her own face, the Fox, and the same closed set of fields.
+        for row in self.rows(self.ysmay):
+            self.assertEqual(set(row), ROW_FIELDS)
+            self.assertEqual(row["own_persona_id"], fox.pk)
+            self.assertEqual(row["own_persona_name"], "the Gray Fox")
+            self.assertEqual(row["counterpart_name"], "Hobb")
 
 
 class ABlockedLetter(MissiveJourneyCase):
