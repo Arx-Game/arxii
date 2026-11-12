@@ -436,6 +436,29 @@ class BlocksMutesAndControls(ChannelJourneyCase):
         self.assertTrue(rows[0]["is_hidden"])
         self.assertEqual((rows[0]["speaker"], rows[0]["body"]), ("", ""))
 
+    def test_a_block_on_one_character_hides_that_character_behind_the_divider(self) -> None:
+        # The ordinary persona-scoped block: Hobb blocks Ysmay's face, not her player.
+        create_block(
+            blocker_account=self.hobb_account,
+            blocker_persona=self.hobb.sheet_data.primary_persona,
+            blocked_persona=self.ysmay.sheet_data.primary_persona,
+            reason="Not tonight.",
+            account_level=False,
+        )
+        self.assertEqual(self.post_web(self.ysmay_account, self.public, "Hi Hobb").status_code, 201)
+
+        self.assertEqual(self.frames(self.hobb_tab), [])
+        rows = self.history(self.hobb_account, self.public)
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]["is_hidden"])
+        self.assertEqual((rows[0]["speaker"], rows[0]["body"]), ("", ""))
+        listed = self.api(self.hobb_account).get(SUBSCRIPTIONS).json()
+        self.assertEqual(listed[0]["unread_count"], 0)
+        # Mutual: Ysmay does not hear Hobb either.
+        ysmay_tab = self.connect_session(self.ysmay_account, "websocket")
+        self.assertEqual(self.post_web(self.hobb_account, self.public, "Evening.").status_code, 201)
+        self.assertEqual(self.frames(ysmay_tab), [])
+
     def test_an_account_muted_author_is_dropped(self) -> None:
         set_mute(
             owner=self.hobb_account.player_data,

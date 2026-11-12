@@ -7,7 +7,8 @@ tenure's ``speaker_name``; the identity picker lists the requester's own tenures
 Serializer context (set by the views, ADR-0260: request data travels as an explicit
 argument): ``subscriptions`` (channel pk -> the requester's subscription),
 ``unread_counts`` (subscription pk -> count), ``hidden_player_ids`` (authors whose rows
-this reader sees hidden).
+this reader sees hidden) and ``hidden_sheet_ids`` (characters whose rows this reader sees
+hidden by a block on their primary persona).
 """
 
 from __future__ import annotations
@@ -190,9 +191,15 @@ class ChannelMessageSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_is_hidden(self, obj: ChannelMessage) -> bool:
-        """Whether this reader and the author block each other."""
+        """Whether a block sits between this reader and the author: account-wide, or on
+        the author's character's primary persona."""
         hidden = self.context.get("hidden_player_ids") or set()
-        return obj.author_tenure.player_data_id in hidden
+        hidden_sheets = self.context.get("hidden_sheet_ids") or set()
+        tenure = obj.author_tenure
+        return (
+            tenure.player_data_id in hidden
+            or tenure.roster_entry.character_sheet_id in hidden_sheets
+        )
 
     def get_speaker(self, obj: ChannelMessage) -> str:
         """The author's speaker name ("Ariel" or "2nd player of Ariel"); empty if hidden."""

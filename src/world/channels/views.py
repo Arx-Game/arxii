@@ -48,6 +48,7 @@ from world.channels.services import (
     accessible_channels_for,
     eligible_tenures,
     hidden_author_player_ids,
+    hidden_author_sheet_ids,
     mark_read,
     subscriptions_by_channel,
     unread_counts,
@@ -182,6 +183,7 @@ class ChannelMessageViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         context = super().get_serializer_context()
         if self.request is not None and self.request.user.is_authenticated:
             context["hidden_player_ids"] = hidden_author_player_ids(self.request.user)
+            context["hidden_sheet_ids"] = hidden_author_sheet_ids(self.request.user)
         return context
 
     @extend_schema(

@@ -37,9 +37,14 @@ from world.channels.models import Channel, ChannelBan, ChannelMessage, ChannelSu
 from world.channels.types import ChannelError
 from world.covenants.models import Covenant
 from world.roster.models import RosterTenure
-from world.scenes.block_services import blocked_player_ids_for
+from world.scenes.block_services import (
+    account_ids_hiding_persona,
+    blocked_player_ids_for,
+    hidden_persona_ids_for_viewer,
+)
 from world.scenes.constants import PersonaType
 from world.scenes.interaction_services import WEB_PROTOCOL_KEYS
+from world.scenes.models import Persona
 from world.scenes.mute_services import account_muter_player_ids, muted_player_ids_for
 from world.societies.houses.models import FealtyEdge
 from world.societies.houses.services import vassals_of
@@ -87,6 +92,21 @@ def hidden_author_player_ids(account: AccountDB) -> set[int]:
     """Players whose channel rows this account sees hidden: account blocks, either way."""
     player = _player_data(account)
     return blocked_player_ids_for(player) if player is not None else set()
+
+
+def hidden_author_sheet_ids(account: AccountDB) -> set[int]:
+    """Characters whose channel rows this account sees hidden by a block on their PRIMARY
+    persona (a persona-scoped block included). Only primary faces count: hiding a
+    character because one of its established faces is blocked would tell the reader the
+    face and the character are one person."""
+    persona_ids = hidden_persona_ids_for_viewer(viewer_account=account)
+    if not persona_ids:
+        return set()
+    return set(
+        Persona.objects.filter(pk__in=persona_ids, persona_type=PersonaType.PRIMARY).values_list(
+            "character_sheet_id", flat=True
+        )
+    )
 
 
 def _muted_author_player_ids(account: AccountDB) -> set[int]:
@@ -443,6 +463,12 @@ def deliver_channel_message(message: ChannelMessage) -> None:
     reader_ids = [s.account_id for s in subscriptions if s.account_id != author_player.pk]
     allowed = _account_ids_with_access(channel, reader_ids)
     blocked = blocked_player_ids_for(author_player)
+    author_primary = Persona.objects.filter(
+        character_sheet_id=message.author_tenure.roster_entry.character_sheet_id,
+        persona_type=PersonaType.PRIMARY,
+    ).first()
+    if author_primary is not None:
+        blocked |= account_ids_hiding_persona(author_primary)
     muting = account_muter_player_ids(target_player=author_player)
     for subscription in subscriptions:
         is_own = subscription.account_id == author_player.pk
@@ -464,7 +490,8 @@ def deliver_channel_message(message: ChannelMessage) -> None:
 
 def history_for(account: AccountDB, channel: Channel) -> QuerySet[ChannelMessage]:
     """The channel's messages for this reader, OOC-muted authors dropped. Blocked authors
-    stay in (the serializer hides them via ``hidden_author_player_ids``)."""
+    stay in (the serializer hides them via ``hidden_author_player_ids`` and
+    ``hidden_author_sheet_ids``)."""
     return (
         channel.messages.exclude(
             author_tenure__player_data_id__in=_muted_author_player_ids(account)
@@ -488,6 +515,7 @@ def unread_counts(account: AccountDB, subscriptions: list[ChannelSubscription]) 
     if not live:
         return counts
     excluded = {account.pk} | _muted_author_player_ids(account) | hidden_author_player_ids(account)
+    hidden_sheets = hidden_author_sheet_ids(account)
     unread = Q()
     for subscription in live:
         since = Q(channel_id=subscription.channel_id)
@@ -497,6 +525,7 @@ def unread_counts(account: AccountDB, subscriptions: list[ChannelSubscription]) 
     rows = (
         ChannelMessage.objects.filter(unread)
         .exclude(author_tenure__player_data_id__in=excluded)
+        .exclude(author_tenure__roster_entry__character_sheet_id__in=hidden_sheets)
         .order_by()
         .values("channel_id")
         .annotate(total=Count("pk"))
