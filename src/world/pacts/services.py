@@ -811,21 +811,71 @@ def _eased_line(
     return line
 
 
-def _grade_commitment_period(details: PactPeriodDetails) -> PeriodGrade:
+def _short_period(
+    details: PactPeriodDetails,
+    instance: ConditionInstance,
+    stages: list[ConditionStage],
+    shortfall: tuple[int, int],
+) -> tuple[int, CheckResult | None, list[str]]:
+    """A short period's rise: (severity added, the resist roll if one was rolled, lines).
+
+    ``shortfall`` is (earned, required). The rise rolls the next worse stage's resist only
+    when it would reach that stage; a worse stage with no resist check authored takes the
+    full rise unrolled.
+    """
     from world.conditions.services import advance_condition_severity  # noqa: PLC0415
 
     pact = details.pact
     offer = pact.offer
-    being = offer.being
-    sheet = pact.character_sheet
+    earned, required = shortfall
+    stage_before = instance.current_stage
+    lines: list[str] = []
+    resist: CheckResult | None = None
+    rise = math.ceil(offer.severity_per_miss * (required - earned) / required)
+    worse = _next_worse_stage(stages, instance.current_stage)
+    reaches = worse is not None and instance.severity + rise >= worse.severity_threshold
+    if reaches and worse.resist_check_type_id is not None:
+        rise, resist, resist_lines = _resist_rise(
+            pact.character_sheet, offer.being, instance, worse, rise
+        )
+        lines += resist_lines
+    if rise > 0:
+        advance_condition_severity(instance, rise)
+    if instance.current_stage != stage_before and instance.current_stage is not None:
+        now_applies = f"{instance.current_stage.name} now applies."
+        if stages and instance.current_stage_id != stages[-1].pk:
+            now_applies += f" Earn {required} next period to ease it by {offer.severity_per_miss}."
+        lines.append(now_applies)
+    elif not reaches:
+        lines.append(f"Severity rises by {rise} (to {instance.severity}). No stage change.")
+    return rise, resist, lines
+
+
+def _reached_last_stage(
+    instance: ConditionInstance | None,
+    stages: list[ConditionStage],
+    stage_before: ConditionStage | None,
+) -> bool:
+    """Whether this period moved the condition into its last stage: the breach."""
+    last = stages[-1] if stages else None
+    return (
+        instance is not None
+        and last is not None
+        and instance.current_stage_id == last.pk
+        and stage_before != last
+    )
+
+
+def _grade_commitment_period(details: PactPeriodDetails) -> PeriodGrade:
+    pact = details.pact
+    being = pact.offer.being
     project = details.project
     earned = project.current_progress
     required = project.threshold_target or 0
     instance = pact.condition_instance
-    stages = _staged_stages(offer.condition)
+    stages = _staged_stages(pact.offer.condition)
     stage_before = instance.current_stage if instance is not None else None
     resist: CheckResult | None = None
-    lines: list[str]
     change = 0
     if earned >= required:
         lines = [f"Your pact with {being.name}: {earned} of {required} favor this period."]
@@ -833,39 +883,18 @@ def _grade_commitment_period(details: PactPeriodDetails) -> PeriodGrade:
             change = -_ease_met(details, instance, stages, earned, required)
             lines.append(_eased_line(instance, -change, stage_before))
     else:
-        short = required - earned
         lines = [
-            f"Your pact with {being.name}: {earned} of {required} favor this period, {short} short."
+            f"Your pact with {being.name}: {earned} of {required} favor this period, "
+            f"{required - earned} short."
         ]
         if instance is not None:
-            rise = math.ceil(offer.severity_per_miss * short / required)
-            worse = _next_worse_stage(stages, instance.current_stage)
-            reaches = worse is not None and instance.severity + rise >= worse.severity_threshold
-            if reaches and worse.resist_check_type_id is not None:
-                rise, resist, resist_lines = _resist_rise(sheet, being, instance, worse, rise)
-                lines += resist_lines
-            # A worse stage with no resist check authored takes the full rise unrolled.
-            if rise > 0:
-                advance_condition_severity(instance, rise)
-            change = rise
-            if instance.current_stage != stage_before and instance.current_stage is not None:
-                now_applies = f"{instance.current_stage.name} now applies."
-                if stages and instance.current_stage_id != stages[-1].pk:
-                    now_applies += (
-                        f" Earn {required} next period to ease it by {offer.severity_per_miss}."
-                    )
-                lines.append(now_applies)
-            elif not reaches:
-                lines.append(f"Severity rises by {rise} (to {instance.severity}). No stage change.")
+            change, resist, short_lines = _short_period(
+                details, instance, stages, (earned, required)
+            )
+            lines += short_lines
     _record(details, instance, change=change, resist=resist.outcome if resist else None)
-    last = stages[-1] if stages else None
-    breached = (
-        instance is not None
-        and last is not None
-        and instance.current_stage_id == last.pk
-        and stage_before != last
-    )
-    _tell(sheet, lines)
+    breached = _reached_last_stage(instance, stages, stage_before)
+    _tell(pact.character_sheet, lines)
     if breached:
         _breach(pact, details, resist)
     else:

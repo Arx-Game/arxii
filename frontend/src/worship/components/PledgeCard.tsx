@@ -269,9 +269,9 @@ function PactOffer({ offer }: { offer: PactOfferSummary }) {
               <th className="py-1 pr-2 font-semibold">Being</th>
               <td className="py-1">{being}</td>
             </tr>
-            {favor.map((row, index) => (
+            {favor.map((row) => (
               <tr
-                key={`favor-${index}`}
+                key={`favor-${row.kind}-${row.amount}-${row.notes}`}
                 className="border-t border-dotted align-top"
                 data-testid="pact-commitment"
               >
@@ -283,9 +283,9 @@ function PactOffer({ offer }: { offer: PactOfferSummary }) {
                 </td>
               </tr>
             ))}
-            {offer.promises.map((promise, index) => (
+            {offer.promises.map((promise) => (
               <tr
-                key={`promise-${index}`}
+                key={`promise-${promise}`}
                 className="border-t border-dotted align-top"
                 data-testid="pact-promise"
               >
@@ -323,8 +323,8 @@ function PactOffer({ offer }: { offer: PactOfferSummary }) {
             <b>
               {index + 1}. {stage.name}
             </b>
-            {[...offer.condition_effects, ...stage.effects].map((line, lineIndex) => (
-              <span key={lineIndex} className="block">
+            {[...offer.condition_effects, ...stage.effects].map((line) => (
+              <span key={line} className="block">
                 {line}
               </span>
             ))}

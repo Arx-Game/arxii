@@ -101,8 +101,8 @@ export function PactCard({ card, characterId }: PactCardProps) {
                 `; stage ${nextStageNumber} begins at ${card.next_stage_threshold}`}
               .
             </p>
-            {card.promises.map((promise, index) => (
-              <p key={index} className="italic" data-testid="pact-card-promise">
+            {card.promises.map((promise) => (
+              <p key={promise} className="italic" data-testid="pact-card-promise">
                 {promise}
               </p>
             ))}

@@ -84,9 +84,11 @@ class _ServiceForms:
         return media
 
     def is_valid(self) -> bool:
-        # Every formset validates (a list, not a generator) so each shows its own errors.
-        results = [formset.is_valid() for formset in self.all]
-        return all(results)
+        # Every formset validates (no short-circuit) so each shows its own errors.
+        valid = True
+        for formset in self.all:
+            valid = formset.is_valid() and valid
+        return valid
 
 
 def _build_forms(request: HttpRequest, being: WorshippedBeing) -> _ServiceForms:

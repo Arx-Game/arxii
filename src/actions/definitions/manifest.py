@@ -20,6 +20,10 @@ from actions.types import ActionContext, ActionResult, TargetType
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
+    from world.companions.models import Companion
+    from world.magic.models import Technique, TechniqueManifestOption
+
 MSG_NO_SHEET = "You have no character sheet."
 MSG_WHICH = "Choose what which technique brings? Usage: manifest <technique>=<option>"
 MSG_NO_OPTION = "That technique cannot bring that."
@@ -54,9 +58,6 @@ class ManifestSetAction(Action):
         from world.magic.exceptions import ManifestChoiceError  # noqa: PLC0415
         from world.magic.services.manifestation import (  # noqa: PLC0415
             MSG_UNKNOWN_TECHNIQUE,
-            manifest_option_named,
-            manifesting_technique_by_id,
-            manifesting_technique_named,
             set_character_manifestation,
         )
 
@@ -74,23 +75,10 @@ class ManifestSetAction(Action):
         if (technique_id is None and not technique_name) or (option_id is None and not option_name):
             return ActionResult(success=False, message=MSG_WHICH)
 
-        if technique_id is not None:
-            technique = manifesting_technique_by_id(sheet, technique_id)
-        else:
-            technique = manifesting_technique_named(sheet, technique_name)
+        technique = _technique(sheet, technique_id, technique_name)
         if technique is None:
             return ActionResult(success=False, message=MSG_UNKNOWN_TECHNIQUE)
-
-        companion = None
-        if option_id is not None:
-            option = (
-                technique.manifest_options.select_related("being", "archetype")
-                .filter(pk=option_id)
-                .first()
-            )
-        else:
-            found = manifest_option_named(sheet, technique, option_name)
-            option, companion = found if found is not None else (None, None)
+        option, companion = _option(sheet, technique, option_id, option_name)
         if option is None:
             return ActionResult(success=False, message=MSG_NO_OPTION)
 
@@ -112,3 +100,34 @@ class ManifestSetAction(Action):
                 "companion_id": row.companion_id,
             },
         )
+
+
+def _technique(
+    sheet: CharacterSheet, technique_id: int | None, technique_name: str
+) -> Technique | None:
+    """The manifesting technique she named: by id (web) or by name (telnet)."""
+    from world.magic.services.manifestation import (  # noqa: PLC0415
+        manifesting_technique_by_id,
+        manifesting_technique_named,
+    )
+
+    if technique_id is not None:
+        return manifesting_technique_by_id(sheet, technique_id)
+    return manifesting_technique_named(sheet, technique_name)
+
+
+def _option(
+    sheet: CharacterSheet, technique: Technique, option_id: int | None, option_name: str
+) -> tuple[TechniqueManifestOption | None, Companion | None]:
+    """The technique's option she chose, and the companion a name picked (or None)."""
+    from world.magic.services.manifestation import manifest_option_named  # noqa: PLC0415
+
+    if option_id is not None:
+        option = (
+            technique.manifest_options.select_related("being", "archetype")
+            .filter(pk=option_id)
+            .first()
+        )
+        return option, None
+    found = manifest_option_named(sheet, technique, option_name)
+    return found if found is not None else (None, None)
