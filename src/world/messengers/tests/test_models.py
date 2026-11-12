@@ -5,9 +5,14 @@ from __future__ import annotations
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
+from world.conditions.factories import CapabilityTypeFactory
 from world.items.factories import ItemInstanceFactory
 from world.messengers.constants import AttachmentResolution
-from world.messengers.factories import MissiveAttachmentFactory, MissiveFactory
+from world.messengers.factories import (
+    MissiveAttachmentFactory,
+    MissiveFactory,
+    TransmissionMethodFactory,
+)
 
 
 class MissiveAttachmentConstraintTests(TestCase):
@@ -20,6 +25,10 @@ class MissiveAttachmentConstraintTests(TestCase):
     def test_attachment_cannot_carry_both_item_and_coin(self) -> None:
         with self.assertRaises(IntegrityError), transaction.atomic():
             MissiveAttachmentFactory(missive=self.missive, item=self.item, coin_amount=5)
+
+    def test_coin_attachment_needs_a_positive_amount(self) -> None:
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            MissiveAttachmentFactory(missive=self.missive, item=None, coin_amount=0)
 
     def test_item_cannot_ride_two_missives_at_once(self) -> None:
         MissiveAttachmentFactory(missive=self.missive, item=self.item, coin_amount=None)
@@ -37,3 +46,10 @@ class MissiveAttachmentConstraintTests(TestCase):
             missive=self.other_missive, item=self.item, coin_amount=None
         )
         self.assertEqual(attachment.resolution, AttachmentResolution.PENDING)
+
+
+class TransmissionMethodConstraintTests(TestCase):
+    def test_universal_method_cannot_require_a_capability(self) -> None:
+        capability = CapabilityTypeFactory()
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            TransmissionMethodFactory(is_universal=True, required_capability=capability)

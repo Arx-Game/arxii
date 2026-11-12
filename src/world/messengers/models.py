@@ -50,6 +50,12 @@ class TransmissionMethod(NaturalKeyMixin, SharedMemoryModel):
 
     class Meta:
         ordering = ["name"]
+        constraints = [
+            models.CheckConstraint(
+                condition=~Q(is_universal=True, required_capability__isnull=False),
+                name="messenger_universal_method_has_no_capability",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name
@@ -58,15 +64,20 @@ class TransmissionMethod(NaturalKeyMixin, SharedMemoryModel):
 class Missive(SharedMemoryModel):
     """One letter from one persona to another."""
 
+    # PROTECT: a persona with correspondence is history; remove_persona
+    # (character_sheets/group_writer.py) relies on ProtectedError to refuse it.
+    # db_index=False: the composite indexes in Meta lead with each persona.
     sender_persona = models.ForeignKey(
         PERSONA_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="missives_sent",
+        db_index=False,
     )
     recipient_persona = models.ForeignKey(
         PERSONA_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="missives_received",
+        db_index=False,
     )
     method = models.ForeignKey(
         TransmissionMethod,
@@ -81,7 +92,6 @@ class Missive(SharedMemoryModel):
     )
     sent_at = models.DateTimeField(auto_now_add=True)
     available_at = models.DateTimeField(
-        db_index=True,
         help_text="Real time the letter arrives and the recipient can read it.",
     )
     arrival_notified_at = models.DateTimeField(null=True, blank=True)
@@ -112,6 +122,12 @@ class Missive(SharedMemoryModel):
                 fields=["sender_persona", "sent_at"],
                 name="missive_sender_sent_idx",
             ),
+            # The delivery sweep: letters due that have not yet been announced.
+            models.Index(
+                fields=["available_at"],
+                condition=Q(arrival_notified_at__isnull=True),
+                name="messenger_missive_due_idx",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -126,11 +142,13 @@ class MissiveAttachment(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="attachments",
     )
-    # PROTECT, not SET_NULL: the XOR constraint below needs item set on an item
-    # attachment, and an item in transit cannot be destroyed.
+    # CASCADE, not SET_NULL (the XOR constraint below needs item set on an item
+    # attachment) and not PROTECT (that would block hard-deleting any item ever
+    # sent, e.g. items.services.usage.hard_delete_item_instance). Matches
+    # VaultHolding.
     item = models.ForeignKey(
         "arxii.ItemInstance",
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="+",
@@ -148,7 +166,7 @@ class MissiveAttachment(SharedMemoryModel):
             models.CheckConstraint(
                 condition=(
                     Q(item__isnull=False, coin_amount__isnull=True)
-                    | Q(item__isnull=True, coin_amount__isnull=False)
+                    | Q(item__isnull=True, coin_amount__isnull=False, coin_amount__gt=0)
                 ),
                 name="messenger_attachment_item_xor_coin",
             ),
