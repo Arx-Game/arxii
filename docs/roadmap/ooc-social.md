@@ -256,7 +256,7 @@ channel, and the #1884 `house_<pk>` channels):
   opt-in "Channels in sidebar" display setting for the old side lane (owner
   ruling 2026-11-12, PR #5095). History keeps the newest 500
   messages per channel (placeholder cap, pruned hourly).
-- **Old Evennia data discarded:** migration 0393 deleted the Evennia Public
+- **Old Evennia data discarded:** migration 0394 deleted the Evennia Public
   and house channels and their nicks; players join again.
 
 Deferred: covert-org channels, covenant channels, player-made channels,

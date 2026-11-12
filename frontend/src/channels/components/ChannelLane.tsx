@@ -194,7 +194,7 @@ export function ChannelLane({
                 </li>
               ) : (
                 <li key={row.message.id} className="group [overflow-wrap:anywhere]">
-                  <span className="font-medium">{row.message.speaker}</span>{' '}
+                  <span className="font-medium">{row.message.speaker}:</span>{' '}
                   <span>{row.message.body}</span>
                   {isStaff ? (
                     <MessageModeration channelId={channel.id} messageId={row.message.id} />

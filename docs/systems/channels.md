@@ -118,7 +118,7 @@ Almanach founding), claim materialization and `publish_house`, gang creation
 (`turf_services`), the placeholder treasury org (`buildings.services`), and
 `OrganizationAdmin.save_model` (every save, so an org staff un-cover gets its
 channel). `ensure_public_channel()` makes the PUBLIC row; the `channels` seed
-cluster calls it and backfills seeded orgs. Migration 0393 created the Public
+cluster calls it and backfills seeded orgs. Migration 0394 created the Public
 channel and one ORG channel per existing non-covert, non-covenant org.
 
 ## Reading and delivery

@@ -6851,7 +6851,7 @@ table-scoped) - see `docs/adr/0228-board-posts-are-authored-by-persona.md`.
 Persistent named out-of-character chat: one PUBLIC channel, one ORG channel per
 non-covert, non-covenant organization, optional STAFF channels. Our own models;
 Evennia's `@channel`, bridge commands, `DEFAULT_CHANNELS` and `house_<pk>`
-channels are retired (migration 0393 deleted the old rows, history discarded).
+channels are retired (migration 0394 deleted the old rows, history discarded).
 A speaker is a `RosterTenure` chosen per channel, never an account name
 (ADR-3299).
 
