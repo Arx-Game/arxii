@@ -1003,7 +1003,7 @@ class GiftAdminForm(forms.ModelForm):
 
 
 class GiftSubstanceInline(admin.StackedInline):
-    """What the gift is made of (#5018): the room reading every cast of it reads."""
+    """What the gift is made of (#5018): the room condition every cast of it draws on."""
 
     model = GiftSubstance
     extra = 0

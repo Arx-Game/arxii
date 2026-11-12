@@ -513,7 +513,7 @@ class AuthoringShapes(JourneyCase):
         )
         with self.assertRaises(ValidationError) as raised:
             falling_wet.full_clean()
-        self.assertIn("cannot go below ordinary", raised.exception.message_dict["direction"][0])
+        self.assertIn("below an ordinary room", raised.exception.message_dict["direction"][0])
 
         too_far = GiftSubstance(
             gift=GiftFactory(),
@@ -525,7 +525,7 @@ class AuthoringShapes(JourneyCase):
         )
         with self.assertRaises(ValidationError) as raised:
             too_far.full_clean()
-        self.assertIn("only goes 2 steps", raised.exception.message_dict["full_at"][0])
+        self.assertIn("only goes 2 from an", raised.exception.message_dict["full_at"][0])
 
     def test_a_surroundings_restriction_needs_sane_bounds(self) -> None:
         restriction = RestrictionFactory(name="Needs dark", kind=RestrictionKind.DESIGN)
