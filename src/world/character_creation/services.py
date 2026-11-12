@@ -31,26 +31,20 @@ from world.character_creation.constants import (
     FALLBACK_STARTING_ROOM_KEY,
     FALLBACK_STARTING_ROOM_TYPECLASS,
     GIFT_FACETS_KEY,
-    KIN_ROWS_KEY,
     LINE_PARENT_FATE_KEY,
     OTHER_PARENT_FATE_KEY,
     STAT_DISPLAY_DIVISOR,
     TECHNIQUE_PERSONALIZATIONS_KEY,
     ApplicationStatus,
-    BetrothedFate,
-    ChildFate,
     CommentType,
     FamilyPath,
     FinalTouchesPrompt,
-    KinRowKind,
     LifeStage,
     OriginStoryState,
     Parentage,
     ParentFate,
     QuestionKind,
-    SpouseFate,
     StartingAreaAccessLevel,
-    TwinFate,
 )
 from world.character_creation.models import (
     CharacterDraft,
@@ -351,8 +345,6 @@ def finalize_character(
     # chosen pool, or self-serve a node for the new PC. Runs before draft
     # deletion (the claim FKs live on the draft).
     _bind_kinship_node(draft, sheet)
-    # The people seated beside the parents (#4395): a twin, a spouse, children.
-    _bind_kin_rows(draft, sheet)
 
     # Derived-name aliases (#3261): the bind above may attach a node whose
     # membership predates the sheet, so the add_membership choke point never
@@ -1097,124 +1089,6 @@ def _bind_kinship_node(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     _bind_invented_parents(draft, node)
     _mark_adoption(draft, node)
     _pin_heredity_back_inference(draft, node)
-
-
-def _bind_kin_rows(draft: CharacterDraft, sheet: CharacterSheet) -> None:
-    """Seat the draft's kin rows in the kinship graph (#4395).
-
-    A twin is a node sharing every parent edge the new PC has (and its family), dead
-    when its fate says so (#4870); a spouse is a wedlock union, ended by death or
-    divorce, separated with the union standing, the spouse marked missing when fled; a
-    betrothed is a union of the betrothal kind (#4870), ended when broken off; a child
-    is a parentage edge from the PC, raised in the PC's family, fostered away into none,
-    lost when dead. Called after ``_bind_kinship_node`` so
-    the PC's node and parents exist. Best-effort like the bind: a kinship refusal
-    (no law of marriage seeded) logs and skips that row.
-    """
-    from world.roster.models import Kinsperson  # noqa: PLC0415
-    from world.roster.services.kinship import KinshipServiceError  # noqa: PLC0415
-
-    rows = draft.draft_data.get(KIN_ROWS_KEY) or []
-    if not rows:
-        return
-    node = Kinsperson.objects.filter(sheet=sheet).first()
-    if node is None:
-        return
-    seat = {
-        KinRowKind.TWIN: _seat_twin,
-        KinRowKind.SPOUSE: _seat_spouse,
-        KinRowKind.CHILD: _seat_child,
-        KinRowKind.BETROTHED: _seat_betrothed,
-    }
-    for row in rows:
-        seat_row = seat.get(row.get("kind"))
-        if seat_row is None:
-            continue
-        try:
-            seat_row(draft, node, row)
-        except KinshipServiceError:
-            logger.exception("Kin row %r on draft %s could not be seated; skipped.", row, draft.pk)
-
-
-def _seat_twin(draft: CharacterDraft, node: Kinsperson, row: dict) -> None:
-    """A twin shares the PC's family and every parent edge the PC has (#4395)."""
-    from world.roster.services.kinship import create_person, record_parentage  # noqa: PLC0415
-
-    twin = create_person(
-        name=str(row.get("name", "")).strip(),
-        family=node.family,
-        gender=_resolve_draft_gender(row.get("gender_id")),
-        age=draft.age,
-        is_deceased=row.get("fate") == TwinFate.DEAD,
-        created_by=draft.account,
-    )
-    for edge in ParentageEdge.objects.filter(child=node):
-        record_parentage(child=twin, parent=edge.parent, kind=edge.kind)
-
-
-def _seat_spouse(draft: CharacterDraft, node: Kinsperson, row: dict) -> None:
-    """A spouse is a wedlock union; death and divorce end it, fled marks them missing."""
-    from world.roster.services.kinship import (  # noqa: PLC0415
-        create_person,
-        end_union,
-        record_union,
-        separate_union,
-        wedlock_union_kind,
-    )
-
-    fate = row.get("fate", "")
-    spouse = create_person(
-        name=str(row.get("name", "")).strip(),
-        gender=_resolve_draft_gender(row.get("gender_id")),
-        is_deceased=fate == SpouseFate.DEAD,
-        created_by=draft.account,
-    )
-    union = record_union(kind=wedlock_union_kind(), members=[node, spouse])
-    if fate in (SpouseFate.DEAD, SpouseFate.DIVORCED):
-        end_union(union)
-    elif fate == SpouseFate.SEPARATED:
-        separate_union(union)
-    _mark_missing(spouse, fate == SpouseFate.FLED)
-
-
-def _seat_betrothed(draft: CharacterDraft, node: Kinsperson, row: dict) -> None:
-    """A betrothed is a union of the betrothal kind (#4870): the promise stands, the person
-    is dead or missing, or the match was broken off (the union ended). Without a betrothal
-    kind authored, ``betrothal_union_kind`` refuses and the caller logs and skips."""
-    from world.roster.services.kinship import (  # noqa: PLC0415
-        betrothal_union_kind,
-        create_person,
-        end_union,
-        record_union,
-    )
-
-    fate = row.get("fate", "")
-    kind = betrothal_union_kind()
-    betrothed = create_person(
-        name=str(row.get("name", "")).strip(),
-        gender=_resolve_draft_gender(row.get("gender_id")),
-        is_deceased=fate == BetrothedFate.DEAD,
-        created_by=draft.account,
-    )
-    union = record_union(kind=kind, members=[node, betrothed])
-    if fate in (BetrothedFate.BROKEN, BetrothedFate.DEAD):
-        end_union(union)
-    _mark_missing(betrothed, fate == BetrothedFate.MISSING)
-
-
-def _seat_child(draft: CharacterDraft, node: Kinsperson, row: dict) -> None:
-    """A child is the PC's: raised in the family, fostered away into none, lost when dead."""
-    from world.roster.services.kinship import create_person, record_parentage  # noqa: PLC0415
-
-    fate = row.get("fate", "")
-    child = create_person(
-        name=str(row.get("name", "")).strip(),
-        family=node.family if fate == ChildFate.RAISED else None,
-        gender=_resolve_draft_gender(row.get("gender_id")),
-        is_deceased=fate == ChildFate.LOST,
-        created_by=draft.account,
-    )
-    record_parentage(child=child, parent=node, kind=ParentageKind.BIOLOGICAL)
 
 
 def _draft_parentage(draft: CharacterDraft) -> str:

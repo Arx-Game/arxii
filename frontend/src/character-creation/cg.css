@@ -1712,56 +1712,6 @@
   font-style: italic;
   color: var(--cg-text-soft);
 }
-/* The people seated beside the parents (#4395). */
-.interview .kin-rows {
-  list-style: none;
-  margin: 0.6rem 0 0;
-  padding: 0;
-}
-.interview .kin-row {
-  display: grid;
-  grid-template-columns: 7rem minmax(0, 1fr) auto;
-  gap: 0.6rem 1rem;
-  align-items: start;
-  padding: 0.7rem 0;
-  border-top: 1px solid var(--cg-hairline);
-}
-.interview .kin-row .kin-kind {
-  font-family: 'Cinzel', serif;
-  font-weight: 600;
-  font-size: 0.75rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--cg-accent);
-  padding-top: 0.5rem;
-}
-.interview .kin-row .kin-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-.interview .kin-add {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.6rem;
-}
-.interview .kin-add button {
-  font-family: 'Cinzel', serif;
-  font-weight: 600;
-  font-size: 0.75rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  background: transparent;
-  color: var(--cg-accent);
-  border: 1px solid var(--cg-hairline-strong);
-  padding: 0.45rem 0.9rem;
-  cursor: pointer;
-}
-.interview .kin-add button:hover,
-.interview .kin-add button:focus-visible {
-  border-color: var(--cg-accent);
-}
 .interview .stance b {
   display: block;
   font-family: 'Cinzel', serif;

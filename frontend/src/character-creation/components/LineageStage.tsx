@@ -3,9 +3,9 @@
  *
  * The beginning carries its family route (`OriginTemplate`, assigned with the
  * beginning; the Upbringing pick retired in #4395): the family block (claim a
- * staff-authored family, name a new one, or none), its path-scoped prompts, the
- * people seated beside the parents (a twin, a spouse, children: `KinRows`), then the
- * life as grids by stage (`LifeGrids`). See docs/systems/character_creation.md's
+ * staff-authored family, name a new one, or none), its path-scoped prompts, then the
+ * life as grids by stage (`LifeGrids`). A spouse, children or a twin are not built
+ * here: family of the character's own is made after creation (ADR-5102-A). See docs/systems/character_creation.md's
  * Lineage step section.
  */
 
@@ -41,7 +41,6 @@ import { ChapterLeaf, Paragraphs } from '../folio';
 import { PARENT_FATES, resolveFamilyPath, Stage, STAGE_LABELS } from '../types';
 import type { CharacterDraft, Family, KinSlot, KinSlotPool, ParentFate, TarotCard } from '../types';
 import { UpbringingPrompts } from './lineage/UpbringingPrompts';
-import { KinRows } from './lineage/KinRows';
 import { LifeGrids } from './lineage/LifeGrids';
 import { FamilyPathSection } from './lineage/FamilyPathSection';
 import { LineageRecord } from './lineage/LineageRecord';
@@ -131,8 +130,8 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
                 <Paragraphs text={template.parentage_note} />
               </div>
             )}
-            {/* The house and the parents come first (#4124); the people beside them
-                follow (#4395); a general write-in never renders. */}
+            {/* The house and the parents come first (#4124); a general write-in never
+                renders. */}
             <FamilyPathSection
               draft={draft}
               template={template}
@@ -157,7 +156,6 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
               copy={copy}
               scope="path"
             />
-            <KinRows draft={draft} copy={copy} />
           </>
         )}
         <LifeGrids draft={draft} copy={copy} />

@@ -48,7 +48,8 @@ character-creation/
     │                        #   codex line), species, gender
     ├── LineageStage.tsx     # Stage 3: the beginning's route (#3617; the Upbringing pick
     │                        #   retired in #4395, the route comes with the beginning),
-    │                        #   family selection, kin rows, the life grids; keeps
+    │                        #   family selection, the life grids (no spouse, child or
+    │                        #   twin: those come after creation, ADR-5102-A); keeps
     │                        #   InventedParentsCard, FamilyNamePreview, KinSlotPicker,
     │                        #   TarotNamingRitual, TarotCardItem, FamilyCard (exported
     │                        #   for lineage/). HouseFoundingPanel retired (#3983 Plan B
@@ -150,14 +151,8 @@ character-creation/
     │                            #   headingTag ("optional"); a route-closed distinction is
     │                            #   absent and named nowhere (#4979).
     └── lineage/             # LineageStage subsections (#3617, #3648, #4395)
-        ├── KinRows.tsx           # The people seated beside the parents (#4395, #4870): a
-        │                         #   twin (alive, dead), a spouse (alive, dead, divorced,
-        │                         #   separated, missing), a betrothed (promised, dead,
-        │                         #   missing, broken off), children (raised, fostered away,
-        │                         #   lost), each with a fate ChoiceRow, the whole list at
-        │                         #   draft_data.kin_rows; finalize seats them in the
-        │                         #   kinship graph. The named parents' fates (#4870) are a
-        │                         #   select under each parent's gender in LineageStage
+        ├── (KinRows.tsx retired, #5102) The named parents' fates (#4870) are a select
+        │                         #   under each parent's gender in LineageStage
         │                         #   (ParentFateRow; draft_data.line_parent_fate /
         │                         #   other_parent_fate)
         ├── LifeGrids.tsx         # The life as an accordion (#4874, slice 9 of #4813, built

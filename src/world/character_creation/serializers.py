@@ -22,9 +22,6 @@ from world.character_creation.constants import (
     CRIME_LINE_MAX_LENGTH,
     FIGURE_NAME_MAX_LENGTH,
     GIFT_FACETS_KEY,
-    KIN_ROW_NAME_MAX_LENGTH,
-    KIN_ROWS_KEY,
-    KIN_ROWS_MAX,
     OFFICIALLY_DEAD_KEY,
     ORGANIZATIONS_KEY,
     PERSONALIZATION_COPY_KEYS,
@@ -2111,7 +2108,6 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         self._validate_beats(value)
         self._validate_stage_descriptions(value)
         self._validate_recent_history(value)
-        self._validate_kin_rows(value)
         self._validate_parent_fates(value)
         self._validate_origin_anchors(value)
         self._validate_origin_figures(value)
@@ -2511,42 +2507,6 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             msg = f"recent_history is text of at most {RECENT_HISTORY_MAX_LENGTH} characters"
             raise serializers.ValidationError({"recent_history": msg})
 
-    def _validate_kin_rows(self, data: dict) -> None:
-        """``kin_rows`` is the list of people seated beside the parents (#4395).
-
-        Each row is ``{kind, name, gender_id, fate}``: a twin (one at most; alive or dead,
-        or no fate, #4870), a spouse (alive, dead, divorced, separated, missing), a
-        betrothed (promised, dead, missing, broken off; #4870) or a child (raised, fostered
-        away, lost). The whole list is replaced on each PATCH.
-        """
-        from world.character_creation.constants import (  # noqa: PLC0415
-            BetrothedFate,
-            ChildFate,
-            KinRowKind,
-            SpouseFate,
-            TwinFate,
-        )
-
-        rows = data.get(KIN_ROWS_KEY)
-        if rows is None:
-            return
-        if not isinstance(rows, list) or len(rows) > KIN_ROWS_MAX:
-            msg = f"{KIN_ROWS_KEY} is a list of at most {KIN_ROWS_MAX} people"
-            raise serializers.ValidationError({KIN_ROWS_KEY: msg})
-        fates = {
-            KinRowKind.TWIN: {"", *TwinFate.values},
-            KinRowKind.SPOUSE: set(SpouseFate.values),
-            KinRowKind.CHILD: set(ChildFate.values),
-            KinRowKind.BETROTHED: set(BetrothedFate.values),
-        }
-        twins = 0
-        for row in rows:
-            self._validate_kin_row(row, fates)
-            twins += row["kind"] == KinRowKind.TWIN
-        if twins > 1:
-            msg = "one twin at most"
-            raise serializers.ValidationError({KIN_ROWS_KEY: msg})
-
     @staticmethod
     def _validate_parent_fates(data: dict) -> None:
         """The named parents' fates (#4870): blank, alive, dead or missing, each."""
@@ -2562,23 +2522,6 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
                 continue
             if fate not in ParentFate.values:
                 raise serializers.ValidationError({key: "A parent is alive, dead or missing."})
-
-    def _validate_kin_row(self, row: object, fates: dict[str, set[str]]) -> None:
-        """Validate one person's shape and the fates allowed for their kin role."""
-        if not isinstance(row, dict) or row.get("kind") not in fates:
-            msg = "each person is a twin, a spouse, a betrothed or a child"
-            raise serializers.ValidationError({KIN_ROWS_KEY: msg})
-        name = row.get("name", "")
-        if not isinstance(name, str) or len(name) > KIN_ROW_NAME_MAX_LENGTH:
-            msg = f"a name is text of at most {KIN_ROW_NAME_MAX_LENGTH} characters"
-            raise serializers.ValidationError({KIN_ROWS_KEY: msg})
-        gender_id = row.get("gender_id")
-        if gender_id is not None and not isinstance(gender_id, int):
-            msg = "gender_id is a gender id or null"
-            raise serializers.ValidationError({KIN_ROWS_KEY: msg})
-        if row.get("fate", "") not in fates[row["kind"]]:
-            msg = f"{row['kind']}: that is not one of its fates"
-            raise serializers.ValidationError({KIN_ROWS_KEY: msg})
 
     def _validate_origin_anchors(self, data: dict) -> None:
         """``origin_anchors`` maps a str slot id to an organization id, or null (#3660)."""

@@ -342,60 +342,6 @@ class ConnectionKind(models.TextChoices):
     HUNTED_BY = "hunted_by", "Hunted by"
 
 
-class KinRowKind(models.TextChoices):
-    """A person the player seats in the Lineage step beside the parents (#4395).
-
-    The rows live at ``draft_data["kin_rows"]`` until finalize writes them into the
-    kinship graph (``services._bind_kin_rows``): a twin shares the character's parents,
-    a spouse is a marriage union, a child a parentage edge from the character.
-    """
-
-    TWIN = "twin", "A twin"
-    SPOUSE = "spouse", "A spouse"
-    CHILD = "child", "A child"
-    #: A promise of marriage, not yet one (#4870, slice 8 of #4813): a union of the
-    #: betrothal kind (``UnionKind.is_betrothal``).
-    BETROTHED = "betrothed", "A betrothed"
-
-
-class SpouseFate(models.TextChoices):
-    """What became of a spouse seated at creation (#4395; separated and the missing
-    relabel, #4870)."""
-
-    ALIVE = "alive", "Alive"
-    DEAD = "dead", "Dead"
-    DIVORCED = "divorced", "Divorced"
-    #: Living apart, the union standing in law (``Union.separated_at``).
-    SEPARATED = "separated", "Separated"
-    #: Gone without a word; the value keeps its first name, the word is "missing".
-    FLED = "fled", "Missing"
-
-
-class ChildFate(models.TextChoices):
-    """What became of a child seated at creation (#4395)."""
-
-    RAISED = "raised", "Raised"
-    FOSTERED_AWAY = "fostered_away", "Fostered away"
-    LOST = "lost", "Lost"
-
-
-class TwinFate(models.TextChoices):
-    """What became of a twin seated at creation (#4870)."""
-
-    ALIVE = "alive", "Alive"
-    DEAD = "dead", "Dead"
-
-
-class BetrothedFate(models.TextChoices):
-    """What became of a betrothed seated at creation (#4870): the promise stands, the person
-    is dead or missing, or the match was called off (the union ended)."""
-
-    PROMISED = "promised", "Promised"
-    DEAD = "dead", "Dead"
-    MISSING = "missing", "Missing"
-    BROKEN = "broken", "Broken off"
-
-
 class ParentFate(models.TextChoices):
     """What became of a parent the player names (#4870): where every "a parent died or
     vanished" story lives instead of a card. On the named parents only; a claimed family's
@@ -410,12 +356,6 @@ class ParentFate(models.TextChoices):
 #: ``other_parent_name``; blank or alive is alive.
 LINE_PARENT_FATE_KEY = "line_parent_fate"
 OTHER_PARENT_FATE_KEY = "other_parent_fate"
-
-
-#: ``draft_data`` key for the seated kin rows (#4395), and the most a draft may seat.
-KIN_ROWS_KEY = "kin_rows"
-KIN_ROWS_MAX = 8
-KIN_ROW_NAME_MAX_LENGTH = 100
 
 
 class LifeStage(models.TextChoices):

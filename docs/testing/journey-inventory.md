@@ -738,7 +738,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `flourish` |  | `commands.social.entrance_flourish.CmdFlourish` | `src/actions/tests/test_entrance_technique.py`, `src/actions/tests/test_entry_flourish_dispatch.py`, `src/commands/tests/test_entrance_flourish_e2e.py` |
 | `force` |  | `evennia.commands.default.admin.CmdForce` | `src/world/conditions/tests/test_effective_capability_value.py`, `src/world/conditions/tests/test_services.py` |
 | `form` |  | `commands.form.CmdForm` | `frontend/src/magic/__tests__/TechniqueBuilderPage.test.tsx`, `src/integration_tests/test_acting_aura_journeys.py`, `src/integration_tests/test_audere_alternate_self_journeys.py`, `src/integration_tests/test_keeping_what_is_yours_journeys.py` (+5) |
-| `frame` |  | `commands.social.accusations.CmdFrame` | `src/integration_tests/test_a_life_in_grids_journeys.py`, `src/world/character_creation/tests/test_beginning_routes_and_kin_rows.py` |
+| `frame` |  | `commands.social.accusations.CmdFrame` | `src/integration_tests/test_a_life_in_grids_journeys.py`, `src/world/character_creation/tests/test_beginning_routes.py` |
 | `functionary` |  | `commands.functionary.CmdFunctionary` | `src/actions/tests/test_npc_assignment_actions.py`, `src/integration_tests/test_keeping_a_house_journeys.py` |
 | `game` |  | `commands.tavern_games.CmdGame` | `src/integration_tests/test_working_the_town_journeys.py`, `src/world/tavern_games/tests/test_views.py` |
 | `gemit` |  | `commands.gemit.CmdGemit` | `src/commands/tests/test_feed_kind.py`, `src/integration_tests/test_minding_the_gm_desk_journeys.py` |
