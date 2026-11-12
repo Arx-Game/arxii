@@ -192,10 +192,11 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   quick-compose from the character card, an unread badge, and a
   `MAIL_ARRIVED` websocket push on send; there is deliberately no telnet
   mail command. _Avoid:_ letters/missives/correspondence for this surface
-  (that framing belongs to #3289's separate, not-yet-built IC messaging
-  system - see ADR-0226); "mail Ariel" as a telnet verb (retired
-  aspiration, never built); messenger/courier (part of that same
-  not-yet-built IC delivery layer).
+  (that framing belongs to the separate, built IC messaging system in
+  `world.messengers`, #3289 - see ADR-0226 and
+  `src/world/messengers/AGENT_GLOSSARY.md`); "mail Ariel" as a telnet verb
+  (retired aspiration, never built); messenger/courier (part of that same
+  IC delivery layer).
 
 **Consort**:
 A realm-recognized OFFICIAL secondary partner (#3091) — a realm-scoped `UnionKind` row carrying the stature vocabulary fields (`stature_share_pct=50`, `contributes_to_origin_house=False`, `requires_landed_title=True`, `max_concurrent` = the realm cap: Inferna 3, Umbros/Ariwn/Aythirmok 1). A consort's renown weighs half toward the senior party's house, only while the senior holds a landed `Title`, and never flows back to the consort's origin house. Luxen recognizes no consorts — expressed as the ABSENCE of a Luxen consort row, never a flag. Realm rows carry realm display names; "consort" is the mechanical term in code/docs only (Arx 1 used "consort" for a title holder's spouse — that sense is styled by courtesy titles here, not this word).

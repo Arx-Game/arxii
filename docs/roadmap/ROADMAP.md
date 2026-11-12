@@ -415,9 +415,10 @@ carried forward as future work rather than blocking anything in this issue:
     (combat/soulfray/scars/zones/magic is his domain); canonically the unconscious
     character can be reached but should not be able to reach back the same way a
     waking character would.
-  - **Messenger gating with #3289's** not-yet-built IC messaging system — the
-    séance/smuggle/dream channels are conceptually adjacent to that system but not
-    wired to it.
+  - **Messenger gating with #3289's** IC messaging system (built; see
+    `docs/systems/missives.md`) — the séance/smuggle/dream channels are conceptually
+    adjacent to it but not wired to it. A magical channel would be a
+    `TransmissionMethod` with a `required_capability`.
   - **DB authorability** of the `OFFSCREEN_ACT_KEYS`/`OFFSCREEN_LIFECYCLE_DISPOSITIONS`
     tables (currently Python constants — a config-table facade was explicitly
     rejected for slice 3, ADR-0246).

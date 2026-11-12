@@ -7522,7 +7522,7 @@
 - `passive_mantle_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum tier-0 FLAT_BONUS contributions from attuned mantle threads (Spec D §5.2).`
 - `passive_mantle_crossing_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum ConditionModifierEffect from MANTLE thread crossing choices (always-on).`
 - `passive_motif_style_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' - Coherence bonus for ``target``'s resonance (Spec D §5.3). Thin wrapper over`
-- `power_flat_bonus_for_resonance(sheet: 'object', resonance_id: 'int') -> 'int' - Sum POWER-category flat modifiers (distinctions) applicable to ``resonance_id``.`
+- `power_flat_bonus_for_resonance(sheet: 'object', resonance_id: 'int | None', *, scoped_only: 'bool' = False) -> 'int' - Sum POWER-category flat modifiers (distinctions) applicable to ``resonance_id``.`
 - `prerequisites_met(prereqs: 'Iterable[Prerequisite]', caster: 'ObjectDB', target: 'ObjectDB') -> 'bool' - True if target satisfies every one of prereqs (all() semantics; empty = True).`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, *, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> int - Preview the rank difference for a check without rolling.`
 - `property_damage_bonus(target: 'ObjectDB', damage_type: 'DamageType | None') -> 'int' - Sum PropertyDamageModifier.modifier_value for target's active Properties.`
@@ -7536,6 +7536,60 @@
 - `volatile_object_property(target: 'ObjectDB') -> 'ObjectProperty | None' - Return the ``ObjectProperty`` making *target* volatile (detonatable), or None.`
 - `vow_stat_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum the vow-driven stat scaling across engaged PRIMARY roles (#2022).`
 - `worn_quality_aggregate(rows: 'Iterable[object]') -> 'Decimal' - Sum (item_quality_multiplier × attachment_quality_multiplier) over worn rows.`
+
+
+## world.messengers
+
+### Missive
+**Foreign Keys:**
+  - sender_persona -> scenes.Persona [FK]
+  - recipient_persona -> scenes.Persona [FK]
+  - method -> messengers.TransmissionMethod [FK]
+  - in_reply_to -> messengers.Missive [FK] (nullable)
+**Pointed to by:**
+  - replies <- messengers.Missive
+  - attachments <- messengers.MissiveAttachment
+
+### MissiveAttachment
+**Foreign Keys:**
+  - missive -> messengers.Missive [FK]
+  - item -> items.ItemInstance [FK] (nullable)
+
+### TransmissionMethod
+**Foreign Keys:**
+  - required_capability -> conditions.CapabilityType [FK] (nullable)
+**Pointed to by:**
+  - missives <- messengers.Missive
+
+### Service Functions
+- `accept_missive(*, sheet: 'CharacterSheet', missive: 'Missive') -> 'list[MissiveAttachment]' - The recipient takes the coin and items that came with the missive.`
+- `account_block_active(*, player_a: 'PlayerData', player_b: 'PlayerData') -> 'bool' - True if an active account-level Block sits between these two players, either way (#2996).`
+- `addressable_persona(persona_id: 'int') -> 'Persona' - The addressable persona with this pk, under the same rules as by name.`
+- `available_methods_for(sheet: 'CharacterSheet') -> 'list[TransmissionMethod]' - The transmission methods this character may send with, ordered by name.`
+- `coded_block_active(*, player_a: 'PlayerData', persona_a: 'Persona | None', player_b: 'PlayerData', persona_b: 'Persona | None') -> 'bool' - True if an active coded block sits between these two (player, persona) sides (#1278).`
+- `default_method_for(sheet: 'CharacterSheet') -> 'TransmissionMethod' - The first available method by name; refuses when there is none.`
+- `deliver_due_missives(*, now: 'datetime | None' = None) -> 'int' - Announce every missive that has come due; returns how many were announced.`
+- `dematerialize_item_instance(item_instance: 'ItemInstance') -> 'None' - Drop an item's game object and keep the item: custody is the row, not the prop (#4474).`
+- `find_addressable_persona(name: 'str') -> 'Persona' - The one primary or established persona going by ``name`` (any case).`
+- `get_effective_capability_value(character_sheet: 'CharacterSheet', capability: world.conditions.models.CapabilityType, *, action_ctx: 'PullActionContext | None' = None) -> int - Effective capability value = innate baseline + CharacterModifier contributions`
+- `get_ic_now(*, real_now: datetime.datetime | None = None) -> datetime.datetime | None - Return the current IC datetime, or None if no clock exists.`
+- `get_or_create_purse(character_sheet: 'CharacterSheet') -> 'CharacterPurse'`
+- `get_real_time_for_ic_date(ic_dt: datetime.datetime) -> datetime.datetime | None - Convert an IC datetime to real datetime, or None if no clock exists.`
+- `get_visible_missive(sheet: 'CharacterSheet', missive_id: 'int') -> 'Missive' - One missive this character may see, else the same refusal whatever the reason.`
+- `is_natural_weapon(item: 'ItemInstance') -> 'bool' - Whether ``item`` is a natural weapon, and so can never be removed. No query.`
+- `materialize_item_game_object(instance: 'ItemInstance', holder_sheet: 'CharacterSheet') -> 'ObjectDB | None' - Create + link the physical ``ObjectDB`` for ``instance`` in the holder's inventory.`
+- `persona_player(persona: 'Persona') -> 'PlayerData | None' - The PlayerData currently playing this persona's character, or None (#1278).`
+- `read_missive(*, sheet: 'CharacterSheet', missive: 'Missive') -> 'Missive' - Mark the missive read the first time its recipient reads it; a sender's read is a no-op.`
+- `refuse_missive(*, sheet: 'CharacterSheet', missive: 'Missive') -> 'list[MissiveAttachment]' - The recipient sends the coin and items back to the sender's character.`
+- `release_item_for_custody(item_instance: 'ItemInstance') -> 'None' - Take an item off the body and out of any container before custody that keeps it (#4474).`
+- `reply_sender_for(missive: 'Missive') -> 'Persona' - The face a reply goes out under: the one that was written to (decision 3).`
+- `send_missive(*, sender_persona: 'Persona', recipient_persona: 'Persona', body: 'str', method: 'TransmissionMethod | None' = None, coin_amount: 'int' = 0, items: 'Sequence[ItemInstance]' = (), in_reply_to: 'Missive | None' = None) -> 'Missive' - Write and send a missive from one persona to another.`
+- `sent_by(sheet: 'CharacterSheet', missive: 'Missive') -> 'bool' - Whether this character wrote the missive to someone else.`
+- `sent_by_q(sheet: 'CharacterSheet') -> 'Q' - ``sent_by`` as a queryset filter: the same rule, for filtering a list in the database.`
+- `set_item_holder(item: 'ItemInstance', sheet: 'CharacterSheet | None', *, event: 'OwnershipEvent | None' = None) -> 'None' - Hand ``item`` to ``sheet``: the holder, the date it started and the event behind it.`
+- `transfer(*, amount: 'int', reason: 'str', from_purse: 'CharacterPurse | None' = None, from_treasury: 'OrganizationTreasury | None' = None, to_purse: 'CharacterPurse | None' = None, to_treasury: 'OrganizationTreasury | None' = None) -> 'CurrencyTransfer' - Move ``amount`` coppers; null source = mint (faucet), null dest = sink.`
+- `unread_count_for(sheet: 'CharacterSheet') -> 'int' - Arrived, unsuppressed, unread missives addressed to any of this character's faces.`
+- `visible_missives_for(sheet: 'CharacterSheet', *, now: 'datetime | None' = None) -> 'QuerySet[Missive]' - Missives this character may see: everything any of its faces sent, and what any of`
 
 
 
@@ -9442,6 +9496,8 @@
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
   - tenancies_granted <- locations.LocationTenancy
+  - missives_sent <- messengers.Missive
+  - missives_received <- messengers.Missive
   - mission_invites_received <- missions.MissionInvite
   - mission_invites_sent <- missions.MissionInvite
   - mission_risk_acknowledgements <- missions.MissionRiskAcknowledgement
