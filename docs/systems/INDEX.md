@@ -6864,8 +6864,8 @@ optional coin and items held until the recipient accepts or refuses them. Not `P
   `Missive`/`MissiveAttachment` (private letters).
 - **Services** (`world.messengers.services`): `send_missive`, `read_missive`,
   `accept_missive`, `refuse_missive`, `visible_missives_for`, `unread_count_for`,
-  `get_visible_missive`, `available_methods_for`, `find_addressable_persona`,
-  `addressable_persona`, `reply_sender_for`, `sent_by`/`sent_by_q`, `deliver_due_missives`.
+  `get_visible_missive`, `available_methods_for`, `addressable_personas`,
+  `find_addressable_persona`, `addressable_persona`, `reply_sender_for`, `sent_by`/`sent_by_q`, `deliver_due_missives`.
   Display rule in `world.messengers.display` (`display_map_for`, `shown_name`,
   `missive_correspondents`): a mask stays a mask, a typed name stays as typed.
 - **Delivery:** availability is lazy (`available_at` has passed); the `missives.deliver`
@@ -6874,9 +6874,11 @@ optional coin and items held until the recipient accepts or refuses them. Not `P
   (`undeliverable`, never shown; attachments stay held).
 - **Actions + telnet:** `send_missive`, `reply_missive`, `read_missive`, `accept_missive`,
   `refuse_missive` (`actions/definitions/missives.py`); telnet `CmdMissive`
-  (`missive`, `/read`, `/send <name>[+coin n][+item x]=<msg>`, `/reply`, `/accept`, `/refuse`).
+  (`missive`, `/read`, `/send <name>[+coin 5s][+item x]=<msg>`, `/reply`, `/accept`,
+  `/refuse`); web writes go through `POST /api/actions/characters/<id>/dispatch/`.
 - **API:** read-only `MissiveViewSet` at `/api/missives/` (list with `direction`/`unread`
-  filters, retrieve, `unread-count/`). Push frame `missive_arrived`
+  filters, retrieve, `unread-count/`, `addressees/?search=` for the compose To picker, id and
+  name only). Push frame `missive_arrived`
   (`MissiveArrivedPayload`): ids and persona-voiced names only.
 - **Web:** `frontend/src/missives/` (`MissivesSheet`, `MissiveList`, `MissiveComposeDialog`),
   opened from the top bar.

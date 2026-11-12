@@ -67,10 +67,12 @@ callers show it as-is and never `str(exc)`.
 
 - Methods: `available_methods_for(sheet)` (universal ones, plus capability-gated ones whose
   effective capability value is above zero), `default_method_for`.
-- Addressing: `find_addressable_persona(name)` (case-insensitive exact name; one match
+- Addressing: `addressable_personas()` (the one queryset: `PRIMARY` or `ESTABLISHED`,
+  not system), `find_addressable_persona(name)` (case-insensitive exact name; one match
   only), `addressable_persona(pk)`. Refusal wording never depends on who owns the persona.
-- `send_missive(sender_persona, recipient_persona, body, method, coin_amount, items,
-  in_reply_to)` (atomic): checks the method can carry what rides along, locks the items
+- `send_missive(*, sender_persona, recipient_persona, body, method=None, coin_amount=0,
+  items=(), in_reply_to=None)` (atomic, every argument keyword-only; `coin_amount` in
+  coppers): de-duplicates `items` by pk (an item named twice rides once), checks the method can carry what rides along, locks the items
   (the sender must hold them, no natural weapons, none already in transit), takes coin out
   of the sender's purse (a sink; the attachment row is the custody) and puts each item into
   row custody (off the body, game object dematerialized, no holder, the org vault's
@@ -80,7 +82,8 @@ callers show it as-is and never `str(exc)`.
 - Reading: `visible_missives_for(sheet)` (everything any of the character's faces sent, plus
   what any face received once `available_at` has passed and it is not `undeliverable`),
   `get_visible_missive` (one refusal for "not found" and "not yours"), `unread_count_for`,
-  `read_missive` (first read by the recipient stamps `read_at`; a sender's read is a no-op).
+  `read_missive` (first read by the recipient stamps `read_at`, and `arrival_notified_at`
+  when the sweep has not yet; a sender's read is a no-op).
   The attachments are never prefetched onto the identity-mapped missive rows (a prefetch
   would go stale after accept or refuse, ADR-0263); the REST view loads them fresh per
   request.
@@ -89,7 +92,9 @@ callers show it as-is and never `str(exc)`.
   are materialized again) and `refuse_missive` (everything goes back to the sender's
   character). Both lock the pending rows, stamp `resolution` and `resolved_at`, and send
   the sender a one-line notice after commit, only if someone is playing the sender
-  character (the notice names the recipient persona the sender addressed).
+  character. The notice names the recipient through the sender's eyes
+  (`display.shown_name`): a reply's recipient may be a mask the sender has not seen
+  through. Both also stamp `arrival_notified_at` when the sweep has not yet.
 - `deliver_due_missives(now)`: the arrival sweep, see Delivery.
 
 ## Delivery
@@ -108,7 +113,10 @@ not anything has run. Three pieces sit on top.
    travelled must not let it through in the window before the next sweep.
    `_settle_arrivals_for(sheet)` runs inside `visible_missives_for` and `unread_count_for`,
    and `_is_delivered_to` runs before read, accept and refuse; each applies the same
-   `_suppress_if_blocked` re-check the sweep makes.
+   `_suppress_if_blocked` re-check the sweep makes. Reading, accepting or refusing a letter
+   the sweep has not reached stamps `arrival_notified_at`, so the sweep never toasts a
+   letter already read, and a block placed after the recipient has read it never makes it
+   vanish.
 3. **The push.** See "Push frame".
 
 Seeding: the Big Button cluster `messengers` (`world.seeds.clusters._seed_messengers`)
@@ -117,9 +125,11 @@ calls `ensure_messenger_method`, a `get_or_create` that never overwrites a tuned
 ## Actions and telnet
 
 Registry actions (`actions/definitions/missives.py`, all `category="social"`, target
-`SELF`); the web dispatches them over the websocket and telnet converges on the same
+`SELF`); the web runs them with `POST /api/actions/characters/<id>/dispatch/`
+(`frontend/src/missives/api.ts`, `dispatchMissiveAction`) and telnet converges on the same
 `action.run()`. Kwargs arrive as JSON types from the web and as strings from telnet, so
-every id and amount is parsed in the action.
+every id is parsed in the action. `coin_amount` is coppers; telnet's `+coin <amount>` is
+parsed by the command with `parse_coppers`, the parser `give` and `withdraw coins` use.
 
 | Key | Kwargs | Notes |
 |---|---|---|
@@ -135,25 +145,32 @@ Telnet (`CmdMissive`, key `missive`, parsing only):
 missive                                          your missives, newest first (a * marks unread)
 missive/list                                     the same
 missive/read <id>
-missive/send <name>[+coin <n>][+item <item>]...=<message>
-missive/reply <id>[+coin <n>][+item <item>]...=<message>
+missive/send <name>[+coin <amount>][+item <item>]...=<message>
+missive/reply <id>[+coin <amount>][+item <item>]...=<message>
 missive/accept <id>
 missive/refuse <id>
 ```
 
-An item named on telnet is matched against what the character carries (exact name, else a
-single partial match).
+Coin is written as for `give`: `+coin 5s`, `+coin 3g 2s`, `+coin 40c` (a bare number is
+refused with the usage line). `missive/read` shows coin the same way (`format_coppers`,
+e.g. `5s (Waiting)`), as the REST attachment label does. An item named on telnet is matched
+against what the character carries (exact name, else a single partial match).
 
 ## REST (`/api/missives/`, read-only)
 
 `MissiveViewSet` (list, retrieve, `unread-count`), `IsAuthenticated`, page size 20 (max 50
 via `page_size`). The acting character is the request's selected roster entry
 (`?entry_id=`, #3479); a request that plays nobody gets an empty list. Writes go through
-action dispatch, not this API.
+`POST /api/actions/characters/<id>/dispatch/`, not this API.
 
 - `GET /api/missives/?direction=received|sent&unread=true|false` - newest first.
 - `GET /api/missives/{id}/` - one missive the character may see; anything else is a 404.
 - `GET /api/missives/unread-count/` - `{"count": n}`.
+- `GET /api/missives/addressees/?search=<text>` - the compose "To" picker:
+  `[{id, name}]` of addressable faces (`addressable_personas()`) whose name contains the
+  text, by name, at most 10, unpaginated; a search under two characters returns `[]`
+  (`MissiveAddresseeFilterSet`). Id and name only: the general persona search
+  (`/api/personas/`) carries each persona's character sheet, so the picker never uses it.
 
 Row fields: `id`, `direction`, `counterpart_name` (the other side as this reader sees them),
 `own_persona_id`, `own_persona_name` (the reader's own face on it), `method_name`, `body`,
@@ -165,10 +182,13 @@ Row fields: `id`, `direction`, `counterpart_name` (the other side as this reader
 `WebsocketMessageType.MISSIVE_ARRIVED` = `missive_arrived`, payload `MissiveArrivedPayload`
 (`web/webclient/message_types.py`): `missive_id`, `recipient_persona_name` (the face the
 letter was addressed to, so a player with several faces knows which was written to),
-`sender_display` (the sender as this recipient sees them). A slim ping: clients refetch the
-list and unread count on receipt (`frontend/src/hooks/handleMissiveArrivedPayload.ts`).
-Telnet sessions get a plain-text twin (`send_text_to_non_web`) so a browser never shows it
-twice. Built by `world.messengers.notifications.notify_missive_arrived`.
+`sender_display` (the sender as this recipient sees them, `display.shown_name`). It goes to
+the recipient persona's character only. A slim ping: clients toast "A missive for
+<recipient_persona_name> from <sender_display>" and refetch the list and unread count
+(`frontend/src/hooks/handleMissiveArrivedPayload.ts`). Telnet sessions get a plain-text
+twin (`send_text_to_non_web`) so a browser never shows it twice: "A <method name,
+lowercased> brings you a missive for <recipient> from <sender>. (missive/read <id>)".
+Built by `world.messengers.notifications.notify_missive_arrived`.
 
 ## Privacy rules
 
@@ -195,12 +215,12 @@ change; the owner can override any of them.
 1. **Addressing by exact name, no discovery gate.** Any `PRIMARY` or `ESTABLISHED`
    non-system persona can be addressed by its exact name (case-insensitive), whether or not
    the sender has met or discovered it (`PersonaDiscovery` is not consulted). Temporary and
-   system personas are not addressable. To gate it, narrow `_addressable_personas()` in
-   `services.py`.
+   system personas are not addressable. To gate it, narrow `addressable_personas()` in
+   `services.py` (the To picker follows).
 2. **Attachments on an undeliverable missive stay held.** When a block makes a missive
    undeliverable, its coin and items stay `PENDING` in custody and are never auto-returned,
-   because a return would tell the sender about the block. Nothing recovers them without
-   staff. To change it, add a return path that does not signal the block (for example a
+   because a return would tell the sender about the block. There is no staff surface for
+   missives, so they are recoverable only by direct database work. To change it, add a return path that does not signal the block (for example a
    delayed, generic "the messenger could not deliver" return for every undeliverable cause).
 3. **The seeded Messenger delay is a placeholder.** The seeded universal `Messenger` method
    carries `ic_delay_minutes=30`, a 30 IC-minute guess. Staff tune it (and add methods,
