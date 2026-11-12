@@ -986,9 +986,13 @@ offers, folded to its heading and "N of M" (copy `life_stage_progress`) or Unkno
 open at a time (a click on the open one folds it); inside it one `.sec` per beat, one open
 at a time, a closed one reading its answers with their signed points or the beat's prompt
 in plain text with `{name}` read from `draft_data.first_name`; Next closes a section and
-opens the next, the last Next the next stage. Fold state is local. The stage's Unknown mark
-sets `unknown` on every beat of the stage in one PATCH (copy `life_stage_unknown_help`,
-Dan's words). A one-of row says no "pick one". Each section's grid is `ChapterOffers`
+opens the next, the last Next the next stage. Fold state is local. Every section's grid
+ends on an **Amnesiac** card (#5102, ADR-5102-B; `ChapterOffers`' `trailing` slot): no
+cost and not a distinction, named by copy `life_amnesiac_name` and read by
+`life_amnesiac_text` (default: the line Dan wrote for the stage-wide Unknown mark it
+replaced). Picking it sets that beat's `unknown`, which drops its picks and closes its
+other cards; picking it again clears it. A stage every one of whose beats is unknown reads
+Unknown and still lists its sections. A one-of row says no "pick one". Each section's grid is `ChapterOffers`
 (`layout="grid"`) with the leaf's new props: `groupBy` (`.group-h` headings "Group
 (count)", the ungrouped last), `pricing="signed"` (a bare `−N` or `+N` in the card's
 bottom-left corner, nothing on a free card), `terms` (the mechanics line built from

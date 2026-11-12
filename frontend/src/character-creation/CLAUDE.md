@@ -161,8 +161,9 @@ character-creation/
         │                         #   folds it), one section per beat inside (a closed one reads
         │                         #   its answers with signed points or the prompt with the
         │                         #   first name; Next walks down and into the next stage);
-        │                         #   Unknown is a mark on the stage (every beat unknown in one
-        │                         #   PATCH); the secret marks under a grid, the Cover story box
+        │                         #   every grid ends on an Amnesiac card (#5102: no cost, not a
+        │                         #   distinction, copy life_amnesiac_name/_text) that marks
+        │                         #   its own beat unknown; the secret marks under a grid, the Cover story box
         │                         #   on a one-of row (the no-cost card is saved as the cover when
         │                         #   the secret is marked, until a click on another card;
         │                         #   clicking the real pick drops both)
@@ -180,7 +181,7 @@ character-creation/
         │                         #   whose `allowance_is_points` is on (#4829: a ranked
         │                         #   card shows pips, `ChapterOffers` `pointsPicks`), any),
         │                         #   a line of the player's own once a card
-        │                         #   is picked, the unknown mark; the footer counts the
+        │                         #   is picked; the footer counts the
         │                         #   taken beats and the purse. Every life ends on the
         │                         #   Recent History box (#4831), a textarea saved on blur
         │                         #   to draft_data.recent_history; a beginning that

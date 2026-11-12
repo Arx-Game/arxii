@@ -295,26 +295,58 @@ describe('LifeGrids', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('the stage mark sets every beat of the stage unknown in one save and folds it', async () => {
+  it('every grid ends on an Amnesiac card that marks its own section unknown (#5102)', async () => {
     const user = userEvent.setup();
     const draft = createMockDraft();
     renderWithCharacterCreationProviders(<LifeGrids draft={draft} copy={{}} />);
-    await user.click(screen.getByRole('button', { name: /^Before the Glimpse/ }));
-    await user.click(screen.getByRole('button', { name: 'Unknown: Before the Glimpse' }));
+    const early = section('Early Upbringing');
+    // No stage-wide mark any more; the card is the last one in the section's grid.
+    expect(screen.queryByRole('button', { name: /^Unknown:/ })).toBeNull();
+    const cards = within(early).getAllByRole('listitem');
+    const amnesiac = within(cards.at(-1)!).getByRole('button', { name: /^Amnesiac/ });
+    expect(amnesiac).toHaveTextContent('No memory of it at all.');
+    expect(amnesiac).toHaveAttribute('aria-pressed', 'false');
+    await user.click(amnesiac);
     expect(mutateAsync).toHaveBeenLastCalledWith({
       draftId: draft.id,
-      data: { draft_data: { beats: { '3': { unknown: true }, '4': { unknown: true } } } },
+      data: { draft_data: { beats: { '1': { unknown: true } } } },
     });
+  });
+
+  it('an Amnesiac section shows the card alone, picked, and a click brings the cards back', async () => {
+    const user = userEvent.setup();
+    const draft = createMockDraft({ draft_data: { beats: { '1': { unknown: true } } } });
+    pool = pool.map((b) => (b.beat_id === 1 ? { ...b, unknown: true } : b));
+    // The server closes an unknown beat's answers.
+    offersResponse = {
+      ...offersResponse,
+      offers: offersResponse.offers.filter((o) => o.opener_key !== 'beat:1'),
+    };
+    renderWithCharacterCreationProviders(
+      <LifeGrids draft={draft} copy={{ life_amnesiac_text: 'Staff line.' }} />
+    );
+    const early = section('Early Upbringing');
+    const amnesiac = within(early).getByRole('button', { name: /^Amnesiac/ });
+    expect(amnesiac).toHaveAttribute('aria-pressed', 'true');
+    expect(amnesiac).toHaveTextContent('Staff line.');
+    expect(within(early).queryByRole('button', { name: /^Patient/ })).toBeNull();
+    await user.click(amnesiac);
+    expect(mutateAsync).toHaveBeenLastCalledWith({
+      draftId: draft.id,
+      data: { draft_data: { beats: { '1': { unknown: false } } } },
+    });
+  });
+
+  it('a stage whose every section is Amnesiac reads Unknown and still lists its sections', async () => {
+    const user = userEvent.setup();
     pool = pool.map((b) => (b.life_stage === 'adulthood' ? { ...b, unknown: true } : b));
-    renderWithCharacterCreationProviders(<LifeGrids draft={draft} copy={{}} />);
-    const before = screen.getAllByRole('region', { name: 'Before the Glimpse' }).at(-1)!;
+    renderWithCharacterCreationProviders(<LifeGrids draft={createMockDraft()} copy={{}} />);
+    const before = screen.getByRole('region', { name: 'Before the Glimpse' });
     expect(within(before).getByText('Unknown', { selector: '.prog' })).toBeInTheDocument();
     await user.click(within(before).getByRole('button', { name: /^Before the Glimpse/ }));
-    expect(within(before).queryByRole('article')).toBeNull();
+    // The sections stay, so each Amnesiac card can be taken back.
+    expect(within(before).getAllByRole('article')).toHaveLength(2);
     expect(within(before).queryByLabelText('Description (Optional)')).toBeNull();
-    expect(
-      within(before).getByRole('button', { name: 'Unknown: Before the Glimpse' })
-    ).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('a secret pick on a one-of row opens the Cover story box and the next card becomes the cover', async () => {

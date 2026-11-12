@@ -143,7 +143,9 @@ each one-of beat.
 Origin's empty name field is boxed until a name is saved, and the letters-only rule shows
 only under a refused name; the rail reads "CG selections"; the doubled realm-change note is
 gone. Heritage reads a beginning's station on its closed row and its cost beside the codex
-link. Kin rows left creation (ADR-5102-A; a player's own family is #5103).
+link. Kin rows left creation (ADR-5102-A; a player's own family is #5103), and the life
+page's per-stage Unknown mark became an Amnesiac card at the end of every section's grid
+(ADR-5102-B).
 
 ## Built (2026-11-01, #4870: kin-row states; slice 8 of #4813) (kin rows retired by #5102)
 
