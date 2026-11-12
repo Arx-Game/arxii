@@ -1018,6 +1018,7 @@ def offers_for(draft: CharacterDraft, chapter: OfferChapter) -> list[VisibleOffe
                 distinction_id=dist.id,
                 name=offer.name,
                 distinction_name=dist.name,
+                distinction_description=dist.description,
                 player_line=offer.player_line,
                 chapter=offer.chapter,
                 arrives_as=offer.arrives_as,

@@ -45899,8 +45899,8 @@ components:
           type: string
           format: date-time
           nullable: true
-        particle_example:
-          type: string
+        particle:
+          $ref: '#/components/schemas/RealmCharterParticle'
         default_succession_law:
           allOf:
           - $ref: '#/components/schemas/AlmanachSuccessionLaw'
@@ -45941,7 +45941,7 @@ components:
       - name
       - observances
       - offices
-      - particle_example
+      - particle
       - patron
       - published_at
       - sigil_description
@@ -99657,6 +99657,8 @@ components:
           type: string
         distinction_name:
           type: string
+        distinction_description:
+          type: string
         player_line:
           type: string
         chapter:
@@ -99703,6 +99705,7 @@ components:
       - cg_max_rank
       - chapter
       - cost_per_rank
+      - distinction_description
       - distinction_id
       - distinction_name
       - effect_line

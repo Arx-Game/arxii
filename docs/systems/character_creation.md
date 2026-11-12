@@ -392,7 +392,7 @@ finalize path.
 - `GET /api/character-creation/drafts/{id}/offers/?chapter=<OfferChapter>` - one
   chapter's `{"offers": [...], "closed": [...]}` (`OffersResponseSerializer`).
   `offers` is `VisibleOfferSerializer` (`offer_id`, `distinction_id`, `name`,
-  `player_line`, `chapter`, `arrives_as`, `opener_label`, `cost_per_rank`, `max_rank`,
+  `distinction_name`, `distinction_description` (#5099), `player_line`, `chapter`, `arrives_as`, `opener_label`, `cost_per_rank`, `max_rank`,
   `is_locked`, `lock_reason`, `opener_key`, `first_look`, `held`, `effect_line`, #3709);
   A distinction the route closes is absent from `offers` and named nowhere in the payload
   (#4979, ADR-4979: the player chose the beginning, so there is nothing to swap and nothing
@@ -871,7 +871,9 @@ and meets the Glimpse row and "what you carry" alone; a struck stage is absent, 
 greyed). The Lineage leaf shows each stage as **grids** (`LifeGrids`, reading A of the
 #4395 demo): a beat is a grid of its answers picked straight from the cards, each card
 the offer's own label and, when that is the author's own words, the distinction under it
-(`VisibleOffer.distinction_name`), at its price. A beat is a prompt over priced distinction offers:
+(`VisibleOffer.distinction_name`), at its price. Under the name a card reads the
+distinction's own description (`VisibleOffer.distinction_description`, #5099), never the
+offer's `player_line`: the backgrounds rows' lines only repeat the card's name. A beat is a prompt over priced distinction offers:
 its answers are `DistinctionOffer` rows in `OfferChapter.BACKGROUNDS`, opened by the
 beat (`DistinctionOffer.beat`, `opener_key` `beat:<id>`), every one
 `OfferArrival.CHOICE` at the distinction's own price. **A beat grants nothing free**, so
