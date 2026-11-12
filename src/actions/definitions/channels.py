@@ -54,9 +54,15 @@ def _resolve_channel(account: AccountDB, kwargs: dict[str, Any]) -> Channel | No
 
     channel_id = kwargs.get("channel_id")
     if channel_id is not None:
-        if isinstance(channel_id, bool) or not str(channel_id).isdigit():
+        if isinstance(channel_id, bool):
             return None
-        return findable_channels_for(account).filter(pk=int(channel_id)).first()
+        try:
+            # str() first: int(5.7) would quietly truncate a float id. A Unicode digit
+            # such as "²" passes str.isdigit() but int() refuses it.
+            pk = int(str(channel_id))
+        except ValueError:
+            return None
+        return findable_channels_for(account).filter(pk=pk).first()
     return channel_named(account, kwargs.get("channel_name") or "")
 
 

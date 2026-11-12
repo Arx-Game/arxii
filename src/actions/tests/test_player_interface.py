@@ -705,6 +705,27 @@ class TestDispatchPlayerActionRegistryImmediate(django.test.TestCase):
 
         self.assertEqual(cm.exception.code, ActionDispatchError.UNKNOWN_ACTION_REF)
 
+    def test_client_sent_account_never_reaches_the_action(self) -> None:
+        """``account`` is server-supplied (``SERVER_SUPPLIED_KWARGS``): a client cannot
+        slip one into dispatch kwargs to act as another player (#3299)."""
+        from actions.player_interface import SERVER_SUPPLIED_KWARGS, dispatch_player_action
+        from actions.registry import get_action
+        from actions.types import ActionRef, ActionResult
+
+        self.assertIn("account", SERVER_SUPPLIED_KWARGS)
+        action = get_action("post_to_channel")
+        ref = ActionRef(backend=ActionBackend.REGISTRY, registry_key="post_to_channel")
+        with patch.object(
+            action, "run", return_value=ActionResult(success=False, message="")
+        ) as run:
+            dispatch_player_action(
+                self.character, ref, {"account": 7, "channel_id": 1, "body": "hi"}
+            )
+
+        run.assert_called_once()
+        self.assertNotIn("account", run.call_args.kwargs)
+        self.assertEqual(run.call_args.kwargs["body"], "hi")
+
 
 class TestDispatchPlayerActionCombatDeferred(django.test.TestCase):
     """Active DECLARING encounter + COMBAT ref → deferred via record_declaration.
