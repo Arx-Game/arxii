@@ -57,7 +57,11 @@ describe('MissiveList', () => {
       />
     );
 
-    const headings = screen.getAllByRole('heading').map((h) => h.textContent);
+    // Accordion triggers sit in headings too; keep only the group headings.
+    const headings = screen
+      .getAllByRole('heading')
+      .map((h) => h.textContent)
+      .filter((text) => text === 'Sent' || text?.startsWith('To '));
     expect(headings).toEqual(['To Hobb', 'To the Gray Fox', 'Sent']);
     const sent = screen.getByRole('heading', { name: 'Sent' }).closest('section') as HTMLElement;
     expect(within(sent).getByText('Alice')).toBeInTheDocument();
