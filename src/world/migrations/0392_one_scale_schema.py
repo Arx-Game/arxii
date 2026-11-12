@@ -280,4 +280,13 @@ class Migration(migrations.Migration):
                 help_text="What the modifier is worth, in the lane's units (check points for the check lane, stat points as a sheet shows them for the stat lane). A magnitude: a debuff's authored row supplies the minus sign."
             ),
         ),
+        migrations.AlterField(
+            model_name="techniquevariant",
+            name="creation_point_cost",
+            field=models.PositiveSmallIntegerField(
+                blank=True,
+                help_text="Character-creation points to take this form early (#4099). Blank = not offered in creation. Only forms unlocking at thread level 10 or below can be offered.",
+                null=True,
+            ),
+        ),
     ]

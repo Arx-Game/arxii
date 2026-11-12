@@ -239,7 +239,7 @@ class TechniqueVariant(NaturalKeyMixin, CreditedContent, AbstractSpecializedVari
         null=True,
         blank=True,
         help_text="Character-creation points to take this form early (#4099). Blank = not "
-        "offered in creation. Only forms unlocking at thread level 1 or 2 can be offered.",
+        "offered in creation. Only forms unlocking at thread level 10 or below can be offered.",
     )
 
     objects = NaturalKeyManager()
