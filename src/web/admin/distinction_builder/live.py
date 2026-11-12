@@ -34,8 +34,8 @@ def favor_target_help(target: ModifierTarget | None) -> str:
     """What a value means on one of a being's favor targets (#4333), else "".
 
     The Effects table's target picker lists every being's favor invocation and
-    favor earning targets and the two "any being" targets; this line under a
-    chosen one names its being and its unit.
+    favor earning targets, the two "any being" targets and the two patron targets;
+    this line under a chosen one names its being and its unit.
     """
     from world.mechanics.constants import (  # noqa: PLC0415
         FAVOR_EARNING_CATEGORY_NAME,
@@ -47,7 +47,12 @@ def favor_target_help(target: ModifierTarget | None) -> str:
     category = target.category.name
     if category not in (FAVOR_INVOCATION_CATEGORY_NAME, FAVOR_EARNING_CATEGORY_NAME):
         return ""
-    being = target.target_being.name if target.target_being_id else "any being"
+    if target.targets_patron:
+        being = "Your patron (only for a being she is the Chosen of)"
+    elif target.target_being_id:
+        being = target.target_being.name
+    else:
+        being = "any being"
     if category == FAVOR_INVOCATION_CATEGORY_NAME:
         return f"Being: {being}. Value is difficulty points eased; 15 is one band."
     return f"Being: {being}. Value is percent added to the earning rate."

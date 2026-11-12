@@ -22,6 +22,7 @@ vi.mock('../queries', () => ({
         favor_target: 20,
         span_weeks: 2,
         closing_rite_name: "Ombrin's rite",
+        pact_offer: null,
       },
     ],
   })),

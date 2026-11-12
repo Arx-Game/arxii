@@ -695,8 +695,10 @@ class ChosenFavorConfig(SharedMemoryModel):
     """Staff-tunable favor thresholds for Chosen benefits (#2550).
 
     Singleton (pk=1), lazy-created via ``get_chosen_favor_config()``.
-    Only ``anima_recovery_*`` fields are wired; ``ceremony_edge_*`` fields are
-    defined for shape stability but inert until a future issue wires them.
+    ``anima_recovery_*`` and ``chosen_distinction`` are wired; ``ceremony_edge_*``
+    fields are defined for shape stability but inert until a future issue wires them.
+    The Chosen earning bonus and invocation ease are effects of ``chosen_distinction`` on
+    the patron favor targets (#4341), so they reach only a Chosen, never a pact holder.
     """
 
     anima_recovery_threshold = models.PositiveIntegerField(
@@ -715,18 +717,17 @@ class ChosenFavorConfig(SharedMemoryModel):
         default=1,
         help_text="DEFERRED — bonus weight added to the Devotion aspect. Inert until wired.",
     )
-    earn_bonus_percent = models.PositiveIntegerField(
-        default=100,
+    chosen_distinction = models.ForeignKey(
+        "arxii.Distinction",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="chosen_favor_configs",
         help_text=(
-            "Added to the 100% base rate for a character whose active patronage is this "
-            "being. Adds with favor earning modifiers."
-        ),
-    )
-    invocation_ease_points = models.PositiveIntegerField(
-        default=30,
-        help_text=(
-            "Points eased when invoking the character's own patron (30 is two bands). "
-            "Adds with favor eases and favor invocation modifiers."
+            'The distinction every Chosen holds (#4341). Its effects on the "Your patron" '
+            "favor targets are the Chosen earning bonus and invocation ease. Character "
+            "creation grants it with the patronage; saving a change here grants it to "
+            "every Chosen who lacks it."
         ),
     )
 
@@ -1630,6 +1631,17 @@ class Pledge(CreditedContent, SharedMemoryModel):
         related_name="closing_for_pledges",
         help_text="One of the being's own tier 1 or 2 rites; performing it closes the pledge.",
     )
+    pact_offer = models.ForeignKey(
+        "arxii.PactOffer",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="pledges",
+        help_text=(
+            "A pact the being offers at this pledge's close (#4341). The holder may accept "
+            "it when the closing rite succeeds. Empty = no pact offered."
+        ),
+    )
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -1656,6 +1668,12 @@ class Pledge(CreditedContent, SharedMemoryModel):
                 errors["closing_rite"] = (
                     "The closing rite must be tier 1 or 2; a tier 3 rite is a ceremony."
                 )
+        if (
+            self.pact_offer_id is not None
+            and self.being_id is not None
+            and self.pact_offer.being_id != self.being_id
+        ):
+            errors["pact_offer"] = "The pact offered must be one of this being's own offers."
         if errors:
             raise ValidationError(errors)
 

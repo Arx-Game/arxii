@@ -926,7 +926,8 @@ def sign_marriage_pact(
     ``OrgObligation`` (settled by the existing weekly obligations pass);
     RESIDENCY marries the junior spouse into the senior family (name change
     via the surname denorm). CRISIS_RESPONSE and CUSTOM are recorded and
-    fire socially — breach machinery watches them all.
+    fire socially. Nothing watches for a breach: ``breach_commitment`` stamps
+    one and stops its machinery, but only a test calls it today.
     """
     if senior_house.pk == junior_house.pk:
         msg = "a pact needs two houses"

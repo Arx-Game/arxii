@@ -372,7 +372,7 @@ class WhatTheBeingAsksFor(JourneyCase):
         }
         data = {
             f"{name}-{key}": value
-            for name in ("resonances", "facets")
+            for name in ("resonances", "facets", "pact_offers", "pact_commitments")
             for key, value in prefix.items()
         }
         data.update(

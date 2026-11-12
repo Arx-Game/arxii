@@ -112,6 +112,7 @@ from world.mechanics.models import (
     PropertyDetonation,
 )
 from world.military.models import MilitaryUnit
+from world.pacts.models import PactOffer, PactPeriodDetails
 from world.room_features.models import DefenseProgressionDetails, RoomWardDetails
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.models import Persona
@@ -307,6 +308,14 @@ SETTER_SOURCES: tuple[SetterSource, ...] = (
         related=("faith_variant__being", "faith_variant__threshold"),
     ),
     SetterSource("restriction", Restriction, "inflicted_condition", _fixed(_PRICE), label=_named()),
+    SetterSource(
+        "pact offer",
+        PactOffer,
+        "condition",
+        _fixed("on the holder, at its first stage, when she signs"),
+        label=lambda row: f"{row.being.name}: {row.name}" if row.being_id else row.name,
+        related=("being",),
+    ),
     SetterSource(
         "standoff approach",
         StandoffApproach,
@@ -737,6 +746,7 @@ EXCLUDED_FIELDS: tuple[ExcludedField, ...] = (
     ExcludedField(TechniqueDraftRemovedCondition, "condition", _DRAFT),
     ExcludedField(ConditionInstance, "condition", _PLAY_STATE),
     ExcludedField(ConditionInstance, "current_stage", _PLAY_STATE),
+    ExcludedField(PactPeriodDetails, "stage_after", _PLAY_STATE),
     ExcludedField(ObjectProperty, "property", _PLAY_STATE),
     ExcludedField(CovenantRiteParticipant, "granted_condition", _PLAY_STATE),
     ExcludedField(DramaticSurgeRecord, "condition", _PLAY_STATE),

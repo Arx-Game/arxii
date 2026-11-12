@@ -13,7 +13,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
-from django.utils import timezone
 
 from commands.tests.message_capture import message_text
 from commands.worship import CmdPledge, CmdSacrifice
@@ -33,7 +32,6 @@ from world.worship.factories import (
     AnswerSacrificeLineFactory,
     BeingFacetFactory,
     BeingResonanceFactory,
-    DevotionStandingFactory,
     FavorOutcomeAwardFactory,
     PledgeFactory,
     RiteKindFactory,
@@ -41,9 +39,10 @@ from world.worship.factories import (
     WorshippedBeingFactory,
     WorshipRiteFactory,
     WorshipRiteTierAwardFactory,
+    make_chosen,
 )
 from world.worship.invocation_services import get_devotion_config
-from world.worship.models import DevotionStanding, PatronageValence, PledgeDetails, Vision
+from world.worship.models import DevotionStanding, PledgeDetails, Vision
 from world.worship.services import bump_devotion
 
 
@@ -106,12 +105,7 @@ class PledgeTelnetTests(TestCase):
             name="Ombrin's rite",
         )
         ShrineDetailsFactory(feature_instance__room_profile=self.profile, being=self.ombrin)
-        DevotionStandingFactory(
-            character_sheet=self.ysmay.sheet_data,
-            being=self.ombrin,
-            valence=PatronageValence.DEVOTIONAL,
-            established_at=timezone.now(),
-        )
+        make_chosen(self.ysmay.sheet_data, self.ombrin)
         self.pledge = PledgeFactory(
             being=self.ombrin, name="The Silk Watch", favor_target=20, closing_rite=rite
         )

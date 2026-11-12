@@ -99,6 +99,9 @@ export const magicKeys = {
     [...magicKeys.pendingAlterations(), 'library', pendingId] as const,
 
   auderePending: () => [...magicKeys.all, 'audere', 'pending'] as const,
+  manifestChoices: (characterSheetId: number) =>
+    [...magicKeys.all, 'manifest-choices', characterSheetId] as const,
+
   audereUltimates: (characterSheetId: number) =>
     [...magicKeys.all, 'audere', 'ultimates', characterSheetId] as const,
 
@@ -1128,6 +1131,40 @@ export function useTrainTechnique(characterSheetId: number) {
       api.trainTechnique(characterSheetId, techniqueId, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: magicKeys.techniqueProgress(characterSheetId) }).catch(
+        () => {}
+      );
+      qc.invalidateQueries({ queryKey: ['character-sheets', characterSheetId] }).catch(() => {});
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Technique picker (#4341)
+// ---------------------------------------------------------------------------
+
+/** What each manifesting technique the character knows can bring into a fight. */
+export function useManifestChoices(characterSheetId: number) {
+  return useQuery({
+    queryKey: magicKeys.manifestChoices(characterSheetId),
+    queryFn: () => api.getManifestChoices(characterSheetId),
+    enabled: characterSheetId > 0,
+  });
+}
+
+/**
+ * Choose what a technique brings (`manifest_set`). A refusal comes back as
+ * `success === false` with the reason, so it is thrown for the panel to show.
+ */
+export function useSetManifestChoice(characterSheetId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ techniqueId, optionId }: { techniqueId: number; optionId: number }) => {
+      const result = await api.setManifestChoice(characterSheetId, techniqueId, optionId);
+      if (result.success === false) throw new Error(result.message);
+      return result;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: magicKeys.manifestChoices(characterSheetId) }).catch(
         () => {}
       );
       qc.invalidateQueries({ queryKey: ['character-sheets', characterSheetId] }).catch(() => {});
