@@ -108,20 +108,17 @@ class CmdChannel(ArxCommand):
     # Subverbs
 
     def _list(self) -> None:
-        from world.channels.models import ChannelSubscription  # noqa: PLC0415
-        from world.channels.services import accessible_channels_for  # noqa: PLC0415
+        from world.channels.services import (  # noqa: PLC0415
+            accessible_channels_for,
+            subscriptions_by_channel,
+        )
 
         account = self._account()
         channels: list[Channel] = list(accessible_channels_for(account))
         if not channels:
             self.msg("You have no channels.")
             return
-        subscriptions: dict[int, ChannelSubscription] = {
-            sub.channel_id: sub
-            for sub in ChannelSubscription.objects.filter(
-                account=account, channel__in=channels
-            ).select_related("display_tenure__roster_entry__character_sheet__character")
-        }
+        subscriptions = subscriptions_by_channel(account)
         lines = ["|wChannels|n"]
         lines.extend(
             f"  {channel.display_name} ({channel.get_kind_display()}) "

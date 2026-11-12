@@ -49,19 +49,12 @@ from world.channels.services import (
     eligible_tenures,
     hidden_author_player_ids,
     mark_read,
+    subscriptions_by_channel,
     unread_counts,
     unsubscribe,
 )
 
 _SUBSCRIPTION_TENURE = "display_tenure__roster_entry__character_sheet__character"
-
-
-def _own_subscriptions(request: Request) -> list[ChannelSubscription]:
-    return list(
-        ChannelSubscription.objects.filter(account=request.user).select_related(
-            "channel__organization", _SUBSCRIPTION_TENURE
-        )
-    )
 
 
 class ChannelViewSet(viewsets.ReadOnlyModelViewSet):
@@ -81,9 +74,9 @@ class ChannelViewSet(viewsets.ReadOnlyModelViewSet):
         context = super().get_serializer_context()
         if self.request is None or not self.request.user.is_authenticated:
             return context
-        subscriptions = _own_subscriptions(self.request)
-        context["subscriptions"] = {sub.channel_id: sub for sub in subscriptions}
-        context["unread_counts"] = unread_counts(self.request.user, subscriptions)
+        subscriptions = subscriptions_by_channel(self.request.user)
+        context["subscriptions"] = subscriptions
+        context["unread_counts"] = unread_counts(self.request.user, list(subscriptions.values()))
         return context
 
     @extend_schema(responses=ChannelIdentitySerializer(many=True))
@@ -130,7 +123,7 @@ class ChannelSubscriptionViewSet(
         context = super().get_serializer_context()
         if self.action == "list" and self.request.user.is_authenticated:
             context["unread_counts"] = unread_counts(
-                self.request.user, _own_subscriptions(self.request)
+                self.request.user, list(subscriptions_by_channel(self.request.user).values())
             )
         return context
 

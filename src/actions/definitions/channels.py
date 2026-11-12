@@ -36,14 +36,27 @@ _MSG_WHICH_IDENTITY = "Pick a number from the list of who you can speak as."
 _CHANNELS_CATEGORY = "channels"
 
 
+def _account(kwargs: dict[str, Any]) -> AccountDB | None:
+    """The caller's account, set by the view or command that ran the action. Only a real
+    ``AccountDB`` counts: anything else (an id a client slipped into dispatch kwargs) is
+    treated as no account at all."""
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+
+    account = kwargs.get("account")
+    return account if isinstance(account, AccountDB) else None
+
+
 def _resolve_channel(account: AccountDB, kwargs: dict[str, Any]) -> Channel | None:
-    """The channel ``channel_id`` or ``channel_name`` names, or None."""
-    from world.channels.models import Channel  # noqa: PLC0415
-    from world.channels.services import channel_named  # noqa: PLC0415
+    """The channel ``channel_id`` or ``channel_name`` names, or None. Either way only a
+    channel the account may name counts (``findable_channels_for``), so an org channel
+    the account cannot reach answers like a missing one."""
+    from world.channels.services import channel_named, findable_channels_for  # noqa: PLC0415
 
     channel_id = kwargs.get("channel_id")
     if channel_id is not None:
-        return Channel.objects.filter(pk=channel_id).select_related("organization").first()
+        if isinstance(channel_id, bool) or not str(channel_id).isdigit():
+            return None
+        return findable_channels_for(account).filter(pk=int(channel_id)).first()
     return channel_named(account, kwargs.get("channel_name") or "")
 
 
@@ -93,7 +106,7 @@ class PostToChannelAction(_AccountChannelAction):
         from world.channels.services import post_to_channel  # noqa: PLC0415
         from world.channels.types import ChannelError  # noqa: PLC0415
 
-        account = kwargs.get("account")
+        account = _account(kwargs)
         if account is None:
             return ActionResult(success=False, message=_MSG_NO_ACCOUNT)
         channel = _resolve_channel(account, kwargs)
@@ -127,7 +140,7 @@ class JoinChannelAction(_AccountChannelAction):
         from world.channels.services import subscribe  # noqa: PLC0415
         from world.channels.types import ChannelError  # noqa: PLC0415
 
-        account = kwargs.get("account")
+        account = _account(kwargs)
         if account is None:
             return ActionResult(success=False, message=_MSG_NO_ACCOUNT)
         channel = _resolve_channel(account, kwargs)
@@ -167,7 +180,7 @@ class LeaveChannelAction(_AccountChannelAction):
         from world.channels.services import unsubscribe  # noqa: PLC0415
         from world.channels.types import ChannelError  # noqa: PLC0415
 
-        account = kwargs.get("account")
+        account = _account(kwargs)
         if account is None:
             return ActionResult(success=False, message=_MSG_NO_ACCOUNT)
         channel = _resolve_channel(account, kwargs)
@@ -199,7 +212,7 @@ class SetChannelMuteAction(_AccountChannelAction):
         from world.channels.services import update_subscription  # noqa: PLC0415
         from world.channels.types import ChannelError  # noqa: PLC0415
 
-        account = kwargs.get("account")
+        account = _account(kwargs)
         if account is None:
             return ActionResult(success=False, message=_MSG_NO_ACCOUNT)
         channel = _resolve_channel(account, kwargs)
@@ -241,7 +254,7 @@ class SetChannelIdentityAction(_AccountChannelAction):
         )
         from world.channels.types import ChannelError  # noqa: PLC0415
 
-        account = kwargs.get("account")
+        account = _account(kwargs)
         if account is None:
             return ActionResult(success=False, message=_MSG_NO_ACCOUNT)
         channel = _resolve_channel(account, kwargs)
@@ -252,7 +265,9 @@ class SetChannelIdentityAction(_AccountChannelAction):
             return ActionResult(success=False, message=ChannelError.NOT_SUBSCRIBED)
         choices = eligible_tenures(account, channel)
         choice = kwargs.get("choice")
-        if not isinstance(choice, int) or not 1 <= choice <= len(choices):
+        if isinstance(choice, bool) or not isinstance(choice, int):
+            return ActionResult(success=False, message=_MSG_WHICH_IDENTITY)
+        if not 1 <= choice <= len(choices):
             return ActionResult(success=False, message=_MSG_WHICH_IDENTITY)
         tenure = choices[choice - 1]
         try:
@@ -285,7 +300,7 @@ class DeleteChannelMessageAction(_AccountChannelAction):
         from world.channels.services import delete_channel_message  # noqa: PLC0415
         from world.channels.types import ChannelError  # noqa: PLC0415
 
-        account = kwargs.get("account")
+        account = _account(kwargs)
         if account is None:
             return ActionResult(success=False, message=_MSG_NO_ACCOUNT)
         message = _resolve_message(kwargs)
@@ -318,7 +333,7 @@ class BanChannelAuthorAction(_AccountChannelAction):
         from world.channels.services import ban_channel_author  # noqa: PLC0415
         from world.channels.types import ChannelError  # noqa: PLC0415
 
-        account = kwargs.get("account")
+        account = _account(kwargs)
         if account is None:
             return ActionResult(success=False, message=_MSG_NO_ACCOUNT)
         message = _resolve_message(kwargs)

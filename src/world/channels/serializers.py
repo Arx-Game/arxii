@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.db import transaction
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
@@ -21,12 +22,25 @@ from world.channels.models import Channel, ChannelMessage, ChannelSubscription
 from world.channels.services import (
     UNSET,
     eligible_tenures,
+    findable_channels_for,
     subscribe,
     unread_count,
     update_subscription,
 )
 from world.channels.types import ChannelError
 from world.roster.models import RosterTenure
+
+
+class _FindableChannelField(serializers.PrimaryKeyRelatedField):
+    """A channel id the requester may name (``findable_channels_for``). An org channel
+    the requester can neither reach nor is banned from is DRF's "invalid pk", the same as
+    a missing one, so the API never confirms an org channel to a non-member."""
+
+    def get_queryset(self) -> Any:
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return Channel.objects.none()
+        return findable_channels_for(request.user)
 
 
 class _OwnCurrentTenureField(serializers.PrimaryKeyRelatedField):
@@ -48,7 +62,7 @@ class ChannelSubscriptionSerializer(serializers.ModelSerializer):
     tenures eligible for the channel (an alt outside the org is refused with 400).
     """
 
-    channel = serializers.PrimaryKeyRelatedField(queryset=Channel.objects.filter(is_active=True))
+    channel = _FindableChannelField(queryset=Channel.objects.none())
     display_tenure = _OwnCurrentTenureField(
         queryset=RosterTenure.objects.none(), allow_null=True, required=False
     )
@@ -102,30 +116,37 @@ class ChannelSubscriptionSerializer(serializers.ModelSerializer):
     def create(self, validated_data: dict[str, Any]) -> ChannelSubscription:
         account = self.context["request"].user
         channel = validated_data.pop("channel")
-        try:
-            subscription = subscribe(account, channel)
-        except ChannelError as exc:
-            raise serializers.ValidationError({"channel": exc.user_message}) from exc
-        return self._apply_preferences(subscription, validated_data)
+        with transaction.atomic():
+            try:
+                subscription = subscribe(account, channel)
+            except ChannelError as exc:
+                raise serializers.ValidationError({"channel": exc.user_message}) from exc
+            return self._apply_preferences(subscription, validated_data)
 
     def update(
         self, instance: ChannelSubscription, validated_data: dict[str, Any]
     ) -> ChannelSubscription:
         validated_data.pop("channel", None)
-        return self._apply_preferences(instance, validated_data)
+        with transaction.atomic():
+            return self._apply_preferences(instance, validated_data)
 
     @staticmethod
     def _apply_preferences(
         subscription: ChannelSubscription, data: dict[str, Any]
     ) -> ChannelSubscription:
-        return update_subscription(
-            subscription,
-            display_tenure=data.get("display_tenure", UNSET),
-            muted=data.get("muted", UNSET),
-            collapsed=data.get("collapsed", UNSET),
-            notification_level=data.get("notification_level", UNSET),
-            sort_order=data.get("sort_order", UNSET),
-        )
+        # validate() already checked the identity; this catches the race where the
+        # tenure lost eligibility in between (the service re-checks it).
+        try:
+            return update_subscription(
+                subscription,
+                display_tenure=data.get("display_tenure", UNSET),
+                muted=data.get("muted", UNSET),
+                collapsed=data.get("collapsed", UNSET),
+                notification_level=data.get("notification_level", UNSET),
+                sort_order=data.get("sort_order", UNSET),
+            )
+        except ChannelError as exc:
+            raise serializers.ValidationError({"display_tenure": exc.user_message}) from exc
 
 
 class ChannelSerializer(serializers.ModelSerializer):
@@ -196,7 +217,7 @@ class ChannelMessageCreateSerializer(serializers.Serializer):
 
 
 class ChannelBanSerializer(serializers.Serializer):
-    reason = serializers.CharField(required=False, allow_blank=True, default="")
+    reason = serializers.CharField(required=False, allow_blank=True, default="", max_length=500)
 
 
 class ChannelActionResultSerializer(serializers.Serializer):

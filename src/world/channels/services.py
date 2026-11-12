@@ -144,14 +144,18 @@ def _is_banned(account: AccountDB, channel: Channel) -> bool:
 
 
 def accessible_channels_for(account: AccountDB) -> QuerySet[Channel]:
-    """Active channels this account may read and post in right now."""
-    allowed = Q(kind=ChannelKind.PUBLIC) | Q(
-        kind=ChannelKind.ORG,
-        organization__is_covert=False,
-        organization_id__in=_org_ids_reachable_for(account),
-    )
+    """Active channels this account may read right now (and post in, given an eligible
+    identity). Staff read every non-covert channel for ordinary moderation (spec leak
+    table, "Channel content to staff"); posting in an org channel still needs a member
+    tenure (``post_to_channel`` checks identity)."""
     if account.is_staff:
-        allowed |= Q(kind=ChannelKind.STAFF)
+        allowed = ~Q(kind=ChannelKind.ORG) | Q(organization__is_covert=False)
+    else:
+        allowed = Q(kind=ChannelKind.PUBLIC) | Q(
+            kind=ChannelKind.ORG,
+            organization__is_covert=False,
+            organization_id__in=_org_ids_reachable_for(account),
+        )
     banned_ids = ChannelBan.objects.filter(account=account).values("channel_id")
     return (
         Channel.objects.filter(allowed, is_active=True)
@@ -169,35 +173,52 @@ def can_access_channel(account: AccountDB, channel: Channel) -> bool:
         return bool(account.is_staff)
     if channel.organization is None or channel.organization.is_covert:
         return False
+    if account.is_staff:
+        return True  # moderation visibility; identity is still checked to post
     return _eligible_tenure_qs(account, channel).exists()
+
+
+def findable_channels_for(account: AccountDB) -> QuerySet[Channel]:
+    """Active channels this account may name, by name or id: those it can reach, is
+    subscribed to (so a player who lost the org can still leave it), or is banned from
+    (so the refusal says why). Every other channel answers as if it did not exist, so
+    no surface confirms an org channel to a non-member."""
+    reachable = (
+        Q(pk__in=accessible_channels_for(account).values("pk"))
+        | Q(subscriptions__account=account)
+        | Q(bans__account=account)
+    )
+    return (
+        Channel.objects.filter(reachable, is_active=True).select_related("organization").distinct()
+    )
+
+
+def subscriptions_by_channel(account: AccountDB) -> dict[int, ChannelSubscription]:
+    """The account's own subscriptions keyed by channel pk, with what a listing shows."""
+    return {
+        subscription.channel_id: subscription
+        for subscription in ChannelSubscription.objects.filter(account=account).select_related(
+            "channel__organization",
+            "display_tenure__roster_entry__character_sheet__character",
+        )
+    }
 
 
 def channel_named(account: AccountDB, name: str) -> Channel | None:
     """The active channel this account names, matched case-insensitively on
     ``display_name`` (an ORG channel answers to its organization's live name).
 
-    Only channels the account can reach, is subscribed to (so a player who lost an org
-    can still leave it), or is banned from (so the refusal says why) are matched; any
-    other channel answers None, the same as one that does not exist. An exact-case match
-    wins when two channels share a name in different case.
+    Only ``findable_channels_for`` channels are matched; any other answers None, the
+    same as one that does not exist. An exact-case match wins when two channels share a
+    name in different case.
     """
     wanted = (name or "").strip()
     if not wanted:
         return None
-    reachable = (
-        Q(pk__in=accessible_channels_for(account).values("pk"))
-        | Q(subscriptions__account=account)
-        | Q(bans__account=account)
-    )
     named = (~Q(kind=ChannelKind.ORG) & Q(name__iexact=wanted)) | Q(
         kind=ChannelKind.ORG, organization__name__iexact=wanted
     )
-    matches = list(
-        Channel.objects.filter(reachable, named, is_active=True)
-        .select_related("organization")
-        .distinct()
-        .order_by("pk")
-    )
+    matches = list(findable_channels_for(account).filter(named).order_by("pk"))
     exact = [channel for channel in matches if channel.display_name == wanted]
     return (exact or matches or [None])[0]
 
@@ -354,12 +375,18 @@ def _account_ids_with_access(channel: Channel, account_ids: list[int]) -> set[in
     organization = channel.organization
     if organization is None or organization.is_covert:
         return set()
-    return set(
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+
+    staff = set(
+        AccountDB.objects.filter(pk__in=candidates, is_staff=True).values_list("pk", flat=True)
+    )
+    members = set(
         RosterTenure.objects.current()
         .filter(_membership_tenure_q(_org_cascade_ids(organization)))
         .filter(player_data_id__in=candidates)
         .values_list("player_data_id", flat=True)
     )
+    return staff | members
 
 
 def _send(subscription: ChannelSubscription, message: ChannelMessage, *, is_own: bool) -> None:

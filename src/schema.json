@@ -51205,6 +51205,7 @@ components:
         reason:
           type: string
           default: ''
+          maxLength: 500
     ChannelIdentity:
       type: object
       description: One of the requester's own tenures eligible to speak in a channel.
