@@ -528,7 +528,7 @@ export function buildPiropaDocument(published: boolean): HouseDocument {
       sigil_description: 'PLACEHOLDER',
       house_state: 'standing',
       published_at: published ? '2026-09-20T00:00:00Z' : null,
-      particle_example: 'Océane aza Piropa · Raffaele azas Piropa',
+      particle: { born: 'aza', taken_in: 'azas' },
       default_succession_law: { name: 'Infernal Enatic - Durance', codex_entry_id: 12 },
       patron: null,
       aspects: [

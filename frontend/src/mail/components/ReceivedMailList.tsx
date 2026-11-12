@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { markdownProse } from '@/lib/markdownProse';
 
 interface Props {
   page: number;
@@ -54,7 +55,7 @@ function MailRow({ mail, onReply }: MailRowProps) {
               </Button>
             )}
           </div>
-          <div className="prose mt-2 max-w-none text-sm">
+          <div className={cn('mt-2 max-w-none text-sm', markdownProse)}>
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{mail.message}</ReactMarkdown>
           </div>
         </AccordionContent>

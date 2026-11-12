@@ -1,5 +1,7 @@
 import { Fragment } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { cn } from '@/lib/utils';
+import { markdownProse } from '@/lib/markdownProse';
 import { Link } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
 import type { CodexCompanionGroup, CodexCompanionItem, CodexCompanionSection } from '../types';
@@ -98,7 +100,7 @@ export function CompanionSections({ sections, onNavigate }: SectionsProps) {
             )}
             {section.when && <span className="text-sm text-muted-foreground">{section.when}</span>}
           </div>
-          <div className="prose prose-sm dark:prose-invert max-w-none">
+          <div className={cn('max-w-none text-sm', markdownProse)}>
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.body}</ReactMarkdown>
           </div>
         </section>

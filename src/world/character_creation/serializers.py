@@ -1285,6 +1285,8 @@ class VisibleOfferSerializer(serializers.Serializer):
     distinction_id = serializers.IntegerField()
     name = serializers.CharField()
     distinction_name = serializers.CharField()
+    #: What a life-page card reads under its name (#5099).
+    distinction_description = serializers.CharField(allow_blank=True)
     player_line = serializers.CharField()
     chapter = serializers.CharField()
     arrives_as = serializers.CharField()
