@@ -15,7 +15,7 @@ from world.channels.factories import (
     ChannelMessageFactory,
     ChannelSubscriptionFactory,
 )
-from world.channels.models import ChannelMessage
+from world.channels.models import Channel, ChannelMessage
 from world.channels.services import (
     accessible_channels_for,
     can_access_channel,
@@ -23,10 +23,12 @@ from world.channels.services import (
     eligible_tenures,
     ensure_public_channel,
     post_to_channel,
+    provision_missing_org_channels,
     provision_org_channel,
     prune_channel_history,
 )
 from world.channels.types import ChannelError
+from world.covenants.factories import CovenantFactory
 from world.roster.factories import PlayerDataFactory, RosterTenureFactory
 from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
 from world.societies.houses.models import FealtyEdge
@@ -120,6 +122,18 @@ class OrgIdentityTests(TestCase):
 class ProvisionTests(TestCase):
     def test_covert_org_gets_no_channel(self) -> None:
         self.assertIsNone(provision_org_channel(OrganizationFactory(is_covert=True)))
+
+    def test_covenant_org_gets_no_channel_and_backfill_skips_it(self) -> None:
+        # Covenant membership is CharacterCovenantRole, so its org channel would be
+        # unreachable (ruling, #3299); the seed backfill gives the plain org its channel.
+        covenant_org = CovenantFactory().organization
+        plain = OrganizationFactory()
+
+        self.assertIsNone(provision_org_channel(covenant_org))
+        provision_missing_org_channels()
+
+        self.assertFalse(Channel.objects.filter(organization=covenant_org).exists())
+        self.assertTrue(Channel.objects.filter(organization=plain).exists())
 
     def test_name_clash_takes_org_suffix(self) -> None:
         org = OrganizationFactory()

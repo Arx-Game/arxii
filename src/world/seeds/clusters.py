@@ -548,9 +548,15 @@ def _seed_roster() -> None:
 
 
 def _seed_channels() -> None:
-    from world.channels.services import ensure_public_channel  # noqa: PLC0415
+    from world.channels.services import (  # noqa: PLC0415
+        ensure_public_channel,
+        provision_missing_org_channels,
+    )
 
     ensure_public_channel()
+    # Seed and config orgs (crown, academy, demo houses) are made by get_or_create paths
+    # that do not provision; give each its ORG channel here. Idempotent.
+    provision_missing_org_channels()
 
 
 def _seed_traits() -> None:
@@ -820,8 +826,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # inventory can show a Trait row count for the #944 content-pipeline domain,
     # which had zero inventory visibility before #2266.
     "traits": _seed_traits,
-    # Channels: the game-wide PUBLIC player channel (#3299). ORG channels are made
-    # with their organizations, not here. No dependencies on any other cluster.
+    # Channels: the game-wide PUBLIC player channel (#3299), plus the ORG channel of
+    # every org the seed clusters above made without one. Registered last so every
+    # org-seeding cluster has run.
     "channels": _seed_channels,
 }
 
@@ -1167,6 +1174,6 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Traits: no-op seeder — see _seed_traits (#2266). Row count for the #944
         # content-pipeline domain (stats/skills), previously invisible in this hub.
         "traits": [Trait],
-        # Channels: the PUBLIC player channel (#3299).
+        # Channels: the PUBLIC player channel and seeded orgs' ORG channels (#3299).
         "channels": [Channel],
     }

@@ -33,6 +33,7 @@ from world.channels.constants import (
 )
 from world.channels.models import Channel, ChannelBan, ChannelMessage, ChannelSubscription
 from world.channels.types import ChannelError
+from world.covenants.models import Covenant
 from world.roster.models import RosterTenure
 from world.scenes.block_services import blocked_player_ids_for
 from world.scenes.interaction_services import WEB_PROTOCOL_KEYS
@@ -446,8 +447,13 @@ def ban_channel_author(
 
 
 def provision_org_channel(organization: Organization) -> Channel | None:
-    """Get or create the ORG channel for ``organization``; None for a covert org."""
-    if organization.is_covert:
+    """Get or create the ORG channel for ``organization``.
+
+    None for a covert org, and for an org that backs a Covenant: covenant membership
+    lives in CharacterCovenantRole, not OrganizationMembership, so nobody could ever
+    reach that channel (ruling, #3299).
+    """
+    if organization.is_covert or Covenant.objects.filter(organization=organization).exists():
         return None
     existing = Channel.objects.filter(organization=organization).first()
     if existing is not None:
@@ -461,6 +467,15 @@ def provision_org_channel(organization: Organization) -> Channel | None:
             suffix = f" (org {organization.pk})"
             name = organization.name[: _CHANNEL_NAME_MAX - len(suffix)] + suffix
     return Channel.objects.create(name=name, kind=ChannelKind.ORG, organization=organization)
+
+
+def provision_missing_org_channels() -> int:
+    """Provision the ORG channel of every org that should have one and lacks it (seed and
+    config orgs made before or outside the creation paths); return how many were made."""
+    missing = Organization.objects.filter(
+        is_covert=False, ooc_channel__isnull=True, covenant__isnull=True
+    ).order_by("pk")
+    return sum(1 for org in missing if provision_org_channel(org) is not None)
 
 
 def ensure_public_channel() -> Channel:
