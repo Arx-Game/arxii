@@ -195,8 +195,13 @@ jobs:
           print(seed_motif_facet_spec(username='e2e_test_account'))
           from integration_tests.live_seeds import seed_gift_substance_spec
           print(seed_gift_substance_spec(username='e2e_test_account'))
+          # The channels spec signs in as its own account: its play-page test enters the
+          # world as that account's character, which would change the character the
+          # other specs' account acts as.
+          from world.seeds.test_account import seed_test_account
+          print(seed_test_account(username='e2e_channels_reader', email='e2e_channels@example.com', password='TestPass123!'))
           from integration_tests.live_seeds import seed_channels_spec
-          print(seed_channels_spec(username='e2e_test_account'))
+          print(seed_channels_spec(username='e2e_channels_reader'))
           "
       - name: Seed the fight the thrown-strike spec reads
         # #5026: a character with a throwable dagger and a fire weapon technique, an

@@ -4,10 +4,12 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
  * Player channels (#3299), against a live server (no mocked /api/**).
  *
  * Needs the rows `integration_tests.live_seeds.seed_channels_spec` writes for
- * e2e_test_account (the real-test workflow runs it after the server starts): the
+ * e2e_channels_reader (the real-test workflow makes that account and runs the seed after
+ * the server starts; it is not e2e_test_account, because the play-page test below enters
+ * the world as Linnea, which would change the character the other specs act as): the
  * account plays "Linnea Channelwright", a member of "The Lantern Guild" whose channel
  * is provisioned; "Odo Brightwater" (another player) has said one line in Public; and
- * "Mara Thornquill", whose player e2e_test_account blocks, has said one line after it.
+ * "Mara Thornquill", whose player this account blocks, has said one line after it.
  * Runs with `--config e2e.backend.config.ts`.
  *
  * Every assertion is on what the page shows. Settings are read back after a reload, so
@@ -25,7 +27,7 @@ const ACCOUNT_NAMES = ['channels_other_player', 'channels_blocked_player'];
 
 async function logIn(page: Page) {
   await page.goto('/login');
-  await page.getByPlaceholder('Username or Email').fill('e2e_test_account');
+  await page.getByPlaceholder('Username or Email').fill('e2e_channels_reader');
   await page.getByPlaceholder('Password').fill('TestPass123!');
   await page.getByRole('button', { name: 'Log In', exact: true }).click();
   await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15000 });

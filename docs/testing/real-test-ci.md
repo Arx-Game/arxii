@@ -22,8 +22,11 @@ queue.
    `seed_motif_facet_spec` (a character the account plays holding one resonance, three
    facets, and the account's creation draft at the Gift stage),
    `seed_gift_substance_spec`, `seed_thrown_strike_spec` and `seed_channels_spec` (a
-   character the account plays in an organization with its channel, and two other
-   players' lines in Public, one of them from a player the account blocks).
+   character played by its own account, `e2e_channels_reader`, in an organization with
+   its channel, and two other players' lines in Public, one of them from a player that
+   account blocks). The channels spec signs in as its own account because its play-page
+   test enters the world, which would change the character `e2e_test_account` acts as
+   in the specs that follow.
 5. Runs the Playwright specs that need a live server, with one worker, using
    `frontend/e2e.backend.config.ts`: `e2e/account-settings.spec.ts`,
    `e2e/user-journey.spec.ts`, `e2e/motif-facets.spec.ts` (the Spellbook Facets
