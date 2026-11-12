@@ -6,8 +6,9 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
  * IC missives (#3289), against a live server (no mocked /api/**). Runs with
  * `--config e2e.backend.config.ts`.
  *
- * Needs the rows `integration_tests.live_seeds.seed_missive_spec` writes for
- * e2e_test_account (the real-test workflow runs it after the server starts and writes the
+ * Needs the rows `integration_tests.live_seeds.seed_missive_spec` writes for its own
+ * account, e2e_missives_account, so nothing here changes the character e2e_test_account
+ * has selected (the real-test workflow seeds it after the server starts and writes the
  * ids it made to the JSON file named by MISSIVE_SEED): "Quill Lettersend" with 1000
  * coppers and a brass locket, wearing her face "the Inkwell"; and one letter already
  * delivered to her own name from "the Lantern Man" by Courier, with 25 coppers riding
@@ -15,6 +16,9 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
  *
  * Each step reads back what the server kept through `/api/missives/` and the purse.
  */
+
+/** The spec's own account (seeded in real-test.yml), never e2e_test_account. */
+const MISSIVES_ACCOUNT = 'e2e_missives_account';
 
 interface Seed {
   character_id: number;
@@ -73,7 +77,7 @@ test.beforeAll(() => {
 
 async function logIn(page: Page) {
   await page.goto('/login');
-  await page.getByPlaceholder('Username or Email').fill('e2e_test_account');
+  await page.getByPlaceholder('Username or Email').fill(MISSIVES_ACCOUNT);
   await page.getByPlaceholder('Password').fill('TestPass123!');
   await page.getByRole('button', { name: 'Log In', exact: true }).click();
   await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15000 });

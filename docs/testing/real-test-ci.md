@@ -20,12 +20,14 @@ queue.
    `arx manage shell` and a function in `src/integration_tests/live_seeds.py`
    (test-factory rows; the database lives for one run). Today that is
    `seed_motif_facet_spec`: a character the account plays holding one resonance, three
-   facets, and the account's creation draft at the Gift stage. The missives,
-   gift-substance and thrown-strike seeds follow (missives before gift-substance, so the
-   account's selected character stays the gift spec's): `seed_missive_spec` (#3289)
-   writes "Quill Lettersend" with coin and a brass locket, wearing an established face, and a letter
-   from "the Lantern Man" already delivered to her with 25 coppers riding along; its ids
-   go to `/tmp/missive-seed.json`, which the spec reads.
+   facets, and the account's creation draft at the Gift stage. The gift-substance and
+   thrown-strike seeds follow. The missives spec (#3289) has its own account,
+   `e2e_missives_account` (same password), seeded in its own step with
+   `seed_test_account` and `seed_missive_spec`, so nothing it writes or plays changes the
+   character `e2e_test_account` has selected, which the gift-substance spec reads. The
+   seed writes "Quill Lettersend" with coin and a brass locket, wearing an established
+   face, and a letter from "the Lantern Man" already delivered to her with 25 coppers
+   riding along; its ids go to `/tmp/missive-seed.json`, which the spec reads.
 5. Runs the Playwright specs that need a live server, with one worker, using
    `frontend/e2e.backend.config.ts`: `e2e/account-settings.spec.ts`,
    `e2e/user-journey.spec.ts`, `e2e/motif-facets.spec.ts` (the Spellbook Facets

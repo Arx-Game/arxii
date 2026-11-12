@@ -19,10 +19,10 @@ from world.roster.models import RosterEntry
 
 class MissiveLiveSeedTests(TestCase):
     def test_seed_is_idempotent_and_the_letter_waits_for_quill(self) -> None:
-        AccountFactory(username="e2e_test_account")
+        AccountFactory(username="e2e_missives_account")
 
-        first = seed_missive_spec(username="e2e_test_account")
-        second = seed_missive_spec(username="e2e_test_account")
+        first = seed_missive_spec(username="e2e_missives_account")
+        second = seed_missive_spec(username="e2e_missives_account")
 
         self.assertEqual(first, second)
         sheet = RosterEntry.objects.get(pk=first.roster_entry_id).character_sheet
