@@ -19,7 +19,7 @@ stock `@channel` command and its IRC/RSS/Grapevine/Discord bridge commands from
 the account cmdset, and #1884 kept an Evennia `house_<pk>` channel per house.
 All of that is gone: the stock and bridge commands are removed from the
 `AccountCmdSet` (`commands/default_cmdsets.py`), `DEFAULT_CHANNELS = []`
-(`server/conf/settings.py`), and migration `0393_channels_carry_from_evennia`
+(`server/conf/settings.py`), and migration `0394_channels_carry_from_evennia`
 deleted the Evennia `Public` and `house_*` `ChannelDB` rows, the Attribute rows
 they owned, and the channel nicks on accounts. Old Evennia history and
 subscriptions were deliberately discarded (Evennia keeps channel lines in log

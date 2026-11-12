@@ -67,7 +67,9 @@ class ControlLossTriggerTests(TestCase):
 
 
 class BandValidatorTests(TestCase):
-    """The monotonic-order rule over a whole band set, which only the admin formsets submit."""
+    """The monotonic-order rule and the control-for-power trade rule (#4887) over a band set.
+
+    No journey authors bands; the admin formsets and model ``clean()`` are the only seams."""
 
     def test_validate_compulsion_bands_rejects_better_outcome_with_worse_result(self) -> None:
         compulsion = CompulsionFactory()
@@ -107,6 +109,7 @@ class BandValidatorTests(TestCase):
             trigger=trigger,
             outcome=CheckOutcomeFactory(name="Fail", success_level=-1),
             intensity=4,
+            control_change=-6,
         )
         better = ControlLossBandFactory.build(
             trigger=trigger,
@@ -114,6 +117,53 @@ class BandValidatorTests(TestCase):
             intensity=0,
         )
         self.assertEqual(validate_control_loss_bands([worse, better]), [])
+
+    def test_a_success_that_lowers_control_is_refused_by_name(self) -> None:
+        """Ruled 2026-11-01 (#4887): gaining control is never a negative."""
+        band = ControlLossBandFactory.build(
+            outcome=CheckOutcomeFactory(name="Clean Win", success_level=1), control_change=-1
+        )
+        self.assertEqual(
+            validate_control_loss_bands([band]),
+            ["'Clean Win' is a success, so it cannot lower Control (it has Control -1)."],
+        )
+
+    def test_a_failure_that_gains_more_power_than_control_it_loses_is_refused(self) -> None:
+        """Ruled 2026-11-01 (#4887): a failed result loses more than it gains."""
+        band = ControlLossBandFactory.build(
+            outcome=CheckOutcomeFactory(name="Slip", success_level=-1),
+            intensity=5,
+            control_change=-4,
+        )
+        self.assertEqual(
+            validate_control_loss_bands([band]),
+            [
+                "'Slip' is a failure, so it cannot add more Intensity than the Control it "
+                "takes away (it has Intensity +5, Control -4)."
+            ],
+        )
+        band.control_change = -5
+        self.assertEqual(validate_control_loss_bands([band]), [])
+
+    def test_model_clean_refuses_a_failure_that_gains_more_than_it_loses(self) -> None:
+        """The band's own ``clean()`` (any ``full_clean`` save) runs the trade rule too."""
+        band = ControlLossBandFactory.build(
+            trigger=ControlLossTriggerFactory(wound=True),
+            outcome=CheckOutcomeFactory(name="Slip", success_level=-1),
+            intensity=5,
+            control_change=-1,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            band.clean()
+        self.assertIn("'Slip' is a failure", " ".join(ctx.exception.messages))
+
+    def test_a_middling_band_is_neither_success_nor_failure(self) -> None:
+        band = ControlLossBandFactory.build(
+            outcome=CheckOutcomeFactory(name="Partial", success_level=0),
+            intensity=3,
+            control_change=-2,
+        )
+        self.assertEqual(validate_control_loss_bands([band]), [])
 
 
 class ControlLossBandFormSetTests(TestCase):
@@ -146,3 +196,27 @@ class ControlLossBandFormSetTests(TestCase):
         trigger.fires_on = ControlLossFiresOn.MOON_PULL
         moon = formset_class(data, instance=trigger, prefix="bands")
         self.assertTrue(moon.is_valid(), moon.errors)
+
+    def test_formset_refuses_a_failure_that_gains_more_than_it_loses(self) -> None:
+        """The trade rule reaches the admin's inline, naming the band (#4887)."""
+        from world.conditions.admin import ControlLossBandInline
+
+        request = RequestFactory().get("/")
+        request.user = SimpleNamespace(has_perm=lambda _perm: True, is_active=True)
+        outcome = CheckOutcomeFactory(name="Slip", success_level=-1)
+        trigger = ControlLossTriggerFactory(wound=True)
+        formset_class = ControlLossBandInline(ControlLossTrigger, admin.site).get_formset(request)
+        data = {
+            "bands-TOTAL_FORMS": "1",
+            "bands-INITIAL_FORMS": "0",
+            "bands-MIN_NUM_FORMS": "0",
+            "bands-MAX_NUM_FORMS": "1000",
+            "bands-0-outcome": str(outcome.pk),
+            "bands-0-intensity": "5",
+            "bands-0-control_change": "-1",
+            "bands-0-severity": "1",
+            "bands-0-duration_rounds": "1",
+        }
+        formset = formset_class(data, instance=trigger, prefix="bands")
+        self.assertFalse(formset.is_valid())
+        self.assertIn("'Slip' is a failure", " ".join(formset.non_form_errors()))

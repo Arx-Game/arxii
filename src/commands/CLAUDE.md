@@ -1005,7 +1005,7 @@ actions, backends, and service functions.
   no alternate selves is told so (it had read "Available: ."); and the usage spells
   `<name or id>` with spaced separators, since `<name|id>` and `[list|shift|revert]`
   lost letters to colour codes on telnet. The hub, both shifts, the revert and the
-  block while not in control are typed in
+  compulsion roll that can refuse it are typed in
   `integration_tests/test_keeping_what_is_yours_journeys.py` (`TakingAnotherShape`;
   the hand-built `tests/test_form_command.py` is gone).
 - **`where.py`**: `CmdWhere` (`where`, #1463) — the public presence/navigation surface.

@@ -192,7 +192,11 @@ def _resolve_tuned_rally(
     from world.combat.services.encounter.config import (  # noqa: PLC0415
         get_social_maneuver_config,
     )
-    from world.conditions.services import apply_condition  # noqa: PLC0415
+    from world.conditions.services import (  # noqa: PLC0415
+        apply_condition,
+        rally_target_instance,
+        record_rally_landed,
+    )
 
     rally_result = roll_social_check(
         participant,
@@ -204,6 +208,11 @@ def _resolve_tuned_rally(
     success_level = rally_result.success_level or 0
     ally = action.focused_ally_target
     if success_level >= 1 and ally is not None:
+        # The rally reaches whatever grips her, as the out-of-combat rally does (#4887):
+        # an Audere talked-down self it holds may change back once Audere ends.
+        reached = rally_target_instance(ally.character_sheet.character)
+        if reached is not None:
+            record_rally_landed(reached)
         # Apply the designated success condition (Inspired) to the ally.
         inspired = get_social_maneuver_config().rally_success_condition
         if inspired is not None:

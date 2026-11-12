@@ -31009,7 +31009,7 @@ paths:
       - in: query
         name: character_sheet
         schema:
-          type: number
+          type: integer
       - name: page
         required: false
         in: query
@@ -31096,7 +31096,7 @@ paths:
       - in: query
         name: character_sheet
         schema:
-          type: number
+          type: integer
       - in: path
         name: id
         schema:
@@ -31313,7 +31313,7 @@ paths:
       - in: query
         name: character_sheet
         schema:
-          type: number
+          type: integer
       - in: path
         name: id
         schema:
@@ -31470,7 +31470,7 @@ paths:
       - in: query
         name: character_sheet
         schema:
-          type: number
+          type: integer
       - name: page
         required: false
         in: query
@@ -83909,13 +83909,17 @@ components:
       - titles
     Persona:
       type: object
+      description: A persona as a list or a profile shows it.
       properties:
         id:
           type: integer
           readOnly: true
         character_sheet:
           type: integer
-          description: The character sheet this persona belongs to.
+          description: The character behind this face. Null for a disguise the viewer
+            has not uncovered, unless they play it, are staff or GM the scene.
+          readOnly: true
+          nullable: true
         name:
           type: string
           description: Display name for this persona
