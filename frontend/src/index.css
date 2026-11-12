@@ -430,8 +430,9 @@
   }
 }
 
-/* Narrative play uses a unit-consistent breakpoint. Tailwind's configured screens
-   mix rem and px, which drops arbitrary min-[960px] variants at build time. */
+/* Narrative play uses a plain px breakpoint. Tailwind drops an arbitrary min-[...]
+   variant whose unit differs from the configured screens (all px; see #4886), so
+   breakpoints are named screens in tailwind.config.js or plain CSS like this. */
 .play-workspace {
   display: flex;
   flex-direction: column;
