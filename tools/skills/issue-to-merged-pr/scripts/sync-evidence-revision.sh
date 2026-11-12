@@ -1,16 +1,14 @@
 #!/usr/bin/env bash
 # Re-point a PR's review-evidence comment at the revision the gate will check.
 #
-# Both `open-pr.sh` and the `review-evidence` CI job validate the report against
-# HEAD^1, after peeling independently verified migration bot updates. Other
-# pushes move that target, so the report goes stale and the job fails. This restates it, and
-# shows what changed between the old revision and the new one so the author
-# decides whether the review still stands rather than rubber-stamping it.
+# Only use after reviewing the current HEAD. Verified neutral updates carry the old
+# report forward automatically; material changes require review and updated evidence.
+# This script shows the diff, but does not itself perform a review.
 #
 # Usage: sync-evidence-revision.sh <pr-number> [--yes]
 #   --yes  skip the confirmation when code changed between revisions
 #
-# Run it as the LAST step before every push once the evidence comment exists.
+# Do not use merely to silence CI: first complete the review of the new revision.
 set -euo pipefail
 
 PR="${1:?usage: sync-evidence-revision.sh <pr-number> [--yes]}"
@@ -18,7 +16,7 @@ ASSUME_YES="${2:-}"
 
 REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-NEW_REV="$(python3 "$REPO_ROOT/tools/review_evidence_revision.py" "$(git rev-parse HEAD)")"
+NEW_REV="$(git rev-parse HEAD)"
 
 BODY_FILE="$(mktemp)"
 gh pr view "$PR" --json body --jq .body > "$BODY_FILE"

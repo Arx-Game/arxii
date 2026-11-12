@@ -156,8 +156,9 @@ gh api graphql -f query='mutation($t:ID!){resolveReviewThread(input:{threadId:$t
 them as an error rather than a question:
 
 - **Review evidence**, when the linked issue carries `review:evidence-required`.
-  Validated against `git rev-parse HEAD^1`, which every push moves - run
-  `sync-evidence-revision.sh <pr>` before each push once the evidence exists.
+  The report identifies the reviewed revision; independently verified neutral updates
+  retain it. Review material changes before refreshing the report with
+  `sync-evidence-revision.sh <pr>`.
 - **Open code-scanning alerts** on the PR head ref (section 3).
 - **Evidence committed under `docs/reviews/` or `.github/issue-evidence/`** is failed by the
   `review-evidence-not-committed` CI job; the report belongs in a PR comment.

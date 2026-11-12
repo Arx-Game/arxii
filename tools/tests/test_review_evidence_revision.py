@@ -147,3 +147,127 @@ def test_spoofed_no_op_merge_is_a_refusal_not_an_uncaught_exception(repo: Path):
     ).strip()
     with pytest.raises(RefusalError, match="cannot be reproduced"):
         reviewed_revision(repo, head, "main")
+
+
+def test_reviewed_head_and_empty_publication_commit_are_valid(repo: Path):
+    anchor = sh(repo, "rev-parse", "HEAD").strip()
+    assert reviewed_revision(repo, anchor, "main", anchor=anchor) == anchor
+    sh(repo, "commit", "--allow-empty", "-qm", "publish evidence")
+    assert (
+        reviewed_revision(repo, sh(repo, "rev-parse", "HEAD").strip(), "main", anchor=anchor)
+        == anchor
+    )
+
+
+def test_material_correction_requires_review_of_corrected_head(repo: Path):
+    anchor = sh(repo, "rev-parse", "HEAD").strip()
+    (repo / "feature.txt").write_text("corrected feature\n")
+    commit(repo, "correct feature")
+    head = sh(repo, "rev-parse", "HEAD").strip()
+    with pytest.raises(RefusalError, match="changes reviewed content"):
+        reviewed_revision(repo, head, "main", anchor=anchor)
+    assert reviewed_revision(repo, head, "main", anchor=head) == head
+
+
+def test_clean_main_merge_preserves_report_anchor(repo: Path):
+    anchor = sh(repo, "rev-parse", "HEAD").strip()
+    # Avoid the fixture's migration conflict: main adds a separate file here.
+    sh(repo, "checkout", "-q", "main")
+    (repo / "main-only.txt").write_text("main\n")
+    commit(repo, "main-only change")
+    sh(repo, "checkout", "-q", "pr")
+    # Merge an independent main descendant after making the migrations agree.
+    (repo / "src/world/migrations/0002_feature.py").unlink()
+    (repo / "src/world/migrations/max_migration.txt").write_text("0001_initial\n")
+    commit(repo, "remove conflicting migration")
+    anchor = sh(repo, "rev-parse", "HEAD").strip()
+    sh(repo, "merge", "--no-ff", "-qm", "merge main", "main")
+    head = sh(repo, "rev-parse", "HEAD").strip()
+    assert reviewed_revision(repo, head, "main", anchor=anchor) == anchor
+
+
+def test_altered_merge_does_not_inherit_report(repo: Path):
+    sh(repo, "checkout", "-q", "main")
+    (repo / "main-only.txt").write_text("main\n")
+    commit(repo, "main-only change")
+    sh(repo, "checkout", "-q", "pr")
+    (repo / "src/world/migrations/0002_feature.py").unlink()
+    (repo / "src/world/migrations/max_migration.txt").write_text("0001_initial\n")
+    commit(repo, "remove conflicting migration")
+    anchor = sh(repo, "rev-parse", "HEAD").strip()
+    sh(repo, "merge", "--no-ff", "-qm", "merge main", "main")
+    (repo / "feature.txt").write_text("hidden change\n")
+    sh(repo, "add", "feature.txt")
+    sh(repo, "commit", "--amend", "--no-edit", "-q")
+    with pytest.raises(RefusalError, match="cannot verify update"):
+        reviewed_revision(repo, sh(repo, "rev-parse", "HEAD").strip(), "main", anchor=anchor)
+
+
+def test_verified_migration_update_carries_anchor(repo: Path):
+    anchor = sh(repo, "rev-parse", "HEAD^1").strip()
+    head = update(repo)
+    assert reviewed_revision(repo, head, "main", anchor=anchor) == anchor
+
+
+def test_unrelated_anchor_is_not_accepted(repo: Path):
+    anchor = sh(repo, "rev-parse", "main").strip()
+    with pytest.raises(RefusalError):
+        reviewed_revision(repo, sh(repo, "rev-parse", "HEAD").strip(), "main", anchor=anchor)
+
+
+def test_evidence_staging_changes_are_neutral_but_source_changes_are_not(repo: Path):
+    anchor = sh(repo, "rev-parse", "HEAD").strip()
+    (repo / "docs/reviews").mkdir(parents=True)
+    (repo / "docs/reviews/report.md").write_text("temporary evidence\n")
+    commit(repo, "stage evidence")
+    head = sh(repo, "rev-parse", "HEAD").strip()
+    assert reviewed_revision(repo, head, "main", anchor=anchor) == anchor
+    (repo / "feature.txt").write_text("changed\n")
+    commit(repo, "change code")
+    with pytest.raises(RefusalError, match="changes reviewed content"):
+        reviewed_revision(repo, sh(repo, "rev-parse", "HEAD").strip(), "main", anchor=anchor)
+
+
+def test_conflict_resolution_needs_fresh_review(repo: Path):
+    anchor = sh(repo, "rev-parse", "HEAD").strip()
+    result = subprocess.run(
+        ["git", "merge", "--no-commit", "--no-ff", "main"],
+        cwd=repo,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    (repo / "src/world/migrations/max_migration.txt").write_text("0002_feature\n")
+    sh(repo, "add", "-A")
+    sh(repo, "commit", "-qm", "resolve conflict")
+    with pytest.raises(RefusalError, match="cannot verify update"):
+        reviewed_revision(repo, sh(repo, "rev-parse", "HEAD").strip(), "main", anchor=anchor)
+
+
+def test_merge_from_untrusted_branch_needs_fresh_review(repo: Path):
+    anchor = sh(repo, "rev-parse", "HEAD").strip()
+    sh(repo, "checkout", "-qb", "untrusted")
+    (repo / "foreign.txt").write_text("foreign\n")
+    commit(repo, "untrusted change")
+    sh(repo, "checkout", "-q", "pr")
+    sh(repo, "merge", "--no-ff", "-qm", "merge untrusted", "untrusted")
+    with pytest.raises(RefusalError, match="cannot verify update"):
+        reviewed_revision(repo, sh(repo, "rev-parse", "HEAD").strip(), "main", anchor=anchor)
+
+
+def test_mixed_migration_clean_merge_and_evidence_cleanup(repo: Path):
+    anchor = sh(repo, "rev-parse", "HEAD^1").strip()
+    update(repo)
+    (repo / "docs/reviews").mkdir(parents=True)
+    report = repo / "docs/reviews/report.md"
+    report.write_text("evidence\n")
+    commit(repo, "stage evidence")
+    report.unlink()
+    commit(repo, "remove evidence")
+    sh(repo, "checkout", "-q", "main")
+    (repo / "main-only.txt").write_text("main\n")
+    commit(repo, "advance main")
+    sh(repo, "checkout", "-q", "pr")
+    sh(repo, "merge", "--no-ff", "-qm", "merge main", "main")
+    head = sh(repo, "rev-parse", "HEAD").strip()
+    assert reviewed_revision(repo, head, "main", anchor=anchor) == anchor
