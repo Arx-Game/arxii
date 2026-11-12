@@ -180,9 +180,20 @@ issue bodies; the model decision is ADR-0132.
   benefits (#2550): `anima_recovery_threshold`/`anima_recovery_bonus` (wired —
   the Chosen's anima ritual adds the bonus to recovery budget when favor meets
   the threshold), `ceremony_edge_threshold`/`ceremony_edge_bonus` (deferred —
-  defined for shape stability but inert until a future issue wires them).
+  defined for shape stability but inert until a future issue wires them), and
+  `chosen_distinction` (#4341: FK `Distinction`, null, SET_NULL), the distinction every
+  Chosen holds. Its effects on the two patron favor targets are the Chosen earning bonus
+  and invocation ease (see "Favor modifiers" below and ADR-4341). Character creation grants
+  it with the patronage (`grant_chosen_distinction`, from `establish_chosen_patronage`);
+  saving a changed designation in admin grants it to every Chosen who lacks it
+  (`grant_chosen_distinction_to_chosen`). The worship seed creates a "Chosen" distinction
+  (+100 earning, +30 invocation ease) and designates it; in production staff must create
+  and designate it in admin, and until they do no Chosen gets either bonus.
 - `PatronageValence` — TextChoice (DEVOTIONAL/ANTAGONISTIC/PACT). Null on
-  DevotionStanding.valence means ordinary worship.
+  DevotionStanding.valence means ordinary worship. **Chosen** (#4341) means a patronage
+  whose valence is set and is not PACT (DEVOTIONAL or ANTAGONISTIC), not released
+  (`favor_services.chosen_standing_q`). PACT is set only by signing a being pact
+  (`docs/systems/pacts.md`); a pact holder is not the being's Chosen.
 
 **Services** (`worship/services.py`)
 
@@ -194,26 +205,36 @@ issue bodies; the model decision is ADR-0132.
   favor grants the gender-matched achievement (God's Favorite Princess / Prince /
   Chosen; leapfroggers earn it too, prior holders keep theirs; text never names
   the being). Since #4333 a positive amount is scaled by the **earning rate**
-  (`favor_services.earning_rate`: 100% + `ChosenFavorConfig.earn_bonus_percent`
-  for an active patronage of the being + the character's favor earning modifiers),
+  (`favor_services.earning_rate`: 100% + the character's favor earning modifiers, the
+  Chosen bonus among them as a modifier on the patron target, #4341, + the worn pieces),
   rounded down; `credited` is what landed, and the rite and prayer callers record
-  it (`WorshipRitePerformance.favor_granted`, `Prayer.devotion_granted`). A Chosen
-  bonus of 0 and no favor earning modifiers restore the old rates. Since #4333 slice 2
+  it (`WorshipRitePerformance.favor_granted`, `Prayer.devotion_granted`). No favor earning
+  modifiers restore the old rates. Since #4333 slice 2
   a positive credit also goes to the character's open pledge to the being, when there
   is one (`pledge_services.record_pledge_credit`); `source` (`FavorSource`) names what
-  the favor was for, so the pledge card can show it.
+  the favor was for, so the pledge card can show it. Since #4341 it also goes to each open
+  period of her active pact with the being (`pacts.services.record_pact_credit`).
 - `gods_favorite_achievement_for(sheet)` — gender-variant row resolution.
 - `get_chosen_favor_config()` — lazy-create the singleton (pk=1).
-- `active_patronage_for(sheet)` → active patronages (valence set, released_at
-  null), ordered by favor descending. Empty list for non-Chosen or a Chosen
-  who lost all patrons.
-- `best_patronage_favor(sheet)` → the highest-favor active patronage's favor,
-  or 0. Read by `apply_anima_ritual_outcome` to gate the anima recovery bonus.
+- `active_patronage_for(sheet)` → active patronages of any valence, a pact's included
+  (valence set, released_at null), ordered by favor descending. Feeds bond ultimates and
+  the technique picker, which a pact holder gets too. The Chosen readers use
+  `favor_services.chosen_patronage_of(sheet, being)` / `chosen_patronages_for(sheet)`
+  instead (#4341).
+- `best_patronage_favor(sheet)` → the highest-favor Chosen patronage's favor, or 0
+  (a pact patronage does not count, #4341). Read by `apply_anima_ritual_outcome` to gate
+  the anima recovery bonus.
+- `grant_chosen_distinction(sheet)` / `grant_chosen_distinction_to_chosen(config)` (#4341)
+  → grant the designated Chosen distinction at creation / to every Chosen lacking it.
 - `establish_patronage(sheet, being, *, valence)` → get-or-create a
   DevotionStanding and mark it as patronage (sets valence/established_at;
   idempotent; preserves existing favor). Called at CG when Path of the Chosen.
-- `release_patronage(standing)` → sets `released_at` (graceful degradation —
-  the Chosen keeps the Path but this patron's favor no longer gates benefits).
+- `release_patronage(standing)` → sets `released_at`. Its callers (#4341) are a being
+  pact's breach and renouncement (`world/pacts/services.py`), and only for a PACT
+  patronage: a Chosen whose own patron also held a pact keeps her patronage when the pact
+  ends. Once released the standing is no active patronage, so the being's bond ultimates
+  leave her Audere list and the technique picker refuses the being; her favor and
+  everything she learned are kept. Nothing releases a Chosen patronage today.
 - `convert_public_worship(sheet, new_being, *, is_sincere=True)` → WorshipDeclaration
   (#2361) — the single write path for a post-CG public conversion. Get-or-creates the
   declaration (a first post-CG public declaration is the same code path as a
@@ -414,7 +435,9 @@ character's standing with one being; it is never spent.
   `scene` / `mission_instance`, OneToOne `scene_action_request`). The only stored player
   text is `player_line`.
 - `WorshippedBeing.invocation_check_type` — optional per-being override (ruling 13).
-- `ChosenFavorConfig.earn_bonus_percent` (100) and `.invocation_ease_points` (30).
+- `ChosenFavorConfig.chosen_distinction` (#4341; replaced `earn_bonus_percent` (100) and
+  `invocation_ease_points` (30), whose values moved into the seeded Chosen distinction's
+  effects on the patron targets).
 - `MissionGroupBallot.invoke_being`/`invoke_line` and `SceneActionRequest.invoke_being`/
   `invoke_line` — a declared invocation held until its check rolls.
 
@@ -423,10 +446,20 @@ character's standing with one being; it is never spent.
 to the earning rate). `ModifierTarget.target_being` scopes a target to one being; null in
 those categories means any being. Uniqueness: (category, target_being) when the being is
 set; `ModifierTarget.clean()` holds the single "any being" target per category and refuses a being outside the two favor categories.
-`ensure_being_modifier_targets(being)` get-or-creates the being's two targets and the two
-"any being" targets; called by the Deity Editor's `save_being`, the seeds, and the backfill
-migration `0224_being_favor_targets`. `favor_modifier_total(sheet, being, category)` is the
-one reader: over the category's targets for the being and for any being, it sums
+Each category also has one **patron target** (`ModifierTarget.targets_patron`, #4341,
+"Your patron favor invocation" / "Your patron favor earning"): it names no being and means
+the character's own patron, resolved when read, and reaches her only for a being she is the
+Chosen of (ADR-4341). The designated Chosen distinction's effects on these two targets are
+the Chosen invocation ease and earning bonus, so one distinction serves every Chosen and a
+pact patronage never picks them up. `ensure_patron_modifier_targets()` get-or-creates them
+(also called when the Chosen favor config admin opens, and by the worship seed).
+`ensure_being_modifier_targets(being)` get-or-creates the being's two targets, the two
+"any being" targets and the patron targets; called by the Deity Editor's `save_being`, the
+seeds, and the backfill migration `0224_being_favor_targets`.
+`favor_modifier_total(sheet, being, category)` is the one reader: it is
+`general_favor_modifier_total` (the category's targets for the being and for any being,
+patron targets excluded) plus `patron_modifier_total` (the patron target, 0 unless
+`chosen_patronage_of(sheet, being)`). Over its targets it sums
 `get_modifier_total` (distinctions and other `CharacterModifier` rows, crafted items, the
 equipment walk) and `get_condition_modifier_total` (conditions). Both favor categories are
 in `EQUIPMENT_RELEVANT_CATEGORIES`, and for them the walk counts a covenant role once
@@ -440,7 +473,8 @@ modifier: see "What she wears counts with her gods" below (#4520, which absorbed
 **Invocation** (`worship/invocation_services.py`)
 
 - `invocation_difficulty(sheet, being, *, worn=None, include_worn=True)` →
-  `InvocationDifficulty`: base points minus the Chosen ease (active patronage of the being),
+  `InvocationDifficulty`: base points minus the Chosen ease (the patron-target total, read only
+  when she is the being's Chosen, labelled "You are <being>'s Chosen"),
   the favor ease (by threshold), the favor invocation total and the worn-piece ease (#4520,
   one labelled "What you wear: <pieces>" line); never below Trivial (15). Each ease is
   labelled for the picker. The worn ease lowers the difficulty the check rolls against and is
@@ -518,8 +552,9 @@ or carry: <pieces>" when any carried piece counts. The picker, `invoke <being>` 
   `mission pick` and the social actions (`commands/utils/invocation.py`).
 
 **Admin**: Devotion config (singleton change form, the awards inline, a read-only
-difficulty table and last week's invocations), Chosen favor config (the two new terms,
-Chosen per being), the being's check type override, the Distinction Builder's favor-target
+difficulty table and last week's invocations; its Chosen column reads the designated
+distinction's patron-target value, 0 when none), Chosen favor config (the Chosen
+distinction and Chosen per being), the being's check type override, the Distinction Builder's favor-target
 help line. Required-content sentinels: `favor-invocation-check-type`,
 `favor-invocation-awards`.
 
@@ -551,6 +586,9 @@ pledge progress (Ruling 9).
   `ceremony` is nullable; a CHECK requires exactly one of ceremony or being (migration 0234,
   its own migration after the columns in 0233).
 - `ProjectKind.PLEDGE`, registered expiry-only (`projects.services.register_expiry_only_kind`).
+- `Pledge.pact_offer` (#4341): nullable FK to a `pacts.PactOffer` of the same being: the pact
+  the being offers at this pledge's close. The pledge serializer and card show it as a
+  `PactOfferSummary`. See `docs/systems/pacts.md`.
 
 **Services** (`worship/pledge_services.py`)
 
@@ -567,12 +605,20 @@ pledge progress (Ruling 9).
   WORSHIP_RITE grants are skipped (the rite pays favor itself). So are the passive sources in
   `PASSIVE_DEED_SOURCES` (`worship/constants.py`): the residence and outfit trickles, distinction
   grants and staff grants. Favor comes only from a character's actions (ruling 2026-10-16).
-- `close_pledge(sheet, *, scene)` — needs the target met and the span not over; runs
+  Since #4341 it credits the open pledge's being and then each being she holds an active pact
+  with (`_deed_beings`), all under the one weekly cap; `deed_favor_used_this_week` adds the pact
+  credits' base (`pacts.services.pact_deed_favor_this_week`) so each deed counts once.
+- `close_pledge(sheet, *, scene, offered_items=(), accept_pact=False)` — needs the target met
+  and the span not over; runs
   `perform_worship_rite(..., pay_award=False)` (the roll and the performance row are kept,
   the rite's own award is not paid, `record_unpaid_performance`). A first Failure or
   Critical Failure only counts the attempt (Ruling 17). Otherwise, in one atomic block, the
   project goes to RESOLVING, the performance is recorded and `resolve_project` runs; a
-  failure restores the identity-mapped project and sidecar.
+  failure restores the identity-mapped project and sidecar. With `accept_pact` (#4341), once
+  the pledge resolves at Success or better and carries a pact offer, `sign_being_pact` runs
+  in its own transaction after the resolution commits; `ClosingOutcome.pact` or
+  `.pact_refusal` reports it. Without it, or below Success, no pact is signed and nothing is
+  left pending.
 - `resolve_pledge_project(project, outcome_tier)` — the PLEDGE handler. With a closing
   performance it pays the CLOSING award for the rite's tier; without one it is a lapse (the
   tick resolved it at the time limit): half the target or more pays the Partial Success
@@ -777,8 +823,8 @@ are slice 5 (below).
 **Services** (`worship/steward_services.py`)
 
 - `god_signs(being, table)` — there is no god flag, so: a public codex entry
-  (`codex_entry.is_public`); any `WorshipDeclaration.public_being`; a Chosen (valence set, not
-  released) who is not an active member of `table`; an active `TempleDedication`. A secret faith
+  (`codex_entry.is_public`); any `WorshipDeclaration.public_being`; a Chosen (valence set and
+  not PACT, not released) who is not an active member of `table`; an active `TempleDedication`. A secret faith
   is not a sign. `steward_refusals(being, table)` adds a GM below `GMLevel.SENIOR` and an archived
   table (Ruling 5).
 - `stewarded_refusal(sheet, being)` — "<being> answers only to the members of one GM table." for

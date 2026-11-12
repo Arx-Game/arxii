@@ -44,14 +44,50 @@
 - **Resonance fed** — a meaning signal: the resonance an item's facets fed its current holder,
   in a resonance the being lists, counted only alongside another signal (#4520).
 - **Earning rate** — the percentage applied to all favor a character earns with one being
-  (#4333): 100 + `ChosenFavorConfig.earn_bonus_percent` for an active patronage of it + the
-  character's favor earning modifiers + what the worn pieces carrying a favored facet add
-  (#4520). `bump_devotion` applies it to every positive amount.
+  (#4333): 100 + the character's favor earning modifiers (a Chosen's bonus is one of them, on
+  the patron target, #4341) + what the worn pieces carrying a favored facet add (#4520).
+  `bump_devotion` applies it to every positive amount.
 - **Favor modifier** — a modifier against a target in the `favor_invocation` (difficulty
   points eased) or `favor_earning` (earning-rate points) category, scoped to one being by
   `ModifierTarget.target_being` or to every being (null). Any modifier source can grant one
   except facet, mantle and motif bonuses (#4333 slice 8). Read only by
   `favor_modifier_total`. _Avoid_: a being-to-distinction link table.
+- **Patron target**: the one favor target per favor category that means "the character's own
+  patron" (`ModifierTarget.targets_patron`, #4341): it names no being and is resolved when
+  read, reaching her only for a being she is the Chosen of (ADR-4341). The **Chosen
+  distinction** (`ChosenFavorConfig.chosen_distinction`) carries the Chosen earning bonus and
+  invocation ease as effects on these targets. _Avoid_: Chosen bonus field, per-being Chosen
+  distinction.
+- **Patronage**: a character's standing with a being marked as her patron's
+  (`DevotionStanding.valence` set, `released_at` empty), of one `PatronageValence`:
+  DEVOTIONAL or ANTAGONISTIC (a Chosen's) or PACT (gained by a being pact). Released, it is
+  kept as history and grants nothing. _Avoid_: bond (reserved for bond ultimates), worship
+  (ordinary worship has no valence), sponsorship.
+- **Chosen**: a character whose patron came from the Path of the Chosen: her patronage of that
+  being is DEVOTIONAL or ANTAGONISTIC, not PACT (`chosen_patronage_of`). Only a Chosen gets the
+  Chosen earning bonus, invocation ease and anima recovery; a pact holder is not her being's
+  Chosen. _Avoid_: devotee (any worshipper), champion, saint.
+- **Pact (being pact, follower pact)**: a formal arrangement between a character and another
+  party, with recorded commitments; the pact family also holds the **Court Pact** (covenants)
+  and the **Marriage Pact** and **Org Pact** (societies). A **being pact** (`CharacterPact`,
+  `world/pacts`, #4341) is struck with a god, demon, spirit or the dead of a line, who becomes
+  her patron; it is offered on a pledge (`PactOffer`) and carries a staged condition whose
+  first stage is its everyday benefit. A **follower pact** (an NPC who serves her) is a later
+  issue (#4437). _Avoid_: bond (bond ultimates), compact, contract (another system), terms
+  (`StandoffTerms`), obligation (Organization Obligation), vow, oath, tithe, debt, deal.
+- **Pact offer**: a being's authored offer of a pact (`PactOffer`): its text, period length,
+  staged condition, severity per missed period and commitments. Carried by a pledge
+  (`Pledge.pact_offer`) and accepted at its closing rite. _Avoid_: bargain, proposal.
+- **Pact commitment**: one thing a side of a pact owes, either checked by the game or a
+  recorded promise (`PactOfferCommitment` on a being's offer: FAVOR_EARNED, graded every
+  period; CUSTOM, a promise shown and never checked). The sibling of a Marriage Pact's
+  `PactCommitment`. _Avoid_: term, clause, obligation.
+- **Holder**: the character who holds a pact (`CharacterPact.character_sheet`). A pact's
+  condition, effects and settle pool touch only her. _Avoid_: signatory, pactee.
+- **Pact period**: one span of a being pact, graded once at its end (`ProjectKind.PACT_PERIOD`
+  with its `PactPeriodDetails`): met, the condition eases; short, it rises, after the worse
+  stage's resist check when the rise would reach it. An **ease-out period** (no commitment)
+  follows the end of a pact and only lets the condition fade. _Avoid_: cycle, tick.
 - **Pledge** — two things (#4333 slice 2). A *pledge type* is an authored `Pledge` row: a
   being's offer of service with a favor target, a span in game weeks and a closing rite (one of
   the being's own tier 1 or 2 rites). An *open pledge* is one character's: a `Project` of kind

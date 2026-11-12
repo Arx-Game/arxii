@@ -216,6 +216,24 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   (queue panel), telnet (`gm prompt answer`) and admin (the level's `may_adapt_answers`).
   Next slices of #4333: rituals, Mysteries. Favored facets on worn items moved into the
   meaningful-items design (#4462 slice 3, #4520; built 2026-10-20).
+- **Pacts with beings (#4341):** a being's pledge can carry a pact offer. Closing the pledge
+  with "close and accept the pact" signs it when the closing rite resolves at Success or
+  better, and the being becomes her patron (a PACT patronage; a Chosen's own patron stays
+  Chosen). The pact asks for favor earned with the being every period and may record custom
+  promises; its staged condition's first stage is the everyday benefit. A met period eases
+  the condition; a short one raises it, and reaching a worse stage first rolls that stage's
+  resist check, eased by her favor band, with the tier deciding how far it moves. The last
+  stage ends the pact in breach (patronage released, the stage's settle pool against her
+  alone, the being's closing text and an optional room line). She can renounce it; either
+  way the cost eases out each period until gone. While it holds she gets the being's bond
+  ultimates at Audere and can bring it into a fight. Web pact card and pledge offer,
+  telnet `pact`, `pact/renounce`, `pledge/close/accept`, and a Pacts section on the Being
+  Service builder. Built with it: the Chosen bonuses moved onto a designated Chosen
+  distinction's effects on "your patron" favor targets, so a pact holder never gets them
+  (ADR-4341), and the technique picker (`manifest`, the Spellbook panel) that lets a player
+  choose which bound being or companion a technique brings. Next, each its own issue:
+  follower pacts (#4437), spirit companions (#4438), a being leading a Court (#4439),
+  commitments that trigger on their own (#4440). System doc: `docs/systems/pacts.md`.
 
 ## Not built (filed)
 
