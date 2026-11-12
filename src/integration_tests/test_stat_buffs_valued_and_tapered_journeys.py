@@ -234,8 +234,28 @@ class StatBuffsAreValuedAndTapered(JourneyCase):
         twin = self.porter("Bram", strength=BASE + TEN_TAPERED)
         self.assertEqual(carry_capacity(self.brannoc), carry_capacity(twin))
         self.assertEqual(self.lift(self.brannoc), self.lift(twin))
-        # Ten buffs on two stats cost the sheet read no per-stat or per-buff queries.
-        self.assertLessEqual(queries - plain_queries, 50)
+        # Pricing two buffed stats costs a bounded handful of queries (9 measured), set by
+        # the stats buffed and not by the twenty conditions carrying the buffs.
+        self.assertLessEqual(queries - plain_queries, 12)
+
+    def test_twenty_conditions_that_buff_nothing_cost_the_sheet_no_more_than_one(self) -> None:
+        def carry(count: int) -> None:
+            for index in range(count):
+                ConditionInstanceFactory(
+                    target=self.brannoc,
+                    condition=ConditionTemplateFactory(name=f"Dockside Mood {index + 1}"),
+                )
+
+        _, none_queries = self.sheet_read()
+        carry(1)
+        _, one_queries = self.sheet_read()
+        ConditionInstance.objects.filter(target=self.brannoc).delete()
+        carry(20)
+        sheet, twenty_queries = self.sheet_read()
+
+        self.assertEqual(sheet["buffed_stats"], {})
+        self.assertEqual(twenty_queries, one_queries, "no query per condition")
+        self.assertLessEqual(twenty_queries - none_queries, 1)
 
     def test_a_debuff_tapers_in_its_own_pile(self) -> None:
         for index in range(10):
