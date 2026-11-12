@@ -2444,9 +2444,7 @@ class VowSituationalPerk(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                 }
             )
         if self.roll_kind and self.effect_kind != PerkEffectKind.CHECK_BONUS:
-            raise ValidationError(
-                {"roll_kind": "Applies to is only meaningful when effect_kind=CHECK_BONUS."}
-            )
+            raise ValidationError({"roll_kind": "Applies to only works on a Check Bonus perk."})
         if self.battle_action_kind and self.effect_kind not in (
             PerkEffectKind.CHECK_BONUS,
             PerkEffectKind.POWER_BONUS,
