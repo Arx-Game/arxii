@@ -1172,7 +1172,9 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
         at call time, not at class-definition time, so the forward reference
         never raises ``NameError`` on import.
         """
-        return FamilyTemplateSerializer(obj.family_templates.all(), many=True).data
+        return FamilyTemplateSerializer(
+            obj.family_templates.all(), many=True, context=self.context
+        ).data
 
     @extend_schema_field(serializers.ListField(child=serializers.IntegerField()))
     def get_claimable_kind_ids(self, obj: OriginTemplate) -> list[int]:
@@ -2915,8 +2917,16 @@ class HouseCharterQuestionSerializer(serializers.ModelSerializer):
         # The patron question offers gods, not authored options (#5110): the same
         # card shape, with ``id`` the god's, sent back as ``patron_being_id``.
         if obj.sets_patron:
-            from world.societies.houses.creator import patron_choice_rows  # noqa: PLC0415
+            from world.societies.houses.creator import (  # noqa: PLC0415
+                PATRON_ROWS_BY_TRADITION,
+                patron_choice_rows,
+            )
 
+            # A list response resolves every patron question's gods once and hands
+            # them down in context; a lone serializer with no such context asks.
+            by_tradition = self.context.get(PATRON_ROWS_BY_TRADITION)
+            if by_tradition is not None:
+                return by_tradition.get(obj.patron_tradition_id, [])
             return patron_choice_rows(obj)
         active = [option for option in obj.options.all() if option.is_active]
         return HouseCharterOptionSerializer(active, many=True).data
@@ -3256,7 +3266,9 @@ class ClaimableTitleSerializer(serializers.ModelSerializer):
     def get_templates(self, obj):
         from world.societies.houses.creator import templates_for_title  # noqa: PLC0415
 
-        return HouseTemplateOptionSerializer(templates_for_title(obj), many=True).data
+        return HouseTemplateOptionSerializer(
+            templates_for_title(obj), many=True, context=self.context
+        ).data
 
 
 class HouseClaimKinSerializer(serializers.ModelSerializer):

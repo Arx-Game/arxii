@@ -144,6 +144,19 @@ _NO_APPLICATION_DETAIL = "No application found."
 logger = logging.getLogger(__name__)
 
 
+def _with_patron_rows(context: dict[str, Any]) -> dict[str, Any]:
+    """Add the gods each patron question offers to a serializer context (#5110): one
+    query for the response, read by ``HouseCharterQuestionSerializer.get_options`` so a
+    patron question on a realm's templates costs nothing per title or per template."""
+    from world.societies.houses.creator import (  # noqa: PLC0415
+        PATRON_ROWS_BY_TRADITION,
+        patron_rows_by_tradition,
+    )
+
+    context[PATRON_ROWS_BY_TRADITION] = patron_rows_by_tradition()
+    return context
+
+
 def _claimable_kind_ids_by_template(templates: list[OriginTemplate]) -> dict[int, list[int]]:
     """One flat query for every ``claimable_kinds`` row across ``templates``.
 
@@ -831,11 +844,13 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
         stashed on the view or serializer instance).
         """
         templates = list(self.filter_queryset(self.get_queryset()))
-        context = {
-            **self.get_serializer_context(),
-            "claimable_kind_ids_by_template": _claimable_kind_ids_by_template(templates),
-            "offers_by_choice": _offers_by_choice(templates),
-        }
+        context = _with_patron_rows(
+            {
+                **self.get_serializer_context(),
+                "claimable_kind_ids_by_template": _claimable_kind_ids_by_template(templates),
+                "offers_by_choice": _offers_by_choice(templates),
+            }
+        )
         serializer = self.get_serializer_class()(templates, many=True, context=context)
         return Response(serializer.data)
 
@@ -948,6 +963,11 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         if self.action == "create":
             return CharacterDraftCreateSerializer
         return CharacterDraftSerializer
+
+    def get_serializer_context(self) -> dict[str, Any]:
+        """Every patron question's gods, once for the response (#5110): a draft's
+        Upbringing nests its Family Templates, each with its charter questions."""
+        return _with_patron_rows(super().get_serializer_context())
 
     def perform_update(self, serializer: BaseSerializer[Any]) -> None:
         """Save the draft, then reconcile which offers its new state carries or drops."""
@@ -1645,6 +1665,10 @@ class ClaimableTitleViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None
     filter_backends: list = []
     serializer_class = ClaimableTitleSerializer
+
+    def get_serializer_context(self) -> dict[str, Any]:
+        """Every patron question's gods, once for the response (#5110)."""
+        return _with_patron_rows(super().get_serializer_context())
 
     def get_queryset(self) -> QuerySet:
         from world.societies.houses.creator import claimable_titles  # noqa: PLC0415

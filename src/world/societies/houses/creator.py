@@ -81,6 +81,10 @@ if TYPE_CHECKING:
     from world.societies.models import CrewSlot, OrganizationType
     from world.worship.models import WorshippedBeing
 
+#: Serializer-context key for ``patron_rows_by_tradition()`` (#5110): the gods each
+#: patron question offers, resolved once per response.
+PATRON_ROWS_BY_TRADITION = "patron_rows_by_tradition"
+
 _PRINCIPLE_AXES = ("mercy", "method", "status", "change", "allegiance", "power")
 # HouseClaim stores the status axis as ``status_principle`` (``status`` is the
 # claim lifecycle); this maps axis name → claim field name.
@@ -613,22 +617,50 @@ def patron_choices(question: HouseCharterQuestion) -> list[WorshippedBeing]:
     )
 
 
+def _patron_row(being: WorshippedBeing) -> dict:
+    """A god in the shape a charter option is read in; ``id`` is the god's."""
+    return {
+        "id": being.pk,
+        "name": being.name,
+        "description": being.domains,
+        "codex_entry_id": None,
+        "being_id": being.pk,
+        "being_name": being.name,
+        "target_entry_id": being.codex_entry_id,
+    }
+
+
 def patron_choice_rows(question: HouseCharterQuestion) -> list[dict]:
     """A patron question's gods in the shape a charter option is read in (#5110), so
     the staff page and character creation draw them with the picker they already
-    have. ``id`` is the god's id: a patron pick is sent as ``patron_being_id``."""
-    return [
-        {
-            "id": being.pk,
-            "name": being.name,
-            "description": being.domains,
-            "codex_entry_id": None,
-            "being_id": being.pk,
-            "being_name": being.name,
-            "target_entry_id": being.codex_entry_id,
-        }
-        for being in patron_choices(question)
-    ]
+    have. ``id`` is the god's id: a patron pick is sent as ``patron_being_id``.
+
+    One query per call. A response that serializes many templates reads
+    ``patron_rows_by_tradition`` once instead and hands it down in serializer context.
+    """
+    return [_patron_row(being) for being in patron_choices(question)]
+
+
+def patron_rows_by_tradition() -> dict[int, list[dict]]:
+    """Every patron question's gods, keyed by the question's worship, in one query:
+    what a list response passes down as ``PATRON_ROWS_BY_TRADITION`` so a patron
+    question costs nothing per title or per template. Same three tests as
+    ``patron_choices``; a worship no patron question names is not read."""
+    from world.worship.models import WorshippedBeing  # noqa: PLC0415
+
+    rows: dict[int, list[dict]] = {}
+    beings = (
+        WorshippedBeing.objects.filter(
+            tradition__patron_questions__isnull=False,
+            is_active=True,
+            codex_entry__is_public=True,
+        )
+        .distinct()
+        .order_by("name")
+    )
+    for being in beings:
+        rows.setdefault(being.tradition_id, []).append(_patron_row(being))
+    return rows
 
 
 def patron_choices_for_house(house: Organization) -> list[WorshippedBeing]:

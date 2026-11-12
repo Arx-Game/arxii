@@ -229,6 +229,43 @@ class HouseClaimApiTests(TestCase):
         self.assertEqual(option["description"], "Honorable combat")
         self.assertEqual(option["target_entry_id"], entry.pk)
 
+    def test_house_titles_ask_for_the_patron_gods_once_however_many_titles(self):
+        """#5110: with a patron question on the realm's templates, the gods are read
+        once for the response, never once per title."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.societies.houses.almanach import plant_rung
+        from world.societies.houses.constants import TitleTier
+
+        _patron, calyx, _hidden, _entry = self._patron_question()
+
+        def patron_names(response):
+            titles = response.data["results"] if isinstance(response.data, dict) else response.data
+            return [
+                [option["name"] for option in question["options"]]
+                for title in titles
+                for template in title["templates"]
+                for question in template["charter_questions"]
+                if question["sets_patron"]
+            ]
+
+        with CaptureQueriesContext(connection) as before:
+            first = self.client.get("/api/character-creation/house-titles/")
+        for i in range(6):
+            plant_rung(realm=self.realm, tier=TitleTier.DUCHY, name=f"Patron Duchy {i}")
+        with CaptureQueriesContext(connection) as after:
+            second = self.client.get("/api/character-creation/house-titles/")
+
+        offered_before, offered_after = patron_names(first), patron_names(second)
+        self.assertGreaterEqual(len(offered_after), len(offered_before) + 6)
+        self.assertTrue(all(names == [calyx.name] for names in offered_after))
+        being_reads = [
+            query["sql"] for query in after if "arxii_worshippedbeing" in query["sql"].lower()
+        ]
+        self.assertEqual(len(being_reads), 1, being_reads)
+        self.assertEqual(len([q for q in before if "arxii_worshippedbeing" in q["sql"].lower()]), 1)
+
     def test_post_claim_carries_the_patron_and_refuses_a_god_not_offered(self):
         """#5110: the claim is refused without a patron and with a god the question
         does not offer; with one it offers, the claim holds the god."""

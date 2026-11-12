@@ -109,6 +109,36 @@ const houseDocument = (patron: Patron) => ({
   turf: null,
 });
 
+/** `/api/societies/organizations/7/` as `OrganizationSerializer` sends a house:
+ * its patron is the god, by its own name. */
+const ORG = {
+  id: KATTA,
+  name: 'House Katta',
+  society_name: 'The Umbral Court',
+  org_type_name: 'noble_family',
+  words: 'First in the Shadow',
+  colors: 'red and black',
+  sigil_description: 'A red dragon breaking chains in its teeth.',
+  ranks: [],
+  house: {
+    family_name: 'Katta',
+    family_id: 4,
+    house_state: 'standing',
+    demesne: 0,
+    liege_name: '',
+    vassal_names: [],
+    titles: [],
+    domains: [],
+    open_crises: [],
+    stature: null,
+    facets: [],
+    features: [],
+    vacancies: [],
+    patron: { being_id: VEIL.id, being_name: VEIL.name, codex_entry_id: VEIL.entry },
+    observances: [],
+  },
+};
+
 const EMPTY_PAGE = { count: 0, next: null, previous: null, results: [] };
 const BARE_ARRAYS = [
   '/api/magic/character-resonances/',
@@ -120,6 +150,7 @@ const BARE_ARRAYS = [
   '/api/magic/rituals/sessions/',
   '/api/personas/',
   '/api/character-creation/genders/',
+  `/api/societies/organizations/${KATTA}/feed/`,
 ];
 
 /** Answers the page's reads; a dispatched `almanach_edit_house` is recorded and the
@@ -145,6 +176,7 @@ async function mockStaff(page: Page, dispatched: Record<string, unknown>[]) {
         json: { backend: 'registry', deferred: false, success: true, message: 'Saved.', data: {} },
       });
     }
+    if (p === `/api/societies/organizations/${KATTA}/`) return route.fulfill({ json: ORG });
     if (BARE_ARRAYS.includes(p)) return route.fulfill({ json: [] });
     if (request.method() === 'GET') return route.fulfill({ json: EMPTY_PAGE });
     return route.fulfill({ json: { message: 'Done.', success: true, data: null } });
@@ -190,6 +222,25 @@ test.describe('#5110 on the production bundle', () => {
     await expect(picked).toContainText('Secrets kept');
     await page.waitForTimeout(400);
     await page.screenshot({ path: shot('2-staff-patron-veil.png'), fullPage: true });
+    expect(errors, errors.join('\n')).toEqual([]);
+  });
+
+  test("the org page names the house's patron by the god's own name", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await mockStaff(page, []);
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.goto(`/orgs/${KATTA}`);
+    await expect(page.getByText('House Katta').first()).toBeVisible();
+
+    const line = page.locator('p', { hasText: 'Patron:' });
+    await expect(line).toHaveText('Patron: Veil');
+    await expect(line.getByRole('link', { name: 'Veil', exact: true })).toHaveAttribute(
+      'href',
+      `/codex?entry=${VEIL.entry}`
+    );
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: shot('4-org-page-patron.png'), fullPage: true });
     expect(errors, errors.join('\n')).toEqual([]);
   });
 });
