@@ -27,7 +27,7 @@ class ResolveEffectiveRoleTests(TestCase):
         cls.sub_role_3 = SubroleCovenantRoleFactory(
             parent_role=cls.parent_role,
             resonance=cls.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
         )
         cls.covenant = CovenantFactory(covenant_type=cls.parent_role.covenant_type)
         cls.membership = CharacterCovenantRoleFactory(
@@ -70,7 +70,7 @@ class ResolveEffectiveRoleTests(TestCase):
         sub_role_5 = SubroleCovenantRoleFactory(
             parent_role=self.parent_role,
             resonance=resonance2,
-            unlock_thread_level=5,
+            unlock_thread_level=50,
         )
         membership2 = CharacterCovenantRoleFactory(
             covenant=CovenantFactory(covenant_type=self.parent_role.covenant_type),
@@ -94,8 +94,8 @@ class ResolveEffectiveRoleTests(TestCase):
         # Use a fresh parent role so we don't collide with the class-level sub_role_3
         parent = CovenantRoleFactory()
         res = ResonanceFactory()
-        sub3 = SubroleCovenantRoleFactory(parent_role=parent, resonance=res, unlock_thread_level=3)
-        sub5 = SubroleCovenantRoleFactory(parent_role=parent, resonance=res, unlock_thread_level=5)
+        sub3 = SubroleCovenantRoleFactory(parent_role=parent, resonance=res, unlock_thread_level=30)
+        sub5 = SubroleCovenantRoleFactory(parent_role=parent, resonance=res, unlock_thread_level=50)
         membership = CharacterCovenantRoleFactory(
             covenant=CovenantFactory(covenant_type=parent.covenant_type),
             covenant_role=parent,
@@ -181,7 +181,7 @@ class HandlerCurrentlyEngagedRolesResolutionTests(TestCase):
         cls.sub_role = SubroleCovenantRoleFactory(
             parent_role=cls.parent_role,
             resonance=cls.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
         )
         cls.covenant = CovenantFactory(covenant_type=cls.parent_role.covenant_type)
         cls.membership = CharacterCovenantRoleFactory(
@@ -237,7 +237,7 @@ class AnchorRoleInHandlerTests(TestCase):
         cls.sub_role = SubroleCovenantRoleFactory(
             parent_role=cls.parent_role,
             resonance=cls.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
         )
         cls.covenant = CovenantFactory(covenant_type=cls.parent_role.covenant_type)
         cls.membership = CharacterCovenantRoleFactory(
@@ -276,7 +276,7 @@ class PassiveCapabilityGrantAnchorTests(TestCase):
         cls.sub_role = SubroleCovenantRoleFactory(
             parent_role=cls.parent_role,
             resonance=cls.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
         )
         cls.covenant = CovenantFactory(covenant_type=cls.parent_role.covenant_type)
 
@@ -309,7 +309,7 @@ class PassiveCapabilityGrantAnchorTests(TestCase):
             effect_kind=EffectKind.CAPABILITY_GRANT,
             flat_bonus_amount=None,
             capability_grant=cls.capability,
-            min_thread_level=1,
+            min_thread_level=10,
         )
 
     def test_capability_grant_active_when_engaged_on_parent_role(self) -> None:

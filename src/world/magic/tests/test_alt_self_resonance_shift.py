@@ -62,7 +62,7 @@ class AltSelfResonanceShiftTests(TestCase):
         cls.celestial_variant = TechniqueVariant.objects.create(
             parent_technique=cls.technique,
             resonance=cls.celestial,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Celestial Form",
             intensity_delta=5,
         )
@@ -70,7 +70,7 @@ class AltSelfResonanceShiftTests(TestCase):
         cls.abyssal_variant = TechniqueVariant.objects.create(
             parent_technique=cls.technique,
             resonance=cls.abyssal,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Abyssal Form",
             intensity_delta=10,
         )

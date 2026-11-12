@@ -35,7 +35,7 @@ from world.covenants.constants import (
     FOCUS_PICK_FREQUENCY_LIMIT_KINDS,
     FOCUS_PICK_LIMIT_FREQUENCY_FULL,
     FOCUS_PICK_REDUCTION_LIMIT_KINDS,
-    VOW_FOCUS_PICK_MAX_LEVEL,
+    VOW_FOCUS_PICK_LEVELS,
 )
 from world.covenants.exceptions import VowFocusPickRefusedError
 from world.covenants.models import (
@@ -161,18 +161,17 @@ def holder_has_pick(focus_pick_id: int | None, holder_id: int, chosen: dict[int,
     return focus_pick_id is None or focus_pick_id in chosen.get(holder_id, ())
 
 
-def shown_vow_level(membership: CharacterCovenantRole) -> int:
-    """The shown COVENANT_ROLE thread level behind a membership (#4759).
+def vow_level(membership: CharacterCovenantRole) -> int:
+    """The COVENANT_ROLE thread level behind a membership (#4759).
 
     Threads key on the anchor role, so a sub-role membership reads its parent's
-    thread. Shown scale: a thread stored at 20 shows 2.
+    thread.
     """
     from world.covenants.services import _covenant_role_thread_level  # noqa: PLC0415
-    from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
 
     role = membership.covenant_role
     anchor = role.parent_role if role.parent_role_id is not None else role
-    return shown_thread_level(_covenant_role_thread_level(membership.character_sheet, anchor))
+    return _covenant_role_thread_level(membership.character_sheet, anchor)
 
 
 def choosable_role_ids(membership: CharacterCovenantRole) -> set[int]:
@@ -200,7 +199,7 @@ def validate_character_focus_pick(choice: CharacterVowFocusPick) -> None:
 
     In order: the membership is a primary vow (a secondary vow gets no picks);
     the pick is in the held vow's catalog (or its anchor's, for a sub-role);
-    the pick's level is no higher than the shown vow level; and the prices of the
+    the pick's level is no higher than the vow level; and the prices of the
     membership's picks at that level fit ``VowFocusPickConfig.budget_per_level``.
     """
     membership = choice.character_role
@@ -218,7 +217,7 @@ def validate_character_focus_pick(choice: CharacterVowFocusPick) -> None:
                 )
             }
         )
-    level = shown_vow_level(membership)
+    level = vow_level(membership)
     if pick.pick_level > level:
         raise ValidationError(
             {
@@ -405,9 +404,9 @@ def _catalog_for(
     reads: _CatalogReads,
 ) -> VowPickCatalog:
     budget = focus_pick_budget()
-    vow_level = shown_vow_level(membership)
+    current_vow_level = vow_level(membership)
     levels: list[VowPickLevel] = []
-    for level in range(1, VOW_FOCUS_PICK_MAX_LEVEL + 1):
+    for level in VOW_FOCUS_PICK_LEVELS:
         level_spent = reads.spent.get((membership.pk, level), 0)
         left = max(0, budget - level_spent)
         entries = []
@@ -430,14 +429,14 @@ def _catalog_for(
                     locked_reason=(
                         ""
                         if chosen
-                        else _locked_reason(pick, price, vow_level=vow_level, left=left)
+                        else _locked_reason(pick, price, vow_level=current_vow_level, left=left)
                     ),
                 )
             )
         levels.append(
             VowPickLevel(
                 level=level,
-                is_open=level <= vow_level,
+                is_open=level <= current_vow_level,
                 budget=budget,
                 spent=level_spent,
                 picks=entries,
@@ -448,7 +447,7 @@ def _catalog_for(
         covenant_id=membership.covenant_id,
         covenant=membership.covenant.name,
         vow=membership.covenant_role.name,
-        vow_level=vow_level,
+        vow_level=current_vow_level,
         vows=list(dict.fromkeys(entry.vow for level in levels for entry in level.picks)),
         levels=levels,
     )
@@ -553,11 +552,11 @@ def resolve_pick_for_choice(
 
 
 def opened_pick_levels(before: int, after: int) -> list[int]:
-    """The pick levels a rise in shown vow level from ``before`` to ``after`` opens.
+    """The pick levels a rise in vow level from ``before`` to ``after`` opens.
 
-    Only pick levels 1 to 3 exist, so a rise past 3 opens nothing more.
+    Only pick levels 10, 20 and 30 exist, so a rise past 30 opens nothing more.
     """
-    return list(range(before + 1, min(after, VOW_FOCUS_PICK_MAX_LEVEL) + 1))
+    return [level for level in VOW_FOCUS_PICK_LEVELS if before < level <= after]
 
 
 def new_picks(levels: Iterable[int]) -> list[NewPicks]:
@@ -567,7 +566,7 @@ def new_picks(levels: Iterable[int]) -> list[NewPicks]:
 
 
 def new_picks_lines(levels: Iterable[int]) -> list[str]:
-    """One "Vow level 2: 4 pts of new picks." line per opened pick level."""
+    """One "Vow level 20: 4 pts of new picks." line per opened pick level."""
     return [opened.line for opened in new_picks(levels)]
 
 
@@ -581,7 +580,6 @@ def picks_opened_by_imbuing(
     character who no longer holds the vow as a primary vow.
     """
     from world.magic.constants import TargetKind  # noqa: PLC0415
-    from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
 
     if thread.target_kind != TargetKind.COVENANT_ROLE or result.levels_gained <= 0:
         return []
@@ -594,8 +592,8 @@ def picks_opened_by_imbuing(
     ).exists()
     if not holds_it:
         return []
-    before = shown_thread_level(result.new_level - result.levels_gained)
-    return opened_pick_levels(before, shown_thread_level(result.new_level))
+    before = result.new_level - result.levels_gained
+    return opened_pick_levels(before, result.new_level)
 
 
 def announce_open_vow_picks(membership: CharacterCovenantRole) -> None:
@@ -608,7 +606,7 @@ def announce_open_vow_picks(membership: CharacterCovenantRole) -> None:
     """
     if membership.is_secondary:
         return
-    lines = new_picks_lines(opened_pick_levels(0, shown_vow_level(membership)))
+    lines = new_picks_lines(opened_pick_levels(0, vow_level(membership)))
     if not lines:
         return
     from world.narrative.constants import NarrativeCategory  # noqa: PLC0415

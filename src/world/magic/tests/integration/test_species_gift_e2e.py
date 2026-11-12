@@ -254,7 +254,7 @@ class _SpeciesGiftJourneyBase(TestCase):
         cov_res = ResonanceFactory()
         parent_role = CovenantRoleFactory()
         sub_role = SubroleCovenantRoleFactory(
-            parent_role=parent_role, resonance=cov_res, unlock_thread_level=3
+            parent_role=parent_role, resonance=cov_res, unlock_thread_level=30
         )
         membership = CharacterCovenantRoleFactory(
             covenant=CovenantFactory(covenant_type=parent_role.covenant_type),
@@ -488,7 +488,7 @@ class SpeciesGiftFullJourneyPostgresTest(_SpeciesGiftJourneyBase):
         high = self._commit_pull_at_level(sheet, thread, 30)
         # active_pull_resistance sums BOTH RESISTANCE snapshots a tier-1 pull writes:
         # resolve_pull_effects iterates effect tiers 0..tier, so the always-on tier-0
-        # passive (amount 3, min_thread_level=1, shown) AND the paid tier-1 row (amount 4) are
+        # passive (amount 3, min_thread_level=10, shown) AND the paid tier-1 row (amount 4) are
         # each snapshotted and scaled by level_multiplier = max(1, level // 10). The
         # returned value is therefore (passive + paid) × multiplier, NOT the paid row
         # alone — that is why it is 7, not 4:

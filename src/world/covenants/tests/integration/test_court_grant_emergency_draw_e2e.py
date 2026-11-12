@@ -105,7 +105,7 @@ class EmergencyDrawE2ETests(TestCase):
         ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=0)
 
         # wire_court_role_powers_catalog's FLAT_BONUS row is authored at
-        # min_thread_level=1 (the pact-granted-cap IS the real gate, #1589 final
+        # min_thread_level=10 (the pact-granted-cap IS the real gate, #1589 final
         # review) — the pull-effect eligibility check reads the thread's REAL
         # level (never the beseech-boosted effective level), so the thread must
         # actually be imbued to stored 10, shown 1 (#4585; the pact's granted_pull_cap=10)

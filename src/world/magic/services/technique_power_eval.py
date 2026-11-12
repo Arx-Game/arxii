@@ -971,7 +971,7 @@ def evaluate_technique(
     caller pricing many techniques so the blend config is read once (#4930).
 
     ``vow_effects`` (#4930) are vow added effects riding this technique, priced into
-    both figures at shown thread level ``vow_thread_level`` by
+    both figures at thread level ``vow_thread_level`` by
     :func:`_vow_effect_valuations` (the power preview on the vow page and the kit view).
     They change no power, anima, windup or flag. With none, the report is exactly the
     technique's own.

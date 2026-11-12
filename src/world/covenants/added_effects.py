@@ -43,9 +43,9 @@ stays in place for that holder.
 
 ## Scaling
 
-The holder's COVENANT_ROLE thread level on the vow's anchor role, shown scale
-(stored // 10, #4585), gates the row (``unlock_thread_level``) and scales it:
-each shown level above the unlock adds the
+The holder's COVENANT_ROLE thread level on the vow's anchor role gates the row
+(``unlock_thread_level``, both thread levels as players see them, #5091) and scales
+it: each 10 thread levels above the unlock (``thread_rung``) add the
 row's ``severity_per_thread_level``, ``duration_per_thread_level`` and
 ``damage_per_thread_level``. A row from a secondary vow has each bonus
 multiplied by ``SecondaryVowConfig.potency_tenths`` and floor-divided by 10.
@@ -139,7 +139,7 @@ class _LiveRow:
 
     candidate: VowHolderCandidate
     effect: VowAddedEffect
-    thread_level: int  # shown level (stored // 10, #4585)
+    thread_level: int  # the holder's vow thread level (#5091)
 
 
 def effect_rides_technique(
@@ -566,13 +566,10 @@ def _live_rows(  # noqa: PLR0913 - the cast's gates, computed once by the caller
     check: SituationCheck,
 ) -> list[_LiveRow]:
     """Rows that pass every per-holder gate; the situation is checked last (it may query)."""
-    from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
-
     functions = {tag.function for tag in technique.cached_function_tags}
     live: list[_LiveRow] = []
     for candidate in candidates:
-        # unlock_thread_level and the per-level bonuses are on the shown scale (#4585).
-        level = shown_thread_level(levels.get((candidate.holder.pk, candidate.anchor_role_id), 0))
+        level = levels.get((candidate.holder.pk, candidate.anchor_role_id), 0)
         live.extend(
             _LiveRow(candidate=candidate, effect=effect, thread_level=level)
             for effect in effects_by_role.get(candidate.role_id, ())
@@ -678,9 +675,10 @@ def _scaled_firings(live: list[_LiveRow]) -> list[FiredVowEffect]:
 def vow_effect_bonuses(
     effect: VowAddedEffect, thread_level: int, *, potency_tenths: int | None = None
 ) -> VowEffectBonuses:
-    """The bonuses ``effect`` adds at shown ``thread_level``: the one per-level rule (#4930).
+    """The bonuses ``effect`` adds at ``thread_level``: the one per-level rule (#4930).
 
-    Each shown level above ``unlock_thread_level`` adds the row's
+    Each 10 thread levels above ``unlock_thread_level`` (``thread_rung``, an internal
+    step, #5091) add the row's
     ``severity_per_thread_level``, ``duration_per_thread_level`` and
     ``damage_per_thread_level``; a level at or below the unlock adds nothing.
     ``potency_tenths`` is ``SecondaryVowConfig.potency_tenths`` for a row from a
@@ -688,7 +686,9 @@ def vow_effect_bonuses(
     primary vow. The cast (``_scaled_firings``) and the technique power evaluator
     both call this, so a preview prices what a cast adds. Issues no query.
     """
-    above = max(0, thread_level - effect.unlock_thread_level)
+    from world.magic.services.threads import thread_rung  # noqa: PLC0415
+
+    above = max(0, thread_rung(thread_level) - thread_rung(effect.unlock_thread_level))
     severity = above * effect.severity_per_thread_level
     duration = above * effect.duration_per_thread_level
     damage = above * effect.damage_per_thread_level

@@ -144,7 +144,7 @@ class CastListingFormsTests(TestCase):
         variant = TechniqueVariant.objects.create(
             parent_technique=self.technique,
             resonance=self.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Ashfall Lash",
         )
         provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)

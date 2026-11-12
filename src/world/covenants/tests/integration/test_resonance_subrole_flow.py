@@ -45,7 +45,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
     """Full flow: imbue past unlock_thread_level → sub-role resolves + discovery fires."""
 
     def setUp(self) -> None:
-        # Seed the parent role + two resonance sub-roles (unlock_thread_level=3 each).
+        # Seed the parent role + two resonance sub-roles (unlock_thread_level=30 each).
         parent_role = None  # seed_resonance_subrole_slice creates the parent internally
         self.subroles = seed_resonance_subrole_slice(parent_role=parent_role)
         self.subrole = self.subroles[0]
@@ -73,7 +73,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
         self.other_sheet = _make_active_sheet()
 
         # CharacterResonance row so spend_resonance_for_imbuing can find a balance.
-        # The thread sits at stored 29 (shown 2, one below unlock_thread_level=3,
+        # The thread sits at stored 29 (shown 2, one below unlock_thread_level=30,
         # #4585); the next level costs (29 - 9) × 100 = 2000 dp, and the stored-30
         # XP boundary is paid below.
         self.cr = CharacterResonanceFactory(

@@ -89,7 +89,10 @@ SECONDARY_VOW_POTENCY_TENTHS_DEFAULT = 6
 # simulator sets it; each pick level's budget defaults to one full-value pick.
 VOW_FOCUS_PICK_VALUE_DEFAULT = 4
 VOW_FOCUS_PICK_BUDGET_PER_LEVEL_DEFAULT = 4
-VOW_FOCUS_PICK_MAX_LEVEL = 3
+#: The vow thread levels a focus pick can sit at (#5091: thread levels, as players see
+#: them). A pick opens once the holder's vow thread reaches its level.
+VOW_FOCUS_PICK_LEVELS = (10, 20, 30)
+VOW_FOCUS_PICK_MAX_LEVEL = VOW_FOCUS_PICK_LEVELS[-1]
 #: Action points the Rite of Re-swearing takes from the weekly pool (#4940). A
 #: placeholder until staff set it on VowFocusPickConfig.
 VOW_FOCUS_PICK_RESPEC_AP_COST_DEFAULT = 3

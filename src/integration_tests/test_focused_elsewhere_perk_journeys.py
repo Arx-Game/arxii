@@ -125,7 +125,7 @@ class _BanditFight(JourneyCase):
 
         covenant = CovenantFactory(covenant_type=CovenantType.DURANCE)
         mira_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
-        engage_vow_with_thread(self.mira.sheet_data, mira_role, covenant=covenant, thread_level=3)
+        engage_vow_with_thread(self.mira.sheet_data, mira_role, covenant=covenant, thread_level=30)
         perk = VowSituationalPerkFactory(
             covenant_role=mira_role,
             beneficiary=self.BENEFICIARY,
@@ -135,7 +135,9 @@ class _BanditFight(JourneyCase):
         )
         VowSituationalPerkSituationFactory(perk=perk, situation=self.SITUATION)
         tomas_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
-        engage_vow_with_thread(self.tomas.sheet_data, tomas_role, covenant=covenant, thread_level=3)
+        engage_vow_with_thread(
+            self.tomas.sheet_data, tomas_role, covenant=covenant, thread_level=30
+        )
         self.watch(self.mira, self.tomas)
 
     def fighter(self, name: str) -> ObjectDB:

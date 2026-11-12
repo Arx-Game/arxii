@@ -52,7 +52,7 @@ class ResolvedTechniquePayloadAliasTest(TestCase):
         cls.variant = TechniqueVariant.objects.create(
             parent_technique=cls.technique,
             resonance=ResonanceFactory(),
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Ashfall Form",
         )
         TechniqueVariantDamageProfile.objects.create(
@@ -116,7 +116,7 @@ class AvailableTechniqueFormsTest(TestCase):
         cls.variant = TechniqueVariant.objects.create(
             parent_technique=cls.technique,
             resonance=cls.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Ashfall Lash",
             intensity_delta=2,
             control_delta=-1,
@@ -187,7 +187,7 @@ class AvailableTechniqueFormsTest(TestCase):
         deeper = TechniqueVariant.objects.create(
             parent_technique=self.technique,
             resonance=self.resonance,
-            unlock_thread_level=6,
+            unlock_thread_level=60,
             name_override="Cinderfall Rite",
         )
         self.technique.__dict__.pop("cached_variants", None)
@@ -202,7 +202,7 @@ class AvailableTechniqueFormsTest(TestCase):
         tide_variant = TechniqueVariant.objects.create(
             parent_technique=self.technique,
             resonance=self.other_resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Tidewrack Lash",
         )
         self.technique.__dict__.pop("cached_variants", None)

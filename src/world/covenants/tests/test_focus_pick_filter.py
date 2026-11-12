@@ -51,9 +51,9 @@ class FocusPickFilterBase(TestCase):
         self.chooser = CharacterSheetFactory()
         self.other = CharacterSheetFactory()
         chooser_vow = engage_vow_with_thread(
-            self.chooser, self.vow, covenant=self.covenant, thread_level=2
+            self.chooser, self.vow, covenant=self.covenant, thread_level=20
         )
-        engage_vow_with_thread(self.other, self.vow, covenant=self.covenant, thread_level=2)
+        engage_vow_with_thread(self.other, self.vow, covenant=self.covenant, thread_level=20)
         CharacterVowFocusPickFactory(character_role=chooser_vow, pick=self.pick)
 
 

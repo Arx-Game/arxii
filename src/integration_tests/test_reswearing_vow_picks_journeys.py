@@ -68,7 +68,7 @@ class _ReswearCase(JourneyCase):
         self.covenant = CovenantFactory(name="The Quicksilver Hall")
         self.vow = CovenantRoleFactory(name="Quicksilver", covenant_type=CovenantType.DURANCE)
         self.membership = engage_vow_with_thread(
-            self.sheet, self.vow, covenant=self.covenant, thread_level=2
+            self.sheet, self.vow, covenant=self.covenant, thread_level=20
         )
         # Level 1: prices 2, 2, 2 and 4. The Target limit met 5 times in 10 halves 4 to 2.
         self.flank = self.pick("Strike from the Flank", level=1, value=4)
@@ -261,7 +261,7 @@ class ReswearingRefused(_ReswearCase):
         )
 
     def test_another_vows_pick(self) -> None:
-        other = VowFocusPickFactory(covenant_role=CovenantRoleFactory(), pick_level=1, value=2)
+        other = VowFocusPickFactory(covenant_role=CovenantRoleFactory(), pick_level=10, value=2)
 
         self.assert_refused(self.perform(self.recovery, other), "Your vow offers no such pick.")
 
@@ -304,7 +304,7 @@ class TheDialogsOptions(_ReswearCase):
 class ANonMagicalHolder(_ReswearCase):
     def test_a_rite_she_cannot_perform_is_not_offered(self) -> None:
         hobb = self.make_player("Hobb", room=self.room)  # no aura: no magical profile
-        engage_vow_with_thread(hobb.sheet_data, self.vow, covenant=self.covenant, thread_level=1)
+        engage_vow_with_thread(hobb.sheet_data, self.vow, covenant=self.covenant, thread_level=10)
 
         options = self.options(hobb).json()
 

@@ -48,7 +48,7 @@ class HoldCleanTests(TestCase):
 
     def test_early_form_must_be_a_form_of_the_held_technique(self) -> None:
         hold = CharacterTechniqueFactory()
-        hold.early_form = TechniqueVariantFactory(unlock_thread_level=1)
+        hold.early_form = TechniqueVariantFactory(unlock_thread_level=10)
         with self.assertRaises(ValidationError):
             hold.full_clean()
 
@@ -100,7 +100,7 @@ class PersonalizationConstraintTests(TestCase):
 
     def test_flourish_cost_needs_a_level_below_the_first_crossing(self) -> None:
         with self.assertRaises(IntegrityError), transaction.atomic():
-            SignatureMotifBonusFactory(min_crossing_level=3, creation_point_cost=2)
+            SignatureMotifBonusFactory(min_crossing_level=30, creation_point_cost=2)
 
     def test_design_restriction_cannot_carry_a_creation_cost(self) -> None:
         with self.assertRaises(IntegrityError), transaction.atomic():

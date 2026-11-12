@@ -283,7 +283,7 @@ class ASecondaryOrLeftVowIsRefused(_VowHolderCase):
         ember = CovenantRoleFactory(name="Ember", covenant_type=CovenantType.DURANCE)
         ember_pick = self.pick("Cinder Step", level=1, value=1, role=ember)
         engage_vow_with_thread(
-            self.sheet, ember, covenant=other_covenant, thread_level=2, is_secondary=True
+            self.sheet, ember, covenant=other_covenant, thread_level=20, is_secondary=True
         )
 
         refused = self.web(self.ysmay, CHOOSE, pick_id=ember_pick.pk, covenant_id=other_covenant.pk)

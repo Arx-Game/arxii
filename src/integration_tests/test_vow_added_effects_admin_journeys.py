@@ -57,7 +57,7 @@ class VowAddedEffectSummaryTests(TestCase):
 
     def test_the_summary_reads_in_plain_words(self) -> None:
         effect = VowAddedEffectFactory(
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             beneficiary=PerkBeneficiary.COVENANT_ALLIES,
             function=TechniqueFunction.WEAKEN,
             cast_context=VowEffectContext.IN_COMBAT,

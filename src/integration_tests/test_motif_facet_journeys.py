@@ -347,7 +347,7 @@ class PickingFacetsInCreation(JourneyCase):
             name="Howl of the Pack",
             required_facet=self.wolf,
             required_resonance=None,
-            min_crossing_level=1,
+            min_crossing_level=10,
             creation_point_cost=3,
         )
         self.account = AccountFactory()

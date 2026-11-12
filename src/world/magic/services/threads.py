@@ -65,6 +65,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: Stored thread levels per character level (a thread's cap is the character's level
+#: times this), and the step ``thread_rung`` counts in.
+THREAD_RUNG_SIZE = PATH_LEVEL_CAP_MULTIPLIER
+
 
 def thread_level_multiplier(level: int) -> Decimal:
     """The shared level-bucketing multiplier for thread-pull-effect scaling (#1718).
@@ -112,17 +116,30 @@ def _typeclass_path_in_registry(path: str, registry: tuple[str, ...]) -> bool:
     return False
 
 
-def shown_thread_level(level: int) -> int:
-    """The thread level a player sees for a stored ``level``: ``level // 10`` (#4585).
+def thread_rung(level: int) -> int:
+    """How many whole steps of 10 a stored thread ``level`` holds (``level // 10``).
 
-    Threads are stored ×10 (stored 30 shows 3), like stats. Every authored thread
-    threshold (crossings 3/6/11/16/21, variant ``unlock_thread_level``, signature
-    ``min_crossing_level``, ``ThreadPullEffect.min_thread_level``,
-    ``CREATION_PERSONALIZATION_MAX_LEVEL``) is on the shown scale, so every
-    threshold comparison goes through this helper rather than reading the stored
-    value directly.
+    Threads show their stored level, like stats and skills (#5091, ADR-5091): a thread
+    at 30 reads 30, and every authored thread threshold (crossings 30/60/110/160/210,
+    variant ``unlock_thread_level``, signature ``min_crossing_level``,
+    ``ThreadPullEffect.min_thread_level``, ``CREATION_PERSONALIZATION_MAX_LEVEL``) is a
+    stored level compared directly. This step is only for formulas tuned "per 10 thread
+    levels" (soul tether caps, facet bonuses, vow effect scaling, derived amounts); it
+    is internal and never shown.
     """
-    return level // 10
+    return level // THREAD_RUNG_SIZE
+
+
+def is_thread_crossing_level(level: int) -> bool:
+    """Whether a stored thread ``level`` is a crossing (30, 60, 110, 160, 210).
+
+    A thread's level tracks its character's level ten to one (``compute_level_cap``),
+    so its crossings are the Path crossings (``is_crossing_level``: 3, 6, 11, 16, 21)
+    times ten.
+    """
+    from world.classes.services import is_crossing_level  # noqa: PLC0415
+
+    return level % THREAD_RUNG_SIZE == 0 and is_crossing_level(level // THREAD_RUNG_SIZE)
 
 
 # =============================================================================
@@ -272,9 +289,9 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: C901
 def compute_level_cap(character_sheet: CharacterSheet) -> int:
     """Return the character-level cap on every thread this character owns (#4585).
 
-    = ``get_character_path_level(character) × PATH_LEVEL_CAP_MULTIPLIER``: 10 stored
-    points (one shown level) per character level, so a thread is never shown higher
-    than its owner's level. ``get_character_path_level`` returns at least 1, so a
+    = ``get_character_path_level(character) × PATH_LEVEL_CAP_MULTIPLIER``: 10 thread
+    levels per character level, so a level-3 character's threads stop at 30.
+    ``get_character_path_level`` returns at least 1, so a
     sheet with no class level still has a cap of 10.
     """
     from world.progression.services.skill_development import (  # noqa: PLC0415
@@ -831,16 +848,16 @@ def weave_creation_technique_thread(
 
     Creation pays for this in CG points (the flourish's own cost), so it bypasses the
     ThreadWeavingUnlock gate ``weave_thread`` enforces in play. ``level`` is the stored
-    level (shown × 10). It never starts a thread shown past
-    ``CREATION_PERSONALIZATION_MAX_LEVEL`` (a shown level, below the first crossing),
-    so no crossing ceremony or threshold is skipped, and never past the effective cap.
+    level. It never starts a thread past ``CREATION_PERSONALIZATION_MAX_LEVEL`` (below
+    the first crossing), so no crossing ceremony or threshold is skipped, and never past
+    the effective cap.
 
     Call only from character-creation finalize.
     """
     from world.magic.constants import CREATION_PERSONALIZATION_MAX_LEVEL  # noqa: PLC0415
     from world.magic.exceptions import CreationThreadLevelTooHigh  # noqa: PLC0415
 
-    if shown_thread_level(level) > CREATION_PERSONALIZATION_MAX_LEVEL:
+    if level > CREATION_PERSONALIZATION_MAX_LEVEL:
         raise CreationThreadLevelTooHigh
     _validate_technique_ownership(character_sheet, technique)
     thread = Thread(
@@ -942,7 +959,7 @@ def near_xp_lock_threads(
     threads = list(Thread.objects.filter(owner=character_sheet, retired_at__isnull=True))
     if not threads:
         return []
-    next_boundaries = {((t.level // 10) + 1) * 10 for t in threads}
+    next_boundaries = {(thread_rung(t.level) + 1) * THREAD_RUNG_SIZE for t in threads}
     locked_map = {
         locked.level: locked
         for locked in ThreadXPLockedLevel.objects.filter(level__in=next_boundaries)
@@ -954,7 +971,7 @@ def near_xp_lock_threads(
     )
     out: list[ThreadXPLockProspect] = []
     for t in threads:
-        next_boundary = ((t.level // 10) + 1) * 10
+        next_boundary = (thread_rung(t.level) + 1) * THREAD_RUNG_SIZE
         locked = locked_map.get(next_boundary)
         if locked is None:
             continue

@@ -99,7 +99,7 @@ class VowAddedEffectsInAScene(JourneyCase):
         self.hobb = self.player("Hobb")
         self.wren = self.player("Wren")
         engage_vow_with_thread(
-            self.ysmay.sheet_data, self.role, covenant=self.covenant, thread_level=2
+            self.ysmay.sheet_data, self.role, covenant=self.covenant, thread_level=20
         )
         self.hobbs_vow = self.swear_hobb()
 
@@ -152,7 +152,7 @@ class VowAddedEffectsInAScene(JourneyCase):
         """Hobb takes an engaged role in Ysmay's covenant."""
         role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
         return engage_vow_with_thread(
-            self.hobb.sheet_data, role, covenant=self.covenant, thread_level=1
+            self.hobb.sheet_data, role, covenant=self.covenant, thread_level=10
         )
 
     def ysmays_row(self, **row: object) -> VowAddedEffect:

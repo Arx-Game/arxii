@@ -79,7 +79,7 @@ class _BandCapCase(JourneyCase):
 
     def band_caps_skills_at(self, cap: int | None) -> None:
         """Staff author the first band's row with ``skill_cap`` (shown units)."""
-        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=5, skill_cap=cap)
+        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=50, skill_cap=cap)
 
     def made_with(self, rating: int) -> None:
         set_skill_values(
@@ -243,7 +243,7 @@ class UseAndAwardsStopAtTheCap(_BandCapCase):
 
 class StaffEditRefusesAboveTheCap(JourneyCase):
     def test_staff_cannot_set_a_skill_above_the_band_cap(self) -> None:
-        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=5, skill_cap=2)
+        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=50, skill_cap=20)
         skill = SkillFactory()
         staff = AccountFactory(is_staff=True)
         sheet = mint_gm_character(staff, "Mirela Vant").character_sheet

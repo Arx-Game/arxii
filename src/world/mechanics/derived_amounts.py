@@ -70,13 +70,16 @@ def input_value(
 
 
 def _thread_level(sheet: CharacterSheet, row: DerivedAmountMixin) -> int:
-    """The shown level of the holder's highest live thread on the row's trait or facet.
+    """The rung of the holder's highest live thread on the row's trait or facet.
+
+    A rung is a whole step of 10 thread levels (``thread_rung``): rows are tuned per 10
+    thread levels, an internal step, never shown (#5091).
 
     A character holds one thread per resonance on an anchor, so the highest one counts; a
     retired thread does not. Read from the character's cached thread handler, so a row
     costs no query. No thread there: 0.
     """
-    from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
+    from world.magic.services.threads import thread_rung  # noqa: PLC0415
 
     character = sheet.character
     if character is None:
@@ -88,7 +91,7 @@ def _thread_level(sheet: CharacterSheet, row: DerivedAmountMixin) -> int:
         if (trait_id is not None and thread.target_trait_id == trait_id)
         or (facet_id is not None and thread.target_facet_id == facet_id)
     ]
-    return shown_thread_level(max(levels)) if levels else 0
+    return thread_rung(max(levels)) if levels else 0
 
 
 # The (sheet, check type) ratings being read right now. A check-rank row that the rating it

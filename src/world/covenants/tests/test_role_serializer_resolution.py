@@ -30,7 +30,7 @@ class RoleSerializerResolutionTests(TestCase):
         self.sub_role = SubroleCovenantRoleFactory(
             parent_role=self.parent_role,
             resonance=self.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
         )
         self.covenant = CovenantFactory(covenant_type=self.parent_role.covenant_type)
 

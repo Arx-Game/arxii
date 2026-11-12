@@ -228,7 +228,7 @@ class DefensePiercingWardTests(TestCase):
         technique = resolver.action.focused_action
         resonance = ResonanceFactory()
         variant = TechniqueVariant.objects.create(
-            parent_technique=technique, resonance=resonance, unlock_thread_level=1
+            parent_technique=technique, resonance=resonance, unlock_thread_level=10
         )
         TechniqueVariantDamageProfile.objects.create(
             variant=variant, bypasses_wards=True, base_damage=7, minimum_success_level=1
@@ -281,7 +281,7 @@ class DefensePiercingVowTests(TestCase):
         role = CovenantRoleFactory()
         covenant = CovenantFactory(covenant_type=role.covenant_type)
         engage_vow_with_thread(
-            resolver.participant.character_sheet, role, covenant=covenant, thread_level=3
+            resolver.participant.character_sheet, role, covenant=covenant, thread_level=30
         )
         resolver.participant.character_sheet.character.threads.invalidate()
         effect = VowAddedEffectFactory(

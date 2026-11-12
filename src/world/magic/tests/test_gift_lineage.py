@@ -262,7 +262,7 @@ class InheritedTechniqueCastTests(TestCase):
         variant = TechniqueVariantFactory(
             parent_technique=self.umbrella_tech,
             resonance=self.thread_resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Fox-Touched Sense",
         )
         resolved = resolve_specialized_variant(

@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.classes.services import is_crossing_level
 from world.magic.constants import ACCELERATED_GAIN_SOURCES, EffectKind, GainSource, TargetKind
 from world.magic.exceptions import (
     CovenantRoleNotEngagedError,
@@ -35,11 +34,11 @@ from world.magic.services.threads import (
     compute_effective_cap,
     compute_level_cap,
     get_imbue_cost_multiplier,
+    is_thread_crossing_level,
     pull_cost_totals,
     pull_resonance_costs,
     recompute_max_health_with_threads,
     relationship_side_from_row,
-    shown_thread_level,
     thread_level_multiplier,
 )
 from world.magic.types import (
@@ -367,15 +366,15 @@ _SOURCE_REQUIRED_KWARG: dict[str, Callable[..., tuple[object | None, str]]] = {
 def _crossing_requirements(
     thread: Thread, next_level: int, character_sheet: CharacterSheet
 ) -> tuple[bool, list[str]]:
-    """Check a crossing on the shown scale, allowing non-crossing levels."""
-    if next_level % 10 != 0 or not is_crossing_level(shown_thread_level(next_level)):
+    """Check a crossing gate, allowing non-crossing levels (thresholds are stored levels)."""
+    if not is_thread_crossing_level(next_level):
         return True, []
     from world.progression.services.spends import (  # noqa: PLC0415
         check_requirements_for_thread_crossing,
     )
 
     threshold = ThreadCrossingThreshold.objects.filter(
-        target_kind=thread.target_kind, level=shown_thread_level(next_level)
+        target_kind=thread.target_kind, level=next_level
     ).first()
     if threshold is None:
         return True, []
@@ -1008,9 +1007,7 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
             effective_level = t.level + beseech_bonus
         multiplier = thread_level_multiplier(effective_level)
         for effect_tier in range(tier + 1):
-            rows = get_pull_effects_for_thread(
-                t, tier=effect_tier, min_thread_level__lte=shown_thread_level(t.level)
-            )
+            rows = get_pull_effects_for_thread(t, tier=effect_tier, min_thread_level__lte=t.level)
             for row in rows:
                 effect = _resolve_one_pull_effect(
                     t,

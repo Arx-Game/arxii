@@ -27,13 +27,13 @@ from world.covenants.models import VowFocusPickConfig
 class BudgetRowsTests(TestCase):
     def setUp(self) -> None:
         self.role = CovenantRoleFactory(name="Fulmination")
-        VowFocusPickFactory(covenant_role=self.role, pick_level=1, name="Arcing Charge", value=4)
+        VowFocusPickFactory(covenant_role=self.role, pick_level=10, name="Arcing Charge", value=4)
         under = VowFocusPickFactory(
-            covenant_role=self.role, pick_level=2, name="Under Open Sky", value=4
+            covenant_role=self.role, pick_level=20, name="Under Open Sky", value=4
         )
         VowFocusPickLimitFactory(pick=under, kind=FocusPickLimitKind.SETTING, frequency_tenths=6)
-        VowFocusPickFactory(covenant_role=self.role, pick_level=3, name="Kneel", value=4)
-        VowFocusPickFactory(covenant_role=self.role, pick_level=3, name="Static Halo", value=2)
+        VowFocusPickFactory(covenant_role=self.role, pick_level=30, name="Kneel", value=4)
+        VowFocusPickFactory(covenant_role=self.role, pick_level=30, name="Static Halo", value=2)
 
     def test_offered_prices_per_level_against_the_default_budget(self) -> None:
         rows = live.budget_rows(self.role)
@@ -54,13 +54,13 @@ class _HolderCase(TestCase):
     def setUp(self) -> None:
         self.role = CovenantRoleFactory(name="Fulmination")
         self.kneel = VowFocusPickFactory(
-            covenant_role=self.role, pick_level=3, name="Kneel", value=4
+            covenant_role=self.role, pick_level=30, name="Kneel", value=4
         )
         VowFocusPickLimitFactory(
             pick=self.kneel, kind=FocusPickLimitKind.TARGET, frequency_tenths=5
         )  # price 2
         self.halo = VowFocusPickFactory(
-            covenant_role=self.role, pick_level=3, name="Static Halo", value=2
+            covenant_role=self.role, pick_level=30, name="Static Halo", value=2
         )
         self.ysolde = CharacterCovenantRoleFactory(
             covenant_role=self.role, character_sheet__character__db_key="Ysolde"

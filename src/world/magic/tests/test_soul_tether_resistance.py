@@ -399,7 +399,7 @@ class ResolveCorruptionResistancePullEffectTests(TestCase):
             target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
             resonance=self.resonance,
             tier=0,
-            min_thread_level=1,
+            min_thread_level=10,
             effect_kind=EffectKind.CORRUPTION_RESISTANCE,
             # All payload columns intentionally null (CheckConstraint requires it).
             flat_bonus_amount=None,

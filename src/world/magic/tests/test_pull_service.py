@@ -363,7 +363,7 @@ class SpendResonanceForPullEphemeralTests(TestCase):
             target_kind=self.thread.target_kind,
             resonance=self.resonance,
             tier=1,
-            min_thread_level=1,
+            min_thread_level=10,
             as_vital_bonus=True,
             vital_bonus_amount=4,
             vital_target=VitalBonusTarget.MAX_HEALTH,

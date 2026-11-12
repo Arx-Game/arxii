@@ -90,7 +90,7 @@ class ContextualThreadPowerTests(TestCase):
             target_kind=TargetKind.TECHNIQUE,
             resonance=thread.resonance,
             tier=0,
-            min_thread_level=5,
+            min_thread_level=50,
             as_intensity_bump=True,
         )
         handler = CharacterThreadHandler(sheet.character)

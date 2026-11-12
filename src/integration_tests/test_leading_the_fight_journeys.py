@@ -316,7 +316,9 @@ class AMarkPaysOff(JourneyCase):
 
         covenant = CovenantFactory(covenant_type=CovenantType.DURANCE)
         tomas_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
-        engage_vow_with_thread(self.tomas.sheet_data, tomas_role, covenant=covenant, thread_level=3)
+        engage_vow_with_thread(
+            self.tomas.sheet_data, tomas_role, covenant=covenant, thread_level=30
+        )
         perk = VowSituationalPerkFactory(
             covenant_role=tomas_role,
             beneficiary=PerkBeneficiary.SELF,

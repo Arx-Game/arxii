@@ -156,7 +156,7 @@ def climb_gossip(row: SecretGossip) -> SecretGossip:
 def _require_gossip_skill(character: ObjectDB) -> None:
     from world.skills.services import has_specialization  # noqa: PLC0415
 
-    if not has_specialization(character, _gossip_specialization(), minimum_rank=1):
+    if not has_specialization(character, _gossip_specialization(), minimum_value=10):
         raise GossipError(_NO_SKILL)
 
 
@@ -436,7 +436,7 @@ def has_gossip_skill(character: ObjectDB) -> bool:
     """Whether a character has Gossip >= 1 (the surface-eligibility gate, #1572)."""
     from world.skills.services import has_specialization  # noqa: PLC0415
 
-    return has_specialization(character, _gossip_specialization(), minimum_rank=1)
+    return has_specialization(character, _gossip_specialization(), minimum_value=10)
 
 
 def spreadable_secrets(character: ObjectDB) -> list[Secret]:

@@ -67,7 +67,7 @@ def _resonance_queryset() -> Any:
 
 
 class StaffStatsSerializer(serializers.Serializer):
-    """``{"stats": {"<trait id>": <1 to 5>}}``."""
+    """``{"stats": {"<trait id>": <10 to 50, in steps of 10>}}``."""
 
     stats = serializers.DictField(child=serializers.IntegerField())
 

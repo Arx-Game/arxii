@@ -60,7 +60,7 @@ class CastableTechniqueFormsTest(TestCase):
         cls.variant = TechniqueVariant.objects.create(
             parent_technique=cls.technique,
             resonance=cls.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Ashfall Lash",
         )
 

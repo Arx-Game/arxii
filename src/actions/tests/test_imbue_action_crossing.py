@@ -57,7 +57,7 @@ class ImbueActionCrossingRequirementTests(TestCase):
     def test_crossing_block_returns_success_with_messages(self) -> None:
         """When blocked_by=CROSSING_REQUIREMENT, action returns success=True
         with the failed-requirement messages in the message text."""
-        threshold = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=3)
+        threshold = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=30)
         ItemRequirement.objects.create(
             thread_crossing_threshold=threshold,
             item_template=self.template,
@@ -78,7 +78,7 @@ class ImbueActionCrossingRequirementTests(TestCase):
     def test_crossing_block_consumes_pending_effect(self) -> None:
         """The PendingRitualEffect is still consumed on a crossing block
         (the rite completed; re-attempting requires a new rite)."""
-        threshold = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=3)
+        threshold = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=30)
         ItemRequirement.objects.create(
             thread_crossing_threshold=threshold,
             item_template=self.template,

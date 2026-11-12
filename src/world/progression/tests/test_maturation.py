@@ -68,8 +68,8 @@ class MaturationServiceTests(TestCase):
             category=TraitCategory.PHYSICAL,
         )
         cls.skill = TraitFactory(name="skill_maturation_test", trait_type=TraitType.SKILL)
-        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=5)
-        MaturationStatCap.objects.create(path_stage=PathStage.POTENTIAL, stat_cap=6)
+        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=50)
+        MaturationStatCap.objects.create(path_stage=PathStage.POTENTIAL, stat_cap=60)
 
     def _sheet(self, matured=30, species=None):
         sheet = CharacterSheetFactory(matured_years=matured, withered_years=0)

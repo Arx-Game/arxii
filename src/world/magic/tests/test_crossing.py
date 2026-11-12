@@ -50,7 +50,7 @@ class CrossingOptionModelTests(TestCase):
         opt = CrossingOption(
             target_kind=TargetKind.TRAIT,
             resonance=self.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Burning Vigor",
             condition_template=self.condition_template,
         )
@@ -60,7 +60,7 @@ class CrossingOptionModelTests(TestCase):
         opt = CrossingOption(
             target_kind=TargetKind.TRAIT,
             resonance=self.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Bad",
             condition_template=None,  # type: ignore[arg-type]
         )
@@ -75,7 +75,7 @@ class CrossingOptionModelTests(TestCase):
         CrossingOption.objects.create(
             target_kind=TargetKind.TRAIT,
             resonance=self.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Default",
             condition_template=self.condition_template,
             is_default=True,
@@ -84,7 +84,7 @@ class CrossingOptionModelTests(TestCase):
             CrossingOption.objects.create(
                 target_kind=TargetKind.TRAIT,
                 resonance=self.resonance,
-                crossing_level=3,
+                crossing_level=30,
                 name="Also Default",
                 condition_template=self.condition_template,
                 is_default=True,
@@ -95,7 +95,7 @@ class CrossingOptionModelTests(TestCase):
         CrossingOption.objects.create(
             target_kind=TargetKind.TRAIT,
             resonance=self.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Trait Default",
             condition_template=self.condition_template,
             is_default=True,
@@ -104,7 +104,7 @@ class CrossingOptionModelTests(TestCase):
         CrossingOption.objects.create(
             target_kind=TargetKind.FACET,
             resonance=self.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Facet Default",
             condition_template=self.condition_template,
             is_default=True,
@@ -131,7 +131,7 @@ class CrossingChoiceModelTests(TestCase):
         cls.option = CrossingOption.objects.create(
             target_kind=TargetKind.TRAIT,
             resonance=cls.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Burning vigor",
             condition_template=cls.condition_template,
         )
@@ -139,7 +139,7 @@ class CrossingChoiceModelTests(TestCase):
     def test_create_choice(self) -> None:
         choice = CrossingChoice.objects.create(
             thread=self.thread,
-            crossing_level=3,
+            crossing_level=30,
             option=self.option,
         )
         self.assertEqual(choice.option, self.option)
@@ -150,13 +150,13 @@ class CrossingChoiceModelTests(TestCase):
 
         CrossingChoice.objects.create(
             thread=self.thread,
-            crossing_level=3,
+            crossing_level=30,
             option=self.option,
         )
         with self.assertRaises(IntegrityError):
             CrossingChoice.objects.create(
                 thread=self.thread,
-                crossing_level=3,
+                crossing_level=30,
                 option=self.option,
             )
 
@@ -181,7 +181,7 @@ class PendingCrossingOfferModelTests(TestCase):
     def test_create_offer(self) -> None:
         offer = PendingCrossingOffer.objects.create(
             thread=self.thread,
-            crossing_level=3,
+            crossing_level=30,
         )
         self.assertEqual(offer.crossing_level, 3)
 
@@ -190,12 +190,12 @@ class PendingCrossingOfferModelTests(TestCase):
 
         PendingCrossingOffer.objects.create(
             thread=self.thread,
-            crossing_level=3,
+            crossing_level=30,
         )
         with self.assertRaises(IntegrityError):
             PendingCrossingOffer.objects.create(
                 thread=self.thread,
-                crossing_level=6,
+                crossing_level=60,
             )
 
 
@@ -220,7 +220,7 @@ class TraitCrossingHandlerTests(TestCase):
         cls.option = CrossingOption.objects.create(
             target_kind=TargetKind.TRAIT,
             resonance=cls.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Burning vigor",
             condition_template=cls.condition_template,
             is_default=True,
@@ -253,7 +253,7 @@ class TraitCrossingHandlerTests(TestCase):
         CrossingOption.objects.create(
             target_kind=TargetKind.TRAIT,
             resonance=self.resonance,
-            crossing_level=6,
+            crossing_level=60,
             name="Greater vigor",
             condition_template=self.condition_template,
             is_default=True,
@@ -261,7 +261,7 @@ class TraitCrossingHandlerTests(TestCase):
         CrossingOption.objects.create(
             target_kind=TargetKind.TRAIT,
             resonance=self.resonance,
-            crossing_level=11,
+            crossing_level=110,
             name="Master vigor",
             condition_template=self.condition_template,
             is_default=True,
@@ -271,13 +271,13 @@ class TraitCrossingHandlerTests(TestCase):
             handler = TraitCrossingHandler()
             handler.execute(thread=self.thread, starting_level=20, new_level=110)
         self.assertTrue(
-            CrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
+            CrossingChoice.objects.filter(thread=self.thread, crossing_level=30).exists()
         )
         self.assertTrue(
-            CrossingChoice.objects.filter(thread=self.thread, crossing_level=6).exists()
+            CrossingChoice.objects.filter(thread=self.thread, crossing_level=60).exists()
         )
         self.assertTrue(
-            PendingCrossingOffer.objects.filter(thread=self.thread, crossing_level=11).exists()
+            PendingCrossingOffer.objects.filter(thread=self.thread, crossing_level=110).exists()
         )
 
     def test_no_crossing_in_range_noop(self) -> None:
@@ -311,7 +311,7 @@ class FacetCrossingHandlerTests(TestCase):
         cls.option = CrossingOption.objects.create(
             target_kind=TargetKind.FACET,
             resonance=cls.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Smirk of the Spidery Seductress",
             description="Your spider-facet aura enhances your allure.",
             condition_template=cls.condition_template,
@@ -350,7 +350,7 @@ class ResolveCrossingOfferTests(TestCase):
         cls.option = CrossingOption.objects.create(
             target_kind=TargetKind.TRAIT,
             resonance=cls.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Burning vigor",
             condition_template=cls.condition_template,
         )
@@ -358,7 +358,7 @@ class ResolveCrossingOfferTests(TestCase):
     def setUp(self) -> None:
         self.offer = PendingCrossingOffer.objects.create(
             thread=self.thread,
-            crossing_level=3,
+            crossing_level=30,
         )
 
     def test_resolve_creates_choice(self) -> None:
@@ -367,7 +367,7 @@ class ResolveCrossingOfferTests(TestCase):
         result = resolve_crossing_offer(self.offer, option=self.option)
         self.assertEqual(result.option_name, "Burning vigor")
         self.assertTrue(
-            CrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
+            CrossingChoice.objects.filter(thread=self.thread, crossing_level=30).exists()
         )
         self.assertFalse(PendingCrossingOffer.objects.filter(pk=self.offer.pk).exists())
 
@@ -380,7 +380,7 @@ class ResolveCrossingOfferTests(TestCase):
         wrong_option = CrossingOption.objects.create(
             target_kind=TargetKind.TRAIT,
             resonance=other_resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Wrong",
             condition_template=self.condition_template,
         )
@@ -395,7 +395,7 @@ class ResolveCrossingOfferTests(TestCase):
         wrong_level_option = CrossingOption.objects.create(
             target_kind=TargetKind.TRAIT,
             resonance=self.resonance,
-            crossing_level=6,
+            crossing_level=60,
             name="Wrong level",
             condition_template=self.condition_template,
         )
@@ -409,7 +409,7 @@ class ResolveCrossingOfferTests(TestCase):
         wrong_kind_option = CrossingOption.objects.create(
             target_kind=TargetKind.FACET,
             resonance=self.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Wrong kind",
             condition_template=self.condition_template,
         )
@@ -438,13 +438,13 @@ class ResolveCrossingOfferActionTests(TestCase):
         cls.option = CrossingOption.objects.create(
             target_kind=TargetKind.TRAIT,
             resonance=cls.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Burning vigor",
             condition_template=cls.condition_template,
         )
 
     def setUp(self) -> None:
-        self.offer = PendingCrossingOffer.objects.create(thread=self.thread, crossing_level=3)
+        self.offer = PendingCrossingOffer.objects.create(thread=self.thread, crossing_level=30)
 
     def test_action_resolves_offer(self) -> None:
         from actions.definitions.crossing import ResolveCrossingOfferAction
@@ -454,7 +454,7 @@ class ResolveCrossingOfferActionTests(TestCase):
         result = action.run(actor=actor, offer=self.offer, option=self.option)
         self.assertTrue(result.success)
         self.assertTrue(
-            CrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
+            CrossingChoice.objects.filter(thread=self.thread, crossing_level=30).exists()
         )
 
 
@@ -483,7 +483,7 @@ class RelationshipTrackCrossingHandlerTests(TestCase):
         cls.option = CrossingOption.objects.create(
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             resonance=cls.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Burning devotion",
             description="Your fire-resonant bond blazes with protective warmth.",
             condition_template=cls.condition_template,
@@ -517,7 +517,7 @@ class RelationshipTrackCrossingHandlerTests(TestCase):
         CrossingOption.objects.create(
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             resonance=self.resonance,
-            crossing_level=6,
+            crossing_level=60,
             name="Greater devotion",
             condition_template=self.condition_template,
             is_default=True,
@@ -525,7 +525,7 @@ class RelationshipTrackCrossingHandlerTests(TestCase):
         CrossingOption.objects.create(
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             resonance=self.resonance,
-            crossing_level=11,
+            crossing_level=110,
             name="Master devotion",
             condition_template=self.condition_template,
             is_default=True,
@@ -535,13 +535,13 @@ class RelationshipTrackCrossingHandlerTests(TestCase):
             handler = RelationshipTrackCrossingHandler()
             handler.execute(thread=self.thread, starting_level=20, new_level=110)
         self.assertTrue(
-            CrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
+            CrossingChoice.objects.filter(thread=self.thread, crossing_level=30).exists()
         )
         self.assertTrue(
-            CrossingChoice.objects.filter(thread=self.thread, crossing_level=6).exists()
+            CrossingChoice.objects.filter(thread=self.thread, crossing_level=60).exists()
         )
         self.assertTrue(
-            PendingCrossingOffer.objects.filter(thread=self.thread, crossing_level=11).exists()
+            PendingCrossingOffer.objects.filter(thread=self.thread, crossing_level=110).exists()
         )
 
 
@@ -565,7 +565,7 @@ class RelationshipCapstoneCrossingHandlerTests(TestCase):
         cls.option = CrossingOption.objects.create(
             target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
             resonance=cls.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Eternal bond",
             description="Your capstone bond deepens into permanence.",
             condition_template=cls.condition_template,
@@ -589,7 +589,7 @@ class RelationshipCapstoneCrossingHandlerTests(TestCase):
         CrossingOption.objects.create(
             target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
             resonance=self.resonance,
-            crossing_level=6,
+            crossing_level=60,
             name="Greater bond",
             condition_template=self.condition_template,
             is_default=True,
@@ -597,7 +597,7 @@ class RelationshipCapstoneCrossingHandlerTests(TestCase):
         CrossingOption.objects.create(
             target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
             resonance=self.resonance,
-            crossing_level=11,
+            crossing_level=110,
             name="Master bond",
             condition_template=self.condition_template,
             is_default=True,
@@ -607,13 +607,13 @@ class RelationshipCapstoneCrossingHandlerTests(TestCase):
             handler = RelationshipCapstoneCrossingHandler()
             handler.execute(thread=self.thread, starting_level=20, new_level=110)
         self.assertTrue(
-            CrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
+            CrossingChoice.objects.filter(thread=self.thread, crossing_level=30).exists()
         )
         self.assertTrue(
-            CrossingChoice.objects.filter(thread=self.thread, crossing_level=6).exists()
+            CrossingChoice.objects.filter(thread=self.thread, crossing_level=60).exists()
         )
         self.assertTrue(
-            PendingCrossingOffer.objects.filter(thread=self.thread, crossing_level=11).exists()
+            PendingCrossingOffer.objects.filter(thread=self.thread, crossing_level=110).exists()
         )
 
 
@@ -643,14 +643,14 @@ class RelationshipCrossingResolutionTests(TestCase):
         cls.track_option = CrossingOption.objects.create(
             target_kind=TargetKind.RELATIONSHIP_TRACK,
             resonance=cls.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Burning devotion",
             condition_template=cls.condition_template,
         )
         cls.capstone_option = CrossingOption.objects.create(
             target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
             resonance=cls.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Eternal bond",
             condition_template=cls.condition_template,
         )
@@ -660,12 +660,12 @@ class RelationshipCrossingResolutionTests(TestCase):
 
         offer = PendingCrossingOffer.objects.create(
             thread=self.track_thread,
-            crossing_level=3,
+            crossing_level=30,
         )
         result = resolve_crossing_offer(offer, option=self.track_option)
         self.assertEqual(result.option_name, "Burning devotion")
         self.assertTrue(
-            CrossingChoice.objects.filter(thread=self.track_thread, crossing_level=3).exists()
+            CrossingChoice.objects.filter(thread=self.track_thread, crossing_level=30).exists()
         )
         self.assertFalse(PendingCrossingOffer.objects.filter(pk=offer.pk).exists())
 
@@ -674,12 +674,12 @@ class RelationshipCrossingResolutionTests(TestCase):
 
         offer = PendingCrossingOffer.objects.create(
             thread=self.capstone_thread,
-            crossing_level=3,
+            crossing_level=30,
         )
         result = resolve_crossing_offer(offer, option=self.capstone_option)
         self.assertEqual(result.option_name, "Eternal bond")
         self.assertTrue(
-            CrossingChoice.objects.filter(thread=self.capstone_thread, crossing_level=3).exists()
+            CrossingChoice.objects.filter(thread=self.capstone_thread, crossing_level=30).exists()
         )
         self.assertFalse(PendingCrossingOffer.objects.filter(pk=offer.pk).exists())
 
@@ -690,7 +690,7 @@ class RelationshipCrossingResolutionTests(TestCase):
 
         offer = PendingCrossingOffer.objects.create(
             thread=self.track_thread,
-            crossing_level=3,
+            crossing_level=30,
         )
         with self.assertRaises(CrossingOfferStaleError):
             resolve_crossing_offer(offer, option=self.capstone_option)
@@ -718,7 +718,7 @@ class SoulTetherNonInterferenceTests(TestCase):
         cls.option = CrossingOption.objects.create(
             target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
             resonance=cls.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Deepened hollow",
             condition_template=cls.condition_template,
             is_default=True,
@@ -909,7 +909,7 @@ class MantleCrossingHandlerTests(TestCase):
             handler = MantleCrossingHandler()
             handler.execute(thread=self.thread, starting_level=20, new_level=30)
         self.assertTrue(
-            PendingCrossingOffer.objects.filter(thread=self.thread, crossing_level=3).exists()
+            PendingCrossingOffer.objects.filter(thread=self.thread, crossing_level=30).exists()
         )
 
     def test_multi_crossing_auto_resolves_and_creates_offer(self) -> None:
@@ -924,7 +924,7 @@ class MantleCrossingHandlerTests(TestCase):
             handler = MantleCrossingHandler()
             handler.execute(thread=self.thread, starting_level=20, new_level=110)
         self.assertTrue(
-            PendingCrossingOffer.objects.filter(thread=self.thread, crossing_level=11).exists()
+            PendingCrossingOffer.objects.filter(thread=self.thread, crossing_level=110).exists()
         )
 
     def test_no_op_when_no_level_gain(self) -> None:
@@ -966,7 +966,7 @@ class MantleCrossingResolveTests(TestCase):
         cls.option = CrossingOption.objects.create(
             target_kind=TargetKind.MANTLE,
             resonance=cls.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Flame-forged edge",
             description="The mantle's blade ignites with your resonance.",
             condition_template=cls.condition_template,
@@ -977,7 +977,7 @@ class MantleCrossingResolveTests(TestCase):
 
         self.offer = PendingCrossingOffer.objects.create(
             thread=self.thread,
-            crossing_level=3,
+            crossing_level=30,
         )
 
     def test_resolve_mantle_offer(self) -> None:
@@ -988,7 +988,7 @@ class MantleCrossingResolveTests(TestCase):
         result = resolve_crossing_offer(self.offer, option=self.option)
         self.assertEqual(result.option_name, "Flame-forged edge")
         self.assertTrue(
-            CrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
+            CrossingChoice.objects.filter(thread=self.thread, crossing_level=30).exists()
         )
         self.assertFalse(PendingCrossingOffer.objects.filter(pk=self.offer.pk).exists())
 
@@ -1002,7 +1002,7 @@ class MantleCrossingResolveTests(TestCase):
         trait_option = CrossingOption.objects.create(
             target_kind=TargetKind.TRAIT,
             resonance=self.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Wrong kind option",
             condition_template=self.condition_template,
         )
@@ -1019,7 +1019,7 @@ class MantleCrossingResolveTests(TestCase):
         result = action.run(actor=actor, offer=self.offer, option=self.option)
         self.assertTrue(result.success)
         self.assertTrue(
-            CrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
+            CrossingChoice.objects.filter(thread=self.thread, crossing_level=30).exists()
         )
 
 
@@ -1054,7 +1054,7 @@ class SanctumCrossingHandlerTests(TestCase):
         cls.option = CrossingOption.objects.create(
             target_kind=TargetKind.SANCTUM,
             resonance=cls.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Sanctum Attunement",
             condition_template=cls.condition_template,
             is_default=True,
@@ -1087,7 +1087,7 @@ class SanctumCrossingHandlerTests(TestCase):
         CrossingOption.objects.create(
             target_kind=TargetKind.SANCTUM,
             resonance=self.resonance,
-            crossing_level=6,
+            crossing_level=60,
             name="Greater attunement",
             condition_template=self.condition_template,
             is_default=True,
@@ -1095,7 +1095,7 @@ class SanctumCrossingHandlerTests(TestCase):
         CrossingOption.objects.create(
             target_kind=TargetKind.SANCTUM,
             resonance=self.resonance,
-            crossing_level=11,
+            crossing_level=110,
             name="Master attunement",
             condition_template=self.condition_template,
             is_default=True,
@@ -1105,13 +1105,13 @@ class SanctumCrossingHandlerTests(TestCase):
             handler = SanctumCrossingHandler()
             handler.execute(thread=self.thread, starting_level=20, new_level=110)
         self.assertTrue(
-            CrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
+            CrossingChoice.objects.filter(thread=self.thread, crossing_level=30).exists()
         )
         self.assertTrue(
-            CrossingChoice.objects.filter(thread=self.thread, crossing_level=6).exists()
+            CrossingChoice.objects.filter(thread=self.thread, crossing_level=60).exists()
         )
         self.assertTrue(
-            PendingCrossingOffer.objects.filter(thread=self.thread, crossing_level=11).exists()
+            PendingCrossingOffer.objects.filter(thread=self.thread, crossing_level=110).exists()
         )
 
 
@@ -1180,13 +1180,13 @@ class ActiveCrossingEffectsSanctumTests(TestCase):
         cls.option = CrossingOption.objects.create(
             target_kind=TargetKind.SANCTUM,
             resonance=cls.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Sanctum Attunement",
             condition_template=cls.condition_template,
         )
         CrossingChoice.objects.create(
             thread=cls.thread,
-            crossing_level=3,
+            crossing_level=30,
             option=cls.option,
         )
 

@@ -153,7 +153,7 @@ class SheetMagicSectionTests(TestCase):
             level=1,
         )
         SignatureMotifBonusFactory(
-            name="Rime walks with you", required_resonance=resonance, min_crossing_level=3
+            name="Rime walks with you", required_resonance=resonance, min_crossing_level=30
         )
 
         lines = SHEET_SECTIONS["magic"](_command_for(self.character))

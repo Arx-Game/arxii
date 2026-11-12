@@ -24,7 +24,7 @@ from world.roster.services.staff_characters import (
 )
 from world.traits.factories import PointConversionRangeFactory
 from world.traits.models import (
-    STAT_DISPLAY_DIVISOR,
+    STAT_POINT_VALUE,
     CharacterTraitChange,
     CharacterTraitValue,
     TraitChangeSource,
@@ -39,12 +39,12 @@ class ApplyNpcPresetServiceTests(TestCase):
         self.preset = NPCStatlinePresetFactory()
 
     def test_trait_lines_written_at_display_times_ten(self) -> None:
-        line = NPCPresetTraitLineFactory(preset=self.preset, display_value=4)
+        line = NPCPresetTraitLineFactory(preset=self.preset, value=40)
 
         apply_npc_preset(self.sheet, self.preset)
 
         value = CharacterTraitValue.objects.get(character=self.sheet, trait=line.trait)
-        assert value.value == 4 * STAT_DISPLAY_DIVISOR
+        assert value.value == 4 * STAT_POINT_VALUE
 
     def test_skill_lines_write_the_skill_trait_row(self) -> None:
         line = NPCPresetSkillLineFactory(preset=self.preset, value=42)
@@ -55,7 +55,7 @@ class ApplyNpcPresetServiceTests(TestCase):
         assert rating.value == 42
 
     def test_provenance_stamps_carry_npc_preset_source(self) -> None:
-        trait_line = NPCPresetTraitLineFactory(preset=self.preset, display_value=5)
+        trait_line = NPCPresetTraitLineFactory(preset=self.preset, value=50)
         skill_line = NPCPresetSkillLineFactory(preset=self.preset, value=20)
 
         apply_npc_preset(self.sheet, self.preset)
@@ -67,7 +67,7 @@ class ApplyNpcPresetServiceTests(TestCase):
             assert change.old_value == 0
 
         trait_change = changes.get(trait=trait_line.trait)
-        assert trait_change.new_value == 5 * STAT_DISPLAY_DIVISOR
+        assert trait_change.new_value == 5 * STAT_POINT_VALUE
         skill_change = changes.get(trait=skill_line.skill)
         assert skill_change.new_value == 20
 
@@ -126,14 +126,14 @@ class MintStoryNpcWithPresetServiceTests(TestCase):
     def test_mint_with_preset_applies_the_statline(self) -> None:
         account = self._junior_gm_account("preset_mint_gm")
         preset = NPCStatlinePresetFactory(name="Test Innkeeper")
-        trait_line = NPCPresetTraitLineFactory(preset=preset, display_value=2)
+        trait_line = NPCPresetTraitLineFactory(preset=preset, value=20)
 
         character = mint_story_npc(gm_account=account, name="Preset Innkeeper", preset=preset)
 
         value = CharacterTraitValue.objects.get(
             character=character.sheet_data, trait=trait_line.trait
         )
-        assert value.value == 2 * STAT_DISPLAY_DIVISOR
+        assert value.value == 2 * STAT_POINT_VALUE
         assert CharacterTraitChange.objects.filter(
             character_sheet=character.sheet_data, source=TraitChangeSource.NPC_PRESET
         ).exists()

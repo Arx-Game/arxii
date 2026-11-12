@@ -99,7 +99,7 @@ class VowSituationalPerkModelTests(TestCase):
         of the anchor role rather than being restricted to primary roles.
         """
         parent = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, sword_weight=1)
-        sub_role = SubroleCovenantRoleFactory(parent_role=parent, unlock_thread_level=3)
+        sub_role = SubroleCovenantRoleFactory(parent_role=parent, unlock_thread_level=30)
         sub_role.full_clean()  # sanity: the sub-role itself is valid
 
         perk = VowSituationalPerkFactory(covenant_role=sub_role)

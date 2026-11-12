@@ -152,7 +152,7 @@ from world.societies.models import OrganizationMembership, OrganizationReputatio
 from world.societies.reputation_reasons import reason_lines_by_reputation
 from world.species.models import Species
 from world.tarot.models import TarotCard
-from world.traits.models import STAT_DISPLAY_DIVISOR, CharacterTraitValue, TraitType
+from world.traits.models import CharacterTraitValue, TraitType
 
 
 class OriginSlotInputSerializer(serializers.Serializer):
@@ -755,14 +755,12 @@ _STATS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 
 
 def _build_stats(sheet: CharacterSheet) -> dict[str, int]:
-    """Build the stats section: a flat dict mapping stat name to its display value.
+    """Build the stats section: a flat dict mapping stat name to its value.
 
-    Stats store internal ×10 (ADR-0193, #2894: stat 2 -> stored 20); this converts to the
-    single-digit display scale (÷10) every other stat surface shows (the Maturation panel,
-    character creation) at the API edge, so the client never has to know about the storage
-    scale. The queryset is pre-filtered to stat-type traits via Prefetch in the viewset.
+    Every trait shows its stored value (#5091, ADR-5091): a stat of 20 reads 20. The
+    queryset is pre-filtered to stat-type traits via Prefetch in the viewset.
     """
-    return {tv.trait.name: tv.value // STAT_DISPLAY_DIVISOR for tv in sheet.cached_trait_values}
+    return {tv.trait.name: tv.value for tv in sheet.cached_trait_values}
 
 
 _SKILLS_SELECT_RELATED: tuple[str, ...] = ()
@@ -2526,17 +2524,15 @@ def _build_staff_rows(sheet: CharacterSheet) -> StaffEditRows:
     from world.classes.models import CharacterClassLevel  # noqa: PLC0415
     from world.forms.models import CharacterFormValue, FormMarking, FormType  # noqa: PLC0415
     from world.progression.models import CharacterPathHistory  # noqa: PLC0415
-    from world.traits.constants import STAT_DISPLAY_DIVISOR  # noqa: PLC0415
     from world.traits.models import CharacterTraitValue, TraitType  # noqa: PLC0415
     from world.vitals.models import CharacterVitals  # noqa: PLC0415
     from world.worship.models import WorshipDeclaration  # noqa: PLC0415
 
-    stats = {
-        trait_id: value // STAT_DISPLAY_DIVISOR
-        for trait_id, value in CharacterTraitValue.objects.filter(
+    stats = dict(
+        CharacterTraitValue.objects.filter(
             character=sheet, trait__trait_type=TraitType.STAT
         ).values_list("trait_id", "value")
-    }
+    )
     held = CharacterDistinction.objects.filter(character=sheet).select_related(
         "distinction", "feature_trait", "feature_marking"
     )

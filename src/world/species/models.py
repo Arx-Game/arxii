@@ -174,7 +174,7 @@ class Species(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         Return stat bonuses as a dictionary.
 
         Returns:
-            Dict mapping stat names to bonus values, e.g., {"strength": 1, "agility": -1}
+            Dict mapping stat names to bonus values, e.g., {"strength": 10, "agility": -10}
         """
         return {bonus.stat: bonus.value for bonus in self.cached_stat_bonuses}
 
@@ -186,8 +186,10 @@ class SpeciesStatBonus(NaturalKeyMixin, SharedMemoryModel):
     These are permanent character data - the stat bonuses apply to the character
     forever, not just during character creation.
 
+    Values are stored units, like every stat (#5091): one stat point is 10.
+
     Example: Infernal might have:
-    - SpeciesStatBonus(stat="charm", value=-1)
+    - SpeciesStatBonus(stat="charm", value=-10)
     """
 
     species = models.ForeignKey(
@@ -202,7 +204,7 @@ class SpeciesStatBonus(NaturalKeyMixin, SharedMemoryModel):
         help_text="The stat to modify",
     )
     value = models.SmallIntegerField(
-        help_text="Bonus value (+1, -1, +2, etc.)",
+        help_text="Bonus in stat points of 10 (+10, -10, +20, etc.).",
     )
 
     objects = NaturalKeyManager()

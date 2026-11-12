@@ -34,7 +34,6 @@ from world.character_creation.constants import (
     KIN_ROWS_KEY,
     LINE_PARENT_FATE_KEY,
     OTHER_PARENT_FATE_KEY,
-    STAT_DISPLAY_DIVISOR,
     TECHNIQUE_PERSONALIZATIONS_KEY,
     ApplicationStatus,
     BetrothedFate,
@@ -1907,8 +1906,8 @@ def _create_stat_values(
 ) -> None:
     """Write the draft's stat allocations through ``set_stat_values`` (#3988).
 
-    Draft allocations are display scale (1 to 5); the shared writer stores x10
-    (#2894) and stamps each new row's ``CharacterTraitChange`` (#3055).
+    Draft allocations are stored units (10 to 50, #5091); the shared writer stamps
+    each new row's ``CharacterTraitChange`` (#3055).
     """
     from world.character_creation.sheet_writers import set_stat_values  # noqa: PLC0415
     from world.traits.models import TraitChangeSource  # noqa: PLC0415
@@ -1990,9 +1989,8 @@ def _apply_post_cg_bonuses(
     """Apply post-CG stat bonuses from the draft (reserved for future use).
 
     NOTE: This is reserved for future functionality where other CG stages might
-    modify stats beyond the normal 1-5 display range. Not currently used.
-    Bonuses are display-scale (+1 = one stat dot) and convert to internal
-    scale here, like ``_create_stat_values`` (#2894).
+    modify stats beyond the normal 10-50 range. Not currently used. Bonuses are
+    stored units (+10 = one stat point), added as given (#5091).
 
     Args:
         character: The newly created ``ObjectDB`` character.
@@ -2010,7 +2008,7 @@ def _apply_post_cg_bonuses(
         ).first()
         if trait_value:
             old_value = trait_value.value
-            trait_value.value += int(bonus) * STAT_DISPLAY_DIVISOR
+            trait_value.value += int(bonus)
             trait_value.save()
             CharacterTraitChange.objects.create(
                 character_sheet=character.sheet_data,

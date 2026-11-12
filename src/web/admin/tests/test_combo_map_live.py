@@ -107,7 +107,7 @@ class SettersTest(ComboMapLiveCase):
         )
 
     def test_a_pick_effect_names_its_pick_and_level(self) -> None:
-        pick = VowFocusPickFactory(covenant_role=self.role, name="What They Want", pick_level=1)
+        pick = VowFocusPickFactory(covenant_role=self.role, name="What They Want", pick_level=10)
         effect = VowAddedEffectFactory(covenant_role=self.role, focus_pick=pick)
         VowAddedEffectAppliedConditionFactory(effect=effect, condition=self.signed)
         rows = live.setters_for_conditions([self.signed])

@@ -8,16 +8,16 @@ from typing import NamedTuple
 
 from django.db import models
 
-# STAT_DISPLAY_DIVISOR (#2894, ADR-0193): stats store internal ×10 and display
-# single-digit; skills store AND display their true 1-100 value (development
-# moves them by single points). Canonical definition lives in
-# world.traits.models (this module imports models, so it can't be defined here);
-# re-exported for the many display-edge consumers.
+# STAT_POINT_VALUE (#5091, ADR-5091): how many stored points one stat point moves a
+# stat. Every trait shows its stored value; nothing divides for display. Canonical
+# definition lives in world.traits.models (this module imports models, so it can't
+# be defined here); re-exported for the spend and allocation paths.
 from world.traits.models import (  # noqa: F401
-    STAT_DISPLAY_DIVISOR,
+    STAT_POINT_VALUE,
     TraitCategory,
     TraitChangeSource,
     TraitType,
+    whole_stat_points,
 )
 
 

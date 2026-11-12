@@ -31,7 +31,7 @@ class RuntimeTechniqueVariantTests(TestCase):
         cls.variant = TechniqueVariantFactory(
             parent_technique=cls.technique,
             resonance=cls.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             intensity_delta=5,
             control_delta=2,
         )

@@ -42,14 +42,14 @@ class EarlyFormTests(TestCase):
         cls.frost_form = TechniqueVariantFactory(
             parent_technique=cls.technique,
             resonance=cls.frost,
-            unlock_thread_level=1,
+            unlock_thread_level=10,
             name_override="Scorch Lash, frost-formed",
             creation_point_cost=4,
         )
         cls.ash_form = TechniqueVariantFactory(
             parent_technique=cls.technique,
             resonance=cls.ash,
-            unlock_thread_level=1,
+            unlock_thread_level=10,
             creation_point_cost=4,
         )
         provision_latent_gift_thread(cls.sheet, cls.gift, resonance=cls.frost)  # level 0
@@ -116,11 +116,11 @@ class EarlyFormTests(TestCase):
         self.assertEqual(resolved, self.technique)
 
     def test_naturally_reached_higher_form_beats_the_early_form(self) -> None:
-        hold = self._hold(self.frost_form)  # unlock_thread_level=1
+        hold = self._hold(self.frost_form)  # unlock_thread_level=10
         ascended_form = TechniqueVariantFactory(
             parent_technique=self.technique,
             resonance=self.frost,
-            unlock_thread_level=2,
+            unlock_thread_level=20,
             name_override="Scorch Lash, frost-ascended",
         )
         thread = Thread.objects.get(
@@ -137,7 +137,7 @@ class EarlyFormTests(TestCase):
         self.assertEqual(resolved.variant, ascended_form)
 
     def test_is_early_becomes_false_once_the_thread_reaches_the_forms_level(self) -> None:
-        hold = self._hold(self.frost_form)  # unlock_thread_level=1
+        hold = self._hold(self.frost_form)  # unlock_thread_level=10
         thread = Thread.objects.get(
             owner=self.sheet, target_kind=TargetKind.GIFT, target_gift=self.gift
         )
@@ -184,10 +184,10 @@ class GradualSignatureTests(TestCase):
         CharacterTechniqueFactory(character=cls.sheet, technique=cls.technique)
         seed_motif_from_gift_resonance(cls.sheet, cls.resonance)
         cls.modest = SignatureMotifBonusFactory(
-            required_resonance=cls.resonance, min_crossing_level=1, creation_point_cost=3
+            required_resonance=cls.resonance, min_crossing_level=10, creation_point_cost=3
         )
         cls.stronger = SignatureMotifBonusFactory(
-            required_resonance=cls.resonance, min_crossing_level=3
+            required_resonance=cls.resonance, min_crossing_level=30
         )
 
     def test_flourish_at_level_one_needs_no_crossing(self) -> None:

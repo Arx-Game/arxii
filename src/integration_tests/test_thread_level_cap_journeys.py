@@ -114,7 +114,7 @@ class ACrossingArrivesAtShownThree(_ThreadCase):
         self.assertEqual(thread.level, 30)
         self.assertIn("Crossing level 3", self.crossing_list())
         self.assertTrue(
-            PendingCrossingOffer.objects.filter(thread=thread, crossing_level=3).exists()
+            PendingCrossingOffer.objects.filter(thread=thread, crossing_level=30).exists()
         )
 
     def test_stored_three_is_shown_point_three_and_offers_nothing(self) -> None:
@@ -137,7 +137,7 @@ class OneImbueAcrossTwoCrossings(_ThreadCase):
         default_at_three = CrossingOption.objects.create(
             target_kind=TargetKind.TRAIT,
             resonance=self.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Steady Hand",
             condition_template=ConditionTemplateFactory(),
             is_default=True,
@@ -271,7 +271,7 @@ class TheSubRoleTakesOverAtShownThree(_ThreadCase):
 
         role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
         sub_role = SubroleCovenantRoleFactory(
-            parent_role=role, resonance=self.resonance, unlock_thread_level=3
+            parent_role=role, resonance=self.resonance, unlock_thread_level=30
         )
         # A level-3 covenant gives the role thread an anchor cap of 30.
         CharacterCovenantRoleFactory(
@@ -314,7 +314,7 @@ class ASignatureFlourishWaitsForShownThree(_ThreadCase):
         CharacterTechniqueFactory(character=self.sheet, technique=technique)
         seed_motif_from_gift_resonance(self.sheet, self.resonance)
         bonus = SignatureMotifBonusFactory(
-            name="Rime Trail", required_resonance=self.resonance, min_crossing_level=3
+            name="Rime Trail", required_resonance=self.resonance, min_crossing_level=30
         )
         self.her_level_is(3)
         thread = ThreadFactory(

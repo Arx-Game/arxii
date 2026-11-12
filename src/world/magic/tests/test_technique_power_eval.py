@@ -294,7 +294,7 @@ class VowEffectTermTests(TestCase):
         # The technique's own figures, by hand: 11 DE over (1 + windup 1).
         self.assertAlmostEqual(own.baseline_de, 11.0 / 2)
         self.assertEqual([v.kind for v in own.valuations], ["damage"])
-        empty = VowAddedEffectFactory(covenant_role=self.role, unlock_thread_level=7)
+        empty = VowAddedEffectFactory(covenant_role=self.role, unlock_thread_level=70)
         self.assertEqual(self._report(self._fetched([empty]), level=9), own)
 
     def test_a_vow_damage_row_adds_its_de_and_changes_no_cost(self) -> None:
@@ -320,7 +320,7 @@ class VowEffectTermTests(TestCase):
     def test_an_upgrade_replaces_its_base(self) -> None:
         base = self._damage_effect()
         upgrade = VowAddedEffectFactory(
-            covenant_role=self.role, unlock_thread_level=1, upgrades=base
+            covenant_role=self.role, unlock_thread_level=10, upgrades=base
         )
         report = self._report(self._fetched([base, upgrade]))
         self.assertEqual([v.kind for v in report.valuations], ["damage"])

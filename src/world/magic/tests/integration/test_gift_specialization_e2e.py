@@ -87,7 +87,7 @@ class GiftSpecializationE2ETest(TestCase):
         cls.variant = TechniqueVariant.objects.create(
             parent_technique=cls.technique,
             resonance=cls.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Celestial Form",
             intensity_delta=5,
             control_delta=2,
@@ -207,7 +207,7 @@ class GiftSpecializationE2ETest(TestCase):
             t for t in self.sheet.character.threads.all() if t.target_kind == TargetKind.GIFT
         )
 
-        # Read base-form stats (thread at level 0 — below the variant's unlock_thread_level=3).
+        # Read base-form stats (thread at level 0 — below the variant's unlock_thread_level=30).
         base_stats = get_runtime_technique_stats(self.technique, self.sheet.character)
 
         # Advance to level 3 to unlock the variant; invalidate the cached handler.
@@ -237,7 +237,7 @@ class GiftSpecializationE2ETest(TestCase):
         ``spend_resonance_for_imbuing(character_sheet, thread, amount)`` advances the
         thread greedily by spending ``amount`` developed-points.  From stored 29 the
         next level costs (29 - 9) × 100 = 2000 dp and lands on stored 30 (shown 3,
-        crossing ``unlock_thread_level=3``), once the stored-30 XP boundary is
+        crossing ``unlock_thread_level=30``), once the stored-30 XP boundary is
         unlocked. The function internally calls ``fire_variant_discoveries``, so the
         achievement should be granted without any explicit ceremony call in this test.
 
@@ -305,7 +305,7 @@ class BaseFormCastE2ETest(CastScenarioMixin):
         cls.variant = TechniqueVariant.objects.create(
             parent_technique=cls.technique,
             resonance=cls.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Celestial Form",
             intensity_delta=5,
             control_delta=0,

@@ -97,7 +97,7 @@ class CourtPullCapTests(TestCase):
 class CourtPullEffectGateTests(TestCase):
     """The pact is the REAL gate on the Court active pull (#1589 final review).
 
-    The seeded Court active-pull effects are authored at ``min_thread_level=1``.
+    The seeded Court active-pull effects are authored at ``min_thread_level=10``.
     A no-pact servant gets granted cap 0 → their Court-role thread cannot imbue
     above level 0 → ``resolve_pull_effects`` selects no FLAT_BONUS (the pull yields
     no Court bonus). A servant whose pact lifted the cap (thread level ≥ 1) DOES

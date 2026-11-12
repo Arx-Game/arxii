@@ -110,7 +110,7 @@ class ShipSanctumStatBonusTests(TestCase):
         sanctum = _sanctum_for_ship(ship)
         resonance = ResonanceFactory()
         _weave(sanctum, resonance, level=20)
-        _author_stat_row(resonance, VitalBonusTarget.SHIP_HULL, 9, min_thread_level=3)
+        _author_stat_row(resonance, VitalBonusTarget.SHIP_HULL, 9, min_thread_level=30)
 
         self.assertEqual(ship_sanctum_bonus(ship).hull, 0)
 
@@ -163,7 +163,7 @@ class ShipSanctumCapabilityGrantTests(TestCase):
         sanctum = _sanctum_for_ship(ship)
         resonance = ResonanceFactory()
         _weave(sanctum, resonance, level=20)
-        _author_capability_row(resonance, CapabilityTypeFactory(), min_thread_level=3)
+        _author_capability_row(resonance, CapabilityTypeFactory(), min_thread_level=30)
 
         self.assertEqual(ship_sanctum_capability_grants(ship), [])
 
@@ -196,8 +196,8 @@ class ShipSanctumCapabilityGrantTests(TestCase):
         shallow_capability = CapabilityTypeFactory(name="movement")
         deep_capability = CapabilityTypeFactory(name="teleport")
         _weave(sanctum, resonance, level=60)
-        _author_capability_row(resonance, shallow_capability, min_thread_level=3)
-        _author_capability_row(resonance, deep_capability, min_thread_level=6)
+        _author_capability_row(resonance, shallow_capability, min_thread_level=30)
+        _author_capability_row(resonance, deep_capability, min_thread_level=60)
 
         grants = ship_sanctum_capability_grants(ship)
 

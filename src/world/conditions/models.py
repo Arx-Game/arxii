@@ -1777,7 +1777,8 @@ class ConditionInstance(SharedMemoryModel):
         blank=True,
         help_text=(
             "The level the caster's vow size step is valued at (#4747): her vow thread's "
-            "shown level, fixed when the buff was cast (never capped by modifier_level). "
+            "level in steps of 10 (a thread at 30 values at 3), fixed when the buff was "
+            "cast (never capped by modifier_level). "
             "Set only when her engaged vow has a technique specialty for one of the "
             "technique's functions. Null means no step."
         ),

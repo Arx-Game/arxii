@@ -778,7 +778,7 @@ class CovenantRoleContentExportTests(TestCase):
             parent_role=primary,
             name="Round Trip Vanguard (Ember)",
             slug="round-trip-vanguard-ember",
-            unlock_thread_level=2,
+            unlock_thread_level=20,
         )
         sub_role.full_clean()  # proves the all-zero-weight sub-role is valid too
         original_resonance_id = sub_role.resonance_id
@@ -1136,7 +1136,7 @@ class CovenantRoleTechniqueSpecialtyContentExportTests(TestCase):
             parent_role=primary,
             name="Round Trip Specialist (Ember)",
             slug="round-trip-specialist-ember",
-            unlock_thread_level=2,
+            unlock_thread_level=20,
         )
         sub_role.full_clean()  # sanity: the all-zero-weight sub-role is valid
         sub_specialty = CovenantRoleTechniqueSpecialtyFactory(
@@ -1817,7 +1817,7 @@ class TechniqueVariantContentExportTests(TestCase):
         variant = TechniqueVariantFactory(
             parent_technique=technique,
             resonance=resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Round Trip Ardent Pull",
             intensity_delta=2,
             control_delta=1,

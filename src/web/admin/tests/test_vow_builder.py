@@ -87,16 +87,16 @@ class VowPageCase(TestCase):
             covenant_role=self.role, function=TechniqueFunction.BARRIER, multiplier_tenths=15
         )
         self.charge = VowFocusPickFactory(
-            covenant_role=self.role, pick_level=1, name="Arcing Charge", value=4
+            covenant_role=self.role, pick_level=10, name="Arcing Charge", value=4
         )
         self.kneel = VowFocusPickFactory(
-            covenant_role=self.role, pick_level=3, name="Kneel", value=4
+            covenant_role=self.role, pick_level=30, name="Kneel", value=4
         )
         self.kneel_limit = VowFocusPickLimitFactory(
             pick=self.kneel, kind=FocusPickLimitKind.TARGET, frequency_tenths=5
         )  # Kneel costs 2
         self.halo = VowFocusPickFactory(
-            covenant_role=self.role, pick_level=3, name="Static Halo", value=2
+            covenant_role=self.role, pick_level=30, name="Static Halo", value=2
         )
         self.ysolde = CharacterCovenantRoleFactory(
             covenant_role=self.role, character_sheet__character__db_key="Ysolde Marrow"
@@ -542,7 +542,7 @@ class VowPowerPreviewTests(VowPageCase):
 
     def _base_damage(self) -> None:
         effect = VowAddedEffectFactory(
-            covenant_role=self.role, function=TechniqueFunction.STRIKE, unlock_thread_level=10
+            covenant_role=self.role, function=TechniqueFunction.STRIKE, unlock_thread_level=100
         )
         VowAddedEffectDamageProfileFactory(effect=effect, base_damage=6)
 
@@ -553,7 +553,7 @@ class VowPowerPreviewTests(VowPageCase):
             covenant_role=self.role,
             function=TechniqueFunction.STRIKE,
             focus_pick=self.halo,
-            unlock_thread_level=11,
+            unlock_thread_level=110,
         )
         VowAddedEffectDamageProfileFactory(effect=on_pick, base_damage=4)
         body = self._get()

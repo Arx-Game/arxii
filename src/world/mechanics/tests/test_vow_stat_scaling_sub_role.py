@@ -37,7 +37,7 @@ class VowStatScalingSubRoleTests(TestCase):
         cls.sub_role = SubroleCovenantRoleFactory(
             parent_role=cls.anchor,
             resonance=cls.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
         )
         cls.target = ModifierTargetFactory()
 

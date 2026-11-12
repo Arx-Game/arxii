@@ -33,8 +33,6 @@ from world.character_creation.constants import (
     RECENT_HISTORY_MAX_LENGTH,
     STAGE_DESCRIPTION_MAX_LENGTH,
     STAGE_DESCRIPTIONS_KEY,
-    STAT_MAX_VALUE,
-    STAT_MIN_VALUE,
     TECHNIQUE_PERSONALIZATIONS_KEY,
     TIE_KIND,
     TIE_ORGANIZATION_ID,
@@ -85,6 +83,7 @@ from world.character_creation.services import (
     set_family_path,
 )
 from world.character_creation.types import StageValidationErrors
+from world.character_creation.validators import stat_value_error
 from world.character_sheets.models import DAYS_IN_MONTH, Gender, Heritage, Pronouns
 from world.classes.models import Path, PathStage
 from world.covenants.models import CombatStyle
@@ -2092,9 +2091,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             if not isinstance(stat_value, int):
                 msg = f"{stat_name} must be an integer, got {type(stat_value).__name__}"
                 raise serializers.ValidationError(msg)
-            if not (STAT_MIN_VALUE <= stat_value <= STAT_MAX_VALUE):
-                msg = f"{stat_name} must be between {STAT_MIN_VALUE} and {STAT_MAX_VALUE}"
-                raise serializers.ValidationError(msg)
+            if error := stat_value_error(stat_name, stat_value):
+                raise serializers.ValidationError(error)
 
     def validate_draft_data(self, value):
         """Validate draft_data fields, including stat allocations and goals."""

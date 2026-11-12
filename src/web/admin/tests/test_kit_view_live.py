@@ -70,13 +70,13 @@ class KitLiveCase(TestCase):
         strike = TechniqueFunction.STRIKE
         cls.base = VowAddedEffectFactory(covenant_role=cls.vow, function=strike)
         cls.locked = VowAddedEffectFactory(
-            covenant_role=cls.vow, function=strike, unlock_thread_level=5
+            covenant_role=cls.vow, function=strike, unlock_thread_level=50
         )
         cls.allies = VowAddedEffectFactory(
             covenant_role=cls.vow,
             function=strike,
             beneficiary=PerkBeneficiary.COVENANT_ALLIES,
-            unlock_thread_level=1,
+            unlock_thread_level=10,
         )
         cls.on_spark = VowAddedEffectFactory(
             covenant_role=cls.vow, function=strike, focus_pick=cls.spark
@@ -91,7 +91,7 @@ class KitLiveCase(TestCase):
 
         cls.sheet = CharacterSheetFactory()
         membership = engage_vow_with_thread(
-            cls.sheet, cls.vow, covenant=cls.covenant, thread_level=2
+            cls.sheet, cls.vow, covenant=cls.covenant, thread_level=20
         )
         for pick in (cls.spark, cls.gale):
             CharacterVowFocusPickFactory(character_role=membership, pick=pick)
@@ -245,7 +245,7 @@ class AbsentPartsTest(KitLiveCase):
     def test_a_secondary_vow_only(self) -> None:
         sheet = CharacterSheetFactory()
         engage_vow_with_thread(
-            sheet, self.vow, covenant=self.covenant, thread_level=1, is_secondary=True
+            sheet, self.vow, covenant=self.covenant, thread_level=10, is_secondary=True
         )
         _know(sheet, self.bolt)
         kit = live.kit_for(sheet)
@@ -264,7 +264,7 @@ class AbsentPartsTest(KitLiveCase):
                 name="Kit Choir Evasion", defense_style=DefenseStyle.EVASION
             )
         )
-        membership = engage_vow_with_thread(sheet, choir, covenant=self.covenant, thread_level=3)
+        membership = engage_vow_with_thread(sheet, choir, covenant=self.covenant, thread_level=30)
         CharacterVowFocusPickFactory(character_role=membership, pick=self.gale)
         kit = live.kit_for(sheet)
         (level,) = kit.picks
@@ -314,7 +314,7 @@ class StyleTest(KitLiveCase):
             name="Tempest Style Choir", slug="tempest-style-choir", parent_role=self.vow
         )
         sheet = CharacterSheetFactory()
-        engage_vow_with_thread(sheet, choir, covenant=self.covenant, thread_level=3)
+        engage_vow_with_thread(sheet, choir, covenant=self.covenant, thread_level=30)
         style = CombatStyleFactory(name="Kit Anchor Style")
         style.compatible_roles.add(self.vow)
         self.assertEqual(self._styled(style, sheet).style_lines, ["works with Tempest Style Choir"])
@@ -326,7 +326,7 @@ class StyleTest(KitLiveCase):
     def test_a_secondary_vow_gets_no_line(self) -> None:
         sheet = CharacterSheetFactory()
         engage_vow_with_thread(
-            sheet, self.vow, covenant=self.covenant, thread_level=1, is_secondary=True
+            sheet, self.vow, covenant=self.covenant, thread_level=10, is_secondary=True
         )
         self.assertEqual(
             self._styled(CombatStyleFactory(name="Kit Side Style"), sheet).style_lines, []
@@ -344,13 +344,15 @@ class QueryCountTest(KitLiveCase):
         QueryCountTest._made += 1
         run = QueryCountTest._made
         sheet = CharacterSheetFactory()
-        membership = engage_vow_with_thread(sheet, self.vow, covenant=self.covenant, thread_level=2)
+        membership = engage_vow_with_thread(
+            sheet, self.vow, covenant=self.covenant, thread_level=20
+        )
         for index in range(techniques):
             technique = _technique(f"Count {run} {index}", TechniqueFunction.STRIKE)
             _know(sheet, technique)
         for index in range(picks):
             pick = VowFocusPickFactory(
-                covenant_role=self.vow, name=f"Count pick {run} {index}", pick_level=1
+                covenant_role=self.vow, name=f"Count pick {run} {index}", pick_level=10
             )
             CharacterVowFocusPickFactory(character_role=membership, pick=pick)
             VowAddedEffectFactory(

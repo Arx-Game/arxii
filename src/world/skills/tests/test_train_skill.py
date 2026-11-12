@@ -69,7 +69,7 @@ class PointsToNextBoundaryAtABandCapTests(TestCase):
         super().setUpTestData()
         cls.sheet = CharacterSheetFactory()
         cls.skill = SkillFactory()
-        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=5, skill_cap=6)
+        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=50, skill_cap=60)
 
     def _row(self, value: int, **kwargs: int) -> DevelopmentPoints:
         return _tracker(self.sheet, self.skill, value, **kwargs)

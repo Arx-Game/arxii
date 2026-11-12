@@ -150,7 +150,7 @@ class KitPageTest(KitPageCase):
         for techniques, picks in ((1, 1), (6, 4)):
             sheet = CharacterSheetFactory()
             membership = engage_vow_with_thread(
-                sheet, self.vow, covenant=self.covenant, thread_level=2
+                sheet, self.vow, covenant=self.covenant, thread_level=20
             )
             for index in range(techniques):
                 _know(sheet, _technique(f"Page {picks} {index}", TechniqueFunction.STRIKE))

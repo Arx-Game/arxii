@@ -239,7 +239,7 @@ class MagicStageValidationTest(TestCase):
         form = TechniqueVariantFactory(
             parent_technique=self.pool_techniques[0],
             resonance=other_resonance,
-            unlock_thread_level=1,
+            unlock_thread_level=10,
             creation_point_cost=1,
         )
         draft = self._draft(
@@ -276,7 +276,7 @@ class MagicStageValidationTest(TestCase):
         uncosted_form = TechniqueVariantFactory(
             parent_technique=self.pool_techniques[0],
             resonance=self.resonance,
-            unlock_thread_level=1,
+            unlock_thread_level=10,
             creation_point_cost=None,
         )
         draft = self._draft(

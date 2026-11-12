@@ -1162,7 +1162,7 @@ class CovenantRoleSpecialtyPowerTermTests(TestCase):
         resonance = ResonanceFactory()
         parent = CovenantRoleFactory(sword_weight=0, shield_weight=0, crown_weight=1)
         sub_role = SubroleCovenantRoleFactory(
-            parent_role=parent, resonance=resonance, unlock_thread_level=3
+            parent_role=parent, resonance=resonance, unlock_thread_level=30
         )
         self._engage_role(role=parent)  # membership row stays on the parent
         ThreadFactory(

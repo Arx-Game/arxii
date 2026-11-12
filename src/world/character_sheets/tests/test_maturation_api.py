@@ -23,7 +23,7 @@ class MaturationApiTests(APITestCase):
         return sheet
 
     def test_owner_reads_maturation_state_and_spends(self):
-        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=5)
+        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=50)
         stat = StatTraitFactory(name="stamina_api_test")
         owner = AccountFactory()
         sheet = self._owned_sheet(owner, matured=30)  # milestones 24, 27, 30 (#3635)

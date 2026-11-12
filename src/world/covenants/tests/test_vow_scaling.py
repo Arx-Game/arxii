@@ -137,7 +137,7 @@ class RoleSourceVariantResolutionTests(TestCase):
         TechniqueVariant.objects.create(
             parent_technique=technique,
             resonance=resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Specialized Form",
             intensity_delta=2,
             control_delta=1,

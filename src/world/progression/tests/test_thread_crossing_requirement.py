@@ -35,40 +35,40 @@ class ThreadCrossingThresholdModelTests(TestCase):
     """Model-level constraints and clean() validation."""
 
     def test_create_valid_crossing_level_3(self) -> None:
-        threshold = ThreadCrossingThreshold(target_kind=TargetKind.GIFT, level=3)
+        threshold = ThreadCrossingThreshold(target_kind=TargetKind.GIFT, level=30)
         threshold.save()
         assert threshold.stage == stage_for_level(3)
         assert threshold.pk is not None
 
     def test_create_valid_crossing_level_6(self) -> None:
         threshold = ThreadCrossingThreshold.objects.create(
-            target_kind=TargetKind.COVENANT_ROLE, level=6
+            target_kind=TargetKind.COVENANT_ROLE, level=60
         )
         assert threshold.stage == stage_for_level(6)
 
     def test_create_valid_crossing_level_21(self) -> None:
-        threshold = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=21)
+        threshold = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=210)
         assert threshold.stage == stage_for_level(21)
 
     def test_clean_rejects_non_crossing_level_4(self) -> None:
         """Level 4 is not a crossing — stage_for_level(4) == stage_for_level(3)."""
         threshold = ThreadCrossingThreshold(
-            target_kind=TargetKind.GIFT, level=4, stage=stage_for_level(4)
+            target_kind=TargetKind.GIFT, level=40, stage=stage_for_level(4)
         )
         with self.assertRaises(ValidationError) as ctx:
             threshold.clean()
-        assert "not a PathStage crossing" in str(ctx.exception)
+        assert "is not a crossing" in str(ctx.exception)
 
     def test_clean_rejects_non_crossing_level_5(self) -> None:
         threshold = ThreadCrossingThreshold(
-            target_kind=TargetKind.GIFT, level=5, stage=stage_for_level(5)
+            target_kind=TargetKind.GIFT, level=50, stage=stage_for_level(5)
         )
         with self.assertRaises(ValidationError):
             threshold.clean()
 
     def test_clean_rejects_non_crossing_level_7(self) -> None:
         threshold = ThreadCrossingThreshold(
-            target_kind=TargetKind.GIFT, level=7, stage=stage_for_level(7)
+            target_kind=TargetKind.GIFT, level=70, stage=stage_for_level(7)
         )
         with self.assertRaises(ValidationError):
             threshold.clean()
@@ -76,29 +76,29 @@ class ThreadCrossingThresholdModelTests(TestCase):
     def test_clean_rejects_stage_mismatch(self) -> None:
         """Stage field must match stage_for_level(level)."""
         threshold = ThreadCrossingThreshold(
-            target_kind=TargetKind.GIFT, level=3, stage=stage_for_level(6)
+            target_kind=TargetKind.GIFT, level=30, stage=stage_for_level(6)
         )
         with self.assertRaises(ValidationError) as ctx:
             threshold.clean()
         assert "does not match" in str(ctx.exception)
 
     def test_unique_target_kind_level(self) -> None:
-        ThreadCrossingThreshold.objects.create(target_kind=TargetKind.GIFT, level=3)
+        ThreadCrossingThreshold.objects.create(target_kind=TargetKind.GIFT, level=30)
         with self.assertRaises(IntegrityError), transaction.atomic():
-            ThreadCrossingThreshold.objects.create(target_kind=TargetKind.GIFT, level=3)
+            ThreadCrossingThreshold.objects.create(target_kind=TargetKind.GIFT, level=30)
 
     def test_different_kinds_same_level_allowed(self) -> None:
         """A GIFT level-3 and a COVENANT_ROLE level-3 are distinct rows."""
-        t1 = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.GIFT, level=3)
-        t2 = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.COVENANT_ROLE, level=3)
+        t1 = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.GIFT, level=30)
+        t2 = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.COVENANT_ROLE, level=30)
         assert t1.pk != t2.pk
 
     def test_str_representation(self) -> None:
         threshold = ThreadCrossingThreshold(
-            target_kind=TargetKind.GIFT, level=3, stage=stage_for_level(3)
+            target_kind=TargetKind.GIFT, level=30, stage=stage_for_level(3)
         )
         assert "GIFT" in str(threshold)
-        assert "3" in str(threshold)
+        assert "30" in str(threshold)
 
 
 class PolymorphicRequirementFKTests(TestCase):
@@ -110,7 +110,9 @@ class PolymorphicRequirementFKTests(TestCase):
         cls.class_unlock = ClassLevelUnlock.objects.create(
             character_class=cls.character_class, target_level=4
         )
-        cls.threshold = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.GIFT, level=3)
+        cls.threshold = ThreadCrossingThreshold.objects.create(
+            target_kind=TargetKind.GIFT, level=30
+        )
 
     def test_item_requirement_with_class_level_unlock(self) -> None:
         """Existing Durance path still works — class_level_unlock set, threshold null."""
@@ -186,7 +188,9 @@ class CheckRequirementsForThreadCrossingTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.threshold = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.GIFT, level=3)
+        cls.threshold = ThreadCrossingThreshold.objects.create(
+            target_kind=TargetKind.GIFT, level=30
+        )
         cls.template = ItemTemplateFactory()
 
     def setUp(self) -> None:

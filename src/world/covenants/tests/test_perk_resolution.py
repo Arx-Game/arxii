@@ -279,7 +279,7 @@ class SubRolePerkAddsTests(TestCase):
         self.covenant = CovenantFactory()
         self.parent_role = CovenantRoleFactory(covenant_type=self.covenant.covenant_type)
         self.sub_role = SubroleCovenantRoleFactory(
-            parent_role=self.parent_role, resonance=self.resonance, unlock_thread_level=3
+            parent_role=self.parent_role, resonance=self.resonance, unlock_thread_level=30
         )
         self.subject_sheet = CharacterSheetFactory()
         CharacterCovenantRoleFactory(
@@ -353,7 +353,7 @@ class AllySubRolePerkAddsTests(TestCase):
         self.covenant = CovenantFactory()
         self.parent_role = CovenantRoleFactory(covenant_type=self.covenant.covenant_type)
         self.sub_role = SubroleCovenantRoleFactory(
-            parent_role=self.parent_role, resonance=self.resonance, unlock_thread_level=3
+            parent_role=self.parent_role, resonance=self.resonance, unlock_thread_level=30
         )
         # Subject holds a DISTINCT role -- just enough to establish the
         # shared-covenant scope _ally_candidates searches within, without
@@ -723,7 +723,7 @@ class AllyMateCountQueryBudgetTests(TestCase):
         self.covenant = CovenantFactory()
         self.parent_role = CovenantRoleFactory(covenant_type=self.covenant.covenant_type)
         SubroleCovenantRoleFactory(
-            parent_role=self.parent_role, resonance=self.resonance, unlock_thread_level=3
+            parent_role=self.parent_role, resonance=self.resonance, unlock_thread_level=30
         )
         self.subject_role = CovenantRoleFactory(covenant_type=self.covenant.covenant_type)
         self.subject_sheet = CharacterSheetFactory()

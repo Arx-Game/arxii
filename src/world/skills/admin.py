@@ -58,16 +58,11 @@ class CharacterSpecializationValueAdmin(admin.ModelAdmin):
         "character",
         "specialization",
         "value",
-        "display_value",
         "development_points",
     ]
     list_filter = ["specialization__parent_skill"]
     search_fields = ["character__db_key", "specialization__name"]
     ordering = ["character__db_key", "specialization__name"]
-
-    @admin.display(description="Display Value")
-    def display_value(self, obj):
-        return obj.display_value
 
 
 @admin.register(SkillPointBudget)

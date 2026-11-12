@@ -38,13 +38,13 @@ class _Catalog:
         cls.flourish = SignatureMotifBonusFactory(
             name="A chill rides your voice",
             required_resonance=cls.frost,
-            min_crossing_level=1,
+            min_crossing_level=10,
             creation_point_cost=3,
         )
         cls.form = TechniqueVariantFactory(
             parent_technique=cls.technique,
             resonance=cls.frost,
-            unlock_thread_level=1,
+            unlock_thread_level=10,
             name_override="Scorch Lash, frost-formed",
             creation_point_cost=4,
         )
@@ -141,7 +141,7 @@ class PickErrorTests(_Catalog, TestCase):
         self.assertTrue(self._errors(self.frost.pk, price_id=RestrictionFactory().pk))
 
     def test_uncosted_flourish_is_not_offered(self) -> None:
-        uncosted = SignatureMotifBonusFactory(required_resonance=self.frost, min_crossing_level=1)
+        uncosted = SignatureMotifBonusFactory(required_resonance=self.frost, min_crossing_level=10)
         self.assertTrue(self._errors(self.frost.pk, signature_bonus_id=uncosted.pk))
 
     def test_custom_name_colliding_with_another_known_techniques_catalog_name(self) -> None:
@@ -324,7 +324,7 @@ class FinalizeTests(_Catalog, TestCase):
         foreign_form = TechniqueVariantFactory(
             parent_technique=other_technique,
             resonance=self.frost,
-            unlock_thread_level=1,
+            unlock_thread_level=10,
             creation_point_cost=1,
         )
         sheet = CharacterSheetFactory()
@@ -473,7 +473,7 @@ class PersonalizationOptionsEndpointTests(_Catalog, TestCase):
         TechniqueVariantFactory(
             parent_technique=second_technique,
             resonance=self.frost,
-            unlock_thread_level=1,
+            unlock_thread_level=10,
             name_override="Frost Needle, forged",
             creation_point_cost=2,
         )
@@ -513,7 +513,7 @@ class PersonalizationOptionsEndpointTests(_Catalog, TestCase):
         second_form = TechniqueVariantFactory(
             parent_technique=second_technique,
             resonance=self.frost,
-            unlock_thread_level=1,
+            unlock_thread_level=10,
             name_override="Frost Needle, forged",
             creation_point_cost=2,
         )

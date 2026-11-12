@@ -195,10 +195,10 @@ class CharacterFocusPickValidationTests(TestCase):
             target_trait=None,
             level=10,
         )
-        cls.level_one = VowFocusPickFactory(covenant_role=cls.role, pick_level=1, value=4)
-        cls.second_level_one = VowFocusPickFactory(covenant_role=cls.role, pick_level=1, value=4)
-        cls.level_two = VowFocusPickFactory(covenant_role=cls.role, pick_level=2, value=4)
-        cls.other_vow_pick = VowFocusPickFactory(covenant_role=CovenantRoleFactory(), pick_level=1)
+        cls.level_one = VowFocusPickFactory(covenant_role=cls.role, pick_level=10, value=4)
+        cls.second_level_one = VowFocusPickFactory(covenant_role=cls.role, pick_level=10, value=4)
+        cls.level_two = VowFocusPickFactory(covenant_role=cls.role, pick_level=20, value=4)
+        cls.other_vow_pick = VowFocusPickFactory(covenant_role=CovenantRoleFactory(), pick_level=10)
 
     def _clean(self, pick, membership=None) -> None:
         CharacterVowFocusPick(character_role=membership or self.membership, pick=pick).full_clean()
@@ -207,7 +207,7 @@ class CharacterFocusPickValidationTests(TestCase):
         self._clean(self.level_one)
 
     def test_a_level_two_pick_at_vow_level_one_is_refused(self) -> None:
-        with self.assertRaisesMessage(ValidationError, "level 2 pick"):
+        with self.assertRaisesMessage(ValidationError, "level 20 pick"):
             self._clean(self.level_two)
 
     def test_a_second_level_one_pick_past_the_budget_is_refused(self) -> None:
@@ -244,10 +244,10 @@ class SubRoleFocusPickTests(TestCase):
         cls.resonance = ResonanceFactory()
         cls.anchor = CovenantRoleFactory()
         cls.sub_role = SubroleCovenantRoleFactory(
-            parent_role=cls.anchor, resonance=cls.resonance, unlock_thread_level=1
+            parent_role=cls.anchor, resonance=cls.resonance, unlock_thread_level=10
         )
-        cls.anchor_pick = VowFocusPickFactory(covenant_role=cls.anchor, pick_level=1)
-        cls.sub_role_pick = VowFocusPickFactory(covenant_role=cls.sub_role, pick_level=1)
+        cls.anchor_pick = VowFocusPickFactory(covenant_role=cls.anchor, pick_level=10)
+        cls.sub_role_pick = VowFocusPickFactory(covenant_role=cls.sub_role, pick_level=10)
 
     def _membership(self, role):
         membership = CharacterCovenantRoleFactory(
@@ -317,8 +317,8 @@ class CharacterFocusPickAdminTests(TestCase):
             target_trait=None,
             level=10,
         )
-        cls.level_one = VowFocusPickFactory(covenant_role=cls.role, pick_level=1)
-        cls.level_two = VowFocusPickFactory(covenant_role=cls.role, pick_level=2)
+        cls.level_one = VowFocusPickFactory(covenant_role=cls.role, pick_level=10)
+        cls.level_two = VowFocusPickFactory(covenant_role=cls.role, pick_level=20)
 
     def _post(self, pick):
         self.client.force_login(self.staff)
@@ -330,7 +330,7 @@ class CharacterFocusPickAdminTests(TestCase):
     def test_a_level_two_pick_is_refused_with_the_reason(self) -> None:
         response = self._post(self.level_two)
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "is a level 2 pick")
+        self.assertContains(response, "is a level 20 pick")
         self.assertFalse(CharacterVowFocusPick.objects.filter(pick=self.level_two).exists())
 
     def test_a_level_one_pick_saves(self) -> None:

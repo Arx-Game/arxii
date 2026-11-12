@@ -726,7 +726,7 @@ class CrossingThresholdImbuingTests(TestCase):
         """Threshold exists but no requirements → fail-open (advance)."""
         from world.magic.models import ThreadCrossingThreshold
 
-        ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=3)
+        ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=30)
         thread = self._make_thread_at_level(29)
         result = self.spend(self.sheet, thread, 2000)
 

@@ -86,7 +86,7 @@ class ResolveSpecializedVariantTests(TestCase):
         TechniqueVariant.objects.create(
             parent_technique=self.technique,
             resonance=self.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Celestial Form",
             intensity_delta=5,
         )

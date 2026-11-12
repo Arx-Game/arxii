@@ -224,7 +224,7 @@ class VowAddedEffectsInAFight(JourneyCase):
             function=TechniqueFunction.HOLD,
             beneficiary=PerkBeneficiary.SELF,
             cast_context=VowEffectContext.IN_COMBAT,
-            unlock_thread_level=1,
+            unlock_thread_level=10,
             severity_per_thread_level=2,
         )
         self.slows_the_enemy(effect)

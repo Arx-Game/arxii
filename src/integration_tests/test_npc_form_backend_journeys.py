@@ -160,7 +160,7 @@ class TheNpcFormsBackend(JourneyCase):
     def test_the_form_lists_stat_blocks_with_their_lines(self) -> None:
         # #4418 bug 7: the list was a 500, so the form's Stat block picker was empty.
         guard = NPCStatlinePresetFactory(name="Gate guard", description="A spear and a shield.")
-        strength = NPCPresetTraitLineFactory(preset=guard, display_value=3)
+        strength = NPCPresetTraitLineFactory(preset=guard, value=30)
         brawl = NPCPresetSkillLineFactory(preset=guard, value=25)
 
         response = self.api(self.gm).get(PRESETS)

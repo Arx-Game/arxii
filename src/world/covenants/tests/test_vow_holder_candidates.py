@@ -48,7 +48,7 @@ class OwnVowCandidateTests(TestCase):
         self.covenant = CovenantFactory(covenant_type=CovenantType.DURANCE)
         self.anchor = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
         self.sub_role = SubroleCovenantRoleFactory(
-            parent_role=self.anchor, resonance=self.resonance, unlock_thread_level=3
+            parent_role=self.anchor, resonance=self.resonance, unlock_thread_level=30
         )
         self.sheet = CharacterSheetFactory()
 
@@ -57,7 +57,7 @@ class OwnVowCandidateTests(TestCase):
             self.sheet,
             self.anchor,
             covenant=self.covenant,
-            thread_level=3,
+            thread_level=30,
             resonance=self.resonance,
         )
         candidates = vow_holder_candidates(self.sheet, None)
@@ -80,7 +80,7 @@ class OwnVowCandidateTests(TestCase):
             self.sheet,
             self.anchor,
             covenant=self.covenant,
-            thread_level=3,
+            thread_level=30,
             resonance=self.resonance,
             is_secondary=True,
         )
@@ -105,7 +105,7 @@ class OwnVowCandidateTests(TestCase):
             self.sheet,
             self.anchor,
             covenant=self.covenant,
-            thread_level=3,
+            thread_level=30,
             resonance=self.resonance,
         )
         candidates = vow_holder_candidates(self.sheet, None)
@@ -128,18 +128,18 @@ class AllyCandidateTests(TestCase):
         self.subject_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
         self.mate_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
         self.mate_sub_role = SubroleCovenantRoleFactory(
-            parent_role=self.mate_role, resonance=self.resonance, unlock_thread_level=3
+            parent_role=self.mate_role, resonance=self.resonance, unlock_thread_level=30
         )
         self.sheet = CharacterSheetFactory()
         self.mate = CharacterSheetFactory()
         engage_vow_with_thread(
-            self.sheet, self.subject_role, covenant=self.covenant, thread_level=1
+            self.sheet, self.subject_role, covenant=self.covenant, thread_level=10
         )
         engage_vow_with_thread(
             self.mate,
             self.mate_role,
             covenant=self.covenant,
-            thread_level=3,
+            thread_level=30,
             resonance=self.resonance,
         )
         self.encounter = CombatEncounterFactory()

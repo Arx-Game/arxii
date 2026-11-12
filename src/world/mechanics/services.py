@@ -624,13 +624,13 @@ def _facet_effect_bonus_total(
     """The ``FacetEffectBonus`` rows of worn, threaded facets naming ``target`` (#4815).
 
     The facet names the maneuver effect, whatever its thread's resonance; each (worn item
-    facet, row) pair scales like a resonance passive, except by the shown thread level:
-    maneuver numbers are plain (a charge's 5 damage), so "+1 a level" at shown level 3
-    is +3, as a vow's stat scaling on a maneuver effect reads it. One query for every
-    thread's facet, and none for a target outside the maneuver-effect category, which no
-    row can name.
+    facet, row) pair scales like a resonance passive, except per 10 thread levels
+    (``thread_rung``): maneuver numbers are plain (a charge's 5 damage), so "+1 per 10
+    levels" at thread level 30 is +3, as a vow's stat scaling on a maneuver effect reads
+    it. One query for every thread's facet, and none for a target outside the
+    maneuver-effect category, which no row can name.
     """
-    from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
+    from world.magic.services.threads import thread_rung  # noqa: PLC0415
 
     if not worn or target.category.name != MANEUVER_EFFECT_CATEGORY_NAME:
         return 0
@@ -647,7 +647,7 @@ def _facet_effect_bonus_total(
         for item_facet in matching:
             total += _facet_effect_contribution(
                 base=amount,
-                level=shown_thread_level(thread.level),
+                level=thread_rung(thread.level),
                 item=item_facet.item_instance,
                 item_facet=item_facet,
             )
@@ -993,8 +993,8 @@ def _facet_effect_contribution(
 
     Args:
         base: The authored amount before scaling.
-        level: The thread level the bonus scales by (stored for a pull effect, shown
-            for a ``FacetEffectBonus``).
+        level: The thread level the bonus scales by (the level for a pull effect, its
+            ``thread_rung`` for a ``FacetEffectBonus``).
         item: The ItemInstance (supplies ``quality_tier.stat_multiplier``).
         item_facet: The ItemFacet (supplies ``attachment_quality_tier.stat_multiplier``).
 
@@ -1284,7 +1284,7 @@ def vow_stat_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
         _anchor_role_id,
         _covenant_role_thread_level,
     )
-    from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
+    from world.magic.services.threads import thread_rung  # noqa: PLC0415
 
     char = sheet.character
     if not hasattr(char, "covenant_roles"):
@@ -1314,9 +1314,9 @@ def vow_stat_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
 
         chosen = chosen_pick_ids_by_holder({sheet.pk})
         configs = [c for c in configs if holder_has_pick(c.focus_pick_id, sheet.pk, chosen)]
-    # Stats are stored x10 like threads, so the stored level times the per-level bonus
+    # A stat's points match the thread's levels, so the level times the per-level bonus
     # lands in stat units. A maneuver effect is in natural units (damage, percent, hops,
-    # morale), so there the bonus counts the SHOWN level.
+    # morale), so there the bonus counts per 10 thread levels (``thread_rung``).
     in_natural_units = target.category.name == MANEUVER_EFFECT_CATEGORY_NAME
     total = 0
     anchor_levels: dict[int, int] = {}
@@ -1326,7 +1326,7 @@ def vow_stat_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
         if anchor_id not in anchor_levels:
             anchor = role.parent_role if role.parent_role_id is not None else role
             level = _covenant_role_thread_level(sheet, anchor)
-            anchor_levels[anchor_id] = shown_thread_level(level) if in_natural_units else level
+            anchor_levels[anchor_id] = thread_rung(level) if in_natural_units else level
         total += anchor_levels[anchor_id] * config.bonus_per_level
     return total
 
