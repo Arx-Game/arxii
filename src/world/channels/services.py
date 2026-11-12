@@ -38,6 +38,7 @@ from world.channels.types import ChannelError
 from world.covenants.models import Covenant
 from world.roster.models import RosterTenure
 from world.scenes.block_services import blocked_player_ids_for
+from world.scenes.constants import PersonaType
 from world.scenes.interaction_services import WEB_PROTOCOL_KEYS
 from world.scenes.mute_services import account_muter_player_ids, muted_player_ids_for
 from world.societies.houses.models import FealtyEdge
@@ -64,9 +65,12 @@ PUBLIC_CHANNEL_DESCRIPTION = (
     "The game-wide out-of-character channel. Everyone can read and post here."
 )
 
-# Tenure -> active membership path. All three conditions must sit in ONE filter() call so
-# they apply to the same membership row.
-_TENURE_MEMBERSHIP = "roster_entry__character_sheet__personas__organization_memberships"
+# Tenure -> persona -> active membership path. Every condition must sit in ONE filter()
+# call so they apply to the same persona and membership row. Only the character's PRIMARY
+# persona counts: a membership held by an established face (an alter ego, a Presumed Dead
+# guise) never makes the true character eligible, or its first post would out the link.
+_TENURE_PERSONA = "roster_entry__character_sheet__personas"
+_TENURE_MEMBERSHIP = f"{_TENURE_PERSONA}__organization_memberships"
 
 
 # ---------------------------------------------------------------- players
@@ -105,6 +109,7 @@ def _org_cascade_ids(organization: Organization) -> list[int]:
 def _membership_tenure_q(org_ids: list[int]) -> Q:
     return Q(
         **{
+            f"{_TENURE_PERSONA}__persona_type": PersonaType.PRIMARY,
             f"{_TENURE_MEMBERSHIP}__organization_id__in": org_ids,
             f"{_TENURE_MEMBERSHIP}__left_at__isnull": True,
             f"{_TENURE_MEMBERSHIP}__exiled_at__isnull": True,
@@ -114,13 +119,14 @@ def _membership_tenure_q(org_ids: list[int]) -> Q:
 
 def _org_ids_reachable_for(account: AccountDB) -> set[int]:
     """Org ids whose channel this account's current tenures reach: each non-covert org a
-    current tenure holds an active membership in, plus every liege above it, stopping at a
-    covert liege (its branch is cut, as in ``_org_cascade_ids``)."""
+    current tenure's PRIMARY persona holds an active membership in, plus every liege above
+    it, stopping at a covert liege (its branch is cut, as in ``_org_cascade_ids``)."""
     start = set(
         OrganizationMembership.objects.filter(
             left_at__isnull=True,
             exiled_at__isnull=True,
             organization__is_covert=False,
+            persona__persona_type=PersonaType.PRIMARY,
             persona__character_sheet__roster_entry__tenures__player_data_id=account.pk,
             persona__character_sheet__roster_entry__tenures__end_date__isnull=True,
         ).values_list("organization_id", flat=True)

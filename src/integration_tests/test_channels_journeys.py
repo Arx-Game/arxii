@@ -22,7 +22,9 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.roster.models import RosterTenure
 from world.scenes.block_services import create_block
+from world.scenes.constants import PersonaType
 from world.scenes.mute_services import set_mute
+from world.scenes.services import create_persona
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.services import swear_fealty
 from world.societies.membership_services import join_organization, leave_organization
@@ -305,6 +307,26 @@ class TalkingInYourOrganization(ChannelJourneyCase):
         self.assertEqual(posted.json()["detail"], "No such channel.")
         self.assertIn("No such channel.", self.telnet(self.hobb, "channel join Lantern Wardens"))
         self.assertEqual(self.history(hobb_account, self.channel), [])
+
+    def test_a_membership_held_by_a_hidden_face_does_not_open_the_channel(self) -> None:
+        # Hobb's alter ego, a face whose link to him stays hidden, is the Wardens' member;
+        # Hobb himself is not. Speaking there as Hobb would tell the room who the face is.
+        hobb_account = self.account_of(self.hobb)
+        face = create_persona(
+            self.hobb.sheet_data, name="The Grey Lamp", persona_type=PersonaType.ESTABLISHED
+        )
+        join_organization(self.order, face)
+
+        self.assertNotIn("Lantern Wardens", self.listed_names(hobb_account))
+        self.assertIn("No such channel.", self.telnet(self.hobb, "channel join Lantern Wardens"))
+        joined = self.api(hobb_account).post(
+            SUBSCRIPTIONS, {"channel": self.channel.pk}, format="json"
+        )
+        self.assertEqual(joined.status_code, 400)
+        posted = self.post_web(hobb_account, self.channel, "Evening, Wardens.")
+        self.assertEqual(posted.status_code, 400)
+        self.assertEqual(posted.json()["detail"], "No such channel.")
+        self.assertFalse(ChannelMessage.objects.filter(channel=self.channel).exists())
 
     def test_leaving_the_organization_loses_the_channel_at_once(self) -> None:
         ysmay_tab = self.connect_session(self.ysmay_account, "websocket")
