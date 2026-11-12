@@ -127,11 +127,11 @@ const LADDER = {
   unclaimed_by_tier: {},
 };
 
-const houseDocument = (id: number, name: string) => ({
+const houseDocument = (id: number, name: string, description = '') => ({
   house: {
     id,
     name,
-    description: '',
+    description,
     words: '',
     colors: '',
     sigil_description: '',
@@ -165,6 +165,14 @@ const houseDocument = (id: number, name: string) => ({
   openings: { appable: [], posts: [], vacant_seats: [] },
   turf: null,
 });
+
+/** House Katta's description as staff wrote it on the house's page: the house
+ * document carries it, and the family read gives the same text (#5106's rule). */
+const KATTA_LORE = [
+  "Commoners often confuse the House words of Katta, as 'First in the Shadow' is used to reference the ancient roots of the great house of Umbros. At the end of the 8th age, when the world rose against the dark, the first of the line stood where the shadow was deepest and did not move. The house has told the story ever since, in halls where the lamps are kept low, and no child of the line is allowed to forget which wall their ancestor held.",
+  'The house keeps its own counsel. Its vassals learn early that a promise from Katta is kept, and that a silence from Katta is a promise too.',
+  'A red dragon breaking chains in its teeth, on a black field, hangs over every gate the house holds.',
+].join('\n\n');
 
 const EMPTY_PAGE = { count: 0, next: null, previous: null, results: [] };
 const BARE_ARRAYS = [
@@ -201,7 +209,7 @@ async function mockStaff(page: Page) {
       });
     }
     if (p === `/api/almanach/houses/${KATTA}/document/`) {
-      return route.fulfill({ json: houseDocument(KATTA, 'Katta') });
+      return route.fulfill({ json: houseDocument(KATTA, 'Katta', KATTA_LORE) });
     }
     if (p === `/api/almanach/houses/${VALEWEEP}/document/`) {
       return route.fulfill({ json: houseDocument(VALEWEEP, 'Valeweep') });
@@ -212,11 +220,6 @@ async function mockStaff(page: Page) {
   });
 }
 
-const KATTA_LORE = [
-  "Commoners often confuse the House words of Katta, as 'First in the Shadow' is used to reference the ancient roots of the great house of Umbros. At the end of the 8th age, when the world rose against the dark, the first of the line stood where the shadow was deepest and did not move. The house has told the story ever since, in halls where the lamps are kept low, and no child of the line is allowed to forget which wall their ancestor held.",
-  'The house keeps its own counsel. Its vassals learn early that a promise from Katta is kept, and that a silence from Katta is a promise too.',
-  'A red dragon breaking chains in its teeth, on a black field, hangs over every gate the house holds.',
-].join('\n\n');
 const NOBLE = { id: 2, name: 'Noble', styles_as_house: true };
 const KATTA_FAMILY: Family = {
   id: 4,
@@ -287,6 +290,12 @@ test.describe('#5106 on the production bundle', () => {
     await page.goto(`/staff/almanach/houses/${KATTA}`);
     await page.getByRole('button', { name: 'The Family', exact: true }).click();
 
+    // The house's own page holds the description character creation shows below.
+    await page.getByRole('button', { name: 'The House', exact: true }).click();
+    await expect(page.locator(`#house-description-${KATTA}`)).toHaveValue(KATTA_LORE);
+    await page.screenshot({ path: shot('5-house-page-description.png'), fullPage: true });
+    await page.getByRole('button', { name: 'The Family', exact: true }).click();
+
     const family = page.getByRole('button', { name: 'Add family member', exact: true });
     const household = page.getByRole('button', { name: 'Add household member', exact: true });
     await expect(family).toBeVisible();
@@ -324,6 +333,8 @@ test.describe('#5106 on the production bundle', () => {
     await expect(about.locator('p')).toHaveCount(3);
     await expect(about.locator('p').nth(0)).toContainText('which wall their ancestor held.');
     await expect(about.locator('p').nth(2)).toContainText('A red dragon breaking chains');
+    // Paragraph for paragraph, it is the text on the house's own page.
+    expect(await about.locator('p').allTextContents()).toEqual(KATTA_LORE.split('\n\n'));
 
     // On the card: the same text, cut to four lines by the page's own rule.
     const cardText = page

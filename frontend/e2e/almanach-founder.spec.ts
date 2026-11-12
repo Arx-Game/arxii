@@ -1,3 +1,5 @@
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test, expect, type Locator, type Route } from '@playwright/test';
 
 /**
@@ -23,6 +25,8 @@ import { test, expect, type Locator, type Route } from '@playwright/test';
  * checks; the overlap and the lost-claim defects the first evidence run found
  * were fixed in 0b43bf647.
  */
+const REPO_ROOT_5106 = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+
 async function safeClick(locator: Locator): Promise<void> {
   await locator.click();
 }
@@ -491,6 +495,17 @@ test('a founder claims the demo duchy and submits a house claim', async ({ page 
   // the House step (`FounderAlmanach`'s own `fd.title_id != null ? 'house'
   // : 'seat'` init), matching a founder who already claimed the duchy.
   await expect(page.getByText('Define a house')).toBeVisible();
+
+  // #5106: a player has no staff page to open, so the ladder's Held by and
+  // Sworn to stay text here; the staff ladder links them.
+  const founderLadder = page.locator('table.lad');
+  await expect(founderLadder).toBeVisible();
+  await expect(founderLadder.locator('td.held').first()).toBeVisible();
+  await expect(founderLadder.locator('a')).toHaveCount(0);
+  await page.screenshot({
+    path: path.join(REPO_ROOT_5106, 'docs', 'reviews', '5106', '6-cg-ladder-is-text.png'),
+    fullPage: true,
+  });
 
   // The Seat (plate F-I): claim the demo duchy for real; the House chapter follows.
   await page.getByRole('button', { name: `Claim ${DUCHY_NAME}` }).click();
