@@ -12,6 +12,10 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
  * "Mara Thornquill", whose player this account blocks, has said one line after it.
  * Runs with `--config e2e.backend.config.ts`.
  *
+ * Channel lines are feed lines under the OOC chip in the play page's main column (owner
+ * ruling, PR #5095); the sidebar Channels mode is the "Channels in sidebar" Display
+ * setting, off by default. The /channels page holds the controls.
+ *
  * Every assertion is on what the page shows. Settings are read back after a reload, so
  * a change the page shows but the server never kept fails here. The spec puts back what
  * it changes (mute, collapse), so it can run again against the same database.
@@ -220,7 +224,9 @@ test.describe('player channels', () => {
     await shot(page, '06-org-joined');
   });
 
-  test('the play page sidebar shows the same lanes in Channels mode', async ({ page }) => {
+  test('on the play page channel lines are in the main column under the OOC chip; the sidebar setting moves them', async ({
+    page,
+  }) => {
     await logIn(page);
     await page.goto('/game');
     await page
@@ -230,16 +236,77 @@ test.describe('player channels', () => {
       )
       .first()
       .click({ timeout: 30000 });
-    await page
-      .getByRole('navigation', { name: 'Sidebar modes' })
-      .getByRole('button', { name: /^Channels/ })
-      .click({ timeout: 30000 });
+
     const sidebar = page.getByRole('complementary', { name: 'Play sidebar' });
+    const modes = page.getByRole('navigation', { name: 'Sidebar modes' });
+    const oocChip = page
+      .getByRole('toolbar', { name: 'Feed filters' })
+      .getByRole('button', { name: /^OOC/ });
+    const channelLine = (text: string) =>
+      page.locator('[data-testid="feed-note"][data-kind="channel"]').filter({ hasText: text });
+    const settings = page.locator('details', { hasText: 'Display settings' });
+    const sidebarSetting = settings.getByRole('checkbox', { name: 'Channels in sidebar' });
+    const openSettings = async () => {
+      if (!(await sidebarSetting.isVisible())) await settings.locator('summary').click();
+    };
+
+    // The setting is off by default (and an earlier run's choice is put back): the lines
+    // are in the main column, there is no Channels mode, and the chip is on.
+    await openSettings();
+    if (await sidebarSetting.isChecked()) await sidebarSetting.uncheck();
+    await expect(oocChip).toHaveAttribute('aria-pressed', 'true', { timeout: 30000 });
+    const otherLine = channelLine(OTHER_MESSAGE);
+    await expect(otherLine).toBeVisible({ timeout: 15000 });
+    await expect(otherLine).toContainText('Public');
+    await expect(otherLine).toContainText(OTHER_SPEAKER);
+    await expect(
+      page.locator('[data-testid="feed-note"][data-kind="channel"] [data-testid="hidden-divider"]')
+    ).toHaveText('1 hidden');
+    await expect(modes.getByRole('button', { name: /^Channels/ })).toHaveCount(0);
+    await expect(sidebar.getByText(OTHER_MESSAGE)).toHaveCount(0);
+    await expect(page.getByText(BLOCKED_SPEAKER)).toHaveCount(0);
+    await expectNoAccountNames(page);
+    await shot(page, 'main-ooc-on');
+
+    // Posting from the main column: the rail's Channels row addresses the composer.
+    const rail = page.getByTestId('rail-channels');
+    await expect(rail.getByRole('button', { name: 'Public' })).toBeVisible();
+    await rail.getByRole('button', { name: 'Public' }).click();
+    const said = `Lamps lit from the play page at ${Date.now()}.`;
+    await page.getByRole('textbox').fill(said);
+    await page.keyboard.press('Enter');
+    const ownLine = channelLine(said);
+    await expect(ownLine).toBeVisible({ timeout: 15000 });
+    await expect(ownLine).toContainText(CHARACTER);
+    await page.locator('[data-testid="rail-row"][data-rail-key="all"] button').click();
+    await expect(channelLine(said)).toBeVisible();
+
+    // Chip off: the lines go with it. Chip on: they come back.
+    await oocChip.click();
+    await expect(oocChip).toHaveAttribute('aria-pressed', 'false');
+    await expect(channelLine(OTHER_MESSAGE)).toHaveCount(0);
+    await shot(page, 'main-ooc-off');
+    await oocChip.click();
+    await expect(oocChip).toHaveAttribute('aria-pressed', 'true');
+    await expect(channelLine(OTHER_MESSAGE)).toBeVisible();
+
+    // The opt-in: lanes in the sidebar's Channels mode, lines out of the main column.
+    await openSettings();
+    await sidebarSetting.check();
+    await modes.getByRole('button', { name: /^Channels/ }).click();
     await expect(lane(sidebar, 'Public').getByText(OTHER_MESSAGE)).toBeVisible({
       timeout: 15000,
     });
     await expect(lane(sidebar, 'Public').getByTestId('hidden-divider')).toHaveText('1 hidden');
     await expect(lane(sidebar, ORG)).toBeVisible();
-    await shot(page, '07-play-sidebar-channels');
+    await expect(page.locator('[data-testid="feed-note"][data-kind="channel"]')).toHaveCount(0);
+    await expect(page.getByTestId('rail-channels')).toHaveCount(0);
+    await shot(page, 'sidebar-optin');
+
+    // Put the default back.
+    await openSettings();
+    await sidebarSetting.uncheck();
+    await expect(modes.getByRole('button', { name: /^Channels/ })).toHaveCount(0);
+    await expect(channelLine(OTHER_MESSAGE)).toBeVisible();
   });
 });
