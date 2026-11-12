@@ -167,7 +167,7 @@ describe('IdentityStage', () => {
       // The first name is asked on the Origin leaf (#4874); here it is a line, not a field.
       expect(screen.queryByLabelText('First name')).toBeNull();
       expect(screen.getByTestId('identity-name')).toHaveTextContent('Sharlotte');
-      expect(screen.getByRole('heading', { name: 'Your choices so far' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'CG selections' })).toBeInTheDocument();
       expect(screen.getAllByText('Sharlotte').length).toBeGreaterThan(0);
     });
   });

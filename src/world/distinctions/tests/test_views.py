@@ -228,6 +228,19 @@ class DraftDistinctionViewSetTests(TestCase):
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 1
 
+    def test_a_legacy_entry_comes_back_with_its_lists(self):
+        """An entry stored before the offers system has no lists; the API fills them (#5102)."""
+        self.draft.draft_data["distinctions"] = [
+            {"distinction_id": self.distinction.id, "rank": 1, "cost": 10, "notes": "kept"}
+        ]
+        self.draft.save()
+
+        response = self.client.get(f"/api/distinctions/drafts/{self.draft.id}/distinctions/")
+        assert response.status_code == status.HTTP_200_OK
+        entry = response.data[0]
+        assert (entry["offer_ids"], entry["sources"], entry["arrivals"]) == ([], [], [])
+        assert entry["notes"] == "kept"
+
     def test_add_distinction_to_draft(self):
         """Can add a distinction to a draft."""
         response = self.client.post(

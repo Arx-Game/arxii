@@ -831,25 +831,15 @@ family influence x position), and ADR-0273 (family entry is a Vacancy).
 
 **Page order (#4124, #4395):** the family block (path picker when the route allows more
 than one path, then the path body: the house and the parents come first), the
-pick-lists asked on every path, the path's prompts, the kin rows (`KinRows`), then the
-life grids (`LifeGrids`), then the record.
+pick-lists asked on every path, the path's prompts, then the life grids (`LifeGrids`),
+then the record.
 
-**Kin rows (#4395; the states of #4870, slice 8 of #4813).** The people seated beside the
-parents: `draft_data["kin_rows"]`, a list of `{kind, name, gender_id, fate}` (`KinRowKind`
-twin / spouse / child / betrothed; `TwinFate` alive / dead, or blank; `SpouseFate` alive /
-dead / divorced / separated / fled, the last reading "Missing"; `BetrothedFate` promised /
-dead / missing / broken; `ChildFate` raised / fostered away / lost; one twin at most,
-`KIN_ROWS_MAX` rows; `_validate_kin_rows`). Finalize's `_bind_kin_rows`, after
-`_bind_kinship_node`, seats them in the kinship graph: a twin is a `Kinsperson` in the
-PC's family sharing every parent edge the PC has, `is_deceased` when its fate says so; a
-spouse is a wedlock `Union` (`wedlock_union_kind`), ended by death or divorce, dated
-`separated_at` through `separate_union` when separated, the spouse `is_missing` when fled;
-a betrothed is a `Union` of the kind marked `UnionKind.is_betrothal`
-(`betrothal_union_kind`, which refuses when no such kind is authored, so the row is logged
-and skipped), ended when broken off, the person dead or missing by fate; a child is a
-parentage edge from the PC, in the PC's family when raised, in none when fostered away,
-`is_deceased` when lost. Best-effort like the bind: a kinship refusal logs and skips the
-row. **The named parents' fates (#4870):** `draft_data.line_parent_fate` and
+**Kin rows retired (#5102, ADR-5102-A).** Creation once seated a twin, spouses, children
+and a betrothed beside the parents (`draft_data["kin_rows"]`, #4395/#4870); the owner ruled
+that a player's own family is built after creation (#5103), so the section, its validator
+and finalize's seating are gone. A draft still carrying the key finalizes with the parents
+alone. The kinship primitives it used (`create_person`, `record_union`, `separate_union`,
+`betrothal_union_kind`) stay. **The named parents' fates (#4870):** `draft_data.line_parent_fate` and
 `other_parent_fate` (`ParentFate` alive / dead / missing, blank is alive;
 `_validate_parent_fates`); `_bind_invented_parents` creates a dead parent `is_deceased`
 and marks a missing one `is_missing`. A claimed family's staff-authored parents are not
@@ -998,9 +988,13 @@ offers, folded to its heading and "N of M" (copy `life_stage_progress`) or Unkno
 open at a time (a click on the open one folds it); inside it one `.sec` per beat, one open
 at a time, a closed one reading its answers with their signed points or the beat's prompt
 in plain text with `{name}` read from `draft_data.first_name`; Next closes a section and
-opens the next, the last Next the next stage. Fold state is local. The stage's Unknown mark
-sets `unknown` on every beat of the stage in one PATCH (copy `life_stage_unknown_help`,
-Dan's words). A one-of row says no "pick one". Each section's grid is `ChapterOffers`
+opens the next, the last Next the next stage. Fold state is local. Every section's grid
+ends on an **Amnesiac** card (#5102, ADR-5102-B; `ChapterOffers`' `trailing` slot): no
+cost and not a distinction, named by copy `life_amnesiac_name` and read by
+`life_amnesiac_text` (default: the line Dan wrote for the stage-wide Unknown mark it
+replaced). Picking it sets that beat's `unknown`, which drops its picks and closes its
+other cards; picking it again clears it. A stage every one of whose beats is unknown reads
+Unknown and still lists its sections. A one-of row says no "pick one". Each section's grid is `ChapterOffers`
 (`layout="grid"`) with the leaf's new props: `groupBy` (`.group-h` headings "Group
 (count)", the ungrouped last), `pricing="signed"` (a bare `−N` or `+N` in the card's
 bottom-left corner, nothing on a free card), `terms` (the mechanics line built from

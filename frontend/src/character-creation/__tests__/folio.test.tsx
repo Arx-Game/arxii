@@ -45,7 +45,7 @@ describe('RecordRail', () => {
         ledger="One of eleven chapters begun."
       />
     );
-    expect(screen.getByRole('heading', { name: /your choices so far/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'CG selections' })).toBeInTheDocument();
     expect(screen.getByText('Perdition')).toBeInTheDocument();
     expect(screen.getByText('not yet chosen')).toHaveClass('unwritten');
     expect(screen.getByText('One of eleven chapters begun.')).toHaveClass('rail-ledger');

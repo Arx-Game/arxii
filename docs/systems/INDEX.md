@@ -2219,8 +2219,8 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   `AGE_PICKS_FROM_AGE`/`AGE_PICKS_YEARS_PER_PICK`/`AGE_PICKS_CAP_AGE`),
   `youngest_age_for_points` and `age_scaled_points_spent` behind the serializer's age
   floor), `beat_pick_conflicts(offers, age=, ranks=) -> list[BeatConflict]` in the
-  distinctions sync (ranks summed on a career-point beat), `draft_data["kin_rows"]` (`KinRowKind`/`SpouseFate`/`ChildFate`,
-  `_bind_kin_rows` at finalize),
+  distinctions sync (ranks summed on a career-point beat), the named parents' fates
+  (`ParentFate`; kin rows retired, ADR-5102-A),
   `_finalize_beats`, the background drafted from answers and beats
   (`assemble_origin_prose`), the sheet's private block (`_build_beats`, `BeatEntry`),
   `Secret.resolves_beat`, `CharacterSheet.maturation_floor` (milestones at or below the
