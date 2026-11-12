@@ -130,7 +130,9 @@ export function PactCard({ card, characterId }: PactCardProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Renounce your pact with {being}?</AlertDialogTitle>
             <AlertDialogDescription>
-              {card.stage_name} eases by {card.severity_per_miss} each period until it is gone.
+              {stageNumber > 1
+                ? `${card.stage_name} eases by ${card.severity_per_miss} each period until it is gone.`
+                : `${card.stage_name || 'Its condition'} ends with the pact.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

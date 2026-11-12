@@ -31,8 +31,11 @@
   and room line goes out when the transaction commits.
 * **Renouncing** (:func:`renounce_pact`): RENOUNCED, the same release, the onlooker line,
   an ease-out period; the holder's text is returned for the action to deliver once.
-* **Ease-out**: a period with no commitment eases the condition by
-  ``severity_per_miss``; at zero the condition is removed and nothing more opens.
+* **Ease-out**: only the cost eases out. The first stage is the pact's benefit, so a
+  pact that ends with its condition in the first stage removes the condition at once
+  and opens no ease-out period. Otherwise a period with no commitment eases the
+  condition by ``severity_per_miss``; when that would bring it into the first stage
+  (or to zero) the condition is removed instead and nothing more opens.
 """
 
 from __future__ import annotations
@@ -687,6 +690,16 @@ def _resist_rise(
     return applied, result, lines
 
 
+def _eased_line(
+    instance: ConditionInstance, eased: int, stage_before: ConditionStage | None
+) -> str:
+    """What a met period did: the ease, and the stage it went back to, if it changed."""
+    line = f"Severity eases by {eased} (to {instance.severity})." if eased else "Severity holds."
+    if instance.current_stage != stage_before and instance.current_stage is not None:
+        line += f" {instance.current_stage.name} now applies."
+    return line
+
+
 def _grade_commitment_period(details: PactPeriodDetails) -> PeriodGrade:
     from world.conditions.services import advance_condition_severity  # noqa: PLC0415
 
@@ -707,11 +720,7 @@ def _grade_commitment_period(details: PactPeriodDetails) -> PeriodGrade:
         lines = [f"Your pact with {being.name}: {earned} of {required} favor this period."]
         if instance is not None:
             change = -_ease_met(details, instance, stages, earned, required)
-            lines.append(
-                f"Severity eases by {-change} (to {instance.severity})."
-                if change
-                else "Severity holds."
-            )
+            lines.append(_eased_line(instance, -change, stage_before))
     else:
         short = required - earned
         lines = [
@@ -792,7 +801,39 @@ def _end_pact(pact: CharacterPact, reason: str, *, keep: PactPeriodDetails | Non
     return _release_if_pact(pact.devotion_standing)
 
 
-def _ended_lines(pact: CharacterPact, *, released: bool) -> list[str]:
+def _in_benefit_range(severity: int, stages: list[ConditionStage]) -> bool:
+    """True when ``severity`` sits in the first stage (the pact's benefit) or below it."""
+    if len(stages) <= 1:  # a lone stage is only the benefit
+        return True
+    return severity < stages[1].severity_threshold
+
+
+def _remove_pact_condition(pact: CharacterPact) -> str:
+    """Remove the pact's condition from her; return the condition's name."""
+    from world.conditions.services import remove_condition  # noqa: PLC0415
+
+    instance = pact.condition_instance
+    name = instance.condition.name
+    _detach_instance(instance)
+    remove_condition(pact.character_sheet.character, instance.condition, include_suppressed=True)
+    pact.condition_instance = None
+    return name
+
+
+def _drop_benefit(pact: CharacterPact) -> str:
+    """At the end, a condition still in its first stage (the benefit) goes at once.
+
+    Returns the removed condition's name, or "" when the cost is left to ease out.
+    """
+    instance = pact.condition_instance
+    if instance is None:
+        return ""
+    if not _in_benefit_range(instance.severity, _staged_stages(pact.offer.condition)):
+        return ""
+    return _remove_pact_condition(pact)
+
+
+def _ended_lines(pact: CharacterPact, *, released: bool, gone: str = "") -> list[str]:
     being = pact.offer.being
     first = (
         f"{being.name} is no longer your patron."
@@ -800,6 +841,9 @@ def _ended_lines(pact: CharacterPact, *, released: bool) -> list[str]:
         else f"Your pact with {being.name} has ended."
     )
     lines = [f"{first} Codex entries and clues you gained are kept."]
+    if gone:
+        lines.append(f"{gone} is gone.")
+        return lines
     instance = pact.condition_instance
     if instance is not None and instance.current_stage is not None:
         lines.append(
@@ -850,42 +894,40 @@ def _breach(
 ) -> None:
     released = _end_pact(pact, CharacterPactEnding.BREACH, keep=details)
     _fire_settle_pool(pact, check_result)
+    gone = _drop_benefit(pact)
     _tell(
         pact.character_sheet,
-        [pact.offer.closing_text.strip(), *_ended_lines(pact, released=released)],
+        [pact.offer.closing_text.strip(), *_ended_lines(pact, released=released, gone=gone)],
     )
     _tell_room(pact)
     _open_ease_out(pact)
 
 
 def _grade_ease_out_period(details: PactPeriodDetails) -> None:
-    """Ease the ended pact's condition by per-miss; at zero remove it, else go on."""
-    from world.conditions.services import (  # noqa: PLC0415
-        decay_condition_severity,
-        remove_condition,
-    )
+    """Ease the ended pact's cost by per-miss. Easing into the first stage (the pact's
+    benefit) or to zero removes the condition instead; otherwise the next period opens."""
+    from world.conditions.services import decay_condition_severity  # noqa: PLC0415
 
     pact = details.pact
     instance = pact.condition_instance
     if instance is None:
         _record(details, None, change=0, resist=None)
         return
-    stage_name = (
-        instance.current_stage.name
-        if instance.current_stage is not None
-        else instance.condition.name
-    )
+    stage_before = instance.current_stage
+    stage_name = stage_before.name if stage_before is not None else instance.condition.name
     amount = min(pact.offer.severity_per_miss, instance.severity)
+    after = instance.severity - amount
+    if after <= 0 or _in_benefit_range(after, _staged_stages(pact.offer.condition)):
+        _record(details, None, change=-instance.severity, resist=None)
+        gone = _remove_pact_condition(pact)
+        _tell(pact.character_sheet, [f"{gone} is gone."])
+        return
     decay_condition_severity(instance, amount)
     _record(details, instance, change=-amount, resist=None)
-    if instance.severity <= 0:
-        _detach_instance(instance)
-        remove_condition(
-            pact.character_sheet.character, instance.condition, include_suppressed=True
-        )
-        _tell(pact.character_sheet, [f"{instance.condition.name} is gone."])
-        return
-    _tell(pact.character_sheet, [f"{stage_name} eases by {amount}."])
+    line = f"{stage_name} eases by {amount}."
+    if instance.current_stage != stage_before and instance.current_stage is not None:
+        line += f" {instance.current_stage.name} now applies."
+    _tell(pact.character_sheet, [line])
     open_pact_period(pact, None)
 
 
@@ -905,9 +947,13 @@ def renounce_pact(sheet: CharacterSheet, being: WorshippedBeing) -> RenouncedPac
         if pact is None:
             raise NoActivePact(MSG_NO_PACT.format(being=being.name))
         released = _end_pact(pact, CharacterPactEnding.RENOUNCED)
+        gone = _drop_benefit(pact)
         _open_ease_out(pact)
         _tell_room(pact)
     message = " ".join(
-        [f"You renounce your pact with {being.name}.", *_ended_lines(pact, released=released)]
+        [
+            f"You renounce your pact with {being.name}.",
+            *_ended_lines(pact, released=released, gone=gone),
+        ]
     )
     return RenouncedPact(pact=pact, message=message)

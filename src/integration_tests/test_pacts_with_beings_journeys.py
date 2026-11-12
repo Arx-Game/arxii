@@ -13,16 +13,18 @@ Hesk's avatar to her side. At Audere, Hesk's bond ultimate is among her choices.
 The project tick grades each period once its time limit has passed (the journeys move
 the limit into the past rather than waiting). A short period inside the stage only
 raises severity. A second short period crosses into Strained, so the stage's resist
-check rolls (pinned at Failure) and Strained applies. A met period eases severity.
-``pact/renounce Hesk`` ends the pact and releases her, and one more tick eases the
-condition until it is gone. Only Corwen is told any of this; the onlooker in the room
-hears only the offer's authored line when the pact ends.
+check rolls (pinned at Failure) and Strained applies. A met period eases severity back
+to Sworn and says so. ``pact/renounce Hesk`` at Sworn ends the pact and releases her,
+and the first stage (the pact's benefit) is gone at once: only a cost eases out. Only
+Corwen is told any of this; the onlooker in the room hears only the offer's authored
+line when the pact ends.
 
 Ilse is Morrow's Chosen through the designated Chosen distinction. She keeps her
 Chosen invocation line and earning rate with Morrow and, holding a pact with Hesk as
 well, gets neither with Hesk. A breach, when the last stage's resist
 fails, ends the pact, releases the patronage, tells her the closing text and gives the
-room only the authored onlooker line.
+room only the authored onlooker line. The cost then eases out a stage at a time, and the
+ease that would bring it back into the first stage removes it instead.
 
 Every roll is pinned with ``force_check_outcome``. Journeys run on the parity tier:
 signing applies the staged condition through a PostgreSQL ``DISTINCT ON``. Other
@@ -445,39 +447,36 @@ class ServingThePact(PactJourneyBase):
         (card,) = self.cards(self.corwen)
         self.assertEqual((card["stage_name"], card["severity"]), ("Strained", 15))
 
-        # A met period eases severity, back under Strained.
+        # A met period eases severity, back under Strained, and says the stage went back.
         self.deed(self.corwen, 8)
         self.assertIn("Hesk - 8 of 8 favor this period", self.telnet(self.corwen, "pact"))
         self.period_ends(self.corwen)
         self.assertTold(self.corwen, "Your pact with Hesk: 8 of 8 favor this period.")
-        self.assertTold(self.corwen, "Severity eases by 10 (to 5).")
+        self.assertTold(self.corwen, "Severity eases by 10 (to 5). Sworn now applies.")
         instance.refresh_from_db()
         self.assertEqual((instance.severity, instance.current_stage.name), (5, "Sworn"))
 
-        # She renounces: released, told once, and the card shows the cost easing out.
+        # She renounces at Sworn: released, told once, and the first stage is the pact's
+        # benefit, so it is gone at once rather than easing out.
         with self.captureOnCommitCallbacks(execute=True):
             told = self.telnet(self.corwen, "pact/renounce Hesk")
         self.assertIn(
             "You renounce your pact with Hesk. Hesk is no longer your patron. Codex entries "
-            "and clues you gained are kept. Sworn eases by 10 each period until it is gone.",
+            f"and clues you gained are kept. {CONDITION_NAME} is gone.",
             told,
         )
         self.assertEqual(told.count("no longer your patron"), 1)
         self.pact.refresh_from_db()
         self.assertEqual(self.pact.dissolution_reason, CharacterPactEnding.RENOUNCED)
         self.assertIsNotNone(self.standing(self.corwen).released_at)
-        self.assertIn(
-            "Hesk (ended). Sworn eases by 10 each period until it is gone.",
-            self.telnet(self.corwen, "pact"),
-        )
-        (card,) = self.cards(self.corwen)
-        self.assertFalse(card["is_active"])
-
-        # One more tick eases the last 5 away and the condition is gone.
-        self.period_ends(self.corwen)
-        self.assertTold(self.corwen, f"{CONDITION_NAME} is gone.")
         self.assertIsNone(self.condition(self.corwen))
         self.assertEqual(self.cards(self.corwen), [])
+        listing = self.telnet(self.corwen, "pact")
+        self.assertNotIn("Hesk", listing)
+        self.assertIn("No pacts stand.", listing)
+        self.assertNotIn(
+            "Favor invocation modifiers for Hesk", self.telnet(self.corwen, "invoke Hesk")
+        )
 
         # The room heard only the author's line when the pact ended.
         self.assertNotTold(self.hobb, "Hesk")
@@ -548,7 +547,21 @@ class BreachingAPact(PactJourneyBase):
         )
         (card,) = self.cards(self.corwen)
         self.assertFalse(card["is_active"])
+        listing = self.telnet(self.corwen, "pact")
+        self.assertIn("Hesk (ended). Breached eases by 10 each period until it is gone.", listing)
+        self.assertNotIn("No pacts stand.", listing)
 
         self.assertShownRow(self.hobb, "[onlooker line]")
         self.assertNotTold(self.hobb, "[closing text]")
         self.assertNotTold(self.hobb, "patron")
+
+        # The cost eases out a stage at a time: 35 to 25 (Soured), 25 to 15 (Strained).
+        self.period_ends(self.corwen)
+        self.assertTold(self.corwen, "Breached eases by 10. Soured now applies.")
+        self.period_ends(self.corwen)
+        self.assertTold(self.corwen, "Soured eases by 10. Strained now applies.")
+        # The next ease would bring it into Sworn, the pact's benefit: it is removed instead.
+        self.period_ends(self.corwen)
+        self.assertTold(self.corwen, f"{CONDITION_NAME} is gone.")
+        self.assertIsNone(self.condition(self.corwen))
+        self.assertEqual(self.cards(self.corwen), [])

@@ -77,6 +77,8 @@ describe('PactCard', () => {
     render(<PactCard card={card()} characterId={3} />);
     fireEvent.click(screen.getByTestId('renounce-pact-button'));
     expect(renounceMutate).not.toHaveBeenCalled();
+    // At the first stage (the pact's benefit) nothing eases out: it ends with the pact.
+    expect(await screen.findByText('Sworn ends with the pact.')).toBeInTheDocument();
     fireEvent.click(await screen.findByTestId('confirm-renounce-pact'));
     expect(renounceMutate).toHaveBeenCalledWith(7, expect.any(Object));
   });

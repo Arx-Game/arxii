@@ -10595,7 +10595,8 @@ rite; the being becomes her patron. Full doc: `docs/systems/pacts.md`; ADR-4341.
   (from `bump_devotion`), `resolve_pact_period` / `grade_pact_period` (registered in
   `pacts/apps.py`; met eases, short rises after the worse stage's resist roll by tier),
   breach at the last stage (release a PACT patronage, settle pool, closing and onlooker
-  lines), `renounce_pact`, ease-out by `severity_per_miss` per period, `pact_card` /
+  lines), `renounce_pact`, ease-out of the cost by `severity_per_miss` per period (the first stage,
+  the benefit, is removed at the end, never eased back into), `pact_card` /
   `pact_cards_for`, `pact_offer_summary` / `offered_pact_summary`, `pact_beings_for`,
   `pact_deed_favor_this_week`. Accepted through `close_pledge(..., accept_pact=True)`.
 - **Interfaces**: `GET /api/pacts/cards/`; actions `pact_renounce`, `pledge_close`

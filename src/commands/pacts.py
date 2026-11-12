@@ -173,7 +173,10 @@ class CmdPact(ArxCommand):
             f"  vow #{vow.pk}: {vow.kinsperson_a.display_name} to {vow.kinsperson_b.display_name}"
             for vow in vows
         )
-        self.msg("Pacts and promises:\n" + "\n".join(lines) if lines else "No pacts stand.")
+        if lines:
+            self.msg("Pacts and promises:\n" + "\n".join(lines))
+        elif not being_lines:
+            self.msg("No pacts stand.")
 
     def _propose(self, rest: list[str]) -> None:
         from world.societies.houses.models import PactKind  # noqa: PLC0415

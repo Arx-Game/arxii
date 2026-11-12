@@ -132,7 +132,8 @@ Failure) and `resolve_project` runs `grade_pact_period(project, outcome_tier)` o
 commitment period of an active pact (`_grade_commitment_period`):
 
 - **Met** (earned at least required): severity eases by `severity_per_miss * earned // required`,
-  at most twice `severity_per_miss`, never below the first stage's threshold. No roll.
+  at most twice `severity_per_miss`, never below the first stage's threshold. No roll. When the
+  ease moves her back a stage the message says so ("Sworn now applies."), as a worsening does.
 - **Short**: the rise is `ceil(severity_per_miss * shortfall / required)`. When the rise would
   reach the next worse stage and that stage has a resist check, the check rolls first
   (`perform_check_with_modifiers`) at the stage's `resist_difficulty` minus the favor band's ease
@@ -164,7 +165,7 @@ dissolved with BREACH and its other open commitment periods cancelled; a `PACT` 
 released (`release_patronage`, its first caller); the stage's settle pool, if authored, fires
 against the holder only, at the failed resist roll's tier (a breach reached with no roll fires
 no pool); the holder sees the offer's `closing_text` and the ending lines; the room sees the
-`onlooker_line` if one is written; an ease-out period opens. Codex entries and clues she gained
+`onlooker_line` if one is written; an ease-out period opens (see Ease-out). Codex entries and clues she gained
 are kept; nothing is deleted. Every holder line and room line from grading (met, short, breach,
 ease-out) is sent with `transaction.on_commit`: grading runs inside the project tick's atomic
 block, and a rollback there must not leave her holding a roll result the next tick rolls again.
@@ -173,7 +174,8 @@ block, and a rollback there must not leave her holding a roll result the next ti
 
 `renounce_pact(sheet, being) -> RenouncedPact` ends her active pact with RENOUNCED, cancels its
 open commitment periods, releases a `PACT` patronage the same way, sends the room the offer's
-`onlooker_line` on commit and opens an ease-out period. It returns the pact and the one message
+`onlooker_line` on commit and, unless the condition is still in its first stage (removed at once,
+see Ease-out), opens an ease-out period. It returns the pact and the one message
 she is told (the action delivers it; the service sends her nothing, so she reads it once).
 Raises `NoActivePact` when she holds none.
 
@@ -185,10 +187,18 @@ Chosen bond follows its own character-creation lifecycle.
 
 ### Ease-out
 
-After any ending the condition eases by `severity_per_miss` each period until it is gone (owner
-ruling 2026-10-18). An ease-out period is a `PACT_PERIOD` project whose `PactPeriodDetails` has
-no commitment; `_grade_ease_out_period` decays the condition and opens the next one, or at zero
-removes the condition and opens nothing more.
+After a pact ends only its cost eases out (spec section 6; owner ruling 2026-10-18). The first
+stage is the pact's benefit, so it never continues past the end:
+
+- A pact that ends with its condition in the first stage (severity below the second stage's
+  threshold, or a condition with a single stage) has the condition removed at once
+  (`_drop_benefit`); no ease-out period opens and she is told "<condition> is gone.".
+- Otherwise an ease-out period opens. An ease-out period is a `PACT_PERIOD` project whose
+  `PactPeriodDetails` has no commitment; `_grade_ease_out_period` decays the condition by
+  `severity_per_miss` and opens the next one ("Soured eases by 10. Strained now applies." when it
+  crosses a stage). When the decay would bring severity into the first stage, or to zero, the
+  condition is removed instead and nothing more opens: the ease-out never returns her to the
+  benefit stage.
 
 ## Accepting at a pledge's close
 

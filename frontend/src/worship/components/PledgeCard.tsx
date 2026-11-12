@@ -178,20 +178,24 @@ export function PledgeCard({ card, characterId }: PledgeCardProps) {
                 <Button
                   size="sm"
                   variant={offer ? 'outline' : 'default'}
+                  className="h-auto min-h-9 max-w-full whitespace-normal text-left"
                   onClick={() => handleClose(false)}
                   disabled={close.isPending}
                   data-testid="close-pledge-button"
                 >
-                  Close the pledge with {card.pledge.closing_rite_name}
+                  {offer
+                    ? 'Perform the closing rite'
+                    : `Close the pledge with ${card.pledge.closing_rite_name}`}
                 </Button>
                 {offer && (
                   <Button
                     size="sm"
+                    className="h-auto min-h-9 max-w-full whitespace-normal text-left"
                     onClick={() => handleClose(true)}
                     disabled={close.isPending}
                     data-testid="close-accept-pact-button"
                   >
-                    Close the pledge with {card.pledge.closing_rite_name} and accept the pact
+                    Perform the closing rite and accept the pact
                   </Button>
                 )}
                 <span className="text-xs text-muted-foreground">

@@ -145,9 +145,12 @@ describe('PledgeCard', () => {
   it('closes and accepts the pact from the second button', () => {
     closeMutate.mockClear();
     render(<PledgeCard card={offeringCard()} characterId={3} />, { wrapper });
+    expect(screen.getByTestId('close-pledge-button')).toHaveTextContent('Perform the closing rite');
     expect(screen.getByTestId('close-accept-pact-button')).toHaveTextContent(
-      "Close the pledge with Ombrin's rite and accept the pact"
+      'Perform the closing rite and accept the pact'
     );
+    // The long label wraps inside the column at phone width instead of overflowing it.
+    expect(screen.getByTestId('close-accept-pact-button')).toHaveClass('whitespace-normal');
     fireEvent.click(screen.getByTestId('close-accept-pact-button'));
     expect(closeMutate).toHaveBeenCalledWith({ itemIds: [], acceptPact: true }, expect.anything());
     closeMutate.mockClear();

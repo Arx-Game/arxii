@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from integration_tests.harness import JourneyCase
 from world.conditions.factories import ConditionInstanceFactory
+from world.conditions.services import advance_condition_severity
 from world.pacts.constants import CharacterPactCommitmentKind, CharacterPactEnding
 from world.pacts.factories import (
     CharacterPactFactory,
@@ -113,23 +114,30 @@ class PactCardJourneys(JourneyCase):
 
         told = self.telnet(self.mira, "pact/renounce hesk")
         self.assertIn("You renounce your pact with Hesk.", told)
+        # Renounced at Sworn, the first stage (the pact's benefit): it ends with the pact.
+        self.assertIn(f"{self.offer.condition.name} is gone.", told)
         pact = CharacterPact.objects.get(pk=self.pact.pk)
         self.assertEqual(pact.dissolution_reason, CharacterPactEnding.RENOUNCED)
+        self.assertIsNone(pact.condition_instance)
 
         told = self.telnet(self.mira, "pact")
-        self.assertIn("Hesk (ended). Sworn eases by 10 each period until it is gone.", told)
+        self.assertNotIn("Hesk", told)
+        self.assertIn("No pacts stand.", told)
 
         told = self.telnet(self.mira, "pact/renounce hesk")
         self.assertIn("You hold no pact with that being.", told)
 
     def test_web_renounce_by_being_id(self) -> None:
+        # At Strained the pact's cost eases out after the end; the card shows it ended.
+        advance_condition_severity(self.pact.condition_instance, 14)
         result = self.web(self.mira, "pact_renounce", being_id=self.being.pk).detail
         self.assertTrue(result.success, result.message)
-        self.assertIn("Sworn eases by 10 each period until it is gone.", result.message)
+        self.assertIn("Strained eases by 10 each period until it is gone.", result.message)
 
         response = self.api(self.account_of(self.mira)).get(
             CARDS_URL, {"character_sheet": self.sheet.pk}
         )
         (card,) = response.json()["results"]
         self.assertFalse(card["is_active"])
+        self.assertEqual((card["stage_name"], card["severity"]), ("Strained", 15))
         self.assertEqual(card["required"], 0)

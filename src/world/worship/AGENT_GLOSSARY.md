@@ -87,7 +87,9 @@
 - **Pact period**: one span of a being pact, graded once at its end (`ProjectKind.PACT_PERIOD`
   with its `PactPeriodDetails`): met, the condition eases; short, it rises, after the worse
   stage's resist check when the rise would reach it. An **ease-out period** (no commitment)
-  follows the end of a pact and only lets the condition fade. _Avoid_: cycle, tick.
+  follows the end of a pact and only lets its cost fade: it removes the condition rather than
+  ease it into the first stage (the pact's benefit), and a pact ending in its first stage loses
+  the condition at once. _Avoid_: cycle, tick.
 - **Pledge** — two things (#4333 slice 2). A *pledge type* is an authored `Pledge` row: a
   being's offer of service with a favor target, a span in game weeks and a closing rite (one of
   the being's own tier 1 or 2 rites). An *open pledge* is one character's: a `Project` of kind

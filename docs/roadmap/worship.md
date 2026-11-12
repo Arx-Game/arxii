@@ -225,7 +225,8 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   resist check, eased by her favor band, with the tier deciding how far it moves. The last
   stage ends the pact in breach (patronage released, the stage's settle pool against her
   alone, the being's closing text and an optional room line). She can renounce it; either
-  way the cost eases out each period until gone. While it holds she gets the being's bond
+  way the first stage's benefit ends with the pact and the cost eases out each period until
+  gone. While it holds she gets the being's bond
   ultimates at Audere and can bring it into a fight. Web pact card and pledge offer,
   telnet `pact`, `pact/renounce`, `pledge/close/accept`, and a Pacts section on the Being
   Service builder. Built with it: the Chosen bonuses moved onto a designated Chosen

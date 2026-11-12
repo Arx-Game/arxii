@@ -246,6 +246,9 @@ class PeriodCheckTests(PactTestBase):
                 self.assertIsNone(graded.resist_outcome)
                 self.assertEqual(graded.project.status, ProjectStatus.COMPLETED)
                 self.assertEqual(self._period(pact).project.threshold_target, 8)
+                # Easing back out of Strained says the stage went back, as a worsening does.
+                went_back = "Sworn now applies." in self._told(pact.character_sheet)
+                self.assertEqual(went_back, before >= 11)
 
     def test_a_short_period_reaching_a_worse_stage_rolls_its_resist_by_tier(self) -> None:
         # From severity 5, 5 short is a rise of 7 (to 12), reaching Strained at 11.
