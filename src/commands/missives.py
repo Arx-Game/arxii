@@ -17,6 +17,9 @@ _EXTRA_ITEM = "item"
 _SWITCH_LIST = "list"
 _SWITCH_SEND = "send"
 _SWITCH_REPLY = "reply"
+_SWITCH_READ = "read"
+_SWITCH_ACCEPT = "accept"
+_SWITCH_REFUSE = "refuse"
 
 
 def _parse_extras(parts: list[str]) -> dict[str, Any] | None:
@@ -88,9 +91,9 @@ class CmdMissive(ArxCommand):
         switch = switches[0] if switches else _SWITCH_LIST
         raw = (self.args or "").strip()
         simple = {
-            "read": ReadMissiveAction,
-            "accept": AcceptMissiveAction,
-            "refuse": RefuseMissiveAction,
+            _SWITCH_READ: ReadMissiveAction,
+            _SWITCH_ACCEPT: AcceptMissiveAction,
+            _SWITCH_REFUSE: RefuseMissiveAction,
         }
         if switch == _SWITCH_LIST:
             self.msg(self._render_list())
@@ -134,22 +137,20 @@ class CmdMissive(ArxCommand):
 
 def _render_missives(sheet: CharacterSheet) -> str:
     """One line per visible missive, newest first: ``* #12 From Ada - Come at once...``."""
-    from world.messengers.services import visible_missives_for  # noqa: PLC0415
+    from actions.definitions.missives import missive_correspondents  # noqa: PLC0415
+    from world.messengers.services import sent_by, visible_missives_for  # noqa: PLC0415
 
     missives = list(visible_missives_for(sheet).order_by("-sent_at", "-pk"))
     if not missives:
         return "You have no missives."
     lines = ["|wMissives|n"]
     for missive in missives:
-        sent_it = (
-            missive.sender_persona.character_sheet_id == sheet.pk
-            and missive.recipient_persona.character_sheet_id != sheet.pk
-        )
-        if sent_it:
-            who = f"To {missive.recipient_persona.name}"
+        from_name, to_name = missive_correspondents(sheet, missive)
+        if sent_by(sheet, missive):
+            who = f"To {to_name}"
             mark = " "
         else:
-            who = f"From {missive.sender_persona.name}"
+            who = f"From {from_name}"
             mark = "*" if missive.read_at is None else " "
         preview = " ".join(missive.body.split())[:_PREVIEW_LENGTH]
         lines.append(f"{mark} #{missive.pk} {who} - {preview}")

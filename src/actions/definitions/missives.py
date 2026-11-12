@@ -33,7 +33,10 @@ WHO_FOR = "Who is the missive for?"
 BAD_COIN = "Give the coin as a whole number."
 ACCEPTED = "You accept what came with the missive."
 REFUSED = "You refuse it; the messenger takes it back."
+NO_FACE = "You have no face to send under."
 UNDATED = "undated"
+_INT64_MIN = -(2**63)
+_INT64_MAX = 2**63 - 1
 
 
 class _Refusal(Exception):
@@ -57,18 +60,21 @@ def _sheet_of(actor: ObjectDB) -> CharacterSheet:
 
 
 def _int_or_none(value: Any) -> int | None:
-    """An int from a JSON int or a telnet string (``"#12"`` too); None when unparseable."""
+    """An int from a JSON int or a telnet string (``"#12"`` too); None when unparseable or
+    outside the signed 64-bit range a database column can hold."""
+    number: int | None = None
     if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str):
-        text = value.strip().lstrip("#")
+        number = None
+    elif isinstance(value, int):
+        number = value
+    elif isinstance(value, str):
         try:
-            return int(text)
+            number = int(value.strip().lstrip("#"))
         except ValueError:
-            return None
-    return None
+            number = None
+    if number is None or not _INT64_MIN <= number <= _INT64_MAX:
+        return None
+    return number
 
 
 def _missive_for(sheet: CharacterSheet, kwargs: dict[str, Any]) -> Missive:
@@ -177,9 +183,10 @@ def _items(actor: ObjectDB, kwargs: dict[str, Any]) -> list[ItemInstance]:
         if len(found) != len(unique):
             raise MissiveError(NOT_HELD)
         return [found[pk] for pk in unique]
-    names: Sequence[str] = kwargs.get("item_names") or []
-    if isinstance(names, str):
-        names = [names]
+    raw_names = kwargs.get("item_names") or []
+    if isinstance(raw_names, (str, int)):
+        raw_names = [raw_names]
+    names: Sequence[str] = [str(name) for name in raw_names]
     items: list[ItemInstance] = []
     for name in names:
         if not name.strip():
@@ -210,10 +217,16 @@ def _send(
         in_reply_to=in_reply_to,
     )
     actor.carried_items.invalidate()
+    # A fresh letter names the recipient as the writer typed it; a reply names the face it
+    # answers through the writer's eyes, so a mask stays a mask.
+    if in_reply_to is None:
+        recipient_label = recipient.name
+    else:
+        recipient_label = shown_name(recipient, sender.character_sheet)
     # Identical whether or not a block suppresses it (write-then-suppress).
     return ActionResult(
         success=True,
-        message=f"Your missive to {recipient.name} is on its way.",
+        message=f"Your missive to {recipient_label} is on its way.",
         data={"missive_id": missive.pk},
     )
 
@@ -221,6 +234,7 @@ def _send(
 def _guarded(run: Any) -> ActionResult:
     """Run ``run()`` and turn a refusal into a failed ``ActionResult``."""
     from world.messengers.exceptions import MissiveError  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
 
     try:
         return run()
@@ -228,16 +242,45 @@ def _guarded(run: Any) -> ActionResult:
         return ActionResult(success=False, message=exc.message)
     except MissiveError as exc:
         return ActionResult(success=False, message=exc.user_message)
+    except Persona.DoesNotExist:
+        # active_persona_for_sheet on a sheet whose PRIMARY persona is missing.
+        return ActionResult(success=False, message=NO_FACE)
 
 
-def render_missive(missive: Missive) -> str:
-    """The letter as its reader sees it: header, body, and what came with it."""
+def shown_name(persona: Persona, sheet: CharacterSheet) -> str:
+    """How ``persona`` reads to this character: real for its own faces and named faces, the
+    discovered name or the composed description for a mask it has not seen through."""
+    from world.scenes.persona_display import resolve_display_for_viewer  # noqa: PLC0415
+
+    return resolve_display_for_viewer(persona, viewer_sheet=sheet)[0]
+
+
+def missive_correspondents(sheet: CharacterSheet, missive: Missive) -> tuple[str, str]:
+    """``(from, to)`` names of a missive as this character reads them.
+
+    The sender always reads through the viewer's eyes. The recipient reads as addressed
+    when this character wrote a fresh letter (it typed that name), and through its eyes
+    otherwise: a reply to a masked writer must not name what the mask hides.
+    """
+    from world.messengers.services import sent_by  # noqa: PLC0415
+
+    recipient = missive.recipient_persona
+    if sent_by(sheet, missive) and missive.in_reply_to_id is None:
+        to_name = recipient.name
+    else:
+        to_name = shown_name(recipient, sheet)
+    return shown_name(missive.sender_persona, sheet), to_name
+
+
+def render_missive(missive: Missive, sheet: CharacterSheet) -> str:
+    """The letter as ``sheet``'s character reads it: header, body, and what came with it."""
     from world.game_clock.services import format_ic_date  # noqa: PLC0415
     from world.messengers.models import MissiveAttachment  # noqa: PLC0415
 
     when = format_ic_date(missive.ic_sent_at) if missive.ic_sent_at is not None else UNDATED
+    from_name, to_name = missive_correspondents(sheet, missive)
     lines = [
-        f"From {missive.sender_persona.name} to {missive.recipient_persona.name}, {when}",
+        f"From {from_name} to {to_name}, {when}",
         "",
         missive.body,
     ]
@@ -291,7 +334,12 @@ class SendMissiveAction(Action):
             else:
                 sender = active_persona_for_sheet(sheet)
             recipient = _recipient(kwargs)
-            return _send(actor, sender=sender, recipient=recipient, kwargs=kwargs)
+            return _send(
+                actor,
+                sender=sender,
+                recipient=recipient,
+                kwargs=kwargs,
+            )
 
         return _guarded(run)
 
@@ -322,15 +370,11 @@ class ReplyMissiveAction(Action):
         self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
         def run() -> ActionResult:
-            from world.messengers.services import reply_sender_for  # noqa: PLC0415
+            from world.messengers.services import reply_sender_for, sent_by  # noqa: PLC0415
 
             sheet = _sheet_of(actor)
             original = _missive_for(sheet, kwargs)
-            actor_sent_it = (
-                original.sender_persona.character_sheet_id == sheet.pk
-                and original.recipient_persona.character_sheet_id != sheet.pk
-            )
-            if actor_sent_it:
+            if sent_by(sheet, original):
                 recipient = original.recipient_persona
                 default_sender = original.sender_persona
             else:
@@ -341,7 +385,11 @@ class ReplyMissiveAction(Action):
             else:
                 sender = default_sender
             return _send(
-                actor, sender=sender, recipient=recipient, kwargs=kwargs, in_reply_to=original
+                actor,
+                sender=sender,
+                recipient=recipient,
+                kwargs=kwargs,
+                in_reply_to=original,
             )
 
         return _guarded(run)
@@ -370,7 +418,9 @@ class ReadMissiveAction(Action):
             sheet = _sheet_of(actor)
             missive = read_missive(sheet=sheet, missive=_missive_for(sheet, kwargs))
             return ActionResult(
-                success=True, message=render_missive(missive), data={"missive_id": missive.pk}
+                success=True,
+                message=render_missive(missive, sheet),
+                data={"missive_id": missive.pk},
             )
 
         return _guarded(run)

@@ -365,6 +365,18 @@ def read_missive(*, sheet: CharacterSheet, missive: Missive) -> Missive:
     return missive
 
 
+def sent_by(sheet: CharacterSheet, missive: Missive) -> bool:
+    """Whether this character wrote the missive to someone else.
+
+    A letter between two of one character's own faces counts as received, so its reply goes
+    back to the face that wrote it.
+    """
+    return (
+        missive.sender_persona.character_sheet_id == sheet.pk
+        and missive.recipient_persona.character_sheet_id != sheet.pk
+    )
+
+
 def reply_sender_for(missive: Missive) -> Persona:
     """The face a reply goes out under: the one that was written to (decision 3).
 
