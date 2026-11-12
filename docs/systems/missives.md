@@ -187,7 +187,8 @@ the recipient persona's character only. A slim ping: clients toast "A missive fo
 <recipient_persona_name> from <sender_display>" and refetch the list and unread count
 (`frontend/src/hooks/handleMissiveArrivedPayload.ts`). Telnet sessions get a plain-text
 twin (`send_text_to_non_web`) so a browser never shows it twice: "A <method name,
-lowercased> brings you a missive for <recipient> from <sender>. (missive/read <id>)".
+lowercased> brings you a missive for <recipient> from <sender>. (missive/read <id>)",
+with "An" before a method name that starts with a vowel ("An owl brings you...").
 Built by `world.messengers.notifications.notify_missive_arrived`.
 
 ## Privacy rules

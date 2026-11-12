@@ -168,3 +168,11 @@ class DeliverDueMissivesTests(TestCase):
             list(MissiveAttachment.objects.filter(missive=missive).values_list("item_id")),
             [(item.pk,)],
         )
+
+
+class ArrivalLineArticleTests(TestCase):
+    def test_the_article_follows_the_way_it_came(self) -> None:
+        from world.messengers.notifications import _with_article
+
+        self.assertEqual(_with_article("courier"), "A courier")
+        self.assertEqual(_with_article("owl"), "An owl")

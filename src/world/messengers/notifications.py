@@ -47,6 +47,15 @@ def notify_missive_arrived(missive: Missive) -> None:
     character.msg(missive_arrived=((), payload))
     send_text_to_non_web(
         character,
-        f"A {missive.method.name.lower()} brings you a missive for {recipient.name} "
-        f"from {sender_display}. (missive/read {missive.pk})",
+        f"{_with_article(missive.method.name.lower())} brings you a missive for "
+        f"{recipient.name} from {sender_display}. (missive/read {missive.pk})",
     )
+
+
+def _with_article(noun: str) -> str:
+    """'A courier', 'An owl': the article by the noun's first letter."""
+    article = "An" if noun[:1] in _VOWELS and noun else "A"
+    return f"{article} {noun}"
+
+
+_VOWELS = frozenset("aeiou")

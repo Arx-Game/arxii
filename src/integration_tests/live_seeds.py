@@ -637,8 +637,12 @@ def seed_missive_spec(*, username: str) -> MissiveSpecSeed:
                 coin_amount=MISSIVE_SPEC_COIN,
             )
         set_selected_entry(player_data, entry)
-    # Outside the block: the sweep commits each arrival on its own.
-    deliver_due_missives()
+        # Inside the block, so the letter is never visible to the live server as due but
+        # unannounced. The server's own missives.deliver sweep can run while this seed is
+        # writing; if it caught the letter in between it would load the account's
+        # PlayerData into the server's identity map with the selection as it stood at
+        # that moment, and every later page would read that stale selection.
+        deliver_due_missives()
 
     sheet = entry.character_sheet
     writer_face = Persona.objects.get(
