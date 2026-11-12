@@ -30,9 +30,16 @@ from integration_tests.test_refused_admin_saves_journeys import RefusedAdminSave
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
-from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
+from world.combat.constants import ParticipantStatus, SurgeTriggerKind
+from world.combat.factories import (
+    CombatEncounterFactory,
+    CombatOpponentFactory,
+    CombatParticipantFactory,
+    SurgeDegreeBandFactory,
+    SurgeTuningFactory,
+)
 from world.combat.models import CombatEncounter
-from world.combat.services import cleanup_completed_encounter
+from world.combat.services import cleanup_completed_encounter, resolve_round
 from world.conditions.constants import BreakFreeMode
 from world.conditions.factories import (
     ConditionCategoryFactory,
@@ -65,8 +72,10 @@ from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 from world.magic.tests.audere_test_helpers import build_audere_gate_fixture
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
+from world.scenes.constants import RoundStatus
 from world.scenes.factories import PersonaFactory
 from world.traits.factories import CheckOutcomeFactory, CheckSystemSetupFactory
+from world.vitals.models import CharacterVitals
 
 _ULTIMATES_URL = "/api/magic/audere/ultimates/"
 _CHOOSE_URL = "/api/magic/audere/ultimates/choose/"
@@ -448,6 +457,60 @@ class AFriendRalliesHerOutOfTheFury(_ATalkedDownSelf):
         with patch("world.checks.services.random.randint", return_value=1):
             missed = self.telnet(self.hobb, "rally Ysmay")
         self.assertIn("Your words don't seem to reach them.", missed)
+
+        refused = self.telnet(self.character, "form revert")
+        self.assertIn("You can't revert while not in control of yourself.", refused)
+        self.assertEqual(self._worn(), self.alt)
+
+
+class HobbRalliesHerMidFight(_ATalkedDownSelf):
+    """Hobb's combat Rally reaches her too (ruled 2026-11-12): one that lands frees her
+    once Audere ends; one that falls short does not."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        CheckSystemSetupFactory.create()
+        self.hobb = self.make_player("Hobb", room=self.room)
+        self.success = CheckOutcomeFactory(name="Rally Success", success_level=1)
+        self.partial = CheckOutcomeFactory(name="Rally Partial", success_level=0)
+        tuning = SurgeTuningFactory(
+            trigger_kind=SurgeTriggerKind.RALLIED, check_type=CheckTypeFactory(name="Rally")
+        )
+        SurgeDegreeBandFactory(tuning=tuning, outcome=self.success, intensity=1)
+        self.fight = CombatEncounterFactory(
+            status=RoundStatus.DECLARING, round_number=1, room=self.room
+        )
+        for player in (self.character, self.hobb):
+            CharacterVitals.objects.create(
+                character_sheet=player.sheet_data, health=100, max_health=100, base_max_health=100
+            )
+            CombatParticipantFactory(
+                encounter=self.fight,
+                character_sheet=player.sheet_data,
+                status=ParticipantStatus.ACTIVE,
+            )
+        CombatOpponentFactory(encounter=self.fight, name="Ash Wight")
+
+    def _hobb_rallies(self, outcome) -> None:
+        self.assertIn("You rally your ally.", self.telnet(self.hobb, "combat rally Ysmay"))
+        with self.captureOnCommitCallbacks(execute=True), force_check_outcome(outcome):
+            resolve_round(self.fight)
+
+    def test_a_combat_rally_that_lands_frees_her_once_audere_ends(self) -> None:
+        self._surge()
+        self._choose(1)
+        self._hobb_rallies(self.success)
+        self._end_the_fight()
+        self.assertTrue(self._fury_held())
+
+        self.assertIn("You revert to your true self.", self.telnet(self.character, "form revert"))
+        self.assertIsNone(self._worn())
+
+    def test_a_combat_rally_that_falls_short_leaves_her_held(self) -> None:
+        self._surge()
+        self._choose(1)
+        self._hobb_rallies(self.partial)
+        self._end_the_fight()
 
         refused = self.telnet(self.character, "form revert")
         self.assertIn("You can't revert while not in control of yourself.", refused)

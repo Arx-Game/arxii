@@ -190,7 +190,8 @@ attempt_revert_form(sheet)                       # Player path (#4802): rolls a 
   (2) with no compulsion, a `TALKED_DOWN` self Audere brought out
   (`ActiveAlternateSelf.assumed_at_audere`) whose emergence condition is still active
   holds her until she is talked down, raising `RevertBlockedError`. Two things talk her
-  down (ruled 2026-11-12, #4887): an ally's rally that lands on the emergence condition (`RallyAction` sets
+  down (ruled 2026-11-12, #4887): an ally's rally that lands on the emergence condition (the conditions `rally` action or
+  the combat Rally maneuver, both through `record_rally_landed`, set
   `ConditionInstance.rallied`, which lasts the instance's life, unlike its consumed
   `pending_rally_bonus`), after which she changes back while the condition still runs; or her own successful `breakfree`,
   which ends the condition. (3) Otherwise she changes back at once: Charmed, Calm or any

@@ -74,8 +74,8 @@ rows. Under a compulsion it rolls; a talked-down self Audere brought out is refu
 otherwise free, a character whose compulsion ended included (#4887). _Avoid_: shift back.
 
 **Talked down**:
-An ally has reached a character held in a talked-down self: a rally landed on its
-emergence condition (`ConditionInstance.rallied`), or she broke free of that condition. From then on she may change back. _Avoid_: calmed (Calm is a
+An ally has reached a character held in a talked-down self: a rally (out of combat, or
+the combat Rally maneuver) landed on its emergence condition (`ConditionInstance.rallied`), or she broke free of that condition. From then on she may change back. _Avoid_: calmed (Calm is a
 condition).
 
 **Revert Form**:

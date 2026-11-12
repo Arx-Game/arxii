@@ -623,7 +623,7 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   compulsion's `retry_wait_minutes` outside one. Once an ally talks the character down and the
   compulsion ends, they change back at once, even while a talked-down self's emergence
   condition still runs; a talked-down self Audere brought out holds her until an ally rallies
-  her or she breaks free; and staff cannot author a band where a success lowers Control or a
+  her (out of combat or with the combat Rally maneuver) or she breaks free; and staff cannot author a band where a success lowers Control or a
   failure gains more Intensity than the Control it costs (#4887). An ally who can act and holds the steadying
   capability (`MovementConfig.steadying_capability`) can give a second roll, costing anima and
   a reaction, scaled by bond depth. Stage triggers fire however the stage is reached (severity,
