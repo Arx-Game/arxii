@@ -321,8 +321,17 @@ def perk_scope_matches(
     Shared by both fired-perk seams (#2536 slice 3): ``checks.services
     ._situational_perk_check_bonus`` (CHECK_BONUS) and ``magic.services.power_terms
     .vow_situational_power_term`` (POWER_BONUS) — one rule, one place.
+
+    ``roll_kind`` ("Applies to", #5092) matches ``ctx.roll_kind`` exactly when set; with
+    ``ctx.roll_kind_perks_only`` an unscoped perk does not match at all.
     """
     if perk.battle_action_kind and perk.battle_action_kind != (ctx.battle_action_kind or ""):
+        return False
+    # "Applies to" (#5092): a scoped perk reaches only its kind of roll, and a roll that
+    # takes only scoped perks (an enchanted Strike's technique roll) refuses the rest.
+    if perk.roll_kind and perk.roll_kind != ctx.roll_kind:
+        return False
+    if ctx.roll_kind_perks_only and not perk.roll_kind:
         return False
     if perk.mission_template_id is not None and (
         ctx.mission is None or ctx.mission.template_id != perk.mission_template_id
@@ -349,6 +358,8 @@ def dormant_perk_firings(  # noqa: PLR0913 - applicable_perks' resolution/target
     mission: MissionInstance | None = None,
     battle_action_kind: str | None = None,
     attacker: object | None = None,
+    roll_kind: str = "",
+    roll_kind_perks_only: bool = False,
 ) -> list[FiredPerk]:
     """Every ``VowSituationalPerk`` of ``effect_kind`` that would have fired for
     ``subject``'s resolution if their vow were still engaged (#2536 slice 3,
@@ -399,6 +410,8 @@ def dormant_perk_firings(  # noqa: PLR0913 - applicable_perks' resolution/target
         mission=mission,
         battle_action_kind=battle_action_kind,
         attacker=attacker,
+        roll_kind=roll_kind,
+        roll_kind_perks_only=roll_kind_perks_only,
     )
     mission_category_ids = mission_category_ids_for(scope_ctx)
     return [

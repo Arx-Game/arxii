@@ -51,6 +51,7 @@ from world.covenants.perks.constants import (
     SITUATION_PARAM_SPECS,
     PerkBeneficiary,
     PerkEffectKind,
+    PerkRollKind,
     Situation,
     SituationOriginSide,
 )
@@ -2295,6 +2296,12 @@ class VowSituationalPerk(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     ``CHECK_BONUS`` **or** ``POWER_BONUS`` (spec §4: a Battle warfare roll scopes
     both the check AND the technique cast it may carry) — ``clean()`` rejects it
     authored on ``TIER_FLOOR``/``BOTCH_IMMUNITY``.
+
+    ``roll_kind`` ("Applies to", #5092) narrows a ``CHECK_BONUS`` perk to one kind of
+    roll (``PerkRollKind``): blank is any roll, ``ATTACK`` is the roll of an attack on an
+    opponent, once per attack. It is a scope column like the three above (AND,
+    including with ``check_type``), matched against ``SituationContext.roll_kind``;
+    ``clean()`` rejects it on any other ``effect_kind``.
     """
 
     covenant_role = models.ForeignKey(
@@ -2357,6 +2364,19 @@ class VowSituationalPerk(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         blank=True,
         default="",
         help_text="CHECK_BONUS/POWER_BONUS scope: fires only on this declared warfare action kind.",
+    )
+    roll_kind = models.CharField(
+        "Applies to",
+        max_length=20,
+        choices=PerkRollKind.choices,
+        blank=True,
+        default=PerkRollKind.ANY,
+        help_text=(
+            "Check bonus only: which rolls the bonus reaches. Attack rolls are a Strike's hit "
+            "roll and an attack technique's roll, once per attack (an enchanted Strike's "
+            "technique roll), never a dodge, a defense, or a cast on oneself or an ally. "
+            "Works together with the check type when both are set."
+        ),
     )
     focus_pick = models.ForeignKey(
         VOW_FOCUS_PICK_MODEL,
@@ -2422,6 +2442,10 @@ class VowSituationalPerk(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                         "mission_template is only meaningful when effect_kind=CHECK_BONUS."
                     )
                 }
+            )
+        if self.roll_kind and self.effect_kind != PerkEffectKind.CHECK_BONUS:
+            raise ValidationError(
+                {"roll_kind": "Applies to is only meaningful when effect_kind=CHECK_BONUS."}
             )
         if self.battle_action_kind and self.effect_kind not in (
             PerkEffectKind.CHECK_BONUS,

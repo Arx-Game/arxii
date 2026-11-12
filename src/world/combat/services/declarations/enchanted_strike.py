@@ -365,15 +365,36 @@ class EnchantedStrikeCast:
     def _roll_technique(self, resolver: CombatTechniqueResolver) -> CheckResult:
         """The technique roll: the cast check, unopposed, with the combat pull and the
         technique skill only (the "Counted once" table: every other term is the hit
-        roll's)."""
-        from world.combat import services as _svc  # noqa: PLC0415
+        roll's).
 
+        It is this attack's attack roll for a perk's "Applies to" (#5092), so a perk
+        scoped to attack rolls answers here, and only such a perk; the hit roll then
+        takes none. An unscoped or check-type perk and every outcome guarantee stay the
+        hit roll's, counted once (ADR-5026).
+        """
+        from world.combat import services as _svc  # noqa: PLC0415
+        from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+        from world.combat.services.techniques.technique_targets import (  # noqa: PLC0415
+            _resolve_primary_target_sheet,
+        )
+        from world.covenants.perks.constants import PerkRollKind  # noqa: PLC0415
+        from world.covenants.perks.context import SituationContext  # noqa: PLC0415
+
+        sheet = self.participant.character_sheet
         return _svc.perform_check(
-            self.participant.character_sheet.character,
+            sheet.character,
             self.cast_check.check_type,
             target_difficulty=0,
             extra_modifiers=resolver.pull_flat_bonus,
             extra_traits=self.cast_check.extra_traits,
+            situation_ctx=SituationContext(
+                holder=sheet,
+                subject=sheet,
+                target=_resolve_primary_target_sheet(self.action),
+                resolution=CombatRoundContext(self.participant),
+                roll_kind=PerkRollKind.ATTACK,
+                roll_kind_perks_only=True,
+            ),
         )
 
 

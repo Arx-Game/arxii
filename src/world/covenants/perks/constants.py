@@ -250,6 +250,24 @@ class PerkEffectKind(models.TextChoices):
     BOTCH_IMMUNITY = "botch_immunity", "Botch Immunity"
 
 
+class PerkRollKind(models.TextChoices):
+    """Which kind of roll a ``CHECK_BONUS`` perk applies to (#5092): the "Applies to"
+    scope, between "any check" and one check type.
+
+    - ``ANY`` (blank) - every roll its other scopes allow; the default.
+    - ``ATTACK`` - only an attack on an opponent, boosted once per attack: a plain
+      Strike's hit roll, an attack technique's roll (a cast at an opponent, a joust
+      pass), and an enchanted Strike's technique roll (not also its hit roll, ADR-5026's
+      counted-once table). Never a dodge or defense roll, a cast at oneself or an ally,
+      a clash contribution, a penetration roll, or a check outside an attack. The roll's
+      caller says which kind it is (``SituationContext.roll_kind``), from
+      ``is_attack_on_opponent`` in combat.
+    """
+
+    ANY = "", "Any roll"
+    ATTACK = "attack", "Attack rolls"
+
+
 class PerkBeneficiary(models.TextChoices):
     """Who benefits when a ``VowSituationalPerk`` fires (#2536 spec §2).
 

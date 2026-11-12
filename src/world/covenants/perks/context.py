@@ -58,6 +58,14 @@ class SituationContext:
       ObjectDB-backed attacker) when the SUBJECT is resolving a DEFENSE —
       the one context where the subject is not the aggressor (defense-side
       seam, #2536 slice 3). ``None`` for every offense-side resolution.
+    - ``roll_kind`` - which kind of roll this is (a ``PerkRollKind`` value, #5092),
+      set by the caller from what it already knows: ``ATTACK`` for the roll of an
+      attack on an opponent (once per attack), blank otherwise. Read by
+      ``perks.services.perk_scope_matches`` against a perk's "Applies to" scope.
+    - ``roll_kind_perks_only`` - only perks scoped to this ``roll_kind`` reach the
+      roll (#5092): an enchanted Strike's technique roll, whose every other check
+      term, outcome guarantees included, belongs to the Strike's hit roll and is
+      counted there once (ADR-5026).
 
     **Conventions (stated once, spec §1):**
 
@@ -79,6 +87,8 @@ class SituationContext:
     mission: MissionInstance | None = None
     battle_action_kind: str | None = None
     attacker: object | None = None
+    roll_kind: str = ""
+    roll_kind_perks_only: bool = False
 
 
 @dataclass(frozen=True)

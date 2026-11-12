@@ -230,9 +230,10 @@ class VowSituationalPerkAdmin(admin.ModelAdmin):
         "magnitude_tenths",
         "floor_success_level",
         "battle_action_kind",
+        "roll_kind",
         "focus_pick",
     )
-    list_filter = ("effect_kind", "beneficiary")
+    list_filter = ("effect_kind", "beneficiary", "roll_kind")
     search_fields = ("name", "covenant_role__name")
     autocomplete_fields = ("covenant_role", "check_type", "focus_pick")
     # mission_category/mission_template are NOT autocomplete_fields: the

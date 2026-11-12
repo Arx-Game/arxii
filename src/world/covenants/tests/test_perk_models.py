@@ -32,6 +32,7 @@ from world.covenants.perks.constants import (
     SITUATION_PARAM_SPECS,
     PerkBeneficiary,
     PerkEffectKind,
+    PerkRollKind,
     Situation,
     SituationOriginSide,
 )
@@ -255,6 +256,23 @@ class VowSituationalPerkModelTests(TestCase):
             battle_action_kind=BattleActionKind.ROUT,
         )
         perk.full_clean()
+
+    def test_applies_to_attack_rolls_is_a_check_bonus_scope_only(self) -> None:
+        """#5092: "Applies to" narrows a check bonus; on any other effect clean() refuses
+        it. It combines with a check type (AND), like every other scope column."""
+        VowSituationalPerkFactory(
+            effect_kind=PerkEffectKind.CHECK_BONUS,
+            check_type=CheckTypeFactory(),
+            roll_kind=PerkRollKind.ATTACK,
+        ).full_clean()
+        perk = VowSituationalPerkFactory.build(
+            covenant_role=CovenantRoleFactory(covenant_type=CovenantType.DURANCE),
+            effect_kind=PerkEffectKind.POWER_BONUS,
+            roll_kind=PerkRollKind.ATTACK,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            perk.full_clean()
+        self.assertIn("roll_kind", ctx.exception.message_dict)
 
 
 class VowSituationalPerkSituationModelTests(TestCase):
