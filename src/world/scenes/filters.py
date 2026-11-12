@@ -58,20 +58,41 @@ class SceneFilter(django_filters.FilterSet):
 
 class PersonaFilter(django_filters.FilterSet):
     scene = django_filters.NumberFilter(field_name="interactions_written__scene__id", distinct=True)
-    character = django_filters.NumberFilter(field_name="character_sheet__character__id")
-    # NOT ``character_sheet__id``: CharacterSheet's pk IS its ``character`` OneToOne
-    # (``primary_key=True``), so the model has no ``id`` field and Django parses the
-    # ``id`` segment as a *lookup* on the ForeignKey - "Unsupported lookup 'id__exact'
-    # for ForeignKey", a 500 on every ``GET /api/personas/?character_sheet=N``. That is
-    # the request the in-game PersonaSwitcher, SelectedCharacterChip and PersonaTiles
-    # all make (frontend/src/game/personaQueries.ts). Filter the FK's own column
-    # instead; by that same pk-sharing it holds the character's ObjectDB pk.
-    character_sheet = django_filters.NumberFilter(field_name="character_sheet_id")
+    # Both filter the FK's own column. NOT ``character_sheet__id``: CharacterSheet's pk IS
+    # its ``character`` OneToOne (``primary_key=True``), so the model has no ``id`` field
+    # and Django parses the ``id`` segment as a *lookup* on the ForeignKey - "Unsupported
+    # lookup 'id__exact' for ForeignKey", a 500 on every ``GET
+    # /api/personas/?character_sheet=N``. That is the request the in-game PersonaSwitcher,
+    # SelectedCharacterChip and PersonaTiles all make (frontend/src/game/personaQueries.ts).
+    # By that same pk-sharing the column holds the character's ObjectDB pk, so
+    # ``character`` filters it too.
+    character = django_filters.NumberFilter(method="filter_character_sheet")
+    character_sheet = django_filters.NumberFilter(method="filter_character_sheet")
     persona_type = django_filters.CharFilter(field_name="persona_type")
 
     class Meta:
         model = Persona
         fields = ["scene", "character", "character_sheet", "persona_type"]
+
+    def filter_character_sheet(
+        self, queryset: QuerySet[Persona], name: str, value: int
+    ) -> QuerySet[Persona]:
+        """One character's faces; its disguises only to the player and staff (#4888).
+
+        Listing a character's personas is itself a link between a disguise and the
+        character behind it, so anyone else gets the faces that hide nothing.
+        """
+        queryset = queryset.filter(character_sheet_id=value)
+        user = self.request.user if self.request is not None else None
+        if user is not None and user.is_authenticated:
+            if user.is_staff:
+                return queryset
+            try:
+                if value in user.played_character_sheet_ids:
+                    return queryset
+            except AttributeError:
+                pass
+        return queryset.filter(is_fake_name=False)
 
 
 class SceneSummaryRevisionFilter(django_filters.FilterSet):

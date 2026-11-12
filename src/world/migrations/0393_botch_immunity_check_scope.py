@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0391_application_anywhere_constraints"),
+        ("arxii", "0392_conditioninstance_rallied"),
     ]
 
     operations = [

@@ -47,7 +47,7 @@ from world.forms.models import (
 | `FormCombatProfile` | Battle-form stat-suite (alt-self modifiers) | `form` (FK CharacterForm), `display_name`, `depth` (band-selection axis; crit→highest, mid→middle, fail→lowest) |
 | `FormCombatProfileEffect` | One stat modifier inside a profile | `profile` (FK), `target` (FK mechanics.ModifierTarget), `value` |
 | `AlternateSelf` | A character's access to an alternate self/facet bundle | `character` (FK CharacterSheet), `form` (FK CharacterForm, nullable), `persona` (FK scenes.Persona, nullable), `combat_profile` (FK FormCombatProfile, nullable), `techniques` (M2M magic.Technique), `tuning_value`, `display_name` |
-| `ActiveAlternateSelf` | Currently-assumed alternate self + return anchors | `character` (OneToOne CharacterSheet), `alternate_self` (FK AlternateSelf, nullable), `return_form` (FK CharacterForm, nullable), `return_persona` (FK scenes.Persona, nullable) |
+| `ActiveAlternateSelf` | Currently-assumed alternate self + return anchors | `character` (OneToOne CharacterSheet), `alternate_self` (FK AlternateSelf, nullable), `return_form` (FK CharacterForm, nullable), `return_persona` (FK scenes.Persona, nullable), `assumed_at_audere` |
 
 ---
 
@@ -163,7 +163,8 @@ active = assume_alternate_self(sheet, alt_self)  # Raises AlternateSelfActiveErr
 revert_alternate_self(sheet)                     # System path: RevertBlockedError while not
                                                  # in_control; ValueError if none active.
 attempt_revert_form(sheet)                       # Player path (#4802): rolls a compulsion,
-                                                 # else free (talked-down self stays blocked).
+                                                 # holds an Audere talked-down self until
+                                                 # she is talked down (#4887); else free.
 ```
 
 ### Alternate-self services
@@ -186,11 +187,20 @@ attempt_revert_form(sheet)                       # Player path (#4802): rolls a 
   roll waits before the next try (the next round in a fight, the compulsion's
   `retry_wait_minutes` outside one), and a try inside the wait rolls nothing and says
   when to try again;
-  (2) otherwise a `TALKED_DOWN` self whose emergence condition is still active stays
-  blocked with `RevertBlockedError`, the ratified "must be talked down" rule, which is
-  not a compulsion refusal; (3) anything else (Charmed, Calm, any other
-  `alters_behavior` condition) changes back freely. A compulsion is cleared by the
-  existing `RestoreSenseAction` (`restore_sense`) calm-down action.
+  (2) with no compulsion, a `TALKED_DOWN` self Audere brought out
+  (`ActiveAlternateSelf.assumed_at_audere`) whose emergence condition is still active
+  holds her until she is talked down, raising `RevertBlockedError`. Two things talk her
+  down (ruled 2026-11-12, #4887): an ally's rally that lands on the emergence condition (the conditions `rally` action or
+  the combat Rally maneuver, both through `record_rally_landed`, set
+  `ConditionInstance.rallied`, which lasts the instance's life, unlike its consumed
+  `pending_rally_bonus`), after which she changes back while the condition still runs; or her own successful `breakfree`,
+  which ends the condition. (3) Otherwise she changes back at once: Charmed, Calm or any
+  other `alters_behavior` condition, a self she put on herself, and a self a compulsion
+  forced once the compulsion has ended, even while its condition still runs (ruled
+  2026-11-01, #4887). A fresh application of the condition is a new, unrallied instance. A
+  talked-down self never drops away on its own: Audere's end skips it and the system path
+  stays blocked while not in control. A compulsion is cleared by the existing
+  `RestoreSenseAction` (`restore_sense`) calm-down action.
 - `trigger_transformation(sheet, alt, *, cause, instance_value=1.0)` (in
   `world/forms/services/transformation.py`) — the single seam both non-command
   cause-paths call. Wraps `assume_alternate_self(sheet, alt, instance_value=...)`;
@@ -204,7 +214,7 @@ attempt_revert_form(sheet)                       # Player path (#4802): rolls a 
   sharing a form-template get differently-tuned stat-suites (#1604), and how a
   strong cast / violent onset scales a single assumption.
 - `RevertBlockedError(user_message=...)`, the exception surfaced when the system
-  revert is blocked, or a talked-down self is held by its emergence condition.
+  revert (`revert_alternate_self`) is blocked. The player path never raises it.
 - `AlternateSelfActiveError(user_message=...)` — raised when a different alt-self is
   already active (strictly-one-active).
 - `FormOwnershipError(user_message=...)` — raised by `switch_form` on a cross-sheet
@@ -237,9 +247,11 @@ and the web share the same `action.run()` path:
   and surfaces each `user_message` as a failure result — a cross-sheet
   `form`/`persona` FK never propagates uncaught (`Action.run` calls `execute`
   bare, so an uncaught exception would 500 on web).
-- `RevertFormAction` (key `"revert_form"`) — wraps `revert_alternate_self`.
-  Catches `RevertBlockedError`, `ActivePersonaError`, `FormOwnershipError`, and
-  `AlternateSelfActiveError` (each → `exc.user_message`); the no-active case uses a
+- `RevertFormAction` (key `"revert_form"`) — wraps `attempt_revert_form` (the player
+  path; a refused compulsion roll comes back as the roll line plus "You cannot change
+  back."). Catches `RevertBlockedError` (an Audere talked-down self not yet talked down),
+  `ActivePersonaError`, `FormOwnershipError`, and `AlternateSelfActiveError` (each →
+  `exc.user_message`); the no-active case uses a
   safe constant. Never surfaces `str(exc)` — the viewset maps every failure to a
   safe 400 via `detail.message`.
 
@@ -283,7 +295,7 @@ the resist) is deferred to #1578 (the specialization engine).
 "True self") and lets the player shift or revert. `frontend/src/game/formQueries.ts`
 holds the React Query hooks (`useAlternateSelvesQuery`, `useShiftFormMutation`,
 `useRevertFormMutation`) that hit the endpoints above. Revert errors from the action
-(e.g. "You can't revert while not in control of yourself.") are surfaced inline.
+(e.g. the compulsion roll line ending "You cannot change back.") are surfaced inline.
 
 ### Telnet surface
 
@@ -336,8 +348,7 @@ The decoupling of control from the shift and the stacking guard are documented i
 - `POST /api/forms/alternate-selves/revert/` - Revert the active alternate self.
   Dispatches `RevertFormAction` (key `"revert_form"`) through the same action seam.
   Returns the compulsion roll line when a compulsion makes it a roll (400 with the
-  line when the roll fails), and 400 with `RevertBlockedError.user_message` only for a
-  talked-down self its emergence condition still holds.
+  line when the roll fails).
 
 All endpoints require `IsAuthenticated`.
 

@@ -163,9 +163,11 @@ They do not use the command system, dispatchers, or handlers.
   (#1111 slice 4), REGISTRY backend, `target_type=SELF`; thin wrappers around
   `world.forms.services.assume_alternate_self` / `revert_alternate_self`. Shift validates that
   `alternate_self_id` belongs to the actor's sheet and is **not** `in_control`-gated
-  (forced/inadvertent shifts are the point). Revert is a three-way rule (#4802): a compulsion rolls its `REVERT_FORM` resist check;
-  with none, a `TALKED_DOWN` self whose `emergence_condition` is active stays blocked
-  (`RevertBlockedError.user_message` as a failure `ActionResult`); anyone else reverts freely. Shared by telnet and the web
+  (forced/inadvertent shifts are the point). Revert (`attempt_revert_form`, #4802, #4887): a compulsion rolls its
+  `REVERT_FORM` resist check; with none, a `TALKED_DOWN` self Audere brought out whose
+  `emergence_condition` is active is refused (`RevertBlockedError.user_message`) until she is talked down (a landed
+  `RallyAction` or the combat Rally maneuver sets `ConditionInstance.rallied` on that condition through `record_rally_landed`, or her break-free ends it); anyone else,
+  a character whose compulsion has ended included, reverts freely. Shared by telnet and the web
   dispatcher;
   `fatigue.py` — `RestAction`, key `"rest"` (#1491/#1524), REGISTRY backend, `target_type=SELF`;
   spend AP to gain `well_rested` for the next dawn reset. Gated by `CanRestPrerequisite`

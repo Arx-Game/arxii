@@ -95,6 +95,20 @@ artist changes persona with an *identical* body; a curse changes the body and
   the accessibility guarantee.
 - **Anonymous personas** (`is_fake_name`, typically TEMPORARY — the mask) render as a
   composed **sdesc** ("a man in a stag mask") until discovered.
+- **The persona list never ties a mask to its character for a stranger** (#4888).
+  `PersonaSerializer` (the scene detail's `personas` and `/api/personas/`) sends
+  `character_sheet` and `roster_entry` for an `is_fake_name` face only to the account that
+  plays it, staff, and a viewer the batched `build_persona_display_map` `reveal_allowed`
+  predicate lets through (their `PersonaDiscovery`, or a sight that pierces that kind);
+  everyone else gets null, and `allow_social_actions` (the real character's own setting)
+  reads the default True. The scene's GM also gets the link, but only in the scene detail
+  (`GET /api/scenes/<id>/`, which passes the scene in context and is what the GM panels
+  read); on `/api/personas/?scene=` a GM is treated like any other viewer.
+  `/api/personas/?character_sheet=` / `?character=` return a character's masks only to its
+  player and staff. The scene's `persona_positions` place only the face a character presents
+  now, so a mask never shares a square with the face behind it. Combat's roster applies the
+  same rule to `character_sheet_id` (#4802), and the combat map matches bystanders by
+  `persona_id`.
 - **Two kinds of secret**, both driving mystery loops:
   - **Hidden link** between two *public* faces (Bob *is* Robert) — the protected
     unit; discovered via `PersonaDiscovery` / investigation. Showing each public
@@ -216,8 +230,10 @@ The alternate-self (shapeshift / cover-identity) seam is intentionally decoupled
   is the system path (Audere end, TALKED_DOWN) and stays **blocked** while
   `not sheet.in_control` (`RevertBlockedError`). A player reverts through
   `attempt_revert_form`: a compulsion rolls its `REVERT_FORM` resist check; with none, a
-  `TALKED_DOWN` self whose `emergence_condition` is active stays blocked; anyone else
-  reverts freely. Assumption is never blocked.
+  `TALKED_DOWN` self Audere brought out is refused while its `emergence_condition` holds
+  her and nobody has talked her down (an ally's rally, or her own break-free); anyone else
+  reverts freely, a character whose compulsion has ended included (#4887). Assumption is
+  never blocked.
 - **Removing an `alters_behavior` condition does NOT auto-revert the form.** It
   re-derives `in_control=True`, which unblocks a later self-revert. The form persists
   after the condition clears. The canonical instance is the fury `Berserk` condition,

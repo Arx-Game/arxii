@@ -32,7 +32,7 @@ def create_botch_immunity_category(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0392_botch_immunity_check_scope")]
+    dependencies = [("arxii", "0393_botch_immunity_check_scope")]
 
     operations = [
         migrations.RunPython(create_botch_immunity_category, migrations.RunPython.noop),
