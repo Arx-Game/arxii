@@ -7,6 +7,7 @@ action — no business logic here; authorization is re-checked in the services.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from commands.command import ArxCommand
@@ -283,10 +284,27 @@ class CmdPact(ArxCommand):
             self.msg(result.message)
 
 
+_SECONDS_PER_HOUR = 3600
+_HOURS_PER_DAY = 24
+
+
+def _time_left(time_limit: datetime) -> str:
+    """ "4 days left", "5 hours left" or "span ended": the same rule as the web card
+    (``frontend/src/worship/pledgeText.ts`` ``timeLeft``), so both read alike."""
+    from django.utils import timezone  # noqa: PLC0415
+
+    seconds = (time_limit - timezone.now()).total_seconds()
+    if seconds <= 0:
+        return "span ended"
+    days = int(seconds // (_SECONDS_PER_HOUR * _HOURS_PER_DAY))
+    if days >= 1:
+        return f"{days} day{'' if days == 1 else 's'} left"
+    hours = max(1, int(seconds // _SECONDS_PER_HOUR))
+    return f"{hours} hour{'' if hours == 1 else 's'} left"
+
+
 def _card_lines(card: PactCard) -> list[str]:
     """One pact with a being as text: the period, the stage, the promises."""
-    from django.utils import timezone  # noqa: PLC0415
-    from django.utils.timesince import timeuntil  # noqa: PLC0415
 
     being = card.being_name
     stage = card.stage_name or "no stage"
@@ -297,7 +315,7 @@ def _card_lines(card: PactCard) -> list[str]:
         ]
     head = f"|wPact|n: {being} - {card.earned} of {card.required} favor this period"
     if card.time_limit is not None:
-        head += f", {timeuntil(card.time_limit, timezone.now(), depth=1)} left"
+        head += f", {_time_left(card.time_limit)}"
     head += f". Stage: {stage} (severity {card.severity}"
     if card.next_stage_threshold is not None:
         head += f"; next at {card.next_stage_threshold}"

@@ -339,8 +339,8 @@ CHOSEN_INVOCATION_EASE = 30
 
 
 def ensure_chosen_distinction() -> None:
-    """Seed the patron favor targets, the "Chosen" distinction with its two effects on
-    them, and designate it on ``ChosenFavorConfig`` (#4341). Idempotent; a designation
+    """Seed the "Chosen" distinction, the patron favor targets its two effects sit on,
+    and designate it on ``ChosenFavorConfig`` (#4341). Idempotent; a designation
     staff already set stands."""
     from world.distinctions.models import (  # noqa: PLC0415
         Distinction,
@@ -351,7 +351,6 @@ def ensure_chosen_distinction() -> None:
     from world.worship.favor_services import ensure_patron_modifier_targets  # noqa: PLC0415
     from world.worship.services import get_chosen_favor_config  # noqa: PLC0415
 
-    invocation_target, earning_target = ensure_patron_modifier_targets()
     category = authored_or_sample(
         DistinctionCategory,
         {
@@ -381,6 +380,9 @@ def ensure_chosen_distinction() -> None:
     )
     if distinction is None:
         return
+    # Only now: the patron targets are content rows, so a seed that authors nothing (sample
+    # content off, no Chosen distinction to carry) must not create them either (#2698).
+    invocation_target, earning_target = ensure_patron_modifier_targets()
     for target, value, line in (
         (
             earning_target,
