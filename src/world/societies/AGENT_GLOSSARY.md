@@ -256,7 +256,7 @@ and `rehome_vassals`/`move_rung` never re-home a pledged oath by containment.
 _Avoid_: overlord, suzerain, sworn (the `FealtyEdge` itself).
 
 **Fealty**:
-The org→org vassal→liege edge (`FealtyEdge`, one liege per vassal, cycle-refused) forming the realm tree. Cascades the house channel audience downward.
+The org→org vassal→liege edge (`FealtyEdge`, one liege per vassal, cycle-refused) forming the realm tree. Cascades access to the house's ORG player channel downward (#3299): members of a vassal house reach the liege's channel, and a covert vassal cuts its whole branch (`vassals_of(..., include_covert=False)`).
 _Avoid_: allegiance (that's a principle axis), parent org.
 
 **Marriage Pact**:
@@ -369,7 +369,7 @@ _Avoid_: org informs, house inbox, notifications (it is not push).
 
 **House Claim**:
 The CG-only application defining the house behind a set-aside claimable `Title` (#1884 Phase D) — the character enters play as a representative of a house that has always existed. Automated thematic gates at submission, staff review in admin, materialization at CG finalization only. Founding a new house *in play* is a different, future loop.
-Materialization shares `world.societies.houses.creator.build_family_org` with the plain (name-path) family builder (#3648): the title path calls it, then additionally seats the title, reassigns the seat domain and holdings, and syncs the house channel.
+Materialization shares `world.societies.houses.creator.build_family_org` with the plain (name-path) family builder (#3648): the title path calls it, then additionally seats the title, reassigns the seat domain and holdings, and re-checks the house's ORG player channel (the builder already provisions it, #3299).
 A claim on an undefined house *defines* it (writes its lore); it never *founds* one (owner
 ruling 2026-11-03; the founder vocabulary rename is #4982).
 _Avoid_: house founding (in-play), ennoblement (future loop), house application (ambiguous with roster apps).

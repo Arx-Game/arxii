@@ -280,7 +280,7 @@ describes.
   founder's own node placed by `HouseClaim.founder_relation` + the holdings
   package materialized on the seat domain + a `KinSlotPool` for future kin
   app-ins + an optional estate (`plan_estate`, under the realm's capital
-  Area) + the house channel. Approval alone creates nothing — an abandoned
+  Area) + the house's ORG player channel (#3299). Approval alone creates nothing — an abandoned
   application leaves no ghost house.
 - **`build_family_org` is the shared builder (#3648).** `materialize_house_claim`
   no longer assembles Family + org + rank ladder + facets + features + fealty
@@ -288,9 +288,10 @@ describes.
   *, description, facet_picks, served_house, created_by, origin_realm, influence)`
   for that package, then does what only the title path needs: seat the title
   (FOUNDING membership), reassign the seat domain and materialize the holdings
-  package, and sync the house channel. The CG name path (below, and
-  `character_creation.services._materialize_named_family`) calls the same
-  builder with `influence=0` and no title, domain, channel or review; see
+  package, and re-check the house's ORG channel (`provision_org_channel`, #3299). The
+  builder itself provisions that channel, so the CG name path (below, and
+  `character_creation.services._materialize_named_family`), which calls the same
+  builder with `influence=0` and no title, domain or review, gets one too; see
   ADR-0273.
 - **Surfaces:** `/api/character-creation/house-titles/` (claimable titles +
   templates), `GET/POST /api/character-creation/drafts/{id}/house-claim/`;
@@ -741,7 +742,7 @@ kingdom | potential
 
 - **`set_house_state(house, state)`** — the house's `HouseState` lifecycle standing.
 - **`publish_house(house)` / `unpublish_house(house)`** — the Almanach's own visibility flag
-  (`Organization.published_at`, null = draft); publishing also syncs the house channel's audience.
+  (`Organization.published_at`, null = draft); publishing also makes sure the house has its ORG player channel (`provision_org_channel`, #3299; access is derived live, so there is no audience to sync).
 - **`describe_demesne(*, domain, description, hall_name, land_shape_names)`** — writes a demesne's
   public description, its hall (a BUILDING-level `Area` under the domain's own `Area` — refused if
   its name repeats the demesne's own name; a domain and its seat hall are two distinct nouns, the
