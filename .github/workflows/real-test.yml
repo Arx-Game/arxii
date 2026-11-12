@@ -185,14 +185,23 @@ jobs:
           ls -la src/server/logs || true
           tail -n 80 src/server/logs/*.log || true
           exit 1
-      - name: Seed the rows the facet and gift substance specs read
+      - name: Seed the rows the facet, missives and gift substance specs read
         # After the server is up, so Evennia's first-start setup has run on an
         # otherwise empty object table. Test-factory rows in a throwaway database:
-        # see src/integration_tests/live_seeds.py.
+        # see src/integration_tests/live_seeds.py. The missives seed (#3289) runs
+        # before the gift substance seed so the account's selected character stays
+        # Vesper Shade, as the gift substance spec has always had it; the missives
+        # spec picks Quill Lettersend in the game page and writes its ids to the
+        # JSON file it reads (MISSIVE_SEED in frontend/e2e/missives.spec.ts).
         run: |
           uv run arx manage shell -c "
+          import dataclasses, json
           from integration_tests.live_seeds import seed_motif_facet_spec
           print(seed_motif_facet_spec(username='e2e_test_account'))
+          from integration_tests.live_seeds import seed_missive_spec
+          missive_seed = seed_missive_spec(username='e2e_test_account')
+          open('/tmp/missive-seed.json', 'w').write(json.dumps(dataclasses.asdict(missive_seed)))
+          print(missive_seed)
           from integration_tests.live_seeds import seed_gift_substance_spec
           print(seed_gift_substance_spec(username='e2e_test_account'))
           "
@@ -217,7 +226,7 @@ jobs:
           npx playwright test --config e2e.backend.config.ts --workers=1
           e2e/account-settings.spec.ts e2e/user-journey.spec.ts
           e2e/motif-facets.spec.ts e2e/gift-substance.spec.ts
-          e2e/thrown-and-enchanted-strike.spec.ts
+          e2e/thrown-and-enchanted-strike.spec.ts e2e/missives.spec.ts
       - name: Stop the server
         if: always()
         run: uv run arx stop || true

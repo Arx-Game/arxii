@@ -20,12 +20,20 @@ queue.
    `arx manage shell` and a function in `src/integration_tests/live_seeds.py`
    (test-factory rows; the database lives for one run). Today that is
    `seed_motif_facet_spec`: a character the account plays holding one resonance, three
-   facets, and the account's creation draft at the Gift stage.
+   facets, and the account's creation draft at the Gift stage. The missives,
+   gift-substance and thrown-strike seeds follow (missives before gift-substance, so the
+   account's selected character stays the gift spec's): `seed_missive_spec` (#3289)
+   writes "Quill Lettersend" with coin and a brass locket, wearing an established face, and a letter
+   from "the Lantern Man" already delivered to her with 25 coppers riding along; its ids
+   go to `/tmp/missive-seed.json`, which the spec reads.
 5. Runs the Playwright specs that need a live server, with one worker, using
    `frontend/e2e.backend.config.ts`: `e2e/account-settings.spec.ts`,
-   `e2e/user-journey.spec.ts` and `e2e/motif-facets.spec.ts` (the Spellbook Facets
-   panel and the creation facet field, #5021). Every other spec mocks the API and runs
-   against `vite preview` under `frontend/playwright.config.ts`. A new spec that talks
+   `e2e/user-journey.spec.ts`, `e2e/motif-facets.spec.ts` (the Spellbook Facets
+   panel and the creation facet field, #5021), `e2e/gift-substance.spec.ts` (#5018),
+   `e2e/thrown-and-enchanted-strike.spec.ts` (#5026) and `e2e/missives.spec.ts` (the
+   Missives drawer: a letter read and its coin accepted, a new letter with coin and an
+   item, a reply from the face the letter was written to, #3289). Every other spec
+   mocks the API and runs against `vite preview` under `frontend/playwright.config.ts`. A new spec that talks
    to :4001 must be added to the spec list in the workflow, and its rows to
    `live_seeds.py` and the seed step.
 6. Always uploads one artifact, `real-test-<run id>-<attempt>`: a screenshot and a
