@@ -7,7 +7,14 @@ import { GameWindow } from './components/GameWindow';
 import { CharacterCardDrawer } from './components/CharacterCardDrawer';
 import { PlaySidebar, type SidebarMode } from './components/PlaySidebar';
 import { ChannelsPanel } from '@/channels/components/ChannelsPanel';
-import { useChannelUnreadTotal } from '@/channels/queries';
+import type { JoinedChannel } from '@/channels/types';
+import { isFeedChannel, useChannelFeedNotes } from '@/channels/feedLines';
+import {
+  useChannelUnreadTotal,
+  useChannelsQuery,
+  useMarkChannelRead,
+  useOpenLaneRegistration,
+} from '@/channels/queries';
 import { fetchPlayContext, fetchPlayPoses, PlayFetchError } from './playQueries';
 import type { PlayPage } from './playTypes';
 import { FocusPanel } from './components/FocusPanel';
@@ -53,11 +60,23 @@ import { useSceneInteractions, wsPayloadToInteraction } from '@/scenes/hooks/use
 import { useThreading, getThreadKey } from '@/scenes/hooks/useThreading';
 import type { Thread } from '@/scenes/hooks/useThreading';
 import { ConversationRail, type RailPersonActions } from './components/ConversationRail';
-import { allRailRows, buildRailRows, isPageRowKey, pageRowKey } from './railRows';
+import { usePlayPreferences } from './playPreferences';
+import {
+  allRailRows,
+  buildRailRows,
+  channelRowKey,
+  isChannelRowKey,
+  isPageRowKey,
+  pageRowKey,
+} from './railRows';
 import { feedItemKey } from './feedChips';
 import { normalizeFind } from './feedFind';
 import type { FeedNote, InteractionWsPayload } from '@/hooks/types';
-import { threadToComposerMode, tabKeyToComposerMode } from '@/scenes/hooks/threadToComposerMode';
+import {
+  channelRowComposerMode,
+  threadToComposerMode,
+  tabKeyToComposerMode,
+} from '@/scenes/hooks/threadToComposerMode';
 import { usePendingUnlinkedActions } from '@/scenes/hooks/usePendingUnlinkedActions';
 import { NpcOfferCard } from '@/gm/npcs/NpcOfferCard';
 import { NpcNotesCard } from '@/gm/npcs/NpcNotesCard';
@@ -94,6 +113,7 @@ const EMPTY_THREAD_LAST_SEEN: Record<string, number> = {};
 // Stable empty-array references — same reasoning as EMPTY_THREAD_LAST_SEEN.
 const EMPTY_AMBIENT: InteractionWsPayload[] = [];
 const EMPTY_NOTES: FeedNote[] = [];
+const EMPTY_CHANNELS: JoinedChannel[] = [];
 
 /**
  * Derive the tab label from the current focus entry, falling back to the
@@ -756,12 +776,23 @@ export function GamePage() {
     [ambientPayloads]
   );
   const sessionNotes = activeSession?.notes ?? EMPTY_NOTES;
+  // Channels (#3299): lines in the main column and a rail group, unless the
+  // player opted them into the sidebar (the Display settings choice).
+  const { preferences: playPreferences } = usePlayPreferences(account?.id);
+  const channelsInSidebar = playPreferences.channelsInSidebar;
+  const { data: channelList } = useChannelsQuery();
+  const railChannels = useMemo(
+    () => (channelsInSidebar ? EMPTY_CHANNELS : (channelList ?? []).filter(isFeedChannel)),
+    [channelsInSidebar, channelList]
+  );
+  const channelNotes = useChannelFeedNotes(!channelsInSidebar);
   const railGroups = useMemo(
     () =>
       buildRailRows({
         threads: sceneId ? threading.threads : [],
         ambientInteractions,
         notes: sessionNotes,
+        channels: railChannels,
         // The row names the room; the composer's label names the scene.
         roomName: roomData?.name ?? roomName,
         viewerPersonaId: personaId,
@@ -773,6 +804,7 @@ export function GamePage() {
       threading.threads,
       ambientInteractions,
       sessionNotes,
+      railChannels,
       roomData?.name,
       roomName,
       personaId,
@@ -794,8 +826,22 @@ export function GamePage() {
   // combat banner (Task 3) can also drive the sidebar into view.
   // `jumpToCombat` (Task 2) is the first real caller of this state — it jumps
   // to Here mode + the Room tab, where `CombatRail` already renders.
-  const [sidebarMode, setSidebarMode] = useState<SidebarMode>('here');
+  const [sidebarModeState, setSidebarMode] = useState<SidebarMode>('here');
+  // Turning the opt-in off while Channels is the open mode falls back to Here.
+  const sidebarMode: SidebarMode =
+    sidebarModeState === 'channels' && !channelsInSidebar ? 'here' : sidebarModeState;
   const channelsUnread = useChannelUnreadTotal();
+  // A selected channel row is a lane being read: no unread bump, and its count clears.
+  const selectedChannel = isChannelRowKey(activeThreadTab) ? (selectedRow?.channel ?? null) : null;
+  useOpenLaneRegistration(selectedChannel?.id ?? 0, selectedChannel !== null);
+  const { mutate: markChannelRead } = useMarkChannelRead(selectedChannel?.id ?? 0);
+  const selectedChannelSubId = selectedChannel?.subscription.id;
+  const selectedChannelUnread = selectedChannel?.subscription.unread_count ?? 0;
+  useEffect(() => {
+    if (selectedChannelSubId !== undefined && selectedChannelUnread > 0) {
+      markChannelRead(selectedChannelSubId);
+    }
+  }, [selectedChannelSubId, selectedChannelUnread, markChannelRead]);
   const [hereActiveTab, setHereActiveTab] = useState('room');
   const jumpToCombat = useCallback(() => {
     setSidebarMode('here');
@@ -816,12 +862,12 @@ export function GamePage() {
   // stored) — that derivation is the mis-send guard.
   const tabInteractions = useMemo(() => {
     if (activeThreadTab === null) return threading.filteredInteractions;
-    if (isPageRowKey(activeThreadTab)) return [];
+    if (isPageRowKey(activeThreadTab) || isChannelRowKey(activeThreadTab)) return [];
     return threading.interactionsByThread.get(activeThreadTab) ?? [];
   }, [activeThreadTab, threading.filteredInteractions, threading.interactionsByThread]);
   const feedAmbient = useMemo(() => {
     if (activeThreadTab === null) return ambientPayloads;
-    if (isPageRowKey(activeThreadTab)) return EMPTY_AMBIENT;
+    if (isPageRowKey(activeThreadTab) || isChannelRowKey(activeThreadTab)) return EMPTY_AMBIENT;
     return ambientPayloads.filter(
       (item) => getThreadKey(wsPayloadToInteraction(item)) === activeThreadTab
     );
@@ -829,7 +875,14 @@ export function GamePage() {
   // Notes belong to the room (a look, an arrival) or to a page correspondent;
   // a whisper or a table has none.
   const feedNotes = useMemo(() => {
-    if (activeThreadTab === null || activeThreadTab === 'room') return sessionNotes;
+    // Channel lines (#3299) belong to All and to their own rail row.
+    if (activeThreadTab === null) return [...channelNotes, ...sessionNotes];
+    if (activeThreadTab === 'room') return sessionNotes;
+    if (isChannelRowKey(activeThreadTab)) {
+      return channelNotes.filter(
+        (note) => channelRowKey(note.channel?.id ?? 0) === activeThreadTab
+      );
+    }
     if (isPageRowKey(activeThreadTab)) {
       return sessionNotes.filter(
         (note) =>
@@ -837,7 +890,7 @@ export function GamePage() {
       );
     }
     return EMPTY_NOTES;
-  }, [activeThreadTab, sessionNotes]);
+  }, [activeThreadTab, sessionNotes, channelNotes]);
 
   // The label is the truth (#3857): with nothing chosen yet (a fresh connection,
   // or the reset on every character or scene change) All's mode is Pose, so a
@@ -851,13 +904,26 @@ export function GamePage() {
     if (activeThreadTab === 'room') {
       return composerMode ?? roomComposerMode(threading.threads, roomName);
     }
+    if (isChannelRowKey(activeThreadTab)) {
+      return channelRowComposerMode(
+        selectedRow?.label ?? '',
+        Boolean(selectedRow?.channel?.subscription.display_tenure)
+      );
+    }
     return tabKeyToComposerMode(
       activeThreadTab,
       threading.threads,
       roomName,
       isPageRowKey(activeThreadTab) ? selectedRow?.label : undefined
     );
-  }, [activeThreadTab, threading.threads, roomName, composerMode, selectedRow?.label]);
+  }, [
+    activeThreadTab,
+    threading.threads,
+    roomName,
+    composerMode,
+    selectedRow?.label,
+    selectedRow?.channel,
+  ]);
 
   // The rail's selection (#4129, decision 3): one row at a time. Choosing All
   // or the room row resets the composer to the room's pose mode, so a locked
@@ -1203,7 +1269,11 @@ export function GamePage() {
               onModeChange={setSidebarMode}
               hasActiveEncounter={hasActiveEncounter}
               onJumpToCombat={jumpToCombat}
-              channels={<ChannelsPanel active={sidebarMode === 'channels'} />}
+              channels={
+                channelsInSidebar ? (
+                  <ChannelsPanel active={sidebarMode === 'channels'} />
+                ) : undefined
+              }
               channelsUnread={channelsUnread}
               here={
                 <GameRightSidebar

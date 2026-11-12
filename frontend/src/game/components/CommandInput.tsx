@@ -42,6 +42,11 @@ export interface ComposerMode {
   label: string; // "Pose -> The Grand Ballroom"
   /** #2165: audience is fixed by the active conversation tab — mode switching disabled. */
   locked?: boolean;
+  /**
+   * #3299: the channel a `channel` mode posts to. A channel row in the rail sets
+   * it only once the player has a speaker chosen there; without it nothing is sent.
+   */
+  channelName?: string;
 }
 
 // #3069 — `page` is a real OOC telnet command (CmdPage,
@@ -129,6 +134,10 @@ function buildFullCommand(
   // A page row in the rail (#4129) addresses the composer to its correspondent.
   if (composerMode.command === 'page' && composerMode.targets.length > 0) {
     return `page ${composerMode.targets[0]}=${line.spoken}`;
+  }
+  // A channel row in the rail (#3299) addresses the composer to its channel.
+  if (composerMode.command === 'channel' && composerMode.channelName) {
+    return `channel ${composerMode.channelName}=${line.spoken}`;
   }
   // The server unescapes only a LEADING `@@`, so the doubled form is right only
   // when the typed text opens the command's arguments: a parsing verb with no
@@ -671,6 +680,13 @@ export function CommandInput({
     // Checked against the RESOLVED mode, not the live composerMode prop, for
     // the same reason as above.
     if (resolvedSpeechMode?.command === 'whisper' && resolvedSpeechMode.targets.length === 0) {
+      return;
+    }
+
+    // #3299: a channel row with no speaker chosen has nowhere to send; the rail
+    // row carries the picker, and the refusal names what to do.
+    if (dispatchMode?.command === 'channel' && !composerMode?.channelName) {
+      toast.error('Choose who you speak as in this channel first.');
       return;
     }
 
