@@ -336,12 +336,15 @@ class SlideAnalyticsTests(TestCase):
         checkbox = re.search(r'<input type="checkbox" id="checks-botch-immune"[^>]*>', body)
         assert checkbox is not None
         assert "checked" in checkbox.group(0)
-        plain = self.client.get(
+        assert -2 not in _by_level(resp.context["matchup"].bands)
+        plain_resp = self.client.get(
             reverse("admin_tuning_checks"), {"roller_points": "20", "target_difficulty": "250"}
-        ).content.decode()
+        )
+        plain = plain_resp.content.decode()
         unticked = re.search(r'<input type="checkbox" id="checks-botch-immune"[^>]*>', plain)
         assert unticked is not None
         assert "checked" not in unticked.group(0)
+        assert _by_level(plain_resp.context["matchup"].bands)[-2] > 0
 
     def test_panel_shows_ranks_with_numbers_and_the_lifted_chart(self) -> None:
         self.client.force_login(self.super)
