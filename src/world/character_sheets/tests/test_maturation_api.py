@@ -32,7 +32,7 @@ class MaturationApiTests(APITestCase):
         state = self.client.get(f"/api/character-sheets/{sheet.pk}/maturation/").data
         assert state["available_points"] == 3
         assert state["next_milestone_year"] == 34
-        assert state["stat_cap"] == 5
+        assert state["stat_cap"] == 50
 
         response = self.client.post(
             f"/api/character-sheets/{sheet.pk}/spend-maturation-point/",

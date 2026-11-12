@@ -309,12 +309,12 @@ class VowEffectTermTests(TestCase):
                 self.assertEqual(getattr(report, field), getattr(own, field))
 
     def test_the_level_bonus_raises_each_band_budget(self) -> None:
-        # 2 levels above unlock 0 x 3 per level = +6 budget per band: 11 + 6 = 17.
-        report = self._report([self._damage_effect(per_level=3)], level=2)
+        # Thread level 20 is 2 rungs above unlock 0, x 3 per rung = +6 budget per band: 11 + 6 = 17.
+        report = self._report([self._damage_effect(per_level=3)], level=20)
         self.assertAlmostEqual(report.valuations[1].value, 17.0)
 
     def test_an_effect_below_its_unlock_is_priced_with_no_bonus(self) -> None:
-        report = self._report([self._damage_effect(unlock=5, per_level=3)], level=2)
+        report = self._report([self._damage_effect(unlock=50, per_level=3)], level=20)
         self.assertAlmostEqual(report.valuations[1].value, 11.0)
 
     def test_an_upgrade_replaces_its_base(self) -> None:
@@ -348,16 +348,16 @@ class VowEffectTermTests(TestCase):
             # Severity 1 x 5 damage a round x 2 rounds.
             [line] = [v for v in self._report([fetched]).valuations if v.kind == "vow debuff"]
             self.assertAlmostEqual(line.value, 10.0)
-        with self.subTest(level=3):
-            # Severity 1 + 6 = 7, so 35 a round, over 2 + 3 = 5 rounds.
+        with self.subTest(level=30):
+            # Thread level 30 is 3 rungs: severity 1 + 6 = 7, so 35 a round, over 2 + 3 = 5 rounds.
             [line] = [
-                v for v in self._report([fetched], level=3).valuations if v.kind == "vow debuff"
+                v for v in self._report([fetched], level=30).valuations if v.kind == "vow debuff"
             ]
             self.assertAlmostEqual(line.value, 175.0)
 
     def test_queries_do_not_grow_with_prefetched_damage_effects(self) -> None:
         one = [self._damage_effect()]
-        two = self._fetched([one[0], self._damage_effect(unlock=4)])
+        two = self._fetched([one[0], self._damage_effect(unlock=40)])
         self._report(one)  # warm the technique's own cached payload lists
         with CaptureQueriesContext(connection) as one_effect:
             self._report(one)

@@ -30,7 +30,7 @@ class StatPointApiTests(APITestCase):
 
         state = self.client.get(f"/api/character-sheets/{sheet.pk}/stat-points/").data
         assert state["available_points"] == 2
-        assert state["stat_cap"] == 6
+        assert state["stat_cap"] == 60
         assert state["level"] == 3
 
         response = self.client.post(

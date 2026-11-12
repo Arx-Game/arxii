@@ -398,7 +398,8 @@ class RewardingAPlayerByFiat(_TheLongTable):
 
     def test_a_stat_rises_one_dot_in_her_gm_s_name(self) -> None:
         self.assertIn(
-            "Raised Brawn to 1 for Ysmay.", self.telnet(self.ravenna, "gm award Ysmay stat=Brawn")
+            f"Raised Brawn to {STAT_POINT_VALUE} for Ysmay.",
+            self.telnet(self.ravenna, "gm award Ysmay stat=Brawn"),
         )
         value = CharacterTraitValue.objects.get(character=self.ysmay.sheet_data, trait=self.brawn)
         self.assertEqual(value.value, STAT_POINT_VALUE)

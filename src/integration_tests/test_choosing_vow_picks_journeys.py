@@ -380,7 +380,7 @@ class ImbuingOpensNewPicks(_ImbuingCase):
         self.assertIn(f"{thread.name} is now level 20.", told)
         self.assertIn("Vow level 20: 4 pts of new picks.", told)
 
-    def test_an_imbue_within_a_level_names_no_new_level(self) -> None:
+    def test_an_imbue_within_a_pick_level_names_the_level_and_opens_no_picks(self) -> None:
         thread = self.vow_thread(10)
 
         told = self.imbue_by_telnet(thread, self.ready(thread, 10, 15))
@@ -388,7 +388,8 @@ class ImbuingOpensNewPicks(_ImbuingCase):
         thread.refresh_from_db()
         self.assertEqual(thread.level, 15)
         self.assertIn(f"You complete the rite, imbuing {thread.name}.", told)
-        self.assertNotIn("is now level", told)
+        # A climb says where the thread now stands, but 15 opens no pick level.
+        self.assertIn(f"{thread.name} is now level 15.", told)
         self.assertNotIn("new picks", told)
 
     def test_the_web_finisher_says_so_and_names_the_level(self) -> None:

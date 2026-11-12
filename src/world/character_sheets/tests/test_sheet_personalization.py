@@ -76,7 +76,7 @@ class SheetPersonalizationTests(TestCase):
         self.assertEqual(entry["price"]["consumes"], [{"name": "Shard of rime", "quantity": 2}])
         self.assertEqual(entry["price"]["inflicts"], "Frostbitten fingers")
         self.assertEqual(entry["next_signature"]["name"], "Rime walks with you")
-        self.assertEqual(entry["next_signature"]["min_level"], 3)
+        self.assertEqual(entry["next_signature"]["min_level"], 30)
 
     def test_build_magic_query_count_holds_with_a_priced_hold_and_technique_thread(
         self,
@@ -148,7 +148,7 @@ class NextSignaturesByTechniqueTieBreakTests(TestCase):
         result = next_signatures_by_technique(self.sheet.character)
 
         self.assertEqual(result[self.technique.pk]["name"], "Nearer flourish")
-        self.assertEqual(result[self.technique.pk]["min_level"], 3)
+        self.assertEqual(result[self.technique.pk]["min_level"], 30)
 
     def test_ties_on_level_break_by_name(self) -> None:
         self._threads()

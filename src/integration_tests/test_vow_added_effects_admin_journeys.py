@@ -70,7 +70,7 @@ class VowAddedEffectSummaryTests(TestCase):
 
         self.assertEqual(
             effect.cached_effect_summary,
-            "From thread 3. On covenant allies' Weaken casts, in a fight, "
+            "From thread 30. On covenant allies' Weaken casts, in a fight, "
             "when Target Is a Boss, once a fight: Deals Fire damage.",
         )
 
