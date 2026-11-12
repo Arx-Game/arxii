@@ -664,7 +664,7 @@ export function ChapterOffers({
                 </li>
               ))}
             {members.map(renderOffer)}
-            {group === groups[groups.length - 1][0] && trailing}
+            {group === groups.at(-1)?.[0] && trailing}
           </ul>
         </div>
       ))}
