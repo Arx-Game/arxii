@@ -3,6 +3,7 @@
 from django import forms
 from django.contrib import admin
 from django.core.exceptions import ValidationError
+from django.http import QueryDict
 from django.urls import reverse
 from django.utils.html import format_html
 
@@ -205,15 +206,33 @@ class SecondaryVowConfigAdmin(admin.ModelAdmin):
 
 
 ALLY_NEEDS_A_SITUATION = (
-    "The announce line names {ally}, but none of this perk's situations says which ally "
-    "acted. Add one that does, such as Enemy Held by Ally, or take {ally} out of the line."
+    "The announce line names {ally}, but none of this perk's situations or rungs says which "
+    "ally acted. Add one that does, such as Enemy Held by Ally, or take {ally} out of the "
+    "line."
 )
+
+
+def _posted_rung_situations(data: QueryDict) -> set[str]:
+    """The extra situations of the rungs posted with the perk (#5092), read from the
+    form data: the rung inline is a sibling formset, validated on its own. A rung marked
+    for deletion does not count."""
+    prefix = VowSituationalPerk.rungs.rel.get_accessor_name()  # the rung inline's prefix
+    try:
+        total = int(data.get(f"{prefix}-TOTAL_FORMS", 0))
+    except (TypeError, ValueError):
+        return set()
+    return {
+        data.get(f"{prefix}-{i}-extra_situation")
+        for i in range(total)
+        if not data.get(f"{prefix}-{i}-DELETE")
+    } - {None, ""}
 
 
 class PerkSituationFormSet(OneRowPerFormSet):
     """The perk's situations, checked against its announce line (#5092): a line naming
-    {ally} needs a situation that knows which ally acted. Checked here, not in the perk's
-    clean(), because the situations being saved with the perk are only known here."""
+    {ally} needs a situation, or a rung's extra situation, that knows which ally acted.
+    Checked here, not in the perk's clean(), because the situations and rungs being saved
+    with the perk are only known here. A firing below that rung says "an ally"."""
 
     def clean(self) -> None:
         super().clean()
@@ -225,7 +244,7 @@ class PerkSituationFormSet(OneRowPerFormSet):
             form.cleaned_data.get("situation")
             for form in self.forms
             if form.cleaned_data and not form.cleaned_data.get("DELETE")
-        }
+        } | _posted_rung_situations(self.data)
         if not situations & set(SITUATION_ALLY_FINDERS):
             raise ValidationError(ALLY_NEEDS_A_SITUATION)
 

@@ -2325,8 +2325,8 @@ class VowSituationalPerk(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text=(
             "Player-facing announce line. It can name {holder} (whose vow it is), {subject} "
             "(whose roll it helps), {target} (the foe it is about) and {ally} (the "
-            "covenant-mate whose action made the situation true; needs a situation about an "
-            "ally, such as Enemy Held by Ally)."
+            "covenant-mate whose action made the situation true; needs a situation or rung "
+            "about an ally, such as Enemy Held by Ally)."
         ),
     )
     check_type = models.ForeignKey(
