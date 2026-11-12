@@ -61,6 +61,7 @@ import {
   type InteractionChangedPayload,
 } from './handleInteractionChangedPayload';
 import { sceneFeedAllKey, sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
+import { channelKeys } from '@/channels/queries';
 
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -259,6 +260,9 @@ function markConnectionReady(
   reconnectAttempts[character] = 0;
   dispatch(setSessionConnectionStatus({ character, status: true }));
   queryClient.invalidateQueries({ queryKey: sceneFeedAllKey() }).catch(() => {});
+  // #3299: channel_message frames pushed while this socket was down never
+  // arrived, so the channel list's unread counts and every open lane refetch.
+  queryClient.invalidateQueries({ queryKey: channelKeys.all }).catch(() => {});
   // #4321: the roster payload carries the server's session count, which every
   // tab's chip and Hall card read; this tab just added a session to it.
   refetchPresence();

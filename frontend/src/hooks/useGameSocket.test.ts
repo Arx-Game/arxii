@@ -452,6 +452,8 @@ describe('useGameSocket reconnect reconciliation ordering (#3760 Task 12)', () =
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['scene-interactions'],
     });
+    // Channel messages pushed while the socket was down are fetched again.
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['channels'] });
 
     // The stranded draft was reconciled (cleared) since the lookup found it.
     const stored = sessionStorage.getItem(
