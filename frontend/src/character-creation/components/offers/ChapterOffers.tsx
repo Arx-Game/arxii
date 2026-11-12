@@ -528,7 +528,9 @@ export function ChapterOffers({
           </b>
           {showsDistinction && <span className="g">{offer.distinction_name}</span>}
           <span className="g">
-            {offer.player_line}
+            {/* A life-page card reads the distinction's own description (#5099): the
+                offer's player_line there is only the card's name again. */}
+            {layout === 'grid' ? offer.distinction_description : offer.player_line}
             {showOpener && offer.opener_label && <i> From {offer.opener_label}.</i>}
           </span>
           {terms ? (

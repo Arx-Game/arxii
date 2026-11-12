@@ -99309,6 +99309,8 @@ components:
           type: string
         distinction_name:
           type: string
+        distinction_description:
+          type: string
         player_line:
           type: string
         chapter:
@@ -99355,6 +99357,7 @@ components:
       - cg_max_rank
       - chapter
       - cost_per_rank
+      - distinction_description
       - distinction_id
       - distinction_name
       - effect_line

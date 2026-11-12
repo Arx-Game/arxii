@@ -54937,6 +54937,7 @@ export interface components {
       distinction_id: number;
       name: string;
       distinction_name: string;
+      distinction_description: string;
       player_line: string;
       chapter: string;
       arrives_as: string;
