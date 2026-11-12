@@ -184,6 +184,8 @@ async function mockMapRoutes(page: Page): Promise<Fixture> {
               state: 'standing',
               is_seat_of: '',
               sworn_to: '',
+              sworn_to_house_id: null,
+              sworn_to_title_id: null,
               demesne: 1,
               vassals: 0,
               claimable: false,

@@ -812,7 +812,9 @@ export function FamilyCard({ family, isSelected, onSelect }: FamilyCardProps) {
       </CardHeader>
       {family.description && (
         <CardContent className="px-3 pb-3 pt-0">
-          <CardDescription className="text-xs">{family.description}</CardDescription>
+          {/* A house's description is its whole page of lore (#5106): the card
+              shows the opening, the full text reads below once it is picked. */}
+          <CardDescription className="line-clamp-4 text-xs">{family.description}</CardDescription>
         </CardContent>
       )}
     </Card>

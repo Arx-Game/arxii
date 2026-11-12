@@ -71,6 +71,12 @@ class LadderReadTests(TestCase):
         assert fervor.state == "Unclaimed"
         assert fervor.claimable
         assert fervor.sworn_to == "Piropa"
+        # #5106: the name is a house or a title, and the row says which one
+        assert fervor.sworn_to_house_id == self.crown.pk
+        assert fervor.sworn_to_title_id is None
+        assert arsura.sworn_to == "Fervor"
+        assert arsura.sworn_to_title_id == self.fervor.pk
+        assert arsura.sworn_to_house_id is None
         assert fervor.demesne == 1, "the seat barony of its seat county"
         assert fervor.vassals == 2, "two unclaimed counties beneath"
         assert payload.unclaimed_by_tier[TitleTier.COUNTY] == 2

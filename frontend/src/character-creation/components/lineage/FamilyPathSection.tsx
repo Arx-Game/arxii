@@ -35,7 +35,7 @@ import {
   KinSlotPicker,
   TarotNamingRitual,
 } from '../LineageStage';
-import { ChoiceRow, Field } from '../../folio';
+import { ChoiceRow, Field, Paragraphs } from '../../folio';
 import { FamilyTemplateForm } from './FamilyTemplateForm';
 import { InheritedFactsPanel } from './InheritedFactsPanel';
 import { ServicePanel } from './ServicePanel';
@@ -302,6 +302,7 @@ function ClaimedFamilyPath({
   const otherFamilies = families?.filter((f) => !f.kind.styles_as_house) ?? [];
   const showHouseFounding =
     !draft.family && (template.claimable_kind_ids.length === 0 || houseFamilies.length > 0);
+  const selectedFamily = families?.find((f) => f.id === draft.family?.id);
 
   return (
     <div className="space-y-4">
@@ -358,15 +359,16 @@ function ClaimedFamilyPath({
       ))}
 
       {draft.family && (
-        <FamilyNamePreview
-          firstName={draft.draft_data.first_name}
-          family={families?.find((f) => f.id === draft.family?.id)}
-        />
+        <FamilyNamePreview firstName={draft.draft_data.first_name} family={selectedFamily} />
       )}
 
-      {draft.family && (
-        <InheritedFactsPanel family={families?.find((f) => f.id === draft.family?.id)} />
+      {selectedFamily?.description && (
+        <div className="space-y-3 text-sm" aria-label={`About ${selectedFamily.name}`}>
+          <Paragraphs text={selectedFamily.description} />
+        </div>
       )}
+
+      {draft.family && <InheritedFactsPanel family={selectedFamily} />}
       {draft.family && (
         <ClaimVacancies draft={draft} organizationFamilyId={draft.family.id} copy={copy} />
       )}

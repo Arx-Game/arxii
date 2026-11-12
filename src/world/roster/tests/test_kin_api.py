@@ -371,6 +371,42 @@ class FamilyListInheritedQueryCountTests(APITestCase):
         self.assertEqual(row["inherited"]["features"][0]["name"], "Feature Contenthouse")
         self.assertEqual(row["inherited"]["liege_name"], "Liege of Contenthouse")
 
+    def test_a_family_with_a_house_reads_as_its_house_does(self):
+        """#5106: the house's description, written on its own page, is what a family
+        with a house shows; the family row's note is for a family with no house, or
+        a house with nothing written."""
+        from world.roster.factories import FamilyKindFactory
+        from world.societies.models import Organization
+
+        kind = FamilyKindFactory(name="Describedfolk")
+        housed = self._housed_family("Written", kind=kind)
+        housed.description = "A note typed on the family row."
+        housed.save(update_fields=["description"])
+        org = Organization.objects.get(family=housed)
+        org.description = "First in the Shadow."
+        org.save(update_fields=["description"])
+        unwritten = self._housed_family("Unwritten", kind=kind)
+        unwritten.description = "Only the family row has words."
+        unwritten.save(update_fields=["description"])
+        unwritten_org = Organization.objects.get(family=unwritten)
+        unwritten_org.description = ""
+        unwritten_org.save(update_fields=["description"])
+        houseless = FamilyFactory(name="Houseless", kind=kind, description="No house at all.")
+        client = APIClient()
+        client.force_authenticate(AccountFactory())
+
+        res = client.get(f"/api/roster/families/?kind={kind.id}")
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        rows = {row["id"]: row for row in res.json()}
+        self.assertEqual(rows[housed.pk]["description"], "First in the Shadow.")
+        self.assertEqual(rows[unwritten.pk]["description"], "Only the family row has words.")
+        self.assertEqual(rows[houseless.pk]["description"], "No house at all.")
+        self.assertNotIn("house_description", rows[housed.pk]["inherited"])
+        # one family read on its own takes the same rule
+        detail = client.get(f"/api/roster/families/{housed.pk}/")
+        self.assertEqual(detail.json()["description"], "First in the Shadow.")
+
 
 class FamilyListParticleQueryCountTests(APITestCase):
     """The families list batches the particle pair too (#3654).

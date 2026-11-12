@@ -39,6 +39,7 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
+import { ADD_FAMILY_MEMBER, ADD_HOUSEHOLD_MEMBER } from '../copy';
 import type { AlmanachFamily, AlmanachFamilyNode, AlmanachHouseholdMember } from '../types';
 import { PersonPanel, type PersonPanelSaveFields, type PersonPanelSubject } from './PersonPanel';
 import { AddKinDialog, type CreateKinFields, type KinRelation } from './AddKinDialog';
@@ -61,10 +62,6 @@ export interface FamilyChapterProps {
    * caller keeps the built-in `PersonPanel`/`onEdit` wiring unchanged.
    */
   renderPanel?: (node: AlmanachFamilyNode) => ReactNode;
-  /** The tree's own "add a child/spouse" door label — default unchanged. */
-  addLabel?: string;
-  /** The household band's own add-door label — default unchanged. */
-  householdAddLabel?: string;
   /** Narrows `AddKinDialog`'s relation choices (the founder dialog offers
    * only head-relative relations, never `grandparent` — see
    * `founder/familyShape.ts`). Omitted keeps `AddKinDialog`'s own default
@@ -270,8 +267,6 @@ export function FamilyChapter({
   onEdit,
   onCreate,
   renderPanel,
-  addLabel = '⊕ a child · a spouse',
-  householdAddLabel = '⊕ a person of the household · a position',
   relations,
   allowEmptyKinName,
   requireRelativeAnchor,
@@ -417,7 +412,7 @@ export function FamilyChapter({
         <li>
           <div className="who">
             <button type="button" className="add" onClick={() => setAddOpen('kin')}>
-              {addLabel}
+              {ADD_FAMILY_MEMBER}
             </button>
           </div>
         </li>
@@ -469,7 +464,7 @@ export function FamilyChapter({
         <li>
           <div className="who">
             <button type="button" className="add" onClick={() => setAddOpen('household')}>
-              {householdAddLabel}
+              {ADD_HOUSEHOLD_MEMBER}
             </button>
           </div>
         </li>

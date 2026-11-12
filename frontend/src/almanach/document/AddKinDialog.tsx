@@ -1,6 +1,6 @@
 /**
- * AddKinDialog (#3983 Task 9, plate S-IV's "⊕ a child · a spouse" /
- * "⊕ a person of the household · a position" doors) — mints a new
+ * AddKinDialog (#3983 Task 9, the family page's "Add family member" and
+ * "Add household member" doors, #5106) — mints a new
  * `Kinsperson` via `almanach_edit_kin`'s create branch (`kinsperson_id`
  * absent). Both doors open the same dialog; `defaultHousehold` seeds
  * `relation="ward"` (the household band's entry point never needs a
@@ -56,6 +56,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+import { ADD_FAMILY_MEMBER, ADD_HOUSEHOLD_MEMBER } from '../copy';
 import { useAllHouses, useGenders } from '../queries';
 import type { AlmanachFamilyNode } from '../types';
 
@@ -212,9 +213,7 @@ export function AddKinDialog({
       }}
     >
       <DialogContent {...NO_DESCRIPTION} className="almanach max-w-md">
-        <DialogTitle>
-          {defaultHousehold ? 'A person of the household' : 'A child · a spouse'}
-        </DialogTitle>
+        <DialogTitle>{defaultHousehold ? ADD_HOUSEHOLD_MEMBER : ADD_FAMILY_MEMBER}</DialogTitle>
         <div className="field">
           <Label htmlFor="add-kin-name">name</Label>
           <Input

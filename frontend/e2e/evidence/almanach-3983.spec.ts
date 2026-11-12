@@ -478,7 +478,7 @@ async function reachFamily(page: Page): Promise<void> {
 }
 
 async function addConsortBornIntoSolano(page: Page): Promise<void> {
-  await safeClick(page.getByRole('button', { name: '⊕ a sibling · a spouse' }));
+  await safeClick(page.getByRole('button', { name: 'Add family member' }));
   await page.locator('#add-kin-name').fill('Dario');
   await safeClick(page.locator('#add-kin-relation'));
   await safeClick(page.getByRole('option', { name: 'spouse', exact: true }));

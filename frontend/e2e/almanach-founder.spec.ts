@@ -60,6 +60,8 @@ const LADDER_ROWS = [
     state: 'Held',
     is_seat_of: '',
     sworn_to: '',
+    sworn_to_house_id: null,
+    sworn_to_title_id: null,
     demesne: 1,
     vassals: 1,
     claimable: false,
@@ -80,6 +82,8 @@ const LADDER_ROWS = [
     state: 'Unclaimed',
     is_seat_of: '',
     sworn_to: HOUSE_NAME,
+    sworn_to_house_id: null,
+    sworn_to_title_id: null,
     demesne: 1,
     vassals: 1,
     claimable: true,
@@ -100,6 +104,8 @@ const LADDER_ROWS = [
     state: 'Unclaimed',
     is_seat_of: '',
     sworn_to: DUCHY_NAME,
+    sworn_to_house_id: null,
+    sworn_to_title_id: null,
     demesne: 0,
     vassals: 1,
     claimable: true,
@@ -120,6 +126,8 @@ const LADDER_ROWS = [
     state: 'Unclaimed',
     is_seat_of: '',
     sworn_to: DUCHY_NAME,
+    sworn_to_house_id: null,
+    sworn_to_title_id: null,
     demesne: 0,
     vassals: 0,
     claimable: true,
@@ -140,6 +148,8 @@ const LADDER_ROWS = [
     state: 'Unclaimed',
     is_seat_of: '',
     sworn_to: HOUSE_NAME,
+    sworn_to_house_id: null,
+    sworn_to_title_id: null,
     demesne: 0,
     vassals: 0,
     claimable: true,
@@ -160,6 +170,8 @@ const LADDER_ROWS = [
     state: 'Unclaimed',
     is_seat_of: '',
     sworn_to: HOUSE_NAME,
+    sworn_to_house_id: null,
+    sworn_to_title_id: null,
     demesne: 1,
     vassals: 0,
     claimable: true,
@@ -180,6 +192,8 @@ const LADDER_ROWS = [
     state: 'Unclaimed',
     is_seat_of: '',
     sworn_to: COUNTY_NAME,
+    sworn_to_house_id: null,
+    sworn_to_title_id: null,
     demesne: 0,
     vassals: 0,
     claimable: true,
@@ -494,7 +508,7 @@ test('a founder claims the demo duchy and submits a house claim', async ({ page 
   // (`founder_relation` defaults to `head`, so the founder herself is the
   // union's other half — `AddKinDialog`'s spouse picker offers her synthetic
   // node, named "Given name" until `CharacterDraft` carries a real one).
-  await safeClick(page.getByRole('button', { name: '⊕ a sibling · a spouse' }));
+  await safeClick(page.getByRole('button', { name: 'Add family member' }));
   await page.locator('#add-kin-name').fill('Lady Osrin');
   await safeClick(page.locator('#add-kin-relation'));
   await safeClick(page.getByRole('option', { name: 'spouse', exact: true }));

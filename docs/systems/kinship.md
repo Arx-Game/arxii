@@ -216,13 +216,21 @@ person.
   `/characters/:id` takes, batched by `_roster_entries_by_sheet` in one query
   per tree. The panel links a selected sheeted node to its sheet through it,
   reads the family line as "House X" only for a `styles_as_house` kind, and
-  draws `Family.description` under that line when it is non-empty.
+  draws the family's description under that line when it is non-empty.
+- (#5106) `FamilySerializer.description` is the house's own description
+  (`Organization.description`, written on the house's Almanach page) when the
+  family has a house with one written, else `Family.description` (the brief
+  note on the family row). One rule for every reader of the serializer: the CG
+  Lineage family cards, the family page and the kin panel. The list view's
+  `_inherited_by_family` batch carries it, so the list adds no query. In CG the
+  card shows the opening lines and the full text reads below once the family
+  is picked.
 - (#4209) FE: the family page, `frontend/src/kinship/pages/FamilyPage.tsx`
   at `/families/:id` (a `Family` pk, never an `Organization` pk; signed-in
   viewers, the tree endpoint's own gate), over `useFamilyTree` and
   `useFamilySlots` (`kinship/queries.ts`). Sections render or vanish: the
   gate (a plate for a `styles_as_house` kind with the house's words, colours
-  and sigil; a plain head otherwise), `Family.description`, the roll grouped
+  and sigil; a plain head otherwise), the description (#5106's rule), the roll grouped
   by generation (`kinship/generations.ts`, the walk the graph lays out by)
   in `full_name` with a dagger for the deceased and a link for every played
   person, the tree (`KinTreeGraph`, in `short_name`), the selected person

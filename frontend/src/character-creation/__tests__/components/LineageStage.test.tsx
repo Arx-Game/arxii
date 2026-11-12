@@ -231,6 +231,23 @@ describe('LineageStage', () => {
       expect(await screen.findByText('Open Positions in This House')).toBeInTheDocument();
     });
 
+    it("a picked house's whole description reads below the cards, in its paragraphs (#5106)", async () => {
+      const lore = 'First in the Shadow.\n\nThe house kept its oath through the long night.';
+      const described = { ...mockNobleFamily, description: lore };
+      vi.mocked(api.getFamilies).mockResolvedValue([described, mockNobleFamily2]);
+      vi.mocked(api.getFamilySlots).mockResolvedValue({ slots: [], pools: [] });
+      const draft = createMockDraft({ ...mockDraftWithUpbringing, family: described });
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient: createTestQueryClient(),
+      });
+
+      const about = await screen.findByLabelText(`About ${described.name}`);
+      const paragraphs = about.querySelectorAll('p');
+      expect(paragraphs).toHaveLength(2);
+      expect(paragraphs[0]).toHaveTextContent('First in the Shadow.');
+      expect(paragraphs[1]).toHaveTextContent('The house kept its oath through the long night.');
+    });
+
     it('claim path shows a kin vacancy card instead of the kin-slot picker when kin vacancies are offered', async () => {
       vi.mocked(api.getVacancies).mockResolvedValue([mockVacancyKin]);
       const queryClient = createTestQueryClient();

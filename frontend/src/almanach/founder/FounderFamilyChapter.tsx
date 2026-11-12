@@ -174,8 +174,6 @@ export function FounderFamilyChapter({
           set={set}
         />
       )}
-      addLabel="⊕ a sibling · a spouse"
-      householdAddLabel="⊕ a ward · a captain of the guard · a position"
       relations={offeredRelations}
       allowEmptyKinName
       requireRelativeAnchor={false}

@@ -231,6 +231,7 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
             selectedTitleId={selectedRow?.title_id ?? null}
             onSelectRow={(row) => setSelectedTitleId(row.title_id)}
             rowHref={(row) => titleUrl(row.title_id)}
+            linked
           />
           <div className="savebar">
             {selectedRow && (

@@ -66590,6 +66590,12 @@ components:
           type: string
         sworn_to:
           type: string
+        sworn_to_house_id:
+          type: integer
+          nullable: true
+        sworn_to_title_id:
+          type: integer
+          nullable: true
         demesne:
           type: integer
         vassals:
@@ -66624,6 +66630,8 @@ components:
       - seat_domain_id
       - state
       - sworn_to
+      - sworn_to_house_id
+      - sworn_to_title_id
       - tier
       - title_id
       - vassals
