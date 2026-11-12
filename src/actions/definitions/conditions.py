@@ -303,6 +303,11 @@ class RallyAction(Action):
         )
         sl = result.success_level
 
+        if sl > 0:
+            # Kept for the instance's life: a talked-down self it holds may now change
+            # back (#4887). The bonus below is consumed; this is not.
+            instance.rallied = True
+            instance.save(update_fields=["rallied"])
         crit_threshold = 2
         if sl >= crit_threshold:
             break_result = attempt_break_free(

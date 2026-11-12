@@ -215,9 +215,11 @@ The alternate-self (shapeshift / cover-identity) seam is intentionally decoupled
   form/persona anchors and deletes the granted modifier + technique rows. `revert_alternate_self`
   is the system path (Audere end, TALKED_DOWN) and stays **blocked** while
   `not sheet.in_control` (`RevertBlockedError`). A player reverts through
-  `attempt_revert_form`: a compulsion rolls its `REVERT_FORM` resist check; with none the
-  character reverts freely, a `TALKED_DOWN` self whose `emergence_condition` is still
-  active included (calming down lets them change back, #4887). Assumption is never blocked.
+  `attempt_revert_form`: a compulsion rolls its `REVERT_FORM` resist check; with none, a
+  `TALKED_DOWN` self Audere brought out is refused while its `emergence_condition` holds
+  her and nobody has talked her down (an ally's rally, or her own break-free); anyone else
+  reverts freely, a character whose compulsion has ended included (#4887). Assumption is
+  never blocked.
 - **Removing an `alters_behavior` condition does NOT auto-revert the form.** It
   re-derives `in_control=True`, which unblocks a later self-revert. The form persists
   after the condition clears. The canonical instance is the fury `Berserk` condition,

@@ -118,9 +118,10 @@ class ShiftFormAction(Action):
 class RevertFormAction(Action):
     """Revert the active alternate self — restore return anchors, delete the
     granted stat + ability suites. A character under a compulsion (rage) rolls its
-    resist check to change back and stays as they are on a failed roll; anyone else,
-    including a talked-down self whose compulsion has ended, changes back freely
-    (#4802, #4887).
+    resist check to change back and stays as they are on a failed roll; a self Audere
+    brought out that must be talked down holds her until an ally rallies her or she
+    breaks free (``RevertBlockedError``); anyone else, including a character whose
+    compulsion has ended, changes back freely (#4802, #4887).
     """
 
     key: str = "revert_form"
@@ -138,6 +139,7 @@ class RevertFormAction(Action):
         from world.forms.services import (  # noqa: PLC0415
             AlternateSelfActiveError,
             FormOwnershipError,
+            RevertBlockedError,
             attempt_revert_form,
         )
         from world.scenes.services import ActivePersonaError  # noqa: PLC0415
@@ -145,6 +147,8 @@ class RevertFormAction(Action):
         sheet = actor.sheet_data
         try:
             attempt = attempt_revert_form(sheet)
+        except RevertBlockedError as exc:
+            return ActionResult(success=False, message=exc.user_message)
         except ActivePersonaError:
             # The active alt-self's persona FK points at another sheet (bad
             # seed/admin edit). Surface the safe message — never ``str(exc)``.
