@@ -163,7 +163,7 @@ class HolderOverBudgetTest(CombatRoleFlagsCase):
     def test_a_holder_over_budget_is_flagged_with_the_total(self) -> None:
         name = self.corvin.character_sheet.character.db_key
         result = flags._probe_holder_over_budget()
-        self.assertEqual(_texts(result), [f"{name}, Fulmination level 1 (5 of 4)"])
+        self.assertEqual(_texts(result), [f"{name}, Fulmination level 10 (5 of 4)"])
 
     def test_the_row_links_to_the_holders_picks(self) -> None:
         name = self.corvin.character_sheet.character.db_key

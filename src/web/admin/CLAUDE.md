@@ -1304,7 +1304,7 @@ slice 7 (#4932).
   technique" when nothing compares); then a "Run the fight simulator" link to
   `admin_tuning?technique=&covenant_role=#panel-simulation`, or, for a technique with no
   action template, a muted line saying the simulator cannot cast it. L is the vow's highest
-  pick level, or 1 with no picks, said in a muted line; then the line on what DE is and
+  pick level, or 10 with no picks, said in a muted line; then the line on what DE is and
   "Situational perks and stat scaling are not priced." Each figure is
   `evaluate_technique(...).baseline_de` with the vow term (`vow_effects`,
   `vow_thread_level`; see `docs/systems/tuning.md`), rounded, at the Techniques panel's

@@ -289,12 +289,12 @@ class VowPageSaveTests(VowPageCase):
         self.assertIn("unsaved changes: 1", body)
         self.assertIn("Kneel&#x27;s price goes from 2 to 3. Two characters hold it.", body)
         self.assertRegex(
-            body, r"Ysolde Marrow</a>\s+stays within level 3&#x27;s budget \(3 of 4\)\."
+            body, r"Ysolde Marrow</a>\s+stays within level 30&#x27;s budget \(3 of 4\)\."
         )
         self.assertRegex(
             body,
             r"Corvin Ashe</a>\s+<span class=\"vb-over\">also holds Static Halo and goes over "
-            r"level 3&#x27;s budget \(5 of 4\)\.",
+            r"level 30&#x27;s budget \(5 of 4\)\.",
         )
         self.assertIn('name="confirm_holders" value="Save anyway"', body)
         self.assertNotIn('name="save" value="Save"', body)
@@ -317,7 +317,7 @@ class VowPageSaveTests(VowPageCase):
         self.assertIn("Deleting Kneel returns its price to 2 holders.", body)
         self.assertRegex(
             body,
-            r"Corvin Ashe</a>\s+also holds Static Halo and stays within level 3&#x27;s budget "
+            r"Corvin Ashe</a>\s+also holds Static Halo and stays within level 30&#x27;s budget "
             r"\(2 of 4\)",
         )
         self.assertTrue(VowFocusPick.objects.filter(pk=self.kneel.pk).exists())
@@ -359,7 +359,9 @@ class VowPageSaveTests(VowPageCase):
         key = f"l{self.kneel.pk}-0-frequency_tenths"
         body = self.client.post(self.url, self._payload(**{key: "3"})).content.decode()
         self.assertIn("Kneel&#x27;s price goes from 2 to 1.", body)
-        self.assertRegex(body, r"Ysolde Marrow</a>\s+stays within level 3&#x27;s budget \(1 of 4\)")
+        self.assertRegex(
+            body, r"Ysolde Marrow</a>\s+stays within level 30&#x27;s budget \(1 of 4\)"
+        )
 
     def test_a_refused_edit_leaves_the_cached_pick_as_stored(self) -> None:
         self.client.force_login(self.author)
@@ -459,7 +461,7 @@ class VowPageRestoreTests(VowPageCase):
             **{
                 "picks-TOTAL_FORMS": "4",
                 "picks-3-covenant_role": str(self.role.pk),
-                "picks-3-pick_level": "2",
+                "picks-3-pick_level": "20",
                 "picks-3-name": "Under Open Sky",
                 "picks-3-value": "4",
                 "picks-3-description": "",
@@ -560,11 +562,11 @@ class VowPowerPreviewTests(VowPageCase):
         self.assertIn("Power preview &middot; Fulmination</h2>", body)
         lines = _de_lines(body, "Arc Lash")
         self.assertEqual(
-            list(lines), ["No vow", "With base vow, level 3", f"With {self.halo.name}"]
+            list(lines), ["No vow", "With base vow, level 30", f"With {self.halo.name}"]
         )
-        self.assertGreater(lines["With base vow, level 3"], lines["No vow"])
-        self.assertGreater(lines[f"With {self.halo.name}"], lines["With base vow, level 3"])
-        self.assertIn("Level 3: the vow&#x27;s highest pick level.", body)
+        self.assertGreater(lines["With base vow, level 30"], lines["No vow"])
+        self.assertGreater(lines[f"With {self.halo.name}"], lines["With base vow, level 30"])
+        self.assertIn("Level 30: the vow&#x27;s highest pick level.", body)
         self.assertIn("DE is damage equivalent per cast, from the technique power evaluator.", body)
         self.assertIn("Situational perks and stat scaling are not priced.", body)
         simulator = reverse("admin_tuning") + (
