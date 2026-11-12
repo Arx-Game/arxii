@@ -48,3 +48,5 @@ is untouched — it was never the engaged+co-present rule to begin with.
 
 > Status: accepted · Source: issue #2536 (slice 2 of 3) · Amends: ADR-0151 (covenant-mate
 > group-membership scoping) · Related: ADR-0149 (four-layer vow-power model — Layer 4)
+
+> **Amended by ADR-4386 (#4386, 2026-11-12):** botch immunity also comes from a `botch_immunity` modifier target scoped to a check category or check type, granted by any modifier source. It joins the same floor list in `_apply_outcome_guarantees`, runs on every rolled check without a situation context, and is never announced; the roller's breakdown shows a "Cannot botch" line instead.

@@ -40,6 +40,10 @@ _Avoid_: opponent snapshot
 The frozen `TechniqueEffectContext` that `technique_effect_context(sheet, technique, damage_type_id=None)` builds for one cast: the technique id, its gift and parent gift ids, its function set, the resonance ids its gift manifests as for the caster and the resolved damage type id. `technique_effect_total(sheet, context, targets)` sums the modifiers of the targets whose technique scopes all match it. Built once per cast, and the damage type slot is filled per damage profile. It also carries the opponent's property and condition ids (#4823), filled per opponent or target.
 _Avoid_: technique snapshot
 
+**Botch immunity category and its scope fields** (`botch_immunity`, #4386, ADR-4386):
+The modifier category whose targets make a character unable to botch. A `ModifierTarget` in it names its scope with exactly one of two plain FKs: `target_check_category` (a `CheckCategory`, the usual niche) or `target_scope_check_type` (one `CheckType`, a narrow niche); `clean()` allows them only in this category and a unique constraint keeps one target per scope. `target_scope_check_type` exists because `target_check_type` is one-to-one and belongs to the check-bonus target. Any modifier source can grant it (distinction effect, condition effect, achievement, form, worn crafted item); a positive total means immune. `ModifierTarget.botch_immunity_targets_for(check_type)` returns the active targets for a check.
+_Avoid_: niche tag, a botch flag on the sheet, reusing `target_check_type` for scope
+
 **ModifierSource**:
 The provenance record for a character's modifier — where it came from (e.g. a distinction effect template plus the character-distinction instance). It answers WHICH target a modifier grants and its base value, and drives cascade cleanup when the source is removed.
 _Avoid_: origin, provider, grantor

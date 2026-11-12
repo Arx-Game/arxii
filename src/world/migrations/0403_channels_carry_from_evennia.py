@@ -135,7 +135,7 @@ def carry_channels_off_evennia(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0400_channel_channelban_channelmessage_and_more"),
+        ("arxii", "0402_channel_channelban_channelmessage_and_more"),
         ("comms", "0022_defaultchannel_alter_channeldb_id_alter_msg_id_and_more"),
         ("typeclasses", "0017_use_index_instead_of_index_together_in_tags"),
     ]

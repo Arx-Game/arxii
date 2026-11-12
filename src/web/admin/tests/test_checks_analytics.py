@@ -7,11 +7,19 @@ thin integration test for the fragment view that renders it.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+import re
+
 from django.test import TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
-from web.admin.tuning.checks_analytics import compute_chart_distributions, compute_matchup
+from web.admin.tuning.checks_analytics import (
+    OutcomeBand,
+    compute_chart_distributions,
+    compute_matchup,
+)
+from world.magic.services.de_valuation import MatchupBand
 from world.traits.factories import (
     CheckOutcomeFactory,
     CheckRankFactory,
@@ -19,6 +27,14 @@ from world.traits.factories import (
     ResultChartOutcomeFactory,
 )
 from world.traits.models import ResultChart
+
+
+def _by_level(bands: Iterable[OutcomeBand | MatchupBand]) -> dict[int, float]:
+    """Each success level's total probability, so two bands at one level both count."""
+    totals: dict[int, float] = {}
+    for band in bands:
+        totals[band.success_level] = totals.get(band.success_level, 0.0) + band.probability
+    return totals
 
 
 class ComputeChartDistributionsTests(TestCase):
@@ -279,6 +295,56 @@ class SlideAnalyticsTests(TestCase):
         assert all(band.success_level < 2 for step in minus_one.steps for band in step.bands)
         assert by_difference[-7].impossible
         assert all(step.success_probability == 0 for step in by_difference[-7].steps)
+
+    def test_an_immune_matchup_counts_every_botch_as_a_failure(self) -> None:
+        """#4386: no botch band, and Failure grew by exactly the botch probability."""
+        plain = compute_matchup(roller_points=20, target_difficulty=250)
+        immune = compute_matchup(roller_points=20, target_difficulty=250, botch_immune=True)
+        plain_by_level = _by_level(plain.bands)
+        immune_by_level = _by_level(immune.bands)
+        assert plain_by_level[-2] > 0
+        assert -2 not in immune_by_level
+        assert abs(immune_by_level[-1] - (plain_by_level[-1] + plain_by_level[-2])) < 1e-9
+        assert immune.success_probability == plain.success_probability
+        failure_names = {band.name for band in immune.bands if band.success_level == -1}
+        assert failure_names == {band.name for band in plain.bands if band.success_level == -1}
+
+    def test_an_immune_magic_preview_counts_every_botch_as_a_failure(self) -> None:
+        """#4386: ``matchup_bands`` folds the botch band into Failure the same way."""
+        from world.magic.services.de_valuation import matchup_bands
+        from world.magic.types.technique_power import EvalContext
+
+        plain = matchup_bands(EvalContext(roller_points=20, target_difficulty=250))
+        immune = matchup_bands(
+            EvalContext(roller_points=20, target_difficulty=250, botch_immune=True)
+        )
+        plain_by_level = _by_level(plain)
+        immune_by_level = _by_level(immune)
+        assert plain_by_level[-2] > 0
+        assert -2 not in immune_by_level
+        assert abs(immune_by_level[-1] - (plain_by_level[-1] + plain_by_level[-2])) < 1e-9
+        assert abs(sum(immune_by_level.values()) - 1) < 1e-9
+
+    def test_the_panel_carries_the_cannot_botch_checkbox(self) -> None:
+        self.client.force_login(self.super)
+        resp = self.client.get(
+            reverse("admin_tuning_checks"),
+            {"roller_points": "20", "target_difficulty": "250", "botch_immune": "on"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        checkbox = re.search(r'<input type="checkbox" id="checks-botch-immune"[^>]*>', body)
+        assert checkbox is not None
+        assert "checked" in checkbox.group(0)
+        assert -2 not in _by_level(resp.context["matchup"].bands)
+        plain_resp = self.client.get(
+            reverse("admin_tuning_checks"), {"roller_points": "20", "target_difficulty": "250"}
+        )
+        plain = plain_resp.content.decode()
+        unticked = re.search(r'<input type="checkbox" id="checks-botch-immune"[^>]*>', plain)
+        assert unticked is not None
+        assert "checked" not in unticked.group(0)
+        assert _by_level(plain_resp.context["matchup"].bands)[-2] > 0
 
     def test_panel_shows_ranks_with_numbers_and_the_lifted_chart(self) -> None:
         self.client.force_login(self.super)

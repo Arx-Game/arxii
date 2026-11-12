@@ -94,6 +94,8 @@ class TechniqueAnalyticsParams:
     roller_points: int = _ROLLER_POINTS_DEFAULT
     target_difficulty: int = _TARGET_DIFFICULTY_DEFAULT
     roll_modifier: int = _ROLL_MODIFIER_DEFAULT
+    #: #4386: price every roll for a character who cannot botch at it.
+    botch_immune: bool = False
     sort: str = DEFAULT_SORT
 
 
@@ -149,7 +151,8 @@ def _corpus_cache_key(params: TechniqueAnalyticsParams) -> str:
     return (
         f"tuning-tech-power-corpus:{technique_catalog_revision()}:"
         f"{params.level}:{params.thread_level}:"
-        f"{params.roller_points}:{params.target_difficulty}:{params.roll_modifier}"
+        f"{params.roller_points}:{params.target_difficulty}:{params.roll_modifier}:"
+        f"{params.botch_immune}"
     )
 
 
@@ -183,6 +186,7 @@ def _eval_context(params: TechniqueAnalyticsParams) -> EvalContext:
         roller_points=params.roller_points,
         target_difficulty=params.target_difficulty,
         roll_modifier=params.roll_modifier,
+        botch_immune=params.botch_immune,
     )
 
 

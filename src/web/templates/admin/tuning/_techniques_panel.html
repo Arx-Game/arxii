@@ -206,6 +206,11 @@
     {{ form.roll_modifier.errors }}
   </div>
   <div class="tuning-field">
+    <label for="{{ form.botch_immune.id_for_label }}">{% translate "Cannot botch" %}</label>
+    {{ form.botch_immune }}
+    {{ form.botch_immune.errors }}
+  </div>
+  <div class="tuning-field">
     <label for="{{ form.sort.id_for_label }}">{% translate "Sort" %}</label>
     {{ form.sort }}
     {{ form.sort.errors }}

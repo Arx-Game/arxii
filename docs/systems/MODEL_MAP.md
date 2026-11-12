@@ -2044,6 +2044,7 @@
 **Pointed to by:**
   - check_types <- checks.CheckType
   - condition_check_modifiers <- conditions.ConditionCheckModifier
+  - modifier_targets <- mechanics.ModifierTarget
 
 ### CheckType
 **Foreign Keys:**
@@ -2070,6 +2071,7 @@
   - compulsions <- conditions.Compulsion
   - control_loss_triggers <- conditions.ControlLossTrigger
   - modifier_target <- mechanics.ModifierTarget
+  - scoped_modifier_targets <- mechanics.ModifierTarget
   - challenge_approaches <- mechanics.ChallengeApproach
   - detect_situation_traps <- mechanics.SituationTrapLink
   - disarm_situation_traps <- mechanics.SituationTrapLink
@@ -2175,12 +2177,15 @@
 
 ### Service Functions
 - `award_check_development(character_sheet: 'CharacterSheet', check_type: 'CheckType', effort_level: 'str | None', path_level: 'int', *, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> 'list[tuple[str, int, int]]' - Award dp to traits used in a check.`
+- `botch_floor_level(levels: 'Iterable[int]') -> int | None - The success level a botch rises to on a chart with ``levels`` (#4386).`
+- `botch_immunity_sources(character_sheet: 'CharacterSheet', check_type: 'CheckType') -> list[world.checks.types.ModifierContribution] - Every source the character holds on the botch_immunity targets for ``check_type``.`
 - `chart_has_success_outcomes(rank_difference: int) -> bool - Check if the ResultChart for this rank difference has any success outcomes.`
 - `collect_check_modifiers(character_sheet: 'CharacterSheet', check_type: 'CheckType', *, scene: 'Scene | None' = None, extra_contributions: list[world.checks.types.ModifierContribution] | None = None, skip_fashion: bool = False, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> world.checks.types.ModifierBreakdown - Aggregate all modifier contributions for a check into a ModifierBreakdown.`
 - `compute_check_rating(character: 'ObjectDB', check_type: 'CheckType', extra_modifiers: int = 0, *, level_override: int | None = None, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> int - Return *character*'s pre-roll rating (total points) for *check_type* — no dice roll.`
 - `compute_resist_increment(defender_character: 'ObjectDB', resist_effort_level: str, *, level_override: int | None = None, stat_override: str | int | None = None, award_development: bool = False) -> int - Compute how much a defender's active resistance raises difficulty.`
 - `get_character_path_level(character: 'ObjectDB') -> 'int' - Return the character's primary class level (or highest, or 1).`
 - `get_rollmod(character: 'ObjectDB') -> int - Sum character.sheet_data.rollmod + character.account.player_data.rollmod.`
+- `is_botch_immune(character_sheet: 'CharacterSheet', check_type: 'CheckType') -> bool - Whether the character cannot botch at ``check_type`` (#4386).`
 - `level_opposition(check_type: 'CheckType', *, level: int, character: 'ObjectDB | None' = None) -> int - Difficulty an opposing entity of *level* adds to *check_type* (#2707).`
 - `load_taper_rules(lane: 'str' = ModifierLane.CHECK) -> 'dict[str, TaperRule]' - ``lane``'s taper rules by source kind, in one query. Empty means no taper.`
 - `load_value_table(lane: 'str' = ModifierLane.CHECK) -> 'ValueTable' - Load ``lane``'s ``ModifierValue`` rows in one query.`
@@ -7422,6 +7427,8 @@
   - scope_resonance -> magic.Resonance [FK] (nullable)
   - scope_opponent_property -> mechanics.Property [FK] (nullable)
   - scope_opponent_condition -> conditions.ConditionTemplate [FK] (nullable)
+  - target_check_category -> checks.CheckCategory [FK] (nullable)
+  - target_scope_check_type -> checks.CheckType [FK] (nullable)
 **Pointed to by:**
   - reward_definitions <- achievements.RewardDefinition
   - conditionmodifiereffect_set <- conditions.ConditionModifierEffect

@@ -54840,6 +54840,7 @@ components:
       - soulfray
       - favor
       - technique
+      - botch_immunity
       type: string
       description: |-
         * `condition` - Condition
@@ -54858,6 +54859,7 @@ components:
         * `soulfray` - Soulfray
         * `favor` - Favor
         * `technique` - Technique roll
+        * `botch_immunity` - Cannot botch
     ConsequencePoolCatalog:
       type: object
       description: Read-only serializer for the curated technique-cast consequence-pool
