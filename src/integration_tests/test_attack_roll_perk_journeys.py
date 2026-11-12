@@ -412,6 +412,9 @@ class TheAnnounceNamesTheAllyAndTheFoe(JourneyCase):
         pool.physical_current = 0
         pool.mental_current = 0
         pool.save(update_fields=["physical_current", "mental_current"])
+        # A damage technique with no foe is refused (TARGET_REQUIRED); a cast at no one has none.
+        self.bolt.effect_type.base_power = None
+        self.bolt.effect_type.save(update_fields=["base_power"])
         declared = dispatch_player_action(
             self.tomas,
             ActionRef(
