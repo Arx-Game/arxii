@@ -1,14 +1,17 @@
 /** ChannelsPanel (#3299): lanes from the cached channel list; the network is stubbed. */
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ChannelsPanel } from '../components/ChannelsPanel';
-import { channelKeys } from '../queries';
+import { addMessageToCache, channelKeys } from '../queries';
 import type { Channel, ChannelMessage, ChannelMessagePage, ChannelSubscription } from '../types';
 
 const account = vi.hoisted(() => ({ current: null as { is_staff: boolean } | null }));
-vi.mock('@/store/hooks', () => ({ useAccount: () => account.current }));
+vi.mock('@/store/hooks', () => ({
+  useAccount: () => account.current,
+  useAppSelector: () => false,
+}));
 vi.mock('@/evennia_replacements/api', () => ({
   apiFetch: vi.fn(async () => new Response('[]', { status: 200 })),
 }));
@@ -56,11 +59,12 @@ function renderPanel(channels: Channel[], newestFirst: ChannelMessage[] = []) {
     count: newestFirst.length,
     results: newestFirst,
   });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <ChannelsPanel active />
     </QueryClientProvider>
   );
+  return { ...view, client };
 }
 
 describe('ChannelsPanel', () => {
@@ -96,5 +100,38 @@ describe('ChannelsPanel', () => {
     expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Ban' })).toBeInTheDocument();
     account.current = null;
+  });
+
+  it('opens on the newest message and follows only a reader at the bottom', async () => {
+    // jsdom has no layout: give every list a fixed content and viewport height.
+    const proto = HTMLOListElement.prototype;
+    Object.defineProperty(proto, 'scrollHeight', { configurable: true, get: () => 1000 });
+    Object.defineProperty(proto, 'clientHeight', { configurable: true, get: () => 200 });
+    try {
+      const { client } = renderPanel([channel({})], [message(2), message(1)]);
+      const list = screen.getByTestId('channel-messages');
+      expect(list.scrollTop).toBe(1000);
+
+      // Scrolled up to read: a new message does not pull the reader down.
+      list.scrollTop = 100;
+      fireEvent.scroll(list);
+      act(() => {
+        addMessageToCache(client, message(3));
+      });
+      expect(await screen.findByText('line 3')).toBeInTheDocument();
+      expect(list.scrollTop).toBe(100);
+
+      // Back at the bottom: the next message is followed.
+      list.scrollTop = 800;
+      fireEvent.scroll(list);
+      act(() => {
+        addMessageToCache(client, message(4));
+      });
+      expect(await screen.findByText('line 4')).toBeInTheDocument();
+      expect(list.scrollTop).toBe(1000);
+    } finally {
+      delete (proto as unknown as Record<string, unknown>).scrollHeight;
+      delete (proto as unknown as Record<string, unknown>).clientHeight;
+    }
   });
 });

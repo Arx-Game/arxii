@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { ChevronDown, ChevronRight, Send } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,8 @@ import { MessageModeration } from './MessageModeration';
 import { useAccount } from '@/store/hooks';
 
 const MARK_READ_COALESCE_MS = 1500;
+/** Within this many pixels of the bottom counts as reading the newest. */
+const FOLLOW_SLACK_PX = 40;
 
 type LaneRow =
   { kind: 'message'; message: ChannelMessage } | { kind: 'hidden'; firstId: number; count: number };
@@ -70,18 +72,27 @@ interface ChannelLaneProps {
   channel: JoinedChannel;
   /** Whether the panel holding this lane is on screen (sidebar mode or page). */
   active: boolean;
+  /** Refetch this lane's history on an interval (no game socket). */
+  poll?: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
   onMove: (direction: -1 | 1) => void;
 }
 
-export function ChannelLane({ channel, active, canMoveUp, canMoveDown, onMove }: ChannelLaneProps) {
+export function ChannelLane({
+  channel,
+  active,
+  poll = false,
+  canMoveUp,
+  canMoveDown,
+  onMove,
+}: ChannelLaneProps) {
   const sub = channel.subscription;
   const collapsed = sub.collapsed ?? false;
   const open = active && !collapsed;
   useOpenLaneRegistration(channel.id, open);
 
-  const { data } = useChannelMessagesQuery(channel.id, open);
+  const { data } = useChannelMessagesQuery(channel.id, open, poll);
   const update = useUpdateSubscription(channel.id);
   const { mutate: markRead } = useMarkChannelRead(channel.id);
   const isStaff = useAccount()?.is_staff ?? false;
@@ -121,6 +132,21 @@ export function ChannelLane({ channel, active, canMoveUp, canMoveDown, onMove }:
     };
   }, [open, sub.id, markRead]);
 
+  // Chat convention: the lane opens on its newest message and follows new ones
+  // while the reader is at (or near) the bottom; a reader scrolled up stays put.
+  const listRef = useRef<HTMLOListElement>(null);
+  const following = useRef(true);
+  const handleScroll = () => {
+    const el = listRef.current;
+    if (!el) return;
+    following.current = el.scrollHeight - el.scrollTop - el.clientHeight <= FOLLOW_SLACK_PX;
+  };
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (!open || !el || !following.current) return;
+    el.scrollTop = el.scrollHeight;
+  }, [open, newestId, data?.results.length]);
+
   return (
     <section className="rounded border" aria-label={channel.name}>
       <header className="flex items-center gap-1 px-2 py-1">
@@ -155,7 +181,12 @@ export function ChannelLane({ channel, active, canMoveUp, canMoveDown, onMove }:
       </header>
       {collapsed ? null : (
         <div className="space-y-2 border-t px-2 py-2">
-          <ol className="max-h-72 space-y-1 overflow-y-auto text-sm" data-testid="channel-messages">
+          <ol
+            ref={listRef}
+            onScroll={handleScroll}
+            className="max-h-72 space-y-1 overflow-y-auto text-sm"
+            data-testid="channel-messages"
+          >
             {laneRows(data?.results ?? []).map((row) =>
               row.kind === 'hidden' ? (
                 <li key={`hidden-${row.firstId}`}>

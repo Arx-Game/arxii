@@ -15,10 +15,11 @@ function byLaneOrder(a: JoinedChannel, b: JoinedChannel): number {
 /**
  * The joined channels as lanes in the player's order, then the ones to join.
  * `active` says whether the panel is on screen; only then do open lanes fetch
- * and mark themselves read.
+ * and mark themselves read. `poll` makes the list and open lanes refetch on an
+ * interval, for a page with no game socket to push to it.
  */
-export function ChannelsPanel({ active }: { active: boolean }) {
-  const { data: channels } = useChannelsQuery();
+export function ChannelsPanel({ active, poll = false }: { active: boolean; poll?: boolean }) {
+  const { data: channels } = useChannelsQuery(poll);
   const reorder = useReorderSubscriptions();
   const all = channels ?? [];
   const lanes = all.filter(isJoined).sort(byLaneOrder);
@@ -39,6 +40,7 @@ export function ChannelsPanel({ active }: { active: boolean }) {
           key={channel.id}
           channel={channel}
           active={active}
+          poll={poll}
           canMoveUp={index > 0 && !reorder.isPending}
           canMoveDown={index < lanes.length - 1 && !reorder.isPending}
           onMove={(direction) => move(index, direction)}

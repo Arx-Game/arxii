@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { useAccount } from '@/store/hooks';
+import { useAccount, useAppSelector } from '@/store/hooks';
 import {
   banChannelAuthor,
   deleteChannelMessage,
@@ -107,12 +107,27 @@ export function channelUnreadTotal(channels: Channel[] | undefined): number {
   return total;
 }
 
-export function useChannelsQuery() {
+/**
+ * How often a reader with no game socket refetches (#3299 ruling): live frames
+ * only arrive over the game socket, which only the play page opens.
+ * react-query skips interval refetches while the document is hidden.
+ */
+export const CHANNEL_POLL_MS = 10_000;
+
+/** True while any character's game socket is connected in this tab. */
+export function useGameSocketConnected(): boolean {
+  return useAppSelector((state) =>
+    Object.values(state.game.sessions).some((session) => session.isConnected)
+  );
+}
+
+export function useChannelsQuery(poll = false) {
   const account = useAccount();
   return useQuery({
     queryKey: channelKeys.list(),
     queryFn: fetchChannels,
     enabled: !!account,
+    refetchInterval: poll ? CHANNEL_POLL_MS : false,
   });
 }
 
@@ -121,11 +136,12 @@ export function useChannelUnreadTotal(): number {
   return channelUnreadTotal(data);
 }
 
-export function useChannelMessagesQuery(channelId: number, enabled: boolean) {
+export function useChannelMessagesQuery(channelId: number, enabled: boolean, poll = false) {
   return useQuery({
     queryKey: channelKeys.messages(channelId),
     queryFn: () => fetchChannelMessages(channelId),
     enabled,
+    refetchInterval: poll ? CHANNEL_POLL_MS : false,
   });
 }
 
