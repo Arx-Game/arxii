@@ -344,16 +344,31 @@ describe('HeritageStage', () => {
   });
 
   describe('Folio markup', () => {
-    it('lists beginnings as entries with their point cost as the tag and no hover panel', async () => {
+    it('heads a beginning with its station and reads its cost at the foot, beside the codex link', async () => {
       const queryClient = createTestQueryClient();
       seedHeritageStageData(queryClient);
+      seedQueryData(queryClient, characterCreationKeys.beginnings(mockStartingArea.id), [
+        {
+          ...mockBeginnings,
+          name: 'Umbral Nobility',
+          station: 'Noble Born in the Shadow of Umbros',
+          cg_point_cost: 0,
+          codex_entry_ids: [7],
+        },
+      ]);
       renderWithCharacterCreationProviders(
         <HeritageStage draft={mockDraftWithArea} onStageSelect={mockOnStageSelect} />,
         { queryClient }
       );
       const list = await screen.findByRole('list', { name: 'Beginnings' });
-      expect(within(list).getByText(mockBeginnings.name)).toBeInTheDocument();
-      expect(within(list).getAllByText(/no cost/i).length).toBeGreaterThan(0);
+      const summary = within(list).getByText('Umbral Nobility').closest('summary') as HTMLElement;
+      // The closed row reads the station, and no cost.
+      expect(within(summary).getByText('Noble Born in the Shadow of Umbros')).toBeInTheDocument();
+      expect(within(summary).queryByText(/no cost/i)).toBeNull();
+      // The cost sits on the codex line in the body, once.
+      const codexLine = within(list).getByText('Codex: Umbral Nobility').closest('p');
+      expect(codexLine).toHaveTextContent(/Codex: Umbral Nobility · No cost/);
+      expect(within(list).getAllByText(/no cost/i)).toHaveLength(1);
       expect(screen.queryByText(/hover/i)).not.toBeInTheDocument();
     });
 
@@ -383,8 +398,9 @@ describe('HeritageStage', () => {
 
       const list = await screen.findByRole('list', { name: 'Beginnings' });
       expect(within(list).getByText('Codex: Duskborn Rite')).toBeInTheDocument();
-      // Only the entry with a codex entry id gets a "Codex:" line.
+      // Only the entry with a codex entry id gets a "Codex:" link, drawn solid.
       expect(within(list).getAllByText(/^Codex:/).length).toBe(1);
+      expect(within(list).getByText('Codex: Duskborn Rite')).toHaveClass('decoration-solid');
     });
 
     it('lists the chosen values in the rail and offers gender as a pressed row', async () => {
@@ -394,7 +410,7 @@ describe('HeritageStage', () => {
         <HeritageStage draft={mockDraftWithHeritage} onStageSelect={mockOnStageSelect} />,
         { queryClient }
       );
-      const rail = await screen.findByRole('heading', { name: 'Your choices so far' });
+      const rail = await screen.findByRole('heading', { name: 'CG selections' });
       expect(rail).toBeInTheDocument();
       expect(screen.getByRole('group', { name: 'Gender' })).toBeInTheDocument();
     });

@@ -1079,6 +1079,16 @@
   min-height: 7rem;
   resize: vertical;
 }
+/* An empty name field wears the focus box before it is clicked, so it reads as a place
+   to write; it drops back to the hairline once a name is saved. */
+.interview .field input[type='text'].awaiting {
+  outline: 2px solid var(--cg-accent);
+  outline-offset: 3px;
+}
+.interview .field input[aria-invalid='true'] + .hint {
+  color: var(--cg-accent);
+  font-style: normal;
+}
 .interview .field .hint {
   display: block;
   margin-top: 0.4rem;

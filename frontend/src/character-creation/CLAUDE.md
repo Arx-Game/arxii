@@ -22,7 +22,7 @@ character-creation/
 │   ├── PageTurn.tsx         # Back/next doors between chapters
 │   ├── NightPlate.tsx       # Full-bleed night moment (arrival, submission)
 │   ├── ChapterLeaf.tsx      # Wraps a stage's old internals in the leaf frame
-│   ├── RecordRail.tsx       # Marginalia: record-so-far rows + a Note aside
+│   ├── RecordRail.tsx       # Marginalia: the "CG selections" rows + a Note aside
 │   ├── Entry.tsx            # EntryList/Entry/EntryDoors: choosable record entries (an
 │   │                        #   optional `tags` list prints extra `.tag`s beside `tag`). Since
 │   │                        #   #4022 the name row carries a square Select mark (Selected
@@ -34,14 +34,18 @@ character-creation/
 │   ├── Field.tsx            # Inscription label over a serif control on a hairline (#3630)
 │   ├── Paragraphs.tsx       # Blank-line-separated prose split into <p> tags (#3630)
 │   ├── CodexWord.tsx        # In-world term linked via CodexTerm when a codex entry exists
-│   ├── CodexLine.tsx        # "Codex: {name}" ledger line in an entry body; nothing without an id
+│   ├── CodexLine.tsx        # "Codex: {name}" ledger line in an entry body (solid link; an
+│   │                        #   optional `note` such as a cost reads after it); nothing without either
 │   └── ConfirmDialog.tsx    # Native <dialog> confirm for record-clearing choices
 └── components/
     ├── index.ts             # Component exports
     ├── OriginStage.tsx      # Stage 1: Area selection; since #4874 the first name is asked
-    │                        #   here too (a Field above the realms, saved on blur by itself,
-    │                        #   listed first in the rail), so the life reads the name
-    ├── HeritageStage.tsx    # Stage 2: Heritage, species, gender, pronouns, age
+    │                        #   here too (a Field above the realms, boxed while empty, saved
+    │                        #   on blur by itself, listed first in the rail), so the life
+    │                        #   reads the name; the letters-only rule shows only under a
+    │                        #   refused name, and a refused name is not saved
+    ├── HeritageStage.tsx    # Stage 2: beginnings (station on the closed row, cost on the
+    │                        #   codex line), species, gender
     ├── LineageStage.tsx     # Stage 3: the beginning's route (#3617; the Upbringing pick
     │                        #   retired in #4395, the route comes with the beginning),
     │                        #   family selection, kin rows, the life grids; keeps
