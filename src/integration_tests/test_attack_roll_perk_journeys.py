@@ -24,6 +24,8 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
+from django.test import override_settings
+
 from actions.constants import ActionBackend
 from actions.factories import ActionTemplateFactory
 from actions.player_interface import dispatch_player_action
@@ -85,6 +87,7 @@ from world.scenes.constants import RoundStatus
 from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
 from world.traits.models import CheckOutcome, Trait
 from world.vitals.models import CharacterVitals
+from world.vitals.seeds import ensure_foundational_capabilities
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -210,6 +213,8 @@ class AnAttackTechniqueTakesItAndADodgeDoesNot(_AttackRollPerkField):
 
     def setUp(self) -> None:
         super().setUp()
+        with override_settings(SEED_SAMPLE_CONTENT=True):  # the movement capability
+            ensure_foundational_capabilities()
         CharacterAnimaFactory(character=self.sheet, current=30, maximum=30)
         CastPowerLevel.objects.create(min_power=0, level=1)
         self.bolt_check = CheckTypeFactory(name="Bolt Cast")
