@@ -99,7 +99,7 @@ skill call it (`SkillAdmin.save_model` through `ensure_skill_target_or_warn`, an
 effect names a skill with no target yet (the preview row says so), so a new skill takes a bonus
 the first time a card names it. A same-named target in another category (the `stealth` roll
 modifier that predates the Stealth skill) is left alone: staff retarget it by hand. The sheet
-prices skills through `skill_modifiers_for_sheet`, which picks a skill when a card, a
+prices skills through `trait_modifiers_for_sheet`, which picks a skill when a card, a
 condition or worn equipment (a crafted piece or the equipment walk) bonuses it, so a bonus
 from gear alone shows on the sheet as it rolls.
 Journeys: `integration_tests/test_skill_bonus_journeys.py`.

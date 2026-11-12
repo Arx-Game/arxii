@@ -818,6 +818,10 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+.refsheet-stat-buffed {
+  font-weight: 400;
+  color: hsl(var(--muted-foreground));
+}
 .refsheet-skills {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));

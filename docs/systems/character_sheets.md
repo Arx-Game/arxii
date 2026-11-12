@@ -379,7 +379,13 @@ The `stats`/`skills` sections of `CharacterSheetSerializer` were always built (`
 true-scale (skills store and display the same number). `frontend/src/character_sheets/components/
 MechanicsSection.tsx` renders both on the character sheet's Sheet tab
 (`roster/pages/CharacterSheetPage.tsx`), reading `useCharacterSheetQuery` and rendering whatever
-`stats`/`skills` the API returns — it does not re-implement visibility client-side. The magic
+`stats`/`skills` the API returns — it does not re-implement visibility client-side.
+**Buffed stats (#4730):** `buffed_stats` (`_build_buffed_stats`, same visibility as `stats`) maps a
+stat name to the display value the game uses (stored plus `get_trait_modifier`, ÷10) for a stat a
+buff changes, and leaves the rest out. `AbilitiesBand` shows "2 (9 with buffs)" for those and one
+number for the rest. It prices through `trait_modifiers_for_sheet`, one pass over the stat list, so
+the queries follow the stats buffed and not the conditions carrying the buffs (journey in
+`test_stat_buffs_valued_and_tapered_journeys.py`). The magic
 section's `resonances` (claimed-resonance balances, already serialized by `_build_magic_resonances`,
 #2032) similarly had no frontend consumer; `SpellbookTab.tsx` now renders a "Resonances" card
 alongside Gifts/Motif/Aura. Per-trait development-point progress is NOT part of this payload

@@ -130,7 +130,9 @@ export function SheetPanel({ sheet, isMyCharacter, rumor, languages }: SheetPane
         )
       )}
 
-      {hasAbilities && <AbilitiesBand stats={sheet.stats} skills={sheet.skills} />}
+      {hasAbilities && (
+        <AbilitiesBand stats={sheet.stats} buffedStats={sheet.buffed_stats} skills={sheet.skills} />
+      )}
 
       <div className="refsheet-columns-even">
         {((sheet.appearance.description || '') !== '' || editing) && (

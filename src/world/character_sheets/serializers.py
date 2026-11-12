@@ -152,7 +152,12 @@ from world.societies.models import OrganizationMembership, OrganizationReputatio
 from world.societies.reputation_reasons import reason_lines_by_reputation
 from world.species.models import Species
 from world.tarot.models import TarotCard
-from world.traits.models import STAT_DISPLAY_DIVISOR, CharacterTraitValue, TraitType
+from world.traits.models import (
+    STAT_DISPLAY_DIVISOR,
+    CharacterTraitValue,
+    TraitType,
+    display_trait_value,
+)
 
 
 class OriginSlotInputSerializer(serializers.Serializer):
@@ -765,6 +770,26 @@ def _build_stats(sheet: CharacterSheet) -> dict[str, int]:
     return {tv.trait.name: tv.value // STAT_DISPLAY_DIVISOR for tv in sheet.cached_trait_values}
 
 
+def _build_buffed_stats(sheet: CharacterSheet) -> dict[str, int]:
+    """The stats whose buffed value differs from the stored one: stat name to display value.
+
+    The value is the one a check, carrying capacity and fatigue read (#4730): the stored
+    value plus the modifier ``TraitHandler.get_trait_modifier`` gives it, shown on the
+    same ÷10 scale as ``stats``. A stat nothing changes is left out, so the client shows
+    one number for it. Modifiers come from one bounded pass over the whole stat list
+    (``trait_modifiers_for_sheet``), never a read per stat.
+    """
+    from world.mechanics.services import trait_modifiers_for_sheet  # noqa: PLC0415
+
+    modifiers = trait_modifiers_for_sheet(sheet, [tv.trait for tv in sheet.cached_trait_values])
+    buffed: dict[str, int] = {}
+    for tv in sheet.cached_trait_values:
+        shown = display_trait_value(TraitType.STAT, tv.value + modifiers.get(tv.trait.pk, 0))
+        if shown != tv.value // STAT_DISPLAY_DIVISOR:
+            buffed[tv.trait.name] = shown
+    return buffed
+
+
 _SKILLS_SELECT_RELATED: tuple[str, ...] = ()
 _SKILLS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     # A skill's rating is its trait's CharacterTraitValue (#5010); a skill is a
@@ -789,9 +814,9 @@ def _build_skills(sheet: CharacterSheet) -> list[SkillEntry]:
 
     A skill's ``value`` is the number a roll uses, the stored rating plus the modifier
     its distinctions, equipment and conditions give it (#4820), read through
-    ``skill_modifiers_for_sheet`` in a bounded pass; the XP gate reads the stored rating.
+    ``trait_modifiers_for_sheet`` in a bounded pass; the XP gate reads the stored rating.
     """
-    from world.mechanics.services import skill_modifiers_for_sheet  # noqa: PLC0415
+    from world.mechanics.services import trait_modifiers_for_sheet  # noqa: PLC0415
 
     # Build a lookup of specialization values keyed by parent_skill_id
     spec_by_skill: dict[int, list[SpecializationEntry]] = {}
@@ -803,7 +828,7 @@ def _build_skills(sheet: CharacterSheet) -> list[SkillEntry]:
             )
         )
 
-    modifiers = skill_modifiers_for_sheet(sheet, [tv.trait for tv in sheet.cached_skill_values])
+    modifiers = trait_modifiers_for_sheet(sheet, [tv.trait for tv in sheet.cached_skill_values])
     result: list[SkillEntry] = []
     for csv in sheet.cached_skill_values:
         skill = csv.trait
@@ -2408,6 +2433,7 @@ class CharacterSheetSerializer(serializers.Serializer):
             # #3988 — the stored values staff edit mode edits; None for anyone else.
             "staff_edit": _build_staff_edit(sheet) if can_edit_npc_sheet(user, sheet) else None,
             "stats": _build_stats(sheet) if show_stats else {},
+            "buffed_stats": _build_buffed_stats(sheet) if show_stats else {},
             "skills": _build_skills(sheet) if show_skills else [],
             "path": _build_path_detail(sheet),
             "distinctions": _build_distinctions(sheet, privileged=privileged),
