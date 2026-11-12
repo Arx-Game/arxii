@@ -33,3 +33,9 @@ invocation-options/`): per being the difficulty with each ease, uses left, the b
 - Answers (#4333 slice 3). A closed pledge's answer arrives as an ordinary vision;
   `components/VisionCard.tsx` footnotes the fact clue (`clue_name`), the follow-up
   (`follow_up_footnote`, "A mission came with it: ..." for a mission clue) and the cost's conditions (`condition_names`), never as controls.
+- Pacts with beings (#4341). `components/PactCard.tsx`: one card per pact from
+  `/api/pacts/cards/?character_sheet=` (owner and staff only): this period's favor against the
+  commitment, favor by source, the current stage, the offer's promises, and Renounce (confirmed in
+  an `AlertDialog`; dispatches `pact_renounce` with `being_id`). An ended pact still easing out
+  shows its stage and how much it eases each period. `WorshipSection` renders them after the
+  pledge card.

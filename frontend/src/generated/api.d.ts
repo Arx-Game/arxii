@@ -19197,6 +19197,48 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/pacts/cards/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Characters' pacts with beings as their cards show them, newest first: active pacts
+     *     and ended pacts still easing out. The owner reads their own characters', staff read
+     *     anyone's; a pact with a secret faith is never shown to anyone else.
+     */
+    get: operations['pacts_cards_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/pacts/cards/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Characters' pacts with beings as their cards show them, newest first: active pacts
+     *     and ended pacts still easing out. The owner reads their own characters', staff read
+     *     anyone's; a pact with a secret faith is never shown to anyone else.
+     */
+    get: operations['pacts_cards_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/personas/': {
     parameters: {
       query?: never;
@@ -41183,6 +41225,36 @@ export interface components {
      */
     PaceModeEnum: 'timed' | 'ready' | 'manual';
     /**
+     * @description A character's pact as her card shows it. Read by her own player and staff only:
+     *     a pact with a secret faith is hers alone.
+     *
+     *     ``earned``/``required``/``time_limit`` describe the open period; after the pact
+     *     ended (``is_active`` false) that is an ease-out period, whose condition eases by
+     *     ``severity_per_miss`` when it ends.
+     */
+    PactCard: {
+      id: number;
+      character_sheet: number;
+      being_id: number;
+      being_name: string;
+      offer_name: string;
+      period_weeks: number;
+      severity_per_miss: number;
+      earned: number;
+      required: number;
+      /** Format: date-time */
+      time_limit: string | null;
+      sources: components['schemas']['PactSourceLine'][];
+      stage_name: string;
+      severity: number;
+      next_stage_threshold: number | null;
+      promises: string[];
+      condition_effects: string[];
+      stages: components['schemas']['PactStageLine'][];
+      is_active: boolean;
+      dissolution_reason: string;
+    };
+    /**
      * @description One commitment of an offer: FAVOR_EARNED (``amount`` per period) or CUSTOM (a
      *     promise in ``notes``, never checked).
      */
@@ -41204,6 +41276,11 @@ export interface components {
       promises: string[];
       condition_effects: string[];
       stages: components['schemas']['PactStageLine'][];
+    };
+    /** @description Favor credited toward the open period from one kind of source. */
+    PactSourceLine: {
+      label: string;
+      favor: number;
     };
     /**
      * @description One stage of a pact's condition, best to worst, with the stage's own effects;
@@ -43229,6 +43306,21 @@ export interface components {
       /** Format: uri */
       previous: string | null;
       results: components['schemas']['OutfitSlotRead'][];
+    };
+    PaginatedPactCardList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PactCard'][];
     };
     PaginatedPendingAlterationList: {
       /** @example 123 */
@@ -81757,6 +81849,51 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  pacts_cards_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPactCardList'];
+        };
+      };
+    };
+  };
+  pacts_cards_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PactCard'];
+        };
       };
     };
   };

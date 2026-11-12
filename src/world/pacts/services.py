@@ -60,6 +60,8 @@ from world.projects.constants import CompletionMode, ProjectKind, ProjectStatus
 from world.worship.constants import DAYS_PER_GAME_WEEK, PledgeCreditSource
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
     from world.conditions.models import ConditionInstance, ConditionStage, ConditionTemplate
@@ -214,13 +216,11 @@ def _open_periods(pact: CharacterPact) -> list[PactPeriodDetails]:
     )
 
 
-def pact_cards_for(sheet: CharacterSheet) -> list[PactCard]:
-    """Her pact cards, newest first: active pacts, and ended pacts still easing out."""
-    from world.worship.invocation_services import is_secret_faith  # noqa: PLC0415
-
-    pacts = (
-        CharacterPact.objects.filter(character_sheet=sheet)
-        .filter(
+def carded_pacts() -> QuerySet[CharacterPact]:
+    """Every pact a card shows, newest first: active pacts, and ended pacts still easing
+    out. Callers scope it (one sheet, or the sheets an account plays)."""
+    return (
+        CharacterPact.objects.filter(
             Q(dissolved_at__isnull=True)
             | Q(
                 periods__commitment__isnull=True,
@@ -228,49 +228,70 @@ def pact_cards_for(sheet: CharacterSheet) -> list[PactCard]:
             )
         )
         .distinct()
-        .select_related("offer__being", "offer__condition", "condition_instance__current_stage")
+        .select_related(
+            "character_sheet",
+            "offer__being",
+            "offer__condition",
+            "condition_instance__current_stage",
+        )
         .order_by("-signed_at", "-pk")
     )
-    cards: list[PactCard] = []
-    for pact in pacts:
-        offer = pact.offer
-        period = next(iter(_open_periods(pact)), None)
-        sources: dict[str, int] = defaultdict(int)
-        if period is not None:
-            for credit in period.credits.all():
-                sources[credit.get_source_display()] += credit.credited
-        condition_effects, stages = _stage_lines(offer.condition)
-        instance = pact.condition_instance
-        stage = instance.current_stage if instance is not None else None
-        severity = instance.severity if instance is not None else 0
-        next_threshold = next(
-            (line.threshold for line in stages if line.threshold > severity), None
-        )
-        project = period.project if period is not None else None
-        cards.append(
-            PactCard(
-                pact=pact,
-                being_name=offer.being.name,
-                being_is_secret=is_secret_faith(sheet, offer.being),
-                offer_name=offer.name,
-                period_weeks=offer.period_weeks,
-                earned=project.current_progress if project is not None else 0,
-                required=(project.threshold_target or 0) if project is not None else 0,
-                time_limit=project.time_limit if project is not None else None,
-                sources=tuple(
-                    PactSourceLine(label=label, favor=favor) for label, favor in sources.items()
-                ),
-                stage_name=stage.name if stage is not None else "",
-                severity=severity,
-                next_stage_threshold=next_threshold,
-                promises=_promises(offer),
-                condition_effects=condition_effects,
-                stages=stages,
-                is_active=pact.is_active,
-                dissolution_reason=pact.dissolution_reason,
-            )
-        )
-    return cards
+
+
+def _source_label(source: str, being_name: str) -> str:
+    """How the card names one kind of favor source toward a pact period."""
+    if source == PledgeCreditSource.DEED:
+        return f"Deeds: resonances {being_name} favors, from missions and scenes"
+    if source == PledgeCreditSource.RITE:
+        return f"{being_name}'s rite, which you performed"
+    return PledgeCreditSource(source).label
+
+
+def pact_card(pact: CharacterPact) -> PactCard:
+    """One pact as its holder's card shows it: the open period, its favor by source,
+    the condition's stage and severity, and the offer's promises."""
+    from world.worship.invocation_services import is_secret_faith  # noqa: PLC0415
+
+    offer = pact.offer
+    being_name = offer.being.name
+    period = next(iter(_open_periods(pact)), None)
+    sources: dict[str, int] = defaultdict(int)
+    if period is not None:
+        for credit in period.credits.order_by("pk"):
+            sources[credit.source] += credit.credited
+    condition_effects, stages = _stage_lines(offer.condition)
+    instance = pact.condition_instance
+    stage = instance.current_stage if instance is not None else None
+    severity = instance.severity if instance is not None else 0
+    next_threshold = next((line.threshold for line in stages if line.threshold > severity), None)
+    project = period.project if period is not None else None
+    return PactCard(
+        pact=pact,
+        being_name=being_name,
+        being_is_secret=is_secret_faith(pact.character_sheet, offer.being),
+        offer_name=offer.name,
+        period_weeks=offer.period_weeks,
+        earned=project.current_progress if project is not None else 0,
+        required=(project.threshold_target or 0) if project is not None else 0,
+        time_limit=project.time_limit if project is not None else None,
+        sources=tuple(
+            PactSourceLine(label=_source_label(source, being_name), favor=favor)
+            for source, favor in sources.items()
+        ),
+        stage_name=stage.name if stage is not None else "",
+        severity=severity,
+        next_stage_threshold=next_threshold,
+        promises=_promises(offer),
+        condition_effects=condition_effects,
+        stages=stages,
+        is_active=pact.is_active,
+        dissolution_reason=pact.dissolution_reason,
+    )
+
+
+def pact_cards_for(sheet: CharacterSheet) -> list[PactCard]:
+    """Her pact cards, newest first: active pacts, and ended pacts still easing out."""
+    return [pact_card(pact) for pact in carded_pacts().filter(character_sheet=sheet)]
 
 
 # ---------------------------------------------------------------------------
