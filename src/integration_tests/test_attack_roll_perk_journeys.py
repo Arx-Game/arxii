@@ -405,6 +405,74 @@ class TheAnnounceNamesTheAllyAndTheFoe(JourneyCase):
             self.ilse, "Press the Held Foe: an ally holds Bandit Captain for Tomas to strike!"
         )
 
+    def cast_at_nobody(self) -> int:
+        """Tomas casts the bolt at no one (its template targets the caster) and the round
+        resolves; the points on his cast roll. He starts each round rested."""
+        pool = get_or_create_fatigue_pool(self.tomas.sheet_data)
+        pool.physical_current = 0
+        pool.mental_current = 0
+        pool.save(update_fields=["physical_current", "mental_current"])
+        declared = dispatch_player_action(
+            self.tomas,
+            ActionRef(
+                backend=ActionBackend.COMBAT, technique_id=self.bolt.pk, action_slot="focused"
+            ),
+            {"effort_level": EffortLevel.MEDIUM},
+        )
+        self.assertTrue(declared.deferred, declared)
+        rolled: list[int] = []
+
+        def recorded(character: Any, *args: Any, **kwargs: Any):
+            result = _forced_success(character, *args, **kwargs)
+            if character == self.tomas:
+                rolled.append(result.total_points)
+            return result
+
+        with patch("world.combat.services.perform_check", side_effect=recorded):
+            resolve_round(self.encounter)
+        begin_declaration_phase(self.encounter)
+        self.encounter.refresh_from_db()
+        self.assertEqual(len(rolled), 1, rolled)
+        return rolled[0]
+
+    def unconditional(self, line: str) -> None:
+        """The perk answers whatever the situation (its situation row removed), off for
+        now: scoped to a check type nobody rolls."""
+        self.situation.delete()
+        self.perk.announce_template = line
+        self.perk.check_type = CheckTypeFactory(name="Never rolled here")
+        self.perk.roll_kind = PerkRollKind.ANY
+        self.perk.save()
+
+    def scope(self, roll_kind: str) -> None:
+        self.perk.check_type = None
+        self.perk.roll_kind = roll_kind
+        self.perk.full_clean()
+        self.perk.save()
+
+    def test_a_cast_at_no_foe_takes_no_attack_bonus(self) -> None:
+        """A cast with no opponent is not an attack: "Attack rolls" adds nothing to it."""
+        self.unconditional("{holder} braces against {target}!")
+        before = self.cast_at_nobody()
+        self.scope(PerkRollKind.ATTACK)
+
+        after = self.cast_at_nobody()
+
+        self.assertEqual(after - before, 0)
+        self.assertNotTold(self.ilse, "Press the Held Foe")
+
+    def test_with_no_foe_to_name_the_line_says_the_foe(self) -> None:
+        """The control and the fallback: "Any roll" reaches the same cast (+30), and with
+        no foe in it the room hears "the foe", never a raw brace."""
+        self.unconditional("{holder} braces against {target}!")
+        before = self.cast_at_nobody()
+        self.scope(PerkRollKind.ANY)
+
+        after = self.cast_at_nobody()
+
+        self.assertEqual(after - before, 30)
+        self.assertTold(self.ilse, "Press the Held Foe: Tomas braces against the foe!")
+
 
 def _forced_success(*args: Any, **kwargs: Any):
     with force_check_outcome(CheckOutcome.objects.get(name="Success")):
