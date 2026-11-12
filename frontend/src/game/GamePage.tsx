@@ -1229,6 +1229,8 @@ export function GamePage() {
           onClose={() => setCardPersona(null)}
           viewerEntryId={viewerEntryId}
           onWhisper={handleWhisper}
+          viewerCharacterId={activeCharacterId}
+          viewerActivePersonaId={personaId}
         />
       </CombatPickProvider>
     </PersonaCardContext.Provider>

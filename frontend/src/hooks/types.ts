@@ -308,6 +308,17 @@ export interface MailArrivedPayload {
 }
 
 /**
+ * Arrival ping for `missive_arrived` (#3289): an IC missive came due for one of this
+ * character's faces. `sender_display` is the sender as the reader knows them. Carries no
+ * body; clients refetch the missive list and unread count.
+ */
+export interface MissiveArrivedPayload {
+  missive_id: number;
+  recipient_persona_name: string;
+  sender_display: string;
+}
+
+/**
  * An environmental-hazard condition (sunlight bane/allergy, #2846) crossed
  * into a damaging stage. `endure_action`/`retreat_action` are action keys the
  * client dispatches through the normal action-dispatch endpoint; cover-up and

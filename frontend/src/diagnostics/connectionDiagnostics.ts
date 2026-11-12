@@ -117,6 +117,7 @@ const SAFE_FRAME_TYPES = new Set([
   'combat_encounter_state',
   'kudos_received',
   'mail_arrived',
+  'missive_arrived',
   'hazard_prompt',
   'request_room_state',
   'state_resync',
