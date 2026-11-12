@@ -790,6 +790,13 @@ def _build_buffed_stats(sheet: CharacterSheet) -> dict[str, int]:
     return buffed
 
 
+def _build_stat_sections(sheet: CharacterSheet, *, show: bool) -> dict[str, dict[str, int]]:
+    """The payload's ``stats`` and ``buffed_stats``, empty when stats are hidden."""
+    if not show:
+        return {"stats": {}, "buffed_stats": {}}
+    return {"stats": _build_stats(sheet), "buffed_stats": _build_buffed_stats(sheet)}
+
+
 _SKILLS_SELECT_RELATED: tuple[str, ...] = ()
 _SKILLS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     # A skill's rating is its trait's CharacterTraitValue (#5010); a skill is a
@@ -2432,8 +2439,7 @@ class CharacterSheetSerializer(serializers.Serializer):
             ),
             # #3988 — the stored values staff edit mode edits; None for anyone else.
             "staff_edit": _build_staff_edit(sheet) if can_edit_npc_sheet(user, sheet) else None,
-            "stats": _build_stats(sheet) if show_stats else {},
-            "buffed_stats": _build_buffed_stats(sheet) if show_stats else {},
+            **_build_stat_sections(sheet, show=show_stats),
             "skills": _build_skills(sheet) if show_skills else [],
             "path": _build_path_detail(sheet),
             "distinctions": _build_distinctions(sheet, privileged=privileged),
