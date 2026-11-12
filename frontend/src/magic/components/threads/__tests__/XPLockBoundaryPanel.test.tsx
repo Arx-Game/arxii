@@ -131,9 +131,9 @@ describe('XPLockBoundaryPanel', () => {
       />,
       { wrapper: createWrapper() }
     );
-    // boundary_level 20 displayed as 20/10 = 2
-    expect(screen.getByTestId('xp-lock-description').textContent).toContain('2');
-    expect(screen.getByTestId('xp-lock-description').textContent).toContain('15');
+    expect(screen.getByTestId('xp-lock-description')).toHaveTextContent(
+      'Crossing level 20 requires 15 XP.'
+    );
     // available XP
     expect(screen.getByTestId('xp-available').textContent).toBe('20');
   });

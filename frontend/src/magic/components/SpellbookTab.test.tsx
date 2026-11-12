@@ -596,8 +596,8 @@ describe('SpellbookTab technique forms (#2901)', () => {
     control: 3,
     is_default: true,
     is_locked: false,
-    unlock_thread_level: 3,
-    thread_level: 3,
+    unlock_thread_level: 30,
+    thread_level: 30,
     is_early: false,
     effect_summary: mockEffectSummary,
   };
@@ -608,7 +608,7 @@ describe('SpellbookTab technique forms (#2901)', () => {
     name: 'Cinderfall Rite',
     is_default: false,
     is_locked: true,
-    unlock_thread_level: 6,
+    unlock_thread_level: 60,
   };
 
   beforeEach(() => {
@@ -644,7 +644,7 @@ describe('SpellbookTab technique forms (#2901)', () => {
     renderWithForms([mockBaseForm, lockedForm]);
 
     expect(screen.getByText('Not yet yours')).toBeInTheDocument();
-    expect(screen.getByText('Cinderfall Rite (Cinder), at thread level 6')).toBeInTheDocument();
+    expect(screen.getByText('Cinderfall Rite (Cinder), at thread level 60')).toBeInTheDocument();
   });
 
   it('renders the signature as a delta, not another form row', () => {
@@ -675,8 +675,8 @@ describe('SpellbookTab personalization (#4099)', () => {
       control: 3,
       is_default: true,
       is_locked: false,
-      unlock_thread_level: 3,
-      thread_level: 3,
+      unlock_thread_level: 30,
+      thread_level: 30,
       is_early: false,
       effect_summary: mockEffectSummary,
       ...overrides,
@@ -729,7 +729,7 @@ describe('SpellbookTab personalization (#4099)', () => {
             consumes: [{ name: 'Shard of rime', quantity: 2 }],
             inflicts: 'Frostbitten fingers',
           },
-          next_signature: { name: 'Rime walks with you', min_level: 3, thread_level: 1 },
+          next_signature: { name: 'Rime walks with you', min_level: 30, thread_level: 10 },
         }),
       ],
     });
@@ -742,7 +742,7 @@ describe('SpellbookTab personalization (#4099)', () => {
       'Consumes 2× Shard of rime · Inflicts Frostbitten fingers'
     );
     expect(within(entry).getByTestId('technique-next-signature')).toHaveTextContent(
-      'Rime walks with you, at thread level 3'
+      'Rime walks with you, at thread level 30'
     );
   });
 
