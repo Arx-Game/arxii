@@ -264,7 +264,10 @@ test.describe('player channels', () => {
     ).toHaveText('1 hidden');
     await expect(modes.getByRole('button', { name: /^Channels/ })).toHaveCount(0);
     await expect(sidebar.getByText(OTHER_MESSAGE)).toHaveCount(0);
-    await expect(page.getByText(BLOCKED_SPEAKER)).toHaveCount(0);
+    // The room's character list may name her; the feed never does.
+    await expect(page.locator('[data-testid="feed-note"]').getByText(BLOCKED_SPEAKER)).toHaveCount(
+      0
+    );
     await expectNoAccountNames(page);
     await shot(page, 'main-ooc-on');
 
