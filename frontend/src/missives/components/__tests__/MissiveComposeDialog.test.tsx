@@ -15,9 +15,8 @@ vi.mock('@/missives/api', () => ({
 vi.mock('@/game/personaQueries', () => ({
   useCharacterPersonasQuery: vi.fn(),
 }));
-vi.mock('@/inventory/hooks/useInventory', () => ({
-  inventoryKeys: { all: ['inventory'] },
-  useInventory: vi.fn(),
+vi.mock('@/inventory/api', () => ({
+  listInventory: vi.fn(),
 }));
 vi.mock('@/roster/usePersonaSearch', () => ({
   usePersonaSearch: vi.fn(() => ({ results: [], isFetching: false })),
@@ -25,7 +24,7 @@ vi.mock('@/roster/usePersonaSearch', () => ({
 
 import { dispatchMissiveAction } from '@/missives/api';
 import { useCharacterPersonasQuery } from '@/game/personaQueries';
-import { useInventory } from '@/inventory/hooks/useInventory';
+import { listInventory } from '@/inventory/api';
 
 const mockDispatch = vi.mocked(dispatchMissiveAction);
 
@@ -56,9 +55,9 @@ describe('MissiveComposeDialog', () => {
     vi.mocked(useCharacterPersonasQuery).mockReturnValue({
       data: PERSONAS,
     } as unknown as ReturnType<typeof useCharacterPersonasQuery>);
-    vi.mocked(useInventory).mockReturnValue({
-      data: [{ id: 5, display_name: 'Moth Brooch' }],
-    } as unknown as ReturnType<typeof useInventory>);
+    vi.mocked(listInventory).mockResolvedValue([
+      { id: 5, display_name: 'Moth Brooch' },
+    ] as unknown as Awaited<ReturnType<typeof listInventory>>);
   });
 
   it('sends to the card persona from the worn face, with coin and an item', async () => {
@@ -73,8 +72,8 @@ describe('MissiveComposeDialog', () => {
       />
     );
     fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Hello there.' } });
-    fireEvent.change(screen.getByLabelText('Coin'), { target: { value: '50' } });
-    fireEvent.click(screen.getByLabelText('Moth Brooch'));
+    fireEvent.change(screen.getByLabelText('Coin'), { target: { value: '5s' } });
+    fireEvent.click(await screen.findByLabelText('Moth Brooch'));
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());

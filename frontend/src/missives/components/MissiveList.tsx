@@ -21,27 +21,29 @@ const RESOLUTION_LABEL: Record<AttachmentResolution, string> = {
 };
 
 interface MissiveGroup {
+  key: string;
   heading: string;
   rows: Missive[];
 }
 
 function groupMissives(missives: Missive[]): MissiveGroup[] {
-  const received = new Map<string, Missive[]>();
+  const received = new Map<number, Missive[]>();
   const sent: Missive[] = [];
   for (const missive of missives) {
     if (missive.direction === 'sent') {
       sent.push(missive);
       continue;
     }
-    const rows = received.get(missive.own_persona_name) ?? [];
+    const rows = received.get(missive.own_persona_id) ?? [];
     rows.push(missive);
-    received.set(missive.own_persona_name, rows);
+    received.set(missive.own_persona_id, rows);
   }
-  const groups: MissiveGroup[] = [...received.entries()].map(([name, rows]) => ({
-    heading: `To ${name}`,
+  const groups: MissiveGroup[] = [...received.entries()].map(([personaId, rows]) => ({
+    key: `to-${personaId}`,
+    heading: `To ${rows[0].own_persona_name}`,
     rows,
   }));
-  if (sent.length > 0) groups.push({ heading: 'Sent', rows: sent });
+  if (sent.length > 0) groups.push({ key: 'sent', heading: 'Sent', rows: sent });
   return groups;
 }
 
@@ -63,7 +65,10 @@ export function MissiveList({ missives, characterId, onReply }: MissiveListProps
   const handleOpen = (value: string) => {
     const missive = byId.get(value);
     if (missive && missive.direction === 'received' && !missive.is_read) {
-      action.mutate({ key: 'read_missive', kwargs: { missive_id: missive.id } });
+      action.mutate(
+        { key: 'read_missive', kwargs: { missive_id: missive.id } },
+        { onError: (err) => toast.error(err.message) }
+      );
     }
   };
 
@@ -81,7 +86,7 @@ export function MissiveList({ missives, characterId, onReply }: MissiveListProps
   return (
     <Accordion type="single" collapsible onValueChange={handleOpen} className="space-y-4">
       {groupMissives(missives).map((group) => (
-        <section key={group.heading}>
+        <section key={group.key}>
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {group.heading}
           </h3>

@@ -20,7 +20,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useCharacterPersonasQuery } from '@/game/personaQueries';
-import { useInventory } from '@/inventory/hooks/useInventory';
+import { useQuery } from '@tanstack/react-query';
+import { listInventory } from '@/inventory/api';
+import { inventoryKeys } from '@/inventory/hooks/useInventory';
+import { parseCoppers } from '@/lib/currency';
 import { usePersonaSearch } from '@/roster/usePersonaSearch';
 import { useMissiveAction } from '../queries';
 import type { Missive } from '../types';
@@ -101,7 +104,13 @@ function ComposeForm({
   onSent,
 }: ComposeFormProps) {
   const { data: personas = [] } = useCharacterPersonasQuery(characterId);
-  const { data: inventory = [] } = useInventory(characterId);
+  // Not Wardrobe's `useInventory`: that one throws to the route boundary, and a failed
+  // read here should only hide the Items field.
+  const { data: inventory = [] } = useQuery({
+    queryKey: inventoryKeys.inventory(characterId),
+    queryFn: () => listInventory(characterId),
+    throwOnError: false,
+  });
   const action = useMissiveAction(characterId);
 
   const [to, setTo] = useState<MissiveRecipient | null>(recipient);
@@ -123,17 +132,16 @@ function ComposeForm({
   const toggleItem = (id: number) =>
     setItemIds((ids) => (ids.includes(id) ? ids.filter((i) => i !== id) : [...ids, id]));
 
-  const canSend = body.trim().length > 0 && (replyTo !== null || to !== null);
+  const coinAmount = coin.trim() === '' ? null : parseCoppers(coin);
+  const coinInvalid = coin.trim() !== '' && coinAmount === null;
+  const canSend = body.trim().length > 0 && (replyTo !== null || to !== null) && !coinInvalid;
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!canSend) return;
     const kwargs: Record<string, unknown> = { body };
     if (fromId != null) kwargs.sender_persona_id = fromId;
-    const coinAmount = Number(coin);
-    if (coin !== '' && Number.isFinite(coinAmount) && coinAmount > 0) {
-      kwargs.coin_amount = coinAmount;
-    }
+    if (coinAmount !== null) kwargs.coin_amount = coinAmount;
     if (itemIds.length > 0) kwargs.item_ids = itemIds;
     if (replyTo) {
       kwargs.missive_id = replyTo.id;
@@ -200,7 +208,8 @@ function ComposeForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       {toField && (
         <div className="space-y-1">
-          <Label htmlFor="missive-to">To</Label>
+          {/* The label points at the search box only while it is mounted. */}
+          <Label htmlFor={to ? undefined : 'missive-to'}>To</Label>
           {toField}
         </div>
       )}
@@ -234,9 +243,8 @@ function ComposeForm({
         <Label htmlFor="missive-coin">Coin</Label>
         <Input
           id="missive-coin"
-          type="number"
-          min={0}
-          step={1}
+          placeholder="1g 2s 3c"
+          aria-invalid={coinInvalid}
           value={coin}
           onChange={(e) => setCoin(e.target.value)}
         />

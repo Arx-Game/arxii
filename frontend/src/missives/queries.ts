@@ -3,6 +3,9 @@ import { dispatchMissiveAction, fetchMissives, fetchMissiveUnreadCount } from '.
 import type { MissiveActionKey } from './types';
 import { inventoryKeys } from '@/inventory/hooks/useInventory';
 
+/** Prefix of `useCharacterPurse`'s key (`@/status/queries`). */
+const PURSE_KEY = ['status', 'purse'] as const;
+
 export const missiveKeys = {
   all: ['missives'] as const,
   list: (entryId: number, page: number) => [...missiveKeys.all, 'list', entryId, page] as const,
@@ -41,8 +44,11 @@ export function useMissiveAction(characterId: number | null) {
     },
     onSettled: (_result, _error, { key }) => {
       queryClient.invalidateQueries({ queryKey: missiveKeys.all }).catch(() => {});
-      // Sending carries items away; accepting brings them in.
-      if (key !== 'read_missive' && key !== 'refuse_missive') {
+      if (key === 'read_missive') return;
+      // Sending carries items and coin away; accepting brings them in; refusing sends
+      // them home (the purse prefix covers every character this account plays).
+      queryClient.invalidateQueries({ queryKey: PURSE_KEY }).catch(() => {});
+      if (key !== 'refuse_missive') {
         queryClient.invalidateQueries({ queryKey: inventoryKeys.all }).catch(() => {});
       }
     },
