@@ -251,7 +251,8 @@ class RallyAction(Action):
         from world.checks.services import level_opposition, perform_check  # noqa: PLC0415
         from world.conditions.services import (  # noqa: PLC0415
             attempt_break_free,
-            breakable_condition_filter,
+            rally_target_instance,
+            record_rally_landed,
         )
         from world.progression.services.skill_development import (  # noqa: PLC0415
             get_character_path_level,
@@ -261,28 +262,12 @@ class RallyAction(Action):
         if target is None:
             return ActionResult(success=False, message="You must specify a target.")
 
-        from world.conditions.models import ConditionInstance  # noqa: PLC0415
-
-        instances = (
-            ConditionInstance.objects.select_related("condition", "condition__category")
-            .filter(
-                breakable_condition_filter(),
-                target=target,
-                resolved_at__isnull=True,
-                is_aware=True,
-            )
-            .exclude(condition__break_free_mode="none")
-        )
-        if not instances.exists():
+        instance = rally_target_instance(target)
+        if instance is None:
             return ActionResult(
                 success=False,
                 message="They don't seem to be fighting anything.",
             )
-
-        instance = max(
-            instances,
-            key=lambda i: (i.severity, i.condition.break_free_difficulty),
-        )
 
         check_type = (
             instance.condition.break_free_check_type or instance.condition.resist_check_type
@@ -303,6 +288,10 @@ class RallyAction(Action):
         )
         sl = result.success_level
 
+        if sl > 0:
+            # Kept for the instance's life: a talked-down self it holds may now change
+            # back (#4887). The bonus below is consumed; this is not.
+            record_rally_landed(instance)
         crit_threshold = 2
         if sl >= crit_threshold:
             break_result = attempt_break_free(

@@ -94,10 +94,10 @@ export function HallPage() {
 
       <OffscreenActsPlate characters={characters} />
 
-      {/* 52rem, not a default Tailwind breakpoint (brief's explicit threshold) —
-          arbitrary variant. Single column below stacks Attention above World
+      {/* `hall` is a named screen in tailwind.config.js (the brief's explicit 52rem
+          threshold, in px). Single column below stacks Attention above World
           (attention outranks ambiance). */}
-      <div className="min-[52rem]:grid-cols-[1.55fr_1fr] grid grid-cols-1 gap-4">
+      <div className="grid grid-cols-1 gap-4 hall:grid-cols-[1.55fr_1fr]">
         <AttentionBand characters={characters} />
         <WorldBand />
       </div>

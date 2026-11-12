@@ -71,14 +71,17 @@ def validate_compulsion_bands(bands: Sequence["CompulsionResistBand"]) -> list[s
 
 
 def validate_control_loss_bands(bands: Sequence["ControlLossBand"]) -> list[str]:
-    """Problem lines for control-loss bands where a better outcome is worse.
+    """Problem lines for control-loss bands that break order or trade control badly.
 
-    A better outcome may not have a lower ``control_change``, or a higher ``severity`` or
-    ``duration_rounds``. ``intensity`` is left out on purpose: losing control trades
-    control for power, so a worse roll may well raise intensity (the approved #4802
-    demo's wound trigger gives +4 on a Failure and +5 on a Critical Failure).
+    Monotonic order: a better outcome may not have a lower ``control_change``, or a higher
+    ``severity`` or ``duration_rounds``. ``intensity`` is left out of the order on purpose:
+    losing control trades control for power, so a worse roll may well raise intensity (the
+    approved #4802 demo's wound trigger gives +4 on a Failure and +5 on a Critical Failure).
+
+    The trade itself is checked band by band (ruled 2026-11-01, #4887): gaining control is
+    never a negative, and a failure loses more than it gains. See ``_trade_problems``.
     """
-    return _check(
+    problems = _check(
         bands,
         lower_is_better=[
             ("control change", lambda band: -band.control_change),
@@ -86,3 +89,30 @@ def validate_control_loss_bands(bands: Sequence["ControlLossBand"]) -> list[str]
             ("duration", lambda band: band.duration_rounds),
         ],
     )
+    for band in sorted(bands, key=lambda band: band.outcome.success_level):
+        problems.extend(_trade_problems(band))
+    return problems
+
+
+def _trade_problems(band: "ControlLossBand") -> list[str]:
+    """The control-for-power trade rules for one band.
+
+    A successful band (success level above 0) may not lower Control. It cannot lower
+    Intensity either, since ``intensity`` only ever adds. A failed band (success level
+    below 0) may not add more Intensity than the Control it takes away. A band at level 0
+    is neither, and is checked by the monotonic order only.
+    """
+    level = band.outcome.success_level
+    name = band.outcome.name
+    if level > 0 and band.control_change < 0:
+        return [
+            f"'{name}' is a success, so it cannot lower Control "
+            f"(it has Control {band.control_change:+d})."
+        ]
+    if level < 0 and band.intensity > -band.control_change:
+        return [
+            f"'{name}' is a failure, so it cannot add more Intensity than the Control it "
+            f"takes away (it has Intensity +{band.intensity}, "
+            f"Control {band.control_change:+d})."
+        ]
+    return []
