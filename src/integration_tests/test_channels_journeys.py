@@ -471,6 +471,9 @@ class BlocksMutesAndControls(ChannelJourneyCase):
         ysmay_tab = self.connect_session(self.ysmay_account, "websocket")
         self.assertEqual(self.post_web(self.hobb_account, self.public, "Evening.").status_code, 201)
         self.assertEqual(self.frames(ysmay_tab), [])
+        # Her own post never comes back hidden to her.
+        own = [r for r in self.history(self.ysmay_account, self.public) if r["is_own"]]
+        self.assertEqual([(r["body"], r["is_hidden"]) for r in own], [("Hi Hobb", False)])
 
     def test_an_account_muted_author_is_dropped(self) -> None:
         set_mute(

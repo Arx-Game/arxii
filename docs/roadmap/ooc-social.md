@@ -111,7 +111,10 @@ every character the target's player currently plays unless the caller opts into 
 advanced persona-only shape (`+block/persona`, `+mute/persona`, or `account_level: false` on
 the create serializers). One query seam per primitive — `block_services.account_block_active`
 / `blocked_player_ids_for` and `mute_services.account_muted` / `muted_player_ids_for` — is the
-only thing every OOC delivery surface calls; no per-surface reimplementation.
+only thing every OOC delivery surface calls; no per-surface reimplementation. A push fan-out
+that must honour persona-scoped blocks too (player channels, #3299) uses
+`block_services.account_ids_hiding_persona`, the one-query inverse of
+`hidden_persona_ids_for_viewer`.
 
 **Per-surface policy** (write-then-filter by default — the actor's own write path is
 byte-identical, suppression is query-time exclusion on the other party's read; IC channels stay

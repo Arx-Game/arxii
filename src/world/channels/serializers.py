@@ -192,7 +192,9 @@ class ChannelMessageSerializer(serializers.ModelSerializer):
 
     def get_is_hidden(self, obj: ChannelMessage) -> bool:
         """Whether a block sits between this reader and the author: account-wide, or on
-        the author's character's primary persona."""
+        the author's character's primary persona. A reader's own posts are never hidden."""
+        if self.get_is_own(obj):
+            return False
         hidden = self.context.get("hidden_player_ids") or set()
         hidden_sheets = self.context.get("hidden_sheet_ids") or set()
         tenure = obj.author_tenure

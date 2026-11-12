@@ -6865,15 +6865,17 @@ A speaker is a `RosterTenure` chosen per channel, never an account name
   `can_access_channel` / `findable_channels_for`, `eligible_tenures` /
   `default_tenure_for`, `subscribe` / `update_subscription` / `unsubscribe`,
   `post_to_channel`, `deliver_channel_message`, `history_for`,
+  `hidden_author_player_ids` / `hidden_author_sheet_ids`,
   `unread_counts` / `mark_read`, `delete_channel_message` /
   `ban_channel_author` (staff), `provision_org_channel`,
   `ensure_public_channel`, `prune_channel_history` (hourly
   `channels.prune_history` task). Raises `ChannelError`.
-- **Access:** ORG = account-union of active memberships in the org or a
+- **Access:** ORG = account-union of active memberships held by each
+  character's primary persona (never an established face) in the org or a
   non-covert vassal house (the #1884 house vassal cascade; a covert vassal cuts
   its branch). Staff read every non-covert channel; posting stays
-  identity-gated. Blocked authors are hidden rows ("N hidden"), account-muted
-  authors dropped.
+  identity-gated. Blocked authors (account-level, or a block on the author's
+  primary persona) are hidden rows ("N hidden"), account-muted authors dropped.
 - **Actions** (`actions/definitions/channels.py`, account-authorized,
   `actor=None`): `post_to_channel`, `join_channel`, `leave_channel`,
   `set_channel_mute`, `set_channel_identity`, `delete_channel_message`,
