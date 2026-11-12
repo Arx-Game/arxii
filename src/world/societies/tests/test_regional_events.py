@@ -232,3 +232,24 @@ class RegionalEventAdminTests(TestCase):
         self.assertEqual(response.status_code, 302)
         event.refresh_from_db()
         self.assertFalse(event.is_active)
+
+    def test_an_open_event_keeps_its_kind_area_and_severity(self):
+        """Closing undoes what opening did to the row's kind and area, so the change
+        form lets staff edit the note and nothing else."""
+        area = rung_area_for_title(self.kingdom)
+        event = open_regional_event(kind=self.blight, area=area, severity_pct=70)
+        famine = RegionalEventKind.objects.create(name="Famine", capacity_cut_pct=20)
+        url = reverse("admin:arxii_regionalevent_change", args=[event.pk])
+
+        form = self.client.get(url).context["adminform"].form
+        self.assertEqual(list(form.fields), ["note"])
+
+        response = self.client.post(
+            url,
+            {"kind": famine.pk, "area": area.pk, "severity_pct": 10, "note": "Second week."},
+        )
+        self.assertEqual(response.status_code, 302, response.content[:2000])
+        event.refresh_from_db()
+        self.assertEqual(event.kind, self.blight)
+        self.assertEqual(event.severity_pct, 70)
+        self.assertEqual(event.note, "Second week.")

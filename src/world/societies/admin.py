@@ -1935,6 +1935,18 @@ class RegionalEventAdmin(admin.ModelAdmin):
     large_table_widget_exempt = ["opened_by"]
     actions = ["close_events"]
 
+    def get_readonly_fields(
+        self, _request: HttpRequest, obj: RegionalEvent | None = None
+    ) -> list[str]:
+        """Once an event is open only its note is editable. Opening applied this
+        kind's deltas to this area's land and rebased it, and closing takes the
+        row's kind and area as what to undo: an edit in between would leave the
+        struck land hurt for good and credit land that was never struck, and a new
+        severity would rewrite the cut back to each holding's last rebase."""
+        if obj is None:
+            return list(self.readonly_fields)
+        return [*self.readonly_fields, "kind", "area", "severity_pct"]
+
     def save_model(self, request: HttpRequest, obj: RegionalEvent, form, change: bool) -> None:
         from world.societies.houses.regional_events import open_regional_event  # noqa: PLC0415
 
