@@ -382,7 +382,7 @@ MechanicsSection.tsx` renders both on the character sheet's Sheet tab
 `stats`/`skills` the API returns — it does not re-implement visibility client-side.
 **Buffed stats (#4730):** `buffed_stats` (`_build_buffed_stats`, same visibility as `stats`) maps a
 stat name to the display value the game uses (stored plus `get_trait_modifier`, ÷10) for a stat a
-buff changes, and leaves the rest out. `AbilitiesBand` shows "2 (9 with buffs)" for those and one
+buff changes, and leaves the rest out. `AbilitiesBand` shows "2 (9 with buffs)" (or "with debuffs" when it is lower) for those and one
 number for the rest. It prices through `trait_modifiers_for_sheet`, one pass over the stat list, so
 the queries follow the stats buffed and not the conditions carrying the buffs (journey in
 `test_stat_buffs_valued_and_tapered_journeys.py`). The magic

@@ -48,7 +48,8 @@ export function AbilitiesBand({ stats, buffedStats, skills }: AbilitiesBandProps
                     {name in buffedStats && (
                       <span className="refsheet-stat-buffed" data-testid="stat-buffed">
                         {' '}
-                        ({buffedStats[name]} with buffs)
+                        ({buffedStats[name]}{' '}
+                        {buffedStats[name] > value ? 'with buffs' : 'with debuffs'})
                       </span>
                     )}
                   </span>
