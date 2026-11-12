@@ -42,8 +42,10 @@ based, and frankly us trying to smash them together just makes no sense."
   goes dormant and its coin stops accruing, so nobody apping into an empty house inherits
   a jackpot; a house in a lull keeps accruing uncapped. Population, prosperity and unrest
   converge to terrain-set values and run everywhere by formula, so dormant land can be
-  struck by a regional event and can recover. (Dormancy and regional events are slices 3
-  and 4 of #5069.)
+  struck by a regional event and can recover. (Dormancy is slice 3, #5078; regional
+  events slice 4, #5080: a `RegionalEvent` is one row over an Area, the land beneath is
+  rebased at open and at close and reads the cut in between, and the per-house
+  `DomainCrisis` is spawned only for awake houses inside.)
 
 **Rejected.** (a) One model, macro superseding micro: the grid layer is correct for
 non-noble families. (b) Extents as counts in columns on a barony: a typed number is not a

@@ -486,6 +486,7 @@
   - gang_turf_projects <- societies.GangTurfDetails
   - domain_profile <- societies.Domain
   - hall_of <- societies.Domain
+  - regional_events <- societies.RegionalEvent
   - income_streams <- currency.OrgIncomeStream
   - build_grants <- gm.AreaBuildGrant
   - story_ownership <- gm.StoryArea
@@ -10170,6 +10171,7 @@
 **Pointed to by:**
   - options <- societies.DomainCrisisTypeOption
   - crises <- societies.DomainCrisis
+  - regional_event_kinds <- societies.RegionalEventKind
   - signs <- predators.AfflictionSign
 
 ### DomainCrisisTypeOption
@@ -10760,6 +10762,20 @@
 **Foreign Keys:**
   - display_object -> evennia.ObjectDB [OneToOne]
   - scope_society -> societies.Society [FK] (nullable)
+
+### RegionalEvent
+**Foreign Keys:**
+  - kind -> societies.RegionalEventKind [FK]
+  - area -> areas.Area [FK]
+  - opened_by -> evennia.AccountDB [FK] (nullable)
+
+### RegionalEventKind
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - crisis_type -> societies.DomainCrisisType [FK] (nullable)
+**Pointed to by:**
+  - events <- societies.RegionalEvent
 
 ### RenownMagnitudeAward
 

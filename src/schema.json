@@ -1367,6 +1367,122 @@ paths:
               schema:
                 $ref: '#/components/schemas/LadderPayload'
           description: ''
+  /api/almanach/regional-event-kinds/:
+    get:
+      operationId: almanach_regional_event_kinds_list
+      description: The authored disasters, for the title page's Open control (#5080).
+      parameters:
+      - in: query
+        name: name
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAlmanachRegionalEventKindList'
+          description: ''
+  /api/almanach/regional-event-kinds/{id}/:
+    get:
+      operationId: almanach_regional_event_kinds_retrieve
+      description: The authored disasters, for the title page's Open control (#5080).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this regional event kind.
+        required: true
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlmanachRegionalEventKind'
+          description: ''
+  /api/almanach/regional-events/:
+    get:
+      operationId: almanach_regional_events_list
+      description: |-
+        Regional events (#5080): the Atlas reads the open ones over a realm and shades
+        their areas; the title page lists the ones over its land. Opening and closing go
+        through the ``almanach_open_regional_event`` / ``almanach_close_regional_event``
+        actions, never a write here.
+      parameters:
+      - in: query
+        name: active
+        schema:
+          type: boolean
+      - in: query
+        name: area
+        schema:
+          type: integer
+      - in: query
+        name: kind
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: realm
+        schema:
+          type: number
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAlmanachRegionalEventList'
+          description: ''
+  /api/almanach/regional-events/{id}/:
+    get:
+      operationId: almanach_regional_events_retrieve
+      description: |-
+        Regional events (#5080): the Atlas reads the open ones over a realm and shades
+        their areas; the title page lists the ones over its land. Opening and closing go
+        through the ``almanach_open_regional_event`` / ``almanach_close_regional_event``
+        actions, never a write here.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this regional event.
+        required: true
+      tags:
+      - almanach
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlmanachRegionalEvent'
+          description: ''
   /api/almanach/search/:
     get:
       operationId: almanach_search_list
@@ -46155,6 +46271,91 @@ components:
       - id
       - name
       - unclaimed_by_tier
+    AlmanachRegionalEvent:
+      type: object
+      description: |-
+        One regional event (#5080): what the Atlas shades and the title page lists. The
+        GM's ``note`` rides along because the whole viewset is staff-only.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        kind:
+          type: string
+          readOnly: true
+        kind_id:
+          type: integer
+          readOnly: true
+        area_id:
+          type: integer
+          readOnly: true
+        area:
+          type: string
+          readOnly: true
+        realm_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        severity_pct:
+          type: integer
+          maximum: 100
+          minimum: 1
+          description: 'Scales the kind''s capacity cut: 100 is the full cut.'
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+        note:
+          type: string
+          description: Staff's own note; never shown to players.
+      required:
+      - area
+      - area_id
+      - id
+      - kind
+      - kind_id
+      - realm_id
+    AlmanachRegionalEventKind:
+      type: object
+      description: The authored disasters staff can open (#5080).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+        capacity_cut_pct:
+          type: integer
+          maximum: 100
+          minimum: 0
+          description: Percent of a holding's capacity the event takes while it is
+            open.
+        prosperity_delta:
+          type: integer
+          maximum: 100
+          minimum: -100
+          description: Added to each holding's prosperity at open, removed at close.
+        unrest_delta:
+          type: integer
+          maximum: 100
+          minimum: -100
+          description: Added to each holding's unrest at open, removed at close.
+        crisis_type_id:
+          type: integer
+          nullable: true
+          description: The crisis an awake house inside the footprint gets; blank
+            = none.
+          readOnly: true
+      required:
+      - crisis_type_id
+      - id
+      - name
     AlmanachSuccessionLaw:
       type: object
       description: |-
@@ -73654,6 +73855,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AlmanachRealm'
+    PaginatedAlmanachRegionalEventKindList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlmanachRegionalEventKind'
+    PaginatedAlmanachRegionalEventList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlmanachRegionalEvent'
     PaginatedAlmanachTemplateList:
       type: object
       required:
@@ -89066,6 +89313,11 @@ components:
           items:
             type: object
             additionalProperties: {}
+        events:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
       required:
       - books
       - chain
@@ -89073,6 +89325,7 @@ components:
       - chartered_fiefs
       - claims
       - demesne
+      - events
       - forces
       - holdings
       - title
