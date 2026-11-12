@@ -45,14 +45,24 @@ from django.utils import timezone
 from evennia.objects.models import ObjectDB
 
 from actions.constants import ActionBackend
-from actions.factories import ActionTemplateFactory
+from actions.factories import (
+    ActionTemplateFactory,
+    ConsequencePoolEntryFactory,
+    ConsequencePoolFactory,
+)
 from actions.player_interface import dispatch_player_action
 from actions.types import ActionRef
 from evennia_extensions.factories import RoomProfileFactory
 from integration_tests.harness import JourneyCase
 from world.action_points.factories import ActionPointPoolFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
+from world.checks.constants import EffectTarget, EffectType
+from world.checks.factories import (
+    CheckTypeFactory,
+    CheckTypeTraitFactory,
+    ConsequenceEffectFactory,
+    ConsequenceFactory,
+)
 from world.checks.services import perform_check
 from world.checks.test_helpers import force_check_outcome
 from world.checks.types import CheckResult
@@ -67,6 +77,7 @@ from world.combat.services import add_participant, resolve_round
 from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionModifierEffectFactory,
+    ConditionTemplateFactory,
     DamageSuccessLevelMultiplierFactory,
 )
 from world.conditions.models import ConditionInstance
@@ -565,3 +576,37 @@ class BreachingAPact(PactJourneyBase):
         self.assertTold(self.corwen, f"{CONDITION_NAME} is gone.")
         self.assertIsNone(self.condition(self.corwen))
         self.assertEqual(self.cards(self.corwen), [])
+
+    def test_the_breached_stage_settles_its_pool_on_the_holder_only(self) -> None:
+        """An authored settle pool on the last stage fires when the pact breaks, its tier
+        taken from the failed resist roll, and it lands on her and no one else."""
+        mark = ConditionTemplateFactory(name="Hesk's Mark")
+        failure_row = ConsequenceFactory(
+            outcome_tier=self.outcomes["Failure"], label="Hesk marks the oathbreaker"
+        )
+        ConsequenceEffectFactory(
+            consequence=failure_row,
+            effect_type=EffectType.APPLY_CONDITION,
+            target=EffectTarget.SELF,
+            condition_template=mark,
+            condition_severity=1,
+        )
+        pool = ConsequencePoolFactory(name="Hesk breach settle")
+        ConsequencePoolEntryFactory(pool=pool, consequence=failure_row)
+        breached = self.offer.condition.stages.get(name="Breached")
+        breached.settle_consequence_pool = pool
+        breached.save(update_fields=["settle_consequence_pool"])
+        pact = self.sign_corwen()
+        advance_condition_severity(pact.condition_instance, 24)
+
+        with force_check_outcome(self.outcomes["Failure"]):
+            self.period_ends(self.corwen)
+
+        pact.refresh_from_db()
+        self.assertEqual(pact.dissolution_reason, CharacterPactEnding.BREACH)
+        self.assertTrue(
+            ConditionInstance.objects.filter(target=self.corwen, condition=mark).exists()
+        )
+        self.assertFalse(
+            ConditionInstance.objects.filter(target=self.hobb, condition=mark).exists()
+        )
