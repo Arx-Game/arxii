@@ -165,6 +165,14 @@ const FOLD_UNDER = 5;
 
 /** A signed price (#4874): the number a life card wears in its corner. `-N` when you
  * pay, `+N` when the world pays you, nothing for a free card. */
+/**
+ * The line under a card's name. A life-page (grid) card reads the distinction's own
+ * description (#5099): the backgrounds offers' `player_line` is only the card's name again.
+ */
+function cardLine(offer: VisibleOffer, layout: 'list' | 'grid'): string {
+  return layout === 'grid' ? offer.distinction_description : offer.player_line;
+}
+
 function SignedPrice({ cost, rank }: { cost: number; rank: number }) {
   const total = cost * Math.max(rank, 1);
   if (total === 0) return null;
@@ -528,9 +536,7 @@ export function ChapterOffers({
           </b>
           {showsDistinction && <span className="g">{offer.distinction_name}</span>}
           <span className="g">
-            {/* A life-page card reads the distinction's own description (#5099): the
-                offer's player_line there is only the card's name again. */}
-            {layout === 'grid' ? offer.distinction_description : offer.player_line}
+            {cardLine(offer, layout)}
             {showOpener && offer.opener_label && <i> From {offer.opener_label}.</i>}
           </span>
           {terms ? (
