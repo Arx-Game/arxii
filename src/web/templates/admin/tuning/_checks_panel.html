@@ -87,7 +87,7 @@
 </p>
 
 <form class="tuning-form" hx-get="{% url 'admin_tuning_checks' %}" hx-target="#panel-checks"
-      hx-trigger="input changed delay:300ms">
+      hx-trigger="input changed delay:300ms, change from:#checks-botch-immune">
   <div class="tuning-field">
     <label for="checks-roll-modifier">
       {% translate "Roll modifier" %}: <span>{{ roll_modifier }}</span>
@@ -122,6 +122,11 @@
     </label>
     <input type="range" id="checks-target-modifier-points" name="target_modifier_points"
            min="-100" max="100" step="1" value="{{ target_modifier_points }}">
+  </div>
+  <div class="tuning-field">
+    <label for="checks-botch-immune">{% translate "Matchup: roller cannot botch" %}</label>
+    <input type="checkbox" id="checks-botch-immune" name="botch_immune"
+           {% if botch_immune %}checked{% endif %}>
   </div>
 </form>
 

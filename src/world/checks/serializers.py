@@ -16,6 +16,9 @@ from world.scenes.action_constants import DifficultyChoice
 
 # Provenance kinds scoped to staff reads.
 _STAFF_ONLY_SOURCE_KINDS = frozenset({ModifierSourceKind.ROLLMOD})
+# Provenance kinds scoped to staff and the roll's own player (#4386): what makes the roller
+# unable to botch is theirs to know; onlookers see an ordinary Failure.
+_ROLLER_ONLY_SOURCE_KINDS = frozenset({ModifierSourceKind.BOTCH_IMMUNITY})
 
 
 class CheckTypeSerializer(serializers.ModelSerializer):
@@ -156,22 +159,28 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
     action_interaction_id = serializers.IntegerField(read_only=True, allow_null=True)
     roll_breakdown = serializers.SerializerMethodField()
 
-    def _visible_kinds_filter(self, rows: list) -> list:
-        """Modifier rows visible to the requesting user (staff see all kinds)."""
+    def _visible_kinds_filter(self, rows: list, obj: ConsequenceOutcome) -> list:
+        """Modifier rows visible to the requesting user (staff see all kinds).
+
+        A roller-only kind (a "Cannot botch" line, #4386) shows to the roll's own player.
+        """
         request = self.context.get("request")
         if request is not None and request.user is not None and request.user.is_staff:
             return rows
-        return [m for m in rows if m.source_kind not in _STAFF_ONLY_SOURCE_KINDS]
+        hidden = _STAFF_ONLY_SOURCE_KINDS
+        if not self._sees_roll_detail(obj):
+            hidden = hidden | _ROLLER_ONLY_SOURCE_KINDS
+        return [m for m in rows if m.source_kind not in hidden]
 
     @extend_schema_field(ConsequenceOutcomeModifierSerializer(many=True))
     def get_modifiers(self, obj: ConsequenceOutcome) -> list[dict]:
-        rows = self._visible_kinds_filter(list(obj.modifiers.all()))
+        rows = self._visible_kinds_filter(list(obj.modifiers.all()), obj)
         return ConsequenceOutcomeModifierSerializer(rows, many=True).data
 
     @extend_schema_field(serializers.IntegerField())
     def get_modifier_total(self, obj: ConsequenceOutcome) -> int:
         rows = list(obj.modifiers.all())
-        visible = self._visible_kinds_filter(rows)
+        visible = self._visible_kinds_filter(rows, obj)
         if len(visible) == len(rows):
             return obj.modifier_total
         hidden = sum(m.value for m in rows if m not in visible)
@@ -216,8 +225,10 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
         from world.combat.constants import INTENSITY_MODIFIER_LABEL  # noqa: PLC0415
 
         lines = [asdict(line) for line in breakdown.lines]
-        for modifier in self._visible_kinds_filter(list(obj.modifiers.all())):
+        for modifier in self._visible_kinds_filter(list(obj.modifiers.all()), obj):
             signed = f"+{modifier.value}" if modifier.value >= 0 else str(modifier.value)
+            if modifier.source_kind == ModifierSourceKind.BOTCH_IMMUNITY:
+                signed = ""  # #4386: a guarantee, not a number; no "+0".
             if modifier.source_label == INTENSITY_MODIFIER_LABEL:
                 detail = "misses add to hit"
             elif modifier.source_kind == ModifierSourceKind.TECHNIQUE:

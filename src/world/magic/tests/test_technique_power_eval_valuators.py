@@ -11,6 +11,8 @@ covered by ``test_technique_power_eval.py`` (Task 1) and are not repeated here.
 
 from __future__ import annotations
 
+from unittest import mock
+
 from django.test import TestCase
 
 from flows.constants import EventName
@@ -41,6 +43,7 @@ from world.magic.factories import (
     TechniqueRemovedConditionFactory,
 )
 from world.magic.models.techniques import ConditionTargetKind, Technique, TechniqueTreatment
+from world.magic.services import technique_power_eval
 from world.magic.services.targeting import protective_magnitude
 from world.magic.services.technique_power_eval import (
     _MatchupBand,
@@ -102,6 +105,63 @@ class TechniquePowerEvalValuatorTestCase(TestCase):
         kwargs.setdefault("intensity", 4)
         kwargs.setdefault("damage_profile", False)
         return TechniqueFactory(**kwargs)
+
+
+class BotchImmunePricingTests(TestCase):
+    """#4386: "Cannot botch" prices both the base and the modifier-shifted roll.
+
+    Pure preview math with no player-facing seam, so it stays a unit test.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        CheckRankFactory(rank=0, min_points=0)
+        chart = ResultChartFactory(rank_difference=0, name="BotchEven")
+        for name, level, low, high in (
+            ("Botch", -2, 1, 10),
+            ("Miss", -1, 11, 50),
+            ("Hit", 1, 51, 100),
+        ):
+            ResultChartOutcomeFactory(
+                chart=chart,
+                outcome=CheckOutcomeFactory(name=name, success_level=level),
+                min_roll=low,
+                max_roll=high,
+            )
+        DamageSuccessLevelMultiplierFactory(min_success_level=1, multiplier=1)
+
+    def setUp(self) -> None:
+        ResultChart.clear_cache()
+
+    def test_base_and_shifted_bands_both_carry_no_botch_band(self) -> None:
+        technique = TechniqueFactory(intensity=4, damage_profile=False)
+        condition = ConditionTemplateFactory(default_duration_value=3)
+        ConditionModifierEffectFactory(
+            condition=condition, modifier_target=ModifierTargetFactory(), value=-20
+        )
+        TechniqueAppliedConditionFactory(
+            technique=technique,
+            condition=condition,
+            target_kind=ConditionTargetKind.SELF,
+            minimum_success_level=1,
+        )
+        reference = ReferenceFrame(outgoing_dpr=20.0, incoming_dpr=15.0, source_label="test")
+        real_bands = technique_power_eval._matchup_bands
+        calls: list[tuple[EvalContext, list[_MatchupBand]]] = []
+
+        def spy(context: EvalContext) -> list[_MatchupBand]:
+            bands = real_bands(context)
+            calls.append((context, bands))
+            return bands
+
+        with mock.patch.object(technique_power_eval, "_matchup_bands", side_effect=spy):
+            evaluate_technique(technique, EvalContext(level=10, botch_immune=True), reference)
+
+        shifted = [context for context, _ in calls if context.roll_modifier != 0]
+        self.assertTrue(shifted, "the modifier row never priced a shifted roll")
+        for context, bands in calls:
+            self.assertTrue(context.botch_immune)
+            self.assertFalse([band for band in bands if band.success_level <= -2])
 
 
 class TeamDamagePercentLaneTests(TechniquePowerEvalValuatorTestCase):

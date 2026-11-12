@@ -48,10 +48,11 @@ term is chosen and the rest are listed under `_Avoid_`.
   target (_Avoid_: bond, compact, contract, terms, obligation, vow, oath, tithe, debt, deal)
 - [ceremonies](src/world/ceremonies/AGENT_GLOSSARY.md)
 - [estates](src/world/estates/AGENT_GLOSSARY.md)
-- [checks](src/world/checks/AGENT_GLOSSARY.md) - also holds Favor as a modifier source (#4333); band position, the slide and own standing (#4601; the hopeless pin was removed by #4723); and modifier level, size, value table, level baseline, taper and lane (#4594), with worn items' level from quality (#4628) and distinctions' from their holder (#4638); the stat lane (#4726)
+- [checks](src/world/checks/AGENT_GLOSSARY.md) - also holds Favor as a modifier source (#4333); band position, the slide and own standing (#4601; the hopeless pin was removed by #4723); and modifier level, size, value table, level baseline, taper and lane (#4594), with worn items' level from quality (#4628) and distinctions' from their holder (#4638); the stat lane (#4726); niche and botch immunity (#4386)
 - [mechanics](src/world/mechanics/AGENT_GLOSSARY.md) - also holds the favor categories and
   `ModifierTarget.target_being` (#4333), and maneuver effects and effect kinds (#4783), and
-  Application (way of moving, dodges), movement source, strength and reach band (#5066)
+  Application (way of moving, dodges), movement source, strength and reach band (#5066), and the botch_immunity
+  category's scope fields (#4386)
 - [progression](src/world/progression/AGENT_GLOSSARY.md)
 - [classes](src/world/classes/AGENT_GLOSSARY.md)
 - [societies](src/world/societies/AGENT_GLOSSARY.md) - also holds the Almanach de Catenys, and title station, chartered fief, claim and pledged liege (#4983), layout and place-name bank (#4986), and Domain (land at barony and county only), hinterland, rural pool, Capacity, Dormant and Regional event (#5069)

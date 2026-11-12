@@ -41,7 +41,7 @@ from world.mechanics.types import (
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `ModifierCategory` | Broad groupings for modifier targets (stat, magic, affinity, resonance, goal, etc.) | `name` (unique), `description`, `display_order` |
-| `ModifierTarget` | Unified registry of all things that can be modified; replaces separate Affinity, Resonance, GoalDomain models | `name`, `category` (FK ModifierCategory), `description`, `display_order`, `is_active`, `target_trait` (FK Trait, nullable), `target_being` (FK WorshippedBeing, nullable, #4333 favor categories), `affiliated_affinity` (self FK), `opposite` (self OneToOne), `resonance_affinity` (ResonanceAffinity) |
+| `ModifierTarget` | Unified registry of all things that can be modified; replaces separate Affinity, Resonance, GoalDomain models | `name`, `category` (FK ModifierCategory), `description`, `display_order`, `is_active`, `target_trait` (FK Trait, nullable), `target_being` (FK WorshippedBeing, nullable, #4333 favor categories), `target_check_category` (FK CheckCategory, nullable) and `target_scope_check_type` (FK CheckType, nullable), the `botch_immunity` category's scope, exactly one set (#4386), `affiliated_affinity` (self FK), `opposite` (self OneToOne), `resonance_affinity` (ResonanceAffinity) |
 
 ### Per-Character Data
 
@@ -243,6 +243,7 @@ bonus once (`covenant_role_base_total`) instead of once per equipped item. See
 | `favor_invocation` / `favor_earning` | `<being> favor invocation` / `<being> favor earning`; one `Any being ...` target each | `target_being` names the being; null = any being (#4333) |
 | `income` / `reputation_gain` / `relationship_gain` / `comfort` / `fatigue_cost` | The category's own name; `reputation_gain` also `reputation_gain_society` and `reputation_gain_organization` | The five levers (#4394); see "Levers" |
 | `disguise_sight` | `mundane`, `magical` (one per `DisguiseKind` value) | Sight through a mask (#4396); see "Levers" |
+| `botch_immunity` | Staff-named, one per scope (for example `Exploration botch immunity`) | `target_check_category` or `target_scope_check_type`, exactly one (#4386); a positive total means the character cannot botch at checks in that scope. See `checks.md` "Niche botch immunity" |
 
 ## Levers (#4394)
 

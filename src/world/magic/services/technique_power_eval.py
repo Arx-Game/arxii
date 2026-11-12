@@ -326,14 +326,7 @@ def _generic_modifier_valuation(  # noqa: PLR0913 - cohesive per-row valuation p
         expected_shift += band.probability * (shift or 0.0)
 
     shifted_roll_modifier = context.roll_modifier + round(expected_shift)
-    shifted_context = EvalContext(
-        level=context.level,
-        thread_level=context.thread_level,
-        roller_points=context.roller_points,
-        target_difficulty=context.target_difficulty,
-        roll_modifier=shifted_roll_modifier,
-        passive=context.passive,
-    )
+    shifted_context = replace(context, roll_modifier=shifted_roll_modifier)
     shifted_bands = _matchup_bands(shifted_context)
     base_de = _reference_attack_de(
         bands, effective_power=context.level, multiplier_cache=multiplier_cache

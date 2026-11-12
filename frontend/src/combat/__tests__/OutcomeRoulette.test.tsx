@@ -133,6 +133,27 @@ describe('OutcomeRoulette — modifier breakdown', () => {
     expect(screen.getByTestId('modifier-total')).toHaveTextContent('+5');
   });
 
+  it('shows a cannot-botch row by its label with no value', () => {
+    const botchModifiers: ConsequenceOutcomeModifier[] = [
+      { source_kind: 'botch_immunity', source_label: 'Cannot botch: Born to the Rock', value: 0 },
+    ];
+
+    render(
+      <OutcomeRoulette
+        outcomeDisplay={OUTCOME_DISPLAY}
+        modifiers={botchModifiers}
+        modifierTotal={0}
+      />
+    );
+
+    expect(screen.getByTestId('modifier-row-Cannot botch: Born to the Rock')).toHaveTextContent(
+      'Cannot botch: Born to the Rock'
+    );
+    expect(
+      screen.queryByTestId('modifier-value-Cannot botch: Born to the Rock')
+    ).not.toBeInTheDocument();
+  });
+
   it('hides modifier breakdown when no modifiers', () => {
     render(<OutcomeRoulette outcomeDisplay={OUTCOME_DISPLAY} modifiers={[]} modifierTotal={0} />);
 
