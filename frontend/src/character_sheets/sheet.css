@@ -820,6 +820,7 @@
 }
 .refsheet-stat-buffed {
   font-weight: 400;
+  white-space: nowrap;
   color: hsl(var(--muted-foreground));
 }
 .refsheet-skills {
