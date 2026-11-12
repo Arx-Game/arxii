@@ -5105,7 +5105,7 @@ export interface paths {
     delete?: never;
     options?: never;
     head?: never;
-    /** @description Set stats at display scale (1 to 5); missing rows are created. */
+    /** @description Set stats (10 to 50, in steps of 10); missing rows are created. */
     patch: operations['character_sheets_staff_stats_partial_update'];
     trace?: never;
   };
@@ -39881,8 +39881,8 @@ export interface components {
     /** @description One STAT line, named by the trait rather than its id (#3427). */
     NPCPresetTraitLine: {
       readonly trait_name: string;
-      /** @description Display-scale value (1-10), mirroring CG's stat-allocation scale. */
-      readonly display_value: number;
+      /** @description Stat value (10-100), the number a sheet shows; CG allocates 10-50. */
+      readonly value: number;
     };
     /** @description Staff CRUD for banded NPC reaction lines (#2632). */
     NPCReactionLine: {
@@ -46556,7 +46556,7 @@ export interface components {
         [key: string]: number;
       };
     };
-    /** @description ``{"stats": {"<trait id>": <1 to 5>}}``. */
+    /** @description ``{"stats": {"<trait id>": <10 to 50, in steps of 10>}}``. */
     PatchedStaffStatsRequest: {
       stats?: {
         [key: string]: number;
@@ -51218,7 +51218,7 @@ export interface components {
       readonly sineater_sheet_id: number | null;
       /** @description Return the Sinner's current Hollow capacity (from the capstone Thread). */
       readonly hollow_current: number;
-      /** @description Return the Sinner's Hollow maximum (``_compute_hollow_max``, shown level × mult). */
+      /** @description Return the Sinner's Hollow maximum (``_compute_hollow_max``, thread rung × mult). */
       readonly hollow_max: number;
       /** @description Return the Sineater's total lifetime_helped across all resonances for this bond. */
       readonly sineater_lifetime_helped: number;
@@ -56078,7 +56078,7 @@ export interface components {
       trait_id: number;
       name: string;
       trait_type: string;
-      display_value: number;
+      value: number;
     };
   };
   responses: never;

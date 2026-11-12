@@ -44,7 +44,7 @@ from world.magic.types.technique_power import (
     TechniquePowerReport,
 )
 from world.species.models import Species
-from world.traits.constants import STAT_DISPLAY_DIVISOR, TraitType
+from world.traits.constants import TraitType
 from world.traits.models import PointConversionRange
 
 #: Sort-key identifiers, named constants (not bare string literals) so the
@@ -317,7 +317,7 @@ def _points_from_ranges(ranges: Sequence[PointConversionRange], trait_value: int
 
 
 def starting_stats_roller_points(stats: dict[str, int]) -> int:
-    """Convert CG display-scale stats to a representative level-one check pool.
+    """Convert CG stats (stored values) to a representative level-one check pool.
 
     A technique has no single check type, so the kit report uses the mean of the
     twelve starting stat pools plus the level-one floor. This preserves the real
@@ -334,7 +334,7 @@ def starting_stats_roller_points(stats: dict[str, int]) -> int:
     ranges = list(
         PointConversionRange.objects.filter(trait_type=TraitType.STAT).order_by("min_value")
     )
-    converted = [_points_from_ranges(ranges, value * STAT_DISPLAY_DIVISOR) for value in values]
+    converted = [_points_from_ranges(ranges, value) for value in values]
     return round(sum(converted) / len(converted)) + LEVEL_POINTS_PER_LEVEL
 
 
@@ -408,7 +408,7 @@ class StartingKitParams:
     gift: Gift
     species: Species | None = None
     extra_picks: int = 0
-    #: Display-scale stats by name; a missing stat reads as the CG default.
+    #: Stats (stored values) by name; a missing stat reads as the CG default.
     stats: Mapping[str, int] = field(default_factory=dict)
 
 

@@ -1,7 +1,7 @@
 """Journeys for stat buffs valued by level and size, and piles of them tapering (#4726).
 
-Slice 8 of #4551. Brannoc is a dock porter (level 6, strength 2 and stamina 2 as shown,
-20 stored). Buffs to his strength are real conditions, distinctions, worn pieces and his
+Slice 8 of #4551. Brannoc is a dock porter (level 6, strength 20 and stamina
+20). Buffs to his strength are real conditions, distinctions, worn pieces and his
 vow. His strength is one number wherever it is read: the Lifting check (through
 ``perform_check_with_modifiers``, the seam every roll uses), his carrying capacity
 (``carry_capacity``), and, for stamina, the stamina term of his base max health
@@ -92,8 +92,8 @@ from world.traits.models import CheckOutcome
 from world.vitals.models import CharacterVitals
 from world.vitals.services import derive_base_max_health, get_vitals_consequence_config
 
-BASE = 20  # strength 2 as shown; stats are stored x10
-BUFF = 10  # +1 shown strength per buff
+BASE = 20  # strength 20
+BUFF = 10  # +10 strength per buff
 # Ten buffs of 10 in the stat lane's seeded taper: 10 x (1 + 7/8 + (7/8)^2 + (7/8)^3 + six
 # at the 2/3 floor) = 73.1, which rounds to 73, not the plain 100.
 TEN_TAPERED = 73
@@ -173,7 +173,7 @@ class StatBuffsAreValuedAndTapered(JourneyCase):
 
         strength = BASE + TEN_TAPERED
         self.assertEqual(self.strength_now(), strength)
-        self.assertEqual(self.brannoc.traits.get_trait_display_value(self.strength.name), 9)
+        self.assertEqual(self.brannoc.traits.get_trait_value(self.strength.name), strength)
         # The check reads it: one check point per stored strength unit on the seeded
         # conversion, and the same total as a twin whose own strength is 93.
         self.assertEqual(self.lift(self.brannoc) - lift_before, TEN_TAPERED)
@@ -217,7 +217,7 @@ class StatBuffsAreValuedAndTapered(JourneyCase):
 
     def test_the_sheet_shows_the_stored_strength_and_the_one_the_game_uses(self) -> None:
         plain, plain_queries = self.sheet_read()
-        self.assertEqual(plain["stats"]["strength"], 2)
+        self.assertEqual(plain["stats"]["strength"], BASE)
         self.assertEqual(plain["buffed_stats"], {}, "an unbuffed stat shows one number")
 
         for index in range(10):
@@ -225,12 +225,10 @@ class StatBuffsAreValuedAndTapered(JourneyCase):
             self.buff(f"Second Wind {index + 1}", target=self.stamina_target)
 
         sheet, queries = self.sheet_read()
-        self.assertEqual(sheet["stats"]["strength"], 2, "the stored number is still shown")
-        # 20 stored + 73 tapered = 93, shown as 9: the same value the check and the
-        # carrying capacity read.
-        shown = self.brannoc.traits.get_trait_display_value(self.strength.name)
-        self.assertEqual(sheet["buffed_stats"], {"strength": 9, "stamina": 9})
-        self.assertEqual(sheet["buffed_stats"]["strength"], shown)
+        self.assertEqual(sheet["stats"]["strength"], BASE, "the stored number is still shown")
+        # 20 stored + 73 tapered = 93: the same value the check and the carrying capacity read.
+        self.assertEqual(sheet["buffed_stats"], {"strength": 93, "stamina": 93})
+        self.assertEqual(sheet["buffed_stats"]["strength"], self.strength_now())
         twin = self.porter("Bram", strength=BASE + TEN_TAPERED)
         self.assertEqual(carry_capacity(self.brannoc), carry_capacity(twin))
         self.assertEqual(self.lift(self.brannoc), self.lift(twin))

@@ -98,8 +98,8 @@ shine-situation in that perk set (2026-07-20 niche ruling; exact tuning numbers 
 _Avoid_: defense type, defense mode, archetype.
 
 **Focus pick**:
-One option in a vow's catalog that a holder chooses at pick level 1, 2 or 3 (`VowFocusPick`,
-#4759). Its payload is the existing vow rows (added effects, situational perks, vow stat scaling)
+One option in a vow's catalog that a holder chooses at pick level 10, 20 or 30 (`VowFocusPick`,
+#4759; thread levels since #5091). Its payload is the existing vow rows (added effects, situational perks, vow stat scaling)
 that point at it through `focus_pick`; a row with no pick is the base vow and applies to every
 holder. Every reader of those rows (the cast-time added effects, the situational perk collector and
 `world.mechanics.services.vow_stat_scaling_bonus`) skips a pick row for a holder who did not choose
@@ -167,7 +167,7 @@ The `PerkBeneficiary` axis on a `VowSituationalPerk` (SELF / COVENANT_ALLIES / W
 _Avoid_: recipient, target (Situation's own `target` field is the acting character's action target, an unrelated concept — do not conflate).
 
 **Vow-scaled maneuver effect**:
-A `VowStatScaling` row whose `modifier_target` is a target in the "maneuver_effect" category (for example one scoped to "Rally: surge intensity" or "Interpose: partial protection"): an engaged holder of the role adds `shown thread level × bonus_per_level` to that maneuver effect's value, read through `world.mechanics.effect_targets.effect_value`. This is how a vow makes a maneuver stronger; it replaced the vow-only per-role action scaling table and its action keys, which #4783 removed. A Rally surge intensity of 200% doubles the band's intensity; the band's control change and condition are not scaled. (#4783, was #4739 and #2529.)
+A `VowStatScaling` row whose `modifier_target` is a target in the "maneuver_effect" category (for example one scoped to "Rally: surge intensity" or "Interpose: partial protection"): an engaged holder of the role adds `bonus_per_level` for every 10 levels of her vow thread (`thread_rung`) to that maneuver effect's value, read through `world.mechanics.effect_targets.effect_value`. This is how a vow makes a maneuver stronger; it replaced the vow-only per-role action scaling table and its action keys, which #4783 removed. A Rally surge intensity of 200% doubles the band's intensity; the band's control change and condition are not scaled. (#4783, was #4739 and #2529.)
 _Avoid_: surges given, covenant scaled action, action scaling (the removed table's names).
 
 **Perk Scope**:

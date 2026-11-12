@@ -37,7 +37,7 @@ class VowStatScalingSubRoleTests(TestCase):
         cls.sub_role = SubroleCovenantRoleFactory(
             parent_role=cls.anchor,
             resonance=cls.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
         )
         cls.target = ModifierTargetFactory()
 
@@ -59,7 +59,7 @@ class VowStatScalingSubRoleTests(TestCase):
         VowStatScaling.objects.create(
             covenant_role=self.anchor, modifier_target=self.target, bonus_per_level=3
         )
-        # 30 stored shows 3, the sub-role's unlock level, so the holder graduates.
+        # 30 is the sub-role's unlock level, so the holder graduates.
         sheet = self._engaged_holder(thread_level=30)
         self.assertEqual(
             sheet.character.covenant_roles.currently_engaged_primary_roles(), [self.sub_role]
@@ -91,8 +91,8 @@ class VowStatScalingSubRoleTests(TestCase):
         )
         self.assertEqual(vow_stat_scaling_bonus(sheet, self.target), 60)
 
-    def test_maneuver_effect_target_counts_shown_level(self):
-        """Effects are in natural units, so a +1 per level row adds the SHOWN level."""
+    def test_maneuver_effect_target_counts_whole_steps_of_10_levels(self):
+        """Effects are in natural units, so a +1 row adds one per 10 thread levels."""
         ensure_maneuver_effects()
         target = ModifierTargetFactory(
             category=ModifierCategory.objects.get(name=MANEUVER_EFFECT_CATEGORY_NAME),

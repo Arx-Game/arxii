@@ -31,8 +31,9 @@ Trait" (ADR-5008).
 
 ## Value Scale
 
-- **Internal:** 10, 20, 30, ... (stored value, increments of 10)
-- **Display:** 1.0, 2.0, 3.0, ... (shown to players, computed as `value / 10`)
+- **Stored and shown:** 10, 20, 30, ... Every surface shows the stored value (a skill at 35
+  reads 35, ADR-5091); development moves a skill by single points and XP boundaries sit on
+  the multiples of 10.
 - **CG max:** 30 (configurable via `SkillPointBudget.max_skill_value`)
 
 ---
@@ -112,8 +113,9 @@ ruling on #5010): `DevelopmentPoints.award_points` parks a skill trait there. In
 points keep paying off rust (a boundary-parked skill can still "blow the rust off"), but
 any surplus beyond the rust payoff **dissipates**: it is deliberately ephemeral, never
 banked. A training dissipation is reported: `train_skill` returns a plateau message
-("`<skill>` is at threshold `<N>.0` — training maintains, does not advance until the
-breakthrough is unlocked.") which `process_weekly_training` folds into the
+("`<skill>` is at threshold `<N>` — training maintains, does not advance until the
+breakthrough is unlocked.", where `<N>` is the stored rating the breakthrough opens, such as
+30, since #5091) which `process_weekly_training` folds into the
 `DevelopmentTransaction.description` audit row. The same rule applies when a level-up's
 overflow lands exactly on a boundary — the overflow dissipates with the same message
 rather than banking or silently zeroing.
@@ -140,11 +142,11 @@ cluster), so no skill is a landmine with no purchasable unlock out of the box.
 
 Skills are capped by the character's level band exactly as stats are. Staff author
 `MaturationStatCap.skill_cap` (admin label "Band caps") per `PathStage` band, beside
-`stat_cap`, in shown units: a cap of 3 is a skill shown at 3.0, stored 30. Blank, or no
+`stat_cap`, in stored units (restated x10 by #5091): a cap of 30 stops a skill at 30. Blank, or no
 row for the band, means no cap; the seeds author none. `skill_cap_for(sheet)`
 (`world.progression.services.maturation`) reads it through the same band lookup as
-`stat_cap_for`; `stored_skill_cap(sheet)` (`world.skills.services`) converts it to the
-stored ceiling at the comparison (ADR-0193). The cap binds a skill and its
+`stat_cap_for`; `stored_skill_cap(sheet)` (`world.skills.services`) returns it for the
+comparison. The cap binds a skill and its
 specializations at every post-creation raise:
 
 | Raise path | At the cap |
@@ -265,7 +267,7 @@ All models registered with appropriate admin interfaces:
   "All skills" links open it. On the Trait page, a skill that has specializations cannot be
   retyped away from Skill.
 - `SpecializationAdmin` - List/filter by `parent_skill` and active status, search by name and parent skill
-- `CharacterSpecializationValueAdmin` - Shows `value`, `display_value`, `development_points`; filter by parent skill
+- `CharacterSpecializationValueAdmin` - Shows `value`, `development_points`; filter by parent skill
 - `SkillPointBudgetAdmin` - Single-row model; `has_add_permission` returns False if row exists, `has_delete_permission` always False
 
 ---

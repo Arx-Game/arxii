@@ -41,14 +41,14 @@ class MultiResonanceTests(TestCase):
         cls.celestial_variant = TechniqueVariant.objects.create(
             parent_technique=cls.technique,
             resonance=cls.celestial,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Celestial Form",
             intensity_delta=5,
         )
         cls.abyssal_variant = TechniqueVariant.objects.create(
             parent_technique=cls.technique,
             resonance=cls.abyssal,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Abyssal Form",
             intensity_delta=10,
         )
@@ -62,7 +62,7 @@ class MultiResonanceTests(TestCase):
             target_gift=self.gift,
             resonance=resonance,
         )
-        thread.level = 30  # stored; shows 3, the variants' unlock level (#4585)
+        thread.level = 30  # the variants' unlock level
         thread.save(update_fields=["level"])
         self.sheet.character.threads.invalidate()
         return thread

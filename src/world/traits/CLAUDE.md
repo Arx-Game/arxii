@@ -6,7 +6,7 @@ Character stats and dice rolling mechanics based on Arx I's successful system. U
 
 ### `models.py`
 - **`Trait`**: Trait definitions (name, category, description) - uses SharedMemoryModel
-- **`CharacterTraitValue`**: Character trait scores (1-100 internal, 1.0-10.0 display)
+- **`CharacterTraitValue`**: Character trait scores (1-100; every surface shows the stored value, ADR-5091)
 - **`CharacterTraitChange`**: Acquisition-provenance ledger row (#3055) for every in-place
   `CharacterTraitValue.value` mutation — `old_value`/`new_value`/`source`
   (`TraitChangeSource`) + optional `granting_tenure` (reserved for a future GM story-reward
@@ -20,9 +20,6 @@ Character stats and dice rolling mechanics based on Arx I's successful system. U
 ### `handlers.py`
 - **`TraitHandler`**: Character trait interface (get/set values, make checks)
 - Accessed via `character.traits` on Character typeclass
-
-### `types.py`
-- **`StatDisplayInfo`**: Display-formatted stat information for API/UI responses
 
 ## Key Classes
 

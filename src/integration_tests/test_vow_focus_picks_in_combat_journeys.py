@@ -108,7 +108,9 @@ class AFocusPickRidesOnlyItsChoosersHold(JourneyCase):
         CombatParticipantFactory(
             encounter=self.encounter, character_sheet=sheet, status=ParticipantStatus.ACTIVE
         )
-        membership = engage_vow_with_thread(sheet, self.vow, covenant=self.covenant, thread_level=1)
+        membership = engage_vow_with_thread(
+            sheet, self.vow, covenant=self.covenant, thread_level=10
+        )
         return character, membership
 
     def hold_row(

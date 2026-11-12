@@ -32,7 +32,7 @@ from world.covenants.constants import (
     MENTOR_BOND_MAX_SIDEKICKS,
     SECONDARY_VOW_POTENCY_TENTHS_DEFAULT,
     VOW_FOCUS_PICK_BUDGET_PER_LEVEL_DEFAULT,
-    VOW_FOCUS_PICK_MAX_LEVEL,
+    VOW_FOCUS_PICK_LEVELS,
     VOW_FOCUS_PICK_RESPEC_AP_COST_DEFAULT,
     VOW_FOCUS_PICK_VALUE_DEFAULT,
     BattleBinding,
@@ -1054,7 +1054,8 @@ class VowStatScaling(NaturalKeyMixin, SharedMemoryModel):
     bonus_per_level = models.SmallIntegerField(
         help_text=(
             "Per-thread-level coefficient. Bonus for an engaged role holder = "
-            "covenant_role_thread_level * bonus_per_level."
+            "covenant_role_thread_level * bonus_per_level (per 10 thread levels for a "
+            "maneuver-effect target)."
         ),
     )
     focus_pick = models.ForeignKey(
@@ -1178,6 +1179,14 @@ class VowFocusPickManager(NaturalKeyManager):
     """Manager for VowFocusPick with natural key support."""
 
 
+def validate_vow_focus_pick_level(value: int) -> None:
+    """A focus pick sits at one of ``VOW_FOCUS_PICK_LEVELS`` (10, 20 or 30, #5091)."""
+    if value not in VOW_FOCUS_PICK_LEVELS:
+        levels = ", ".join(str(level) for level in VOW_FOCUS_PICK_LEVELS)
+        msg = f"A pick level is one of {levels}."
+        raise ValidationError(msg)
+
+
 class VowFocusPick(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """One entry in a vow's focus pick catalog (#4759).
 
@@ -1203,10 +1212,10 @@ class VowFocusPick(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text="The vow (covenant role) whose catalog this pick belongs to.",
     )
     pick_level = models.PositiveSmallIntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(VOW_FOCUS_PICK_MAX_LEVEL)],
+        validators=[validate_vow_focus_pick_level],
         help_text=(
-            "The pick level this pick sits at (1 to 3). A character may choose it once "
-            "their shown vow thread level reaches this number."
+            "The pick level this pick sits at (10, 20 or 30). A character may choose it "
+            "once their vow thread level reaches this number."
         ),
     )
     name = models.CharField(
@@ -1399,7 +1408,7 @@ class CharacterVowFocusPick(SharedMemoryModel):
     one in the admin. ``clean()`` runs the rules in
     ``world.covenants.focus_picks.validate_character_focus_pick``: the pick
     belongs to the held vow (or its anchor, for a sub-role), the membership is
-    not a secondary vow, the pick's level is no higher than the shown vow level,
+    not a secondary vow, the pick's level is no higher than the vow level,
     and the level's picks fit the budget.
     """
 
@@ -1639,7 +1648,7 @@ class CovenantRoleGiftGrant(NaturalKeyMixin, SharedMemoryModel):
     unlock_thread_level = models.PositiveIntegerField(
         default=0,
         help_text=(
-            "Shown thread level (the number players see; a thread stored at 30 shows 3). "
+            "Thread level (the number players see). "
             "The COVENANT_ROLE thread level at which this gift's techniques "
             "become available while engaged. 0 = always available."
         ),
@@ -2753,21 +2762,23 @@ class VowAddedEffect(SituationRequirementMixin, NaturalKeyMixin, SharedMemoryMod
     unlock_thread_level = models.PositiveIntegerField(
         default=0,
         help_text=(
-            "Shown thread level (the number players see; a thread stored at 30 shows 3). "
+            "Thread level (the number players see). "
             "The holder's vow thread level this effect needs."
         ),
     )
     severity_per_thread_level = models.PositiveIntegerField(
         default=0,
-        help_text="Added to applied condition severity per thread level above the unlock.",
+        help_text="Added to applied condition severity per 10 thread levels above the unlock.",
     )
     duration_per_thread_level = models.PositiveIntegerField(
         default=0,
-        help_text="Added to applied condition duration (rounds) per level above the unlock.",
+        help_text=(
+            "Added to applied condition duration (rounds) per 10 thread levels above the unlock."
+        ),
     )
     damage_per_thread_level = models.PositiveIntegerField(
         default=0,
-        help_text="Added to each damage profile per thread level above the unlock.",
+        help_text="Added to each damage profile per 10 thread levels above the unlock.",
     )
     upgrades = models.ForeignKey(
         "self",

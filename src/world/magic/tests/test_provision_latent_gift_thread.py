@@ -86,7 +86,7 @@ class ResolveSpecializedVariantTests(TestCase):
         TechniqueVariant.objects.create(
             parent_technique=self.technique,
             resonance=self.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Celestial Form",
             intensity_delta=5,
         )
@@ -96,7 +96,7 @@ class ResolveSpecializedVariantTests(TestCase):
             target_kind=TargetKind.GIFT,
             target_gift=self.gift,
             target_trait=None,
-            level=50,  # stored; shows 5 (#4585)
+            level=50,
         )
         result = resolve_specialized_variant(entity=self.technique, character=self.sheet.character)
         # The resolver returns a _ResolvedTechnique wrapper when a variant

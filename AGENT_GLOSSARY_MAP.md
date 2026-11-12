@@ -14,7 +14,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   ultimate (#4118); the manifestation terms (#4118): Manifestation option, Character
   manifestation; the creation-personalization terms (#4099): Hold, Price, Early form,
   Personalized name; and Prepared Text (#4101); and Cosmetic Mage Scar (#4501); and Magical training points and Teaching fit (#4659,
-  ADR-4659-B; replaced the #4457 Magic skill floor); and Shown thread level / level cap (#4585); and Drift, Drift correction, Conversion offer,
+  ADR-4659-B; replaced the #4457 Magic skill floor); and Thread level / level cap (#4585; one scale since #5091); and Drift, Drift correction, Conversion offer,
   Conversion rite (#4733, slice 4 of #4672); and Thread retune (#4735, slice 6 of #4672)
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md) - also holds the #4581 vow added effect terms
   (ADR-4581-A): Vow added effect, Upgrade (of a vow added effect), Added-effect firing
@@ -357,7 +357,8 @@ Regard Modulation", "Relationship Bond Pull Modulation", "Pull Target Modulation
 framing in [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
 
 **Focus pick** (#4759):
-An option in a vow's catalog a holder chooses at pick level 1 to 3 (`VowFocusPick`); the vow rows
+An option in a vow's catalog a holder chooses at pick level 10, 20 or 30 (`VowFocusPick`,
+#5091); the vow rows
 pointing at it through `focus_pick` reach only holders who chose it. Priced from its value and
 limits, within a per-level budget. _Avoid_: talent, feat, perk.
 Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
@@ -408,7 +409,8 @@ Full entry: [mechanics AGENT_GLOSSARY](src/world/mechanics/AGENT_GLOSSARY.md).
 
 **Vow-scaled maneuver effect** (#4783):
 A `VowStatScaling` row on a "maneuver_effect" target (such as "Rally: surge intensity"): the
-holder's shown thread level x `bonus_per_level` is added to that maneuver effect. Replaced
+holder's thread rung (whole steps of 10 thread levels) x `bonus_per_level` is added to that
+maneuver effect. Replaced
 `CovenantRoleActionScaling`. _Avoid_: surges given, covenant scaled action, action scaling.
 Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
 

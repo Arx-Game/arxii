@@ -75,7 +75,7 @@ class FireSubroleDiscoveriesFirstEverTest(TestCase):
         self.sub = SubroleCovenantRoleFactory(
             parent_role=self.parent_role,
             resonance=self.resonance,
-            unlock_thread_level=5,
+            unlock_thread_level=50,
             discovery_achievement=self.ach,
             codex_entry=self.codex_entry,
         )
@@ -168,7 +168,7 @@ class FireSubroleDiscoveriesSecondCharacterTest(TestCase):
         self.sub = SubroleCovenantRoleFactory(
             parent_role=self.parent_role,
             resonance=self.resonance,
-            unlock_thread_level=5,
+            unlock_thread_level=50,
             discovery_achievement=self.ach,
             codex_entry=self.codex_entry,
         )
@@ -237,7 +237,7 @@ class FireSubroleDiscoveriesIdempotencyTest(TestCase):
         self.sub = SubroleCovenantRoleFactory(
             parent_role=self.parent_role,
             resonance=self.resonance,
-            unlock_thread_level=5,
+            unlock_thread_level=50,
             discovery_achievement=self.ach,
             codex_entry=None,
         )
@@ -331,7 +331,7 @@ class FireSubroleDiscoveriesNullFKsTest(TestCase):
         self.sub = SubroleCovenantRoleFactory(
             parent_role=self.parent_role,
             resonance=self.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             discovery_achievement=None,
             codex_entry=None,
         )

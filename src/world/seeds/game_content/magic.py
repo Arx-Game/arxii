@@ -328,7 +328,7 @@ class MagicContent:
             TechniqueVariant.objects.get_or_create(
                 parent_technique=technique,
                 resonance=resonance,
-                unlock_thread_level=3,
+                unlock_thread_level=30,
                 defaults={
                     "name_override": f"{resonance.name} {technique.name}",
                     "intensity_delta": 2,
@@ -2163,7 +2163,7 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
         - FLAT_BONUS (tier=1, min_thread_level=0, flat_bonus_amount=10)
         - INTENSITY_BUMP (tier=2, min_thread_level=0, intensity_bump_amount=10)
         - VITAL_BONUS (tier=0, min_thread_level=0, vital_bonus_amount=10, MAX_HEALTH)
-        - CAPABILITY_GRANT (tier=3, min_thread_level=5, capability=endurance)
+        - CAPABILITY_GRANT (tier=3, min_thread_level=50, capability=endurance)
 
     The reference resonance is whichever the content repo authored first
     (#2967) — the seeder never invents one. When none is authored, the four
@@ -2276,7 +2276,7 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
             target_kind=TargetKind.TRAIT,
             resonance=resonance,
             tier=3,
-            min_thread_level=5,
+            min_thread_level=50,
             defaults={
                 "effect_kind": EffectKind.CAPABILITY_GRANT,
                 "capability_grant": capability,

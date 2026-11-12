@@ -109,7 +109,7 @@ class MintStoryNPCActionPresetTests(MintStoryNPCActionTestBase):
         seed_default_gm_level_caps()
         actor = self._gm_character(GMLevel.JUNIOR)
         preset = NPCStatlinePresetFactory(name="Test Watch Guard")
-        trait_line = NPCPresetTraitLineFactory(preset=preset, display_value=3)
+        trait_line = NPCPresetTraitLineFactory(preset=preset, value=30)
 
         result = MintStoryNPCAction().run(actor=actor, name="Preset Guard", preset=preset.name)
 
@@ -119,7 +119,7 @@ class MintStoryNPCActionPresetTests(MintStoryNPCActionTestBase):
             trait=trait_line.trait,
         )
         assert stamp.source == TraitChangeSource.NPC_PRESET
-        assert stamp.new_value == trait_line.display_value * 10
+        assert stamp.new_value == trait_line.value
 
 
 class MintStoryNPCJourneyTests(APITestCase):

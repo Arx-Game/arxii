@@ -31,7 +31,6 @@ from world.covenants.models import CharacterCovenantRole
 from world.magic.constants import TargetKind
 from world.magic.factories import TechniqueFactory
 from world.magic.models import Thread
-from world.magic.services.threads import shown_thread_level
 from world.scenes.models import Interaction
 from world.vitals.models import CharacterVitals
 
@@ -216,7 +215,7 @@ class SimulationTechniqueAndVowTests(TestCase):
                     (
                         sheet.pk,
                         membership.covenant_role_id if membership else 0,
-                        shown_thread_level(thread.level) if thread else None,
+                        thread.level if thread else None,
                     )
                 )
             real(encounter)
@@ -247,7 +246,7 @@ class SimulationTechniqueAndVowTests(TestCase):
         self._run(covenant_role_id=self.role.pk)
         self.assertEqual(len(self.memberships), 2)
         for _sheet, role_id, level in self.memberships:
-            self.assertEqual((role_id, level), (self.role.pk, 4))
+            self.assertEqual((role_id, level), (self.role.pk, 40))
 
     def test_without_one_nobody_holds_a_vow(self) -> None:
         self._run()

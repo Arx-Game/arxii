@@ -2,8 +2,8 @@
  * Stage 7: Appearance (#3630).
  *
  * Physical characteristics as fields and choice rows: age and birthday day
- * and height in inches are typed numbers (a `StatRow`'s pips would run to a
- * hundred); birthday month, height band, build and each form trait are
+ * and height in inches are typed numbers (a `StatRow`'s steppers would take a
+ * hundred presses); birthday month, height band, build and each form trait are
  * pressed-row choices. The record rail lists the choices made so far; every
  * explanatory sentence the old layout put under a section heading now lives
  * in the margin instead (Decision 8).

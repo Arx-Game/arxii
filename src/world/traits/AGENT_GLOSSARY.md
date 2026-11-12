@@ -1,8 +1,8 @@
 # Traits glossary
 
 **Storage scale**:
-Every `CharacterTraitValue` stores the fine-grained 1-100 range (ADR-0193, #2894), but display differs by family: **skills show their true stored value** (35 reads 35 — development moves them by single points, XP unlocks cross the ×10 rung boundaries), while **stats display single-digit and store ×10** (strength 2 = stored 20; players allocate 1-5 dots in CG, converted once at finalization). Convert stat display at the edge via `display_trait_value` / `STAT_DISPLAY_DIVISOR`; never divide a skill for display, and never write a display-scale stat to a trait row.
-_Avoid_: "1-5 scale" for storage (that's stat display, draft-side only), dividing skill values by 10
+Every `CharacterTraitValue` stores the fine-grained 1-100 range (#2894), and every surface shows that stored value for stats and skills alike (ADR-5091, #5091; superseded ADR-0193's divide-by-10 for stats): strength 20 reads 20, a skill at 35 reads 35. A **stat point** is `STAT_POINT_VALUE` (10), the step character creation (10 to 50), maturation, level stat points and GM raises move a stat by. Formulas tuned per whole stat point count `whole_stat_points(value)` (`value // 10`), an internal step that is never shown.
+_Avoid_: "display value", "dots" or a "1-5 scale" for stats (removed by #5091); dividing any stat, skill or thread value by 10 for display
 
 **Trait**:
 The base definition template for any measurable character quality, typed as STAT, SKILL, MODIFIER, or OTHER and grouped by category. Every Stat and Skill is backed by a Trait record, giving them a unified check-resolution pipeline.

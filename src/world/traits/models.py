@@ -3,7 +3,7 @@ Arx II Traits System Models
 
 Core models for character traits, check resolution, and advancement tracking.
 Following Arx II design principles:
-- 1-100 internal scale (displayed as 1.0-10.0)
+- one 1-100 scale, stored and shown as-is (ADR-5091)
 - Data-driven configuration for all mechanics
 - Support for GM/player intervention in checks
 - Clean separation between trait definitions and character values
@@ -59,22 +59,23 @@ class TraitType(models.TextChoices):
     OTHER = "other", "Other"
 
 
-# The stat display divisor (#2894, ADR-0193). STATS store internal ×10 (stat 2
-# → stored 20) and display single-digit (÷10). SKILLS store and display their
-# true 1-100 value — development moves them by single points (11…19) and XP
-# unlocks cross the ×10 rung boundaries — so skill display is the stored value,
-# never divided. Convert stat display at the edge with this divisor; never
-# write a display-scale stat to CharacterTraitValue.
+# One stat point (#5091, ADR-5091, superseding ADR-0193). Every trait shows its
+# stored value: a stat of 20 reads 20, a skill of 35 reads 35, a thread at 30
+# reads 30. A stat point (CG allocation step, a maturation or level stat point,
+# a GM stat raise) moves a stat by this many stored points.
 # (Defined here, not in constants.py, because constants.py imports this module;
 # constants.py re-exports it.)
-STAT_DISPLAY_DIVISOR = 10
+STAT_POINT_VALUE = 10
 
 
-def display_trait_value(trait_type: str, value: int) -> int:
-    """A trait value as players see it: stats ÷10, everything else true value."""
-    if trait_type == TraitType.STAT:
-        return value // STAT_DISPLAY_DIVISOR
-    return value
+def whole_stat_points(value: int) -> int:
+    """How many whole stat points a stored stat value holds (``value // 10``).
+
+    An internal step for formulas tuned per stat point (fatigue capacity, for
+    instance: so many capacity per 10 points of stamina), never a display: every
+    surface shows ``value`` itself (#5091, ADR-5091).
+    """
+    return value // STAT_POINT_VALUE
 
 
 def _trait_type_label(trait_type: str) -> str:
@@ -264,12 +265,7 @@ class TraitRankDescription(NaturalKeyMixin, SharedMemoryModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.trait.name}: {self.label} ({self.display_value})"
-
-    @property
-    def display_value(self) -> int:
-        """Display value as shown to players: stats ÷10, skills true value (#2894)."""
-        return display_trait_value(self.trait.trait_type, cast(int, self.value))
+        return f"{self.trait.name}: {self.label} ({self.value})"
 
 
 class CharacterTraitValue(SharedMemoryModel):
@@ -304,12 +300,7 @@ class CharacterTraitValue(SharedMemoryModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.character}: {self.trait.name} = {self.display_value}"
-
-    @property
-    def display_value(self) -> int:
-        """Display value as shown to players: stats ÷10, skills true value (#2894)."""
-        return display_trait_value(self.trait.trait_type, cast(int, self.value))
+        return f"{self.character}: {self.trait.name} = {self.value}"
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         """Override save to update character's trait handler cache."""

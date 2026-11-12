@@ -28,7 +28,7 @@ from world.character_creation.constants import (
 
 ```python
 from world.character_creation.types import (
-    StatAdjustment,      # TypedDict: stat, old_display, new_display, reason
+    StatAdjustment,      # TypedDict: stat, old_value, new_value, reason
     ResonanceSource,     # Dataclass: distinction_name, value
     ProjectedResonance,  # Dataclass: resonance_id, resonance_name, total, sources
 )
@@ -98,7 +98,7 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 | 3 | Lineage | The beginning's route exists (assigned with the beginning, #4395; none authored names the staff gap); family path resolved (claim: playable family of an offered kind in the area's realm; name: unique name; none: tarot card; with claim and name both offered and nothing chosen, the path resolves to name, #4024); every required shown prompt on that path answered (`get_lineage_errors`, #3617; a general write-in never shows, #4395). The life grids (#4124, #4395) and the kin rows are never required: a stage with nothing picked is a quiet one |
 | 5 | Path | Path selected (`get_path_errors`) |
 | 6 | Gift | Tradition, gift, >=1 technique(s), gift resonance, and Anima Check stat/skill all selected and valid (`compute_magic_errors`, 5-branch return-first gate); renders the `GiftStage` funnel component (#2426 Task 10) |
-| 7 | Attributes & Skills | All 12 primary stats present, valid range (1-5), points remaining = 0; skill point allocation validated against budget (moved in from Path, #2426 Task 9). No points in a Magic skill or one of its specializations (#4457). Draft allocations are display-scale; finalization stores stats ×10 and bridges each CG skill into a matching `CharacterTraitValue` row so checks and DP progression read them (ADR-0193, #2894) |
+| 7 | Attributes & Skills | All 12 primary stats present, each 10-50 in steps of 10 (`STAT_MIN_VALUE`/`STAT_MAX_VALUE`/`STAT_ALLOCATION_STEP`, checked by `validators.stat_value_error`, #5091), points remaining = 0; skill point allocation validated against budget (moved in from Path, #2426 Task 9). No points in a Magic skill or one of its specializations (#4457). Draft allocations are in stored units and finalization writes stats as allocated (`sheet_writers.set_stat_values`, ADR-5091), and bridges each CG skill into a matching `CharacterTraitValue` row so checks and DP progression read them (#2894) |
 | 8 | Appearance | Age (within `age_bounds`, below), height band, height inches, build all set |
 | 9 | Identity | `first_name` in draft_data |
 | 10 | Final Touches | Complete when CG points are in balance (`get_purse_errors`); the Actor's Sheet, goals, enemy, the Officially dead door (#4396), the card-unlocked chapter (#4846) and Introductions are all optional (#3621), and the Distinctions stage is retired -- #3675, distinctions are offered per CG chapter now, see `world.character_creation.offers` |

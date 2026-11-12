@@ -258,8 +258,8 @@ def apply_npc_preset(sheet: CharacterSheet, preset: NPCStatlinePreset) -> None:
     Mirrors CG finalize's write shape exactly -- ``_create_stat_values``/
     ``_create_skill_values`` in ``world.character_creation.services`` --
     rather than calling them: those are private draft-dict readers, not a
-    reusable seam. For each trait line, writes a ``CharacterTraitValue`` at
-    ``display_value * STAT_DISPLAY_DIVISOR``. For each skill line, writes the
+    reusable seam. For each trait line, writes a ``CharacterTraitValue`` at the
+    line's ``value`` (stored units, #5091). For each skill line, writes the
     ``CharacterTraitValue`` on ``skill`` (a skill's one rating store, #5010)
     and aligns its ``DevelopmentPoints`` ledger. Every written
     value gets a ``CharacterTraitChange`` provenance stamp
@@ -276,7 +276,6 @@ def apply_npc_preset(sheet: CharacterSheet, preset: NPCStatlinePreset) -> None:
         align_development_floors,
     )
     from world.traits.models import (  # noqa: PLC0415
-        STAT_DISPLAY_DIVISOR,
         CharacterTraitChange,
         CharacterTraitValue,
         TraitChangeSource,
@@ -294,7 +293,7 @@ def apply_npc_preset(sheet: CharacterSheet, preset: NPCStatlinePreset) -> None:
         CharacterTraitValue(
             character=sheet,
             trait=line.trait,
-            value=line.display_value * STAT_DISPLAY_DIVISOR,
+            value=line.value,
         )
         for line in trait_lines
     ]

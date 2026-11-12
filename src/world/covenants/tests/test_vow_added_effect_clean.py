@@ -90,24 +90,24 @@ class VowAddedEffectCleanTests(TestCase):
         row = VowAddedEffectFactory.build(
             covenant_role=self.role,
             function=TechniqueFunction.STRIKE,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             upgrades=base,
         )
         self.assertIn("upgrades", self._keys(row))
 
     def test_an_upgrade_may_not_name_itself(self) -> None:
-        row = VowAddedEffectFactory(covenant_role=self.role, unlock_thread_level=4)
+        row = VowAddedEffectFactory(covenant_role=self.role, unlock_thread_level=40)
         row.upgrades = row
         self.assertIn("upgrades", self._keys(row))
 
     def test_an_upgrade_on_the_same_role_must_unlock_later(self) -> None:
-        base = VowAddedEffectFactory(covenant_role=self.role, unlock_thread_level=2)
+        base = VowAddedEffectFactory(covenant_role=self.role, unlock_thread_level=20)
         same = VowAddedEffectFactory.build(
-            covenant_role=self.role, unlock_thread_level=2, upgrades=base
+            covenant_role=self.role, unlock_thread_level=20, upgrades=base
         )
         self.assertIn("upgrades", self._keys(same))
         later = VowAddedEffectFactory.build(
-            covenant_role=self.role, unlock_thread_level=3, upgrades=base
+            covenant_role=self.role, unlock_thread_level=30, upgrades=base
         )
         later.full_clean()
 
@@ -117,7 +117,7 @@ class VowAddedEffectCleanTests(TestCase):
             covenant_role=self.role,
             cast_context=fight,
             frequency=VowEffectFrequency.ONCE_PER_ROUND,
-            unlock_thread_level=1,
+            unlock_thread_level=10,
         )
         for frequency, refused in (
             (VowEffectFrequency.ONCE_PER_FIGHT, True),
@@ -128,7 +128,7 @@ class VowAddedEffectCleanTests(TestCase):
                 covenant_role=self.role,
                 cast_context=fight,
                 frequency=frequency,
-                unlock_thread_level=3,
+                unlock_thread_level=30,
                 upgrades=base,
             )
             with self.subTest(frequency=frequency):
@@ -140,14 +140,14 @@ class VowAddedEffectCleanTests(TestCase):
     def test_an_upgrade_on_a_sub_role_may_name_the_parents_row(self) -> None:
         parent = CovenantRoleFactory()
         sub = SubroleCovenantRoleFactory(parent_role=parent)
-        base = VowAddedEffectFactory(covenant_role=parent, unlock_thread_level=2)
-        row = VowAddedEffectFactory.build(covenant_role=sub, unlock_thread_level=2, upgrades=base)
+        base = VowAddedEffectFactory(covenant_role=parent, unlock_thread_level=20)
+        row = VowAddedEffectFactory.build(covenant_role=sub, unlock_thread_level=20, upgrades=base)
         row.full_clean()
 
     def test_an_upgrade_may_not_name_an_unrelated_roles_row(self) -> None:
         other = VowAddedEffectFactory(covenant_role=CovenantRoleFactory())
         row = VowAddedEffectFactory.build(
-            covenant_role=self.role, unlock_thread_level=5, upgrades=other
+            covenant_role=self.role, unlock_thread_level=50, upgrades=other
         )
         self.assertIn("upgrades", self._keys(row))
 

@@ -152,12 +152,7 @@ from world.societies.models import OrganizationMembership, OrganizationReputatio
 from world.societies.reputation_reasons import reason_lines_by_reputation
 from world.species.models import Species
 from world.tarot.models import TarotCard
-from world.traits.models import (
-    STAT_DISPLAY_DIVISOR,
-    CharacterTraitValue,
-    TraitType,
-    display_trait_value,
-)
+from world.traits.models import CharacterTraitValue, TraitType
 
 
 class OriginSlotInputSerializer(serializers.Serializer):
@@ -760,34 +755,31 @@ _STATS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 
 
 def _build_stats(sheet: CharacterSheet) -> dict[str, int]:
-    """Build the stats section: a flat dict mapping stat name to its display value.
+    """Build the stats section: a flat dict mapping stat name to its value.
 
-    Stats store internal ×10 (ADR-0193, #2894: stat 2 -> stored 20); this converts to the
-    single-digit display scale (÷10) every other stat surface shows (the Maturation panel,
-    character creation) at the API edge, so the client never has to know about the storage
-    scale. The queryset is pre-filtered to stat-type traits via Prefetch in the viewset.
+    Every trait shows its stored value (#5091, ADR-5091): a stat of 20 reads 20. The
+    queryset is pre-filtered to stat-type traits via Prefetch in the viewset.
     """
-    return {tv.trait.name: tv.value // STAT_DISPLAY_DIVISOR for tv in sheet.cached_trait_values}
+    return {tv.trait.name: tv.value for tv in sheet.cached_trait_values}
 
 
 def _build_buffed_stats(sheet: CharacterSheet) -> dict[str, int]:
-    """The stats whose buffed value differs from the stored one: stat name to display value.
+    """The stats whose buffed value differs from the stored one: stat name to buffed value.
 
     The value is the one a check, carrying capacity and fatigue read (#4730): the stored
-    value plus the modifier ``TraitHandler.get_trait_modifier`` gives it, shown on the
-    same ÷10 scale as ``stats``. A stat nothing changes is left out, so the client shows
-    one number for it. Modifiers come from one bounded pass over the whole stat list
+    value plus the modifier ``TraitHandler.get_trait_modifier`` gives it, on the same
+    stored scale as ``stats`` (#5091). A stat nothing changes is left out, so the client
+    shows one number for it. Modifiers come from one bounded pass over the whole stat list
     (``trait_modifiers_for_sheet``), never a read per stat.
     """
     from world.mechanics.services import trait_modifiers_for_sheet  # noqa: PLC0415
 
     modifiers = trait_modifiers_for_sheet(sheet, [tv.trait for tv in sheet.cached_trait_values])
-    buffed: dict[str, int] = {}
-    for tv in sheet.cached_trait_values:
-        shown = display_trait_value(TraitType.STAT, tv.value + modifiers.get(tv.trait.pk, 0))
-        if shown != tv.value // STAT_DISPLAY_DIVISOR:
-            buffed[tv.trait.name] = shown
-    return buffed
+    return {
+        tv.trait.name: tv.value + modifiers[tv.trait.pk]
+        for tv in sheet.cached_trait_values
+        if modifiers.get(tv.trait.pk, 0) != 0
+    }
 
 
 def _build_stat_sections(sheet: CharacterSheet, *, show: bool) -> dict[str, dict[str, int]]:
@@ -2558,17 +2550,15 @@ def _build_staff_rows(sheet: CharacterSheet) -> StaffEditRows:
     from world.classes.models import CharacterClassLevel  # noqa: PLC0415
     from world.forms.models import CharacterFormValue, FormMarking, FormType  # noqa: PLC0415
     from world.progression.models import CharacterPathHistory  # noqa: PLC0415
-    from world.traits.constants import STAT_DISPLAY_DIVISOR  # noqa: PLC0415
     from world.traits.models import CharacterTraitValue, TraitType  # noqa: PLC0415
     from world.vitals.models import CharacterVitals  # noqa: PLC0415
     from world.worship.models import WorshipDeclaration  # noqa: PLC0415
 
-    stats = {
-        trait_id: value // STAT_DISPLAY_DIVISOR
-        for trait_id, value in CharacterTraitValue.objects.filter(
+    stats = dict(
+        CharacterTraitValue.objects.filter(
             character=sheet, trait__trait_type=TraitType.STAT
         ).values_list("trait_id", "value")
-    }
+    )
     held = CharacterDistinction.objects.filter(character=sheet).select_related(
         "distinction", "feature_trait", "feature_marking"
     )

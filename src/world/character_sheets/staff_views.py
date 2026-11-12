@@ -113,7 +113,7 @@ class StaffSheetRowsMixin:
     @extend_schema(request=StaffStatsSerializer, responses={200: CharacterSheetSerializer})
     @action(detail=True, methods=[HTTPMethod.PATCH], url_path="staff-stats")
     def staff_stats(self, request: Request, pk: int | None = None) -> Response:
-        """Set stats at display scale (1 to 5); missing rows are created."""
+        """Set stats (10 to 50, in steps of 10); missing rows are created."""
         sheet = self._npc_owner_sheet(request)
         data = self._validated(StaffStatsSerializer, request, sheet)
         try:

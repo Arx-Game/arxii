@@ -10,7 +10,7 @@ from world.classes.models import PathStage
 from world.progression.models import MaturationStatCap
 from world.progression.services.awards import award_stat_raise
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
-from world.traits.constants import STAT_DISPLAY_DIVISOR
+from world.traits.constants import STAT_POINT_VALUE
 from world.traits.factories import TraitFactory
 from world.traits.models import (
     CharacterTraitChange,
@@ -38,9 +38,9 @@ class AwardStatRaiseTests(TestCase):
         tenure = self._tenure()
         change = award_stat_raise(sheet, self.stat, granting_tenure=tenure)
         value = CharacterTraitValue.objects.get(character=sheet, trait=self.stat).value
-        self.assertEqual(value, STAT_DISPLAY_DIVISOR)
+        self.assertEqual(value, STAT_POINT_VALUE)
         self.assertEqual(change.old_value, 0)
-        self.assertEqual(change.new_value, STAT_DISPLAY_DIVISOR)
+        self.assertEqual(change.new_value, STAT_POINT_VALUE)
 
     def test_writes_gm_grant_provenance_with_tenure(self):
         sheet = self._sheet()
@@ -65,21 +65,21 @@ class AwardStatRaiseTests(TestCase):
 
     def test_cap_reached_raises_value_error(self):
         sheet = self._sheet()
-        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=3)
+        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=30)
         CharacterTraitValue.objects.create(
-            character=sheet, trait=self.stat, value=3 * STAT_DISPLAY_DIVISOR
+            character=sheet, trait=self.stat, value=3 * STAT_POINT_VALUE
         )
         with self.assertRaises(ValueError):
             award_stat_raise(sheet, self.stat, granting_tenure=None)
         value = CharacterTraitValue.objects.get(character=sheet, trait=self.stat).value
-        self.assertEqual(value, 3 * STAT_DISPLAY_DIVISOR)
+        self.assertEqual(value, 3 * STAT_POINT_VALUE)
 
     def test_repeated_raises_accumulate(self):
         sheet = self._sheet()
         award_stat_raise(sheet, self.stat, granting_tenure=None)
         award_stat_raise(sheet, self.stat, granting_tenure=None)
         value = CharacterTraitValue.objects.get(character=sheet, trait=self.stat).value
-        self.assertEqual(value, 2 * STAT_DISPLAY_DIVISOR)
+        self.assertEqual(value, 2 * STAT_POINT_VALUE)
         self.assertEqual(
             CharacterTraitChange.objects.filter(
                 character_sheet=sheet, trait=self.stat, source=TraitChangeSource.GM_GRANT

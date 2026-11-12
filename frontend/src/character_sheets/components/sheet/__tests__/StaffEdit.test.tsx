@@ -322,13 +322,13 @@ describe('staff edit mode', () => {
     renderSheet(sheet());
 
     const rowsBand = await screen.findByTestId('staff-rows-band');
-    await user.type(within(rowsBand).getByRole('spinbutton', { name: 'strength' }), '3');
+    await user.type(within(rowsBand).getByRole('spinbutton', { name: 'strength' }), '30');
     await user.click(within(rowsBand).getByRole('button', { name: 'Save stats' }));
     await waitFor(() =>
       expect(runStaffRowAction).toHaveBeenCalledWith(20, {
         path: 'staff-stats',
         method: 'PATCH',
-        body: { stats: { '1': 3 } },
+        body: { stats: { '1': 30 } },
       })
     );
   });

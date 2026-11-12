@@ -327,7 +327,7 @@ class ResolveSocialVerbTests(TestCase):
             self.participant.character_sheet,
             role,
             covenant=CovenantFactory(covenant_type=CovenantType.DURANCE),
-            thread_level=1,
+            thread_level=10,
         )
         # +15 at thread level 1 doubles the base 15 morale per success level.
         base = MANEUVER_EFFECT_DEFAULTS[ManeuverEffectKey.RALLY_MORALE]

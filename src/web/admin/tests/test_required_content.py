@@ -1586,7 +1586,7 @@ class TestPersonalizationRows(TestCase):
         from world.magic.factories import SignatureMotifBonusFactory, TechniqueVariantFactory
 
         SignatureMotifBonusFactory(creation_point_cost=2)
-        TechniqueVariantFactory(unlock_thread_level=1, creation_point_cost=3)
+        TechniqueVariantFactory(unlock_thread_level=10, creation_point_cost=3)
         self.assertTrue(_probe_for("creation-flourishes").resolve(None).present)
         self.assertTrue(_probe_for("creation-forms").resolve(None).present)
 

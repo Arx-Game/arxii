@@ -45,7 +45,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
     """Full flow: imbue past unlock_thread_level → sub-role resolves + discovery fires."""
 
     def setUp(self) -> None:
-        # Seed the parent role + two resonance sub-roles (unlock_thread_level=3 each).
+        # Seed the parent role + two resonance sub-roles (unlock_thread_level=30 each).
         parent_role = None  # seed_resonance_subrole_slice creates the parent internally
         self.subroles = seed_resonance_subrole_slice(parent_role=parent_role)
         self.subrole = self.subroles[0]
@@ -61,7 +61,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
 
         # Covenant + engaged membership on the parent role.
         # make_engaged_member creates and engages the membership.
-        # Covenant level 3 → the role thread's anchor cap is 30 (#4585: shown 3).
+        # Covenant level 3 → the role thread's anchor cap is 30.
         self.covenant = CovenantFactory(covenant_type=self.parent_role.covenant_type, level=3)
         self.membership = make_engaged_member(
             character_sheet=self.sheet,
@@ -73,8 +73,8 @@ class ResonanceSubroleEndToEndTest(TestCase):
         self.other_sheet = _make_active_sheet()
 
         # CharacterResonance row so spend_resonance_for_imbuing can find a balance.
-        # The thread sits at stored 29 (shown 2, one below unlock_thread_level=3,
-        # #4585); the next level costs (29 - 9) × 100 = 2000 dp, and the stored-30
+        # The thread sits at 29 (one below unlock_thread_level=30); the next
+        # level costs (29 - 9) × 100 = 2000 dp, and the level-30
         # XP boundary is paid below.
         self.cr = CharacterResonanceFactory(
             character_sheet=self.sheet,
@@ -82,7 +82,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
             balance=IMBUE_TO_THIRTY,
         )
 
-        # COVENANT_ROLE thread at stored 29 (shown 2), anchored on parent_role with the
+        # COVENANT_ROLE thread at 29, anchored on parent_role with the
         # sub-role's resonance.
         self.thread = Thread.objects.create(
             owner=self.sheet,

@@ -322,7 +322,7 @@ store, the one the sheet shows (#5010; see skills.md "The rating is `CharacterTr
 `CharacterTraitChange` shape and its other writers (CG finalize, maturation).
 
 **Band skill cap (#4585).** For a SKILL-typed trait, `award_points` stops leveling at
-the level band's skill cap (`MaturationStatCap.skill_cap`, shown units, stored cap x 10
+the level band's skill cap (`MaturationStatCap.skill_cap`, stored units since #5091, read
 via `world.skills.services.stored_skill_cap`) and lets surplus `total_earned` dissipate,
 as at an XP wall; `at_skill_cap()` reports it, and `award_development_points` appends the
 cap message to the transaction description. Stat and other traits are unaffected. See
@@ -339,8 +339,8 @@ counterpart purchase, writing its own `CharacterTraitChange` with
 **GM story-reward stat raise (#3055 slice 1c).** `world.progression.services.awards
 .award_stat_raise(sheet, trait, *, granting_tenure)` is the pure-fiat counterpart to
 `spend_level_stat_point` (`services/stat_points.py`): same cap enforcement
-(`stat_cap_for`, authored in display dots; storage is internal ×10 via
-`STAT_DISPLAY_DIVISOR`), same get-or-create-then-raise-by-one-dot shape, but no
+(`stat_cap_for`, authored in stored units and compared directly, #5091), same
+get-or-create-then-raise-by-one-stat-point (`STAT_POINT_VALUE`, 10) shape, but no
 `LevelStatPointSpend` row is created — this is GM fiat, not an earned point. Writes a
 `CharacterTraitChange` with `source=TraitChangeSource.GM_GRANT` and `granting_tenure`
 set to the GM's own current tenure (`None` for a staff-piloted GM with no tenure — the

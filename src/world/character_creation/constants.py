@@ -6,15 +6,15 @@ and keep models.py focused on model definitions.
 
 from django.db import models
 
-# STAT_DISPLAY_DIVISOR's canonical definition lives in world.traits.constants (#2894);
-# re-exported here for the CG modules that convert display allocations to internal scale.
-from world.traits.constants import STAT_DISPLAY_DIVISOR, PrimaryStat  # noqa: F401
+from world.traits.constants import STAT_POINT_VALUE, PrimaryStat
 
-# Primary stat constants (1-5 DISPLAY scale — draft_data holds display values;
-# finalization multiplies by STAT_DISPLAY_DIVISOR when writing CharacterTraitValue)
-STAT_MIN_VALUE = 1  # Minimum stat value
-STAT_MAX_VALUE = 5  # Maximum stat value during character creation
-STAT_DEFAULT_VALUE = 2  # Default starting value
+# Primary stat allocation, in stored units (#5091, ADR-5091): draft_data holds the
+# value the character will have and finalization writes it as-is. A stat moves in
+# steps of one stat point (STAT_POINT_VALUE).
+STAT_MIN_VALUE = 10  # Minimum stat value
+STAT_MAX_VALUE = 50  # Maximum stat value during character creation
+STAT_DEFAULT_VALUE = 20  # Default starting value
+STAT_ALLOCATION_STEP = STAT_POINT_VALUE
 
 # Age constraints for character creation
 AGE_MIN = 18

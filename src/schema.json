@@ -7499,7 +7499,7 @@ paths:
   /api/character-sheets/{id}/staff-stats/:
     patch:
       operationId: character_sheets_staff_stats_partial_update
-      description: Set stats at display scale (1 to 5); missing rows are created.
+      description: Set stats (10 to 50, in steps of 10); missing rows are created.
       parameters:
       - in: path
         name: id
@@ -70515,14 +70515,14 @@ components:
         trait_name:
           type: string
           readOnly: true
-        display_value:
+        value:
           type: integer
           readOnly: true
-          description: Display-scale value (1-10), mirroring CG's stat-allocation
-            scale.
+          description: Stat value (10-100), the number a sheet shows; CG allocates
+            10-50.
       required:
-      - display_value
       - trait_name
+      - value
     NPCReactionLine:
       type: object
       description: Staff CRUD for banded NPC reaction lines (#2632).
@@ -81921,7 +81921,7 @@ components:
             type: integer
     PatchedStaffStatsRequest:
       type: object
-      description: '``{"stats": {"<trait id>": <1 to 5>}}``.'
+      description: '``{"stats": {"<trait id>": <10 to 50, in steps of 10>}}``.'
       properties:
         stats:
           type: object
@@ -91588,7 +91588,7 @@ components:
         hollow_max:
           type: integer
           description: Return the Sinner's Hollow maximum (``_compute_hollow_max``,
-            shown level × mult).
+            thread rung × mult).
           readOnly: true
         sineater_lifetime_helped:
           type: integer
@@ -102127,13 +102127,13 @@ components:
           type: string
         trait_type:
           type: string
-        display_value:
+        value:
           type: integer
       required:
-      - display_value
       - name
       - trait_id
       - trait_type
+      - value
   securitySchemes:
     cookieAuth:
       type: apiKey

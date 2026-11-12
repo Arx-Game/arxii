@@ -778,7 +778,7 @@ class CovenantRoleContentExportTests(TestCase):
             parent_role=primary,
             name="Round Trip Vanguard (Ember)",
             slug="round-trip-vanguard-ember",
-            unlock_thread_level=2,
+            unlock_thread_level=20,
         )
         sub_role.full_clean()  # proves the all-zero-weight sub-role is valid too
         original_resonance_id = sub_role.resonance_id
@@ -807,7 +807,7 @@ class CovenantRoleContentExportTests(TestCase):
         assert sub_record["fields"]["parent_role"] == ["round-trip-vanguard"]
         assert isinstance(sub_record["fields"]["resonance"], list)
         assert all(not isinstance(v, int) for v in sub_record["fields"]["resonance"])
-        assert sub_record["fields"]["unlock_thread_level"] == 2
+        assert sub_record["fields"]["unlock_thread_level"] == 20
         assert Decimal(str(sub_record["fields"]["sword_weight"])) == 0
 
         from core_management.content_fixtures import build_all, load_entries
@@ -824,7 +824,7 @@ class CovenantRoleContentExportTests(TestCase):
         sub_role.refresh_from_db()
         assert sub_role.parent_role_id == primary.pk
         assert sub_role.resonance_id == original_resonance_id
-        assert sub_role.unlock_thread_level == 2
+        assert sub_role.unlock_thread_level == 20
 
 
 class VowSituationalPerkContentExportTests(TestCase):
@@ -1136,7 +1136,7 @@ class CovenantRoleTechniqueSpecialtyContentExportTests(TestCase):
             parent_role=primary,
             name="Round Trip Specialist (Ember)",
             slug="round-trip-specialist-ember",
-            unlock_thread_level=2,
+            unlock_thread_level=20,
         )
         sub_role.full_clean()  # sanity: the all-zero-weight sub-role is valid
         sub_specialty = CovenantRoleTechniqueSpecialtyFactory(
@@ -1817,7 +1817,7 @@ class TechniqueVariantContentExportTests(TestCase):
         variant = TechniqueVariantFactory(
             parent_technique=technique,
             resonance=resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Round Trip Ardent Pull",
             intensity_delta=2,
             control_delta=1,
@@ -1835,7 +1835,7 @@ class TechniqueVariantContentExportTests(TestCase):
         assert "pk" not in record
         assert record["fields"]["parent_technique"] == [technique.gift.name, technique.name]
         assert record["fields"]["resonance"] == [resonance.name]
-        assert record["fields"]["unlock_thread_level"] == 3
+        assert record["fields"]["unlock_thread_level"] == 30
         assert record["fields"]["name_override"] == "Round Trip Ardent Pull"
 
         from core_management.content_fixtures import build_all, load_entries
@@ -1847,7 +1847,7 @@ class TechniqueVariantContentExportTests(TestCase):
         assert variant.intensity_delta == 2
 
         resolved = TechniqueVariant.objects.get_by_natural_key(
-            technique.gift.name, technique.name, resonance.name, 3
+            technique.gift.name, technique.name, resonance.name, 30
         )
         assert resolved.pk == variant.pk
 

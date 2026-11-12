@@ -121,7 +121,7 @@ class ThreadPullEffect(SharedMemoryModel):
     tier = models.PositiveSmallIntegerField()  # 0..3
     min_thread_level = models.PositiveSmallIntegerField(
         default=0,
-        help_text="Shown thread level (the number players see; a thread stored at 30 shows 3).",
+        help_text="Thread level this effect needs (the number players see).",
     )
     capability_grant_value = models.PositiveIntegerField(
         default=1,

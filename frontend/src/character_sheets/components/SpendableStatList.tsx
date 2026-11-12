@@ -1,6 +1,7 @@
 /**
  * Shared spend-a-point stat list for the Maturation (#2756) and Level Stat
- * Point (#3001) panels — one row per stat with a +1 button, capped per stage.
+ * Point (#3001) panels — one row per stat with a +10 button (one point), capped per stage.
+ * Values and the cap are stored values (#5091).
  */
 
 import { Button } from '@/components/ui/button';
@@ -34,7 +35,7 @@ export function SpendableStatList({ stats, statCap, disabled, onSpend }: Spendab
             disabled={stat.at_cap || disabled}
             onClick={() => onSpend(stat.trait_id)}
           >
-            +1
+            +10
           </Button>
         </li>
       ))}

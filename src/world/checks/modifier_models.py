@@ -59,7 +59,7 @@ class ModifierValue(SharedMemoryModel):
     )
     value = models.PositiveIntegerField(
         help_text="What the modifier is worth, in the lane's units (check points for the "
-        "check lane, internal stat units, x10 the shown stat, for the stat lane). A "
+        "check lane, stat points as a sheet shows them for the stat lane). A "
         "magnitude: a debuff's authored row supplies the minus sign.",
     )
 

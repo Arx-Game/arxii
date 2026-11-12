@@ -163,8 +163,8 @@ export interface SyncDistinctionEntry {
  */
 export interface StatAdjustment {
   stat: string;
-  old_display: number;
-  new_display: number;
+  old_value: number;
+  new_value: number;
   reason: string;
 }
 

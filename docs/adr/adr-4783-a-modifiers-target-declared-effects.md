@@ -5,6 +5,9 @@
 **Issue:** #4783. Amends ADR-0126 (the flat Charge numbers) and ADR-0149 and ADR-0108 (the vow-only
 action scaling table, now removed). Relates ADR-0010 (FK direction) and ADR-0007 (no JSON fields).
 
+> Editor's note (2026-11-12): ADR-5091 made a thread show its stored level; the "shown level"
+> below is now counted as `thread_rung(level)` (`level // 10`, an internal step), same numbers.
+
 ## Decision
 
 A maneuver (Charge, Cover, Succor, Interpose, Rally) declares its numbers as named **effects**,

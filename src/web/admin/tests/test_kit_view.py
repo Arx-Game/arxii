@@ -66,7 +66,7 @@ class KitPageTest(KitPageCase):
     def test_the_techniques_module_shows_base_and_what_the_vow_adds(self) -> None:
         body = self.get(self.url())
         self.assertIn("Techniques, with what the vow adds", body)
-        self.assertIn("Vow adds (level 2)", body)
+        self.assertIn("Vow adds (level 20)", body)
         bolt_url = reverse("admin:arxii_technique_change", args=[self.bolt.pk])
         self.assertIn(f'<a href="{bolt_url}">Bolt</a><span class="kv-sub">Strike</span>', body)
         self.assertIn(
@@ -77,7 +77,7 @@ class KitPageTest(KitPageCase):
             body,
         )
         self.assertNotIn("Unchosen:", body)
-        self.assertIn('<span class="kv-chip kv-mark">unlocks at level 5</span>', body)
+        self.assertIn('<span class="kv-chip kv-mark">unlocks at level 50</span>', body)
         self.assertIn('<span class="kv-chip kv-note">rides Covenant Allies</span>', body)
         self.assertIn("nothing: Tempest adds nothing to Perception", body)
         self.assertIn('<th scope="col">Preview</th>', body)
@@ -89,7 +89,7 @@ class KitPageTest(KitPageCase):
         spark_url = reverse("admin:arxii_vowfocuspick_change", args=[self.spark.pk])
         gale_url = reverse("admin:arxii_vowfocuspick_change", args=[self.gale.pk])
         self.assertIn(
-            f'Level 1 &middot; <a href="{gale_url}">Gale</a>, <a href="{spark_url}">Spark</a>',
+            f'Level 10 &middot; <a href="{gale_url}">Gale</a>, <a href="{spark_url}">Spark</a>',
             body,
         )
         self.assertIn('7 of 4 <span class="kv-chip kv-mark">over budget</span>', body)
@@ -109,7 +109,7 @@ class KitPageTest(KitPageCase):
         body = self.get(self.url())
         self.assertIn("<td>Tomes &middot; Storms</td>", body)
         vow_url = reverse("admin_vow_builder", args=[self.vow.pk])
-        self.assertIn(f'<td><a href="{vow_url}">Tempest</a>, level 2</td>', body)
+        self.assertIn(f'<td><a href="{vow_url}">Tempest</a>, level 20</td>', body)
         self.assertIn("<td>Evasion</td>", body)
         crumbs = re.search(r'<div class="breadcrumbs">(.*?)</div>', body, re.DOTALL).group(1)
         name = self.sheet.character.db_key
@@ -150,7 +150,7 @@ class KitPageTest(KitPageCase):
         for techniques, picks in ((1, 1), (6, 4)):
             sheet = CharacterSheetFactory()
             membership = engage_vow_with_thread(
-                sheet, self.vow, covenant=self.covenant, thread_level=2
+                sheet, self.vow, covenant=self.covenant, thread_level=20
             )
             for index in range(techniques):
                 _know(sheet, _technique(f"Page {picks} {index}", TechniqueFunction.STRIKE))

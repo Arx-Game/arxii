@@ -156,7 +156,7 @@ class CharacterDraftSerializerValidationTests(TestCase):
         stages' keys (e.g. a debounced skills save landing after a navigation
         save wiped the skills).
         """
-        self.draft.draft_data = {"first_name": "Vex", "stats": {"strength": 3}}
+        self.draft.draft_data = {"first_name": "Vex", "stats": {"strength": 30}}
         self.draft.save(update_fields=["draft_data"])
 
         serializer = CharacterDraftSerializer(
@@ -168,7 +168,7 @@ class CharacterDraftSerializerValidationTests(TestCase):
         updated = serializer.save()
 
         assert updated.draft_data["first_name"] == "Vex"
-        assert updated.draft_data["stats"] == {"strength": 3}
+        assert updated.draft_data["stats"] == {"strength": 30}
         assert updated.draft_data["description"] == "A wary courier."
 
     def test_partial_update_null_key_still_clears(self):
@@ -191,7 +191,7 @@ class CharacterDraftSerializerValidationTests(TestCase):
         data = {
             "draft_data": {
                 "stats": {
-                    "invalid_stat": 2,
+                    "invalid_stat": 20,
                 }
             }
         }
@@ -205,7 +205,7 @@ class CharacterDraftSerializerValidationTests(TestCase):
         data = {
             "draft_data": {
                 "stats": {
-                    "strength": 2.5,
+                    "strength": 25.5,
                 }
             }
         }
@@ -216,7 +216,7 @@ class CharacterDraftSerializerValidationTests(TestCase):
 
     def test_validate_draft_data_out_of_range(self):
         """Test validation fails with out of range values."""
-        # Below minimum (0 < STAT_MIN_VALUE=1)
+        # Below minimum (0 < STAT_MIN_VALUE=10)
         data = {
             "draft_data": {
                 "stats": {
@@ -229,11 +229,11 @@ class CharacterDraftSerializerValidationTests(TestCase):
         assert not serializer.is_valid()
         assert "draft_data" in serializer.errors
 
-        # Above maximum (6 > STAT_MAX_VALUE=5)
+        # Above maximum (60 > STAT_MAX_VALUE=50)
         data = {
             "draft_data": {
                 "stats": {
-                    "strength": 6,
+                    "strength": 60,
                 }
             }
         }
@@ -243,12 +243,12 @@ class CharacterDraftSerializerValidationTests(TestCase):
         assert "draft_data" in serializer.errors
 
     def test_validate_draft_data_valid_stats(self):
-        """Test validation passes with valid stats (1-5 scale)."""
+        """Test validation passes with valid stats (10-50, steps of 10)."""
         data = {
             "draft_data": {
                 "stats": {
-                    "strength": 3,
-                    "agility": 2,
+                    "strength": 30,
+                    "agility": 20,
                 }
             }
         }

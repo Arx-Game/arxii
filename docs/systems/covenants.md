@@ -65,7 +65,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   **COVENANT_ROLE thread level** (not character level, which `CovenantRoleBonus`
   already handles). `vow_stat_scaling_bonus(sheet, target)` returns
   `thread_level × bonus_per_level`; no row → 0. Rows on an engaged role's anchor role count too
-  (#4783), and on a maneuver-effect target the level is the shown level (see below). The mechanical heart of "solo
+  (#4783), and on a maneuver-effect target the level counts in rungs of 10 (see below). The mechanical heart of "solo
   darkness" — a deepened vow is a substantially stronger character. When the vow
   dims (#2051), the scaling drops to 0. This is ADR-0149 Layer 3's stat-power pillar
   and stayed unaffected by the #2533 rework; as of #2533 it rides the lore-repo
@@ -113,9 +113,10 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   the five maneuvers' wiring. Vow scaling reads the holder's engaged PRIMARY roles only. Two rules are specific to vows:
   (1) `vow_stat_scaling_bonus` looks up rows on both an engaged role and its anchor role, so a holder who graduated to a
   sub-role keeps rows authored on either, and they sum; the thread level is always read from
-  the anchor's thread. (2) On a maneuver-effect target the bonus multiplies the SHOWN thread
-  level (stored level // 10), because an effect is in natural units (damage, percent, hops,
-  morale) while stats are stored x10; every other category keeps the stored level. The Rally
+  the anchor's thread. (2) On a maneuver-effect target the bonus multiplies the thread rung
+  (`thread_rung`: whole steps of 10 thread levels, an internal step never shown), because an
+  effect is in natural units (damage, percent, hops, morale), so it counts "per 10 thread
+  levels"; every other category multiplies the thread level itself. The Rally
   roll line notes a surge intensity above 100% as "surge +N" (stored on
   `DramaticSurgeRecord.vow_scaling`). A vow's old "Surges given" row is gone: author a row
   on a target scoped to "Rally: surge intensity" instead.
@@ -130,7 +131,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `covenant_role_specialty_power_term` (`world.magic.services.power_terms`, see
   `docs/systems/magic.md`), and since #4747 (ADR-4747-A) by `caster_vow_step`: a sized buff
   or debuff cast by a holder whose first engaged vow specializes in the technique's function
-  counts one size step stronger at her vow thread's shown level, scaled by the same
+  counts one size step stronger at her vow thread's rung (`thread_rung`), scaled by the same
   `multiplier_tenths` (the larger when role and sub-role both match; a secondary vow's tenths
   times `SecondaryVowConfig.potency_tenths / 10`), never tapered. Points only. Lore-repo content
   (`covenants.covenantroletechniquespecialty` in `CONTENT_MODELS`).
@@ -1134,7 +1135,8 @@ list[FiredVowEffect]` runs these steps in order:
    one holder reaches a row through both a primary and a secondary candidate, the primary
    fires (no potency scaling), whatever order the candidates came in. Two different holders
    of the same vow each fire it once.
-8. **Scaling**: each level above `unlock_thread_level` adds the row's
+8. **Scaling**: each 10 thread levels above `unlock_thread_level` (counted in
+   `thread_rung` steps, #5091) add the row's
    `severity_per_thread_level`, `duration_per_thread_level` and `damage_per_thread_level`.
    A row from a SECONDARY vow has each bonus multiplied by
    `SecondaryVowConfig.potency_tenths` and floor-divided by 10 (ADR-0159). The rule is
@@ -1259,7 +1261,7 @@ decides defense" under Combat Seams).
 
 - **`VowFocusPick`** (`NaturalKeyMixin` NK `(covenant_role, name)`, `CreditedContent`,
   `covenants.vowfocuspick` in `CONTENT_MODELS`) - one entry in a vow's pick catalog:
-  `covenant_role` (CASCADE, `related_name="focus_picks"`), `pick_level` (1 to 3), `name`
+  `covenant_role` (CASCADE, `related_name="focus_picks"`), `pick_level` (10, 20 or 30, `VOW_FOCUS_PICK_LEVELS`, #5091), `name`
   (unique per role), `description`, `value` (default 4, a placeholder point score until the
   simulator sets it). Valid on anchor roles and sub-roles.
 - **`VowFocusPickLimit`** (NK `(pick, kind)`, `CreditedContent`, in `CONTENT_MODELS`) - one
@@ -1308,11 +1310,12 @@ decides defense" under Combat Seams).
   `TARGET` limit at 5 it is 2. The formula itself is `price_for(value, limits)`, which the
   vow page (#4880) calls with the value and limits an unsaved edit would leave, to warn
   holders before the save.
-- `shown_vow_level(membership) -> int` - the shown COVENANT_ROLE thread level, read on the
-  anchor role through `services._covenant_role_thread_level` and `shown_thread_level`.
+- `vow_level(membership) -> int` - the COVENANT_ROLE thread level behind a membership (the
+  number players see, #5091), read on the anchor role through
+  `services._covenant_role_thread_level`.
 - `validate_character_focus_pick(choice)` - raises `ValidationError` naming the reason when
   the membership is secondary, the pick is not in the held role's, its anchor's or its
-  resolved sub-role's catalog (`resolve_effective_role`), the pick level is above the shown
+  resolved sub-role's catalog (`resolve_effective_role`), the pick level is above the
   vow level, or the level's chosen prices exceed `budget_per_level`.
 
 - `chosen_pick_ids_by_holder(holder_ids) -> dict[int, set[int]]` - each holder's chosen
@@ -1359,8 +1362,8 @@ All in `world.covenants.focus_picks`:
   membership. `ChooseVowFocusPickAction` (key `choose_vow_focus_pick`, REGISTRY) wraps both;
   the web dispatches it from the sheet, telnet through `vow pick <name> [in <covenant>]`.
 - `vow_pick_catalogs(sheet)` returns one `VowPickCatalog` per active, non-secondary
-  membership (`types.py`: `VowPickCatalog`, `VowPickLevel`, `VowPickEntry`): the shown vow
-  level and, for pick levels 1 to 3, the budget, the spend, and every pick with its price,
+  membership (`types.py`: `VowPickCatalog`, `VowPickLevel`, `VowPickEntry`): the vow
+  level and, for pick levels 10, 20 and 30, the budget, the spend, and every pick with its price,
   effect lines (`pick_effect_lines`, the vow page's payload summaries:
   `summarize_vow_added_effect`, `summarize_situational_perk`, `summarize_stat_scaling` in
   `added_effect_summary.py`), its limits line (`limits_line`: "Target limit: a boss, met 3
@@ -1376,8 +1379,8 @@ All in `world.covenants.focus_picks`:
   only a character they play now, staff any; 404 otherwise), the sheet's Covenant block
   (`frontend/src/covenants/components/VowPicksPanel.tsx`, owner only) and `vow picks [in
   <covenant>]`.
-- `new_picks_lines(levels)` ("Vow level 2: 4 pts of new picks.") and `opened_pick_levels`
-  (only levels 1 to 3). `picks_opened_by_imbuing` is read by `ImbueAction` (the line is
+- `new_picks_lines(levels)` ("Vow level 20: 4 pts of new picks.") and `opened_pick_levels`
+  (only levels 10, 20 and 30). `picks_opened_by_imbuing` is read by `ImbueAction` (the line is
   appended to its message and the levels ride `data["opened_pick_levels"]`), and by
   `PerformRitualAction` for a staff-authored SERVICE imbuing rite (which therefore says the
   same lines on telnet and the web; `spend_resonance_for_imbuing` now absorbs the `ritual=`
@@ -1385,13 +1388,13 @@ All in `world.covenants.focus_picks`:
   and the SERVICE branch return the levels as `opened_pick_levels` and as `new_picks`
   (`NewPicks`: level and points, whose `line` is the telnet text), and the Imbue panel
   draws them in their own row, the points in bold, with "Choose picks" to the sheet's Ties
-  section (`?section=ties`). The rite's line names a climb in shown levels ("Quicksilver
-  is now level 2."), as does the panel's summary: threads are stored x10, so
-  `ThreadImbueResult.levels_gained` and `new_level` are never the numbers a player reads. `announce_open_vow_picks` is called by `add_member`,
+  section (`?section=ties`). The rite's line names the thread's new level ("Quicksilver
+  is now level 23."), as does the panel's summary: a thread shows its stored level (#5091),
+  so `ThreadImbueResult.new_level` is the number a player reads. `announce_open_vow_picks` is called by `add_member`,
   `assign_covenant_role`, `change_role` and the founders of `create_covenant`: a member
   whose vow thread already stands at a level is sent the same lines as a COVENANT narrative
   message once the joining commits (`transaction.on_commit`, so a rite rolled back tells
-  nothing); a fresh joiner has no vow thread and is told nothing until imbuing opens level 1
+  nothing); a fresh joiner has no vow thread and is told nothing until imbuing opens level 10
   (the maintainer's "thread first" ruling, ledger row vow-picks-open-with-the-thread).
 - The catalog read and the dispatch share one rule for who may act as a character:
   `web.api.permissions.account_may_play` (`IsCharacterOwner`'s rule: a begun tenure, a

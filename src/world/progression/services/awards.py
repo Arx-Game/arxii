@@ -21,7 +21,7 @@ from world.progression.models import (
 from world.progression.services.maturation import stat_cap_for
 from world.progression.services.xp_ledger import get_or_create_xp_tracker, record_character_earn
 from world.progression.types import DevelopmentSource, ProgressionReason
-from world.traits.constants import STAT_DISPLAY_DIVISOR
+from world.traits.constants import STAT_POINT_VALUE
 from world.traits.models import (
     CharacterTraitChange,
     CharacterTraitValue,
@@ -206,11 +206,12 @@ def award_stat_raise(
     *,
     granting_tenure: RosterTenure | None,
 ) -> CharacterTraitChange:
-    """Raise ``trait`` by exactly one display dot as a GM story reward (#3055 slice 1c).
+    """Raise ``trait`` by one stat point (``STAT_POINT_VALUE``) as a GM story reward.
+
+    #3055 slice 1c.
 
     Mirrors ``spend_level_stat_point`` (``world.progression.services.stat_points``) --
-    same cap enforcement (``stat_cap_for``, authored in display dots; storage is
-    internal x10 via ``STAT_DISPLAY_DIVISOR``) and the same
+    same cap enforcement (``stat_cap_for``, authored in stored units, #5091) and the same
     get_or_create-then-save-then-CharacterTraitChange shape -- but this is pure GM
     fiat: no ``LevelStatPointSpend`` row is created or consumed, and the provenance
     record carries ``source=GM_GRANT`` + the GM's own tenure (``granting_tenure``,
@@ -227,14 +228,13 @@ def award_stat_raise(
     trait_value, _created = CharacterTraitValue.objects.get_or_create(
         character=sheet, trait=trait, defaults={"value": 0}
     )
-    # Caps are authored in display dots; stat storage is internal x10 (#2894).
     cap = stat_cap_for(sheet)
-    if cap is not None and trait_value.value >= cap * STAT_DISPLAY_DIVISOR:
+    if cap is not None and trait_value.value >= cap:
         msg = f"{trait.name} is already at the maximum {sheet.character.key}'s stage allows."
         raise ValueError(msg)
 
     old_value = trait_value.value
-    trait_value.value += STAT_DISPLAY_DIVISOR
+    trait_value.value += STAT_POINT_VALUE
     trait_value.save()
     return CharacterTraitChange.objects.create(
         character_sheet=sheet,

@@ -22,7 +22,7 @@ class SubroleCleanValidationTests(TestCase):
         role = CovenantRoleFactory.build(
             parent_role=parent,
             resonance=None,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             covenant_type=parent.covenant_type,
             sword_weight=0,
             shield_weight=0,
@@ -37,7 +37,7 @@ class SubroleCleanValidationTests(TestCase):
         role = CovenantRoleFactory.build(
             parent_role=None,
             resonance=resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
         )
         with self.assertRaises(ValidationError):
             role.full_clean()
@@ -58,7 +58,7 @@ class SubroleCleanValidationTests(TestCase):
         role = CovenantRoleFactory.build(
             parent_role=parent,
             resonance=resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             covenant_type=parent.covenant_type,
             sword_weight=0,
             shield_weight=0,
@@ -71,7 +71,7 @@ class SubroleCleanValidationTests(TestCase):
         role = CovenantRoleFactory.build(
             parent_role=None,
             resonance=None,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
         )
         with self.assertRaises(ValidationError) as ctx:
             role.full_clean()
@@ -101,7 +101,7 @@ class SubroleCleanValidationTests(TestCase):
         role = CovenantRoleFactory.build(
             parent_role=parent,
             resonance=resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             covenant_type=CovenantType.BATTLE,
             sword_weight=0,
             shield_weight=0,
@@ -118,7 +118,7 @@ class SubroleCleanValidationTests(TestCase):
         role = CovenantRoleFactory.build(
             parent_role=parent,
             resonance=resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             covenant_type=parent.covenant_type,
             sword_weight=1,
             shield_weight=0,
@@ -139,7 +139,7 @@ class SubroleCleanValidationTests(TestCase):
         role = CovenantRoleFactory.build(
             parent_role=parent,
             resonance=resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             covenant_type=parent.covenant_type,
             sword_weight=0,
             shield_weight=0,
@@ -160,7 +160,7 @@ class SubroleUniqueConstraintTests(TestCase):
         SubroleCovenantRoleFactory(
             parent_role=parent,
             resonance=resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             covenant_type=parent.covenant_type,
         )
         with self.assertRaises(IntegrityError), transaction.atomic():
@@ -171,7 +171,7 @@ class SubroleUniqueConstraintTests(TestCase):
                 speed_rank=parent.speed_rank,
                 parent_role=parent,
                 resonance=resonance,
-                unlock_thread_level=3,
+                unlock_thread_level=30,
             )
 
     def test_different_unlock_level_coexists(self) -> None:
@@ -181,7 +181,7 @@ class SubroleUniqueConstraintTests(TestCase):
         SubroleCovenantRoleFactory(
             parent_role=parent,
             resonance=resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             covenant_type=parent.covenant_type,
         )
         # Different level should not conflict
@@ -192,9 +192,9 @@ class SubroleUniqueConstraintTests(TestCase):
             speed_rank=parent.speed_rank,
             parent_role=parent,
             resonance=resonance,
-            unlock_thread_level=6,
+            unlock_thread_level=60,
         )
-        self.assertEqual(higher_tier.unlock_thread_level, 6)
+        self.assertEqual(higher_tier.unlock_thread_level, 60)
 
     def test_primary_roles_unaffected_by_partial_constraint(self) -> None:
         """Two primary roles (both parent_role=null) should not collide via the partial constraint.

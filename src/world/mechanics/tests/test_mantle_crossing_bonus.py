@@ -66,13 +66,13 @@ class MantleCrossingBonusPipelineTests(TestCase):
         cls.option = CrossingOption.objects.create(
             target_kind=TargetKind.MANTLE,
             resonance=cls.resonance,
-            crossing_level=3,
+            crossing_level=30,
             name="Mantle crossing buff",
             condition_template=cls.condition_template,
         )
         CrossingChoice.objects.create(
             thread=cls.thread,
-            crossing_level=3,
+            crossing_level=30,
             option=cls.option,
         )
 

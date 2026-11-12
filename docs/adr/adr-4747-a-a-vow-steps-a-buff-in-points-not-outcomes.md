@@ -23,4 +23,7 @@ path), and the buff would change strength mid-scene as the thread grew or staff 
 the row. The price is that a buff cast before a thread levels or a retune keeps its old
 step until re-cast; a re-cast keeps the stronger step, compared by level and then tenths.
 
+> Editor's note (2026-11-12): ADR-5091 made a thread show its stored level; the "shown level"
+> above is now counted as `thread_rung(level)` (`level // 10`, an internal step), same numbers.
+
 > Status: accepted · Source: owner rulings 2026-10-27 on #4551 and #4747 · issue #4747 (slice 9 of #4551)

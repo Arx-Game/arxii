@@ -62,7 +62,7 @@ class SpeciesStatBonusFactory(factory_django.DjangoModelFactory):
 
     species = factory.SubFactory(SpeciesFactory)
     stat = "strength"
-    value = 1
+    value = 10
 
 
 class SpeciesGiftGrantFactory(factory_django.DjangoModelFactory):

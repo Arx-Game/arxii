@@ -1372,7 +1372,7 @@ Layout:
   Each row:
   - Player-authored `name` (defaulted to "{Resonance} thread on {anchor}" if
     blank) + anchor name + kind icon
-  - Resonance tag + display level (`level / 10`, e.g. internal 30 → "Lv 3")
+  - Resonance tag + level (the stored level since #5091, e.g. 30 → "Lv 30")
   - Player-authored `description` collapsed by default; "✎" affordance to
     edit in place
   - `developed_points` progress bar — fill = `developed_points / next-level cost`,

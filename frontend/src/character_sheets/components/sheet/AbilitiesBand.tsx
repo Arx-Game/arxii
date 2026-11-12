@@ -12,8 +12,8 @@
  * Neither this component nor its caller can tell "hidden" from "none" — and neither
  * can the response, which is why the band simply is not there either way.
  *
- * Stat values arrive on the single-digit display scale already (ADR-0193). A stat a buff
- * changes shows its stored value and, beside it, the one the game uses (#4730).
+ * Stat values arrive as stored and render as-is (#5091). A stat a buff changes shows its
+ * stored value and, beside it, the one the game uses (#4730).
  */
 
 import type { CharacterSheetSkill } from '@/character_sheets/api';

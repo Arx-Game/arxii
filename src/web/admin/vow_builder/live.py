@@ -30,7 +30,7 @@ from world.covenants.added_effects import (
 from world.covenants.constants import (
     FOCUS_PICK_FREQUENCY_LIMIT_KINDS,
     FOCUS_PICK_LIMIT_FREQUENCY_FULL,
-    VOW_FOCUS_PICK_MAX_LEVEL,
+    VOW_FOCUS_PICK_LEVELS,
 )
 from world.covenants.focus_picks import focus_pick_budget, pick_price
 from world.covenants.models import (
@@ -231,9 +231,9 @@ def limits_text(limits: list[VowFocusPickLimit]) -> str:
 
 
 def picks_by_level(role: CovenantRole) -> list[LevelGroup]:
-    """Every pick level from 1 to the maximum, each with its picks (an empty level too)."""
+    """Every pick level (10, 20, 30), each with its picks (an empty level too)."""
     held = holders_by_pick(role)
-    groups = {level: LevelGroup(level=level) for level in range(1, VOW_FOCUS_PICK_MAX_LEVEL + 1)}
+    groups = {level: LevelGroup(level=level) for level in VOW_FOCUS_PICK_LEVELS}
     for pick in role_picks(role):
         group = groups.setdefault(pick.pick_level, LevelGroup(level=pick.pick_level))
         group.picks.append(
@@ -250,7 +250,7 @@ def picks_by_level(role: CovenantRole) -> list[LevelGroup]:
 def budget_rows(role: CovenantRole) -> list[BudgetRow]:
     """Each pick level's total offered price against the budget per level."""
     budget = focus_pick_budget()
-    offered: dict[int, int] = dict.fromkeys(range(1, VOW_FOCUS_PICK_MAX_LEVEL + 1), 0)
+    offered: dict[int, int] = dict.fromkeys(VOW_FOCUS_PICK_LEVELS, 0)
     for pick in role_picks(role):
         offered[pick.pick_level] = offered.get(pick.pick_level, 0) + pick_price(pick)
     return [BudgetRow(level=level, offered=offered[level], budget=budget) for level in offered]
@@ -358,7 +358,9 @@ def payload_summaries(role: CovenantRole) -> dict[int | None, list[PayloadLine]]
                 change_url=_change_url("vowsituationalperk", perk.pk),
             )
         )
-    scalings = VowStatScaling.objects.filter(covenant_role=role).select_related("modifier_target")
+    scalings = VowStatScaling.objects.filter(covenant_role=role).select_related(
+        "modifier_target__category"
+    )
     for scaling in scalings:
         lines.setdefault(scaling.focus_pick_id, []).append(
             PayloadLine(

@@ -209,7 +209,7 @@ class GiftAcquisitionConfig(SharedMemoryModel):
     techniques_per_thread_level = models.PositiveIntegerField(
         default=3,
         help_text=(
-            "Max techniques a character can learn per gift per thread level. Variants excluded."
+            "Max techniques a character can learn per gift per 10 thread levels. Variants excluded."
         ),
     )
     first_technique_ap_multiplier = models.PositiveIntegerField(
