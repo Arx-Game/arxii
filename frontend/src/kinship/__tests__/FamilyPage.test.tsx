@@ -230,6 +230,33 @@ describe('FamilyPage', () => {
     expect(within(description).getAllByRole('paragraph')).toHaveLength(2);
   });
 
+  it("reads the house's own description, and the family row's line when the house has none (#5106)", () => {
+    const tree = katta();
+    const written = {
+      ...tree,
+      house: tree.house && {
+        ...tree.house,
+        description: 'First in the Shadow.\n\nThe house keeps its own counsel.',
+      },
+    };
+    givenTree(written);
+    const { unmount } = renderPage();
+    const description = screen.getByRole('region', { name: 'Description' });
+    const paragraphs = within(description).getAllByRole('paragraph');
+    expect(paragraphs.map((p) => p.textContent)).toEqual([
+      'First in the Shadow.',
+      'The house keeps its own counsel.',
+    ]);
+    unmount();
+
+    // A house with nothing written falls back to the family row's line.
+    givenTree(tree);
+    renderPage();
+    expect(screen.getByRole('region', { name: 'Description' })).toHaveTextContent(
+      (tree.family?.description ?? '').split('\n')[0]
+    );
+  });
+
   it('opens a commoner family on a plain head by its bare name', () => {
     givenTree(tallow());
     renderPage();

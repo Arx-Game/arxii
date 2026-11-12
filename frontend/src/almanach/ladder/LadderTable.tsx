@@ -37,6 +37,7 @@ import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 import { STATES } from '../copy';
+import { houseUrl, titleUrl } from '../shared/tier';
 import type { LadderRow } from '../types';
 import { buildLadderTree, defaultExpanded, defaultPressedTier, type LadderTreeNode } from './tree';
 
@@ -56,6 +57,12 @@ export interface LadderTableProps {
   rowHref?: (row: LadderRow) => string;
   /** An extra trailing column per row, rendered after `vassals` — see above. */
   trailingCell?: (row: LadderRow) => ReactNode;
+  /**
+   * Staff's ladder (#5106): the house in Held by and the house or title in Sworn to
+   * open their staff pages. Left off in character creation, where a player has no
+   * such page to open and the names stay text.
+   */
+  linked?: boolean;
 }
 
 function NumCell({ value }: { value: number }) {
@@ -70,14 +77,29 @@ function PeopleCell({ value }: { value: number }) {
   );
 }
 
-function SwornToCell({ row }: { row: LadderRow }) {
+/** Where the name in a rung's Sworn to cell leads: the house or the title it is. */
+function swornToHref(row: LadderRow): string | undefined {
+  if (row.sworn_to_house_id != null) return houseUrl(row.sworn_to_house_id);
+  if (row.sworn_to_title_id != null) return titleUrl(row.sworn_to_title_id);
+  return undefined;
+}
+
+function SwornToCell({ row, linked }: { row: LadderRow; linked: boolean }) {
   if (row.claimant_name !== '') {
     return <td>claimed by {row.claimant_name}</td>;
   }
-  return <td>{row.sworn_to !== '' ? row.sworn_to : <abbr title="none">—</abbr>}</td>;
+  if (row.sworn_to === '') {
+    return (
+      <td>
+        <abbr title="none">—</abbr>
+      </td>
+    );
+  }
+  const href = linked ? swornToHref(row) : undefined;
+  return <td>{href !== undefined ? <Link to={href}>{row.sworn_to}</Link> : row.sworn_to}</td>;
 }
 
-function HeldByCell({ row }: { row: LadderRow }) {
+function HeldByCell({ row, linked }: { row: LadderRow; linked: boolean }) {
   if (row.state === STATES.unclaimed) {
     return (
       <td>
@@ -92,7 +114,15 @@ function HeldByCell({ row }: { row: LadderRow }) {
       </td>
     );
   }
-  return <td className="held">{row.house_name}</td>;
+  return (
+    <td className="held">
+      {linked && row.house_id != null ? (
+        <Link to={houseUrl(row.house_id)}>{row.house_name}</Link>
+      ) : (
+        row.house_name
+      )}
+    </td>
+  );
 }
 
 interface NameCellProps {
@@ -176,6 +206,7 @@ export function LadderTable({
   onSelectRow,
   rowHref,
   trailingCell,
+  linked = false,
 }: LadderTableProps) {
   const tree = useMemo(() => buildLadderTree(rows), [rows]);
   const fallbackTier = useMemo(() => defaultPressedTier(rows), [rows]);
@@ -228,8 +259,8 @@ export function LadderTable({
             onSelect={() => onSelectRow?.(node.row)}
             href={rowHref?.(node.row)}
           />
-          <HeldByCell row={node.row} />
-          <SwornToCell row={node.row} />
+          <HeldByCell row={node.row} linked={linked} />
+          <SwornToCell row={node.row} linked={linked} />
           <NumCell value={node.row.demesne} />
           <NumCell value={node.row.vassals} />
           <PeopleCell value={node.row.population} />

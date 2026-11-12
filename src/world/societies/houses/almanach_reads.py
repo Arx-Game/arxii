@@ -146,6 +146,8 @@ class LadderRow:
     state: str
     is_seat_of: str
     sworn_to: str
+    sworn_to_house_id: int | None
+    sworn_to_title_id: int | None
     demesne: int
     vassals: int
     population: int
@@ -411,28 +413,41 @@ def _realm_graph(realm_id: int) -> _RealmGraph | None:
     )
 
 
+@dataclass(frozen=True)
+class _Oath:
+    """What a rung's ``sworn_to`` cell says, and the house or title that name is
+    (#5106), so the staff ladder can open it. At most one of the ids is set."""
+
+    sworn_to: str = ""
+    comes_with: str = ""
+    house_id: int | None = None
+    title_id: int | None = None
+
+
 def _sworn_to_and_comes_with(
     t: Title, graph: _RealmGraph, *, top: bool, parent_id: int | None
-) -> tuple[str, str]:
+) -> _Oath:
     """See the module docstring's ``sworn_to``/``comes_with`` rules."""
     if not top:
         top_title = graph.titles_by_pk[graph.family_top_by_seat[t.seat_domain_id]]
-        return top_title.name, top_title.name
+        return _Oath(top_title.name, top_title.name, title_id=top_title.pk)
     # #4983: a pledged crown, when held, is the oath, whatever the land says (the
     # same rule ``assign_holder`` writes); the pledge is a crown, so it reads as one.
     if t.pledged_liege_id is not None and t.pledged_liege.house_id is not None:
-        return f"{t.pledged_liege.house.name} (crown)", ""
+        house = t.pledged_liege.house
+        return _Oath(f"{house.name} (crown)", house_id=house.pk)
     liege = graph.liege_title(t.pk)
     if t.house_id is not None:
         if liege is None:
-            return "", ""
+            return _Oath()
         suffix = " (crown)" if liege.house_id in graph.top_tier_house_ids else ""
-        return f"{liege.house.name}{suffix}", ""
+        return _Oath(f"{liege.house.name}{suffix}", house_id=liege.house_id)
     if liege is not None:
-        return liege.house.name, ""
+        return _Oath(liege.house.name, house_id=liege.house_id)
     if parent_id is not None:
-        return graph.titles_by_pk[parent_id].name or UNDEFINED_AREA_NAME, ""
-    return "", ""
+        name = graph.titles_by_pk[parent_id].name or UNDEFINED_AREA_NAME
+        return _Oath(name, title_id=parent_id)
+    return _Oath()
 
 
 def _demesne_for(t: Title, graph: _RealmGraph, own_area_id: int | None) -> int:
@@ -476,7 +491,7 @@ def _row_for(t: Title, graph: _RealmGraph) -> LadderRow:
     top = graph.is_top(t)
     parent_id = graph.parent_title_by_title.get(t.pk)
     own_area_id = graph.own_area_by_title.get(t.pk)
-    sworn_to, comes_with = _sworn_to_and_comes_with(t, graph, top=top, parent_id=parent_id)
+    oath = _sworn_to_and_comes_with(t, graph, top=top, parent_id=parent_id)
     is_seat_of = ""
     if t.tier == TitleTier.BARONY and t.house_id is not None and not top:
         is_seat_of = t.house.name
@@ -491,13 +506,15 @@ def _row_for(t: Title, graph: _RealmGraph) -> LadderRow:
         house_name=t.house.name if t.house_id is not None else "",
         state=_state_word(t),
         is_seat_of=is_seat_of,
-        sworn_to=sworn_to,
+        sworn_to=oath.sworn_to,
+        sworn_to_house_id=oath.house_id,
+        sworn_to_title_id=oath.title_id,
         demesne=_demesne_for(t, graph, own_area_id),
         vassals=_vassals_for(t, graph),
         population=graph.population_under(own_area_id),
         claimable=t.is_claimable,
         seat_domain_id=t.seat_domain_id,
-        comes_with=comes_with,
+        comes_with=oath.comes_with,
         chain_top_id=graph.family_top_by_seat.get(t.seat_domain_id, t.pk),
         claimant_name=claimant_label(graph.first_claim_by_title.get(t.pk)),
         station=t.station,

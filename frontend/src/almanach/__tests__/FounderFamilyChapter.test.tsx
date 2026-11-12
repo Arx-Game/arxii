@@ -338,7 +338,7 @@ test('the relation dialog hides "head of house" once the founder occupies the he
     />
   );
 
-  await userEvent.click(screen.getByRole('button', { name: '⊕ a sibling · a spouse' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Add family member' }));
   const relationSelect = screen.getByLabelText('relation');
   expect(
     within(relationSelect).queryByRole('option', { name: 'head of house' })
@@ -364,7 +364,7 @@ test('a sibling can be added with a blank name — "to be defined" (I4)', async 
     />
   );
 
-  await userEvent.click(screen.getByRole('button', { name: '⊕ a sibling · a spouse' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Add family member' }));
   await userEvent.selectOptions(screen.getByLabelText('relation'), 'sibling');
   expect(screen.getByRole('button', { name: 'Add' })).not.toBeDisabled();
   await userEvent.click(screen.getByRole('button', { name: 'Add' }));
@@ -385,7 +385,7 @@ test('the relation dialog hides "head of house" once a head kin row already exis
     />
   );
 
-  await userEvent.click(screen.getByRole('button', { name: '⊕ a sibling · a spouse' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Add family member' }));
   const relationSelect = screen.getByLabelText('relation');
   expect(
     within(relationSelect).queryByRole('option', { name: 'head of house' })

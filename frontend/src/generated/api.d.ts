@@ -38171,6 +38171,8 @@ export interface components {
       state: string;
       is_seat_of: string;
       sworn_to: string;
+      sworn_to_house_id: number | null;
+      sworn_to_title_id: number | null;
       demesne: number;
       vassals: number;
       population: number;

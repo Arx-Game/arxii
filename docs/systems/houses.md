@@ -844,7 +844,10 @@ and unavailable on the SQLite test tier. The graph also loads the realm's claims
   The page builds for an inner chain rung too (the empire's own kingdom, a kingdom's own
   duchy, planted with the top and sharing its seat): the liege walk (`liege_for_title`,
   which refuses a non-top through `_require_chain_top`) runs only when `graph.is_top(title)`,
-  and an inner rung's `sworn_to` is its chain top's name from `_row_for` (#5011). When the
+  and an inner rung's `sworn_to` is its chain top's name from `_row_for` (#5011). A ladder
+  row also carries `sworn_to_house_id` or `sworn_to_title_id`, whichever the name is, and
+  the staff ladder links Held by to the house's page and Sworn to to that house or title
+  (`LadderTable`'s `linked`; the CG ladder stays text) (#5106). When the
   document request fails, the page shows the error and a "Try again" button instead of
   "Loading the domain…" (#5011).
 - **The trail over every Almanach page** (`frontend/src/almanach/shared/Crumbs.tsx`, #5039) is

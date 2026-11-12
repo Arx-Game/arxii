@@ -216,13 +216,21 @@ person.
   `/characters/:id` takes, batched by `_roster_entries_by_sheet` in one query
   per tree. The panel links a selected sheeted node to its sheet through it,
   reads the family line as "House X" only for a `styles_as_house` kind, and
-  draws `Family.description` under that line when it is non-empty.
+  draws the family's description under that line when it is non-empty.
+- (#5106) Two descriptions, two jobs. `Family.description` (the family row,
+  Django admin) is the line or two of introduction a character creation card
+  shows. `Organization.description` (the house, written on its Almanach page)
+  is the house's page of lore, and the family page shows it: `FamilyPage` reads
+  `tree.house.description` and falls back to the family row's line for a family
+  with no house or a house with nothing written. Each character creation card
+  links to its family page (`urls.family`, "House page" for a house-styled
+  kind, "Family page" otherwise), opened in a new tab so the draft stays put.
 - (#4209) FE: the family page, `frontend/src/kinship/pages/FamilyPage.tsx`
   at `/families/:id` (a `Family` pk, never an `Organization` pk; signed-in
   viewers, the tree endpoint's own gate), over `useFamilyTree` and
   `useFamilySlots` (`kinship/queries.ts`). Sections render or vanish: the
   gate (a plate for a `styles_as_house` kind with the house's words, colours
-  and sigil; a plain head otherwise), `Family.description`, the roll grouped
+  and sigil; a plain head otherwise), the description (#5106's rule), the roll grouped
   by generation (`kinship/generations.ts`, the walk the graph lays out by)
   in `full_name` with a dagger for the deceased and a link for every played
   person, the tree (`KinTreeGraph`, in `short_name`), the selected person

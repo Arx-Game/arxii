@@ -53,6 +53,8 @@ describe('useLadder', () => {
           state: 'Unclaimed',
           is_seat_of: '',
           sworn_to: 'Piropa (crown)',
+          sworn_to_house_id: null,
+          sworn_to_title_id: null,
           demesne: 1,
           vassals: 2,
           claimable: true,

@@ -394,7 +394,9 @@
   color: hsl(var(--foreground));
 }
 .almanach .lad .rung-name:hover,
-.almanach .lad .rung-name:focus-visible {
+.almanach .lad .rung-name:focus-visible,
+.almanach .lad td a:hover,
+.almanach .lad td a:focus-visible {
   text-decoration: underline;
 }
 .almanach .lad tr.sel td {

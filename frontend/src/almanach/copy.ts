@@ -72,3 +72,11 @@ export const PUBLISH_STATUS = {
   draft: 'draft',
   published: 'published',
 } as const;
+
+/**
+ * The family page's two add buttons and the dialog they open (#5106). Both open
+ * the same dialog over every relation; the second starts on a ward and marks the
+ * person as household, not kin.
+ */
+export const ADD_FAMILY_MEMBER = 'Add family member';
+export const ADD_HOUSEHOLD_MEMBER = 'Add household member';

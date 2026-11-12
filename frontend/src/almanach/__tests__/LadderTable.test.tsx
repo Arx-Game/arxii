@@ -20,6 +20,8 @@ const rows = [
     state: 'Unclaimed',
     is_seat_of: '',
     sworn_to: 'Piropa (crown)',
+    sworn_to_house_id: 9,
+    sworn_to_title_id: null,
     demesne: 1,
     vassals: 2,
     population: 4200,
@@ -41,6 +43,8 @@ const rows = [
     state: 'Unclaimed',
     is_seat_of: '',
     sworn_to: 'Fervor',
+    sworn_to_house_id: null,
+    sworn_to_title_id: 1,
     demesne: 1,
     vassals: 0,
     population: 1000,
@@ -62,6 +66,8 @@ const rows = [
     state: 'Held',
     is_seat_of: 'Piropa',
     sworn_to: 'County of Inferna',
+    sworn_to_house_id: null,
+    sworn_to_title_id: 7,
     demesne: 1,
     vassals: 0,
     population: 1000,
@@ -85,6 +91,8 @@ const contestedRow = {
   state: 'Held',
   is_seat_of: '',
   sworn_to: 'Piropa (crown)',
+  sworn_to_house_id: 9,
+  sworn_to_title_id: null,
   demesne: 2,
   vassals: 2,
   population: 2500,
@@ -176,4 +184,28 @@ describe('buildLadderTree', () => {
     const perdition = tree.find((node) => node.row.title_id === 3);
     expect(perdition?.children).toEqual([]);
   });
+});
+
+test("the staff ladder opens a rung's house and what it is sworn to; a player's stays text (#5106)", () => {
+  const { unmount } = renderWithProviders(<LadderTable rows={rows} linked />);
+  // Held by: the house's own page.
+  expect(screen.getByRole('link', { name: 'Piropa' })).toHaveAttribute(
+    'href',
+    '/staff/almanach/houses/9'
+  );
+  // Sworn to: a house where the name is a house, a title where it is a title.
+  expect(screen.getByRole('link', { name: 'Piropa (crown)' })).toHaveAttribute(
+    'href',
+    '/staff/almanach/houses/9'
+  );
+  expect(screen.getByRole('link', { name: 'County of Inferna' })).toHaveAttribute(
+    'href',
+    '/staff/almanach/titles/7'
+  );
+  unmount();
+
+  renderWithProviders(<LadderTable rows={rows} />);
+  expect(screen.getByText('Piropa (crown)')).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Piropa (crown)' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Piropa' })).not.toBeInTheDocument();
 });

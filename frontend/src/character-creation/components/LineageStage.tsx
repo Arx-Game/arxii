@@ -23,7 +23,8 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
-import { Shuffle } from 'lucide-react';
+import { ExternalLink, Shuffle } from 'lucide-react';
+import { urls } from '@/utils/urls';
 import { useEffect, useState } from 'react';
 import { CodexTerm } from '@/codex/components/CodexTerm';
 import {
@@ -810,11 +811,24 @@ export function FamilyCard({ family, isSelected, onSelect }: FamilyCardProps) {
           <StandingBar standing={family.standing} />
         )}
       </CardHeader>
-      {family.description && (
-        <CardContent className="px-3 pb-3 pt-0">
+      <CardContent className="space-y-2 px-3 pb-3 pt-0">
+        {family.description && (
           <CardDescription className="text-xs">{family.description}</CardDescription>
-        </CardContent>
-      )}
+        )}
+        {/* The card carries a line of introduction; the family's own page holds the
+            rest (#5106). It opens beside character creation so the draft stays put,
+            and the click is the link's, not the card's pick. */}
+        <a
+          className="inline-flex items-center gap-1 text-xs text-primary underline-offset-2 hover:underline"
+          href={urls.family(family.id)}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {family.kind.styles_as_house ? 'House page' : 'Family page'}
+          <ExternalLink className="h-3 w-3" aria-hidden="true" />
+        </a>
+      </CardContent>
     </Card>
   );
 }
