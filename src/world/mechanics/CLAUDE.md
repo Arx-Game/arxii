@@ -62,6 +62,8 @@ Slim pointer registry for things that can be modified. Resonance and Affinity do
 | target_capability | OneToOne(CapabilityType, null) | FK to the CapabilityType this target represents |
 | target_check_type | OneToOne(CheckType, null) | FK to the CheckType this target represents |
 | target_aspect | OneToOne(Aspect, null) | The Aspect this target represents (#4827); the check seam's ASPECT block reads it |
+| target_check_category | FK(CheckCategory, null, CASCADE) | A "botch_immunity" target scoped to every check type in this category (#4386) |
+| target_scope_check_type | FK(CheckType, null, CASCADE) | A "botch_immunity" target scoped to one check type (#4386). A plain FK because `target_check_type` is one-to-one and belongs to the check-bonus target. Exactly one of the two is set on a botch_immunity target and neither on any other category (`clean()`); one target per scope. `botch_immunity_targets_for(check_type)` returns the active targets for a check; a positive total from any source means the holder cannot botch there (`world.checks.services.is_botch_immune`) |
 | target_damage_type | OneToOne(DamageType, null) | FK to the DamageType this target represents (resistance) |
 | scope_maneuver_effect | FK(ManeuverEffect, null, CASCADE) | A "maneuver_effect" target scoped to one effect (#4783) |
 | scope_effect_kind | CharField(blank) | A "maneuver_effect" target scoped to one `EffectKind` across every maneuver; exactly one of the two scope columns is set on such a target, and neither on any other category (`clean()`, and the `modifier_target_one_scope` constraint stops both). A target with neither matches nothing. A target with a technique scope sets the kind and no effect |

@@ -471,10 +471,48 @@ term would double-count it. See ADR-0166.
    position = effective_roll - fraction  (an unslid chart reads only the face)
 
 7. The slid chart's band at that position -> CheckOutcome; outcome guarantees after,
-   capped at the chart's best outcome
+   capped at the chart's best outcome (vow perks with a situation context; niche botch
+   immunity on every check, see "Niche botch immunity" below)
 
 8. Return CheckResult dataclass
 ```
+
+---
+
+### Niche botch immunity (#4386, ADR-4386)
+
+A character whose niche is a kind of check cannot botch at it when a source they hold grants
+botch immunity there. It is the second source of the botch floor ADR-0152 built for covenant
+vows, and it shares that floor.
+
+- **Authoring.** Staff create a `ModifierTarget` in the `botch_immunity` category
+  (`BOTCH_IMMUNITY_CATEGORY_NAME`) with exactly one scope: `target_check_category` (every
+  check type in a `CheckCategory`) or `target_scope_check_type` (one `CheckType`). Any modifier
+  source can then grant it: a `DistinctionEffect` (written as `CharacterModifier` rows by
+  `grant_distinction`), a `ConditionModifierEffect`, an achievement, an alternate form, or a
+  `CraftingRecipeModifier` on a worn crafted item. Facets and mantles do not reach it (the
+  equipment walk's categories are fixed). A Path grants no modifiers, so a Path niche goes
+  through a distinction granted in character creation.
+- **Who is immune.** `is_botch_immune(sheet, check_type)`: the sum of `get_modifier_total`
+  and `get_condition_modifier_total` over `ModifierTarget.botch_immunity_targets_for(check_type)`
+  is positive. The amount does not matter.
+- **The floor.** `_apply_outcome_guarantees(character, outcome, chart, situation_ctx,
+  check_type)` checks this only on a raw botch, before the vow perks' situation-context
+  requirement, so it applies on every rolled check (the dice path and the forced-outcome path).
+  An immune character's botch adds `BOTCH_SUCCESS_LEVEL_MAX + 1` to the same floor list as the
+  vow perks, and the one `_lowest_outcome_at_or_above` call picks the chart's least-bad outcome
+  at or above it. This route never raises a result above Failure; a vow `TIER_FLOOR` still can.
+  A raised botch is a Failure in every respect: a consequence pool reads its Failure row.
+- **Display.** Nothing is announced to the room; onlookers see an ordinary Failure.
+  `collect_check_modifiers` adds one value-0 `ModifierSourceKind.BOTCH_IMMUNITY` line,
+  "Cannot botch: <source>", per source (`botch_immunity_sources`) on every in-scope check of an
+  immune roller, whether or not that roll was a botch. The lines change no total.
+  `ConsequenceOutcomeSerializer` shows them to the roll's own player and staff and hides them
+  from everyone else, and the roll breakdown prints them with no number.
+- **Previews.** `botch_floor_level(levels)` gives the level a botch rises to on a chart.
+  `compute_matchup(botch_immune=True)` (the tuning dashboard's checks panel) and
+  `EvalContext.botch_immune` (`matchup_bands`, the magic outcome preview) count a botch as that
+  level. `chart_has_success_outcomes` only asks whether success is possible and is unchanged.
 
 ---
 
