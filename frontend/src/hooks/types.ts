@@ -39,6 +39,8 @@ export const WS_MESSAGE_TYPE = {
   KUDOS_RECEIVED: 'kudos_received',
   /** Inbound: a new letter arrived for one of the recipient's tenures (#2160). */
   MAIL_ARRIVED: 'mail_arrived',
+  /** Inbound: a message in a channel the account joined; never enters the IC feed (#3299). */
+  CHANNEL_MESSAGE: 'channel_message',
   /** Inbound: an environmental hazard entered a damaging stage; show the response card (#2846). */
   HAZARD_PROMPT: 'hazard_prompt',
   REQUEST_ROOM_STATE: 'request_room_state',
@@ -303,6 +305,22 @@ export interface MailArrivedPayload {
   mail_id: number;
   sender_display: string;
   subject: string;
+}
+
+/**
+ * A live channel message (#3299), sent to every web session on the account (the
+ * client dedupes on `message_id`). `speaker` is display text only, never an
+ * account name.
+ */
+export interface ChannelMessagePayload {
+  message_id: number;
+  channel_id: number;
+  channel_name: string;
+  speaker: string;
+  body: string;
+  created_at: string;
+  is_own: boolean;
+  notification_level: 'all' | 'badge' | 'none';
 }
 
 /**

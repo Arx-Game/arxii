@@ -29,6 +29,7 @@ import type {
   InteractionWsPayload,
   KudosReceivedPayload,
   MailArrivedPayload,
+  ChannelMessagePayload,
   OutgoingMessage,
   RoomStatePayload,
   ScenePayload,
@@ -49,6 +50,7 @@ import {
 import type { BattleStatePayload } from '@/battles/types';
 import { handleKudosReceivedPayload } from './handleKudosReceivedPayload';
 import { handleMailArrivedPayload } from './handleMailArrivedPayload';
+import { handleChannelMessagePayload } from './handleChannelMessagePayload';
 import { handleGMPromptPayload } from './handleGMPromptPayload';
 import {
   handleInteractionChangedPayload,
@@ -431,6 +433,10 @@ function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefi
 
     case WS_MESSAGE_TYPE.MAIL_ARRIVED:
       return ({ kwargs }) => handleMailArrivedPayload(kwargs as unknown as MailArrivedPayload);
+
+    case WS_MESSAGE_TYPE.CHANNEL_MESSAGE:
+      return ({ kwargs }) =>
+        handleChannelMessagePayload(kwargs as unknown as ChannelMessagePayload | undefined);
 
     case WS_MESSAGE_TYPE.HAZARD_PROMPT:
       return ({ kwargs }) => emitHazardPrompt(kwargs as unknown as HazardPromptPayload);
