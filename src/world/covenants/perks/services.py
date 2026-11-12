@@ -918,7 +918,7 @@ class _PerkResolver:
 
 
 def _character_name(character_id: int) -> str | None:
-    """A character's name as players see it on an announce line (#5092), by its id."""
+    """A character's key for an announce line (#5092), by id: the same name {holder} uses."""
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
 
     return ObjectDB.objects.filter(pk=character_id).values_list("db_key", flat=True).first()
