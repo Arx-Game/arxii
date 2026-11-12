@@ -33205,9 +33205,11 @@ export interface components {
      *     ``offer_ids``/``sources``/``arrivals`` (#3675) name an entry's contributing
      *     ``DistinctionOffer`` rows, their display labels, and how each arrived
      *     (choice/bundled/carried) -- ``world.distinctions.types.DraftDistinctionEntry``
-     *     carries them on every offer-tracked entry. ``required=False`` mirrors runtime
-     *     reality: a legacy entry saved before the offers system landed (0106) has no
-     *     ``offer_ids`` key at all (see ``offers._drop_vanished_sources``). ``offer_ids``
+     *     carries them on every offer-tracked entry. A legacy entry saved before the offers
+     *     system landed (0106) has no ``offer_ids`` key at all (see
+     *     ``offers._drop_vanished_sources``); the three lists default to empty so every entry
+     *     the API returns carries them, and the leaf never meets a missing list (#5102: the
+     *     Lineage step crashed on ``offer_ids is not iterable`` for such a draft). ``offer_ids``
      *     has no declared item type because it mixes ``int`` (a real ``DistinctionOffer``
      *     row) and ``str`` (a tradition-state-carried drawback's synthetic
      *     ``"state:<TraditionState>"`` key).
