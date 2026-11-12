@@ -151,9 +151,11 @@ def god_signs(being: WorshippedBeing, table: GMTable) -> list[str]:
     if declared:
         noun = "character declares" if declared == 1 else "characters declare"
         signs.append(f"{declared} {noun} it as their public faith.")
-    chosen = DevotionStanding.objects.filter(
-        being=being, valence__isnull=False, released_at__isnull=True
-    ).exclude(character_sheet_id__in=_table_member_sheet_ids(table))
+    from world.worship.favor_services import chosen_standing_q  # noqa: PLC0415
+
+    chosen = DevotionStanding.objects.filter(chosen_standing_q(), being=being).exclude(
+        character_sheet_id__in=_table_member_sheet_ids(table)
+    )
     if chosen.exists():
         signs.append("It has a Chosen who is not seated at this table.")
     if TempleDedication.objects.filter(being=being, dissolved_at__isnull=True).exists():

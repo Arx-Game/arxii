@@ -763,6 +763,32 @@ def _build_stats(sheet: CharacterSheet) -> dict[str, int]:
     return {tv.trait.name: tv.value for tv in sheet.cached_trait_values}
 
 
+def _build_buffed_stats(sheet: CharacterSheet) -> dict[str, int]:
+    """The stats whose buffed value differs from the stored one: stat name to buffed value.
+
+    The value is the one a check, carrying capacity and fatigue read (#4730): the stored
+    value plus the modifier ``TraitHandler.get_trait_modifier`` gives it, on the same
+    stored scale as ``stats`` (#5091). A stat nothing changes is left out, so the client
+    shows one number for it. Modifiers come from one bounded pass over the whole stat list
+    (``trait_modifiers_for_sheet``), never a read per stat.
+    """
+    from world.mechanics.services import trait_modifiers_for_sheet  # noqa: PLC0415
+
+    modifiers = trait_modifiers_for_sheet(sheet, [tv.trait for tv in sheet.cached_trait_values])
+    return {
+        tv.trait.name: tv.value + modifiers[tv.trait.pk]
+        for tv in sheet.cached_trait_values
+        if modifiers.get(tv.trait.pk, 0) != 0
+    }
+
+
+def _build_stat_sections(sheet: CharacterSheet, *, show: bool) -> dict[str, dict[str, int]]:
+    """The payload's ``stats`` and ``buffed_stats``, empty when stats are hidden."""
+    if not show:
+        return {"stats": {}, "buffed_stats": {}}
+    return {"stats": _build_stats(sheet), "buffed_stats": _build_buffed_stats(sheet)}
+
+
 _SKILLS_SELECT_RELATED: tuple[str, ...] = ()
 _SKILLS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     # A skill's rating is its trait's CharacterTraitValue (#5010); a skill is a
@@ -787,9 +813,9 @@ def _build_skills(sheet: CharacterSheet) -> list[SkillEntry]:
 
     A skill's ``value`` is the number a roll uses, the stored rating plus the modifier
     its distinctions, equipment and conditions give it (#4820), read through
-    ``skill_modifiers_for_sheet`` in a bounded pass; the XP gate reads the stored rating.
+    ``trait_modifiers_for_sheet`` in a bounded pass; the XP gate reads the stored rating.
     """
-    from world.mechanics.services import skill_modifiers_for_sheet  # noqa: PLC0415
+    from world.mechanics.services import trait_modifiers_for_sheet  # noqa: PLC0415
 
     # Build a lookup of specialization values keyed by parent_skill_id
     spec_by_skill: dict[int, list[SpecializationEntry]] = {}
@@ -801,7 +827,7 @@ def _build_skills(sheet: CharacterSheet) -> list[SkillEntry]:
             )
         )
 
-    modifiers = skill_modifiers_for_sheet(sheet, [tv.trait for tv in sheet.cached_skill_values])
+    modifiers = trait_modifiers_for_sheet(sheet, [tv.trait for tv in sheet.cached_skill_values])
     result: list[SkillEntry] = []
     for csv in sheet.cached_skill_values:
         skill = csv.trait
@@ -2405,7 +2431,7 @@ class CharacterSheetSerializer(serializers.Serializer):
             ),
             # #3988 — the stored values staff edit mode edits; None for anyone else.
             "staff_edit": _build_staff_edit(sheet) if can_edit_npc_sheet(user, sheet) else None,
-            "stats": _build_stats(sheet) if show_stats else {},
+            **_build_stat_sections(sheet, show=show_stats),
             "skills": _build_skills(sheet) if show_skills else [],
             "path": _build_path_detail(sheet),
             "distinctions": _build_distinctions(sheet, privileged=privileged),

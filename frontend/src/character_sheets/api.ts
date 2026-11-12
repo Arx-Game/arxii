@@ -556,6 +556,11 @@ export interface CharacterSheetPayload {
   appearance: CharacterSheetAppearance;
   /** Stat name -> stored value (a stat of 2 dots is 20; #5091). */
   stats: Record<string, number>;
+  /**
+   * #4730 — stat name -> the value the game uses, display scale, only for a stat whose
+   * buffed value differs from the stored one in `stats`.
+   */
+  buffed_stats: Record<string, number>;
   skills: CharacterSheetSkill[];
   path: CharacterSheetPath | null;
   distinctions: CharacterSheetDistinction[];

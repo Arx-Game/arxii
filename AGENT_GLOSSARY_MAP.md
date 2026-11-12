@@ -43,7 +43,9 @@ term is chosen and the rest are listed under `_Avoid_`.
   amended Vision; and the steward terms (slice 4, ADR-4333-C): Steward, god sign, Catalogue
   clue; and the live route (slice 5): Live route / live answer; and the worn-piece terms
   (#4520): Worn piece, Resonance fed; and the slice 4 terms (#4530): Requested item, Relic
-  ease
+  ease; and the being pact terms (#4341, ADR-4341; code in `world/pacts`): Pact (being pact,
+  follower pact), Pact offer, Pact commitment, Holder, Pact period, Patronage, Chosen, Patron
+  target (_Avoid_: bond, compact, contract, terms, obligation, vow, oath, tithe, debt, deal)
 - [ceremonies](src/world/ceremonies/AGENT_GLOSSARY.md)
 - [estates](src/world/estates/AGENT_GLOSSARY.md)
 - [checks](src/world/checks/AGENT_GLOSSARY.md) - also holds Favor as a modifier source (#4333); band position, the slide and own standing (#4601; the hopeless pin was removed by #4723); and modifier level, size, value table, level baseline, taper and lane (#4594), with worn items' level from quality (#4628) and distinctions' from their holder (#4638); the stat lane (#4726)
@@ -624,6 +626,14 @@ called "standing" (Reputation's avoid-word). Consort/paramour union vocabulary a
 rank-relative `PrestigeRankBand` benefits (ADR-0210) ride it — see
 `src/world/societies/AGENT_GLOSSARY.md` and `src/world/roster/AGENT_GLOSSARY.md`.
 _Avoid_: standing, deterrence score, power rating.
+
+**Being pact**:
+A character's pact with a being (`CharacterPact`, `world/pacts`, #4341), offered on a pledge
+and accepted at its closing rite; the being becomes her patron. One of the pact family beside
+the Court Pact, Marriage Pact and Org Pact. Full entry: [worship
+AGENT_GLOSSARY](src/world/worship/AGENT_GLOSSARY.md).
+_Avoid_: bond (bond ultimates), compact, contract, terms, obligation, vow, oath, tithe, debt,
+deal.
 
 **OrgPact / Betrothal / Match Dossier**:
 The #2999 diplomacy layer riding Stature: OrgPact (lever-based paper pacts, sibling of

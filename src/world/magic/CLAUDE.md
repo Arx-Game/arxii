@@ -1896,7 +1896,10 @@ own companion. It manifests nothing for a failed roll, a caster with no location
 that is not in the caster's room after the move, a Savaged companion, or an avatar in
 another running fight. A being option's tier needs an `OpponentTierTemplate` row or the
 cast raises on purpose and the whole round rolls back (probe `manifest-tier-templates`).
-No CG picker, no out-of-combat manifestation. The flow-payload `summon_ally` is a separate
+The player chooses her own option with the technique picker (#4341):
+`services/manifestation.py` (`manifest_choices_for`, `set_character_manifestation`), action
+`manifest_set`, telnet `manifest <technique>=<option>`, `GET /api/magic/manifest-choices/`,
+the Spellbook's `ManifestPickerPanel`. No CG picker, no out-of-combat manifestation. The flow-payload `summon_ally` is a separate
 threat-pool summon and is untouched. Detail: `docs/systems/magic.md`'s "Manifesting a
 bound entity"; ADR-4118.
 

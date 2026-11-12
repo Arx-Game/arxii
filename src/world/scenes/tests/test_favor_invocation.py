@@ -13,7 +13,6 @@ from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
-from django.utils import timezone
 
 from actions.definitions.scene_checks import SceneSelfCheckAction
 from actions.factories import ActionTemplateFactory
@@ -37,9 +36,10 @@ from world.worship.factories import (
     FavorOutcomeAwardFactory,
     WorshipDeclarationFactory,
     WorshippedBeingFactory,
+    make_chosen,
 )
 from world.worship.favor_services import ensure_being_modifier_targets
-from world.worship.models import FavorInvocation, PatronageValence
+from world.worship.models import FavorInvocation
 from world.worship.types import InvocationChoice
 
 _PERFORM_CHECK = "world.checks.services.perform_check"
@@ -178,13 +178,7 @@ class SelfCheckInvocationTests(SceneInvocationBase):
 class SceneActionInvocationTests(SceneInvocationBase):
     def setUp(self) -> None:
         super().setUp()
-        DevotionStandingFactory(
-            character_sheet=self.sheet,
-            being=self.being,
-            favor=44,
-            valence=PatronageValence.DEVOTIONAL,
-            established_at=timezone.now(),
-        )
+        make_chosen(self.sheet, self.being, favor=44)
         self.persuasion = CheckTypeFactory(name="Persuasion")
         ActionTemplateFactory(name="Persuade", check_type=self.persuasion)
         self.target_sheet = self.onlooker.sheet_data

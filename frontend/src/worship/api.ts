@@ -12,6 +12,7 @@ import { dispatchCanvasAction, type DispatchResult } from '@/map-canvas/dispatch
 import type {
   HolySite,
   InvocationOptions,
+  PactCard,
   Pledge,
   PledgeCard,
   Prayer,
@@ -110,6 +111,19 @@ export async function fetchPledgeCards(sheetId: number): Promise<PledgeCard[]> {
   return unwrap((await res.json()) as Paginated<PledgeCard> | PledgeCard[]);
 }
 
+/** GET /api/pacts/cards/?character_sheet={sheetId} (#4341): her pacts with beings, newest
+ * first, active ones and ended ones still easing out. Owner and staff only. */
+export async function fetchPactCards(sheetId: number): Promise<PactCard[]> {
+  const res = await apiFetch(`/api/pacts/cards/?character_sheet=${sheetId}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load the pacts.');
+  return unwrap((await res.json()) as Paginated<PactCard> | PactCard[]);
+}
+
+/** Dispatch `pact_renounce` as `characterId`: `{ being_id }` (#4341). */
+export function renouncePact(characterId: number, beingId: number): Promise<DispatchResult> {
+  return dispatchCanvasAction(characterId, 'pact_renounce', { being_id: beingId });
+}
+
 /** Dispatch `pledge_take` as `characterId`: `{ pledge: id, prayer }`. */
 export function takePledge(
   characterId: number,
@@ -120,13 +134,16 @@ export function takePledge(
 }
 
 /** Dispatch `pledge_close` as `characterId`: perform the open pledge's closing rite, giving
- * up `itemIds` (#4530) during it: their meaning eases the rite's roll. */
-export function closePledge(characterId: number, itemIds: number[] = []): Promise<DispatchResult> {
-  return dispatchCanvasAction(
-    characterId,
-    'pledge_close',
-    itemIds.length > 0 ? { item_ids: itemIds } : {}
-  );
+ * up `itemIds` (#4530) during it: their meaning eases the rite's roll. `acceptPact` accepts
+ * the pact the pledge offers (#4341), signed if the rite resolves it at Success or better. */
+export function closePledge(
+  characterId: number,
+  { itemIds = [], acceptPact = false }: { itemIds?: number[]; acceptPact?: boolean } = {}
+): Promise<DispatchResult> {
+  return dispatchCanvasAction(characterId, 'pledge_close', {
+    ...(itemIds.length > 0 ? { item_ids: itemIds } : {}),
+    ...(acceptPact ? { accept_pact: true } : {}),
+  });
 }
 
 /** Dispatch `sacrifice` as `characterId`: `{ item_ids, being?, player_line? }`. The optional

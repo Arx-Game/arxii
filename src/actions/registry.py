@@ -368,6 +368,7 @@ from actions.definitions.locations import (
     UnlinkRoomsAction,
     UntagRoomResonanceAction,
 )
+from actions.definitions.manifest import ManifestSetAction
 from actions.definitions.market import (
     BuyStockAction,
     BuyWareAction,
@@ -458,6 +459,7 @@ from actions.definitions.outfits import (
     SaveOutfitAction,
     UndressAction,
 )
+from actions.definitions.pacts import RenouncePactAction
 from actions.definitions.perception import InventoryAction, LookAction, LookAtItemAction
 from actions.definitions.personas import SetActivePersonaAction
 from actions.definitions.places import JoinPlaceAction, LeavePlaceAction
@@ -1261,6 +1263,9 @@ _ALL_ACTIONS: list[Action] = [
     TakePledgeAction(),
     ClosePledgeAction(),
     SacrificeAction(),
+    # #4341: renouncing a pact with a being.
+    RenouncePactAction(),
+    ManifestSetAction(),
     # #4333 slice 4: a stewarded being's table GM answers a closed pledge.
     AnswerBeingPromptAction(),
     # #4530: an item kept as a keepsake of a tie, deed, being, organization, person or place.

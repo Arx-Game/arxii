@@ -88,6 +88,9 @@ vi.mock('@/magic/queries', () => ({
   useTechniqueProgress: vi.fn(),
   useTrainTechnique: vi.fn(),
   useSetMotifFacet: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  // The technique picker (#4341): no manifesting technique, so it renders nothing.
+  useManifestChoices: () => ({ data: [] }),
+  useSetManifestChoice: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
 }));
 
 // GlimpseEditorDialog reads the catalog via the character-creation module's

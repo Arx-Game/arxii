@@ -137,15 +137,15 @@ target = ensure_aspect_target(aspect)   # AspectAdmin.save_model and ensure_aspe
 ### Skill targets (#4820)
 
 ```python
-from world.mechanics.services import ensure_skill_target, skill_modifiers_for_sheet
+from world.mechanics.services import ensure_skill_target, trait_modifiers_for_sheet
 
 # The stat-category target a skill's bonuses land on (target_trait = the skill's trait),
 # created if missing; None when another category already owns the name (retarget by hand).
 target = ensure_skill_target(skill)   # SkillAdmin.save_model and the paste call this
 
-# skill.pk -> the modifier a roll on that skill gets, for the sheet: card and condition
+# trait.pk -> the modifier a roll on that skill or stat gets, for the sheet (#4730): card and condition
 # rows in three queries, worn crafted pieces and the equipment walk from cached handlers.
-modifiers = skill_modifiers_for_sheet(sheet, skills)
+modifiers = trait_modifiers_for_sheet(sheet, traits)
 ```
 
 ### Amplification and Immunity

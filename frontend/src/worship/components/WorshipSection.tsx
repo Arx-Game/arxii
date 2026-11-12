@@ -9,7 +9,8 @@
  */
 
 import { formatRelativeTime } from '@/lib/relativeTime';
-import { usePledgeCards, usePrayers, useVisions } from '../queries';
+import { usePactCards, usePledgeCards, usePrayers, useVisions } from '../queries';
+import { PactCard } from './PactCard';
 import { PledgeCard } from './PledgeCard';
 import { PledgeDialog } from './PledgeDialog';
 import { PrayDialog } from './PrayDialog';
@@ -50,6 +51,7 @@ export function WorshipSection({
   const { data: visions } = useVisions(sheetId, privileged);
   const { data: prayers } = usePrayers(sheetId, isStaff);
   const { data: pledgeCards } = usePledgeCards(sheetId, privileged);
+  const { data: pactCards } = usePactCards(sheetId, privileged);
   const recentPrayers = (prayers ?? []).slice(0, RECENT_PRAYERS);
   // The open pledge, else the one that resolved most recently (#4333).
   const pledgeCard = (pledgeCards ?? [])[0] ?? null;
@@ -87,6 +89,10 @@ export function WorshipSection({
       {privileged && pledgeCard && (
         <PledgeCard card={pledgeCard} characterId={isMyCharacter ? sheetId : null} />
       )}
+      {privileged &&
+        (pactCards ?? []).map((pact) => (
+          <PactCard key={pact.id} card={pact} characterId={isMyCharacter ? sheetId : null} />
+        ))}
       {privileged && (
         <div className="refsheet-stack" data-testid="visions-list">
           <Subheading>Visions</Subheading>

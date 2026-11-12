@@ -172,6 +172,7 @@ function makeSheet(overrides: Partial<CharacterSheetPayload> = {}): CharacterShe
       form_traits: [],
     },
     stats: {},
+    buffed_stats: {},
     skills: [],
     path: null,
     distinctions: [],

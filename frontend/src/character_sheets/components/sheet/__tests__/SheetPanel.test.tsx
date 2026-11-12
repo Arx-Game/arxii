@@ -45,6 +45,7 @@ function payload(overrides: { family: { id: number; name: string } | null }) {
       form_traits: [],
     },
     stats: {},
+    buffed_stats: {},
     skills: [],
     path: null,
     distinctions: [],
@@ -163,5 +164,17 @@ describe('SheetPanel', () => {
   it('has no House row for a character without a family', () => {
     renderSheet(payload({ family: null }));
     expect(screen.queryByText('House')).not.toBeInTheDocument();
+  });
+
+  it('shows a buffed stat beside its stored value and an unbuffed one alone (#4730)', () => {
+    const sheet = payload({ family: null });
+    sheet.stats = { strength: 2, agility: 3, wits: 5 };
+    sheet.buffed_stats = { strength: 9, wits: 4 };
+    renderSheet(sheet);
+    const rows = screen.getByTestId('stats-grid').querySelectorAll('.refsheet-stat');
+    expect(rows[0]).toHaveTextContent('Strength2 (9 with buffs)');
+    expect(rows[1]).toHaveTextContent(/^Agility3$/);
+    expect(rows[2]).toHaveTextContent('Wits5 (4 with debuffs)');
+    expect(screen.getAllByTestId('stat-buffed')).toHaveLength(2);
   });
 });

@@ -2913,7 +2913,7 @@ class TestCharacterSheetQueryCount(TestCase):
         # +1 (#4681): the aura's affinity shares (one prefetch, select_related onto the
         # affinity) feed both the magic and the theming section.
         # +0 (#4820): the skills section prices skill bonuses through
-        # skill_modifiers_for_sheet, which asks ModifierTarget.get_for_trait for each
+        # trait_modifiers_for_sheet, which asks ModifierTarget.get_for_trait for each
         # skill; that is a class-level cache built once per process (every stat read
         # shares it) and cleared by any target save, so it is warmed here rather than
         # counted. With no skill target in this fixture the pass issues no query of

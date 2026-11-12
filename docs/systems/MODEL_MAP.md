@@ -66,11 +66,11 @@
   - mishap_tiers <- magic.MishapPoolTier
   - situation_guides <- gm.ConsequencePoolGuide
   - traps <- room_features.Trap
+  - being_answers <- worship.Answer
   - success_beats <- stories.Beat
   - failure_beats <- stories.Beat
   - expired_beats <- stories.Beat
   - task_templates <- tasking.TaskTemplate
-  - being_answers <- worship.Answer
 
 ### ConsequencePoolEntry
 **Foreign Keys:**
@@ -249,12 +249,12 @@
   - tenancy_records <- locations.LocationTenancy
   - ambient_emote_lines <- narrative.AmbientEmoteLine
   - ambient_emits <- narrative.AmbientEmit
+  - prayers <- worship.Prayer
   - scenes_held <- scenes.Scene
   - scene_rounds <- scenes.SceneRound
   - places <- scenes.Place
   - speaker_queues <- scenes.SpeakerQueue
   - travel_hub <- travel.TravelHub
-  - prayers <- worship.Prayer
 
 ### RoomSizeTier
 **Pointed to by:**
@@ -1061,8 +1061,8 @@
   - mothballed_room_states <- buildings.MothballedRoomState
   - holdings <- societies.DomainHolding
   - bequests <- estates.Bequest
-  - ship_details <- ships.ShipDetails
   - temple_dedications <- worship.TempleDedication
+  - ship_details <- ships.ShipDetails
 
 ### BuildingActivationDetails
 **Foreign Keys:**
@@ -1861,6 +1861,20 @@
   - summoned_military_units <- military.MilitaryUnit
   - commanded_armies <- military.Army
   - narrative_message_deliveries <- narrative.NarrativeMessageDelivery
+  - avatar_of_being <- worship.WorshippedBeing
+  - worship_grants <- worship.WorshipGrant
+  - devotion_standings <- worship.DevotionStanding
+  - worship_declaration <- worship.WorshipDeclaration
+  - miracle_performances <- worship.MiraclePerformance
+  - favor_invocations <- worship.FavorInvocation
+  - rite_performances <- worship.WorshipRitePerformance
+  - founded_shrines <- worship.ShrineDetails
+  - founded_temples <- worship.TempleDedication
+  - prayers <- worship.Prayer
+  - visions <- worship.Vision
+  - pledges <- worship.PledgeDetails
+  - pending_answers <- worship.PendingAnswer
+  - pacts <- pacts.CharacterPact
   - petitions_about <- player_submissions.Petition
   - relationships_as_source <- relationships.CharacterRelationship
   - relationships_as_target <- relationships.CharacterRelationship
@@ -1888,19 +1902,6 @@
   - vitals <- vitals.CharacterVitals
   - carrying_body <- vitals.CarriedBody
   - carried_by <- vitals.CarriedBody
-  - avatar_of_being <- worship.WorshippedBeing
-  - worship_grants <- worship.WorshipGrant
-  - devotion_standings <- worship.DevotionStanding
-  - worship_declaration <- worship.WorshipDeclaration
-  - miracle_performances <- worship.MiraclePerformance
-  - favor_invocations <- worship.FavorInvocation
-  - rite_performances <- worship.WorshipRitePerformance
-  - founded_shrines <- worship.ShrineDetails
-  - founded_temples <- worship.TempleDedication
-  - prayers <- worship.Prayer
-  - visions <- worship.Vision
-  - pledges <- worship.PledgeDetails
-  - pending_answers <- worship.PendingAnswer
 
 ### Gender
 **Pointed to by:**
@@ -2029,11 +2030,11 @@
   - detect_traps <- room_features.Trap
   - disarm_traps <- room_features.Trap
   - assist_patterns <- missions.MissionAssistPattern
+  - invocation_for_beings <- worship.WorshippedBeing
+  - worship_rites <- worship.WorshipRite
   - project_contribution_methods <- projects.ContributionMethod
   - scene_check_modifiers <- scenes.SceneCheckModifier
   - task_templates <- tasking.TaskTemplate
-  - invocation_for_beings <- worship.WorshippedBeing
-  - worship_rites <- worship.WorshipRite
 
 ### CheckTypeAspect
 **Foreign Keys:**
@@ -3167,6 +3168,7 @@
   - hazard_response <- conditions.HazardResponseState
   - granted_properties <- mechanics.ObjectProperty
   - alteration_events <- magic.MagicalAlterationEvent
+  - pacts <- pacts.CharacterPact
   - treatment_action_requests <- scenes.SceneActionRequest
   - wound_details <- vitals.WoundDetails
 
@@ -3282,6 +3284,7 @@
   - ward_reactions <- room_features.RoomWardDetails
   - defense_progression_projects <- room_features.DefenseProgressionDetails
   - miracleappliedcondition_applied <- worship.MiracleAppliedCondition
+  - pact_offers <- pacts.PactOffer
 
 ### ControlLossBand
 **Foreign Keys:**
@@ -3335,8 +3338,8 @@
   - protecting_armor_templates <- items.ItemTemplate
   - cascade_overrides <- locations.LocationValueOverride
   - cascade_modifiers <- locations.LocationValueModifier
-  - pending_sudden_harm_entries <- scenes.PendingSuddenHarm
   - miracledamageprofile_damage_profiles <- worship.MiracleDamageProfile
+  - pending_sudden_harm_entries <- scenes.PendingSuddenHarm
 
 ### HazardResponseState
 **Foreign Keys:**
@@ -4090,6 +4093,7 @@
   - table_update_request_details <- gm.DistinctionChangeRequestDetails
   - npc_regard_seeds <- npc_services.DistinctionRegardSeed
   - item_grants <- items.DistinctionItemGrant
+  - chosen_favor_configs <- worship.ChosenFavorConfig
   - persona_grant <- scenes.DistinctionPersonaGrant
 
 ### DistinctionCategory
@@ -4540,11 +4544,12 @@
   - gm_reward_trackers <- gm.GMWeeklyRewardTracker
   - goal_journals <- goals.GoalJournal
   - journal_xp_trackers <- journals.WeeklyJournalXP
-  - gambling_loss_ledgers <- tavern_games.GamblingLossLedger
   - favor_invocations <- worship.FavorInvocation
   - rite_performances <- worship.WorshipRitePerformance
   - prayers <- worship.Prayer
   - pledge_credits <- worship.PledgeCredit
+  - pact_credits <- pacts.PactCredit
+  - gambling_loss_ledgers <- tavern_games.GamblingLossLedger
 
 ### ScheduledTaskRecord
 
@@ -4698,13 +4703,13 @@
   - authored_roster_entries <- roster.RosterEntry
   - draft_characters <- character_creation.CharacterDraft
   - memberships <- gm.GMTableMembership
+  - stewarded_beings <- worship.BeingSteward
   - primary_stories <- stories.Story
   - beat_completions <- stories.BeatCompletion
   - ran_beat_completions <- stories.BeatCompletion
   - episode_resolutions <- stories.EpisodeResolution
   - story_progress <- stories.GroupStoryProgress
   - bulletin_posts <- stories.TableBulletinPost
-  - stewarded_beings <- worship.BeingSteward
 
 ### GMTableMembership
 **Foreign Keys:**
@@ -4928,8 +4933,8 @@
   - gem_details <- items.GemDetails
   - stock_listings <- items.StockListing
   - distinction_grants <- items.DistinctionItemGrant
-  - secrets_about <- secrets.Secret
   - worship_requests <- worship.RequestedItem
+  - secrets_about <- secrets.Secret
 
 ### AudacityTuning
 
@@ -5157,9 +5162,9 @@
   - trade_stakes <- items.TradeItemStake
   - reclamation_claims <- items.ReclamationClaim
   - crime_evidence <- justice.CrimeEvidence
+  - relic_of <- worship.Relic
   - project_contributions <- projects.Contribution
   - secrets_about <- secrets.Secret
-  - relic_of <- worship.Relic
 
 ### ItemLineage
 **Foreign Keys:**
@@ -5220,8 +5225,8 @@
   - gem_details <- items.GemDetails
   - stock_listings <- items.StockListing
   - distinction_grants <- items.DistinctionItemGrant
-  - secrets_about <- secrets.Secret
   - worship_requests <- worship.RequestedItem
+  - secrets_about <- secrets.Secret
 
 ### ItemTemplateAppearanceEffect
 **Foreign Keys:**
@@ -5432,8 +5437,8 @@
   - gem_details <- items.GemDetails
   - stock_listings <- items.StockListing
   - distinction_grants <- items.DistinctionItemGrant
-  - secrets_about <- secrets.Secret
   - worship_requests <- worship.RequestedItem
+  - secrets_about <- secrets.Secret
 
 ### ShowcaseState
 **Foreign Keys:**
@@ -5573,8 +5578,8 @@
   - gem_details <- items.GemDetails
   - stock_listings <- items.StockListing
   - distinction_grants <- items.DistinctionItemGrant
-  - secrets_about <- secrets.Secret
   - worship_requests <- worship.RequestedItem
+  - secrets_about <- secrets.Secret
 
 ### WornTemplate
 **Foreign Keys:**
@@ -5617,8 +5622,8 @@
   - gem_details <- items.GemDetails
   - stock_listings <- items.StockListing
   - distinction_grants <- items.DistinctionItemGrant
-  - secrets_about <- secrets.Secret
   - worship_requests <- worship.RequestedItem
+  - secrets_about <- secrets.Secret
 
 ### Service Functions
 - `attach_facet_to_item(*, crafter: 'AccountDB', item_instance: 'ItemInstance', facet: 'Facet', attachment_quality_tier: 'QualityTier') -> 'ItemFacet' - Attach ``facet`` to ``item_instance``.`
@@ -6563,8 +6568,8 @@
   - cascade_overrides <- locations.LocationValueOverride
   - cascade_modifiers <- locations.LocationValueModifier
   - mission_route_rewards <- missions.MissionOptionRouteReward
-  - projects <- projects.Project
   - favored_by_beings <- worship.BeingResonance
+  - projects <- projects.Project
 
 ### ResonanceAlignmentBoonTier
 **Foreign Keys:**
@@ -6875,8 +6880,8 @@
   - ultimate_for_alternate_selves <- forms.AlternateSelf
   - gm_prompts <- gm.GMPrompt
   - train_offers <- npc_services.TrainOfferDetails
-  - scene_action_requests <- scenes.SceneActionRequest
   - ultimate_for_beings <- worship.WorshippedBeing
+  - scene_action_requests <- scenes.SceneActionRequest
 
 ### TechniqueAppliedCondition
 **Foreign Keys:**
@@ -7527,7 +7532,7 @@
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, *, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> int - Preview the rank difference for a check without rolling.`
 - `property_damage_bonus(target: 'ObjectDB', damage_type: 'DamageType | None') -> 'int' - Sum PropertyDamageModifier.modifier_value for target's active Properties.`
 - `role_base_bonus_for_target(role: 'CovenantRole', target: 'ModifierTarget', character_level: 'int') -> 'int' - Authored covenant-role bonus for ``target``, scaled by character level (#985).`
-- `skill_modifiers_for_sheet(character_sheet: 'CharacterSheet', skills: 'Iterable[Skill]') -> 'dict[int, int]' - ``skill.pk`` to the modifier a roll on that skill gets, for the sheet (#4820).`
+- `trait_modifiers_for_sheet(character_sheet: 'CharacterSheet', traits: 'Iterable[Trait]') -> 'dict[int, int]' - ``trait.pk`` to the modifier a roll on that stat or skill gets, for the sheet.`
 - `source_carries_required_mark(source: 'CapabilitySource', app: 'Application') -> 'bool' - Whether ``source`` carries the effect property ``app`` needs (or it needs none).`
 - `source_matches_application(source: 'CapabilitySource', app: 'Application') -> 'bool' - Whether ``source`` reaches ``app`` (#5066): the same capability, held above the`
 - `stage_property(target: 'ObjectDB', property_: 'Property', value: 'int' = 1) -> 'ObjectProperty' - GM improv: attach or refresh a Property on ``target`` (#2503).`
@@ -7673,8 +7678,8 @@
   - deeds <- missions.MissionDeedRecord
   - support_declarations <- missions.MissionSupportDeclaration
   - tales <- missions.MissionRunTale
-  - task_fulfillments <- tasking.TaskFulfillment
   - favor_invocations <- worship.FavorInvocation
+  - task_fulfillments <- tasking.TaskFulfillment
 
 ### MissionInvite
 **Foreign Keys:**
@@ -8151,6 +8156,66 @@
 - `template_visible_to(template: 'MissionTemplate', character: 'ObjectDB', *, persona: 'Persona | None' = None) -> 'bool' - True if ``character`` may see / be offered ``template``.`
 
 
+## world.pacts
+
+### CharacterPact
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - offer -> pacts.PactOffer [FK]
+  - devotion_standing -> worship.DevotionStanding [FK] (nullable)
+  - condition_instance -> conditions.ConditionInstance [FK] (nullable)
+**Pointed to by:**
+  - periods <- pacts.PactPeriodDetails
+
+### PactCredit
+**Foreign Keys:**
+  - period -> pacts.PactPeriodDetails [FK]
+  - game_week -> game_clock.GameWeek [FK] (nullable)
+
+### PactOffer
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - being -> worship.WorshippedBeing [FK] (nullable)
+  - condition -> conditions.ConditionTemplate [FK]
+**Pointed to by:**
+  - pledges <- worship.Pledge
+  - commitments <- pacts.PactOfferCommitment
+  - signed <- pacts.CharacterPact
+
+### PactOfferCommitment
+**Foreign Keys:**
+  - offer -> pacts.PactOffer [FK]
+**Pointed to by:**
+  - periods <- pacts.PactPeriodDetails
+
+### PactPeriodDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - pact -> pacts.CharacterPact [FK]
+  - commitment -> pacts.PactOfferCommitment [FK] (nullable)
+  - resist_outcome -> traits.CheckOutcome [FK] (nullable)
+  - stage_after -> conditions.ConditionStage [FK] (nullable)
+**Pointed to by:**
+  - credits <- pacts.PactCredit
+
+### Service Functions
+- `active_pact_with(sheet: 'CharacterSheet', being: 'WorshippedBeing') -> 'CharacterPact | None' - Her active pact with ``being``, or None.`
+- `carded_pacts() -> 'QuerySet[CharacterPact]' - Every pact a card shows, newest first: active pacts, and ended pacts still easing`
+- `grade_pact_period(project: 'Project', outcome_tier: 'CheckOutcome | None') -> 'None' - The PACT_PERIOD kind handler, run once by ``resolve_project``.`
+- `offered_pact_summary(pledge: 'Pledge') -> 'PactOfferSummary | None' - The pact ``pledge`` offers at its close, while that offer stands; else None.`
+- `open_pact_period(pact: 'CharacterPact', commitment: 'PactOfferCommitment | None') -> 'PactPeriodDetails' - Open one PACT_PERIOD project for ``commitment`` (None: an ease-out period).`
+- `pact_beings_for(sheet: 'CharacterSheet') -> 'list[WorshippedBeing]' - The beings she holds an active pact with, oldest pact first.`
+- `pact_card(pact: 'CharacterPact') -> 'PactCard' - One pact as its holder's card shows it: the open period, its favor by source,`
+- `pact_cards_for(sheet: 'CharacterSheet') -> 'list[PactCard]' - Her pact cards, newest first: active pacts, and ended pacts still easing out.`
+- `pact_deed_favor_this_week(sheet: 'CharacterSheet') -> 'int' - Base deed favor her pact credits took from this week's deed cap.`
+- `pact_offer_summary(offer: 'PactOffer') -> 'PactOfferSummary' - The offer as the pledge card shows it: being, text, commitments, period, stages.`
+- `record_pact_credit(sheet: 'CharacterSheet', being: 'WorshippedBeing', credited: 'int', source: 'FavorSource | None', *, base: 'int' = 0) -> 'list[PactCredit]' - Credit ``credited`` favor to every open commitment period of her pact with ``being``.`
+- `renounce_pact(sheet: 'CharacterSheet', being: 'WorshippedBeing') -> 'CharacterPact' - End her active pact with ``being`` (RENOUNCED): release (D5) and ease out.`
+- `resolve_pact_period(project: 'Project') -> 'None' - The PACT_PERIOD tiered resolver: Success when met (or easing out), else Failure.`
+- `sign_being_pact(sheet: 'CharacterSheet', offer: 'PactOffer') -> 'CharacterPact' - Sign ``offer`` for ``sheet`` (spec section 7, step 3).`
+
+
 ## world.player_submissions
 
 ### BugReport
@@ -8613,11 +8678,12 @@
   - defense_progression_details <- room_features.DefenseProgressionDetails
   - item_refinement_details <- items.ItemRefinementDetails
   - frame_job_details <- justice.FrameJobDetails
+  - pledge_details <- worship.PledgeDetails
+  - pact_period_details <- pacts.PactPeriodDetails
   - contributions <- projects.Contribution
   - ship_upgrade_details <- ships.ShipUpgradeDetails
   - ship_construction_details <- ships.ShipConstructionDetails
   - ship_repair_details <- ships.ShipRepairDetails
-  - pledge_details <- worship.PledgeDetails
   - org_capability_details <- societies.OrganizationCapabilityProjectDetails
 
 ### ProjectKindResonanceAward
@@ -9574,6 +9640,9 @@
   - gm_prompts <- gm.GMPrompt
   - fashion_showings <- items.FashionShowing
   - npc_regard_events <- npc_services.NpcRegardEvent
+  - miracle_performances <- worship.MiraclePerformance
+  - favor_invocations <- worship.FavorInvocation
+  - rite_performances <- worship.WorshipRitePerformance
   - petitions <- player_submissions.Petition
   - check_proposals <- player_submissions.CheckProposal
   - affection_shifts <- relationships.AffectionShift
@@ -9592,9 +9661,6 @@
   - explaining_secrets <- secrets.Secret
   - story_episodes <- stories.EpisodeScene
   - deaths <- vitals.CharacterVitals
-  - miracle_performances <- worship.MiraclePerformance
-  - favor_invocations <- worship.FavorInvocation
-  - rite_performances <- worship.WorshipRitePerformance
 
 ### SceneActionDeclaration
 **Foreign Keys:**
@@ -9639,10 +9705,10 @@
   - delivery_receivers -> scenes.Persona [M2M]
   - target_personas -> scenes.Persona [M2M]
 **Pointed to by:**
+  - favor_invocation <- worship.FavorInvocation
   - additional_targets <- scenes.SceneActionTarget
   - pull_declaration <- scenes.SceneActionPullDeclaration
   - boon <- scenes.Boon
-  - favor_invocation <- worship.FavorInvocation
 
 ### SceneActionTarget
 **Foreign Keys:**
@@ -9940,9 +10006,9 @@
   - parent_skill -> skills.Skill [FK]
 **Pointed to by:**
   - check_type_specializations <- checks.CheckTypeSpecialization
+  - worship_traditions <- worship.WorshipTradition
   - character_values <- skills.CharacterSpecializationValue
   - training_allocations <- skills.TrainingAllocation
-  - worship_traditions <- worship.WorshipTradition
 
 ### TrainingAllocation
 **Foreign Keys:**
@@ -11145,6 +11211,7 @@
 **Foreign Keys:**
   - chapter -> stories.Chapter [FK]
 **Pointed to by:**
+  - visions <- worship.Vision
   - episode_scenes <- stories.EpisodeScene
   - outbound_transitions <- stories.Transition
   - inbound_transitions <- stories.Transition
@@ -11157,7 +11224,6 @@
   - session_requests <- stories.SessionRequest
   - crossover_invites <- stories.CrossoverInvite
   - crossover_invites_accepted <- stories.CrossoverInvite
-  - visions <- worship.Vision
 
 ### EpisodeProgressionRequirement
 **Foreign Keys:**
@@ -11576,14 +11642,14 @@
   - arxii_trainingoutcomeaward <- magic.TrainingOutcomeAward
   - arxii_strainburnreach <- combat.StrainBurnReach
   - encounter_outcome_mappings <- combat.EncounterOutcomeMapping
-  - project_outcomes <- projects.Project
-  - project_contributions <- projects.Contribution
-  - beat_completions <- stories.BeatCompletion
   - favor_outcome_awards <- worship.FavorOutcomeAward
   - favor_invocations <- worship.FavorInvocation
   - worship_rite_awards <- worship.WorshipRiteTierAward
   - rite_performances <- worship.WorshipRitePerformance
   - being_answers <- worship.Answer
+  - project_outcomes <- projects.Project
+  - project_contributions <- projects.Contribution
+  - beat_completions <- stories.BeatCompletion
 
 ### CheckRank
 
@@ -11898,6 +11964,8 @@
   - card -> tarot.TarotCard [FK]
 
 ### ChosenFavorConfig
+**Foreign Keys:**
+  - chosen_distinction -> distinctions.Distinction [FK] (nullable)
 
 ### ConsecrationTier
 
@@ -11911,6 +11979,8 @@
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - being -> worship.WorshippedBeing [FK]
+**Pointed to by:**
+  - pacts <- pacts.CharacterPact
 
 ### DivineInterventionConfig
 
@@ -11980,6 +12050,7 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - being -> worship.WorshippedBeing [FK]
   - closing_rite -> worship.WorshipRite [FK]
+  - pact_offer -> pacts.PactOffer [FK] (nullable)
 **Pointed to by:**
   - requested_items <- worship.RequestedItem
   - taken <- worship.PledgeDetails
@@ -12148,10 +12219,11 @@
   - pledges <- worship.Pledge
   - answers <- worship.Answer
   - steward <- worship.BeingSteward
+  - pact_offers <- pacts.PactOffer
 
 ### Service Functions
 - `active_patronage_for(sheet: 'CharacterSheet') -> list[world.worship.models.DevotionStanding] - Return all active patronages for a character, ordered by favor descending.`
-- `best_patronage_favor(sheet: 'CharacterSheet') -> int - Return the favor of the highest-favor active patronage, or 0.`
+- `best_patronage_favor(sheet: 'CharacterSheet') -> int - Return the favor of the highest-favor Chosen patronage, or 0.`
 - `bump_devotion(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, amount: int, *, source: 'FavorSource | None' = None) -> world.worship.types.DevotionBump - Upsert the (sheet, being) standing and run the God's Favorite check.`
 - `convert_public_worship(character_sheet: 'CharacterSheet', new_being: world.worship.models.WorshippedBeing, *, is_sincere: bool = True) -> world.worship.models.WorshipDeclaration - Repoint a character's PUBLIC worship declaration (#2361).`
 - `establish_patronage(sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, *, valence: world.worship.models.PatronageValence) -> world.worship.models.DevotionStanding - Get-or-create a DevotionStanding and mark it as a patronage.`
@@ -12159,6 +12231,8 @@
 - `get_chosen_favor_config() -> world.worship.models.ChosenFavorConfig - Lazy-create the ChosenFavorConfig singleton (pk=1).`
 - `get_divine_intervention_config() -> 'DivineInterventionConfig' - Lazy-create the singleton (pk=1) divine intervention config (#2360).`
 - `gods_favorite_achievement_for(character_sheet: 'CharacterSheet') -> 'Achievement | None' - Resolve the gender-matched God's Favorite achievement row (Decision 6).`
+- `grant_chosen_distinction(sheet: 'CharacterSheet') -> None - Grant ``sheet`` the designated Chosen distinction at character creation (#4341),`
+- `grant_chosen_distinction_to_chosen(config: world.worship.models.ChosenFavorConfig) -> int - Grant the designated Chosen distinction to every Chosen who lacks it (#4341).`
 - `grant_worship(being: world.worship.models.WorshippedBeing, amount: int, *, granted_by: 'CharacterSheet | None' = None, reason: str = '') -> world.worship.models.WorshipGrant - Add worship to a being's pool and record the audit ledger row.`
 - `install_divine_intervention_trigger(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing) -> None - Install the divine intervention Trigger on the character's ObjectDB.`
 - `intervention_cooldown_active(character) -> bool - Whether the divine intervention cooldown condition is on ``character``.`
