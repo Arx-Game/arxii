@@ -66,6 +66,7 @@ class TestClusterRegistry(TestCase):
                 "ceremonies",
                 "market",
                 "tavern_games",
+                "messengers",
                 "gm",
                 "kinship",
                 "houses",

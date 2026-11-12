@@ -448,6 +448,12 @@ def _seed_tavern_games() -> None:
     ensure_dice_game()
 
 
+def _seed_messengers() -> None:
+    from world.messengers.seeds import ensure_messenger_method  # noqa: PLC0415
+
+    ensure_messenger_method()
+
+
 def _seed_kinship() -> None:
     from world.seeds.kinship import seed_kinship_demo  # noqa: PLC0415
 
@@ -775,6 +781,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Tavern games: the starter Highest Roll dice game (#3292) - without it
     # `game open` fails "no such game" on a fresh clone/dev DB.
     "tavern_games": _seed_tavern_games,
+    # Missives: the universal Messenger method (#3289) - without it nobody can
+    # send a letter on a fresh clone/dev DB. No dependencies on any other cluster.
+    "messengers": _seed_messengers,
     # Kinship: the PLACEHOLDER ducal demo tree + slots/pool + truth-pair (#2062).
     "kinship": _seed_kinship,
     # Houses: the demo house made a landed peer — org + particle + recognition
@@ -889,6 +898,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.magic.models import Affinity, CastPowerLevel, Resonance, Ritual  # noqa: PLC0415
     from world.magic.models.techniques import Technique  # noqa: PLC0415
     from world.mechanics.models import ChallengeTemplate  # noqa: PLC0415
+    from world.messengers.models import TransmissionMethod  # noqa: PLC0415
     from world.missions.models import MissionGiver, MissionTemplate  # noqa: PLC0415
     from world.npc_services.models import NPCRole  # noqa: PLC0415
     from world.predators.models import PredatorKind  # noqa: PLC0415
@@ -1126,6 +1136,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "market": [MarketSquare],
         # Tavern games: the starter Highest Roll dice game (#3292).
         "tavern_games": [TavernGame],
+        # Missives: the universal Messenger TransmissionMethod (#3289).
+        "messengers": [TransmissionMethod],
         # GM trust ladder: the 5 default GMLevelCap rows, one per GMLevel (#2000).
         # Also seeds the starter scenario-catalog SituationKind taxonomy + difficulty
         # guides (#2127); represented by SituationKind alongside GMLevelCap.

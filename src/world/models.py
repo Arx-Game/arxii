@@ -66,6 +66,7 @@ import world.justice.models
 import world.locations.models
 import world.magic.models
 import world.mechanics.models
+import world.messengers.models
 import world.military.models
 import world.missions.models
 import world.narrative.models

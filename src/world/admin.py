@@ -71,6 +71,7 @@ import world.justice.admin
 import world.locations.admin
 import world.magic.admin
 import world.mechanics.admin
+import world.messengers.admin
 import world.military.admin
 import world.missions.admin
 import world.narrative.admin
