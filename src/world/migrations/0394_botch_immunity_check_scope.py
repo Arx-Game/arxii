@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0392_conditioninstance_rallied"),
+        ("arxii", "0393_gift_substance_plain_labels"),
     ]
 
     operations = [
