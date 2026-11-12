@@ -4502,6 +4502,45 @@ def breakable_condition_filter() -> Q:
     )
 
 
+def rally_target_instance(
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM - a rally may reach any afflicted body
+) -> ConditionInstance | None:
+    """The condition instance a rally on *target* reaches, or None when nothing holds them.
+
+    The worst breakable condition the target knows they carry: highest severity, then the
+    hardest to break. The conditions ``rally`` action and the combat Rally maneuver both
+    aim here, so a rally from either lands on the same instance.
+    """
+    instances = (
+        ConditionInstance.objects.select_related("condition", "condition__category")
+        .filter(
+            breakable_condition_filter(),
+            target=target,
+            resolved_at__isnull=True,
+            is_aware=True,
+        )
+        .exclude(condition__break_free_mode=BreakFreeMode.NONE)
+    )
+    return max(
+        instances,
+        key=lambda inst: (inst.severity, inst.condition.break_free_difficulty),
+        default=None,
+    )
+
+
+def record_rally_landed(instance: ConditionInstance) -> None:
+    """An ally's rally landed on *instance* (#4887): the one writer of ``rallied``.
+
+    Kept for the instance's life. An Audere talked-down self held by this condition may
+    change back from now on (``world.forms.services.attempt_revert_form``). Every rally
+    that lands calls this, out of combat and in it.
+    """
+    if instance.rallied:
+        return
+    instance.rallied = True
+    instance.save(update_fields=["rallied"])
+
+
 def process_break_free_tick() -> list[BreakFreeResult]:
     """Process periodic break-free attempts for NPC targets (#2706).
 

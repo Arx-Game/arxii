@@ -10,7 +10,7 @@ Restated (times ten), all authored content unless marked play state:
 
 - ``MaturationStatCap.stat_cap`` and ``skill_cap`` (band caps);
 - ``SpeciesStatBonus.value`` (species stat bonuses in CG);
-- ``NPCPresetTraitLine.value`` (preset stat lines; 0392 renamed it from
+- ``NPCPresetTraitLine.value`` (preset stat lines; 0393 renamed it from
   ``display_value``);
 - ``ThreadPullEffect.min_thread_level``;
 - ``ThreadCrossingThreshold.level``;
@@ -109,7 +109,7 @@ def backwards(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0392_one_scale_schema"),
+        ("arxii", "0393_one_scale_schema"),
     ]
 
     operations = [

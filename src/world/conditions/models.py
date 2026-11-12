@@ -1704,6 +1704,15 @@ class ConditionInstance(SharedMemoryModel):
             "break-free attempt and consumed (reset to 0) on use."
         ),
     )
+    rallied = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text=(
+            "Set when an ally's rally lands on this instance (#4887) and kept for its "
+            "life, unlike the bonus. A talked-down alternate self held by this condition "
+            "lets her change back once it is set. Set by the game, not by staff."
+        ),
+    )
 
     # === Source Tracking ===
     # noqa: OBJECTDB_FIELD
