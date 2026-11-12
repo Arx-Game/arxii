@@ -19,7 +19,11 @@ from world.distinctions.models import DistinctionEffect
 from world.forms.models import FormCombatProfileEffect
 from world.items.crafting.models import CraftingRecipeModifier
 from world.items.models import FashionStyleBonus
-from world.mechanics.constants import MANEUVER_EFFECT_BASE_HELP, EffectKind
+from world.mechanics.constants import (
+    EQUIPMENT_RELEVANT_CATEGORIES,
+    MANEUVER_EFFECT_BASE_HELP,
+    EffectKind,
+)
 from world.mechanics.models import (
     AestheticAxisConfig,
     Application,
@@ -128,11 +132,14 @@ class ModifierTargetAdmin(admin.ModelAdmin):
     def granted_by(self, obj: ModifierTarget) -> str:
         """The authored rows that grant a modifier on this target: distinction effects,
         condition effects, crafting recipe modifiers, achievement reward definitions, form
-        combat profile effects, covenant level and role bonuses, vow stat scalings and
-        fashion style bonuses. Per-character rows are left out."""
+        combat profile effects, and, for a target the equipment walk reaches, covenant
+        level and role bonuses, vow stat scalings and fashion style bonuses. Those four
+        reach a character only through that walk (``EQUIPMENT_RELEVANT_CATEGORIES``), so on
+        any other target they grant nothing and are not listed. Per-character rows are left
+        out."""
         if obj.pk is None:
             return "-"
-        sources = (
+        sources: list[tuple[str, Any]] = [
             (
                 "Distinction",
                 DistinctionEffect.objects.filter(target=obj).select_related(
@@ -158,6 +165,18 @@ class ModifierTargetAdmin(admin.ModelAdmin):
                     "profile__form", "target__category"
                 ),
             ),
+        ]
+        if obj.category.name in EQUIPMENT_RELEVANT_CATEGORIES:
+            sources += self._equipment_walk_sources(obj)
+        labels = [f"{kind}: {row}" for kind, rows in sources for row in rows]
+        if not labels:
+            return "Nothing grants this target yet."
+        return format_html_join("", "<div>{}</div>", ((label,) for label in labels))
+
+    @staticmethod
+    def _equipment_walk_sources(obj: ModifierTarget) -> list[tuple[str, Any]]:
+        """The ``granted_by`` grantors that reach a target only through the equipment walk."""
+        return [
             (
                 "Covenant level bonus",
                 CovenantLevelBonus.objects.filter(modifier_target=obj).select_related(
@@ -182,11 +201,7 @@ class ModifierTargetAdmin(admin.ModelAdmin):
                     "fashion_style", "target"
                 ),
             ),
-        )
-        labels = [f"{kind}: {row}" for kind, rows in sources for row in rows]
-        if not labels:
-            return "Nothing grants this target yet."
-        return format_html_join("", "<div>{}</div>", ((label,) for label in labels))
+        ]
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """Correct the trait help text for language traits (model text says stat only)."""
