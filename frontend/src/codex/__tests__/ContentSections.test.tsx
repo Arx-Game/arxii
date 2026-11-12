@@ -12,6 +12,33 @@ import { LoreSection, OOCSection } from '../components/ContentSections';
 import type { CodexLinkRef } from '../types';
 
 describe('LoreSection', () => {
+  it('keeps the paragraphs the author wrote, with a link inside its own sentence (#5090)', () => {
+    const links: CodexLinkRef[] = [
+      { match_text: '[[Glamour]]', entry_id: 23, display_text: 'Glamour', accessible: true },
+    ];
+    const { container } = render(
+      <LoreSection
+        content={'A house of [[Glamour]] is owed grandeur.\n\nGlamour houses spend to match.'}
+        links={links}
+        onNavigate={vi.fn()}
+      />
+    );
+
+    const paragraphs = container.querySelectorAll('p');
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs[0]).toHaveTextContent('A house of Glamour is owed grandeur.');
+    expect(paragraphs[0].querySelector('button')).toHaveTextContent('Glamour');
+    expect(paragraphs[1]).toHaveTextContent('Glamour houses spend to match.');
+  });
+
+  it('renders an ordinary Markdown link as a link', () => {
+    render(<LoreSection content="Read [the rules](https://example.com/rules)." />);
+    expect(screen.getByRole('link', { name: 'the rules' })).toHaveAttribute(
+      'href',
+      'https://example.com/rules'
+    );
+  });
+
   it('renders plain text without links', () => {
     render(<LoreSection content="Just plain text." />);
     expect(screen.getByText('Just plain text.')).toBeInTheDocument();

@@ -14,8 +14,7 @@
  * A door with neither `to` nor `onClick` (review fix round 1, Finding I2)
  * renders as a labeled dash instead — present on the page (the plate draws
  * it), but inert: nothing this app can link to or act on exists for it yet
- * ("the house on the roster", "the tree as players see it", "✎ the
- * secret", "the ladder" with no realm id to link back to, "open on the
+ * ("✎ the secret", "the ladder" with no realm id to link back to, "open on the
  * Atlas" for an Estate with no area picker). A door with `to`/`onClick` set
  * renders as a real, working control, same as before.
  */

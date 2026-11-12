@@ -40,7 +40,8 @@
 import { useState, type ReactNode } from 'react';
 
 import { useAlmanachMutation, useHouseDocument } from '../queries';
-import { PUBLISH_STATUS } from '../copy';
+import { PUBLISH_STATUS, houseFamilyPage, houseOrgPage } from '../copy';
+import { urls } from '@/utils/urls';
 import { HouseChapter, type EditHouseFields } from './HouseChapter';
 import { FamilyChapter } from './FamilyChapter';
 import type { CreateKinFields } from './AddKinDialog';
@@ -113,6 +114,13 @@ function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: L
   let recordRows: RecordRailRow[] = [];
   let recordExtraSection: RecordRailSection | undefined;
   let recordDoors: RecordRailDoor[] = [];
+  // Links are named for where they go (#5090). The family page is what players
+  // read; a house with no family has none to open.
+  const orgDoor: RecordRailDoor = { label: houseOrgPage(house.name), to: orgUrl(houseId) };
+  const familyDoors: RecordRailDoor[] =
+    family.family_id != null
+      ? [{ label: houseFamilyPage(house.name), to: urls.family(family.family_id) }]
+      : [];
 
   switch (leaf) {
     case 'house':
@@ -127,10 +135,7 @@ function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: L
         { label: 'vassals', value: valueOrDash(realm.vassals.length) },
         { label: 'stature', value: <Dash /> },
       ];
-      recordDoors = [
-        { label: 'the organization', to: orgUrl(houseId) },
-        { label: 'the house on the roster', small: 'as players read it' },
-      ];
+      recordDoors = [orgDoor, ...familyDoors];
       break;
     case 'family':
       chapter = (
@@ -156,7 +161,7 @@ function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: L
         rows: [{ label: 'none on record', value: <Dash /> }],
       };
       recordDoors = [
-        { label: 'the tree as players see it', small: 'public record only' },
+        ...familyDoors,
         { label: '✎ the secret', small: 'who knows, what reveals it' },
       ];
       break;
@@ -214,7 +219,7 @@ function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: L
         { label: 'income', value: `${doc.books.income_week.toLocaleString()} c / week` },
         { label: 'soldiers', value: doc.forces.reduce((n, f) => n + f.men, 0) },
       ];
-      recordDoors = [{ label: 'the organization', to: orgUrl(houseId) }];
+      recordDoors = [orgDoor];
       break;
     case 'openings':
       chapter = (
@@ -238,7 +243,7 @@ function leafPresentation(leaf: Leaf, houseId: number, doc: HouseDoc, actions: L
         { label: 'wards', value: doc.turf?.wards.length ?? 0 },
         { label: 'gangs', value: doc.turf?.gangs.length ?? 0 },
       ];
-      recordDoors = [{ label: 'the organization', to: orgUrl(houseId) }];
+      recordDoors = [orgDoor];
       break;
     case 'publish':
       chapter = (

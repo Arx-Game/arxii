@@ -580,24 +580,13 @@ def demesne_count(titles: Sequence[Title]) -> int:
     return sum(1 for t in titles if t.tier == TitleTier.BARONY)
 
 
-_PARTICLE_EXAMPLE_KIN_COUNT = 2
-
-
-def _particle_example(house: Organization) -> str:
-    """'<name> <particle> <house>' pairs (born-form, taken-in-form) joined
-    with ' · ', using the family's first two kin (or 'Sample'/'Sample' when
-    it has fewer than two)."""
-    names = []
-    if house.family_id is not None:
-        kin = Kinsperson.objects.filter(family_id=house.family_id).order_by("pk")
-        names = [k.display_name for k in kin[:_PARTICLE_EXAMPLE_KIN_COUNT]]
-    if len(names) < _PARTICLE_EXAMPLE_KIN_COUNT:
-        names = ["Sample", "Sample"]
-    born = resolve_particle(house.family)
-    taken_in = resolve_particle(house.family, taken_in=True)
-    pair_born = " ".join(piece for piece in (names[0], born, house.name) if piece)
-    pair_taken_in = " ".join(piece for piece in (names[1], taken_in, house.name) if piece)
-    return f"{pair_born} · {pair_taken_in}"
+def _particle_payload(house: Organization) -> dict:
+    """The house's particle pair, born and taken-in, as ``charter_for_realm``
+    shapes it; both "" where the realm has none."""
+    return {
+        "born": resolve_particle(house.family),
+        "taken_in": resolve_particle(house.family, taken_in=True),
+    }
 
 
 def facet_payload(facet) -> dict:
@@ -682,7 +671,7 @@ def _house_payload(house: Organization) -> dict:
         "sigil_description": house.sigil_description,
         "house_state": house.house_state,
         "published_at": house.published_at,
-        "particle_example": _particle_example(house),
+        "particle": _particle_payload(house),
         "default_succession_law": law_payload,
         "patron": patron_payload(house),
         "facets": [

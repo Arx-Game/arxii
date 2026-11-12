@@ -27,8 +27,7 @@
  *
  * The feature inert door is a plain `disabled aria-disabled` button with no
  * `title` (review fix round 1, Finding I4 — a native `title` tooltip is
- * reserved for the `.tip`/`.bub` pattern on the particle/succession fields per
- * the global constraints; `disabled` + `aria-disabled` alone already
+ * reserved for the `.tip`/`.bub` pattern per the global constraints; `disabled` + `aria-disabled` alone already
  * communicates "not available" without a second, unapproved hover-text channel).
  *
  * Gentry is the one exception, ordered explicitly: it is a live option of
@@ -44,7 +43,7 @@ import { Link } from 'react-router-dom';
 
 import { useDraft } from '@/world-builder/document/useDraft';
 
-import { HOUSE_STATES, GENTRY_LUXEN_ONLY, houseHeading } from '../copy';
+import { HOUSE_STATES, GENTRY_LUXEN_ONLY, houseHeading, particlePair } from '../copy';
 import { ObservanceRows, type ObservanceRow } from '../ObservanceRows';
 import type { AlmanachHouseDocumentHouse } from '../types';
 import { urls } from '@/utils/urls';
@@ -145,7 +144,6 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
   const readOnlyGroups = facetGroups.filter(
     ([, facets]) => !catalogIds.has(facets[0].definition_id)
   );
-  const particleGlossId = `house-particle-gloss-${house.id}`;
 
   const togglePick = (questionId: number, optionId: number, maxPicks: number) => {
     setPicks((prev) => {
@@ -212,12 +210,11 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
         <div className="field">
           <span className="label">particle</span>
           <div className="val">
-            <button type="button" className="tip" aria-describedby={particleGlossId}>
-              worked example
-              <span className="bub" id={particleGlossId}>
-                {house.particle_example}
-              </span>
-            </button>
+            {house.particle.born ? (
+              particlePair(house.particle.born, house.particle.taken_in)
+            ) : (
+              <abbr title="none">—</abbr>
+            )}
           </div>
         </div>
         <div className="field">
