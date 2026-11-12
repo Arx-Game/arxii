@@ -71,7 +71,6 @@ export function ThreadDetailPage() {
   // ---------------------------------------------------------------------------
 
   const displayName = thread.name.trim() || '(unnamed)';
-  const displayLevel = thread.level / 10;
 
   // Find the resonance balance for this thread's resonance from hub summary.
   const resonanceBalance = summary?.balances.find((b) => b.resonance_id === thread.resonance);
@@ -168,7 +167,7 @@ export function ThreadDetailPage() {
           <div>
             <dt className="text-muted-foreground">Level</dt>
             <dd className="font-medium tabular-nums" data-testid="thread-stat-level">
-              {displayLevel}
+              {thread.level}
             </dd>
           </div>
           <div>
@@ -193,7 +192,7 @@ export function ThreadDetailPage() {
             <div>
               <dt className="text-muted-foreground">Level Cap</dt>
               <dd className="font-medium tabular-nums" data-testid="thread-stat-level-cap">
-                {thread.level_cap / 10}
+                {thread.level_cap}
               </dd>
             </div>
           )}
@@ -201,7 +200,7 @@ export function ThreadDetailPage() {
             <div>
               <dt className="text-muted-foreground">Anchor Cap</dt>
               <dd className="font-medium tabular-nums" data-testid="thread-stat-anchor-cap">
-                {thread.anchor_cap / 10}
+                {thread.anchor_cap}
               </dd>
             </div>
           )}
@@ -209,7 +208,7 @@ export function ThreadDetailPage() {
             <div>
               <dt className="text-muted-foreground">Effective Cap</dt>
               <dd className="font-medium tabular-nums" data-testid="thread-stat-effective-cap">
-                {thread.effective_cap / 10}
+                {thread.effective_cap}
               </dd>
             </div>
           )}

@@ -37,7 +37,12 @@ from world.roster.services.kinship import (
 )
 from world.scenes.constants import PersonaType
 from world.societies.constants import CrimeTier
-from world.societies.houses.almanach import _family_org, _pledged_liege_house, liege_for_title
+from world.societies.houses.almanach import (
+    _family_org,
+    _pledged_liege_house,
+    liege_for_title,
+    rung_area_for_title,
+)
 from world.societies.houses.almanach_reads import (
     _build_rows,
     _realm_graph,
@@ -120,6 +125,8 @@ class RungDocument:
     chartered_by: list[dict] = field(default_factory=list)
     claims: list[dict] = field(default_factory=list)
     chain: list[dict] = field(default_factory=list)
+    # #5080: the open regional events striking this rung's land, over it or beneath it.
+    events: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -782,8 +789,9 @@ def rung_document(title: Title) -> RungDocument:
             )
         ]
     vassals = _rung_vassals(title, graph)
+    rung_area = rung_area_for_title(title)
     return RungDocument(
-        title=_rung_title_details(title, row, liege, law),
+        title={**_rung_title_details(title, row, liege, law), "area_id": rung_area.pk},
         demesne=(
             {
                 "domain_id": domain.pk,
@@ -818,7 +826,33 @@ def rung_document(title: Title) -> RungDocument:
         chartered_by=_charter_rows(title.chartered_by.select_related("title"), "title"),
         claims=_claim_rows(title),
         chain=_rung_chain(title, graph),
+        events=_rung_events(rung_area),
     )
+
+
+def _rung_events(area: Area) -> list[dict]:
+    """The open regional events over this land (#5080): one over the area or any
+    ancestor strikes it; one over a descendant strikes part of it. Each row is what the
+    page shows and the Close control needs; the GM's note stays off the page."""
+    from world.areas.services import area_subtree_pks  # noqa: PLC0415
+    from world.societies.houses.regional_events import active_events  # noqa: PLC0415
+
+    touching = set(area_subtree_pks(area))
+    node: Area | None = area.parent
+    while node is not None:
+        touching.add(node.pk)
+        node = node.parent
+    return [
+        {
+            "event_id": event.pk,
+            "kind": event.kind.name,
+            "area_id": event.area_id,
+            "area": event.area.name,
+            "severity_pct": event.severity_pct,
+            "started_at": event.started_at,
+        }
+        for event in active_events().filter(area_id__in=touching)
+    ]
 
 
 def _charter_rows(rows, attr: str) -> list[dict]:

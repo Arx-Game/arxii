@@ -239,7 +239,7 @@ class GMAwardAction(Action):
     the beta reset:
 
     - ``award_type="stat"`` raises an authored ``Trait`` (must be
-      ``TraitType.STAT``) by exactly one display dot via
+      ``TraitType.STAT``) by one stat point (``STAT_POINT_VALUE``, 10) via
       ``world.progression.services.awards.award_stat_raise``, writing a
       ``CharacterTraitChange`` with ``source=TraitChangeSource.GM_GRANT`` and
       ``granting_tenure`` set to the GM's own current tenure (``None`` for a
@@ -444,7 +444,7 @@ class GMAwardAction(Action):
         kwargs: dict[str, Any],
     ) -> ActionResult:
         from world.progression.services.awards import award_stat_raise  # noqa: PLC0415
-        from world.traits.models import Trait, display_trait_value  # noqa: PLC0415
+        from world.traits.models import Trait  # noqa: PLC0415
 
         sheet = target.character_sheet
         if sheet is None:
@@ -470,10 +470,9 @@ class GMAwardAction(Action):
         except ValueError as exc:
             return ActionResult(success=False, message=str(exc))
 
-        new_dots = display_trait_value(trait.trait_type, change.new_value)
         return ActionResult(
             success=True,
-            message=f"Raised {trait.name} to {new_dots} for {target.key}.",
+            message=f"Raised {trait.name} to {change.new_value} for {target.key}.",
         )
 
     def _award_technique(

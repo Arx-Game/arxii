@@ -5,9 +5,9 @@
   rows). The applied condition keeps that level and its authored size, and the check
   lane's value table turns the pair into points (the stat lane's for a stat, #4726).
   The target's level is never read.
-* ``caster_vow_step`` - a vowed caster's size step (#4747): her vow thread's shown
-  level and the matching technique specialty's share, when her engaged vow specializes
-  in one of the cast technique's functions.
+* ``caster_vow_step`` - a vowed caster's size step (#4747): her vow thread's
+  rung (``thread_rung``, steps of 10 levels) and the matching technique specialty's
+  share, when her engaged vow specializes in one of the cast technique's functions.
 * ``applied_condition_size_warnings`` - the admin size check: a buff's authored size
   should match how its technique spends its power.
 """
@@ -98,7 +98,8 @@ def sized_modifier_level(
 class VowStep:
     """A caster's vow size step on one cast (#4747): where it is valued and how much.
 
-    ``level`` is her vow thread's shown level; ``tenths`` is the step's share in
+    ``level`` is her vow thread's rung (``thread_rung``: whole steps of 10 thread
+    levels, an internal step for the value table, #5091); ``tenths`` is the step's share in
     integer tenths (10 = one whole size step), from the matching specialty row's
     ``multiplier_tenths``.
     """
@@ -119,7 +120,7 @@ def caster_vow_step(
     whose function is one of ``technique``'s function tags. Only the one-size-up shape
     is fixed here; every amount is staff-tuned data:
 
-    * the level is the shown level of her COVENANT_ROLE thread on the anchor, never
+    * the level is the rung (``thread_rung``) of her COVENANT_ROLE thread on the anchor, never
       capped by the buff's own level (owner ruling 2026-10-27);
     * the share is the matching row's ``multiplier_tenths``, the same dial that scales
       the specialty's cast power; when the role and its sub-role (or anchor) both
@@ -151,7 +152,7 @@ def caster_vow_step(
     from world.covenants.models import CovenantRoleTechniqueSpecialty  # noqa: PLC0415
     from world.magic.constants import TargetKind  # noqa: PLC0415
     from world.magic.models import Thread  # noqa: PLC0415
-    from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
+    from world.magic.services.threads import thread_rung  # noqa: PLC0415
 
     multipliers = CovenantRoleTechniqueSpecialty.objects.filter(
         covenant_role_id__in={role.pk, anchor_id}, function__in=functions
@@ -169,7 +170,7 @@ def caster_vow_step(
         .values_list("level", flat=True)
         .first()
     )
-    level = shown_thread_level(stored) if stored else 0
+    level = thread_rung(stored) if stored else 0
     if not level:
         return None
     if is_secondary:

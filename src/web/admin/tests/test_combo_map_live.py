@@ -107,13 +107,13 @@ class SettersTest(ComboMapLiveCase):
         )
 
     def test_a_pick_effect_names_its_pick_and_level(self) -> None:
-        pick = VowFocusPickFactory(covenant_role=self.role, name="What They Want", pick_level=1)
+        pick = VowFocusPickFactory(covenant_role=self.role, name="What They Want", pick_level=10)
         effect = VowAddedEffectFactory(covenant_role=self.role, focus_pick=pick)
         VowAddedEffectAppliedConditionFactory(effect=effect, condition=self.signed)
         rows = live.setters_for_conditions([self.signed])
         self.assertEqual(
             [r.source.label for r in rows],
-            [f"{effect.get_function_display()} (Sage pick What They Want, level 1)"],
+            [f"{effect.get_function_display()} (Sage pick What They Want, level 10)"],
         )
 
     def test_each_setter_links_to_its_owner_change_page(self) -> None:

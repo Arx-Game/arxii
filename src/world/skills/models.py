@@ -4,7 +4,7 @@ Skills System Models
 Skills (a proxy of Trait, #5008) and specializations for character abilities.
 """
 
-from typing import TYPE_CHECKING, ClassVar, cast
+from typing import ClassVar
 
 from django.db import models
 
@@ -12,9 +12,6 @@ from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.traits.models import Trait, TraitType
-
-if TYPE_CHECKING:
-    from evennia.objects.models import ObjectDB
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
@@ -182,13 +179,7 @@ class CharacterSpecializationValue(SharedMemoryModel):
         ]
 
     def __str__(self):
-        character = cast("ObjectDB", self.character)
-        return f"{character.key}: {self.specialization} = {self.display_value}"
-
-    @property
-    def display_value(self) -> int:
-        """Specializations display their true stored value, like skills (#2894)."""
-        return cast(int, self.value)
+        return f"{self.character}: {self.specialization} = {self.value}"
 
 
 class SkillPointBudget(SharedMemoryModel):

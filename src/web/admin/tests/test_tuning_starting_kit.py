@@ -38,7 +38,7 @@ from world.magic.types.technique_power import (
     ValuationProvenance,
 )
 from world.species.factories import SpeciesFactory, SpeciesGiftGrantFactory
-from world.traits.constants import STAT_DISPLAY_DIVISOR, TraitType
+from world.traits.constants import TraitType
 from world.traits.factories import (
     CheckOutcomeFactory,
     CheckRankFactory,
@@ -362,7 +362,7 @@ class RollerPointsTests(TestCase):
         )
         stats = dict.fromkeys(REQUIRED_STATS, STAT_DEFAULT_VALUE)
         expected_per_stat = PointConversionRange.calculate_points(
-            TraitType.STAT, STAT_DEFAULT_VALUE * STAT_DISPLAY_DIVISOR
+            TraitType.STAT, STAT_DEFAULT_VALUE
         )
         expected = expected_per_stat + ta.LEVEL_POINTS_PER_LEVEL
         self.assertEqual(ta.starting_stats_roller_points(stats), expected)

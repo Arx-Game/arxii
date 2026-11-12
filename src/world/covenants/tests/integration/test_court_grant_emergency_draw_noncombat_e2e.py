@@ -91,9 +91,9 @@ class EmergencyDrawNonCombatE2ETests(CastScenarioMixin):
         ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=0)
 
         # The FLAT_BONUS row (wire_court_role_powers_catalog) is authored at
-        # min_thread_level=1 — the pull-effect eligibility check reads the thread's
+        # min_thread_level=10 — the pull-effect eligibility check reads the thread's
         # REAL level (never the beseech-boosted effective level), so the thread
-        # must actually be imbued to stored 10 (shown 1, #4585) for there to be an
+        # must actually be imbued to 10 for there to be an
         # applicable effect.
         ThreadLevelUnlock.objects.create(thread=cls.thread, unlocked_level=10, xp_spent=0)
         spend_resonance_for_imbuing(cls.caster.character_sheet, cls.thread, 10)

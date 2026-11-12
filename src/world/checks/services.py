@@ -614,6 +614,8 @@ def _situational_perk_check_bonus(
         mission=situation_ctx.mission,
         battle_action_kind=situation_ctx.battle_action_kind,
         attacker=situation_ctx.attacker,
+        roll_kind=situation_ctx.roll_kind,
+        roll_kind_perks_only=situation_ctx.roll_kind_perks_only,
     )
     if dormant:
         dormant_scoped = [
@@ -768,6 +770,10 @@ def _apply_outcome_guarantees(
     it has no numeric field to soften).
     """
     if outcome is None:
+        return outcome
+    if situation_ctx is not None and situation_ctx.roll_kind_perks_only:
+        # An enchanted Strike's technique roll (#5092): outcome guarantees belong to the
+        # Strike's hit roll and bind there once (ADR-5026).
         return outcome
 
     raw_level = int(outcome.success_level)

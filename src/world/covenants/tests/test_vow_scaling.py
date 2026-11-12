@@ -131,13 +131,13 @@ class RoleSourceVariantResolutionTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=role,
             resonance=resonance,
-            level=30,  # stored; shows 3 (#4585)
+            level=30,
         )
 
         TechniqueVariant.objects.create(
             parent_technique=technique,
             resonance=resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Specialized Form",
             intensity_delta=2,
             control_delta=1,

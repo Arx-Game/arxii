@@ -30,7 +30,7 @@ class RoleSerializerResolutionTests(TestCase):
         self.sub_role = SubroleCovenantRoleFactory(
             parent_role=self.parent_role,
             resonance=self.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
         )
         self.covenant = CovenantFactory(covenant_type=self.parent_role.covenant_type)
 
@@ -38,7 +38,7 @@ class RoleSerializerResolutionTests(TestCase):
         """Serialize a membership via CharacterCovenantRoleSerializer."""
         return CharacterCovenantRoleSerializer(membership).data
 
-    def _add_qualifying_thread(self, membership, *, level: int = 3):
+    def _add_qualifying_thread(self, membership, *, level: int = 30):
         """Create a COVENANT_ROLE thread at *level* for the membership's character."""
         character = membership.character_sheet.character
         ThreadFactory(
@@ -47,7 +47,7 @@ class RoleSerializerResolutionTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=self.parent_role,
             target_trait=None,
-            level=level * 10,  # ``level`` is shown; stored × 10 (#4585)
+            level=level,
         )
         character.threads.invalidate()
 
@@ -57,7 +57,7 @@ class RoleSerializerResolutionTests(TestCase):
             covenant=self.covenant,
             covenant_role=self.parent_role,
         )
-        self._add_qualifying_thread(membership, level=3)
+        self._add_qualifying_thread(membership, level=30)
         data = self._serialize(membership)
         self.assertEqual(data["covenant_role"]["slug"], self.sub_role.slug)
 
@@ -67,7 +67,7 @@ class RoleSerializerResolutionTests(TestCase):
             covenant=self.covenant,
             covenant_role=self.parent_role,
         )
-        self._add_qualifying_thread(membership, level=3)
+        self._add_qualifying_thread(membership, level=30)
         data = self._serialize(membership)
         self.assertEqual(data["anchor_role"]["slug"], self.parent_role.slug)
 
@@ -96,7 +96,7 @@ class RoleSerializerResolutionTests(TestCase):
             covenant=self.covenant,
             covenant_role=self.parent_role,
         )
-        self._add_qualifying_thread(membership, level=3)
+        self._add_qualifying_thread(membership, level=30)
         data = self._serialize(membership)
         # covenant_role resolves to sub-role; anchor_role stays as parent
         self.assertNotEqual(data["covenant_role"]["slug"], data["anchor_role"]["slug"])

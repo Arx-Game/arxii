@@ -21,6 +21,15 @@ from world.items.market.models import CraftingServiceOffer
 from world.magic.factories import FacetFactory
 from world.mechanics.constants import FAVOR_INVOCATION_CATEGORY_NAME
 from world.mechanics.models import ModifierTarget
+from world.pacts.constants import CharacterPactCommitmentKind
+from world.pacts.factories import (
+    CharacterPactFactory,
+    PactOfferCommitmentFactory,
+    PactOfferFactory,
+    PactPeriodDetailsFactory,
+    make_pact_condition,
+)
+from world.pacts.models import CharacterPact, PactOffer, PactOfferCommitment
 from world.scenes.factories import PersonaFactory
 from world.worship.constants import BeingResonanceTier, RiteTier
 from world.worship.factories import (
@@ -31,6 +40,7 @@ from world.worship.factories import (
     RiteKindFactory,
     WorshippedBeingFactory,
     WorshipRiteFactory,
+    designate_chosen_distinction,
 )
 from world.worship.models import BeingFacet, Pledge, RequestedItem
 
@@ -97,6 +107,14 @@ class ServiceBuilderTestCase(TestCase):
             "requests-INITIAL_FORMS": "0",
             "requests-MIN_NUM_FORMS": "0",
             "requests-MAX_NUM_FORMS": "1000",
+            "pact_offers-TOTAL_FORMS": "0",
+            "pact_offers-INITIAL_FORMS": "0",
+            "pact_offers-MIN_NUM_FORMS": "0",
+            "pact_offers-MAX_NUM_FORMS": "1000",
+            "pact_commitments-TOTAL_FORMS": "0",
+            "pact_commitments-INITIAL_FORMS": "0",
+            "pact_commitments-MIN_NUM_FORMS": "0",
+            "pact_commitments-MAX_NUM_FORMS": "1000",
             "pledges-TOTAL_FORMS": "2",
             "pledges-INITIAL_FORMS": "1",
             "pledges-MIN_NUM_FORMS": "0",
@@ -124,6 +142,8 @@ class ServiceBuilderTestCase(TestCase):
 
 class ServiceBuilderPageTests(ServiceBuilderTestCase):
     def test_the_page_shows_the_beings_service_and_its_context(self) -> None:
+        # The Chosen column reads the designated Chosen distinction's earning effect (#4341).
+        designate_chosen_distinction()
         body = self.body()
         self.assertIn("Being Service builder: Ombrin", body)
         self.assertIn("100% of amount", body)  # deed favor for the favored resonance
@@ -133,6 +153,9 @@ class ServiceBuilderPageTests(ServiceBuilderTestCase):
             body,
         )
         self.assertIn("Ombrin favor invocation", body)  # the targets exist once it opens
+        # The patron targets list the Chosen distinction under their own names.
+        self.assertIn("Your patron favor earning", body)
+        self.assertIn("Distinction effect: Chosen", body)
         self.assertIn("Every pledge type has an active closing rite.", body)
 
     def test_the_favored_facets_table_shows_the_worn_rates_and_the_side_panel_who_supplies_them(
@@ -369,6 +392,151 @@ class ServiceBuilderRequestedItemTests(ServiceBuilderTestCase):
         self.client.post(self.url(), data)
 
         self.assertFalse(RequestedItem.objects.exists())
+
+
+class ServiceBuilderPactTests(ServiceBuilderTestCase):
+    """The Pacts section and the pledge's "Pact offered at the close" field (#4341)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.offer = PactOfferFactory(being=cls.being, name="Ombrin's bargain")
+        cls.favor = PactOfferCommitmentFactory(offer=cls.offer, amount=8)
+
+    def _commitment_rows(self) -> dict:
+        return {
+            "pact_commitments-TOTAL_FORMS": "1",
+            "pact_commitments-INITIAL_FORMS": "1",
+            "pact_commitments-0-id": str(self.favor.pk),
+            "pact_commitments-0-offer": str(self.offer.pk),
+            "pact_commitments-0-kind": CharacterPactCommitmentKind.FAVOR_EARNED,
+            "pact_commitments-0-amount": "8",
+            "pact_commitments-0-notes": "",
+        }
+
+    def test_the_page_shows_the_pacts_section_its_context_and_the_pledge_field(self) -> None:
+        self.pledge.pact_offer = self.offer
+        self.pledge.save()
+        body = self.body()
+
+        self.assertIn('id="pacts-module"', body)
+        self.assertIn("Pact offered at the close", body)
+        self.assertIn("Edit this condition", body)
+        # The pledge's saved choice, read-only.
+        self.assertIn("Commitments: 8 favor per 2 game weeks", body)
+        self.assertIn("Stages: Sworn · Strained · Soured · Breached", body)
+        # The rail beside the offer.
+        self.assertIn("How demanding is 8 per 2 weeks", body)
+        self.assertIn("Deeds alone: at most 16 per period (cap 8 a week).", body)
+        self.assertIn(
+            "OK: 50% is between the warning lines at 25% (4 favor) and 67% (about 11 favor).",
+            body,
+        )
+        self.assertIn("Stage spacing (10) matches severity per missed period (10).", body)
+        self.assertIn("Pledge: PLACEHOLDER pledge, at its close", body)
+
+    def test_a_tiny_commitment_is_warned(self) -> None:
+        self.favor.amount = 2
+        self.favor.save()
+
+        body = self.body()
+
+        self.assertIn("Warn: 12% is below the warning lines", body)
+
+    def test_one_save_writes_an_offer_its_commitments_and_the_pledge_link(self) -> None:
+        self.client.force_login(self.author)
+        data = self.post_data(
+            **{
+                **self._commitment_rows(),
+                "pact_offers-TOTAL_FORMS": "2",
+                "pact_offers-INITIAL_FORMS": "1",
+                "pact_offers-0-id": str(self.offer.pk),
+                "pact_offers-0-being": str(self.being.pk),
+                "pact_offers-0-name": "Ombrin's bargain",
+                "pact_offers-0-offer_text": "[staff-authored offer text]",
+                "pact_offers-0-period_weeks": "2",
+                "pact_offers-0-condition": str(self.offer.condition_id),
+                "pact_offers-0-severity_per_miss": "10",
+                "pact_offers-0-is_active": "on",
+                "pact_offers-1-being": str(self.being.pk),
+                "pact_offers-1-name": "A second bargain",
+                "pact_offers-1-offer_text": "[staff-authored offer text]",
+                "pact_offers-1-period_weeks": "1",
+                "pact_offers-1-condition": str(make_pact_condition().pk),
+                "pact_offers-1-severity_per_miss": "10",
+                "pact_offers-1-is_active": "on",
+                "pact_commitments-TOTAL_FORMS": "2",
+                "pact_commitments-1-offer": str(self.offer.pk),
+                "pact_commitments-1-kind": CharacterPactCommitmentKind.CUSTOM,
+                "pact_commitments-1-amount": "0",
+                "pact_commitments-1-notes": "[staff-authored promise]",
+                "pledges-0-pact_offer": str(self.offer.pk),
+            },
+        )
+
+        response = self.client.post(self.url(), data)
+
+        self.assertEqual(response.status_code, 302)
+        second = PactOffer.objects.get(being=self.being, name="A second bargain")
+        self.assertEqual(second.written_by, self.writer)
+        self.assertEqual(
+            sorted(
+                PactOfferCommitment.objects.filter(offer=self.offer).values_list("kind", flat=True)
+            ),
+            [CharacterPactCommitmentKind.CUSTOM, CharacterPactCommitmentKind.FAVOR_EARNED],
+        )
+        self.assertEqual(Pledge.objects.get(pk=self.pledge.pk).pact_offer, self.offer)
+
+    def test_a_commitment_with_graded_periods_cannot_be_deleted(self) -> None:
+        PactPeriodDetailsFactory(pact__offer=self.offer, commitment=self.favor)
+        self.client.force_login(self.author)
+        data = self.post_data(
+            **{
+                **self._commitment_rows(),
+                "pact_commitments-0-amount": "3",
+                "pact_commitments-0-DELETE": "on",
+            }
+        )
+
+        response = self.client.post(self.url(), data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "holders have periods graded against it")
+        cached = PactOfferCommitment.objects.get(pk=self.favor.pk)
+        self.assertEqual(cached.amount, 8)
+
+    def test_a_refused_save_leaves_a_signed_pact_reading_the_stored_offer(self) -> None:
+        # The weekly grading reads ``pact.offer.severity_per_miss`` through the FK cache.
+        pact = CharacterPact.objects.get(pk=CharacterPactFactory(offer=self.offer).pk)
+        cached_offer = pact.offer
+        self.client.force_login(self.author)
+        data = self.post_data(
+            **{
+                **self._commitment_rows(),
+                "pact_offers-TOTAL_FORMS": "1",
+                "pact_offers-INITIAL_FORMS": "1",
+                "pact_offers-0-id": str(self.offer.pk),
+                "pact_offers-0-being": str(self.being.pk),
+                "pact_offers-0-name": "",
+                "pact_offers-0-offer_text": "[staff-authored offer text]",
+                "pact_offers-0-period_weeks": "2",
+                "pact_offers-0-condition": str(self.offer.condition_id),
+                "pact_offers-0-severity_per_miss": "3",
+                "pact_offers-0-is_active": "on",
+            },
+        )
+
+        response = self.client.post(self.url(), data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIs(pact.offer, cached_offer)
+        self.assertEqual(pact.offer.severity_per_miss, 10)
+        self.assertEqual(pact.offer.name, "Ombrin's bargain")
+
+    def test_the_pacts_rules_reach_the_page(self) -> None:
+        css = reachable_css(self.body())
+        self.assertIn("#being-service-root .bs-pact-rail {", css)
+        self.assertIn("#being-service-root .bs-res-chip {", css)
 
 
 class ServiceBuilderStylingTest(ServiceBuilderTestCase):

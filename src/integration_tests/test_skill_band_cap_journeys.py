@@ -1,7 +1,7 @@
 """Journeys: a skill stops at its level band's skill cap, the way a stat does (#4585).
 
 Staff author a skill cap per level band beside the stat cap (``MaturationStatCap``),
-in the shown units a player reads (a cap of 3 is a skill shown at 3.0, stored 30).
+in the value a player reads (a cap of 30 stops a skill at 30, #5091).
 Ysmay is a level-1 character, so the first band's row binds her. She trains, rolls
 and buys breakthroughs; at the cap development stops and the surplus dissipates, as
 at an XP wall, with a message naming the cap. A band with a blank cap, or no row at
@@ -78,8 +78,8 @@ class _BandCapCase(JourneyCase):
         self.skill = SkillFactory()
 
     def band_caps_skills_at(self, cap: int | None) -> None:
-        """Staff author the first band's row with ``skill_cap`` (shown units)."""
-        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=5, skill_cap=cap)
+        """Staff author the first band's row with ``skill_cap``."""
+        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=50, skill_cap=cap)
 
     def made_with(self, rating: int) -> None:
         set_skill_values(
@@ -126,22 +126,22 @@ class _BandCapCase(JourneyCase):
 
 class TrainingStopsAtTheBandCap(_BandCapCase):
     def test_breaks_through_to_the_cap_then_training_only_maintains(self) -> None:
-        """Cap 3: she buys 2.9 -> 3.0, then a week of training adds nothing."""
-        self.band_caps_skills_at(3)
+        """Cap 30: she buys 29 -> 30, then a week of training adds nothing."""
+        self.band_caps_skills_at(30)
         self.made_with(29)
         self.author_breakthrough(30)
 
         told = self.telnet(self.ysmay, f"progression unlock skill={self.skill.pk}")
-        self.assertIn(f"Breakthrough! {self.skill.name} rises to 3.0", told)
+        self.assertIn(f"Breakthrough! {self.skill.name} rises to 30", told)
 
         transaction = self.train_a_week()
         self.assertEqual((self.skill_row().value, self.banked()), (30, 0))
         self.assertEqual(self.rolls_at(), 30)
-        self.assertIn(f"{self.skill.name} is at 3.0, {CAP_MESSAGE}", transaction.description)
+        self.assertIn(f"{self.skill.name} is at 30, {CAP_MESSAGE}", transaction.description)
 
     def test_development_that_reaches_the_cap_dissipates_the_rest(self) -> None:
-        """Cap 6, at 59 with 4,900 of 5,000 banked: 400 more buys 60 and 300 dissipates."""
-        self.band_caps_skills_at(6)
+        """Cap 60, at 59 with 4,900 of 5,000 banked: 400 more buys 60 and 300 dissipates."""
+        self.band_caps_skills_at(60)
         self.made_with(59)
         ledger = self.ledger()
         ledger.total_earned = cumulative_dp_for_level(59) + 4900
@@ -151,7 +151,7 @@ class TrainingStopsAtTheBandCap(_BandCapCase):
 
         self.assertEqual((self.skill_row().value, self.banked()), (60, 0))
         self.assertEqual(self.rolls_at(), 60)
-        self.assertIn(f"is at 6.0, {CAP_MESSAGE}", transaction.description)
+        self.assertIn(f"is at 60, {CAP_MESSAGE}", transaction.description)
 
     def test_a_blank_cap_caps_nothing(self) -> None:
         self.band_caps_skills_at(None)
@@ -169,14 +169,14 @@ class TrainingStopsAtTheBandCap(_BandCapCase):
 
 class ABreakthroughPastTheCapIsRefused(_BandCapCase):
     def test_a_skill_made_above_the_cap_cannot_break_through(self) -> None:
-        """Made at 2.9 under a band cap of 2: buying 3.0 is refused and costs nothing."""
-        self.band_caps_skills_at(2)
+        """Made at 29 under a band cap of 20: buying 30 is refused and costs nothing."""
+        self.band_caps_skills_at(20)
         self.made_with(29)
         self.author_breakthrough(30)
 
         told = self.telnet(self.ysmay, f"progression unlock skill={self.skill.pk}")
 
-        self.assertIn(f"{self.skill.name} is at 2.0, {CAP_MESSAGE}", told)
+        self.assertIn(f"{self.skill.name} is at 20, {CAP_MESSAGE}", told)
         self.assertEqual(self.skill_row().value, 29)
         xp = ExperiencePointsData.objects.get(account=self.account_of(self.ysmay))
         self.assertEqual(xp.total_spent, 0)
@@ -198,9 +198,9 @@ class UseAndAwardsStopAtTheCap(_BandCapCase):
         return check_type
 
     def test_a_roll_with_effort_at_the_cap_does_not_level_the_skill(self) -> None:
-        """Ten points short of 3.1, a high-effort roll (20 points) would level her; the
-        cap holds her at 3.0 and the surplus dissipates."""
-        self.band_caps_skills_at(3)
+        """Ten points short of 31, a high-effort roll (20 points) would level her; the
+        cap holds her at 30 and the surplus dissipates."""
+        self.band_caps_skills_at(30)
         self.made_with(30)
         self._bank_toward(self.skill, 31, short_by=10)
 
@@ -212,7 +212,7 @@ class UseAndAwardsStopAtTheCap(_BandCapCase):
         self.assertEqual(tracker.total_earned, cumulative_dp_for_level(30))
 
     def test_a_gm_award_at_the_cap_says_so_on_the_record(self) -> None:
-        self.band_caps_skills_at(3)
+        self.band_caps_skills_at(30)
         self.made_with(30)
         self._bank_toward(self.skill, 31, short_by=10)
 
@@ -226,7 +226,7 @@ class UseAndAwardsStopAtTheCap(_BandCapCase):
 
     def test_a_stat_is_not_held_by_the_skill_cap(self) -> None:
         """Stats keep their own cap; the skill cap of 3 does not stop a stat at 40 -> 41."""
-        self.band_caps_skills_at(3)
+        self.band_caps_skills_at(30)
         stat = StatTraitFactory(name="band_cap_strength")
         CharacterTraitValue.objects.create(character=self.sheet, trait=stat, value=40)
         self._bank_toward(stat, 41, short_by=10)
@@ -243,7 +243,7 @@ class UseAndAwardsStopAtTheCap(_BandCapCase):
 
 class StaffEditRefusesAboveTheCap(JourneyCase):
     def test_staff_cannot_set_a_skill_above_the_band_cap(self) -> None:
-        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=5, skill_cap=2)
+        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=50, skill_cap=20)
         skill = SkillFactory()
         staff = AccountFactory(is_staff=True)
         sheet = mint_gm_character(staff, "Mirela Vant").character_sheet

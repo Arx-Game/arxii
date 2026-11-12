@@ -406,7 +406,7 @@ class TestSeedThreadPullCatalogCreation(TestCase):
 
         cap_grant = self.result.pull_effects[EffectKind.CAPABILITY_GRANT]
         self.assertEqual(cap_grant.tier, 3)
-        self.assertEqual(cap_grant.min_thread_level, 5)
+        self.assertEqual(cap_grant.min_thread_level, 50)
         self.assertIsNotNone(cap_grant.capability_grant)
         self.assertEqual(cap_grant.capability_grant.name, "endurance")
 

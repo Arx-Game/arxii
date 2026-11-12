@@ -124,7 +124,7 @@ export function ThreadResonanceDialog({ thread, open, onOpenChange }: ThreadReso
         data-testid="thread-resonance-dialog"
       >
         <DialogTitle className="text-sm font-semibold">
-          Thread: {thread.name.trim() || '(unnamed)'} · level {thread.level / 10} ·{' '}
+          Thread: {thread.name.trim() || '(unnamed)'} · level {thread.level} ·{' '}
           {thread.resonance_name}
         </DialogTitle>
 

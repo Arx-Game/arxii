@@ -97,10 +97,10 @@ class CourtPullCapTests(TestCase):
 class CourtPullEffectGateTests(TestCase):
     """The pact is the REAL gate on the Court active pull (#1589 final review).
 
-    The seeded Court active-pull effects are authored at ``min_thread_level=1``.
+    The seeded Court active-pull effects are authored at ``min_thread_level=10``.
     A no-pact servant gets granted cap 0 → their Court-role thread cannot imbue
     above level 0 → ``resolve_pull_effects`` selects no FLAT_BONUS (the pull yields
-    no Court bonus). A servant whose pact lifted the cap (thread level ≥ 1) DOES
+    no Court bonus). A servant whose pact lifted the cap (thread level ≥ 10) DOES
     get the FLAT_BONUS. This makes "no pact → cannot pull" structurally true, not
     merely cap-cosmetic.
     """
@@ -111,7 +111,7 @@ class CourtPullEffectGateTests(TestCase):
         cls.resonance = cls.flat_effects[0].resonance
         # The seeded active pull is authored above level 0 — the pact gate.
         for effect in cls.flat_effects:
-            assert effect.min_thread_level == 1
+            assert effect.min_thread_level == 10
 
     def _court_thread(self, level: int) -> object:
         servant = CharacterSheetFactory()
@@ -137,12 +137,12 @@ class CourtPullEffectGateTests(TestCase):
             "A level-0 Court-role thread must pull no FLAT_BONUS — the pact is the gate.",
         )
 
-    def test_level_one_thread_yields_court_flat_bonus(self) -> None:
-        """With a pact lifting the cap (thread shown ≥ 1, stored 10) the FLAT_BONUS applies."""
+    def test_level_ten_thread_yields_court_flat_bonus(self) -> None:
+        """With a pact lifting the cap (thread at 10 or more) the FLAT_BONUS applies."""
         thread = self._court_thread(10)
         flat = self._flat_bonuses(thread)
         self.assertTrue(
             flat,
-            "A level-1 Court-role thread must pull the seeded FLAT_BONUS.",
+            "A level-10 Court-role thread must pull the seeded FLAT_BONUS.",
         )
         self.assertGreater(flat[0].scaled_value, 0)

@@ -23,10 +23,9 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from world.classes.services import is_crossing_level
 from world.magic.constants import TargetKind
 from world.magic.crossing.ceremony import CeremonyNarrative, execute_ceremony_beat
-from world.magic.services.threads import shown_thread_level
+from world.magic.services.threads import is_thread_crossing_level
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -38,24 +37,20 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: The first PathStage crossing, on the shown thread scale (stored 30).
-_FIRST_CROSSING_LEVEL = 3
+#: The first PathStage crossing, as a thread level (#5091).
+_FIRST_CROSSING_LEVEL = 30
 
 
 def _crossed_levels(starting_level: int, new_level: int) -> list[int]:
-    """Shown crossing levels a thread passed going from stored ``starting_level`` to
-    stored ``new_level`` (#4585).
+    """Crossing levels a thread passed going from ``starting_level`` to ``new_level``.
 
-    Thread levels are stored ×10, crossings (3, 6, 11, 16, 21) are shown levels, so
-    stored 29 → 30 crosses 3 and stored 0 → 3 crosses nothing. Crossing detection is
-    ``is_crossing_level`` on the shown level, the same list Paths use.
+    Crossings are thread levels 30, 60, 110, 160, 210 (``is_thread_crossing_level``,
+    the Path crossings times ten), so 29 -> 30 crosses 30 and 0 -> 3 crosses nothing.
     """
     return [
         level
-        for level in range(
-            shown_thread_level(starting_level) + 1, shown_thread_level(new_level) + 1
-        )
-        if is_crossing_level(level)
+        for level in range(starting_level + 1, new_level + 1)
+        if is_thread_crossing_level(level)
     ]
 
 
@@ -220,9 +215,9 @@ def _execute_variant_beat(
 class TechniqueCrossingHandler:
     """TECHNIQUE thread crossing handler.
 
-    Fires a narrative-only beat at the first crossing (level 3) so the player
+    Fires a narrative-only beat at the first crossing (level 30) so the player
     notices the depth milestone. (#4099: ``min_crossing_level`` can authored
-    below 3, so signing may already have happened before this fires — the beat
+    below 30, so signing may already have happened before this fires — the beat
     no longer claims otherwise.) The real ceremony (discovery) fires at
     selection time, not at the crossing — driven by the bonus's
     ``discovery_achievement`` FK via ``execute_ceremony_beat``. Higher crossings
@@ -240,7 +235,7 @@ class TechniqueCrossingHandler:
         if new_level <= starting_level:
             return
 
-        # Only fire at the first crossing (shown level 3) — the depth-milestone beat.
+        # Only fire at the first crossing (thread level 30) — the depth-milestone beat.
         # Higher crossings don't need a beat; the discovery fires on selection.
         if _FIRST_CROSSING_LEVEL not in _crossed_levels(starting_level, new_level):
             return

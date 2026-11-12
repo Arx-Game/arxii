@@ -16,7 +16,7 @@ from evennia.objects.models import ObjectDB
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.magic.constants import GiftKind
-from world.traits.models import CharacterTraitValue, display_trait_value
+from world.traits.models import CharacterTraitValue
 
 # XP Cost System
 
@@ -236,7 +236,7 @@ class TraitRatingUnlock(SharedMemoryModel):
 
     def __str__(self) -> str:
         rating = cast(int, self.target_rating)
-        return f"{self.trait.name} Rating {display_trait_value(self.trait.trait_type, rating)}"
+        return f"{self.trait.name} Rating {rating}"
 
 
 # Abstract Requirements System
@@ -373,26 +373,22 @@ class TraitRequirement(AbstractClassLevelRequirement):
             if trait_value.value >= cast(int, self.minimum_value):
                 return (
                     True,
-                    f"Has {self.trait.name} {trait_value.display_value}",
+                    f"Has {self.trait.name} {trait_value.value}",
                 )
-            needed = display_trait_value(self.trait.trait_type, cast(int, self.minimum_value))
+            needed = cast(int, self.minimum_value)
             return (
                 False,
-                f"Need {self.trait.name} {needed}, have {trait_value.display_value}",
+                f"Need {self.trait.name} {needed}, have {trait_value.value}",
             )
         except ObjectDoesNotExist:
-            needed = display_trait_value(self.trait.trait_type, cast(int, self.minimum_value))
+            needed = cast(int, self.minimum_value)
             return (
                 False,
                 f"Need {self.trait.name} {needed}, trait not set",
             )
 
     def __str__(self) -> str:
-        minimum_value = cast(int, self.minimum_value)
-        return (
-            f"Trait: {self.trait.name} >= "
-            f"{display_trait_value(self.trait.trait_type, minimum_value)}"
-        )
+        return f"Trait: {self.trait.name} >= {self.minimum_value}"
 
 
 class LevelRequirement(AbstractClassLevelRequirement):

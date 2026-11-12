@@ -78,6 +78,7 @@ class ModifierTargetAdmin(admin.ModelAdmin):
         "category",
         "target_trait",
         "target_being",
+        "targets_patron",
         "scope_maneuver_effect",
         "scope_effect_kind",
         "scope_technique",

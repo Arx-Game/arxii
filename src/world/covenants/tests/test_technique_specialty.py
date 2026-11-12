@@ -105,7 +105,7 @@ class CovenantRoleTechniqueSpecialtyModelTests(TestCase):
         parent = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, sword_weight=1)
         sub_role = SubroleCovenantRoleFactory(
             parent_role=parent,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
         )
         sub_role.full_clean()  # sanity: the sub-role itself is valid
 

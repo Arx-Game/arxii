@@ -12,7 +12,6 @@ from decimal import Decimal
 
 from django.db import IntegrityError, transaction
 from django.test import TestCase
-from django.utils import timezone
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -49,6 +48,8 @@ from world.worship.factories import (
     FavorOutcomeAwardFactory,
     WorshipDeclarationFactory,
     WorshippedBeingFactory,
+    designate_chosen_distinction,
+    make_chosen,
 )
 from world.worship.favor_services import (
     earning_rate,
@@ -60,8 +61,8 @@ from world.worship.invocation_services import (
     invocation_options,
     invoke_favor,
 )
-from world.worship.models import DevotionStanding, FavorInvocation, PatronageValence
-from world.worship.services import bump_devotion, get_chosen_favor_config
+from world.worship.models import DevotionStanding, FavorInvocation
+from world.worship.services import bump_devotion
 
 
 def _target(being, category_name: str) -> ModifierTarget:
@@ -69,17 +70,14 @@ def _target(being, category_name: str) -> ModifierTarget:
 
 
 def _any_target(category_name: str) -> ModifierTarget:
-    return ModifierTarget.objects.get(category__name=category_name, target_being__isnull=True)
+    return ModifierTarget.objects.get(
+        category__name=category_name, target_being__isnull=True, targets_patron=False
+    )
 
 
 def _make_chosen(sheet, being, favor: int) -> DevotionStanding:
-    return DevotionStandingFactory(
-        character_sheet=sheet,
-        being=being,
-        favor=favor,
-        valence=PatronageValence.DEVOTIONAL,
-        established_at=timezone.now(),
-    )
+    """A Chosen of ``being`` through the Chosen distinction (#4341)."""
+    return make_chosen(sheet, being, favor=favor)
 
 
 class FavorTargetTests(TestCase):
@@ -96,7 +94,7 @@ class FavorTargetTests(TestCase):
             ModifierTarget.objects.filter(
                 category__name__in=[FAVOR_INVOCATION_CATEGORY_NAME, FAVOR_EARNING_CATEGORY_NAME]
             ).count(),
-            4,
+            6,
         )
 
     def test_any_being_target_unique(self) -> None:
@@ -106,7 +104,13 @@ class FavorTargetTests(TestCase):
         for category_name in (FAVOR_INVOCATION_CATEGORY_NAME, FAVOR_EARNING_CATEGORY_NAME):
             self.assertEqual(
                 ModifierTarget.objects.filter(
-                    category__name=category_name, target_being__isnull=True
+                    category__name=category_name, target_being__isnull=True, targets_patron=False
+                ).count(),
+                1,
+            )
+            self.assertEqual(
+                ModifierTarget.objects.filter(
+                    category__name=category_name, targets_patron=True
                 ).count(),
                 1,
             )
@@ -118,6 +122,20 @@ class FavorTargetTests(TestCase):
             ModifierTarget.objects.create(
                 category=target.category, name="A second one", target_being=being
             )
+
+    def test_a_patron_target_must_be_a_favor_target(self) -> None:
+        """#4341: ``clean()`` refuses ``targets_patron`` outside the favor categories.
+
+        No journey reaches it: staff add targets only through the admin, whose form
+        runs this branch, and no play path creates a target.
+        """
+        from django.core.exceptions import ValidationError
+
+        from world.mechanics.factories import ModifierCategoryFactory
+
+        other = ModifierCategoryFactory(name="not_favor")
+        with self.assertRaises(ValidationError):
+            ModifierTarget(category=other, name="Patron stat", targets_patron=True).clean()
 
     def test_a_target_that_lost_its_being_is_linked_again(self) -> None:
         """A rolled-back release drops target_being and leaves the named targets."""
@@ -258,10 +276,8 @@ class EarningRateTests(TestCase):
         self.assertEqual(earning_rate(self.sheet, self.being), 250)
 
     def test_chosen_bonus_of_zero_restores_todays_rate(self) -> None:
+        designate_chosen_distinction(earning_percent=0)
         _make_chosen(self.sheet, self.being, favor=0)
-        config = get_chosen_favor_config()
-        config.earn_bonus_percent = 0
-        config.save()
         self.assertEqual(earning_rate(self.sheet, self.being), 100)
 
     def test_bump_devotion_scales_positive_amounts(self) -> None:

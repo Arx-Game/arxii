@@ -26,7 +26,7 @@ from world.magic.services.capability_curve import (
     apply_capability_curve,
     get_capability_power_config,
 )
-from world.magic.services.threads import shown_thread_level, thread_level_multiplier
+from world.magic.services.threads import thread_level_multiplier
 from world.ships.models import ShipDetails
 from world.ships.types import ShipCapabilityGrant, ShipStatBonus
 
@@ -127,7 +127,7 @@ def ship_sanctum_bonus(ship: ShipDetails) -> ShipStatBonus:
                     # weaver's business, not the ship's; skip rather than mis-apply.
                     continue
                 level = level_by_resonance[row.resonance_id]
-                if row.min_thread_level > shown_thread_level(level):
+                if row.min_thread_level > level:
                     continue
                 totals[stat] += round(row.vital_bonus_amount * thread_level_multiplier(level))
 
@@ -163,10 +163,10 @@ def ship_sanctum_capability_grants(ship: ShipDetails) -> list[ShipCapabilityGran
 
     For each woven resonance, the authored ``CAPABILITY_GRANT`` row with the **highest
     qualifying** ``min_thread_level`` wins — so a catalog may author a deeper unlock
-    (``min_thread_level=6``) that supersedes the shallow one without the code knowing
+    (``min_thread_level=60``) that supersedes the shallow one without the code knowing
     the numbers. There is deliberately **no hardcoded level-3 floor** any more: the
     authored ``min_thread_level`` is the gate, which is the whole point of moving this
-    onto the catalog. Content authors 3 for the first unlock.
+    onto the catalog. Content authors 30 for the first unlock.
 
     **Magnitude.** ``apply_capability_curve(base, power=…, sensitivity=…)`` is
     geometric in ``power`` and inert when ``power <= 0`` — so ``sensitivity`` alone
@@ -205,7 +205,7 @@ def ship_sanctum_capability_grants(ship: ShipDetails) -> list[ShipCapabilityGran
         if row.capability_grant_id is None:
             continue
         level = level_by_resonance[row.resonance_id]
-        if row.min_thread_level > shown_thread_level(level):
+        if row.min_thread_level > level:
             continue
         incumbent = best_row.get(row.resonance_id)
         if incumbent is None or row.min_thread_level > incumbent.min_thread_level:

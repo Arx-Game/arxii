@@ -19,18 +19,16 @@ class MaturationStatCap(SharedMemoryModel):
 
     Stat caps are PLACEHOLDER tuning.
 
-    Seeded 5/6/11/16/21/25 for PROSPECT..TRANSCENDENT (#3001 ruling). Shared by
-    the maturation spend path and the level stat point spend path (#3001) — a
+    Seeded 50/60/110/160/210/250 for PROSPECT..TRANSCENDENT (#3001 ruling). Shared
+    by the maturation spend path and the level stat point spend path (#3001) — a
     stat's ceiling is a property of the stage band, regardless of which point
-    pool paid for the raise. Caps are display dots
-    (stat storage is internal ×10 — #2894; the spend service multiplies at the
-    comparison). The cap binds the maturation spend path; CG's
-    ``STAT_MAX_VALUE`` (5) is the PROSPECT row enforced at creation time.
+    pool paid for the raise. Caps are stored values, the ones players see (#5091,
+    ADR-5091). The cap binds the maturation spend path; CG's ``STAT_MAX_VALUE``
+    (50) is the PROSPECT row enforced at creation time.
 
     ``skill_cap`` (#4585) is the same ceiling for skills and their specializations,
-    also in shown units (stored ``skill_cap * 10``, converted at the comparison).
-    Blank means no cap. Every post-creation skill raise path reads it through
-    ``world.progression.services.maturation.skill_cap_for``.
+    also a stored value. Blank means no cap. Every post-creation skill raise path
+    reads it through ``world.progression.services.maturation.skill_cap_for``.
     """
 
     path_stage = models.PositiveSmallIntegerField(
@@ -44,7 +42,7 @@ class MaturationStatCap(SharedMemoryModel):
     skill_cap = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
-        help_text="Highest shown skill value this band allows. Blank means no cap.",
+        help_text="Highest skill value this band allows. Blank means no cap.",
     )
 
     class Meta:

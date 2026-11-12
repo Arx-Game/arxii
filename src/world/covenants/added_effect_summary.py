@@ -80,7 +80,11 @@ def summarize_situational_perk(
 
     Shared by the vow page (#4880) and the holder's pick catalog (#4929).
     """
-    parts = [perk.get_beneficiary_display(), perk.get_effect_kind_display()]
+    effect = perk.get_effect_kind_display()
+    if perk.roll_kind:
+        # "Applies to" (#5092): e.g. "Check Bonus on attack rolls".
+        effect = f"{effect} on {perk.get_roll_kind_display().lower()}"
+    parts = [perk.get_beneficiary_display(), effect]
     if situations:
         parts.append(f"when {' and '.join(situations)}")
     parts.append(f"{perk.magnitude_tenths} tenths")
@@ -94,5 +98,17 @@ def summarize_situational_perk(
 
 
 def summarize_stat_scaling(scaling: VowStatScaling) -> str:
-    """One line for a stat scaling: the target and its bonus per thread level."""
-    return f"{scaling.modifier_target.name} {scaling.bonus_per_level:+d} per thread level"
+    """One line for a stat scaling: the target and its bonus per thread level.
+
+    On a maneuver-effect target the bonus counts whole steps of 10 thread levels
+    (``thread_rung``, #5091), so the line says so.
+    """
+    from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME  # noqa: PLC0415
+
+    target = scaling.modifier_target
+    per = (
+        "per 10 thread levels"
+        if target.category.name == MANEUVER_EFFECT_CATEGORY_NAME
+        else "per thread level"
+    )
+    return f"{target.name} {scaling.bonus_per_level:+d} {per}"

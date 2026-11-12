@@ -217,7 +217,7 @@ class SettleObligationLoopEndToEndTests(TestCase):
         draft_data = {
             "first_name": "Debtor",
             "description": "A fresh Unbound Prospect who owes the Academy a Hare.",
-            "stats": dict.fromkeys(DEFAULT_STAT_NAMES, 2),
+            "stats": dict.fromkeys(DEFAULT_STAT_NAMES, 20),
             "tarot_card_name": tarot.name,
             "tarot_reversed": False,
             "selected_gift_id": gift.id,

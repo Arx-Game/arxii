@@ -1,7 +1,7 @@
 """Journeys for stat buffs valued by level and size, and piles of them tapering (#4726).
 
-Slice 8 of #4551. Brannoc is a dock porter (level 6, strength 2 and stamina 2 as shown,
-20 stored). Buffs to his strength are real conditions, distinctions, worn pieces and his
+Slice 8 of #4551. Brannoc is a dock porter (level 6, strength 20 and stamina
+20). Buffs to his strength are real conditions, distinctions, worn pieces and his
 vow. His strength is one number wherever it is read: the Lifting check (through
 ``perform_check_with_modifiers``, the seam every roll uses), his carrying capacity
 (``carry_capacity``), and, for stamina, the stamina term of his base max health
@@ -13,6 +13,9 @@ the seed is coherent.
   capacity and (for a stamina pile) max health all read that same value. His check is the
   same as an unbuffed twin's whose own strength is that total.
 - One buff counts in full, as before.
+- His web sheet (#4730) shows the stored strength and, only once a buff changes it, the
+  value those reads use; an unbuffed stat shows one number. The read's extra queries
+  follow the stats buffed, not the conditions that buff them.
 - A debuff tapers in its own pile, apart from the bonuses.
 - A sized technique buff cast on him adds the stat lane's value for its level and size; the
   same condition unsized adds its flat authored value.
@@ -24,6 +27,8 @@ the seed is coherent.
 
 from __future__ import annotations
 
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from evennia.objects.models import ObjectDB
 
 from actions.factories import ActionTemplateFactory
@@ -87,8 +92,8 @@ from world.traits.models import CheckOutcome
 from world.vitals.models import CharacterVitals
 from world.vitals.services import derive_base_max_health, get_vitals_consequence_config
 
-BASE = 20  # strength 2 as shown; stats are stored x10
-BUFF = 10  # +1 shown strength per buff
+BASE = 20  # strength 20
+BUFF = 10  # +10 strength per buff
 # Ten buffs of 10 in the stat lane's seeded taper: 10 x (1 + 7/8 + (7/8)^2 + (7/8)^3 + six
 # at the 2/3 floor) = 73.1, which rounds to 73, not the plain 100.
 TEN_TAPERED = 73
@@ -168,7 +173,7 @@ class StatBuffsAreValuedAndTapered(JourneyCase):
 
         strength = BASE + TEN_TAPERED
         self.assertEqual(self.strength_now(), strength)
-        self.assertEqual(self.brannoc.traits.get_trait_display_value(self.strength.name), 9)
+        self.assertEqual(self.brannoc.traits.get_trait_value(self.strength.name), strength)
         # The check reads it: one check point per stored strength unit on the seeded
         # conversion, and the same total as a twin whose own strength is 93.
         self.assertEqual(self.lift(self.brannoc) - lift_before, TEN_TAPERED)
@@ -199,6 +204,56 @@ class StatBuffsAreValuedAndTapered(JourneyCase):
             carry_capacity(self.brannoc),
             CARRY_CAPACITY_BASE + (BASE + BUFF) * CARRY_CAPACITY_PER_STRENGTH,
         )
+
+    def sheet_read(self) -> tuple[dict, int]:
+        """Brannoc's sheet through the API, and the queries the read cost."""
+        client = self.api(self.account_of(self.brannoc))
+        url = f"/api/character-sheets/{self.brannoc.sheet_data.pk}/"
+        client.get(url)  # warm the process-wide caches, so only the read itself is counted
+        with CaptureQueriesContext(connection) as queries:
+            response = client.get(url)
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json(), len(queries)
+
+    def test_the_sheet_shows_the_stored_strength_and_the_one_the_game_uses(self) -> None:
+        plain, plain_queries = self.sheet_read()
+        self.assertEqual(plain["stats"]["strength"], BASE)
+        self.assertEqual(plain["buffed_stats"], {}, "an unbuffed stat shows one number")
+
+        for index in range(10):
+            self.buff(f"Dockside Cheer {index + 1}")
+            self.buff(f"Second Wind {index + 1}", target=self.stamina_target)
+
+        sheet, queries = self.sheet_read()
+        self.assertEqual(sheet["stats"]["strength"], BASE, "the stored number is still shown")
+        # 20 stored + 73 tapered = 93: the same value the check and the carrying capacity read.
+        self.assertEqual(sheet["buffed_stats"], {"strength": 93, "stamina": 93})
+        self.assertEqual(sheet["buffed_stats"]["strength"], self.strength_now())
+        twin = self.porter("Bram", strength=BASE + TEN_TAPERED)
+        self.assertEqual(carry_capacity(self.brannoc), carry_capacity(twin))
+        self.assertEqual(self.lift(self.brannoc), self.lift(twin))
+        # Pricing two buffed stats costs a bounded handful of queries (9 measured), set by
+        # the stats buffed and not by the twenty conditions carrying the buffs.
+        self.assertLessEqual(queries - plain_queries, 12)
+
+    def test_twenty_conditions_that_buff_nothing_cost_the_sheet_no_more_than_one(self) -> None:
+        def carry(count: int) -> None:
+            for index in range(count):
+                ConditionInstanceFactory(
+                    target=self.brannoc,
+                    condition=ConditionTemplateFactory(name=f"Dockside Mood {index + 1}"),
+                )
+
+        _, none_queries = self.sheet_read()
+        carry(1)
+        _, one_queries = self.sheet_read()
+        ConditionInstance.objects.filter(target=self.brannoc).delete()
+        carry(20)
+        sheet, twenty_queries = self.sheet_read()
+
+        self.assertEqual(sheet["buffed_stats"], {})
+        self.assertEqual(twenty_queries, one_queries, "no query per condition")
+        self.assertLessEqual(twenty_queries - none_queries, 1)
 
     def test_a_debuff_tapers_in_its_own_pile(self) -> None:
         for index in range(10):

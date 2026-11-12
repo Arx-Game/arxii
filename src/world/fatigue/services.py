@@ -36,7 +36,7 @@ from world.fatigue.models import FatiguePool
 from world.fatigue.types import FatigueCollapseResult, RestResult
 from world.mechanics.constants import FATIGUE_COST_CATEGORY_NAME, FATIGUE_COST_TARGET_NAME
 from world.mechanics.levers import lever_total, scale_by_percent
-from world.traits.constants import STAT_DISPLAY_DIVISOR, PrimaryStat
+from world.traits.constants import PrimaryStat, whole_stat_points
 from world.traits.services import ensure_stat_trait
 
 if TYPE_CHECKING:
@@ -53,15 +53,13 @@ def get_or_create_fatigue_pool(character_sheet: CharacterSheet) -> FatiguePool:
     return pool
 
 
-def _get_display_stat_value(character_sheet: CharacterSheet, stat_name: str) -> int:
-    """Get a stat's display value (1-5 scale) from the trait handler.
+def _get_stat_points(character_sheet: CharacterSheet, stat_name: str) -> int:
+    """A stat's whole stat points (stored value // 10) from the trait handler.
 
-    Storage is internal ×10 (#2894 — CG writes 10-50 like every other writer),
-    so display is a plain ÷10. Capacity constants are tuned for display-scale
-    input.
+    Capacity constants are tuned per 10 points of a stat (#5091: an internal
+    step, not a display scale; the sheet shows the stored value).
     """
-    raw_value = character_sheet.character.traits.get_trait_value(stat_name)
-    return raw_value // STAT_DISPLAY_DIVISOR
+    return whole_stat_points(character_sheet.character.traits.get_trait_value(stat_name))
 
 
 def get_fatigue_capacity(
@@ -87,8 +85,8 @@ def get_fatigue_capacity(
         Integer fatigue capacity.
     """
     endurance_stat_name = FATIGUE_ENDURANCE_STAT[category]
-    endurance_value = _get_display_stat_value(character_sheet, endurance_stat_name)
-    willpower_value = _get_display_stat_value(character_sheet, PrimaryStat.WILLPOWER.value)
+    endurance_value = _get_stat_points(character_sheet, endurance_stat_name)
+    willpower_value = _get_stat_points(character_sheet, PrimaryStat.WILLPOWER.value)
 
     base_capacity = (
         endurance_value * CAPACITY_STAT_MULTIPLIER + willpower_value * CAPACITY_WILLPOWER_MULTIPLIER

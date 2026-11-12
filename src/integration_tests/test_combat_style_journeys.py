@@ -102,7 +102,7 @@ def _swear(sheet, role) -> None:
         sheet,
         role,
         covenant=CovenantFactory(covenant_type=CovenantType.DURANCE),
-        thread_level=1,
+        thread_level=10,
     )
 
 

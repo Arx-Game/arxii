@@ -238,6 +238,15 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "not SET_NULL: clearing it would widen a being's target to every being."
         ),
     )
+    targets_patron = models.BooleanField(
+        default=False,
+        verbose_name="Your patron",
+        help_text=(
+            "Favor categories only (#4341): this target means the character's own patron, "
+            "and reaches her only while she is that being's Chosen. Never names a being; "
+            "one per favor category."
+        ),
+    )
     # CASCADE, not SET_NULL, on scope_maneuver_effect: clearing it would widen the
     # target to every effect. Maneuver effect category only (#4783); set this or the
     # kind, not both (modifier_target_one_scope).
@@ -397,6 +406,17 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                 condition=models.Q(target_being__isnull=False),
                 name="unique_modifier_target_category_being",
             ),
+            # The patron target (#4341) is resolved when read, so it never names a being,
+            # and each favor category has at most one.
+            models.CheckConstraint(
+                condition=~(models.Q(targets_patron=True) & models.Q(target_being__isnull=False)),
+                name="modifier_target_patron_names_no_being",
+            ),
+            models.UniqueConstraint(
+                fields=["category"],
+                condition=models.Q(targets_patron=True),
+                name="unique_modifier_target_patron_per_category",
+            ),
             # One scope at a time (#4783): a target names one effect or one kind.
             models.CheckConstraint(
                 condition=~(
@@ -468,7 +488,8 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def clean(self) -> None:
         """A favor target's being (#4333): only in the two favor categories, and one
-        "any being" target (no being) per favor category."""
+        "any being" target (no being) per favor category. The patron target (#4341):
+        favor categories only, never with a being, one per favor category."""
         super().clean()
         if not self.category_id:
             return
@@ -478,15 +499,37 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         if self.target_being_id and not is_favor:
             msg = "Only a favor invocation or favor earning target names a being."
             raise ValidationError({"target_being": msg})
+        if self.targets_patron:
+            self._clean_patron_target(is_favor=is_favor)
+            return
         if is_favor and not self.target_being_id:
             others = (
                 type(self)
-                .objects.filter(category_id=self.category_id, target_being__isnull=True)
+                .objects.filter(
+                    category_id=self.category_id, target_being__isnull=True, targets_patron=False
+                )
                 .exclude(pk=self.pk)
             )
             if others.exists():
                 msg = "This favor category already has its any-being target; name a being."
                 raise ValidationError({"target_being": msg})
+
+    def _clean_patron_target(self, *, is_favor: bool) -> None:
+        """The patron target (#4341): a favor category, no being, one per category."""
+        if not is_favor:
+            msg = "Only a favor invocation or favor earning target can mean your patron."
+            raise ValidationError({"targets_patron": msg})
+        if self.target_being_id:
+            msg = "A patron target means whoever her patron is; it names no being."
+            raise ValidationError({"target_being": msg})
+        others = (
+            type(self)
+            .objects.filter(category_id=self.category_id, targets_patron=True)
+            .exclude(pk=self.pk)
+        )
+        if others.exists():
+            msg = "This favor category already has its patron target."
+            raise ValidationError({"targets_patron": msg})
 
     @property
     def has_technique_scope(self) -> bool:

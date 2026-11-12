@@ -628,12 +628,12 @@ class ProtagonismLockResonanceSpendTests(TestCase):
 
 
 class CrossingThresholdImbuingTests(TestCase):
-    """spend_resonance_for_imbuing gates at PathStage crossings (shown 3, 6, 11, 16, 21)
+    """spend_resonance_for_imbuing gates at PathStage crossings (30, 60, 110, 160, 210)
     when a ThreadCrossingThreshold exists with unmet requirements.
 
-    Thread levels are stored ×10 (#4585): the shown-3 crossing is stored 30, so these
-    tests imbue across stored 29 → 30. Every XP boundary is pre-unlocked and the owner is
-    level 10 so neither the XP lock nor the level cap is what stops the imbue.
+    These tests imbue across 29 → 30, the first crossing. Every XP boundary is
+    pre-unlocked and the owner is level 10 so neither the XP lock nor the level cap is
+    what stops the imbue.
     """
 
     def setUp(self) -> None:
@@ -680,8 +680,8 @@ class CrossingThresholdImbuingTests(TestCase):
         )
 
     def test_blocks_at_crossing_when_requirement_unmet(self) -> None:
-        """Imbuing stored 29→30 blocks at the shown-3 crossing when requirement unmet."""
-        self._gate(3)
+        """Imbuing 29→30 blocks at the level-30 crossing when requirement unmet."""
+        self._gate(30)
         thread = self._make_thread_at_level(29)
         result = self.spend(self.sheet, thread, 2000)
 
@@ -691,8 +691,8 @@ class CrossingThresholdImbuingTests(TestCase):
         assert len(result.blocked_requirement_messages) == 1
         assert "Need" in result.blocked_requirement_messages[0]
 
-    def test_stored_three_is_not_a_crossing(self) -> None:
-        """Stored 3 shows 0.3: a shown-3 gate never stops a thread at stored 2→3."""
+    def test_level_three_is_not_a_crossing(self) -> None:
+        """Level 3 is not a crossing: a threshold row there never stops a 2→3 imbue."""
         self._gate(3)
         thread = self._make_thread_at_level(2)
         result = self.spend(self.sheet, thread, 1)
@@ -701,10 +701,10 @@ class CrossingThresholdImbuingTests(TestCase):
         assert result.new_level == 3
 
     def test_advances_through_crossing_when_requirement_met(self) -> None:
-        """Imbuing stored 29→30 advances when the item requirement is satisfied."""
+        """Imbuing 29→30 advances when the item requirement is satisfied."""
         from world.items.factories import ItemInstanceFactory
 
-        self._gate(3)
+        self._gate(30)
         ItemInstanceFactory(template=self.template, holder_character_sheet=self.sheet)
         thread = self._make_thread_at_level(29)
         result = self.spend(self.sheet, thread, 2000)
@@ -714,7 +714,7 @@ class CrossingThresholdImbuingTests(TestCase):
         assert result.levels_gained == 1
 
     def test_fail_open_when_no_threshold_authored(self) -> None:
-        """No ThreadCrossingThreshold row for (TRAIT, 3) → advance freely."""
+        """No ThreadCrossingThreshold row for (TRAIT, 30) → advance freely."""
         thread = self._make_thread_at_level(29)
         result = self.spend(self.sheet, thread, 2000)
 
@@ -726,7 +726,7 @@ class CrossingThresholdImbuingTests(TestCase):
         """Threshold exists but no requirements → fail-open (advance)."""
         from world.magic.models import ThreadCrossingThreshold
 
-        ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=3)
+        ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=30)
         thread = self._make_thread_at_level(29)
         result = self.spend(self.sheet, thread, 2000)
 
@@ -736,10 +736,10 @@ class CrossingThresholdImbuingTests(TestCase):
     def test_partial_advance_below_crossing(self) -> None:
         """Resonance is spent and levels below the crossing are gained.
 
-        From stored 27: 27→28 costs 1800 dp, 28→29 costs 1900, then the shown-3
-        crossing at stored 30 blocks. Resonance is still deducted.
+        From 27: 27→28 costs 1800 dp, 28→29 costs 1900, then the crossing at 30
+        blocks. Resonance is still deducted.
         """
-        self._gate(3)
+        self._gate(30)
         thread = self._make_thread_at_level(27)
         result = self.spend(self.sheet, thread, 6000)
 
@@ -753,7 +753,7 @@ class CrossingThresholdImbuingTests(TestCase):
         from world.items.factories import ItemInstanceFactory
         from world.items.models import ItemInstance
 
-        self._gate(3)
+        self._gate(30)
         ItemInstanceFactory(template=self.template, holder_character_sheet=self.sheet)
         count_before = ItemInstance.objects.filter(
             holder_character_sheet=self.sheet, template=self.template
@@ -767,9 +767,9 @@ class CrossingThresholdImbuingTests(TestCase):
         ).count()
         assert count_before == count_after
 
-    def test_blocks_at_level_6_crossing(self) -> None:
-        """The gate fires at the shown-6 crossing (stored 60) too."""
-        self._gate(6)
+    def test_blocks_at_level_60_crossing(self) -> None:
+        """The gate fires at the level-60 crossing too."""
+        self._gate(60)
         thread = self._make_thread_at_level(59)
         result = self.spend(self.sheet, thread, 5000)
 
@@ -777,12 +777,12 @@ class CrossingThresholdImbuingTests(TestCase):
         assert result.new_level == 59
 
     def test_per_kind_scoping(self) -> None:
-        """A TRAIT threshold at level 3 does not block a GIFT thread."""
+        """A TRAIT threshold at level 30 does not block a GIFT thread."""
         from world.magic.factories import GiftFactory
         from world.magic.specialization.services import provision_latent_gift_thread
 
-        self._gate(3)
-        # A GIFT thread at stored 29 should NOT be gated by a TRAIT threshold
+        self._gate(30)
+        # A GIFT thread at 29 should NOT be gated by a TRAIT threshold
         gift = GiftFactory()
         provision_latent_gift_thread(self.sheet, gift, resonance=self.resonance)
         thread = next(

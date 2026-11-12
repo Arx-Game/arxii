@@ -279,7 +279,7 @@ class SubRolePerkAddsTests(TestCase):
         self.covenant = CovenantFactory()
         self.parent_role = CovenantRoleFactory(covenant_type=self.covenant.covenant_type)
         self.sub_role = SubroleCovenantRoleFactory(
-            parent_role=self.parent_role, resonance=self.resonance, unlock_thread_level=3
+            parent_role=self.parent_role, resonance=self.resonance, unlock_thread_level=30
         )
         self.subject_sheet = CharacterSheetFactory()
         CharacterCovenantRoleFactory(
@@ -297,7 +297,7 @@ class SubRolePerkAddsTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=self.parent_role,
             target_trait=None,
-            level=30,  # stored; shows 3 (#4585)
+            level=30,
         )
         character.threads.invalidate()
 
@@ -353,7 +353,7 @@ class AllySubRolePerkAddsTests(TestCase):
         self.covenant = CovenantFactory()
         self.parent_role = CovenantRoleFactory(covenant_type=self.covenant.covenant_type)
         self.sub_role = SubroleCovenantRoleFactory(
-            parent_role=self.parent_role, resonance=self.resonance, unlock_thread_level=3
+            parent_role=self.parent_role, resonance=self.resonance, unlock_thread_level=30
         )
         # Subject holds a DISTINCT role -- just enough to establish the
         # shared-covenant scope _ally_candidates searches within, without
@@ -391,7 +391,7 @@ class AllySubRolePerkAddsTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=self.parent_role,
             target_trait=None,
-            level=30,  # stored; shows 3 (#4585)
+            level=30,
         )
 
     def _fire(self) -> list[FiredPerk]:
@@ -723,7 +723,7 @@ class AllyMateCountQueryBudgetTests(TestCase):
         self.covenant = CovenantFactory()
         self.parent_role = CovenantRoleFactory(covenant_type=self.covenant.covenant_type)
         SubroleCovenantRoleFactory(
-            parent_role=self.parent_role, resonance=self.resonance, unlock_thread_level=3
+            parent_role=self.parent_role, resonance=self.resonance, unlock_thread_level=30
         )
         self.subject_role = CovenantRoleFactory(covenant_type=self.covenant.covenant_type)
         self.subject_sheet = CharacterSheetFactory()
@@ -764,7 +764,7 @@ class AllyMateCountQueryBudgetTests(TestCase):
                 target_kind=TargetKind.COVENANT_ROLE,
                 target_covenant_role=self.parent_role,
                 target_trait=None,
-                level=30,  # stored; shows 3 (#4585)
+                level=30,
             )
 
     def _count_queries(self) -> int:

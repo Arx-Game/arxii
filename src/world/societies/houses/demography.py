@@ -33,6 +33,7 @@ from world.societies.houses.models import (
     DominionConfig,
     TerrainCalibration,
 )
+from world.societies.houses.regional_events import active_capacity_multipliers
 
 IC_DAYS_PER_MONTH = 30
 _SECONDS_PER_IC_MONTH = IC_DAYS_PER_MONTH * 24 * 60 * 60
@@ -69,6 +70,9 @@ def populations_now(domains: Iterable[Domain], *, at: datetime | None = None) ->
     moment = at if at is not None else timezone.now()
     clock = GameClock.get_active()
     rate = DominionConfig.load().population_rate_pct_per_month / 100
+    # A regional event over the land cuts the capacity the people fall toward; the
+    # row is the only state, so every read sees the same cut (#5069 slice 4).
+    multipliers = active_capacity_multipliers(now=moment)
     figures: dict[int, int] = {}
     for domain in domains:
         months = 0.0
@@ -79,7 +83,7 @@ def populations_now(domains: Iterable[Domain], *, at: datetime | None = None) ->
         if months <= 0:
             figures[domain.pk] = domain.population
             continue
-        capacity = domain.population_capacity
+        capacity = domain.population_capacity * multipliers.get(domain.area_id, 1.0)
         gap = capacity - domain.population
         figures[domain.pk] = max(0, round(capacity - gap * math.exp(-rate * months)))
     return figures

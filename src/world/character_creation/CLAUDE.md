@@ -17,8 +17,8 @@ Character creation is a multi-stage process that guides players through creating
    step section and ADR-0273). Plus kin-slot claim/mint/defer and invented parents
    (#2815: names/genders in draft_data, `second_parent_species` for a
    cross-species parent, unlocks that line's colors in Appearance; finalize
-   creates the nodes and pins back-inference). Then the kin rows (a twin, spouses,
-   children: `draft_data.kin_rows`, seated by `_bind_kin_rows`) and the life as grids by
+   creates the nodes and pins back-inference). No spouse, child or twin is built here
+   (ADR-5102-A: a player's own family comes after creation). Then the life as grids by
    stage (#4124 beats, #4395 grids: a beginning strikes stages out, an age-scaled beat
    allows career points, one at 19 and one more every five years to 59, spent by rank
    (#4829: pips on the card, the age cannot drop under the points held), a general

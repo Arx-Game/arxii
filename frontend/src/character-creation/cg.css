@@ -829,7 +829,7 @@
 }
 .interview .stat-row {
   display: grid;
-  grid-template-columns: 1fr auto 2.25rem auto;
+  grid-template-columns: 1fr 2.25rem auto;
   align-items: center;
   gap: 0.75rem;
   padding: 0.45rem 0;
@@ -952,25 +952,6 @@
   font-family: 'EB Garamond', Georgia, serif;
   font-size: 1rem;
 }
-.interview .stat-pips {
-  display: inline-flex;
-  gap: 3px;
-}
-.interview .stat-pips i {
-  display: block;
-  width: 7px;
-  height: 7px;
-  border: 1px solid var(--cg-hairline-strong);
-}
-.interview .stat-pips i.on {
-  background: var(--cg-text-soft);
-  border-color: var(--cg-text-soft);
-}
-/* A value the Tradition granted rather than the player bought (#4457). */
-.interview .stat-pips.granted i.on {
-  background: var(--cg-orn);
-  border-color: var(--cg-orn);
-}
 .interview .stat-val {
   font-variant-numeric: tabular-nums;
   text-align: center;
@@ -1025,9 +1006,6 @@
   .interview .goal-row {
     grid-template-columns: auto 1fr;
   }
-  .interview .stat-pips {
-    display: none;
-  }
   .interview .instruments {
     padding-left: 1rem;
     padding-right: 1rem;
@@ -1078,6 +1056,16 @@
   padding: 0.7rem 0.9rem;
   min-height: 7rem;
   resize: vertical;
+}
+/* An empty name field wears the focus box before it is clicked, so it reads as a place
+   to write; it drops back to the hairline once a name is saved. */
+.interview .field input[type='text'].awaiting {
+  outline: 2px solid var(--cg-accent);
+  outline-offset: 3px;
+}
+.interview .field input[aria-invalid='true'] + .hint {
+  color: var(--cg-accent);
+  font-style: normal;
 }
 .interview .field .hint {
   display: block;
@@ -1702,56 +1690,6 @@
   font-style: italic;
   color: var(--cg-text-soft);
 }
-/* The people seated beside the parents (#4395). */
-.interview .kin-rows {
-  list-style: none;
-  margin: 0.6rem 0 0;
-  padding: 0;
-}
-.interview .kin-row {
-  display: grid;
-  grid-template-columns: 7rem minmax(0, 1fr) auto;
-  gap: 0.6rem 1rem;
-  align-items: start;
-  padding: 0.7rem 0;
-  border-top: 1px solid var(--cg-hairline);
-}
-.interview .kin-row .kin-kind {
-  font-family: 'Cinzel', serif;
-  font-weight: 600;
-  font-size: 0.75rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--cg-accent);
-  padding-top: 0.5rem;
-}
-.interview .kin-row .kin-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-.interview .kin-add {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.6rem;
-}
-.interview .kin-add button {
-  font-family: 'Cinzel', serif;
-  font-weight: 600;
-  font-size: 0.75rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  background: transparent;
-  color: var(--cg-accent);
-  border: 1px solid var(--cg-hairline-strong);
-  padding: 0.45rem 0.9rem;
-  cursor: pointer;
-}
-.interview .kin-add button:hover,
-.interview .kin-add button:focus-visible {
-  border-color: var(--cg-accent);
-}
 .interview .stance b {
   display: block;
   font-family: 'Cinzel', serif;
@@ -2220,8 +2158,7 @@
 /* Distinctive physical features (#3739). A feature block is a short list of
    ordinary `.stance` rows: the one-point unlock, then the three presence axes
    it opens. `.opened` indents the axes under the unlock that paid for them, so
-   the dependency reads at a glance; `.tiers` is the bought-tier gauge, drawn
-   the way a stat row's pips are. */
+   the dependency reads at a glance; `.tiers` is the bought-tier gauge. */
 .interview .feature-buy {
   margin: 0.35rem 0 1.1rem;
 }

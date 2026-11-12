@@ -215,7 +215,7 @@ class AmountInput(models.TextChoices):
 
     NONE = "", "No input"
     CHARACTER_LEVEL = "character_level", "Character level"
-    THREAD_LEVEL = "thread_level", "Thread level"
+    THREAD_LEVEL = "thread_level", "Thread level (per 10 levels)"
     CHECK_RANK = "check_rank", "Check rank"
     TARGET_SOAK = "target_soak", "Target's soak"
 

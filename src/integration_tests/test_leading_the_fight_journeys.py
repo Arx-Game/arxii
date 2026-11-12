@@ -271,7 +271,7 @@ class AMarkPaysOff(JourneyCase):
 
     Mira and Tomas share a covenant; Ilse is in none. Tomas's engaged role carries a perk of
     +10 tenths per thread level on his own checks when the target is marked by an ally, and his
-    thread is shown at level 3. The perk scales by the stored thread level (stored 30, #4585), so
+    thread is at level 30. The perk scales by the thread level, so
     the authored bonus is 30 x 10 / 10 = +30 points. The captain has 500 health, so nobody ends
     the fight.
     """
@@ -316,7 +316,9 @@ class AMarkPaysOff(JourneyCase):
 
         covenant = CovenantFactory(covenant_type=CovenantType.DURANCE)
         tomas_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
-        engage_vow_with_thread(self.tomas.sheet_data, tomas_role, covenant=covenant, thread_level=3)
+        engage_vow_with_thread(
+            self.tomas.sheet_data, tomas_role, covenant=covenant, thread_level=30
+        )
         perk = VowSituationalPerkFactory(
             covenant_role=tomas_role,
             beneficiary=PerkBeneficiary.SELF,

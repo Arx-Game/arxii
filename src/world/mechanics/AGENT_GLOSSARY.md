@@ -21,7 +21,7 @@ A modifier row's amount worked out at read time from an input the row picks (`Am
 _Avoid_: dynamic modifier, formula, scaling expression
 
 **Effect kind** (#4783):
-What sort of number a maneuver effect is (`EffectKind`: to hit, damage, reach, escape bonus, partial protection, morale, surge intensity; and, for technique scopes (#4822), condition severity and condition duration in rounds). A broad target names a kind, such as "partial protection, any maneuver". Each kind fixes the unit of every modifier that targets it, so a modifier on a kind adds the same sort of number wherever it applies. Derived from the key by the `MANEUVER_EFFECT_KIND` map, not stored on the row. A modifier on a maneuver effect is a flat amount; a vow adds its shown thread level times its `bonus_per_level`.
+What sort of number a maneuver effect is (`EffectKind`: to hit, damage, reach, escape bonus, partial protection, morale, surge intensity; and, for technique scopes (#4822), condition severity and condition duration in rounds). A broad target names a kind, such as "partial protection, any maneuver". Each kind fixes the unit of every modifier that targets it, so a modifier on a kind adds the same sort of number wherever it applies. Derived from the key by the `MANEUVER_EFFECT_KIND` map, not stored on the row. A modifier on a maneuver effect is a flat amount; a vow adds its `bonus_per_level` once per 10 thread levels (`thread_rung`).
 _Avoid_: effect type, effect category (a `ModifierCategory` is the registry grouping, and "maneuver_effect" is one of them)
 
 **Technique scope** (#4822):

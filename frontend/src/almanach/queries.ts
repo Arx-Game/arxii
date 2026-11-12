@@ -28,6 +28,8 @@ import {
   fetchTitleDocument,
   fetchUnionKinds,
   fetchRealmTitles,
+  fetchRegionalEventKinds,
+  fetchRegionalEvents,
   fetchVacantTitles,
 } from './api';
 import type { AlmanachActionKey, LadderMode } from './types';
@@ -58,6 +60,9 @@ export const almanachKeys = {
   vacantTitles: (realmId: number) => [...almanachKeys.all, 'vacant-titles', realmId] as const,
   realmTitles: (realmId: number) => [...almanachKeys.all, 'realm-titles', realmId] as const,
   holdingKinds: () => [...almanachKeys.all, 'holding-kinds'] as const,
+  // #5080
+  regionalEvents: (realmId: number) => [...almanachKeys.all, 'regional-events', realmId] as const,
+  regionalEventKinds: () => [...almanachKeys.all, 'regional-event-kinds'] as const,
 };
 
 export function useRealms() {
@@ -278,6 +283,24 @@ export function useHoldingKinds() {
   return useQuery({
     queryKey: almanachKeys.holdingKinds(),
     queryFn: fetchHoldingKinds,
+    staleTime: 300_000,
+  });
+}
+
+/** The open regional events over a realm (#5080), for the Atlas. */
+export function useRegionalEvents(realmId: number | null | undefined) {
+  return useQuery({
+    queryKey: almanachKeys.regionalEvents(realmId ?? 0),
+    queryFn: () => fetchRegionalEvents(realmId!),
+    enabled: realmId != null,
+    staleTime: 15_000,
+  });
+}
+
+export function useRegionalEventKinds() {
+  return useQuery({
+    queryKey: almanachKeys.regionalEventKinds(),
+    queryFn: fetchRegionalEventKinds,
     staleTime: 300_000,
   });
 }

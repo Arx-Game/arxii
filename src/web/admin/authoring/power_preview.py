@@ -80,7 +80,7 @@ def preview_de(
     effects: Sequence[VowAddedEffect] = (),
     level: int = 0,
 ) -> int:
-    """``technique``'s baseline DE with ``effects`` at shown thread level ``level``, rounded."""
+    """``technique``'s baseline DE with ``effects`` at thread level ``level``, rounded."""
     report = technique_power_eval.evaluate_technique(
         technique,
         frame.context,
@@ -208,7 +208,7 @@ def simulator_url(technique: Technique, role: CovenantRole) -> str:
 
 def _preview_level(picks: Sequence[VowFocusPick]) -> tuple[int, str]:
     if not picks:
-        return 1, "Level 1: the vow has no focus picks."
+        return 10, "Level 10: the vow has no focus picks."
     level = max(pick.pick_level for pick in picks)
     return level, f"Level {level}: the vow's highest pick level."
 

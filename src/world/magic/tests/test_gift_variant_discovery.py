@@ -41,7 +41,7 @@ class GiftVariantDiscoveryTests(TestCase):
         cls.variant = TechniqueVariant.objects.create(
             parent_technique=cls.technique,
             resonance=cls.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Celestial Form",
             discovery_achievement=cls.achievement,
             codex_entry=cls.codex_entry,

@@ -12,6 +12,8 @@ from world.societies.houses.almanach_views import (
     AlmanachHouseViewSet,
     AlmanachPersonViewSet,
     AlmanachRealmViewSet,
+    AlmanachRegionalEventKindViewSet,
+    AlmanachRegionalEventViewSet,
     AlmanachSearchView,
     AlmanachTemplateViewSet,
     AlmanachTitleViewSet,
@@ -31,6 +33,15 @@ router.register(r"kinds", AlmanachFamilyKindViewSet, basename="almanach-kind")
 router.register(r"templates", AlmanachTemplateViewSet, basename="almanach-template")
 router.register(r"union-kinds", AlmanachUnionKindViewSet, basename="almanach-union-kind")
 router.register(r"holding-kinds", AlmanachHoldingKindViewSet, basename="almanach-holding-kind")
+# #5080: regional events, the rows the Atlas shades, and the kinds staff open.
+router.register(
+    r"regional-events", AlmanachRegionalEventViewSet, basename="almanach-regional-event"
+)
+router.register(
+    r"regional-event-kinds",
+    AlmanachRegionalEventKindViewSet,
+    basename="almanach-regional-event-kind",
+)
 
 app_name = "almanach"
 urlpatterns = [

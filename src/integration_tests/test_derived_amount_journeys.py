@@ -10,8 +10,8 @@ an input, a "per N" step and a cap; its own amount is the amount per step.
   Stat 100 at level 11 is 155, rank 6: +3. Stat 100 at level 30 is 250, rank 8: 4 steps,
   held at +3. Stat 10 at level 1 is 15, rank 1: no whole step, +0.
 * Thread level. Hobb charges a bandit (5 damage with no modifier) and holds "+1 Charge
-  damage per level of his Wolf thread". At shown level 3 the charge does 8; with no Wolf
-  thread, 5.
+  damage per level of his Wolf thread", which counts each whole 10 thread levels. At
+  thread level 30 the charge does 8; with no Wolf thread, 5.
 * Character level. A condition on Hobb carries "+1 Charge to hit per 2 character levels".
   At level 11 the charge adds 10 + 5 = 15 to hit, and a stage multiplier of 2 changes
   nothing: the input replaces the condition's own scaling.
@@ -158,9 +158,9 @@ class AThreadAndALevelDriveTheCharge(_WolfFangField):
         )
         grant_distinction(self.sheet, distinction, origin=DistinctionOrigin.GM_AWARD)
 
-    def test_a_wolf_thread_at_shown_level_three_adds_three_damage(self) -> None:
+    def test_a_wolf_thread_at_level_thirty_adds_three_damage(self) -> None:
         self.grant_wolf_damage()
-        self.thread_on(self.wolf, shown_level=3)
+        self.thread_on(self.wolf, level=30)
 
         to_hit, damage = self.charge_and_resolve()
 
@@ -169,7 +169,7 @@ class AThreadAndALevelDriveTheCharge(_WolfFangField):
 
     def test_with_no_wolf_thread_it_adds_nothing(self) -> None:
         self.grant_wolf_damage()
-        self.thread_on(self.silk, shown_level=3)
+        self.thread_on(self.silk, level=30)
 
         _to_hit, damage = self.charge_and_resolve()
 
@@ -178,7 +178,7 @@ class AThreadAndALevelDriveTheCharge(_WolfFangField):
     def test_after_a_facet_merge_the_row_reads_the_winners_thread(self) -> None:
         # The row names "Wolves"; staff merge Wolves into Wolf, where Hobb's thread is.
         # Before the merge Wolves has no thread of his: 5. After it, the row names Wolf
-        # and reads his level 3 thread: 8.
+        # and reads his level 30 thread: 8.
         wolves = FacetFactory(name="Wolves")
         distinction = DistinctionFactory(name="Packsworn", slug="packsworn")
         effect = DistinctionEffectFactory(
@@ -189,7 +189,7 @@ class AThreadAndALevelDriveTheCharge(_WolfFangField):
             amount_thread_facet=wolves,
         )
         grant_distinction(self.sheet, distinction, origin=DistinctionOrigin.GM_AWARD)
-        self.thread_on(self.wolf, shown_level=3)
+        self.thread_on(self.wolf, level=30)
         # Charge's own damage term reads this (``kind_wide=False``); nothing yet.
         before = effect_modifier_total(self.sheet, ManeuverEffectKey.CHARGE_DAMAGE, kind_wide=False)
         self.assertEqual(before, 0)
@@ -203,7 +203,7 @@ class AThreadAndALevelDriveTheCharge(_WolfFangField):
 
     def test_a_retired_wolf_thread_adds_nothing(self) -> None:
         self.grant_wolf_damage()
-        self.thread_on(self.wolf, shown_level=3)
+        self.thread_on(self.wolf, level=30)
         thread = Thread.objects.get(owner=self.sheet)
         thread.retired_at = timezone.now()
         thread.save(update_fields=["retired_at"])

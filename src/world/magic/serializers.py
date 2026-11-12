@@ -2148,7 +2148,7 @@ class SoulTetherDetailSerializer(serializers.Serializer):
         return thread.hollow_current if thread is not None else 0
 
     def get_hollow_max(self, obj: object) -> int:
-        """Return the Sinner's Hollow maximum (``_compute_hollow_max``, shown level × mult)."""
+        """Return the Sinner's Hollow maximum (``_compute_hollow_max``, thread rung × mult)."""
         from world.magic.constants import TargetKind  # noqa: PLC0415
         from world.magic.models import Thread  # noqa: PLC0415
 
@@ -3133,8 +3133,8 @@ class _WeavableTraitSerializer(serializers.Serializer):
     trait_id = serializers.IntegerField()
     name = serializers.CharField()
     trait_type = serializers.CharField()
-    # Stats ÷10, skills true value (#2894) — always whole numbers now.
-    display_value = serializers.IntegerField()
+    # The stored value, the one every trait shows (#5091).
+    value = serializers.IntegerField()
 
 
 class _WeavableTechniqueSerializer(serializers.Serializer):

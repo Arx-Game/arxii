@@ -377,6 +377,94 @@ _CAPACITY_IS_A_NUMBER = "Capacity is a whole number of people, or blank."
 
 
 @dataclass
+class AlmanachOpenRegionalEventAction(_AlmanachAction):
+    """Open a regional event over an area (#5080): a blight, a war, a famine. The land
+    beneath is rebased and reads the cut while it lasts; every awake house inside gets
+    a crisis of the kind's type. Kwargs: ``kind_id``, ``area_id``, optional
+    ``severity_pct`` (1-100, default 100), optional ``note`` (staff-only)."""
+
+    key: str = "almanach_open_regional_event"
+    name: str = "Open Regional Event"
+    icon: str = "flag"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.areas.models import Area  # noqa: PLC0415
+        from world.societies.houses.models import RegionalEventKind  # noqa: PLC0415
+        from world.societies.houses.regional_events import open_regional_event  # noqa: PLC0415
+
+        kind = RegionalEventKind.objects.filter(pk=kwargs.get("kind_id")).first()
+        if kind is None:
+            return ActionResult(success=False, message=_NO_SUCH_EVENT_KIND)
+        area = Area.objects.filter(pk=kwargs.get("area_id")).first()
+        if area is None:
+            return ActionResult(success=False, message=_NO_SUCH_LAND)
+        raw = kwargs.get("severity_pct", 100)
+        try:
+            severity = int(raw if raw not in (None, "") else 100)
+        except (TypeError, ValueError):
+            return ActionResult(success=False, message=_SEVERITY_IS_A_PERCENT)
+        if not 1 <= severity <= _FULL_SEVERITY:
+            return ActionResult(success=False, message=_SEVERITY_IS_A_PERCENT)
+        event = open_regional_event(
+            kind=kind,
+            area=area,
+            severity_pct=severity,
+            note=str(kwargs.get("note") or ""),
+            opened_by=actor.db_account,
+        )
+        return ActionResult(
+            success=True,
+            message=f"{kind.name} opens over {area.name}.",
+            data={"event_id": event.pk, "area_id": area.pk},
+        )
+
+
+@dataclass
+class AlmanachCloseRegionalEventAction(_AlmanachAction):
+    """Close a regional event (#5080): the land beneath is rebased to the figure the
+    cut left it at and climbs back by formula. Kwargs: ``event_id``."""
+
+    key: str = "almanach_close_regional_event"
+    name: str = "Close Regional Event"
+    icon: str = "flag"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.societies.houses.models import RegionalEvent  # noqa: PLC0415
+        from world.societies.houses.regional_events import close_regional_event  # noqa: PLC0415
+
+        event = (
+            RegionalEvent.objects.filter(pk=kwargs.get("event_id"))
+            .select_related("kind", "area")
+            .first()
+        )
+        if event is None or not event.is_active:
+            return ActionResult(success=False, message=_NO_SUCH_OPEN_EVENT)
+        close_regional_event(event)
+        return ActionResult(
+            success=True,
+            message=f"{event.kind.name} over {event.area.name} ends.",
+            data={"event_id": event.pk, "area_id": event.area_id},
+        )
+
+
+_FULL_SEVERITY = 100
+_NO_SUCH_EVENT_KIND = "No such kind of event."
+_NO_SUCH_LAND = "No such land."
+_SEVERITY_IS_A_PERCENT = "Severity is a whole number from 1 to 100."
+_NO_SUCH_OPEN_EVENT = "No such open event."
+
+
+@dataclass
 class AlmanachRemoveHoldingAction(_AlmanachAction):
     """Remove a holding and its income stream. Kwargs: ``holding_id``."""
 

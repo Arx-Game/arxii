@@ -34,7 +34,6 @@ function deriveThreadState(threadId: number, summary: ThreadHubSummary): ThreadS
 export function ThreadCard({ thread, summary, onClick }: ThreadCardProps) {
   const state = deriveThreadState(thread.id, summary);
   const displayName = thread.name.trim() || '(unnamed)';
-  const displayLevel = thread.level / 10;
 
   return (
     <button
@@ -52,7 +51,7 @@ export function ThreadCard({ thread, summary, onClick }: ThreadCardProps) {
             </span>
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            <span>Level {displayLevel}</span>
+            <span>Level {thread.level}</span>
             <span>{thread.resonance_name}</span>
           </div>
         </div>

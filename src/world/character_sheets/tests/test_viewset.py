@@ -678,10 +678,10 @@ class TestStatsSection(TestCase):
         return response.data["stats"]
 
     def test_stats_contains_expected_values(self) -> None:
-        """Stats section maps stat names to their display values (stored ×10, ADR-0193)."""
+        """Stats section maps stat names to their stored values (ADR-5091)."""
         stats = self._get_stats()
-        assert stats["strength"] == 3
-        assert stats["agility"] == 4
+        assert stats["strength"] == 30
+        assert stats["agility"] == 40
 
     def test_stats_only_contains_stat_traits(self) -> None:
         """Stats section only contains traits with trait_type='stat', not skills."""
@@ -2913,7 +2913,7 @@ class TestCharacterSheetQueryCount(TestCase):
         # +1 (#4681): the aura's affinity shares (one prefetch, select_related onto the
         # affinity) feed both the magic and the theming section.
         # +0 (#4820): the skills section prices skill bonuses through
-        # skill_modifiers_for_sheet, which asks ModifierTarget.get_for_trait for each
+        # trait_modifiers_for_sheet, which asks ModifierTarget.get_for_trait for each
         # skill; that is a class-level cache built once per process (every stat read
         # shares it) and cleared by any target save, so it is warmed here rather than
         # counted. With no skill target in this fixture the pass issues no query of

@@ -3,12 +3,12 @@
 Requires a PendingRitualEffect for 'Rite of Imbuing' (created by
 PerformRitualAction when the player performs that CEREMONY-kind ritual).
 On success, calls spend_resonance_for_imbuing and consumes the pending effect.
-When the thread is a vow's and its shown level rose into a new focus pick level,
-the result says so ("Vow level 2: 4 pts of new picks.", #4929) and carries the
+When the thread is a vow's and its level rose into a new focus pick level,
+the result says so ("Vow level 20: 4 pts of new picks.", #4929) and carries the
 opened levels in ``data["opened_pick_levels"]`` (and ``data["new_picks"]``, level and
 points, which the web draws with the points in bold) for the web's "Choose picks".
-A climb to a new shown level says so ("Quicksilver is now level 2."): threads are
-stored x10, so the stored ``levels_gained`` is never the number a player reads.
+A climb says where the thread now stands ("Quicksilver is now level 23."): the level
+players read is the stored one (#5091).
 """
 
 from __future__ import annotations
@@ -61,7 +61,6 @@ class ImbueAction(Action):
         )
         from world.magic.models import PendingRitualEffect  # noqa: PLC0415
         from world.magic.services.resonance import spend_resonance_for_imbuing  # noqa: PLC0415
-        from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
 
         sheet = actor.sheet_data
         thread = kwargs["thread"]
@@ -89,9 +88,8 @@ class ImbueAction(Action):
             "opened_pick_levels": [row.level for row in opened],
             "new_picks": opened,
         }
-        # Threads are stored x10 (#4585); the player reads the shown level.
-        shown = shown_thread_level(result.new_level)
-        rose = shown > shown_thread_level(result.new_level - result.levels_gained)
+        shown = result.new_level
+        rose = result.levels_gained > 0
         if result.blocked_by == "CROSSING_REQUIREMENT" and result.blocked_requirement_messages:  # noqa: STRING_LITERAL
             req_list = "; ".join(result.blocked_requirement_messages)
             message = (

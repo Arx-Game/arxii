@@ -23,7 +23,7 @@ from world.progression.services.stat_points import (
     stat_points_earned,
     sync_level_stat_point_spends,
 )
-from world.traits.constants import STAT_DISPLAY_DIVISOR
+from world.traits.constants import STAT_POINT_VALUE
 from world.traits.factories import TraitFactory
 from world.traits.models import CharacterTraitValue, TraitCategory, TraitType
 
@@ -46,8 +46,8 @@ class StatPointServiceTests(TestCase):
             category=TraitCategory.PHYSICAL,
         )
         cls.skill = TraitFactory(name="skill_stat_point_test", trait_type=TraitType.SKILL)
-        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=5)
-        MaturationStatCap.objects.create(path_stage=PathStage.POTENTIAL, stat_cap=6)
+        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=50)
+        MaturationStatCap.objects.create(path_stage=PathStage.POTENTIAL, stat_cap=60)
 
     def _sheet(self, level=3):
         sheet = CharacterSheetFactory()
@@ -70,7 +70,7 @@ class StatPointServiceTests(TestCase):
         sheet = self._sheet(level=3)
         spend_level_stat_point(sheet, self.stat)
         value = CharacterTraitValue.objects.get(character=sheet, trait=self.stat).value
-        self.assertEqual(value, STAT_DISPLAY_DIVISOR)
+        self.assertEqual(value, STAT_POINT_VALUE)
         spend = LevelStatPointSpend.objects.get()
         self.assertEqual(spend.level_granted, 2)
 
@@ -82,7 +82,7 @@ class StatPointServiceTests(TestCase):
     def test_cap_binds_in_display_dots(self):
         sheet = self._sheet(level=2)  # PROSPECT: cap 5
         CharacterTraitValue.objects.create(
-            character=sheet, trait=self.stat, value=5 * STAT_DISPLAY_DIVISOR
+            character=sheet, trait=self.stat, value=5 * STAT_POINT_VALUE
         )
         with self.assertRaises(StatPointCapReachedError):
             spend_level_stat_point(sheet, self.stat)
@@ -92,14 +92,14 @@ class StatPointServiceTests(TestCase):
         spend_level_stat_point(sheet, self.stat)  # level 2's point
         spend_level_stat_point(sheet, self.stat)  # level 3's point
         value = CharacterTraitValue.objects.get(character=sheet, trait=self.stat).value
-        self.assertEqual(value, 2 * STAT_DISPLAY_DIVISOR)
+        self.assertEqual(value, 2 * STAT_POINT_VALUE)
 
         set_primary_class_level(sheet.character, self.character_class, 2)
         flipped = sync_level_stat_point_spends(sheet)
 
         self.assertEqual(flipped, 1)
         value = CharacterTraitValue.objects.get(character=sheet, trait=self.stat).value
-        self.assertEqual(value, STAT_DISPLAY_DIVISOR)
+        self.assertEqual(value, STAT_POINT_VALUE)
         self.assertEqual(available_stat_points(sheet), 0)
 
         # Re-leveling reactivates the dormant spend rather than granting anew.
@@ -107,4 +107,4 @@ class StatPointServiceTests(TestCase):
         flipped = sync_level_stat_point_spends(sheet)
         self.assertEqual(flipped, 1)
         value = CharacterTraitValue.objects.get(character=sheet, trait=self.stat).value
-        self.assertEqual(value, 2 * STAT_DISPLAY_DIVISOR)
+        self.assertEqual(value, 2 * STAT_POINT_VALUE)

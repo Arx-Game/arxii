@@ -27,18 +27,18 @@ from world.covenants.models import VowFocusPickConfig
 class BudgetRowsTests(TestCase):
     def setUp(self) -> None:
         self.role = CovenantRoleFactory(name="Fulmination")
-        VowFocusPickFactory(covenant_role=self.role, pick_level=1, name="Arcing Charge", value=4)
+        VowFocusPickFactory(covenant_role=self.role, pick_level=10, name="Arcing Charge", value=4)
         under = VowFocusPickFactory(
-            covenant_role=self.role, pick_level=2, name="Under Open Sky", value=4
+            covenant_role=self.role, pick_level=20, name="Under Open Sky", value=4
         )
         VowFocusPickLimitFactory(pick=under, kind=FocusPickLimitKind.SETTING, frequency_tenths=6)
-        VowFocusPickFactory(covenant_role=self.role, pick_level=3, name="Kneel", value=4)
-        VowFocusPickFactory(covenant_role=self.role, pick_level=3, name="Static Halo", value=2)
+        VowFocusPickFactory(covenant_role=self.role, pick_level=30, name="Kneel", value=4)
+        VowFocusPickFactory(covenant_role=self.role, pick_level=30, name="Static Halo", value=2)
 
     def test_offered_prices_per_level_against_the_default_budget(self) -> None:
         rows = live.budget_rows(self.role)
         self.assertEqual(
-            [(r.level, r.offered, r.budget) for r in rows], [(1, 4, 4), (2, 2, 4), (3, 6, 4)]
+            [(r.level, r.offered, r.budget) for r in rows], [(10, 4, 4), (20, 2, 4), (30, 6, 4)]
         )
 
     def test_reading_the_budget_never_creates_the_config(self) -> None:
@@ -54,13 +54,13 @@ class _HolderCase(TestCase):
     def setUp(self) -> None:
         self.role = CovenantRoleFactory(name="Fulmination")
         self.kneel = VowFocusPickFactory(
-            covenant_role=self.role, pick_level=3, name="Kneel", value=4
+            covenant_role=self.role, pick_level=30, name="Kneel", value=4
         )
         VowFocusPickLimitFactory(
             pick=self.kneel, kind=FocusPickLimitKind.TARGET, frequency_tenths=5
         )  # price 2
         self.halo = VowFocusPickFactory(
-            covenant_role=self.role, pick_level=3, name="Static Halo", value=2
+            covenant_role=self.role, pick_level=30, name="Static Halo", value=2
         )
         self.ysolde = CharacterCovenantRoleFactory(
             covenant_role=self.role, character_sheet__character__db_key="Ysolde"
@@ -83,7 +83,7 @@ class HolderImpactTests(_HolderCase):
     def test_a_raise_within_budget_and_one_going_over(self) -> None:
         impacts = self._by_name(live.holder_impact(self.role, {self.kneel.pk: 3}))
         ysolde, corvin = impacts["Ysolde"], impacts["Corvin"]
-        self.assertEqual((ysolde.level, ysolde.old_total, ysolde.new_total), (3, 2, 3))
+        self.assertEqual((ysolde.level, ysolde.old_total, ysolde.new_total), (30, 2, 3))
         self.assertFalse(ysolde.over)
         self.assertEqual((corvin.old_total, corvin.new_total, corvin.budget), (4, 5, 4))
         self.assertTrue(corvin.over)
@@ -105,9 +105,9 @@ class PickChangesTests(_HolderCase):
         (change,) = live.pick_changes(self.role, {self.kneel.pk: 3, self.halo.pk: 2})
         self.assertEqual(change.headline, "Kneel's price goes from 2 to 3. Two characters hold it.")
         lines = {line.impact.holder_name: line.text for line in change.holders}
-        self.assertEqual(lines["Ysolde"], "stays within level 3's budget (3 of 4).")
+        self.assertEqual(lines["Ysolde"], "stays within level 30's budget (3 of 4).")
         self.assertEqual(
-            lines["Corvin"], "also holds Static Halo and goes over level 3's budget (5 of 4)."
+            lines["Corvin"], "also holds Static Halo and goes over level 30's budget (5 of 4)."
         )
 
     def test_a_delete_returns_the_price(self) -> None:

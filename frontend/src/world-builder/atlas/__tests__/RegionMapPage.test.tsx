@@ -80,9 +80,10 @@ vi.mock('@/almanach/queries', () => ({
     refetch: vi.fn(),
   })),
   useAlmanachMutation: vi.fn(() => ({ mutateAsync: plantAsync, isPending: false })),
+  useRegionalEvents: vi.fn(() => ({ data: { results: [] } })),
 }));
 
-import { useLadder, useRealms } from '@/almanach/queries';
+import { useLadder, useRealms, useRegionalEvents } from '@/almanach/queries';
 import { useRegionMapPipsQuery } from '../../queries';
 
 const realLadder = vi.mocked(useLadder).getMockImplementation()!;
@@ -185,6 +186,9 @@ describe('RegionMapPage', () => {
     plantAsync.mockResolvedValue({ success: true, message: '', data: { title_id: 900 } });
     mutateAsync.mockResolvedValue({ success: true, message: '', data: { changed: [] } });
     window.localStorage.clear();
+    vi.mocked(useRegionalEvents).mockReturnValue({
+      data: { results: [] },
+    } as unknown as ReturnType<typeof useRegionalEvents>);
     vi.mocked(useRegionMapPipsQuery).mockReturnValue({
       data: payload,
       isLoading: false,
@@ -207,6 +211,30 @@ describe('RegionMapPage', () => {
       'href',
       '/api/world-builder/region-maps/1/file/'
     );
+  });
+
+  it('names an open regional event in the legend and counts the land it strikes (#5080)', () => {
+    vi.mocked(useRegionalEvents).mockReturnValue({
+      data: {
+        results: [
+          {
+            id: 5,
+            kind: 'Blight',
+            kind_id: 1,
+            area_id: 10,
+            area: 'Salvation',
+            realm_id: 1,
+            severity_pct: 80,
+            started_at: '2026-11-11T00:00:00Z',
+            ended_at: null,
+            note: '',
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useRegionalEvents>);
+    renderWithProviders(<RegionMapPage regionId={1} focusAreaId={10} />);
+    expect(screen.getByTestId('region-map-legend')).toHaveTextContent('Blight over Salvation');
+    expect(screen.getByTestId('region-map-viewport')).toHaveAttribute('data-struck', '1');
   });
 
   it('offers the four views on the panel, All by default, and remembers the pick (#5030)', async () => {

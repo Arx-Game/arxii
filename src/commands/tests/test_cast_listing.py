@@ -140,18 +140,18 @@ class CastListingFormsTests(TestCase):
         CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
 
     def _unlock_variant(self, level: int) -> TechniqueVariant:
-        """A shown-3 variant and the GIFT thread SHOWN at ``level`` (stored × 10, #4585)."""
+        """A variant unlocking at 30 and the GIFT thread at ``level``."""
         variant = TechniqueVariant.objects.create(
             parent_technique=self.technique,
             resonance=self.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Ashfall Lash",
         )
         provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)
         thread = Thread.objects.get(
             owner=self.sheet, target_kind=TargetKind.GIFT, target_gift=self.gift
         )
-        thread.level = level * 10
+        thread.level = level
         thread.save(update_fields=["level"])
         self.character.threads.invalidate()
         return variant
@@ -165,7 +165,7 @@ class CastListingFormsTests(TestCase):
 
     def test_forms_line_names_the_variant_and_marks_the_default(self) -> None:
         """This is what makes `base` and `variant=<resonance>` discoverable."""
-        self._unlock_variant(level=3)
+        self._unlock_variant(level=30)
 
         cmd = _RecordingCmd(self.character)
         cmd.func()
@@ -175,7 +175,7 @@ class CastListingFormsTests(TestCase):
 
     def test_locked_forms_stay_off_the_cast_list(self) -> None:
         """The scene shows what you can do; the sheet shows what you are becoming."""
-        self._unlock_variant(level=1)
+        self._unlock_variant(level=10)
 
         cmd = _RecordingCmd(self.character)
         cmd.func()

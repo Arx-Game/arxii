@@ -87,7 +87,7 @@ class StaffBuildsACompleteSheetTests(TestCase):
             response = getattr(client, method)(f"{base}/{path}/", payload, format="json")
             assert response.status_code == 200, (path, response.content[:800])
 
-        send("patch", "staff-stats", {"stats": {str(self.stat.pk): 3}})
+        send("patch", "staff-stats", {"stats": {str(self.stat.pk): 30}})
         send("patch", "staff-skills", {"skills": {str(self.skill.pk): 10}})
         send("post", "staff-distinctions", {"distinction": DistinctionFactory().pk})
         send("patch", "staff-form", {"values": {str(self.hair.pk): self.red.pk}})

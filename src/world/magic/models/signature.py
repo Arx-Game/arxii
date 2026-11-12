@@ -74,18 +74,18 @@ class SignatureMotifBonus(DiscoverableContent, SharedMemoryModel):
         help_text="Flat modifier added to the signed technique's effective intensity.",
     )
     min_crossing_level = models.PositiveSmallIntegerField(
-        default=3,
+        default=30,
         help_text=(
-            "Shown thread level (the number players see; a thread stored at 30 shows 3). "
+            "Thread level (the number players see). "
             "The bonus becomes selectable here; low levels are the early flourishes "
-            "(#4099). Default 3."
+            "(#4099). Default 30."
         ),
     )
     creation_point_cost = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
         help_text="Character-creation points to take this flourish (#4099). Blank = not "
-        "offered in creation. Only resonance-gated rows at level 1 can be offered.",
+        "offered in creation. Only resonance-gated rows at level 10 or below can be offered.",
     )
 
     class Meta:

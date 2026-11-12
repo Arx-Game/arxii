@@ -32,7 +32,7 @@ from world.covenants.constants import (
     MENTOR_BOND_MAX_SIDEKICKS,
     SECONDARY_VOW_POTENCY_TENTHS_DEFAULT,
     VOW_FOCUS_PICK_BUDGET_PER_LEVEL_DEFAULT,
-    VOW_FOCUS_PICK_MAX_LEVEL,
+    VOW_FOCUS_PICK_LEVELS,
     VOW_FOCUS_PICK_RESPEC_AP_COST_DEFAULT,
     VOW_FOCUS_PICK_VALUE_DEFAULT,
     BattleBinding,
@@ -51,8 +51,10 @@ from world.covenants.perks.constants import (
     SITUATION_PARAM_SPECS,
     PerkBeneficiary,
     PerkEffectKind,
+    PerkRollKind,
     Situation,
     SituationOriginSide,
+    announce_placeholder_error,
 )
 from world.covenants.perks.context import SituationParams
 from world.items.constants import ARMOR_ARCHETYPES, WEAPON_ARCHETYPES, GearArchetype
@@ -1052,7 +1054,8 @@ class VowStatScaling(NaturalKeyMixin, SharedMemoryModel):
     bonus_per_level = models.SmallIntegerField(
         help_text=(
             "Per-thread-level coefficient. Bonus for an engaged role holder = "
-            "covenant_role_thread_level * bonus_per_level."
+            "covenant_role_thread_level * bonus_per_level (per 10 thread levels for a "
+            "maneuver-effect target)."
         ),
     )
     focus_pick = models.ForeignKey(
@@ -1176,6 +1179,14 @@ class VowFocusPickManager(NaturalKeyManager):
     """Manager for VowFocusPick with natural key support."""
 
 
+def validate_vow_focus_pick_level(value: int) -> None:
+    """A focus pick sits at one of ``VOW_FOCUS_PICK_LEVELS`` (10, 20 or 30, #5091)."""
+    if value not in VOW_FOCUS_PICK_LEVELS:
+        levels = ", ".join(str(level) for level in VOW_FOCUS_PICK_LEVELS)
+        msg = f"A pick level is one of {levels}."
+        raise ValidationError(msg)
+
+
 class VowFocusPick(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """One entry in a vow's focus pick catalog (#4759).
 
@@ -1201,10 +1212,10 @@ class VowFocusPick(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text="The vow (covenant role) whose catalog this pick belongs to.",
     )
     pick_level = models.PositiveSmallIntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(VOW_FOCUS_PICK_MAX_LEVEL)],
+        validators=[validate_vow_focus_pick_level],
         help_text=(
-            "The pick level this pick sits at (1 to 3). A character may choose it once "
-            "their shown vow thread level reaches this number."
+            "The pick level this pick sits at (10, 20 or 30). A character may choose it "
+            "once their vow thread level reaches this number."
         ),
     )
     name = models.CharField(
@@ -1397,7 +1408,7 @@ class CharacterVowFocusPick(SharedMemoryModel):
     one in the admin. ``clean()`` runs the rules in
     ``world.covenants.focus_picks.validate_character_focus_pick``: the pick
     belongs to the held vow (or its anchor, for a sub-role), the membership is
-    not a secondary vow, the pick's level is no higher than the shown vow level,
+    not a secondary vow, the pick's level is no higher than the vow level,
     and the level's picks fit the budget.
     """
 
@@ -1637,7 +1648,7 @@ class CovenantRoleGiftGrant(NaturalKeyMixin, SharedMemoryModel):
     unlock_thread_level = models.PositiveIntegerField(
         default=0,
         help_text=(
-            "Shown thread level (the number players see; a thread stored at 30 shows 3). "
+            "Thread level (the number players see). "
             "The COVENANT_ROLE thread level at which this gift's techniques "
             "become available while engaged. 0 = always available."
         ),
@@ -2295,6 +2306,12 @@ class VowSituationalPerk(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     ``CHECK_BONUS`` **or** ``POWER_BONUS`` (spec §4: a Battle warfare roll scopes
     both the check AND the technique cast it may carry) — ``clean()`` rejects it
     authored on ``TIER_FLOOR``/``BOTCH_IMMUNITY``.
+
+    ``roll_kind`` ("Applies to", #5092) narrows a ``CHECK_BONUS`` perk to one kind of
+    roll (``PerkRollKind``): blank is any roll, ``ATTACK`` is the roll of an attack on an
+    opponent, once per attack. It is a scope column like the three above (AND,
+    including with ``check_type``), matched against ``SituationContext.roll_kind``;
+    ``clean()`` rejects it on any other ``effect_kind``.
     """
 
     covenant_role = models.ForeignKey(
@@ -2314,7 +2331,12 @@ class VowSituationalPerk(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     )
     announce_template = models.CharField(
         max_length=200,
-        help_text="Player-facing announce line; {holder}/{subject} placeholders.",
+        help_text=(
+            "Player-facing announce line. It can name {holder} (whose vow it is), {subject} "
+            "(whose roll it helps), {target} (the foe it is about) and {ally} (the "
+            "covenant-mate whose action made the situation true; needs a situation or rung "
+            "about an ally, such as Enemy Held by Ally)."
+        ),
     )
     check_type = models.ForeignKey(
         "arxii.CheckType",
@@ -2357,6 +2379,19 @@ class VowSituationalPerk(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         blank=True,
         default="",
         help_text="CHECK_BONUS/POWER_BONUS scope: fires only on this declared warfare action kind.",
+    )
+    roll_kind = models.CharField(
+        "Applies to",
+        max_length=20,
+        choices=PerkRollKind.choices,
+        blank=True,
+        default=PerkRollKind.ANY,
+        help_text=(
+            "Check bonus only: which rolls the bonus reaches. Attack rolls are a Strike's hit "
+            "roll and an attack technique's roll, once per attack (an enchanted Strike's "
+            "technique roll), never a dodge, a defense, or a cast on oneself or an ally. "
+            "Works together with the check type when both are set."
+        ),
     )
     focus_pick = models.ForeignKey(
         VOW_FOCUS_PICK_MODEL,
@@ -2423,6 +2458,11 @@ class VowSituationalPerk(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                     )
                 }
             )
+        template_error = announce_placeholder_error(self.announce_template)
+        if template_error is not None:
+            raise ValidationError({"announce_template": template_error})
+        if self.roll_kind and self.effect_kind != PerkEffectKind.CHECK_BONUS:
+            raise ValidationError({"roll_kind": "Applies to only works on a Check Bonus perk."})
         if self.battle_action_kind and self.effect_kind not in (
             PerkEffectKind.CHECK_BONUS,
             PerkEffectKind.POWER_BONUS,
@@ -2722,21 +2762,23 @@ class VowAddedEffect(SituationRequirementMixin, NaturalKeyMixin, SharedMemoryMod
     unlock_thread_level = models.PositiveIntegerField(
         default=0,
         help_text=(
-            "Shown thread level (the number players see; a thread stored at 30 shows 3). "
+            "Thread level (the number players see). "
             "The holder's vow thread level this effect needs."
         ),
     )
     severity_per_thread_level = models.PositiveIntegerField(
         default=0,
-        help_text="Added to applied condition severity per thread level above the unlock.",
+        help_text="Added to applied condition severity per 10 thread levels above the unlock.",
     )
     duration_per_thread_level = models.PositiveIntegerField(
         default=0,
-        help_text="Added to applied condition duration (rounds) per level above the unlock.",
+        help_text=(
+            "Added to applied condition duration (rounds) per 10 thread levels above the unlock."
+        ),
     )
     damage_per_thread_level = models.PositiveIntegerField(
         default=0,
-        help_text="Added to each damage profile per thread level above the unlock.",
+        help_text="Added to each damage profile per 10 thread levels above the unlock.",
     )
     upgrades = models.ForeignKey(
         "self",

@@ -121,7 +121,6 @@ function SkillSpecializations({
                 name={spec.name}
                 sub={spec.tooltip}
                 value={value}
-                max={maxValue}
                 step={10}
                 onChange={(newValue) => onSpecChange(spec.id, newValue)}
                 canDecrease={value > 0}
@@ -383,7 +382,6 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
                       name={skill.name}
                       sub={skill.tooltip}
                       value={skillValue}
-                      max={budget.max_skill_value}
                       step={10}
                       onChange={(newValue) => handleSkillChange(skill.id, newValue, skill)}
                       canDecrease={skillValue > 0}
@@ -424,7 +422,6 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
                   name={skill.name}
                   sub={magicTooltip.get(skill.id)}
                   value={skill.value}
-                  max={skill.max}
                   step={10}
                   readOnly
                 />

@@ -56,14 +56,12 @@ the age floor (`youngest_age_for_points`) keeps the age at or above the points h
 `beat_allowance` reads it, one-of or any otherwise. _Avoid_: age allowance (the old name),
 age slots, experience picks, career slots.
 
-**Kin row** (`draft_data["kin_rows"]`, `KinRowKind`, #4395, #4870):
-A person seated beside the parents in the Lineage step: a twin (`TwinFate`, alive or dead),
-a spouse (`SpouseFate`; separated stands in law apart, fled reads missing), a betrothed
-(`BetrothedFate`: promised, dead, missing, broken off; a union of the **betrothal kind**), a
-child (`ChildFate`); finalize's `_bind_kin_rows` writes them into the kinship graph. The
-named parents carry a **parent fate** of their own (`ParentFate`, `line_parent_fate` /
-`other_parent_fate`), where every "a parent died or vanished" story lives instead of a
-card. _Avoid_: kin beat, family slot (that is a staff Vacancy), parent card.
+**Parent fate** (`ParentFate`, `line_parent_fate` / `other_parent_fate`, #4870):
+What became of a parent the player names: alive, dead or missing. Every "a parent died or
+vanished" story lives here instead of a card. A spouse, a child, a twin or a betrothed is
+not built in creation (the retired **kin rows**, ADR-5102-A; a player's own family comes
+after creation, #5103). _Avoid_: kin row (retired), kin beat, family slot (that is a staff
+Vacancy), parent card.
 
 **Struck-stages text** (`Beginnings.struck_stages_text`, #4830):
 What the life page shows in place of the stage rows when a beginning strikes every stage (the Sleeper's). _Avoid_: frame (that is the prose at the pick), absent-life text.

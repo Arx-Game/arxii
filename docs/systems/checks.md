@@ -158,7 +158,8 @@ the authored modifier, so a debuff's step is a further penalty and lands in the 
 Only the one-size-up shape is code; the values, the level and the tenths (the vow's
 `CovenantRoleTechniqueSpecialty.multiplier_tenths`) are all data. The step is the
 contribution's `vow_part` and is never tapered; the buff's own value (at `modifier_level`) still
-tapers in its pile. L is the caster's vow thread shown level, never capped by the buff's own
+tapers in its pile. L is the rung of the caster's vow thread (`thread_rung`: whole steps of 10 thread levels,
+#5091), never capped by the buff's own
 level. No table row for either size means no step. Paramount is reachable only this way. One
 helper prices it, `conditions.services._priced_sized_modifier` -> (value, vow_part), shared by
 the check lane (`_check_modifier_for_target`, `condition_contributions`), the opponent path
@@ -169,8 +170,8 @@ ceiling and never touches `_apply_outcome_guarantees`.
 ### The stat lane (#4726, ADR-4726-A)
 
 A modifier on a stat target (a `ModifierTarget` whose `target_trait` is a STAT trait) is valued
-and tapered in the `stat` lane, in internal stat units (stats are stored x10, so 10 is one shown
-point). The lane applies wherever a stat is read: the change is in
+and tapered in the `stat` lane, in stored stat units (the number the sheet shows; one stat point is
+`STAT_POINT_VALUE`, 10). The lane applies wherever a stat is read: the change is in
 `TraitHandler._get_stat_modifier`, so checks (inside trait points), fatigue capacity, stamina's
 health term, carrying capacity and scandal all read the same buffed number. The web sheet
 shows the stored, unbuffed stats (`_build_stats` in `world/character_sheets/serializers.py`).

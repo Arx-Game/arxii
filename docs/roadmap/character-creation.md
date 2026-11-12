@@ -138,7 +138,16 @@ a granted NPC asset); the magnitudes and term definitions a card's mechanics lin
 the first name asked on the Origin stage. Unremarkable is content: a no-cost card attached to
 each one-of beat.
 
-## Built (2026-11-01, #4870: kin-row states; slice 8 of #4813)
+## Built (2026-11-12, #5102: creation polish)
+
+Origin's empty name field is boxed until a name is saved, and the letters-only rule shows
+only under a refused name; the rail reads "CG selections"; the doubled realm-change note is
+gone. Heritage reads a beginning's station on its closed row and its cost beside the codex
+link. Kin rows left creation (ADR-5102-A; a player's own family is #5103), and the life
+page's per-stage Unknown mark became an Amnesiac card at the end of every section's grid
+(ADR-5102-B).
+
+## Built (2026-11-01, #4870: kin-row states; slice 8 of #4813) (kin rows retired by #5102)
 
 A fate on each named parent (alive, dead, missing; `ParentFate` on the invented parents),
 a betrothed row (a union of the kind marked `UnionKind.is_betrothal`, through
@@ -468,7 +477,8 @@ section for the full #2428/#2440/#2441/#2442 build record.
 - Picks are written at finalize onto the hold (`CharacterTechnique.custom_name`
   /`custom_description`/`price`/`early_form`), never onto the shared catalog
   `Technique`; a flourish pick also weaves a TECHNIQUE thread (up to
-  `CREATION_PERSONALIZATION_MAX_LEVEL`, 1, a new character's level per #4585) so an early flourish never skips a
+  `CREATION_PERSONALIZATION_MAX_LEVEL`, 10, a new character's level cap per #4585 in stored
+  thread levels since #5091) so an early flourish never skips a
   crossing. A Motif is seeded for every new character at finalize so a flourish pick
   (resonance-gated; a price or name/description pick carries no resonance of its own)
   can qualify once the gift resonance resolves.

@@ -1,7 +1,7 @@
 """Journeys for a life in grids (#4395): a beginning strikes stages out of the life and
 brings its own family route, an age-scaled beat allows one more pick per decade, and a life
-picked straight from the grids, with a twin and a dead spouse seated beside the parents,
-reaches the sheet and the kinship graph."""
+picked straight from the grids reaches the sheet. (The twin and spouse it once seated left
+creation, ADR-5102-A.)"""
 
 from __future__ import annotations
 
@@ -25,7 +25,6 @@ from world.character_creation.services import finalize_character
 from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
 from world.distinctions.factories import DistinctionFactory
 from world.roster.factories import UnionKindFactory
-from world.roster.models import Kinsperson, ParentageEdge, Union
 
 STRANGERS_GAP = "The family paths for this beginning are not set up yet"
 
@@ -160,9 +159,7 @@ class ALifeInGrids(FinalizationTestMixin, JourneyCase):
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(len(response.json()["distinctions"]), 2)
 
-    def test_a_life_from_the_grids_with_a_twin_and_a_dead_spouse_reaches_the_sheet(
-        self,
-    ) -> None:
+    def test_a_life_from_the_grids_reaches_the_sheet(self) -> None:
         draft = self._create_base_draft(line_parent_name="Mother", other_parent_name="Father")
         draft.selected_origin_template = self.route
         draft.save(update_fields=["selected_origin_template"])
@@ -182,10 +179,6 @@ class ALifeInGrids(FinalizationTestMixin, JourneyCase):
             {
                 "draft_data": {
                     "beats": {str(self.household.pk): {"line": "Soft hands, hard lessons."}},
-                    "kin_rows": [
-                        {"kind": "twin", "name": "Wen", "gender_id": None, "fate": ""},
-                        {"kind": "spouse", "name": "Ser Aldo", "gender_id": None, "fate": "dead"},
-                    ],
                 }
             },
             format="json",
@@ -204,14 +197,3 @@ class ALifeInGrids(FinalizationTestMixin, JourneyCase):
         self.assertEqual(beats["What they made of you"]["answers"], ["Apprenticed"])
         self.assertEqual(beats["What you were known for"]["answers"], ["Spied for a house"])
         self.assertNotIn("The Glimpse", beats)
-
-        node = Kinsperson.objects.get(sheet=sheet)
-        twin = Kinsperson.objects.get(name="Wen")
-        self.assertEqual(
-            {e.parent.name for e in ParentageEdge.objects.filter(child=twin)}, {"Mother", "Father"}
-        )
-        spouse = Kinsperson.objects.get(name="Ser Aldo")
-        self.assertTrue(spouse.is_deceased)
-        union = Union.objects.get(members=node)
-        self.assertIn(spouse, union.members.all())
-        self.assertIsNotNone(union.ended_at)

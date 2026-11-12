@@ -77,12 +77,11 @@ class NPCStatlinePreset(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
 
 class NPCPresetTraitLine(RelatedCacheClearingMixin, SharedMemoryModel):
-    """One STAT line on a preset, at display scale (1-10).
+    """One STAT line on a preset, in stored units (10-100).
 
-    ``apply_npc_preset`` converts ``display_value`` to the internal x10
-    storage scale the same way CG finalize's ``_create_stat_values`` does
-    (``STAT_DISPLAY_DIVISOR``, ``world.traits.models``) -- staff author in
-    the scale they see on a sheet, not the internal one.
+    ``apply_npc_preset`` writes ``value`` as-is, the same way CG finalize's
+    ``_create_stat_values`` does: staff author the number they see on a sheet,
+    which is the stored one (#5091, ADR-5091).
     """
 
     # The preset's cached line list (the catalog list reads it) follows every save.
@@ -103,8 +102,8 @@ class NPCPresetTraitLine(RelatedCacheClearingMixin, SharedMemoryModel):
         help_text="A STAT trait. PROTECT: deleting a referenced trait requires clearing "
         "the preset line first, rather than silently truncating the archetype.",
     )
-    display_value = models.PositiveSmallIntegerField(
-        help_text="Display-scale value (1-10), mirroring CG's stat-allocation scale."
+    value = models.PositiveSmallIntegerField(
+        help_text="Stat value (10-100), the number a sheet shows; CG allocates 10-50."
     )
 
     class Meta:
@@ -117,15 +116,13 @@ class NPCPresetTraitLine(RelatedCacheClearingMixin, SharedMemoryModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.preset_id}: {self.trait_id}={self.display_value}"
+        return f"{self.preset_id}: {self.trait_id}={self.value}"
 
 
 class NPCPresetSkillLine(RelatedCacheClearingMixin, SharedMemoryModel):
     """One SKILL line on a preset, at true 1-100 scale.
 
-    Skills store and display the same value (no x10 conversion, unlike
-    stats) -- see ``STAT_DISPLAY_DIVISOR``'s docstring in
-    ``world.traits.models``.
+    Skills, like stats, store and show the same value (#5091).
     """
 
     # The preset's cached line list (the catalog list reads it) follows every save.

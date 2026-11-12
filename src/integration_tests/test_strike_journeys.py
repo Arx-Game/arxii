@@ -344,7 +344,7 @@ class StrikeWithAWeapon(_StrikeField):
             self.sheet,
             role,
             covenant=CovenantFactory(covenant_type=CovenantType.DURANCE),
-            thread_level=3,
+            thread_level=30,
         )
         VowStatScaling.objects.create(covenant_role=role, modifier_target=target, bonus_per_level=1)
 

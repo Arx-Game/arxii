@@ -2,7 +2,7 @@
  * Level Stat Point panel (#3001) — owner-only sheet section.
  *
  * Shows points earned by leveling (+1 per class level past the first) and
- * lets the owner spend them: +1 to a stat, capped per stage (the same
+ * lets the owner spend them: one point is +10 to a stat, capped per stage (the same
  * MaturationStatCap table the maturation panel binds to).
  * Reads GET /stat-points/ and writes POST /spend-stat-point/.
  */

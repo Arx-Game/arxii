@@ -128,7 +128,6 @@ export function MagicTrainingBlock({ draft }: MagicTrainingBlockProps) {
               id={`lbl-magic-skill-${skill.id}`}
               name={skill.name}
               value={skill.value}
-              max={skill.max}
               step={step}
               onChange={(value) => handleChange(skill, value)}
               canDecrease={skill.value > 0 && !updateDraft.isPending}

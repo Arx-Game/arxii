@@ -48,7 +48,7 @@ def _make_technique_thread(sheet, technique, resonance):
         resonance=resonance,
         target_kind=TargetKind.TECHNIQUE,
         target_technique=technique,
-        level=30,  # stored; shows 3 (#4585)
+        level=30,
     )
 
 
@@ -136,14 +136,14 @@ class AvailableSignatureBonusesTests(TestCase):
         locked_bonus = SignatureMotifBonus.objects.create(
             name="Locked Crossing Bonus",
             required_resonance=self.resonance,
-            min_crossing_level=6,
+            min_crossing_level=60,
         )
         thread = Thread.objects.create(
             owner=self.sheet,
             resonance=self.resonance,
             target_kind=TargetKind.TECHNIQUE,
             target_technique=self.technique,
-            level=30,  # stored; shows 3 (#4585)
+            level=30,
         )
         try:
             result = available_signature_bonuses(self.sheet, thread=thread)
@@ -163,14 +163,14 @@ class AvailableSignatureBonusesTests(TestCase):
         mismatched_bonus = SignatureMotifBonus.objects.create(
             name="Mismatched Resonance Bonus",
             required_resonance=other_resonance,
-            min_crossing_level=3,
+            min_crossing_level=30,
         )
         thread = Thread.objects.create(
             owner=self.sheet,
             resonance=self.resonance,
             target_kind=TargetKind.TECHNIQUE,
             target_technique=self.technique,
-            level=30,  # stored; shows 3 (#4585)
+            level=30,
         )
         try:
             result = available_signature_bonuses(self.sheet, thread=thread)
@@ -286,7 +286,7 @@ class SetSignatureBonusTests(TestCase):
             resonance=self.resonance,
             target_kind=TargetKind.TECHNIQUE,
             target_technique=other_technique,
-            level=30,  # stored; shows 3 (#4585)
+            level=30,
         )
         try:
             with self.assertRaises(TechniqueNotOwned):
@@ -316,19 +316,19 @@ class SetSignatureBonusTests(TestCase):
         """A low authored min_crossing_level works below the first crossing (#4099).
 
         The hard ``thread.level >= 3`` floor is gone — ``min_crossing_level`` is
-        the only gate, so a staff-authored bonus with ``min_crossing_level=1``
+        the only gate, so a staff-authored bonus with ``min_crossing_level=10``
         (below the first PathStage crossing) is settable on a level-1 thread.
         """
-        self.bonus.min_crossing_level = 1
+        self.bonus.min_crossing_level = 10
         self.bonus.save(update_fields=["min_crossing_level"])
-        self.technique_thread.level = 10  # stored; shows 1 (#4585)
+        self.technique_thread.level = 10
         self.technique_thread.save(update_fields=["level"])
         result = set_signature_bonus(self.technique_thread, self.bonus)
         self.assertEqual(result.signature_bonus_id, self.bonus.pk)
 
     def test_set_succeeds_when_thread_at_level_3(self) -> None:
         """set_signature_bonus succeeds when thread.level >= 3."""
-        self.technique_thread.level = 30  # stored; shows 3 (#4585)
+        self.technique_thread.level = 30
         self.technique_thread.save(update_fields=["level"])
         result = set_signature_bonus(self.technique_thread, self.bonus)
         self.assertEqual(result.signature_bonus_id, self.bonus.pk)
@@ -337,12 +337,12 @@ class SetSignatureBonusTests(TestCase):
         """SignatureBonusLocked raised when bonus.min_crossing_level > thread.level."""
         from world.magic.exceptions import SignatureBonusLocked
 
-        self.technique_thread.level = 30  # stored; shows 3 (#4585)
+        self.technique_thread.level = 30
         self.technique_thread.save(update_fields=["level"])
         locked_bonus = SignatureMotifBonus.objects.create(
             name="Locked Bonus",
             required_facet=self.facet,
-            min_crossing_level=6,
+            min_crossing_level=60,
         )
         try:
             with self.assertRaises(SignatureBonusLocked):
@@ -364,7 +364,7 @@ class SetSignatureBonusTests(TestCase):
         discoverable_bonus = SignatureMotifBonus.objects.create(
             name="Discoverable Bonus",
             required_facet=self.facet,
-            min_crossing_level=3,
+            min_crossing_level=30,
             discovery_achievement=achievement,
         )
         try:

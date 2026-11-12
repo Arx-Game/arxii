@@ -61,10 +61,10 @@ def author_stat_row(resonance, vital_target, amount, *, min_thread_level=0):
     )
 
 
-def author_capability_row(resonance, capability, *, base=2, min_thread_level=3):
+def author_capability_row(resonance, capability, *, base=2, min_thread_level=30):
     """Author the tier-0 CAPABILITY_GRANT row for ``resonance``.
 
-    ``min_thread_level`` defaults to 3 because that is the depth content authors the
+    ``min_thread_level`` defaults to 30 because that is the depth content authors the
     first unlock at — but it is the row's gate, not the code's, so a test may move it.
     A stat row and a capability row for one resonance must differ in
     ``min_thread_level``: ``threadpulleffect_lookup_key`` admits one row per

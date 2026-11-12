@@ -444,7 +444,7 @@ class TestTechniquePanelStartingKits(TestCase):
             "species": "",
             "extra_picks": 1,
         }
-        data.update(dict.fromkeys(REQUIRED_STATS, 2))
+        data.update(dict.fromkeys(REQUIRED_STATS, 20))
         data.update(overrides)
         return data
 

@@ -40,16 +40,6 @@ from world.traits.models import (
 
 ---
 
-## Types (types.py)
-
-```python
-from world.traits.types import (
-    StatDisplayInfo,  # Dataclass: value, display, modifiers (for API/UI responses)
-)
-```
-
----
-
 ## Models
 
 ### Lookup Tables (SharedMemoryModel - cached, rarely change)
@@ -74,8 +64,12 @@ from world.traits.types import (
 
 ## Value Scale
 
-- **Internal:** 1-100 integers (stored in database)
-- **Display:** 1.0-10.0 (shown to players, computed as `value / 10`)
+- **Stored and shown:** 1-100 integers. Every surface shows the stored value for stats and
+  skills alike (ADR-5091, #5091): strength 20 reads 20, a skill at 35 reads 35.
+- **Stat point:** `STAT_POINT_VALUE` (10, `world/traits/models.py`), the step character
+  creation, maturation, level stat points and GM raises move a stat by.
+  `whole_stat_points(value)` (`value // 10`) is an internal step for formulas tuned per whole
+  stat point (fatigue capacity); it is never shown.
 - NPCs may have negative values or values above 100
 
 ---
@@ -153,9 +147,6 @@ value = handler.get_trait_value("strength")
 # Get base value without modifiers
 base = handler.get_base_trait_value("strength")
 
-# Get display value (1.0-10.0 scale)
-display = handler.get_trait_display_value("strength")
-
 # Set a trait value
 handler.set_trait_value("strength", 50)
 
@@ -228,7 +219,7 @@ All models registered with appropriate admin interfaces:
   CONDITION contributions (`world.conditions.services.condition_target_contributions`) as a
   checks `ModifierBreakdown` tapered by `load_taper_rules(ModifierLane.STAT)`. A sized technique
   buff or distinction effect on a stat reads the stat lane's `ModifierValue` table; values are
-  in stored units (x10 the shown stat). Every reader of `get_trait_value` sees this one number.
+  in stored units (the number the sheet shows). Every reader of `get_trait_value` sees this one number.
   The table and taper rows load only when needed, so a read with nothing sized and no pile of
   one kind adds no query (the #552 fatigue hot path). See `docs/systems/checks.md`, "The stat
   lane".

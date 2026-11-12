@@ -362,9 +362,11 @@ class DraftDistinctionEntrySerializer(serializers.Serializer):
     ``offer_ids``/``sources``/``arrivals`` (#3675) name an entry's contributing
     ``DistinctionOffer`` rows, their display labels, and how each arrived
     (choice/bundled/carried) -- ``world.distinctions.types.DraftDistinctionEntry``
-    carries them on every offer-tracked entry. ``required=False`` mirrors runtime
-    reality: a legacy entry saved before the offers system landed (0106) has no
-    ``offer_ids`` key at all (see ``offers._drop_vanished_sources``). ``offer_ids``
+    carries them on every offer-tracked entry. A legacy entry saved before the offers
+    system landed (0106) has no ``offer_ids`` key at all (see
+    ``offers._drop_vanished_sources``); the three lists default to empty so every entry
+    the API returns carries them, and the leaf never meets a missing list (#5102: the
+    Lineage step crashed on ``offer_ids is not iterable`` for such a draft). ``offer_ids``
     has no declared item type because it mixes ``int`` (a real ``DistinctionOffer``
     row) and ``str`` (a tradition-state-carried drawback's synthetic
     ``"state:<TraditionState>"`` key).
@@ -377,9 +379,9 @@ class DraftDistinctionEntrySerializer(serializers.Serializer):
     rank = serializers.IntegerField()
     cost = serializers.IntegerField()
     notes = serializers.CharField(allow_blank=True)
-    offer_ids = serializers.ListField(required=False)
-    sources = serializers.ListField(child=serializers.CharField(), required=False)
-    arrivals = serializers.ListField(child=serializers.CharField(), required=False)
+    offer_ids = serializers.ListField(default=list)
+    sources = serializers.ListField(child=serializers.CharField(), default=list)
+    arrivals = serializers.ListField(child=serializers.CharField(), default=list)
     #: The feature this entry is aimed at (#3739). Empty/zero on everything that is
     #: not ``taken_per_feature``, and on entries stored before #3739 landed.
     feature_trait = serializers.CharField(required=False, allow_blank=True, default="")

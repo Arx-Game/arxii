@@ -126,7 +126,7 @@ class _SuccorField(JourneyCase):
             character.sheet_data,
             role,
             covenant=CovenantFactory(covenant_type=CovenantType.DURANCE),
-            thread_level=1,
+            thread_level=10,
         )
         VowStatScaling.objects.create(
             covenant_role=role, modifier_target=target, bonus_per_level=bonus
