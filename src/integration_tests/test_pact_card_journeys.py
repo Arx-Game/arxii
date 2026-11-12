@@ -8,6 +8,8 @@ in ``integration_tests.test_pacts_with_beings_journeys``.
 
 from __future__ import annotations
 
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from integration_tests.harness import JourneyCase
@@ -105,6 +107,37 @@ class PactCardJourneys(JourneyCase):
         self.assertEqual(len(response.json()["results"]), 1)
 
         self.assertEqual(self.api().get(CARDS_URL).status_code, 403)
+
+    def test_the_card_list_costs_the_same_queries_however_many_pacts(self) -> None:
+        """The cards are built in one batch, not seven queries a pact (#4341 review)."""
+        client = self.api(self.account_of(self.mira))
+
+        def count() -> int:
+            with CaptureQueriesContext(connection) as queries:
+                response = client.get(CARDS_URL, {"character_sheet": self.sheet.pk})
+            self.assertEqual(response.status_code, 200)
+            return len(queries)
+
+        count()
+        one = count()
+        for index in range(3):
+            being = WorshippedBeingFactory(name=f"Other being {index}")
+            condition = make_pact_condition(name=f"Other pact {index}")
+            offer = PactOfferFactory(being=being, name=f"Other pact {index}", condition=condition)
+            commitment = PactOfferCommitmentFactory(offer=offer, amount=8)
+            standing = DevotionStandingFactory(
+                character_sheet=self.sheet,
+                being=being,
+                valence=PatronageValence.PACT,
+                established_at=timezone.now(),
+            )
+            pact = CharacterPactFactory(
+                character_sheet=self.sheet, offer=offer, devotion_standing=standing
+            )
+            period = open_pact_period(pact, commitment)
+            PactCreditFactory(period=period, source=PledgeCreditSource.DEED, credited=1)
+        count()
+        self.assertEqual(count(), one)
 
     def test_telnet_pact_shows_her_card_then_renounces_it(self) -> None:
         told = self.telnet(self.mira, "pact")

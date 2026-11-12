@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from world.pacts.serializers import PactCardSerializer
-from world.pacts.services import carded_pacts, pact_card
+from world.pacts.services import carded_pacts, pact_card, pact_cards
 from world.roster.models import RosterEntry
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -35,10 +35,8 @@ class PactCardViewSet(ReadOnlyModelViewSet):
         queryset = self.filter_queryset(self.get_queryset())
         page = self.paginate_queryset(queryset)
         if page is not None:
-            return self.get_paginated_response(
-                PactCardSerializer([pact_card(pact) for pact in page], many=True).data
-            )
-        return Response(PactCardSerializer([pact_card(p) for p in queryset], many=True).data)
+            return self.get_paginated_response(PactCardSerializer(pact_cards(page), many=True).data)
+        return Response(PactCardSerializer(pact_cards(list(queryset)), many=True).data)
 
     def retrieve(self, request, *args, **kwargs):
         return Response(PactCardSerializer(pact_card(self.get_object())).data)

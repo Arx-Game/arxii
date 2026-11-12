@@ -20,12 +20,14 @@ from django.utils import timezone
 
 from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
 from world.conditions.services import advance_condition_severity
 from world.magic.constants import GainSource
 from world.magic.services.resonance import grant_resonance
 from world.narrative.models import NarrativeMessageDelivery
 from world.pacts.constants import CharacterPactCommitmentKind, CharacterPactEnding
+from world.pacts.exceptions import PactOfferUnavailable
 from world.pacts.factories import PactOfferCommitmentFactory, PactOfferFactory, make_pact_condition
 from world.pacts.models import CharacterPact, PactCredit, PactPeriodDetails
 from world.pacts.services import (
@@ -129,6 +131,32 @@ class SigningTests(PactTestBase):
 
         standing = DevotionStanding.objects.get(character_sheet=chosen, being=self.being)
         self.assertEqual(standing.valence, PatronageValence.DEVOTIONAL)
+
+    def test_a_resisted_condition_leaves_no_cached_patronage_behind(self) -> None:
+        """A refused signing rolls back inside the atomic block; the cached standing keeps
+        what the database kept, so the next accept still writes the PACT valence. No
+        journey can resist the condition at the close (#4341 review, idmapper-cache)."""
+        condition = make_pact_condition(name="Resistible pact")
+        condition.resist_check_type = CheckTypeFactory(name="Pact resist")
+        condition.resist_difficulty = 10
+        condition.save(update_fields=["resist_check_type", "resist_difficulty"])
+        offer = PactOfferFactory(being=self.being, name="Resistible", condition=condition)
+        PactOfferCommitmentFactory(offer=offer, amount=8)
+        standing = DevotionStanding.objects.create(character_sheet=self.sheet, being=self.being)
+
+        with force_check_outcome(self.outcomes["Success"]), self.assertRaises(PactOfferUnavailable):
+            sign_being_pact(self.sheet, offer)
+
+        self.assertIsNone(standing.valence)
+        self.assertIsNone(DevotionStanding.objects.get(pk=standing.pk).valence)
+        self.assertFalse(CharacterPact.objects.filter(character_sheet=self.sheet).exists())
+
+        with force_check_outcome(self.outcomes["Failure"]):
+            sign_being_pact(self.sheet, offer)
+
+        self.assertEqual(
+            DevotionStanding.objects.get(pk=standing.pk).valence, PatronageValence.PACT
+        )
 
 
 class CreditTests(PactTestBase):

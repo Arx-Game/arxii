@@ -52,7 +52,12 @@ from django.utils import timezone
 
 from world.pacts.constants import CharacterPactCommitmentKind, CharacterPactEnding
 from world.pacts.exceptions import NoActivePact, PactAlreadyHeld, PactOfferUnavailable
-from world.pacts.models import CharacterPact, PactCredit, PactPeriodDetails
+from world.pacts.models import (
+    CharacterPact,
+    PactCredit,
+    PactOfferCommitment,
+    PactPeriodDetails,
+)
 from world.pacts.types import (
     PactCard,
     PactCommitmentLine,
@@ -71,7 +76,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
     from world.conditions.models import ConditionInstance, ConditionStage, ConditionTemplate
-    from world.pacts.models import PactOffer, PactOfferCommitment
+    from world.pacts.models import PactOffer
     from world.projects.models import Project
     from world.traits.models import CheckOutcome
     from world.worship.models import DevotionStanding, Pledge, WorshippedBeing
@@ -119,65 +124,97 @@ def _staged_stages(condition: ConditionTemplate) -> list[ConditionStage]:
     )
 
 
-def _effect_lines(condition: ConditionTemplate) -> tuple[list[str], dict[int, list[str]]]:
-    """Each effect of ``condition`` as a line: (condition-wide lines, lines by stage pk).
+#: A condition's lines as cards and offers show them: (condition-wide effect lines, stages).
+StageLines = tuple[tuple[str, ...], tuple[PactStageLine, ...]]
 
-    Modifier effects, granted capabilities and check modifiers, the effects a pact
-    stage carries. Three queries, whatever the stage count.
-    """
+
+def _effect_rows(condition_ids: set[int]) -> list[tuple[int, int | None, str]]:
+    """Every effect line of the conditions in ``condition_ids``: (condition pk, stage pk or
+    None for condition-wide, line). Modifier effects, granted capabilities and check
+    modifiers, the effects a pact stage carries. Three queries, whatever the count."""
     from world.conditions.models import (  # noqa: PLC0415
         ConditionCapabilityEffect,
         ConditionCheckModifier,
         ConditionModifierEffect,
     )
 
-    scope = Q(condition=condition) | Q(stage__condition=condition)
-    rows: list[tuple[int | None, str]] = [
-        (row.stage_id, f"{row.value:+d} {row.modifier_target.name}")
-        for row in ConditionModifierEffect.objects.filter(scope).select_related("modifier_target")
+    scope = Q(condition_id__in=condition_ids) | Q(stage__condition_id__in=condition_ids)
+
+    def owner(row) -> tuple[int, int | None]:
+        if row.stage_id is not None:
+            return row.stage.condition_id, row.stage_id
+        return row.condition_id, None
+
+    rows = [
+        (*owner(row), f"{row.value:+d} {row.modifier_target.name}")
+        for row in ConditionModifierEffect.objects.filter(scope).select_related(
+            "modifier_target", "stage"
+        )
     ]
     rows += [
-        (row.stage_id, f"{row.capability.name} {row.value:+d}")
-        for row in ConditionCapabilityEffect.objects.filter(scope).select_related("capability")
+        (*owner(row), f"{row.capability.name} {row.value:+d}")
+        for row in ConditionCapabilityEffect.objects.filter(scope).select_related(
+            "capability", "stage"
+        )
     ]
     rows += [
         (
-            row.stage_id,
+            *owner(row),
             f"{row.modifier_value:+d} to {(row.check_type or row.check_category).name} checks",
         )
         for row in ConditionCheckModifier.objects.filter(scope).select_related(
-            "check_type", "check_category"
+            "check_type", "check_category", "stage"
         )
     ]
-    condition_wide = [line for stage_id, line in rows if stage_id is None]
+    return rows
+
+
+def _stage_lines_for(conditions: list[ConditionTemplate]) -> dict[int, StageLines]:
+    """Each condition's lines keyed by its pk: four queries for the lot, so a page of
+    cards reads every distinct condition once (#4341 review)."""
+    from world.conditions.models import ConditionStage  # noqa: PLC0415
+
+    condition_ids = {condition.pk for condition in conditions}
+    if not condition_ids:
+        return {}
+    staged: dict[int, list[ConditionStage]] = defaultdict(list)
+    for stage in ConditionStage.objects.filter(
+        condition_id__in=condition_ids, severity_threshold__isnull=False
+    ).order_by("condition_id", "stage_order"):
+        staged[stage.condition_id].append(stage)
+    wide: dict[int, list[str]] = defaultdict(list)
     by_stage: dict[int, list[str]] = defaultdict(list)
-    for stage_id, line in rows:
-        if stage_id is not None:
+    for condition_id, stage_id, line in _effect_rows(condition_ids):
+        if stage_id is None:
+            wide[condition_id].append(line)
+        else:
             by_stage[stage_id].append(line)
-    return condition_wide, by_stage
-
-
-def _stage_lines(
-    condition: ConditionTemplate,
-) -> tuple[tuple[str, ...], tuple[PactStageLine, ...]]:
-    condition_wide, by_stage = _effect_lines(condition)
-    staged = _staged_stages(condition)
-    stages = tuple(
-        PactStageLine(
-            name=stage.name,
-            threshold=stage.severity_threshold,
-            effects=tuple(by_stage.get(stage.pk, ())),
-            is_last=index == len(staged) - 1,
+    lines: dict[int, StageLines] = {}
+    for condition_id in condition_ids:
+        stages = staged[condition_id]
+        lines[condition_id] = (
+            tuple(wide[condition_id]),
+            tuple(
+                PactStageLine(
+                    name=stage.name,
+                    threshold=stage.severity_threshold,
+                    effects=tuple(by_stage.get(stage.pk, ())),
+                    is_last=index == len(stages) - 1,
+                )
+                for index, stage in enumerate(stages)
+            ),
         )
-        for index, stage in enumerate(staged)
-    )
-    return tuple(condition_wide), stages
+    return lines
 
 
-def _promises(offer: PactOffer) -> tuple[str, ...]:
+def _stage_lines(condition: ConditionTemplate) -> StageLines:
+    return _stage_lines_for([condition])[condition.pk]
+
+
+def _promises(commitments: list[PactOfferCommitment]) -> tuple[str, ...]:
     return tuple(
         row.notes
-        for row in offer.commitments.all()
+        for row in commitments
         if row.kind == CharacterPactCommitmentKind.CUSTOM and row.notes.strip()
     )
 
@@ -196,7 +233,7 @@ def pact_offer_summary(offer: PactOffer) -> PactOfferSummary:
             for row in commitments
             if row.kind == CharacterPactCommitmentKind.FAVOR_EARNED
         ),
-        promises=_promises(offer),
+        promises=_promises(commitments),
         condition_effects=condition_effects,
         stages=stages,
         commitments=tuple(
@@ -253,22 +290,56 @@ def _source_label(source: str, being_name: str) -> str:
     return PledgeCreditSource(source).label
 
 
-def pact_card(pact: CharacterPact) -> PactCard:
-    """One pact as its holder's card shows it: the open period, its favor by source,
-    the condition's stage and severity, and the offer's promises."""
+def pact_cards(pacts: list[CharacterPact]) -> list[PactCard]:
+    """``pacts`` as their holders' cards show them, in the given order: the open period,
+    its favor by source, the condition's stage and severity, and the offer's promises.
+
+    Batched (#4341 review): one query each for the open periods, their credits and the
+    offers' commitments, plus the stage and effect lines of every distinct condition at
+    once, however many pacts there are. ``pacts`` come from ``carded_pacts`` (offer,
+    being, condition and condition instance already joined).
+    """
+    pacts = list(pacts)
+    if not pacts:
+        return []
+    periods: dict[int, PactPeriodDetails] = {}
+    for details in (
+        PactPeriodDetails.objects.filter(pact__in=pacts, project__status=ProjectStatus.ACTIVE)
+        .select_related("project", "commitment")
+        .order_by("pk")
+    ):
+        periods.setdefault(details.pact_id, details)
+    sources: dict[int, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for credit in PactCredit.objects.filter(period__in=list(periods.values())).order_by("pk"):
+        sources[credit.period_id][credit.source] += credit.credited
+    commitments: dict[int, list[PactOfferCommitment]] = defaultdict(list)
+    for row in PactOfferCommitment.objects.filter(
+        offer_id__in={pact.offer_id for pact in pacts}
+    ).order_by("pk"):
+        commitments[row.offer_id].append(row)
+    lines = _stage_lines_for([pact.offer.condition for pact in pacts])
+    return [
+        _card(pact, periods.get(pact.pk), sources, commitments[pact.offer_id], lines)
+        for pact in pacts
+    ]
+
+
+def _card(
+    pact: CharacterPact,
+    period: PactPeriodDetails | None,
+    sources: dict[int, dict[str, int]],
+    commitments: list[PactOfferCommitment],
+    lines: dict[int, StageLines],
+) -> PactCard:
     offer = pact.offer
     being_name = offer.being.name
-    period = next(iter(_open_periods(pact)), None)
-    sources: dict[str, int] = defaultdict(int)
-    if period is not None:
-        for credit in period.credits.order_by("pk"):
-            sources[credit.source] += credit.credited
-    condition_effects, stages = _stage_lines(offer.condition)
+    condition_effects, stages = lines[offer.condition_id]
     instance = pact.condition_instance
     stage = instance.current_stage if instance is not None else None
     severity = instance.severity if instance is not None else 0
     next_threshold = next((line.threshold for line in stages if line.threshold > severity), None)
     project = period.project if period is not None else None
+    period_sources = sources.get(period.pk, {}) if period is not None else {}
     return PactCard(
         pact=pact,
         being_name=being_name,
@@ -279,12 +350,12 @@ def pact_card(pact: CharacterPact) -> PactCard:
         time_limit=project.time_limit if project is not None else None,
         sources=tuple(
             PactSourceLine(label=_source_label(source, being_name), favor=favor)
-            for source, favor in sources.items()
+            for source, favor in period_sources.items()
         ),
         stage_name=stage.name if stage is not None else "",
         severity=severity,
         next_stage_threshold=next_threshold,
-        promises=_promises(offer),
+        promises=_promises(commitments),
         condition_effects=condition_effects,
         stages=stages,
         is_active=pact.is_active,
@@ -292,9 +363,14 @@ def pact_card(pact: CharacterPact) -> PactCard:
     )
 
 
+def pact_card(pact: CharacterPact) -> PactCard:
+    """One pact's card (``pact_cards`` for one)."""
+    return pact_cards([pact])[0]
+
+
 def pact_cards_for(sheet: CharacterSheet) -> list[PactCard]:
     """Her pact cards, newest first: active pacts, and ended pacts still easing out."""
-    return [pact_card(pact) for pact in carded_pacts().filter(character_sheet=sheet)]
+    return pact_cards(list(carded_pacts().filter(character_sheet=sheet)))
 
 
 # ---------------------------------------------------------------------------
@@ -400,39 +476,74 @@ def sign_being_pact(sheet: CharacterSheet, offer: PactOffer) -> CharacterPact:
     with the being. Her standing becomes a PACT patronage when it was none (a released
     one is restored; a Chosen standing keeps its valence), the offer's condition goes on
     at its first stage, and one period opens per FAVOR_EARNED commitment.
+
+    The condition goes on before the standing changes, and every identity-mapped row the
+    signing may touch is kept in a ``CacheGuard``: when the condition is resisted or a
+    trigger cancels it (``PactOfferUnavailable`` inside the atomic block), the rollback
+    leaves no cached standing, pact or period showing values the database never kept
+    (django_notes.md, "Idmapper Rollback Staleness"; #4341 review).
     """
+    from core.identity_map import CacheGuard  # noqa: PLC0415
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.conditions.services import get_condition_instance  # noqa: PLC0415
+    from world.projects.models import Project  # noqa: PLC0415
     from world.worship.models import DevotionStanding, PatronageValence  # noqa: PLC0415
 
     being = offer.being
     if not offer.is_active or not being.is_active:
         raise PactOfferUnavailable
-    with transaction.atomic():
-        CharacterSheet.objects.select_for_update().filter(pk=sheet.pk).exists()
-        if active_pact_with(sheet, being) is not None:
-            raise PactAlreadyHeld(MSG_ALREADY_HELD.format(being=being.name))
-        standing, _ = DevotionStanding.objects.get_or_create(character_sheet=sheet, being=being)
-        update_fields: list[str] = []
-        if standing.valence is None:
-            standing.valence = PatronageValence.PACT
-            standing.established_at = timezone.now()
-            update_fields += ["valence", "established_at"]
-        if standing.released_at is not None:
-            standing.released_at = None
-            update_fields.append("released_at")
-        if update_fields:
-            standing.save(update_fields=update_fields)
-        instance = _fresh_condition_instance(sheet, offer)
-        pact = CharacterPact.objects.create(
-            character_sheet=sheet,
-            offer=offer,
-            devotion_standing=standing,
-            condition_instance=instance,
-        )
-        for commitment in offer.commitments.filter(
-            kind=CharacterPactCommitmentKind.FAVOR_EARNED
-        ).order_by("pk"):
-            open_pact_period(pact, commitment)
+    guard = CacheGuard()
+    guard.watch_created(
+        DevotionStanding, CharacterPact, PactPeriodDetails, Project, ConditionInstance
+    )
+    existing = get_condition_instance(sheet.character, offer.condition, include_suppressed=True)
+    linked = (
+        list(CharacterPact.objects.filter(condition_instance=existing))
+        if existing is not None
+        else []
+    )
+    guard.keep(
+        DevotionStanding.objects.filter(character_sheet=sheet, being=being).first(),
+        existing,
+        *linked,
+        *(
+            details.project
+            for details in PactPeriodDetails.objects.filter(
+                pact__in=linked, project__status=ProjectStatus.ACTIVE
+            ).select_related("project")
+        ),
+    )
+    try:
+        with transaction.atomic():
+            CharacterSheet.objects.select_for_update().filter(pk=sheet.pk).exists()
+            if active_pact_with(sheet, being) is not None:
+                raise PactAlreadyHeld(MSG_ALREADY_HELD.format(being=being.name))
+            instance = _fresh_condition_instance(sheet, offer)
+            standing, _ = DevotionStanding.objects.get_or_create(character_sheet=sheet, being=being)
+            update_fields: list[str] = []
+            if standing.valence is None:
+                standing.valence = PatronageValence.PACT
+                standing.established_at = timezone.now()
+                update_fields += ["valence", "established_at"]
+            if standing.released_at is not None:
+                standing.released_at = None
+                update_fields.append("released_at")
+            if update_fields:
+                standing.save(update_fields=update_fields)
+            pact = CharacterPact.objects.create(
+                character_sheet=sheet,
+                offer=offer,
+                devotion_standing=standing,
+                condition_instance=instance,
+            )
+            for commitment in offer.commitments.filter(
+                kind=CharacterPactCommitmentKind.FAVOR_EARNED
+            ).order_by("pk"):
+                open_pact_period(pact, commitment)
+    except BaseException:
+        guard.restore()
+        raise
     return pact
 
 
