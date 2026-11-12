@@ -13,9 +13,10 @@ import { TAKEN_IN, mockCg, type Family } from './fixtures/cgLineage';
  * The staff house page's Family chapter: the two add buttons and the dialog they
  * open read "Add family member" and "Add household member".
  *
- * Character creation at Lineage: a house's card shows the opening of the house's
- * own description, and the whole of it reads below, in its paragraphs, once the
- * house is picked.
+ * Character creation at Lineage: a house's card carries the family's line of
+ * introduction and a link to the house's own page, which opens beside the draft.
+ * That page (`/families/4`) is where the house's description, written on its
+ * staff page, reads in full.
  */
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -220,6 +221,8 @@ async function mockStaff(page: Page) {
   });
 }
 
+/** The family row's line of introduction: what a card in character creation shows. */
+const KATTA_INTRO = 'The imperial house of Umbros, first in the shadow.';
 const NOBLE = { id: 2, name: 'Noble', styles_as_house: true };
 const KATTA_FAMILY: Family = {
   id: 4,
@@ -227,7 +230,7 @@ const KATTA_FAMILY: Family = {
   kind: NOBLE,
   influence: 0,
   standing: null,
-  description: KATTA_LORE,
+  description: KATTA_INTRO,
   born_particle: 'mar',
   taken_in_particle: 'mal',
   inherited: { facets: [], features: [], liege_name: '' },
@@ -237,6 +240,27 @@ const VALEWEEP_FAMILY: Family = {
   id: 5,
   name: 'Valeweep',
   description: 'A ducal house of the northern marches.',
+};
+
+/** `/api/roster/families/4/tree/`: the family row with its short line, and the
+ * house as a gate shows it, carrying the description written on its staff page. */
+const FAMILY_TREE = {
+  family: { ...KATTA_FAMILY, is_playable: true, origin_realm: null },
+  house: {
+    id: KATTA,
+    name: 'House Katta',
+    description: KATTA_LORE,
+    words: 'First in the Shadow',
+    colors: 'red and black',
+    sigil_description: 'a red dragon breaking chains in its teeth',
+    org_type_name: 'noble_family',
+    society_name: 'The Umbral Court',
+    family_id: 4,
+  },
+  realm_name: 'Umbros',
+  nodes: [],
+  parentage: [],
+  unions: [],
 };
 
 test.describe('#5106 on the production bundle', () => {
@@ -315,48 +339,63 @@ test.describe('#5106 on the production bundle', () => {
     expect(errors, errors.join('\n')).toEqual([]);
   });
 
-  test("character creation shows a house's own description: the opening on its card, the whole below", async ({
+  test("character creation: a house's card is a line of introduction and a way to its page", async ({
     page,
+    context,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 1800 });
+    await page.setViewportSize({ width: 1280, height: 1500 });
     await mockCg(page, TAKEN_IN, {
       families: [KATTA_FAMILY, VALEWEEP_FAMILY],
       family: KATTA_FAMILY,
+    });
+    const writes: string[] = [];
+    page.on('request', (request) => {
+      if (request.method() !== 'GET') writes.push(`${request.method()} ${request.url()}`);
     });
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
     await page.goto('/characters/create');
 
-    // Below the cards: the whole description, in the author's three paragraphs.
-    const about = page.getByLabel('About Katta');
-    await expect(about).toBeVisible();
-    await expect(about.locator('p')).toHaveCount(3);
-    await expect(about.locator('p').nth(0)).toContainText('which wall their ancestor held.');
-    await expect(about.locator('p').nth(2)).toContainText('A red dragon breaking chains');
-    // Paragraph for paragraph, it is the text on the house's own page.
-    expect(await about.locator('p').allTextContents()).toEqual(KATTA_LORE.split('\n\n'));
-
-    // On the card: the same text, cut to four lines by the page's own rule.
-    const cardText = page
-      .locator('.cursor-pointer', { hasText: 'Katta' })
-      .first()
-      .getByText('Commoners often confuse');
-    const clamp = await cardText.evaluate((node) => {
-      const style = getComputedStyle(node);
-      return {
-        lines: style.getPropertyValue('-webkit-line-clamp'),
-        shown: node.clientHeight,
-        full: node.scrollHeight,
-        lineHeight: parseFloat(style.lineHeight),
-      };
-    });
-    console.log('card description clamp:', clamp);
-    expect(clamp.lines).toBe('4');
-    expect(clamp.shown).toBeLessThanOrEqual(Math.ceil(clamp.lineHeight * 4) + 1);
-    expect(clamp.full).toBeGreaterThan(clamp.shown);
-
+    const card = page.locator('.cursor-pointer', { hasText: 'Katta' }).first();
+    await expect(card).toContainText(KATTA_INTRO);
+    // The card holds the introduction only: none of the house's long description.
+    await expect(page.getByText('Commoners often confuse')).toHaveCount(0);
+    const link = card.getByRole('link', { name: 'House page' });
+    await expect(link).toHaveAttribute('href', '/families/4');
+    await expect(link).toHaveAttribute('target', '_blank');
     await page.waitForTimeout(400);
-    await page.screenshot({ path: shot('4-cg-house-description.png'), fullPage: true });
+    await page.screenshot({ path: shot('4-cg-house-card.png'), fullPage: true });
+
+    // The link opens the house's page beside character creation; the draft stays
+    // where it was and the click picks nothing.
+    await context.route('**/api/**', async (route: Route) => {
+      const p = new URL(route.request().url()).pathname;
+      if (p === '/api/roster/families/4/tree/') return route.fulfill({ json: FAMILY_TREE });
+      if (p === '/api/roster/families/4/slots/') {
+        return route.fulfill({ json: { slots: [], pools: [] } });
+      }
+      // The new tab is a signed-in player's: the account, then empty chrome reads.
+      if (p === '/api/user/') {
+        return route.fulfill({ json: { ...ACCOUNT, is_staff: false, username: 'player-e2e' } });
+      }
+      if (p === '/api/roster/entries/mine/' || BARE_ARRAYS.includes(p)) {
+        return route.fulfill({ json: [] });
+      }
+      return route.fulfill({ json: EMPTY_PAGE });
+    });
+    writes.length = 0; // the stage's own loading writes are done; count from the click
+    const [housePage] = await Promise.all([context.waitForEvent('page'), link.click()]);
+    await housePage.waitForLoadState();
+    await expect(housePage).toHaveURL(/\/families\/4$/);
+    await expect(housePage.getByRole('heading', { level: 1, name: 'House Katta' })).toBeVisible();
+    // The house's description, as written on its staff page, paragraph for paragraph.
+    const description = housePage.getByRole('region', { name: 'Description' });
+    expect(await description.locator('p').allTextContents()).toEqual(KATTA_LORE.split('\n\n'));
+    await housePage.screenshot({ path: shot('7-house-player-page.png'), fullPage: true });
+
+    await expect(page).toHaveURL(/\/characters\/create$/);
+    await expect(page.getByLabel('An established family')).toBeChecked();
+    expect(writes, 'following the link writes nothing to the draft').toEqual([]);
     expect(errors, errors.join('\n')).toEqual([]);
   });
 });

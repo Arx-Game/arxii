@@ -217,14 +217,14 @@ person.
   per tree. The panel links a selected sheeted node to its sheet through it,
   reads the family line as "House X" only for a `styles_as_house` kind, and
   draws the family's description under that line when it is non-empty.
-- (#5106) `FamilySerializer.description` is the house's own description
-  (`Organization.description`, written on the house's Almanach page) when the
-  family has a house with one written, else `Family.description` (the brief
-  note on the family row). One rule for every reader of the serializer: the CG
-  Lineage family cards, the family page and the kin panel. The list view's
-  `_inherited_by_family` batch carries it, so the list adds no query. In CG the
-  card shows the opening lines and the full text reads below once the family
-  is picked.
+- (#5106) Two descriptions, two jobs. `Family.description` (the family row,
+  Django admin) is the line or two of introduction a character creation card
+  shows. `Organization.description` (the house, written on its Almanach page)
+  is the house's page of lore, and the family page shows it: `FamilyPage` reads
+  `tree.house.description` and falls back to the family row's line for a family
+  with no house or a house with nothing written. Each character creation card
+  links to its family page (`urls.family`, "House page" for a house-styled
+  kind, "Family page" otherwise), opened in a new tab so the draft stays put.
 - (#4209) FE: the family page, `frontend/src/kinship/pages/FamilyPage.tsx`
   at `/families/:id` (a `Family` pk, never an `Organization` pk; signed-in
   viewers, the tree endpoint's own gate), over `useFamilyTree` and

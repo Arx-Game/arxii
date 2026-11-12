@@ -13,10 +13,6 @@ from world.roster.constants import RelationshipType
 from world.roster.models import Family, FamilyKind, KinSlotPool, Kinsperson
 from world.societies.serializers import OrganizationShopWindowSerializer
 
-#: The key the list view's batch files a house's own description under (#5106);
-#: read by ``FamilySerializer.to_representation``, never part of ``inherited``.
-HOUSE_DESCRIPTION = "house_description"
-
 
 class FamilyKindSerializer(serializers.ModelSerializer):
     """Serializer for a family's authored kind (#3617)."""
@@ -102,9 +98,7 @@ class FamilySerializer(serializers.ModelSerializer):
         """
         grouping = self.context.get("inherited_by_family")
         if grouping is not None:
-            inherited = grouping.get(obj.id, {"facets": [], "features": [], "liege_name": ""})
-            # ``house_description`` rides the same batch for ``to_representation``
-            return {key: value for key, value in inherited.items() if key != HOUSE_DESCRIPTION}
+            return grouping.get(obj.id, {"facets": [], "features": [], "liege_name": ""})
         from world.societies.houses.almanach_reads import facet_payload  # noqa: PLC0415
         from world.societies.houses.services import house_for_family  # noqa: PLC0415
 
@@ -130,26 +124,6 @@ class FamilySerializer(serializers.ModelSerializer):
             ],
             "liege_name": liege.liege.name if liege is not None else "",
         }
-
-    def to_representation(self, instance: Family) -> dict:
-        """A family with a house reads as its house does (#5106): the description
-        staff write on the house's own page, not the family row's brief note. The
-        family's own is what shows for a family with no house, or a house with
-        nothing written yet."""
-        data = super().to_representation(instance)
-        house_description = self._house_description(instance)
-        if house_description:
-            data["description"] = house_description
-        return data
-
-    def _house_description(self, obj: Family) -> str:
-        grouping = self.context.get("inherited_by_family")
-        if grouping is not None:
-            return grouping.get(obj.id, {}).get(HOUSE_DESCRIPTION, "")
-        from world.societies.houses.services import house_for_family  # noqa: PLC0415
-
-        org = house_for_family(obj)
-        return org.description if org is not None else ""
 
     def get_standing(self, obj) -> int | None:
         by_family = self.context.get("standing_by_family")

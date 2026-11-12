@@ -6,7 +6,7 @@
  * already comes filtered to what the viewer may see, plus the CG slot browser's
  * open seats. Sections render or vanish: the gate (a plate for a house-styled
  * kind, with the house's words, colours and sigil; a plain head otherwise), the
- * family's own description, the roll grouped by generation in full-formal
+ * house's description (the family row's line when there is none), the roll grouped by generation in full-formal
  * names, the tree in short names, the selected person, the open seats.
  *
  * Names: the roll and the selected entry print `full_name`; the tree prints
@@ -150,6 +150,10 @@ export function FamilyPageInner({ familyId }: { familyId: number | undefined }) 
   const family = tree.family;
   const house = tree.house;
   const styled = family.kind.styles_as_house;
+  // A house's page reads the description written on the house (#5106); the family
+  // row's own line is the short introduction character creation shows, and is all
+  // a family with no house, or a house with nothing written, has to show.
+  const description = house?.description || family.description;
   const title = styled ? `House ${family.name}` : family.name;
   const eyebrow = [`${family.kind.name} ${styled ? 'House' : 'Family'}`, tree.realm_name]
     .filter(Boolean)
@@ -173,9 +177,9 @@ export function FamilyPageInner({ familyId }: { familyId: number | undefined }) 
         {arms && <p className="family-arms">{arms}</p>}
       </header>
 
-      {family.description && (
+      {description && (
         <section className="family-description" aria-label="Description">
-          {paragraphs(family.description).map((text, index) => (
+          {paragraphs(description).map((text, index) => (
             <p key={index}>{text}</p>
           ))}
         </section>

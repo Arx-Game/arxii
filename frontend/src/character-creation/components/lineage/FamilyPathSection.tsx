@@ -35,7 +35,7 @@ import {
   KinSlotPicker,
   TarotNamingRitual,
 } from '../LineageStage';
-import { ChoiceRow, Field, Paragraphs } from '../../folio';
+import { ChoiceRow, Field } from '../../folio';
 import { FamilyTemplateForm } from './FamilyTemplateForm';
 import { InheritedFactsPanel } from './InheritedFactsPanel';
 import { ServicePanel } from './ServicePanel';
@@ -360,12 +360,6 @@ function ClaimedFamilyPath({
 
       {draft.family && (
         <FamilyNamePreview firstName={draft.draft_data.first_name} family={selectedFamily} />
-      )}
-
-      {selectedFamily?.description && (
-        <div className="space-y-3 text-sm" aria-label={`About ${selectedFamily.name}`}>
-          <Paragraphs text={selectedFamily.description} />
-        </div>
       )}
 
       {draft.family && <InheritedFactsPanel family={selectedFamily} />}

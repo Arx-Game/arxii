@@ -33,7 +33,6 @@ from world.roster.serializers import (
     KinSlotPoolSerializer,
     KinSlotSerializer,
 )
-from world.roster.serializers.families import HOUSE_DESCRIPTION
 from world.roster.services.kinship import (
     OMNISCIENT,
     FamilyTreePayload,
@@ -81,14 +80,12 @@ def _inherited_by_family(families: list[Family]) -> dict[int, dict]:
     # (unordered-by-default) result closely enough for a house lookup - a
     # family has at most one org in practice.
     org_by_family: dict[int, int] = {}
-    description_by_org: dict[int, str] = {}
-    for org_id, family_id, description in (
+    for org_id, family_id in (
         Organization.objects.filter(family_id__in=family_ids)
         .order_by("family_id", "pk")
-        .values_list("pk", "family_id", "description")
+        .values_list("pk", "family_id")
     ):
         org_by_family.setdefault(family_id, org_id)
-        description_by_org[org_id] = description
     if not org_by_family:
         return grouping
     org_ids = list(org_by_family.values())
@@ -121,8 +118,6 @@ def _inherited_by_family(families: list[Family]) -> dict[int, dict]:
             "facets": aspects_by_org.get(org_id, []),
             "features": features_by_org.get(org_id, []),
             "liege_name": liege_name_by_org.get(org_id, ""),
-            # the house's own description (#5106), read by ``to_representation``
-            HOUSE_DESCRIPTION: description_by_org.get(org_id, ""),
         }
     return grouping
 
