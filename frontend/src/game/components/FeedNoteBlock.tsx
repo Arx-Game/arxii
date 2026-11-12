@@ -4,6 +4,10 @@ import { cn } from '@/lib/utils';
 import { FeedBlockFrame } from './FeedBlockFrame';
 import { KIND_LABELS, feedItemKey } from '../feedChips';
 import { VISION_FRAME_CLASS, VISION_GLYPH } from '@/worship/visionStyle';
+import { HiddenDivider } from '@/components/HiddenDivider';
+import { MessageModeration } from '@/channels/components/MessageModeration';
+import { useAccount } from '@/store/hooks';
+import { markMatches, useFeedFind } from '../feedFind';
 
 interface FeedNoteBlockProps {
   note: FeedNote;
@@ -28,6 +32,9 @@ const BOX_GLYPHS: Partial<Record<FeedNote['kind'], string>> = { look: '◎', err
  *   `VisionCard`.
  * - `ooc` (#4337): a player talking out of character, in full ink like speech
  *   and set off by a sky rule, so it never reads as a pose or a system note.
+ * - `channel` (#3299): the same sky rule and ink, led by the channel's name and
+ *   the speaker's label; a run of a blocked author's lines is the "N hidden"
+ *   rule. Staff get Delete and Ban on a line.
  *
  * **No note sets its own size, face or width** (#4330): every one inherits the
  * reader's Display settings (`--play-prose-size`, `--play-prose-family`, the
@@ -49,7 +56,7 @@ export function FeedNoteBlock({ note, allKeys }: FeedNoteBlockProps) {
   return (
     <FeedBlockFrame
       itemKey={feedItemKey('note', note.id)}
-      stub={`${KIND_LABELS[note.kind]} · ${time}`}
+      stub={`${note.channel?.name ?? KIND_LABELS[note.kind]} · ${time}`}
       allKeys={allKeys}
     >
       <FeedNoteBody note={note} time={time} />
@@ -57,8 +64,41 @@ export function FeedNoteBlock({ note, allKeys }: FeedNoteBlockProps) {
   );
 }
 
+function ChannelLine({ note, time }: { note: FeedNote; time: string }) {
+  const find = useFeedFind();
+  const isStaff = useAccount()?.is_staff ?? false;
+  const channel = note.channel;
+  if (!channel) return null;
+  if (channel.hiddenCount > 0) {
+    return (
+      <div data-testid="feed-note" data-kind="channel">
+        <HiddenDivider label={`${channel.hiddenCount} hidden`} />
+      </div>
+    );
+  }
+  return (
+    <div
+      data-testid="feed-note"
+      data-kind="channel"
+      className={cn(
+        'border-l-2 border-sky-500/70 pl-2.5 text-foreground [overflow-wrap:anywhere]',
+        'dark:border-sky-400/70'
+      )}
+    >
+      <span className="text-muted-foreground">{channel.name}</span>{' '}
+      <span className="font-medium">{channel.speaker}</span>
+      {': '}
+      <span>{markMatches(note.content, find)}</span>
+      {isStaff ? <MessageModeration channelId={channel.id} messageId={channel.messageId} /> : null}
+      <span className="sr-only">{time}</span>
+    </div>
+  );
+}
+
 function FeedNoteBody({ note, time }: { note: FeedNote; time: string }) {
   const { kind } = note;
+
+  if (kind === 'channel') return <ChannelLine note={note} time={time} />;
 
   if (kind === 'vision') {
     return (

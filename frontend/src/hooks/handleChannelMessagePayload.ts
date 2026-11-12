@@ -48,8 +48,9 @@ function isValid(payload: ChannelMessagePayload | undefined): payload is Channel
 }
 
 /**
- * A channel message arrived live (#3299). It never enters the IC feed: it goes
- * into that channel's cached history only. Own messages and lanes the player
+ * A channel message arrived live (#3299). It goes into that channel's cached
+ * history only, never into the session's notes: the feed derives its channel
+ * lines from those caches (`useChannelFeedNotes`). Own messages and lanes the player
  * is already reading change nothing else; otherwise `badge` bumps the unread
  * count and `all` also toasts. `none` stays silent.
  */

@@ -37,7 +37,8 @@ describe('default chips (#3856)', () => {
       ['Visions', 'vision', true],
       // Players talking out of character to the room (#4337): it shows; its wake
       // flag is set like Visions', though only interactions drive attention today.
-      ['OOC', 'ooc', true],
+      // Player channel lines (#3299) are OOC feed lines and sit here too.
+      ['OOC', 'ooc,channel', true],
       // Pages (#4129) are OOC lines, so the hide-system button hides them too.
       ['System', 'look,item,error,page,system', false],
     ]);
@@ -120,10 +121,10 @@ describe('editing', () => {
   it('wake is per chip', () => {
     const state = setChipWake(defaults(), 'am', true);
     expect(wakingKinds(state.chips)).toEqual(
-      new Set(['pose', 'say', 'emit', 'whisper', 'ambience', 'vision', 'ooc'])
+      new Set(['pose', 'say', 'emit', 'whisper', 'ambience', 'vision', 'ooc', 'channel'])
     );
     expect(wakingKinds(toggleChip(state, 'rp').chips)).toEqual(
-      new Set(['whisper', 'ambience', 'vision', 'ooc'])
+      new Set(['whisper', 'ambience', 'vision', 'ooc', 'channel'])
     );
   });
 });
@@ -175,6 +176,29 @@ describe('normalizeFeedChips', () => {
     const stored = DEFAULT_FEED_CHIPS.map((c) => (c.id === 'sy' ? { ...c, kinds: ['look'] } : c));
     const chips = normalizeFeedChips(stored);
     expect(chips.find((c) => c.id === 'sy')?.kinds).toEqual(['look']);
+  });
+
+  it('a channel line is owned by the OOC chip and goes with it (#3299)', () => {
+    expect(chipFor('channel', DEFAULT_FEED_CHIPS)?.id).toBe('oc');
+    expect(isKindShown('channel', defaults())).toBe(true);
+    expect(isKindShown('channel', toggleChip(defaults(), 'oc'))).toBe(false);
+  });
+
+  it('migrates a layout saved before channel existed: channel lines go to the OOC chip (#3299)', () => {
+    const stored = DEFAULT_FEED_CHIPS.map((c) => (c.id === 'oc' ? { ...c, kinds: ['ooc'] } : c));
+    const chips = normalizeFeedChips(stored);
+    expect(chips.find((c) => c.id === 'oc')?.kinds).toEqual(['ooc', 'channel']);
+    expect(isKindShown('channel', toggleChip({ all: true, chips }, 'oc'))).toBe(false);
+  });
+
+  it('leaves channel where a newer layout put it (#3299)', () => {
+    const stored = [
+      ...DEFAULT_FEED_CHIPS.map((c) => (c.id === 'oc' ? { ...c, kinds: ['ooc'] } : c)),
+      { id: 'c1', label: 'Chans', kinds: ['channel'], on: true, wake: false, custom: true },
+    ];
+    const chips = normalizeFeedChips(stored);
+    expect(chips.find((c) => c.id === 'oc')?.kinds).toEqual(['ooc']);
+    expect(chips.find((c) => c.id === 'c1')?.kinds).toEqual(['channel']);
   });
 
   it('leaves a System chip that already owns system alone', () => {

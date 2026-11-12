@@ -124,6 +124,19 @@ export interface FeedNote {
   from?: { personaId: number; name: string };
   /** True on the sender's own echo of a page, which never counts as unread. */
   outgoing?: boolean;
+  /**
+   * A line from a player channel (#3299), kind `channel`, built from the channel
+   * message caches (never from the session): `content` is the plain message
+   * text. `hiddenCount` above zero makes it the "N hidden" divider that stands
+   * for a run of a blocked author's lines (`content` and `speaker` empty).
+   */
+  channel?: {
+    id: number;
+    name: string;
+    messageId: number;
+    speaker: string;
+    hiddenCount: number;
+  };
 }
 
 /**
