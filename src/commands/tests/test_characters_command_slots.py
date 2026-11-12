@@ -66,9 +66,21 @@ class StockCharacterMintRemovedTests(TestCase):
         assert "chardelete" not in keys
         assert "@ic" in keys or "ic" in keys
 
-    def test_stock_channel_command_and_its_aliases_are_gone(self):
-        """#3299: player channels are world.channels models; Evennia's @channel is retired."""
+    def test_stock_channel_and_bridge_commands_are_gone(self):
+        """#3299: player channels are world.channels models; Evennia's @channel and the
+        bridges that relay its ChannelDB rows are retired, aliases included."""
         cmdset = AccountCmdSet()
         cmdset.at_cmdset_creation()
         names = {name for cmd in cmdset.commands for name in (cmd.key, *cmd.aliases)}
-        assert not names & {"@channel", "@chan", "@channels"}
+        retired = {
+            "@channel",
+            "@chan",
+            "@channels",
+            "irc2chan",
+            "ircstatus",
+            "rss2chan",
+            "grapevine2chan",
+            "discord2chan",
+            "discord",
+        }
+        assert not names & retired

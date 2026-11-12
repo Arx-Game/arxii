@@ -644,7 +644,9 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         # puppet), and there Evennia's account `look` still draws its stock screen.
         # @channel (#3299): Evennia's stock channel command (aliases @chan, @channels)
         # speaks on ChannelDB rows; player channels are world.channels models now.
-        # Removing by key drops its aliases with it.
+        # Removing by key drops its aliases with it. The bridge commands (irc2chan,
+        # ircstatus, rss2chan, grapevine2chan, discord2chan, alias discord) relay those
+        # same ChannelDB rows to outside services, so they go too.
         for cmdname in (
             "ic",
             "characters",
@@ -654,6 +656,11 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
             "chardelete",
             "ooc",
             "@channel",
+            "irc2chan",
+            "ircstatus",
+            "rss2chan",
+            "grapevine2chan",
+            "discord2chan",
         ):
             self.remove(cmdname)
 
