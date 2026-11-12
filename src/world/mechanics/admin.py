@@ -9,9 +9,21 @@ from typing import Any
 from django.contrib import admin
 from django.forms import ModelForm
 from django.http import HttpRequest
+from django.utils.html import format_html_join
 
+from world.achievements.models import RewardDefinition
 from world.admin_utils import OneRowPerFormSet
-from world.mechanics.constants import MANEUVER_EFFECT_BASE_HELP, EffectKind
+from world.conditions.models import ConditionModifierEffect
+from world.covenants.models import CovenantLevelBonus, CovenantRoleBonus, VowStatScaling
+from world.distinctions.models import DistinctionEffect
+from world.forms.models import FormCombatProfileEffect
+from world.items.crafting.models import CraftingRecipeModifier
+from world.items.models import FashionStyleBonus
+from world.mechanics.constants import (
+    EQUIPMENT_RELEVANT_CATEGORIES,
+    MANEUVER_EFFECT_BASE_HELP,
+    EffectKind,
+)
 from world.mechanics.models import (
     AestheticAxisConfig,
     Application,
@@ -76,12 +88,16 @@ class ModifierTargetAdmin(admin.ModelAdmin):
         "scope_resonance",
         "scope_opponent_property",
         "scope_opponent_condition",
+        "target_check_category",
+        "target_scope_check_type",
         "display_order",
         "is_active",
     ]
     list_filter = ["category", "is_active"]
     autocomplete_fields = [
         "target_trait",
+        "target_check_category",
+        "target_scope_check_type",
         "scope_technique",
         "scope_gift",
         "scope_damage_type",
@@ -106,7 +122,87 @@ class ModifierTargetAdmin(admin.ModelAdmin):
         "scope_resonance",
         "scope_opponent_property",
         "scope_opponent_condition",
+        "target_check_category",
+        "target_scope_check_type",
     ]
+    # #4386: staff see what hands out a target (e.g. what grants "cannot botch at
+    # Riding") without leaving the page: every authored row that grants a modifier on it.
+    readonly_fields = ["granted_by"]
+
+    @admin.display(description="Granted by")
+    def granted_by(self, obj: ModifierTarget) -> str:
+        """The authored rows that grant a modifier on this target: distinction effects,
+        condition effects, crafting recipe modifiers, achievement reward definitions, form
+        combat profile effects, and, for a target the equipment walk reaches, covenant
+        level and role bonuses, vow stat scalings and fashion style bonuses. Those four
+        reach a character only through that walk (``EQUIPMENT_RELEVANT_CATEGORIES``), so on
+        any other target they grant nothing and are not listed. Per-character rows are left
+        out."""
+        if obj.pk is None:
+            return "-"
+        sources: list[tuple[str, Any]] = [
+            (
+                "Distinction",
+                DistinctionEffect.objects.filter(target=obj).select_related(
+                    "distinction", "target"
+                ),
+            ),
+            (
+                "Condition",
+                ConditionModifierEffect.objects.filter(modifier_target=obj).select_related(
+                    "condition", "stage__condition", "modifier_target"
+                ),
+            ),
+            (
+                "Crafting recipe",
+                CraftingRecipeModifier.objects.filter(target=obj).select_related(
+                    "recipe", "target"
+                ),
+            ),
+            ("Achievement reward", RewardDefinition.objects.filter(modifier_target=obj)),
+            (
+                "Form combat profile",
+                FormCombatProfileEffect.objects.filter(target=obj).select_related(
+                    "profile__form", "target__category"
+                ),
+            ),
+        ]
+        if obj.category.name in EQUIPMENT_RELEVANT_CATEGORIES:
+            sources += self._equipment_walk_sources(obj)
+        labels = [f"{kind}: {row}" for kind, rows in sources for row in rows]
+        if not labels:
+            return "Nothing grants this target yet."
+        return format_html_join("", "<div>{}</div>", ((label,) for label in labels))
+
+    @staticmethod
+    def _equipment_walk_sources(obj: ModifierTarget) -> list[tuple[str, Any]]:
+        """The ``granted_by`` grantors that reach a target only through the equipment walk."""
+        return [
+            (
+                "Covenant level bonus",
+                CovenantLevelBonus.objects.filter(modifier_target=obj).select_related(
+                    "modifier_target"
+                ),
+            ),
+            (
+                "Covenant role bonus",
+                CovenantRoleBonus.objects.filter(modifier_target=obj).select_related(
+                    "covenant_role", "modifier_target"
+                ),
+            ),
+            (
+                "Vow stat scaling",
+                VowStatScaling.objects.filter(modifier_target=obj).select_related(
+                    "covenant_role", "modifier_target"
+                ),
+            ),
+            (
+                "Fashion style",
+                FashionStyleBonus.objects.filter(target=obj).select_related(
+                    "fashion_style", "target"
+                ),
+            ),
+        ]
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """Correct the trait help text for language traits (model text says stat only)."""

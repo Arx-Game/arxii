@@ -7,6 +7,9 @@ BOTCH_SUCCESS_LEVEL_MAX = -2
 below this is a botch / critical failure. Single source for the boundary that
 world.magic.services.sanctum_install previously declared locally."""
 
+# The longest recorded modifier label (``ConsequenceOutcomeModifier.source_label``).
+MODIFIER_SOURCE_LABEL_MAX_LENGTH = 120
+
 LEVEL_POINTS_PER_LEVEL = 5
 """Points a character's class level contributes to EVERY check, on both sides (#2707).
 
@@ -117,6 +120,9 @@ class ModifierSourceKind(models.TextChoices):
     # #5026: what a technique cast into a Strike adds to that Strike's hit roll, set by
     # the technique roll and labelled with the technique.
     TECHNIQUE = "technique", "Technique roll"
+    # #4386: a zero-value provenance row naming what makes the roller unable to botch at
+    # this check (a botch-immunity target with a positive total). Shown to the roller only.
+    BOTCH_IMMUNITY = "botch_immunity", "Cannot botch"
 
 
 # Kinds ``perform_check`` already counts on its own, so a caller never feeds them back in

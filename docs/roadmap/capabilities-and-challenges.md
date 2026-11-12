@@ -76,6 +76,7 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 - **`apply_resolution(pending, context)`** — dispatch ConsequenceEffects via handlers using `ResolutionContext`. Returns list of `AppliedEffect` with optional `created_instance` for caller bookkeeping.
 - **`ResolutionContext`** — carries typed optional refs (challenge_instance, action_context, future fields). Replaces direct ChallengeInstance coupling in effect handlers.
 - **Two-step design** — separation of selection from application supports future reroll/negation mechanics.
+- **Niche botch immunity (#4386, ADR-4386): SHIPPED.** Any modifier source (a distinction, condition, achievement, form or worn crafted item) can make a character unable to botch at one check category or one check type, through a `botch_immunity` `ModifierTarget` with `target_check_category` or `target_scope_check_type`. A botch lands on Failure on every rolled check, with or without a situation context, through the same floor the covenant vow `BOTCH_IMMUNITY` perk uses; the room sees an ordinary Failure and the roller's breakdown shows "Cannot botch: <source>". The tuning dashboard's checks panel and the magic outcome preview can price it. Divine intervention (#4349) is the first planned user. Journey: `src/integration_tests/test_niche_checks_cannot_backfire_journeys.py`.
 - See `docs/architecture/check-resolution-spectrum.md` for how this fits the broader check pipeline.
 
 ### Resolution Pipeline (actions app)

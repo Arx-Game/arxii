@@ -221,3 +221,11 @@ One kind of quantity a modifier can change (`ModifierLane`). The check lane and 
 (#4726, ADR-4726-A: a buff to a stat, in stored units, applied wherever the stat is read) exist;
 later lanes (cast power, damage, soak, healing and more) add a choice and rows to the same tables.
 _Avoid_: channel, track
+
+**Niche** (#4386):
+A kind of check that defines a character, so that being bad at it would undermine their appeal (a scholar's research, a duelist's fencing). A niche has two halves: easier odds (a check-bonus modifier on the check type's own target) and botch immunity. It is never a tag on the sheet; it comes from a source the character holds.
+_Avoid_: specialty, focus, signature check
+
+**Botch immunity** (#2536, #4386; ADR-0152, ADR-4386):
+A guarantee that a check cannot land on a botch (Critical Failure, `success_level <= BOTCH_SUCCESS_LEVEL_MAX`); a raw botch is raised to the chart's least-bad non-botch result, normally Failure, and counts as a Failure in every respect. It has two sources sharing one floor in `_apply_outcome_guarantees`: a covenant vow perk of kind `BOTCH_IMMUNITY` (needs a situation context, announced to the room), and a positive total on a `botch_immunity` modifier target scoped to the check's category or type (any rolled check, not announced; the roller's breakdown shows "Cannot botch: <source>"). `is_botch_immune` answers the second.
+_Avoid_: can't fail (it can fail), fumble protection, crit-fail shield

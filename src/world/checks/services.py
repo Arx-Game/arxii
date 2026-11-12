@@ -11,6 +11,7 @@ from django.db.models import Max, Q
 from world.checks.constants import (
     BOTCH_SUCCESS_LEVEL_MAX,
     LEVEL_POINTS_PER_LEVEL,
+    MODIFIER_SOURCE_LABEL_MAX_LENGTH,
     ModifierLane,
     ModifierSourceKind,
 )
@@ -37,7 +38,7 @@ from world.traits.models import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterable, Sequence
 
     from evennia.objects.models import ObjectDB
 
@@ -46,6 +47,7 @@ if TYPE_CHECKING:
     from world.checks.types import ExtraTraitTerm, RollSnapshot
     from world.covenants.models import VowSituationalPerk
     from world.covenants.perks.context import SituationContext
+    from world.covenants.perks.services import FiredPerk
     from world.items.models import ItemCheckModifier
     from world.mechanics.derived_amounts import DerivedInputs
     from world.mechanics.models import CharacterChallengeRecord, ModifierTarget
@@ -180,7 +182,9 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     # fractional band edges count exactly (#4601). An unslid chart reads only the face.
     check_roll = CheckRoll(face=effective_roll, fraction=random.random())  # noqa: S311 # NOSONAR game RNG
     outcome = breakdown.standing.slid.outcome_for(check_roll.position) if breakdown.chart else None
-    outcome = _apply_outcome_guarantees(character, outcome, breakdown.chart, situation_ctx)
+    outcome = _apply_outcome_guarantees(
+        character, outcome, breakdown.chart, situation_ctx, check_type
+    )
 
     result = _check_result(check_type, outcome, breakdown, effective_roll=effective_roll)
     _award_check_development(character, check_type, effort_level, extra_traits=extra_traits)
@@ -424,7 +428,9 @@ def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signatu
         stat_override=stat_override,
         extra_traits=extra_traits,
     )
-    outcome = _apply_outcome_guarantees(character, forced_outcome, breakdown.chart, situation_ctx)
+    outcome = _apply_outcome_guarantees(
+        character, forced_outcome, breakdown.chart, situation_ctx, check_type
+    )
     return _check_result(check_type, outcome, breakdown)
 
 
@@ -721,6 +727,7 @@ def _apply_outcome_guarantees(
     outcome: "CheckOutcome | None",
     chart: "ResultChart | None",
     situation_ctx: "SituationContext | None",
+    check_type: "CheckType",
 ) -> "CheckOutcome | None":
     """Raise ``outcome`` to the effective TIER_FLOOR / BOTCH_IMMUNITY floor (#2536 slice 2).
 
@@ -736,8 +743,16 @@ def _apply_outcome_guarantees(
     ``CheckOutcome`` table when the chart has none (degenerate charts, forced
     outcomes without chart rows). Announces ONLY the binding perks, ONLY when
     the outcome actually changed — a guarantee that didn't bind is silence, not
-    spam. ``situation_ctx=None`` (every pre-slice-2 caller) or ``outcome=None``
-    returns unchanged with zero queries.
+    spam. ``outcome=None`` returns unchanged with zero queries.
+
+    **Niche botch immunity (#4386):** a raw botch also reads the character's
+    ``botch_immunity`` modifier targets scoped to ``check_type`` or its category
+    (``is_botch_immune``). A positive total adds the non-botch floor to the same
+    floor list the vow perks build, so one ``_lowest_outcome_at_or_above`` call
+    applies the highest. This route needs no ``situation_ctx`` (it runs on every
+    check) and announces nothing to the room: the roller's own breakdown carries a
+    "Cannot botch" line instead (``collect_check_modifiers``). Vow perks still
+    need a ``situation_ctx``; without one they neither fire nor make a dormant pass.
 
     Makes ONE dormant pass right after computing the live firings (#2536
     slice 3, Task 7 — ruling 2's "loud OFF state"): a DISENGAGED guarantee
@@ -754,26 +769,82 @@ def _apply_outcome_guarantees(
     still fires at full strength for a secondary (deliberately unweakened —
     it has no numeric field to soften).
     """
-    if situation_ctx is None or outcome is None:
+    if outcome is None:
         return outcome
-    if situation_ctx.roll_kind_perks_only:
+    if situation_ctx is not None and situation_ctx.roll_kind_perks_only:
         # An enchanted Strike's technique roll (#5092): outcome guarantees belong to the
         # Strike's hit roll and bind there once (ADR-5026).
         return outcome
 
-    try:
-        sheet = character.sheet_data  # type: ignore[attr-defined] — ObjectDB typeclass extension
-    except (ObjectDoesNotExist, AttributeError):
+    raw_level = int(outcome.success_level)
+    floors: list[int] = []
+    if raw_level <= BOTCH_SUCCESS_LEVEL_MAX and _niche_botch_immune(character, check_type):
+        floors.append(BOTCH_SUCCESS_LEVEL_MAX + 1)
+
+    sheet, binding = _binding_vow_guarantees(character, situation_ctx, raw_level)
+    floors.extend(floor for floor, _firing in binding)
+    if not floors:
         return outcome
 
+    replacement = _lowest_outcome_at_or_above(chart, max(floors))
+    if replacement is None or replacement.success_level <= raw_level:
+        # Capped at the chart's best outcome (#4601): nothing on this chart is better.
+        return outcome
+
+    if binding:
+        from world.covenants.perks.services import announce_fired_perks  # noqa: PLC0415
+
+        announce_fired_perks(
+            [firing for _floor, firing in binding], subject=sheet, location=character.location
+        )
+    return replacement
+
+
+def _sheet_or_none(character: "ObjectDB") -> "CharacterSheet | None":
+    """The character's sheet, or ``None`` for a sheet-less actor (a GM puppet, a raw object)."""
+    try:
+        return character.sheet_data  # type: ignore[attr-defined] — ObjectDB typeclass extension
+    except (ObjectDoesNotExist, AttributeError):
+        return None
+
+
+def _niche_botch_immune(character: "ObjectDB", check_type: "CheckType") -> bool:
+    """Whether ``character`` holds botch immunity at ``check_type`` from a modifier (#4386).
+
+    A sheet-less actor is never immune; a mocked check type (combat resolver tests pass a
+    MagicMock) is skipped, as ``collect_check_modifiers`` skips it.
+    """
+    from django.db.models import Model as _DjangoModel  # noqa: PLC0415
+
+    if not isinstance(check_type, _DjangoModel):
+        return False
+    sheet = _sheet_or_none(character)
+    if sheet is None:
+        return False
+    return is_botch_immune(sheet, check_type)
+
+
+def _binding_vow_guarantees(
+    character: "ObjectDB",
+    situation_ctx: "SituationContext | None",
+    raw_level: int,
+) -> "tuple[CharacterSheet | None, list[tuple[int, FiredPerk]]]":
+    """The vow perk half of ``_apply_outcome_guarantees`` (#2536 slice 2/3).
+
+    Returns the sheet and each live TIER_FLOOR/BOTCH_IMMUNITY firing whose floor exceeds
+    ``raw_level``, as ``(floor, firing)``, after the dormant pass. No firings, and no
+    query, without a ``situation_ctx`` or a sheet.
+    """
+    if situation_ctx is None:
+        return None, []
+    sheet = _sheet_or_none(character)
+    if sheet is None:
+        return None, []
+
     from world.covenants.perks.constants import PerkEffectKind  # noqa: PLC0415
-    from world.covenants.perks.services import (  # noqa: PLC0415
-        announce_fired_perks,
-        applicable_perks,
-    )
+    from world.covenants.perks.services import applicable_perks  # noqa: PLC0415
 
     kinds = (PerkEffectKind.TIER_FLOOR, PerkEffectKind.BOTCH_IMMUNITY)
-    raw_level = int(outcome.success_level)
     non_botch_floor = BOTCH_SUCCESS_LEVEL_MAX + 1
 
     fired = applicable_perks(
@@ -786,10 +857,7 @@ def _apply_outcome_guarantees(
 
     _announce_dormant_outcome_guarantees(sheet, situation_ctx, kinds, raw_level)
 
-    if not fired:
-        return outcome
-
-    binding = []
+    binding: list[tuple[int, FiredPerk]] = []
     for firing in fired:
         floor = _guarantee_floor(
             firing.perk,
@@ -799,19 +867,98 @@ def _apply_outcome_guarantees(
         )
         if floor is not None and floor > raw_level:
             binding.append((floor, firing))
-    if not binding:
-        return outcome
+    return sheet, binding
 
-    effective_floor = max(floor for floor, _firing in binding)
-    replacement = _lowest_outcome_at_or_above(chart, effective_floor)
-    if replacement is None or replacement.success_level <= raw_level:
-        # Capped at the chart's best outcome (#4601): nothing on this chart is better.
-        return outcome
 
-    announce_fired_perks(
-        [firing for _floor, firing in binding], subject=sheet, location=character.location
+def botch_floor_level(levels: "Iterable[int]") -> int | None:
+    """The success level a botch rises to on a chart with ``levels`` (#4386).
+
+    The lowest level at or above ``BOTCH_SUCCESS_LEVEL_MAX + 1``; when the chart has
+    none, its highest level. ``None`` for no levels. The same rule
+    ``_lowest_outcome_at_or_above`` applies to a chart's rows, for the odds previews
+    (``matchup_bands``, ``compute_matchup``) that work from levels alone.
+    """
+    ordered = sorted(set(levels))
+    if not ordered:
+        return None
+    non_botch_floor = BOTCH_SUCCESS_LEVEL_MAX + 1
+    return next((level for level in ordered if level >= non_botch_floor), ordered[-1])
+
+
+def botch_immunity_sources(
+    character_sheet: "CharacterSheet",
+    check_type: "CheckType",
+) -> list[ModifierContribution]:
+    """Every source the character holds on the botch_immunity targets for ``check_type``.
+
+    #4386. One contribution per source, across the active targets scoped to the check type
+    or its category (``ModifierTarget.botch_immunity_targets_for``): CHARACTER rows
+    (distinctions, achievements, forms) and worn crafted pieces through
+    ``modifier_target_contributions``, conditions through
+    ``get_condition_modifier_breakdown``. This list only NAMES the sources on the "Cannot
+    botch" lines; whether the character is immune is ``is_botch_immune``'s spec sum, never
+    this list's (a sized distinction is priced from the check lane's table here, so the
+    two sums can differ). No query once the target cache is built and no target is
+    authored.
+    """
+    from world.conditions.services import get_condition_modifier_breakdown  # noqa: PLC0415
+    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+
+    sources: list[ModifierContribution] = []
+    for target in ModifierTarget.botch_immunity_targets_for(check_type):
+        sources.extend(
+            modifier_target_contributions(character_sheet, target, lane=ModifierLane.CHECK)
+        )
+        sources.extend(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.CONDITION, source_label=label, value=value
+            )
+            for label, value in get_condition_modifier_breakdown(character_sheet, target)
+            if value != 0
+        )
+    return sources
+
+
+def is_botch_immune(character_sheet: "CharacterSheet", check_type: "CheckType") -> bool:
+    """Whether the character cannot botch at ``check_type`` (#4386).
+
+    The spec's sum: ``get_modifier_total + get_condition_modifier_total`` over the active
+    botch_immunity targets scoped to the check type or its category, positive. The amount
+    does not matter. No query once the target cache is built and no target is authored.
+    """
+    from world.conditions.services import get_condition_modifier_total  # noqa: PLC0415
+    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+    from world.mechanics.services import get_modifier_total  # noqa: PLC0415
+
+    total = sum(
+        get_modifier_total(character_sheet, target)
+        + get_condition_modifier_total(character_sheet, target)
+        for target in ModifierTarget.botch_immunity_targets_for(check_type)
     )
-    return replacement
+    return total > 0
+
+
+def _botch_immunity_contributions(
+    character_sheet: "CharacterSheet",
+    check_type: "CheckType",
+) -> list[ModifierContribution]:
+    """The "Cannot botch: <source>" breakdown lines for an immune character (#4386).
+
+    One value-0 BOTCH_IMMUNITY line per positive source, so the roll's totals, taper and
+    ``extra_modifiers_total`` are unchanged. Empty when ``is_botch_immune`` says the
+    character is not immune. A label is cut to what a recorded modifier row holds.
+    """
+    if not is_botch_immune(character_sheet, check_type):
+        return []
+    return [
+        ModifierContribution(
+            source_kind=ModifierSourceKind.BOTCH_IMMUNITY,
+            source_label=f"Cannot botch: {source.source_label}"[:MODIFIER_SOURCE_LABEL_MAX_LENGTH],
+            value=0,
+        )
+        for source in botch_immunity_sources(character_sheet, check_type)
+        if source.value > 0
+    ]
 
 
 def _lowest_outcome_at_or_above(chart: "ResultChart | None", floor: int) -> "CheckOutcome | None":
@@ -1803,6 +1950,12 @@ def collect_check_modifiers(  # noqa: PLR0913 - keyword-only check params mirror
         contributions.extend(
             _capability_contributions(character_sheet, check_type, extra_traits=extra_traits)
         )
+
+    # --- BOTCH IMMUNITY lines (#4386) ---
+    # A value-0 "Cannot botch: <source>" line per source when the character holds niche
+    # botch immunity here; the floor itself applies in ``_apply_outcome_guarantees``.
+    if isinstance(check_type, _DjangoModel):
+        contributions.extend(_botch_immunity_contributions(character_sheet, check_type))
 
     # --- CALLER-SUPPLIED contributions (combat strain/affinity, effort, ...) ---
     # Appended last so the gathered condition/rollmod/scene ordering stays stable.

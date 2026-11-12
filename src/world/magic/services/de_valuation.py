@@ -33,6 +33,7 @@ from world.magic.types.technique_power import (
 
 if TYPE_CHECKING:
     from world.conditions.models import ConditionTemplate
+    from world.traits.models import ResultChartOutcome
 
 #: The synthetic "reference attack" profile used by both the technique generic-modifier
 #: valuator and (#3390) the standalone condition/capability valuators to measure how much
@@ -73,6 +74,10 @@ def matchup_bands(context: EvalContext) -> list[MatchupBand]:
     reverse) — this is a local, byte-for-byte-equivalent replica of
     ``compute_matchup``'s ~40-line roll enumeration over the same tables, not a
     parallel formula.
+
+    ``context.botch_immune`` (#4386) folds every botch band into the band of the chart's
+    least-bad non-botch level (``world.checks.services.botch_floor_level``), as the roll
+    resolves for a character who cannot botch.
     """
     from world.traits.models import CheckRank, ResultChart, ResultChartOutcome  # noqa: PLC0415
 
@@ -106,9 +111,38 @@ def matchup_bands(context: EvalContext) -> list[MatchupBand]:
         counts[key] = counts.get(key, 0) + 1
         levels[key] = matched.outcome.success_level
 
+    if context.botch_immune:
+        return _fold_botch_bands(outcome_rows, counts, levels)
     return [
         MatchupBand(success_level=levels[key], probability=count / 100.0)
         for key, count in counts.items()
+    ]
+
+
+def _fold_botch_bands(
+    outcome_rows: list[ResultChartOutcome],
+    counts: dict[int, int],
+    levels: dict[int, int],
+) -> list[MatchupBand]:
+    """``matchup_bands``' tallies with every botch counted at the chart's floor (#4386).
+
+    The floor is ``botch_floor_level`` over the chart's own levels; its band gains the
+    botch bands' rolls, and is added when it had no rolls of its own. Bands are keyed by
+    level here, the only field a ``MatchupBand`` carries.
+    """
+    from world.checks.constants import BOTCH_SUCCESS_LEVEL_MAX  # noqa: PLC0415
+    from world.checks.services import botch_floor_level  # noqa: PLC0415
+
+    floor = botch_floor_level(row.outcome.success_level for row in outcome_rows)
+    folded: dict[int, int] = {}
+    for key, count in counts.items():
+        level = levels[key]
+        if floor is not None and level <= BOTCH_SUCCESS_LEVEL_MAX:
+            level = floor
+        folded[level] = folded.get(level, 0) + count
+    return [
+        MatchupBand(success_level=level, probability=count / 100.0)
+        for level, count in folded.items()
     ]
 
 

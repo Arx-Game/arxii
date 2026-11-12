@@ -19,20 +19,21 @@ modifier.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from itertools import pairwise
 from typing import TYPE_CHECKING
 
 from django.db.models import Prefetch
 
-from world.checks.constants import ModifierSourceKind
+from world.checks.constants import BOTCH_SUCCESS_LEVEL_MAX, ModifierSourceKind
 from world.checks.modifier_values import (
     level_baseline,
     load_taper_rules,
     load_value_table,
     rank_band_share,
 )
+from world.checks.services import botch_floor_level
 from world.checks.slide import load_ranks, resolve_standing, slide_chart
 from world.checks.types import ModifierBreakdown, ModifierContribution
 from world.traits.models import CheckRank, ResultChart, ResultChartOutcome
@@ -175,14 +176,44 @@ def _tally_slid(slid: SlidChart, *, roll_modifier: int) -> list[OutcomeBand]:
     return bands
 
 
+def _fold_botch_bands(bands: list[OutcomeBand], slid: SlidChart) -> list[OutcomeBand]:
+    """``bands`` with every botch counted at the slid chart's floor outcome (#4386).
+
+    The floor is ``botch_floor_level`` over the chart's own outcomes, as
+    ``_apply_outcome_guarantees`` raises a botch for a character who cannot botch. The
+    floor band keeps its name and gains the botch bands' probability; it is added when
+    the roll never lands on it.
+    """
+    floor = botch_floor_level(band.outcome.success_level for band in slid.bands)
+
+    def raised(band: OutcomeBand) -> bool:
+        return band.success_level <= BOTCH_SUCCESS_LEVEL_MAX and band.success_level != floor
+
+    gained = sum(band.probability for band in bands if raised(band))
+    if floor is None or not gained:
+        return bands
+    kept = [band for band in bands if not raised(band)]
+    index = next((i for i, band in enumerate(kept) if band.success_level == floor), None)
+    if index is not None:
+        kept[index] = replace(kept[index], probability=kept[index].probability + gained)
+    else:
+        name = next(b.outcome.name for b in slid.bands if b.outcome.success_level == floor)
+        kept.append(OutcomeBand(name=name, success_level=floor, probability=gained))
+    kept.sort(key=lambda band: band.success_level, reverse=True)
+    return kept
+
+
 def _distribution_for_slid(
     slid: SlidChart,
     *,
     roll_modifier: int,
     rank_difference: int,
     standing: CheckStanding | None = None,
+    botch_immune: bool = False,
 ) -> ChartDistribution:
     bands = _tally_slid(slid, roll_modifier=roll_modifier)
+    if botch_immune:
+        bands = _fold_botch_bands(bands, slid)
     return ChartDistribution(
         rank_difference=rank_difference,
         chart_name=slid.chart.name if slid.chart else "",
@@ -193,13 +224,14 @@ def _distribution_for_slid(
     )
 
 
-def compute_matchup(
+def compute_matchup(  # noqa: PLR0913 - keyword-only matchup knobs, one per panel control
     *,
     roller_points: int,
     target_difficulty: int,
     roll_modifier: int = 0,
     modifier_points: int = 0,
     target_modifier_points: int = 0,
+    botch_immune: bool = False,
 ) -> ChartDistribution | None:
     """Distribution for one roller/target matchup, exactly as ``perform_check`` rolls it.
 
@@ -211,6 +243,9 @@ def compute_matchup(
     whole difference of the chart the roll uses, which may differ from ``chart_name``'s
     chart field when the lookup falls back to the nearest authored chart. Returns
     ``None`` only when no ``ResultChart`` exists at all.
+
+    ``botch_immune`` (#4386) shows the odds for a character who cannot botch at the
+    check: every botch counts as the chart's least-bad non-botch outcome.
     """
     standing = resolve_standing(
         roller_points + modifier_points, target_difficulty + target_modifier_points
@@ -222,6 +257,7 @@ def compute_matchup(
         roll_modifier=roll_modifier,
         rank_difference=standing.chart_difference,
         standing=standing,
+        botch_immune=botch_immune,
     )
 
 

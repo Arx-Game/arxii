@@ -32245,6 +32245,7 @@ export interface components {
      *     * `soulfray` - Soulfray
      *     * `favor` - Favor
      *     * `technique` - Technique roll
+     *     * `botch_immunity` - Cannot botch
      * @enum {string}
      */
     ConsequenceOutcomeModifierSourceKindEnum:
@@ -32263,7 +32264,8 @@ export interface components {
       | 'capability'
       | 'soulfray'
       | 'favor'
-      | 'technique';
+      | 'technique'
+      | 'botch_immunity';
     /** @description Read-only serializer for the curated technique-cast consequence-pool catalog. */
     ConsequencePoolCatalog: {
       readonly id: number;

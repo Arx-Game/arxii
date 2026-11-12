@@ -23,7 +23,11 @@ from django.db import models
 from django.db.models import Q
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
-from world.checks.constants import CombatRollKind, ModifierSourceKind
+from world.checks.constants import (
+    MODIFIER_SOURCE_LABEL_MAX_LENGTH,
+    CombatRollKind,
+    ModifierSourceKind,
+)
 
 
 class ConsequenceOutcome(SharedMemoryModel):
@@ -318,7 +322,7 @@ class ConsequenceOutcomeModifier(SharedMemoryModel):
         max_length=20,
         choices=ModifierSourceKind.choices,
     )
-    source_label = models.CharField(max_length=120)
+    source_label = models.CharField(max_length=MODIFIER_SOURCE_LABEL_MAX_LENGTH)
     value = models.IntegerField()
 
     def __str__(self) -> str:

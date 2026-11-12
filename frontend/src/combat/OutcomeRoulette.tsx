@@ -116,6 +116,8 @@ function ModifierRow({ modifier }: ModifierRowProps) {
   const signed = modifier.value >= 0 ? `+${modifier.value}` : String(modifier.value);
   const isPositive = modifier.value > 0;
   const isNegative = modifier.value < 0;
+  // A "Cannot botch" line (#4386) is a guarantee, not a number: no "+0".
+  const showsValue = modifier.source_kind !== 'botch_immunity';
 
   return (
     <div
@@ -123,17 +125,19 @@ function ModifierRow({ modifier }: ModifierRowProps) {
       data-testid={`modifier-row-${modifier.source_label}`}
     >
       <span className="truncate text-muted-foreground">{modifier.source_label}</span>
-      <span
-        className={cn(
-          'ml-2 shrink-0 font-mono font-semibold',
-          isPositive && 'text-emerald-400',
-          isNegative && 'text-rose-400',
-          !isPositive && !isNegative && 'text-muted-foreground'
-        )}
-        data-testid={`modifier-value-${modifier.source_label}`}
-      >
-        {signed}
-      </span>
+      {showsValue && (
+        <span
+          className={cn(
+            'ml-2 shrink-0 font-mono font-semibold',
+            isPositive && 'text-emerald-400',
+            isNegative && 'text-rose-400',
+            !isPositive && !isNegative && 'text-muted-foreground'
+          )}
+          data-testid={`modifier-value-${modifier.source_label}`}
+        >
+          {signed}
+        </span>
+      )}
     </div>
   );
 }

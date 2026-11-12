@@ -8,7 +8,7 @@ import core.natural_keys
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0399_one_scale_values"),
+        ("arxii", "0401_botch_immunity_category"),
     ]
 
     operations = [

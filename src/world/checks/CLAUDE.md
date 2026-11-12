@@ -90,6 +90,16 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
    call — so an `ATTACKER_AFFINITY`-gated guarantee can fire on a defender's roll (#2623,
    ADR-0154 — parameterized to any affinity row, renamed from its original Abyssal-only
    form).
+   **Niche botch immunity (#4386, ADR-4386):** on a raw botch, `_apply_outcome_guarantees`
+   also reads the character's `botch_immunity` modifier targets scoped to the check type or
+   its category (`is_botch_immune`: `get_modifier_total` + `get_condition_modifier_total`,
+   positive means immune). This runs on every rolled check, with or without a `situation_ctx`,
+   and adds the non-botch floor (`BOTCH_SUCCESS_LEVEL_MAX + 1`) to the same floor list the vow
+   perks build, so one `_lowest_outcome_at_or_above` call applies the highest. It is never
+   announced; `collect_check_modifiers` adds a value-0 `BOTCH_IMMUNITY` "Cannot botch: <source>"
+   line per source (`botch_immunity_sources`) on any in-scope check of an immune roller, and
+   `ConsequenceOutcomeSerializer` shows it to the roller and staff only. The odds previews use
+   `botch_floor_level` to count a botch as the chart's least-bad non-botch level.
    Both `_situational_perk_check_bonus` (step 5's CHECK_BONUS) and this step also make a
    DORMANT pass right after their live `applicable_perks` call (#2536 slice 3, Task 7, ruling
    2): a covenant role the checking character holds but has left DISENGAGED, that would have
