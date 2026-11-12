@@ -73,6 +73,30 @@ def _sheet_linked_persona_ids(personas: list[Persona], context: dict[str, Any]) 
     return everyone - hidden
 
 
+def _persona_position_row(persona: Persona, *, stands: bool) -> dict[str, Any]:
+    """One ``persona_positions`` row: where the persona's character stands, when ``stands``.
+
+    A face that is not the one its character presents now (``stands=False``) gets a null
+    position and square (#4888).
+    """
+    from world.areas.positioning.services import position_of, square_of  # noqa: PLC0415
+
+    position = None
+    square = None
+    character = persona.character_sheet.character if stands else None
+    if character is not None:
+        pos = position_of(character)
+        if pos is not None:
+            position = PositionSummarySerializer(pos).data
+            square = square_of(character)
+    return {
+        "persona_id": persona.pk,
+        "position": position,
+        "square_x": square[0] if square else None,
+        "square_y": square[1] if square else None,
+    }
+
+
 class _PersonaListSerializer(serializers.ListSerializer):
     """Resolves which listed faces may show their character, once for the list (#4888)."""
 
@@ -565,31 +589,15 @@ class SceneDetailSerializer(SceneListSerializer):
         """
         if obj.location is None:
             return []
-        from world.areas.positioning.services import position_of, square_of  # noqa: PLC0415
         from world.scenes.services import personas_for_sheets  # noqa: PLC0415
 
         personas = self._collect_personas(obj, only_real_names=False)
         presented = personas_for_sheets({persona.character_sheet_id for persona in personas})
         result = []
         for persona in personas:
-            position = None
-            square = None
             face = presented.get(persona.character_sheet_id)
-            if face is None or face.pk == persona.pk:
-                character = persona.character_sheet.character
-                if character is not None:
-                    pos = position_of(character)
-                    if pos is not None:
-                        position = PositionSummarySerializer(pos).data
-                        square = square_of(character)
-            result.append(
-                {
-                    "persona_id": persona.pk,
-                    "position": position,
-                    "square_x": square[0] if square else None,
-                    "square_y": square[1] if square else None,
-                }
-            )
+            stands = face is None or face.pk == persona.pk
+            result.append(_persona_position_row(persona, stands=stands))
         return result
 
     @extend_schema_field(SceneRoundSerializer(allow_null=True))
