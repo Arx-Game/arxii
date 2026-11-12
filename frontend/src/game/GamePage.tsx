@@ -6,6 +6,8 @@ import { GameTopBar } from './components/GameTopBar';
 import { GameWindow } from './components/GameWindow';
 import { CharacterCardDrawer } from './components/CharacterCardDrawer';
 import { PlaySidebar, type SidebarMode } from './components/PlaySidebar';
+import { ChannelsPanel } from '@/channels/components/ChannelsPanel';
+import { useChannelUnreadTotal } from '@/channels/queries';
 import { fetchPlayContext, fetchPlayPoses, PlayFetchError } from './playQueries';
 import type { PlayPage } from './playTypes';
 import { FocusPanel } from './components/FocusPanel';
@@ -793,6 +795,7 @@ export function GamePage() {
   // `jumpToCombat` (Task 2) is the first real caller of this state — it jumps
   // to Here mode + the Room tab, where `CombatRail` already renders.
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('here');
+  const channelsUnread = useChannelUnreadTotal();
   const [hereActiveTab, setHereActiveTab] = useState('room');
   const jumpToCombat = useCallback(() => {
     setSidebarMode('here');
@@ -1200,6 +1203,8 @@ export function GamePage() {
               onModeChange={setSidebarMode}
               hasActiveEncounter={hasActiveEncounter}
               onJumpToCombat={jumpToCombat}
+              channels={<ChannelsPanel active={sidebarMode === 'channels'} />}
+              channelsUnread={channelsUnread}
               here={
                 <GameRightSidebar
                   accountId={account.id}

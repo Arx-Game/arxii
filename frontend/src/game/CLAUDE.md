@@ -200,8 +200,12 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   names the side); a touch screen adds a 44px grip at mid-height
   (`index.css`, `pointer: coarse`). The sidebar's was a 44px strip down the
   whole edge and sat over the battle map's zoom buttons (#4641).
-- **`PlaySidebar.tsx`**: The single contextual sidebar — Here / History mode tabs
-  sharing one scroll container (Conversations mode left for the rail, #4129).
+- **`PlaySidebar.tsx`**: The single contextual sidebar — Here / History / Channels mode
+  tabs sharing one scroll container (Conversations mode left for the rail, #4129).
+  Channels (#3299) is `GamePage`'s `<ChannelsPanel active={sidebarMode === 'channels'} />`
+  passed as the `channels` prop; its button carries `channelsUnread`
+  (`useChannelUnreadTotal`: the sum of `unread_count` over unmuted subscriptions not set
+  to Nothing). Channel messages never enter the center feed, the rail or its All row.
   Both mode bodies stay mounted (`hidden` attribute, not conditional unmount) so
   switching modes preserves each one's scroll position and in-flight state
   (#3759). A "Combat" nav button (#3761) appears only while `hasActiveEncounter` is true

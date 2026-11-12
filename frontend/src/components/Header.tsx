@@ -102,6 +102,7 @@ const dropdownGroups: NavDropdown[] = [
       { to: '/events', label: 'Events' },
       { to: '/stories/my-active', label: 'My Stories', requires: 'auth' },
       { to: '/books', label: 'Books', requires: 'auth' },
+      { to: '/channels', label: 'Channels', requires: 'auth' },
     ],
   },
   // #4188: story design and tracking. What waits on a GM lives on the

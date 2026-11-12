@@ -109,6 +109,28 @@ describe('PlaySidebar', () => {
     expect(screen.getByRole('button', { name: /combat/i })).toBeInTheDocument();
   });
 
+  it('shows Channels with its unread badge only when channels are passed', async () => {
+    const user = userEvent.setup();
+    const onModeChange = vi.fn();
+    const { rerender } = render(
+      <PlaySidebar here={<div>here content</div>} mode="here" onModeChange={onModeChange} />
+    );
+    expect(screen.queryByRole('button', { name: /channels/i })).not.toBeInTheDocument();
+    rerender(
+      <PlaySidebar
+        here={<div>here content</div>}
+        mode="here"
+        onModeChange={onModeChange}
+        channels={<div>channel lanes</div>}
+        channelsUnread={4}
+      />
+    );
+    expect(screen.getByTestId('channels-unread-badge')).toHaveTextContent('4');
+    expect(screen.getByText('channel lanes')).not.toBeVisible();
+    await user.click(screen.getByRole('button', { name: /channels/i }));
+    expect(onModeChange).toHaveBeenCalledWith('channels');
+  });
+
   it('calls onJumpToCombat, not onModeChange, when the Combat button is clicked', async () => {
     const user = userEvent.setup();
     const onModeChange = vi.fn();
