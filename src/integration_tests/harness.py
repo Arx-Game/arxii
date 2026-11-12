@@ -94,6 +94,7 @@ class JourneyCase(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self._mailboxes: dict[int, Mailbox] = {}
+        self._account_sessions: dict[int, list[MagicMock]] = {}
 
     # No tearDown of its own: the rooms and characters a journey builds are
     # rolled back with the test, and the test runner empties Evennia's
@@ -204,6 +205,32 @@ class JourneyCase(TestCase):
         sessions_patch = patch.object(character.sessions, "all", return_value=[session])
         sessions_patch.start()
         self.addCleanup(sessions_patch.stop)
+
+    def connect_session(self, account: AccountDB, protocol_key: str = "websocket") -> MagicMock:
+        """Give ``account`` one more session of ``protocol_key``, puppeting nothing.
+
+        For what the game pushes to an account's sessions rather than to a
+        character (``account.sessions.all()``): channel lines and frames. A
+        ``"websocket"`` session is a browser tab, ``"telnet"`` a MUD client. Read
+        what it was sent from the mock's ``msg`` calls (``session_frames``). Keyed
+        by the session, so an account and a character sharing a pk never collide
+        the way ``watch`` would.
+        """
+        # Signed in, puppeting nothing (a MagicMock's own ``puppet`` would read as one).
+        session = MagicMock(protocol_key=protocol_key, puppet=None)
+        sessions = self._account_sessions.setdefault(account.pk, [])
+        if not sessions:
+            sessions_patch = patch.object(account.sessions, "all", return_value=sessions)
+            sessions_patch.start()
+            self.addCleanup(sessions_patch.stop)
+        sessions.append(session)
+        return session
+
+    @staticmethod
+    def session_frames(session: MagicMock, kind: str) -> list[Any]:
+        """The values ``session.msg`` was sent under keyword ``kind`` (``"text"``,
+        ``"channel_message"``, ...), in order."""
+        return [call.kwargs[kind] for call in session.msg.call_args_list if kind in call.kwargs]
 
     def assertNotTold(self, obj: ObjectDB, needle: str) -> None:  # noqa: N802
         """``obj`` was told nothing containing ``needle``."""
