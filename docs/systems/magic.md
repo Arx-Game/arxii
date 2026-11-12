@@ -5008,7 +5008,7 @@ remains for the progression dashboard's display. An imbue that stops at the leve
 reports `blocked_by="LEVEL_CAP"`; the thread serializer's field is `level_cap`.
 
 Every authored thread threshold is a stored thread level compared directly against
-`thread.level` (restated x10 by migration `0398_one_scale_values`): crossings (30, 60, 110,
+`thread.level` (restated x10 by migration `0399_one_scale_values`): crossings (30, 60, 110,
 160, 210, `is_thread_crossing_level`: the Path crossings times ten),
 `ThreadCrossingThreshold.level`, `CrossingOption.crossing_level`,
 `TechniqueVariant`/`CovenantRole.unlock_thread_level`,

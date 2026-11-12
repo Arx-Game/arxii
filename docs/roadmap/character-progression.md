@@ -38,7 +38,7 @@ The central spine connecting every system in the game. Characters develop throug
   surface (web sheet, CG, telnet, admin, narration) shows a stat, a skill or a thread at its
   stored value: a stat of 20 reads 20, a thread at 30 reads 30. Nothing divides by 10 for
   display any more. Authored numbers written in the old shown unit were restated x10 by
-  migration `0398_one_scale_values` so every gate fires where it did: band caps
+  migration `0399_one_scale_values` so every gate fires where it did: band caps
   50/60/110/160/210/250, CG stats 10-50 in steps of 10, crossings at thread levels
   30/60/110/160/210, vow focus picks at 10/20/30, species stat bonuses, NPC preset stat lines,
   thread unlock and pull-effect levels. Formulas tuned per old shown level keep their numbers

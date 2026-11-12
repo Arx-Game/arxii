@@ -109,7 +109,7 @@ def backwards(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0397_one_scale_schema"),
+        ("arxii", "0398_one_scale_schema"),
     ]
 
     operations = [

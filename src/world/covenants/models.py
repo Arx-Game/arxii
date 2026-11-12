@@ -51,8 +51,10 @@ from world.covenants.perks.constants import (
     SITUATION_PARAM_SPECS,
     PerkBeneficiary,
     PerkEffectKind,
+    PerkRollKind,
     Situation,
     SituationOriginSide,
+    announce_placeholder_error,
 )
 from world.covenants.perks.context import SituationParams
 from world.items.constants import ARMOR_ARCHETYPES, WEAPON_ARCHETYPES, GearArchetype
@@ -2304,6 +2306,12 @@ class VowSituationalPerk(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     ``CHECK_BONUS`` **or** ``POWER_BONUS`` (spec §4: a Battle warfare roll scopes
     both the check AND the technique cast it may carry) — ``clean()`` rejects it
     authored on ``TIER_FLOOR``/``BOTCH_IMMUNITY``.
+
+    ``roll_kind`` ("Applies to", #5092) narrows a ``CHECK_BONUS`` perk to one kind of
+    roll (``PerkRollKind``): blank is any roll, ``ATTACK`` is the roll of an attack on an
+    opponent, once per attack. It is a scope column like the three above (AND,
+    including with ``check_type``), matched against ``SituationContext.roll_kind``;
+    ``clean()`` rejects it on any other ``effect_kind``.
     """
 
     covenant_role = models.ForeignKey(
@@ -2323,7 +2331,12 @@ class VowSituationalPerk(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     )
     announce_template = models.CharField(
         max_length=200,
-        help_text="Player-facing announce line; {holder}/{subject} placeholders.",
+        help_text=(
+            "Player-facing announce line. It can name {holder} (whose vow it is), {subject} "
+            "(whose roll it helps), {target} (the foe it is about) and {ally} (the "
+            "covenant-mate whose action made the situation true; needs a situation or rung "
+            "about an ally, such as Enemy Held by Ally)."
+        ),
     )
     check_type = models.ForeignKey(
         "arxii.CheckType",
@@ -2366,6 +2379,19 @@ class VowSituationalPerk(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         blank=True,
         default="",
         help_text="CHECK_BONUS/POWER_BONUS scope: fires only on this declared warfare action kind.",
+    )
+    roll_kind = models.CharField(
+        "Applies to",
+        max_length=20,
+        choices=PerkRollKind.choices,
+        blank=True,
+        default=PerkRollKind.ANY,
+        help_text=(
+            "Check bonus only: which rolls the bonus reaches. Attack rolls are a Strike's hit "
+            "roll and an attack technique's roll, once per attack (an enchanted Strike's "
+            "technique roll), never a dodge, a defense, or a cast on oneself or an ally. "
+            "Works together with the check type when both are set."
+        ),
     )
     focus_pick = models.ForeignKey(
         VOW_FOCUS_PICK_MODEL,
@@ -2432,6 +2458,11 @@ class VowSituationalPerk(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                     )
                 }
             )
+        template_error = announce_placeholder_error(self.announce_template)
+        if template_error is not None:
+            raise ValidationError({"announce_template": template_error})
+        if self.roll_kind and self.effect_kind != PerkEffectKind.CHECK_BONUS:
+            raise ValidationError({"roll_kind": "Applies to only works on a Check Bonus perk."})
         if self.battle_action_kind and self.effect_kind not in (
             PerkEffectKind.CHECK_BONUS,
             PerkEffectKind.POWER_BONUS,

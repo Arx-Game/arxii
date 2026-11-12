@@ -177,9 +177,26 @@ CHECK_BONUS-only) and `battle_action_kind` (`BattleActionKind` CharField, CHECK_
 POWER_BONUS only) — `clean()` rejects each column authored outside its valid `effect_kind`
 set. Every non-empty scope column on a row must match (AND); an empty scope always matches.
 Checked by `perk_scope_matches` (`world.covenants.perks.services`), the single seam both fired-
-perk delivery providers filter through. (#2536 slice 3, ADR-0153.)
+perk delivery providers filter through. (#2536 slice 3, ADR-0153.) `roll_kind` ("Applies to",
+CHECK_BONUS only, #5092) is a fourth: blank is any roll, `ATTACK` is an **Attack roll** (below).
 _Avoid_: filter, condition (both are used elsewhere for different mechanisms — Scope is
-specifically these three typed columns, not a general predicate).
+specifically these typed columns, not a general predicate).
+
+**Ally finder**:
+The function a situation about an ally registers in `SITUATION_ALLY_FINDERS`
+(`world.covenants.perks.evaluators`) that names WHICH covenant-mate made it true (their sheet id);
+the situation's yes/no evaluator is "the finder found someone". It fills a perk announce line's
+`{ally}`. (#5092.)
+_Avoid_: ally resolver, helper.
+
+**Attack roll**:
+The one roll per attack on an opponent that a perk scoped "Applies to: Attack rolls" boosts: a
+plain Strike's hit roll, an attack technique's roll (a cast at an opponent, a joust pass), and an
+enchanted Strike's technique roll (not its hit roll). Never a dodge or defense roll, a cast at
+oneself or an ally, a clash contribution, a penetration or damage roll. Marked by the roll's
+caller on `SituationContext.roll_kind` (`PerkRollKind.ATTACK`). (#5092, ADR-5092.)
+_Avoid_: attack technique roll (the first name, before plain Strikes were included), offense
+check (the resolver's name covers non-attack casts too).
 
 **Champion Duel (situation)**:
 `Situation.CHAMPION_DUEL` — holds when the SUBJECT is a participant in a `CombatEncounter` whose
