@@ -836,7 +836,10 @@ class PersonaViewSet(
             )
         except PersonaCreationError as exc:
             raise serializers.ValidationError(exc.user_message) from exc
-        return Response(PersonaSerializer(persona).data, status=status.HTTP_201_CREATED)
+        return Response(
+            PersonaSerializer(persona, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
 
     @extend_schema(
         request=CreateMaskRequestSerializer,
@@ -860,7 +863,10 @@ class PersonaViewSet(
             mask = create_mask(sheet, name=body.validated_data["name"])
         except PersonaCreationError as exc:
             raise serializers.ValidationError(exc.user_message) from exc
-        return Response(PersonaSerializer(mask).data, status=status.HTTP_201_CREATED)
+        return Response(
+            PersonaSerializer(mask, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
 
     @extend_schema(
         request=SetPersonaProfileRequestSerializer,
@@ -906,7 +912,9 @@ class PersonaViewSet(
             )
         except GuiseProfileError as exc:
             raise serializers.ValidationError(exc.user_message) from exc
-        return Response(PersonaSerializer(persona).data, status=status.HTTP_200_OK)
+        return Response(
+            PersonaSerializer(persona, context={"request": request}).data, status=status.HTTP_200_OK
+        )
 
     @extend_schema(responses=RenownSerializer, tags=["personas"])
     @action(detail=True, methods=[HTTPMethod.GET])
