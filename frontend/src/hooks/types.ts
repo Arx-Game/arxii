@@ -39,6 +39,8 @@ export const WS_MESSAGE_TYPE = {
   KUDOS_RECEIVED: 'kudos_received',
   /** Inbound: a new letter arrived for one of the recipient's tenures (#2160). */
   MAIL_ARRIVED: 'mail_arrived',
+  /** Inbound: an IC missive came due for one of this character's personas (#3289). */
+  MISSIVE_ARRIVED: 'missive_arrived',
   /** Inbound: an environmental hazard entered a damaging stage; show the response card (#2846). */
   HAZARD_PROMPT: 'hazard_prompt',
   REQUEST_ROOM_STATE: 'request_room_state',

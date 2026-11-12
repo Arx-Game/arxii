@@ -74,7 +74,7 @@ def ooc_muter_account_ids(*, persona: Persona) -> set[int]:
 def _persona_player(persona: Persona) -> PlayerData | None:
     """The PlayerData currently playing this persona's character, or None (#2996).
 
-    Mirrors ``block_services._persona_player`` — kept local (not imported) so each service module
+    Mirrors ``block_services.persona_player`` — kept local (not imported) so each service module
     stays self-contained; both derive the same "current tenure's player" fact from a persona's
     character sheet.
     """

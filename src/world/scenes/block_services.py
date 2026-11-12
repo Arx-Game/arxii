@@ -280,7 +280,7 @@ def _sheet_player(sheet: CharacterSheet) -> PlayerData | None:
     return current.player_data if current is not None else None
 
 
-def _persona_player(persona: Persona) -> PlayerData | None:
+def persona_player(persona: Persona) -> PlayerData | None:
     """The PlayerData currently playing this persona's character, or None (#1278)."""
     return _sheet_player(persona.character_sheet)
 
@@ -481,7 +481,7 @@ def create_block(
     from evennia_extensions.models import PlayerData  # noqa: PLC0415
 
     blocker_player, _ = PlayerData.objects.get_or_create(account=blocker_account)
-    blocked_player = _persona_player(blocked_persona)
+    blocked_player = persona_player(blocked_persona)
     if blocked_player is None:
         msg = "That character has no current player to block."
         raise ValidationError(msg)
@@ -553,8 +553,8 @@ def flag_blocked_contact_attempt(
     signal to either player. Deduped per (blocked, blocker, scene). Returns the flag, or None when
     there is no such block.
     """
-    initiator_player = _persona_player(initiator_persona)
-    target_player = _persona_player(target_persona)
+    initiator_player = persona_player(initiator_persona)
+    target_player = persona_player(target_persona)
     if initiator_player is None or target_player is None:
         return None
     if not _active_blocks().filter(owner=target_player, blocked_player=initiator_player).exists():
