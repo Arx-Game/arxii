@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { HiddenDivider } from '@/components/HiddenDivider';
 import { PoseUnit } from './PoseUnit';
 import type { PoseUnitAvatarClickPersona } from './PoseUnit';
 import type { Interaction } from '../types';
@@ -60,16 +61,12 @@ function MutedDivider({ count, ids }: { count: number; ids: number[] }) {
   }
 
   return (
-    <button
+    <HiddenDivider
+      label={loading ? 'Loading…' : `${count} hidden · click to expand`}
       onClick={handleExpand}
       disabled={loading}
-      className="my-1 flex w-full items-center gap-2 px-4 py-1 text-xs text-muted-foreground hover:text-foreground"
-      data-testid="muted-divider"
-    >
-      <span className="h-px flex-1 bg-border" />
-      <span>{loading ? 'Loading…' : `${count} hidden · click to expand`}</span>
-      <span className="h-px flex-1 bg-border" />
-    </button>
+      testId="muted-divider"
+    />
   );
 }
 

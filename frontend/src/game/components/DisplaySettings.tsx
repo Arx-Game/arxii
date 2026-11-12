@@ -125,6 +125,16 @@ export function DisplaySettings({ accountId }: DisplaySettingsProps) {
           </select>
         </label>
         <label className="flex min-h-11 items-center justify-between gap-2">
+          Channels in sidebar{' '}
+          <input
+            aria-label="Channels in sidebar"
+            type="checkbox"
+            className="h-4 w-4"
+            checked={preferences.channelsInSidebar}
+            onChange={(event) => update({ channelsInSidebar: event.target.checked })}
+          />
+        </label>
+        <label className="flex min-h-11 items-center justify-between gap-2">
           Reader{' '}
           <select
             aria-label="Reader order"

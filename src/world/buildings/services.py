@@ -961,9 +961,13 @@ def _placeholder_treasury_organization() -> Organization:
     from world.societies.models import Organization, OrganizationType  # noqa: PLC0415
 
     org_type, _ = OrganizationType.objects.get_or_create(name=_PLACEHOLDER_TREASURY_ORG_TYPE_NAME)
-    organization, _ = Organization.objects.get_or_create(
+    from world.channels.services import provision_org_channel  # noqa: PLC0415
+
+    organization, created = Organization.objects.get_or_create(
         name=_PLACEHOLDER_TREASURY_ORG_NAME, defaults={"org_type": org_type}
     )
+    if created:
+        provision_org_channel(organization)
     return organization
 
 

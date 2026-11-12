@@ -2253,7 +2253,7 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   for family standing, subordination, patronage, and culture-specific facts through this
   layer: [family-authoring-recipes.md](family-authoring-recipes.md) (recipes 4-7 and 9
   use the houses layer); design record: ADR-0268, ADR-0269.
-- **Key Services:** `full_display_name` (degree-aware particle naming, #3261) / `resolve_particle` (+ `particles_for_families`, the batched form the families list uses, #3654) / `sync_name_aliases` (derived-name telnet aliases), `recognize_birth` / `acknowledge_into_family`, `derive_succession_candidates` / `pass_title` / `register_gifted_power_rater`, `swear_fealty` / `release_fealty` (ends one oath and its tithe together, #4064) / `vassals_of` / `liege_chain_of`, `sign_marriage_pact` / `dissolve_pact` / `handle_death_for_pacts` / `breach_commitment`, `create_domain` / `add_holding`, `start_domain_improvement` (+ `DOMAIN_IMPROVEMENT` `ProjectKind` handler), `is_org_leader` / `can_administer_domain` (#2239 — the in-play domain-management gate: leader OR `domain-steward` office), `sync_house_channel`; `house_feed_for` lives in `world/tidings/services.py`. **In-play surface (#2239):** the CG/seed-only `add_holding`/`start_domain_improvement` are now reachable via `actions/definitions/domains.py` (`add_domain_holding` / `start_domain_improvement` / `appoint_domain_office` / `vacate_domain_office`) + telnet `CmdDomain` (`domain <subverb>`). **Garrison (#696 gap 5):** `effective_defenses(domain)` = `Domain.defenses` + `garrison_term(domain)` (a seam returning 0 until TehomCD's military side wires a real garrison bonus off `DomainGarrisonPost` units); `assign_garrison`/`relieve_garrison` (gated on `can_administer_domain`, unit's `owner_org` must match) are reachable via `AssignGarrisonAction`/`RelieveGarrisonAction` (`actions/definitions/domains.py`, registry keys `assign_garrison`/`relieve_garrison`).
+- **Key Services:** `full_display_name` (degree-aware particle naming, #3261) / `resolve_particle` (+ `particles_for_families`, the batched form the families list uses, #3654) / `sync_name_aliases` (derived-name telnet aliases), `recognize_birth` / `acknowledge_into_family`, `derive_succession_candidates` / `pass_title` / `register_gifted_power_rater`, `swear_fealty` / `release_fealty` (ends one oath and its tithe together, #4064) / `vassals_of` / `liege_chain_of`, `sign_marriage_pact` / `dissolve_pact` / `handle_death_for_pacts` / `breach_commitment`, `create_domain` / `add_holding`, `start_domain_improvement` (+ `DOMAIN_IMPROVEMENT` `ProjectKind` handler), `is_org_leader` / `can_administer_domain` (#2239 — the in-play domain-management gate: leader OR `domain-steward` office), the house ORG channel via `world.channels.services.provision_org_channel` (#3299; `sync_house_channel` retired); `house_feed_for` lives in `world/tidings/services.py`. **In-play surface (#2239):** the CG/seed-only `add_holding`/`start_domain_improvement` are now reachable via `actions/definitions/domains.py` (`add_domain_holding` / `start_domain_improvement` / `appoint_domain_office` / `vacate_domain_office`) + telnet `CmdDomain` (`domain <subverb>`). **Garrison (#696 gap 5):** `effective_defenses(domain)` = `Domain.defenses` + `garrison_term(domain)` (a seam returning 0 until TehomCD's military side wires a real garrison bonus off `DomainGarrisonPost` units); `assign_garrison`/`relieve_garrison` (gated on `can_administer_domain`, unit's `owner_org` must match) are reachable via `AssignGarrisonAction`/`RelieveGarrisonAction` (`actions/definitions/domains.py`, registry keys `assign_garrison`/`relieve_garrison`).
 - **Proclamations & edicts (#2842, ADR-0178):** `StanceArchetype` (sibling of `PhilosophicalArchetype` — positions, not deed-judgments) + `Proclamation` (issuer, optional org voice, stance, display-only prose, stored roll) in societies; `issue_proclamation` applies the renown dot-product per society with asymmetric roll scaling (support earned on success only; provocation mitigated by success, amplified on botch) — `world/societies/proclamations.py`. `EdictKind` (inherent stance + payload: income %, weekly unrest, upkeep) + `DomainEdict` (one active per domain) in houses; `enact_edict` proclaims the stance and persists the payload, read by `accrue_income_stream`, the weekly `edict_weekly_tick` rollover processor, spy `domain_report`, and the PROCLAMATION feed kind. Seeds: `proclamations` cluster (9 stances + 6 edict kinds). API: `/api/societies/proclamations/` (+`proclaim`, #3412 slice 3 — now dispatches through `IssueProclamationAction.run()`, `actions/definitions/organizations.py`, instead of calling the `proclamations` service functions directly; the offscreen-act gate (ADR-0246) now refuses a captured/unconscious/dead issuer before the service layer's own leadership/domain-authority checks ever run).
 - **Threat/opportunity loop (#2837, ADR-0177):** `DomainCrisisType` gains `valence` (threat/opportunity) + `audience` (domain/org/criminal-org); `DomainCrisis` gains a nullable `org` leg (exactly-one-of), `surfaces_at` (generated crises spawn covert for `COVERT_WINDOW_DAYS`; hidden even from their target until surfaced or swept), and `CrisisIntel` (org × crisis early knowledge, minted by spy sweeps). `crisis_generation_tick` (weekly rollover processor) ambient-spawns per domain and per eligible org (active income streams or covert org type); opportunities expire after `OPPORTUNITY_LIFETIME_DAYS`; org-target threats skim stream accrual (`org_crisis_income_factor` in `accrue_income_stream`); MISSION options now actually mint (`choose_crisis_option` → `staff_assign_mission`); `apply_crisis_boon` pays seizure (owner: prosperity; anyone else: treasury coppers). Catalog seeded by the `crisis_types` cluster (`world/seeds/crisis_types.py`). Spy counterplay: `reveal_schemes` / `crisis_severity_delta` / `exploit_crisis` route payouts + `TaskTargetKind.CRISIS` (see tasking).
 - **Civ-stats drive gameplay (#2238):** `Domain.income_multiplier` (prosperity / `DOMAIN_PROSPERITY_BASELINE`) scales a holding's gross in `currency.accrue_income_stream` — prosperity now drives income, not just display. `unrest_crisis_chance` / `maybe_open_unrest_crisis` roll a `DomainCrisis` when unrest is high (called from the weekly `domain_consumption_tick`). Unrest also skims food collection (`agriculture._apply_unrest_skim`) and a well-fed week recovers prosperity/unrest toward equilibrium (`agriculture` recovery drift). Still deferred (own PR): unrest→justice-heat *suppression* + crackdown loop (unrest makes a domain heat-safe until a crackdown spikes heat)
@@ -6856,6 +6856,54 @@ table-scoped) - see `docs/adr/0228-board-posts-are-authored-by-persona.md`.
   Notice Board hint line.
 - **Source:** `src/world/boards/` (see the app's `AGENT_GLOSSARY.md` and
   `docs/systems/boards.md` for the full write-up).
+
+### Channels (player OOC channels - #3299)
+Persistent named out-of-character chat: one PUBLIC channel, one ORG channel per
+non-covert, non-covenant organization, optional STAFF channels. Our own models;
+Evennia's `@channel`, bridge commands, `DEFAULT_CHANNELS` and `house_<pk>`
+channels are retired (migration 0394 deleted the old rows, history discarded).
+A speaker is a `RosterTenure` chosen per channel, never an account name
+(ADR-3299).
+
+- **Models** (`world.channels.models`): `Channel` (`kind` PUBLIC/ORG/STAFF,
+  nullable O2O `organization`, check constraint ORG iff organization;
+  `display_name` reads the org name live), `ChannelMessage` (`author_tenure`
+  frozen at post time), `ChannelSubscription` (per account: `display_tenure`,
+  `muted`, `collapsed`, `notification_level`, `sort_order`, `last_read_at`),
+  `ChannelBan`. `RosterTenure.speaker_name` renders the speaker.
+- **Services** (`world.channels.services`): `accessible_channels_for` /
+  `can_access_channel` / `findable_channels_for`, `eligible_tenures` /
+  `default_tenure_for`, `subscribe` / `update_subscription` / `unsubscribe`,
+  `post_to_channel`, `deliver_channel_message`, `history_for`,
+  `hidden_author_player_ids` / `hidden_author_sheet_ids`,
+  `unread_counts` / `mark_read`, `delete_channel_message` /
+  `ban_channel_author` (staff), `provision_org_channel`,
+  `ensure_public_channel`, `prune_channel_history` (hourly
+  `channels.prune_history` task). Raises `ChannelError`.
+- **Access:** ORG = account-union of active memberships held by each
+  character's primary persona (never an established face) in the org or a
+  non-covert vassal house (the #1884 house vassal cascade; a covert vassal cuts
+  its branch). Staff read every non-covert channel; posting stays
+  identity-gated. Blocked authors (account-level, or a block on the author's
+  primary persona) are hidden rows ("N hidden"), account-muted authors dropped.
+- **Actions** (`actions/definitions/channels.py`, account-authorized,
+  `actor=None`): `post_to_channel`, `join_channel`, `leave_channel`,
+  `set_channel_mute`, `set_channel_identity`, `delete_channel_message`,
+  `ban_channel_author`. `account` is in `SERVER_SUPPLIED_KWARGS`
+  (`actions/player_interface.py`), stripped from client dispatch kwargs, so web
+  writes go through REST.
+- **Telnet:** `CmdChannel` (`commands/channels.py`, `channel`/`chan`/`channels`,
+  AccountCmdSet).
+- **API:** `/api/channels/channels/` (+ `identities/`), `subscriptions/`
+  (+ `mark-read/`), `messages/?channel=` (POST to post; staff DELETE and `ban/`).
+- **Frames:** `channel_message`, `channel_message_removed`
+  (`web/webclient/message_types.py`).
+- **Web:** `frontend/src/channels/` - channel lines are `channel` feed lines in
+  the `/game` main column under the OOC chip (`useChannelFeedNotes`), posted from
+  the rail's Channels group; the `/channels` page holds the controls; the
+  `PlaySidebar` "Channels" mode is the opt-in "Channels in sidebar" setting.
+- **Source:** `src/world/channels/` (see its `AGENT_GLOSSARY.md` and
+  `docs/systems/channels.md`).
 
 ### Sanctum (Plan 4 §F — first Room Feature kind)
 Plan 4 §F (#669 §F, shipped via #703). Per-resonance per-room

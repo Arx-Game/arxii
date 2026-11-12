@@ -229,6 +229,7 @@ def add_gang(
     from django.db import transaction  # noqa: PLC0415
 
     from world.areas.constants import AreaLevel  # noqa: PLC0415
+    from world.channels.services import provision_org_channel  # noqa: PLC0415
     from world.societies.houses.services import HousesServiceError, swear_fealty  # noqa: PLC0415
     from world.societies.membership_services import ensure_default_rank_ladder  # noqa: PLC0415
     from world.societies.models import Organization, OrganizationType, Turf  # noqa: PLC0415
@@ -258,6 +259,7 @@ def add_gang(
         gang = Organization.objects.create(
             name=name, org_type=gang_type, parent_org=family_org, society=family_org.society
         )
+        provision_org_channel(gang)
         ensure_default_rank_ladder(gang)
         try:
             swear_fealty(vassal=gang, liege=family_org)

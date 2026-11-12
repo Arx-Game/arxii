@@ -185,7 +185,7 @@ jobs:
           ls -la src/server/logs || true
           tail -n 80 src/server/logs/*.log || true
           exit 1
-      - name: Seed the rows the facet, gift substance and one-scale specs read
+      - name: Seed the rows the facet, gift substance and channels specs read
         # After the server is up, so Evennia's first-start setup has run on an
         # otherwise empty object table. Test-factory rows in a throwaway database:
         # see src/integration_tests/live_seeds.py.
@@ -197,6 +197,13 @@ jobs:
           print(seed_gift_substance_spec(username='e2e_test_account'))
           from integration_tests.live_seeds import seed_one_scale_spec
           print(seed_one_scale_spec(username='e2e_test_account'))
+          # The channels spec signs in as its own account: its play-page test enters the
+          # world as that account's character, which would change the character the
+          # other specs' account acts as.
+          from world.seeds.test_account import seed_test_account
+          print(seed_test_account(username='e2e_channels_reader', email='e2e_channels@example.com', password='TestPass123!'))
+          from integration_tests.live_seeds import seed_channels_spec
+          print(seed_channels_spec(username='e2e_channels_reader'))
           "
       - name: Seed the fight the thrown-strike spec reads
         # #5026: a character with a throwable dagger and a fire weapon technique, an
@@ -219,7 +226,7 @@ jobs:
           npx playwright test --config e2e.backend.config.ts --workers=1
           e2e/account-settings.spec.ts e2e/user-journey.spec.ts
           e2e/motif-facets.spec.ts e2e/gift-substance.spec.ts
-          e2e/thrown-and-enchanted-strike.spec.ts e2e/one-scale.spec.ts
+          e2e/thrown-and-enchanted-strike.spec.ts e2e/channels.spec.ts e2e/one-scale.spec.ts
       - name: Stop the server
         if: always()
         run: uv run arx stop || true

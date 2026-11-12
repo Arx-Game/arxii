@@ -1,4 +1,5 @@
 import type { FeedNote } from '@/hooks/types';
+import type { JoinedChannel } from '@/channels/types';
 import type { Interaction } from '@/scenes/types';
 import {
   groupThreads,
@@ -13,7 +14,7 @@ import {
  * them from the scene's threads, the quiet room's ambient interactions and the
  * session's page notes.
  */
-export type RailRowKind = 'room' | 'thread' | 'place' | 'whisper' | 'page';
+export type RailRowKind = 'room' | 'thread' | 'place' | 'whisper' | 'page' | 'channel';
 
 export interface RailRow {
   /** The thread key the row selects: `room`, a thread key, or `page:<persona id>`. */
@@ -24,11 +25,15 @@ export interface RailRow {
   person: ThreadPersona | null;
   unreadCount: number;
   latestTimestamp: string;
+  /** A channel row's channel (#3299), so the rail can ask who the player speaks as. */
+  channel?: JoinedChannel;
 }
 
 export interface RailGroups {
   here: RailRow[];
   pages: RailRow[];
+  /** Joined, unmuted channels in the player's order (#3299); empty when the sidebar holds them. */
+  channels: RailRow[];
 }
 
 export interface RailRowsInput {
@@ -43,6 +48,8 @@ export interface RailRowsInput {
   viewerPersonaId: number | null;
   lastSeenByThread: Record<string, number>;
   sceneBaselineId: number | null;
+  /** Channels shown as rows (#3299): joined, unmuted, in the player's order; none when the sidebar has them. */
+  channels?: JoinedChannel[];
 }
 
 /** The kind word a row shows beside its name; the room shows none. */
@@ -52,6 +59,7 @@ export const RAIL_KIND_WORDS: Record<RailRowKind, string> = {
   place: 'tabletalk',
   whisper: 'whisper',
   page: 'page',
+  channel: '',
 };
 
 /** The key a page conversation selects: the correspondent's persona. */
@@ -61,6 +69,15 @@ export function pageRowKey(personaId: number): string {
 
 export function isPageRowKey(key: string | null): key is string {
   return key !== null && key.startsWith('page:');
+}
+
+/** The key a channel row selects (#3299). */
+export function channelRowKey(channelId: number): string {
+  return `channel:${channelId}`;
+}
+
+export function isChannelRowKey(key: string | null): key is string {
+  return key !== null && key.startsWith('channel:');
 }
 
 function othersIn(thread: Thread, viewerPersonaId: number | null): ThreadPersona[] {
@@ -145,10 +162,26 @@ function pageRows(notes: FeedNote[], lastSeenByThread: Record<string, number>): 
   return newestFirst([...byPersona.values()]);
 }
 
+/** One row per channel (#3299); the unread count is the subscription's own. */
+function channelRows(channels: JoinedChannel[]): RailRow[] {
+  return channels.map((channel) => {
+    const sub = channel.subscription;
+    return {
+      key: channelRowKey(channel.id),
+      kind: 'channel',
+      label: channel.name,
+      person: null,
+      unreadCount: sub.muted || sub.notification_level === 'none' ? 0 : sub.unread_count,
+      latestTimestamp: '',
+      channel,
+    };
+  });
+}
+
 /**
  * Every conversation the character is in, grouped: **Here** (the room first,
  * then its threads, places and whispers, the quiet room's grouped the same
- * way) and **OOC Pages**. Newest activity first within a group. The room row
+ * way), **OOC Pages** and **Channels** (#3299, in the player's order). Newest activity first within a group. The room row
  * is always drawn once there is a room; everything else only when it has
  * lines.
  */
@@ -179,10 +212,11 @@ export function buildRailRows(input: RailRowsInput): RailGroups {
   return {
     here: [room, ...newestFirst([...byKey.values()])],
     pages: pageRows(input.notes, input.lastSeenByThread),
+    channels: channelRows(input.channels ?? []),
   };
 }
 
 /** Every row of both groups, for the folded strip and the selection lookup. */
 export function allRailRows(groups: RailGroups): RailRow[] {
-  return [...groups.here, ...groups.pages];
+  return [...groups.here, ...groups.pages, ...groups.channels];
 }

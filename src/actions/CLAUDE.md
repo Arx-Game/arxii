@@ -298,6 +298,15 @@ They do not use the command system, dispatchers, or handlers.
   (`"respond_invitation"`, acts as the invitee's active persona). Each wraps its
   `world.events.services` counterpart; shared by telnet `CmdEvent` (`event <subverb>`) and the web
   `EventViewSet` / `EventInvitationViewSet`; no consent gate (ADR-0024).)
+  `channels.py` (#3299, ADR-3299) - the player channel verbs, all REGISTRY, account-authorized
+  (`actor=None` + an `AccountDB` instance as `account`; anything else refuses): `post_to_channel`,
+  `join_channel`, `leave_channel`, `set_channel_mute`, `set_channel_identity`, and staff
+  `delete_channel_message` / `ban_channel_author`, wrapping `world.channels.services`. Shared by
+  telnet `CmdChannel` and the `/api/channels/` views. Channels are our own OOC models (Evennia's
+  `@channel` and `DEFAULT_CHANNELS` are retired); a speaker is a roster tenure chosen per channel,
+  never an account name; covert orgs get no channel; a house's ORG channel keeps the #1884 vassal
+  cascade (a covert vassal cuts its branch). Web writes go through REST, because dispatch strips
+  `account` (see "Server-supplied kwargs" below).
   `sanctum.py` (#1497) — 7 REGISTRY actions, all `target_type=SELF`, `category="magic"`,
   wrapping the existing sanctum services. Keys: `sanctum_install`
   (`perform_sanctification` + homecoming-offer link), `sanctum_homecoming`
@@ -909,6 +918,19 @@ on sync-with-main. Resolution is mechanical: keep **both** sides' appends
 (concatenate the two Action lists / two key sets), never drop either — dropping
 one breaks the exact-match test. Verify post-merge with `just test-fast
 actions`; a failure there means a key was dropped or duplicated.
+
+**Server-supplied kwargs never come from the client** (#3299). `SERVER_SUPPLIED_KWARGS`
+(`actions/player_interface.py`, today `{"account"}`) names the kwargs only server code may set;
+`dispatch_player_action` drops them from the client's kwargs before routing, which covers the
+websocket `execute_action` inputfunc and REST `DispatchActionView` alike. An account-authorized
+action (`actor=None`, `account=...`) gets its account from its own view (`request.user`) or
+command (`self.account`) calling `.run()` directly, never through dispatch; through dispatch it
+sees no account and refuses, or falls back to the actor's own account (`gm_standoff`, worship's
+`gm_being_answer`). Before this, events, ceremonies, dramatic moments, GM standoff and worship
+actions took whatever `account` a client sent. A new action that trusts a kwarg the server must
+supply (an account, a staff flag, a resolved owner) adds the key to `SERVER_SUPPLIED_KWARGS`
+and accepts only the model instance (`isinstance`), never a bare id; the
+`server-supplied-kwarg-reviewer` agent checks for this.
 
 **`objectdb_target_kwargs` does NOT auto-resolve on the REST dispatch path** (#2163,
 a real bug that shipped past all per-task tests because they mocked the dispatch

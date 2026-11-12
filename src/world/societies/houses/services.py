@@ -817,14 +817,23 @@ def swear_fealty(
     return edge
 
 
-def vassals_of(liege: Organization, *, recursive: bool = False) -> list[Organization]:
-    """Direct vassals, or the whole subtree with ``recursive=True`` (BFS)."""
+def vassals_of(
+    liege: Organization, *, recursive: bool = False, include_covert: bool = True
+) -> list[Organization]:
+    """Direct vassals, or the whole subtree with ``recursive=True`` (BFS).
+
+    ``include_covert=False`` never enters a covert vassal: neither it nor anything sworn
+    beneath it is returned (the player-channel cascade, #3299, where a sub-vassal's
+    presence would hint at the covert link).
+    """
     frontier = [liege]
     found: list[Organization] = []
     seen: set[int] = {liege.pk}
     while frontier:
         current = frontier.pop(0)
         edges = FealtyEdge.objects.filter(liege=current).select_related("vassal")
+        if not include_covert:
+            edges = edges.filter(vassal__is_covert=False)
         for edge in edges:
             if edge.vassal_id in seen:
                 continue
@@ -1421,56 +1430,6 @@ def complete_domain_improvement(project, outcome_tier=None) -> None:
             stream.save(update_fields=["gross_amount"])
     details.applied_at = timezone.now()
     details.save(update_fields=["applied_at"])
-
-
-# ---------------------------------------------------------------------------
-# House channel — the household's line, vassal cascade included (#1884)
-# ---------------------------------------------------------------------------
-
-
-def _house_audience(house: Organization, *, include_vassals: bool) -> list:
-    """Accounts currently playing an active member of the house (and, with
-    the cascade, of its vassal houses) — the channel's rightful listeners."""
-    from evennia.accounts.models import AccountDB  # noqa: PLC0415
-
-    orgs = [house, *(vassals_of(house, recursive=True) if include_vassals else [])]
-    membership_path = (
-        "player_data__tenures__roster_entry__character_sheet__personas__organization_memberships"
-    )
-    return list(
-        AccountDB.objects.filter(
-            **{
-                "player_data__tenures__end_date__isnull": True,
-                f"{membership_path}__organization__in": orgs,
-                f"{membership_path}__left_at__isnull": True,
-                f"{membership_path}__exiled_at__isnull": True,
-            }
-        ).distinct()
-    )
-
-
-def sync_house_channel(house: Organization, *, include_vassals: bool = True):
-    """Create the house channel if needed and connect the current audience.
-
-    Idempotent: run after membership or fealty changes (explicit call, no
-    signals). Leaves manual disconnections alone except for members — a
-    member is always (re)connected.
-    """
-    from evennia.comms.models import ChannelDB  # noqa: PLC0415
-    from evennia.utils.create import create_channel  # noqa: PLC0415
-
-    key = f"house_{house.pk}"
-    channel = ChannelDB.objects.filter(db_key=key).first()
-    if channel is None:
-        channel = create_channel(
-            key,
-            aliases=[house.name],
-            desc=f"The house line of {house.name} (#1884).",
-        )
-    for account in _house_audience(house, include_vassals=include_vassals):
-        if not channel.has_connection(account):
-            channel.connect(account)
-    return channel
 
 
 def unrest_crisis_chance(unrest: int) -> float:

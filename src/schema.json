@@ -4391,6 +4391,310 @@ paths:
               schema:
                 $ref: '#/components/schemas/SeanceManifestationOffer'
           description: ''
+  /api/channels/channels/:
+    get:
+      operationId: channels_channels_list
+      description: Channels the requester can read and post in.
+      tags:
+      - channels
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Channel'
+          description: ''
+  /api/channels/channels/{id}/:
+    get:
+      operationId: channels_channels_retrieve
+      description: Channels the requester can read and post in.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - channels
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Channel'
+          description: ''
+  /api/channels/channels/{id}/identities/:
+    get:
+      operationId: channels_channels_identities_list
+      description: 'Who the requester can speak as here: their own eligible tenures,
+        by name.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - channels
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChannelIdentity'
+          description: ''
+  /api/channels/messages/:
+    get:
+      operationId: channels_messages_list
+      description: |-
+        A channel's history, posting, and staff moderation.
+
+        List needs ``?channel=<id>``. Create runs ``PostToChannelAction``; destroy
+        (``DeleteChannelMessageAction``) and ``ban/`` (``BanChannelAuthorAction``) are staff
+        only. A refused action is 400 with its player-facing message as ``detail``.
+      parameters:
+      - in: query
+        name: channel
+        schema:
+          type: integer
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - channels
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedChannelMessageList'
+          description: ''
+    post:
+      operationId: channels_messages_create
+      description: Post as the subscription's chosen identity (posting marks the channel
+        read).
+      tags:
+      - channels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChannelMessageCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelMessage'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelActionResult'
+          description: ''
+  /api/channels/messages/{id}/:
+    delete:
+      operationId: channels_messages_destroy
+      description: 'Staff: delete a message from every reader''s history.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this channel message.
+        required: true
+      tags:
+      - channels
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelActionResult'
+          description: ''
+  /api/channels/messages/{id}/ban/:
+    post:
+      operationId: channels_messages_ban_create
+      description: 'Staff: ban this message''s author from its channel.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this channel message.
+        required: true
+      tags:
+      - channels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChannelBanRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelActionResult'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelActionResult'
+          description: ''
+  /api/channels/subscriptions/:
+    get:
+      operationId: channels_subscriptions_list
+      description: The requester's own channel subscriptions. PATCH only (no PUT).
+      tags:
+      - channels
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChannelSubscription'
+          description: ''
+    post:
+      operationId: channels_subscriptions_create
+      description: The requester's own channel subscriptions. PATCH only (no PUT).
+      tags:
+      - channels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChannelSubscriptionRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelSubscription'
+          description: ''
+  /api/channels/subscriptions/{id}/:
+    get:
+      operationId: channels_subscriptions_retrieve
+      description: The requester's own channel subscriptions. PATCH only (no PUT).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - channels
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelSubscription'
+          description: ''
+    patch:
+      operationId: channels_subscriptions_partial_update
+      description: The requester's own channel subscriptions. PATCH only (no PUT).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - channels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedChannelSubscriptionRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelSubscription'
+          description: ''
+    delete:
+      operationId: channels_subscriptions_destroy
+      description: The requester's own channel subscriptions. PATCH only (no PUT).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - channels
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/channels/subscriptions/{id}/mark-read/:
+    post:
+      operationId: channels_subscriptions_mark_read_create
+      description: Mark everything in this channel read for the requester.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - channels
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelSubscription'
+          description: ''
   /api/chapters/:
     get:
       operationId: chapters_list
@@ -51145,6 +51449,205 @@ components:
         * `cause` - Set cause
         * `drive` - Set drive
         * `drop_drive` - Drop drive
+    Channel:
+      type: object
+      description: A channel the requester can reach, with their own subscription
+        (or null).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/ChannelKindEnum'
+          readOnly: true
+        subscription:
+          allOf:
+          - $ref: '#/components/schemas/ChannelSubscription'
+          nullable: true
+          readOnly: true
+      required:
+      - description
+      - id
+      - kind
+      - name
+      - subscription
+    ChannelActionResult:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    ChannelBanRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          default: ''
+          maxLength: 500
+    ChannelIdentity:
+      type: object
+      description: One of the requester's own tenures eligible to speak in a channel.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        label:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - label
+    ChannelKindEnum:
+      enum:
+      - public
+      - org
+      - staff
+      type: string
+      description: |-
+        * `public` - Public
+        * `org` - Organization
+        * `staff` - Staff
+    ChannelMessage:
+      type: object
+      description: |-
+        A channel message as this reader sees it. A blocked author's row comes back with
+        ``is_hidden`` true and an empty speaker and body (the client shows "N hidden").
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        channel:
+          type: integer
+          readOnly: true
+        speaker:
+          type: string
+          description: The author's speaker name ("Ariel" or "2nd player of Ariel");
+            empty if hidden.
+          readOnly: true
+        body:
+          type: string
+          description: The message text; empty if hidden.
+          readOnly: true
+        is_hidden:
+          type: boolean
+          description: |-
+            Whether a block sits between this reader and the author: account-wide, or on
+            the author's character's primary persona. A reader's own posts are never hidden.
+          readOnly: true
+        is_own:
+          type: boolean
+          description: Whether the requester wrote it (under any of their tenures).
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - body
+      - channel
+      - created_at
+      - id
+      - is_hidden
+      - is_own
+      - speaker
+    ChannelMessageCreateRequest:
+      type: object
+      description: |-
+        Post input. Emptiness, length, access and identity are refused by the post
+        action with the player-facing reason (400).
+      properties:
+        channel:
+          type: integer
+        body:
+          type: string
+      required:
+      - body
+      - channel
+    ChannelNotificationLevelEnum:
+      enum:
+      - all
+      - badge
+      - none
+      type: string
+      description: |-
+        * `all` - Every message
+        * `badge` - Unread count only
+        * `none` - Nothing
+    ChannelSubscription:
+      type: object
+      description: |-
+        The requester's own subscription row and its preferences.
+
+        ``channel`` is set on create only. ``display_tenure`` must be one of the requester's
+        tenures eligible for the channel (an alt outside the org is refused with 400).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        channel:
+          type: integer
+        display_tenure:
+          type: integer
+          nullable: true
+        display_label:
+          type: string
+          nullable: true
+          description: Who the requester speaks as here (the speaker name), or null
+            if unchosen.
+          readOnly: true
+        muted:
+          type: boolean
+        collapsed:
+          type: boolean
+        notification_level:
+          $ref: '#/components/schemas/ChannelNotificationLevelEnum'
+        sort_order:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        unread_count:
+          type: integer
+          description: Unread messages; 0 for a muted channel or notification level
+            "none".
+          readOnly: true
+      required:
+      - channel
+      - display_label
+      - id
+      - unread_count
+    ChannelSubscriptionRequest:
+      type: object
+      description: |-
+        The requester's own subscription row and its preferences.
+
+        ``channel`` is set on create only. ``display_tenure`` must be one of the requester's
+        tenures eligible for the channel (an alt outside the org is refused with 400).
+      properties:
+        channel:
+          type: integer
+        display_tenure:
+          type: integer
+          nullable: true
+        muted:
+          type: boolean
+        collapsed:
+          type: boolean
+        notification_level:
+          $ref: '#/components/schemas/ChannelNotificationLevelEnum'
+        sort_order:
+          type: integer
+          maximum: 32767
+          minimum: 0
+      required:
+      - channel
     ChapterCreate:
       type: object
       description: Serializer for creating chapters
@@ -74469,6 +74972,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ChallengeTemplateList'
+    PaginatedChannelMessageList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChannelMessage'
     PaginatedChapterListList:
       type: object
       required:
@@ -79976,6 +80502,29 @@ components:
           type: string
           format: date-time
           nullable: true
+    PatchedChannelSubscriptionRequest:
+      type: object
+      description: |-
+        The requester's own subscription row and its preferences.
+
+        ``channel`` is set on create only. ``display_tenure`` must be one of the requester's
+        tenures eligible for the channel (an alt outside the org is refused with 400).
+      properties:
+        channel:
+          type: integer
+        display_tenure:
+          type: integer
+          nullable: true
+        muted:
+          type: boolean
+        collapsed:
+          type: boolean
+        notification_level:
+          $ref: '#/components/schemas/ChannelNotificationLevelEnum'
+        sort_order:
+          type: integer
+          maximum: 32767
+          minimum: 0
     PatchedChapterDetailRequest:
       type: object
       description: Full serializer for chapter details

@@ -81,6 +81,13 @@ kind}))`), whose dict becomes the frame's kwargs; a sibling keyword would leave 
   frame) clears it.
 - **`handleRoomStatePayload.ts`**: Updates room state from server messages
 - **`handleScenePayload.ts`**: Processes scene-related updates
+- **`handleChannelMessagePayload.ts`** (#3299): the `channel_message` frame. It writes the
+  row into that channel's cached history (`channels/queries.ts`), never the IC feed. The
+  server sends it to every web session on the account, so it dedupes on `message_id`. Own
+  messages and lanes on screen get no bump; otherwise `badge` bumps unread, `all` also
+  toasts, `none` does neither.
+  `handleChannelMessageRemovedPayload` (`channel_message_removed`, staff delete) drops the
+  row from that cache.
 - **`handleInteractionChangedPayload.ts`** (#4508): the `interaction_changed` frame, ids only.
   It calls `refreshSceneFeedRow` (`scenes/sceneFeedCache.ts`) to refetch that pose for this
   viewer. A 403 or 404 is quiet (the viewer may not see the row); any other failure is reported.

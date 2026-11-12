@@ -116,6 +116,10 @@ if TYPE_CHECKING:
 _UNSET = object()
 
 
+# Action kwargs only server code may set (see ``dispatch_player_action``).
+SERVER_SUPPLIED_KWARGS = frozenset({"account"})
+
+
 def dispatch_player_action(
     character: ObjectDB,
     ref: ActionRef,
@@ -144,6 +148,12 @@ def dispatch_player_action(
             but the declaration window has already closed (propagated from
             ``record_declaration``).
     """
+    # Server-supplied kwargs never come from the client: an account-authorized action
+    # (``actor=None, account=<request account>``) trusts ``account`` because its own
+    # view or command set it. Dispatch kwargs are client data (websocket ``execute_action``
+    # and REST dispatch pass them through), so a forged ``account`` is dropped here and an
+    # action that falls back to the actor's own account sees none (#3299).
+    kwargs = {key: value for key, value in kwargs.items() if key not in SERVER_SUPPLIED_KWARGS}
     sheet = _get_character_sheet(character)
 
     # Step 1: get the active round context (None if not in an active round).

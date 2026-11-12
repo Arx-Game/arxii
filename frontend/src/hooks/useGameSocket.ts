@@ -29,6 +29,8 @@ import type {
   InteractionWsPayload,
   KudosReceivedPayload,
   MailArrivedPayload,
+  ChannelMessagePayload,
+  ChannelMessageRemovedPayload,
   OutgoingMessage,
   RoomStatePayload,
   ScenePayload,
@@ -49,12 +51,17 @@ import {
 import type { BattleStatePayload } from '@/battles/types';
 import { handleKudosReceivedPayload } from './handleKudosReceivedPayload';
 import { handleMailArrivedPayload } from './handleMailArrivedPayload';
+import {
+  handleChannelMessagePayload,
+  handleChannelMessageRemovedPayload,
+} from './handleChannelMessagePayload';
 import { handleGMPromptPayload } from './handleGMPromptPayload';
 import {
   handleInteractionChangedPayload,
   type InteractionChangedPayload,
 } from './handleInteractionChangedPayload';
 import { sceneFeedAllKey, sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
+import { channelKeys } from '@/channels/queries';
 
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -253,6 +260,9 @@ function markConnectionReady(
   reconnectAttempts[character] = 0;
   dispatch(setSessionConnectionStatus({ character, status: true }));
   queryClient.invalidateQueries({ queryKey: sceneFeedAllKey() }).catch(() => {});
+  // #3299: channel_message frames pushed while this socket was down never
+  // arrived, so the channel list's unread counts and every open lane refetch.
+  queryClient.invalidateQueries({ queryKey: channelKeys.all }).catch(() => {});
   // #4321: the roster payload carries the server's session count, which every
   // tab's chip and Hall card read; this tab just added a session to it.
   refetchPresence();
@@ -431,6 +441,16 @@ function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefi
 
     case WS_MESSAGE_TYPE.MAIL_ARRIVED:
       return ({ kwargs }) => handleMailArrivedPayload(kwargs as unknown as MailArrivedPayload);
+
+    case WS_MESSAGE_TYPE.CHANNEL_MESSAGE:
+      return ({ kwargs }) =>
+        handleChannelMessagePayload(kwargs as unknown as ChannelMessagePayload | undefined);
+
+    case WS_MESSAGE_TYPE.CHANNEL_MESSAGE_REMOVED:
+      return ({ kwargs }) =>
+        handleChannelMessageRemovedPayload(
+          kwargs as unknown as ChannelMessageRemovedPayload | undefined
+        );
 
     case WS_MESSAGE_TYPE.HAZARD_PROMPT:
       return ({ kwargs }) => emitHazardPrompt(kwargs as unknown as HazardPromptPayload);

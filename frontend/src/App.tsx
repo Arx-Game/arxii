@@ -42,6 +42,7 @@ import { SceneDetailPage } from './scenes/pages/SceneDetailPage';
 import { BattleMapPage } from './battles/pages/BattleMapPage';
 import { BattleWriteupPage } from './battles/pages/BattleWriteupPage';
 import MailPage from './mail/pages/MailPage';
+import { ChannelsPage } from './channels/pages/ChannelsPage';
 import { XpKudosPage } from './progression/XpKudosPage';
 import { EventsListPage } from '@/events/pages/EventsListPage';
 import { EventDetailPage } from '@/events/pages/EventDetailPage';
@@ -414,6 +415,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <HallPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/channels"
+            element={
+              <ProtectedRoute>
+                <ChannelsPage />
               </ProtectedRoute>
             }
           />

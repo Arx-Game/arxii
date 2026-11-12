@@ -111,7 +111,10 @@ every character the target's player currently plays unless the caller opts into 
 advanced persona-only shape (`+block/persona`, `+mute/persona`, or `account_level: false` on
 the create serializers). One query seam per primitive — `block_services.account_block_active`
 / `blocked_player_ids_for` and `mute_services.account_muted` / `muted_player_ids_for` — is the
-only thing every OOC delivery surface calls; no per-surface reimplementation.
+only thing every OOC delivery surface calls; no per-surface reimplementation. A push fan-out
+that must honour persona-scoped blocks too (player channels, #3299) uses
+`block_services.account_ids_hiding_persona`, the one-query inverse of
+`hidden_persona_ids_for_viewer`.
 
 **Per-surface policy** (write-then-filter by default — the actor's own write path is
 byte-identical, suppression is query-time exclusion on the other party's read; IC channels stay
@@ -227,6 +230,38 @@ were deleted rather than kept alongside the new page; see ADR-0227.
   theme choice on navigating away.
 
 Details: ADR-0227, `docs/systems/realms.md`.
+
+## Built - Player Channels (#3299)
+
+Persistent named OOC channels replace the Evennia channels the game had
+inherited by accident (the stock `@channel` command, an unconfigured Public
+channel, and the #1884 `house_<pk>` channels):
+
+- **One PUBLIC channel and one ORG channel per non-covert organization**
+  (`world.channels`), provisioned by explicit calls where orgs are made. Covert
+  and covenant-backed orgs get none. A house's ORG channel keeps the vassal
+  cascade: members of a non-covert vassal house reach the liege's channel.
+- **Speaker = a roster tenure chosen per channel**, shown as the character
+  name or "2nd player of Y", frozen on each message; account names are never
+  shown, so alts are never outed.
+- **Per-channel controls:** join/leave, speak as, mute (no push, no badge),
+  collapse, notification level (every message / unread count / nothing),
+  order. Blocked authors show as an "N hidden" divider; account-muted authors
+  are dropped.
+- **Staff moderation:** delete a message (gone from every open screen) and
+  ban an author from a channel; staff can read every non-covert channel.
+- **Surfaces:** channel lines in the play page's main column under the OOC
+  chip (a `channel` feed kind), a Channels group in the conversation rail to
+  post from, the `/channels` page with every control, telnet `channel`, and an
+  opt-in "Channels in sidebar" display setting for the old side lane (owner
+  ruling 2026-11-12, PR #5095). History keeps the newest 500
+  messages per channel (placeholder cap, pruned hourly).
+- **Old Evennia data discarded:** migration 0394 deleted the Evennia Public
+  and house channels and their nicks; players join again.
+
+Deferred: covert-org channels, covenant channels, player-made channels,
+reactions, paging to older history. Details: `docs/systems/channels.md`,
+ADR-3299.
 
 ## What's Needed for MVP
 - ~~Friend list system~~ — SHIPPED (#1727): `FriendsTab`/`FriendButton` over

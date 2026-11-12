@@ -2,6 +2,9 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { postChannelMessage } from '@/channels/api';
+import { addMessageToCache } from '@/channels/queries';
+import { queryClient } from '@/queryClient';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { useActionResult } from '@/hooks/actionResultBus';
 import type { ActionResultPayload, RoomStateObject } from '@/hooks/types';
@@ -42,6 +45,12 @@ export interface ComposerMode {
   label: string; // "Pose -> The Grand Ballroom"
   /** #2165: audience is fixed by the active conversation tab — mode switching disabled. */
   locked?: boolean;
+  /**
+   * #3299: the channel a `channel` mode posts to, through the channels REST API.
+   * A channel row in the rail sets it only once the player has a speaker chosen
+   * there; without it nothing is sent.
+   */
+  channelId?: number;
 }
 
 // #3069 — `page` is a real OOC telnet command (CmdPage,
@@ -671,6 +680,40 @@ export function CommandInput({
     // Checked against the RESOLVED mode, not the live composerMode prop, for
     // the same reason as above.
     if (resolvedSpeechMode?.command === 'whisper' && resolvedSpeechMode.targets.length === 0) {
+      return;
+    }
+
+    // #3299: a channel row posts through the channels REST API (the account's
+    // own action), ack-gated like the companion emote below. With no speaker
+    // chosen it has nowhere to send: the rail row carries the picker, and the
+    // refusal names what to do.
+    if (dispatchMode?.command === 'channel') {
+      const channelId = composerMode?.channelId;
+      if (channelId === undefined) {
+        toast.error('Choose who you speak as in this channel first.');
+        return;
+      }
+      submittingRef.current = true;
+      const clientRequestId = beginSend(null);
+      pendingSpeechRef.current = { clientRequestId, text: trimmed };
+      postChannelMessage(channelId, spoken)
+        .then((message) => {
+          addMessageToCache(queryClient, message);
+          acknowledge(clientRequestId);
+          setHistory((prev) => [...prev, trimmed]);
+          setHistoryIndex(-1);
+        })
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : 'Failed to post to channel.';
+          rejectDraft(clientRequestId, message);
+          toast.error(message);
+        })
+        .finally(() => {
+          if (pendingSpeechRef.current?.clientRequestId === clientRequestId) {
+            pendingSpeechRef.current = null;
+          }
+          submittingRef.current = false;
+        });
       return;
     }
 

@@ -41,6 +41,7 @@ import world.boundaries.admin
 import world.buildings.admin
 import world.captivity.admin
 import world.ceremonies.admin
+import world.channels.admin
 import world.character_creation.admin
 import world.character_sheets.admin
 import world.checks.admin

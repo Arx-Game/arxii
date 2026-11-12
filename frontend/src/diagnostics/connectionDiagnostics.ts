@@ -117,6 +117,8 @@ const SAFE_FRAME_TYPES = new Set([
   'combat_encounter_state',
   'kudos_received',
   'mail_arrived',
+  'channel_message',
+  'channel_message_removed',
   'hazard_prompt',
   'request_room_state',
   'state_resync',

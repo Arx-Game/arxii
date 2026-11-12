@@ -39,6 +39,10 @@ export const WS_MESSAGE_TYPE = {
   KUDOS_RECEIVED: 'kudos_received',
   /** Inbound: a new letter arrived for one of the recipient's tenures (#2160). */
   MAIL_ARRIVED: 'mail_arrived',
+  /** Inbound: a message in a channel the account joined; never enters the IC feed (#3299). */
+  CHANNEL_MESSAGE: 'channel_message',
+  /** Inbound: staff deleted a channel message; drop the row (#3299). */
+  CHANNEL_MESSAGE_REMOVED: 'channel_message_removed',
   /** Inbound: an environmental hazard entered a damaging stage; show the response card (#2846). */
   HAZARD_PROMPT: 'hazard_prompt',
   REQUEST_ROOM_STATE: 'request_room_state',
@@ -120,6 +124,19 @@ export interface FeedNote {
   from?: { personaId: number; name: string };
   /** True on the sender's own echo of a page, which never counts as unread. */
   outgoing?: boolean;
+  /**
+   * A line from a player channel (#3299), kind `channel`, built from the channel
+   * message caches (never from the session): `content` is the plain message
+   * text. `hiddenCount` above zero makes it the "N hidden" divider that stands
+   * for a run of a blocked author's lines (`content` and `speaker` empty).
+   */
+  channel?: {
+    id: number;
+    name: string;
+    messageId: number;
+    speaker: string;
+    hiddenCount: number;
+  };
 }
 
 /**
@@ -303,6 +320,28 @@ export interface MailArrivedPayload {
   mail_id: number;
   sender_display: string;
   subject: string;
+}
+
+/**
+ * A live channel message (#3299), sent to every web session on the account (the
+ * client dedupes on `message_id`). `speaker` is display text only, never an
+ * account name.
+ */
+export interface ChannelMessagePayload {
+  message_id: number;
+  channel_id: number;
+  channel_name: string;
+  speaker: string;
+  body: string;
+  created_at: string;
+  is_own: boolean;
+  notification_level: 'all' | 'badge' | 'none';
+}
+
+/** Staff deleted a channel message (#3299); ids only. */
+export interface ChannelMessageRemovedPayload {
+  message_id: number;
+  channel_id: number;
 }
 
 /**
