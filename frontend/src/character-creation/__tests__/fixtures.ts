@@ -1415,6 +1415,7 @@ export function makeVisibleOffer(overrides: Partial<VisibleOffer> = {}): Visible
     distinction_id: 1,
     name: 'An Offer',
     distinction_name: 'An Offer',
+    distinction_description: '',
     player_line: '',
     chapter: 'appearance',
     arrives_as: 'choice',

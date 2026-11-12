@@ -132,6 +132,25 @@ class AlmanachApiTests(TestCase):
         assert res.data["unclaimed_by_tier"]["barony"] == 1
         assert client.get(f"/api/almanach/houses/{house.pk}/document/").status_code == 200
 
+    def test_document_carries_the_houses_particle_pair(self) -> None:
+        """#5090: the house page shows the particles themselves, born and taken-in."""
+        client = APIClient()
+        client.force_authenticate(self.staff)
+        url = f"/api/almanach/houses/{self.crown.pk}/document/"
+        assert client.get(url).data["house"]["particle"] == {"born": "", "taken_in": ""}
+
+        # a house's realm is its society's (``realm_for_house``)
+        NobiliaryParticle.objects.create(
+            realm=self.crown.society.realm,
+            kind=self.crown.family.kind,
+            particle="aza",
+            taken_in_particle="azas",
+        )
+
+        house = client.get(url).data["house"]
+        assert house["particle"] == {"born": "aza", "taken_in": "azas"}
+        assert "particle_example" not in house
+
     def test_document_carries_the_houses_days_of_remembrance(self) -> None:
         """#4206: the house section lists its observances in calendar order,
         each spelled with the game's one IC date formatter."""

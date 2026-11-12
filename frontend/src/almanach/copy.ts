@@ -52,13 +52,21 @@ export function houseHeading(name: string): string {
 
 /** `house.house_state`, as `HouseChapter`'s state toggle labels it. */
 export const HOUSE_STATES = {
-  standing: 'Standing',
+  standing: 'Active',
   in_exile: 'In exile',
   extinct: 'Extinct',
   gentry: 'Gentry',
 } as const;
 
 export const GENTRY_LUXEN_ONLY = 'Luxen only';
+
+/** A realm's particles as the house page shows them: born, then taken-in ("aza / azas"). */
+export const particlePair = (born: string, takenIn: string) =>
+  takenIn && takenIn !== born ? `${born} / ${takenIn}` : born;
+
+/** The record rail's links off a house page, named for where they go. */
+export const houseOrgPage = (houseName: string) => `${houseName} org page`;
+export const houseFamilyPage = (houseName: string) => `${houseName} family page`;
 
 export const PUBLISH_STATUS = {
   draft: 'draft',

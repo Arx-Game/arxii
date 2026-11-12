@@ -185,6 +185,15 @@ class AlmanachHouseObservanceSerializer(serializers.Serializer):
     when = serializers.CharField()
 
 
+class RealmCharterParticleSerializer(serializers.Serializer):
+    """Mirrors ``almanach_reads.charter_for_realm``'s ``particle`` dict."""
+
+    # the house document's ``particle`` (``_particle_payload``) has the same shape
+
+    born = serializers.CharField(allow_blank=True)
+    taken_in = serializers.CharField(allow_blank=True)
+
+
 class AlmanachHouseDocumentHouseSerializer(serializers.Serializer):
     """The document's ``house`` section (mirrors ``_house_payload``) — the
     only section given its own nested serializer, per the #3983 Task 5
@@ -198,7 +207,7 @@ class AlmanachHouseDocumentHouseSerializer(serializers.Serializer):
     sigil_description = serializers.CharField(allow_blank=True)
     house_state = serializers.CharField()
     published_at = serializers.DateTimeField(allow_null=True)
-    particle_example = serializers.CharField(allow_blank=True)
+    particle = RealmCharterParticleSerializer()
     default_succession_law = AlmanachSuccessionLawSerializer(allow_null=True)
     patron = AlmanachHousePatronSerializer(allow_null=True)
     facets = AlmanachHouseFacetSerializer(many=True)
@@ -235,13 +244,6 @@ class LandShapeSerializer(serializers.ModelSerializer):
     class Meta:
         model = LandShape
         fields = ["id", "name", "description", "sort_order"]
-
-
-class RealmCharterParticleSerializer(serializers.Serializer):
-    """Mirrors ``almanach_reads.charter_for_realm``'s ``particle`` dict."""
-
-    born = serializers.CharField(allow_blank=True)
-    taken_in = serializers.CharField(allow_blank=True)
 
 
 class RealmCharterSerializer(serializers.Serializer):

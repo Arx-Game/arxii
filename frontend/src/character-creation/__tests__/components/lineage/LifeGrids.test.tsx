@@ -58,6 +58,7 @@ function offer(over: Partial<VisibleOffer>): VisibleOffer {
     distinction_id: 100,
     name: 'Patient',
     distinction_name: 'Patient',
+    distinction_description: '',
     player_line: '',
     chapter: 'backgrounds',
     arrives_as: 'choice',
@@ -131,6 +132,9 @@ describe('LifeGrids', () => {
           offer_id: 10,
           distinction_id: 100,
           name: 'Patient',
+          // The offer's own line repeats the name, as the authored rows do (#5099).
+          player_line: 'Patient',
+          distinction_description: 'You learned to wait out every storm.',
           effects: [{ target: 'sailing', label: 'sailing', value: 10, immune: false }],
         }),
         offer({
@@ -138,6 +142,7 @@ describe('LifeGrids', () => {
           distinction_id: 101,
           name: 'Spoiled',
           distinction_name: 'Soft Hands',
+          distinction_description: '',
           cost_per_rank: -10,
         }),
         offer({ offer_id: 12, distinction_id: 102, name: 'Unremarkable', cost_per_rank: 0 }),
@@ -293,6 +298,14 @@ describe('LifeGrids', () => {
     expect(syncMutate).not.toHaveBeenCalled();
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it("a grid card reads its distinction's description, not the offer's line (#5099)", () => {
+    renderWithCharacterCreationProviders(<LifeGrids draft={createMockDraft()} copy={{}} />);
+    const patient = within(section('Early Upbringing')).getByRole('button', { name: /^Patient/ });
+    expect(within(patient).getByText('You learned to wait out every storm.')).toBeInTheDocument();
+    // The name prints once, as the card's title; the repeated player_line never shows.
+    expect(within(patient).getAllByText('Patient')).toHaveLength(1);
   });
 
   it('the stage mark sets every beat of the stage unknown in one save and folds it', async () => {
