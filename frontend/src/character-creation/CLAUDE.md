@@ -242,7 +242,9 @@ character-creation/
 ## ChapterOffers, the life page's props (#4874)
 
 `ChapterOffers` (`components/offers/`) grew five props for the life page and keeps every
-default for the other chapters: `groupBy` splits a grid under `.group-h` headings
+default for the other chapters. A `layout="grid"` card (the life page's only layout) reads
+the distinction's description under its name, not the offer's `player_line` (#5099).
+`groupBy` splits a grid under `.group-h` headings
 ("Group (count)", the ungrouped cards last); `pricing="signed"` prints a grid card's price
 as a bare `−N`/`+N` in its bottom-left corner and nothing on a free card; `terms` builds the
 mechanics line from `offer.effects` with each term a `.term` role-button (the card is a
