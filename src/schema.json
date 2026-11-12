@@ -45815,8 +45815,8 @@ components:
           type: string
           format: date-time
           nullable: true
-        particle_example:
-          type: string
+        particle:
+          $ref: '#/components/schemas/RealmCharterParticle'
         default_succession_law:
           allOf:
           - $ref: '#/components/schemas/AlmanachSuccessionLaw'
@@ -45857,7 +45857,7 @@ components:
       - name
       - observances
       - offices
-      - particle_example
+      - particle
       - patron
       - published_at
       - sigil_description

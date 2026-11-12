@@ -28220,7 +28220,7 @@ export interface components {
       house_state: string;
       /** Format: date-time */
       published_at: string | null;
-      particle_example: string;
+      particle: components['schemas']['RealmCharterParticle'];
       default_succession_law: components['schemas']['AlmanachSuccessionLaw'] | null;
       patron: components['schemas']['AlmanachHousePatron'] | null;
       facets: components['schemas']['AlmanachHouseFacet'][];
