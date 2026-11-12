@@ -58,6 +58,7 @@ from world.combat.factories import (
 )
 from world.combat.services import begin_declaration_phase, resolve_round
 from world.combat.services.boss.creature_spawn import spawn_from_creature_template
+from world.conditions.factories import CapabilityTypeFactory
 from world.covenants.constants import CovenantType
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
@@ -84,6 +85,8 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.magic.models.modifier_level import CastPowerLevel
+from world.mechanics.factories import ModifierCategoryFactory, MovementApplicationFactory
+from world.mechanics.models import CharacterModifier, ModifierSource, ModifierTarget
 from world.scenes.constants import RoundStatus
 from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
 from world.traits.models import CheckOutcome, Trait
@@ -272,6 +275,31 @@ class AnAttackTechniqueTakesItAndADodgeDoesNot(_AttackRollPerkField):
         added = self.added(self.cast_bolt, roll_kind=PerkRollKind.ANY)
 
         self.assertEqual(sorted(added), [("Bolt Cast", PAYOFF), ("Parry", PAYOFF)])
+
+    def test_a_dodge_that_round_takes_no_attack_bonus(self) -> None:
+        """Hobb can dodge: the blade's swing is answered by a dodge, which is not an attack on
+        an opponent, so "Attack rolls" leaves the defense roll at +0 while the bolt takes it."""
+        traversal = CapabilityTypeFactory(name="traversal", innate_baseline=0)
+        MovementApplicationFactory(name="Tumble", capability=traversal, dodges=True)
+        target, _ = ModifierTarget.objects.get_or_create(
+            name=f"capability_{traversal.pk}",
+            category=ModifierCategoryFactory(name="capability"),
+            defaults={
+                "description": "",
+                "display_order": 0,
+                "is_active": True,
+                "target_capability": traversal,
+            },
+        )
+        CharacterModifier.objects.create(
+            character=self.sheet,
+            target=target,
+            value=4,
+            source=ModifierSource.objects.create(),
+        )
+        added = self.added(self.cast_bolt)
+
+        self.assertEqual(sorted(added), [("Bolt Cast", PAYOFF), ("Parry", 0)])
 
     def test_a_check_type_beside_it_narrows_it_further(self) -> None:
         """Attack rolls AND the thrown check: the bolt is an attack on another check."""
