@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
-from django.db.models import F, Q, QuerySet, Window
+from django.db.models import Count, F, Q, QuerySet, Window
 from django.db.models.functions import RowNumber
 from django.utils import timezone
 from evennia.utils.logger import log_trace
@@ -170,6 +170,36 @@ def can_access_channel(account: AccountDB, channel: Channel) -> bool:
     if channel.organization is None or channel.organization.is_covert:
         return False
     return _eligible_tenure_qs(account, channel).exists()
+
+
+def channel_named(account: AccountDB, name: str) -> Channel | None:
+    """The active channel this account names, matched case-insensitively on
+    ``display_name`` (an ORG channel answers to its organization's live name).
+
+    Only channels the account can reach, is subscribed to (so a player who lost an org
+    can still leave it), or is banned from (so the refusal says why) are matched; any
+    other channel answers None, the same as one that does not exist. An exact-case match
+    wins when two channels share a name in different case.
+    """
+    wanted = (name or "").strip()
+    if not wanted:
+        return None
+    reachable = (
+        Q(pk__in=accessible_channels_for(account).values("pk"))
+        | Q(subscriptions__account=account)
+        | Q(bans__account=account)
+    )
+    named = (~Q(kind=ChannelKind.ORG) & Q(name__iexact=wanted)) | Q(
+        kind=ChannelKind.ORG, organization__name__iexact=wanted
+    )
+    matches = list(
+        Channel.objects.filter(reachable, named, is_active=True)
+        .select_related("organization")
+        .distinct()
+        .order_by("pk")
+    )
+    exact = [channel for channel in matches if channel.display_name == wanted]
+    return (exact or matches or [None])[0]
 
 
 # ---------------------------------------------------------------- identity
@@ -396,16 +426,42 @@ def history_for(account: AccountDB, channel: Channel) -> QuerySet[ChannelMessage
     )
 
 
+def unread_counts(account: AccountDB, subscriptions: list[ChannelSubscription]) -> dict[int, int]:
+    """Unread messages per subscription pk (one query for the lot): messages after
+    ``last_read_at``, own, OOC-muted and blocked authors excluded; 0 for a muted channel
+    or level NONE."""
+    counts = {subscription.pk: 0 for subscription in subscriptions}
+    live = [
+        subscription
+        for subscription in subscriptions
+        if not subscription.muted
+        and subscription.notification_level != ChannelNotificationLevel.NONE
+    ]
+    if not live:
+        return counts
+    excluded = {account.pk} | _muted_author_player_ids(account) | hidden_author_player_ids(account)
+    unread = Q()
+    for subscription in live:
+        since = Q(channel_id=subscription.channel_id)
+        if subscription.last_read_at is not None:
+            since &= Q(created_at__gt=subscription.last_read_at)
+        unread |= since
+    rows = (
+        ChannelMessage.objects.filter(unread)
+        .exclude(author_tenure__player_data_id__in=excluded)
+        .order_by()
+        .values("channel_id")
+        .annotate(total=Count("pk"))
+    )
+    by_channel = {row["channel_id"]: row["total"] for row in rows}
+    for subscription in live:
+        counts[subscription.pk] = by_channel.get(subscription.channel_id, 0)
+    return counts
+
+
 def unread_count(subscription: ChannelSubscription) -> int:
     """Unread messages since ``last_read_at``; 0 for a muted channel or level NONE."""
-    if subscription.muted or subscription.notification_level == ChannelNotificationLevel.NONE:
-        return 0
-    account = subscription.account
-    excluded = {account.pk} | _muted_author_player_ids(account) | hidden_author_player_ids(account)
-    qs = subscription.channel.messages.exclude(author_tenure__player_data_id__in=excluded)
-    if subscription.last_read_at is not None:
-        qs = qs.filter(created_at__gt=subscription.last_read_at)
-    return qs.count()
+    return unread_counts(subscription.account, [subscription])[subscription.pk]
 
 
 def mark_read(subscription: ChannelSubscription) -> None:

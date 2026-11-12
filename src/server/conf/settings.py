@@ -546,6 +546,12 @@ SPECTACULAR_SETTINGS = {
         "PreferenceValenceEnum": "world.npc_services.models.PreferenceValence.choices",
         # An NPC loan's `status` (#4418) collides with other `status` fields; pinned likewise.
         "NPCLoanStatusEnum": "world.roster.constants.NPCLoanStatus.choices",
+        # A channel subscription's `notification_level` (#3299) collides with the
+        # achievements one; both pinned so neither becomes NotificationLevel29bEnum.
+        "NotificationLevelEnum": "world.achievements.constants.NotificationLevel.choices",
+        "ChannelNotificationLevelEnum": (
+            "world.channels.constants.ChannelNotificationLevel.choices"
+        ),
     },
 }
 

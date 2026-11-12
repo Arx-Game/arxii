@@ -70,6 +70,7 @@ urlpatterns = [
     path("api/staff/", include("world.registration.staff_urls")),
     path("api/downtime/", include("world.downtime.urls")),
     path("api/boards/", include("world.boards.urls", namespace="boards")),
+    path("api/channels/", include("world.channels.urls", namespace="channels")),
     path("", include("world.scenes.urls")),
     path("", include("world.stories.urls")),
     path("webclient/", include("web.webclient.urls")),

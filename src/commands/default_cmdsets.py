@@ -32,6 +32,7 @@ from commands.canon_review import CmdCanonReview
 from commands.captivity import CmdDemandRansom
 from commands.carry import CmdCarry, CmdSetDown  # #2852
 from commands.ceremonies import CmdCeremony
+from commands.channels import CmdChannel
 from commands.combat import CmdClashCommit, CmdDeclareTechnique
 from commands.combat_maneuvers import CmdCombat, CmdStrike
 from commands.comfort import CmdComfort
@@ -687,6 +688,9 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         # #4001 — staff full reboot of both daemons; distinct from Evennia's
         # @shutdown (stays down) and @reload/@restart (Server only).
         self.add(CmdReboot())
+        # #3299 - player channels (world.channels), replacing Evennia's @channel. Keys
+        # channel/chan/channels only: no @channel alias (stale nicks pointed at it).
+        self.add(CmdChannel())
 
 
 class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):
