@@ -28226,6 +28226,29 @@ export interface components {
       target_companion_id?: number;
       ap_amount: number;
     };
+    /**
+     * @description One answer a staff house may pick (#5064; mirrors
+     *     ``almanach_reads.charter_questions_for_house``).
+     */
+    AlmanachCharterOption: {
+      id: number;
+      name: string;
+      description: string;
+      target_entry_id: number | null;
+    };
+    /**
+     * @description A charter question of the house's realm with its active options (#5064):
+     *     what the House chapter's picker offers.
+     */
+    AlmanachCharterQuestion: {
+      id: number;
+      name: string;
+      prompt: string;
+      min_picks: number;
+      max_picks: number;
+      sets_patron: boolean;
+      options: components['schemas']['AlmanachCharterOption'][];
+    };
     /** @description The family types Create Family offers (``FamilyKind`` rows, ADR-0268). */
     AlmanachFamilyKind: {
       readonly id: number;
@@ -28279,6 +28302,7 @@ export interface components {
       default_succession_law: components['schemas']['AlmanachSuccessionLaw'] | null;
       patron: components['schemas']['AlmanachHousePatron'] | null;
       facets: components['schemas']['AlmanachHouseFacet'][];
+      charter_questions: components['schemas']['AlmanachCharterQuestion'][];
       features: components['schemas']['AlmanachHouseFeature'][];
       offices: components['schemas']['AlmanachHouseOffice'][];
       observances: components['schemas']['AlmanachHouseObservance'][];
@@ -28290,7 +28314,9 @@ export interface components {
      */
     AlmanachHouseFacet: {
       definition: string;
+      definition_id: number;
       option: string;
+      option_id: number;
       description: string;
       being_name: string;
       target_entry_id: number | null;
@@ -47475,10 +47501,11 @@ export interface components {
         [key: string]: unknown;
       };
     };
+    /** @description A persona as a list or a profile shows it. */
     Persona: {
       readonly id: number;
-      /** @description The character sheet this persona belongs to. */
-      character_sheet: number;
+      /** @description The character behind this face. Null for a disguise the viewer has not uncovered, unless they play it, are staff or GM the scene. */
+      readonly character_sheet: number | null;
       /** @description Display name for this persona */
       name: string;
       /**

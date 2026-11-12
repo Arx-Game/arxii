@@ -17,6 +17,7 @@ from world.areas.positioning.services import (
 )
 from world.scenes.factories import InteractionFactory, PersonaFactory, SceneFactory
 from world.scenes.serializers import SceneDetailSerializer
+from world.scenes.services import set_active_persona
 
 
 class SceneDetailSerializerPositionsTestCase(TestCase):
@@ -33,8 +34,10 @@ class SceneDetailSerializerPositionsTestCase(TestCase):
         # Scene located in the room
         self.scene = SceneFactory(room=self.room)
 
-        # Persona whose character is placed in pos_a
+        # Persona whose character is placed in pos_a, worn as the face the character
+        # presents (only that face stands anywhere, #4888)
         self.persona = PersonaFactory()
+        set_active_persona(self.persona.character_sheet, self.persona)
         # The persona's character is persona.character_sheet.character
         character = self.persona.character_sheet.character
         # Move the character into the room so place_in_position can work

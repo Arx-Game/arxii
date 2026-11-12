@@ -41,8 +41,12 @@ export interface ScenePersona {
   id: number;
   name: string;
   persona_type?: string;
-  /** The persona's character (CharacterSheet pk == character ObjectDB pk). */
-  character_sheet?: number;
+  /**
+   * The persona's character (CharacterSheet pk == character ObjectDB pk). Null for a
+   * disguise the viewer has not uncovered, unless they play it, are staff or GM the
+   * scene (#4888).
+   */
+  character_sheet?: number | null;
   /**
    * Whether this persona's character may be socially targeted. Mirrors the
    * challenge consent gate; the scene UI hides the duel-challenge affordance when

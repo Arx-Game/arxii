@@ -821,38 +821,65 @@ class AlmanachVacateHolderAction(_AlmanachAction):
         )
 
 
-def _prepare_house_edit(*, org, kwargs):
-    """Resolve requested house fields and replacement collections before writes."""
-    from world.societies.houses.constants import HouseState  # noqa: PLC0415
+def _apply_succession_law(org, kwargs):
+    """Set the house's default succession law from ``default_succession_law_id``
+    (a falsy id clears it). Returns the field written, ``None`` when the kwarg is
+    absent, or the refusal for an unknown law."""
     from world.societies.houses.models import SuccessionLaw  # noqa: PLC0415
 
+    if "default_succession_law_id" not in kwargs:  # noqa: STRING_LITERAL
+        return None
+    law_id = kwargs["default_succession_law_id"]
+    law = None
+    if law_id:
+        law = SuccessionLaw.objects.filter(pk=law_id).first()
+        if law is None:
+            return ActionResult(success=False, message="No such succession law.")
+    org.default_succession_law = law
+    return "default_succession_law"  # noqa: STRING_LITERAL - an update_fields name
+
+
+def _apply_house_state(org, kwargs):
+    """Set the house's state from ``house_state``. Returns the field written, ``None``
+    when the kwarg is absent, or the refusal for an unknown state."""
+    from world.societies.houses.constants import HouseState  # noqa: PLC0415
+
+    house_state = kwargs.get("house_state")
+    if house_state is None:
+        return None
+    if house_state not in HouseState.values:
+        options = ", ".join(HouseState.values)
+        return ActionResult(
+            success=False, message=f"No '{house_state}' house state. Options: {options}."
+        )
+    org.house_state = house_state
+    return "house_state"  # noqa: STRING_LITERAL - an update_fields name
+
+
+def _prepare_house_edit(*, org, kwargs):
+    """Resolve requested house fields and replacement collections before writes."""
     update_fields = []
     for field in ("name", "words", "colors", "sigil_description", "description"):
         if kwargs.get(field) is not None:
             setattr(org, field, kwargs[field])
             update_fields.append(field)
-    house_state = kwargs.get("house_state")
-    if house_state is not None:
-        if house_state not in HouseState.values:
-            options = ", ".join(HouseState.values)
-            return ActionResult(
-                success=False, message=f"No '{house_state}' house state. Options: {options}."
-            )
-        org.house_state = house_state
-        update_fields.append("house_state")
-    if "default_succession_law_id" in kwargs:  # noqa: STRING_LITERAL
-        law_id = kwargs["default_succession_law_id"]
-        law = None
-        if law_id:
-            law = SuccessionLaw.objects.filter(pk=law_id).first()
-            if law is None:
-                return ActionResult(success=False, message="No such succession law.")
-        org.default_succession_law = law
-        update_fields.append("default_succession_law")
+    for step in (_apply_house_state, _apply_succession_law):
+        written = step(org, kwargs)
+        if isinstance(written, ActionResult):
+            return written
+        if written is not None:
+            update_fields.append(written)
 
     collections = _resolve_house_collections(kwargs)
     if isinstance(collections, ActionResult):
         return collections
+    facet_options = collections[0]
+    if facet_options is not None:
+        patron_field = _patron_from_facets(org, facet_options)
+        if isinstance(patron_field, ActionResult):
+            return patron_field
+        if patron_field is not None:
+            update_fields.append(patron_field)
     return (update_fields, *collections)
 
 
@@ -908,10 +935,33 @@ def _resolve_house_facets(facet_option_ids):
 
     if facet_option_ids is None:
         return None
-    facet_options = list(HouseCharterOption.objects.filter(pk__in=facet_option_ids))
+    facet_options = list(
+        HouseCharterOption.objects.filter(pk__in=facet_option_ids).select_related(
+            "definition", "being_nickname"
+        )
+    )
     if len(facet_options) != len(set(facet_option_ids)):
         return ActionResult(success=False, message="One of those house aspects doesn't exist.")
     return facet_options
+
+
+def _patron_from_facets(org, facet_options):
+    """Set the house's patron from its picks, the rule founding applies (#4205, #5064):
+    the one pick on a ``sets_patron`` question names the god by that option's nickname.
+    Returns the field written, ``None`` when no patron question was answered, or the
+    refusal for two patron picks or an option with no name for the house to use."""
+    patron_picks = [opt for opt in facet_options if opt.definition.sets_patron]
+    if not patron_picks:
+        return None
+    if len(patron_picks) > 1:
+        return ActionResult(success=False, message="A house serves one patron; pick one.")
+    nickname = patron_picks[0].being_nickname
+    if nickname is None:
+        return ActionResult(
+            success=False, message=f"{patron_picks[0].name} has no name for the house to use."
+        )
+    org.patron_nickname = nickname
+    return "patron_nickname"  # noqa: STRING_LITERAL - an update_fields name
 
 
 def _resolve_house_features(feature_ids):

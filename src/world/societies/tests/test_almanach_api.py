@@ -272,6 +272,67 @@ class AlmanachApiTests(TestCase):
         assert res.data["quiddity_prompt"] == "Which virtue rules the house?"
         assert res.data["capital_name"] == "Almanach API Capital"
 
+    def test_document_offers_the_realms_charter_questions_with_ids(self) -> None:
+        """#5064: the House chapter's Quiddity picker needs the catalog, not only the
+        house's own picks: every charter question attached to a Family Template of
+        the house's realm, its active options, and the ids the picks are saved by."""
+        from world.societies.houses.models import HouseCharterOption, OrganizationFacet
+
+        home_realm = self.crown.society.realm
+        template = HouseTemplate.objects.create(
+            name="Almanach API Infernal Nobility",
+            realm=home_realm,
+            kind=FamilyKindFactory(name=NOBLE_KIND_NAME),
+            society=self.crown.society,
+            org_type=self.crown.org_type,
+        )
+        quiddity = HouseCharterQuestion.objects.create(
+            name="House Quiddity", prompt="What drives your house?", display_order=1
+        )
+        glamour = HouseCharterOption.objects.create(
+            definition=quiddity, name="Glamour", description="Beauty as a weapon."
+        )
+        HouseCharterOption.objects.create(definition=quiddity, name="Vendetta")
+        HouseCharterOption.objects.create(definition=quiddity, name="Retired", is_active=False)
+        template.charter_questions.add(quiddity)
+        # Another realm's question never reaches this house's page.
+        elsewhere = HouseTemplate.objects.create(
+            name="Almanach API Umbral Nobility",
+            realm=RealmFactory(name="Umbros"),
+            kind=template.kind,
+            society=self.crown.society,
+            org_type=self.crown.org_type,
+        )
+        patron = HouseCharterQuestion.objects.create(name="Umbral Patron Deity", prompt="Who?")
+        elsewhere.charter_questions.add(patron)
+        OrganizationFacet.objects.create(
+            organization=self.crown, definition=quiddity, option=glamour
+        )
+
+        client = APIClient()
+        client.force_authenticate(self.staff)
+        res = client.get(f"/api/almanach/houses/{self.crown.pk}/document/")
+        assert res.status_code == 200
+        house = res.data["house"]
+        assert house["facets"][0]["definition_id"] == quiddity.pk
+        assert house["facets"][0]["option_id"] == glamour.pk
+        assert [q["name"] for q in house["charter_questions"]] == ["House Quiddity"]
+        question = house["charter_questions"][0]
+        assert question["id"] == quiddity.pk
+        assert question["prompt"] == "What drives your house?"
+        assert (question["min_picks"], question["max_picks"], question["sets_patron"]) == (
+            1,
+            1,
+            False,
+        )
+        assert [o["name"] for o in question["options"]] == ["Glamour", "Vendetta"]
+        assert question["options"][0] == {
+            "id": glamour.pk,
+            "name": "Glamour",
+            "description": "Beauty as a weapon.",
+            "target_entry_id": None,
+        }
+
     def test_charter_with_no_authored_rows_is_all_blank(self) -> None:
         empty_realm = RealmFactory(name="Charterless")
         client = APIClient()

@@ -25,6 +25,7 @@ from world.codex.models import OrganizationCodexGrant
 from world.codex.services import apply_organization_codex_grants
 from world.contributors.admin import CREDIT_FIELDSET
 from world.societies.constants import PRINCIPLE_FIELD_NAMES
+from world.societies.houses.models import OrganizationFacet
 from world.societies.models import (
     AssociationConfig,
     CovenantLegendCredit,
@@ -124,6 +125,19 @@ class OrganizationRankInline(admin.TabularInline):
     formset = OneRowPerFormSet
     extra = 0
     fields = ["name", "tier", "can_invite", "can_kick", "can_manage_ranks"]
+
+
+class OrganizationFacetInline(admin.TabularInline):
+    """The house's charter answers, a Quiddity among them (#5064): the staff fallback
+    to the Almanach house page's picker. ``definition`` is the question, ``option`` the
+    answer; the admin does not re-derive the patron from a patron question's pick,
+    the house page and founding do."""
+
+    model = OrganizationFacet
+    formset = OneRowPerFormSet
+    extra = 0
+    fields = ["definition", "option"]
+    verbose_name_plural = "Facets"
 
 
 class OrganizationMembershipInline(admin.TabularInline):
@@ -440,6 +454,7 @@ class OrganizationAdmin(ReviewedDeleteMixin, GrantReachOnSaveMixin, admin.ModelA
     inlines = [
         OrganizationRankInline,
         OrganizationMembershipInline,
+        OrganizationFacetInline,
         OrganizationCodexGrantInline,
         OrganizationGiftGrantInline,
         VacancyInline,
