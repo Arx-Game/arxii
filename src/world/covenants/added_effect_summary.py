@@ -94,5 +94,17 @@ def summarize_situational_perk(
 
 
 def summarize_stat_scaling(scaling: VowStatScaling) -> str:
-    """One line for a stat scaling: the target and its bonus per thread level."""
-    return f"{scaling.modifier_target.name} {scaling.bonus_per_level:+d} per thread level"
+    """One line for a stat scaling: the target and its bonus per thread level.
+
+    On a maneuver-effect target the bonus counts whole steps of 10 thread levels
+    (``thread_rung``, #5091), so the line says so.
+    """
+    from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME  # noqa: PLC0415
+
+    target = scaling.modifier_target
+    per = (
+        "per 10 thread levels"
+        if target.category.name == MANEUVER_EFFECT_CATEGORY_NAME
+        else "per thread level"
+    )
+    return f"{target.name} {scaling.bonus_per_level:+d} {per}"

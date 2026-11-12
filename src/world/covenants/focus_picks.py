@@ -371,7 +371,7 @@ def pick_effect_lines(pick_ids: set[int]) -> dict[int, list[str]]:
             summarize_situational_perk(perk, situations[perk.pk], rungs[perk.pk])
         )
     scalings = VowStatScaling.objects.filter(focus_pick_id__in=pick_ids).select_related(
-        "modifier_target"
+        "modifier_target__category"
     )
     for scaling in scalings:
         lines[scaling.focus_pick_id].append(summarize_stat_scaling(scaling))

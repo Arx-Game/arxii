@@ -172,7 +172,7 @@ class TheNpcFormsBackend(JourneyCase):
                     "id": guard.pk,
                     "name": "Gate guard",
                     "description": "A spear and a shield.",
-                    "trait_lines": [{"trait_name": strength.trait.name, "display_value": 3}],
+                    "trait_lines": [{"trait_name": strength.trait.name, "value": 30}],
                     "skill_lines": [{"skill_name": brawl.skill.name, "value": 25}],
                 }
             ],

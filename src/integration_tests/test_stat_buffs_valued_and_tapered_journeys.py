@@ -87,7 +87,7 @@ from world.traits.models import CheckOutcome
 from world.vitals.models import CharacterVitals
 from world.vitals.services import derive_base_max_health, get_vitals_consequence_config
 
-BASE = 20  # strength 2 as shown; stats are stored x10
+BASE = 20  # strength 20
 BUFF = 10  # +1 shown strength per buff
 # Ten buffs of 10 in the stat lane's seeded taper: 10 x (1 + 7/8 + (7/8)^2 + (7/8)^3 + six
 # at the 2/3 floor) = 73.1, which rounds to 73, not the plain 100.
@@ -168,7 +168,7 @@ class StatBuffsAreValuedAndTapered(JourneyCase):
 
         strength = BASE + TEN_TAPERED
         self.assertEqual(self.strength_now(), strength)
-        self.assertEqual(self.brannoc.traits.get_trait_display_value(self.strength.name), 9)
+        self.assertEqual(self.brannoc.traits.get_trait_value(self.strength.name), strength)
         # The check reads it: one check point per stored strength unit on the seeded
         # conversion, and the same total as a twin whose own strength is 93.
         self.assertEqual(self.lift(self.brannoc) - lift_before, TEN_TAPERED)

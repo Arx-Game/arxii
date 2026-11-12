@@ -239,7 +239,7 @@ class GMAwardAction(Action):
     the beta reset:
 
     - ``award_type="stat"`` raises an authored ``Trait`` (must be
-      ``TraitType.STAT``) by exactly one display dot via
+      ``TraitType.STAT``) by one stat point (``STAT_POINT_VALUE``, 10) via
       ``world.progression.services.awards.award_stat_raise``, writing a
       ``CharacterTraitChange`` with ``source=TraitChangeSource.GM_GRANT`` and
       ``granting_tenure`` set to the GM's own current tenure (``None`` for a

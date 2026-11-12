@@ -215,9 +215,9 @@ def _execute_variant_beat(
 class TechniqueCrossingHandler:
     """TECHNIQUE thread crossing handler.
 
-    Fires a narrative-only beat at the first crossing (level 3) so the player
+    Fires a narrative-only beat at the first crossing (level 30) so the player
     notices the depth milestone. (#4099: ``min_crossing_level`` can authored
-    below 3, so signing may already have happened before this fires — the beat
+    below 30, so signing may already have happened before this fires — the beat
     no longer claims otherwise.) The real ceremony (discovery) fires at
     selection time, not at the crossing — driven by the bonus's
     ``discovery_achievement`` FK via ``execute_ceremony_beat``. Higher crossings

@@ -265,7 +265,7 @@ class AllyCastTests(VowAddedEffectsTestBase):
             self.hobb,
             CovenantRoleFactory(covenant_type=CovenantType.DURANCE),
             covenant=second_covenant,
-            thread_level=1,
+            thread_level=10,
             is_secondary=True,
         )
         CharacterCovenantRoleFactory(

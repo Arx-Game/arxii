@@ -163,10 +163,10 @@ def ship_sanctum_capability_grants(ship: ShipDetails) -> list[ShipCapabilityGran
 
     For each woven resonance, the authored ``CAPABILITY_GRANT`` row with the **highest
     qualifying** ``min_thread_level`` wins — so a catalog may author a deeper unlock
-    (``min_thread_level=6``) that supersedes the shallow one without the code knowing
+    (``min_thread_level=60``) that supersedes the shallow one without the code knowing
     the numbers. There is deliberately **no hardcoded level-3 floor** any more: the
     authored ``min_thread_level`` is the gate, which is the whole point of moving this
-    onto the catalog. Content authors 3 for the first unlock.
+    onto the catalog. Content authors 30 for the first unlock.
 
     **Magnitude.** ``apply_capability_curve(base, power=…, sensitivity=…)`` is
     geometric in ``power`` and inert when ``power <= 0`` — so ``sensitivity`` alone

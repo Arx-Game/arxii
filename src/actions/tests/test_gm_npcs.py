@@ -119,7 +119,7 @@ class MintStoryNPCActionPresetTests(MintStoryNPCActionTestBase):
             trait=trait_line.trait,
         )
         assert stamp.source == TraitChangeSource.NPC_PRESET
-        assert stamp.new_value == trait_line.display_value * 10
+        assert stamp.new_value == trait_line.value
 
 
 class MintStoryNPCJourneyTests(APITestCase):

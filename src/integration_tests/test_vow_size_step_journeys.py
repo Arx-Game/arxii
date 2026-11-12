@@ -424,7 +424,7 @@ class AHexersDebuffStepsOnAnOpponent(JourneyCase):
             self.selene.sheet_data,
             role,
             covenant=CovenantFactory(covenant_type=CovenantType.DURANCE),
-            thread_level=6,
+            thread_level=60,
         )
         before = self.difficulty()
         ref = ActionRef(

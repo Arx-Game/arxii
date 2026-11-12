@@ -265,4 +265,19 @@ class Migration(migrations.Migration):
                 violation_error_message="A form offered in creation needs an unlock thread level of 10: a new character's threads stop there.",
             ),
         ),
+        migrations.AlterField(
+            model_name="giftacquisitionconfig",
+            name="techniques_per_thread_level",
+            field=models.PositiveIntegerField(
+                default=3,
+                help_text="Max techniques a character can learn per gift per 10 thread levels. Variants excluded.",
+            ),
+        ),
+        migrations.AlterField(
+            model_name="modifiervalue",
+            name="value",
+            field=models.PositiveIntegerField(
+                help_text="What the modifier is worth, in the lane's units (check points for the check lane, stat points as a sheet shows them for the stat lane). A magnitude: a debuff's authored row supplies the minus sign."
+            ),
+        ),
     ]

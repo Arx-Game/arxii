@@ -73,7 +73,7 @@ class OwnVowCandidateTests(TestCase):
             self.sheet,
             CovenantRoleFactory(covenant_type=CovenantType.DURANCE),
             covenant=CovenantFactory(covenant_type=CovenantType.DURANCE),
-            thread_level=3,
+            thread_level=30,
         )
         # A secondary anchor with a qualifying sub-role: depth stays primary-only.
         engage_vow_with_thread(

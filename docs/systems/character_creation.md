@@ -28,7 +28,7 @@ from world.character_creation.constants import (
 
 ```python
 from world.character_creation.types import (
-    StatAdjustment,      # TypedDict: stat, old_display, new_display, reason
+    StatAdjustment,      # TypedDict: stat, old_value, new_value, reason
     ResonanceSource,     # Dataclass: distinction_name, value
     ProjectedResonance,  # Dataclass: resonance_id, resonance_name, total, sources
 )

@@ -151,7 +151,7 @@ class VowAddedEffectsInAFight(JourneyCase):
         )
         return character
 
-    def swear(self, character: ObjectDB, *, thread_level: int = 1, engaged: bool = True) -> None:
+    def swear(self, character: ObjectDB, *, thread_level: int = 10, engaged: bool = True) -> None:
         """``character`` takes a role in the covenant, engaged unless told otherwise."""
         role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
         sheet = character.sheet_data
@@ -220,7 +220,7 @@ class VowAddedEffectsInAFight(JourneyCase):
 
     def test_the_tanks_own_hold_slows_the_held_enemy(self) -> None:
         effect = self.ysmays_vow(
-            thread_level=4,
+            thread_level=40,
             function=TechniqueFunction.HOLD,
             beneficiary=PerkBeneficiary.SELF,
             cast_context=VowEffectContext.IN_COMBAT,
@@ -239,7 +239,7 @@ class VowAddedEffectsInAFight(JourneyCase):
 
     def test_once_per_round_lands_once_a_round_and_again_next_round(self) -> None:
         effect = self.ysmays_vow(
-            thread_level=2,
+            thread_level=20,
             function=TechniqueFunction.HOLD,
             beneficiary=PerkBeneficiary.COVENANT_ALLIES,
             cast_context=VowEffectContext.IN_COMBAT,
@@ -269,7 +269,7 @@ class VowAddedEffectsInAFight(JourneyCase):
 
     def boss_damage_vow(self) -> VowAddedEffect:
         effect = self.ysmays_vow(
-            thread_level=3,
+            thread_level=30,
             function=TechniqueFunction.WEAKEN,
             beneficiary=PerkBeneficiary.COVENANT_ALLIES,
             cast_context=VowEffectContext.IN_COMBAT,
@@ -330,7 +330,7 @@ class VowAddedEffectsInAFight(JourneyCase):
         # The row's payload is authored to land at success level 0, but a cast that
         # cannot spend a once-per-round row cannot use it either.
         effect = self.ysmays_vow(
-            thread_level=2,
+            thread_level=20,
             function=TechniqueFunction.HOLD,
             beneficiary=PerkBeneficiary.SELF,
             cast_context=VowEffectContext.IN_COMBAT,
@@ -380,7 +380,7 @@ class VowAddedEffectsInAFight(JourneyCase):
     def test_a_disengaged_caster_gets_nothing(self) -> None:
         # Once a round, so a firing would leave a ledger row to count.
         effect = self.ysmays_vow(
-            thread_level=4,
+            thread_level=40,
             function=TechniqueFunction.HOLD,
             beneficiary=PerkBeneficiary.COVENANT_ALLIES,
             cast_context=VowEffectContext.IN_COMBAT,
