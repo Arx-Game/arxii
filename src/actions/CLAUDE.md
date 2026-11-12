@@ -613,6 +613,16 @@ They do not use the command system, dispatchers, or handlers.
   (`ObjectParent.at_examined`/`return_appearance` in `typeclasses/mixins.py`,
   and `Room.return_appearance` in `typeclasses/rooms.py`) that had zero live
   callers, since real play always rendered through this action layer instead.
+  `missives.py` (#3289) - five REGISTRY actions, all `target_type=SELF`, `category="social"`,
+  thin over `world.messengers.services` (`MissiveError.user_message` as the failure message):
+  `send_missive` (`body`; `recipient_persona_id` or `recipient_name`; optional
+  `sender_persona_id`, `coin_amount`, `item_ids`/`item_names`, `method_id`), `reply_missive`
+  (`missive_id`, `body`, same optional kwargs; answers the other side of the original),
+  `read_missive`, `accept_missive` and `refuse_missive` (`missive_id`). The actions own what the
+  services leave to callers: the sending face must be one of the actor's own non-system
+  personas, the recipient must be addressable, and every `missive_id` goes through
+  `get_visible_missive`. The send line is the same whether or not a block suppresses the
+  letter. Shared by telnet `CmdMissive` (`commands/missives.py`) and the web dispatch.
 
 ## SCENE_ADAPTIVE Backend (#1351)
 

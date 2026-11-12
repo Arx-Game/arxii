@@ -813,6 +813,12 @@ class ActionRegistryTests(TestCase):
             "post_to_board",
             "edit_board_post",
             "remove_board_post",
+            # #3289 — IC missives.
+            "send_missive",
+            "reply_missive",
+            "read_missive",
+            "accept_missive",
+            "refuse_missive",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 
