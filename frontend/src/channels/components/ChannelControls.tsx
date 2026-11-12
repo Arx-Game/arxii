@@ -97,7 +97,7 @@ export function ChannelControls({ channel, canMoveUp, canMoveDown, onMove }: Cha
         <div className="space-y-1">
           <Label htmlFor={notifyId}>Notifications</Label>
           <Select
-            value={sub.notification_level ?? 'all'}
+            value={sub.notification_level ?? 'badge'}
             onValueChange={(level) =>
               patch({ notification_level: level as ChannelNotificationLevel })
             }
