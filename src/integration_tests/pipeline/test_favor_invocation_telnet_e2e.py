@@ -13,7 +13,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
-from django.utils import timezone
 
 from actions.factories import ActionTemplateFactory
 from commands.consent import CmdPersuade
@@ -41,12 +40,12 @@ from world.traits.factories import CheckOutcomeFactory
 from world.worship.constants import FavorAwardKind
 from world.worship.factories import (
     DevotionConfigFactory,
-    DevotionStandingFactory,
     FavorOutcomeAwardFactory,
     WorshippedBeingFactory,
+    make_chosen,
 )
 from world.worship.favor_services import ensure_being_modifier_targets
-from world.worship.models import FavorInvocation, PatronageValence
+from world.worship.models import FavorInvocation
 
 
 def _run(command_class, caller, args: str):
@@ -105,13 +104,7 @@ class FavorInvocationTelnetTests(TestCase):
         self.scene = SceneFactory(room=self.room, is_active=True)
         self.ysmay = self._pc("Ysmay")
         self.hobb = self._pc("Hobb")
-        DevotionStandingFactory(
-            character_sheet=self.ysmay.sheet_data,
-            being=self.ombrin,
-            favor=44,
-            valence=PatronageValence.DEVOTIONAL,
-            established_at=timezone.now(),
-        )
+        make_chosen(self.ysmay.sheet_data, self.ombrin, favor=44)
 
     def _pc(self, name):
         character = CharacterFactory(db_key=name, location=self.room)

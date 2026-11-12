@@ -11,7 +11,7 @@ import core.natural_keys
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0393_gift_substance_plain_labels"),
+        ("arxii", "0395_pacts_with_beings"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

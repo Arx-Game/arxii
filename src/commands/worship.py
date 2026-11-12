@@ -12,6 +12,7 @@ from world.worship.constants import InvocationPieceSource
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.pacts.types import PactOfferSummary
     from world.worship.types import InvocationOption
 
 _SWITCH_REVEAL = "reveal"
@@ -228,6 +229,7 @@ def _render_worn(option: InvocationOption) -> list[str]:
 
 
 _SWITCH_CLOSE = "close"
+_SWITCH_ACCEPT = "accept"
 
 
 class CmdPledge(ArxCommand):
@@ -239,12 +241,15 @@ class CmdPledge(ArxCommand):
         pledge <being>/<pledge>[=<prayer>]      - take one, with optional words
         pledge/close[=<item>[,<item>...]]       - close it with its closing rite, giving
                                                   up items to ease the rite
+        pledge/close/accept[=<item>,...]        - close it and accept the pact it offers
 
     A pledge has a favor target and a span. Every favor you earn with the being
     after pledging counts toward it: deeds that grant a resonance it values,
     sacrifices at its shrine, its rites, holy-site prayer and ceremony offerings.
     Reaching the target does not close it; its closing rite does, in a live
-    scene. A first failed close leaves one more try within the span.
+    scene. A first failed close leaves one more try within the span. A pledge may
+    offer a pact with its being: accepted at the close, it is signed if the rite
+    resolves the pledge at Success or better.
     """
 
     key = "pledge"
@@ -264,7 +269,11 @@ class CmdPledge(ArxCommand):
             from actions.definitions.worship import ClosePledgeAction  # noqa: PLC0415
 
             names = [name.strip() for name in raw.lstrip("=").split(",") if name.strip()]
-            result = ClosePledgeAction().run(actor=self.caller, item_names=names)
+            result = ClosePledgeAction().run(
+                actor=self.caller,
+                item_names=names,
+                accept_pact=_SWITCH_ACCEPT in switches,
+            )
             if result.message:
                 self.msg(result.message)
             return
@@ -322,7 +331,47 @@ def _render_own_pledge(sheet: CharacterSheet) -> str:
             )
     if card.retry_available:
         lines.append("Your first close failed; one more try is left within the span.")
+    if card.state in (PledgeState.OPEN, PledgeState.READY):
+        from world.pacts.services import offered_pact_summary  # noqa: PLC0415
+
+        summary = offered_pact_summary(details.pledge)
+        if summary is not None:
+            lines.extend(_pact_offer_lines(summary))
+            lines.append("Accept it at the close with 'pledge/close/accept'.")
     return "\n".join(lines)
+
+
+def _weeks(count: int) -> str:
+    return f"{count} game week" if count == 1 else f"{count} game weeks"
+
+
+def _pact_offer_lines(summary: PactOfferSummary) -> list[str]:
+    """The pact a pledge offers, as text: the offer, then its system summary."""
+    from world.pacts.constants import CharacterPactCommitmentKind  # noqa: PLC0415
+
+    being = summary.being_name
+    lines = [f"Offered at the close: a pact with {being}.", f"  {summary.offer_text}"]
+    lines.extend(
+        f"  You commit to: earn {row.amount} favor with {being} every "
+        f"{_weeks(summary.period_weeks)}. Favor comes from deeds it values, sacrifices at "
+        "its shrine and its rites. Nothing is spent."
+        for row in summary.commitments
+        if row.kind == CharacterPactCommitmentKind.FAVOR_EARNED
+    )
+    lines.extend(f"  Promise (not checked by the game): {promise}" for promise in summary.promises)
+    lines.append(
+        f"  What you gain: {being} becomes your patron: its bond ultimate can be among your "
+        f"choices at Audere, and you can choose {being} on a technique that brings a being "
+        "into a fight. Plus your current stage's effects."
+    )
+    lines.append("  If you fall short: every change of stage rolls its resist check first.")
+    for number, stage in enumerate(summary.stages, start=1):
+        effects = [*summary.condition_effects, *stage.effects]
+        if stage.is_last:
+            effects.append("the pact ends, if its resist check fails")
+        detail = f": {'; '.join(effects)}" if effects else ""
+        lines.append(f"    {number}. {stage.name}{detail}")
+    return lines
 
 
 def _render_offered(sheet: CharacterSheet, being_name: str) -> str:
@@ -335,13 +384,17 @@ def _render_offered(sheet: CharacterSheet, being_name: str) -> str:
     pledges = offered_pledges(being)
     if not pledges:
         return f"{being.name} offers no pledge."
+    from world.pacts.services import offered_pact_summary  # noqa: PLC0415
+
     lines = [f"|wPledges {being.name} offers|n"]
     for pledge in pledges:
-        weeks = "game week" if pledge.span_weeks == 1 else "game weeks"
         lines.append(
             f"  {pledge.name}: favor target {pledge.favor_target} within "
-            f"{pledge.span_weeks} {weeks}; closed with {pledge.closing_rite.name}."
+            f"{_weeks(pledge.span_weeks)}; closed with {pledge.closing_rite.name}."
         )
+        summary = offered_pact_summary(pledge)
+        if summary is not None:
+            lines.extend(f"    {line}" for line in _pact_offer_lines(summary))
     terms = service_terms(sheet, being)
     lines.append(f"What earns favor with {being.name} for you:")
     lines.extend(f"  {line.label}: {line.amount}" for line in terms.lines)

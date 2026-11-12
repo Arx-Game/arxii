@@ -13,9 +13,11 @@
 
 import { apiFetch } from '@/evennia_replacements/api';
 import { readErrorDetail } from '@/lib/errors';
+import { dispatchCanvasAction, type DispatchResult } from '@/map-canvas/dispatch';
 import { getRituals } from '@/rituals/api';
 import type { components } from '@/generated/api';
 import type {
+  ManifestChoice,
   ThreadResonanceOptions,
   AcceptTeachingOfferRequest,
   AcceptTeachingOfferResponse,
@@ -1387,4 +1389,34 @@ export async function trainTechnique(
     await readErrorDetail(res, 'Failed to train that technique');
   }
   return res.json() as Promise<TrainTechniqueResult>;
+}
+
+// ---------------------------------------------------------------------------
+// Technique picker (#4341)
+// ---------------------------------------------------------------------------
+
+const MANIFEST_CHOICES_URL = '/api/magic/manifest-choices/';
+
+/**
+ * GET /api/magic/manifest-choices/?character_sheet=<id> (#4341): each manifesting
+ * technique the character knows, its options (bond holds or the reason it does not)
+ * and the current pick. Owner or staff only.
+ */
+export async function getManifestChoices(characterSheetId: number): Promise<ManifestChoice[]> {
+  const res = await apiFetch(`${MANIFEST_CHOICES_URL}?character_sheet=${characterSheetId}`);
+  if (!res.ok) await readErrorDetail(res, 'Failed to load what your techniques bring');
+  const page = (await res.json()) as { results: ManifestChoice[] };
+  return page.results;
+}
+
+/** Dispatch `manifest_set` as `characterId`: choose what a technique brings (#4341). */
+export function setManifestChoice(
+  characterId: number,
+  techniqueId: number,
+  optionId: number
+): Promise<DispatchResult> {
+  return dispatchCanvasAction(characterId, 'manifest_set', {
+    technique_id: techniqueId,
+    option_id: optionId,
+  });
 }

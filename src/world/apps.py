@@ -77,6 +77,7 @@ class ArxiiConfig(AppConfig):
         import world.justice.apps as justice_apps  # noqa: PLC0415
         import world.magic.apps as magic_apps  # noqa: PLC0415
         import world.missions.apps as missions_apps  # noqa: PLC0415
+        import world.pacts.apps as pacts_apps  # noqa: PLC0415
         import world.progression.apps as progression_apps  # noqa: PLC0415
         import world.projects.apps as projects_apps  # noqa: PLC0415
         import world.room_features.apps as room_features_apps  # noqa: PLC0415
@@ -110,6 +111,8 @@ class ArxiiConfig(AppConfig):
         ships_apps.ready()
         room_features_apps.ready()
         worship_apps.ready()
+        # #4341 - registers the PACT_PERIOD project kind; after worship (pacts point into it).
+        pacts_apps.ready()
         # #3071 — new registration, no ordering dependency on the handshakes above.
         gm_apps.ready()
         # #3417 — new registration, no ordering dependency on the handshakes above.

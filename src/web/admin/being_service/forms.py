@@ -4,6 +4,7 @@ favored facets (with their worn rates, #4520) and pledge types, written together
 from __future__ import annotations
 
 from django import forms
+from django.core.exceptions import ValidationError
 from django.forms import (
     BaseInlineFormSet,
     BaseModelFormSet,
@@ -11,6 +12,8 @@ from django.forms import (
     modelformset_factory,
 )
 
+from world.pacts.constants import CharacterPactCommitmentKind
+from world.pacts.models import PactOffer, PactOfferCommitment
 from world.worship.constants import RiteTier
 from world.worship.models import (
     BeingFacet,
@@ -48,7 +51,15 @@ class PledgeForm(forms.ModelForm):
 
     class Meta:
         model = Pledge
-        fields = ["name", "description", "favor_target", "span_weeks", "closing_rite", "is_active"]
+        fields = [
+            "name",
+            "description",
+            "favor_target",
+            "span_weeks",
+            "closing_rite",
+            "pact_offer",
+            "is_active",
+        ]
         widgets = {
             "name": forms.TextInput(attrs={"class": "vTextField", "size": 60}),
             "description": forms.Textarea(attrs={"rows": 3, "cols": 60}),
@@ -57,18 +68,26 @@ class PledgeForm(forms.ModelForm):
             "favor_target": "Favor to earn with the being after pledging.",
             "span_weeks": "Game weeks the character has to earn it and close the pledge.",
             "closing_rite": "Lists only this being's own tier 1 and 2 rites.",
+            "pact_offer": (
+                "Optional. The holder may choose to accept it when she performs the closing "
+                "rite; it is signed if the rite resolves the pledge at Success or better. "
+                "Refused with a reason if she already holds a pact with this being."
+            ),
         }
+        labels = {"pact_offer": "Pact offered at the close"}
 
 
 class _PledgeFormSet(BaseInlineFormSet):
     """Limits every row's closing rite picker (the empty template row too) to the
-    being's own tier 1 and 2 rites."""
+    being's own tier 1 and 2 rites, and its pact offer picker to the being's own
+    offers (#4341)."""
 
     def add_fields(self, form, index) -> None:
         super().add_fields(form, index)
         form.fields["closing_rite"].queryset = WorshipRite.objects.filter(
             being=self.instance, kind__tier__in=[RiteTier.DEVOTIONAL, RiteTier.DEMANDING]
         ).select_related("kind")
+        form.fields["pact_offer"].queryset = PactOffer.objects.filter(being=self.instance)
 
 
 BeingFacetFormSet = inlineformset_factory(
@@ -168,6 +187,158 @@ RequestedItemFormSet = modelformset_factory(
     RequestedItem,
     form=RequestedItemForm,
     formset=_RequestedItemFormSet,
+    extra=0,
+    can_delete=True,
+)
+
+
+class PactOfferForm(forms.ModelForm):
+    """One pact offer the being makes (#4341). The condition is authored in the condition
+    admin; the page links to it."""
+
+    class Meta:
+        model = PactOffer
+        fields = [
+            "name",
+            "offer_text",
+            "period_weeks",
+            "condition",
+            "severity_per_miss",
+            "closing_text",
+            "onlooker_line",
+            "is_active",
+        ]
+        widgets = {
+            "name": forms.TextInput(attrs={"class": "vTextField", "size": 60}),
+            "offer_text": forms.Textarea(attrs={"rows": 3, "cols": 60}),
+            "closing_text": forms.Textarea(attrs={"rows": 2, "cols": 60}),
+            "onlooker_line": forms.TextInput(attrs={"class": "vTextField", "size": 60}),
+            "period_weeks": forms.NumberInput(attrs={"min": 1, "style": "width: 5em"}),
+            "severity_per_miss": forms.NumberInput(attrs={"min": 1, "style": "width: 5em"}),
+        }
+        labels = {
+            "period_weeks": "Period (game weeks)",
+            "severity_per_miss": "Severity per missed period",
+        }
+        help_texts = {
+            "name": "Unique per being.",
+            "offer_text": "",
+            "period_weeks": "",
+            "condition": (
+                "First stage: the benefit. Later stages: the cost. Last stage: breach, and "
+                "its settle pool fires if written, against the holder only. Stages should "
+                "advance at their threshold; the pact rolls the resist check itself."
+            ),
+            "severity_per_miss": (
+                "A period with nothing earned adds this much; a shortfall adds its share. "
+                "A met period removes this much, up to twice it for earning double."
+            ),
+            "closing_text": "",
+            "onlooker_line": (
+                "Optional. One room line when the pact ends. Never states the reason."
+            ),
+            "is_active": "",
+        }
+
+
+class _PactOfferFormSet(BaseInlineFormSet):
+    """Refuses to delete an offer someone has signed: the signed pact keeps it as its record."""
+
+    def clean(self) -> None:
+        super().clean()
+        # Names come from the database: a deleted form has already written its posted
+        # values onto the shared cached instance.
+        signed = list(
+            PactOffer.objects.filter(
+                pk__in=[form.instance.pk for form in self.deleted_forms if form.instance.pk],
+                signed__isnull=False,
+            )
+            .distinct()
+            .order_by("name")
+            .values_list("name", flat=True)
+        )
+        if signed:
+            msg = (
+                f"Cannot delete {', '.join(signed)}: characters have signed it. "
+                "Untick Active instead, so it is no longer offered."
+            )
+            raise ValidationError(msg)
+
+
+PactOfferFormSet = inlineformset_factory(
+    WorshippedBeing,
+    PactOffer,
+    form=PactOfferForm,
+    formset=_PactOfferFormSet,
+    extra=0,
+    can_delete=True,
+)
+
+#: The commitment kinds as the builder names them.
+_COMMITMENT_KIND_CHOICES = [
+    (CharacterPactCommitmentKind.FAVOR_EARNED, "Favor earned per period"),
+    (CharacterPactCommitmentKind.CUSTOM, "Custom (recorded prose)"),
+]
+
+
+class PactOfferCommitmentForm(forms.ModelForm):
+    """One commitment of one of the being's saved offers (#4341). Every commitment is
+    owed by the holder in this version, so the form has no choice for it."""
+
+    class Meta:
+        model = PactOfferCommitment
+        fields = ["offer", "kind", "amount", "notes"]
+        widgets = {
+            "offer": forms.Select(attrs={"style": "max-width: 12em"}),
+            "amount": forms.NumberInput(attrs={"min": 0, "style": "width: 5em"}),
+            "notes": forms.TextInput(attrs={"style": "width: 16em"}),
+        }
+
+    def __init__(self, *args, offers, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.fields["offer"].queryset = offers
+        self.fields["offer"].label_from_instance = lambda offer: offer.name
+        self.fields["kind"].choices = _COMMITMENT_KIND_CHOICES
+
+
+class _PactCommitmentFormSet(BaseModelFormSet):
+    """Every commitment of the being's saved offers. A commitment with graded periods
+    cannot be deleted: its periods keep it as their record."""
+
+    def __init__(self, *args, being: WorshippedBeing, **kwargs) -> None:
+        self._offers = PactOffer.objects.filter(being=being)
+        super().__init__(*args, **kwargs)
+
+    def get_form_kwargs(self, index: int | None) -> dict:
+        kwargs = super().get_form_kwargs(index)
+        kwargs["offers"] = self._offers
+        return kwargs
+
+    def clean(self) -> None:
+        super().clean()
+        # Read from the database: a deleted form has already written its posted values
+        # onto the shared cached instance.
+        kept = (
+            PactOfferCommitment.objects.filter(
+                pk__in=[form.instance.pk for form in self.deleted_forms if form.instance.pk],
+                periods__isnull=False,
+            )
+            .distinct()
+            .order_by("offer__name", "pk")
+            .values_list("offer__name", flat=True)
+        )
+        if kept:
+            msg = (
+                f"Cannot delete a commitment of {', '.join(dict.fromkeys(kept))}: holders "
+                "have periods graded against it. Untick the offer's Active instead."
+            )
+            raise ValidationError(msg)
+
+
+PactOfferCommitmentFormSet = modelformset_factory(
+    PactOfferCommitment,
+    form=PactOfferCommitmentForm,
+    formset=_PactCommitmentFormSet,
     extra=0,
     can_delete=True,
 )

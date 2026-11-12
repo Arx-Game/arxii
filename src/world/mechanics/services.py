@@ -85,7 +85,6 @@ if TYPE_CHECKING:
     from world.covenants.style_fit import StyleGearReach
     from world.items.models import EquippedItem, ItemInstance
     from world.mechanics.engagement import CharacterEngagement
-    from world.skills.models import Skill
 
 
 # ---------------------------------------------------------------------------
@@ -2505,30 +2504,30 @@ def ensure_skill_target(trait: Trait) -> ModifierTarget | None:
     )
 
 
-def skill_modifiers_for_sheet(
-    character_sheet: CharacterSheet, skills: Iterable[Skill]
+def trait_modifiers_for_sheet(
+    character_sheet: CharacterSheet, traits: Iterable[Trait]
 ) -> dict[int, int]:
-    """``skill.pk`` to the modifier a roll on that skill gets, for the sheet (#4820).
+    """``trait.pk`` to the modifier a roll on that stat or skill gets, for the sheet.
 
-    Picks the skills worth pricing from every source ``get_trait_modifier`` reads: the
-    sheet's ``CharacterModifier`` rows on any skill target, the active conditions'
-    effects on them (three queries whatever the skill count), and the equipment the
-    roll counts, a worn crafted piece or the equipment walk (facet, covenant-role,
-    mantle and motif passives), read per target from the character's cached
-    equipment and thread handlers. Each picked skill then reads
-    ``TraitHandler.get_trait_modifier`` (character, equipment and condition
-    contributions, tapered in the stat lane), so the sheet and the roll agree. A skill
-    with no source is left out and shows its stored value.
+    Built for skills (#4820); the sheet's stats read it too (#4730). Picks the traits
+    worth pricing from every source ``get_trait_modifier`` reads: the sheet's
+    ``CharacterModifier`` rows on any of their targets, the active conditions' effects on
+    them (three queries whatever the trait count), and the equipment the roll counts, a
+    worn crafted piece or the equipment walk (facet, covenant-role, mantle and motif
+    passives), read per target from the character's cached equipment and thread handlers.
+    Each picked trait then reads ``TraitHandler.get_trait_modifier`` (character, equipment
+    and condition contributions, tapered in the stat lane), so the sheet and the roll
+    agree. A trait with no source is left out and shows its stored value.
     """
     from world.conditions.models import ConditionModifierEffect  # noqa: PLC0415
     from world.conditions.services import get_active_conditions  # noqa: PLC0415
 
-    by_target: dict[int, Skill] = {}
+    by_target: dict[int, Trait] = {}
     targets: dict[int, ModifierTarget] = {}
-    for skill in skills:
-        target = ModifierTarget.get_for_trait(skill)
+    for trait in traits:
+        target = ModifierTarget.get_for_trait(trait)
         if target is not None:
-            by_target[target.pk] = skill
+            by_target[target.pk] = trait
             targets[target.pk] = target
     character = character_sheet.character
     if not by_target or character is None:

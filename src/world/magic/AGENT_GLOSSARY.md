@@ -543,8 +543,8 @@ summon is a different, reactive mechanism).
 A `CharacterManifestation` row: which manifestation option one character brings when they
 cast a manifesting technique, keyed by (character, technique) so it covers an ultimate
 that has no `CharacterTechnique`. It holds only while the character's bond to the entity
-(active patronage, or their own unreleased companion of the archetype) holds. Set by GM or
-staff.
+(active patronage, a being pact's included, or their own unreleased companion of the
+archetype) holds. Chosen by the player with the technique picker (#4341), or set by staff.
 _Avoid_: manifest choice, summon binding, bonded summon.
 
 **Fury** (#567, reworked #4738):

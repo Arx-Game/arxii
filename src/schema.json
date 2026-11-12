@@ -23093,6 +23093,35 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/magic/manifest-choices/:
+    get:
+      operationId: magic_manifest_choices_list
+      description: Each manifesting technique a character knows, its options and the
+        current pick.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedManifestChoiceList'
+          description: ''
   /api/magic/motif-styles/:
     get:
       operationId: magic_motif_styles_retrieve
@@ -30800,6 +30829,61 @@ paths:
           description: Summons is not pending or risk acknowledgement required.
         '404':
           description: Summons not found.
+  /api/pacts/cards/:
+    get:
+      operationId: pacts_cards_list
+      description: |-
+        Characters' pacts with beings as their cards show them, newest first: active pacts
+        and ended pacts still easing out. The owner reads their own characters', staff read
+        anyone's; a pact with a secret faith is never shown to anyone else.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - pacts
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPactCardList'
+          description: ''
+  /api/pacts/cards/{id}/:
+    get:
+      operationId: pacts_cards_retrieve
+      description: |-
+        Characters' pacts with beings as their cards show them, newest first: active pacts
+        and ended pacts still easing out. The owner reads their own characters', staff read
+        anyone's; a pact with a secret faith is never shown to anyone else.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - pacts
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PactCard'
+          description: ''
   /api/personas/:
     get:
       operationId: personas_list
@@ -67170,6 +67254,47 @@ components:
         * `guest` - Guest
         * `tenant` - Tenant
         * `trustee` - Trustee
+    ManifestChoice:
+      type: object
+      description: One manifesting technique the character knows, its options and
+        the current pick.
+      properties:
+        technique_id:
+          type: integer
+        technique_name:
+          type: string
+        chosen_option_id:
+          type: integer
+          nullable: true
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManifestOptionChoice'
+      required:
+      - options
+      - technique_id
+      - technique_name
+    ManifestOptionChoice:
+      type: object
+      description: 'One option a technique can bring: its label, whether its bond
+        holds, why not.'
+      properties:
+        option_id:
+          type: integer
+        label:
+          type: string
+        available:
+          type: boolean
+        reason:
+          type: string
+        companion_id:
+          type: integer
+          nullable: true
+      required:
+      - available
+      - label
+      - option_id
+      - reason
     MarketSquare:
       type: object
       properties:
@@ -73380,6 +73505,172 @@ components:
         * `timed` - Timed
         * `ready` - Ready
         * `manual` - Manual
+    PactCard:
+      type: object
+      description: |-
+        A character's pact as her card shows it. Read by her own player and staff only:
+        a pact with a secret faith is hers alone.
+
+        ``earned``/``required``/``time_limit`` describe the open period; after the pact
+        ended (``is_active`` false) that is an ease-out period, whose condition eases by
+        ``severity_per_miss`` when it ends.
+      properties:
+        id:
+          type: integer
+        character_sheet:
+          type: integer
+        being_id:
+          type: integer
+        being_name:
+          type: string
+        offer_name:
+          type: string
+        period_weeks:
+          type: integer
+        severity_per_miss:
+          type: integer
+        earned:
+          type: integer
+        required:
+          type: integer
+        time_limit:
+          type: string
+          format: date-time
+          nullable: true
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/PactSourceLine'
+        stage_name:
+          type: string
+        severity:
+          type: integer
+        next_stage_threshold:
+          type: integer
+          nullable: true
+        promises:
+          type: array
+          items:
+            type: string
+        condition_effects:
+          type: array
+          items:
+            type: string
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/PactStageLine'
+        is_active:
+          type: boolean
+        dissolution_reason:
+          type: string
+      required:
+      - being_id
+      - being_name
+      - character_sheet
+      - condition_effects
+      - dissolution_reason
+      - earned
+      - id
+      - is_active
+      - next_stage_threshold
+      - offer_name
+      - period_weeks
+      - promises
+      - required
+      - severity
+      - severity_per_miss
+      - sources
+      - stage_name
+      - stages
+      - time_limit
+    PactCommitmentLine:
+      type: object
+      description: |-
+        One commitment of an offer: FAVOR_EARNED (``amount`` per period) or CUSTOM (a
+        promise in ``notes``, never checked).
+      properties:
+        kind:
+          type: string
+        amount:
+          type: integer
+        notes:
+          type: string
+      required:
+      - amount
+      - kind
+      - notes
+    PactOfferSummary:
+      type: object
+      description: |-
+        The pact a pledge offers at its close, built from the offer's rows.
+        ``condition_effects`` apply at every stage.
+      properties:
+        being_name:
+          type: string
+        offer_name:
+          type: string
+        offer_text:
+          type: string
+        period_weeks:
+          type: integer
+        commitments:
+          type: array
+          items:
+            $ref: '#/components/schemas/PactCommitmentLine'
+        promises:
+          type: array
+          items:
+            type: string
+        condition_effects:
+          type: array
+          items:
+            type: string
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/PactStageLine'
+      required:
+      - being_name
+      - commitments
+      - condition_effects
+      - offer_name
+      - offer_text
+      - period_weeks
+      - promises
+      - stages
+    PactSourceLine:
+      type: object
+      description: Favor credited toward the open period from one kind of source.
+      properties:
+        label:
+          type: string
+        favor:
+          type: integer
+      required:
+      - favor
+      - label
+    PactStageLine:
+      type: object
+      description: |-
+        One stage of a pact's condition, best to worst, with the stage's own effects;
+        ``is_last`` marks the stage whose arrival ends the pact.
+      properties:
+        name:
+          type: string
+        threshold:
+          type: integer
+        effects:
+          type: array
+          items:
+            type: string
+        is_last:
+          type: boolean
+      required:
+      - effects
+      - is_last
+      - name
+      - threshold
     PaginatedAccountInviteList:
       type: object
       required:
@@ -75730,6 +76021,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LivePrompt'
+    PaginatedManifestChoiceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManifestChoice'
     PaginatedMediaList:
       type: object
       required:
@@ -76579,6 +76893,29 @@ components:
       - next
       - previous
       - results
+    PaginatedPactCardList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PactCard'
     PaginatedPendingAlterationList:
       type: object
       required:
@@ -84892,8 +85229,9 @@ components:
       - reporter_persona
     Pledge:
       type: object
-      description: 'A pledge type a being offers (#4333 slice 2): the staff-authored
-        text and terms.'
+      description: |-
+        A pledge type a being offers (#4333 slice 2): the staff-authored text and terms.
+        ``pact_offer`` is the pact accepted at its close (#4341), null when it offers none.
       properties:
         id:
           type: integer
@@ -84923,6 +85261,11 @@ components:
         closing_rite_name:
           type: string
           readOnly: true
+        pact_offer:
+          allOf:
+          - $ref: '#/components/schemas/PactOfferSummary'
+          nullable: true
+          readOnly: true
       required:
       - being
       - being_name
@@ -84931,6 +85274,7 @@ components:
       - favor_target
       - id
       - name
+      - pact_offer
       - span_weeks
     PledgeCard:
       type: object

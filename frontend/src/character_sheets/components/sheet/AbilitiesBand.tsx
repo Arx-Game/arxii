@@ -12,7 +12,8 @@
  * Neither this component nor its caller can tell "hidden" from "none" — and neither
  * can the response, which is why the band simply is not there either way.
  *
- * Stat values arrive on the single-digit display scale already (ADR-0193).
+ * Stat values arrive on the single-digit display scale already (ADR-0193). A stat a buff
+ * changes shows its stored value and, beside it, the one the game uses (#4730).
  */
 
 import type { CharacterSheetSkill } from '@/character_sheets/api';
@@ -24,10 +25,12 @@ function capitalize(word: string): string {
 
 interface AbilitiesBandProps {
   stats: Record<string, number>;
+  /** The value the game uses, for a stat a buff changes (#4730). */
+  buffedStats: Record<string, number>;
   skills: CharacterSheetSkill[];
 }
 
-export function AbilitiesBand({ stats, skills }: AbilitiesBandProps) {
+export function AbilitiesBand({ stats, buffedStats, skills }: AbilitiesBandProps) {
   const statEntries = Object.entries(stats);
   const breakthroughs = skills.filter((entry) => entry.at_boundary);
 
@@ -40,7 +43,16 @@ export function AbilitiesBand({ stats, skills }: AbilitiesBandProps) {
               {statEntries.map(([name, value]) => (
                 <div key={name} className="refsheet-stat">
                   <span className="refsheet-stat-name">{capitalize(name)}</span>
-                  <span className="refsheet-stat-value">{value}</span>
+                  <span className="refsheet-stat-value">
+                    {value}
+                    {name in buffedStats && (
+                      <span className="refsheet-stat-buffed" data-testid="stat-buffed">
+                        {' '}
+                        ({buffedStats[name]}{' '}
+                        {buffedStats[name] > value ? 'with buffs' : 'with debuffs'})
+                      </span>
+                    )}
+                  </span>
                 </div>
               ))}
             </div>
