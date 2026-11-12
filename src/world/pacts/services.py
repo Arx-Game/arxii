@@ -899,17 +899,34 @@ def _grade_commitment_period(details: PactPeriodDetails) -> PeriodGrade:
         _breach(pact, details, resist)
     else:
         open_pact_period(pact, details.commitment)
+    return _period_grade(
+        (earned, required, change),
+        resist,
+        stage_before,
+        instance,
+        breached=breached,
+    )
+
+
+def _period_grade(
+    numbers: tuple[int, int, int],
+    resist: CheckResult | None,
+    stage_before: ConditionStage | None,
+    instance: ConditionInstance | None,
+    *,
+    breached: bool,
+) -> PeriodGrade:
+    """The graded period as its record reads: ``numbers`` is (earned, required, severity
+    change); then the roll and the stages."""
+    earned, required, change = numbers
+    stage_after = instance.current_stage if instance is not None else None
     return PeriodGrade(
         earned=earned,
         required=required,
         severity_change=change,
         resist_outcome=resist.outcome.name if resist and resist.outcome else "",
         stage_before=stage_before.name if stage_before is not None else "",
-        stage_after=(
-            instance.current_stage.name
-            if instance is not None and instance.current_stage is not None
-            else ""
-        ),
+        stage_after=stage_after.name if stage_after is not None else "",
         breached=breached,
     )
 
