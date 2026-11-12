@@ -1,8 +1,8 @@
 """Journeys for a vow perk that applies to attack rolls only (#5092).
 
-Hobb holds an engaged vow at thread level 3 whose role carries one check-bonus perk of 10
+Hobb holds an engaged vow at thread level 30 whose role carries one check-bonus perk of 10
 tenths, with no situation, so it answers every roll its scope allows. The perk scales by the
-stored thread level (stored 30, #4585): 30 x 10 / 10 = +30 points on a roll it reaches.
+thread level, read on the one scale (#5091): 30 x 10 / 10 = +30 points on a roll it reaches.
 
 The perk's "Applies to" is set to "Attack rolls" (owner ruling, 2026-11-12): once per attack
 on an opponent. A plain Strike's hit roll takes it, an attack technique's roll takes it, and
@@ -112,7 +112,7 @@ class _AttackRollPerkField(_ThrowingField):
             self.sheet,
             role,
             covenant=CovenantFactory(covenant_type=CovenantType.DURANCE),
-            thread_level=3,
+            thread_level=30,
         )
         self.never_rolled = CheckTypeFactory(name="Never rolled here")
         self.perk = VowSituationalPerkFactory(
@@ -355,7 +355,7 @@ class TheAnnounceNamesTheAllyAndTheFoe(JourneyCase):
         )
         covenant = CovenantFactory(covenant_type=CovenantType.DURANCE)
         role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
-        engage_vow_with_thread(self.tomas.sheet_data, role, covenant=covenant, thread_level=3)
+        engage_vow_with_thread(self.tomas.sheet_data, role, covenant=covenant, thread_level=30)
         CharacterCovenantRoleFactory(
             character_sheet=self.mira.sheet_data,
             covenant=covenant,
