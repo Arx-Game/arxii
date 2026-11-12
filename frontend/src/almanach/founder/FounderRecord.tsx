@@ -124,6 +124,8 @@ export interface FounderRecordProps {
   characterDraftId: number;
   template: HouseTemplateOption;
   quiddityName: string;
+  /** The row's label: the charter question's own name, or "charter" (#5110). */
+  quiddityLabel: string;
   seatName: string;
   seatTier: string;
   swornTo: string;
@@ -141,6 +143,7 @@ export function FounderRecord({
   characterDraftId,
   template,
   quiddityName,
+  quiddityLabel,
   seatName,
   seatTier,
   swornTo,
@@ -178,7 +181,7 @@ export function FounderRecord({
       </h3>
       <div className="row3">
         <div className="field">
-          <span className="label">quiddity</span>
+          <span className="label">{quiddityLabel}</span>
           <div className="val">
             {quiddityName !== '' ? quiddityName : <abbr title="none">—</abbr>}
           </div>

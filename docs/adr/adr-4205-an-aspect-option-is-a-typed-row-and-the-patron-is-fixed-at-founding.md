@@ -1,6 +1,8 @@
 # ADR-4205: An aspect option is a typed row, never a label; the patron is fixed at founding
 
-**Status:** Accepted (2026-10-09, ApostateCD)
+**Status:** Accepted (2026-10-09, ApostateCD); superseded in part by ADR-5110 (2026-11-12):
+a patron pick is a god of the question's worship shown by its own name, so
+`being_nickname` and `Organization.patron_nickname` are gone. The rest stands.
 **Issue:** #4205
 **Related:** ADR-0101 (aspects are catalog-only), ADR-0010 (FK direction, specific → general),
 ADR-0268 (no patron FK on Family), ADR-4198 (an entry's owner registers its companion)

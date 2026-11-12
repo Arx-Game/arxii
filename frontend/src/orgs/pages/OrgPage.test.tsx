@@ -191,7 +191,7 @@ describe('OrgPageInner', () => {
         ],
         vacancies: [],
         patron: {
-          nickname: 'The Debt-Keeper',
+          being_id: 12,
           being_name: 'The Chained Judge',
           codex_entry_id: 55,
         },
@@ -226,10 +226,9 @@ describe('OrgPageInner', () => {
     expect(screen.getByText(/Patron Deity: The Chained Judge/)).toBeInTheDocument();
     expect(screen.getByText('Black Ledger')).toBeInTheDocument();
     expect(screen.getByText(/Ways of the House/)).toBeInTheDocument();
-    // #4205: the patron reads by the house's own name, the god's name opens its page,
-    // and a pick that IS the god opens the same page.
-    expect(screen.getByText(/The Debt-Keeper/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '(The Chained Judge)' })).toHaveAttribute(
+    // #4205, #5110: the patron reads by the god's own name and opens its page, and a
+    // pick that IS the god opens the same page.
+    expect(screen.getByRole('link', { name: 'The Chained Judge' })).toHaveAttribute(
       'href',
       '/codex?entry=55'
     );

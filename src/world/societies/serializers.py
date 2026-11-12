@@ -253,13 +253,13 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "house",
         ]
 
-    @extend_schema_field(HouseDetailSerializer(allow_null=True))
     def _reader_is_staff(self) -> bool:
         """Whether the request's user is staff; no request (a nested or test use)
         reads as not staff, the narrower answer."""
         request = self.context.get("request")
         return bool(request is not None and request.user.is_staff)
 
+    @extend_schema_field(HouseDetailSerializer(allow_null=True))
     def get_house(self, obj) -> dict | None:
         if obj.family is None:
             return None

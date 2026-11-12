@@ -51,9 +51,8 @@ issue bodies; the model decision is ADR-0132.
   Edited on the Being Service builder's favored-facets table.
 - `BeingNickname` (#3776) — an alternate name a being's worshippers use:
   `being` FK (`related_name="nicknames"`), `name`, unique per (being, name).
-  No reverent/irreverent field — tone is prose, not data. Reached
-  transitively by `Organization.patron_nickname` (see societies.md) so
-  different orgs can name the same god differently in their own records.
+  No reverent/irreverent field — tone is prose, not data. A house's patron is
+  the god itself (`Organization.patron`, #5110, see houses.md), not a nickname.
 - `BeingResonance` (#3776) — a resonance a being favors or is merely
   associated with: `being` FK (`related_name="resonances"`), `resonance` FK →
   `magic.Resonance` (PROTECT, `related_name="favored_by_beings"`), `tier`
@@ -353,7 +352,7 @@ saved live (no draft gate pre-launch); blank fields simply do not render on the 
   valence (Ally, Rival, Feud, Unclear) naming the other god as a link to its entry -
   drawn only when the reader may open that entry (`CompanionReader.may_see`), so a feud
   with a god the reader cannot see is not drawn at all - and last **Sworn houses**
-  (#4205): the published organisations whose `patron_nickname.being` is this god, each
+  (#4205, #5110): the published organisations whose `patron` is this god, each
   a site-path link to its house page (`CompanionItem.href`, `/orgs/<id>`), left out when
   there is nobody. Sections under the Lore: one per
   feast day with lore (calendar order), one per visible relationship whose story from

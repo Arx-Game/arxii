@@ -985,6 +985,8 @@ export interface HouseClaimPayload {
    */
   founder_relation: ClaimKinRelation;
   founder_is_heir: boolean;
+  /** The god picked on the template's patron question, or null (#5110). */
+  patron_being_id: number | null;
   kin: ClaimKinDraft[];
   lands: ClaimLandDraft[];
   estate: { name: string; description: string };

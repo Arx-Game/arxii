@@ -38,6 +38,8 @@ export interface RecordSoFarProps {
   /** The picked template's first charter question's chosen option name
    * (plate F-II's "quiddity" row) — omitted before a template/pick exist. */
   quiddityName?: string;
+  /** That row's label: the charter question's own name, or "charter" (#5110). */
+  quiddityLabel?: string;
   /** The picked template's own cultural features (plate F-II's "features"
    * `<dl>`) — omitted before a template is picked. */
   features?: { name: string; codexEntryId: number | null }[];
@@ -65,7 +67,7 @@ type RecordEntry = { q: string; text: string };
 type RecordSummary = { entries: RecordEntry[]; todos: string[] };
 
 function addSeatAndHouse(summary: RecordSummary, props: RecordSoFarProps): void {
-  const { draft, seatName, swornTo, quiddityName, step } = props;
+  const { draft, seatName, swornTo, quiddityName, quiddityLabel = 'charter', step } = props;
   if (seatName !== '') {
     summary.entries.push({
       q: 'seat',
@@ -83,7 +85,8 @@ function addSeatAndHouse(summary: RecordSummary, props: RecordSoFarProps): void 
           : draft.house_name,
     });
   } else summary.todos.push('the house');
-  if (quiddityName != null && !combine) summary.entries.push({ q: 'quiddity', text: quiddityName });
+  if (quiddityName != null && !combine)
+    summary.entries.push({ q: quiddityLabel, text: quiddityName });
   if (
     draft.house_name !== '' &&
     (draft.words === '' || draft.colors === '' || draft.sigil_description === '')
