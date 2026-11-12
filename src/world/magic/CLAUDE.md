@@ -585,10 +585,10 @@ does NOT participate in `execute_crossing_ceremonies` (the crossing ceremony). I
 boundary must be preserved.
 
 **Gradual unlock (#4099):** the old hard `thread.level >= 3` floor on `set_signature_bonus`
-is gone — `SignatureMotifBonus.min_crossing_level` (default 3, display-level scale,
-authorable lower) is the only gate on which bonuses unlock at which thread depth. Staff
-author higher-value bonuses with `min_crossing_level=6` (or 11, 16, 21), and may author one
-below 3 for an earlier flourish. `available_signature_bonuses` accepts an optional `thread=`
+is gone — `SignatureMotifBonus.min_crossing_level` (a stored thread level, default 30,
+authorable lower; restated x10 by #5091) is the only gate on which bonuses unlock at which
+thread depth. Staff author higher-value bonuses with `min_crossing_level=60` (or 110, 160,
+210), and may author one below 30 for an earlier flourish. `available_signature_bonuses` accepts an optional `thread=`
 to filter by crossing level + resonance match; `next_signature_bonus(thread, catalog)`
 (`services/signature.py`) returns the nearest not-yet-reached flourish for a "keep imbuing"
 progress display. When a bonus with a `discovery_achievement` is selected,
@@ -602,14 +602,15 @@ possible; higher crossings produce no beat.
 (nullable; blank = not offered in creation) is a separate authored decision from
 `min_crossing_level`: a flourish is only offered as a CG pick when staff set its creation
 cost, and creation weaves the TECHNIQUE thread no higher than
-`CREATION_PERSONALIZATION_MAX_LEVEL` (1, a new character's level, #4585) via `weave_creation_technique_thread`
+`CREATION_PERSONALIZATION_MAX_LEVEL` (10, a new character's level cap in stored thread
+levels, #4585/#5091) via `weave_creation_technique_thread`
 (`services/threads.py`), so a creation pick never skips the first crossing. A flourish with
 no `creation_point_cost` is still reachable later in play, once a thread reaches its
 `min_crossing_level` the ordinary way.
 
 - **Catalog model:** `SignatureMotifBonus` (inherits `DiscoverableContent`) — `name`,
   `narrative_snippet`, `required_facet` FK (Facet, nullable), `required_resonance` FK
-  (Resonance, nullable), `flat_intensity_delta`, `min_crossing_level` (default 3),
+  (Resonance, nullable), `flat_intensity_delta`, `min_crossing_level` (a thread level, default 30),
   `creation_point_cost` (nullable, #4099), `discovery_achievement` (nullable FK →
   `Achievement`, from `DiscoverableContent`). At least one of `required_facet`/
   `required_resonance` required (`clean()`). AND semantics.
@@ -670,7 +671,7 @@ a character's Motif bindings buffs that resonance's magic through the modifier p
 - `Motif` - Character-level magical aesthetic (container for resonances + facets)
 - `MotifResonance` - Resonances in a motif (from gifts or optional)
 - `Facet` - Flat vocabulary of imagery/symbolism, name globally unique (2026-09-11 ruling, #3776 — no longer a Category > Subcategory > Specific tree)
-- `FacetEffectBonus` - A facet's always-on bonus to one maneuver effect (#4815): the facet names the effect, whatever its thread's resonance; `passive_facet_bonuses` counts it for a worn, threaded facet, scaled by item and attachment quality and the SHOWN thread level. Inline on `FacetAdmin`; `merge_facets` moves it
+- `FacetEffectBonus` - A facet's always-on bonus to one maneuver effect (#4815): the facet names the effect, whatever its thread's resonance; `passive_facet_bonuses` counts it for a worn, threaded facet, scaled by item and attachment quality and the thread rung (`thread_rung`, per 10 thread levels). Inline on `FacetAdmin`; `merge_facets` moves it
 - `MotifResonanceLink` - Abstract base for per-resonance attachments. Declares
   NO fields; each concrete subclass declares its own `motif_resonance` FK.
   Provides `clean()`/`save()` cap-enforcement logic (Python-layer count check
@@ -842,29 +843,33 @@ admin all converge on the same service layer.
   `ThreadWeavingUnlock` — the anchor cap (`sanctum.feature_instance.level × 10`)
   is the only gate at imbue time.
 - `ThreadCrossingThreshold` - Authored gate at thread-level PathStage crossing
-  levels (3, 6, 11, 16, 21), on the SHOWN thread scale (stored 30 = shown 3, #4585).
-  Keyed on `(target_kind, level)` so a level-3 GIFT
-  crossing can require different things than a level-3 COVENANT_ROLE crossing.
+  levels (30, 60, 110, 160, 210: the Path crossings times ten, stored thread levels,
+  ADR-5091). Keyed on `(target_kind, level)` so a level-30 GIFT
+  crossing can require different things than a level-30 COVENANT_ROLE crossing.
   Requirements attach via the polymorphic `thread_crossing_threshold` FK on
   `AbstractUnlockRequirement` (the generalized base formerly
   `AbstractClassLevelRequirement`). Possession-only — items are never consumed
   (#1885, ADR-0090). Fail-open: no row for `(target_kind, level)` → no gate.
   The imbuing loop (`spend_resonance_for_imbuing`) checks for a threshold
   before advancing to a crossing level; if requirements are unmet, it sets
-  `blocked_by="CROSSING_REQUIREMENT"` and stops. `is_crossing_level(level)`
-  in `world/classes/services.py` is the single source of truth for crossing
-  detection, applied to `shown_thread_level(next_level)` only when `next_level % 10 == 0`.
+  `blocked_by="CROSSING_REQUIREMENT"` and stops. `is_thread_crossing_level(level)`
+  in `services/threads.py` names a thread crossing (a multiple of 10 whose `level // 10` is a
+  Path crossing per `world/classes/services.is_crossing_level`).
 - **Thread caps (#4585).** `compute_level_cap(sheet)` = character level ×
   `PATH_LEVEL_CAP_MULTIPLIER` (10; never 0, since `get_character_path_level` returns at
   least 1). `compute_effective_cap` = min(level cap, anchor cap) is the ONLY place the
   level cap applies; anchor caps hold only what the anchor imposes (ORGANIZATION = the
   org grant cap, GIFT = the level cap, FACET = `lifetime // ANCHOR_CAP_FACET_DIVISOR`).
   No cap reads Path stage. Blocked reason `LEVEL_CAP`; serializer field `level_cap`.
-- **Shown thread level (#4585).** Stored levels are ×10; every authored thread threshold
+- **One scale (#5091, ADR-5091; was the #4585 shown level).** A thread shows its stored
+  level, like stats and skills (a thread at 30 reads 30). Every authored thread threshold
   (crossings, `unlock_thread_level` on variants/sub-roles/`CovenantRoleGiftGrant`/
   `VowAddedEffect`, `min_crossing_level`, `ThreadPullEffect.min_thread_level`,
-  `CREATION_PERSONALIZATION_MAX_LEVEL`) is a shown level. Compare through
-  `shown_thread_level(level)` (`services/threads.py`), never the raw `thread.level`.
+  `CREATION_PERSONALIZATION_MAX_LEVEL` = 10) is a stored level compared directly against
+  `thread.level`. Formulas tuned "per 10 thread levels" (soul tether caps, the Hollow's
+  size, facet effect bonuses, vow added-effect and maneuver-effect scaling, derived amounts,
+  the outfit trickle, the vow size step, substance power) count `thread_rung(level)`
+  (`level // THREAD_RUNG_SIZE`, `services/threads.py`), an internal step never shown.
 - `ImbuingProseTemplate` - Fallback prose for the Imbuing ritual keyed on
   `(resonance, target_kind)`. The row with both NULL is the universal fallback.
 - `Ritual` - Authored magical procedure. Dispatch kinds: `SERVICE` →
@@ -1004,7 +1009,7 @@ regeneration step.
   ceremony appends `[thread.owner]`).
 - `TechniqueVariant` — concrete subclass. A resonance-specialized form of a parent
   `Technique` (`parent_technique` self-FK, `related_name="variants"`). Fields:
-  `resonance`, `unlock_thread_level` (≥3 = variant), `name_override`,
+  `resonance`, `unlock_thread_level` (≥30 = variant, a thread level), `name_override`,
   `intensity_delta`, `control_delta`, `discovery_achievement`, `codex_entry`. Unique per
   `(parent_technique, resonance, unlock_thread_level)`.
 - `CovenantRole` — refactored to inherit `AbstractSpecializedVariant` (schema no-op;
@@ -1048,7 +1053,8 @@ resolver; no parallel specialization systems (ADR-0016).
 
 **Crossing ceremony — `execute_crossing_ceremonies(*, thread, starting_level, new_level)`**
 (`world/magic/crossing/ceremony.py`, ADR-0094): dispatches on `thread.target_kind` via a handler
-registry so every `TargetKind` gets a ceremony at PathStage crossings (3, 6, 11, 16, 21).
+registry so every `TargetKind` gets a ceremony at PathStage crossings (thread
+levels 30, 60, 110, 160, 210, `is_thread_crossing_level`).
 GIFT/COVENANT_ROLE handlers wrap the existing variant-discovery logic
 (`AbstractSpecializedVariant.newly_crossed_variants` → achievement + codex + narrative). The
 other kinds use the `_CrossingChoiceHandler` base (player-choice buffs from the
@@ -1890,7 +1896,10 @@ own companion. It manifests nothing for a failed roll, a caster with no location
 that is not in the caster's room after the move, a Savaged companion, or an avatar in
 another running fight. A being option's tier needs an `OpponentTierTemplate` row or the
 cast raises on purpose and the whole round rolls back (probe `manifest-tier-templates`).
-No CG picker, no out-of-combat manifestation. The flow-payload `summon_ally` is a separate
+The player chooses her own option with the technique picker (#4341):
+`services/manifestation.py` (`manifest_choices_for`, `set_character_manifestation`), action
+`manifest_set`, telnet `manifest <technique>=<option>`, `GET /api/magic/manifest-choices/`,
+the Spellbook's `ManifestPickerPanel`. No CG picker, no out-of-combat manifestation. The flow-payload `summon_ally` is a separate
 threat-pool summon and is untouched. Detail: `docs/systems/magic.md`'s "Manifesting a
 bound entity"; ADR-4118.
 

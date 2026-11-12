@@ -40,8 +40,7 @@ class CrossingOption(SharedMemoryModel):
     )
     crossing_level = models.PositiveSmallIntegerField(
         help_text=(
-            "Shown thread level (the number players see; a thread stored at 30 shows 3). "
-            "A crossing level: 3, 6, 11, 16 or 21."
+            "Thread level (the number players see). A crossing level: 30, 60, 110, 160 or 210."
         ),
     )
     name = models.CharField(

@@ -28,6 +28,7 @@ const doc: RungDocument = {
     chain_top_id: 3,
     station: 'seated',
     pledged_liege: { title_id: 8, name: 'Kingdom of Umbros' },
+    area_id: 70,
   },
   // a county's own land: its hinterland (#5069)
   demesne: {
@@ -81,6 +82,7 @@ const doc: RungDocument = {
     { title_id: null, name: 'Umbros', tier: 'realm' },
     { title_id: 8, name: 'Kingdom of Umbros', tier: 'kingdom' },
   ],
+  events: [],
 };
 
 const { mutate } = vi.hoisted(() => ({ mutate: vi.fn() }));
@@ -158,8 +160,53 @@ vi.mock('../queries', () => ({
       ],
     },
   }),
+  useRegionalEventKinds: () => ({
+    data: {
+      results: [
+        { id: 1, name: 'Blight', description: '', capacity_cut_pct: 50 },
+        { id: 2, name: 'Famine', description: '', capacity_cut_pct: 20 },
+      ],
+    },
+  }),
   useAlmanachMutation: () => ({ mutate, mutateAsync: vi.fn() }),
 }));
+
+test('the Events row (#5080): the blight over the land, Close, and Open one here', async () => {
+  currentDoc = {
+    ...doc,
+    events: [
+      {
+        event_id: 5,
+        kind: 'Blight',
+        area_id: 77,
+        area: 'Duchy of Katta',
+        severity_pct: 80,
+        started_at: '2026-11-11T00:00:00Z',
+      },
+    ],
+  };
+  try {
+    renderWithProviders(<TitlePage titleId={3} />);
+    const events = screen.getByRole('heading', { name: 'Events' }).nextElementSibling!;
+    const row = within(events as HTMLElement);
+    expect(row.getByText('Blight', { selector: 'strong' })).toBeInTheDocument();
+    expect(row.getByText(/over Duchy of Katta/)).toBeInTheDocument();
+    expect(row.getByText('80%')).toBeInTheDocument();
+    await userEvent.click(row.getByRole('button', { name: 'Close' }));
+    expect(mutate).toHaveBeenCalledWith({ event_id: 5 });
+    mutate.mockClear();
+    // nothing opens until a kind is picked; then the rung's own area is struck
+    expect(row.getByRole('button', { name: 'Open' })).toBeDisabled();
+    await userEvent.selectOptions(row.getByLabelText('event'), 'Famine');
+    const severity = row.getByLabelText('severity');
+    await userEvent.clear(severity);
+    await userEvent.type(severity, '40');
+    await userEvent.click(row.getByRole('button', { name: 'Open' }));
+    expect(mutate).toHaveBeenCalledWith({ kind_id: 2, area_id: 70, severity_pct: 40 });
+  } finally {
+    currentDoc = doc;
+  }
+});
 
 test('the county page: holder, location, hinterland, developments, books, forces, holdings', () => {
   renderWithProviders(<TitlePage titleId={3} />);

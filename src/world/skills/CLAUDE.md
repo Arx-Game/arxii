@@ -26,8 +26,7 @@ Skills (a proxy of Trait, #5008) and specializations for character abilities.
 - A character's rating in a skill is the skill's own `CharacterTraitValue` (#5010): one
   row the sheet shows and checks read. Read it with `skill_rating(sheet, skill)` (through the character's trait handler); set it
   directly with `set_skill_trait`
-- Internal: 10, 20, 30... (stored value)
-- Display: 1.0, 2.0, 3.0... (value / 10)
+- Stored and shown: 10, 20, 30... (one scale, ADR-5091; never divided for display)
 - CG max: 30 (configurable via SkillPointBudget)
 - Post-CG max: the level band's `MaturationStatCap.skill_cap` (#4585); no cap when blank
 
@@ -119,9 +118,9 @@ dev_points = base_gain + mentor_bonus
   (`PurchaseUnlockAction` `unlock_type="skill_breakthrough"`); default breakthroughs are
   seeded by the `"skills"` cluster (`world.seeds.game_content.skills`).
 - Specializations have no XP boundaries
-- **Band skill cap (#4585):** `MaturationStatCap.skill_cap` (shown units, blank = no cap) caps every
+- **Band skill cap (#4585):** `MaturationStatCap.skill_cap` (stored units, #5091; blank = no cap) caps every
   skill and specialization by the character's level band, like `stat_cap`. `stored_skill_cap(sheet)`
-  converts it (`skill_cap_for(sheet) * 10`). `train_skill`, `points_to_next_boundary`,
+  returns it (`skill_cap_for(sheet)`). `train_skill`, `points_to_next_boundary`,
   `_apply_development_to_specialization`, `purchase_skill_breakthrough`,
   `DevelopmentPoints.award_points` (SKILL traits only) and staff edit's `set_skill_values` all stop
   there; development at the cap dissipates as at an XP boundary, with `skill_cap_message` naming

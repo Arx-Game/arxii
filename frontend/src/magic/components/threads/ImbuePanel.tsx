@@ -2,8 +2,7 @@
  * ImbuePanel — spend resonance to advance a Thread.
  *
  * Shows a stepper for `amount` (0..balance). Amount=0 is valid (probes blocked_by).
- * On success, displays the shown levels climbed and the shown level (threads are stored
- * x10), and blocked_by.
+ * On success, displays the levels climbed, the thread's new level, and blocked_by.
  * On error, shows the typed user_message inline. When the imbue opened new vow pick
  * levels (#4929), "Choose picks" leads to the character's sheet, where they are chosen.
  */
@@ -37,15 +36,10 @@ function pointsLabel(points: number): string {
   return `${points} ${points === 1 ? 'pt' : 'pts'}`;
 }
 
-/**
- * The shown level and how many shown levels the imbue climbed. Threads are stored x10
- * (#4585), so `levels_gained` and `new_level` are never the numbers a player reads.
- */
-function shownClimb(result: ImbueResponse): { level: number; gained: number } | null {
+/** The thread's level after the imbue and how many levels it climbed. */
+function climbOf(result: ImbueResponse): { level: number; gained: number } | null {
   if (result.new_level === undefined) return null;
-  const level = Math.floor(result.new_level / 10);
-  const before = Math.floor((result.new_level - (result.levels_gained ?? 0)) / 10);
-  return { level, gained: level - before };
+  return { level: result.new_level, gained: result.levels_gained ?? 0 };
 }
 
 /** The sheet's Ties section, where the vow's picks are chosen. */
@@ -65,7 +59,7 @@ export function ImbuePanel({ thread, balance, characterSheetId, onResult }: Imbu
   const [lastResult, setLastResult] = useState<ImbueResponse | null>(null);
 
   const { mutate, isPending, error, isError } = useImbueThread();
-  const climb = lastResult ? shownClimb(lastResult) : null;
+  const climb = lastResult ? climbOf(lastResult) : null;
 
   const handleDecrement = () => setAmount((a) => Math.max(0, a - 1));
   const handleIncrement = () => setAmount((a) => Math.min(balance, a + 1));

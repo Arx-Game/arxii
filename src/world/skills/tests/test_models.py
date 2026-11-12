@@ -124,8 +124,8 @@ class CharacterSpecializationValueModelTests(TestCase):
         assert csw.development_points == 0
         # No rust_points - specializations are immune
 
-    def test_character_specialization_display_value(self):
-        """Specializations display their true stored value, like skills (ADR-0193)."""
+    def test_character_specialization_shows_stored_value(self):
+        """Specializations show their stored value, like every trait (ADR-5091)."""
         from world.skills.models import CharacterSpecializationValue
 
         csw = CharacterSpecializationValue.objects.create(
@@ -133,7 +133,7 @@ class CharacterSpecializationValueModelTests(TestCase):
             specialization=self.spec,
             value=15,
         )
-        assert csw.display_value == 15
+        assert str(csw).endswith(f"{self.spec} = 15")
 
 
 class SkillPointBudgetModelTests(TestCase):

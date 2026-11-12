@@ -27,20 +27,20 @@ describe('getDefaultStats', () => {
     expect(stats).toHaveProperty('willpower');
   });
 
-  it('returns all stats with default value of 2', () => {
+  it('returns all stats with default value of 20', () => {
     const stats = getDefaultStats();
 
-    expect(stats.strength).toBe(2);
-    expect(stats.agility).toBe(2);
-    expect(stats.stamina).toBe(2);
-    expect(stats.charm).toBe(2);
-    expect(stats.presence).toBe(2);
-    expect(stats.composure).toBe(2);
-    expect(stats.intellect).toBe(2);
-    expect(stats.wits).toBe(2);
-    expect(stats.stability).toBe(2);
-    expect(stats.luck).toBe(2);
-    expect(stats.perception).toBe(2);
-    expect(stats.willpower).toBe(2);
+    expect(stats.strength).toBe(20);
+    expect(stats.agility).toBe(20);
+    expect(stats.stamina).toBe(20);
+    expect(stats.charm).toBe(20);
+    expect(stats.presence).toBe(20);
+    expect(stats.composure).toBe(20);
+    expect(stats.intellect).toBe(20);
+    expect(stats.wits).toBe(20);
+    expect(stats.stability).toBe(20);
+    expect(stats.luck).toBe(20);
+    expect(stats.perception).toBe(20);
+    expect(stats.willpower).toBe(20);
   });
 });

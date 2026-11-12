@@ -2,7 +2,7 @@
  * Maturation Point panel (#2756) — owner-only sheet section.
  *
  * Shows points earned by actually aging (milestones every 3rd matured year
- * from 21) and lets the owner spend them: +1 to a stat, capped per stage.
+ * from 21) and lets the owner spend them: one point is +10 to a stat, capped per stage.
  * Reads GET /maturation/ and writes POST /spend-maturation-point/.
  */
 

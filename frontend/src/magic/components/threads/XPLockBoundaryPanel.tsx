@@ -33,7 +33,6 @@ export function XPLockBoundaryPanel({
   }
 
   const canAfford = accountAvailableXP >= prospect.xp_cost;
-  const displayBoundaryLevel = prospect.boundary_level / 10;
 
   const handlePay = () => {
     mutate({ threadId: thread.id, body: { boundary_level: prospect.boundary_level } });
@@ -48,7 +47,7 @@ export function XPLockBoundaryPanel({
         XP Lock Boundary
       </h3>
       <p className="text-sm text-yellow-700 dark:text-yellow-300" data-testid="xp-lock-description">
-        Crossing level <span className="font-medium tabular-nums">{displayBoundaryLevel}</span>{' '}
+        Crossing level <span className="font-medium tabular-nums">{prospect.boundary_level}</span>{' '}
         requires <span className="font-medium tabular-nums">{prospect.xp_cost}</span> XP. Available:{' '}
         <span className="font-medium tabular-nums" data-testid="xp-available">
           {accountAvailableXP}

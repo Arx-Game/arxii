@@ -4,7 +4,6 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
-from world.classes.services import is_crossing_level
 from world.magic.constants import CREATION_PERSONALIZATION_MAX_LEVEL, RestrictionKind
 from world.magic.factories import (
     CharacterTechniqueFactory,
@@ -18,15 +17,16 @@ from world.magic.factories import (
 from world.magic.models import CharacterTechnique, Restriction
 from world.magic.serializers import TechniqueSerializer
 from world.magic.services.technique_builder import _restriction_bonus_total
+from world.magic.services.threads import is_thread_crossing_level
 from world.magic.types.technique_builder import TechniqueDesignInput
 
 
 class CreationLevelCeilingTests(TestCase):
     def test_ceiling_is_a_new_characters_level_below_any_crossing(self) -> None:
-        """A new character is level 1 and a thread never exceeds its level (#4585)."""
-        self.assertEqual(CREATION_PERSONALIZATION_MAX_LEVEL, 1)
+        """A new character is level 1; a thread never exceeds ten times that (#4585)."""
+        self.assertEqual(CREATION_PERSONALIZATION_MAX_LEVEL, 10)
         for level in range(1, CREATION_PERSONALIZATION_MAX_LEVEL + 1):
-            self.assertFalse(is_crossing_level(level))
+            self.assertFalse(is_thread_crossing_level(level))
 
 
 class HoldCleanTests(TestCase):
@@ -48,7 +48,7 @@ class HoldCleanTests(TestCase):
 
     def test_early_form_must_be_a_form_of_the_held_technique(self) -> None:
         hold = CharacterTechniqueFactory()
-        hold.early_form = TechniqueVariantFactory(unlock_thread_level=1)
+        hold.early_form = TechniqueVariantFactory(unlock_thread_level=10)
         with self.assertRaises(ValidationError):
             hold.full_clean()
 
@@ -100,7 +100,7 @@ class PersonalizationConstraintTests(TestCase):
 
     def test_flourish_cost_needs_a_level_below_the_first_crossing(self) -> None:
         with self.assertRaises(IntegrityError), transaction.atomic():
-            SignatureMotifBonusFactory(min_crossing_level=3, creation_point_cost=2)
+            SignatureMotifBonusFactory(min_crossing_level=30, creation_point_cost=2)
 
     def test_design_restriction_cannot_carry_a_creation_cost(self) -> None:
         with self.assertRaises(IntegrityError), transaction.atomic():

@@ -1,25 +1,36 @@
-"""Telnet pact/betrothal namespace command (#2999).
+"""Telnet pact/betrothal namespace command (#2999), and pacts with beings (#4341).
 
-Thin parse-and-dispatch over ``world.societies.houses.pact_services`` — no
-business logic here; authorization is re-checked in the services.
+Thin parse-and-dispatch over ``world.societies.houses.pact_services`` and, for a
+character's own pacts with beings, ``world.pacts.services`` and the ``pact_renounce``
+action — no business logic here; authorization is re-checked in the services.
 """
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 
 if TYPE_CHECKING:
+    from world.pacts.types import PactCard
     from world.societies.models import Organization
+
+_SWITCH_RENOUNCE = "renounce"
+MSG_USAGE = (
+    "Usage: pact [list|propose|ratify|dissolve|betroth|breakvow|divorce] ... "
+    "or pact/renounce <being>"
+)
 
 
 class CmdPact(ArxCommand):
-    """Diplomacy between organizations, and promised unions.
+    """Your pacts with beings, diplomacy between organizations, and promised unions.
 
     Syntax:
+        pact                    - your pacts with beings, then the pacts that stand
         pact list
+        pact/renounce <being>   - renounce your pact with a being
         pact propose <my-org> to <their-org> kind=<pact kind>
         pact ratify <id>
         pact dissolve <id>
@@ -32,9 +43,13 @@ class CmdPact(ArxCommand):
     alliance at a fraction; the WEDDING ceremony solemnizes it. Either
     spouse may divorce unilaterally — both take a prestige hit, the
     initiator's steeper (#2358).
+
+    A pact with a being is accepted at a pledge's close. Renounced, it ends and its
+    cost eases each period until it is gone.
     """
 
     key = "pact"
+    takes_switches = True
     locks = "cmd:all()"
     help_category = "Organizations"
 
@@ -45,6 +60,12 @@ class CmdPact(ArxCommand):
             self.msg(str(exc))
 
     def _dispatch(self) -> None:
+        switches = {switch.lower() for switch in self.switches}
+        if switches and switches != {_SWITCH_RENOUNCE}:
+            raise CommandError(MSG_USAGE)
+        if switches:
+            self._renounce()
+            return
         tokens = (self.args or "").strip().split()
         if not tokens or tokens[0].lower() == "list":  # noqa: STRING_LITERAL
             self._list()
@@ -61,8 +82,7 @@ class CmdPact(ArxCommand):
         }
         handler = handlers.get(first)
         if handler is None:
-            msg = "Usage: pact [list|propose|ratify|dissolve|betroth|breakvow|divorce] ..."
-            raise CommandError(msg)
+            raise CommandError(MSG_USAGE)
         handler(rest)
 
     # ------------------------------------------------------------------
@@ -109,9 +129,34 @@ class CmdPact(ArxCommand):
 
     # ------------------------------------------------------------------
 
+    def _renounce(self) -> None:
+        from actions.definitions.pacts import RenouncePactAction  # noqa: PLC0415
+
+        being_name = (self.args or "").strip()
+        if not being_name:
+            msg = "Usage: pact/renounce <being>"
+            raise CommandError(msg)
+        result = RenouncePactAction().run(actor=self.caller, being_name=being_name)
+        if result.message:
+            self.msg(result.message)
+
+    def _being_pact_lines(self) -> list[str]:
+        from world.pacts.services import pact_cards_for  # noqa: PLC0415
+
+        sheet = self.caller.character_sheet
+        if sheet is None:
+            return []
+        lines: list[str] = []
+        for card in pact_cards_for(sheet):
+            lines.extend(_card_lines(card))
+        return lines
+
     def _list(self) -> None:
         from world.societies.houses.models import Betrothal, OrgPact  # noqa: PLC0415
 
+        being_lines = self._being_pact_lines()
+        if being_lines:
+            self.msg("\n".join(being_lines))
         lines = []
         pacts = OrgPact.objects.filter(dissolved_at__isnull=True).select_related(
             "kind", "party_a", "party_b"
@@ -129,7 +174,10 @@ class CmdPact(ArxCommand):
             f"  vow #{vow.pk}: {vow.kinsperson_a.display_name} to {vow.kinsperson_b.display_name}"
             for vow in vows
         )
-        self.msg("Pacts and promises:\n" + "\n".join(lines) if lines else "No pacts stand.")
+        if lines:
+            self.msg("Pacts and promises:\n" + "\n".join(lines))
+        elif not being_lines:
+            self.msg("No pacts stand.")
 
     def _propose(self, rest: list[str]) -> None:
         from world.societies.houses.models import PactKind  # noqa: PLC0415
@@ -234,3 +282,42 @@ class CmdPact(ArxCommand):
         result = InitiateDivorceAction().run(actor=self.caller, union_id=int(rest[0].lstrip("#")))
         if result.message:
             self.msg(result.message)
+
+
+_SECONDS_PER_HOUR = 3600
+_HOURS_PER_DAY = 24
+
+
+def _time_left(time_limit: datetime) -> str:
+    """ "4 days left", "5 hours left" or "span ended": the same rule as the web card
+    (``frontend/src/worship/pledgeText.ts`` ``timeLeft``), so both read alike."""
+    from django.utils import timezone  # noqa: PLC0415
+
+    seconds = (time_limit - timezone.now()).total_seconds()
+    if seconds <= 0:
+        return "span ended"
+    days = int(seconds // (_SECONDS_PER_HOUR * _HOURS_PER_DAY))
+    if days >= 1:
+        return f"{days} day{'' if days == 1 else 's'} left"
+    hours = max(1, int(seconds // _SECONDS_PER_HOUR))
+    return f"{hours} hour{'' if hours == 1 else 's'} left"
+
+
+def _card_lines(card: PactCard) -> list[str]:
+    """One pact with a being as text: the period, the stage, the promises."""
+
+    being = card.being_name
+    stage = card.stage_name or "no stage"
+    if not card.is_active:
+        return [
+            f"|wPact|n: {being} (ended). {stage} eases by "
+            f"{card.pact.offer.severity_per_miss} each period until it is gone."
+        ]
+    head = f"|wPact|n: {being} - {card.earned} of {card.required} favor this period"
+    if card.time_limit is not None:
+        head += f", {_time_left(card.time_limit)}"
+    head += f". Stage: {stage} (severity {card.severity}"
+    if card.next_stage_threshold is not None:
+        head += f"; next at {card.next_stage_threshold}"
+    head += ")."
+    return [head, *(f"  You promised: {promise}" for promise in card.promises)]

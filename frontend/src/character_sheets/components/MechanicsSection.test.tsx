@@ -23,12 +23,12 @@ function makeSkill(overrides: Partial<CharacterSheetSkill> = {}): CharacterSheet
 }
 
 describe('MechanicsSection', () => {
-  it('renders stat entries with capitalized names and display values', () => {
-    render(<MechanicsSection stats={{ strength: 3, agility: 4 }} skills={[]} />);
+  it('renders stat entries with capitalized names and stored values', () => {
+    render(<MechanicsSection stats={{ strength: 30, agility: 40 }} skills={[]} />);
     expect(screen.getByText('Strength')).toBeInTheDocument();
-    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.getByText('30')).toBeInTheDocument();
     expect(screen.getByText('Agility')).toBeInTheDocument();
-    expect(screen.getByText('4')).toBeInTheDocument();
+    expect(screen.getByText('40')).toBeInTheDocument();
   });
 
   it('shows the empty state when there are no stats', () => {

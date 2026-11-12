@@ -86,6 +86,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
     from world.magic.models import ResonanceGrant
+    from world.pacts.models import CharacterPact
     from world.projects.models import Project
     from world.scenes.models import Persona, Scene
     from world.traits.models import CheckOutcome
@@ -97,6 +98,11 @@ _FAILED_CLOSE_BELOW = 0
 _PARTIAL_SUCCESS_LEVEL = 0
 #: Sources that are paid when a pledge resolves and never add to its progress.
 _RESOLUTION_SOURCES = frozenset({PledgeCreditSource.CLOSING, PledgeCreditSource.LAPSE})
+#: A pact offered at the close is signed only when the rite resolves at Success or better.
+_PACT_SIGNED_FROM = 1
+
+MSG_NO_PACT_OFFERED = "This pledge offers no pact."
+MSG_PACT_NEEDS_SUCCESS = "The rite did not resolve at Success or better, so no pact was signed."
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +134,9 @@ def offered_pledges(being: WorshippedBeing) -> list[Pledge]:
     if not being.is_active:
         return []
     return list(
-        Pledge.objects.filter(being=being, is_active=True).select_related("closing_rite__kind")
+        Pledge.objects.filter(being=being, is_active=True).select_related(
+            "closing_rite__kind", "pact_offer__being", "pact_offer__condition"
+        )
     )
 
 
@@ -243,28 +251,46 @@ def record_pledge_credit(  # noqa: PLR0913 - the calculation's parts are keyword
 
 
 def deed_favor_used_this_week(sheet: CharacterSheet) -> int:
-    """Base favor ``sheet`` has earned from deeds in the current game week."""
+    """Base favor ``sheet`` has earned from deeds in the current game week.
+
+    The pledge credits' base plus the pact credits' base (#4341). Each deed is counted
+    once: a deed credited to a pledge and a pact with the same being carries its base on
+    the ``PledgeCredit`` and 0 on the ``PactCredit`` (see ``record_pact_credit``).
+    """
     from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
+    from world.pacts.services import pact_deed_favor_this_week  # noqa: PLC0415
 
     total = PledgeCredit.objects.filter(
         pledge_details__character_sheet=sheet,
         source=PledgeCreditSource.DEED,
         game_week=get_current_game_week(),
     ).aggregate(total=Sum("base"))["total"]
-    return total or 0
+    return (total or 0) + pact_deed_favor_this_week(sheet)
+
+
+def _deed_beings(sheet: CharacterSheet, details: PledgeDetails | None) -> list[WorshippedBeing]:
+    """The beings a deed can earn favor with: the open pledge's, then each pact's (#4341)."""
+    from world.pacts.services import pact_beings_for  # noqa: PLC0415
+
+    beings = [details.pledge.being] if details is not None else []
+    for being in pact_beings_for(sheet):
+        if all(being.pk != seen.pk for seen in beings):
+            beings.append(being)
+    return beings
 
 
 def credit_pledge_deed(grant: ResonanceGrant) -> PledgeCredit | None:
-    """Turn a resonance grant into deed favor for an open pledge (design 2).
+    """Turn a resonance grant into deed favor for an open pledge or a pact (design 2).
 
-    Counts only while the character holds an open pledge, and only for a
-    resonance the pledge's being holds as FAVORED or ASSOCIATED. Base favor is
-    the grant's amount times the configured percentage for that tier, rounded
-    down, at least 1, then held to what is left of the weekly deed cap (base
-    favor, before the earning rate). A worship rite's own grant is skipped: the
+    Counts for the being of her open pledge and for every being she holds an active pact
+    with (#4341), each only for a resonance that being holds as FAVORED or ASSOCIATED.
+    Base favor is the grant's amount times the configured percentage for that tier,
+    rounded down, at least 1, then held to what is left of the weekly deed cap (base
+    favor, before the earning rate). The cap is shared: each being's base is taken from
+    what is left, the pledge's being first. A worship rite's own grant is skipped: the
     rite already pays favor. So is a passive grant (``PASSIVE_DEED_SOURCES``): favor
     comes only from a character's actions, never from a trickle, a distinction or a
-    staff grant.
+    staff grant. Returns the pledge's credit, if the pledge's being earned any.
     """
     from world.magic.constants import GainSource  # noqa: PLC0415
     from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
@@ -274,32 +300,41 @@ def credit_pledge_deed(grant: ResonanceGrant) -> PledgeCredit | None:
         return None
     sheet = grant.character_sheet
     details = open_pledge_for(sheet)
-    if details is None:
+    beings = _deed_beings(sheet, details)
+    if not beings:
         return None
-    being = details.pledge.being
-    tier = (
-        BeingResonance.objects.filter(being=being, resonance_id=grant.resonance_id)
-        .values_list("tier", flat=True)
-        .first()
+    tiers = dict(
+        BeingResonance.objects.filter(
+            being__in=beings, resonance_id=grant.resonance_id
+        ).values_list("being_id", "tier")
     )
-    if tier is None:
+    if not tiers:
         return None
     config = get_devotion_config()
-    percent = (
-        config.favored_deed_percent
-        if tier == BeingResonanceTier.FAVORED
-        else config.associated_deed_percent
-    )
-    base = max(grant.amount * percent // 100, 1)
-    base = min(base, config.weekly_deed_favor_cap - deed_favor_used_this_week(sheet))
-    if base <= 0:
-        return None
-    return bump_devotion(
-        sheet,
-        being,
-        base,
-        source=FavorSource(kind=PledgeCreditSource.DEED, resonance_grant=grant),
-    ).pledge_credit
+    remaining = config.weekly_deed_favor_cap - deed_favor_used_this_week(sheet)
+    pledge_credit = None
+    for being in beings:
+        tier = tiers.get(being.pk)
+        if tier is None:
+            continue
+        if remaining <= 0:
+            break
+        percent = (
+            config.favored_deed_percent
+            if tier == BeingResonanceTier.FAVORED
+            else config.associated_deed_percent
+        )
+        base = min(max(grant.amount * percent // 100, 1), remaining)
+        remaining -= base
+        bump = bump_devotion(
+            sheet,
+            being,
+            base,
+            source=FavorSource(kind=PledgeCreditSource.DEED, resonance_grant=grant),
+        )
+        if details is not None and being.pk == details.pledge.being_id:
+            pledge_credit = bump.pledge_credit
+    return pledge_credit
 
 
 # ---------------------------------------------------------------------------
@@ -308,7 +343,11 @@ def credit_pledge_deed(grant: ResonanceGrant) -> PledgeCredit | None:
 
 
 def close_pledge(
-    sheet: CharacterSheet, *, scene: Scene, offered_items: Sequence[ItemInstance] = ()
+    sheet: CharacterSheet,
+    *,
+    scene: Scene,
+    offered_items: Sequence[ItemInstance] = (),
+    accept_pact: bool = False,
 ) -> ClosingOutcome:
     """Perform the open pledge's closing rite in ``scene`` (design 3).
 
@@ -325,6 +364,12 @@ def close_pledge(
 
     ``offered_items`` (#4530) are given up during the closing rite: their meaning, and the
     pledge's and the rite's requests they fill, ease the rite's roll.
+
+    ``accept_pact`` (#4341): she chose to accept the pledge's pact offer. Once the
+    pledge resolves at Success or better the pact is signed (:func:`_accept_pact_offer`);
+    a refusal leaves the pledge resolved and comes back as ``pact_refusal``. A failed
+    first close signs nothing (she may accept again on the retry). Asking to accept a
+    pledge that carries no offer still closes it, with the refusal saying so.
     """
     from world.projects.services import resolve_project  # noqa: PLC0415
     from world.worship.answer_services import deliver_pledge_answer  # noqa: PLC0415
@@ -382,6 +427,9 @@ def close_pledge(
     # the block above could show a vision a rolled-back resolution never kept.
     # A stewarded being's table GM answers it instead of the draw (slice 4).
     delivery = route_to_steward(details) or deliver_pledge_answer(details, outcome)
+    # The pact is signed in its own transaction after the pledge's resolution commits,
+    # so a refused signing can never undo the close.
+    pact, pact_refusal = _accept_pact_offer(sheet, details, outcome) if accept_pact else (None, "")
     return ClosingOutcome(
         details=details,
         rite=rite,
@@ -391,7 +439,31 @@ def close_pledge(
         award=award.credited if award is not None else 0,
         earning_rate_percent=award.earning_rate_percent if award is not None else 0,
         delivery=delivery,
+        pact=pact,
+        pact_refusal=pact_refusal,
     )
+
+
+def _accept_pact_offer(
+    sheet: CharacterSheet, details: PledgeDetails, outcome: CheckOutcome
+) -> tuple[CharacterPact | None, str]:
+    """(pact, refusal) for accepting the pledge's pact offer at a resolved close.
+
+    Signed only when the pledge carries an offer and the rite resolved it at Success
+    or better (spec section 7, step 2); otherwise no pact and the player-safe reason.
+    """
+    from world.pacts.exceptions import PactError  # noqa: PLC0415
+    from world.pacts.services import sign_being_pact  # noqa: PLC0415
+
+    offer = details.pledge.pact_offer
+    if offer is None:
+        return None, MSG_NO_PACT_OFFERED
+    if outcome.success_level < _PACT_SIGNED_FROM:
+        return None, MSG_PACT_NEEDS_SUCCESS
+    try:
+        return sign_being_pact(sheet, offer), ""
+    except PactError as exc:
+        return None, exc.user_message
 
 
 def closing_award_amount(
@@ -462,24 +534,22 @@ def resolve_pledge_project(project: Project, outcome_tier: CheckOutcome | None) 
 
 def earning_rate_breakdown(sheet: CharacterSheet, being: WorshippedBeing) -> EarningRateBreakdown:
     """The earning rate's parts: the base, the Chosen bonus, favor earning modifiers and
-    what the worn pieces add (#4520)."""
+    what the worn pieces add (#4520).
+
+    The Chosen bonus is the patron-target part of the favor earning total (the Chosen
+    distinction's effect, #4341), 0 unless she is the being's Chosen; ``modifiers`` is
+    the rest, so the two never count the same point."""
     from world.mechanics.constants import FAVOR_EARNING_CATEGORY_NAME  # noqa: PLC0415
     from world.worship.favor_services import (  # noqa: PLC0415
-        active_patronage_of,
-        favor_modifier_total,
+        general_favor_modifier_total,
+        patron_modifier_total,
     )
-    from world.worship.services import get_chosen_favor_config  # noqa: PLC0415
     from world.worship.worn_services import worn_meaning  # noqa: PLC0415
 
-    chosen = (
-        get_chosen_favor_config().earn_bonus_percent
-        if active_patronage_of(sheet, being) is not None
-        else 0
-    )
     return EarningRateBreakdown(
         base=FAVOR_EARNING_BASE_PERCENT,
-        chosen_bonus=chosen,
-        modifiers=favor_modifier_total(sheet, being, FAVOR_EARNING_CATEGORY_NAME),
+        chosen_bonus=patron_modifier_total(sheet, being, FAVOR_EARNING_CATEGORY_NAME),
+        modifiers=general_favor_modifier_total(sheet, being, FAVOR_EARNING_CATEGORY_NAME),
         worn_bonus=worn_meaning(sheet, being).earning_percent,
     )
 

@@ -28,7 +28,7 @@ class ImbueActionCrossingRequirementTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.sheet = CharacterSheetFactory(_class_level=5)  # level cap 50 (#4585)
+        cls.sheet = CharacterSheetFactory(_class_level=5)  # level cap 50
         cls.resonance = ResonanceFactory()
         CharacterResonanceFactory(character_sheet=cls.sheet, resonance=cls.resonance, balance=9999)
         cls.template = ItemTemplateFactory()
@@ -41,7 +41,7 @@ class ImbueActionCrossingRequirementTests(TestCase):
     def _make_thread_at_level(self, level: int):
         """A TRAIT thread at stored ``level`` with the stored-30 XP boundary paid.
 
-        The shown-3 crossing is stored 30 (#4585), so these tests imbue stored
+        The first crossing is level 30, so these tests imbue
         29 -> 30, which costs (29 - 9) × 100 = 2000 dp.
         """
         thread = ThreadFactory(
@@ -57,7 +57,7 @@ class ImbueActionCrossingRequirementTests(TestCase):
     def test_crossing_block_returns_success_with_messages(self) -> None:
         """When blocked_by=CROSSING_REQUIREMENT, action returns success=True
         with the failed-requirement messages in the message text."""
-        threshold = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=3)
+        threshold = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=30)
         ItemRequirement.objects.create(
             thread_crossing_threshold=threshold,
             item_template=self.template,
@@ -78,7 +78,7 @@ class ImbueActionCrossingRequirementTests(TestCase):
     def test_crossing_block_consumes_pending_effect(self) -> None:
         """The PendingRitualEffect is still consumed on a crossing block
         (the rite completed; re-attempting requires a new rite)."""
-        threshold = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=3)
+        threshold = ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=30)
         ItemRequirement.objects.create(
             thread_crossing_threshold=threshold,
             item_template=self.template,

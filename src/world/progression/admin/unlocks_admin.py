@@ -117,7 +117,7 @@ class TraitRatingUnlockAdmin(admin.ModelAdmin):
     search_fields = ["trait__name"]
 
     def target_rating_display(self, obj):
-        return f"{obj.target_rating / 10:.1f}"
+        return str(obj.target_rating)
 
     target_rating_display.short_description = "Target Rating"
 
@@ -172,9 +172,7 @@ class TraitRequirementAdmin(admin.ModelAdmin):
     ]
 
     def minimum_value_display(self, obj):
-        from world.traits.models import display_trait_value  # noqa: PLC0415
-
-        return str(display_trait_value(obj.trait.trait_type, obj.minimum_value))
+        return str(obj.minimum_value)
 
     minimum_value_display.short_description = "Min Value"
 

@@ -310,7 +310,7 @@ class ThreadHubSummaryPickerDataTests(APITestCase):
         self.assertEqual(len(traits), 1)
         self.assertEqual(traits[0]["trait_id"], self.trait.pk)
         self.assertEqual(traits[0]["name"], "Persuasion")
-        self.assertEqual(traits[0]["display_value"], 30)
+        self.assertEqual(traits[0]["value"], 30)
 
     def test_trait_with_zero_value_excluded(self) -> None:
         """Trait unlock exists but character's value is 0 → not in weavable_traits."""

@@ -662,3 +662,88 @@ def seed_missive_spec(*, username: str) -> MissiveSpecSeed:
         worn_face_name=MISSIVE_SPEC_WORN_FACE,
         writer_face_name=MISSIVE_SPEC_WRITER_FACE,
     )
+
+
+@dataclass(frozen=True)
+class OneScaleSeed:
+    """What `frontend/e2e/one-scale.spec.ts` reads back (#5091)."""
+
+    roster_entry_id: int
+    thread_id: int
+
+
+#: The character the one-scale spec opens; its stats, skill and thread read as stored.
+ONE_SCALE_SPEC_CHARACTER = "Odile Onescale"
+#: Stored values the sheet must show as-is (strength 30 used to read 3).
+ONE_SCALE_SPEC_STATS = {"strength": 30, "agility": 20}
+ONE_SCALE_SPEC_THREAD_LEVEL = 30
+
+
+def seed_one_scale_spec(*, username: str) -> OneScaleSeed:
+    """A level-3 character of *username*'s with stats 30/20 and a gift thread at 30.
+
+    The sheet shows strength 30 and agility 20 (stored values, #5091), the thread page
+    shows level 30 against a cap of 30, and the band caps are the stored 50/60/110/...
+    rows, and the pull-cost catalog is seeded so the thread page's Pull Preview reads real
+    costs. The account's creation draft is not touched here: the spec moves it to the
+    Attributes stage itself, after the specs that read it at another stage have run.
+    """
+    from django.db import transaction  # noqa: PLC0415
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+
+    from evennia_extensions.factories import CharacterFactory  # noqa: PLC0415
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+    from world.character_sheets.factories import CharacterSheetFactory  # noqa: PLC0415
+    from world.classes.factories import CharacterClassLevelFactory  # noqa: PLC0415
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+    from world.magic.factories import (  # noqa: PLC0415
+        CharacterResonanceFactory,
+        GiftFactory,
+        ResonanceFactory,
+        ThreadFactory,
+    )
+    from world.magic.models import Thread  # noqa: PLC0415
+    from world.progression.seeds import seed_maturation_stat_caps  # noqa: PLC0415
+    from world.roster.factories import (  # noqa: PLC0415
+        RosterEntryFactory,
+        RosterTenureFactory,
+    )
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+    from world.seeds.game_content.magic import seed_thread_pull_catalog  # noqa: PLC0415
+    from world.traits.models import CharacterTraitValue, Trait, TraitType  # noqa: PLC0415
+
+    with transaction.atomic():
+        seed_maturation_stat_caps()
+        seed_thread_pull_catalog()
+        account = AccountDB.objects.get(username=username)
+        player_data, _ = PlayerData.objects.get_or_create(account=account)
+        entry = RosterEntry.objects.filter(
+            character_sheet__character__db_key=ONE_SCALE_SPEC_CHARACTER
+        ).first()
+        if entry is None:
+            character = CharacterFactory(db_key=ONE_SCALE_SPEC_CHARACTER)
+            sheet = CharacterSheetFactory(character=character)
+            entry = RosterEntryFactory(character_sheet=sheet)
+            RosterTenureFactory(roster_entry=entry, player_data=player_data, end_date=None)
+            character.db_account = account
+            character.save()
+            CharacterClassLevelFactory(character=sheet, level=3, is_primary=True)
+            for name, value in ONE_SCALE_SPEC_STATS.items():
+                trait, _ = Trait.objects.get_or_create(
+                    name=name, defaults={"trait_type": TraitType.STAT}
+                )
+                CharacterTraitValue.objects.create(character=sheet, trait=trait, value=value)
+            resonance = ResonanceFactory(name="Quickmarrow")
+            CharacterResonanceFactory(
+                character_sheet=sheet, resonance=resonance, balance=10, lifetime_earned=10
+            )
+            ThreadFactory(
+                owner=sheet,
+                target_kind=TargetKind.GIFT,
+                target_trait=None,
+                target_gift=GiftFactory(name="Marrowcraft"),
+                resonance=resonance,
+                level=ONE_SCALE_SPEC_THREAD_LEVEL,
+            )
+        thread = Thread.objects.get(owner=entry.character_sheet)
+    return OneScaleSeed(roster_entry_id=entry.pk, thread_id=thread.pk)

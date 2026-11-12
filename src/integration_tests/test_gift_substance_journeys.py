@@ -550,7 +550,7 @@ class TheThreadLevelScalesIt(_ShadowField):
     def setUp(self) -> None:
         super().setUp()
         thread = Thread.objects.get(owner=self.sheet, target_gift=self.gift)
-        thread.level = 10  # stored x10: shown level 1
+        thread.level = 10
         thread.save(update_fields=["level"])
         self.mira.threads.invalidate()
 

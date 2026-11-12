@@ -14,7 +14,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   ultimate (#4118); the manifestation terms (#4118): Manifestation option, Character
   manifestation; the creation-personalization terms (#4099): Hold, Price, Early form,
   Personalized name; and Prepared Text (#4101); and Cosmetic Mage Scar (#4501); and Magical training points and Teaching fit (#4659,
-  ADR-4659-B; replaced the #4457 Magic skill floor); and Shown thread level / level cap (#4585); and Drift, Drift correction, Conversion offer,
+  ADR-4659-B; replaced the #4457 Magic skill floor); and Thread level / level cap (#4585; one scale since #5091); and Drift, Drift correction, Conversion offer,
   Conversion rite (#4733, slice 4 of #4672); and Thread retune (#4735, slice 6 of #4672)
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md) - also holds the #4581 vow added effect terms
   (ADR-4581-A): Vow added effect, Upgrade (of a vow added effect), Added-effect firing
@@ -43,7 +43,9 @@ term is chosen and the rest are listed under `_Avoid_`.
   amended Vision; and the steward terms (slice 4, ADR-4333-C): Steward, god sign, Catalogue
   clue; and the live route (slice 5): Live route / live answer; and the worn-piece terms
   (#4520): Worn piece, Resonance fed; and the slice 4 terms (#4530): Requested item, Relic
-  ease
+  ease; and the being pact terms (#4341, ADR-4341; code in `world/pacts`): Pact (being pact,
+  follower pact), Pact offer, Pact commitment, Holder, Pact period, Patronage, Chosen, Patron
+  target (_Avoid_: bond, compact, contract, terms, obligation, vow, oath, tithe, debt, deal)
 - [ceremonies](src/world/ceremonies/AGENT_GLOSSARY.md)
 - [estates](src/world/estates/AGENT_GLOSSARY.md)
 - [checks](src/world/checks/AGENT_GLOSSARY.md) - also holds Favor as a modifier source (#4333); band position, the slide and own standing (#4601; the hopeless pin was removed by #4723); and modifier level, size, value table, level baseline, taper and lane (#4594), with worn items' level from quality (#4628) and distinctions' from their holder (#4638); the stat lane (#4726)
@@ -52,7 +54,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   Application (way of moving, dodges), movement source, strength and reach band (#5066)
 - [progression](src/world/progression/AGENT_GLOSSARY.md)
 - [classes](src/world/classes/AGENT_GLOSSARY.md)
-- [societies](src/world/societies/AGENT_GLOSSARY.md) - also holds the Almanach de Catenys, and title station, chartered fief, claim and pledged liege (#4983), layout and place-name bank (#4986), and Domain (land at barony and county only), hinterland, rural pool, Capacity and Dormant (#5069)
+- [societies](src/world/societies/AGENT_GLOSSARY.md) - also holds the Almanach de Catenys, and title station, chartered fief, claim and pledged liege (#4983), layout and place-name bank (#4986), and Domain (land at barony and county only), hinterland, rural pool, Capacity, Dormant and Regional event (#5069)
   feudal-ladder builder terms (#3983): Almanach de Catenys, Rung (stub, canonical in areas),
   Seat, Hall, Land Shape, Demesne, House State, Household, Contested Title, and (#3983 Plan B
   Task 7) Claim Grants, Founder Place, Capital (canonical; areas holds a stub), Claim Tier
@@ -356,7 +358,8 @@ Regard Modulation", "Relationship Bond Pull Modulation", "Pull Target Modulation
 framing in [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
 
 **Focus pick** (#4759):
-An option in a vow's catalog a holder chooses at pick level 1 to 3 (`VowFocusPick`); the vow rows
+An option in a vow's catalog a holder chooses at pick level 10, 20 or 30 (`VowFocusPick`,
+#5091); the vow rows
 pointing at it through `focus_pick` reach only holders who chose it. Priced from its value and
 limits, within a per-level budget. _Avoid_: talent, feat, perk.
 Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
@@ -407,7 +410,8 @@ Full entry: [mechanics AGENT_GLOSSARY](src/world/mechanics/AGENT_GLOSSARY.md).
 
 **Vow-scaled maneuver effect** (#4783):
 A `VowStatScaling` row on a "maneuver_effect" target (such as "Rally: surge intensity"): the
-holder's shown thread level x `bonus_per_level` is added to that maneuver effect. Replaced
+holder's thread rung (whole steps of 10 thread levels) x `bonus_per_level` is added to that
+maneuver effect. Replaced
 `CovenantRoleActionScaling`. _Avoid_: surges given, covenant scaled action, action scaling.
 Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
 
@@ -623,6 +627,14 @@ called "standing" (Reputation's avoid-word). Consort/paramour union vocabulary a
 rank-relative `PrestigeRankBand` benefits (ADR-0210) ride it — see
 `src/world/societies/AGENT_GLOSSARY.md` and `src/world/roster/AGENT_GLOSSARY.md`.
 _Avoid_: standing, deterrence score, power rating.
+
+**Being pact**:
+A character's pact with a being (`CharacterPact`, `world/pacts`, #4341), offered on a pledge
+and accepted at its closing rite; the being becomes her patron. One of the pact family beside
+the Court Pact, Marriage Pact and Org Pact. Full entry: [worship
+AGENT_GLOSSARY](src/world/worship/AGENT_GLOSSARY.md).
+_Avoid_: bond (bond ultimates), compact, contract, terms, obligation, vow, oath, tithe, debt,
+deal.
 
 **OrgPact / Betrothal / Match Dossier**:
 The #2999 diplomacy layer riding Stature: OrgPact (lever-based paper pacts, sibling of

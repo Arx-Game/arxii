@@ -12,7 +12,7 @@ the hands still feel the sun.
 In a fight (``_StrikeField``, the Strike journeys' Steading) the claws are a Strike weapon
 listed before bare hands, rolled on "Unarmed Attack", and a landed Strike deals the claws'
 own damage: 5 at a Success damage roll (x1), above the Strike's base damage of 3. A Wolf
-facet on the claws, with a Wolf thread at shown level 1 and "+2 Strike: base damage" on the
+facet on the claws, with a Wolf thread at level 10 and "+2 Strike: base damage" on the
 facet, adds 2: the claws take enchantments through the ordinary facet path.
 """
 

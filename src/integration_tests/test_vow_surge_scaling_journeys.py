@@ -26,7 +26,7 @@ from world.mechanics.maneuver_effects import ensure_maneuver_effects, get_maneuv
 from world.mechanics.models import ModifierCategory
 
 BAND_INTENSITY = 3
-THREAD_LEVEL = 2
+THREAD_LEVEL = 20
 BONUS_PER_LEVEL = 50
 # 100 + 2 x 50 = 200%: the Success band's intensity, doubled.
 VOWED_SUCCESS_INTENSITY = BAND_INTENSITY * 2

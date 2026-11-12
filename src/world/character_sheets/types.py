@@ -1006,7 +1006,7 @@ class StaffMentorBondRow(TypedDict):
 class StaffEditRows(TypedDict):
     """The CG rows a sheet holds, by id, for staff edit mode's editors (#4221).
 
-    ``stats`` is display scale by trait id; ``form`` is option id by form trait id.
+    ``stats`` is the stored value by trait id; ``form`` is option id by form trait id.
     """
 
     stats: dict[int, int]

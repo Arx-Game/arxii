@@ -160,7 +160,7 @@ class RallyByDesignationTests(_SocialField):
 class VowScaledRallySurgeTests(_SocialField):
     """A rallier's vow on "Rally: surge intensity" scales the surge's intensity only (#4783)."""
 
-    THREAD_LEVEL = 2
+    THREAD_LEVEL = 20
     BONUS_PER_LEVEL = 50  # 100 + 2 x 50 = 200%
 
     @classmethod

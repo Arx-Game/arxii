@@ -8,10 +8,11 @@ invocation writes a ``FavorInvocation`` row, which is both the weekly counter an
 the log. Callers (mission options, scene checks, scene actions) own the check the
 bonus lands on and where the lines are delivered.
 
-Difficulty, in points: ``DevotionConfig.base_difficulty`` minus the Chosen ease
-(``ChosenFavorConfig.invocation_ease_points``) for an active patronage of the
-being, minus the favor ease at the configured thresholds, minus the character's
-favor invocation total for the being (``favor_modifier_total``). Never below
+Difficulty, in points: ``DevotionConfig.base_difficulty`` minus the Chosen ease (the
+character's patron-target favor invocation total, from the Chosen distinction, read only
+for a being she is the Chosen of; #4341), minus the favor ease at the configured
+thresholds, minus the rest of her favor invocation total for the being
+(``general_favor_modifier_total``). Never below
 Trivial. Eases add (ruling 12). The worn pieces carrying a facet the being favors, the keepsakes
 of the being she carries and its Relic ease it too (``worn_services.worn_meaning``, #4520,
 #4530), within ``DevotionConfig.invocation_meaning_ease_max``; a sacrifice does not read
@@ -34,7 +35,11 @@ from world.scenes.action_constants import (
 )
 from world.worship.constants import FavorAwardKind
 from world.worship.exceptions import FavorInvocationRefused
-from world.worship.favor_services import active_patronage_of, favor_modifier_total
+from world.worship.favor_services import (
+    chosen_patronage_of,
+    general_favor_modifier_total,
+    patron_modifier_total,
+)
 from world.worship.types import (
     InvocationBonusRow,
     InvocationChoice,
@@ -101,6 +106,27 @@ def favor_with(sheet: CharacterSheet, being: WorshippedBeing) -> int:
     return standing.favor if standing is not None else 0
 
 
+def favor_ease_for(
+    sheet: CharacterSheet, being: WorshippedBeing, *, config: DevotionConfig | None = None
+) -> InvocationEase | None:
+    """The favor band's ease for ``sheet`` with ``being``, or None below the low band.
+
+    The configured high band eases more than the low band. Read by the invocation check
+    and by a pact's resist check (#4341), which eases by the same band.
+    """
+    config = config or get_devotion_config()
+    favor = favor_with(sheet, being)
+    if favor >= config.favor_ease_high_threshold:
+        threshold, points = config.favor_ease_high_threshold, config.favor_ease_high_points
+    elif favor >= config.favor_ease_low_threshold:
+        threshold, points = config.favor_ease_low_threshold, config.favor_ease_low_points
+    else:
+        return None
+    return InvocationEase(
+        label=FAVOR_EASE_LABEL.format(favor=favor, threshold=threshold), points=points
+    )
+
+
 def invocation_difficulty(
     sheet: CharacterSheet,
     being: WorshippedBeing,
@@ -114,42 +140,27 @@ def invocation_difficulty(
     (``worn_meaning``; pass ``worn`` when the caller already read it). A sacrifice passes
     ``include_worn=False``: the item given up is its own ease.
     """
-    from world.worship.services import get_chosen_favor_config  # noqa: PLC0415
     from world.worship.worn_services import worn_meaning  # noqa: PLC0415
 
     config = get_devotion_config()
     base_points = DIFFICULTY_VALUES[config.base_difficulty]
     eases: list[InvocationEase] = []
-    if active_patronage_of(sheet, being) is not None:
-        eases.append(
-            InvocationEase(
-                label=CHOSEN_EASE_LABEL.format(being=being.name),
-                points=get_chosen_favor_config().invocation_ease_points,
+    if chosen_patronage_of(sheet, being) is not None:
+        # No row when nothing eases it (no Chosen distinction designated or held).
+        chosen_points = patron_modifier_total(sheet, being, FAVOR_INVOCATION_CATEGORY_NAME)
+        if chosen_points:
+            eases.append(
+                InvocationEase(
+                    label=CHOSEN_EASE_LABEL.format(being=being.name), points=chosen_points
+                )
             )
-        )
-    favor = favor_with(sheet, being)
-    if favor >= config.favor_ease_high_threshold:
-        eases.append(
-            InvocationEase(
-                label=FAVOR_EASE_LABEL.format(
-                    favor=favor, threshold=config.favor_ease_high_threshold
-                ),
-                points=config.favor_ease_high_points,
-            )
-        )
-    elif favor >= config.favor_ease_low_threshold:
-        eases.append(
-            InvocationEase(
-                label=FAVOR_EASE_LABEL.format(
-                    favor=favor, threshold=config.favor_ease_low_threshold
-                ),
-                points=config.favor_ease_low_points,
-            )
-        )
+    favor_ease = favor_ease_for(sheet, being, config=config)
+    if favor_ease is not None:
+        eases.append(favor_ease)
     eases.append(
         InvocationEase(
             label=MODIFIER_EASE_LABEL.format(being=being.name),
-            points=favor_modifier_total(sheet, being, FAVOR_INVOCATION_CATEGORY_NAME),
+            points=general_favor_modifier_total(sheet, being, FAVOR_INVOCATION_CATEGORY_NAME),
         )
     )
     if include_worn:

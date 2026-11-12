@@ -1,9 +1,10 @@
 """Thread crossing threshold model (#1885).
 
 Authored catalog rows that gate thread-level advancement across PathStage
-crossing levels (3, 6, 11, 16, 21). Mirrors ``ClassLevelUnlock``'s shape but
-keyed on ``(target_kind, level)`` so a level-3 GIFT crossing can require
-different things than a level-3 COVENANT_ROLE crossing.
+crossing levels (thread levels 30, 60, 110, 160, 210: the Path crossings times
+ten, #5091). Mirrors ``ClassLevelUnlock``'s shape but keyed on
+``(target_kind, level)`` so a level-30 GIFT crossing can require different
+things than a level-30 COVENANT_ROLE crossing.
 
 Requirements FK to a ``ThreadCrossingThreshold`` via the polymorphic
 ``thread_crossing_threshold`` field on ``AbstractUnlockRequirement`` (the
@@ -27,8 +28,9 @@ from world.magic.constants import TargetKind
 class ThreadCrossingThreshold(SharedMemoryModel):
     """Authored gate at a thread-level PathStage crossing.
 
-    One row per ``(target_kind, level)`` where ``level`` is a crossing level
-    (i.e. ``stage_for_level(level) != stage_for_level(level - 1)``). When a
+    One row per ``(target_kind, level)`` where ``level`` is a thread crossing level
+    (30, 60, 110, 160, 210: the Path crossings times ten, ``is_thread_crossing_level``,
+    #5091). When a
     thread's imbuing loop would advance to ``level``, the loop checks for a
     matching threshold row; if one exists, its requirements must be met before
     the level crosses.
@@ -44,15 +46,15 @@ class ThreadCrossingThreshold(SharedMemoryModel):
     )
     level = models.PositiveSmallIntegerField(
         help_text=(
-            "Shown thread level (the number players see; a thread stored at 30 shows 3). "
-            "Must be a crossing level (3, 6, 11, 16, 21)."
+            "Thread level (the number players see). "
+            "Must be a crossing level (30, 60, 110, 160, 210)."
         ),
     )
     stage = models.PositiveSmallIntegerField(
         choices=PathStage.choices,
         help_text=(
             "Derived PathStage at this level (denormalized for admin "
-            "clarity / filtering). Must match stage_for_level(level)."
+            "clarity / filtering). Must match the stage the level crosses into."
         ),
     )
 
@@ -63,32 +65,35 @@ class ThreadCrossingThreshold(SharedMemoryModel):
     def clean(self) -> None:
         """Validate that level is a crossing and stage matches."""
         super().clean()
+        from world.magic.services.threads import (  # noqa: PLC0415
+            THREAD_RUNG_SIZE,
+            is_thread_crossing_level,
+        )
+
         if self.level < 1:
             msg = "Level must be at least 1."
             raise ValidationError(msg)
 
-        current_stage = stage_for_level(self.level)
-        prev_stage = stage_for_level(self.level - 1)
-
-        if current_stage == prev_stage:
+        if not is_thread_crossing_level(self.level):
             msg = (
-                f"Level {self.level} is not a PathStage crossing "
-                f"(stage {current_stage} == stage {prev_stage} at level {self.level - 1}). "
-                "Crossing levels are 3, 6, 11, 16, 21."
+                f"Level {self.level} is not a crossing. Crossing levels are 30, 60, 110, 160, 210."
             )
             raise ValidationError(msg)
 
+        current_stage = stage_for_level(self.level // THREAD_RUNG_SIZE)
         if self.stage != current_stage:
             msg = (
-                f"Stage field ({self.stage}) does not match stage_for_level({self.level}) "
-                f"= {current_stage}."
+                f"Stage field ({self.stage}) does not match the stage level {self.level} "
+                f"crosses into ({current_stage})."
             )
             raise ValidationError(msg)
 
     def save(self, *args, **kwargs):  # type: ignore[no-untyped-def]
         """Auto-populate stage from stage_for_level if not set."""
         if self.stage is None or self.stage == 0:
-            self.stage = stage_for_level(self.level)
+            from world.magic.services.threads import THREAD_RUNG_SIZE  # noqa: PLC0415
+
+            self.stage = stage_for_level(self.level // THREAD_RUNG_SIZE)
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:

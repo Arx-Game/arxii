@@ -202,7 +202,7 @@ class PledgeViewSet(ReadOnlyModelViewSet):
 
         qs = (
             Pledge.objects.filter(is_active=True, being__is_active=True)
-            .select_related("being", "closing_rite")
+            .select_related("being", "closing_rite", "pact_offer__being", "pact_offer__condition")
             .order_by("being__name", "name")
         )
         if self.request.user.is_staff:
@@ -229,7 +229,12 @@ class PledgeCardViewSet(ReadOnlyModelViewSet):
 
     def get_queryset(self):
         qs = PledgeDetails.objects.select_related(
-            "project", "pledge__being", "pledge__closing_rite", "character_sheet"
+            "project",
+            "pledge__being",
+            "pledge__closing_rite",
+            "pledge__pact_offer__being",
+            "pledge__pact_offer__condition",
+            "character_sheet",
         ).order_by("-created_at", "-pk")
         if self.request.user.is_staff:
             return qs

@@ -114,7 +114,7 @@ class FacetEffectBonus(NaturalKeyMixin, SharedMemoryModel):
     )
     amount = models.IntegerField(
         help_text=(
-            "Added per thread level, times the item's and the attachment's quality "
+            "Added per 10 thread levels, times the item's and the attachment's quality "
             "multipliers. Negative for a facet that hinders the effect."
         ),
     )

@@ -99,8 +99,9 @@ export function StatsEditor({ rows, options, run }: EditorProps) {
             <Input
               aria-label={stat.name}
               type="number"
-              min={1}
-              max={5}
+              min={10}
+              max={50}
+              step={10}
               className="h-8 w-16"
               value={value(stat.id)}
               onChange={(event) => setDraft({ ...draft, [stat.id]: event.target.value })}

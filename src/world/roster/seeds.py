@@ -146,7 +146,7 @@ class NPCPresetSeedSpec(NamedTuple):
 
     name: str
     description: str
-    #: (STAT trait name, display-scale value 1-10).
+    #: (STAT trait name, stored value 10-100).
     trait_lines: tuple[tuple[str, int], ...]
     #: (SKILL name, true 1-100 value).
     skill_lines: tuple[tuple[str, int], ...]
@@ -159,7 +159,7 @@ _NPC_PRESET_SEED: tuple[NPCPresetSeedSpec, ...] = (
             "A trained watchman or house guard — solid in a fight, "
             "unremarkable everywhere else. Staff rewrite freely."
         ),
-        trait_lines=(("strength", 3), ("stamina", 3)),
+        trait_lines=(("strength", 30), ("stamina", 30)),
         skill_lines=(("Melee Combat", 25),),
     ),
     NPCPresetSeedSpec(
@@ -168,7 +168,7 @@ _NPC_PRESET_SEED: tuple[NPCPresetSeedSpec, ...] = (
             "A polished court fixture — persuasive and composed under scrutiny. "
             "Staff rewrite freely."
         ),
-        trait_lines=(("charm", 3), ("presence", 3)),
+        trait_lines=(("charm", 30), ("presence", 30)),
         skill_lines=(("Persuasion", 25), ("Performance", 15)),
     ),
     NPCPresetSeedSpec(
@@ -176,7 +176,7 @@ _NPC_PRESET_SEED: tuple[NPCPresetSeedSpec, ...] = (
         description=(
             "A venue-running fixture NPC — personable enough to run a room. Staff rewrite freely."
         ),
-        trait_lines=(("charm", 2), ("presence", 2)),
+        trait_lines=(("charm", 20), ("presence", 20)),
         skill_lines=(("Persuasion", 15),),
     ),
     NPCPresetSeedSpec(
@@ -184,7 +184,7 @@ _NPC_PRESET_SEED: tuple[NPCPresetSeedSpec, ...] = (
         description=(
             "A sharp-eyed inquirer, good at noticing what others miss. Staff rewrite freely."
         ),
-        trait_lines=(("wits", 3), ("perception", 3)),
+        trait_lines=(("wits", 30), ("perception", 30)),
         skill_lines=(("Investigation", 25),),
     ),
 )
@@ -219,14 +219,14 @@ def ensure_starter_npc_presets() -> None:
         if preset is None:
             continue
 
-        for trait_name, display_value in spec.trait_lines:
+        for trait_name, value in spec.trait_lines:
             trait = Trait.objects.filter(name__iexact=trait_name, trait_type=TraitType.STAT).first()
             if trait is None:
                 continue
             NPCPresetTraitLine.objects.get_or_create(
                 preset=preset,
                 trait=trait,
-                defaults={"display_value": display_value},
+                defaults={"value": value},
             )
 
         for skill_name, value in spec.skill_lines:

@@ -14,6 +14,7 @@ from rest_framework import serializers
 from world.character_creation.constants import (
     GIFT_FACETS_KEY,
     REQUIRED_STATS,
+    STAT_ALLOCATION_STEP,
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
     TECHNIQUE_PERSONALIZATIONS_KEY,
@@ -375,6 +376,20 @@ def get_skill_allocation_errors(draft: CharacterDraft) -> list[str]:
     return errors
 
 
+def stat_value_error(stat_name: str, value: int) -> str | None:
+    """Why ``value`` is not an allocatable stat, or None when it is (#5091).
+
+    Stats allocate in stored units: STAT_MIN_VALUE to STAT_MAX_VALUE in steps of
+    STAT_ALLOCATION_STEP (one stat point).
+    """
+    if not STAT_MIN_VALUE <= value <= STAT_MAX_VALUE or value % STAT_ALLOCATION_STEP:
+        return (
+            f"{stat_name} must be between {STAT_MIN_VALUE} and {STAT_MAX_VALUE}, "
+            f"in steps of {STAT_ALLOCATION_STEP}."
+        )
+    return None
+
+
 def get_attributes_errors(draft: CharacterDraft) -> list[str]:
     """Return validation errors for the Attributes & Skills stage."""
     errors: list[str] = [*get_skill_allocation_errors(draft)]
@@ -392,8 +407,8 @@ def get_attributes_errors(draft: CharacterDraft) -> list[str]:
             continue
         if not isinstance(value, int):
             errors.append(f"{stat_name} has invalid value")
-        elif not (STAT_MIN_VALUE <= value <= STAT_MAX_VALUE):
-            errors.append(f"{stat_name} must be between {STAT_MIN_VALUE} and {STAT_MAX_VALUE}")
+        elif error := stat_value_error(stat_name, value):
+            errors.append(error)
 
     remaining = draft.calculate_points_remaining()
     if remaining > 0:

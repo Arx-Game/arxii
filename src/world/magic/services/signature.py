@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from world.magic.constants import TargetKind
-from world.magic.services.threads import shown_thread_level
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -39,8 +38,8 @@ def available_signature_bonuses(character_sheet, *, thread=None) -> list[Signatu
 
     When ``thread`` is provided (a TECHNIQUE-kind Thread), the list is further
     filtered by:
-    - ``min_crossing_level <= shown_thread_level(thread.level)`` (only bonuses the
-      thread has unlocked; ``min_crossing_level`` is a shown level, #4585).
+    - ``min_crossing_level <= thread.level`` (only bonuses the thread has unlocked;
+      both are stored levels, #5091).
     - Resonance match: a bonus with ``required_resonance`` set must match
       ``thread.resonance``; a bonus with ``required_resonance=None`` (facet-only
       gate) is universally available.
@@ -62,11 +61,10 @@ def available_signature_bonuses(character_sheet, *, thread=None) -> list[Signatu
     ]
     if thread is None:
         return bonuses
-    shown_level = shown_thread_level(thread.level)
     return [
         bonus
         for bonus in bonuses
-        if bonus.min_crossing_level <= shown_level
+        if bonus.min_crossing_level <= thread.level
         and (
             bonus.required_resonance_id is None
             or bonus.required_resonance_id == thread.resonance_id
@@ -83,12 +81,11 @@ def next_signature_bonus(
     once. Considers resonance-gated rows at the thread's resonance only: a facet-gated
     row depends on Motif facets the sheet does not walk here.
     """
-    shown_level = shown_thread_level(thread.level)
     ahead = [
         bonus
         for bonus in catalog
         if bonus.required_resonance_id == thread.resonance_id
-        and bonus.min_crossing_level > shown_level
+        and bonus.min_crossing_level > thread.level
     ]
     return min(ahead, key=lambda b: (b.min_crossing_level, b.name)) if ahead else None
 
@@ -98,8 +95,7 @@ def set_signature_bonus(thread: Thread, bonus: SignatureMotifBonus) -> Thread:
 
     Guards (in order):
     1. ``thread.target_kind == TECHNIQUE`` — else ``NotATechniqueThread``.
-    2. ``bonus.min_crossing_level <= shown_thread_level(thread.level)`` — else
-       ``SignatureBonusLocked`` (the minimum is a shown level, #4585).
+    2. ``bonus.min_crossing_level <= thread.level`` — else ``SignatureBonusLocked``.
        Authored ``min_crossing_level`` is the only gate on how deep a thread must
        be (#4099 — the old hard ``thread.level >= 3`` floor is gone, so a staff-set
        lower minimum now works).
@@ -122,7 +118,7 @@ def set_signature_bonus(thread: Thread, bonus: SignatureMotifBonus) -> Thread:
     Raises:
         NotATechniqueThread: ``thread.target_kind != TECHNIQUE``.
         SignatureBonusLocked: ``bonus.min_crossing_level`` is above the thread's
-            shown level.
+            level.
         SignatureBonusNotAvailable: The bonus gate is not satisfied by the owner's Motif.
         TechniqueNotOwned: The owner has no CharacterTechnique for this thread's technique.
     """
@@ -137,7 +133,7 @@ def set_signature_bonus(thread: Thread, bonus: SignatureMotifBonus) -> Thread:
     if thread.target_kind != TargetKind.TECHNIQUE:
         raise NotATechniqueThread
 
-    if bonus.min_crossing_level > shown_thread_level(thread.level):
+    if bonus.min_crossing_level > thread.level:
         raise SignatureBonusLocked
 
     if not bonus.qualifies_for(thread.owner):

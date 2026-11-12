@@ -29,22 +29,8 @@ class TraitRankDescriptionInline(admin.TabularInline):
     model = TraitRankDescription
     formset = OneRowPerFormSet
     extra = 1
-    fields = ["value", "display_value", "label", "description"]
-    # display_value is a @property, not a DB field — must be declared readonly or
-    # the inline's modelform_factory raises FieldError on every Trait change view (#3679).
-    readonly_fields = ["display_value"]
+    fields = ["value", "label", "description"]
     ordering = ["value"]
-
-    @admin.display(description="Display value")
-    def display_value(self, obj: TraitRankDescription) -> int | str:
-        """The shown value, or blank on the empty add row (#5006).
-
-        The empty row has no value yet, and a stat's display value divides it by ten, so
-        reading the model property there raised and every stat trait's page failed.
-        """
-        if obj.value is None:
-            return ""
-        return obj.display_value
 
 
 SKILL_IN_USE_RETYPED_MESSAGE = (
@@ -105,7 +91,7 @@ class TraitAdmin(admin.ModelAdmin):
 @admin.register(CharacterTraitValue)
 class CharacterTraitValueAdmin(admin.ModelAdmin):
     autocomplete_fields = ["character"]
-    list_display = ["character", "trait", "value", "display_value"]
+    list_display = ["character", "trait", "value"]
     list_filter = ["trait__trait_type", "trait__category"]
     search_fields = ["character__db_key", "trait__name"]
     ordering = ["character", "trait"]

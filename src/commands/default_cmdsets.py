@@ -135,6 +135,7 @@ from commands.journals import CmdJournal
 from commands.keepsakes import CmdKeepsake
 from commands.language import CmdSpeak, CmdTrainLanguage  # #2993
 from commands.locations import CmdRoom
+from commands.manifest import CmdManifest
 from commands.market import CmdMarket
 from commands.missions import CmdMission
 from commands.missives import CmdMissive  # #3289
@@ -320,6 +321,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdCompanion,
             # #1582 — signature-bonus selection namespace (set/clear/list).
             CmdSignature,
+            # #4341 - the technique picker: what a manifesting technique brings.
+            CmdManifest,
             # #2030 — motif style-binding namespace (bindstyle/unbindstyle/list).
             CmdMotif,
             # #2739 — technique training sessions (bare = list meters).

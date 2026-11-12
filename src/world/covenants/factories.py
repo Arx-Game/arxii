@@ -110,7 +110,7 @@ class SubroleCovenantRoleFactory(CovenantRoleFactory):
 
     parent_role = factory.SubFactory(CovenantRoleFactory)
     resonance = factory.SubFactory("world.magic.factories.ResonanceFactory")
-    unlock_thread_level = 3
+    unlock_thread_level = 30
     discovery_achievement = None
     codex_entry = None
     sword_weight = 0
@@ -557,7 +557,7 @@ def seed_resonance_subrole_slice(
         subrole, _ = CovenantRole.objects.get_or_create(
             parent_role=parent_role,
             resonance=resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             defaults={
                 "name": f"{parent_role.name} ({res_name})",
                 "slug": f"{parent_role.slug}-res-{idx}",
@@ -1221,10 +1221,10 @@ def wire_court_role_powers_catalog() -> "tuple[CovenantRole, list[ThreadPullEffe
     )
 
     # ------------------------------------------------------------------
-    # Per resonance: a tier-1 FLAT_BONUS pull, authored at min_thread_level=1
-    # (shown; stored 10, #4585) so the PACT is the real gate (#1589 final
+    # Per resonance: a tier-1 FLAT_BONUS pull, authored at min_thread_level=10
+    # (#4585, #5091) so the PACT is the real gate (#1589 final
     # review). A servant with no active pact gets granted cap 0 → their
-    # Court-role thread cannot imbue above level 0 → this min-level-1 effect
+    # Court-role thread cannot imbue above level 0 → this min-level-10 effect
     # does NOT apply → the pull yields no Court bonus. Keyed (target_kind,
     # resonance, tier, min_thread_level) — the unique lookup.
     #
@@ -1250,7 +1250,7 @@ def wire_court_role_powers_catalog() -> "tuple[CovenantRole, list[ThreadPullEffe
             target_kind=TargetKind.COVENANT_ROLE,
             resonance=resonance,
             tier=1,
-            min_thread_level=1,
+            min_thread_level=10,
             defaults={
                 "effect_kind": EffectKind.FLAT_BONUS,
                 "flat_bonus_amount": amount,
@@ -1342,8 +1342,8 @@ def engage_vow_with_thread(  # noqa: PLR0913 - mirrors the vow's own shape
 ) -> CharacterCovenantRole:
     """An engaged vow on ``role`` plus its COVENANT_ROLE thread at ``thread_level`` (#4581).
 
-    ``thread_level`` is the SHOWN level, the scale every vow and sub-role unlock is
-    authored on; the thread is stored at ``thread_level × 10`` (#4585).
+    ``thread_level`` is the thread's level, the number players see and every vow
+    and sub-role unlock is authored in (#5091).
 
     The thread sits on the role's anchor (its ``parent_role`` for a sub-role,
     else the role itself), where COVENANT_ROLE threads always key, with
@@ -1366,7 +1366,7 @@ def engage_vow_with_thread(  # noqa: PLR0913 - mirrors the vow's own shape
         target_kind=TargetKind.COVENANT_ROLE,
         target_trait=None,
         target_covenant_role=anchor,
-        level=thread_level * 10,
+        level=thread_level,
     )
     sheet.character.covenant_roles.invalidate()
     return membership
@@ -1499,7 +1499,7 @@ class VowFocusPickFactory(factory_django.DjangoModelFactory):
         django_get_or_create = ("covenant_role", "name")
 
     covenant_role = factory.SubFactory(CovenantRoleFactory)
-    pick_level = 1
+    pick_level = 10
     name = factory.Sequence(lambda n: f"Focus Pick {n}")
     description = ""
     value = 4

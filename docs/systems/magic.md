@@ -79,7 +79,7 @@ and the 5-axis Thread model no longer exist.
 | `Restriction` | Limitations that grant power bonuses (DESIGN kind) or a price a caster attaches to their own hold of a technique (PRICE kind, #4099, ADR-4099) | `name`, `description`, `power_bonus`, `kind` (`RestrictionKind`: DESIGN/PRICE), `creation_point_cost` (PRICE only, nullable; blank = not offered in creation), `cast_narration` (PRICE only; joins the cast narration) |
 | `Facet` | Flat imagery/symbolism vocabulary — every facet is a peer (Wolf, Silk, Scythe, Red). The Category > Subcategory > Specific hierarchy and its `parent` self-FK were removed by #3776 (ADR-0289): depth made a node's mechanical reach uneven, so a facet's reach is now the same whichever one you pick. Owner-agnostic — characters bind facets via `Motif`, a `WorshippedBeing` via `worship.BeingFacet`, an `ItemTemplate` via `inherent_facets`, all from this one shared pool. Typed by many hands, so it drifts; three guards share one spelling rule, `services.facets.facet_key` (#4197, ADR-4197): a picker shows the near-matches (`GET /api/magic/facets/near/`) before it offers to create, `POST /api/magic/facets/` (staff) answers a spelling that already resolves with `matched: true` instead of a near-duplicate, and the admin action **Merge into...** (`merge_facets`) repoints every binding to a survivor and retires the losers as aliases. | `name` (unique), `description` |
 | `FacetAlias` | Another spelling that routes to a facet (#4197): the names a merge retired, and any spelling staff add by hand. Resolved by the pickers' search and the create endpoint; never shown to a player. Content (`CONTENT_MODELS`, natural key `name`); cascades with its facet. | `name` (unique), `facet` FK |
-| `FacetEffectBonus` | A facet's always-on bonus to one maneuver effect (#4815, slice 4 of #4783): the facet names the effect, whatever its thread's resonance ("Wolf: +2 Charge: damage"). Counted by `passive_facet_bonuses` while the character wears an item carrying the facet and has a FACET thread on it: `amount x item quality x attachment quality x max(1, shown thread level)` per worn item facet. Authored in the Facet admin's inline; `merge_facets` moves the rows. Content (`CONTENT_MODELS`, natural key `(facet, target)`). | `facet` FK (CASCADE), `target` FK `ModifierTarget` ("maneuver_effect" category only), `amount` (non-zero); unique per `(facet, target)` |
+| `FacetEffectBonus` | A facet's always-on bonus to one maneuver effect (#4815, slice 4 of #4783): the facet names the effect, whatever its thread's resonance ("Wolf: +2 Charge: damage"). Counted by `passive_facet_bonuses` while the character wears an item carrying the facet and has a FACET thread on it: `amount x item quality x attachment quality x max(1, thread_rung(level))` (per 10 thread levels) per worn item facet. Authored in the Facet admin's inline; `merge_facets` moves the rows. Content (`CONTENT_MODELS`, natural key `(facet, target)`). | `facet` FK (CASCADE), `target` FK `ModifierTarget` ("maneuver_effect" category only), `amount` (non-zero); unique per `(facet, target)` |
 | `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance`, the **supported set**, a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050), `parent` (self-FK, PROTECT, `related_name="children"`: the umbrella gift this one hangs beneath; see "Gift lineage" below, #2891, ADR-0192), `natural_weapon_template` (nullable FK to an Unarmed `ItemTemplate`, PROTECT: claws or a bite the gift gives its holder, made and equipped by `grant_gift_to_character`, marked `ItemInstance.natural_weapon_gift`, and removed only when the gift is lost; #4898, see docs/systems/items.md "Natural weapons") |
 | `Affinity` | Celestial / Primal / Abyssal rows; `Affinity.objects.get_celestial_affinity()` / `get_primal_affinity()` / `get_abyssal_affinity()` are the canonical getters | `name`, `corruption_coefficient` (integer tenths of corruption per cast tick), optional OneToOne `modifier_target`. Listed read-only at `GET /api/magic/affinities/` (`AffinityViewSet`) |
 | `Resonance` | Identity resonance tags | `name`, `affinity` FK, `opposite` self-OneToOne, optional `modifier_target` OneToOne. Listed read-only, unpaginated, at `GET /api/magic/resonances/` (`ResonanceViewSet`, `ResonanceSerializer` with `affinity_name`; `?affinity=<pk>` filters): the CG Gift stage's Resonance picker reads it (#4665) |
@@ -1168,7 +1168,8 @@ inventory join later.
   vow is her first engaged role (the one `_resolve_source_vow_anchor` stamps as `source_vow`);
   it steps when that role, its resolved sub-role or its anchor has a
   `CovenantRoleTechniqueSpecialty` for one of the technique's function tags. `VowStep.level`
-  is the shown level of her COVENANT_ROLE thread on the anchor, never capped by the buff's own
+  is the rung (`thread_rung`, whole steps of 10 levels) of her COVENANT_ROLE thread on the
+  anchor, never capped by the buff's own
   level, so a weak cast from a deep vow steps at the vow's depth. `VowStep.tenths` is the
   matching row's `multiplier_tenths` (the larger when two rows match), times
   `SecondaryVowConfig.potency_tenths / 10` (rounded half up) for a secondary vow. None when
@@ -1539,14 +1540,14 @@ never changes the technique's identity.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `SignatureMotifBonus` | Staff-authored bonus gated on the character's Motif | `name`, `narrative_snippet`, `required_facet` FK (Facet, nullable), `required_resonance` FK (Resonance, nullable), `flat_intensity_delta` (SmallInt, additive to effective intensity), `min_crossing_level` (default 3; the only gate on which thread depth unlocks this bonus, #4099), `creation_point_cost` (nullable; character-creation points to weave this flourish at creation, blank = not offered in creation, #4099). At least one of `required_facet`/`required_resonance` must be set (`clean()` enforces). AND semantics when both gates set. |
+| `SignatureMotifBonus` | Staff-authored bonus gated on the character's Motif | `name`, `narrative_snippet`, `required_facet` FK (Facet, nullable), `required_resonance` FK (Resonance, nullable), `flat_intensity_delta` (SmallInt, additive to effective intensity), `min_crossing_level` (a thread level, default 30; the only gate on which thread depth unlocks this bonus, #4099), `creation_point_cost` (nullable; character-creation points to weave this flourish at creation, blank = not offered in creation, #4099). At least one of `required_facet`/`required_resonance` must be set (`clean()` enforces). AND semantics when both gates set. |
 | `SignatureMotifBonusDamageProfile` | Damage profile for a bonus (inherits `AbstractDamageProfile`) | `signature_bonus` FK |
 | `SignatureMotifBonusAppliedCondition` | Applied condition for a bonus (inherits `AbstractAppliedCondition`) | `signature_bonus` FK |
 
 **Gradual unlock (#4099, ADR-4099):** `min_crossing_level` is the only gate on which
 thread depth unlocks a flourish, now that the old hard `thread.level >= 3` floor on
-`set_signature_bonus` is gone. Staff may author a bonus below level 3 for an earlier
-flourish, or above 3 for a deeper one; `next_signature_bonus(thread, catalog)`
+`set_signature_bonus` is gone. Staff may author a bonus below level 30 for an earlier
+flourish, or above 30 for a deeper one (stored thread levels, #5091); `next_signature_bonus(thread, catalog)`
 (`services/signature.py`) returns the nearest not-yet-reached flourish for a "keep
 imbuing" progress display.
 
@@ -1684,12 +1685,12 @@ draft-time half):
 - `weave_creation_technique_thread(character_sheet, technique, resonance, *, level) ->
   Thread` weaves a TECHNIQUE thread at a starting level during creation, paid for in CG
   points. Raises `CreationThreadLevelTooHigh` above `CREATION_PERSONALIZATION_MAX_LEVEL`
-  (1), because a new character is level 1 and a thread never exceeds its character's
-  level (#4585); that also keeps creation below the first crossing (level 3).
+  (10), because a new character is level 1 and a thread never exceeds ten times its
+  character's level (#4585, #5091); that also keeps creation below the first crossing (30).
 - `next_signature_bonus(thread, catalog) -> SignatureMotifBonus | None` returns the
   nearest flourish the thread has not yet reached, for a "keep imbuing" display. See
   "Gradual unlock" above: `min_crossing_level` is the only gate on when a flourish
-  unlocks, not a hard level-3 floor.
+  unlocks, not a hard level floor.
 
 **Price at cast** (`src/world/magic/services/techniques.py` `use_technique`, the seam
 every cast path shares: scene cast, social enhanced action, combat round, clash, battle).
@@ -2444,7 +2445,7 @@ resonance instantly re-specializes every affected technique with no regeneration
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `AbstractSpecializedVariant` | Shared abstract base (SharedMemoryModel) — the "one specialization engine" | `parent` discriminator contract, `matching_variant` selection predicate (highest `unlock_thread_level ≤ thread level` at the thread's resonance), `newly_crossed_variants` discovery query, `discovery_narrative(is_first)` ceremony contract |
-| `TechniqueVariant` | Concrete subclass — a resonance-specialized form of a parent `Technique`. `NaturalKeyMixin`, `CONTENT_MODELS` (`magic.techniquevariant`, #3034) — NK `(parent_technique, resonance, unlock_thread_level)`, the same triple the `UniqueConstraint` already enforces | `parent_technique` (self-FK, `related_name="variants"`), `resonance` FK, `unlock_thread_level` (≥3 = variant), `name_override`, `intensity_delta`, `control_delta`, `discovery_achievement` FK, `codex_entry` FK. Unique per `(parent_technique, resonance, unlock_thread_level)` |
+| `TechniqueVariant` | Concrete subclass — a resonance-specialized form of a parent `Technique`. `NaturalKeyMixin`, `CONTENT_MODELS` (`magic.techniquevariant`, #3034) — NK `(parent_technique, resonance, unlock_thread_level)`, the same triple the `UniqueConstraint` already enforces | `parent_technique` (self-FK, `related_name="variants"`), `resonance` FK, `unlock_thread_level` (≥30 = variant, a stored thread level), `name_override`, `intensity_delta`, `control_delta`, `discovery_achievement` FK, `codex_entry` FK. Unique per `(parent_technique, resonance, unlock_thread_level)` |
 | `CovenantRole` | Refactored to inherit `AbstractSpecializedVariant` (schema no-op) | existing sub-role fields; `parent_role` (`related_name="sub_roles"`) is the variant parent |
 
 **Resolver — `resolve_specialized_variant(*, entity, character)`** (`world/magic/specialization/services.py`):
@@ -2580,8 +2581,8 @@ situationally unwanted. Surfaces:
 
 **Crossing ceremony — `execute_crossing_ceremonies(*, thread, starting_level, new_level)`**
 (`world/magic/crossing/ceremony.py`, ADR-0094): dispatches on `thread.target_kind` via a
-handler registry so **every** `TargetKind` gets a ceremony at PathStage crossing levels (3, 6,
-11, 16, 21), not just GIFT and COVENANT_ROLE. GIFT/COVENANT_ROLE handlers wrap the existing
+handler registry so **every** `TargetKind` gets a ceremony at PathStage crossing levels (thread
+levels 30, 60, 110, 160, 210), not just GIFT and COVENANT_ROLE. GIFT/COVENANT_ROLE handlers wrap the existing
 variant-discovery logic (`AbstractSpecializedVariant.newly_crossed_variants` → achievement +
 codex + narrative). The other seven kinds (TECHNIQUE, TRAIT, FACET,
 RELATIONSHIP_TRACK/CAPSTONE, MANTLE, SANCTUM) have stub handlers that log a debug no-op,
@@ -2636,7 +2637,7 @@ gift — added to `_ALWAYS_IN_ACTION_KINDS`). The frontend CG resonance picker i
 
 Proven end-to-end by `world/magic/tests/integration/test_gift_specialization_e2e.py` (#1578):
 CG provisioning → base resolve at level 0 → `gift_resonances_for` reads the thread's
-resonance → advance past `unlock_thread_level=3` → variant resolve (name/intensity/control
+resonance → advance past `unlock_thread_level=30` → variant resolve (name/intensity/control
 deltas) → discovery beat fires (achievement + codex).
 
 **The anima ritual records the same CG pick too (#2971).** `_finalize_anima_ritual`
@@ -3615,7 +3616,8 @@ technique is a limited form, a high-tier option on an ultimate is the full arriv
 | Piece | Status | What it is |
 |-------|--------|------------|
 | `TechniqueManifestOption` (`models/manifestation.py`) | [BUILT & WIRED] | Authored per-technique row: `technique`, then exactly one of `being` (`WorshippedBeing`) or `archetype` (`CompanionArchetype`) (check constraint `manifest_option_exactly_one_entity`; unique constraints `unique_manifest_option_being` and `unique_manifest_option_archetype`), plus `tier` (`OpponentTier`, default MOOK; a being's arrival size, ignored for an archetype) and `threat_pool` (nullable `ThreatPool`, #4076: what a being does each round on the caster's side; without one it arrives and never acts; ignored for an archetype). A technique with at least one option is a manifesting technique. Authored in the Technique admin through `TechniqueManifestOptionInline`. |
-| `CharacterManifestation` (`models/manifestation.py`) | [BUILT & WIRED] | Per-character choice: `character` (`CharacterSheet`), `technique`, `option`, nullable `companion` (for an archetype option, the character's own `Companion`). Unique per (character, technique). Keyed by (character, technique) rather than hung on `CharacterTechnique` because an ultimate has no `CharacterTechnique` row. Set by GM or staff in the admin (`CharacterManifestationAdmin`). |
+| `CharacterManifestation` (`models/manifestation.py`) | [BUILT & WIRED] | Per-character choice: `character` (`CharacterSheet`), `technique`, `option`, nullable `companion` (for an archetype option, the character's own `Companion`). Unique per (character, technique). Keyed by (character, technique) rather than hung on `CharacterTechnique` because an ultimate has no `CharacterTechnique` row. Set by the player with the technique picker (#4341, below), or by staff in the admin (`CharacterManifestationAdmin`). |
+| The technique picker (`services/manifestation.py`, #4341) | [BUILT & WIRED] | `manifest_choices_for(sheet)` lists each manifesting technique she knows with every option and her current pick; an option whose bond does not hold is listed unavailable, with the reason. `set_character_manifestation(sheet, technique, option, companion=None)` writes the row (one per character and technique) or raises `ManifestChoiceError`; for an archetype option with no companion named, her first unreleased companion of that archetype goes. Action `manifest_set`; telnet `manifest` (list) and `manifest <technique>=<option>`; `GET /api/magic/manifest-choices/?character_sheet=<id>` (owner or staff); the Spellbook's `ManifestPickerPanel`. A being option holds for any active patronage, so a being pact's patron can be chosen. |
 | `CharacterManifestation.bond_is_active()` | [BUILT & WIRED] | A being option holds while `active_patronage_for(character)` includes that being. An archetype option holds while the companion is the character's own, matches the archetype, and has no `released_at`. |
 | `CharacterManifestation.clean()` | [BUILT & WIRED] | The option must belong to the technique; a being option takes no companion; an archetype option needs one; the bond must be active. |
 | `manifest_bound_entity(participant, technique)` (`services/effect_handlers.py`) | [BUILT & WIRED] | Called from `CombatTechniqueResolver` (`world/combat/services/`) after conditions apply, on a successful, unbounced cast only (check `success_level >= 1`; a failed roll or a ward bounce manifests nothing). Returns the new ally `CombatOpponent` or None. |
@@ -3659,8 +3661,8 @@ untouched: it is reactive-flow driven and picks a `ThreatPool` entry, where mani
 a per-character choice among authored options.
 
 **Not built:**
-- [ABSENT] A character-creation picker for the manifested entity: choices are set in the
-  admin by GM or staff.
+- [ABSENT] A character-creation picker for the manifested entity: a player chooses after
+  creation with the technique picker (#4341), and staff can still set it in the admin.
 - [ABSENT] Manifestation outside combat: the hook is in the combat resolver only.
 - [ABSENT] A persistent bonded Companion created by a cast: a being arrives as a fight
   opponent row over its existing avatar character, and an archetype option materializes a
@@ -4701,7 +4703,7 @@ gift-resonance balance can pay the rest. A fixed setting (sanctum override) or t
 resonance means no call-up, never a refusal. `richness_after` is the room after any call-up.
 
 - **Power** (`substance_power`): `richness_after × substance_power_at_full ×
-  thread_level_multiplier(shown thread level, floored at 1)`, one ENVIRONMENT line
+  thread_level_multiplier(thread_rung(level), floored at 1)`, one ENVIRONMENT line
   "Surroundings: <label>" in `_derive_power` (`_add_environment_stage`), beside the
   unchanged resonance-environment line.
 - **Cost**: `_calculate_technique_cost` builds the plan with `control_surplus =
@@ -4993,10 +4995,11 @@ from world.magic.services import (
 cap = compute_effective_cap(thread)   # min(level_cap, anchor_cap)
 ```
 
-**Thread caps and the shown scale (#4585).** A thread level is stored ×10, like a stat:
-stored 30 shows 3. `compute_level_cap(sheet)` = `get_character_path_level(character) ×
+**Thread caps and one scale (#4585, #5091).** A thread shows its stored level, like stats
+and skills (ADR-5091; #4585's divide-by-10 "shown level" is gone): a thread at 30 reads 30.
+`compute_level_cap(sheet)` = `get_character_path_level(character) ×
 PATH_LEVEL_CAP_MULTIPLIER` (10, `world/magic/constants.py`; the sanctum Homecoming cap
-reads the same constant), so a thread is never shown above its owner's level. A sheet
+reads the same constant), so a level-3 character's threads stop at 30. A sheet
 with no class level still gets 10. `compute_effective_cap` = min(level cap, anchor cap)
 and is the only place the level cap applies; each anchor cap holds only what its anchor
 imposes (ORGANIZATION: the org's granted cap; GIFT: the level cap; FACET:
@@ -5004,19 +5007,20 @@ imposes (ORGANIZATION: the org's granted cap; GIFT: the level cap; FACET:
 remains for the progression dashboard's display. An imbue that stops at the level cap
 reports `blocked_by="LEVEL_CAP"`; the thread serializer's field is `level_cap`.
 
-Every authored thread threshold is a **shown** level: crossings (3, 6, 11, 16, 21),
+Every authored thread threshold is a stored thread level compared directly against
+`thread.level` (restated x10 by migration `0399_one_scale_values`): crossings (30, 60, 110,
+160, 210, `is_thread_crossing_level`: the Path crossings times ten),
 `ThreadCrossingThreshold.level`, `CrossingOption.crossing_level`,
 `TechniqueVariant`/`CovenantRole.unlock_thread_level`,
 `SignatureMotifBonus.min_crossing_level`, `ThreadPullEffect.min_thread_level`,
-`CovenantRoleGiftGrant.unlock_thread_level`, `VowAddedEffect.unlock_thread_level`
-(including its per-level scaling) and `CREATION_PERSONALIZATION_MAX_LEVEL`. Every
-comparison goes through `shown_thread_level(level)` (= `level // 10`,
-`services/threads.py`). The imbue loop checks a crossing only at a whole shown level
-(`next_level % 10 == 0 and is_crossing_level(shown_thread_level(next_level))`); the
-crossing handlers list shown crossings between the start and end levels with the same
-`is_crossing_level` Paths use. Soul Tether's per-scene cap and Hollow max and the outfit
-trickle's level factor also read the shown level. The predicate DSL's `min_thread_level`
-stays on the stored scale, like its `min_trait`.
+`CovenantRoleGiftGrant.unlock_thread_level`, `VowAddedEffect.unlock_thread_level` and
+`CREATION_PERSONALIZATION_MAX_LEVEL` (10). The imbue loop and the crossing handlers check
+each level passed with `is_thread_crossing_level`. Formulas tuned "per 10 thread levels"
+keep their numbers by counting `thread_rung(level)` (`level // THREAD_RUNG_SIZE`,
+`services/threads.py`), an internal step never shown: Soul Tether's per-scene cap and
+Hollow max, the outfit trickle's level factor, facet effect bonuses, vow added-effect
+scaling, the vow size step, derived amounts with a thread-level input and substance power.
+The predicate DSL's `min_thread_level` reads the stored level, like its `min_trait`.
 
 ### Per-Character Handlers
 

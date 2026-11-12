@@ -178,7 +178,7 @@ Success band).
 `ConditionInstance.modifier_vow_level` and `modifier_vow_tenths`, stamped at cast by
 `caster_vow_step` when the caster's first engaged vow (or its sub-role or anchor) has a
 `CovenantRoleTechniqueSpecialty` for one of the technique's functions; the level is her vow
-thread's shown level, uncapped by the buff's own level, and the tenths are the row's
+thread's rung (`thread_rung`, whole steps of 10 levels; the "shown level" before #5091), uncapped by the buff's own level, and the tenths are the row's
 `multiplier_tenths` (a secondary vow's scaled by its potency). Each sized modifier of the
 instance adds (value(L, size + 1) minus value(L, size)) x tenths / 10, rounded half up, as an
 untapered `vow_part` on the check lane, the opponent path and the stat lane. Every amount is

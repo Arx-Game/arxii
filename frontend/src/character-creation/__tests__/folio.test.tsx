@@ -45,7 +45,7 @@ describe('RecordRail', () => {
         ledger="One of eleven chapters begun."
       />
     );
-    expect(screen.getByRole('heading', { name: /your choices so far/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'CG selections' })).toBeInTheDocument();
     expect(screen.getByText('Perdition')).toBeInTheDocument();
     expect(screen.getByText('not yet chosen')).toHaveClass('unwritten');
     expect(screen.getByText('One of eleven chapters begun.')).toHaveClass('rail-ledger');
@@ -156,7 +156,6 @@ describe('StatRow', () => {
             id="lbl-strength"
             name="strength"
             value={6}
-            max={6}
             onChange={vi.fn()}
             canDecrease
             canIncrease={false}
@@ -173,12 +172,11 @@ describe('StatRow', () => {
 
   it('a read-only row has no steppers but keeps the grid cell they occupy (#4457)', () => {
     const { container } = render(
-      <StatRow id="lbl-occult" name="Occult" value={20} max={30} step={10} readOnly />
+      <StatRow id="lbl-occult" name="Occult" value={20} step={10} readOnly />
     );
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     const row = container.querySelector('.stat-row');
-    expect(row?.children).toHaveLength(4);
-    expect(row?.querySelector('.stat-pips')).toHaveClass('granted');
+    expect(row?.children).toHaveLength(3);
   });
 });
 

@@ -23,7 +23,7 @@ class MaturationApiTests(APITestCase):
         return sheet
 
     def test_owner_reads_maturation_state_and_spends(self):
-        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=5)
+        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=50)
         stat = StatTraitFactory(name="stamina_api_test")
         owner = AccountFactory()
         sheet = self._owned_sheet(owner, matured=30)  # milestones 24, 27, 30 (#3635)
@@ -32,7 +32,7 @@ class MaturationApiTests(APITestCase):
         state = self.client.get(f"/api/character-sheets/{sheet.pk}/maturation/").data
         assert state["available_points"] == 3
         assert state["next_milestone_year"] == 34
-        assert state["stat_cap"] == 5
+        assert state["stat_cap"] == 50
 
         response = self.client.post(
             f"/api/character-sheets/{sheet.pk}/spend-maturation-point/",

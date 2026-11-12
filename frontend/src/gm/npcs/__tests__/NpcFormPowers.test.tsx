@@ -105,7 +105,7 @@ async function fillPowers(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByLabelText('Spark'));
   await user.selectOptions(screen.getByLabelText('Anima stat'), '11');
   await user.selectOptions(screen.getByLabelText('Anima skill'), '12');
-  await user.type(screen.getByLabelText('Stats: Strength'), '4');
+  await user.type(screen.getByLabelText('Stats: Strength'), '40');
   await user.type(screen.getByLabelText('Skills: Persuasion'), '60');
 }
 
@@ -173,7 +173,7 @@ describe('NpcForm Powers', () => {
       {
         method: 'PATCH',
         url: `/api/character-sheets/${SHEET}/staff-stats/`,
-        body: { stats: { 13: 4 } },
+        body: { stats: { 13: 40 } },
       },
       {
         method: 'PATCH',
@@ -188,7 +188,7 @@ describe('NpcForm Powers', () => {
     failOn = 'staff-stats';
     renderForm();
     await user.type(screen.getByLabelText('Name'), 'Vael');
-    await user.type(await screen.findByLabelText('Stats: Strength'), '4');
+    await user.type(await screen.findByLabelText('Stats: Strength'), '40');
     await user.click(screen.getByRole('button', { name: 'Create NPC' }));
     expect(await screen.findByText(/saving the stats|refused/i)).toBeInTheDocument();
 

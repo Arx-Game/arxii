@@ -64,6 +64,9 @@ _SPAWN_POOLS: dict[str, tuple[str, ...]] = {
         DomainCrisisSeverity.CRISIS,
         DomainCrisisSeverity.CATASTROPHE,
     ),
+    # A regional event names its crisis type itself (#5069 slice 4); the pool is the
+    # fallback shape every spawner carries.
+    CrisisOrigin.REGIONAL: (DomainCrisisSeverity.TROUBLE, DomainCrisisSeverity.CRISIS),
 }
 
 _SEVERITY_ORDER: tuple[str, ...] = (

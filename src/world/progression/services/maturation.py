@@ -20,7 +20,7 @@ from world.progression.exceptions import (
 )
 from world.progression.models import MaturationSpend, MaturationStatCap
 from world.progression.services.skill_development import get_character_path_level
-from world.traits.constants import STAT_DISPLAY_DIVISOR
+from world.traits.constants import STAT_POINT_VALUE
 from world.traits.models import (
     CharacterTraitChange,
     CharacterTraitValue,
@@ -83,11 +83,9 @@ def stat_cap_for(sheet: "CharacterSheet") -> int | None:
 
 
 def skill_cap_for(sheet: "CharacterSheet") -> int | None:
-    """The per-skill cap for the sheet's current band in shown units (#4585).
+    """The per-skill cap for the sheet's current band, in stored units (#4585, #5091).
 
-    None when the band has no row or its ``skill_cap`` is blank: no cap. Callers
-    compare against stored values at ``cap * 10`` (ADR-0193: authored numbers
-    convert at the comparison, never at rest).
+    None when the band has no row or its ``skill_cap`` is blank: no cap.
     """
     row = _band_cap_row(sheet)
     return row.skill_cap if row else None
@@ -121,13 +119,12 @@ def spend_maturation_point(sheet: "CharacterSheet", trait: Trait) -> MaturationS
     trait_value, _ = CharacterTraitValue.objects.get_or_create(
         character=sheet, trait=trait, defaults={"value": 0}
     )
-    # Caps are authored in display dots; stat storage is internal ×10 (#2894).
     cap = stat_cap_for(sheet)
-    if cap is not None and trait_value.value >= cap * STAT_DISPLAY_DIVISOR:
+    if cap is not None and trait_value.value >= cap:
         raise MaturationCapReachedError(MaturationCapReachedError.user_message)
 
     old_value = trait_value.value
-    trait_value.value += STAT_DISPLAY_DIVISOR
+    trait_value.value += STAT_POINT_VALUE
     trait_value.save()
     CharacterTraitChange.objects.create(
         character_sheet=sheet,
@@ -158,7 +155,7 @@ def sync_maturation_spends(sheet: "CharacterSheet") -> int:
         should_be_active = spend.milestone_year <= sheet.matured_years
         if spend.is_active == should_be_active:
             continue
-        delta = STAT_DISPLAY_DIVISOR if should_be_active else -STAT_DISPLAY_DIVISOR
+        delta = STAT_POINT_VALUE if should_be_active else -STAT_POINT_VALUE
         trait_value, _ = CharacterTraitValue.objects.get_or_create(
             character=sheet, trait=spend.trait, defaults={"value": 0}
         )

@@ -1,6 +1,9 @@
 """Django admin configuration for the covenants system."""
 
+from django import forms
 from django.contrib import admin
+from django.core.exceptions import ValidationError
+from django.http import QueryDict
 from django.urls import reverse
 from django.utils.html import format_html
 
@@ -202,11 +205,55 @@ class SecondaryVowConfigAdmin(admin.ModelAdmin):
         return False
 
 
+ALLY_NEEDS_A_SITUATION = (
+    "The announce line names {ally}, but none of this perk's situations or rungs says which "
+    "ally acted. Add one that does, such as Enemy Held by Ally, or take {ally} out of the "
+    "line."
+)
+
+
+def _posted_rung_situations(data: QueryDict) -> set[str]:
+    """The extra situations of the rungs posted with the perk (#5092), read from the
+    form data: the rung inline is a sibling formset, validated on its own. A rung marked
+    for deletion does not count."""
+    prefix = VowSituationalPerk.rungs.rel.get_accessor_name()  # the rung inline's prefix
+    try:
+        total = int(data.get(f"{prefix}-TOTAL_FORMS", 0))
+    except (TypeError, ValueError):
+        return set()
+    return {
+        data.get(f"{prefix}-{i}-extra_situation")
+        for i in range(total)
+        if not data.get(f"{prefix}-{i}-DELETE")
+    } - {None, ""}
+
+
+class PerkSituationFormSet(OneRowPerFormSet):
+    """The perk's situations, checked against its announce line (#5092): a line naming
+    {ally} needs a situation, or a rung's extra situation, that knows which ally acted.
+    Checked here, not in the perk's clean(), because the situations and rungs being saved
+    with the perk are only known here. A firing below that rung says "an ally"."""
+
+    def clean(self) -> None:
+        super().clean()
+        from world.covenants.perks.evaluators import SITUATION_ALLY_FINDERS  # noqa: PLC0415
+
+        if "{ally}" not in (self.instance.announce_template or ""):
+            return
+        situations = {
+            form.cleaned_data.get("situation")
+            for form in self.forms
+            if form.cleaned_data and not form.cleaned_data.get("DELETE")
+        } | _posted_rung_situations(self.data)
+        if not situations & set(SITUATION_ALLY_FINDERS):
+            raise ValidationError(ALLY_NEEDS_A_SITUATION)
+
+
 class VowSituationalPerkSituationInline(admin.TabularInline):
     """Inline AND-composed situations on the perk admin (#2536)."""
 
     model = VowSituationalPerkSituation
-    formset = OneRowPerFormSet
+    formset = PerkSituationFormSet
     extra = 1
     autocomplete_fields = ("condition_property",)
 
@@ -220,8 +267,23 @@ class VowSituationalPerkRungInline(admin.TabularInline):
     autocomplete_fields = ("condition_property",)
 
 
+class VowSituationalPerkForm(forms.ModelForm):
+    """The perk form with room to write its announce line (#5092): a three-row, full-width
+    box, so a line naming {ally} and {target} is never cut off while it is written."""
+
+    class Meta:
+        model = VowSituationalPerk
+        fields = "__all__"  # noqa: DJ007 - the admin shows every authored column
+        widgets = {
+            "announce_template": forms.Textarea(
+                attrs={"rows": 3, "class": "vLargeTextField", "style": "width: 100%"}
+            ),
+        }
+
+
 @admin.register(VowSituationalPerk)
 class VowSituationalPerkAdmin(admin.ModelAdmin):
+    form = VowSituationalPerkForm
     list_display = (
         "name",
         "covenant_role",
@@ -230,9 +292,10 @@ class VowSituationalPerkAdmin(admin.ModelAdmin):
         "magnitude_tenths",
         "floor_success_level",
         "battle_action_kind",
+        "roll_kind",
         "focus_pick",
     )
-    list_filter = ("effect_kind", "beneficiary")
+    list_filter = ("effect_kind", "beneficiary", "roll_kind")
     search_fields = ("name", "covenant_role__name")
     autocomplete_fields = ("covenant_role", "check_type", "focus_pick")
     # mission_category/mission_template are NOT autocomplete_fields: the

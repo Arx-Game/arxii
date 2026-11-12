@@ -355,7 +355,7 @@ class SoulTetherFullPipelineTests(TestCase):
         rel_out = CharacterRelationship.objects.get(source=self.sinner, target=self.sineater)
         sinner_thread = _get_sinner_thread(self.sinner, self.capstone, self.resonance)
 
-        # Bump thread to stored 30 (shown 3) so the Hollow has capacity (3*10 = 30).
+        # Bump thread to 30 (rung 3) so the Hollow has capacity (3*10 = 30).
         _bump_thread_level(sinner_thread, level=30)
         sinner_thread.refresh_from_db()
 

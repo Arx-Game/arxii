@@ -137,15 +137,15 @@ target = ensure_aspect_target(aspect)   # AspectAdmin.save_model and ensure_aspe
 ### Skill targets (#4820)
 
 ```python
-from world.mechanics.services import ensure_skill_target, skill_modifiers_for_sheet
+from world.mechanics.services import ensure_skill_target, trait_modifiers_for_sheet
 
 # The stat-category target a skill's bonuses land on (target_trait = the skill's trait),
 # created if missing; None when another category already owns the name (retarget by hand).
 target = ensure_skill_target(skill)   # SkillAdmin.save_model and the paste call this
 
-# skill.pk -> the modifier a roll on that skill gets, for the sheet: card and condition
+# trait.pk -> the modifier a roll on that skill or stat gets, for the sheet (#4730): card and condition
 # rows in three queries, worn crafted pieces and the equipment walk from cached handlers.
-modifiers = skill_modifiers_for_sheet(sheet, skills)
+modifiers = trait_modifiers_for_sheet(sheet, traits)
 ```
 
 ### Amplification and Immunity
@@ -336,8 +336,9 @@ the target, and an effect target has none; the facet effect bonus is how a facet
   sheet the base value is used.
 - **Rally.** Morale restored is success level x the rallier's Rally morale. The surge intensity
   scale is `value / 100`, and the ally's roll line says "surge +N" when it adds intensity.
-- **Vows.** A `VowStatScaling` row on an effect target adds the holder's SHOWN thread level
-  (stored // 10) x `bonus_per_level`; every other category keeps the stored level. Rows on an
+- **Vows.** A `VowStatScaling` row on an effect target adds the holder's thread rung
+  (`thread_rung`: whole steps of 10 thread levels, never shown) x `bonus_per_level`; every
+  other category multiplies the thread level itself. Rows on an
   engaged role and on its anchor role both count, so a holder graduated to a sub-role keeps
   their scaling (`docs/systems/covenants.md`).
 - **Facets (#4815, slice 4 of #4783).** `FacetEffectBonus` (`world/magic/models/motifs.py`:
@@ -345,7 +346,7 @@ the target, and an effect target has none; the facet effect bonus is how a facet
   facet and target) is the facet naming the effect it boosts, whatever its thread's resonance
   (owner ruling 2026-11-01). `passive_facet_bonuses` adds, for each FACET thread whose facet is
   on a worn item, `amount x item quality multiplier x attachment quality multiplier x max(1,
-  SHOWN thread level)` per worn item facet, in one query for all the threads' facets. Staff
+  thread_rung(level))` (per 10 thread levels) per worn item facet, in one query for all the threads' facets. Staff
   author rows in the Facet admin's "Facet effect bonuses" inline; `merge_facets` moves them,
   keeping the winner's row where both facets boost one target.
 
@@ -363,7 +364,7 @@ amounts only: a size there is refused by `DistinctionEffect.clean()` ("Only dama
 partial protection effects take a size; clear the size."), as is a `DistinctionEffectRankSize`
 row on one. **Derived amounts (#4878):** a distinction effect or condition modifier effect can
 pick an input (`AmountInput`: character level, the holder's highest thread on a named trait or
-facet at its shown level, or the holder's rank on a named check from `compute_check_rating`),
+facet counted per 10 thread levels (`thread_rung`), or the holder's rank on a named check from `compute_check_rating`),
 a "per N" step (`amount_per`) and a cap (`amount_cap`), the columns of the abstract
 `DerivedAmountMixin` (`derived_amount_models.py`). The row's own amount is then the amount per
 step; `derived_amount(sheet, row, per_step)` (`derived_amounts.py`) returns it times

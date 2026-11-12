@@ -22,7 +22,7 @@ class StatPointApiTests(APITestCase):
         return sheet
 
     def test_owner_reads_state_and_spends(self):
-        MaturationStatCap.objects.create(path_stage=PathStage.POTENTIAL, stat_cap=6)
+        MaturationStatCap.objects.create(path_stage=PathStage.POTENTIAL, stat_cap=60)
         stat = StatTraitFactory(name="stamina_stat_point_api_test")
         owner = AccountFactory()
         sheet = self._owned_sheet(owner, level=3)  # 2 points
@@ -30,7 +30,7 @@ class StatPointApiTests(APITestCase):
 
         state = self.client.get(f"/api/character-sheets/{sheet.pk}/stat-points/").data
         assert state["available_points"] == 2
-        assert state["stat_cap"] == 6
+        assert state["stat_cap"] == 60
         assert state["level"] == 3
 
         response = self.client.post(

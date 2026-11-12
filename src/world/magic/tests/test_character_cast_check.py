@@ -103,18 +103,18 @@ class CharacterMagicCheckTypeTests(TestCase):
 
 
 _PROVISION_STATS = {
-    "strength": 2,
-    "agility": 2,
-    "stamina": 2,
-    "charm": 2,
-    "presence": 2,
-    "composure": 2,
-    "intellect": 2,
-    "wits": 2,
-    "stability": 2,
-    "luck": 2,
-    "perception": 2,
-    "willpower": 2,
+    "strength": 20,
+    "agility": 20,
+    "stamina": 20,
+    "charm": 20,
+    "presence": 20,
+    "composure": 20,
+    "intellect": 20,
+    "wits": 20,
+    "stability": 20,
+    "luck": 20,
+    "perception": 20,
+    "willpower": 20,
 }
 
 

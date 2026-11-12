@@ -44,7 +44,7 @@ interface HeritageStageProps {
   onStageSelect: (stage: Stage) => void;
 }
 
-/** The cost line for a Beginnings option, plain and unhedged. */
+/** The cost for a Beginnings option, plain and unhedged; read beside its codex link. */
 function costTag(cost: number): string {
   return cost === 0 ? 'No cost' : `${cost} CG points`;
 }
@@ -256,7 +256,8 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
             <Entry
               key={b.id}
               name={b.name}
-              tag={costTag(b.cg_point_cost)}
+              gloss={b.station || undefined}
+              tag=""
               chosen={isChosen}
               open={isChosen}
               onChoose={() => chooseBeginning(b)}
@@ -264,14 +265,17 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
             >
               {/* Decorative: the entry name beside it is the text. */}
               {b.art_image && <img className="entry-art" src={b.art_image} alt="" />}
-              {b.station && <p className="ledger-line">{b.station}</p>}
               <Paragraphs text={b.description} />
               {b.frame && (
                 <div className="frame">
                   <Paragraphs text={b.frame} />
                 </div>
               )}
-              <CodexLine entryId={b.codex_entry_ids?.[0]} name={b.name} />
+              <CodexLine
+                entryId={b.codex_entry_ids?.[0]}
+                name={b.name}
+                note={costTag(b.cg_point_cost)}
+              />
               <EntryDoors
                 chooseLabel={`Select ${b.name}`}
                 onChoose={() => chooseBeginning(b)}

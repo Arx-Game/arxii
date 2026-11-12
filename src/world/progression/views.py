@@ -640,11 +640,10 @@ class ProgressionUnlockViewSet(viewsets.GenericViewSet):
 
         for skill_prospect in skills_at_boundary(character):
             skill = skill_prospect.skill
-            rating = skill_prospect.next_rating / 10
             items.append(
                 {
                     "unlock_type": "skill_breakthrough",
-                    "display_name": f"{skill.name} Breakthrough to {rating:.1f}",
+                    "display_name": f"{skill.name} Breakthrough to {skill_prospect.next_rating}",
                     "xp_cost": skill_prospect.xp_cost or 0,
                     "requirements_met": skill_prospect.authored,
                     "locked_reason": None if skill_prospect.authored else "Not yet authored",

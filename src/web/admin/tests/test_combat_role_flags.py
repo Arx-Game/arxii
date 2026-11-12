@@ -163,7 +163,7 @@ class HolderOverBudgetTest(CombatRoleFlagsCase):
     def test_a_holder_over_budget_is_flagged_with_the_total(self) -> None:
         name = self.corvin.character_sheet.character.db_key
         result = flags._probe_holder_over_budget()
-        self.assertEqual(_texts(result), [f"{name}, Fulmination level 1 (5 of 4)"])
+        self.assertEqual(_texts(result), [f"{name}, Fulmination level 10 (5 of 4)"])
 
     def test_the_row_links_to_the_holders_picks(self) -> None:
         name = self.corvin.character_sheet.character.db_key
@@ -296,8 +296,10 @@ class RegistryTest(CombatRoleFlagsCase):
 
 
 #: The six probes' queries together, however many vows, picks, holders, conditions and
-#: styles (the style probe is one query, #4932).
-FLAG_QUERIES = 117
+#: styles (the style probe is one query, #4932). It does grow with the combo map's source
+#: list: the two condition probes read each setter source once, so a new SetterSource in
+#: web/admin/combo_map/sources.py adds 2 (the pact offer, #4341).
+FLAG_QUERIES = 119
 
 
 class QueryCountTest(CombatRoleFlagsCase):

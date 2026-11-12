@@ -71,7 +71,7 @@ class VowAddedEffectModelTests(TestCase):
             covenant_role=first.covenant_role,
             function=first.function,
             beneficiary=first.beneficiary,
-            unlock_thread_level=2,
+            unlock_thread_level=20,
         )
         other.full_clean()
 
@@ -92,7 +92,7 @@ class VowAddedEffectModelTests(TestCase):
             function=base.function,
             beneficiary=base.beneficiary,
             upgrades=base,
-            unlock_thread_level=1,
+            unlock_thread_level=10,
         )
         with self.assertRaises(ValidationError):
             again.full_clean()
@@ -107,7 +107,7 @@ class VowAddedEffectModelTests(TestCase):
     def test_deleting_a_role_takes_its_base_and_its_own_upgrade(self) -> None:
         role = CovenantRoleFactory()
         base = VowAddedEffectFactory(covenant_role=role, unlock_thread_level=0)
-        upgrade = VowAddedEffectFactory(covenant_role=role, upgrades=base, unlock_thread_level=3)
+        upgrade = VowAddedEffectFactory(covenant_role=role, upgrades=base, unlock_thread_level=30)
         role.delete()
         self.assertFalse(VowAddedEffect.objects.filter(pk__in=[base.pk, upgrade.pk]).exists())
 

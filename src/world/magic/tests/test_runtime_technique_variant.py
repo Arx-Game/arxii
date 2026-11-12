@@ -31,7 +31,7 @@ class RuntimeTechniqueVariantTests(TestCase):
         cls.variant = TechniqueVariantFactory(
             parent_technique=cls.technique,
             resonance=cls.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             intensity_delta=5,
             control_delta=2,
         )
@@ -39,7 +39,7 @@ class RuntimeTechniqueVariantTests(TestCase):
         thread = next(
             t for t in cls.sheet.character.threads.all() if t.target_kind == TargetKind.GIFT
         )
-        thread.level = 30  # stored; shows 3 (#4585)
+        thread.level = 30
         thread.save()
         cls.sheet.character.threads.invalidate()
 

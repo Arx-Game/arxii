@@ -159,7 +159,7 @@ unlocks, never grants" makes XP scarce, so this is the pull). Built:
   fiat trust bar as `xp`/`development`; telnet `gm award <char> hare=<org>
   reason=<text>`. Two more kinds (#3055 slice 1c) write the acquisition-provenance
   ledger, so a GM-fiat grant is distinguishable from organic advancement:
-  `award_type="stat"` raises an authored stat `Trait` by one display dot
+  `award_type="stat"` raises an authored stat `Trait` by one stat point (`STAT_POINT_VALUE`, 10)
   (`progression.award_stat_raise`, `source=TraitChangeSource.GM_GRANT` on the written
   `CharacterTraitChange`, `granting_tenure` set to the GM's own current tenure);
   `award_type="technique"` mints a `Technique` via the shared `learn_technique` seam

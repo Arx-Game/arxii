@@ -295,12 +295,13 @@ describe('ImbuePanel', () => {
 
   it.each([
     [
-      'a climb from shown 1 to 2',
+      'a climb from 10 to 20',
       { levels_gained: 10, new_level: 20 },
-      '1 level gained, now level 2',
+      '10 levels gained, now level 20',
     ],
-    ['an imbue within shown level 1', { levels_gained: 3, new_level: 15 }, 'Now level 1'],
-  ])('reads shown levels for %s', (_case, stored, expected) => {
+    ['a single level', { levels_gained: 1, new_level: 21 }, '1 level gained, now level 21'],
+    ['an imbue that climbs nothing', { levels_gained: 0, new_level: 15 }, 'Now level 15'],
+  ])('reads stored levels for %s', (_case, stored, expected) => {
     const mockMutate = vi.fn((_vars, options: { onSuccess: (result: unknown) => void }) =>
       options.onSuccess({ success: true, blocked_by: 'NONE', ...stored })
     );

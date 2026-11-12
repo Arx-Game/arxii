@@ -14,7 +14,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timedelta
+from fractions import Fraction
+from itertools import pairwise
 import math
+from typing import TYPE_CHECKING
 
 from django.db.models import Count, Q
 from django.urls import NoReverseMatch, reverse
@@ -24,6 +27,7 @@ from web.admin.authoring.links import builder_url
 from world.mechanics.constants import FAVOR_EARNING_CATEGORY_NAME, FAVOR_INVOCATION_CATEGORY_NAME
 from world.projects.constants import ProjectStatus
 from world.worship.constants import FAVOR_EARNING_BASE_PERCENT, BeingResonanceTier
+from world.worship.favor_services import chosen_distinction_patron_value, chosen_standing_q
 from world.worship.models import (
     Answer,
     BeingResonance,
@@ -34,6 +38,9 @@ from world.worship.models import (
     PledgeDetails,
     WorshippedBeing,
 )
+
+if TYPE_CHECKING:
+    from world.pacts.models import CharacterPact, PactOffer
 
 #: How far back "where each resonance comes from in play" looks.
 GRANT_WINDOW_DAYS = 30
@@ -108,7 +115,9 @@ class ModifierRow:
 
 
 def favor_modifier_rows(being: WorshippedBeing) -> list[ModifierRow]:
-    """Every source authored against ``being``'s favor targets or the any-being ones."""
+    """Every source authored against ``being``'s favor targets, the any-being ones and the
+    patron ones (#4341; those reach only the being's Chosen, listed under their own
+    "Your patron" target names, never as any-being)."""
     from world.conditions.models import ConditionInstance, ConditionModifierEffect  # noqa: PLC0415
     from world.covenants.models import CovenantRoleBonus  # noqa: PLC0415
     from world.distinctions.models import CharacterDistinction, DistinctionEffect  # noqa: PLC0415
@@ -121,7 +130,7 @@ def favor_modifier_rows(being: WorshippedBeing) -> list[ModifierRow]:
         )
         .filter(Q(target_being=being) | Q(target_being__isnull=True))
         .select_related("category")
-        .order_by("target_being", "category__name")
+        .order_by("targets_patron", "target_being", "category__name")
     )
     rows: list[ModifierRow] = []
     for target in targets:
@@ -192,10 +201,9 @@ def weeks_from_deeds(target: int, rate_percent: int, weekly_cap: int) -> int | N
 def pledge_pacing(pledge: Pledge) -> str:
     """ "At the weekly deed cap, from deeds alone: stranger N weeks · ..." for one pledge."""
     from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
-    from world.worship.services import get_chosen_favor_config  # noqa: PLC0415
 
     cap = get_devotion_config().weekly_deed_favor_cap
-    chosen = get_chosen_favor_config().earn_bonus_percent
+    chosen = chosen_distinction_patron_value(FAVOR_EARNING_CATEGORY_NAME)
     columns = (
         ("stranger", FAVOR_EARNING_BASE_PERCENT),
         (
@@ -401,9 +409,7 @@ def being_stats(being: WorshippedBeing) -> BeingStats:
     return BeingStats(
         domains=being.domains,
         worshippers_with_favor=DevotionStanding.objects.filter(being=being, favor__gt=0).count(),
-        chosen=DevotionStanding.objects.filter(
-            being=being, valence__isnull=False, released_at__isnull=True
-        ).count(),
+        chosen=DevotionStanding.objects.filter(chosen_standing_q(), being=being).count(),
         open_pledges=pledges.filter(project__status=ProjectStatus.ACTIVE).count(),
         closed_pledges=pledges.filter(
             project__status__in=[ProjectStatus.COMPLETED, ProjectStatus.FAILED]
@@ -464,8 +470,14 @@ class CreditSummary:
 
 
 def credit_summary(being: WorshippedBeing) -> CreditSummary:
-    """Who wrote and reviewed the being's pledge types: one name, "several", or not yet."""
-    pledges = list(Pledge.objects.filter(being=being).select_related("written_by", "reviewed_by"))
+    """Who wrote and reviewed the being's pledge types and pact offers (#4341): the names,
+    or not yet."""
+    from world.pacts.models import PactOffer  # noqa: PLC0415
+
+    pledges = [
+        *Pledge.objects.filter(being=being).select_related("written_by", "reviewed_by"),
+        *PactOffer.objects.filter(being=being).select_related("written_by", "reviewed_by"),
+    ]
 
     def _one(attr: str, missing: str) -> str:
         names = {getattr(p, attr).name for p in pledges if getattr(p, attr) is not None}
@@ -478,4 +490,238 @@ def credit_summary(being: WorshippedBeing) -> CreditSummary:
     return CreditSummary(
         written=_one("written_by", "Not yet written"),
         reviewed=_one("reviewed_by", "Not yet reviewed"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Pacts (#4341): the context beside each offer, and the summary beside a pledge's choice
+# ---------------------------------------------------------------------------
+
+#: The commitment's share of a period's deed cap the builder warns outside of.
+PACT_SHARE_LOW = Fraction(1, 4)
+PACT_SHARE_HIGH = Fraction(2, 3)
+
+
+def _favor_amount(value: Fraction) -> str:
+    """ "4 favor", or "about 11 favor" when the line falls between whole numbers."""
+    if value.denominator == 1:
+        return f"{value.numerator} favor"
+    return f"about {round(value)} favor"
+
+
+@dataclass(frozen=True)
+class PactDemand:
+    """How demanding one favor commitment is against a period's deed cap."""
+
+    heading: str
+    ceiling: str
+    kind: str
+    verdict: str
+
+
+def pact_demand(amount: int, period_weeks: int, weekly_cap: int) -> PactDemand:
+    """One favor commitment's share of what deeds alone can earn in a period, with the
+    builder's warning lines at a quarter and two thirds (spec section 4)."""
+    weeks = "week" if period_weeks == 1 else "weeks"
+    ceiling = weekly_cap * period_weeks
+    heading = f"How demanding is {amount} per {period_weeks} {weeks}"
+    if ceiling <= 0:
+        return PactDemand(heading, "Deeds earn no favor: the weekly deed cap is 0.", "warn", "")
+    share = Fraction(amount, ceiling)
+    percent = round(share * 100)
+    low, high = ceiling * PACT_SHARE_LOW, ceiling * PACT_SHARE_HIGH
+    lines = (
+        f"the warning lines at {round(PACT_SHARE_LOW * 100)}% ({_favor_amount(low)}) and "
+        f"{round(PACT_SHARE_HIGH * 100)}% ({_favor_amount(high)})"
+    )
+    if share < PACT_SHARE_LOW:
+        kind, verdict = "warn", f"{percent}% is below {lines}: it asks almost nothing."
+    elif share > PACT_SHARE_HIGH:
+        kind, verdict = "warn", f"{percent}% is above {lines}: few holders will keep it."
+    else:
+        kind, verdict = "ok", f"{percent}% is between {lines}."
+    return PactDemand(
+        heading=heading,
+        ceiling=(
+            f"Deeds alone: at most {ceiling} per period (cap {weekly_cap} a week). "
+            f"The commitment uses {percent}% of it."
+        ),
+        kind=kind,
+        verdict=verdict,
+    )
+
+
+@dataclass(frozen=True)
+class PactStageRow:
+    name: str
+    threshold: int
+    resist: str
+
+
+@dataclass(frozen=True)
+class PactOfferContext:
+    """What sits beside one saved offer: its demand, stages, holders and pledges."""
+
+    demands: list[PactDemand]
+    stages: list[PactStageRow]
+    checks: list[tuple[str, str]]
+    holders_by_stage: list[tuple[str, int]]
+    short_last_period: int
+    offered_on: list[str]
+    condition_url: str
+
+
+def _spacing_check(thresholds: list[int], severity_per_miss: int) -> tuple[str, str] | None:
+    spacings = sorted({b - a for a, b in pairwise(thresholds)})
+    if not spacings:
+        return None
+    shown = ", ".join(str(spacing) for spacing in spacings)
+    if spacings == [severity_per_miss]:
+        return (
+            "ok",
+            f"Stage spacing ({shown}) matches severity per missed period ({severity_per_miss}).",
+        )
+    return (
+        "warn",
+        f"Stage spacing ({shown}) differs from severity per missed period "
+        f"({severity_per_miss}): one missed period can skip a stage or take several to reach "
+        "the next.",
+    )
+
+
+def _short_last_period(pacts: list[CharacterPact]) -> int:
+    """Holders whose latest graded commitment period was short (resolved at Failure)."""
+    from world.pacts.models import PactPeriodDetails  # noqa: PLC0415
+
+    latest: dict[int, PactPeriodDetails] = {}
+    for details in (
+        PactPeriodDetails.objects.filter(
+            pact__in=pacts, commitment__isnull=False, severity_change__isnull=False
+        )
+        .select_related("project__outcome_tier")
+        .order_by("-created_at", "-pk")
+    ):
+        latest.setdefault(details.pact_id, details)
+    return sum(
+        1
+        for details in latest.values()
+        if details.project.outcome_tier is not None
+        and details.project.outcome_tier.success_level < 0
+    )
+
+
+def pact_offer_context(offer: PactOffer) -> PactOfferContext:
+    """The read-only panel beside one saved offer (#4341). Warnings never block a save."""
+    from world.conditions.types import AdvancementResistFailureKind  # noqa: PLC0415
+    from world.pacts.constants import CharacterPactCommitmentKind  # noqa: PLC0415
+    from world.pacts.models import CharacterPact  # noqa: PLC0415
+    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+
+    cap = get_devotion_config().weekly_deed_favor_cap
+    demands = [
+        pact_demand(row.amount, offer.period_weeks, cap)
+        for row in offer.commitments.all()
+        if row.kind == CharacterPactCommitmentKind.FAVOR_EARNED
+    ]
+    staged = list(
+        offer.condition.stages.filter(severity_threshold__isnull=False)
+        .select_related("resist_check_type")
+        .order_by("stage_order")
+    )
+    stages = [
+        PactStageRow(
+            name=stage.name,
+            threshold=stage.severity_threshold,
+            resist=(
+                f"{stage.resist_check_type.name} at {stage.resist_difficulty}"
+                if index and stage.resist_check_type_id is not None
+                else "none"
+            ),
+        )
+        for index, stage in enumerate(staged)
+    ]
+    lines: list[tuple[str, str]] = []
+    spacing = _spacing_check([stage.threshold for stage in stages], offer.severity_per_miss)
+    if spacing is not None:
+        lines.append(spacing)
+    overflow = [
+        stage.name
+        for stage in staged
+        if stage.advancement_resist_failure_kind == AdvancementResistFailureKind.HOLD_OVERFLOW
+    ]
+    if overflow:
+        lines.append(
+            (
+                "warn",
+                f"{', '.join(overflow)} holds overflow: the condition would roll a second "
+                "time. Set it to advance at its threshold.",
+            )
+        )
+    pacts = list(
+        CharacterPact.objects.filter(offer=offer, dissolved_at__isnull=True).select_related(
+            "condition_instance__current_stage"
+        )
+    )
+    by_stage: dict[str, int] = {}
+    for pact in pacts:
+        instance = pact.condition_instance
+        name = (
+            instance.current_stage.name
+            if instance is not None and instance.current_stage is not None
+            else "no stage"
+        )
+        by_stage[name] = by_stage.get(name, 0) + 1
+    order = {stage.name: index for index, stage in enumerate(stages)}
+    return PactOfferContext(
+        demands=demands,
+        stages=stages,
+        checks=lines,
+        holders_by_stage=sorted(by_stage.items(), key=lambda item: order.get(item[0], len(order))),
+        short_last_period=_short_last_period(pacts) if pacts else 0,
+        offered_on=[
+            f"Pledge: {name}, at its close"
+            for name in offer.pledges.order_by("name").values_list("name", flat=True)
+        ],
+        condition_url=_admin_url("admin:arxii_conditiontemplate_change", offer.condition_id),
+    )
+
+
+def favored_resonance_chips(being: WorshippedBeing) -> list[str]:
+    """ "<resonance> FAVORED" / "<resonance> ASSOCIATED", favored first."""
+    return [
+        f"{row.resonance.name} {row.get_tier_display().upper()}"
+        for row in BeingResonance.objects.filter(being=being)
+        .select_related("resonance")
+        .order_by("-tier", "resonance__name")
+    ]
+
+
+@dataclass(frozen=True)
+class PactOfferBrief:
+    """The chosen offer beside a pledge's picker: being, commitments, stages."""
+
+    being: str
+    commitments: str
+    stages: str
+
+
+def pact_offer_brief(offer: PactOffer) -> PactOfferBrief:
+    """ "8 favor per 2 game weeks; 1 custom" and "Sworn · Strained · ..." for one offer."""
+    from world.pacts.constants import CharacterPactCommitmentKind  # noqa: PLC0415
+
+    weeks = "game week" if offer.period_weeks == 1 else "game weeks"
+    rows = list(offer.commitments.all())
+    parts = [
+        f"{row.amount} favor per {offer.period_weeks} {weeks}"
+        for row in rows
+        if row.kind == CharacterPactCommitmentKind.FAVOR_EARNED
+    ]
+    custom = sum(1 for row in rows if row.kind == CharacterPactCommitmentKind.CUSTOM)
+    if custom:
+        parts.append(f"{custom} custom")
+    stages = offer.condition.stages.filter(severity_threshold__isnull=False).order_by("stage_order")
+    return PactOfferBrief(
+        being=offer.being.name,
+        commitments="; ".join(parts) or "none yet",
+        stages=" · ".join(stage.name for stage in stages),
     )

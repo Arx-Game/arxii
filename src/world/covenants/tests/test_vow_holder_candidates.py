@@ -48,7 +48,7 @@ class OwnVowCandidateTests(TestCase):
         self.covenant = CovenantFactory(covenant_type=CovenantType.DURANCE)
         self.anchor = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
         self.sub_role = SubroleCovenantRoleFactory(
-            parent_role=self.anchor, resonance=self.resonance, unlock_thread_level=3
+            parent_role=self.anchor, resonance=self.resonance, unlock_thread_level=30
         )
         self.sheet = CharacterSheetFactory()
 
@@ -57,7 +57,7 @@ class OwnVowCandidateTests(TestCase):
             self.sheet,
             self.anchor,
             covenant=self.covenant,
-            thread_level=3,
+            thread_level=30,
             resonance=self.resonance,
         )
         candidates = vow_holder_candidates(self.sheet, None)
@@ -73,14 +73,14 @@ class OwnVowCandidateTests(TestCase):
             self.sheet,
             CovenantRoleFactory(covenant_type=CovenantType.DURANCE),
             covenant=CovenantFactory(covenant_type=CovenantType.DURANCE),
-            thread_level=3,
+            thread_level=30,
         )
         # A secondary anchor with a qualifying sub-role: depth stays primary-only.
         engage_vow_with_thread(
             self.sheet,
             self.anchor,
             covenant=self.covenant,
-            thread_level=3,
+            thread_level=30,
             resonance=self.resonance,
             is_secondary=True,
         )
@@ -105,13 +105,13 @@ class OwnVowCandidateTests(TestCase):
             self.sheet,
             self.anchor,
             covenant=self.covenant,
-            thread_level=3,
+            thread_level=30,
             resonance=self.resonance,
         )
         candidates = vow_holder_candidates(self.sheet, None)
         with self.assertNumQueries(1):
             levels = vow_holder_thread_levels(candidates)
-        # Stored levels: shown 3 is stored 30 (#4585).
+        # Thread level 30.
         self.assertEqual(levels, {(self.sheet.pk, self.anchor.pk): 30})
 
     def test_no_candidates_reads_no_thread_levels(self) -> None:
@@ -128,18 +128,18 @@ class AllyCandidateTests(TestCase):
         self.subject_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
         self.mate_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
         self.mate_sub_role = SubroleCovenantRoleFactory(
-            parent_role=self.mate_role, resonance=self.resonance, unlock_thread_level=3
+            parent_role=self.mate_role, resonance=self.resonance, unlock_thread_level=30
         )
         self.sheet = CharacterSheetFactory()
         self.mate = CharacterSheetFactory()
         engage_vow_with_thread(
-            self.sheet, self.subject_role, covenant=self.covenant, thread_level=1
+            self.sheet, self.subject_role, covenant=self.covenant, thread_level=10
         )
         engage_vow_with_thread(
             self.mate,
             self.mate_role,
             covenant=self.covenant,
-            thread_level=3,
+            thread_level=30,
             resonance=self.resonance,
         )
         self.encounter = CombatEncounterFactory()
@@ -169,7 +169,7 @@ class AllyCandidateTests(TestCase):
             levels = vow_holder_thread_levels(candidates)
         self.assertEqual(
             levels,
-            # Stored levels: shown 1 and 3 are stored 10 and 30 (#4585).
+            # Thread levels 10 and 30.
             {(self.sheet.pk, self.subject_role.pk): 10, (self.mate.pk, self.mate_role.pk): 30},
         )
 

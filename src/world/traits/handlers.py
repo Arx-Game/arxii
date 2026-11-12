@@ -22,7 +22,6 @@ from world.traits.models import (
     PointConversionRange,
     Trait,
     TraitType,
-    display_trait_value,
 )
 
 #: The trait types a ``ModifierTarget`` with ``target_trait`` set can modify (#4820). A
@@ -42,10 +41,6 @@ class DefaultTraitValue:
         self.trait_name = trait_name
         self.trait_type = trait_type
         self.value = 0
-
-    @property
-    def display_value(self) -> int:
-        return 0
 
     def __str__(self) -> str:
         return f"Default: {self.trait_name} = 0"
@@ -257,20 +252,6 @@ class TraitHandler:
         has_pile = any(count >= 2 for count in kinds.values())  # noqa: PLR2004
         tapers = load_taper_rules(ModifierLane.STAT) if has_pile else {}
         return ModifierBreakdown(contributions=contributions, tapers=tapers).total
-
-    def get_trait_display_value(self, trait_name: str) -> int:
-        """
-        Get the display value for a trait (#2894): stats ÷10, skills true value.
-
-        Args:
-            trait_name: Name of the trait
-
-        Returns:
-            The value as players see it (modifiers included).
-        """
-        value = self.get_trait_value(trait_name)
-        trait = Trait.get_by_name(trait_name)
-        return display_trait_value(trait.trait_type if trait else TraitType.OTHER, value)
 
     def set_trait_value(self, trait_name: str, value: int) -> bool:
         """

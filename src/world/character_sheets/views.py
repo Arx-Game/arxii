@@ -55,12 +55,11 @@ from world.standoffs.serializers import (
 
 
 def _spendable_stat_rows(sheet: CharacterSheet, cap: int | None) -> list[dict]:
-    """Display-dot stat rows for the maturation/stat-point spend panels (#2756/#3001)."""
-    from world.traits.constants import STAT_DISPLAY_DIVISOR  # noqa: PLC0415
+    """Stat rows for the maturation/stat-point spend panels (#2756/#3001), stored values."""
     from world.traits.models import CharacterTraitValue, Trait, TraitType  # noqa: PLC0415
 
     values = {
-        tv.trait_id: tv.value // STAT_DISPLAY_DIVISOR
+        tv.trait_id: tv.value
         for tv in CharacterTraitValue.objects.filter(
             character=sheet, trait__trait_type=TraitType.STAT
         )

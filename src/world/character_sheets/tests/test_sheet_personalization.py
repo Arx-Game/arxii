@@ -55,7 +55,7 @@ class SheetPersonalizationTests(TestCase):
             level=1,
         )
         cls.next_flourish = SignatureMotifBonusFactory(
-            name="Rime walks with you", required_resonance=cls.resonance, min_crossing_level=3
+            name="Rime walks with you", required_resonance=cls.resonance, min_crossing_level=30
         )
 
     def _technique_entry(self):
@@ -76,7 +76,7 @@ class SheetPersonalizationTests(TestCase):
         self.assertEqual(entry["price"]["consumes"], [{"name": "Shard of rime", "quantity": 2}])
         self.assertEqual(entry["price"]["inflicts"], "Frostbitten fingers")
         self.assertEqual(entry["next_signature"]["name"], "Rime walks with you")
-        self.assertEqual(entry["next_signature"]["min_level"], 3)
+        self.assertEqual(entry["next_signature"]["min_level"], 30)
 
     def test_build_magic_query_count_holds_with_a_priced_hold_and_technique_thread(
         self,
@@ -139,24 +139,24 @@ class NextSignaturesByTechniqueTieBreakTests(TestCase):
     def test_picks_the_lowest_min_crossing_level(self) -> None:
         self._threads()
         SignatureMotifBonusFactory(
-            name="Farther flourish", required_resonance=self.resonance_a, min_crossing_level=6
+            name="Farther flourish", required_resonance=self.resonance_a, min_crossing_level=60
         )
         SignatureMotifBonusFactory(
-            name="Nearer flourish", required_resonance=self.resonance_b, min_crossing_level=3
+            name="Nearer flourish", required_resonance=self.resonance_b, min_crossing_level=30
         )
 
         result = next_signatures_by_technique(self.sheet.character)
 
         self.assertEqual(result[self.technique.pk]["name"], "Nearer flourish")
-        self.assertEqual(result[self.technique.pk]["min_level"], 3)
+        self.assertEqual(result[self.technique.pk]["min_level"], 30)
 
     def test_ties_on_level_break_by_name(self) -> None:
         self._threads()
         SignatureMotifBonusFactory(
-            name="Zed flourish", required_resonance=self.resonance_a, min_crossing_level=3
+            name="Zed flourish", required_resonance=self.resonance_a, min_crossing_level=30
         )
         SignatureMotifBonusFactory(
-            name="Able flourish", required_resonance=self.resonance_b, min_crossing_level=3
+            name="Able flourish", required_resonance=self.resonance_b, min_crossing_level=30
         )
 
         result = next_signatures_by_technique(self.sheet.character)

@@ -28,7 +28,7 @@ from world.character_creation.constants import (
 
 ```python
 from world.character_creation.types import (
-    StatAdjustment,      # TypedDict: stat, old_display, new_display, reason
+    StatAdjustment,      # TypedDict: stat, old_value, new_value, reason
     ResonanceSource,     # Dataclass: distinction_name, value
     ProjectedResonance,  # Dataclass: resonance_id, resonance_name, total, sources
 )
@@ -98,7 +98,7 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 | 3 | Lineage | The beginning's route exists (assigned with the beginning, #4395; none authored names the staff gap); family path resolved (claim: playable family of an offered kind in the area's realm; name: unique name; none: tarot card; with claim and name both offered and nothing chosen, the path resolves to name, #4024); every required shown prompt on that path answered (`get_lineage_errors`, #3617; a general write-in never shows, #4395). The life grids (#4124, #4395) and the kin rows are never required: a stage with nothing picked is a quiet one |
 | 5 | Path | Path selected (`get_path_errors`) |
 | 6 | Gift | Tradition, gift, >=1 technique(s), gift resonance, and Anima Check stat/skill all selected and valid (`compute_magic_errors`, 5-branch return-first gate); renders the `GiftStage` funnel component (#2426 Task 10) |
-| 7 | Attributes & Skills | All 12 primary stats present, valid range (1-5), points remaining = 0; skill point allocation validated against budget (moved in from Path, #2426 Task 9). No points in a Magic skill or one of its specializations (#4457). Draft allocations are display-scale; finalization stores stats ×10 and bridges each CG skill into a matching `CharacterTraitValue` row so checks and DP progression read them (ADR-0193, #2894) |
+| 7 | Attributes & Skills | All 12 primary stats present, each 10-50 in steps of 10 (`STAT_MIN_VALUE`/`STAT_MAX_VALUE`/`STAT_ALLOCATION_STEP`, checked by `validators.stat_value_error`, #5091), points remaining = 0; skill point allocation validated against budget (moved in from Path, #2426 Task 9). No points in a Magic skill or one of its specializations (#4457). Draft allocations are in stored units and finalization writes stats as allocated (`sheet_writers.set_stat_values`, ADR-5091), and bridges each CG skill into a matching `CharacterTraitValue` row so checks and DP progression read them (#2894) |
 | 8 | Appearance | Age (within `age_bounds`, below), height band, height inches, build all set |
 | 9 | Identity | `first_name` in draft_data |
 | 10 | Final Touches | Complete when CG points are in balance (`get_purse_errors`); the Actor's Sheet, goals, enemy, the Officially dead door (#4396), the card-unlocked chapter (#4846) and Introductions are all optional (#3621), and the Distinctions stage is retired -- #3675, distinctions are offered per CG chapter now, see `world.character_creation.offers` |
@@ -831,25 +831,15 @@ family influence x position), and ADR-0273 (family entry is a Vacancy).
 
 **Page order (#4124, #4395):** the family block (path picker when the route allows more
 than one path, then the path body: the house and the parents come first), the
-pick-lists asked on every path, the path's prompts, the kin rows (`KinRows`), then the
-life grids (`LifeGrids`), then the record.
+pick-lists asked on every path, the path's prompts, then the life grids (`LifeGrids`),
+then the record.
 
-**Kin rows (#4395; the states of #4870, slice 8 of #4813).** The people seated beside the
-parents: `draft_data["kin_rows"]`, a list of `{kind, name, gender_id, fate}` (`KinRowKind`
-twin / spouse / child / betrothed; `TwinFate` alive / dead, or blank; `SpouseFate` alive /
-dead / divorced / separated / fled, the last reading "Missing"; `BetrothedFate` promised /
-dead / missing / broken; `ChildFate` raised / fostered away / lost; one twin at most,
-`KIN_ROWS_MAX` rows; `_validate_kin_rows`). Finalize's `_bind_kin_rows`, after
-`_bind_kinship_node`, seats them in the kinship graph: a twin is a `Kinsperson` in the
-PC's family sharing every parent edge the PC has, `is_deceased` when its fate says so; a
-spouse is a wedlock `Union` (`wedlock_union_kind`), ended by death or divorce, dated
-`separated_at` through `separate_union` when separated, the spouse `is_missing` when fled;
-a betrothed is a `Union` of the kind marked `UnionKind.is_betrothal`
-(`betrothal_union_kind`, which refuses when no such kind is authored, so the row is logged
-and skipped), ended when broken off, the person dead or missing by fate; a child is a
-parentage edge from the PC, in the PC's family when raised, in none when fostered away,
-`is_deceased` when lost. Best-effort like the bind: a kinship refusal logs and skips the
-row. **The named parents' fates (#4870):** `draft_data.line_parent_fate` and
+**Kin rows retired (#5102, ADR-5102-A).** Creation once seated a twin, spouses, children
+and a betrothed beside the parents (`draft_data["kin_rows"]`, #4395/#4870); the owner ruled
+that a player's own family is built after creation (#5103), so the section, its validator
+and finalize's seating are gone. A draft still carrying the key finalizes with the parents
+alone. The kinship primitives it used (`create_person`, `record_union`, `separate_union`,
+`betrothal_union_kind`) stay. **The named parents' fates (#4870):** `draft_data.line_parent_fate` and
 `other_parent_fate` (`ParentFate` alive / dead / missing, blank is alive;
 `_validate_parent_fates`); `_bind_invented_parents` creates a dead parent `is_deceased`
 and marks a missing one `is_missing`. A claimed family's staff-authored parents are not
@@ -998,9 +988,13 @@ offers, folded to its heading and "N of M" (copy `life_stage_progress`) or Unkno
 open at a time (a click on the open one folds it); inside it one `.sec` per beat, one open
 at a time, a closed one reading its answers with their signed points or the beat's prompt
 in plain text with `{name}` read from `draft_data.first_name`; Next closes a section and
-opens the next, the last Next the next stage. Fold state is local. The stage's Unknown mark
-sets `unknown` on every beat of the stage in one PATCH (copy `life_stage_unknown_help`,
-Dan's words). A one-of row says no "pick one". Each section's grid is `ChapterOffers`
+opens the next, the last Next the next stage. Fold state is local. Every section's grid
+ends on an **Amnesiac** card (#5102, ADR-5102-B; `ChapterOffers`' `trailing` slot): no
+cost and not a distinction, named by copy `life_amnesiac_name` and read by
+`life_amnesiac_text` (default: the line Dan wrote for the stage-wide Unknown mark it
+replaced). Picking it sets that beat's `unknown`, which drops its picks and closes its
+other cards; picking it again clears it. A stage every one of whose beats is unknown reads
+Unknown and still lists its sections. A one-of row says no "pick one". Each section's grid is `ChapterOffers`
 (`layout="grid"`) with the leaf's new props: `groupBy` (`.group-h` headings "Group
 (count)", the ungrouped last), `pricing="signed"` (a bare `−N` or `+N` in the card's
 bottom-left corner, nothing on a free card), `terms` (the mechanics line built from

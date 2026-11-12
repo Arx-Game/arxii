@@ -62,7 +62,7 @@ EFFORT_COST_MULTIPLIER = {
 # Minimum fatigue cost (even very low effort costs at least 1)
 MIN_FATIGUE_COST = 1
 
-# Capacity formula constants
+# Capacity formula constants: capacity per stat point (per 10 points of the stat, #5091)
 CAPACITY_STAT_MULTIPLIER = 10
 CAPACITY_WILLPOWER_MULTIPLIER = 3
 WELL_RESTED_MULTIPLIER = 1.5

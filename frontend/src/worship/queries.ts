@@ -4,12 +4,14 @@ import {
   closePledge,
   fetchHolySites,
   fetchInvocationOptions,
+  fetchPactCards,
   fetchPledgeCards,
   fetchPledges,
   fetchPrayers,
   fetchServiceTerms,
   fetchVisions,
   pray,
+  renouncePact,
   sacrifice,
   sendVision,
   takePledge,
@@ -28,6 +30,7 @@ export const worshipKeys = {
   holySites: (entryId: number | null | undefined, roomId: number | null | undefined) =>
     ['worship', 'holy-sites', entryId ?? null, roomId ?? null] as const,
   pledgeCards: (sheetId: number) => ['worship', 'pledge-cards', sheetId] as const,
+  pactCards: (sheetId: number) => ['worship', 'pact-cards', sheetId] as const,
 };
 
 /**
@@ -142,6 +145,15 @@ export function usePledgeCards(sheetId: number, enabled = true) {
   });
 }
 
+/** One character's pacts with beings (#4341): their own to the owner, anyone's to staff. */
+export function usePactCards(sheetId: number, enabled = true) {
+  return useQuery({
+    queryKey: worshipKeys.pactCards(sheetId),
+    queryFn: () => fetchPactCards(sheetId),
+    enabled: enabled && sheetId > 0,
+  });
+}
+
 function useWorshipMutation<TVars>(
   mutationFn: (vars: TVars) => ReturnType<typeof pray>,
   extraKeys: readonly (readonly unknown[])[] = []
@@ -166,7 +178,8 @@ export function useTakePledge(characterId: number) {
 
 export function useClosePledge(characterId: number) {
   return useWorshipMutation(
-    ({ itemIds }: { itemIds: number[] }) => closePledge(characterId, itemIds),
+    ({ itemIds, acceptPact = false }: { itemIds: number[]; acceptPact?: boolean }) =>
+      closePledge(characterId, { itemIds, acceptPact }),
     [['inventory', characterId]]
   );
 }
@@ -184,4 +197,9 @@ export function useSacrifice(characterId: number) {
     }) => sacrifice(characterId, itemIds, being, playerLine),
     [['inventory', characterId]]
   );
+}
+
+/** Renounce a pact with a being (#4341); refreshes every worship read, the pact cards with it. */
+export function useRenouncePact(characterId: number) {
+  return useWorshipMutation((beingId: number) => renouncePact(characterId, beingId));
 }

@@ -183,7 +183,7 @@ class CharacterContent:
     def create_base_social_character(cls) -> tuple[ObjectDB, Persona]:
         """Sheet + trait values for social stats:
           presence=70, charm=60, intellect=50, wits=40, strength=30, willpower=30
-          (internal 1-100 scale; display scale is /10)
+          (1-100 scale; every surface shows the stored value, ADR-5091)
         No magic. Suitable for testing mundane social action path.
 
         Also creates a Persona (PRIMARY type) for use in consent flow tests.

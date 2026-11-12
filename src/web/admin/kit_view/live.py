@@ -35,7 +35,6 @@ from world.covenants.style_fit import style_vow_ids
 from world.magic.constants import TargetKind, TechniqueFunction
 from world.magic.models import CharacterGift, Technique, Thread
 from world.magic.services.technique_effects import technique_payload_prefetches
-from world.magic.services.threads import shown_thread_level
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -62,7 +61,7 @@ class Link:
 class VowLine:
     """One added effect on one technique, as the summary line staff read for it.
 
-    ``unlocks_at`` is the row's unlock level (shown scale) when the character's thread
+    ``unlocks_at`` is the row's unlock thread level when the character's thread
     on that vow is below it, else ``None``. ``rides`` names whose casts the row rides
     when that is not the character's own ("Covenant allies"), else "".
     """
@@ -116,7 +115,7 @@ class PickLevel:
 
 @dataclass(frozen=True)
 class HeldVow:
-    """One live vow membership: the vow, its shown level, and its defense style.
+    """One live vow membership: the vow, its thread level, and its defense style.
 
     ``defense`` is the defense type of the character's combat style, or "" with no style.
     ``style`` says whether the
@@ -167,7 +166,7 @@ class Kit:
 
     @property
     def level(self) -> int | None:
-        """The one primary vow's shown level, for the column heading; ``None`` otherwise."""
+        """The one primary vow's thread level, for the column heading; ``None`` otherwise."""
         primary = self.primary_vows
         return primary[0].level if len(primary) == 1 else None
 
@@ -192,11 +191,11 @@ def known_techniques(sheet: CharacterSheet) -> list[Technique]:
 
 
 def vow_levels(sheet: CharacterSheet) -> dict[int, int]:
-    """The character's shown COVENANT_ROLE thread level per anchor role: one query."""
+    """The character's COVENANT_ROLE thread level per anchor role: one query."""
     rows = Thread.objects.filter(
         owner=sheet, target_kind=TargetKind.COVENANT_ROLE, retired_at__isnull=True
     ).values_list("target_covenant_role_id", "level")
-    return {role_id: shown_thread_level(level) for role_id, level in rows}
+    return dict(rows)
 
 
 def _vow_line(effect: VowAddedEffect, levels: dict[int, int]) -> VowLine:

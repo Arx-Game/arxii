@@ -5,10 +5,10 @@ provisioned with a latent GIFT thread at CG resolves to the base technique; once
 thread advances past the variant's unlock threshold the resolver derives the variant
 (derive-on-read, no regeneration) and the discovery beat fires (achievement + codex).
 
-Thread levels are stored ×10 (#4585): the variant unlocking at shown 3 resolves at
-stored 30. The GIFT anchor cap is the owner's level cap (character level × 10), so the
-character here is level 3 and ``spend_resonance_for_imbuing`` can carry a GIFT thread
-to stored 30 without hitting the cap. The journey therefore exercises two paths:
+The variant unlocking at thread level 30 resolves at 30. The GIFT anchor cap is the
+owner's level cap (character level × 10), so the character here is level 3 and
+``spend_resonance_for_imbuing`` can carry a GIFT thread to 30 without hitting the cap.
+The journey therefore exercises two paths:
 
 - ``test_full_journey`` / ``test_base_form_resolves_without_thread``: direct
   level-setting + explicit ``fire_variant_discoveries`` ceremony (ceremony-direct pattern).
@@ -87,7 +87,7 @@ class GiftSpecializationE2ETest(TestCase):
         cls.variant = TechniqueVariant.objects.create(
             parent_technique=cls.technique,
             resonance=cls.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Celestial Form",
             intensity_delta=5,
             control_delta=2,
@@ -119,7 +119,7 @@ class GiftSpecializationE2ETest(TestCase):
             target_kind=TargetKind.GIFT,
             target_gift=self.gift,
         )
-        latent.level = 30  # stored; shows 3 (#4585)
+        latent.level = 30
         latent.save(update_fields=["level"])
         fire_variant_discoveries(thread=latent, starting_level=0, new_level=30)
 
@@ -207,11 +207,11 @@ class GiftSpecializationE2ETest(TestCase):
             t for t in self.sheet.character.threads.all() if t.target_kind == TargetKind.GIFT
         )
 
-        # Read base-form stats (thread at level 0 — below the variant's unlock_thread_level=3).
+        # Read base-form stats (thread at level 0 — below the variant's unlock_thread_level=30).
         base_stats = get_runtime_technique_stats(self.technique, self.sheet.character)
 
         # Advance to level 3 to unlock the variant; invalidate the cached handler.
-        thread.level = 30  # stored; shows 3 (#4585)
+        thread.level = 30
         thread.save(update_fields=["level"])
         self.sheet.character.threads.invalidate()
 
@@ -236,8 +236,8 @@ class GiftSpecializationE2ETest(TestCase):
 
         ``spend_resonance_for_imbuing(character_sheet, thread, amount)`` advances the
         thread greedily by spending ``amount`` developed-points.  From stored 29 the
-        next level costs (29 - 9) × 100 = 2000 dp and lands on stored 30 (shown 3,
-        crossing ``unlock_thread_level=3``), once the stored-30 XP boundary is
+        next level costs (29 - 9) × 100 = 2000 dp and lands on 30 (crossing
+        ``unlock_thread_level=30``), once the stored-30 XP boundary is
         unlocked. The function internally calls ``fire_variant_discoveries``, so the
         achievement should be granted without any explicit ceremony call in this test.
 
@@ -258,7 +258,7 @@ class GiftSpecializationE2ETest(TestCase):
         cr.balance = 9999
         cr.save(update_fields=["balance"])
 
-        thread.level = 29  # stored; shows 2
+        thread.level = 29
         thread.save(update_fields=["level"])
         ThreadLevelUnlock.objects.create(thread=thread, unlocked_level=30, xp_spent=0)
         spend_resonance_for_imbuing(self.sheet, thread, 2000)
@@ -305,7 +305,7 @@ class BaseFormCastE2ETest(CastScenarioMixin):
         cls.variant = TechniqueVariant.objects.create(
             parent_technique=cls.technique,
             resonance=cls.resonance,
-            unlock_thread_level=3,
+            unlock_thread_level=30,
             name_override="Celestial Form",
             intensity_delta=5,
             control_delta=0,
@@ -319,7 +319,7 @@ class BaseFormCastE2ETest(CastScenarioMixin):
             target_kind=TargetKind.GIFT,
             target_gift=cls.gift,
         )
-        thread.level = 30  # stored; shows 3 (#4585)
+        thread.level = 30
         thread.save(update_fields=["level"])
         # Invalidate the cached thread handler so the variant is visible to the resolver.
         cls.caster.character_sheet.character.threads.invalidate()

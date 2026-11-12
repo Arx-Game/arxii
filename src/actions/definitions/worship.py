@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from evennia.objects.models import ObjectDB
 
 from actions.base import Action, ActionResult
 from actions.types import ActionContext, TargetType
+
+if TYPE_CHECKING:
+    from world.worship.types import ClosingOutcome
 
 
 def _resolve_rite(kwargs: dict[str, Any]):
@@ -605,7 +608,9 @@ class ClosePledgeAction(Action):
     """Close your open pledge with its closing rite (#4333 slice 2, design 3).
 
     Needs the favor target reached. Performed in the live scene where you stand;
-    one is started if none runs. No shrine is required.
+    one is started if none runs. No shrine is required. ``accept_pact`` (True or
+    "true") accepts the pledge's pact offer, signed if the rite resolves it at
+    Success or better (#4341).
     """
 
     key: str = "pledge_close"
@@ -641,29 +646,19 @@ class ClosePledgeAction(Action):
         if error is not None:
             return error
         try:
-            outcome = close_pledge(sheet, scene=scene, offered_items=items)
+            outcome = close_pledge(
+                sheet,
+                scene=scene,
+                offered_items=items,
+                accept_pact=kwargs.get("accept_pact") in _TRUE_VALUES,
+            )
         except (PledgeError, WorshipRiteError) as exc:
             return ActionResult(success=False, message=exc.user_message)
         _broadcast_rite_line(sheet, outcome.rite, actor)
         _broadcast_onlooker_line(sheet, outcome.delivery, actor)
         being = details.pledge.being.name
-        if not outcome.resolved:
-            message = (
-                f"You close your pledge with {outcome.rite.name}: {outcome.outcome_name}. "
-                f"{being} has not accepted it yet; you may try once more within the span."
-            )
-        else:
-            message = (
-                f"You close your pledge with {outcome.rite.name}: {outcome.outcome_name}. "
-                f"Closing award for {outcome.outcome_name}: {outcome.award_base} base, at "
-                f"{outcome.earning_rate_percent}% = +{outcome.award} favor with {being}."
-                if outcome.award
-                else f"You close your pledge with {outcome.rite.name}: {outcome.outcome_name}."
-            )
         awaiting = outcome.delivery is not None and outcome.delivery.awaiting_steward
-        if awaiting:
-            # A stewarded being's table GM answers it (slice 4); the vision comes later.
-            message += f" {being}'s answer will come later."
+        message = _closing_message(outcome, being, awaiting=awaiting)
         return ActionResult(
             success=True,
             message=message,
@@ -672,8 +667,39 @@ class ClosePledgeAction(Action):
                 "resolved": outcome.resolved,
                 "award": outcome.award,
                 "awaiting_steward": awaiting,
+                "pact_signed": outcome.pact is not None,
             },
         )
+
+
+def _closing_message(outcome: ClosingOutcome, being: str, *, awaiting: bool) -> str:
+    """The closer's line: the rite's tier, the award, and the pact accepted or refused."""
+    if not outcome.resolved:
+        message = (
+            f"You close your pledge with {outcome.rite.name}: {outcome.outcome_name}. "
+            f"{being} has not accepted it yet; you may try once more within the span."
+        )
+    else:
+        message = (
+            f"You close your pledge with {outcome.rite.name}: {outcome.outcome_name}. "
+            f"Closing award for {outcome.outcome_name}: {outcome.award_base} base, at "
+            f"{outcome.earning_rate_percent}% = +{outcome.award} favor with {being}."
+            if outcome.award
+            else f"You close your pledge with {outcome.rite.name}: {outcome.outcome_name}."
+        )
+    if awaiting:
+        # A stewarded being's table GM answers it (slice 4); the vision comes later.
+        message += f" {being}'s answer will come later."
+    if outcome.pact is not None:
+        message += f" {being} is now your patron. Your pact begins."
+    elif outcome.pact_refusal:
+        message += f" {outcome.pact_refusal}"
+    return message
+
+
+#: Spellings of a true boolean flag in an action's kwargs (web dispatch sends JSON
+#: true; a telnet or form caller may send the string).
+_TRUE_VALUES = (True, "true", "True", "1", 1)
 
 
 def _scene_to_close_in(actor: ObjectDB, sheet):

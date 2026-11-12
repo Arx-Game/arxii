@@ -34,6 +34,15 @@ The central spine connecting every system in the game. Characters develop throug
   (XP ledger, advancement, stat points, maturation, sheet-change requests) moved to the
   owner-only "Growth" section — the numbers you check and the numbers you spend are now
   two different places.
+- **One scale for stats, skills and threads (#5091, ADR-5091; supersedes ADR-0193):** every
+  surface (web sheet, CG, telnet, admin, narration) shows a stat, a skill or a thread at its
+  stored value: a stat of 20 reads 20, a thread at 30 reads 30. Nothing divides by 10 for
+  display any more. Authored numbers written in the old shown unit were restated x10 by
+  migration `0399_one_scale_values` so every gate fires where it did: band caps
+  50/60/110/160/210/250, CG stats 10-50 in steps of 10, crossings at thread levels
+  30/60/110/160/210, vow focus picks at 10/20/30, species stat bonuses, NPC preset stat lines,
+  thread unlock and pull-effect levels. Formulas tuned per old shown level keep their numbers
+  through `thread_rung` and `whole_stat_points`, internal steps never shown.
 - **Audere Majora / Crossing the Threshold (#543):** the unified tier-crossing event. Per-boundary `AudereMajoraThreshold` rows (levels 5/10/15/20) gate a cast-time offer (intensity tier + deep Soulfray + engagement + active Audere + eligible next-stage path). Accepting atomically advances the level boundary, writes `CharacterPathHistory`, records an irreversible `AudereMajoraCrossing` receipt, and applies the Audere Majora power-spike condition (DeathDeferred — consequences resolve when the blaze ends). Ceremony content is DB-authored and spoiler-private. `PathIntent` lets players pre-declare their next path; the offer pre-selects it. REST + React offer surfaces mirror the Audere offer family
 - **Audere Majora legend-deed minting (#953):** `cross_threshold` now mints a full
   renown deed for the crosser. `AudereMajoraThreshold` inherits the new abstract
@@ -300,7 +309,8 @@ in `honor_deed` checks life-state.
 
 **Done (fatigue/effort system):**
 - 12 stats in 4 categories: Physical (str/agi/sta), Social (cha/pre/com), Mental (int/wit/stb), Meta (lck/per/wil)
-- Simplified CG stat allocation: budget = 2 * stat_count + bonuses, store 1-5 directly
+- Simplified CG stat allocation: budget = 2 * stat_count + bonuses (allocated 10-50 in steps
+  of 10 and stored as allocated since #5091)
 - Three independent fatigue pools (physical/social/mental) with capacity from endurance stats + willpower
 - Five fatigue zones (fresh/strained/tired/overexerted/exhausted) with threshold-based check penalties
 - Five effort levels (very low/low/medium/high/extreme) with cost multiplier and check modifier

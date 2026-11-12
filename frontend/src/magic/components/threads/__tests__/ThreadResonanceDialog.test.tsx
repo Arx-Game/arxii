@@ -92,7 +92,7 @@ describe('ThreadResonanceDialog', () => {
     renderDialog();
     expect(await screen.findByText('Lumen (same affinity)')).toBeInTheDocument();
     expect(screen.getByText('Umbra (Fall)')).toBeInTheDocument();
-    expect(screen.getByText(/Thread: Oath · level 3 · Bene/)).toBeInTheDocument();
+    expect(screen.getByText(/Thread: Oath · level 30 · Bene/)).toBeInTheDocument();
     expect(screen.getByTestId('resonance-projected')).toHaveTextContent('40 points → 40');
     fireEvent.click(screen.getByTestId('resonance-option-3'));
     expect(screen.getByTestId('resonance-projected')).toHaveTextContent('40 points → 30');

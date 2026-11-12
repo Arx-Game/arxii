@@ -1,10 +1,10 @@
 """The kit view's reads for one character (#4918, slice 5 of #4843).
 
-Tempest is a vow at thread level 2. Its holder knows
+Tempest is a vow at thread level 20. Its holder knows
 Bolt (a strike), Watch (perception, which the vow adds nothing to) and Bare (no function
-tag). The vow adds to strikes: a base row, a base row that unlocks at level 5, a row
+tag). The vow adds to strikes: a base row, a base row that unlocks at level 50, a row
 riding covenant allies' casts, a row on the chosen Spark pick, and a row on Unchosen, a
-pick the holder did not choose. At pick level 1 the holder chose Spark (4) and Gale (3):
+pick the holder did not choose. At pick level 10 the holder chose Spark (4) and Gale (3):
 7 of a budget of 4.
 """
 
@@ -70,13 +70,13 @@ class KitLiveCase(TestCase):
         strike = TechniqueFunction.STRIKE
         cls.base = VowAddedEffectFactory(covenant_role=cls.vow, function=strike)
         cls.locked = VowAddedEffectFactory(
-            covenant_role=cls.vow, function=strike, unlock_thread_level=5
+            covenant_role=cls.vow, function=strike, unlock_thread_level=50
         )
         cls.allies = VowAddedEffectFactory(
             covenant_role=cls.vow,
             function=strike,
             beneficiary=PerkBeneficiary.COVENANT_ALLIES,
-            unlock_thread_level=1,
+            unlock_thread_level=10,
         )
         cls.on_spark = VowAddedEffectFactory(
             covenant_role=cls.vow, function=strike, focus_pick=cls.spark
@@ -91,7 +91,7 @@ class KitLiveCase(TestCase):
 
         cls.sheet = CharacterSheetFactory()
         membership = engage_vow_with_thread(
-            cls.sheet, cls.vow, covenant=cls.covenant, thread_level=2
+            cls.sheet, cls.vow, covenant=cls.covenant, thread_level=20
         )
         for pick in (cls.spark, cls.gale):
             CharacterVowFocusPickFactory(character_role=membership, pick=pick)
@@ -135,7 +135,7 @@ class TechniqueLinesTest(KitLiveCase):
     def test_a_row_above_the_thread_level_is_marked_with_its_unlock(self) -> None:
         lines = self._line("Bolt").groups[0].lines
         marks = {line.text: line.unlocks_at for line in lines}
-        self.assertEqual(marks[self.locked.cached_effect_summary], 5)
+        self.assertEqual(marks[self.locked.cached_effect_summary], 50)
         self.assertIsNone(marks[self.base.cached_effect_summary])
 
     def test_a_row_riding_allies_casts_names_who_it_rides(self) -> None:
@@ -181,7 +181,7 @@ class PreviewTest(KitLiveCase):
         VowAddedEffectDamageProfileFactory(effect=flat, base_damage=5)
         with_line = int(self._preview("Bolt").split()[0])
         self.assertEqual(with_line, before + 5)
-        # The holder's vow is level 2 and the row unlocks at 0: +3 a level is +6 a band.
+        # The holder's vow is level 20 and the row unlocks at 0: +3 per 10 levels is +6 a band.
         scaled = VowAddedEffectFactory(
             covenant_role=self.vow,
             function=TechniqueFunction.STRIKE,
@@ -197,7 +197,7 @@ class PreviewTest(KitLiveCase):
 class PicksAndSheetTest(KitLiveCase):
     def test_the_chosen_picks_by_level_with_the_spend_over_budget(self) -> None:
         (level,) = live.kit_for(self.sheet).picks
-        self.assertEqual((level.vow, level.level, level.spent, level.budget), ("Tempest", 1, 7, 4))
+        self.assertEqual((level.vow, level.level, level.spent, level.budget), ("Tempest", 10, 7, 4))
         self.assertTrue(level.over)
         self.assertEqual([pick.label for pick in level.picks], ["Gale", "Spark"])
         self.assertEqual(
@@ -220,10 +220,10 @@ class PicksAndSheetTest(KitLiveCase):
         (vow,) = kit.sheet.vows
         self.assertEqual(
             (vow.vow.label, vow.level, vow.defense, vow.is_secondary, vow.engaged),
-            ("Tempest", 2, "Evasion", False, True),
+            ("Tempest", 20, "Evasion", False, True),
         )
         self.assertEqual(vow.vow.url, reverse("admin_vow_builder", args=[self.vow.pk]))
-        self.assertEqual(kit.level, 2)
+        self.assertEqual(kit.level, 20)
 
 
 class AbsentPartsTest(KitLiveCase):
@@ -245,7 +245,7 @@ class AbsentPartsTest(KitLiveCase):
     def test_a_secondary_vow_only(self) -> None:
         sheet = CharacterSheetFactory()
         engage_vow_with_thread(
-            sheet, self.vow, covenant=self.covenant, thread_level=1, is_secondary=True
+            sheet, self.vow, covenant=self.covenant, thread_level=10, is_secondary=True
         )
         _know(sheet, self.bolt)
         kit = live.kit_for(sheet)
@@ -264,14 +264,14 @@ class AbsentPartsTest(KitLiveCase):
                 name="Kit Choir Evasion", defense_style=DefenseStyle.EVASION
             )
         )
-        membership = engage_vow_with_thread(sheet, choir, covenant=self.covenant, thread_level=3)
+        membership = engage_vow_with_thread(sheet, choir, covenant=self.covenant, thread_level=30)
         CharacterVowFocusPickFactory(character_role=membership, pick=self.gale)
         kit = live.kit_for(sheet)
         (level,) = kit.picks
         self.assertEqual((level.vow, level.spent, level.over), ("Tempest Choir", 3, False))
         (vow,) = kit.sheet.vows
         # The thread keys on the anchor; the defense comes from the character's style.
-        self.assertEqual((vow.level, vow.defense), (3, "Evasion"))
+        self.assertEqual((vow.level, vow.defense), (30, "Evasion"))
 
 
 class StyleTest(KitLiveCase):
@@ -314,7 +314,7 @@ class StyleTest(KitLiveCase):
             name="Tempest Style Choir", slug="tempest-style-choir", parent_role=self.vow
         )
         sheet = CharacterSheetFactory()
-        engage_vow_with_thread(sheet, choir, covenant=self.covenant, thread_level=3)
+        engage_vow_with_thread(sheet, choir, covenant=self.covenant, thread_level=30)
         style = CombatStyleFactory(name="Kit Anchor Style")
         style.compatible_roles.add(self.vow)
         self.assertEqual(self._styled(style, sheet).style_lines, ["works with Tempest Style Choir"])
@@ -326,7 +326,7 @@ class StyleTest(KitLiveCase):
     def test_a_secondary_vow_gets_no_line(self) -> None:
         sheet = CharacterSheetFactory()
         engage_vow_with_thread(
-            sheet, self.vow, covenant=self.covenant, thread_level=1, is_secondary=True
+            sheet, self.vow, covenant=self.covenant, thread_level=10, is_secondary=True
         )
         self.assertEqual(
             self._styled(CombatStyleFactory(name="Kit Side Style"), sheet).style_lines, []
@@ -344,13 +344,15 @@ class QueryCountTest(KitLiveCase):
         QueryCountTest._made += 1
         run = QueryCountTest._made
         sheet = CharacterSheetFactory()
-        membership = engage_vow_with_thread(sheet, self.vow, covenant=self.covenant, thread_level=2)
+        membership = engage_vow_with_thread(
+            sheet, self.vow, covenant=self.covenant, thread_level=20
+        )
         for index in range(techniques):
             technique = _technique(f"Count {run} {index}", TechniqueFunction.STRIKE)
             _know(sheet, technique)
         for index in range(picks):
             pick = VowFocusPickFactory(
-                covenant_role=self.vow, name=f"Count pick {run} {index}", pick_level=1
+                covenant_role=self.vow, name=f"Count pick {run} {index}", pick_level=10
             )
             CharacterVowFocusPickFactory(character_role=membership, pick=pick)
             VowAddedEffectFactory(

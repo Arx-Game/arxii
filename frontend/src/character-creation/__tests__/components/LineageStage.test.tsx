@@ -7,7 +7,7 @@
  * prompts, the kin rows and the life grids.
  */
 
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { LineageStage } from '../../components/LineageStage';
@@ -347,6 +347,12 @@ describe('LineageStage', () => {
     it('no known parents: the note and the explained tarot ritual, and no family or parents', async () => {
       renderWith(noParents);
       expect(await screen.findByText(noParents.parentage_note)).toBeInTheDocument();
+      // The note reads under its beginning's name, at body size (#5102).
+      const note = screen.getByText(noParents.parentage_note).closest('section')!;
+      const heading = within(note).getByRole('heading', { level: 2 });
+      expect(heading.textContent).not.toBe('');
+      expect(note).toHaveAccessibleName(heading.textContent!);
+      expect(note.querySelector('.text-sm')).toBeNull();
       expect(
         screen.getByText('With no known parents, the tarot gives you a name.')
       ).toBeInTheDocument();

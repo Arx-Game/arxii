@@ -110,7 +110,7 @@ class ShipSanctumStatBonusTests(TestCase):
         sanctum = _sanctum_for_ship(ship)
         resonance = ResonanceFactory()
         _weave(sanctum, resonance, level=20)
-        _author_stat_row(resonance, VitalBonusTarget.SHIP_HULL, 9, min_thread_level=3)
+        _author_stat_row(resonance, VitalBonusTarget.SHIP_HULL, 9, min_thread_level=30)
 
         self.assertEqual(ship_sanctum_bonus(ship).hull, 0)
 
@@ -163,12 +163,12 @@ class ShipSanctumCapabilityGrantTests(TestCase):
         sanctum = _sanctum_for_ship(ship)
         resonance = ResonanceFactory()
         _weave(sanctum, resonance, level=20)
-        _author_capability_row(resonance, CapabilityTypeFactory(), min_thread_level=3)
+        _author_capability_row(resonance, CapabilityTypeFactory(), min_thread_level=30)
 
         self.assertEqual(ship_sanctum_capability_grants(ship), [])
 
     def test_deeper_thread_grants_strictly_more(self) -> None:
-        """The curve is wired: shown 6 (stored 60) beats shown 3 (stored 30) off ONE row.
+        """The curve is wired: level 60 beats level 30 off ONE row.
 
         Needs a ``CapabilityPowerConfig`` row and a sanctum level above 0 —
         ``apply_capability_curve`` is inert without both, by design.
@@ -196,8 +196,8 @@ class ShipSanctumCapabilityGrantTests(TestCase):
         shallow_capability = CapabilityTypeFactory(name="movement")
         deep_capability = CapabilityTypeFactory(name="teleport")
         _weave(sanctum, resonance, level=60)
-        _author_capability_row(resonance, shallow_capability, min_thread_level=3)
-        _author_capability_row(resonance, deep_capability, min_thread_level=6)
+        _author_capability_row(resonance, shallow_capability, min_thread_level=30)
+        _author_capability_row(resonance, deep_capability, min_thread_level=60)
 
         grants = ship_sanctum_capability_grants(ship)
 

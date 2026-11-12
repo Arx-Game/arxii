@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.db.models import Count
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.urls import reverse
@@ -353,10 +353,10 @@ class ChosenFavorConfigAdmin(admin.ModelAdmin):
         "id",
         "anima_recovery_threshold",
         "anima_recovery_bonus",
-        "earn_bonus_percent",
-        "invocation_ease_points",
+        "chosen_distinction",
     )
     readonly_fields = ("chosen_per_being",)
+    autocomplete_fields = ("chosen_distinction",)
     fieldsets = (
         (
             "Anima recovery and ceremony edge",
@@ -371,16 +371,48 @@ class ChosenFavorConfigAdmin(admin.ModelAdmin):
         ),
         (
             "Favor: earning and invocation",
-            {"fields": ("earn_bonus_percent", "invocation_ease_points", "chosen_per_being")},
+            {"fields": ("chosen_distinction", "chosen_per_being")},
         ),
     )
 
+    def changeform_view(
+        self, request: HttpRequest, object_id=None, form_url="", extra_context=None
+    ) -> HttpResponse:
+        """Opening the page makes sure the two patron favor targets exist (#4341), so staff
+        can author the Chosen distinction's effects on them."""
+        from world.worship.favor_services import ensure_patron_modifier_targets  # noqa: PLC0415
+
+        ensure_patron_modifier_targets()
+        return super().changeform_view(request, object_id, form_url, extra_context)
+
+    def save_model(self, request: HttpRequest, obj: ChosenFavorConfig, form, change: bool) -> None:
+        """Saving a new Chosen distinction grants it to every Chosen who lacks it (#4341)."""
+        from world.worship.services import grant_chosen_distinction_to_chosen  # noqa: PLC0415
+
+        super().save_model(request, obj, form, change)
+        if "chosen_distinction" in form.changed_data:  # noqa: STRING_LITERAL - a form field name
+            grants = grant_chosen_distinction_to_chosen(obj)
+            if grants.granted:
+                self.message_user(
+                    request, f"Granted {obj.chosen_distinction} to {grants.granted} Chosen."
+                )
+            if grants.skipped:
+                names = ", ".join(sheet.character.key for sheet in grants.skipped)
+                self.message_user(
+                    request,
+                    f"Not granted to {names}: a distinction they hold excludes "
+                    f"{obj.chosen_distinction}.",
+                    level=messages.WARNING,
+                )
+
     @admin.display(description="Chosen per being")
     def chosen_per_being(self, obj: ChosenFavorConfig) -> str:
-        """How many characters each being has as its Chosen (an active patronage)."""
+        """How many characters each being has as its Chosen (a Chosen patronage, #4341)."""
+        from world.worship.favor_services import chosen_standing_q  # noqa: PLC0415
+
         del obj  # The counts are game-wide; the singleton row is not read.
         rows = (
-            DevotionStanding.objects.filter(valence__isnull=False, released_at__isnull=True)
+            DevotionStanding.objects.filter(chosen_standing_q())
             .values("being__name")
             .annotate(count=Count("id"))
             .order_by("being__name")
@@ -642,7 +674,10 @@ class DevotionConfigAdmin(admin.ModelAdmin):
         self, request, context, add=False, change=False, form_url="", obj=None
     ):
         """Adds the read-only difficulty table and last week's counts."""
-        from world.worship.services import get_chosen_favor_config  # noqa: PLC0415
+        from world.mechanics.constants import FAVOR_INVOCATION_CATEGORY_NAME  # noqa: PLC0415
+        from world.worship.favor_services import (  # noqa: PLC0415
+            chosen_distinction_patron_value,
+        )
 
         if obj is not None:
             context["difficulty_headers"] = (
@@ -653,7 +688,7 @@ class DevotionConfigAdmin(admin.ModelAdmin):
                 f"Chosen and +{_EXAMPLE_INVOCATION_MODIFIER} modifier",
             )
             context["difficulty_rows"] = invocation_difficulty_rows(
-                obj, get_chosen_favor_config().invocation_ease_points
+                obj, chosen_distinction_patron_value(FAVOR_INVOCATION_CATEGORY_NAME)
             )
             context["invocations_last_week"] = invocations_last_week()
             context["odds_rows"] = sacrifice_odds_rows()

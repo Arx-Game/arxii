@@ -44,7 +44,7 @@ from world.covenants.constants import (
     FOCUS_PICK_FREQUENCY_LIMIT_KINDS,
     FOCUS_PICK_LIMIT_FREQUENCY_FULL,
     FOCUS_PICK_REDUCTION_LIMIT_KINDS,
-    VOW_FOCUS_PICK_MAX_LEVEL,
+    VOW_FOCUS_PICK_LEVELS,
 )
 from world.covenants.focus_picks import MIN_PICK_PRICE, price_for
 from world.covenants.models import (
@@ -192,7 +192,7 @@ def _form_level(form: object) -> int:
     try:
         return int(raw)
     except (TypeError, ValueError):
-        return 1
+        return VOW_FOCUS_PICK_LEVELS[0]
 
 
 def _level_sections(
@@ -202,9 +202,7 @@ def _level_sections(
     payload: dict[int | None, list[live.PayloadLine]],
 ) -> list[_LevelSection]:
     held = live.holders_by_pick(role)
-    sections = {
-        level: _LevelSection(level=level) for level in range(1, VOW_FOCUS_PICK_MAX_LEVEL + 1)
-    }
+    sections = {level: _LevelSection(level=level) for level in VOW_FOCUS_PICK_LEVELS}
     for form in forms.picks.forms:
         pick = form.instance
         saved = pick.pk is not None

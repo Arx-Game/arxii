@@ -50,29 +50,29 @@ class TechniqueVariantResolutionTests(TestCase):
         )
 
     def test_matching_variant_none_below_threshold(self) -> None:
-        self._make_variant(unlock_level=3)
+        self._make_variant(unlock_level=30)
         result = TechniqueVariant.matching_variant(
             self.parent_technique, resonance=self.resonance, thread_level=20
         )
         self.assertIsNone(result)
 
     def test_matching_variant_at_threshold(self) -> None:
-        v3 = self._make_variant(unlock_level=3)
+        v3 = self._make_variant(unlock_level=30)
         result = TechniqueVariant.matching_variant(
             self.parent_technique, resonance=self.resonance, thread_level=30
         )
         self.assertEqual(result, v3)
 
     def test_matching_variant_highest_wins(self) -> None:
-        self._make_variant(unlock_level=3)
-        v5 = self._make_variant(unlock_level=5)
+        self._make_variant(unlock_level=30)
+        v5 = self._make_variant(unlock_level=50)
         result = TechniqueVariant.matching_variant(
             self.parent_technique, resonance=self.resonance, thread_level=50
         )
         self.assertEqual(result, v5)
 
     def test_matching_variant_wrong_resonance_returns_none(self) -> None:
-        self._make_variant(unlock_level=3)
+        self._make_variant(unlock_level=30)
         other = ResonanceFactory()
         result = TechniqueVariant.matching_variant(
             self.parent_technique, resonance=other, thread_level=50
@@ -80,8 +80,8 @@ class TechniqueVariantResolutionTests(TestCase):
         self.assertIsNone(result)
 
     def test_newly_crossed_variants(self) -> None:
-        v3 = self._make_variant(unlock_level=3)
-        v5 = self._make_variant(unlock_level=5)
+        v3 = self._make_variant(unlock_level=30)
+        v5 = self._make_variant(unlock_level=50)
         crossed = TechniqueVariant.newly_crossed_variants(
             self.parent_technique,
             resonance_id=self.resonance.pk,
@@ -91,7 +91,7 @@ class TechniqueVariantResolutionTests(TestCase):
         self.assertEqual(set(crossed), {v3, v5})
 
     def test_newly_crossed_variants_empty_when_no_gain(self) -> None:
-        self._make_variant(unlock_level=3)
+        self._make_variant(unlock_level=30)
         crossed = TechniqueVariant.newly_crossed_variants(
             self.parent_technique,
             resonance_id=self.resonance.pk,
@@ -105,7 +105,7 @@ class TechniqueVariantResolutionTests(TestCase):
         # fire_variant_discoveries — supplies [thread.owner]) plus personal
         # prose naming the variant form + its resonance. See the brief's note
         # on the discovery_narrative recipient contract.
-        v = self._make_variant(unlock_level=3, name="Celestial Form")
+        v = self._make_variant(unlock_level=30, name="Celestial Form")
         recipients, body = v.discovery_narrative(is_first=False)
         self.assertEqual(list(recipients), [])
         self.assertIn("Celestial Form", body)
@@ -116,31 +116,31 @@ class TechniqueVariantResolutionTests(TestCase):
         # active_player_character_sheets() + "first time" prose. No
         # CharacterSheetFactory rows are needed to assert the prose branch;
         # we only check the body names the form + resonance.
-        v = self._make_variant(unlock_level=3, name="Celestial Form")
+        v = self._make_variant(unlock_level=30, name="Celestial Form")
         recipients, body = v.discovery_narrative(is_first=True)
         self.assertIsInstance(recipients, list)
         self.assertIn("Celestial Form", body)
         self.assertIn(self.resonance.name, body)
 
     def test_unique_constraint_parent_resonance_level(self) -> None:
-        self._make_variant(unlock_level=3)
+        self._make_variant(unlock_level=30)
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                self._make_variant(unlock_level=3)  # duplicate (parent, resonance, level)
+                self._make_variant(unlock_level=30)  # duplicate (parent, resonance, level)
 
     def test_str_uses_name_override(self) -> None:
-        v = self._make_variant(unlock_level=3, name="Celestial Form")
+        v = self._make_variant(unlock_level=30, name="Celestial Form")
         self.assertIn("Celestial Form", str(v))
         self.assertIn(str(self.resonance.pk), str(v))
 
     def test_str_falls_back_to_parent_id_when_no_override(self) -> None:
-        v = self._make_variant(unlock_level=3, name=None)
+        v = self._make_variant(unlock_level=30, name=None)
         self.assertIn(str(self.parent_technique.pk), str(v))
 
     def test_payload_children_related_names(self) -> None:
         # The 3 payload children attach via related_names capability_grants /
         # damage_profiles / condition_applications, mirroring Technique*.
-        v = self._make_variant(unlock_level=3)
+        v = self._make_variant(unlock_level=30)
         grant = TechniqueVariantCapabilityGrantFactory(variant=v)
         profile = TechniqueVariantDamageProfileFactory(variant=v)
         cond = TechniqueVariantAppliedConditionFactory(variant=v)
@@ -155,7 +155,7 @@ class TechniqueVariantResolutionTests(TestCase):
     def test_two_untyped_damage_profiles_on_variant_rejected(self) -> None:
         # The untyped split: at most ONE untyped (damage_type=None) profile per
         # variant. Mirrors unique_untyped_damage_profile_per_technique.
-        v = self._make_variant(unlock_level=3)
+        v = self._make_variant(unlock_level=30)
         TechniqueVariantDamageProfileFactory(variant=v, damage_type=None)
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
@@ -163,7 +163,7 @@ class TechniqueVariantResolutionTests(TestCase):
 
     def test_two_typed_damage_profiles_same_type_rejected(self) -> None:
         # Typed side of the split: one profile per (variant, damage_type).
-        v = self._make_variant(unlock_level=3)
+        v = self._make_variant(unlock_level=30)
         dtype = DamageTypeFactory()
         TechniqueVariantDamageProfileFactory(variant=v, damage_type=dtype)
         with self.assertRaises(IntegrityError):
@@ -172,7 +172,7 @@ class TechniqueVariantResolutionTests(TestCase):
 
     def test_typed_and_untyped_damage_profiles_coexist(self) -> None:
         # The split allows one typed + one untyped on the same variant.
-        v = self._make_variant(unlock_level=3)
+        v = self._make_variant(unlock_level=30)
         typed = TechniqueVariantDamageProfileFactory(variant=v)
         untyped = TechniqueVariantDamageProfileFactory(variant=v, damage_type=None)
         self.assertEqual(set(v.damage_profiles.all()), {typed, untyped})
@@ -181,7 +181,7 @@ class TechniqueVariantResolutionTests(TestCase):
         # A variant may apply the same condition at different target_kinds
         # (e.g. vs ENEMY and vs ALLY). target_kind is part of the key, mirroring
         # unique_applied_condition_per_technique.
-        v = self._make_variant(unlock_level=3)
+        v = self._make_variant(unlock_level=30)
         cond = ConditionTemplateFactory()
         TechniqueVariantAppliedConditionFactory(
             variant=v, condition=cond, target_kind=ConditionTargetKind.ENEMY
@@ -194,7 +194,7 @@ class TechniqueVariantResolutionTests(TestCase):
 
     def test_same_condition_same_target_kind_rejected(self) -> None:
         # Same condition + same target_kind on one variant is a duplicate.
-        v = self._make_variant(unlock_level=3)
+        v = self._make_variant(unlock_level=30)
         cond = ConditionTemplateFactory()
         TechniqueVariantAppliedConditionFactory(
             variant=v, condition=cond, target_kind=ConditionTargetKind.ENEMY

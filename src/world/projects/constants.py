@@ -48,6 +48,9 @@ class ProjectKind(models.TextChoices):
     # ``register_expiry_only_kind``): reaching its favor target never resolves it;
     # its closing rite or its time limit does. Details model + handler in world.worship.
     PLEDGE = "PLEDGE", "Pledge"
+    # #4341: one period of a character's pact with a being. TIERED_PERIOD: graded once
+    # at its time limit against its commitment. Details model + resolver in world.pacts.
+    PACT_PERIOD = "PACT_PERIOD", "Pact period"
 
 
 class ProjectStatus(models.TextChoices):

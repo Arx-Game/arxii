@@ -58,7 +58,7 @@ from world.scenes.narrator import NARRATOR_PERSONA_NAME
 from world.societies.factories import OrganizationFactory
 from world.species.factories import make_language_with_target, make_understanding_condition
 from world.species.language_services import comprehension_value
-from world.traits.constants import STAT_DISPLAY_DIVISOR
+from world.traits.constants import STAT_POINT_VALUE
 from world.traits.factories import CheckSystemSetupFactory, TraitFactory
 from world.traits.models import (
     CharacterTraitChange,
@@ -398,15 +398,16 @@ class RewardingAPlayerByFiat(_TheLongTable):
 
     def test_a_stat_rises_one_dot_in_her_gm_s_name(self) -> None:
         self.assertIn(
-            "Raised Brawn to 1 for Ysmay.", self.telnet(self.ravenna, "gm award Ysmay stat=Brawn")
+            f"Raised Brawn to {STAT_POINT_VALUE} for Ysmay.",
+            self.telnet(self.ravenna, "gm award Ysmay stat=Brawn"),
         )
         value = CharacterTraitValue.objects.get(character=self.ysmay.sheet_data, trait=self.brawn)
-        self.assertEqual(value.value, STAT_DISPLAY_DIVISOR)
+        self.assertEqual(value.value, STAT_POINT_VALUE)
         change = CharacterTraitChange.objects.get(
             character_sheet=self.ysmay.sheet_data, trait=self.brawn
         )
         self.assertEqual(change.source, TraitChangeSource.GM_GRANT)
-        self.assertEqual((change.old_value, change.new_value), (0, STAT_DISPLAY_DIVISOR))
+        self.assertEqual((change.old_value, change.new_value), (0, STAT_POINT_VALUE))
         self.assertEqual(
             change.granting_tenure, self.ravenna.sheet_data.roster_entry.current_tenure
         )
@@ -417,7 +418,7 @@ class RewardingAPlayerByFiat(_TheLongTable):
         )
         self.assertFalse(CharacterTraitChange.objects.filter(trait=self.lockpicking).exists())
 
-        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=1)
+        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=10)
         self.assertIn(
             "Brawn is already at the maximum Ysmay's stage allows.",
             self.telnet(self.ravenna, "gm award Ysmay stat=Brawn"),
@@ -426,7 +427,7 @@ class RewardingAPlayerByFiat(_TheLongTable):
             CharacterTraitValue.objects.get(
                 character=self.ysmay.sheet_data, trait=self.brawn
             ).value,
-            STAT_DISPLAY_DIVISOR,
+            STAT_POINT_VALUE,
         )
 
     def test_a_technique_is_granted_from_a_gift_she_holds(self) -> None:

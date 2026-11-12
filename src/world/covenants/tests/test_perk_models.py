@@ -32,10 +32,12 @@ from world.covenants.perks.constants import (
     SITUATION_PARAM_SPECS,
     PerkBeneficiary,
     PerkEffectKind,
+    PerkRollKind,
     Situation,
     SituationOriginSide,
 )
 from world.covenants.perks.context import SituationParams
+from world.covenants.perks.services import FiredPerk, render_announce
 from world.magic.factories import ensure_canonical_affinities
 from world.missions.factories import MissionCategoryFactory, MissionTemplateFactory
 
@@ -99,7 +101,7 @@ class VowSituationalPerkModelTests(TestCase):
         of the anchor role rather than being restricted to primary roles.
         """
         parent = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, sword_weight=1)
-        sub_role = SubroleCovenantRoleFactory(parent_role=parent, unlock_thread_level=3)
+        sub_role = SubroleCovenantRoleFactory(parent_role=parent, unlock_thread_level=30)
         sub_role.full_clean()  # sanity: the sub-role itself is valid
 
         perk = VowSituationalPerkFactory(covenant_role=sub_role)
@@ -255,6 +257,49 @@ class VowSituationalPerkModelTests(TestCase):
             battle_action_kind=BattleActionKind.ROUT,
         )
         perk.full_clean()
+
+    def test_applies_to_attack_rolls_is_refused_off_a_check_bonus(self) -> None:
+        """#5092: "Applies to" narrows only a check bonus; clean() refuses it on any other
+        effect. A unit, because staff authoring is admin validation no journey reaches."""
+        perk = VowSituationalPerkFactory.build(
+            covenant_role=CovenantRoleFactory(covenant_type=CovenantType.DURANCE),
+            effect_kind=PerkEffectKind.POWER_BONUS,
+            roll_kind=PerkRollKind.ATTACK,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            perk.full_clean()
+        self.assertIn("roll_kind", ctx.exception.message_dict)
+
+    def test_announce_line_takes_only_the_four_placeholders(self) -> None:
+        """#5092: {holder}/{subject}/{target}/{ally} are fine; anything else, or a stray
+        brace, is refused in plain words (admin validation no journey reaches)."""
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        VowSituationalPerkFactory.build(
+            covenant_role=role,
+            announce_template="{ally} holds {target} for {holder}, and {subject} strikes",
+        ).full_clean()
+        for line, needle in (("{enemy} reels", "{enemy}"), ("{holder strikes", "stray brace")):
+            perk = VowSituationalPerkFactory.build(covenant_role=role, announce_template=line)
+            with self.assertRaises(ValidationError) as ctx:
+                perk.full_clean()
+            self.assertIn(needle, ctx.exception.message_dict["announce_template"][0])
+
+    def test_an_unfilled_placeholder_renders_plain_words(self) -> None:
+        """#5092: with no ally or foe to name, the line says "an ally" / "the foe", never a
+        raw brace, and never raises."""
+        perk = VowSituationalPerkFactory.build(
+            name="Press", announce_template="{ally} holds {target} for {holder}!"
+        )
+        firing = FiredPerk(perk=perk, holder=None, magnitude_tenths=10, rung_number=None)
+        self.assertEqual(
+            render_announce(firing, holder_name="Tomas", subject_name="Tomas"),
+            "an ally holds the foe for Tomas!",
+        )
+        perk.announce_template = "{holder} strikes {"
+        self.assertEqual(
+            render_announce(firing, holder_name="Tomas", subject_name="Tomas"),
+            "holder strikes ",
+        )
 
 
 class VowSituationalPerkSituationModelTests(TestCase):

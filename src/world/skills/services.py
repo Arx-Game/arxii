@@ -53,10 +53,6 @@ _XP_BOUNDARY_DIGIT = 9
 _XP_BOUNDARY_MIN = 19
 _XP_BOUNDARY_MAX = 49
 
-# A skill's shown value is its stored value / 10 (the "3.0" a plateau message names).
-# Band caps (#4585) are authored on that shown scale and converted at the comparison.
-_SKILL_SHOWN_DIVISOR = 10
-
 
 def _get_path_level(character: ObjectDB) -> int:
     """Get the character's highest class level.
@@ -135,15 +131,14 @@ def get_specialization_value(character: ObjectDB, specialization: Specialization
 
 
 def has_specialization(
-    character: ObjectDB, specialization: Specialization, *, minimum_rank: int = 1
+    character: ObjectDB, specialization: Specialization, *, minimum_value: int = 10
 ) -> bool:
-    """Whether a character owns a specialization at ``minimum_rank`` or better (#1688).
+    """Whether a character owns a specialization at ``minimum_value`` or better (#1688).
 
-    A rank is ten points of stored value (rank 1 = value 10 — the same rung
-    boundaries XP unlocks cross). Gates surfacing of spec-only options
-    (e.g. the gossip option only appears at Gossip rank ≥ 1).
+    Compared on the stored value, the one players see (#5091). Gates surfacing of
+    spec-only options (e.g. the gossip option only appears at Gossip 10 or more).
     """
-    return _get_spec_value(character, specialization) >= minimum_rank * 10
+    return _get_spec_value(character, specialization) >= minimum_value
 
 
 def _get_teaching_skill() -> Skill | None:
@@ -479,19 +474,18 @@ def next_xp_boundary(value: int) -> int | None:
 def stored_skill_cap(sheet: CharacterSheet) -> int | None:
     """The highest stored value the sheet's level band lets a skill reach (#4585).
 
-    ``MaturationStatCap.skill_cap`` (shown units) times ten, or ``None`` when the band
+    ``MaturationStatCap.skill_cap`` (stored units, #5091), or ``None`` when the band
     has no row or its skill cap is blank. Applies to skills and their specializations.
     """
     from world.progression.services.maturation import skill_cap_for  # noqa: PLC0415
 
-    cap = skill_cap_for(sheet)
-    return None if cap is None else cap * _SKILL_SHOWN_DIVISOR
+    return skill_cap_for(sheet)
 
 
 def skill_cap_message(name: str, stored_cap: int) -> str:
     """Message shown when development stops at the band's skill cap (#4585)."""
     return (
-        f"{name} is at {stored_cap / _SKILL_SHOWN_DIVISOR:.1f}, the cap for your current "
+        f"{name} is at {stored_cap}, the cap for your current "
         "level band. Development maintains it but cannot raise it further."
     )
 
@@ -504,7 +498,7 @@ def _boundary_message(skill: Skill, next_rating: int) -> str:
 def boundary_message(name: str, next_rating: int) -> str:
     """The XP-boundary plateau message for a skill named ``name`` (#2115, #5010)."""
     return (
-        f"{name} is at threshold {next_rating / 10:.1f} — training maintains, "
+        f"{name} is at threshold {next_rating} — training maintains, "
         "does not advance until the breakthrough is unlocked."
     )
 
@@ -682,7 +676,7 @@ def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool
             spend_xp_for_character(
                 character.sheet_data,
                 xp_cost,
-                f"Breakthrough: {skill.name} to {target_rating / 10:.1f}",
+                f"Breakthrough: {skill.name} to {target_rating}",
             )
         except InsufficientXPError as exc:
             return False, f"Insufficient XP (need {exc.required}, have {exc.available})."
@@ -695,7 +689,7 @@ def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool
 
     return (
         True,
-        f"Breakthrough! {skill.name} rises to {target_rating / 10:.1f} — training resumes.",
+        f"Breakthrough! {skill.name} rises to {target_rating} — training resumes.",
     )
 
 

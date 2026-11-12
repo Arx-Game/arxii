@@ -13,6 +13,7 @@ import {
   useAlmanachMutation,
   useHoldingKinds,
   useRealmTitles,
+  useRegionalEventKinds,
   useTitleDocument,
 } from '../queries';
 import { RecordRail, type RecordRailDoor, type RecordRailRow } from '../document/RecordRail';
@@ -47,6 +48,12 @@ export function TitlePage({ titleId }: { titleId: number }) {
   const addHolding = useAlmanachMutation('almanach_add_holding');
   const setCapacity = useAlmanachMutation('almanach_set_capacity');
   const [capacityText, setCapacityText] = useState('');
+  // #5080: a blight, a war, a famine over this land
+  const openEvent = useAlmanachMutation('almanach_open_regional_event');
+  const closeEvent = useAlmanachMutation('almanach_close_regional_event');
+  const [eventKindId, setEventKindId] = useState('');
+  const [severityText, setSeverityText] = useState('100');
+  const { data: eventKinds } = useRegionalEventKinds();
   const { data: holdingKinds } = useHoldingKinds();
   const { data: regionMaps } = useRegionMapsQuery();
   const account = useAccount();
@@ -96,7 +103,7 @@ export function TitlePage({ titleId }: { titleId: number }) {
       </div>
     );
   }
-  const { title, demesne, holdings, books, forces, vassals } = doc;
+  const { title, demesne, holdings, books, forces, vassals, events } = doc;
   const { chartered_fiefs: charteredFiefs, chartered_by: charteredBy, claims, chain } = doc;
   // Land is a county or a barony (#5069): only land has a demesne, developments and
   // forces; a duchy and above are organization, their holdings the rungs beneath.
@@ -628,6 +635,76 @@ export function TitlePage({ titleId }: { titleId: number }) {
 
           <Books books={books} />
           {demesne && <Forces forces={forces} />}
+
+          <h4 className="sec">{SECTIONS.events}</h4>
+          <div className="events">
+            {events.length === 0 && <p className="meta">none</p>}
+            {events.map((event) => (
+              <div key={event.event_id} className="row2 ev">
+                <div className="field">
+                  <div className="val">
+                    <strong>{event.kind}</strong> over {event.area}{' '}
+                    <span className="meta">{event.severity_pct}%</span>
+                  </div>
+                </div>
+                <div className="field">
+                  <button
+                    type="button"
+                    className="btn sm ghost"
+                    onClick={() => closeEvent.mutate({ event_id: event.event_id })}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            ))}
+            <div className="row3">
+              <div className="field">
+                <select
+                  id="d-event-kind"
+                  aria-label="event"
+                  value={eventKindId}
+                  onChange={(e) => setEventKindId(e.target.value)}
+                >
+                  <option value="">Event</option>
+                  {(eventKinds?.results ?? []).map((kind) => (
+                    <option key={kind.id} value={kind.id}>
+                      {kind.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <input
+                  id="d-event-severity"
+                  type="number"
+                  min={1}
+                  max={100}
+                  aria-label="severity"
+                  value={severityText}
+                  onChange={(e) => setSeverityText(e.target.value)}
+                />
+              </div>
+              <div className="field">
+                <button
+                  type="button"
+                  className="btn sm quiet"
+                  disabled={eventKindId === '' || severityText.trim() === ''}
+                  onClick={() => {
+                    openEvent.mutate({
+                      kind_id: Number(eventKindId),
+                      area_id: title.area_id,
+                      severity_pct: Number(severityText),
+                    });
+                    setEventKindId('');
+                    setSeverityText('100');
+                  }}
+                >
+                  Open
+                </button>
+              </div>
+            </div>
+          </div>
 
           <h4 className="sec">{SECTIONS.holdings}</h4>
           <div className="scroll">

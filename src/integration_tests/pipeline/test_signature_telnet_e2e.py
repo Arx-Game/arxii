@@ -93,7 +93,7 @@ class SignatureTelnetE2EJourneyTest(TestCase):
             target_kind=TargetKind.TECHNIQUE,
             target_technique=self.technique,
             name=self.technique.name,
-            level=30,  # stored; shows 3, the flourish's default minimum (#4585)
+            level=30,  # the flourish's default minimum
         )
         self.character.threads.invalidate()
 
