@@ -1,9 +1,10 @@
 """Thread crossing threshold model (#1885).
 
 Authored catalog rows that gate thread-level advancement across PathStage
-crossing levels (3, 6, 11, 16, 21). Mirrors ``ClassLevelUnlock``'s shape but
-keyed on ``(target_kind, level)`` so a level-3 GIFT crossing can require
-different things than a level-3 COVENANT_ROLE crossing.
+crossing levels (thread levels 30, 60, 110, 160, 210: the Path crossings times
+ten, #5091). Mirrors ``ClassLevelUnlock``'s shape but keyed on
+``(target_kind, level)`` so a level-30 GIFT crossing can require different
+things than a level-30 COVENANT_ROLE crossing.
 
 Requirements FK to a ``ThreadCrossingThreshold`` via the polymorphic
 ``thread_crossing_threshold`` field on ``AbstractUnlockRequirement`` (the

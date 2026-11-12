@@ -1,11 +1,10 @@
 """Journeys: threads are capped by character level and their thresholds fire at the
-level a player sees (#4585).
+level a player sees (#4585, #5091).
 
-A thread level is stored x10, like a stat: stored 30 shows 3. Every authored thread
-threshold (the crossings at 3, 6, 11, 16 and 21, a covenant sub-role's unlock level, a
-signature flourish's minimum) is a shown level, so it is reached at stored 30, never at
-stored 3. And a thread is never shown above its owner's level: a level-4 character's
-threads stop at stored 40.
+A thread shows its stored level. Every authored thread threshold (the crossings at 30,
+60, 110, 160 and 210, a covenant sub-role's unlock level, a signature flourish's
+minimum) is a thread level, so a crossing is reached at 30, never at 3. And a thread
+never rises past ten times its owner's level: a level-4 character's threads stop at 40.
 
 Ysmay imbues through the real telnet path: ``ritual Rite of Imbuing`` then
 ``imbue thread=<id> amount=<n>``. The expected numbers come from the rules the magic
@@ -101,9 +100,9 @@ class _ThreadCase(JourneyCase):
         return self.telnet(self.ysmay, "threads crossing list")
 
 
-class ACrossingArrivesAtShownThree(_ThreadCase):
-    def test_imbuing_to_stored_thirty_offers_the_level_three_crossing(self) -> None:
-        """Stored 29 -> 30 is shown 2.9 -> 3: the crossing catalog offers level 3."""
+class ACrossingArrivesAtThirty(_ThreadCase):
+    def test_imbuing_to_thirty_offers_the_level_thirty_crossing(self) -> None:
+        """29 -> 30 crosses: the crossing catalog offers level 30."""
         self.her_level_is(3)
         thread = self.trait_thread(29)
         self.boundaries_paid(thread, 30)
@@ -112,13 +111,13 @@ class ACrossingArrivesAtShownThree(_ThreadCase):
 
         self.assertIn(f"You complete the rite, imbuing {thread.name}.", told)
         self.assertEqual(thread.level, 30)
-        self.assertIn("Crossing level 3", self.crossing_list())
+        self.assertIn("Crossing level 30", self.crossing_list())
         self.assertTrue(
             PendingCrossingOffer.objects.filter(thread=thread, crossing_level=30).exists()
         )
 
-    def test_stored_three_is_shown_point_three_and_offers_nothing(self) -> None:
-        """Stored 2 -> 3 is shown 0.2 -> 0.3: no crossing fires."""
+    def test_level_three_is_no_crossing_and_offers_nothing(self) -> None:
+        """2 -> 3 is not a crossing (the old shown 3 is now 30): no crossing fires."""
         thread = self.trait_thread(2)
 
         self.imbue(thread, imbue_cost(2, 3))
@@ -130,7 +129,7 @@ class ACrossingArrivesAtShownThree(_ThreadCase):
 
 class OneImbueAcrossTwoCrossings(_ThreadCase):
     def test_the_skipped_crossing_auto_resolves_and_the_highest_is_offered(self) -> None:
-        """Stored 25 -> 62 passes shown 3 and 6: 3 takes its default, 6 is offered."""
+        """25 -> 62 passes 30 and 60: 30 takes its default, 60 is offered."""
         from world.conditions.factories import ConditionTemplateFactory
         from world.magic.models.crossing import CrossingOption
 
@@ -150,15 +149,15 @@ class OneImbueAcrossTwoCrossings(_ThreadCase):
 
         self.assertEqual(thread.level, 62)
         choice = CrossingChoice.objects.get(thread=thread)
-        self.assertEqual((choice.crossing_level, choice.option), (3, default_at_three))
+        self.assertEqual((choice.crossing_level, choice.option), (30, default_at_three))
         told = self.crossing_list()
-        self.assertIn("Crossing level 6", told)
-        self.assertNotIn("Crossing level 3", told)
+        self.assertIn("Crossing level 60", told)
+        self.assertNotIn("Crossing level 30", told)
 
 
 class TheThreadStopsAtHerLevel(_ThreadCase):
     def test_a_level_four_character_stops_at_stored_forty(self) -> None:
-        """Level 4 caps every thread at stored 40 (shown 4), whatever the anchor allows."""
+        """Level 4 caps every thread at 40, whatever the anchor allows."""
         from actions.definitions.imbue import ImbueAction
 
         self.her_level_is(4)

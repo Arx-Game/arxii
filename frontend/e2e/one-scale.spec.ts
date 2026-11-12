@@ -14,6 +14,20 @@ import { test, expect, type Page, type TestInfo } from '@playwright/test';
  */
 
 const CHARACTER = 'Odile Onescale';
+const STAT_NAMES = [
+  'strength',
+  'agility',
+  'stamina',
+  'charm',
+  'presence',
+  'composure',
+  'intellect',
+  'wits',
+  'stability',
+  'luck',
+  'perception',
+  'willpower',
+];
 
 async function logIn(page: Page) {
   await page.goto('/login');
@@ -74,10 +88,24 @@ test.describe('one scale: the stored value everywhere', () => {
     const drafts = await page.request.get('/api/character-creation/drafts/');
     expect(drafts.ok()).toBe(true);
     const draftBody = (await drafts.json()) as { id: number }[] | { results: { id: number }[] };
-    const draft = (Array.isArray(draftBody) ? draftBody : draftBody.results)[0];
-    expect(draft, 'the account has a creation draft').toBeTruthy();
+    let draft = (Array.isArray(draftBody) ? draftBody : draftBody.results)[0];
+    if (!draft) {
+      // The page starts a draft the same way when the account has none.
+      const created = await page.request.post('/api/character-creation/drafts/', {
+        headers: { 'X-CSRFToken': await csrf(page) },
+      });
+      expect(created.ok(), await created.text()).toBe(true);
+      draft = (await created.json()) as { id: number };
+    }
+    // Open the Attributes stage with every statistic at the default 20, so a rerun
+    // against the same database starts where a fresh draft does.
+    const current = await page.request.get(`/api/character-creation/drafts/${draft.id}/`);
+    const { draft_data: draftData } = (await current.json()) as {
+      draft_data: Record<string, unknown>;
+    };
+    const defaults = Object.fromEntries(STAT_NAMES.map((name) => [name, 20]));
     const moved = await page.request.patch(`/api/character-creation/drafts/${draft.id}/`, {
-      data: { current_stage: 7 },
+      data: { current_stage: 7, draft_data: { ...draftData, stats: defaults } },
       headers: { 'X-CSRFToken': await csrf(page) },
     });
     expect(moved.ok(), await moved.text()).toBe(true);
@@ -94,6 +122,10 @@ test.describe('one scale: the stored value everywhere', () => {
     await page.getByRole('button', { name: 'Raise agility' }).click();
     const agility = page.locator('output[aria-labelledby="lbl-agility"]');
     await expect(agility).toHaveText('30');
+    // Ten moved from strength to agility: the budget is spent, nothing over, nothing left.
+    await expect(page.getByText(/Points remaining:/)).toHaveText(
+      /Points remaining:\s*0\s*of\s*240/
+    );
     await shoot(page, testInfo, 'cg-attributes-moved.png');
 
     // What the page shows is what the server kept: a fresh read of the draft.

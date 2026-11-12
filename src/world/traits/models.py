@@ -3,7 +3,7 @@ Arx II Traits System Models
 
 Core models for character traits, check resolution, and advancement tracking.
 Following Arx II design principles:
-- 1-100 internal scale (displayed as 1.0-10.0)
+- one 1-100 scale, stored and shown as-is (ADR-5091)
 - Data-driven configuration for all mechanics
 - Support for GM/player intervention in checks
 - Clean separation between trait definitions and character values

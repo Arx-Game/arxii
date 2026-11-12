@@ -1,6 +1,6 @@
 """Journeys: a vow holder chooses their own focus picks (#4929, slice 6 of #4844).
 
-Ysmay holds the Quicksilver vow at vow level 2. She reads every pick her vow offers
+Ysmay holds the Quicksilver vow at vow level 20. She reads every pick her vow offers
 by level from the sheet's endpoint and through ``vow picks``, chooses within each
 level's budget from the web and through ``vow pick``, and is refused a pick over
 budget, a pick above her level, and a pick she already chose. The expected numbers
@@ -54,7 +54,7 @@ CATALOG_URL = "/api/covenants/character-roles/vow-picks/"
 
 
 class _VowHolderCase(JourneyCase):
-    """Ysmay, in the Quicksilver covenant, holding its vow at vow level 2."""
+    """Ysmay, in the Quicksilver covenant, holding its vow at vow level 20."""
 
     vow_level = 2
 
@@ -131,17 +131,17 @@ class ReadingTheCatalog(_VowHolderCase):
         self.assertTrue(flank["choosable"])
         self.assertEqual(self.entry(first, "Light on Your Feet")["limits"], "no limits")
         stand = self.entry(third, "Last Stand")
-        self.assertEqual(stand["locked_reason"], "opens at vow level 3")
+        self.assertEqual(stand["locked_reason"], "opens at vow level 30")
         self.assertFalse(stand["choosable"])
 
     def test_telnet_lists_the_same_catalog(self) -> None:
         told = self.telnet(self.ysmay, "vow picks")
 
-        self.assertIn("Quicksilver|n, vow level 2.", told)
+        self.assertIn("Quicksilver|n, vow level 20.", told)
         self.assertIn("Level 1: 0 of 4.", told)
         self.assertIn("Strike from the Flank, 2 pts.", told)
-        self.assertIn("Level 3: opens at vow level 3.", told)
-        self.assertIn("Last Stand, 2 pts. |x(opens at vow level 3)|n", told)
+        self.assertIn("Level 30: opens at vow level 30.", told)
+        self.assertIn("Last Stand, 2 pts. |x(opens at vow level 30)|n", told)
 
     def test_another_account_cannot_read_her_catalog(self) -> None:
         hobb = self.make_player("Hobb", room=self.room)
@@ -378,7 +378,7 @@ class ImbuingOpensNewPicks(_ImbuingCase):
         self.assertEqual(thread.level, 20)
         # The shown level (stored 20 shows 2), never the stored climb of 10.
         self.assertIn(f"{thread.name} is now level 2.", told)
-        self.assertIn("Vow level 2: 4 pts of new picks.", told)
+        self.assertIn("Vow level 20: 4 pts of new picks.", told)
 
     def test_an_imbue_within_a_level_names_no_new_level(self) -> None:
         thread = self.vow_thread(1)
@@ -406,7 +406,7 @@ class ImbuingOpensNewPicks(_ImbuingCase):
         )
 
         self.assertEqual(response.status_code, 200, response.content)
-        self.assertIn("Vow level 2: 4 pts of new picks.", response.json()["message"])
+        self.assertIn("Vow level 20: 4 pts of new picks.", response.json()["message"])
         self.assertIn(f"{thread.name} is now level 2.", response.json()["message"])
         self.assertEqual(response.json()["opened_pick_levels"], [2])
         self.assertEqual(response.json()["new_picks"], [{"level": 2, "points": 4}])
@@ -431,7 +431,7 @@ class ImbuingOpensNewPicks(_ImbuingCase):
             format="json",
         )
         self.assertEqual(response.status_code, 200, response.content)
-        self.assertIn("Vow level 2: 4 pts of new picks.", response.json()["message"])
+        self.assertIn("Vow level 20: 4 pts of new picks.", response.json()["message"])
         self.assertEqual(response.json()["opened_pick_levels"], [2])
         self.assertEqual(response.json()["new_picks"], [{"level": 2, "points": 4}])
 
@@ -439,7 +439,7 @@ class ImbuingOpensNewPicks(_ImbuingCase):
             self.ysmay,
             f"ritual Quick Imbuing thread={thread.pk} amount={self.ready(thread, 20, 30)}",
         )
-        self.assertIn("Vow level 3: 4 pts of new picks.", told)
+        self.assertIn("Vow level 30: 4 pts of new picks.", told)
 
     def test_imbuing_past_level_three_opens_nothing_more(self) -> None:
         thread = self.vow_thread(3)
@@ -515,8 +515,8 @@ class JoiningWithAVowAlreadyWoven(JourneyCase):
 
         self.induct()
 
-        self.assertTold(self.ysmay, "Vow level 1: 4 pts of new picks.")
-        self.assertTold(self.ysmay, "Vow level 2: 4 pts of new picks.")
+        self.assertTold(self.ysmay, "Vow level 10: 4 pts of new picks.")
+        self.assertTold(self.ysmay, "Vow level 20: 4 pts of new picks.")
 
     def test_a_fresh_joiner_is_told_nothing_of_picks(self) -> None:
         self.induct()

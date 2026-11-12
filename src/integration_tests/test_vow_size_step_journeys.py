@@ -248,7 +248,7 @@ class AVowedCastersBuffsStep(JourneyCase):
     # -- journeys -----------------------------------------------------------------
 
     def test_her_whole_step_at_thread_six_counts_beside_a_tapered_pile(self) -> None:
-        self.swear(thread_level=6)
+        self.swear(thread_level=60)
 
         gain = self.buff_vesper_beside_others()
 
@@ -265,7 +265,7 @@ class AVowedCastersBuffsStep(JourneyCase):
         self.assertEqual((contribution.value, contribution.vow_part), (15, 5))
 
     def test_at_thread_four_the_step_is_smaller(self) -> None:
-        self.swear(thread_level=4)
+        self.swear(thread_level=40)
 
         gain = self.buff_vesper_beside_others()
 
@@ -275,7 +275,7 @@ class AVowedCastersBuffsStep(JourneyCase):
         self.assertEqual(gain, 50)
 
     def test_a_vow_without_the_functions_specialty_adds_nothing(self) -> None:
-        self.swear(thread_level=6, function=TechniqueFunction.STRIKE)
+        self.swear(thread_level=60, function=TechniqueFunction.STRIKE)
 
         gain = self.buff_vesper_beside_others()
 
@@ -285,7 +285,7 @@ class AVowedCastersBuffsStep(JourneyCase):
         self.assertEqual(gain, 49)
 
     def test_a_three_tenths_specialty_gives_a_small_step(self) -> None:
-        self.swear(thread_level=6, tenths=3)
+        self.swear(thread_level=60, tenths=3)
 
         gain = self.buff_vesper_beside_others()
 
@@ -297,7 +297,7 @@ class AVowedCastersBuffsStep(JourneyCase):
     def test_a_secondary_vow_steps_at_the_secondary_potency(self) -> None:
         # Her only engaged vow is a secondary one. The default SecondaryVowConfig potency
         # is 6 tenths, so her 10-tenths specialty counts 10 x 6/10 = 6 tenths.
-        self.swear(thread_level=6, is_secondary=True)
+        self.swear(thread_level=60, is_secondary=True)
 
         gain = self.buff_vesper_beside_others()
 
@@ -309,7 +309,7 @@ class AVowedCastersBuffsStep(JourneyCase):
         self.assertEqual(gain, 52)
 
     def test_a_weak_cast_from_a_deep_vow_still_steps_at_the_vows_level(self) -> None:
-        self.swear(thread_level=6)
+        self.swear(thread_level=60)
         _pin_cast_level(1)
         before = self.ward_check().total_points
 
@@ -323,7 +323,7 @@ class AVowedCastersBuffsStep(JourneyCase):
         self.assertEqual(self.ward_check().total_points - before, 8)
 
     def test_recasting_without_the_vow_keeps_the_step(self) -> None:
-        self.swear(thread_level=6)
+        self.swear(thread_level=60)
         self.cast(self.selene, self.vesper, self.warding_word)
         grant_technique(self.aldric.sheet_data.primary_persona, self.warding_word)
 
@@ -334,7 +334,7 @@ class AVowedCastersBuffsStep(JourneyCase):
         self.assertEqual((selene.modifier_vow_level, selene.modifier_vow_tenths), (6, 10))
 
     def test_a_stat_buff_steps_in_the_stat_lane(self) -> None:
-        self.swear(thread_level=6)
+        self.swear(thread_level=60)
         condition = ConditionTemplateFactory(name="Iron Grip")
         ConditionModifierEffectFactory(
             condition=condition, modifier_target=self.strength_target, value=FLAT_AUTHORED

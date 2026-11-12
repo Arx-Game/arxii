@@ -133,8 +133,8 @@ class StatAdjustment(TypedDict):
     """Result of a stat cap enforcement adjustment."""
 
     stat: str
-    old_display: int
-    new_display: int
+    old_value: int
+    new_value: int
     reason: str
 
 
