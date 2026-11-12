@@ -8,8 +8,8 @@ Hobb's distinction, Eye for Faces, covers the Identification check's whole categ
 ``identify`` forced to a botch tells him only that he can't place the face. Maud's
 distinction covers only the Search check, so her botched ``identify`` still names the
 wrong person. Ysmay's Born to the Rock covers her climbing; her botched climb lands on
-Failure, and the stored roll read back over REST shows her a "Cannot botch" line that
-Maren, who shares the scene, never sees.
+Failure, so the roll she reads back over REST shows her slip, not her fall, with a
+"Cannot botch" line that Maren, who shares the scene, never sees.
 
 Staff author the immunity the way the spec says: a ``botch_immunity`` modifier target
 scoped to a check category or a check type, and a distinction effect on it, granted
@@ -23,11 +23,9 @@ from decimal import Decimal
 from django.test import override_settings
 
 from actions.constants import ActionBackend
-from actions.player_interface import dispatch_player_action
-from actions.types import ActionRef
 from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from integration_tests.harness import JourneyCase
-from world.checks.factories import CheckTypeFactory
+from world.checks.factories import CheckTypeFactory, ConsequenceFactory
 from world.checks.models import CheckType
 from world.checks.test_helpers import force_check_outcome
 from world.conditions.factories import CapabilityTypeFactory
@@ -40,6 +38,7 @@ from world.mechanics.constants import BOTCH_IMMUNITY_CATEGORY_NAME
 from world.mechanics.factories import (
     ApplicationFactory,
     ChallengeApproachFactory,
+    ChallengeTemplateConsequenceFactory,
     ChallengeTemplateFactory,
     ModifierCategoryFactory,
     ModifierTargetFactory,
@@ -56,6 +55,8 @@ from world.seeds.checks import seed_check_resolution_tables
 from world.seeds.investigation_checks import ensure_identification_check
 from world.traits.models import CheckOutcome, ResultChart
 
+SLIPPED = "Your hands slip and you catch the ledge."
+FELL = "You fall to the quarry floor."
 CANT_PLACE = "You can't place who's really underneath"
 FAKE_ID = "You'd swear that's Old Marta... but you're wrong."
 
@@ -81,7 +82,6 @@ class _NicheCase(JourneyCase):
         target = ModifierTargetFactory(
             category=self.botch_immunity, name=f"{distinction_name} scope", **scope
         )
-        ModifierTarget.clear_trait_cache()
         distinction = DistinctionFactory(name=distinction_name)
         DistinctionEffectFactory(distinction=distinction, target=target, value_per_rank=1)
         grant_distinction(character.sheet_data, distinction, origin=DistinctionOrigin.GM_AWARD)
@@ -143,6 +143,13 @@ class AClimberSeesWhyHerFallWasOnlyAFailure(_NicheCase):
             name="The Quarry Face", severity=DIFFICULTY_VALUES[DifficultyChoice.TRIVIAL]
         )
         template.properties.add(prop)
+        for tier, label in (("Failure", SLIPPED), ("Critical Failure", FELL)):
+            ChallengeTemplateConsequenceFactory(
+                challenge_template=template,
+                consequence=ConsequenceFactory(
+                    outcome_tier=CheckOutcome.objects.get(name=tier), label=label
+                ),
+            )
         self.approach = ChallengeApproachFactory(
             challenge_template=template,
             application=ApplicationFactory(
@@ -179,24 +186,36 @@ class AClimberSeesWhyHerFallWasOnlyAFailure(_NicheCase):
         (outcome,) = response.json()["results"]
         return outcome
 
+    def climb(self) -> None:
+        """Ysmay climbs the face from the browser's dispatch endpoint.
+
+        ``web()`` drives registry keys only, so the challenge ref is posted to the
+        dispatch endpoint the browser's action calls go through.
+        """
+        response = self.api(self.account_of(self.ysmay)).post(
+            f"/api/actions/characters/{self.ysmay.pk}/dispatch/",
+            {
+                "ref": {
+                    "backend": ActionBackend.CHALLENGE,
+                    "challenge_instance_id": self.face.pk,
+                    "approach_id": self.approach.pk,
+                },
+                "kwargs": {},
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+
     def test_her_botch_lands_on_failure_and_only_she_reads_why(self) -> None:
         with force_check_outcome(self.botch):
-            result = dispatch_player_action(
-                self.ysmay,
-                ActionRef(
-                    backend=ActionBackend.CHALLENGE,
-                    challenge_instance_id=self.face.pk,
-                    approach_id=self.approach.pk,
-                ),
-                {},
-            )
+            self.climb()
 
-        self.assertEqual(result.detail.check_result.outcome.name, "Failure")
-        hers = [
-            (m["source_kind"], m["source_label"], m["value"])
-            for m in self.stored_for(self.ysmay)["modifiers"]
-        ]
+        stored = self.stored_for(self.ysmay)
+        (shown,) = [row for row in stored["outcome_display"] if row["is_selected"]]
+        self.assertEqual((shown["label"], shown["tier_name"]), (SLIPPED, "Failure"))
+        hers = [(m["source_kind"], m["source_label"], m["value"]) for m in stored["modifiers"]]
         self.assertIn(("botch_immunity", "Cannot botch: Born to the Rock", 0), hers)
+        self.assertEqual(sum(value for _, _, value in hers), stored["modifier_total"])
         theirs = self.stored_for(self.maren)
         self.assertNotIn(
             "Born to the Rock", " ".join(m["source_label"] for m in theirs["modifiers"])
