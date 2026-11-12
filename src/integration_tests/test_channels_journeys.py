@@ -232,6 +232,17 @@ class TalkingOnPublic(ChannelJourneyCase):
         # The telnet picker reads it as a post to a channel named "as Public", and refuses.
         self.assertIn("No such channel.", self.telnet(self.hobb, "channel as Public=\u00b2"))
 
+    def test_a_new_subscriber_starts_caught_up(self) -> None:
+        self.subscribe_web(self.ysmay_account, self.public)
+        self.post_web(self.ysmay_account, self.public, "Before you came.")
+
+        joined = self.subscribe_web(self.hobb_account, self.public).json()
+        self.assertEqual(joined["unread_count"], 0)
+        self.assertEqual(len(self.history(self.hobb_account, self.public)), 1)
+        self.post_web(self.ysmay_account, self.public, "Welcome.")
+        listed = self.api(self.hobb_account).get(SUBSCRIPTIONS).json()
+        self.assertEqual(listed[0]["unread_count"], 1)
+
     def test_the_stock_evennia_channel_command_is_gone(self) -> None:
         listing = self.telnet(self.ysmay, "channel")
         self.assertIn("Public (Public) - not joined", listing)

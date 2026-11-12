@@ -307,7 +307,8 @@ def _require_access(account: AccountDB, channel: Channel) -> None:
 
 
 def subscribe(account: AccountDB, channel: Channel) -> ChannelSubscription:
-    """Join ``channel`` (idempotent), pre-filling the speaking identity."""
+    """Join ``channel`` (idempotent), pre-filling the speaking identity. A new subscriber
+    starts caught up: what was said before they joined is history, not unread."""
     _require_access(account, channel)
     existing = ChannelSubscription.objects.filter(account=account, channel=channel).first()
     if existing is not None:
@@ -316,6 +317,7 @@ def subscribe(account: AccountDB, channel: Channel) -> ChannelSubscription:
         account=account,
         channel=channel,
         display_tenure=default_tenure_for(account, channel),
+        last_read_at=timezone.now(),
     )
 
 
