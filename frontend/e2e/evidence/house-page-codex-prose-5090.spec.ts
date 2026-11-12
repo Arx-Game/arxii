@@ -226,7 +226,29 @@ test.describe('#5090 on the production bundle', () => {
     await expect(page.getByText('the organization', { exact: true })).toHaveCount(0);
     await expect(page.getByText('the house on the roster')).toHaveCount(0);
 
+    // The rail holds only what the document has data for: four rows and two
+    // links on The House, the family page alone on The Family, the ladder alone
+    // on Titles. Nothing that only ever showed a dash, no link without a target.
+    const rail = page.locator('aside.record');
+    await expect(rail.locator('dt')).toHaveText(['crown', 'holds', 'demesne', 'vassals']);
+    await expect(rail.locator('ul.doors li')).toHaveCount(2);
+    await expect(rail.locator('ul.doors li a')).toHaveCount(2);
+
     await page.screenshot({ path: shot('1-house-page.png'), fullPage: true });
+
+    await page.getByRole('button', { name: 'The Family', exact: true }).click();
+    await expect(page.locator('main.chapter h3').first()).toContainText('Family');
+    await expect(rail.locator('dt')).toHaveCount(0);
+    await expect(rail.locator('h4')).toHaveText(['links']);
+    await expect(rail.locator('ul.doors li a')).toHaveText(['Piropa family page']);
+
+    await page.getByRole('button', { name: 'Titles', exact: true }).click();
+    await expect(rail.locator('ul.doors li a')).toHaveText(['the ladder']);
+    await expect(rail.locator('dt')).toHaveCount(0);
+    await expect(rail.locator('ul.doors li')).toHaveCount(1);
+
+    await page.getByRole('button', { name: 'The House', exact: true }).click();
+    await expect(rail.locator('dt')).toHaveCount(4);
 
     // The family page link leaves for the family page.
     await family.click();
