@@ -60,9 +60,12 @@ first player of a character (`player_number == 1`), else the anonymous
 channel, and frozen on each message as `author_tenure`.
 
 - **PUBLIC / STAFF:** any current tenure (`end_date IS NULL`) of the account.
-- **ORG:** only a current tenure whose character holds an active
-  `OrganizationMembership` (`left_at` and `exiled_at` null) in the channel's
-  organization or in a non-covert vassal of it (below).
+- **ORG:** only a current tenure whose character's **primary persona** holds an
+  active `OrganizationMembership` (`left_at` and `exiled_at` null) in the
+  channel's organization or in a non-covert vassal of it (below). A membership
+  held by an established face (an alter ego, a Presumed Dead guise) never
+  counts, for eligibility, access or delivery alike: the true character's first
+  post would tell the room who the face is.
 
 `default_tenure_for` pre-fills the choice: the account's puppet when it is
 eligible, else `PlayerData.selected_entry`'s tenure when no puppet is up. There
@@ -123,10 +126,16 @@ channel and one ORG channel per existing non-covert, non-covenant org.
   Blocked authors (either direction, `world.scenes.block_services`) stay in
   the page as rows with `is_hidden: true`, empty `speaker` and `body`; the
   client folds each run into one "N hidden" divider (`HiddenDivider`, the
-  #2087 scene-OOC pattern).
+  #2087 scene-OOC pattern). Both block shapes count: an account-level block
+  (`hidden_author_player_ids`) and a persona-scoped block on the author's
+  character's **primary persona** (`hidden_author_sheet_ids`, from
+  `hidden_persona_ids_for_viewer`). A block on an established face never hides
+  the true character's posts, since that would link the two.
 - **Live push** (`deliver_channel_message`, after every post): to each
   subscriber with access who has not muted the channel, is not banned, has no
-  block with the author and has not account-muted the author. Web sessions
+  block with the author (account-level, or on the author's character's primary
+  persona via `block_services.account_ids_hiding_persona`) and has not
+  account-muted the author. Web sessions
   (`WEB_PROTOCOL_KEYS`) get one `channel_message` frame
   (`ChannelMessagePayload`: `message_id`, `channel_id`, `channel_name`,
   `speaker`, `body`, `created_at`, `is_own`, and the recipient's
@@ -137,8 +146,11 @@ channel and one ORG channel per existing non-covert, non-covenant org.
 - **Muted channel** = no push and no unread badge; still readable when opened.
   `notification_level` NONE also zeroes the badge; ALL toasts on the web.
 - **Unread** (`unread_counts`): messages after `last_read_at`, not your own,
-  not from muted or blocked authors. `mark_read` sets `last_read_at`; posting
-  marks the channel read.
+  not from muted or blocked authors (either block shape above). `subscribe`
+  sets `last_read_at` when the subscription is created, so a new subscriber
+  starts caught up; `mark_read` sets it; posting marks the channel read. The
+  web client refetches the channel list and open lanes when its socket
+  reconnects, since frames pushed while it was down never arrived.
 - **Staff delete** pushes `channel_message_removed`
   (`ChannelMessageRemovedPayload`: `message_id`, `channel_id`) to subscribers'
   web sessions, and open readers drop the row.
