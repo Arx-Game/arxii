@@ -81,6 +81,10 @@ async function openSettings(page: Page, name: string): Promise<Locator> {
 async function speakAs(page: Page, name: string, character: string) {
   const menu = await openSettings(page, name);
   const picker = menu.getByRole('combobox', { name: 'Speak as' });
+  // The trigger is blank until the identity list loads; then it shows the chosen
+  // character, or the "Speak as" placeholder when none is chosen yet. Choosing the
+  // character already shown saves nothing, so read it only once it has loaded.
+  await expect(picker).not.toHaveText('', { timeout: 15000 });
   if ((await picker.textContent())?.trim() !== character) {
     const saved = subscriptionWrite(page, 'PATCH');
     await picker.click();
@@ -106,9 +110,14 @@ async function setMute(page: Page, name: string, muted: boolean) {
   await expect(menu).toHaveCount(0);
 }
 
+/** A lane's collapse toggle: the first header button (the settings trigger follows it). */
+function laneToggle(scope: Page | Locator, name: string): Locator {
+  return lane(scope, name).locator('header > button').first();
+}
+
 /** Collapses or expands a lane from its header. */
 async function setCollapsed(page: Page, name: string, collapsed: boolean) {
-  const header = lane(page, name).locator('header button[aria-expanded]');
+  const header = laneToggle(page, name);
   if ((await header.getAttribute('aria-expanded')) === String(collapsed)) {
     const saved = subscriptionWrite(page, 'PATCH');
     await header.click();
@@ -184,11 +193,9 @@ test.describe('player channels', () => {
     await setCollapsed(page, 'Public', true);
     await expect(lane(page, 'Public').getByTestId('channel-messages')).toHaveCount(0);
     await page.reload();
-    await expect(lane(page, 'Public').locator('header button[aria-expanded]')).toHaveAttribute(
-      'aria-expanded',
-      'false',
-      { timeout: 15000 }
-    );
+    await expect(laneToggle(page, 'Public')).toHaveAttribute('aria-expanded', 'false', {
+      timeout: 15000,
+    });
     await expect(lane(page, 'Public').getByTestId('channel-messages')).toHaveCount(0);
     await shot(page, '05-public-collapsed');
     await setCollapsed(page, 'Public', false);
