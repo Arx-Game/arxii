@@ -151,7 +151,7 @@ function fetchTraitOptions(summary: ThreadHubSummary | undefined): AnchorOption[
   return (summary?.weavable_traits ?? []).map((t) => ({
     id: t.trait_id,
     label: t.name,
-    sublabel: `${t.trait_type} · ${t.display_value}`,
+    sublabel: `${t.trait_type} · ${t.value}`,
   }));
 }
 

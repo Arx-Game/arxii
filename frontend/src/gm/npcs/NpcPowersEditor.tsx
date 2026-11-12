@@ -47,13 +47,17 @@ function Overrides({
   options,
   values,
   onChange,
+  min = 0,
   max,
+  step,
 }: {
   title: string;
   options: Option[];
   values: Record<string, string>;
   onChange: (values: Record<string, string>) => void;
+  min?: number;
   max?: number;
+  step?: number;
 }) {
   return (
     <fieldset className="flex flex-col gap-1">
@@ -65,8 +69,9 @@ function Overrides({
             <Input
               aria-label={`${title}: ${titleCase(option.name)}`}
               type="number"
-              min={title === 'Stats' ? 1 : 0}
+              min={min}
               max={max}
+              step={step}
               className="h-8 w-16"
               value={values[option.id] ?? ''}
               onChange={(event) => onChange({ ...values, [option.id]: event.target.value })}
@@ -198,7 +203,9 @@ export function NpcPowersEditor({ value, onChange }: NpcPowersEditorProps) {
         title="Stats"
         options={options.all_stats}
         values={value.stats}
-        max={5}
+        min={10}
+        max={50}
+        step={10}
         onChange={(stats) => set({ stats })}
       />
       <Overrides

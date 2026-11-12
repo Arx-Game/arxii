@@ -26,7 +26,10 @@ interface AttributesStageProps {
   draft: CharacterDraft;
 }
 
-const STAT_MAX = 5;
+const STAT_MIN = 10;
+const STAT_MAX = 50;
+/** One stat point raises a statistic by 10. */
+const STAT_STEP = 10;
 
 /** Why the raise button is disabled, if it is; `undefined` when it isn't. */
 function increaseTitleFor(atCap: boolean, out: boolean): string | undefined {
@@ -123,7 +126,7 @@ export function AttributesStage({ draft }: AttributesStageProps) {
       <InstrumentFrame
         label="Statistics"
         ledger={{
-          left: `Twelve statistics, one to ${STAT_MAX} each`,
+          left: `Twelve statistics, ${STAT_MIN} to ${STAT_MAX} each`,
           right: (
             <>
               Points remaining: <b>{remaining}</b> of <b>{budget}</b>
@@ -138,7 +141,7 @@ export function AttributesStage({ draft }: AttributesStageProps) {
             {cat.stats.map((stat) => {
               const value = stats[stat];
               const atCap = value >= STAT_MAX;
-              const out = remaining <= 0;
+              const out = remaining < STAT_STEP;
               return (
                 <StatRow
                   key={stat}
@@ -147,8 +150,9 @@ export function AttributesStage({ draft }: AttributesStageProps) {
                   value={value}
                   bonus={bonuses[stat] || undefined}
                   max={STAT_MAX}
+                  step={STAT_STEP}
                   onChange={(v) => change(stat, v)}
-                  canDecrease={value > 1}
+                  canDecrease={value > STAT_MIN}
                   canIncrease={!atCap && !out}
                   increaseTitle={increaseTitleFor(atCap, out)}
                   onWhy={() => setWhy(stat)}
