@@ -1,9 +1,11 @@
 """Read-only missives API (#3289): the acting character's letters, sent and received.
 
 Writing, reading (marking read), accepting and refusing go through the registry actions
-(``actions/definitions/missives.py``) over websocket dispatch; this API only lists. The
-rows are ``services.visible_missives_for``: everything the character sent, and what it
-received once arrived and not suppressed by a block.
+(``actions/definitions/missives.py``), which the web client runs with
+``POST /api/actions/characters/<id>/dispatch/``; this API only reads. The rows are
+``services.visible_missives_for``: everything the character sent, and what it received
+once arrived and not suppressed by a block. ``addressees/`` is the compose "To" picker:
+addressable faces by name, id and name only.
 """
 
 from __future__ import annotations
@@ -27,10 +29,15 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from world.messengers.display import display_map_for
-from world.messengers.filters import VIEWER_SENT, MissiveFilterSet
+from world.messengers.filters import VIEWER_SENT, MissiveAddresseeFilterSet, MissiveFilterSet
 from world.messengers.models import Missive, MissiveAttachment
-from world.messengers.serializers import MissiveSerializer
-from world.messengers.services import sent_by_q, unread_count_for, visible_missives_for
+from world.messengers.serializers import MissiveAddresseeSerializer, MissiveSerializer
+from world.messengers.services import (
+    addressable_personas,
+    sent_by_q,
+    unread_count_for,
+    visible_missives_for,
+)
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -41,6 +48,9 @@ _ENTRY_ID = OpenApiParameter(
     required=False,
     description="The roster entry this tab acts as (#3479).",
 )
+
+
+ADDRESSEE_MAX_RESULTS = 10
 
 
 class MissivePagination(PageNumberPagination):
@@ -163,3 +173,29 @@ class MissiveViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         sheet = _viewer_sheet(request)
         count = unread_count_for(sheet) if sheet is not None else 0
         return Response({"count": count})
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                "search",
+                str,
+                required=True,
+                description="Part of the name; at least two characters.",
+            )
+        ],
+        responses=MissiveAddresseeSerializer(many=True),
+    )
+    @action(detail=False, methods=["get"], url_path="addressees", pagination_class=None)
+    def addressees(self, request: Request) -> Response:
+        """Faces a missive can be addressed to whose name contains ``search``.
+
+        Primary and established, non-system personas, by name, at most ten; id and name
+        only, never who plays them. A search shorter than two characters finds nobody.
+        """
+        filterset = MissiveAddresseeFilterSet(
+            request.query_params, queryset=addressable_personas().order_by("name"), request=request
+        )
+        if not filterset.is_valid():
+            return Response([])
+        personas = filterset.qs[:ADDRESSEE_MAX_RESULTS]
+        return Response(MissiveAddresseeSerializer(personas, many=True).data)

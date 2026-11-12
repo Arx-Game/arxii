@@ -250,6 +250,7 @@ def _guarded(run: Any) -> ActionResult:
 
 def render_missive(missive: Missive, sheet: CharacterSheet) -> str:
     """The letter as ``sheet``'s character reads it: header, body, and what came with it."""
+    from world.currency.constants import format_coppers  # noqa: PLC0415
     from world.game_clock.services import format_ic_date  # noqa: PLC0415
     from world.messengers.display import missive_correspondents  # noqa: PLC0415
     from world.messengers.models import MissiveAttachment  # noqa: PLC0415
@@ -271,7 +272,7 @@ def render_missive(missive: Missive, sheet: CharacterSheet) -> str:
         lines.append("With it:")
         for attachment in attachments:
             what = (
-                f"{attachment.coin_amount} coin"
+                format_coppers(attachment.coin_amount)
                 if attachment.coin_amount
                 else attachment.item.display_name
             )
@@ -288,7 +289,8 @@ class SendMissiveAction(Action):
         recipient_persona_id (web) / recipient_name (telnet): who it is for; any primary or
             established persona that is not a system one.
         sender_persona_id: optional, one of the actor's own faces; default the active one.
-        coin_amount: optional whole number of coin to send with it.
+        coin_amount: optional coin to send with it, in coppers (the telnet ``+coin 5s`` is
+            parsed to coppers by the command).
         item_ids (web) / item_names (telnet): optional items to send with it.
         method_id: optional transmission method; default the first one open to the actor.
     """

@@ -10,6 +10,8 @@ where the scheduler would run it.
 
 from __future__ import annotations
 
+from evennia.objects.models import ObjectDB
+
 from evennia_extensions.factories import ObjectDBFactory
 from integration_tests.harness import JourneyCase
 from world.currency.services import get_or_create_purse, transfer
@@ -74,6 +76,16 @@ def holder_of(item: ItemInstance) -> int | None:
     return ItemInstance.objects.filter(pk=item.pk).values_list("holder_character_sheet_id").get()[0]
 
 
+def in_transit(test, item: ItemInstance, old_object_pk: int) -> None:
+    """The item rides with the letter: its row is kept, held by nobody, with no game object,
+    and the object it had in the sender's hands is gone, not left lying anywhere."""
+    row = ItemInstance.objects.filter(pk=item.pk).values(
+        "game_object_id", "holder_character_sheet_id"
+    )
+    test.assertEqual(list(row), [{"game_object_id": None, "holder_character_sheet_id": None}])
+    test.assertFalse(ObjectDB.objects.filter(pk=old_object_pk).exists())
+
+
 def carries(character, item: ItemInstance) -> bool:
     character.carried_items.invalidate()
     return item.pk in {carried.pk for carried in character.carried_items.all()}
@@ -92,6 +104,9 @@ class MissiveJourneyCase(JourneyCase):
         self.counting_house = self.make_room("The Counting House")
         self.ysmay = self.make_player("Ysmay", room=self.study)
         self.hobb = self.make_player("Hobb", room=self.counting_house)
+        # Record from the start, so a push the sweep sends lands in a mailbox; one opened
+        # after the push would hold nothing and every "was told" assertion would be blind.
+        self.watch(self.ysmay, self.hobb)
         # Sorts before the seed "Messenger", so it is the default way to send.
         self.courier = TransmissionMethodFactory(name="Courier", ic_delay_minutes=0)
 
@@ -120,15 +135,19 @@ class SendingAndAccepting(MissiveJourneyCase):
     def test_a_letter_with_coin_and_a_brooch_reaches_hobb_and_he_keeps_them(self) -> None:
         give_coppers(self.ysmay, 100)
         brooch = held_item(self.ysmay, "Moth Brooch")
+        brooch_object_pk = brooch.game_object.pk
         self.connect_telnet(self.hobb)
 
+        # Coin is typed as give takes it: 5s is fifty coppers.
         told = self.telnet(
-            self.ysmay, "missive/send Hobb+coin 50+item Moth Brooch=Wear it to the masque."
+            self.ysmay, "missive/send Hobb+coin 5s+item Moth Brooch=Wear it to the masque."
         )
         self.assertIn("Your missive to Hobb is on its way.", told)
         self.assertEqual(purse_balance(self.ysmay), 50)
         self.assertFalse(carries(self.ysmay, brooch))
+        in_transit(self, brooch, brooch_object_pk)
         letter = self.only_missive()
+        self.assertEqual(arrival_frames(self.mailbox(self.hobb)), [])
 
         self.sweep()
         self.assertEqual(
@@ -141,19 +160,23 @@ class SendingAndAccepting(MissiveJourneyCase):
                 }
             ],
         )
+        # The telnet twin names the way it came, the face written to, and the writer.
         self.assertTold(
             self.hobb,
-            f"A messenger brings you a missive from Ysmay. (missive/read {letter.pk})",
+            f"A courier brings you a missive for Hobb from Ysmay. (missive/read {letter.pk})",
         )
 
         told = self.telnet(self.hobb, f"missive/read {letter.pk}")
         self.assertIn("From Ysmay to Hobb", told)
         self.assertIn("Wear it to the masque.", told)
-        self.assertIn("50 coin (Waiting)", told)
+        self.assertIn("5s (Waiting)", told)
         self.assertIn("Moth Brooch (Waiting)", told)
 
-        told = self.telnet(self.hobb, f"missive/accept {letter.pk}")
+        self.connect_telnet(self.ysmay)
+        with self.captureOnCommitCallbacks(execute=True):
+            told = self.telnet(self.hobb, f"missive/accept {letter.pk}")
         self.assertIn("You accept what came with the missive.", told)
+        self.assertTold(self.ysmay, "Hobb accepted what you sent with your missive.")
         self.assertEqual(purse_balance(self.hobb), 50)
         self.assertEqual(holder_of(brooch), sheet_of(self.hobb).pk)
         self.assertTrue(carries(self.hobb, brooch))
@@ -165,6 +188,7 @@ class RefusingByTheWeb(MissiveJourneyCase):
     def test_refused_coin_and_brooch_go_home_and_ysmay_hears_why(self) -> None:
         give_coppers(self.ysmay, 100)
         brooch = held_item(self.ysmay, "Moth Brooch")
+        brooch_object_pk = brooch.game_object.pk
         result = self.web(
             self.ysmay,
             "send_missive",
@@ -176,11 +200,21 @@ class RefusingByTheWeb(MissiveJourneyCase):
         self.assertTrue(result.detail.success, result.detail.message)
         self.assertIn("Your missive to Hobb is on its way.", result.detail.message)
         letter_id = result.detail.data["missive_id"]
+        in_transit(self, brooch, brooch_object_pk)
         self.sweep()
+        self.assertEqual(
+            arrival_frames(self.mailbox(self.hobb)),
+            [
+                {
+                    "missive_id": letter_id,
+                    "recipient_persona_name": "Hobb",
+                    "sender_display": "Ysmay",
+                }
+            ],
+        )
 
         # The notice reaches a sender someone is playing right now.
         self.connect_telnet(self.ysmay)
-        self.watch(self.ysmay)
         with self.captureOnCommitCallbacks(execute=True):
             result = self.web(self.hobb, "refuse_missive", missive_id=letter_id)
         self.assertTrue(result.detail.success, result.detail.message)

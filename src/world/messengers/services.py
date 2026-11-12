@@ -93,7 +93,11 @@ def default_method_for(sheet: CharacterSheet) -> TransmissionMethod:
     return methods[0]
 
 
-def _addressable_personas() -> QuerySet[Persona]:
+def addressable_personas() -> QuerySet[Persona]:
+    """Every face a missive can be addressed to: primary or established, never a system one.
+
+    The one rule for addressing by name, by id, and the compose "To" picker.
+    """
     return Persona.objects.filter(persona_type__in=_ADDRESSABLE_TYPES, is_system=False)
 
 
@@ -102,7 +106,7 @@ def find_addressable_persona(name: str) -> Persona:
 
     The refusal wording never depends on who owns the persona.
     """
-    matches = list(_addressable_personas().filter(name__iexact=name.strip())[:2])
+    matches = list(addressable_personas().filter(name__iexact=name.strip())[:2])
     if not matches:
         raise MissiveError(NO_SUCH_PERSONA)
     if len(matches) > 1:
@@ -112,7 +116,7 @@ def find_addressable_persona(name: str) -> Persona:
 
 def addressable_persona(persona_id: int) -> Persona:
     """The addressable persona with this pk, under the same rules as by name."""
-    persona = _addressable_personas().filter(pk=persona_id).first()
+    persona = addressable_personas().filter(pk=persona_id).first()
     if persona is None:
         raise MissiveError(NO_SUCH_PERSONA)
     return persona
@@ -237,6 +241,9 @@ def send_missive(  # noqa: PLR0913 - every argument is a distinct part of the le
     text = body.strip()
     if not text:
         raise MissiveError(EMPTY_BODY)
+    # One attachment per item: a repeated item from a direct caller is sent once, not a
+    # second row the (missive, item) constraint would refuse.
+    items = list({item.pk: item for item in items}.values())
     sender_sheet = sender_persona.character_sheet
     method = _method_for_sending(
         sender_sheet, method, carries_coin=coin_amount != 0, carries_items=bool(items)
@@ -360,11 +367,25 @@ def _is_delivered_to(sheet: CharacterSheet, missive: Missive) -> bool:
     return not missive.undeliverable and missive.available_at <= now
 
 
+def _mark_arrived(missive: Missive, now: datetime) -> None:
+    """Stamp the arrival on a letter its recipient has already opened or answered.
+
+    Once read (or answered), the sweep has nothing left to do: it must not toast a letter
+    already read, nor re-check a block placed afterwards and vanish a letter the recipient
+    has seen.
+    """
+    if missive.arrival_notified_at is None:
+        missive.arrival_notified_at = now
+        missive.save(update_fields=["arrival_notified_at"])
+
+
 def read_missive(*, sheet: CharacterSheet, missive: Missive) -> Missive:
     """Mark the missive read the first time its recipient reads it; a sender's read is a no-op."""
     if missive.read_at is None and _is_delivered_to(sheet, missive):
-        missive.read_at = timezone.now()
+        now = timezone.now()
+        missive.read_at = now
         missive.save(update_fields=["read_at"])
+        _mark_arrived(missive, now)
     return missive
 
 
@@ -457,16 +478,21 @@ def _notify_sender(missive: Missive, text: str) -> None:
 
 
 def _resolve(*, sheet: CharacterSheet, missive: Missive, accepted: bool) -> list[MissiveAttachment]:
+    from world.messengers.display import shown_name  # noqa: PLC0415 - display imports us
+
     pending = _lock_pending_attachments(sheet, missive)
-    to_sheet = sheet if accepted else missive.sender_persona.character_sheet
+    sender_sheet = missive.sender_persona.character_sheet
+    to_sheet = sheet if accepted else sender_sheet
     resolution = AttachmentResolution.ACCEPTED if accepted else AttachmentResolution.REFUSED
     now = timezone.now()
+    _mark_arrived(missive, now)
     for attachment in pending:
         _hand_over(attachment, missive=missive, to_sheet=to_sheet, accepted=accepted)
         attachment.resolution = resolution
         attachment.resolved_at = now
         attachment.save(update_fields=["resolution", "resolved_at"])
-    name = missive.recipient_persona.name
+    # Through the sender's eyes: a reply's recipient may be a mask it has not seen through.
+    name = shown_name(missive.recipient_persona, sender_sheet)
     if accepted:
         text = f"{name} accepted what you sent with your missive."
     else:
@@ -519,7 +545,7 @@ def deliver_due_missives(*, now: datetime | None = None) -> int:
             missive = (
                 Missive.objects.select_for_update(skip_locked=True)
                 .filter(pk=candidate.pk, arrival_notified_at__isnull=True, undeliverable=False)
-                .select_related("sender_persona", "recipient_persona")
+                .select_related("method", "sender_persona", "recipient_persona")
                 .first()
             )
             if missive is None or _suppress_if_blocked(missive):

@@ -5,8 +5,9 @@ websocket ping (clients refetch the list on receipt), plus a plain-text twin
 for telnet sessions only so a browser never shows it twice.
 
 Anonymity boundary: the notice names the persona the letter was addressed to and the sender
-as this recipient sees them (``resolve_display_for_viewer``). It never carries a character,
-tenure or account of the sender.
+as this recipient sees them (``display.shown_name``, the one rule every missive surface uses).
+It never carries a character, tenure or account of the sender. It goes to the recipient
+persona's character only.
 """
 
 from __future__ import annotations
@@ -15,8 +16,8 @@ from dataclasses import asdict
 from typing import TYPE_CHECKING
 
 from web.webclient.message_types import MissiveArrivedPayload
+from world.messengers.display import shown_name
 from world.scenes.interaction_services import send_text_to_non_web
-from world.scenes.persona_display import resolve_display_for_viewer
 
 if TYPE_CHECKING:
     from world.messengers.models import Missive
@@ -35,7 +36,7 @@ def notify_missive_arrived(missive: Missive) -> None:
     character = sheet.character
     if character is None:
         return
-    sender_display, _ = resolve_display_for_viewer(missive.sender_persona, viewer_sheet=sheet)
+    sender_display = shown_name(missive.sender_persona, sheet)
     payload = asdict(
         MissiveArrivedPayload(
             missive_id=missive.pk,
@@ -46,5 +47,6 @@ def notify_missive_arrived(missive: Missive) -> None:
     character.msg(missive_arrived=((), payload))
     send_text_to_non_web(
         character,
-        f"A messenger brings you a missive from {sender_display}. (missive/read {missive.pk})",
+        f"A {missive.method.name.lower()} brings you a missive for {recipient.name} "
+        f"from {sender_display}. (missive/read {missive.pk})",
     )

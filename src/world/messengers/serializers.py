@@ -113,3 +113,14 @@ class MissiveSerializer(serializers.ModelSerializer):
     def get_attachments(self, obj: Missive) -> list[dict[str, Any]]:
         by_missive: dict[int, list[MissiveAttachment]] = self.context["attachments_by_missive"]
         return MissiveAttachmentSerializer(by_missive.get(obj.pk, []), many=True).data
+
+
+class MissiveAddresseeSerializer(serializers.Serializer):
+    """A face a missive can be addressed to, for the compose "To" picker: its id and name only.
+
+    Deliberately not ``PersonaSerializer``, which carries the persona's character sheet: who
+    plays a face is never something the picker may tell.
+    """
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)

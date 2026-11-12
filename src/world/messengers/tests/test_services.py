@@ -14,9 +14,12 @@ from django.utils import timezone
 
 from evennia_extensions.factories import AccountFactory
 from evennia_extensions.models import PlayerData
+from world.items.factories import ItemInstanceFactory
 from world.messengers.factories import MissiveFactory, TransmissionMethodFactory
+from world.messengers.models import MissiveAttachment
 from world.messengers.services import (
     deliver_due_missives,
+    read_missive,
     send_missive,
     unread_count_for,
     visible_missives_for,
@@ -131,3 +134,37 @@ class DeliverDueMissivesTests(TestCase):
         sender_view = visible_missives_for(self.sender_sheet, now=later)
         self.assertIn(arrived_unswept, sender_view)
         self.assertIn(arrives_at_sweep, sender_view)
+
+    def test_a_letter_read_before_the_sweep_is_never_announced_or_withdrawn(self) -> None:
+        now = timezone.now()
+        letter = self._send_arriving_at(now - timedelta(minutes=1))
+        read_missive(sheet=self.recipient_sheet, missive=letter)
+        create_block(
+            blocker_account=self.recipient_account,
+            blocker_persona=self.recipient,
+            blocked_persona=self.sender,
+            reason="After reading it.",
+        )
+
+        character_class = type(self.recipient_sheet.character)
+        with patch.object(character_class, "msg") as msg_mock:
+            self.assertEqual(self._sweep(now=now), 0)
+
+        self.assertEqual(_arrival_pushes(msg_mock), [])
+        letter.refresh_from_db()
+        self.assertFalse(letter.undeliverable)
+        self.assertIn(letter, visible_missives_for(self.recipient_sheet, now=now))
+
+    def test_the_same_item_twice_rides_once(self) -> None:
+        item = ItemInstanceFactory(holder_character_sheet=self.sender_sheet)
+        missive = send_missive(
+            sender_persona=self.sender,
+            recipient_persona=self.recipient,
+            body="Twice over.",
+            method=self.method,
+            items=[item, item],
+        )
+        self.assertEqual(
+            list(MissiveAttachment.objects.filter(missive=missive).values_list("item_id")),
+            [(item.pk,)],
+        )

@@ -28,6 +28,7 @@ from world.scenes.factories import PersonaFactory
 
 LIST_URL = "/api/missives/"
 UNREAD_URL = "/api/missives/unread-count/"
+ADDRESSEES_URL = "/api/missives/addressees/"
 ROW_FIELDS = {
     "id",
     "direction",
@@ -234,3 +235,24 @@ class MissiveApiSmokeTests(TestCase):
         self.assertEqual(detail.status_code, 200)
         self.assertEqual(detail.data, rows[0])
         self.assertEqual(client.get(f"{LIST_URL}nope/").status_code, 404)
+
+    def test_the_to_picker_names_faces_and_nothing_about_who_plays_them(self) -> None:
+        mask_owner, _ = _player("Hobbin")
+        PersonaFactory(
+            character_sheet=mask_owner.character_sheet,
+            name="Hobgoblin mask",
+            persona_type=PersonaType.TEMPORARY,
+            is_fake_name=True,
+        )
+        rows = self._get(self.tam_account, ADDRESSEES_URL, search="hob")
+        self.assertEqual(
+            rows,
+            [
+                {"id": self.hobb_face.pk, "name": "Hobb"},
+                {"id": mask_owner.character_sheet.primary_persona.pk, "name": "Hobbin"},
+            ],
+        )
+        for row in rows:
+            self.assertEqual(set(row), {"id", "name"})
+        # Too short a search finds nobody.
+        self.assertEqual(self._get(self.tam_account, ADDRESSEES_URL, search="h"), [])

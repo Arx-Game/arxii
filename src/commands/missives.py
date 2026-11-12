@@ -5,12 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from commands.command import ArxCommand
+from world.currency.constants import parse_coppers
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
 
-SEND_USAGE = "Usage: missive/send <name>=<message>"
-REPLY_USAGE = "Usage: missive/reply <id>=<message>"
+SEND_USAGE = "Usage: missive/send <name>[+coin <amount>][+item <item>]=<message>"
+REPLY_USAGE = "Usage: missive/reply <id>[+coin <amount>][+item <item>]=<message>"
 _PREVIEW_LENGTH = 40
 _EXTRA_COIN = "coin"
 _EXTRA_ITEM = "item"
@@ -23,7 +24,11 @@ _SWITCH_REFUSE = "refuse"
 
 
 def _parse_extras(parts: list[str]) -> dict[str, Any] | None:
-    """``coin <n>`` and ``item <name>`` pieces after a ``+``; None when one is malformed."""
+    """``coin <amount>`` and ``item <name>`` pieces after a ``+``; None when one is malformed.
+
+    The amount is written as ``give`` and ``withdraw coins`` take it (``5s``, ``3g 2s``,
+    ``40c``), parsed to coppers by the same ``parse_coppers``.
+    """
     kwargs: dict[str, Any] = {}
     item_names: list[str] = []
     for part in parts:
@@ -32,7 +37,10 @@ def _parse_extras(parts: list[str]) -> dict[str, Any] | None:
         if not rest:
             return None
         if word.lower() == _EXTRA_COIN:
-            kwargs["coin_amount"] = rest
+            coppers = parse_coppers(rest)
+            if coppers is None:
+                return None
+            kwargs["coin_amount"] = coppers
         elif word.lower() == _EXTRA_ITEM:
             item_names.append(rest)
         else:
@@ -63,13 +71,14 @@ class CmdMissive(ArxCommand):
         missive                                   - your missives, newest first
         missive/list                              - the same
         missive/read <id>                         - read one
-        missive/send <name>[+coin <n>][+item <item>]...=<message>
-        missive/reply <id>[+coin <n>][+item <item>]...=<message>
+        missive/send <name>[+coin <amount>][+item <item>]...=<message>
+        missive/reply <id>[+coin <amount>][+item <item>]...=<message>
         missive/accept <id>                       - take what came with it
         missive/refuse <id>                       - send what came with it back
 
     A missive goes out under the face you are wearing, and a reply under the face the
-    letter was written to. A * marks one you have not read.
+    letter was written to. A * marks one you have not read. Coin is written as
+    for give, e.g. +coin 5s or +coin 3g 2s.
     """
 
     key = "missive"
