@@ -16,7 +16,14 @@ from world.realms.models import Realm
 from world.roster.models import Family, FamilyKind, Kinsperson, UnionKind
 from world.societies.houses.almanach_reads import ladder_for_realm
 from world.societies.houses.constants import TitleTier
-from world.societies.houses.models import HoldingKind, HouseTemplate, LandShape, Title
+from world.societies.houses.models import (
+    HoldingKind,
+    HouseTemplate,
+    LandShape,
+    RegionalEvent,
+    RegionalEventKind,
+    Title,
+)
 from world.societies.models import Organization
 
 
@@ -336,6 +343,8 @@ class RungDocumentSerializer(serializers.Serializer):
     chartered_by = serializers.ListField(child=serializers.DictField())
     claims = serializers.ListField(child=serializers.DictField())
     chain = serializers.ListField(child=serializers.DictField())
+    # #5080: the open regional events over this rung's land.
+    events = serializers.ListField(child=serializers.DictField())
 
 
 class FamilyDocumentSerializer(serializers.Serializer):
@@ -382,3 +391,45 @@ class AlmanachHoldingKindSerializer(serializers.ModelSerializer):
     class Meta:
         model = HoldingKind
         fields = ["id", "name", "description", "site_kind", "requires_field"]
+
+
+class AlmanachRegionalEventKindSerializer(serializers.ModelSerializer):
+    """The authored disasters staff can open (#5080)."""
+
+    class Meta:
+        model = RegionalEventKind
+        fields = [
+            "id",
+            "name",
+            "description",
+            "capacity_cut_pct",
+            "prosperity_delta",
+            "unrest_delta",
+            "crisis_type_id",
+        ]
+
+
+class AlmanachRegionalEventSerializer(serializers.ModelSerializer):
+    """One regional event (#5080): what the Atlas shades and the title page lists. The
+    GM's ``note`` rides along because the whole viewset is staff-only."""
+
+    kind = serializers.CharField(source="kind.name", read_only=True)
+    kind_id = serializers.IntegerField(read_only=True)
+    area_id = serializers.IntegerField(read_only=True)
+    area = serializers.CharField(source="area.name", read_only=True)
+    realm_id = serializers.IntegerField(source="area.realm_id", read_only=True, allow_null=True)
+
+    class Meta:
+        model = RegionalEvent
+        fields = [
+            "id",
+            "kind",
+            "kind_id",
+            "area_id",
+            "area",
+            "realm_id",
+            "severity_pct",
+            "started_at",
+            "ended_at",
+            "note",
+        ]

@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 
 import type { RegionMapFootprint, RegionMapLandlessTitle } from '../types';
 import { MAP_VIEW_LABELS, MAP_VIEWS, type MapView } from './mapViews';
-import { TERRAIN_COLORS } from './regionMapCanvas';
+import { STRIKE_COLOR, TERRAIN_COLORS } from './regionMapCanvas';
 
 interface FoldToggleProps {
   open: boolean;
@@ -74,6 +74,8 @@ interface RegionMapPanelProps {
   charterFootprints: RegionMapFootprint[];
   footprintCount: number;
   terrains: string[];
+  /** The open regional events on this map (#5080), named in the legend. */
+  events?: { id: number; kind: string; area: string }[];
   /** Offered only while carving: make the selected footprint the domain being carved. */
   onCarveThis?: (footprint: RegionMapFootprint) => void;
 }
@@ -165,6 +167,7 @@ export function RegionMapPanel({
   charterFootprints,
   footprintCount,
   terrains,
+  events = [],
   onCarveThis,
 }: RegionMapPanelProps) {
   const hasSelection =
@@ -234,6 +237,15 @@ export function RegionMapPanel({
                   style={{ background: TERRAIN_COLORS[terrain] ?? '#c0c0c0' }}
                 />
                 {terrain}
+              </span>
+            ))}
+            {events.map((event) => (
+              <span key={event.id} className="flex items-center gap-2 text-xs">
+                <span
+                  className="inline-block h-3 w-3 rounded-sm border border-black/20"
+                  style={{ background: STRIKE_COLOR }}
+                />
+                {event.kind} over {event.area}
               </span>
             ))}
           </div>

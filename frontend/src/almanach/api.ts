@@ -19,6 +19,8 @@ import type {
   AlmanachActionKey,
   AlmanachFamilyKind,
   AlmanachHoldingKind,
+  AlmanachRegionalEvent,
+  AlmanachRegionalEventKind,
   AlmanachTemplate,
   AlmanachTitleSummary,
   AlmanachUnionKind,
@@ -180,4 +182,14 @@ export function fetchRealmTitles(realmId: number): Promise<Paginated<AlmanachTit
 
 export function fetchHoldingKinds(): Promise<Paginated<AlmanachHoldingKind>> {
   return getJson('/api/almanach/holding-kinds/', 'Failed to load holding kinds.');
+}
+
+/** The open regional events over a realm (#5080): what the Atlas shades. */
+export function fetchRegionalEvents(realmId: number): Promise<Paginated<AlmanachRegionalEvent>> {
+  const qs = new URLSearchParams({ realm: String(realmId), active: 'true' }).toString();
+  return getJson(withQuery('/api/almanach/regional-events/', qs), 'Failed to load events.');
+}
+
+export function fetchRegionalEventKinds(): Promise<Paginated<AlmanachRegionalEventKind>> {
+  return getJson('/api/almanach/regional-event-kinds/', 'Failed to load event kinds.');
 }

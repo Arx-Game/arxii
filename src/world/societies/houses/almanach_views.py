@@ -39,6 +39,8 @@ from world.societies.houses.almanach_serializers import (
     AlmanachHouseSummarySerializer,
     AlmanachPersonSummarySerializer,
     AlmanachRealmSerializer,
+    AlmanachRegionalEventKindSerializer,
+    AlmanachRegionalEventSerializer,
     AlmanachTemplateSerializer,
     AlmanachTitleSummarySerializer,
     AlmanachUnionKindSerializer,
@@ -52,7 +54,14 @@ from world.societies.houses.almanach_serializers import (
     RungDocumentSerializer,
     SearchHitSerializer,
 )
-from world.societies.houses.models import HoldingKind, HouseTemplate, LandShape, Title
+from world.societies.houses.models import (
+    HoldingKind,
+    HouseTemplate,
+    LandShape,
+    RegionalEvent,
+    RegionalEventKind,
+    Title,
+)
 from world.societies.models import Organization
 from world.societies.views import SocietiesPagination
 
@@ -295,3 +304,40 @@ class AlmanachHoldingKindViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = SocietiesPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["site_kind"]
+
+
+class AlmanachRegionalEventFilter(django_filters.FilterSet):
+    """``?realm=<id>`` through the struck area's realm; ``?active=true`` for the events
+    still open, which is what the Atlas shades (#5080)."""
+
+    realm = django_filters.NumberFilter(field_name="area__realm_id")
+    active = django_filters.BooleanFilter(field_name="ended_at", lookup_expr="isnull")
+
+    class Meta:
+        model = RegionalEvent
+        fields = ["realm", "active", "kind", "area"]
+
+
+class AlmanachRegionalEventViewSet(viewsets.ReadOnlyModelViewSet):
+    """Regional events (#5080): the Atlas reads the open ones over a realm and shades
+    their areas; the title page lists the ones over its land. Opening and closing go
+    through the ``almanach_open_regional_event`` / ``almanach_close_regional_event``
+    actions, never a write here."""
+
+    queryset = RegionalEvent.objects.select_related("kind", "area")
+    serializer_class = AlmanachRegionalEventSerializer
+    permission_classes = _STAFF
+    pagination_class = SocietiesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = AlmanachRegionalEventFilter
+
+
+class AlmanachRegionalEventKindViewSet(viewsets.ReadOnlyModelViewSet):
+    """The authored disasters, for the title page's Open control (#5080)."""
+
+    queryset = RegionalEventKind.objects.all().order_by("name")
+    serializer_class = AlmanachRegionalEventKindSerializer
+    permission_classes = _STAFF
+    pagination_class = SocietiesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["name"]

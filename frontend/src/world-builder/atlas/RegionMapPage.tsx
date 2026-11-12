@@ -18,7 +18,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Maximize2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { useAlmanachMutation, useLadder, useRealms } from '@/almanach/queries';
+import { useAlmanachMutation, useLadder, useRealms, useRegionalEvents } from '@/almanach/queries';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -84,7 +84,14 @@ import {
 } from './regionMapFill';
 import { BARONY_LEVEL, regionMapTabUrl } from './constants';
 import { clearMapFocus, peekMapFocus } from './mapFocus';
-import { borderWidths, placeNames, rootsOf, visibleFootprints, type MapView } from './mapViews';
+import {
+  borderWidths,
+  placeNames,
+  rootsOf,
+  struckFootprints,
+  visibleFootprints,
+  type MapView,
+} from './mapViews';
 import { FoldToggle, RegionMapPanel } from './RegionMapPanel';
 import { CarvePickers, SelectPickers } from './SelectPickers';
 import { useMapSelection } from './useMapSelection';
@@ -193,6 +200,17 @@ export function RegionMapPage({
   const realms = realmsPage?.results ?? [];
   const { data: ladder, refetch: refetchLadder } = useLadder(realmId, 'staff');
   const plantRung = useAlmanachMutation('almanach_plant_rung');
+  // #5080: the open regional events over the realm, shaded on every footprint beneath
+  const { data: eventsPage } = useRegionalEvents(realmId);
+  const events = useMemo(() => eventsPage?.results ?? [], [eventsPage]);
+  const struck = useMemo(
+    () =>
+      struckFootprints(
+        data?.footprints ?? [],
+        events.map((e) => e.area_id)
+      ),
+    [data, events]
+  );
 
   useEffect(() => {
     setSelectedAreaId(focusAreaId);
@@ -347,6 +365,7 @@ export function RegionMapPage({
         borderWidths: borders,
         ghostPips: mapView === 'geography' ? undefined : ghostPips,
         cellLines,
+        struckAreaIds: struck,
       }
     );
   }, [
@@ -359,6 +378,7 @@ export function RegionMapPage({
     pending,
     pendingRemove,
     selectedAreaId,
+    struck,
     visible,
   ]);
 
@@ -977,6 +997,7 @@ export function RegionMapPage({
           data-testid="region-map-viewport"
           data-zoom={view.zoom.toFixed(2)}
           data-map-view={mapView}
+          data-struck={struck.size}
           data-visible={visible.length}
           data-bordered={borders.size}
           data-ghost-pips={ghostPips.size}
@@ -1012,6 +1033,7 @@ export function RegionMapPage({
           charterFootprints={charterFootprints}
           footprintCount={data.footprints.length}
           terrains={data.terrains}
+          events={events.map((e) => ({ id: e.id, kind: e.kind, area: e.area }))}
           onCarveThis={
             mode === 'carve'
               ? (footprint) => {
