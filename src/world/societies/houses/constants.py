@@ -71,6 +71,9 @@ class CrisisOrigin(models.TextChoices):
     AMBIENT = "ambient", "Ambient Generation"
     PREDATOR = "predator", "Predator Raid"
     AFFLICTION = "affliction", "Affliction Outbreak"
+    # #5069 slice 4: spawned for an awake house inside a regional event's footprint,
+    # the player-facing half of the ambient hit the formula already takes.
+    REGIONAL = "regional", "Regional Event"
 
 
 class CrisisResolutionKind(models.TextChoices):

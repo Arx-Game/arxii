@@ -7,7 +7,7 @@ import world.covenants.models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0395_pacts_with_beings"),
+        ("arxii", "0396_regional_events"),
     ]
 
     operations = [

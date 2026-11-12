@@ -225,3 +225,30 @@ export function placeNames(
   }
   return placed;
 }
+
+/**
+ * The footprints under an open regional event (#5080): the struck area and everything
+ * beneath it on the ladder, walked through `parent_id` within the map's own rows.
+ */
+export function struckFootprints(
+  footprints: RegionMapFootprint[],
+  eventAreaIds: number[]
+): Set<number> {
+  const out = new Set<number>();
+  if (eventAreaIds.length === 0) return out;
+  const roots = new Set(eventAreaIds);
+  const parentOf = new Map(footprints.map((f) => [f.area_id, f.parent_id] as const));
+  for (const footprint of footprints) {
+    let node: number | null = footprint.area_id;
+    const seen = new Set<number>();
+    while (node != null && !seen.has(node)) {
+      if (roots.has(node)) {
+        out.add(footprint.area_id);
+        break;
+      }
+      seen.add(node);
+      node = parentOf.get(node) ?? null;
+    }
+  }
+  return out;
+}

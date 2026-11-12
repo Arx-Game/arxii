@@ -884,6 +884,84 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/almanach/regional-event-kinds/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The authored disasters, for the title page's Open control (#5080). */
+    get: operations['almanach_regional_event_kinds_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/regional-event-kinds/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The authored disasters, for the title page's Open control (#5080). */
+    get: operations['almanach_regional_event_kinds_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/regional-events/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Regional events (#5080): the Atlas reads the open ones over a realm and shades
+     *     their areas; the title page lists the ones over its land. Opening and closing go
+     *     through the ``almanach_open_regional_event`` / ``almanach_close_regional_event``
+     *     actions, never a write here.
+     */
+    get: operations['almanach_regional_events_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/almanach/regional-events/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Regional events (#5080): the Atlas reads the open ones over a realm and shades
+     *     their areas; the title page lists the ones over its land. Opening and closing go
+     *     through the ``almanach_open_regional_event`` / ``almanach_close_regional_event``
+     *     actions, never a write here.
+     */
+    get: operations['almanach_regional_events_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/almanach/search/': {
     parameters: {
       query?: never;
@@ -28401,6 +28479,40 @@ export interface components {
       };
     };
     /**
+     * @description One regional event (#5080): what the Atlas shades and the title page lists. The
+     *     GM's ``note`` rides along because the whole viewset is staff-only.
+     */
+    AlmanachRegionalEvent: {
+      readonly id: number;
+      readonly kind: string;
+      readonly kind_id: number;
+      readonly area_id: number;
+      readonly area: string;
+      readonly realm_id: number | null;
+      /** @description Scales the kind's capacity cut: 100 is the full cut. */
+      severity_pct?: number;
+      /** Format: date-time */
+      started_at?: string;
+      /** Format: date-time */
+      ended_at?: string | null;
+      /** @description Staff's own note; never shown to players. */
+      note?: string;
+    };
+    /** @description The authored disasters staff can open (#5080). */
+    AlmanachRegionalEventKind: {
+      readonly id: number;
+      name: string;
+      description?: string;
+      /** @description Percent of a holding's capacity the event takes while it is open. */
+      capacity_cut_pct?: number;
+      /** @description Added to each holding's prosperity at open, removed at close. */
+      prosperity_delta?: number;
+      /** @description Added to each holding's unrest at open, removed at close. */
+      unrest_delta?: number;
+      /** @description The crisis an awake house inside the footprint gets; blank = none. */
+      readonly crisis_type_id: number | null;
+    };
+    /**
      * @description ``house.default_succession_law`` on the document (mirrors
      *     ``almanach_reads._house_payload``'s ``law_payload``).
      */
@@ -41444,6 +41556,36 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['AlmanachRealm'][];
     };
+    PaginatedAlmanachRegionalEventKindList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['AlmanachRegionalEventKind'][];
+    };
+    PaginatedAlmanachRegionalEventList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['AlmanachRegionalEvent'][];
+    };
     PaginatedAlmanachTemplateList: {
       /** @example 123 */
       count: number;
@@ -50025,6 +50167,9 @@ export interface components {
       chain: {
         [key: string]: unknown;
       }[];
+      events: {
+        [key: string]: unknown;
+      }[];
     };
     /**
      * @description Read-shape for SanctumDetails surfaced on the player's "My Sanctums" view.
@@ -57036,6 +57181,99 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['LadderPayload'];
+        };
+      };
+    };
+  };
+  almanach_regional_event_kinds_list: {
+    parameters: {
+      query?: {
+        name?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAlmanachRegionalEventKindList'];
+        };
+      };
+    };
+  };
+  almanach_regional_event_kinds_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this regional event kind. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AlmanachRegionalEventKind'];
+        };
+      };
+    };
+  };
+  almanach_regional_events_list: {
+    parameters: {
+      query?: {
+        active?: boolean;
+        area?: number;
+        kind?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        realm?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAlmanachRegionalEventList'];
+        };
+      };
+    };
+  };
+  almanach_regional_events_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this regional event. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AlmanachRegionalEvent'];
         };
       };
     };
