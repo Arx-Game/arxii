@@ -65,12 +65,12 @@ class CastableTechniqueFormsTest(TestCase):
         )
 
     def _thread_at(self, level: int) -> Thread:
-        """The GIFT thread SHOWN at ``level`` (stored × 10, #4585)."""
+        """The GIFT thread at ``level``."""
         provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)
         thread = Thread.objects.get(
             owner=self.sheet, target_kind=TargetKind.GIFT, target_gift=self.gift
         )
-        thread.level = level * 10
+        thread.level = level
         thread.save(update_fields=["level"])
         self.sheet.character.threads.invalidate()
         return thread
@@ -93,7 +93,7 @@ class CastableTechniqueFormsTest(TestCase):
 
     def test_ships_base_and_variant_once_the_thread_reaches_the_unlock(self) -> None:
         """A variant adds a form; it does not replace the technique."""
-        self._thread_at(3)
+        self._thread_at(30)
         data = self._serialize()
 
         self.assertEqual(len(data["forms"]), 2)
@@ -107,7 +107,7 @@ class CastableTechniqueFormsTest(TestCase):
 
     def test_locked_forms_are_omitted_from_the_scene(self) -> None:
         """The scene shows what you can work now; the sheet shows the goal."""
-        self._thread_at(1)
+        self._thread_at(10)
         data = self._serialize()
 
         self.assertEqual([f["variant_id"] for f in data["forms"]], [None])
@@ -119,7 +119,7 @@ class CastableTechniqueFormsTest(TestCase):
         self.assertIsNone(data["forms"][0]["variant_id"])
 
     def test_each_form_carries_the_shared_effect_block(self) -> None:
-        self._thread_at(3)
+        self._thread_at(30)
         data = self._serialize()
         for form in data["forms"]:
             self.assertIn("summary", form["effect_summary"])

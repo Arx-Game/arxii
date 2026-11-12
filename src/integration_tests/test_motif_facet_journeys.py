@@ -142,7 +142,7 @@ class AFacetGatedFlourishBecomesReachable(_FacetCase):
             target_kind=TargetKind.TECHNIQUE,
             target_technique=technique,
             name=technique.name,
-            level=30,  # stored; shows 3, the flourish's default minimum (#4585)
+            level=30,  # the flourish's default minimum
         )
         self.ysmay.threads.invalidate()
 

@@ -35,7 +35,7 @@ from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
 from world.traits.models import CharacterTraitValue, Trait, TraitType
 
-# Shared stats dict used by all finalization tests (12 stats, 1-5 scale, sum=24)
+# Shared stats dict used by all finalization tests (12 stats, 10-50, sum=240)
 DEFAULT_STATS = {
     "strength": 20,
     "agility": 20,

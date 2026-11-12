@@ -16,7 +16,7 @@ from world.seeds.checks import seed_check_resolution_tables
 from world.seeds.modifier_values import seed_modifier_value_tables
 from world.traits.models import PointConversionRange, TraitType
 
-# A shown strength of 2 (stats are stored x10): a typical stat a buff lands on.
+# A strength of 20: a typical stat a buff lands on.
 BASE_STAT = 20
 
 

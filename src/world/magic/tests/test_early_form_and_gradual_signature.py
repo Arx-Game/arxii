@@ -126,7 +126,7 @@ class EarlyFormTests(TestCase):
         thread = Thread.objects.get(
             owner=self.sheet, target_kind=TargetKind.GIFT, target_gift=self.gift
         )
-        thread.level = 20  # stored; shows 2 (#4585)
+        thread.level = 20
         thread.save(update_fields=["level"])
         self.sheet.character.threads.invalidate()
 
@@ -141,7 +141,7 @@ class EarlyFormTests(TestCase):
         thread = Thread.objects.get(
             owner=self.sheet, target_kind=TargetKind.GIFT, target_gift=self.gift
         )
-        thread.level = 10  # stored; shows 1 (#4585)
+        thread.level = 10
         thread.save(update_fields=["level"])
         self.sheet.character.threads.invalidate()
 
@@ -176,8 +176,8 @@ class GradualSignatureTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        # Thread levels are stored x10 (#4585): the level-3 character and level-3
-        # technique leave room up to stored 30, so the caps never bind here.
+        # The level-3 character and level-3
+        # technique leave room up to thread level 30, so the caps never bind here.
         cls.sheet = CharacterSheetFactory(_class_level=3)
         cls.resonance = ResonanceFactory()
         cls.technique = TechniqueFactory(level=3)  # TECHNIQUE anchor cap = level x 10
@@ -205,7 +205,7 @@ class GradualSignatureTests(TestCase):
         self.assertEqual(next_signature_bonus(thread, catalog), self.stronger)
         self.assertNotIn(self.stronger, available_signature_bonuses(self.sheet, thread=thread))
 
-        # Stored 29 still shows 2: the level-3 flourish stays locked until stored 30.
+        # At 29 the level-30 flourish stays locked until the thread reaches 30.
         thread.level = 29
         thread.save(update_fields=["level"])
         self.assertNotIn(self.stronger, available_signature_bonuses(self.sheet, thread=thread))
@@ -228,14 +228,14 @@ class GradualSignatureTests(TestCase):
         self.assertEqual(thread.target_technique, self.technique)
 
     def test_weaving_at_exactly_level_one_succeeds(self) -> None:
-        """CREATION_PERSONALIZATION_MAX_LEVEL (shown 1, stored 10) is the inclusive ceiling."""
+        """CREATION_PERSONALIZATION_MAX_LEVEL (10) is the inclusive ceiling."""
         thread = weave_creation_technique_thread(
             self.sheet, self.technique, self.resonance, level=10
         )
         self.assertEqual(thread.level, 10)
 
     def test_weaving_at_level_two_is_refused(self) -> None:
-        """A new character is level 1, so creation cannot start a thread at shown 2 (#4585)."""
+        """A new character is level 1, so creation cannot start a thread at 20 (#4585)."""
         with self.assertRaises(CreationThreadLevelTooHigh):
             weave_creation_technique_thread(self.sheet, self.technique, self.resonance, level=20)
 

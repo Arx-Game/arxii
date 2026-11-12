@@ -131,7 +131,7 @@ class RoleSourceVariantResolutionTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=role,
             resonance=resonance,
-            level=30,  # stored; shows 3 (#4585)
+            level=30,
         )
 
         TechniqueVariant.objects.create(

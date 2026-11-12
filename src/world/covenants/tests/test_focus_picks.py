@@ -186,7 +186,7 @@ class CharacterFocusPickValidationTests(TestCase):
         cls.membership = CharacterCovenantRoleFactory(
             covenant=cls.covenant, covenant_role=cls.role, engaged=True
         )
-        # Shown vow level 1 (stored x10).
+        # Vow level 10.
         ThreadFactory(
             owner=cls.membership.character_sheet,
             resonance=cls.resonance,

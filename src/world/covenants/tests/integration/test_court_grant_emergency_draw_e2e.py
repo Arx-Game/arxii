@@ -108,7 +108,7 @@ class EmergencyDrawE2ETests(TestCase):
         # min_thread_level=10 (the pact-granted-cap IS the real gate, #1589 final
         # review) — the pull-effect eligibility check reads the thread's REAL
         # level (never the beseech-boosted effective level), so the thread must
-        # actually be imbued to stored 10, shown 1 (#4585; the pact's granted_pull_cap=10)
+        # actually be imbued to 10 (the pact's granted_pull_cap=10)
         # for there to be any applicable effect to scale at all. The emergency
         # draw only affects the multiplier of an ALREADY-unlocked effect.
         ThreadLevelUnlock.objects.create(thread=self.thread, unlocked_level=10, xp_spent=0)

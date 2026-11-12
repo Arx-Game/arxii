@@ -790,8 +790,8 @@ class ThreadPullPreviewTests(APITestCase):
     def test_preview_capped_intensity_flag(self) -> None:
         IntensityTierFactory(name="Minor", threshold=1)
         # min_thread_level=10 keeps this row distinct from the tier-0 row
-        # seeded in setUpTestData (which uses min_thread_level=0); it is a shown
-        # level, met by the stored-20 (shown 2) thread (#4585).
+        # seeded in setUpTestData (which uses min_thread_level=0); the
+        # thread at 20 meets it.
         ThreadPullEffectFactory(
             target_kind=TargetKind.TRAIT,
             resonance=self.resonance,
@@ -839,7 +839,7 @@ class ThreadPullPreviewTests(APITestCase):
         with scaled_value=0 and a non-empty inactive_reason so the UI can
         explain why the bonus isn't applied.
         """
-        # Wire a tier-1 VITAL_BONUS row at min_thread_level=10 (shown) so the
+        # Wire a tier-1 VITAL_BONUS row at min_thread_level=10 so the
         # (kind, resonance, tier, min_thread_level) unique key differs from
         # the tier-0 FLAT_BONUS row seeded in setUpTestData.
         ThreadPullEffectFactory(

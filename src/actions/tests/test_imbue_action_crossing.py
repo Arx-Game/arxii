@@ -28,7 +28,7 @@ class ImbueActionCrossingRequirementTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.sheet = CharacterSheetFactory(_class_level=5)  # level cap 50 (#4585)
+        cls.sheet = CharacterSheetFactory(_class_level=5)  # level cap 50
         cls.resonance = ResonanceFactory()
         CharacterResonanceFactory(character_sheet=cls.sheet, resonance=cls.resonance, balance=9999)
         cls.template = ItemTemplateFactory()
@@ -41,7 +41,7 @@ class ImbueActionCrossingRequirementTests(TestCase):
     def _make_thread_at_level(self, level: int):
         """A TRAIT thread at stored ``level`` with the stored-30 XP boundary paid.
 
-        The shown-3 crossing is stored 30 (#4585), so these tests imbue stored
+        The first crossing is level 30, so these tests imbue
         29 -> 30, which costs (29 - 9) × 100 = 2000 dp.
         """
         thread = ThreadFactory(

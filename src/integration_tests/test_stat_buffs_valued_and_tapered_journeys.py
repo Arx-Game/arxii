@@ -1,7 +1,7 @@
 """Journeys for stat buffs valued by level and size, and piles of them tapering (#4726).
 
-Slice 8 of #4551. Brannoc is a dock porter (level 6, strength 2 and stamina 2 as shown,
-20 stored). Buffs to his strength are real conditions, distinctions, worn pieces and his
+Slice 8 of #4551. Brannoc is a dock porter (level 6, strength 20 and stamina
+20). Buffs to his strength are real conditions, distinctions, worn pieces and his
 vow. His strength is one number wherever it is read: the Lifting check (through
 ``perform_check_with_modifiers``, the seam every roll uses), his carrying capacity
 (``carry_capacity``), and, for stamina, the stamina term of his base max health
@@ -88,7 +88,7 @@ from world.vitals.models import CharacterVitals
 from world.vitals.services import derive_base_max_health, get_vitals_consequence_config
 
 BASE = 20  # strength 20
-BUFF = 10  # +1 shown strength per buff
+BUFF = 10  # +10 strength per buff
 # Ten buffs of 10 in the stat lane's seeded taper: 10 x (1 + 7/8 + (7/8)^2 + (7/8)^3 + six
 # at the 2/3 floor) = 73.1, which rounds to 73, not the plain 100.
 TEN_TAPERED = 73

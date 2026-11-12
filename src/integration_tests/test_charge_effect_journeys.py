@@ -9,7 +9,7 @@ lost health is the charge's own damage.
 
 Expected values are the catalog's defaults and the spec: a charge adds +10 to hit and +5
 damage, doubled by a lance (the base only; a modifier is never doubled); its reach is 5 hops.
-A vow's stat scaling of +1 a level on a Charge damage target, at shown thread level 3, adds 3
+A vow's stat scaling of +1 per 10 levels on a Charge damage target, at thread level 30, adds 3
 (a lance does not double it: 5 x 2 + 3 = 13). Staff change a base on the Maneuver effect admin
 page and the next charge uses it.
 """
@@ -179,7 +179,7 @@ class _ChargeField(JourneyCase):
         return rolled[0], before - after
 
     def swear_to_charge_harder(self, bonus_per_level: int = 1, thread_level: int = 30) -> None:
-        """Hobb engages a vow at shown ``thread_level`` that scales Charge damage per level."""
+        """Hobb engages a vow at ``thread_level`` that scales Charge damage per 10 levels."""
         category = ModifierCategory.objects.get(name=MANEUVER_EFFECT_CATEGORY_NAME)
         target = ModifierTargetFactory(
             category=category,

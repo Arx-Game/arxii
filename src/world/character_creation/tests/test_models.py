@@ -238,7 +238,7 @@ class AppearanceStageCompletionTest(TestCase):
 
 
 class CharacterDraftStatsValidationTests(TestCase):
-    """Test stat allocation with simplified 1-5 scale and budget system."""
+    """Test stat allocation on the 10-50 scale (steps of 10) and the budget system."""
 
     def setUp(self):
         """Set up test data."""
@@ -407,7 +407,7 @@ class CharacterDraftStatsValidationTests(TestCase):
     # --- calculate_final_stats ---
 
     def test_calculate_final_stats_returns_allocated_values(self):
-        """calculate_final_stats returns stats as stored (1-5 scale), no bonuses on top."""
+        """calculate_final_stats returns stats as stored (10-50), no bonuses on top."""
         stats = self._budget_balanced_stats()
         stat_names = list(stats.keys())
         stats[stat_names[0]] = 1

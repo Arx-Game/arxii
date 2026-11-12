@@ -2,9 +2,9 @@
 
 Slice 9 of #4551. Selene (level 6) holds a Sword vow whose role carries a technique
 specialty for Defense Buff. When she casts a sized buff whose technique carries that
-function, the buff counts one size step stronger, valued at her vow thread's shown
-level and scaled by the specialty row's ``multiplier_tenths`` (10 = one whole step), and
-that extra part is never tapered. Points only: no outcome floor or ceiling. Only the
+function, the buff counts one size step stronger, valued at her vow thread's level
+in whole steps of 10 and scaled by the specialty row's ``multiplier_tenths`` (10 = one whole
+step), and that extra part is never tapered. Points only: no outcome floor or ceiling. Only the
 one-size-up shape is code; every amount is staff-tuned rows.
 
 Every cast goes the way the web client sends it (``cast_technique`` through dispatch),
@@ -16,7 +16,7 @@ number below is worked by hand from it:
   Exceptional = 1.5 x Large, rounded half to even: 4 at level 1 (4.5), 15 at level 6,
   24 at level 11. A level reads the row at the highest seeded level at or below it, so
   level 4 reads level 1's row.
-* a whole step at thread level 6 is 15 - 10 = 5; at thread level 4 it is 4 - 3 = 1. A
+* a whole step at thread level 60 is 15 - 10 = 5; at thread level 40 it is 4 - 3 = 1. A
   share of it rounds half away from zero.
 * the taper: the k-th largest of a pile counts (7/8)^(k-1), never below 2/3.
 

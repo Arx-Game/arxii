@@ -4,7 +4,7 @@ Mira and Tomas are played fighters in one declaring round-1 encounter on "The Ro
 a Bandit Captain and a Bandit Guard. Ilse fights beside them but is in no covenant. Mira's
 engaged vow carries a power perk of +10 tenths per thread level, scaled by the STRIKER's own
 thread total. Mira and Tomas (her covenant-mate, with his own engaged vow) each hold one thread
-shown at level 3 and stored at 30 (#4585), so a firing adds 30 x 10 / 10 = 30 power to the
+at level 30, so a firing adds 30 x 10 / 10 = 30 power to the
 striker's technique (the "vow situational power" line of the round's power breakdown) and
 announces itself.
 

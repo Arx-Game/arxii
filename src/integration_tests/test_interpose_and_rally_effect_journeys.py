@@ -4,12 +4,12 @@ Interpose: Hobb and Mara stand in a yard against a brute whose swing hits Hobb f
 declares Interpose for Hobb through the web client (``combat_interpose``), and her interpose
 roll lands as a partial: not a clean block, not a failure. What is read back is Hobb's health
 after the round resolves. The catalog default stops 50% on a partial, so 20 of the 40 lands.
-A +10 on Mara's Interpose partial protection (her vow, +10 per level at thread level 1) stops
+A +10 on Mara's Interpose partial protection (her vow, +10 per 10 levels at thread level 10) stops
 60%, so 16 lands. Only the interposer's own number counts.
 
 Rally: Mira rallies Tomas through ``combat rally Tomas`` and her roll is a great success at
 success level 3. An ally summon at 30 morale gains success level x the Rally morale value:
-the catalog's 15 gives 45; a +5 on Mira's Rally morale (her vow at thread level 1) gives
+the catalog's 15 gives 45; a +5 on Mira's Rally morale (her vow at thread level 10) gives
 3 x 20 = 60.
 """
 

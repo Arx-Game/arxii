@@ -111,7 +111,7 @@ class OwnVowCandidateTests(TestCase):
         candidates = vow_holder_candidates(self.sheet, None)
         with self.assertNumQueries(1):
             levels = vow_holder_thread_levels(candidates)
-        # Stored levels: shown 3 is stored 30 (#4585).
+        # Thread level 30.
         self.assertEqual(levels, {(self.sheet.pk, self.anchor.pk): 30})
 
     def test_no_candidates_reads_no_thread_levels(self) -> None:
@@ -169,7 +169,7 @@ class AllyCandidateTests(TestCase):
             levels = vow_holder_thread_levels(candidates)
         self.assertEqual(
             levels,
-            # Stored levels: shown 1 and 3 are stored 10 and 30 (#4585).
+            # Thread levels 10 and 30.
             {(self.sheet.pk, self.subject_role.pk): 10, (self.mate.pk, self.mate_role.pk): 30},
         )
 

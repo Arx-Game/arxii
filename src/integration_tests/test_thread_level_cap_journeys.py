@@ -257,7 +257,7 @@ class AnOrganizationThreadTakesTheLowerCap(_ThreadCase):
         )
 
 
-class TheSubRoleTakesOverAtShownThree(_ThreadCase):
+class TheSubRoleTakesOverAtThirty(_ThreadCase):
     def test_a_role_thread_imbued_to_stored_thirty_resolves_the_level_three_sub_role(self) -> None:
         from world.covenants.constants import CovenantType
         from world.covenants.factories import (
@@ -298,7 +298,7 @@ class TheSubRoleTakesOverAtShownThree(_ThreadCase):
         self.assertEqual(resolve_specialized_variant(entity=role, character=self.ysmay), sub_role)
 
 
-class ASignatureFlourishWaitsForShownThree(_ThreadCase):
+class ASignatureFlourishWaitsForThirty(_ThreadCase):
     def test_a_level_three_flourish_is_locked_at_stored_five_and_open_at_thirty(self) -> None:
         from world.magic.factories import (
             CharacterTechniqueFactory,

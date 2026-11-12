@@ -210,7 +210,7 @@ class CombatStyleArmorShareTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=parent,
             resonance=resonance,
-            level=30,  # stored; shows 3, the sub-role's unlock level (#4585)
+            level=30,  # the sub-role's unlock level
         )
 
         set_engaged_membership(membership=membership)

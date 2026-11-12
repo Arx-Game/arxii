@@ -96,7 +96,7 @@ class ResolveSpecializedVariantTests(TestCase):
             target_kind=TargetKind.GIFT,
             target_gift=self.gift,
             target_trait=None,
-            level=50,  # stored; shows 5 (#4585)
+            level=50,
         )
         result = resolve_specialized_variant(entity=self.technique, character=self.sheet.character)
         # The resolver returns a _ResolvedTechnique wrapper when a variant

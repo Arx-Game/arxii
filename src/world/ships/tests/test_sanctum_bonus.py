@@ -168,7 +168,7 @@ class ShipSanctumCapabilityGrantTests(TestCase):
         self.assertEqual(ship_sanctum_capability_grants(ship), [])
 
     def test_deeper_thread_grants_strictly_more(self) -> None:
-        """The curve is wired: shown 6 (stored 60) beats shown 3 (stored 30) off ONE row.
+        """The curve is wired: level 60 beats level 30 off ONE row.
 
         Needs a ``CapabilityPowerConfig`` row and a sanctum level above 0 —
         ``apply_capability_curve`` is inert without both, by design.

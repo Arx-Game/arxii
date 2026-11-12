@@ -123,7 +123,7 @@ class AvailableTechniqueFormsTest(TestCase):
         )
 
     def _thread_at(self, level: int, resonance: Resonance | None = None) -> Thread:
-        """A GIFT thread SHOWN at ``level`` (stored level × 10, #4585)."""
+        """A GIFT thread at ``level``."""
         provision_latent_gift_thread(self.sheet, self.gift, resonance=resonance or self.resonance)
         thread = Thread.objects.get(
             owner=self.sheet,
@@ -131,7 +131,7 @@ class AvailableTechniqueFormsTest(TestCase):
             target_gift=self.gift,
             resonance=resonance or self.resonance,
         )
-        thread.level = level * 10
+        thread.level = level
         thread.save(update_fields=["level"])
         self.sheet.character.threads.invalidate()
         return thread
@@ -145,7 +145,7 @@ class AvailableTechniqueFormsTest(TestCase):
 
     def test_below_unlock_shows_base_default_and_the_next_form_locked(self) -> None:
         """The deepening reads as a goal, one step ahead."""
-        self._thread_at(1)
+        self._thread_at(10)
         forms = available_technique_forms(self.sheet.character, self.technique)
 
         base, locked = forms
@@ -155,13 +155,13 @@ class AvailableTechniqueFormsTest(TestCase):
         self.assertEqual(locked["variant_id"], self.variant.pk)
         self.assertTrue(locked["is_locked"])
         self.assertFalse(locked["is_default"])
-        self.assertEqual(locked["unlock_thread_level"], 3)
-        self.assertEqual(locked["thread_level"], 1)
+        self.assertEqual(locked["unlock_thread_level"], 30)
+        self.assertEqual(locked["thread_level"], 10)
         self.assertEqual(locked["resonance_name"], "Cinder")
 
     def test_at_unlock_the_variant_becomes_default_and_base_stays_available(self) -> None:
         """A variant does not replace the technique; it adds a form."""
-        self._thread_at(3)
+        self._thread_at(30)
         forms = available_technique_forms(self.sheet.character, self.technique)
 
         self.assertEqual(len(forms), 2)
@@ -178,7 +178,7 @@ class AvailableTechniqueFormsTest(TestCase):
         self.assertEqual(unlocked["control"], self.technique.control - 1)
 
     def test_exactly_one_form_is_default(self) -> None:
-        self._thread_at(3)
+        self._thread_at(30)
         forms = available_technique_forms(self.sheet.character, self.technique)
         self.assertEqual(sum(1 for f in forms if f["is_default"]), 1)
 
@@ -191,7 +191,7 @@ class AvailableTechniqueFormsTest(TestCase):
             name_override="Cinderfall Rite",
         )
         self.technique.__dict__.pop("cached_variants", None)
-        self._thread_at(6)
+        self._thread_at(60)
 
         forms = available_technique_forms(self.sheet.character, self.technique)
         variant_ids = [f["variant_id"] for f in forms if f["variant_id"] is not None]
@@ -206,8 +206,8 @@ class AvailableTechniqueFormsTest(TestCase):
             name_override="Tidewrack Lash",
         )
         self.technique.__dict__.pop("cached_variants", None)
-        self._thread_at(3)
-        self._thread_at(3, resonance=self.other_resonance)
+        self._thread_at(30)
+        self._thread_at(30, resonance=self.other_resonance)
 
         forms = available_technique_forms(self.sheet.character, self.technique)
         names = {f["name"] for f in forms}
@@ -218,7 +218,7 @@ class AvailableTechniqueFormsTest(TestCase):
 
     def test_each_form_carries_its_own_effect_summary(self) -> None:
         """The block #2898 built, per form rather than per technique."""
-        self._thread_at(3)
+        self._thread_at(30)
         forms = available_technique_forms(self.sheet.character, self.technique)
         for form in forms:
             self.assertIn("summary", form["effect_summary"])
@@ -229,7 +229,7 @@ class AvailableTechniqueFormsTest(TestCase):
         condition = ConditionTemplateFactory(name="Scorched")
         self.variant.condition_applications.create(condition=condition, target_kind="enemy")
         invalidate_variant_payload_caches(self.variant)
-        self._thread_at(3)
+        self._thread_at(30)
 
         forms = available_technique_forms(self.sheet.character, self.technique)
         unlocked = next(f for f in forms if f["variant_id"] == self.variant.pk)

@@ -42,7 +42,7 @@ from world.mechanics.services import vow_stat_scaling_bonus
 
 
 class FocusPickFilterBase(TestCase):
-    """Two holders of one vow at thread level 2; only the chooser chose the pick."""
+    """Two holders of one vow at thread level 20; only the chooser chose the pick."""
 
     def setUp(self) -> None:
         self.covenant = CovenantFactory(covenant_type=CovenantType.DURANCE)
@@ -101,7 +101,7 @@ class PerkOnAFocusPickTests(FocusPickFilterBase):
 
 
 class VowStatScalingOnAFocusPickTests(FocusPickFilterBase):
-    """Thread level 2 shows as 2 and is stored as 20 (stored = shown x 10)."""
+    """Thread level 20."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -125,7 +125,7 @@ class VowStatScalingOnAFocusPickTests(FocusPickFilterBase):
         self.base_value = effect_value(None, ManeuverEffectKey.INTERPOSE_PARTIAL_PROTECTION)
 
     def test_the_chooser_scales_by_the_base_and_the_pick(self) -> None:
-        # The shown level 2 counts on a maneuver effect: 2 x 2 + 2 x 3.
+        # A maneuver effect counts whole steps of 10 levels, 2 at level 20: 2 x 2 + 2 x 3.
         self.assertEqual(vow_stat_scaling_bonus(self.chooser, self.effect_target), 10)
         self.assertEqual(
             effect_value(self.chooser, ManeuverEffectKey.INTERPOSE_PARTIAL_PROTECTION),

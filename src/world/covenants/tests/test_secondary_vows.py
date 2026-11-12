@@ -352,7 +352,7 @@ class SecondaryVowChassisIsolationTests(TestCase):
             sheet=self.sheet, role=self.primary_role, resonance=ResonanceFactory(), level=10
         )
         baseline = effect_value(self.sheet, key)
-        self.assertEqual(baseline, 51)  # base 50 + shown level 1 x 1
+        self.assertEqual(baseline, 51)  # base 50 + 1 per 10 levels at level 10
 
         secondary_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
         VowStatScaling.objects.create(
