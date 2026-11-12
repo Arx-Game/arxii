@@ -1002,3 +1002,17 @@ class CasterRemovedFromFight(MagicError):
     """
 
     user_message = "A GM removed you from this fight."
+
+
+class ManifestChoiceError(MagicError):
+    """A player's pick of what a manifesting technique brings is refused (#4341).
+
+    Carries the specific reason as ``user_message`` (authored at the raise site).
+    """
+
+    user_message = "That option cannot be chosen."
+
+    def __init__(self, user_message: str | None = None) -> None:
+        super().__init__(user_message)
+        if user_message:
+            self.user_message = user_message

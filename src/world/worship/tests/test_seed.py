@@ -69,3 +69,25 @@ class WorshipSeedTests(TestCase):
             ModifierTarget.objects.filter(target_being__isnull=False).count(),
             2 * WorshippedBeing.objects.count(),
         )
+
+    def test_seed_designates_the_chosen_distinction(self) -> None:
+        """#4341: the two patron targets and a "Chosen" distinction adding 100% earning and
+        30 invocation ease on them, designated on the Chosen favor config, idempotently."""
+        from world.distinctions.models import Distinction, DistinctionEffect
+        from world.mechanics.models import ModifierTarget
+        from world.worship.services import get_chosen_favor_config
+
+        seed_worship_content()
+        seed_worship_content()
+
+        distinction = Distinction.objects.get(slug="chosen")
+        self.assertEqual(get_chosen_favor_config().chosen_distinction, distinction)
+        self.assertEqual(ModifierTarget.objects.filter(targets_patron=True).count(), 2)
+        values = dict(
+            DistinctionEffect.objects.filter(distinction=distinction).values_list(
+                "target__name", "value_per_rank"
+            )
+        )
+        self.assertEqual(
+            values, {"Your patron favor earning": 100, "Your patron favor invocation": 30}
+        )

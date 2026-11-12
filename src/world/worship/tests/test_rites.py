@@ -35,6 +35,7 @@ from world.worship.factories import (
     WorshipFeastDayFactory,
     WorshipRiteFactory,
     WorshipRiteTierAwardFactory,
+    make_chosen,
 )
 from world.worship.models import DevotionStanding, WorshipRitePerformance
 from world.worship.rite_services import perform_worship_rite, rite_ap_cost
@@ -100,17 +101,8 @@ class PerformRiteTests(RiteTestBase):
 
     def test_a_chosen_records_the_credited_favor(self) -> None:
         """#4333: the Chosen earn at 200%; the performance records what landed."""
-        from django.utils import timezone
 
-        from world.worship.factories import DevotionStandingFactory
-        from world.worship.models import PatronageValence
-
-        DevotionStandingFactory(
-            character_sheet=self.sheet,
-            being=self.being,
-            valence=PatronageValence.DEVOTIONAL,
-            established_at=timezone.now(),
-        )
+        make_chosen(self.sheet, self.being)
 
         outcome = self._perform()
 

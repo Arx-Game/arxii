@@ -14954,6 +14954,23 @@ export interface paths {
     patch: operations['magic_gifts_partial_update'];
     trace?: never;
   };
+  '/api/magic/manifest-choices/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Each manifesting technique a character knows, its options and the current pick. */
+    get: operations['magic_manifest_choices_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/motif-styles/': {
     parameters: {
       query?: never;
@@ -19191,6 +19208,48 @@ export interface paths {
      *       the ``respond`` action.
      */
     post: operations['npc_services_summons_respond_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/pacts/cards/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Characters' pacts with beings as their cards show them, newest first: active pacts
+     *     and ended pacts still easing out. The owner reads their own characters', staff read
+     *     anyone's; a pact with a secret faith is never shown to anyone else.
+     */
+    get: operations['pacts_cards_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/pacts/cards/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Characters' pacts with beings as their cards show them, newest first: active pacts
+     *     and ended pacts still easing out. The owner reads their own characters', staff read
+     *     anyone's; a pact with a secret faith is never shown to anyone else.
+     */
+    get: operations['pacts_cards_retrieve'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -28220,7 +28279,7 @@ export interface components {
       house_state: string;
       /** Format: date-time */
       published_at: string | null;
-      particle_example: string;
+      particle: components['schemas']['RealmCharterParticle'];
       default_succession_law: components['schemas']['AlmanachSuccessionLaw'] | null;
       patron: components['schemas']['AlmanachHousePatron'] | null;
       facets: components['schemas']['AlmanachHouseFacet'][];
@@ -38035,6 +38094,21 @@ export interface components {
      * @enum {string}
      */
     ManagerTenancyKindEnum: 'guest' | 'tenant' | 'trustee';
+    /** @description One manifesting technique the character knows, its options and the current pick. */
+    ManifestChoice: {
+      technique_id: number;
+      technique_name: string;
+      chosen_option_id?: number | null;
+      options: components['schemas']['ManifestOptionChoice'][];
+    };
+    /** @description One option a technique can bring: its label, whether its bond holds, why not. */
+    ManifestOptionChoice: {
+      option_id: number;
+      label: string;
+      available: boolean;
+      reason: string;
+      companion_id?: number | null;
+    };
     MarketSquare: {
       readonly id: number;
       readonly name: string;
@@ -41182,6 +41256,74 @@ export interface components {
      * @enum {string}
      */
     PaceModeEnum: 'timed' | 'ready' | 'manual';
+    /**
+     * @description A character's pact as her card shows it. Read by her own player and staff only:
+     *     a pact with a secret faith is hers alone.
+     *
+     *     ``earned``/``required``/``time_limit`` describe the open period; after the pact
+     *     ended (``is_active`` false) that is an ease-out period, whose condition eases by
+     *     ``severity_per_miss`` when it ends.
+     */
+    PactCard: {
+      id: number;
+      character_sheet: number;
+      being_id: number;
+      being_name: string;
+      offer_name: string;
+      period_weeks: number;
+      severity_per_miss: number;
+      earned: number;
+      required: number;
+      /** Format: date-time */
+      time_limit: string | null;
+      sources: components['schemas']['PactSourceLine'][];
+      stage_name: string;
+      severity: number;
+      next_stage_threshold: number | null;
+      promises: string[];
+      condition_effects: string[];
+      stages: components['schemas']['PactStageLine'][];
+      is_active: boolean;
+      dissolution_reason: string;
+    };
+    /**
+     * @description One commitment of an offer: FAVOR_EARNED (``amount`` per period) or CUSTOM (a
+     *     promise in ``notes``, never checked).
+     */
+    PactCommitmentLine: {
+      kind: string;
+      amount: number;
+      notes: string;
+    };
+    /**
+     * @description The pact a pledge offers at its close, built from the offer's rows.
+     *     ``condition_effects`` apply at every stage.
+     */
+    PactOfferSummary: {
+      being_name: string;
+      offer_name: string;
+      offer_text: string;
+      period_weeks: number;
+      commitments: components['schemas']['PactCommitmentLine'][];
+      promises: string[];
+      condition_effects: string[];
+      stages: components['schemas']['PactStageLine'][];
+    };
+    /** @description Favor credited toward the open period from one kind of source. */
+    PactSourceLine: {
+      label: string;
+      favor: number;
+    };
+    /**
+     * @description One stage of a pact's condition, best to worst, with the stage's own effects;
+     *     ``is_last`` marks the stage whose arrival ends the pact.
+     */
+    PactStageLine: {
+      name: string;
+      threshold: number;
+      effects: string[];
+      is_last: boolean;
+    };
     PaginatedAccountInviteList: {
       /** @example 123 */
       count: number;
@@ -42656,6 +42798,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['LivePrompt'][];
     };
+    PaginatedManifestChoiceList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ManifestChoice'][];
+    };
     PaginatedMediaList: {
       /** @example 123 */
       count: number;
@@ -43196,6 +43353,21 @@ export interface components {
       /** Format: uri */
       previous: string | null;
       results: components['schemas']['OutfitSlotRead'][];
+    };
+    PaginatedPactCardList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PactCard'][];
     };
     PaginatedPendingAlterationList: {
       /** @example 123 */
@@ -47952,7 +48124,10 @@ export interface components {
       location?: number | null;
       status?: components['schemas']['StatusD66Enum'];
     };
-    /** @description A pledge type a being offers (#4333 slice 2): the staff-authored text and terms. */
+    /**
+     * @description A pledge type a being offers (#4333 slice 2): the staff-authored text and terms.
+     *     ``pact_offer`` is the pact accepted at its close (#4341), null when it offers none.
+     */
     Pledge: {
       readonly id: number;
       readonly being: number;
@@ -47965,6 +48140,7 @@ export interface components {
       /** @description Game weeks the character has to earn the target and close. */
       readonly span_weeks: number;
       readonly closing_rite_name: string;
+      readonly pact_offer: components['schemas']['PactOfferSummary'] | null;
     };
     /**
      * @description One character's pledge as its card shows it (#4333 slice 2). Read by the
@@ -54938,6 +55114,7 @@ export interface components {
       distinction_id: number;
       name: string;
       distinction_name: string;
+      distinction_description: string;
       player_line: string;
       chapter: string;
       arrives_as: string;
@@ -75120,6 +75297,30 @@ export interface operations {
       };
     };
   };
+  magic_manifest_choices_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedManifestChoiceList'];
+        };
+      };
+    };
+  };
   magic_motif_styles_retrieve: {
     parameters: {
       query?: never;
@@ -81721,6 +81922,51 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  pacts_cards_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPactCardList'];
+        };
+      };
+    };
+  };
+  pacts_cards_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PactCard'];
+        };
       };
     };
   };

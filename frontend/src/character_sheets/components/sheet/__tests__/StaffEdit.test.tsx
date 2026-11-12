@@ -171,6 +171,7 @@ function sheet(overrides: Partial<CharacterSheetPayload> = {}): CharacterSheetPa
     },
     appearance: { height_inches: null, height_band: '', build: null, description: '' },
     stats: {},
+    buffed_stats: {},
     skills: [],
     distinctions: [],
     magic: null,

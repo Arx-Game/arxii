@@ -901,9 +901,17 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `manifest-being-avatars`, `manifest-archetype-abilities`, `manifest-tier-templates`,
   `manifest-being-threat-pools`. An ultimate's roll is floored at success in
   `CombatTechniqueResolver._floor_ultimate_at_success` (#4076).
-  Not built: a CG picker, manifestation outside combat, a persistent Companion made by a
-  cast. Coexists with the flow-payload `summon_ally`. Detail: `docs/systems/magic.md`'s
-  "Manifesting a bound entity"; ADR-4118.
+  **The technique picker (#4341):** a player sets her own `CharacterManifestation`:
+  `world/magic/services/manifestation.py` (`manifest_choices_for` lists each manifesting
+  technique she knows with every option, unavailable ones with the reason;
+  `set_character_manifestation`; `manifesting_technique_named`/`_by_id`,
+  `manifest_option_named`; refusals raise `ManifestChoiceError`), action `manifest_set`
+  (`ManifestSetAction`), telnet `manifest` / `manifest <technique>=<option>`,
+  `GET /api/magic/manifest-choices/?character_sheet=<id>` (`ManifestChoiceViewSet`), and the
+  Spellbook's `ManifestPickerPanel`. A being option holds for any active patronage, a pact's
+  included. Not built: a CG picker, manifestation outside combat, a persistent Companion
+  made by a cast. Coexists with the flow-payload `summon_ally`. Detail:
+  `docs/systems/magic.md`'s "Manifesting a bound entity"; ADR-4118.
 - **Integrates with:** traits (thread anchor kind TRAIT), progression (XP
   spend for ThreadWeaving and XP-lock crossings), relationships (soul tether,
   magical_flavor; thread anchors RELATIONSHIP_TRACK / RELATIONSHIP_CAPSTONE),
@@ -7170,9 +7178,10 @@ Unified modifier system — categories, types, sources, and per-character modifi
   - `ensure_skill_target(trait) -> ModifierTarget | None` (#4820) — the stat-category target a
     skill's bonuses land on, created if missing; called by `SkillAdmin.save_model` and the
     Distinction Builder's paste at create time
-  - `skill_modifiers_for_sheet(sheet, skills) -> dict[int, int]` (#4820) — the modifier a roll
-    on each skill gets, for the sheet's `SkillEntry.modifier`; cards, conditions and worn
-    equipment (crafted pieces, the equipment walk) all count
+  - `trait_modifiers_for_sheet(sheet, traits) -> dict[int, int]` (#4820, stats #4730) — the
+    modifier a roll on each skill or stat gets, for the sheet's `SkillEntry.modifier` and
+    `buffed_stats`; cards, conditions and worn equipment (crafted pieces, the equipment
+    walk) all count
   - `delete_distinction_modifiers(char_distinction) -> int`
   - `passive_facet_bonuses(sheet, target) -> int` (Spec D §5.2) — sums tier-0 FACET
     `ThreadPullEffect` contributions per worn item, plus the worn facets' own
@@ -10373,9 +10382,15 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `invocation_check_type`, `base_difficulty`, favor ease thresholds/points,
   `invocations_per_week`), `FavorOutcomeAward` (kind INVOCATION/CLOSING × `CheckOutcome` →
   amount), `FavorInvocation` (the weekly counter and log; `player_line`; scene / mission /
-  scene-action links), `WorshippedBeing.invocation_check_type`, `ChosenFavorConfig.
-  earn_bonus_percent`/`invocation_ease_points`, `ModifierTarget.target_being` with the
-  `favor_invocation`/`favor_earning` categories. Services: `favor_services.
+  scene-action links), `WorshippedBeing.invocation_check_type`, `ModifierTarget.target_being`
+  with the `favor_invocation`/`favor_earning` categories. The Chosen bonuses (#4341,
+  ADR-4341): `ChosenFavorConfig.chosen_distinction` (the distinction every Chosen holds; its
+  effects on the patron targets `ModifierTarget.targets_patron` are the Chosen earning bonus
+  and invocation ease; replaced `earn_bonus_percent`/`invocation_ease_points`),
+  `favor_services.chosen_patronage_of`/`chosen_patronages_for`/`chosen_standing_q` (Chosen =
+  valence set and not PACT), `patron_modifier_total`, `general_favor_modifier_total`,
+  `ensure_patron_modifier_targets`, `services.grant_chosen_distinction`/
+  `grant_chosen_distinction_to_chosen`. Services: `favor_services.
   ensure_being_modifier_targets`, `favor_modifier_total`, `earning_rate` (scales every
   `bump_devotion`, which now returns `DevotionBump(standing, credited)`);
   `invocation_services.invocation_difficulty`, `invocation_refusal`, `invoke_favor`
@@ -10564,6 +10579,35 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   inventory.py`); `ceremonies.auto_abandon` hourly cron. Actions `ceremony_open`/`_offering`/
   `_speech`/`_finish`/`_abandon`; telnet `ceremony` family; API `/api/worship/beings/` +
   `/api/ceremonies/ceremonies/` (both paginated read-only); game-view `CeremonyRoomCard`.
+
+### Pacts with beings (#4341)
+A character's standing bargain with a being, offered on a pledge and accepted at its closing
+rite; the being becomes her patron. Full doc: `docs/systems/pacts.md`; ADR-4341.
+
+- **Models** (`world/pacts`): `PactOffer` (credited content: being, offer/closing/onlooker
+  text, `period_weeks`, staged `condition`, `severity_per_miss`), `PactOfferCommitment`
+  (`CharacterPactCommitmentKind` FAVOR_EARNED or CUSTOM, `owed_by_holder`, `amount`, `notes`),
+  `CharacterPact` (holder, offer, `devotion_standing`, `condition_instance`, `signed_at`,
+  `dissolved_at`, `dissolution_reason` `CharacterPactEnding` BREACH/RENOUNCED/PARTY_ENDED; one
+  active per standing), `PactPeriodDetails` (sidecar of a `ProjectKind.PACT_PERIOD` project;
+  null `commitment` = ease-out period; `resist_outcome`, `severity_change`, `stage_after`),
+  `PactCredit` (favor credited to a period by source, `base` counted once against the deed
+  cap). `Pledge.pact_offer` FK.
+- **Services** (`world/pacts/services.py`): `sign_being_pact` (PACT patronage unless Chosen,
+  condition at its first stage, one period per FAVOR_EARNED commitment), `record_pact_credit`
+  (from `bump_devotion`), `resolve_pact_period` / `grade_pact_period` (registered in
+  `pacts/apps.py`; met eases, short rises after the worse stage's resist roll by tier),
+  breach at the last stage (release a PACT patronage, settle pool, closing and onlooker
+  lines), `renounce_pact`, ease-out of the cost by `severity_per_miss` per period (the first stage,
+  the benefit, is removed at the end, never eased back into), `pact_card` /
+  `pact_cards_for`, `pact_offer_summary` / `offered_pact_summary`, `pact_beings_for`,
+  `pact_deed_favor_this_week`. Accepted through `close_pledge(..., accept_pact=True)`.
+- **Interfaces**: `GET /api/pacts/cards/`; actions `pact_renounce`, `pledge_close`
+  (`accept_pact`); telnet `pact`, `pact/renounce <being>`, `pledge/close/accept`; web
+  `PactCard` in the sheet's worship section; admin Pacts section on the Being Service builder
+  and the pledge's "Pact offered at the close" field.
+- **Not built** (own issues): follower pacts (#4437), spirit companions (#4438), a being
+  leading a Court (#4439), commitments that trigger on their own (#4440).
 
 ### Wills & Estate Settlement (#1985)
 Death opens a settlement window; the estate executes through the first of three doors —

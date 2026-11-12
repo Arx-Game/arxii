@@ -12,7 +12,6 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from django.test import TestCase
-from django.utils import timezone
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -42,9 +41,10 @@ from world.worship.factories import (
     FavorOutcomeAwardFactory,
     WorshipDeclarationFactory,
     WorshippedBeingFactory,
+    make_chosen,
 )
 from world.worship.favor_services import ensure_being_modifier_targets
-from world.worship.models import FavorInvocation, PatronageValence
+from world.worship.models import FavorInvocation
 from world.worship.types import InvocationChoice
 
 _OPTION_CHECK = "world.missions.services.resolution.perform_check"
@@ -125,13 +125,7 @@ class SoloMissionInvocationTests(MissionInvocationBase):
         self.character = _pc()
         self.sheet = self.character.sheet_data
         # Ysmay: Ombrin's Chosen with favor 44.
-        DevotionStandingFactory(
-            character_sheet=self.sheet,
-            being=self.being,
-            favor=44,
-            valence=PatronageValence.DEVOTIONAL,
-            established_at=timezone.now(),
-        )
+        make_chosen(self.sheet, self.being, favor=44)
         template, self.option, self.branch = self._check_graph("solo-invoke")
         self.instance = staff_assign_mission(template, self.character)
 
@@ -333,13 +327,7 @@ class FavorInvocationApiTests(MissionInvocationBase):
         self.entry_id = entry.pk
         self.client = APIClient()
         self.client.force_authenticate(tenure.player_data.account)
-        DevotionStandingFactory(
-            character_sheet=self.sheet,
-            being=self.being,
-            favor=44,
-            valence=PatronageValence.DEVOTIONAL,
-            established_at=timezone.now(),
-        )
+        make_chosen(self.sheet, self.being, favor=44)
         template, self.option, _ = self._check_graph("api-invoke")
         self.instance = staff_assign_mission(template, self.character)
 

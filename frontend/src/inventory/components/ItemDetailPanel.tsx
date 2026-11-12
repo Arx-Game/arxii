@@ -38,6 +38,7 @@ import {
 } from '@/components/ui/sheet';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { markdownProse } from '@/lib/markdownProse';
 import { useFacets } from '@/character-creation/queries';
 import type { ContainerAccessPolicy, ItemInstance, UseItemResult } from '../types';
 import { useItemFacets, useQualityTiers, useRemoveItemFacet } from '../hooks/useItemFacets';
@@ -329,7 +330,7 @@ function ItemContent({
 
       <div className="flex flex-col gap-6 p-6">
         {item.display_description && (
-          <div className={cn('max-w-none text-base leading-relaxed', proseClasses)}>
+          <div className={cn('max-w-none text-base leading-relaxed', markdownProse)}>
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.display_description}</ReactMarkdown>
           </div>
         )}
@@ -512,21 +513,3 @@ function Stat({ label, value }: StatProps) {
     </div>
   );
 }
-
-/**
- * Manual editorial typography — `@tailwindcss/typography` is not installed.
- * Mimics a small subset of `prose dark:prose-invert max-w-none`.
- */
-const proseClasses = [
-  '[&_p]:my-3',
-  '[&_p:first-child]:mt-0',
-  '[&_p:last-child]:mb-0',
-  '[&_strong]:font-semibold',
-  '[&_em]:italic',
-  '[&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5',
-  '[&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5',
-  '[&_li]:my-1',
-  '[&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-muted-foreground',
-  '[&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-sm',
-  '[&_a]:text-primary [&_a]:underline-offset-2 hover:[&_a]:underline',
-].join(' ');

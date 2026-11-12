@@ -24,7 +24,7 @@ from world.worship.models import (
     WorshipGrant,
     WorshippedBeing,
 )
-from world.worship.types import DevotionBump
+from world.worship.types import ChosenDistinctionGrants, DevotionBump
 
 if TYPE_CHECKING:
     from datetime import date
@@ -121,15 +121,18 @@ def bump_devotion(
     theirs; ``grant_achievement`` is idempotent per sheet).
 
     A positive ``amount`` is scaled by the character's earning rate with the
-    being (#4333, design 1a): 100%, plus the Chosen bonus for an active patronage,
-    plus favor earning modifiers. Every favor source writes through here, so all
+    being (#4333, design 1a): 100%, plus favor earning modifiers (a Chosen's bonus is
+    one, on the patron target, #4341). Every favor source writes through here, so all
     of them are scaled. A negative amount is applied as given. Returns the
     standing and the amount actually credited.
 
     While the character holds an open pledge to ``being`` (#4333 slice 2), the
     credited amount also advances the pledge's ``Project.current_progress`` and
     is recorded as a ``PledgeCredit`` of ``source``'s kind with its calculation.
+    While she holds an active pact with ``being`` (#4341), it also counts toward each
+    open period of the pact (``record_pact_credit``).
     """
+    from world.pacts.services import record_pact_credit  # noqa: PLC0415
     from world.worship.favor_services import earning_rate  # noqa: PLC0415
     from world.worship.pledge_services import record_pledge_credit  # noqa: PLC0415
 
@@ -171,6 +174,14 @@ def bump_devotion(
     if amount > 0:
         pledge_credit = record_pledge_credit(
             character_sheet, being, base=base, rate=rate, credited=amount, source=source
+        )
+        # A write the pledge credit already counts takes nothing more from the deed cap.
+        record_pact_credit(
+            character_sheet,
+            being,
+            amount,
+            source,
+            base=0 if pledge_credit is not None else base,
         )
     return DevotionBump(
         standing=standing,
@@ -581,13 +592,97 @@ def active_patronage_for(sheet: "CharacterSheet") -> list[DevotionStanding]:
 
 
 def best_patronage_favor(sheet: "CharacterSheet") -> int:
-    """Return the favor of the highest-favor active patronage, or 0.
+    """Return the favor of the highest-favor Chosen patronage, or 0.
 
-    Returns 0 when the character has no active patronage — a non-Chosen or a
-    Chosen who has lost all their patrons.
+    Returns 0 when the character is no being's Chosen: a non-Chosen, a Chosen who has
+    lost all their patrons, or a character whose only patron is a pact (#4341). Read by
+    the anima ritual's Chosen bonus.
     """
-    patronages = active_patronage_for(sheet)
+    from world.worship.favor_services import chosen_patronages_for  # noqa: PLC0415
+
+    patronages = chosen_patronages_for(sheet)
     return patronages[0].favor if patronages else 0
+
+
+def grant_chosen_distinction_to_chosen(config: ChosenFavorConfig) -> ChosenDistinctionGrants:
+    """Grant the designated Chosen distinction to every Chosen who lacks it (#4341).
+
+    Called by the Chosen favor admin when staff set or change
+    ``config.chosen_distinction``; character creation grants it with the patronage
+    (``establish_chosen_patronage``). A Chosen whose distinctions exclude it is skipped
+    and returned, so the admin can name her. Does nothing when no distinction is
+    designated.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.distinctions.exceptions import DistinctionExclusionError  # noqa: PLC0415
+    from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
+    from world.distinctions.services import grant_distinction  # noqa: PLC0415
+    from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
+    from world.worship.favor_services import chosen_standing_q  # noqa: PLC0415
+
+    distinction = config.chosen_distinction
+    if distinction is None:
+        return ChosenDistinctionGrants(granted=0, skipped=())
+    holders = CharacterDistinction.objects.filter(distinction=distinction).values("character_id")
+    sheet_ids = (
+        DevotionStanding.objects.filter(chosen_standing_q())
+        .exclude(character_sheet_id__in=holders)
+        .values_list("character_sheet_id", flat=True)
+        .distinct()
+    )
+    granted = 0
+    skipped: list[CharacterSheet] = []
+    for sheet in CharacterSheet.objects.filter(pk__in=list(sheet_ids)).order_by("pk"):
+        try:
+            grant_distinction(
+                sheet,
+                distinction,
+                origin=DistinctionOrigin.GAMEPLAY,
+                rank=1,
+                source_description="Chosen of a being",
+            )
+        except DistinctionExclusionError:
+            logger.warning(
+                "Chosen distinction %s skipped for sheet %s (exclusion conflict)",
+                distinction.pk,
+                sheet.pk,
+            )
+            skipped.append(sheet)
+            continue
+        granted += 1
+    return ChosenDistinctionGrants(granted=granted, skipped=tuple(skipped))
+
+
+def grant_chosen_distinction(sheet: "CharacterSheet") -> None:
+    """Grant ``sheet`` the designated Chosen distinction at character creation (#4341),
+    unless none is designated or she already holds it. A distinction she holds that
+    excludes it is logged and skipped; creation goes on."""
+    from world.distinctions.exceptions import DistinctionExclusionError  # noqa: PLC0415
+    from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
+    from world.distinctions.services import grant_distinction  # noqa: PLC0415
+    from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
+
+    distinction = get_chosen_favor_config().chosen_distinction
+    if distinction is None:
+        return
+    if CharacterDistinction.objects.filter(character=sheet, distinction=distinction).exists():
+        return
+    try:
+        grant_distinction(
+            sheet,
+            distinction,
+            origin=DistinctionOrigin.CHARACTER_CREATION,
+            rank=1,
+            source_description="Path of the Chosen",
+        )
+    except DistinctionExclusionError:
+        # Creation still succeeds: she is Chosen, without the bonus her distinctions
+        # exclude (the achievements reward grant handles the conflict the same way).
+        logger.warning(
+            "Chosen distinction %s skipped at creation for sheet %s (exclusion conflict)",
+            distinction.pk,
+            sheet.pk,
+        )
 
 
 def establish_patronage(

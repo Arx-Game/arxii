@@ -99,3 +99,29 @@ class PatronageEstablishmentTests(TestCase):
         self.assertIsNone(standing.valence)
         self.assertIsNone(standing.established_at)
         self.assertEqual(standing.favor, 10)
+
+    def test_path_of_the_chosen_grants_the_chosen_distinction(self) -> None:
+        """#4341: CG grants the designated Chosen distinction with the patronage, which
+        carries the Chosen earning bonus; none designated grants nothing."""
+        from world.character_creation.constants import PATH_OF_THE_CHOSEN_NAME
+        from world.character_creation.sheet_writers import establish_chosen_patronage
+        from world.classes.factories import PathFactory
+        from world.distinctions.models import CharacterDistinction
+        from world.worship.factories import WorshipDeclarationFactory, designate_chosen_distinction
+        from world.worship.favor_services import earning_rate
+
+        path = PathFactory(name=PATH_OF_THE_CHOSEN_NAME)
+        plain = CharacterSheetFactory()
+        WorshipDeclarationFactory(character_sheet=plain, public_being=self.being)
+        establish_chosen_patronage(plain, path)
+        self.assertFalse(CharacterDistinction.objects.filter(character=plain).exists())
+
+        distinction = designate_chosen_distinction()
+        sheet = CharacterSheetFactory()
+        WorshipDeclarationFactory(character_sheet=sheet, public_being=self.being)
+        establish_chosen_patronage(sheet, path)
+
+        self.assertTrue(
+            CharacterDistinction.objects.filter(character=sheet, distinction=distinction).exists()
+        )
+        self.assertEqual(earning_rate(sheet, self.being), 200)

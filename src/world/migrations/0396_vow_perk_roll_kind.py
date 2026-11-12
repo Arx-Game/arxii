@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0392_conditioninstance_rallied"),
+        ("arxii", "0395_pacts_with_beings"),
     ]
 
     operations = [

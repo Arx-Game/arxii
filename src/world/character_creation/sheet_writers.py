@@ -455,10 +455,15 @@ def path_consequences(sheet: CharacterSheet, path: Path) -> None:
 
 
 def establish_chosen_patronage(sheet: CharacterSheet, path: Path) -> None:
-    """Path of the Chosen binds the declared being as patron (#2550); other paths, nothing."""
+    """Path of the Chosen binds the declared being as patron (#2550) and grants the
+    designated Chosen distinction, which carries the Chosen bonuses (#4341); other paths,
+    nothing."""
     from world.character_creation.constants import PATH_OF_THE_CHOSEN_NAME  # noqa: PLC0415
     from world.worship.models import PatronageValence, WorshipDeclaration  # noqa: PLC0415
-    from world.worship.services import establish_patronage  # noqa: PLC0415
+    from world.worship.services import (  # noqa: PLC0415
+        establish_patronage,
+        grant_chosen_distinction,
+    )
 
     if path.name != PATH_OF_THE_CHOSEN_NAME:
         return
@@ -466,6 +471,7 @@ def establish_chosen_patronage(sheet: CharacterSheet, path: Path) -> None:
     being = declaration and (declaration.secret_being or declaration.public_being)
     if being:
         establish_patronage(sheet, being, valence=PatronageValence.DEVOTIONAL)
+        grant_chosen_distinction(sheet)
 
 
 def distinction_consequences(sheet: CharacterSheet, distinction: Distinction) -> None:
