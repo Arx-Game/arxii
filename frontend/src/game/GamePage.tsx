@@ -906,7 +906,7 @@ export function GamePage() {
     }
     if (isChannelRowKey(activeThreadTab)) {
       return channelRowComposerMode(
-        selectedRow?.label ?? '',
+        { id: selectedRow?.channel?.id ?? 0, name: selectedRow?.label ?? '' },
         Boolean(selectedRow?.channel?.subscription.display_tenure)
       );
     }

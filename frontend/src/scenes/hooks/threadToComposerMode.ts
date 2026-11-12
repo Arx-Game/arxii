@@ -70,15 +70,18 @@ export function tabKeyToComposerMode(
 
 /**
  * Composer mode for a channel row in the rail (#3299): always `locked`, posting
- * through the `channel` command. `channelName` is set only once the player has
- * a speaker chosen in that channel; without it the composer refuses to send.
+ * through the channels REST API. `channelId` is set only once the player has a
+ * speaker chosen in that channel; without it the composer refuses to send.
  */
-export function channelRowComposerMode(channelName: string, canSpeak: boolean): ComposerMode {
+export function channelRowComposerMode(
+  channel: { id: number; name: string },
+  canSpeak: boolean
+): ComposerMode {
   return {
     command: 'channel',
     targets: [],
-    label: `Channel → ${channelName}`,
+    label: `Channel → ${channel.name}`,
     locked: true,
-    ...(canSpeak ? { channelName } : {}),
+    ...(canSpeak ? { channelId: channel.id } : {}),
   };
 }
