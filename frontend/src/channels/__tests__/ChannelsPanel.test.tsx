@@ -7,7 +7,8 @@ import { ChannelsPanel } from '../components/ChannelsPanel';
 import { channelKeys } from '../queries';
 import type { Channel, ChannelMessage, ChannelMessagePage, ChannelSubscription } from '../types';
 
-vi.mock('@/store/hooks', () => ({ useAccount: () => null }));
+const account = vi.hoisted(() => ({ current: null as { is_staff: boolean } | null }));
+vi.mock('@/store/hooks', () => ({ useAccount: () => account.current }));
 vi.mock('@/evennia_replacements/api', () => ({
   apiFetch: vi.fn(async () => new Response('[]', { status: 200 })),
 }));
@@ -83,5 +84,17 @@ describe('ChannelsPanel', () => {
     renderPanel([channel({ display_tenure: null, display_label: null })]);
     expect(screen.getByRole('combobox', { name: 'Speak as' })).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'Message' })).not.toBeInTheDocument();
+  });
+
+  it('shows Delete and Ban on messages to staff only', () => {
+    account.current = null;
+    const { unmount } = renderPanel([channel({})], [message(1)]);
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+    unmount();
+    account.current = { is_staff: true };
+    renderPanel([channel({})], [message(1)]);
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ban' })).toBeInTheDocument();
+    account.current = null;
   });
 });

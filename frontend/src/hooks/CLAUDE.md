@@ -86,6 +86,8 @@ kind}))`), whose dict becomes the frame's kwargs; a sibling keyword would leave 
   server sends it to every web session on the account, so it dedupes on `message_id`. Own
   messages and lanes on screen get no bump; otherwise `badge` bumps unread, `all` also
   toasts, `none` does neither.
+  `handleChannelMessageRemovedPayload` (`channel_message_removed`, staff delete) drops the
+  row from that cache.
 - **`handleInteractionChangedPayload.ts`** (#4508): the `interaction_changed` frame, ids only.
   It calls `refreshSceneFeedRow` (`scenes/sceneFeedCache.ts`) to refetch that pose for this
   viewer. A 403 or 404 is quiet (the viewer may not see the row); any other failure is reported.

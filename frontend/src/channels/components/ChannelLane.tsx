@@ -13,6 +13,10 @@ import {
 } from '../queries';
 import type { ChannelMessage, JoinedChannel } from '../types';
 import { ChannelControls, IdentitySelect } from './ChannelControls';
+import { MessageModeration } from './MessageModeration';
+import { useAccount } from '@/store/hooks';
+
+const MARK_READ_COALESCE_MS = 1500;
 
 type LaneRow =
   { kind: 'message'; message: ChannelMessage } | { kind: 'hidden'; firstId: number; count: number };
@@ -80,17 +84,42 @@ export function ChannelLane({ channel, active, canMoveUp, canMoveDown, onMove }:
   const { data } = useChannelMessagesQuery(channel.id, open);
   const update = useUpdateSubscription(channel.id);
   const { mutate: markRead } = useMarkChannelRead(channel.id);
-  const newestId = data?.results[0]?.id;
+  const isStaff = useAccount()?.is_staff ?? false;
+  const newest = data?.results[0];
+  const newestId = newest?.id;
+  const newestIsOwn = newest?.is_own ?? false;
 
-  // Reading a lane marks it read: once when it opens with unread, and again
-  // whenever a new message lands while it is open.
+  // Reading a lane marks it read: at once when it opens with unread, and, while it
+  // stays open, once per burst of other people's messages (coalesced). A pending
+  // mark is flushed when the lane closes or unmounts.
   const seenNewest = useRef<number | undefined>(undefined);
+  const pendingMark = useRef<number | null>(null);
   useEffect(() => {
     if (!open) return;
     const changed = seenNewest.current !== undefined && newestId !== seenNewest.current;
     seenNewest.current = newestId;
-    if (sub.unread_count > 0 || changed) markRead(sub.id);
-  }, [open, newestId, sub.unread_count, sub.id, markRead]);
+    if (sub.unread_count > 0) {
+      if (pendingMark.current !== null) window.clearTimeout(pendingMark.current);
+      pendingMark.current = null;
+      markRead(sub.id);
+      return;
+    }
+    if (!changed || newestIsOwn) return;
+    if (pendingMark.current !== null) window.clearTimeout(pendingMark.current);
+    pendingMark.current = window.setTimeout(() => {
+      pendingMark.current = null;
+      markRead(sub.id);
+    }, MARK_READ_COALESCE_MS);
+  }, [open, newestId, newestIsOwn, sub.unread_count, sub.id, markRead]);
+  useEffect(() => {
+    if (!open) return;
+    return () => {
+      if (pendingMark.current === null) return;
+      window.clearTimeout(pendingMark.current);
+      pendingMark.current = null;
+      markRead(sub.id);
+    };
+  }, [open, sub.id, markRead]);
 
   return (
     <section className="rounded border" aria-label={channel.name}>
@@ -133,9 +162,12 @@ export function ChannelLane({ channel, active, canMoveUp, canMoveDown, onMove }:
                   <HiddenDivider label={`${row.count} hidden`} />
                 </li>
               ) : (
-                <li key={row.message.id} className="[overflow-wrap:anywhere]">
+                <li key={row.message.id} className="group [overflow-wrap:anywhere]">
                   <span className="font-medium">{row.message.speaker}</span>{' '}
                   <span>{row.message.body}</span>
+                  {isStaff ? (
+                    <MessageModeration channelId={channel.id} messageId={row.message.id} />
+                  ) : null}
                 </li>
               )
             )}
