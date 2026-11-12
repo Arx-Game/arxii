@@ -3046,7 +3046,6 @@
 - `rename_companion(companion: 'Companion', name: 'str') -> 'None' - Rename a companion: its row and its in-world object's key together (#4338).`
 - `resolve_bonded_companion(opponent: 'CombatOpponent') -> 'Companion | None' - The live, unreleased Companion behind an ALLY CombatOpponent, if any.`
 - `resolve_companion_defeat(companion: 'Companion', risk_level: 'str') -> 'bool' - Resolve a bridged companion's defeat consequence (#1873).`
-- `shown_thread_level(level: 'int') -> 'int' - The thread level a player sees for a stored ``level``: ``level // 10`` (#4585).`
 - `stables_capacity_bonus_for_sheet(character_sheet: 'CharacterSheet') -> 'int' - Flat Companion Capacity bonus from every Stables the sheet keeps a household at.`
 - `used_companion_capacity(character_sheet: 'CharacterSheet', gift: 'Gift') -> 'int' - Companion Capacity currently consumed by character_sheet's active companions via gift.`
 
@@ -4332,6 +4331,7 @@
 - `scale_by_percent(base: 'int', percent: 'int', *, floor: 'int' = 0) -> 'int' - ``base`` scaled by ``100 + percent`` percent, whole units, never below ``floor``.`
 - `should_check_collapse(character_sheet: 'CharacterSheet', category: 'str', effort_level: 'str') -> 'bool' - Return True if a collapse check is needed.`
 - `tick_fatigue_collapse_for_targets(targets: 'Iterable[ObjectDB]') -> 'None' - Evaluate non-cast over-capacity fatigue collapse for each target.`
+- `whole_stat_points(value: int) -> int - How many whole stat points a stored stat value holds (``value // 10``).`
 
 
 ## world.forms
@@ -7522,7 +7522,7 @@
 - `passive_mantle_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum tier-0 FLAT_BONUS contributions from attuned mantle threads (Spec D §5.2).`
 - `passive_mantle_crossing_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum ConditionModifierEffect from MANTLE thread crossing choices (always-on).`
 - `passive_motif_style_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' - Coherence bonus for ``target``'s resonance (Spec D §5.3). Thin wrapper over`
-- `power_flat_bonus_for_resonance(sheet: 'object', resonance_id: 'int') -> 'int' - Sum POWER-category flat modifiers (distinctions) applicable to ``resonance_id``.`
+- `power_flat_bonus_for_resonance(sheet: 'object', resonance_id: 'int | None', *, scoped_only: 'bool' = False) -> 'int' - Sum POWER-category flat modifiers (distinctions) applicable to ``resonance_id``.`
 - `prerequisites_met(prereqs: 'Iterable[Prerequisite]', caster: 'ObjectDB', target: 'ObjectDB') -> 'bool' - True if target satisfies every one of prereqs (all() semantics; empty = True).`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, *, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> int - Preview the rank difference for a check without rolling.`
 - `property_damage_bonus(target: 'ObjectDB', damage_type: 'DamageType | None') -> 'int' - Sum PropertyDamageModifier.modifier_value for target's active Properties.`
@@ -9958,7 +9958,7 @@
 - `cumulative_dp_for_level(level: int) -> int - Total dp needed to reach *level* from the base level of 10.`
 - `get_relationship_tier(character_a: 'CharacterSheet | ObjectDB', character_b: 'CharacterSheet | ObjectDB') -> 'int' - The lower claimed tier of a mutual Mentor/Student tie, else 0 (#3957).`
 - `get_specialization_value(character: 'ObjectDB', specialization: 'Specialization') -> 'int' - A character's raw value for a specialization, 0 if unowned (#1688).`
-- `has_specialization(character: 'ObjectDB', specialization: 'Specialization', *, minimum_rank: 'int' = 1) -> 'bool' - Whether a character owns a specialization at ``minimum_rank`` or better (#1688).`
+- `has_specialization(character: 'ObjectDB', specialization: 'Specialization', *, minimum_value: 'int' = 10) -> 'bool' - Whether a character owns a specialization at ``minimum_value`` or better (#1688).`
 - `is_skill_at_xp_boundary(value: 'int') -> 'bool' - Public wrapper for :func:`_is_at_xp_boundary` (#2115).`
 - `next_xp_boundary(value: 'int') -> 'int | None' - The first XP boundary at or above *value* (19, 29, 39, 49), ``None`` above 49.`
 - `points_to_next_boundary(tracker: 'DevelopmentPoints') -> 'int | None' - Development the skill can take before it parks at its next XP boundary.`
