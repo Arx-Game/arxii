@@ -144,7 +144,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `BOTCH_IMMUNITY` fire in `perform_check`'s outcome resolution as of slice 2, see "Outcome
   guarantees" below), `magnitude_tenths` (integer-tenths, `PositiveIntegerField` — no negative
   magnitudes anywhere in this table; a vow's weakness is the absence of a perk, never a malus),
-  `announce_template` (player-facing line with `{holder}`/`{subject}` placeholders), an optional
+  `announce_template` (player-facing line with `{holder}`/`{subject}`/`{target}`/`{ally}` placeholders, #5092: `{target}` is the subject's declared opponent this round in combat, else the action's target; `{ally}` is the covenant-mate whose action made a held situation true, named by that situation's ally finder in `perks.evaluators.SITUATION_ALLY_FINDERS` (ENEMY_HELD_BY_ALLY, TARGET_SWAYED_BY_ALLY, SHIELDED_BY_ALLY, TARGET_IS_MARKED_BY_ALLY, ALLY_INTERCEPTED_FOR_ME, ALLY_SENT_FLYING; deliberately not ALLY_LOW_HEALTH or BARRIER_CONTESTED). `clean()` refuses any other placeholder or a stray brace; the perk admin's situation inline refuses `{ally}` when no base situation or rung extra situation supplies one (a firing below that rung says "an ally"); `render_announce` never raises and falls back to "an ally" / "the foe". The admin edits it in a three-row, full-width box), an optional
   `check_type` FK (`CHECK_BONUS` scope; null = any check — `clean()` rejects a `check_type` on a
   non-`CHECK_BONUS` row), and an optional `floor_success_level` (`SmallIntegerField`, canonical
   −10..+10 `success_level` scale — `TIER_FLOOR`-only, `clean()`-required on `TIER_FLOOR` rows and
@@ -158,6 +158,15 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `POWER_BONUS` — `clean()` rejects it on `TIER_FLOOR`/`BOTCH_IMMUNITY`). Every non-empty scope
   column on a row must match (AND); an empty scope always matches — see `perk_scope_matches`
   below.
+  A fourth, `roll_kind` (admin label **"Applies to"**, `PerkRollKind`: blank "Any roll" or
+  `ATTACK` "Attack rolls", #5092), narrows a `CHECK_BONUS` perk (`clean()` rejects it on any other
+  `effect_kind`) to the roll of an attack on an opponent, **once per attack**: a plain Strike's
+  hit roll, an attack technique's roll (a cast at an opponent, a joust pass) and an enchanted
+  Strike's technique roll, never that Strike's hit roll (ADR-5026's counted-once table). Dodges,
+  defense rolls, casts at oneself or an ally, clash contributions, penetration rolls and damage
+  rolls never take it. It ANDs with `check_type` like every other scope column. The roll's
+  caller marks it: `CombatTechniqueResolver._roll_kind` (from `is_attack_on_opponent`, skipping an
+  enchanted Strike's hit roll) and `EnchantedStrikeCast._roll_technique`.
 - **`SituationRequirementMixin`** (#2623, ADR-0154) — abstract mixin shared by
   `VowSituationalPerkSituation`/`VowSituationalPerkRung`/`VowAddedEffect`; carries five typed,
   nullable/blank parameter columns (Situation Parameters): `condition_property` (#4759, nullable
@@ -220,7 +229,10 @@ modules import combat/checks contexts at function level, never the reverse):
   `MissionInstance` for a mission-driven check, Court scoping), `battle_action_kind` (the
   declared `BattleActionKind` for a warfare roll, Battle scoping), and `attacker` (the attacking
   entity — a `CombatOpponent` or ObjectDB-backed attacker — populated ONLY on a defense-side
-  resolution; `None` on every offense-side one, the defense-side seam). See the class docstring
+  resolution; `None` on every offense-side one, the defense-side seam), plus `roll_kind` (#5092,
+  the `PerkRollKind` of this roll, blank unless the caller marks an attack roll) and
+  `roll_kind_perks_only` (only `roll_kind`-scoped perks reach the roll and outcome guarantees
+  skip it: an enchanted Strike's technique roll, whose other terms stay the hit roll's). See the class docstring
   for the full field contract and the missing-field-returns-False convention.
 - **`evaluators.py`** — `SITUATION_EVALUATORS` registry (`register(situation)` decorator,
   mirrors `magic.services.power_terms`'s `_PROVIDERS` registry pattern) + one evaluator per
@@ -243,7 +255,8 @@ modules import combat/checks contexts at function level, never the reverse):
   `mission_category_ids` kwarg. `announce_fired_perks(fired, *, subject, location)`, the
   dual-dispatch presentation-contract seam (see "Presentation contract" below).
   `dormant_perk_firings(subject, *, effect_kind, resolution, target, mission=None,
-  battle_action_kind=None, attacker=None) -> list[FiredPerk]` / `announce_dormant_perks(dormant,
+  battle_action_kind=None, attacker=None, roll_kind="", roll_kind_perks_only=False) ->
+  list[FiredPerk]` / `announce_dormant_perks(dormant,
   *, subject)` (slice 3, Task 7, ruling 2) — see "Dormant-vow messaging" below.
 
 **Delivery seams:** `POWER_BONUS` (slice 1) rides a conditional power-term provider

@@ -250,6 +250,51 @@ class PerkEffectKind(models.TextChoices):
     BOTCH_IMMUNITY = "botch_immunity", "Botch Immunity"
 
 
+class PerkRollKind(models.TextChoices):
+    """Which kind of roll a ``CHECK_BONUS`` perk applies to (#5092): the "Applies to"
+    scope, between "any check" and one check type.
+
+    - ``ANY`` (blank) - every roll its other scopes allow; the default.
+    - ``ATTACK`` - only an attack on an opponent, boosted once per attack: a plain
+      Strike's hit roll, an attack technique's roll (a cast at an opponent, a joust
+      pass), and an enchanted Strike's technique roll (not also its hit roll, ADR-5026's
+      counted-once table). Never a dodge or defense roll, a cast at oneself or an ally,
+      a clash contribution, a penetration roll, or a check outside an attack. The roll's
+      caller says which kind it is (``SituationContext.roll_kind``), from
+      ``is_attack_on_opponent`` in combat.
+    """
+
+    ANY = "", "Any roll"
+    ATTACK = "attack", "Attack rolls"
+
+
+#: The placeholders a perk's announce line may use (#5092). ``holder``/``subject`` always
+#: fill; ``target`` is the foe the firing is about and ``ally`` the covenant-mate whose
+#: action made a held situation true, each with a plain-words fallback at render time.
+ANNOUNCE_PLACEHOLDERS = ("holder", "subject", "target", "ally")
+
+
+def announce_placeholder_error(template: str) -> str | None:
+    """Why an announce line cannot be used as written, or None (#5092): a placeholder
+    other than the four above, or braces that do not make a placeholder."""
+    from string import Formatter  # noqa: PLC0415
+
+    allowed = ", ".join("{" + name + "}" for name in ANNOUNCE_PLACEHOLDERS)
+    try:
+        names = [
+            name for _text, name, _spec, _conv in Formatter().parse(template) if name is not None
+        ]
+    except ValueError:
+        return f"The line has a stray brace. The words in braces it can use are {allowed}."
+    unknown = [name for name in names if name not in ANNOUNCE_PLACEHOLDERS]
+    if unknown:
+        return (
+            f"The line uses {{{unknown[0]}}}, which nothing fills. The words in braces it can "
+            f"use are {allowed}."
+        )
+    return None
+
+
 class PerkBeneficiary(models.TextChoices):
     """Who benefits when a ``VowSituationalPerk`` fires (#2536 spec §2).
 

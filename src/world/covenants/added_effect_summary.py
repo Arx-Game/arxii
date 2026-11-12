@@ -80,7 +80,11 @@ def summarize_situational_perk(
 
     Shared by the vow page (#4880) and the holder's pick catalog (#4929).
     """
-    parts = [perk.get_beneficiary_display(), perk.get_effect_kind_display()]
+    effect = perk.get_effect_kind_display()
+    if perk.roll_kind:
+        # "Applies to" (#5092): e.g. "Check Bonus on attack rolls".
+        effect = f"{effect} on {perk.get_roll_kind_display().lower()}"
+    parts = [perk.get_beneficiary_display(), effect]
     if situations:
         parts.append(f"when {' and '.join(situations)}")
     parts.append(f"{perk.magnitude_tenths} tenths")

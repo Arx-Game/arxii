@@ -60,6 +60,14 @@ if TYPE_CHECKING:
 
 SITUATION_EVALUATORS: dict[str, Callable[[SituationContext, SituationParams], bool]] = {}
 
+#: Situations that can name the ally whose action made them true (#5092): each finder
+#: returns that ally's CharacterSheet id (== their character's ObjectDB id) or None. A perk
+#: whose announce line uses ``{ally}`` needs one of these among its situations
+#: (``VowSituationalPerk.clean``); the announce asks the finder only when the line uses it.
+#: Not here, deliberately: ALLY_LOW_HEALTH and BARRIER_CONTESTED (no ally acted to make
+#: them true) and every situation that is not about an ally.
+SITUATION_ALLY_FINDERS: dict[str, Callable[[SituationContext, SituationParams], int | None]] = {}
+
 # --- Module-tuned thresholds (spec §1's "document the threshold as a module
 # constant" instruction) ---
 
@@ -90,6 +98,24 @@ def register(
         func: Callable[[SituationContext, SituationParams], bool],
     ) -> Callable[[SituationContext, SituationParams], bool]:
         SITUATION_EVALUATORS[situation] = func
+        return func
+
+    return _decorator
+
+
+def register_ally_finder(
+    situation: str,
+) -> Callable[
+    [Callable[[SituationContext, SituationParams], int | None]],
+    Callable[[SituationContext, SituationParams], int | None],
+]:
+    """Decorator registering an ally finder under a ``Situation`` value (#5092). The
+    situation's boolean evaluator is ``finder(...) is not None``, so the two never drift."""
+
+    def _decorator(
+        func: Callable[[SituationContext, SituationParams], int | None],
+    ) -> Callable[[SituationContext, SituationParams], int | None]:
+        SITUATION_ALLY_FINDERS[situation] = func
         return func
 
     return _decorator
@@ -153,6 +179,22 @@ def _companion_order_owner_matches_covenant(
     ``target_opponent_id`` is set, filters to orders targeting that opponent;
     when None, checks any ATTACK_TARGET order in the encounter.
     """
+    return (
+        _companion_order_mate_owner_id(
+            encounter, round_number, holder_covenant_ids, target_opponent_id
+        )
+        is not None
+    )
+
+
+def _companion_order_mate_owner_id(
+    encounter: object,
+    round_number: int,
+    holder_covenant_ids: frozenset[int],
+    target_opponent_id: int | None = None,
+) -> int | None:
+    """The sheet id of a covenant-mate whose companion holds an ATTACK_TARGET order, or
+    None (#2666; the owner is the ally a perk names, #5092)."""
     from world.companions.constants import CompanionOrderKind  # noqa: PLC0415
     from world.companions.models import CompanionOrder  # noqa: PLC0415
     from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
@@ -169,15 +211,18 @@ def _companion_order_owner_matches_covenant(
         CompanionOrder.objects.filter(**filters).select_related("companion__owner")
     )
     if not companion_orders:
-        return False
+        return None
 
     order_owner_ids = {order.companion.owner_id for order in companion_orders}
-    return bool(
+    return (
         CharacterCovenantRole.objects.filter(
             character_sheet_id__in=order_owner_ids,
             covenant_id__in=holder_covenant_ids,
             left_at__isnull=True,
-        ).exists()
+        )
+        .order_by("character_sheet_id")
+        .values_list("character_sheet_id", flat=True)
+        .first()
     )
 
 
@@ -333,7 +378,16 @@ def target_distracted(ctx: SituationContext, params: SituationParams) -> bool:  
 
 
 @register(Situation.TARGET_SWAYED_BY_ALLY)
-def target_swayed_by_ally(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+def target_swayed_by_ally(ctx: SituationContext, params: SituationParams) -> bool:
+    """See ``_target_swayed_by_ally_applier``."""
+    return _target_swayed_by_ally_applier(ctx, params) is not None
+
+
+@register_ally_finder(Situation.TARGET_SWAYED_BY_ALLY)
+def _target_swayed_by_ally_applier(
+    ctx: SituationContext,
+    params: SituationParams,  # noqa: ARG001
+) -> int | None:
     """Same condition as TARGET_DISTRACTED, applied by holder or a covenant-mate.
 
     Deliberately reads HISTORY via ``shares_covenant_with`` (ACTIVE membership
@@ -354,18 +408,26 @@ def target_swayed_by_ally(ctx: SituationContext, params: SituationParams) -> boo
     """
     bearer_id = _target_bearer_id(ctx)
     if ctx.holder is None or bearer_id is None:
-        return False
+        return None
     instance = _distraction_condition_instance(bearer_id)
     if instance is None or instance.source_character is None:
-        return False
-    applier = instance.source_character
-    holder_character = ctx.holder.character
+        return None
+    return _applier_if_holder_or_mate(instance.source_character, ctx.holder.character)
+
+
+def _applier_if_holder_or_mate(applier: ObjectDB, holder_character: object) -> int | None:
+    """The id of whoever laid a condition, when it was the holder or a covenant-mate.
+
+    Companion-as-mate bridge: a companion's condition counts as its owner's (#2666), and
+    the owner is the one named.
+    """
     if applier == holder_character:
-        return True
-    # Companion-as-mate bridge: a companion's condition counts as the owner's (#2666).
+        return applier.pk
     companion_owner = _resolve_companion_owner_character(applier)
     effective_applier = companion_owner if companion_owner is not None else applier
-    return bool(effective_applier.shares_covenant_with(holder_character))
+    if effective_applier.shares_covenant_with(holder_character):
+        return effective_applier.pk
+    return None
 
 
 def _target_declared_action(ctx: SituationContext) -> CombatRoundAction | None:
@@ -759,7 +821,16 @@ def ambush_underway(ctx: SituationContext, params: SituationParams) -> bool:
 
 
 @register(Situation.ALLY_INTERCEPTED_FOR_ME)
-def ally_intercepted_for_me(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+def ally_intercepted_for_me(ctx: SituationContext, params: SituationParams) -> bool:
+    """See ``_ally_intercepting_for_me``."""
+    return _ally_intercepting_for_me(ctx, params) is not None
+
+
+@register_ally_finder(Situation.ALLY_INTERCEPTED_FOR_ME)
+def _ally_intercepting_for_me(
+    ctx: SituationContext,
+    params: SituationParams,  # noqa: ARG001
+) -> int | None:
     """A covenant-mate of the holder has an armed INTERPOSE guarding the subject.
 
     Ratified v1 judgment call (#2536 slice 3, Task 5): DECLARED-guard
@@ -797,14 +868,14 @@ def ally_intercepted_for_me(ctx: SituationContext, params: SituationParams) -> b
     """
     participant = _resolution_participant(ctx.resolution)
     if participant is None or ctx.holder is None:
-        return False
+        return None
     holder_character = ctx.holder.character
     if holder_character is None:
-        return False
+        return None
 
     holder_covenant_ids = holder_character.active_covenant_ids()
     if not holder_covenant_ids:
-        return False
+        return None
 
     from world.combat.constants import CombatManeuver, ParticipantStatus  # noqa: PLC0415
     from world.combat.models import CombatRoundAction  # noqa: PLC0415
@@ -823,7 +894,7 @@ def ally_intercepted_for_me(ctx: SituationContext, params: SituationParams) -> b
         .select_related("participant__character_sheet")
     )
     if not declarations:
-        return False
+        return None
 
     guarding = [
         declaration
@@ -832,7 +903,7 @@ def ally_intercepted_for_me(ctx: SituationContext, params: SituationParams) -> b
         or declaration.focused_ally_target_id == participant.pk
     ]
     if not guarding:
-        return False
+        return None
 
     mate_sheet_ids = set(
         CharacterCovenantRole.objects.filter(
@@ -841,7 +912,14 @@ def ally_intercepted_for_me(ctx: SituationContext, params: SituationParams) -> b
             left_at__isnull=True,
         ).values_list("character_sheet_id", flat=True)
     )
-    return any(d.participant.character_sheet_id in mate_sheet_ids for d in guarding)
+    return next(
+        (
+            d.participant.character_sheet_id
+            for d in guarding
+            if d.participant.character_sheet_id in mate_sheet_ids
+        ),
+        None,
+    )
 
 
 def _attacker_aura(attacker: object) -> ActingAura | None:
@@ -977,7 +1055,16 @@ def enemy_windup_called_out(ctx: SituationContext, params: SituationParams) -> b
 
 
 @register(Situation.ALLY_SENT_FLYING)
-def ally_sent_flying(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+def ally_sent_flying(ctx: SituationContext, params: SituationParams) -> bool:
+    """See ``_ally_sent_flying_mate``."""
+    return _ally_sent_flying_mate(ctx, params) is not None
+
+
+@register_ally_finder(Situation.ALLY_SENT_FLYING)
+def _ally_sent_flying_mate(
+    ctx: SituationContext,
+    params: SituationParams,  # noqa: ARG001
+) -> int | None:
     """A covenant-mate of the holder currently carries the Sent Flying marker (#2638).
 
     Mate scoping mirrors ``ally_low_health`` exactly (see that function's
@@ -1000,14 +1087,14 @@ def ally_sent_flying(ctx: SituationContext, params: SituationParams) -> bool:  #
     """
     participant = _resolution_participant(ctx.resolution)
     if participant is None or ctx.holder is None:
-        return False
+        return None
     holder_character = ctx.holder.character
     if holder_character is None:
-        return False
+        return None
 
     holder_covenant_ids = holder_character.active_covenant_ids()
     if not holder_covenant_ids:
-        return False
+        return None
 
     from world.combat.constants import ParticipantStatus  # noqa: PLC0415
     from world.combat.models import CombatParticipant as _CombatParticipant  # noqa: PLC0415
@@ -1022,7 +1109,7 @@ def ally_sent_flying(ctx: SituationContext, params: SituationParams) -> bool:  #
         .select_related("character_sheet__character")
     )
     if not mates:
-        return False
+        return None
 
     mate_sheet_ids = set(
         CharacterCovenantRole.objects.filter(
@@ -1041,16 +1128,22 @@ def ally_sent_flying(ctx: SituationContext, params: SituationParams) -> bool:  #
     try:
         template = ConditionTemplate.get_by_name(SENT_FLYING_CONDITION_NAME)
     except ConditionTemplate.DoesNotExist:
-        return False
+        return None
 
     mate_character_ids = [
         m.character_sheet.character_id for m in mates if m.character_sheet_id in mate_sheet_ids
     ]
-    return ConditionInstance.objects.filter(
-        condition=template,
-        target_id__in=mate_character_ids,
-        is_suppressed=False,
-    ).exists()
+    # The flying mate's character id is their sheet id (the sheet shares its pk).
+    return (
+        ConditionInstance.objects.filter(
+            condition=template,
+            target_id__in=mate_character_ids,
+            is_suppressed=False,
+        )
+        .order_by("target_id")
+        .values_list("target_id", flat=True)
+        .first()
+    )
 
 
 def _holder_sheet_ids_on_opponent(
@@ -1124,7 +1217,16 @@ def _holder_sheet_ids_on_opponent(
 
 
 @register(Situation.ENEMY_HELD_BY_ALLY)
-def enemy_held_by_ally(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+def enemy_held_by_ally(ctx: SituationContext, params: SituationParams) -> bool:
+    """See ``_enemy_held_by_ally_holder``."""
+    return _enemy_held_by_ally_holder(ctx, params) is not None
+
+
+@register_ally_finder(Situation.ENEMY_HELD_BY_ALLY)
+def _enemy_held_by_ally_holder(
+    ctx: SituationContext,
+    params: SituationParams,  # noqa: ARG001
+) -> int | None:
     """A covenant-mate of the holder holds the opponent the subject is attacking
     this round.
 
@@ -1147,14 +1249,14 @@ def enemy_held_by_ally(ctx: SituationContext, params: SituationParams) -> bool: 
     """
     participant = _resolution_participant(ctx.resolution)
     if participant is None or ctx.holder is None:
-        return False
+        return None
     holder_character = ctx.holder.character
     if holder_character is None:
-        return False
+        return None
 
     holder_covenant_ids = holder_character.active_covenant_ids()
     if not holder_covenant_ids:
-        return False
+        return None
 
     from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
 
@@ -1162,24 +1264,28 @@ def enemy_held_by_ally(ctx: SituationContext, params: SituationParams) -> bool: 
 
     target_opponent = _subject_focused_opponent(participant)
     if target_opponent is None:
-        return False
+        return None
     target_opponent_id = target_opponent.pk
 
     candidate_sheet_ids = _holder_sheet_ids_on_opponent(encounter, target_opponent, participant)
-    if (
-        candidate_sheet_ids
-        and CharacterCovenantRole.objects.filter(
-            character_sheet_id__in=candidate_sheet_ids,
-            covenant_id__in=holder_covenant_ids,
-            left_at__isnull=True,
-        ).exists()
-    ):
-        return True
+    if candidate_sheet_ids:
+        mate_id = (
+            CharacterCovenantRole.objects.filter(
+                character_sheet_id__in=candidate_sheet_ids,
+                covenant_id__in=holder_covenant_ids,
+                left_at__isnull=True,
+            )
+            .order_by("character_sheet_id")
+            .values_list("character_sheet_id", flat=True)
+            .first()
+        )
+        if mate_id is not None:
+            return mate_id
 
     # Companion-as-mate bridge: a companion ordered ATTACK_TARGET on the
     # subject's declared enemy, owned by a covenant-mate, counts as the
-    # mate holding that enemy (#2666).
-    return _companion_order_owner_matches_covenant(
+    # mate holding that enemy (#2666); the owner is the ally named.
+    return _companion_order_mate_owner_id(
         encounter, encounter.round_number, holder_covenant_ids, target_opponent_id
     )
 
@@ -1287,7 +1393,16 @@ def barrier_contested(ctx: SituationContext, params: SituationParams) -> bool:  
 
 
 @register(Situation.SHIELDED_BY_ALLY)
-def shielded_by_ally(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+def shielded_by_ally(ctx: SituationContext, params: SituationParams) -> bool:
+    """See ``_shielded_by_ally_applier``."""
+    return _shielded_by_ally_applier(ctx, params) is not None
+
+
+@register_ally_finder(Situation.SHIELDED_BY_ALLY)
+def _shielded_by_ally_applier(
+    ctx: SituationContext,
+    params: SituationParams,  # noqa: ARG001
+) -> int | None:
     """The target carries a "Shielded" ConditionInstance applied by a
     covenant-mate of the holder.
 
@@ -1309,19 +1424,19 @@ def shielded_by_ally(ctx: SituationContext, params: SituationParams) -> bool:  #
     anywhere (False when ``target`` is None). No params.
     """
     if ctx.holder is None or ctx.target is None:
-        return False
+        return None
 
     from world.combat.defend_content import SHIELDED_CONDITION_NAME  # noqa: PLC0415
     from world.conditions.models import ConditionInstance, ConditionTemplate  # noqa: PLC0415
 
     target_character = ctx.target.character
     if target_character is None:
-        return False
+        return None
 
     try:
         template = ConditionTemplate.get_by_name(SHIELDED_CONDITION_NAME)
     except ConditionTemplate.DoesNotExist:
-        return False
+        return None
 
     instance = (
         ConditionInstance.objects.filter(
@@ -1333,20 +1448,21 @@ def shielded_by_ally(ctx: SituationContext, params: SituationParams) -> bool:  #
         .first()
     )
     if instance is None or instance.source_character is None:
-        return False
-
-    applier = instance.source_character
-    holder_character = ctx.holder.character
-    if applier == holder_character:
-        return True
-    # Companion-as-mate bridge: a companion's condition counts as the owner's (#2666).
-    companion_owner = _resolve_companion_owner_character(applier)
-    effective_applier = companion_owner if companion_owner is not None else applier
-    return bool(effective_applier.shares_covenant_with(holder_character))
+        return None
+    return _applier_if_holder_or_mate(instance.source_character, ctx.holder.character)
 
 
 @register(Situation.TARGET_IS_MARKED_BY_ALLY)
-def target_is_marked_by_ally(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+def target_is_marked_by_ally(ctx: SituationContext, params: SituationParams) -> bool:
+    """See ``_target_marked_by_ally_marker``."""
+    return _target_marked_by_ally_marker(ctx, params) is not None
+
+
+@register_ally_finder(Situation.TARGET_IS_MARKED_BY_ALLY)
+def _target_marked_by_ally_marker(
+    ctx: SituationContext,
+    params: SituationParams,  # noqa: ARG001
+) -> int | None:
     """The opponent the subject is attacking matches a covenant-mate's
     CombatMark for this round.
 
@@ -1368,14 +1484,14 @@ def target_is_marked_by_ally(ctx: SituationContext, params: SituationParams) -> 
     """
     participant = _resolution_participant(ctx.resolution)
     if participant is None or ctx.holder is None:
-        return False
+        return None
     holder_character = ctx.holder.character
     if holder_character is None:
-        return False
+        return None
 
     holder_covenant_ids = holder_character.active_covenant_ids()
     if not holder_covenant_ids:
-        return False
+        return None
 
     from world.combat.models import CombatMark, CombatRoundAction  # noqa: PLC0415
     from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
@@ -1387,7 +1503,7 @@ def target_is_marked_by_ally(ctx: SituationContext, params: SituationParams) -> 
         round_number=encounter.round_number,
     ).first()
     if subject_action is None or subject_action.focused_opponent_target_id is None:
-        return False
+        return None
 
     target_opponent_id = subject_action.focused_opponent_target_id
 
@@ -1401,7 +1517,7 @@ def target_is_marked_by_ally(ctx: SituationContext, params: SituationParams) -> 
         .select_related("participant__character_sheet")
     )
     if not marks:
-        return False
+        return None
 
     mate_sheet_ids = set(
         CharacterCovenantRole.objects.filter(
@@ -1410,7 +1526,14 @@ def target_is_marked_by_ally(ctx: SituationContext, params: SituationParams) -> 
             left_at__isnull=True,
         ).values_list("character_sheet_id", flat=True)
     )
-    return any(mark.participant.character_sheet_id in mate_sheet_ids for mark in marks)
+    return next(
+        (
+            mark.participant.character_sheet_id
+            for mark in marks
+            if mark.participant.character_sheet_id in mate_sheet_ids
+        ),
+        None,
+    )
 
 
 # --- #4759 slice 3: situations that read the state a target is in ----------

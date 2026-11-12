@@ -7947,7 +7947,9 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     scope columns (ADR-0153): `mission_category`/`mission_template` (FKs, CHECK_BONUS-only) and
     `battle_action_kind` (`BattleActionKind` CharField, CHECK_BONUS/POWER_BONUS only) — every
     non-empty scope on a row must match (AND), narrowing WHEN a fired perk applies (distinct
-    from a `Situation`, which asks whether the game state holds at all).
+    from a `Situation`, which asks whether the game state holds at all). #5092 adds `roll_kind`
+    (admin "Applies to", `PerkRollKind`: "Any roll" / "Attack rolls", CHECK_BONUS-only): one
+    boost per attack on an opponent, matched against `SituationContext.roll_kind` (ADR-5092).
     `VowSituationalPerkSituation` (AND-composed situation attachments) + `VowSituationalPerkRung`
     (cumulative escalation tiers — rung N requires rungs 1..N-1 too, highest qualifying rung's
     magnitude replaces the base). Both inherit `SituationRequirementMixin` (#2623, ADR-0154) —

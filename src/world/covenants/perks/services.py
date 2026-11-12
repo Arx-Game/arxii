@@ -103,7 +103,7 @@ from django.utils import timezone
 
 from world.covenants.perks.constants import PerkBeneficiary
 from world.covenants.perks.context import SituationContext, SituationParams
-from world.covenants.perks.evaluators import SITUATION_EVALUATORS
+from world.covenants.perks.evaluators import SITUATION_ALLY_FINDERS, SITUATION_EVALUATORS
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -162,6 +162,11 @@ class FiredPerk:
     contribution by ``SecondaryVowConfig.potency_tenths / 10``; outcome
     guarantees (``checks.services._apply_outcome_guarantees``) weaken a
     secondary-sourced TIER_FLOOR by one tier.
+
+    ``ally_name`` / ``target_name`` (#5092) fill the announce line's ``{ally}`` and
+    ``{target}``: the covenant-mate whose action made a held situation true, and the foe
+    the firing is about. Each is worked out only when the perk's line uses it; ``None``
+    renders as the fallback words in ``ANNOUNCE_FALLBACKS``.
     """
 
     perk: VowSituationalPerk
@@ -169,6 +174,8 @@ class FiredPerk:
     magnitude_tenths: int
     rung_number: int | None
     is_secondary: bool = False
+    ally_name: str | None = None
+    target_name: str | None = None
 
 
 def applicable_perks(
@@ -321,8 +328,17 @@ def perk_scope_matches(
     Shared by both fired-perk seams (#2536 slice 3): ``checks.services
     ._situational_perk_check_bonus`` (CHECK_BONUS) and ``magic.services.power_terms
     .vow_situational_power_term`` (POWER_BONUS) — one rule, one place.
+
+    ``roll_kind`` ("Applies to", #5092) matches ``ctx.roll_kind`` exactly when set; with
+    ``ctx.roll_kind_perks_only`` an unscoped perk does not match at all.
     """
     if perk.battle_action_kind and perk.battle_action_kind != (ctx.battle_action_kind or ""):
+        return False
+    # "Applies to" (#5092): a scoped perk reaches only its kind of roll, and a roll that
+    # takes only scoped perks (an enchanted Strike's technique roll) refuses the rest.
+    if perk.roll_kind and perk.roll_kind != ctx.roll_kind:
+        return False
+    if ctx.roll_kind_perks_only and not perk.roll_kind:
         return False
     if perk.mission_template_id is not None and (
         ctx.mission is None or ctx.mission.template_id != perk.mission_template_id
@@ -349,6 +365,8 @@ def dormant_perk_firings(  # noqa: PLR0913 - applicable_perks' resolution/target
     mission: MissionInstance | None = None,
     battle_action_kind: str | None = None,
     attacker: object | None = None,
+    roll_kind: str = "",
+    roll_kind_perks_only: bool = False,
 ) -> list[FiredPerk]:
     """Every ``VowSituationalPerk`` of ``effect_kind`` that would have fired for
     ``subject``'s resolution if their vow were still engaged (#2536 slice 3,
@@ -399,6 +417,8 @@ def dormant_perk_firings(  # noqa: PLR0913 - applicable_perks' resolution/target
         mission=mission,
         battle_action_kind=battle_action_kind,
         attacker=attacker,
+        roll_kind=roll_kind,
+        roll_kind_perks_only=roll_kind_perks_only,
     )
     mission_category_ids = mission_category_ids_for(scope_ctx)
     return [
@@ -812,6 +832,37 @@ class _PerkResolver:
         self._situations = SituationCheck(
             subject=subject, target=target, resolution=resolution, attacker=attacker
         )
+        self._target_name: str | None = None
+        self._target_name_read = False
+
+    def _target_name_for_announce(self) -> str | None:
+        """The foe this resolution is about, by name (#5092): the subject's declared
+        opponent this round in combat, else the action's target. Read once."""
+        if not self._target_name_read:
+            self._target_name_read = True
+            self._target_name = _target_name(self.target, self.resolution)
+        return self._target_name
+
+    def _ally_name_for_announce(
+        self, requirements: list[tuple[str, SituationParams]], holder: CharacterSheet
+    ) -> str | None:
+        """The ally a held situation names (#5092): the first held situation with an ally
+        finder that answers, by name."""
+        for situation, params in requirements:
+            finder = SITUATION_ALLY_FINDERS.get(situation)
+            if finder is None:
+                continue
+            ctx = SituationContext(
+                holder=holder,
+                subject=self.subject,
+                target=self.target,
+                resolution=self.resolution,
+                attacker=self.attacker,
+            )
+            ally_id = finder(ctx, params)
+            if ally_id is not None:
+                return _character_name(ally_id)
+        return None
 
     def _holds(self, situation: str, params: SituationParams, holder: CharacterSheet) -> bool:
         return self._situations.holds(situation, params, holder)
@@ -838,6 +889,7 @@ class _PerkResolver:
         magnitude_tenths = perk.magnitude_tenths
         rung_number: int | None = None
         cumulative_requirements = list(base_requirements)
+        held_requirements = list(base_requirements)
         for rung in perk.rungs.all():  # Meta.ordering = ["perk", "rung_number"]
             cumulative_requirements.append((rung.extra_situation, rung.params))
             if not all(
@@ -847,14 +899,76 @@ class _PerkResolver:
                 break
             magnitude_tenths = rung.magnitude_tenths
             rung_number = rung.rung_number
+            held_requirements = list(cumulative_requirements)
 
+        template = perk.announce_template
         return FiredPerk(
             perk=perk,
             holder=holder,
             magnitude_tenths=magnitude_tenths,
             rung_number=rung_number,
             is_secondary=is_secondary,
+            ally_name=(
+                self._ally_name_for_announce(held_requirements, holder)
+                if "{ally}" in template
+                else None
+            ),
+            target_name=self._target_name_for_announce() if "{target}" in template else None,
         )
+
+
+def _character_name(character_id: int) -> str | None:
+    """A character's key for an announce line (#5092), by id: the same name {holder} uses."""
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    return ObjectDB.objects.filter(pk=character_id).values_list("db_key", flat=True).first()
+
+
+def _target_name(target: CharacterSheet | None, resolution: object | None) -> str | None:
+    """The foe a resolution is about, by name (#5092): in combat the opponent the subject
+    declared this round (the same read the target situations use), else the action's
+    target character."""
+    from world.covenants.perks.evaluators import (  # noqa: PLC0415
+        _resolution_participant,
+        _subject_focused_opponent,
+    )
+
+    participant = _resolution_participant(resolution)
+    if participant is not None:
+        opponent = _subject_focused_opponent(participant)
+        if opponent is not None:
+            return opponent.name
+    if target is not None and target.character is not None:
+        return target.character.key
+    return None
+
+
+#: What an announce placeholder says when nothing fills it (#5092): a rung or situation
+#: edited after the line was written, or a resolution with no foe in it.
+ANNOUNCE_FALLBACKS = {"ally": "an ally", "target": "the foe"}
+
+
+class _AnnounceValues(dict):
+    """Placeholder values for ``str.format_map`` that never raise: a known placeholder
+    with no value falls back to plain words, an unknown one renders as nothing."""
+
+    def __missing__(self, key: str) -> str:
+        return ANNOUNCE_FALLBACKS.get(key, "")
+
+
+def render_announce(firing: FiredPerk, *, holder_name: str, subject_name: str) -> str:
+    """The perk's announce line with ``{holder}``, ``{subject}``, ``{target}`` and
+    ``{ally}`` filled in (#5092); never raises, never leaves a raw placeholder."""
+    values = _AnnounceValues(holder=holder_name, subject=subject_name)
+    if firing.ally_name:
+        values["ally"] = firing.ally_name
+    if firing.target_name:
+        values["target"] = firing.target_name
+    try:
+        return firing.perk.announce_template.format_map(values)
+    except (ValueError, IndexError, AttributeError, KeyError):
+        # A malformed line ("{", "{0}", "{holder.x}") says its words without placeholders.
+        return firing.perk.announce_template.replace("{", "").replace("}", "")
 
 
 def sum_potency_scaled_magnitudes(fired: list[FiredPerk], total_threads: int) -> int:
@@ -920,9 +1034,10 @@ def announce_fired_perks(
     telnet session physically present in ``location`` — the honest primitive
     for "broadcast to this room," independent of who or what triggered it.
 
-    ``announce_template`` is rendered with the firing's ``holder`` name and
-    ``subject``'s name via plain ``str.format`` (the template's documented
-    ``{holder}``/``{subject}`` placeholders — NOT the funcparser actor-
+    ``announce_template`` is rendered by ``render_announce`` with the firing's
+    ``holder`` name, ``subject``'s name, and (#5092) the ``{target}`` foe and the
+    ``{ally}`` whose action made the situation true, each with a plain-words
+    fallback (the template's documented placeholders — NOT the funcparser actor-
     stance syntax ``message_location``'s own ``mapping`` machinery
     understands), then prefixed with ``perk.name`` — the "announced label"
     per the model's own help_text (e.g. "Scout's Instinct") — mirroring
@@ -985,7 +1100,7 @@ def announce_fired_perks(
     for firing in fired:
         holder_character = firing.holder.character
         holder_name = holder_character.key if holder_character is not None else str(firing.holder)
-        rendered = firing.perk.announce_template.format(holder=holder_name, subject=subject_name)
+        rendered = render_announce(firing, holder_name=holder_name, subject_name=subject_name)
         # perk.name is the "announced label" (its help_text's own words, e.g.
         # "Scout's Instinct") — spec §5's presentation example prefixes it
         # onto the templated line ("Scout's Instinct: you have revealed a
