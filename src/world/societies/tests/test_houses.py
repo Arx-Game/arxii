@@ -814,12 +814,12 @@ class HouseChannelTests(TestCase):
         from evennia_extensions.factories import AccountFactory
         from world.channels.models import Channel
         from world.channels.services import can_access_channel, provision_org_channel
+        from world.character_sheets.factories import CharacterSheetFactory
         from world.roster.factories import (
             PlayerDataFactory,
             RosterEntryFactory,
             RosterTenureFactory,
         )
-        from world.scenes.factories import PersonaFactory
         from world.societies.membership_services import (
             ensure_default_rank_ladder,
             join_organization,
@@ -831,10 +831,12 @@ class HouseChannelTests(TestCase):
 
         def playing_member(org):
             account = AccountFactory()
-            persona = PersonaFactory()
+            # Only a membership on the character's primary face opens an org channel.
+            sheet = CharacterSheetFactory()
+            persona = sheet.primary_persona
             RosterTenureFactory(
                 player_data=PlayerDataFactory(account=account),
-                roster_entry=RosterEntryFactory(character_sheet=persona.character_sheet),
+                roster_entry=RosterEntryFactory(character_sheet=sheet),
                 end_date=None,
             )
             ensure_default_rank_ladder(org)

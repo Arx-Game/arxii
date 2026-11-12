@@ -30797,7 +30797,10 @@ export interface components {
       readonly speaker: string;
       /** @description The message text; empty if hidden. */
       readonly body: string;
-      /** @description Whether this reader and the author block each other. */
+      /**
+       * @description Whether a block sits between this reader and the author: account-wide, or on
+       *     the author's character's primary persona. A reader's own posts are never hidden.
+       */
       readonly is_hidden: boolean;
       /** @description Whether the requester wrote it (under any of their tenures). */
       readonly is_own: boolean;
@@ -61255,7 +61258,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this title. */
+        id: number;
       };
       cookie?: never;
     };
