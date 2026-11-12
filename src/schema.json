@@ -73179,6 +73179,82 @@ components:
         * `timed` - Timed
         * `ready` - Ready
         * `manual` - Manual
+    PactCommitmentLine:
+      type: object
+      description: |-
+        One commitment of an offer: FAVOR_EARNED (``amount`` per period) or CUSTOM (a
+        promise in ``notes``, never checked).
+      properties:
+        kind:
+          type: string
+        amount:
+          type: integer
+        notes:
+          type: string
+      required:
+      - amount
+      - kind
+      - notes
+    PactOfferSummary:
+      type: object
+      description: |-
+        The pact a pledge offers at its close, built from the offer's rows.
+        ``condition_effects`` apply at every stage.
+      properties:
+        being_name:
+          type: string
+        offer_name:
+          type: string
+        offer_text:
+          type: string
+        period_weeks:
+          type: integer
+        commitments:
+          type: array
+          items:
+            $ref: '#/components/schemas/PactCommitmentLine'
+        promises:
+          type: array
+          items:
+            type: string
+        condition_effects:
+          type: array
+          items:
+            type: string
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/PactStageLine'
+      required:
+      - being_name
+      - commitments
+      - condition_effects
+      - offer_name
+      - offer_text
+      - period_weeks
+      - promises
+      - stages
+    PactStageLine:
+      type: object
+      description: |-
+        One stage of a pact's condition, best to worst, with the stage's own effects;
+        ``is_last`` marks the stage whose arrival ends the pact.
+      properties:
+        name:
+          type: string
+        threshold:
+          type: integer
+        effects:
+          type: array
+          items:
+            type: string
+        is_last:
+          type: boolean
+      required:
+      - effects
+      - is_last
+      - name
+      - threshold
     PaginatedAccountInviteList:
       type: object
       required:
@@ -84641,8 +84717,9 @@ components:
       - reporter_persona
     Pledge:
       type: object
-      description: 'A pledge type a being offers (#4333 slice 2): the staff-authored
-        text and terms.'
+      description: |-
+        A pledge type a being offers (#4333 slice 2): the staff-authored text and terms.
+        ``pact_offer`` is the pact accepted at its close (#4341), null when it offers none.
       properties:
         id:
           type: integer
@@ -84672,6 +84749,11 @@ components:
         closing_rite_name:
           type: string
           readOnly: true
+        pact_offer:
+          allOf:
+          - $ref: '#/components/schemas/PactOfferSummary'
+          nullable: true
+          readOnly: true
       required:
       - being
       - being_name
@@ -84680,6 +84762,7 @@ components:
       - favor_target
       - id
       - name
+      - pact_offer
       - span_weeks
     PledgeCard:
       type: object

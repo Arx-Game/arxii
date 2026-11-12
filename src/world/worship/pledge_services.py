@@ -86,6 +86,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
     from world.magic.models import ResonanceGrant
+    from world.pacts.models import CharacterPact
     from world.projects.models import Project
     from world.scenes.models import Persona, Scene
     from world.traits.models import CheckOutcome
@@ -97,6 +98,11 @@ _FAILED_CLOSE_BELOW = 0
 _PARTIAL_SUCCESS_LEVEL = 0
 #: Sources that are paid when a pledge resolves and never add to its progress.
 _RESOLUTION_SOURCES = frozenset({PledgeCreditSource.CLOSING, PledgeCreditSource.LAPSE})
+#: A pact offered at the close is signed only when the rite resolves at Success or better.
+_PACT_SIGNED_FROM = 1
+
+MSG_NO_PACT_OFFERED = "This pledge offers no pact."
+MSG_PACT_NEEDS_SUCCESS = "The rite did not resolve at Success or better, so no pact was signed."
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +134,9 @@ def offered_pledges(being: WorshippedBeing) -> list[Pledge]:
     if not being.is_active:
         return []
     return list(
-        Pledge.objects.filter(being=being, is_active=True).select_related("closing_rite__kind")
+        Pledge.objects.filter(being=being, is_active=True).select_related(
+            "closing_rite__kind", "pact_offer__being", "pact_offer__condition"
+        )
     )
 
 
@@ -335,7 +343,11 @@ def credit_pledge_deed(grant: ResonanceGrant) -> PledgeCredit | None:
 
 
 def close_pledge(
-    sheet: CharacterSheet, *, scene: Scene, offered_items: Sequence[ItemInstance] = ()
+    sheet: CharacterSheet,
+    *,
+    scene: Scene,
+    offered_items: Sequence[ItemInstance] = (),
+    accept_pact: bool = False,
 ) -> ClosingOutcome:
     """Perform the open pledge's closing rite in ``scene`` (design 3).
 
@@ -352,6 +364,12 @@ def close_pledge(
 
     ``offered_items`` (#4530) are given up during the closing rite: their meaning, and the
     pledge's and the rite's requests they fill, ease the rite's roll.
+
+    ``accept_pact`` (#4341): she chose to accept the pledge's pact offer. Once the
+    pledge resolves at Success or better the pact is signed (:func:`_accept_pact_offer`);
+    a refusal leaves the pledge resolved and comes back as ``pact_refusal``. A failed
+    first close signs nothing (she may accept again on the retry). Asking to accept a
+    pledge that carries no offer still closes it, with the refusal saying so.
     """
     from world.projects.services import resolve_project  # noqa: PLC0415
     from world.worship.answer_services import deliver_pledge_answer  # noqa: PLC0415
@@ -409,6 +427,9 @@ def close_pledge(
     # the block above could show a vision a rolled-back resolution never kept.
     # A stewarded being's table GM answers it instead of the draw (slice 4).
     delivery = route_to_steward(details) or deliver_pledge_answer(details, outcome)
+    # The pact is signed in its own transaction after the pledge's resolution commits,
+    # so a refused signing can never undo the close.
+    pact, pact_refusal = _accept_pact_offer(sheet, details, outcome) if accept_pact else (None, "")
     return ClosingOutcome(
         details=details,
         rite=rite,
@@ -418,7 +439,31 @@ def close_pledge(
         award=award.credited if award is not None else 0,
         earning_rate_percent=award.earning_rate_percent if award is not None else 0,
         delivery=delivery,
+        pact=pact,
+        pact_refusal=pact_refusal,
     )
+
+
+def _accept_pact_offer(
+    sheet: CharacterSheet, details: PledgeDetails, outcome: CheckOutcome
+) -> tuple[CharacterPact | None, str]:
+    """(pact, refusal) for accepting the pledge's pact offer at a resolved close.
+
+    Signed only when the pledge carries an offer and the rite resolved it at Success
+    or better (spec section 7, step 2); otherwise no pact and the player-safe reason.
+    """
+    from world.pacts.exceptions import PactError  # noqa: PLC0415
+    from world.pacts.services import sign_being_pact  # noqa: PLC0415
+
+    offer = details.pledge.pact_offer
+    if offer is None:
+        return None, MSG_NO_PACT_OFFERED
+    if outcome.success_level < _PACT_SIGNED_FROM:
+        return None, MSG_PACT_NEEDS_SUCCESS
+    try:
+        return sign_being_pact(sheet, offer), ""
+    except PactError as exc:
+        return None, exc.user_message
 
 
 def closing_award_amount(

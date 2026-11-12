@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from world.items.models import ItemInstance
     from world.items.types import ItemMeaning
     from world.magic.models import ResonanceGrant
+    from world.pacts.models import CharacterPact
     from world.traits.models import CheckOutcome
     from world.worship.models import (
         Answer,
@@ -311,6 +312,10 @@ class ClosingOutcome:
     ``resolved`` is False after a first Failure or Critical Failure, which
     leaves one retry; then nothing is paid. Otherwise the pledge resolved and
     ``award`` is the closing award credited (``award_base`` before the rate).
+
+    ``pact`` is the pact signed when she chose to accept the pledge's pact offer and
+    the rite resolved it at Success or better (#4341). ``pact_refusal`` is the
+    player-safe reason she asked to accept and no pact was signed; empty otherwise.
     """
 
     details: PledgeDetails
@@ -321,6 +326,8 @@ class ClosingOutcome:
     award: int
     earning_rate_percent: int
     delivery: AnswerDelivery | None = None
+    pact: CharacterPact | None = None
+    pact_refusal: str = ""
 
 
 @dataclass(frozen=True)

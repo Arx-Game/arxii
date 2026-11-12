@@ -13,11 +13,15 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class PactStageLine:
-    """One stage of a pact's condition as the offer and the card list it."""
+    """One stage of a pact's condition as the offer and the card list it.
+
+    ``is_last`` marks the worst stage, whose arrival ends the pact.
+    """
 
     name: str
     threshold: int
     effects: tuple[str, ...]
+    is_last: bool
 
 
 @dataclass(frozen=True)
@@ -47,6 +51,15 @@ class PeriodGrade:
 
 
 @dataclass(frozen=True)
+class PactCommitmentLine:
+    """One commitment of an offer: favor earned per period, or a custom promise."""
+
+    kind: str
+    amount: int
+    notes: str
+
+
+@dataclass(frozen=True)
 class PactOfferSummary:
     """A pact offer as the pledge card shows it, built from the offer's rows."""
 
@@ -58,6 +71,7 @@ class PactOfferSummary:
     promises: tuple[str, ...]
     condition_effects: tuple[str, ...]
     stages: tuple[PactStageLine, ...]
+    commitments: tuple[PactCommitmentLine, ...]
 
 
 @dataclass(frozen=True)

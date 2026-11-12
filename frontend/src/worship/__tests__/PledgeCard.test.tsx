@@ -9,7 +9,7 @@ import type { ReactNode } from 'react';
 import { vi } from 'vitest';
 import { PledgeCard } from '../components/PledgeCard';
 import { timeLeft } from '../pledgeText';
-import type { PledgeCard as PledgeCardData } from '../types';
+import type { PactOfferSummary, PledgeCard as PledgeCardData } from '../types';
 
 const closeMutate = vi.fn();
 vi.mock('@/inventory/hooks/useInventory', () => ({ useInventory: () => ({ data: [] }) }));
@@ -43,6 +43,7 @@ function card(overrides: Partial<PledgeCardData> = {}): PledgeCardData {
       favor_target: 20,
       span_weeks: 2,
       closing_rite_name: "Ombrin's rite",
+      pact_offer: null,
     },
     state: 'ready',
     progress: 20,
@@ -67,6 +68,28 @@ function card(overrides: Partial<PledgeCardData> = {}): PledgeCardData {
     requests: [],
     ...overrides,
   };
+}
+
+const offer: PactOfferSummary = {
+  being_name: 'Ombrin',
+  offer_name: '[offer name]',
+  offer_text: '[staff-authored offer text]',
+  period_weeks: 2,
+  commitments: [
+    { kind: 'favor_earned', amount: 8, notes: '' },
+    { kind: 'custom', amount: 0, notes: '[staff-authored promise line]' },
+  ],
+  promises: ['[staff-authored promise line]'],
+  condition_effects: [],
+  stages: [
+    { name: 'Sworn', threshold: 1, effects: ['+10 [modifier target]'], is_last: false },
+    { name: 'Breached', threshold: 31, effects: [], is_last: true },
+  ],
+};
+
+function offeringCard(): PledgeCardData {
+  const base = card();
+  return { ...base, pledge: { ...base.pledge, pact_offer: offer } };
 }
 
 describe('PledgeCard', () => {
@@ -96,6 +119,40 @@ describe('PledgeCard', () => {
     expect(screen.getByTestId('close-pledge-button')).toHaveTextContent(
       "Close the pledge with Ombrin's rite"
     );
+  });
+
+  it('shows one close button and no offer when the pledge offers no pact', () => {
+    render(<PledgeCard card={card()} characterId={3} />, { wrapper });
+    expect(screen.queryByTestId('pact-offer')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('close-accept-pact-button')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('pact-accept-note')).not.toBeInTheDocument();
+  });
+
+  it('shows the pact offered at the close with its summary and stages', () => {
+    render(<PledgeCard card={offeringCard()} characterId={3} />, { wrapper });
+    const block = screen.getByTestId('pact-offer');
+    expect(block).toHaveTextContent('Offered at the close: a pact with Ombrin.');
+    expect(block).toHaveTextContent('[staff-authored offer text]');
+    expect(screen.getByTestId('pact-commitment')).toHaveTextContent(
+      'Earn 8 favor with Ombrin every 2 game weeks.'
+    );
+    expect(screen.getByTestId('pact-promise')).toHaveTextContent('[staff-authored promise line]');
+    const stages = screen.getAllByTestId('pact-stage');
+    expect(stages[0]).toHaveTextContent('1. Sworn+10 [modifier target]');
+    expect(stages[1]).toHaveTextContent('2. BreachedThe pact ends, if its resist check fails');
+  });
+
+  it('closes and accepts the pact from the second button', () => {
+    closeMutate.mockClear();
+    render(<PledgeCard card={offeringCard()} characterId={3} />, { wrapper });
+    expect(screen.getByTestId('close-accept-pact-button')).toHaveTextContent(
+      "Close the pledge with Ombrin's rite and accept the pact"
+    );
+    fireEvent.click(screen.getByTestId('close-accept-pact-button'));
+    expect(closeMutate).toHaveBeenCalledWith({ itemIds: [], acceptPact: true }, expect.anything());
+    closeMutate.mockClear();
+    fireEvent.click(screen.getByTestId('close-pledge-button'));
+    expect(closeMutate).toHaveBeenCalledWith({ itemIds: [] }, expect.anything());
   });
 
   it('lists what the pledge asks for with the count given and the points each', () => {

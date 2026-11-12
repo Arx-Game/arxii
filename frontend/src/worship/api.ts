@@ -120,13 +120,16 @@ export function takePledge(
 }
 
 /** Dispatch `pledge_close` as `characterId`: perform the open pledge's closing rite, giving
- * up `itemIds` (#4530) during it: their meaning eases the rite's roll. */
-export function closePledge(characterId: number, itemIds: number[] = []): Promise<DispatchResult> {
-  return dispatchCanvasAction(
-    characterId,
-    'pledge_close',
-    itemIds.length > 0 ? { item_ids: itemIds } : {}
-  );
+ * up `itemIds` (#4530) during it: their meaning eases the rite's roll. `acceptPact` accepts
+ * the pact the pledge offers (#4341), signed if the rite resolves it at Success or better. */
+export function closePledge(
+  characterId: number,
+  { itemIds = [], acceptPact = false }: { itemIds?: number[]; acceptPact?: boolean } = {}
+): Promise<DispatchResult> {
+  return dispatchCanvasAction(characterId, 'pledge_close', {
+    ...(itemIds.length > 0 ? { item_ids: itemIds } : {}),
+    ...(acceptPact ? { accept_pact: true } : {}),
+  });
 }
 
 /** Dispatch `sacrifice` as `characterId`: `{ item_ids, being?, player_line? }`. The optional

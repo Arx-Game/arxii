@@ -31,6 +31,8 @@ export interface InvocationChoice {
 export type Pledge = components['schemas']['Pledge'];
 export type ServiceTerms = components['schemas']['ServiceTerms'];
 export type PledgeCard = components['schemas']['PledgeCard'];
+/** The pact a pledge offers at its close (#4341), built from the offer's rows. */
+export type PactOfferSummary = components['schemas']['PactOfferSummary'];
 export type PledgeCreditLine = components['schemas']['PledgeCreditLine'];
 /** A being holy where the acting character stands: its shrine here or the temple over it. */
 export type HolySite = components['schemas']['HolySite'];
@@ -41,4 +43,10 @@ export const PLEDGE_STATE = {
   ready: 'ready',
   closed: 'closed',
   lapsed: 'lapsed',
+} as const;
+
+/** `PactCommitmentLine.kind` (`world.pacts.constants.CharacterPactCommitmentKind`). */
+export const PACT_COMMITMENT_KIND = {
+  favorEarned: 'favor_earned',
+  custom: 'custom',
 } as const;

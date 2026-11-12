@@ -41182,6 +41182,39 @@ export interface components {
      * @enum {string}
      */
     PaceModeEnum: 'timed' | 'ready' | 'manual';
+    /**
+     * @description One commitment of an offer: FAVOR_EARNED (``amount`` per period) or CUSTOM (a
+     *     promise in ``notes``, never checked).
+     */
+    PactCommitmentLine: {
+      kind: string;
+      amount: number;
+      notes: string;
+    };
+    /**
+     * @description The pact a pledge offers at its close, built from the offer's rows.
+     *     ``condition_effects`` apply at every stage.
+     */
+    PactOfferSummary: {
+      being_name: string;
+      offer_name: string;
+      offer_text: string;
+      period_weeks: number;
+      commitments: components['schemas']['PactCommitmentLine'][];
+      promises: string[];
+      condition_effects: string[];
+      stages: components['schemas']['PactStageLine'][];
+    };
+    /**
+     * @description One stage of a pact's condition, best to worst, with the stage's own effects;
+     *     ``is_last`` marks the stage whose arrival ends the pact.
+     */
+    PactStageLine: {
+      name: string;
+      threshold: number;
+      effects: string[];
+      is_last: boolean;
+    };
     PaginatedAccountInviteList: {
       /** @example 123 */
       count: number;
@@ -47951,7 +47984,10 @@ export interface components {
       location?: number | null;
       status?: components['schemas']['StatusD66Enum'];
     };
-    /** @description A pledge type a being offers (#4333 slice 2): the staff-authored text and terms. */
+    /**
+     * @description A pledge type a being offers (#4333 slice 2): the staff-authored text and terms.
+     *     ``pact_offer`` is the pact accepted at its close (#4341), null when it offers none.
+     */
     Pledge: {
       readonly id: number;
       readonly being: number;
@@ -47964,6 +48000,7 @@ export interface components {
       /** @description Game weeks the character has to earn the target and close. */
       readonly span_weeks: number;
       readonly closing_rite_name: string;
+      readonly pact_offer: components['schemas']['PactOfferSummary'] | null;
     };
     /**
      * @description One character's pledge as its card shows it (#4333 slice 2). Read by the

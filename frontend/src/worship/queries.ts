@@ -166,7 +166,8 @@ export function useTakePledge(characterId: number) {
 
 export function useClosePledge(characterId: number) {
   return useWorshipMutation(
-    ({ itemIds }: { itemIds: number[] }) => closePledge(characterId, itemIds),
+    ({ itemIds, acceptPact = false }: { itemIds: number[]; acceptPact?: boolean }) =>
+      closePledge(characterId, { itemIds, acceptPact }),
     [['inventory', characterId]]
   );
 }

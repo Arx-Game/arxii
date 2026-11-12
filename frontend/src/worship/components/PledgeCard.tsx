@@ -13,7 +13,12 @@ import { Entry, Subheading, Tag } from '@/character_sheets/components/sheet/prim
 import { useInventory } from '@/inventory/hooks/useInventory';
 import { useClosePledge } from '../queries';
 import { timeLeft } from '../pledgeText';
-import { PLEDGE_STATE, type PledgeCard as PledgeCardData } from '../types';
+import {
+  PACT_COMMITMENT_KIND,
+  PLEDGE_STATE,
+  type PactOfferSummary,
+  type PledgeCard as PledgeCardData,
+} from '../types';
 
 const STATE_LABEL: Record<string, string> = {
   [PLEDGE_STATE.open]: 'Open',
@@ -43,21 +48,20 @@ export function PledgeCard({ card, characterId }: PledgeCardProps) {
     );
   }
 
-  function handleClose() {
-    close.mutate(
-      { itemIds: chosen },
-      {
-        onSuccess: (result) => {
-          if (result.success === false) {
-            toast.error(result.message);
-            return;
-          }
-          toast.success(result.message);
-          setChosen([]);
-        },
-        onError: (error: Error) => toast.error(error.message),
-      }
-    );
+  const offer = card.pledge.pact_offer;
+
+  function handleClose(acceptPact: boolean) {
+    close.mutate(acceptPact ? { itemIds: chosen, acceptPact: true } : { itemIds: chosen }, {
+      onSuccess: (result) => {
+        if (result.success === false) {
+          toast.error(result.message);
+          return;
+        }
+        toast.success(result.message);
+        setChosen([]);
+      },
+      onError: (error: Error) => toast.error(error.message),
+    });
   }
 
   return (
@@ -167,22 +171,41 @@ export function PledgeCard({ card, characterId }: PledgeCardProps) {
               Your first closing rite failed; one more try is left within the span.
             </p>
           )}
+          {live && offer && <PactOffer offer={offer} />}
           {characterId != null && card.state === PLEDGE_STATE.ready && (
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   size="sm"
-                  onClick={handleClose}
+                  variant={offer ? 'outline' : 'default'}
+                  onClick={() => handleClose(false)}
                   disabled={close.isPending}
                   data-testid="close-pledge-button"
                 >
                   Close the pledge with {card.pledge.closing_rite_name}
                 </Button>
+                {offer && (
+                  <Button
+                    size="sm"
+                    onClick={() => handleClose(true)}
+                    disabled={close.isPending}
+                    data-testid="close-accept-pact-button"
+                  >
+                    Close the pledge with {card.pledge.closing_rite_name} and accept the pact
+                  </Button>
+                )}
                 <span className="text-xs text-muted-foreground">
                   <b>Rule:</b> closing needs a live scene; no shrine is required. One is started if
                   none is running.
                 </span>
               </div>
+              {offer && (
+                <p className="text-xs text-muted-foreground" data-testid="pact-accept-note">
+                  The pact is signed only if you chose to accept and the rite resolves the pledge at
+                  Success or better. Closing without accepting leaves no pact and nothing waiting;
+                  the pledge pays its reward and answer either way.
+                </p>
+              )}
               <details
                 onToggle={(event) => setGiveOpen((event.currentTarget as HTMLDetailsElement).open)}
                 data-testid="close-give-items"
@@ -213,6 +236,100 @@ export function PledgeCard({ card, characterId }: PledgeCardProps) {
           )}
         </div>
       </Entry>
+    </div>
+  );
+}
+
+function weeks(count: number): string {
+  return `${count} game week${count === 1 ? '' : 's'}`;
+}
+
+/** The pact a pledge offers at its close: the staff-authored offer, then the system summary
+ * built from the offer's rows and its condition's stages, best to worst. */
+function PactOffer({ offer }: { offer: PactOfferSummary }) {
+  const being = offer.being_name;
+  const favor = offer.commitments.filter((row) => row.kind === PACT_COMMITMENT_KIND.favorEarned);
+  return (
+    <div className="space-y-2" data-testid="pact-offer">
+      <p>
+        <b>Offered at the close:</b> a pact with {being}.
+      </p>
+      <p className="italic">{offer.offer_text}</p>
+      <p className="text-xs text-muted-foreground">
+        System summary, built from the offer&apos;s rows:
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <tbody>
+            <tr className="border-t border-dotted align-top">
+              <th className="py-1 pr-2 font-semibold">Being</th>
+              <td className="py-1">{being}</td>
+            </tr>
+            {favor.map((row, index) => (
+              <tr
+                key={`favor-${index}`}
+                className="border-t border-dotted align-top"
+                data-testid="pact-commitment"
+              >
+                <th className="py-1 pr-2 font-semibold">You commit to</th>
+                <td className="py-1">
+                  Earn <b>{row.amount} favor</b> with {being} every{' '}
+                  <b>{weeks(offer.period_weeks)}</b>. Favor comes from deeds it values, sacrifices
+                  at its shrine and its rites. Nothing is spent.
+                </td>
+              </tr>
+            ))}
+            {offer.promises.map((promise, index) => (
+              <tr
+                key={`promise-${index}`}
+                className="border-t border-dotted align-top"
+                data-testid="pact-promise"
+              >
+                <th className="py-1 pr-2 font-semibold">Promise (not checked by the game)</th>
+                <td className="py-1">{promise}</td>
+              </tr>
+            ))}
+            <tr className="border-t border-dotted align-top">
+              <th className="py-1 pr-2 font-semibold">What you gain</th>
+              <td className="py-1">
+                {being} becomes your patron: its bond ultimate can be among your choices at Audere
+                (the peak moment in a fight where ultimates can be used), and you can choose {being}{' '}
+                on a technique that brings a being into a fight. Plus your current stage&apos;s
+                effects, below.
+              </td>
+            </tr>
+            <tr className="border-t border-dotted align-top">
+              <th className="py-1 pr-2 font-semibold">If you fall short</th>
+              <td className="py-1">
+                The stages below; every change of stage rolls its resist check first.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ol className="flex flex-col gap-1 sm:flex-row" data-testid="pact-stages">
+        {offer.stages.map((stage, index) => (
+          <li
+            key={stage.name}
+            className={`flex-1 rounded-md border p-1.5 text-xs ${
+              index === 0 ? 'border-2 border-amber-600 bg-amber-50 dark:bg-amber-950/40' : ''
+            }`}
+            data-testid="pact-stage"
+          >
+            <b>
+              {index + 1}. {stage.name}
+            </b>
+            {[...offer.condition_effects, ...stage.effects].map((line, lineIndex) => (
+              <span key={lineIndex} className="block">
+                {line}
+              </span>
+            ))}
+            {stage.is_last && (
+              <span className="block">The pact ends, if its resist check fails</span>
+            )}
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

@@ -50,6 +50,7 @@ from world.pacts.exceptions import NoActivePact, PactAlreadyHeld, PactOfferUnava
 from world.pacts.models import CharacterPact, PactCredit, PactPeriodDetails
 from world.pacts.types import (
     PactCard,
+    PactCommitmentLine,
     PactOfferSummary,
     PactSourceLine,
     PactStageLine,
@@ -65,7 +66,7 @@ if TYPE_CHECKING:
     from world.pacts.models import PactOffer, PactOfferCommitment
     from world.projects.models import Project
     from world.traits.models import CheckOutcome
-    from world.worship.models import DevotionStanding, WorshippedBeing
+    from world.worship.models import DevotionStanding, Pledge, WorshippedBeing
     from world.worship.types import FavorSource
 
 #: Sources paid when a pledge resolves; they never count toward a pact period.
@@ -152,13 +153,15 @@ def _stage_lines(
     condition: ConditionTemplate,
 ) -> tuple[tuple[str, ...], tuple[PactStageLine, ...]]:
     condition_wide, by_stage = _effect_lines(condition)
+    staged = _staged_stages(condition)
     stages = tuple(
         PactStageLine(
             name=stage.name,
             threshold=stage.severity_threshold,
             effects=tuple(by_stage.get(stage.pk, ())),
+            is_last=index == len(staged) - 1,
         )
-        for stage in _staged_stages(condition)
+        for index, stage in enumerate(staged)
     )
     return tuple(condition_wide), stages
 
@@ -188,7 +191,19 @@ def pact_offer_summary(offer: PactOffer) -> PactOfferSummary:
         promises=_promises(offer),
         condition_effects=condition_effects,
         stages=stages,
+        commitments=tuple(
+            PactCommitmentLine(kind=row.kind, amount=row.amount, notes=row.notes)
+            for row in commitments
+        ),
     )
+
+
+def offered_pact_summary(pledge: Pledge) -> PactOfferSummary | None:
+    """The pact ``pledge`` offers at its close, while that offer stands; else None."""
+    offer = pledge.pact_offer
+    if offer is None or not offer.is_active:
+        return None
+    return pact_offer_summary(offer)
 
 
 def _open_periods(pact: CharacterPact) -> list[PactPeriodDetails]:
