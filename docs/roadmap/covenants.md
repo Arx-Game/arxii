@@ -991,7 +991,7 @@ until slices 2 to 7. What was built:
   button or `vow pick <name>`) runs the admin's rules, plus a held vow and no repeat; over
   budget, above the vow level, a secondary vow and a pick already chosen are refused with the
   rule. Unspent budget waits; changing a pick is slice 7's rite.
-- Imbuing a vow thread into a new pick level says "Vow level 2: 4 pts of new picks." on
+- Imbuing a vow thread into a new pick level says "Vow level 20: 4 pts of new picks." on
   telnet and the web (with "Choose picks" to the sheet); joining with a vow thread already at
   a level is told the same. No migration. Journeys:
   `src/integration_tests/test_choosing_vow_picks_journeys.py`.
@@ -1025,8 +1025,8 @@ the vow-only action scaling table is gone. What was built:
   `covenant_role_action_scaling_bonus` and the "Surges given" row (migration
   `0335_drop_action_scaling`; deliberate discard of placeholder rows, owner ruling 2026-10-31).
 - **Replacement**: a `VowStatScaling` row on a `ModifierTarget` in the "maneuver_effect"
-  category, scoped to one effect or one kind of effect. The holder's shown thread level times
-  `bonus_per_level` is added to the effect's catalog base value (`effect_value`).
+  category, scoped to one effect or one kind of effect. The holder's thread rung (`thread_rung`, whole steps
+  of 10 thread levels; the "shown level" before #5091) times `bonus_per_level` is added to the effect's catalog base value (`effect_value`).
 - **Sub-role fix**: `vow_stat_scaling_bonus` counts rows on an engaged role and on its anchor
   role, so a holder graduated to a sub-role keeps their scaling; this also changes existing
   stat rows for sub-role holders, as intended. The thread level always comes from the anchor.

@@ -141,8 +141,8 @@ carries, a skill's rating included).
 - **Models** (`world.roster.models.npc_presets`): `NPCStatlinePreset`
   (`name` unique, `description`, `NaturalKeyMixin + CreditedContent +
   SharedMemoryModel`, registered in `CONTENT_MODELS`) with child rows
-  `NPCPresetTraitLine` (`trait` FK PROTECT to a STAT `Trait`, `display_value`
-  1-10) and `NPCPresetSkillLine` (`skill` FK PROTECT, `value` true 1-100),
+  `NPCPresetTraitLine` (`trait` FK PROTECT to a STAT `Trait`, `value`
+  10-100 in stored units; was `display_value` 1-10 before #5091) and `NPCPresetSkillLine` (`skill` FK PROTECT, `value` true 1-100),
   each unique per (preset, trait)/(preset, skill). Admin: one preset page
   with two `TabularInline`s. The child-line models are not themselves in
   `CONTENT_MODELS` (mirrors `traits.TraitRankDescription`'s asymmetry) — they
@@ -153,7 +153,7 @@ carries, a skill's rating included).
   CG finalize's write shape exactly — `_create_stat_values`/
   `_create_skill_values` in `world.character_creation.services` — rather
   than calling those private draft-dict helpers: trait lines write a
-  `CharacterTraitValue` at `display_value * STAT_DISPLAY_DIVISOR`; skill
+  `CharacterTraitValue` at the line's `value`, as stored (#5091); skill
   lines write the skill's `CharacterTraitValue` (a skill's one
   rating store, #5010) and align its `DevelopmentPoints` ledger; every written value gets a `CharacterTraitChange` provenance stamp
   (`old_value=0`, `source=TraitChangeSource.NPC_PRESET`). Refuses a sheet

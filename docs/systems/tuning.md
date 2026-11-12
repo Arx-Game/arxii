@@ -61,7 +61,7 @@ and looks up the same `ResultChartOutcome` row the engine would land in.
   or baseline row covers the inputs.
 - The stat lane (#4726, ADR-4726-A) has its own `ModifierValue` and `ModifierTaper` rows
   (`lane=stat`), edited on the same admin pages as the check lane's. Its values are in stored
-  stat units (x10 the shown stat) and apply wherever a stat is read
+  stat units (the number the sheet shows) and apply wherever a stat is read
   (`TraitHandler._get_stat_modifier`). The rule staff tune it by is #4551 section 5.5's
   universality: a stat buff of a size and level should move a check, through the stat's
   `PointConversionRange`, by about the check lane's value for that size and level. The seed
@@ -69,7 +69,8 @@ and looks up the same `ResultChartOutcome` row the engine would land in.
   `world/seeds/tests/test_stat_lane_universality.py` holds the relation until the simulator's
   universality guard is built. The modifier pile above reads the check lane only.
 - A vowed caster's size step (#4747, ADR-4747-A) reads the same rows: a stepped buff adds
-  (value(L, size + 1) minus value(L, size)) x tenths / 10 at her vow thread's shown level L,
+  (value(L, size + 1) minus value(L, size)) x tenths / 10 at L, the rung of her vow thread
+  (`thread_rung`, whole steps of 10 thread levels),
   rounded half up, untapered. Two knobs tune it, both data: the gap between adjacent sizes at
   each level in the value table (the Paramount rows exist only for the step above
   Exceptional), and each vow's `CovenantRoleTechniqueSpecialty.multiplier_tenths` on the
@@ -194,7 +195,7 @@ the dataclass hashable). With `technique_id` the party casts that catalog techni
 (fetched once per batch) instead of the synthetic basic attack; combat reads no
 `CharacterTechnique` for a declared technique, so none is made. With `covenant_role_id`
 every party member holds that vow engaged, as a primary membership of one shared
-synthetic covenant, with its COVENANT_ROLE thread at shown level `avg_level`
+synthetic covenant, with its COVENANT_ROLE thread at `avg_level` x 10, the level cap
 (`engage_vow_with_thread`; the thread cap is character level x 10), so the cast path
 fires the vow's added effects and power terms as for a real holder. Both roll back with
 the batch.

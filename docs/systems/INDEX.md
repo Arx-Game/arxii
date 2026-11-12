@@ -232,7 +232,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     E2E: `test_signature_motif_e2e.py`.
   - **Specialization engine (ADR-0055 — #1578):** `AbstractSpecializedVariant`
     (shared abstract base — the "one specialization engine"), `TechniqueVariant`
-    (concrete — resonance-specialized form of a parent `Technique`, `unlock_thread_level`≥3);
+    (concrete — resonance-specialized form of a parent `Technique`, `unlock_thread_level`≥30, a stored thread level since #5091);
     `CovenantRole` refactored to inherit the base (schema no-op). Resolved derive-on-read
     via `resolve_specialized_variant(entity, character)` (`resolve_effective_role` is a
     shim); discovery beat generalized as `fire_variant_discoveries` (dispatch on
@@ -581,8 +581,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `sanctum.feature_instance.level × 10`; GIFT: the owner's level cap; ORGANIZATION: the
     org's granted cap), `compute_level_cap(character_sheet) -> int` (character level ×
     10, #4585), `compute_effective_cap(thread) -> int` (min of the two),
-    `shown_thread_level(level) -> int` (`level // 10`; every thread threshold compares
-    against it, #4585)
+    `thread_rung(level) -> int` (`level // 10`, #5091: an internal step for formulas tuned
+    per 10 thread levels, never shown; every authored thread threshold is a stored level
+    compared directly), `is_thread_crossing_level(level) -> bool` (30, 60, 110, 160, 210)
   - Specialization engine (ADR-0055 — #1578, `world/magic/specialization/services.py`):
     `resolve_specialized_variant(*, entity, character)` (the one resolver — Technique →
     `_ResolvedTechnique` value object with variant deltas; CovenantRole → cached-handler
@@ -642,9 +643,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     without the price. Picks live on `CharacterTechnique` (the hold), never the catalog, and are written at
     finalize by `apply_creation_personalizations`
     (`world/magic/services/creation_personalization.py`); the flourish pick also weaves a
-    TECHNIQUE thread up to `CREATION_PERSONALIZATION_MAX_LEVEL` (1, a new character's level, #4585) via
+    TECHNIQUE thread up to `CREATION_PERSONALIZATION_MAX_LEVEL` (10, a new character's level cap in stored thread
+    levels, #4585/#5091) via
     `weave_creation_technique_thread`, so creation never skips a crossing. The old hard
-    level-3 floor on signing is gone; `SignatureMotifBonus.min_crossing_level` is the only
+    level-30 floor on signing is gone; `SignatureMotifBonus.min_crossing_level` is the only
     gate, so flourishes keep unlocking in play as the thread is imbued. Endpoint: `GET
     drafts/{id}/personalization-options/`. Supersedes part of ADR-0136 ("personalization
     starts at level 3"). See `docs/systems/magic.md`'s "Technique personalization"
@@ -1066,11 +1068,12 @@ plus the reachability rule (#3787).
 ### Traits
 Character statistics and dice rolling mechanics.
 
-- **Scale (ADR-0193, #2894):** storage is the fine-grained 1-100 range for all
-  trait values. Skills display their TRUE stored value (35 reads 35 — never
-  divided); stats display single-digit and store ×10 (strength 2 = stored 20),
-  converted at the edge via `display_trait_value` / `STAT_DISPLAY_DIVISOR`.
-  CG finalization converts stat dots ×10 and bridges CG skills into
+- **Scale (ADR-5091, #5091; superseded ADR-0193):** storage is the fine-grained 1-100
+  range for all trait values, and every surface shows the stored value for stats and
+  skills alike (strength 20 reads 20, a skill at 35 reads 35). A stat point is
+  `STAT_POINT_VALUE` (10); `whole_stat_points(value)` (`value // 10`) is an internal step
+  for per-point formulas (fatigue capacity), never shown. CG allocates stats 10-50 in
+  steps of 10 and writes them as allocated; it bridges CG skills into
   `CharacterTraitValue` rows.
 - **Models:** `Trait`, `CharacterTraitValue`, `PointConversionRange`, `CheckRank`, `ResultChart`, `ResultChartOutcome`,
   `CharacterTraitChange` (#3055 acquisition-provenance ledger — durable record of every
@@ -1090,11 +1093,9 @@ Character statistics and dice rolling mechanics.
 - **Key Functions:**
   - `character.traits.get_trait_value(name)` — with modifiers applied
   - `character.traits.get_base_trait_value(name)` — raw, no modifiers
-  - `character.traits.get_trait_display_value(name)` — stats ÷10, skills true value
   - `character.traits.get_traits_by_type(type)` — dict[name → value]
   - `character.traits.calculate_check_points(trait_names)` — weighted points
-  - `character.stats.get_stat(name)` — internal value
-  - `character.stats.get_stat_display(name)` — display value (1-5)
+  - `character.stats.get_stat(name)`: the stored value
 - **9 Primary Stats:** strength, agility, stamina, charm, presence, perception, intellect, wits, willpower
 - **Trait Types:** stat, skill, modifier, other
 - **Trait Categories:** physical, social, mental, magic, combat, general, crafting, war, other
@@ -2938,7 +2939,7 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
 - **Models:** `ExperiencePointsData`, `XPTransaction`, `CharacterXP`, `DevelopmentPoints`, `DevelopmentTransaction`, `KudosPointsData`, `KudosTransaction`, `CharacterUnlock`, `XPCostChart`, `XPCostEntry`, `CharacterPathHistory`, `PathIntent` (player's declared next-path preference — one per character sheet; FK to `CharacterSheet` + `Path`), `KudosDifficultyWeight` (staff-tunable band→multiplier for good-sport kudos; one row per `DifficultyChoice`), `WeeklySocialEngagement` (per-account weekly pending-kudos accumulator; `pending_points`, `granted`, `game_week` FK; `distinct_initiators` is a derived property counting child rows), `WeeklyEngagementInitiator` (child row recording each unique initiator toward a ledger; `UniqueConstraint(ledger, initiator_account)`),
   **Class-Level Advancement (#1352):** `AbstractClassLevelAdvancement` (abstract base shared by `ClassLevelAdvancement` and `AudereMajoraCrossing`; carries `scene`, `declaration_interaction`, `level_before`, `level_after`, `created_at`), `ClassLevelAdvancement` (within-tier Durance receipt — `character_sheet`, `character_class`, `officiant`, `ritual`, `witnesses` M2M → `scenes.Persona`),
   **Training Site (#1700):** `DuranceTrainingSite` (room + trainer-of-record pair; enables site-convened sessions — `room_profile` FK → `RoomProfile`, `officiant` FK → `CharacterSheet`, `training_path` FK → `Path` (nullable), `is_active`; unique `(room_profile, officiant)`),
-  **Maturation Points (#2756, ADR-0172; milestones retuned by #3635 to `MATURATION_MILESTONES` = 24, 27, 30, 34, 38, 42, 47, 52, 58, 64, 75, none after; `next_milestone_year` null past 75; since #4124 milestones at or below `CharacterSheet.maturation_floor`, the creation age, never bank, so a new character arrives with none; starting under 21 costs `UNDERAGE_CG_POINT_COST` in the CG breakdown):** `MaturationStatCap` (admin "Band caps": authored per-`PathStage` stat cap, seeded 5/6/11/16/21/25 per the #3001 ruling — `seed_maturation_stat_caps` in `progression/seeds.py`, previously never authored; plus the nullable `skill_cap` (#4585, shown units, blank = no cap, unseeded) read by `skill_cap_for` and enforced on every skill raise path, see skills.md "Band skill cap") + `MaturationSpend` (sheet FK, trait FK, `milestone_year`, `is_active` — active iff `milestone_year <= sheet.matured_years`; unique per (sheet, milestone_year)). Services in `progression/services/maturation.py`: `milestone_count` / `available_points` / `spend_maturation_point` (+1 display dot = +10 internal, stage-capped; caps are authored in display dots and convert at the comparison — ADR-0193) / `sync_maturation_spends` (reversal deactivates, re-aging reactivates — every `matured_years` writer outside the birthday tick must call it). Both writers also stamp a `traits.CharacterTraitChange` row (`source=MATURATION`, #3055) for each ±1 dot they apply
+  **Maturation Points (#2756, ADR-0172; milestones retuned by #3635 to `MATURATION_MILESTONES` = 24, 27, 30, 34, 38, 42, 47, 52, 58, 64, 75, none after; `next_milestone_year` null past 75; since #4124 milestones at or below `CharacterSheet.maturation_floor`, the creation age, never bank, so a new character arrives with none; starting under 21 costs `UNDERAGE_CG_POINT_COST` in the CG breakdown):** `MaturationStatCap` (admin "Band caps": authored per-`PathStage` stat cap, seeded 50/60/110/160/210/250 (stored units, restated x10 by #5091) per the #3001 ruling — `seed_maturation_stat_caps` in `progression/seeds.py`, previously never authored; plus the nullable `skill_cap` (#4585, stored units since #5091, blank = no cap, unseeded) read by `skill_cap_for` and enforced on every skill raise path, see skills.md "Band skill cap") + `MaturationSpend` (sheet FK, trait FK, `milestone_year`, `is_active` — active iff `milestone_year <= sheet.matured_years`; unique per (sheet, milestone_year)). Services in `progression/services/maturation.py`: `milestone_count` / `available_points` / `spend_maturation_point` (+1 stat point = +10 stored, `STAT_POINT_VALUE`, stage-capped; caps are authored in stored units and compared directly, ADR-5091) / `sync_maturation_spends` (reversal deactivates, re-aging reactivates — every `matured_years` writer outside the birthday tick must call it). Both writers also stamp a `traits.CharacterTraitChange` row (`source=MATURATION`, #3055) for each ±1 stat point they apply
 
   **Level Stat Points (#3001, ADR-0205):** `LevelStatPointSpend` (sheet FK, trait FK, `level_granted` 2..N, `is_active`; unique per (sheet, level_granted)) — one point per class level past the first, balance derived (`level − 1` minus active spends, no grant hook). Services in `progression/services/stat_points.py`: `stat_points_earned` / `available_stat_points` / `spend_level_stat_point` (same `MaturationStatCap` stage cap) / `sync_level_stat_point_spends` (called from `apply_class_level_advance` so reversals refund). Both writers stamp `traits.CharacterTraitChange` rows (`source=LEVEL_STAT_POINT`, #3055). API: `GET /api/character-sheets/{id}/stat-points/` + `POST .../spend-stat-point/`; frontend `StatPointPanel` beside `MaturationPanel`
 - **Unlock Requirements** (all have `is_met_by_character(character) -> tuple[bool, str]`):
@@ -3755,7 +3756,7 @@ GM at a given level may author (#2000, ADR-0097).
   `currency.mint_favor_token`, resolving `org_ref` pk-or-name against `societies.Organization`
   and requiring a non-empty `description` as the token's `provenance_note`; two more kinds
   (#3055 slice 1c) write the acquisition-provenance ledger: `award_type="stat"` raises an
-  authored `Trait` (must be `TraitType.STAT`) by one display dot via
+  authored `Trait` (must be `TraitType.STAT`) by one stat point (10) via
   `progression.award_stat_raise`, writing a `traits.CharacterTraitChange` with
   `source=GM_GRANT` and `granting_tenure` set to the GM's own current tenure (`None` for a
   staff-piloted GM); `award_type="technique"` mints a `Technique` via the shared
@@ -4085,12 +4086,12 @@ GM at a given level may author (#2000, ADR-0097).
   (`world.roster.models`, `NaturalKeyMixin + CreditedContent`, registered in
   `CONTENT_MODELS` — staff-authored catalog, GMs select but never edit values,
   ADR-0176 intact) + its child rows `NPCPresetTraitLine`
-  (STAT trait, display-scale 1-10) / `NPCPresetSkillLine` (SKILL, true 1-100),
+  (STAT trait, `value` 10-100 in stored units) / `NPCPresetSkillLine` (SKILL, 1-100),
   unique per (preset, trait)/(preset, skill), admin page with two inlines.
   `apply_npc_preset(sheet, preset)` (beside `mint_story_npc`) mirrors CG
   finalize's write shape exactly (`_create_stat_values`/`_create_skill_values`,
-  `world.character_creation.services`): trait lines at `display_value *
-  STAT_DISPLAY_DIVISOR`, skill lines as the skill's `CharacterTraitValue`
+  `world.character_creation.services`): trait lines at their
+  `value` (stored units, #5091), skill lines as the skill's `CharacterTraitValue`
   (a skill's one rating store, #5010, ledger aligned), every line stamped with a
   `CharacterTraitChange` (`old_value=0`, `source=TraitChangeSource.NPC_PRESET`).
   Refuses re-application to a sheet already carrying an NPC_PRESET stamp — no
@@ -7176,8 +7177,8 @@ Unified modifier system — categories, types, sources, and per-character modifi
   - `delete_distinction_modifiers(char_distinction) -> int`
   - `passive_facet_bonuses(sheet, target) -> int` (Spec D §5.2) — sums tier-0 FACET
     `ThreadPullEffect` contributions per worn item, plus the worn facets' own
-    `FacetEffectBonus` rows on a maneuver-effect target (#4815, scaled by the shown thread
-    level); called by `get_modifier_total`
+    `FacetEffectBonus` rows on a maneuver-effect target (#4815, scaled per 10 thread levels,
+    `thread_rung`); called by `get_modifier_total`
   - `covenant_role_bonus(sheet, target) -> int` (Spec D §5.6, #985) — loops
     `currently_engaged_roles()` × equipped items; compatible slot adds `role_bonus`
     (stacks on combat's gear read); incompatible slot adds `max(0, role_bonus -
@@ -8027,7 +8028,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     defends (read through `CombatStyle.defense_style`). Code-defined vocabulary (Layer 4's situational perks, #2536, key on these
     labels).
   - **Vow focus picks and combat styles (#4759 slice 1, ADR-4759) [BUILT, NOT WIRED]:**
-    `VowFocusPick` (NK `(covenant_role, name)`, `pick_level` 1-3, `value`),
+    `VowFocusPick` (NK `(covenant_role, name)`, `pick_level` 10/20/30 (`VOW_FOCUS_PICK_LEVELS`, #5091), `value`),
     `VowFocusPickLimit` (NK `(pick, kind)`, `FocusPickLimitKind`, `frequency_tenths`,
     `reduction`), `VowFocusPickConfig` (singleton, `budget_per_level`),
     `CharacterVowFocusPick` (`character_role` x `pick`, play state) and `CombatStyle`
@@ -8047,7 +8048,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `Property`) and Situations `TARGET_HAS_CONDITION_PROPERTY`,
     `ENEMIES_WITH_CONDITION_PROPERTY_NEARBY`, `TARGET_LOW_HEALTH` (evaluators stubbed
     False until slice 3). Services in `world.covenants.focus_picks`: `pick_price`,
-    `price_for`, `shown_vow_level`, `validate_character_focus_pick`, `vow_focus_pick_config`,
+    `price_for`, `vow_level`, `validate_character_focus_pick`, `vow_focus_pick_config`,
     `focus_pick_budget`, `choosable_role_ids`. Players choose their own picks since #4929
     [BUILT & WIRED]: `choose_vow_focus_pick`, `resolve_pick_for_choice`,
     `vow_pick_catalogs` (`VowPickCatalog`/`VowPickLevel`/`VowPickEntry`), `pick_effect_lines`,

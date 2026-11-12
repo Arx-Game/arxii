@@ -293,7 +293,7 @@ section. An empty field keeps a slot. A save calls
 
 **Piece B, the CG rows (#4221).** In edit mode a rows band edits every family CG writes,
 each through a staff action on the sheet API (`staff_views.StaffSheetRowsMixin`, inputs in
-`staff_serializers.py`): `staff-stats` (display scale, `TraitChangeSource.STAFF_EDIT`; fills
+`staff_serializers.py`): `staff-stats` (stored values, 10 to 50 in steps of 10, #5091; `TraitChangeSource.STAFF_EDIT`; fills
 vitals if missing), `staff-skills`, `staff-distinctions` / `staff-distinction` (add, re-rank,
 remove), `staff-form`, `staff-beginnings`, `staff-path` (the first path only, plus the class
 level), `staff-goals` (revision limit bypassed), `staff-worship`, `staff-markings` /
@@ -374,9 +374,8 @@ nothing.
 The `stats`/`skills` sections of `CharacterSheetSerializer` were always built (`_build_stats`/
 `_build_skills`) and gated by the tiers above, but had no frontend consumer — a player's own
 12 stats and skill ratings were invisible on the web sheet. `_build_stats` returns
-**display-scale** values (`tv.value // STAT_DISPLAY_DIVISOR`, ADR-0193 — stats store internal
-×10) so the client never has to know about the storage scale; `_build_skills` values are already
-true-scale (skills store and display the same number). `frontend/src/character_sheets/components/
+the stored values (ADR-5091, #5091: a stat of 20 reads 20, no divisor at the edge), as
+`_build_skills` does for skills, so stats, skills and threads all read on one scale. `frontend/src/character_sheets/components/
 MechanicsSection.tsx` renders both on the character sheet's Sheet tab
 (`roster/pages/CharacterSheetPage.tsx`), reading `useCharacterSheetQuery` and rendering whatever
 `stats`/`skills` the API returns — it does not re-implement visibility client-side. The magic

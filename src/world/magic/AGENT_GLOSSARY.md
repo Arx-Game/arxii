@@ -72,16 +72,18 @@ _Avoid_: conflating this with the `Unbound` Tradition row itself (see "Tradition
 **Gift-thread**:
 The Thread woven into a Gift: its level sets the Gift's strength (more and stronger techniques) and its resonance sets the Gift's affinity. The costliest thread kind, because it gates magical power. (ADR-0051, ADR-0052.)
 
-**Shown thread level** (#4585):
-The thread level a player sees: the stored `Thread.level` divided by 10 (stored 30 shows
-3), the same split stats use. Every authored thread threshold (crossings, variant and
-sub-role unlocks, signature minimums, pull-effect minimums) is a shown level; code compares
-through `shown_thread_level`. A thread is capped at its owner's character level (the
-**level cap**, `compute_level_cap`). _Avoid_: comparing a raw `thread.level` against an
-authored level; "path cap" (threads are no longer capped by Path stage).
+**Thread level** (#4585, ADR-5091):
+The stored `Thread.level`, which is also the number a player sees (a thread at 30 reads 30),
+like stats and skills. Every authored thread threshold (crossings 30/60/110/160/210, variant
+and sub-role unlocks, signature minimums, pull-effect minimums) is a stored level compared
+directly; `is_thread_crossing_level` names the crossings. A thread is capped at ten times its
+owner's character level (the **level cap**, `compute_level_cap`). Formulas tuned "per 10
+thread levels" count the **thread rung** (`thread_rung(level)`, `level // 10`), an internal
+step that is never shown. _Avoid_: "shown thread level" (removed by #5091); dividing a thread
+level by 10 for display; "path cap" (threads are no longer capped by Path stage).
 
 **Signature**:
-A Thread woven into a single Technique, deepening just that technique above its Gift baseline. The character applies their Motif to the signed technique via a `SignatureMotifBonus` — an ADDITIVE flourish (intensity delta, conditions, cosmetic prose) that fires alongside the technique at cast time. The bonus is NOT a `TechniqueVariant` and does NOT change the technique's identity. No longer a level-3+ mechanic: `SignatureMotifBonus.min_crossing_level` (default 3, authorable lower or higher) is the only gate on when a given bonus unlocks, and creation can weave a starting thread up to `CREATION_PERSONALIZATION_MAX_LEVEL` so an early flourish is reachable at CG (#4099, ADR-4099). (ADR-0072, supersedes ADR-0056.)
+A Thread woven into a single Technique, deepening just that technique above its Gift baseline. The character applies their Motif to the signed technique via a `SignatureMotifBonus` — an ADDITIVE flourish (intensity delta, conditions, cosmetic prose) that fires alongside the technique at cast time. The bonus is NOT a `TechniqueVariant` and does NOT change the technique's identity. No longer a level-3+ mechanic: `SignatureMotifBonus.min_crossing_level` (a thread level, default 30, authorable lower or higher) is the only gate on when a given bonus unlocks, and creation can weave a starting thread up to `CREATION_PERSONALIZATION_MAX_LEVEL` so an early flourish is reachable at CG (#4099, ADR-4099). (ADR-0072, supersedes ADR-0056.)
 _Avoid_: technique thread (use "signature"); discordant signature (the resonance-divergence model was closed by ADR-0072).
 
 **Signature Motif Bonus**:

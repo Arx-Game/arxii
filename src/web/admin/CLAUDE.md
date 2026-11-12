@@ -1513,12 +1513,12 @@ the sheet facts beside them, the combat style among them (slice 7, #4932).
   ignores unlock level, context, situation and frequency by design: "Base: <line>" first,
   then "<pick>: <line>" per chosen pick (by level, then name); with more than one live vow
   the base group is named "<vow> base". Each line is `summarize_vow_added_effect`. A row
-  whose `unlock_thread_level` is above the character's shown thread level on that vow is
+  whose `unlock_thread_level` is above the character's thread level on that vow is
   still listed, chipped "unlocks at level N"; a row whose beneficiary is not the holder's
   own casts is chipped "rides <beneficiary>". A technique with no line reads "nothing: <vow>
   adds nothing to <function>" ("it carries no function tag" / "no engaged vow" otherwise).
   A fourth column, Preview (#4930), is the technique's DE with those vow lines
-  (`power_preview.preview_de`) at the highest shown level among their vows (a secondary
+  (`power_preview.preview_de`) at the highest thread level among their vows (a secondary
   vow's lines are priced at full potency), the technique's own DE with no line, and "n/a"
   for a technique with no function tag.
 - **Focus picks chosen** - per live primary vow and pick level with a chosen pick: "Level N
@@ -1528,7 +1528,7 @@ the sheet facts beside them, the combat style among them (slice 7, #4932).
   `vow_builder.live.focus_pick_budget()`. Links to the vow page and the
   `CharacterVowFocusPick` changelist searched by the character's key.
 - **Sheet** - Path . Gift (newest path history row, gift names), each live vow (linked to its
-  vow page, shown level, "not engaged" chip; secondary vows labelled), and Defense: the
+  vow page, thread level, "not engaged" chip; secondary vows labelled), and Defense: the
   defense type of the sheet's combat style (#4975, the same for every vow held), or "No combat
   style". Then Style
   (#4932): the sheet's `combat_style` linked to its change page, then per held primary vow
