@@ -162,7 +162,7 @@ class SheetMagicSectionTests(TestCase):
         self.assertIn("Winterbite (Scorch Lash, level 1)", text)
         self.assertIn("Price: Frost on the skin", text)
         self.assertIn("Not yet yours:", text)
-        self.assertIn("Rime walks with you, at thread level 3", text)
+        self.assertIn("Rime walks with you, at thread level 30", text)
 
     def test_price_line_shows_what_the_price_costs(self) -> None:
         """#4099: the telnet price line carries the price's real cost, like the web."""

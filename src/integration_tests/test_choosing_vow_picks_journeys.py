@@ -56,7 +56,7 @@ CATALOG_URL = "/api/covenants/character-roles/vow-picks/"
 class _VowHolderCase(JourneyCase):
     """Ysmay, in the Quicksilver covenant, holding its vow at vow level 20."""
 
-    vow_level = 2
+    vow_level = 20
 
     def setUp(self) -> None:
         super().setUp()
@@ -68,22 +68,22 @@ class _VowHolderCase(JourneyCase):
         self.membership = engage_vow_with_thread(
             self.sheet, self.vow, covenant=self.covenant, thread_level=self.vow_level
         )
-        # Level 1: prices 2, 2 and 4. The Target limit met 5 times in 10 halves 4 to 2.
-        self.flank = self.pick("Strike from the Flank", level=1, value=4)
+        # Level 10: prices 2, 2 and 4. The Target limit met 5 times in 10 halves 4 to 2.
+        self.flank = self.pick("Strike from the Flank", level=10, value=4)
         VowFocusPickLimitFactory(
             pick=self.flank,
             kind=FocusPickLimitKind.TARGET,
             frequency_tenths=5,
             description="an ally is engaging them",
         )
-        self.recovery = self.pick("Quick Recovery", level=1, value=2)
-        self.light = self.pick("Light on Your Feet", level=1, value=4)
-        # Level 2: prices 3, 1 and 4.
-        self.bleeding = self.pick("Bleeding Cut", level=2, value=3)
-        self.feint = self.pick("Read the Feint", level=2, value=1)
-        self.gap = self.pick("Through the Gap", level=2, value=4)
-        # Level 3: above her vow level.
-        self.stand = self.pick("Last Stand", level=3, value=2)
+        self.recovery = self.pick("Quick Recovery", level=10, value=2)
+        self.light = self.pick("Light on Your Feet", level=10, value=4)
+        # Level 20: prices 3, 1 and 4.
+        self.bleeding = self.pick("Bleeding Cut", level=20, value=3)
+        self.feint = self.pick("Read the Feint", level=20, value=1)
+        self.gap = self.pick("Through the Gap", level=20, value=4)
+        # Level 30: above her vow level.
+        self.stand = self.pick("Last Stand", level=30, value=2)
 
     def pick(self, name: str, *, level: int, value: int, role: object = None) -> VowFocusPick:
         return VowFocusPickFactory(
@@ -118,8 +118,8 @@ class ReadingTheCatalog(_VowHolderCase):
     def test_every_pick_by_level_with_the_locked_ones_saying_why(self) -> None:
         (quicksilver,) = self.catalog()
 
-        self.assertEqual((quicksilver["vow"], quicksilver["vow_level"]), ("Quicksilver", 2))
-        first, second, third = (self.level(quicksilver, n) for n in (1, 2, 3))
+        self.assertEqual((quicksilver["vow"], quicksilver["vow_level"]), ("Quicksilver", 20))
+        first, second, third = (self.level(quicksilver, n) for n in (10, 20, 30))
         self.assertEqual((first["is_open"], first["budget"], first["spent"]), (True, 4, 0))
         self.assertTrue(second["is_open"])
         self.assertFalse(third["is_open"])
@@ -138,7 +138,7 @@ class ReadingTheCatalog(_VowHolderCase):
         told = self.telnet(self.ysmay, "vow picks")
 
         self.assertIn("Quicksilver|n, vow level 20.", told)
-        self.assertIn("Level 1: 0 of 4.", told)
+        self.assertIn("Level 10: 0 of 4.", told)
         self.assertIn("Strike from the Flank, 2 pts.", told)
         self.assertIn("Level 30: opens at vow level 30.", told)
         self.assertIn("Last Stand, 2 pts. |x(opens at vow level 30)|n", told)
@@ -165,19 +165,19 @@ class ChoosingWithinTheBudget(_VowHolderCase):
     def test_she_fills_level_one_and_the_next_pick_is_refused(self) -> None:
         taken = self.web(self.ysmay, CHOOSE, pick_id=self.flank.pk)
         self.assertTrue(taken.detail.success, taken.detail.message)
-        self.assertEqual(taken.detail.message, "You take Strike from the Flank. Level 1: 2 of 4.")
+        self.assertEqual(taken.detail.message, "You take Strike from the Flank. Level 10: 2 of 4.")
 
         told = self.telnet(self.ysmay, "vow pick Quick Recovery")
-        self.assertIn("You take Quick Recovery. Level 1: 4 of 4.", told)
+        self.assertIn("You take Quick Recovery. Level 10: 4 of 4.", told)
 
         refused = self.web(self.ysmay, CHOOSE, pick_id=self.light.pk)
         self.assertFalse(refused.detail.success)
         self.assertEqual(
             refused.detail.message,
             "'Light on Your Feet' costs 4, and this character has already spent 4 of the "
-            "4 points for level 1 picks.",
+            "4 points for level 10 picks.",
         )
-        first = self.level(self.catalog()[0], 1)
+        first = self.level(self.catalog()[0], 10)
         self.assertEqual(first["spent"], 4)
         self.assertEqual(
             self.entry(first, "Light on Your Feet")["locked_reason"], ("costs more than is left")
@@ -188,7 +188,7 @@ class ChoosingWithinTheBudget(_VowHolderCase):
     def test_unspent_budget_waits_for_a_second_pick_at_the_same_level(self) -> None:
         self.telnet(self.ysmay, "vow pick bleeding cut")
 
-        second = self.level(self.catalog()[0], 2)
+        second = self.level(self.catalog()[0], 20)
         self.assertEqual((second["spent"], second["left"]), (3, 1))
         self.assertTrue(self.entry(second, "Read the Feint")["choosable"])
         self.assertEqual(
@@ -196,22 +196,22 @@ class ChoosingWithinTheBudget(_VowHolderCase):
         )
 
         told = self.telnet(self.ysmay, "vow pick Read the Feint")
-        self.assertIn("You take Read the Feint. Level 2: 4 of 4.", told)
+        self.assertIn("You take Read the Feint. Level 20: 4 of 4.", told)
         self.assertEqual(self.chosen_names(), {"Bleeding Cut", "Read the Feint"})
 
     def test_a_pick_with_in_in_its_name_and_a_named_covenant(self) -> None:
-        self.pick("Cut in Two", level=2, value=1)
+        self.pick("Cut in Two", level=20, value=1)
 
         told = self.telnet(self.ysmay, "vow pick Cut in Two")
-        self.assertIn("You take Cut in Two. Level 2: 1 of 4.", told)
+        self.assertIn("You take Cut in Two. Level 20: 1 of 4.", told)
         told = self.telnet(self.ysmay, "vow pick Bleeding Cut in The Quicksilver Hall")
-        self.assertIn("You take Bleeding Cut. Level 2: 4 of 4.", told)
+        self.assertIn("You take Bleeding Cut. Level 20: 4 of 4.", told)
 
     def test_a_pick_above_her_level_or_chosen_twice_is_refused(self) -> None:
         above = self.web(self.ysmay, CHOOSE, pick_id=self.stand.pk)
         self.assertEqual(
             above.detail.message,
-            "'Last Stand' is a level 3 pick, and this character's vow is at level 2.",
+            "'Last Stand' is a level 30 pick, and this character's vow is at level 20.",
         )
         self.web(self.ysmay, CHOOSE, pick_id=self.flank.pk)
         again = self.telnet(self.ysmay, "vow pick Strike from the Flank")
@@ -221,7 +221,7 @@ class ChoosingWithinTheBudget(_VowHolderCase):
         self.assertEqual(self.chosen_names(), {"Strike from the Flank"})
 
     def test_another_vows_pick_cannot_be_named_from_the_wire(self) -> None:
-        other = self.pick("Shield Wall", level=1, value=1, role=CovenantRoleFactory())
+        other = self.pick("Shield Wall", level=10, value=1, role=CovenantRoleFactory())
 
         refused = self.web(self.ysmay, CHOOSE, pick_id=other.pk)
 
@@ -236,11 +236,11 @@ class ASubRoleHoldersPicksInOnePlace(_VowHolderCase):
         )
         self.membership.covenant_role = sub_role
         self.membership.save(update_fields=["covenant_role"])
-        self.pick("Riposte", level=1, value=1, role=sub_role)
+        self.pick("Riposte", level=10, value=1, role=sub_role)
 
         (catalog,) = self.catalog()
         self.assertEqual(catalog["vows"], ["Quicksilver", "Quicksilver Duelist"])
-        first = self.level(catalog, 1)
+        first = self.level(catalog, 10)
         self.assertEqual(
             [(row["vow"], row["name"]) for row in first["picks"]],
             [
@@ -251,18 +251,18 @@ class ASubRoleHoldersPicksInOnePlace(_VowHolderCase):
             ],
         )
         told = self.telnet(self.ysmay, "vow pick Riposte")
-        self.assertIn("You take Riposte. Level 1: 1 of 4.", told)
+        self.assertIn("You take Riposte. Level 10: 1 of 4.", told)
         # One budget per level for the membership, whichever vow's catalog a pick is from.
         told = self.telnet(self.ysmay, "vow pick Quick Recovery")
-        self.assertIn("You take Quick Recovery. Level 1: 3 of 4.", told)
-        first = self.level(self.catalog()[0], 1)
+        self.assertIn("You take Quick Recovery. Level 10: 3 of 4.", told)
+        first = self.level(self.catalog()[0], 10)
         self.assertEqual((first["spent"], first["left"]), (3, 1))
         self.assertEqual(
             self.entry(first, "Light on Your Feet")["locked_reason"], "costs more than is left"
         )
 
         listed = self.telnet(self.ysmay, "vow picks")
-        level_one = listed[listed.index("Level 1: 3 of 4.") : listed.index("Level 2:")]
+        level_one = listed[listed.index("Level 10: 3 of 4.") : listed.index("Level 20:")]
         self.assertLess(level_one.index(" Quicksilver:"), level_one.index("Strike from the Flank"))
         self.assertLess(
             level_one.index("Strike from the Flank"), level_one.index(" Quicksilver Duelist:")
@@ -281,7 +281,7 @@ class ASecondaryOrLeftVowIsRefused(_VowHolderCase):
     def test_a_secondary_vow_gets_no_picks(self) -> None:
         other_covenant = CovenantFactory(name="The Ember Court")
         ember = CovenantRoleFactory(name="Ember", covenant_type=CovenantType.DURANCE)
-        ember_pick = self.pick("Cinder Step", level=1, value=1, role=ember)
+        ember_pick = self.pick("Cinder Step", level=10, value=1, role=ember)
         engage_vow_with_thread(
             self.sheet, ember, covenant=other_covenant, thread_level=20, is_secondary=True
         )
@@ -341,12 +341,12 @@ class _ImbuingCase(JourneyCase):
         self.covenant = CovenantFactory(name="The Quicksilver Hall", level=5)
         self.vow = CovenantRoleFactory(name="Quicksilver", covenant_type=CovenantType.DURANCE)
 
-    def vow_thread(self, shown_level: int) -> Thread:
+    def vow_thread(self, level: int) -> Thread:
         engage_vow_with_thread(
             self.sheet,
             self.vow,
             covenant=self.covenant,
-            thread_level=shown_level,
+            thread_level=level,
             resonance=self.resonance,
         )
         return Thread.objects.get(owner=self.sheet, target_kind=TargetKind.COVENANT_ROLE)
@@ -369,19 +369,19 @@ class _ImbuingCase(JourneyCase):
 
 
 class ImbuingOpensNewPicks(_ImbuingCase):
-    def test_imbuing_the_vow_thread_into_level_two_says_so(self) -> None:
-        thread = self.vow_thread(1)
+    def test_imbuing_the_vow_thread_into_level_twenty_says_so(self) -> None:
+        thread = self.vow_thread(10)
 
         told = self.imbue_by_telnet(thread, self.ready(thread, 10, 20))
 
         thread.refresh_from_db()
         self.assertEqual(thread.level, 20)
-        # The shown level (stored 20 shows 2), never the stored climb of 10.
-        self.assertIn(f"{thread.name} is now level 2.", told)
+        # The level the thread now stands at, never the climb of 10.
+        self.assertIn(f"{thread.name} is now level 20.", told)
         self.assertIn("Vow level 20: 4 pts of new picks.", told)
 
     def test_an_imbue_within_a_level_names_no_new_level(self) -> None:
-        thread = self.vow_thread(1)
+        thread = self.vow_thread(10)
 
         told = self.imbue_by_telnet(thread, self.ready(thread, 10, 15))
 
@@ -392,7 +392,7 @@ class ImbuingOpensNewPicks(_ImbuingCase):
         self.assertNotIn("new picks", told)
 
     def test_the_web_finisher_says_so_and_names_the_level(self) -> None:
-        thread = self.vow_thread(1)
+        thread = self.vow_thread(10)
         amount = self.ready(thread, 10, 20)
 
         response = self.api(self.account_of(self.ysmay)).post(
@@ -407,14 +407,14 @@ class ImbuingOpensNewPicks(_ImbuingCase):
 
         self.assertEqual(response.status_code, 200, response.content)
         self.assertIn("Vow level 20: 4 pts of new picks.", response.json()["message"])
-        self.assertIn(f"{thread.name} is now level 2.", response.json()["message"])
-        self.assertEqual(response.json()["opened_pick_levels"], [2])
-        self.assertEqual(response.json()["new_picks"], [{"level": 2, "points": 4}])
+        self.assertIn(f"{thread.name} is now level 20.", response.json()["message"])
+        self.assertEqual(response.json()["opened_pick_levels"], [20])
+        self.assertEqual(response.json()["new_picks"], [{"level": 20, "points": 4}])
 
     def test_a_service_imbuing_rite_says_so_on_telnet_and_the_web(self) -> None:
         """A staff-authored SERVICE variant of the rite carries the same line on both."""
         quick = RitualFactory(name="Quick Imbuing", service_function_path=IMBUING_SERVICE_PATH)
-        thread = self.vow_thread(1)
+        thread = self.vow_thread(10)
 
         told = self.telnet(
             self.ysmay,
@@ -432,8 +432,8 @@ class ImbuingOpensNewPicks(_ImbuingCase):
         )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertIn("Vow level 20: 4 pts of new picks.", response.json()["message"])
-        self.assertEqual(response.json()["opened_pick_levels"], [2])
-        self.assertEqual(response.json()["new_picks"], [{"level": 2, "points": 4}])
+        self.assertEqual(response.json()["opened_pick_levels"], [20])
+        self.assertEqual(response.json()["new_picks"], [{"level": 20, "points": 4}])
 
         told = self.telnet(
             self.ysmay,
@@ -441,8 +441,8 @@ class ImbuingOpensNewPicks(_ImbuingCase):
         )
         self.assertIn("Vow level 30: 4 pts of new picks.", told)
 
-    def test_imbuing_past_level_three_opens_nothing_more(self) -> None:
-        thread = self.vow_thread(3)
+    def test_imbuing_past_level_thirty_opens_nothing_more(self) -> None:
+        thread = self.vow_thread(30)
 
         told = self.imbue_by_telnet(thread, self.ready(thread, 30, 40))
 
@@ -503,7 +503,7 @@ class JoiningWithAVowAlreadyWoven(JourneyCase):
             ).exists()
         )
 
-    def test_a_joiner_whose_thread_stands_at_level_two_is_told_both_levels(self) -> None:
+    def test_a_joiner_whose_thread_stands_at_level_twenty_is_told_both_levels(self) -> None:
         ThreadFactory(
             owner=self.ysmay.sheet_data,
             resonance=ResonanceFactory(),

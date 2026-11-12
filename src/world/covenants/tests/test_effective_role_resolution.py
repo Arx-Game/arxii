@@ -23,7 +23,7 @@ class ResolveEffectiveRoleTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.resonance = ResonanceFactory()
         cls.parent_role = CovenantRoleFactory()
-        # Sub-role that unlocks at level 3
+        # Sub-role that unlocks at thread level 30
         cls.sub_role_3 = SubroleCovenantRoleFactory(
             parent_role=cls.parent_role,
             resonance=cls.resonance,
@@ -43,7 +43,7 @@ class ResolveEffectiveRoleTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=self.parent_role,
             target_trait=None,
-            level=level * 10,  # ``level`` is shown; stored × 10 (#4585)
+            level=level,
         )
         if retired:
             t.retired_at = timezone.now()
@@ -53,19 +53,19 @@ class ResolveEffectiveRoleTests(TestCase):
         return t
 
     def test_below_unlock_threshold_returns_parent(self) -> None:
-        """Thread level 2 < unlock_thread_level 3 → resolve returns parent."""
-        self._make_thread(level=2)
+        """Thread level 20 < unlock_thread_level 30 → resolve returns parent."""
+        self._make_thread(level=20)
         result = resolve_effective_role(character=self.character, role=self.parent_role)
         self.assertEqual(result, self.parent_role)
 
     def test_at_unlock_threshold_returns_subrole(self) -> None:
-        """Thread level 3 == unlock_thread_level 3 → resolve returns sub_role."""
-        self._make_thread(level=3)
+        """Thread level 30 == unlock_thread_level 30 → resolve returns sub_role."""
+        self._make_thread(level=30)
         result = resolve_effective_role(character=self.character, role=self.parent_role)
         self.assertEqual(result, self.sub_role_3)
 
     def test_above_threshold_returns_best_subrole(self) -> None:
-        """With two sub-roles at unlock 3 and 5, thread level 5 → unlock-5 sub-role wins."""
+        """With two sub-roles at unlock 30 and 50, thread level 50 → unlock-50 sub-role wins."""
         resonance2 = ResonanceFactory()
         sub_role_5 = SubroleCovenantRoleFactory(
             parent_role=self.parent_role,
@@ -83,14 +83,14 @@ class ResolveEffectiveRoleTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=self.parent_role,
             target_trait=None,
-            level=50,  # stored; shows 5 (#4585)
+            level=50,
         )
         char2.threads.invalidate()
         result = resolve_effective_role(character=char2, role=self.parent_role)
         self.assertEqual(result, sub_role_5)
 
     def test_two_subroles_same_resonance_best_wins(self) -> None:
-        """Thread level 5 with two sub-roles at unlock 3 and unlock 5 → unlock-5 sub-role."""
+        """Thread level 50 with two sub-roles at unlock 30 and 50 → unlock-50 sub-role."""
         # Use a fresh parent role so we don't collide with the class-level sub_role_3
         parent = CovenantRoleFactory()
         res = ResonanceFactory()
@@ -107,7 +107,7 @@ class ResolveEffectiveRoleTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=parent,
             target_trait=None,
-            level=50,  # stored; shows 5 (#4585)
+            level=50,
         )
         char.threads.invalidate()
         result = resolve_effective_role(character=char, role=parent)
@@ -128,7 +128,7 @@ class ResolveEffectiveRoleTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=self.parent_role,
             target_trait=None,
-            level=50,  # stored; shows 5 (#4585)
+            level=50,
         )
         char.threads.invalidate()
         result = resolve_effective_role(character=char, role=self.parent_role)
@@ -147,7 +147,7 @@ class ResolveEffectiveRoleTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=self.parent_role,
             target_trait=None,
-            level=30,  # stored; shows 3 (#4585)
+            level=30,
         )
         t.retired_at = timezone.now()
         t.save(update_fields=["retired_at"])
@@ -200,7 +200,7 @@ class HandlerCurrentlyEngagedRolesResolutionTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=self.parent_role,
             target_trait=None,
-            level=30,  # stored; shows 3 (#4585)
+            level=30,
         )
         self.character.threads.invalidate()
         self.character.covenant_roles.invalidate()
@@ -210,14 +210,14 @@ class HandlerCurrentlyEngagedRolesResolutionTests(TestCase):
         self.assertEqual(engaged[0], self.sub_role)
 
     def test_handler_returns_parent_when_thread_below_threshold(self) -> None:
-        """Thread level 2 < unlock 3 → currently_engaged_roles returns parent."""
+        """Thread level 20 < unlock 30 → currently_engaged_roles returns parent."""
         ThreadFactory(
             owner=self.membership.character_sheet,
             resonance=self.resonance,
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=self.parent_role,
             target_trait=None,
-            level=20,  # stored; shows 2 (#4585)
+            level=20,
         )
         self.character.threads.invalidate()
         self.character.covenant_roles.invalidate()
@@ -298,7 +298,7 @@ class PassiveCapabilityGrantAnchorTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=cls.parent_role,
             target_trait=None,
-            level=50,  # stored; shows 5 (#4585)
+            level=50,
         )
 
         cls.capability = CapabilityTypeFactory()
@@ -322,7 +322,7 @@ class PassiveCapabilityGrantAnchorTests(TestCase):
 
     def test_capability_grant_active_after_role_resolves_to_subrole(self) -> None:
         """After role resolves to sub-role, CAPABILITY_GRANT still fires (anchor is parent)."""
-        # currently_engaged_roles() will return sub_role (thread level 5 >= unlock 3)
+        # currently_engaged_roles() will return sub_role (thread level 50 >= unlock 30)
         self.char_obj.threads.invalidate()
         self.char_obj.covenant_roles.invalidate()
 

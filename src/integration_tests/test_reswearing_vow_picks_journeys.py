@@ -1,7 +1,7 @@
 """Journeys: the Rite of Re-swearing changes a chosen vow pick (#4940, slice 7 of #4844).
 
-Ysmay holds the Quicksilver vow at vow level 2 and has chosen Strike from the Flank and
-Quick Recovery, 2 points each, which fills level 1's budget of 4. Between fights she
+Ysmay holds the Quicksilver vow at vow level 20 and has chosen Strike from the Flank and
+Quick Recovery, 2 points each, which fills level 10's budget of 4. Between fights she
 performs the rite on the web and through ``vow reswear`` to give up Quick Recovery for
 Feint and Vanish (also 2 points). The rite takes ``VowFocusPickConfig.respec_ap_cost``
 action points (3 by default) plus its own anima and components. In a fight, short of
@@ -56,7 +56,7 @@ NO_RITE = "No ritual can change a chosen vow pick yet."
 
 
 class _ReswearCase(JourneyCase):
-    """Ysmay, level 1 full with Strike from the Flank and Quick Recovery, 10 AP left."""
+    """Ysmay, level 10 full with Strike from the Flank and Quick Recovery, 10 AP left."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -70,15 +70,15 @@ class _ReswearCase(JourneyCase):
         self.membership = engage_vow_with_thread(
             self.sheet, self.vow, covenant=self.covenant, thread_level=20
         )
-        # Level 1: prices 2, 2, 2 and 4. The Target limit met 5 times in 10 halves 4 to 2.
-        self.flank = self.pick("Strike from the Flank", level=1, value=4)
+        # Level 10: prices 2, 2, 2 and 4. The Target limit met 5 times in 10 halves 4 to 2.
+        self.flank = self.pick("Strike from the Flank", level=10, value=4)
         VowFocusPickLimitFactory(
             pick=self.flank, kind=FocusPickLimitKind.TARGET, frequency_tenths=5
         )
-        self.recovery = self.pick("Quick Recovery", level=1, value=2)
-        self.feint = self.pick("Feint and Vanish", level=1, value=2)
-        self.light = self.pick("Light on Your Feet", level=1, value=4)
-        self.bleeding = self.pick("Bleeding Cut", level=2, value=3)
+        self.recovery = self.pick("Quick Recovery", level=10, value=2)
+        self.feint = self.pick("Feint and Vanish", level=10, value=2)
+        self.light = self.pick("Light on Your Feet", level=10, value=4)
+        self.bleeding = self.pick("Bleeding Cut", level=20, value=3)
         for pick in (self.flank, self.recovery):
             CharacterVowFocusPickFactory(character_role=self.membership, pick=pick)
         self.pool = ActionPointPool.get_or_create_for_character(self.ysmay)
@@ -136,7 +136,7 @@ class ReswearingBetweenFights(_ReswearCase):
         self.assertEqual(
             response.json()["message"],
             f"You perform {RITE}. You give up Quick Recovery and take Feint and Vanish. "
-            "Level 1: 4 of 4. 3 AP spent.",
+            "Level 10: 4 of 4. 3 AP spent.",
         )
         self.assertEqual(self.chosen_names(), {"Strike from the Flank", "Feint and Vanish"})
         self.assertEqual(self.ap(), 7)
@@ -150,7 +150,7 @@ class ReswearingBetweenFights(_ReswearCase):
 
         self.assertIn(
             f"You perform {RITE}. You give up Quick Recovery and take Feint and Vanish. "
-            "Level 1: 4 of 4. 3 AP spent.",
+            "Level 10: 4 of 4. 3 AP spent.",
             told,
         )
         self.assertEqual(self.chosen_names(), {"Strike from the Flank", "Feint and Vanish"})
@@ -242,7 +242,7 @@ class ReswearingRefused(_ReswearCase):
     def test_a_pick_of_another_level(self) -> None:
         self.assert_refused(
             self.perform(self.recovery, self.bleeding),
-            "Bleeding Cut is a level 2 pick and Quick Recovery is level 1; a pick changes "
+            "Bleeding Cut is a level 20 pick and Quick Recovery is level 10; a pick changes "
             "only for one of the same level.",
         )
 
@@ -250,7 +250,7 @@ class ReswearingRefused(_ReswearCase):
         self.assert_refused(
             self.perform(self.recovery, self.light),
             "Light on Your Feet costs 4; giving up Quick Recovery leaves 2 of the 4 points "
-            "for level 1 picks.",
+            "for level 10 picks.",
         )
 
     def test_a_pick_she_has_not_chosen_or_already_holds(self) -> None:

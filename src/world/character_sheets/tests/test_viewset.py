@@ -678,10 +678,10 @@ class TestStatsSection(TestCase):
         return response.data["stats"]
 
     def test_stats_contains_expected_values(self) -> None:
-        """Stats section maps stat names to their display values (stored ×10, ADR-0193)."""
+        """Stats section maps stat names to their stored values (ADR-5091)."""
         stats = self._get_stats()
-        assert stats["strength"] == 3
-        assert stats["agility"] == 4
+        assert stats["strength"] == 30
+        assert stats["agility"] == 40
 
     def test_stats_only_contains_stat_traits(self) -> None:
         """Stats section only contains traits with trait_type='stat', not skills."""

@@ -38,7 +38,7 @@ class ApplyNpcPresetServiceTests(TestCase):
         self.sheet = CharacterSheetFactory()
         self.preset = NPCStatlinePresetFactory()
 
-    def test_trait_lines_written_at_display_times_ten(self) -> None:
+    def test_trait_lines_written_as_their_stored_value(self) -> None:
         line = NPCPresetTraitLineFactory(preset=self.preset, value=40)
 
         apply_npc_preset(self.sheet, self.preset)
