@@ -829,7 +829,7 @@
 }
 .interview .stat-row {
   display: grid;
-  grid-template-columns: 1fr auto 2.25rem auto;
+  grid-template-columns: 1fr 2.25rem auto;
   align-items: center;
   gap: 0.75rem;
   padding: 0.45rem 0;
@@ -952,25 +952,6 @@
   font-family: 'EB Garamond', Georgia, serif;
   font-size: 1rem;
 }
-.interview .stat-pips {
-  display: inline-flex;
-  gap: 3px;
-}
-.interview .stat-pips i {
-  display: block;
-  width: 7px;
-  height: 7px;
-  border: 1px solid var(--cg-hairline-strong);
-}
-.interview .stat-pips i.on {
-  background: var(--cg-text-soft);
-  border-color: var(--cg-text-soft);
-}
-/* A value the Tradition granted rather than the player bought (#4457). */
-.interview .stat-pips.granted i.on {
-  background: var(--cg-orn);
-  border-color: var(--cg-orn);
-}
 .interview .stat-val {
   font-variant-numeric: tabular-nums;
   text-align: center;
@@ -1024,9 +1005,6 @@
   }
   .interview .goal-row {
     grid-template-columns: auto 1fr;
-  }
-  .interview .stat-pips {
-    display: none;
   }
   .interview .instruments {
     padding-left: 1rem;
@@ -2220,8 +2198,7 @@
 /* Distinctive physical features (#3739). A feature block is a short list of
    ordinary `.stance` rows: the one-point unlock, then the three presence axes
    it opens. `.opened` indents the axes under the unlock that paid for them, so
-   the dependency reads at a glance; `.tiers` is the bought-tier gauge, drawn
-   the way a stat row's pips are. */
+   the dependency reads at a glance; `.tiers` is the bought-tier gauge. */
 .interview .feature-buy {
   margin: 0.35rem 0 1.1rem;
 }

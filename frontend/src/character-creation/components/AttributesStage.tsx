@@ -149,7 +149,6 @@ export function AttributesStage({ draft }: AttributesStageProps) {
                   name={stat}
                   value={value}
                   bonus={bonuses[stat] || undefined}
-                  max={STAT_MAX}
                   step={STAT_STEP}
                   onChange={(v) => change(stat, v)}
                   canDecrease={value > STAT_MIN}

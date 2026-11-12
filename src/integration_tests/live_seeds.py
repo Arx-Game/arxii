@@ -530,7 +530,8 @@ def seed_one_scale_spec(*, username: str) -> OneScaleSeed:
 
     The sheet shows strength 30 and agility 20 (stored values, #5091), the thread page
     shows level 30 against a cap of 30, and the band caps are the stored 50/60/110/...
-    rows. The account's creation draft is not touched here: the spec moves it to the
+    rows, and the pull-cost catalog is seeded so the thread page's Pull Preview reads real
+    costs. The account's creation draft is not touched here: the spec moves it to the
     Attributes stage itself, after the specs that read it at another stage have run.
     """
     from django.db import transaction  # noqa: PLC0415
@@ -554,10 +555,12 @@ def seed_one_scale_spec(*, username: str) -> OneScaleSeed:
         RosterTenureFactory,
     )
     from world.roster.models import RosterEntry  # noqa: PLC0415
+    from world.seeds.game_content.magic import seed_thread_pull_catalog  # noqa: PLC0415
     from world.traits.models import CharacterTraitValue, Trait, TraitType  # noqa: PLC0415
 
     with transaction.atomic():
         seed_maturation_stat_caps()
+        seed_thread_pull_catalog()
         account = AccountDB.objects.get(username=username)
         player_data, _ = PlayerData.objects.get_or_create(account=account)
         entry = RosterEntry.objects.filter(
