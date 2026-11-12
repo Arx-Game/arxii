@@ -35,8 +35,6 @@ from world.mechanics.models import CharacterModifier, ModifierSource
 from world.species.models import Species
 
 if TYPE_CHECKING:
-    from evennia.objects.models import ObjectDB
-
     from world.character_sheets.models import CharacterSheet
     from world.combat.types import CompulsionAttempt
     from world.scenes.models import Persona
@@ -378,8 +376,8 @@ def revert_alternate_self(sheet: CharacterSheet) -> None:
     The system entry point (Audere end, TALKED_DOWN): blocked while
     ``not sheet.in_control`` (rage/possession/charm) — raises ``RevertBlockedError``.
     A player's own revert goes through ``attempt_revert_form``, which rolls against a
-    compulsion, keeps the block only for a talked-down self whose condition holds them,
-    and otherwise reverts freely. Assumption is never blocked.
+    compulsion, holds an Audere talked-down self until someone reaches her, and otherwise
+    reverts freely. Assumption is never blocked.
     Removing an alters_behavior condition does NOT call this — it re-derives
     ``in_control=True`` and unblocks a later self-revert.
 
@@ -402,27 +400,32 @@ def revert_alternate_self(sheet: CharacterSheet) -> None:
 
 
 def attempt_revert_form(sheet: CharacterSheet) -> CompulsionAttempt:
-    """The player's entry point for changing back (#4802).
+    """The player's entry point for changing back (#4802, #4887).
 
     Three cases, in order:
 
     1. The character carries a compulsion: they roll its resist check for
        ``REVERT_FORM`` and change back only when the roll lets them (an NPC changes back
        with no roll, since NPCs never roll). The roll is committed even when it fails.
-    2. No compulsion, but the worn self is ``TALKED_DOWN`` and its ``emergence_condition``
-       is active on the character: the ratified "must be talked down" block holds and
-       ``RevertBlockedError`` is raised. This is not a compulsion refusal.
-    3. Otherwise (Charmed, Calm, any other alters_behavior condition): change back freely.
+    2. No compulsion, but Audere brought out the worn ``TALKED_DOWN`` self, its
+       ``emergence_condition`` still holds the character and nobody has reached her yet:
+       ``RevertBlockedError``. An ally's rally landing on that condition
+       (``ConditionInstance.rallied``) or her own successful break-free (which ends it)
+       lifts it (ruled 2026-11-12).
+    3. Otherwise they change back at once. That covers a self she put on herself or one a
+       compulsion forced: once the compulsion ends she is calmed and changes back even
+       while its condition still runs (ruled 2026-11-01), and Charmed, Calm or any other
+       alters_behavior condition never held her.
 
     A revert that fails during DECLARING needs nothing here: a compelled fighter with no
     declared action is covered by ``select_compelled_actions`` at the round lock.
 
     The system paths (Audere end, TALKED_DOWN) call ``revert_alternate_self`` and keep its
-    ``in_control`` check.
+    ``in_control`` check, so a talked-down self never drops away on its own.
 
     Raises:
         ValueError: if no active alternate self exists for this sheet.
-        RevertBlockedError: a talked-down self whose condition still holds the character.
+        RevertBlockedError: an Audere talked-down self that nobody has reached yet.
     """
     from world.combat.compulsion import resist_compulsion_now  # noqa: PLC0415
     from world.combat.types import CompulsionAttempt  # noqa: PLC0415
@@ -436,18 +439,24 @@ def attempt_revert_form(sheet: CharacterSheet) -> CompulsionAttempt:
         if attempt.allowed:
             _revert(sheet, active)
         return attempt
-    if _held_until_talked_down(character, active.alternate_self):
+    if _waiting_to_be_talked_down(sheet, active):
         raise RevertBlockedError
     _revert(sheet, active)
     return CompulsionAttempt(allowed=True, line="", check_result=None)
 
 
-def _held_until_talked_down(character: ObjectDB, alt: AlternateSelf) -> bool:  # noqa: OBJECTDB_PARAM
-    """Whether *alt* must be talked down and its emergence condition still holds *character*."""
-    if alt.revert_kind != AlternateSelfRevertKind.TALKED_DOWN:
+def _waiting_to_be_talked_down(sheet: CharacterSheet, active: ActiveAlternateSelf) -> bool:
+    """Whether Audere's talked-down self still holds *sheet* until someone reaches her.
+
+    Held while an instance of its emergence condition is active and no ally's rally has
+    landed on it (``ConditionInstance.rallied``). A broken-free condition is gone.
+    """
+    alt = active.alternate_self
+    if alt.revert_kind != AlternateSelfRevertKind.TALKED_DOWN or not active.assumed_at_audere:
         return False
     return any(
-        inst.condition_id == alt.emergence_condition_id for inst in character.conditions.active()
+        inst.condition_id == alt.emergence_condition_id and not inst.rallied
+        for inst in sheet.character.conditions.active()
     )
 
 

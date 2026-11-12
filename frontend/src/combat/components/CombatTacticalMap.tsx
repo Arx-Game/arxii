@@ -133,33 +133,30 @@ function buildLockLinks(encounter: EncounterDetail): OccupantLink[] {
 
 /**
  * Non-combatant scene personas at their persona position (#3557): everyone in
- * `scene.personas` whose character is neither a participant nor an opponent (by
- * `objectdb_id`). A persona with no character or no position is skipped.
+ * `scene.personas` who is neither a participant nor an opponent.
  *
- * Another fighter's row carries no sheet id (a mask must not be tied to its
- * character, #4802 Ruling 50), so a participant is matched by the persona it
- * presents (`persona_id`); any other scene persona of that same character is
- * then skipped too, so a masked fighter's own face never stands beside the mask.
+ * A participant is matched by the persona it presents (`persona_id`), never by
+ * a sheet id: another fighter's row carries none, and a disguise in the scene's
+ * persona list carries none either unless the viewer has uncovered it (#4802
+ * Ruling 50, #4888). A persona whose character the viewer can see is also
+ * matched by that character, so a fighter's other faces are never bystanders;
+ * the scene only positions the face a character presents now anyway. An
+ * opponent is matched by `objectdb_id`. A persona with no position is skipped.
  */
-function combatantCharacterIds(
-  encounter: EncounterDetail,
-  scenePersonas: SceneDetail['personas']
-): Set<number> {
-  const ids = new Set<number>();
-  const presented = new Set<number>();
+function combatantKeys(encounter: EncounterDetail): {
+  personaIds: Set<number>;
+  characterIds: Set<number>;
+} {
+  const personaIds = new Set<number>();
+  const characterIds = new Set<number>();
   for (const participant of encounter.participants ?? []) {
-    if (participant.character_sheet_id != null) ids.add(participant.character_sheet_id);
-    if (participant.persona_id != null) presented.add(participant.persona_id);
-  }
-  for (const persona of scenePersonas ?? []) {
-    if (presented.has(persona.id) && persona.character_sheet != null) {
-      ids.add(persona.character_sheet);
-    }
+    if (participant.character_sheet_id != null) characterIds.add(participant.character_sheet_id);
+    if (participant.persona_id != null) personaIds.add(participant.persona_id);
   }
   for (const opponent of encounter.opponents ?? []) {
-    if (opponent.objectdb_id != null) ids.add(opponent.objectdb_id);
+    if (opponent.objectdb_id != null) characterIds.add(opponent.objectdb_id);
   }
-  return ids;
+  return { personaIds, characterIds };
 }
 
 function buildBystanders(
@@ -169,13 +166,14 @@ function buildBystanders(
 ): Map<number, BattleOccupant[]> {
   const map = new Map<number, BattleOccupant[]>();
   if (!scene) return map;
-  const combatantIds = combatantCharacterIds(encounter, scene.personas);
+  const { personaIds, characterIds } = combatantKeys(encounter);
   const personaById = new Map((scene.personas ?? []).map((p) => [p.id, p]));
   for (const pp of scene.persona_positions ?? []) {
     if (pp.position === null) continue;
     const persona = personaById.get(pp.persona_id);
-    if (!persona || persona.character_sheet == null) continue;
-    if (combatantIds.has(persona.character_sheet)) continue;
+    if (!persona) continue;
+    if (personaIds.has(persona.id)) continue;
+    if (persona.character_sheet != null && characterIds.has(persona.character_sheet)) continue;
     const occupants = map.get(pp.position.id) ?? [];
     occupants.push({
       name: persona.name,
@@ -183,7 +181,7 @@ function buildBystanders(
       side: 'bystander',
       square:
         pp.square_x != null && pp.square_y != null ? { x: pp.square_x, y: pp.square_y } : null,
-      isViewer: persona.character_sheet === characterId,
+      isViewer: persona.character_sheet != null && persona.character_sheet === characterId,
     });
     map.set(pp.position.id, occupants);
   }

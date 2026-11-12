@@ -39,7 +39,15 @@ so the #2642 gate divisor is always 1):
   flat entry (``base_damage=12``) establishes the pre-enrage damage baseline
   (``12``), and the ``conditions_applied`` entry (``base_damage=8``) proves
   enemy-NPC condition application onto a PC (see the DoD-wording-discrepancy
-  note below).
+  note below). Each direct hit is measured as the health PC3 loses across that
+  one call (``_damage_taken_from``), never as ``100 - health``: ``resolve_round``
+  auto-selects the boss's own attack each round while its threat pool has
+  entries (rounds 1-3), and with no ``Meta.ordering`` on ``CombatParticipant``
+  the planner's default target is whichever participant the database returns
+  first. On Postgres that is not always PC1, so the boss's own round-1 hit can
+  land on PC3 (24 = 12 + 12, 20 = 12 + 8 on shard-8, #5005). The direct hit's
+  damage is what the baseline and enrage assertions are about; the boss's
+  auto-selected hits are not.
 - Round 2: PC1+PC2 upgrade to the learned combo (``bonus_damage=10``,
   ``bypass_soak=True``); PC3 solo. Combo riders bypass soak entirely
   (``2 x 10 = 20`` damage through); each PC's own technique is still soaked
@@ -183,13 +191,37 @@ class BossFightJourneyTest(TestCase):
             upgrade_action_to_combo(actions[i], self.combo)
         return actions
 
+    def _damage_taken_from(self, entry: object, *, round_number: int) -> int:
+        """Health PC3 loses to one direct NPC hit with ``entry``, fixed defense roll.
+
+        Reads PC3's health immediately before and after the call, so damage the
+        boss's auto-selected round attacks dealt to PC3 earlier is not counted.
+        """
+        participant = self.participants[2]
+        vitals = CharacterVitals.objects.get(character_sheet=participant.character_sheet)
+        health_before = vitals.health
+        action = CombatOpponentAction.objects.create(
+            opponent=self.opponent,
+            round_number=round_number,
+            threat_entry=entry,
+        )
+        action.targets.add(participant)
+        _resolve_npc_action(
+            self.opponent,
+            action,
+            defense_check_type=None,
+            defense_check_fn=_defense_check_fn,
+        )
+        vitals.refresh_from_db()
+        return health_before - vitals.health
+
     def _resolve(self) -> object:
         return resolve_round(
             self.encounter,
             offense_check_fn=_offense_check_fn,
         )
 
-    def test_boss_fight_journey(self) -> None:  # noqa: PLR0915 - one linear journey walk
+    def test_boss_fight_journey(self) -> None:
         """Walk every DoD beat in order: mitigation -> break -> vuln -> phase 2 ->
         phase 3 (enrage) -> re-break -> win inside the reopened vulnerability window.
         """
@@ -204,21 +236,7 @@ class BossFightJourneyTest(TestCase):
         # Baseline enrage measurement (opponent.damage_multiplier is still 1.0):
         # a direct NPC attack via the flat threat entry, forced to a fixed
         # success_level=0 defense roll so only the enrage multiplier varies.
-        baseline_action = CombatOpponentAction.objects.create(
-            opponent=self.opponent,
-            round_number=1,
-            threat_entry=self.scenario.flat_entry,
-        )
-        baseline_action.targets.add(self.participants[2])
-        _resolve_npc_action(
-            self.opponent,
-            baseline_action,
-            defense_check_type=None,
-            defense_check_fn=_defense_check_fn,
-        )
-        pc3_sheet = self.participants[2].character_sheet
-        pc3_vitals = CharacterVitals.objects.get(character_sheet=pc3_sheet)
-        baseline_damage = 100 - pc3_vitals.health
+        baseline_damage = self._damage_taken_from(self.scenario.flat_entry, round_number=1)
         self.assertEqual(baseline_damage, 12, "pre-enrage NPC hit should be flat base_damage")
 
         # Enemy-NPC condition application: the boss's Venom Bite entry
@@ -269,20 +287,7 @@ class BossFightJourneyTest(TestCase):
         self.assertEqual(self.opponent.damage_multiplier, Decimal("2.50"))
 
         # Enrage proof via a real damage comparison against the round-1 baseline.
-        enrage_action = CombatOpponentAction.objects.create(
-            opponent=self.opponent,
-            round_number=4,
-            threat_entry=self.scenario.flat_entry,
-        )
-        enrage_action.targets.add(self.participants[2])
-        _resolve_npc_action(
-            self.opponent,
-            enrage_action,
-            defense_check_type=None,
-            defense_check_fn=_defense_check_fn,
-        )
-        pc3_vitals.refresh_from_db()
-        enraged_damage = (100 - baseline_damage) - pc3_vitals.health
+        enraged_damage = self._damage_taken_from(self.scenario.flat_entry, round_number=4)
         self.assertEqual(enraged_damage, 30, "enraged hit should be 2.50x the base_damage")
         expected_enraged = int(self.scenario.flat_entry.base_damage * Decimal("2.50"))
         self.assertEqual(enraged_damage, expected_enraged)

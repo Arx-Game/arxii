@@ -17,6 +17,14 @@ export default {
       },
     },
     extend: {
+      // Named so the class sort and the build never meet an arbitrary min-[...] variant:
+      // a rem value among px screens makes Tailwind drop the variant from the build and
+      // prettier-plugin-tailwindcss order the class string differently per run (#4886).
+      // Keep every screen in px.
+      screens: {
+        rail: '860px', // scene page: story column beside the combat/story rail
+        hall: '832px', // home page: Attention beside World (52rem at the default root size)
+      },
       fontFamily: {
         display: ['Cinzel', 'Georgia', 'serif'],
         body: ['"EB Garamond"', 'Georgia', 'serif'],
