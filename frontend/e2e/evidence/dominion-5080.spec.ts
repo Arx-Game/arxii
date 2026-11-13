@@ -449,4 +449,61 @@ test.describe('Dominion slice 4 (#5080)', () => {
     await page.screenshot({ path: shot('3-atlas-blight-over-vampa.png'), fullPage: true });
     expect(errors).toEqual([]);
   });
+
+  test('#5112: under a held title the seat control says it changes the holder', async ({
+    page,
+  }) => {
+    const shot5112 = (name: string) => path.join(REPO_ROOT, 'docs', 'reviews', '5112', name);
+    const errors = trackErrors(page);
+    // Registered after the catch-all, so these win: a second house to hand the
+    // title to, and (second half) the same duchy with nobody holding it.
+    let vacant = false;
+    await page.route('**/api/almanach/houses/', (route) =>
+      route.fulfill({
+        json: paginated([
+          { id: PIROPA_ID, name: 'House Piropa' },
+          { id: 77, name: 'House Valeweep' },
+        ]),
+      })
+    );
+    // The fixture's duchy sits inside the kingdom's own chain, where the page shows
+    // no seat control; here it is a title in its own right.
+    const own = { ...DUCHY_DOC.title, chain_top_id: DUCHY_ID };
+    await page.route(`**/api/almanach/titles/${DUCHY_ID}/document/`, (route) =>
+      route.fulfill({
+        json: {
+          ...DUCHY_DOC,
+          title: vacant
+            ? { ...own, house_id: null, held_by: '', holder_id: null, holder: '' }
+            : own,
+        },
+      })
+    );
+    await page.goto(`/staff/almanach/titles/${DUCHY_ID}`);
+    const heldBy = String(DUCHY_DOC.title.held_by);
+
+    // Held: the field says what it does, and leaves the holder out of its list.
+    const change = page.getByLabel('change holder');
+    await expect(change).toBeVisible();
+    const offered = await change.locator('option').allTextContents();
+    expect(offered[0]).toBe('pick another house');
+    expect(offered).not.toContain(heldBy);
+    expect(offered.length).toBe(2);
+    await expect(page.getByLabel('house', { exact: true })).toHaveCount(0);
+    await page.screenshot({ path: shot5112('1-held-change-holder.png'), fullPage: true });
+
+    // Vacant: the same field is where a house is seated, and offers every house.
+    vacant = true;
+    await page.reload();
+    const seat = page.getByLabel('house', { exact: true });
+    await expect(seat).toBeVisible();
+    await expect(seat.locator('option')).toHaveText([
+      'pick a house',
+      'House Piropa',
+      'House Valeweep',
+    ]);
+    await expect(page.getByLabel('change holder')).toHaveCount(0);
+    await page.screenshot({ path: shot5112('2-vacant-house.png'), fullPage: true });
+    expect(errors, errors.join('\n')).toEqual([]);
+  });
 });

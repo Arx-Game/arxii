@@ -306,13 +306,18 @@ export function TitlePage({ titleId }: { titleId: number }) {
           </div>
           {title.chain_top_id === title.title_id && (
             <div className="field">
-              <label htmlFor="r-house">house</label>
+              {/* On a held title this hands it to another house, so it says so (#5112):
+                  "house / pick a house" under a title that shows its house read as a
+                  house that had not been set. */}
+              <label htmlFor="r-house">{title.house_id != null ? 'change holder' : 'house'}</label>
               <select
                 id="r-house"
                 value={seatHouseId}
                 onChange={(e) => setSeatHouseId(e.target.value)}
               >
-                <option value="">pick a house</option>
+                <option value="">
+                  {title.house_id != null ? 'pick another house' : 'pick a house'}
+                </option>
                 {(housesPayload?.results ?? [])
                   .filter((house) => house.id !== title.house_id)
                   .map((house) => (
