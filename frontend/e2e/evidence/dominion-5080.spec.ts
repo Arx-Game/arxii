@@ -546,6 +546,13 @@ test.describe('Dominion slice 4 (#5080)', () => {
     await expect(caption).toHaveText('Inferna');
     await expect(page.getByText('no domain selected')).toHaveCount(0);
     await page.screenshot({ path: shot5118('1-carve-caption.png'), fullPage: true });
+
+    // Opened with nothing in focus: no domain and no realm picked yet.
+    await page.goto('/staff/world-builder/map/1');
+    await expect(page.getByRole('heading', { name: 'Catenys' })).toBeVisible();
+    console.log('unfocused caption:', JSON.stringify(await caption.textContent()));
+    await expect(caption).toHaveText('all realms');
+    await page.screenshot({ path: shot5118('2-nothing-picked.png'), fullPage: true });
     expect(errors).toEqual([]);
   });
 
