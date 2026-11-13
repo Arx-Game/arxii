@@ -304,6 +304,14 @@ export function RegionMapPage({
   useEffect(() => {
     if (realmId == null && focusRealmId != null) setRealmId(focusRealmId);
   }, [focusRealmId, realmId]);
+  // #5116: the domain the selected one lies in, for the panel's way up.
+  const selectedAbove = useMemo(
+    () =>
+      selected?.parent_id == null
+        ? null
+        : (data?.footprints.find((f) => f.area_id === selected.parent_id) ?? null),
+    [data, selected]
+  );
   const carveTarget = useMemo(
     () => ladder?.rows.find((row) => row.title_id === carveTitleId) ?? null,
     [ladder, carveTitleId]
@@ -1034,6 +1042,11 @@ export function RegionMapPage({
           footprintCount={data.footprints.length}
           terrains={data.terrains}
           events={events.map((e) => ({ id: e.id, kind: e.kind, area: e.area }))}
+          above={mode === 'select' ? selectedAbove : null}
+          onUp={(footprint) => {
+            setSelectedAreaId(footprint.area_id);
+            setSelectedTitleId(footprint.title_id);
+          }}
           onCarveThis={
             mode === 'carve'
               ? (footprint) => {

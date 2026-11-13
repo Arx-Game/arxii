@@ -831,8 +831,9 @@ and unavailable on the SQLite test tier. The graph also loads the realm's claims
 (`first_claim_by_title`).
 
 - **`rung_document(title) -> RungDocument`** (`almanach_pages.py`) gains `chartered_fiefs`,
-  `chartered_by`, `claims` and `chain` (the realm first, then every chain top above, nearest
-  last) and the title block carries `station` and `pledged_liege` (#4983). Its `demesne` is
+  `chartered_by`, `claims` and `chain` (the realm first, then every rung above by containment,
+  nearest last; inner chain rungs included since #5116, so a county under the empire's own
+  duchy names the empire, its kingdom and its duchy) and the title block carries `station` and `pledged_liege` (#4983). Its `demesne` is
   the rung's own Domain, so it is `None` above county (#5069) and, where present, its
   `population` is `demography.population_now` (the people by formula, never the stored base)
   beside a `population_capacity`. Its `events` are the open regional events over the rung's

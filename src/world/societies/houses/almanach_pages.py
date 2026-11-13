@@ -884,8 +884,13 @@ def _claim_rows(title: Title) -> list[dict]:
 
 
 def _rung_chain(title: Title, graph: _RealmGraph | None) -> list[dict]:
-    """The way up from a rung: the realm first, then every chain-top rung above
-    it by containment, nearest last (#4983). A rung with no graph has only its realm."""
+    """The way up from a rung: the realm first, then every rung above it by
+    containment, nearest last (#4983). A rung with no graph has only its realm.
+
+    Every rung, inner chain rungs included (#5116): the empire's own kingdom and
+    duchy share its seat, and a county under that duchy is under all three. Each
+    has a page (#5011), so each is a step on the way up.
+    """
     chain = [{"title_id": None, "name": title.realm.name, "tier": "realm"}]
     if graph is None:
         return chain
@@ -893,8 +898,7 @@ def _rung_chain(title: Title, graph: _RealmGraph | None) -> list[dict]:
     current = graph.parent_title_by_title.get(title.pk)
     while current is not None:
         rung = graph.titles_by_pk[current]
-        if graph.is_top(rung):
-            above.append({"title_id": rung.pk, "name": rung.name, "tier": rung.tier})
+        above.append({"title_id": rung.pk, "name": rung.name, "tier": rung.tier})
         current = graph.parent_title_by_title.get(current)
     return chain + list(reversed(above))
 

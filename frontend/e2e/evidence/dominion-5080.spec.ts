@@ -450,6 +450,80 @@ test.describe('Dominion slice 4 (#5080)', () => {
     expect(errors).toEqual([]);
   });
 
+  test('#5116: the map walks up from a barony to the top, and a county names every rung above it', async ({
+    page,
+  }) => {
+    const shot5116 = (name: string) => path.join(REPO_ROOT, 'docs', 'reviews', '5116', name);
+    const errors = trackErrors(page);
+    // The map: select the barony, then go up one domain at a time.
+    await page.goto(`/staff/world-builder/map/1?focus=${PERDITION_AREA}`);
+    const panel = page.getByTestId('region-map-panel');
+    const name = panel.getByRole('heading', { level: 3 });
+    const up = panel.getByTestId('selection-up');
+    await expect(name).toHaveText('Perdition');
+    await expect(up).toHaveAccessibleName('Up to Inferna');
+    await page.screenshot({ path: shot5116('1-map-barony-with-up.png'), fullPage: true });
+    const walked: string[] = [];
+    for (const expected of ['County', 'Duchy', 'Kingdom']) {
+      await up.click();
+      await expect(panel.getByText(expected, { exact: true })).toBeVisible();
+      walked.push(`${expected}: ${await name.textContent()}`);
+    }
+    console.log('walked up:', JSON.stringify(walked));
+    expect(walked).toEqual(['County: Inferna', 'Duchy: Vampa', 'Kingdom: Inferna']);
+    // The kingdom lies in nothing on this map: no way further up.
+    await expect(up).toHaveCount(0);
+    await page.screenshot({ path: shot5116('2-map-top-no-up.png'), fullPage: true });
+
+    // The Almanach: a county under the empire's own duchy. The chain is what the
+    // server now sends for it (every rung above); the page links each step.
+    const COUNTY_ID = 77;
+    await page.route(`**/api/almanach/titles/${COUNTY_ID}/document/`, (route) =>
+      route.fulfill({
+        json: {
+          ...DUCHY_DOC,
+          title: {
+            ...DUCHY_DOC.title,
+            title_id: COUNTY_ID,
+            name: 'Hollowmere',
+            tier: 'county',
+            realm: 'Umbros',
+            house_id: null,
+            held_by: '',
+            holder_id: null,
+            holder: '',
+            chain_top_id: COUNTY_ID,
+          },
+          vassals: [],
+          events: [],
+          chain: [
+            { title_id: null, name: 'Umbros', tier: 'realm' },
+            { title_id: 90, name: 'The Umbral Empire', tier: 'empire' },
+            { title_id: 91, name: 'Umbros', tier: 'kingdom' },
+            { title_id: 92, name: 'Erebus', tier: 'duchy' },
+          ],
+        },
+      })
+    );
+    await page.goto(`/staff/almanach/titles/${COUNTY_ID}`);
+    const trail = page.getByRole('navigation', { name: 'Breadcrumb' });
+    await expect(trail).toContainText('Hollowmere');
+    const steps = await trail
+      .getByRole('link')
+      .evaluateAll((links) => links.map((a) => `${a.textContent} -> ${a.getAttribute('href')}`));
+    console.log('trail:', JSON.stringify(steps));
+    expect(steps).toEqual([
+      'Almanach -> /staff/almanach',
+      `Umbros -> /staff/almanach/realms/${REALM_ID}`,
+      'The Umbral Empire -> /staff/almanach/titles/90',
+      'Umbros -> /staff/almanach/titles/91',
+      'Erebus -> /staff/almanach/titles/92',
+    ]);
+    await expect(trail).toContainText('Hollowmere');
+    await page.screenshot({ path: shot5116('3-county-trail.png'), fullPage: true });
+    expect(errors).toEqual([]);
+  });
+
   test('#5112: under a held title the seat control says it changes the holder', async ({
     page,
   }) => {
