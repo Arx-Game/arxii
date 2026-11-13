@@ -610,7 +610,7 @@ Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
     comments `<!-- migration-auto-rebase sha=... status=resolved -->`. Then
     `git pull --ff-only`, refresh evidence only after reviewing material changes,
     and re-arm the watcher. On `status=refused`, or for any other conflict: merge main
-    in (never rebase once evidence URLs are published), run
+    in (never rebase once evidence URLs are published),
     refresh the evidence only after reviewing material changes, push, re-enqueue, re-arm the watcher.
   - `DROPPED` (exit 9): the queue ejected it or a check failed there. Read the checks,
     enter the CI-fix phase, re-enqueue, re-arm the watcher.
