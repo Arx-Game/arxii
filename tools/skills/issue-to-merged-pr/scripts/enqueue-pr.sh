@@ -70,8 +70,6 @@ if evidence_required "$ISSUE_LABELS" "$ISSUE_BODY_TEXT"; then
     echo "ERROR: branch $HEAD_REF is not checked out; cannot validate its evidence report." >&2
     exit 1
   fi
-  REVIEWED_SHA=$(python3 "$BRANCH_WT/tools/review_evidence_revision.py" \
-    --repo "$BRANCH_WT" "$(git -C "$BRANCH_WT" rev-parse HEAD)")
   if [[ -n "$EVIDENCE_URL" ]]; then
     if [[ "$EVIDENCE_URL" != https://github.com/*/issues/*#issuecomment-* && "$EVIDENCE_URL" != https://github.com/*/pull/*#issuecomment-* ]]; then
       echo "ERROR: evidence URL must be a GitHub issue or PR comment URL." >&2
@@ -81,14 +79,16 @@ if evidence_required "$ISSUE_LABELS" "$ISSUE_BODY_TEXT"; then
     EVIDENCE_TMP=$(mktemp)
     REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
     gh api "repos/$REPO/issues/comments/$COMMENT_ID" --jq .body > "$EVIDENCE_TMP"
-    uv run python "$BRANCH_WT/tools/validate_review_evidence.py" "$EVIDENCE_TMP" --revision "$REVIEWED_SHA"
+    uv run python "$BRANCH_WT/tools/validate_review_evidence.py" "$EVIDENCE_TMP"
+    uv run python "$BRANCH_WT/tools/review_evidence_revision.py" --repo "$BRANCH_WT" "$(git -C "$BRANCH_WT" rev-parse HEAD)" --report "$EVIDENCE_TMP"
     rm -f "$EVIDENCE_TMP"
   else
     if [[ "$EVIDENCE_FILE" = /* || "$EVIDENCE_FILE" == *..* ]]; then
       echo "ERROR: evidence report path must be repository-relative without '..'." >&2
       exit 1
     fi
-    uv run python "$BRANCH_WT/tools/validate_review_evidence.py" "$BRANCH_WT/$EVIDENCE_FILE" --revision "$REVIEWED_SHA"
+    uv run python "$BRANCH_WT/tools/validate_review_evidence.py" "$BRANCH_WT/$EVIDENCE_FILE"
+    uv run python "$BRANCH_WT/tools/review_evidence_revision.py" --repo "$BRANCH_WT" "$(git -C "$BRANCH_WT" rev-parse HEAD)" --report "$BRANCH_WT/$EVIDENCE_FILE"
   fi
 
 else

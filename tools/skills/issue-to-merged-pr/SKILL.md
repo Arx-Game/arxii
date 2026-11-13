@@ -479,25 +479,12 @@ red, so do not treat it as cleanup to get to later:
 3. **Point the PR body's `- Report:` line at that comment URL.** The
    `review-evidence` job reads that line; a stale path there fails it.
 4. **Delete `docs/reviews/` and `.github/issue-evidence/`, then push again.**
-5. **Before EVERY later push, run
-   `scripts/sync-evidence-revision.sh <pr>`.** It restates the report's
-   `Reviewed revision` to the current `HEAD^1`, prints what changed between the
-   old revision and the new one so you can judge whether the review still
-   stands, and re-validates the comment exactly as CI will. Skipping it is the
-   single most common way this job goes red after a green one. When code
-   changed in between and there is no terminal (always, for an agent), it
-   prints the diff and exits 3 without touching the report: judge the diff,
-   then re-run with `--yes` (#4797; the prompt used to wait forever).
-
-**The revision gotcha, which bites every time.** Both the gate and
-`open-pr.sh` validate the report against `git rev-parse HEAD^1`, so the report's
-`Reviewed revision` field must name the commit that ends up as the FIRST PARENT
-of the branch tip - not the commit you happened to review. Any push after the
-report is written (a merge from main, the deletion commit itself) moves that
-target, so re-read `HEAD^1` and update the comment before the final push. When
-the intervening commits changed code the review covered, say so in the report
-and state what you re-verified; when they did not, prove it with a diff of the
-reviewed files rather than asserting it.
+5. Keep the report's `Reviewed revision` as the exact commit reviewed. The gate
+   verifies later clean main merges, reproducible migration updates, and changes
+   confined to the temporary evidence directories. Other changes, including
+   manual conflict resolutions, require review and an updated report. Once
+   that review is complete, `scripts/sync-evidence-revision.sh <pr>` can point
+   the report at the reviewed HEAD; it does not perform the review itself.
 
 See `references/evidence-screenshots-not-in-main.md` for the underlying
 technique.
@@ -621,10 +608,10 @@ Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
     CI's `migration-conflict-rebase` workflow its few minutes (#4879): it fixes a
     PR whose only conflict is that file, pushes a merge commit, re-arms the queue and
     comments `<!-- migration-auto-rebase sha=... status=resolved -->`. Then
-    `git pull --ff-only`, run `sync-evidence-revision.sh` if the PR carries evidence,
+    `git pull --ff-only`, refresh evidence only after reviewing material changes,
     and re-arm the watcher. On `status=refused`, or for any other conflict: merge main
-    in (never rebase once evidence URLs are published), run
-    `sync-evidence-revision.sh`, push, re-enqueue, re-arm the watcher.
+    in (never rebase once evidence URLs are published),
+    refresh the evidence only after reviewing material changes, push, re-enqueue, re-arm the watcher.
   - `DROPPED` (exit 9): the queue ejected it or a check failed there. Read the checks,
     enter the CI-fix phase, re-enqueue, re-arm the watcher.
   - `NEEDS_ANSWER` (exit 10, #4834): the PR is armed or queued but held by an

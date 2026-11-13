@@ -148,7 +148,14 @@ jobs:
           else
               report_path="$report_reference"
           fi
-          # Keep the original evidence revision across reproducible migration updates.
-          reviewed_sha="$(python3 tools/review_evidence_revision.py "$head_sha")"
-          python3 tools/validate_review_evidence.py "$report_path" \
-              --revision "$reviewed_sha" --pr-body /tmp/pr-body.md
+          # Validate the report first, then prove every update since its reviewed revision.
+          python3 tools/validate_review_evidence.py "$report_path" --pr-body /tmp/pr-body.md
+          report_sha="$(python3 - "$report_path" <<'PY'
+          import sys
+          from tools.validate_review_evidence import _field
+
+          with open(sys.argv[1], encoding="utf-8") as stream:
+              print(_field(stream.readlines(), "Reviewed revision").strip("`"))
+          PY
+          )"
+          python3 tools/review_evidence_revision.py "$head_sha" --reviewed-revision "$report_sha"

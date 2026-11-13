@@ -68,22 +68,13 @@ rewritten, re-upload the images afterward and verify every final URL with HTTP
    `main`'s history, even though they're still reachable (and the raw URLs
    still resolve) via the PR's own ref.
 
-## Sequencing gotcha: this touches the same clock as the evidence gate itself
+## Evidence revision after cleanup
 
-`validate_review_evidence.py --revision` (and the CI job that calls it) always
-checks the report's stamped "Reviewed revision" against **`HEAD^1` of the PR's
-current tip at validation time** — not a fixed point you set once. Two
-consequences:
-
-- Write the new comment's "Reviewed revision" as the SHA you're about to make
-  `HEAD^1` — i.e. current `HEAD`, since the removal commit you're about to push
-  will be its child. Do this **before** creating the removal commit, not after
-  (you already know what that SHA will be).
-- Any commit you push **after** the removal commit invalidates this again
-  (its own `HEAD^1` shifts) — so the removal commit should generally be your
-  last push for this evidence pass. If you must push again later, re-stamp the
-  comment's revision field to the new tip (edit the same comment via
-  `gh api -X PATCH`, or post a fresh one) before pushing.
+Record the exact commit that was reviewed in the report. The evidence gate can
+carry that report across commits confined to the temporary evidence directories,
+independently reproduced clean main merges, and verified migration-bot updates.
+Material changes and manual conflict resolutions require a fresh review and an
+updated report; changing the revision in a report is not a substitute for review.
 
 ## Why not a gist, why not GitHub's own image upload
 

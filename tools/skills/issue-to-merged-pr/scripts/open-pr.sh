@@ -146,7 +146,6 @@ if [[ "$EVIDENCE_REQUIRED" == "1" ]]; then
     echo "ERROR: issue #$ISSUE requires review evidence; set PR_EVIDENCE_FILE or PR_EVIDENCE_URL." >&2
     exit 1
   fi
-  REVIEWED_SHA=$(python3 tools/review_evidence_revision.py "$(git rev-parse HEAD)")
   if [[ -n "$EVIDENCE_URL" ]]; then
     if [[ "$EVIDENCE_URL" != https://github.com/*/issues/*#issuecomment-* && "$EVIDENCE_URL" != https://github.com/*/pull/*#issuecomment-* ]]; then
       echo "ERROR: PR_EVIDENCE_URL must be a GitHub issue or PR comment URL." >&2
@@ -157,10 +156,12 @@ if [[ "$EVIDENCE_REQUIRED" == "1" ]]; then
     trap 'rm -f "$EVIDENCE_TMP"' EXIT
     REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
     gh api "repos/$REPO/issues/comments/$COMMENT_ID" --jq .body > "$EVIDENCE_TMP"
-    uv run python tools/validate_review_evidence.py "$EVIDENCE_TMP" --revision "$REVIEWED_SHA"
+    uv run python tools/validate_review_evidence.py "$EVIDENCE_TMP"
+    uv run python tools/review_evidence_revision.py "$(git rev-parse HEAD)" --report "$EVIDENCE_TMP"
     EVIDENCE_REFERENCE="$EVIDENCE_URL"
   else
-    uv run python tools/validate_review_evidence.py "$EVIDENCE_FILE" --revision "$REVIEWED_SHA"
+    uv run python tools/validate_review_evidence.py "$EVIDENCE_FILE"
+    uv run python tools/review_evidence_revision.py "$(git rev-parse HEAD)" --report "$EVIDENCE_FILE"
     EVIDENCE_REFERENCE="$EVIDENCE_FILE"
   fi
 else
