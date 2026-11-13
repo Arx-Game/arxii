@@ -20,6 +20,7 @@ from world.character_creation.constants import (
     CRIME_KIND_ID,
     CRIME_LINE,
     CRIME_LINE_MAX_LENGTH,
+    FAMILY_PATRON_BEING_ID,
     FIGURE_NAME_MAX_LENGTH,
     GIFT_FACETS_KEY,
     OFFICIALLY_DEAD_KEY,
@@ -1171,7 +1172,9 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
         at call time, not at class-definition time, so the forward reference
         never raises ``NameError`` on import.
         """
-        return FamilyTemplateSerializer(obj.family_templates.all(), many=True).data
+        return FamilyTemplateSerializer(
+            obj.family_templates.all(), many=True, context=self.context
+        ).data
 
     @extend_schema_field(serializers.ListField(child=serializers.IntegerField()))
     def get_claimable_kind_ids(self, obj: OriginTemplate) -> list[int]:
@@ -2113,6 +2116,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         self._validate_origin_figures(value)
         self._validate_new_family_name(value)
         self._validate_family_facet_picks(value)
+        self._validate_family_patron_being_id(value)
         self._validate_technique_personalizations(value)
         self._validate_gift_facets(value)
 
@@ -2600,6 +2604,16 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             except (TypeError, ValueError) as exc:
                 raise serializers.ValidationError({"family_facet_picks": msg}) from exc
 
+    def _validate_family_patron_being_id(self, data: dict) -> None:
+        """``family_patron_being_id`` is a god's id or null (#5110): the answer to the
+        Family Template's patron question. Whether that god is one of the choices is
+        ``validators.py``'s to say, as it is for the other family picks."""
+        if FAMILY_PATRON_BEING_ID not in data or data[FAMILY_PATRON_BEING_ID] is None:
+            return
+        value = data[FAMILY_PATRON_BEING_ID]
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise serializers.ValidationError({FAMILY_PATRON_BEING_ID: "Choose a patron."})
+
     def _validate_tarot_card_name(self, data: dict) -> None:
         """Validate that tarot_card_name refers to an existing TarotCard."""
         tarot_card_name = data.get("tarot_card_name")
@@ -2896,10 +2910,24 @@ class HouseCharterQuestionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = HouseCharterQuestion
-        fields = ["id", "name", "prompt", "min_picks", "max_picks", "options"]
+        fields = ["id", "name", "prompt", "min_picks", "max_picks", "sets_patron", "options"]
 
     @extend_schema_field(HouseCharterOptionSerializer(many=True))
     def get_options(self, obj):
+        # The patron question offers gods, not authored options (#5110): the same
+        # card shape, with ``id`` the god's, sent back as ``patron_being_id``.
+        if obj.sets_patron:
+            from world.societies.houses.creator import (  # noqa: PLC0415
+                PATRON_ROWS_BY_TRADITION,
+                patron_choice_rows,
+            )
+
+            # A list response resolves every patron question's gods once and hands
+            # them down in context; a lone serializer with no such context asks.
+            by_tradition = self.context.get(PATRON_ROWS_BY_TRADITION)
+            if by_tradition is not None:
+                return by_tradition.get(obj.patron_tradition_id, [])
+            return patron_choice_rows(obj)
         active = [option for option in obj.options.all() if option.is_active]
         return HouseCharterOptionSerializer(active, many=True).data
 
@@ -3138,6 +3166,9 @@ class HouseClaimSubmitSerializer(serializers.Serializer):
     colors = serializers.CharField(required=False, allow_blank=True, default="")
     sigil_description = serializers.CharField(required=False, allow_blank=True, default="")
     facets = ClaimAspectPickSerializer(many=True, required=False, default=list)
+    # The god picked on the template's patron question (#5110); whether it is one of
+    # the choices is ``submit_house_claim``'s gate, like the other thematic checks.
+    patron_being_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     mercy = serializers.IntegerField(required=False, default=0)
     method = serializers.IntegerField(required=False, default=0)
     status = serializers.IntegerField(required=False, default=0)
@@ -3209,6 +3240,7 @@ class HouseClaimSubmitSerializer(serializers.Serializer):
             "colors": data.get("colors", ""),
             "sigil_description": data.get("sigil_description", ""),
             "facet_picks": facet_picks,
+            "patron_being_id": data.get("patron_being_id"),
             "kin": data.get("kin", []),
             "lands": data.get("lands", []),
             "estate_name": estate.get("name", ""),
@@ -3234,7 +3266,9 @@ class ClaimableTitleSerializer(serializers.ModelSerializer):
     def get_templates(self, obj):
         from world.societies.houses.creator import templates_for_title  # noqa: PLC0415
 
-        return HouseTemplateOptionSerializer(templates_for_title(obj), many=True).data
+        return HouseTemplateOptionSerializer(
+            templates_for_title(obj), many=True, context=self.context
+        ).data
 
 
 class HouseClaimKinSerializer(serializers.ModelSerializer):
@@ -3290,6 +3324,8 @@ class HouseClaimStatusSerializer(serializers.ModelSerializer):
     lands = HouseClaimLandSerializer(many=True, read_only=True)
     observances = HouseClaimObservanceSerializer(many=True, read_only=True)
     estate_district_id = serializers.IntegerField(read_only=True, allow_null=True)
+    patron_being_id = serializers.IntegerField(read_only=True, allow_null=True)
+    patron_name = serializers.CharField(source="patron_being.name", read_only=True, default="")
 
     class Meta:
         model = HouseClaim
@@ -3311,6 +3347,8 @@ class HouseClaimStatusSerializer(serializers.ModelSerializer):
             "estate_district_id",
             "founder_relation",
             "founder_is_heir",
+            "patron_being_id",
+            "patron_name",
         ]
 
     @extend_schema_field(serializers.ListField(child=serializers.DictField()))

@@ -64,18 +64,22 @@ stable slug code can check) stamped as `OrganizationFeature`. Both can be set di
 on staff-authored houses. Do not: add a boolean per fact.
 
 An answer that IS a real thing (#4205): bind the option to it. A god or a totem is the
-option's `being` plus `being_nickname` (one of that being's own names, the name a house on
-this option will use); a battle or a tradition is its `codex_entry`. One or the other,
-never both. The pick then opens that page from the house, the family and the CG card.
+option's `being`; a battle or a tradition is its `codex_entry`. One or the other, never
+both. The pick then opens that page from the house, the family and the CG card.
 
 ## Recipe 7b: a patron question (Umbros's patron god, Aythirmok's totem)
-One `HouseCharterQuestion` on the charter with `sets_patron` on, `max_picks` 1, and one
-option per god the realm's houses may serve, each with `being` and `being_nickname`. The
-founder's pick becomes `Organization.patron_nickname` at founding and the god's Codex
-page lists the house among its sworn houses once published. Optional patron: `min_picks`
-0. Only one such question per charter. Beings and nicknames are installation rows, so a
-catalog loaded on another installation needs its options re-bound (and the flag re-set)
-in admin: `sets_patron`, `being` and `being_nickname` do not travel in the export.
+One `HouseCharterQuestion` on the charter with `sets_patron` on, `max_picks` 1, and
+`patron_tradition` set to the realm's kind of worship (Church Liturgy for Umbros; the
+shamanic tradition for Aythirmok's totems). Author no options: the choices are every
+active god of that tradition whose Codex page is public (#5110), so a new god of that
+worship is offered as soon as its page is public, and a secret god or one of another
+worship never is. The pick becomes `Organization.patron` at founding, shown by the
+god's own name, and the god's Codex page lists the house among its sworn houses once
+published. Optional patron: `min_picks` 0. Only one such question per charter, and one
+question per realm: a question shared by two realms' templates would give both the same
+worship. Worship traditions are installation rows, so a catalog loaded on another
+installation needs the flag and the tradition re-set in admin: `sets_patron` and
+`patron_tradition` do not travel in the export.
 
 ## Recipe 8: servants of a powerful family
 Superseded by Recipes 11 and 12 (#3648): a claim-path role priced by influence is now a

@@ -169,6 +169,10 @@ function NamedFamilyPath({
   const offered = template.family_templates;
   const familyTemplate = resolveFamilyTemplate(draft);
   const picks = draft.draft_data.family_facet_picks ?? {};
+  // The patron question is answered with a god (#5110): its pick is its own key in
+  // the draft, never one of the option picks.
+  const patronQuestion = familyTemplate?.charter_questions.find((q) => q.sets_patron);
+  const patronPick = draft.draft_data.family_patron_being_id ?? null;
 
   useEffect(() => {
     setName(draft.draft_data.new_family_name ?? '');
@@ -183,6 +187,13 @@ function NamedFamilyPath({
   };
 
   const toggleAspect = (definitionId: number, optionId: number, maxPicks: number) => {
+    if (definitionId === patronQuestion?.id) {
+      updateDraft.mutate({
+        draftId: draft.id,
+        data: { draft_data: { family_patron_being_id: patronPick === optionId ? null : optionId } },
+      });
+      return;
+    }
     const current = picks[String(definitionId)] ?? [];
     let next: number[];
     if (current.includes(optionId)) next = current.filter((id) => id !== optionId);
@@ -256,7 +267,12 @@ function NamedFamilyPath({
       {familyTemplate && (
         <FamilyTemplateForm
           template={familyTemplate}
-          picks={Object.fromEntries(Object.entries(picks).map(([k, v]) => [Number(k), v]))}
+          picks={{
+            ...Object.fromEntries(Object.entries(picks).map(([k, v]) => [Number(k), v])),
+            ...(patronQuestion
+              ? { [patronQuestion.id]: patronPick != null ? [patronPick] : [] }
+              : {}),
+          }}
           onToggle={toggleAspect}
         />
       )}

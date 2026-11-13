@@ -34,7 +34,7 @@ from world.societies.models import (
     refresh_legend_views,
 )
 from world.societies.types import ReputationTier
-from world.worship.factories import BeingNicknameFactory, WorshippedBeingFactory
+from world.worship.factories import WorshippedBeingFactory
 
 
 class SocietyModelTests(TestCase):
@@ -164,14 +164,14 @@ class OrganizationTraditionTests(TestCase):
         assert "society" not in {f.name for f in Tradition._meta.get_fields()}
 
 
-class OrganizationPatronNicknameTests(TestCase):
-    """Test Organization.patron_nickname (#3776) — reaches the being transitively."""
+class OrganizationPatronTests(TestCase):
+    """``Organization.patron`` (#5110): the god itself, by its own name."""
 
-    def test_patron_nickname_reaches_being_transitively(self) -> None:
-        being = WorshippedBeingFactory()
-        nickname = BeingNicknameFactory(being=being, name="Old Resting Murder Face")
-        org = OrganizationFactory(patron_nickname=nickname)
-        self.assertEqual(org.patron_nickname.being, being)
+    def test_patron_is_the_god_and_the_god_lists_its_houses(self) -> None:
+        being = WorshippedBeingFactory(name="Veil")
+        org = OrganizationFactory(patron=being)
+        self.assertEqual(org.patron.name, "Veil")
+        self.assertEqual(list(being.sworn_organizations.all()), [org])
 
 
 class OrganizationPrincipleInheritanceTests(TestCase):

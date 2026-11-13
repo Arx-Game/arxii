@@ -104,6 +104,33 @@ class OrganizationApiTests(TestCase):
             f"House payload query count scaled with org count: {one_org} -> {five_orgs}",
         )
 
+    def test_a_member_is_not_told_a_patron_whose_page_is_no_longer_public(self) -> None:
+        """#5110: a house's patron is named to a member while the god's Codex page is
+        public. Once the page stops being public the member's read drops the patron
+        and staff's read keeps it; the house itself still has it."""
+        from world.codex.factories import CodexEntryFactory
+        from world.roster.factories import FamilyFactory
+        from world.worship.factories import WorshippedBeingFactory
+
+        entry = CodexEntryFactory(name="Veil", is_public=True)
+        veil = WorshippedBeingFactory(name="Veil", codex_entry=entry)
+        house = OrganizationFactory(name="House Shroud", family=FamilyFactory(), patron=veil)
+        OrganizationMembershipFactory(organization=house, persona=self.persona)
+        url = reverse("societies:organization-detail", args=[house.pk])
+        staff_client = APIClient()
+        staff_client.force_authenticate(user=AccountFactory(is_staff=True))
+        named = {"being_id": veil.pk, "being_name": "Veil", "codex_entry_id": entry.pk}
+
+        self.assertEqual(self.client.get(url).data["house"]["patron"], named)
+
+        entry.is_public = False
+        entry.save(update_fields=["is_public"])
+
+        self.assertIsNone(self.client.get(url).data["house"]["patron"])
+        self.assertEqual(staff_client.get(url).data["house"]["patron"], named)
+        house.refresh_from_db()
+        self.assertEqual(house.patron_id, veil.pk)
+
     def test_house_payload_carries_the_days_of_remembrance(self) -> None:
         """#4206: the house block lists the org's observances in calendar order,
         each spelled with the game's one IC date formatter."""

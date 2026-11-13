@@ -139,7 +139,7 @@ class BeingCompanionTests(TestCase):
         )
 
     def test_sworn_houses_list_the_published_houses_whose_patron_this_is(self):
-        """#4205: a published house whose patron_nickname names this god is on the rail,
+        """#4205, #5110: a published house whose patron is this god is on the rail,
         linked to its page by site path; an unpublished one, or one sworn to another
         god, is not; and the group is absent when there is nobody."""
         from world.societies.factories import OrganizationFactory
@@ -148,11 +148,9 @@ class BeingCompanionTests(TestCase):
         before = self._retrieve(self.entry)
         self.assertNotIn("Sworn houses", [g["label"] for g in before["rail"]])
 
-        gory = self.being.nicknames.get(name="The Gory Goddess")
-        piropa = publish_house(OrganizationFactory(name="House Piropa", patron_nickname=gory))
-        OrganizationFactory(name="House Unpublished", patron_nickname=gory)
-        other_name = BeingNicknameFactory(being=self.calyx, name="The Knight")
-        publish_house(OrganizationFactory(name="House Elsewhere", patron_nickname=other_name))
+        piropa = publish_house(OrganizationFactory(name="House Piropa", patron=self.being))
+        OrganizationFactory(name="House Unpublished", patron=self.being)
+        publish_house(OrganizationFactory(name="House Elsewhere", patron=self.calyx))
 
         companion = self._retrieve(self.entry)
         sworn = next(g for g in companion["rail"] if g["label"] == "Sworn houses")

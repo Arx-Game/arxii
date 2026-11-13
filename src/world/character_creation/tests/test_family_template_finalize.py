@@ -86,25 +86,29 @@ class NamedFamilyMaterializeTest(FinalizationTestMixin, TestCase):
         assert org.ranks.count() == 5
 
     def test_name_path_writes_the_patron_the_charter_question_names(self) -> None:
-        """#4205: the name path founds through the same builder, so a pick on the
-        charter's patron question sets the family org's patron too."""
-        from world.worship.factories import BeingNicknameFactory, WorshippedBeingFactory
+        """#4205: the name path founds through the same builder, so the god picked on
+        the charter's patron question is the family org's patron too. #5110: the pick
+        is a god of the question's worship, carried in ``family_patron_being_id``."""
+        from world.codex.factories import CodexEntryFactory
+        from world.worship.factories import WorshippedBeingFactory, WorshipTraditionFactory
 
-        calyx = WorshippedBeingFactory(name="Calyx")
-        knight = BeingNicknameFactory(being=calyx, name="The One True Knight")
-        patron = HouseCharterQuestion.objects.create(
-            name="Patron", prompt="Whom does the family serve?", sets_patron=True
+        liturgy = WorshipTraditionFactory(name="Church Liturgy")
+        calyx = WorshippedBeingFactory(
+            name="Calyx",
+            tradition=liturgy,
+            codex_entry=CodexEntryFactory(name="Calyx", is_public=True),
         )
-        calyx_option = HouseCharterOption.objects.create(
-            definition=patron, name="Calyx", being=calyx, being_nickname=knight
+        patron = HouseCharterQuestion.objects.create(
+            name="Patron",
+            prompt="Whom does the family serve?",
+            sets_patron=True,
+            patron_tradition=liturgy,
         )
         self.template.charter_questions.add(patron)
         draft = self._create_base_draft(
             new_family_name="Cisternwrights",
-            family_facet_picks={
-                str(self.charge.id): [self.granaries.id],
-                str(patron.id): [calyx_option.id],
-            },
+            family_facet_picks={str(self.charge.id): [self.granaries.id]},
+            family_patron_being_id=calyx.pk,
         )
         draft.selected_origin_template = self.upbringing
         draft.served_house = self.served
@@ -114,7 +118,7 @@ class NamedFamilyMaterializeTest(FinalizationTestMixin, TestCase):
         finalize_character(draft, add_to_roster=True)
         org = house_for_family(Family.objects.get(name="Cisternwrights"))
         assert org is not None
-        assert org.patron_nickname == knight
+        assert org.patron == calyx
 
     def test_second_finalize_on_the_same_family_id_is_idempotent(self) -> None:
         draft = self._named_draft()

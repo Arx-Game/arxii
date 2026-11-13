@@ -357,6 +357,9 @@ class ParentFate(models.TextChoices):
 LINE_PARENT_FATE_KEY = "line_parent_fate"
 OTHER_PARENT_FATE_KEY = "other_parent_fate"
 
+#: ``draft_data`` key for the god picked on a Family Template's patron question (#5110).
+FAMILY_PATRON_BEING_ID = "family_patron_being_id"
+
 
 class LifeStage(models.TextChoices):
     """When the tie was formed, and which stage of a life a beat belongs to (#3660, #4124).

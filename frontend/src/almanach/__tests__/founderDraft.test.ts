@@ -4,7 +4,7 @@ import { vi } from 'vitest';
 import type { HouseTemplateOption } from '@/character-creation/api';
 import { toClaimPayload, useFounderDraft, type FounderDraft } from '../founder/founderDraft';
 
-const template = { id: 3 } as HouseTemplateOption;
+const template = { id: 3, charter_questions: [] } as unknown as HouseTemplateOption;
 
 function baseDraft(): FounderDraft {
   return {
@@ -71,6 +71,7 @@ test('toClaimPayload maps kin, lands, and the estate to the nested claim shape e
     colors: 'oxblood and slate',
     sigil_description: 'A coiled serpent in gold.',
     facets: [{ definition: 1, options: [5] }],
+    patron_being_id: null,
     mercy: 1,
     method: -2,
     status: 0,
@@ -166,4 +167,30 @@ describe('useFounderDraft composes writes made in one handler', () => {
     expect(stored.realm_id).toBe(3);
     expect(stored.template_id).toBe(950);
   });
+});
+
+test('a pick on the patron question goes up as the god it is, never among the options (#5110)', () => {
+  const patronQuestion = {
+    id: 2,
+    name: 'Umbral Patron Deity',
+    prompt: 'Whom does the house stand behind?',
+    min_picks: 1,
+    max_picks: 1,
+    sets_patron: true,
+    options: [],
+  };
+  const umbral = {
+    ...template,
+    charter_questions: [...template.charter_questions, patronQuestion],
+  };
+  const draft = { ...baseDraft(), facet_picks: { 1: [5], 2: [31] } };
+
+  const payload = toClaimPayload(draft, umbral);
+
+  expect(payload.facets).toEqual([{ definition: 1, options: [5] }]);
+  expect(payload.patron_being_id).toBe(31);
+  // the question left unanswered sends no god
+  expect(
+    toClaimPayload({ ...baseDraft(), facet_picks: { 1: [5] } }, umbral).patron_being_id
+  ).toBeNull();
 });

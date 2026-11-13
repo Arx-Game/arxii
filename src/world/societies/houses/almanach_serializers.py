@@ -133,7 +133,8 @@ class AlmanachHouseFacetSerializer(serializers.Serializer):
 
 class AlmanachCharterOptionSerializer(serializers.Serializer):
     """One answer a staff house may pick (#5064; mirrors
-    ``almanach_reads.charter_questions_for_house``)."""
+    ``almanach_reads.charter_questions_for_house``). On the patron question the
+    answers are gods and ``id`` is the god's (#5110)."""
 
     id = serializers.IntegerField()
     name = serializers.CharField()
@@ -155,10 +156,10 @@ class AlmanachCharterQuestionSerializer(serializers.Serializer):
 
 
 class AlmanachHousePatronSerializer(serializers.Serializer):
-    """The house's patron by its own name for it (#4205; mirrors
+    """The house's patron, the god by its own name (#4205, #5110; mirrors
     ``almanach_reads.patron_payload``)."""
 
-    nickname = serializers.CharField()
+    being_id = serializers.IntegerField()
     being_name = serializers.CharField()
     codex_entry_id = serializers.IntegerField(allow_null=True)
 

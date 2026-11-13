@@ -34,7 +34,7 @@ const doc: HouseDocumentPayload = {
     published_at: null,
     particle: { born: 'aza', taken_in: 'azas' },
     default_succession_law: { name: 'Infernal Enatic - Durance', codex_entry_id: null },
-    patron: { nickname: 'The One True Knight', being_name: 'Calyx', codex_entry_id: 77 },
+    patron: { being_id: 31, being_name: 'Calyx', codex_entry_id: 77 },
     facets: [
       {
         definition: 'Patron',
@@ -305,17 +305,65 @@ test('a several-pick question is pressed chips capped at its maximum, and a pick
   expect(mutate).toHaveBeenCalledWith({ org_id: 9, facet_option_ids: [11, 21, 22] });
 });
 
-test("the patron reads by the house's own name and a pick that is a god opens its page (#4205)", () => {
+test("the patron reads by the god's own name and opens its page (#4205, #5110)", () => {
   vi.mocked(queries.useHouseDocument).mockReturnValue({
     data: doc,
     isLoading: false,
   } as never);
 
   renderWithProviders(<HouseDocument houseId={9} />);
-  expect(screen.getByText('patron')).toBeInTheDocument();
-  expect(screen.getByText(/The One True Knight/)).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: '(Calyx)' })).toHaveAttribute('href', '/codex?entry=77');
-  expect(screen.getByRole('link', { name: 'Calyx' })).toHaveAttribute('href', '/codex?entry=77');
+  // This house's realm asks no patron question, so the patron has its own line.
+  const patron = screen.getByText('patron').closest('.field') as HTMLElement;
+  expect(within(patron).getByRole('link', { name: 'Calyx' })).toHaveAttribute(
+    'href',
+    '/codex?entry=77'
+  );
+  expect(screen.queryByText(/The One True Knight/)).not.toBeInTheDocument();
+});
+
+test('the patron question is a select of gods, and its pick is saved as the patron (#5110)', async () => {
+  const mutate = vi.fn();
+  vi.mocked(queries.useAlmanachMutation).mockReturnValue({ mutate } as never);
+  const patronQuestion = {
+    id: 3,
+    name: 'Umbral Patron Deity',
+    prompt: 'Whom does the house stand behind?',
+    min_picks: 1,
+    max_picks: 1,
+    sets_patron: true,
+    options: [
+      { id: 31, name: 'Calyx', description: 'Honorable combat', target_entry_id: 77 },
+      { id: 32, name: 'Veil', description: 'Secrets kept', target_entry_id: 78 },
+    ],
+  };
+  vi.mocked(queries.useHouseDocument).mockReturnValue({
+    data: {
+      ...doc,
+      house: { ...doc.house, facets: [], charter_questions: [patronQuestion] },
+    },
+    isLoading: false,
+  } as never);
+  renderWithProviders(<HouseDocument houseId={9} />);
+
+  // The house's patron is what the select starts on; no separate patron line.
+  const select = screen.getByLabelText('Umbral Patron Deity') as HTMLSelectElement;
+  expect(select.value).toBe('31');
+  expect(screen.queryByText('patron')).not.toBeInTheDocument();
+  expect(
+    within(select)
+      .getAllByRole('option')
+      .map((o) => o.textContent)
+  ).toEqual(['pick', 'Calyx', 'Veil']);
+
+  await userEvent.selectOptions(select, '32');
+  await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+  // A god, sent on its own: never among the option ids.
+  expect(mutate).toHaveBeenCalledWith({ org_id: 9, patron_being_id: 32 });
+
+  mutate.mockClear();
+  await userEvent.selectOptions(select, '');
+  await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate).toHaveBeenCalledWith({ org_id: 9, patron_being_id: null });
 });
 
 test('editing a day of remembrance saves the whole list, without the spelled date (#4206)', async () => {

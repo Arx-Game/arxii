@@ -661,6 +661,39 @@ describe('LineageStage', () => {
       });
     });
 
+    it("a pick on the Family Template's patron question PATCHes the god, not an option (#5110)", async () => {
+      const charge = mockFamilyTemplate.charter_questions[0];
+      const patronQuestion = {
+        ...charge,
+        id: 990,
+        name: 'Patron',
+        prompt: 'Whom does the family stand behind?',
+        sets_patron: true,
+        options: [
+          { ...charge.options[0], id: 31, name: 'Calyx', being_id: 31, being_name: 'Calyx' },
+        ],
+      };
+      const withPatron = {
+        ...mockUpbringingNamedWithTemplate,
+        family_templates: [{ ...mockFamilyTemplate, charter_questions: [charge, patronQuestion] }],
+      };
+      const draft = createMockDraft({
+        ...mockDraftWithHeritageNoUpbringing,
+        selected_origin_template: withPatron,
+      });
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient: createTestQueryClient(),
+      });
+
+      expect(await screen.findByText(patronQuestion.prompt)).toBeInTheDocument();
+      vi.mocked(api.updateDraft).mockClear();
+      await userEvent.click(screen.getByRole('button', { name: /Calyx/ }));
+
+      expect(api.updateDraft).toHaveBeenCalledWith(draft.id, {
+        draft_data: { family_patron_being_id: 31 },
+      });
+    });
+
     it('offers a Family Template choice row when the Upbringing offers more than one, and PATCHes on pick', async () => {
       const secondTemplate = { ...mockFamilyTemplate, id: 402, name: 'Alternate Trust' };
       const draft = createMockDraft({

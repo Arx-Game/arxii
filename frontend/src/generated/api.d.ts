@@ -28450,7 +28450,8 @@ export interface components {
     };
     /**
      * @description One answer a staff house may pick (#5064; mirrors
-     *     ``almanach_reads.charter_questions_for_house``).
+     *     ``almanach_reads.charter_questions_for_house``). On the patron question the
+     *     answers are gods and ``id`` is the god's (#5110).
      */
     AlmanachCharterOption: {
       id: number;
@@ -28566,11 +28567,11 @@ export interface components {
       holder_name: string;
     };
     /**
-     * @description The house's patron by its own name for it (#4205; mirrors
+     * @description The house's patron, the god by its own name (#4205, #5110; mirrors
      *     ``almanach_reads.patron_payload``).
      */
     AlmanachHousePatron: {
-      nickname: string;
+      being_id: number;
       being_name: string;
       codex_entry_id: number | null;
     };
@@ -36670,6 +36671,8 @@ export interface components {
       prompt: string;
       min_picks?: number;
       max_picks?: number;
+      /** @description The pick on this question is the house's patron (Organization.patron), fixed at founding (#4205). Its choices are the gods of patron_tradition (#5110), not options; at most one such question per template. */
+      sets_patron?: boolean;
       readonly options: components['schemas']['HouseCharterOption'][];
     };
     /** @description One founder-written kin row, as CG echoes it back (#3983 Plan B). */
@@ -36738,6 +36741,9 @@ export interface components {
        */
       founder_relation?: components['schemas']['FounderRelationEnum'];
       founder_is_heir?: boolean;
+      readonly patron_being_id: number | null;
+      /** @default  */
+      readonly patron_name: string;
     };
     /**
      * @description * `pending` - Pending Review
@@ -36764,6 +36770,7 @@ export interface components {
       /** @default  */
       sigil_description: string;
       facets?: components['schemas']['ClaimAspectPickRequest'][];
+      patron_being_id?: number | null;
       /** @default 0 */
       mercy: number;
       /** @default 0 */
@@ -36912,11 +36919,11 @@ export interface components {
       when: string;
     };
     /**
-     * @description The house's patron by its own name for it (#4205; mirrors
+     * @description The house's patron, the god by its own name (#4205, #5110; mirrors
      *     ``almanach_reads.patron_payload``).
      */
     HousePatron: {
-      nickname: string;
+      being_id: number;
       being_name: string;
       codex_entry_id: number | null;
     };

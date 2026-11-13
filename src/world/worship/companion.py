@@ -92,14 +92,14 @@ def being_companion(entry: CodexEntry, reader: CompanionReader) -> Companion | N
 def _sworn_houses(being: WorshippedBeing, rail: list[CompanionGroup]) -> None:
     """The published houses whose patron is this god (#4205), each a link to its page.
 
-    Read through ``Organization.patron_nickname`` (#3776), the one column the
-    founding write sets; a house not yet published is not on the roster, so it is
-    not here either.
+    Read through ``Organization.patron`` (#5110), the one column the founding
+    write sets; a house not yet published is not on the roster, so it is not here
+    either.
     """
     from world.societies.models import Organization  # noqa: PLC0415
 
     houses = (
-        Organization.objects.filter(patron_nickname__being=being, published_at__isnull=False)
+        Organization.objects.filter(patron=being, published_at__isnull=False)
         .order_by("name")
         .values_list("pk", "name")
     )
