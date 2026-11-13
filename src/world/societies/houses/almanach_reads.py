@@ -97,7 +97,7 @@ from world.areas.models import Area
 from world.game_clock.services import format_ic_month_day
 from world.locations.models import LocationOwnership
 from world.roster.constants import NOBLE_KIND_NAME
-from world.roster.models import Kinsperson
+from world.roster.models import FamilyMembership, Kinsperson
 from world.roster.services.kinship import OMNISCIENT, family_tree_for
 from world.societies.houses.almanach import (
     HOUSEHOLD_RANK_TITLE,
@@ -760,9 +760,20 @@ def observance_rows(house: Organization) -> list[dict]:
     ]
 
 
-def _family_payload(house: Organization, viewer: object, *, staff: bool) -> dict:
+def _family_payload(
+    house: Organization, viewer: object, *, staff: bool, titles: Sequence[Title] = ()
+) -> dict:
+    """The house's family tree, with the two stored facts the page labels it by.
+
+    ``head_id`` is whoever holds the house's top title today, or None when it
+    holds none or the title is vacant. Each node's ``basis`` is how that person
+    is of this family (their active membership's basis; "" for a relative who
+    is on the tree without being of the name). The tree seats a couple by
+    ``basis`` and names the head by ``head_id``; before #5114 it did both from
+    the order the people were entered in.
+    """
     if house.family_id is None:
-        return {"family_id": None, "nodes": [], "parentage": [], "unions": []}
+        return {"family_id": None, "head_id": None, "nodes": [], "parentage": [], "unions": []}
     payload = family_tree_for(house.family, OMNISCIENT if staff else viewer)
     # The staff cut's nodes already carry ``believed_deceased`` (the node
     # dict is viewer-aware since #3983's leak fix); this one query keeps the
@@ -772,11 +783,27 @@ def _family_payload(house: Organization, viewer: object, *, staff: bool) -> dict
     believed = dict(
         Kinsperson.objects.filter(pk__in=node_ids).values_list("pk", "believed_deceased")
     )
+    # Oldest first, so a person with two active rows in the family (a wrong
+    # row not yet removed) reads by the newer one.
+    basis = dict(
+        FamilyMembership.objects.filter(
+            family_id=house.family_id, ended_at__isnull=True, kinsperson_id__in=node_ids
+        )
+        .order_by("started_at", "pk")
+        .values_list("kinsperson_id", "basis")
+    )
     nodes = [
-        {**node, "believed_deceased": believed.get(node["id"], False)} for node in payload.nodes
+        {
+            **node,
+            "believed_deceased": believed.get(node["id"], False),
+            "basis": basis.get(node["id"], ""),
+        }
+        for node in payload.nodes
     ]
+    head_id = _family_top(list(titles)).holder_id if titles else None
     return {
         "family_id": house.family_id,
+        "head_id": head_id if head_id in believed else None,
         "nodes": nodes,
         "parentage": payload.parentage,
         "unions": payload.unions,
@@ -974,7 +1001,7 @@ def document_for_house(house: Organization, *, viewer: object, staff: bool) -> H
         all_rows, _unclaimed = _build_rows(titles[0].realm_id)
     return HouseDocument(
         house=_house_payload(house),
-        family=_family_payload(house, viewer, staff=staff),
+        family=_family_payload(house, viewer, staff=staff, titles=titles),
         household=_household_payload(house),
         realm=_realm_payload(house, titles, all_rows),
         lands=_lands_payload(house, titles),

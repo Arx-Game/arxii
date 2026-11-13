@@ -328,6 +328,42 @@ class DocumentReadTests(TestCase):
         assert node["is_deceased"] is False
         assert node["believed_deceased"] is True
 
+    def test_the_family_names_its_head_by_the_title_and_each_member_by_basis(self) -> None:
+        """#5114: the page read "head of house" and "consort" off the order the
+        people were entered in. The widower who holds the throne was entered
+        first here, and the document still says who was born to the name."""
+        realm = RealmFactory(name="Umbros")
+        family = FamilyFactory(name="House Katta")
+        crown = OrganizationFactory(name="Katta", family=family)
+        empire = plant_rung(realm=realm, tier=TitleTier.KINGDOM, name="Umbros", held_by=crown)
+        widower = KinspersonFactory(name="Galleron")
+        add_membership(kinsperson=widower, family=family, basis=MembershipBasis.MARRIED_IN)
+        empress = KinspersonFactory(name="Alarysa", is_deceased=True)
+        add_membership(kinsperson=empress, family=family, basis=MembershipBasis.BORN)
+        empire.holder = widower
+        empire.save(update_fields=["holder"])
+
+        doc = document_for_house(crown, viewer=None, staff=True)
+
+        assert doc.family["head_id"] == widower.pk
+        basis = {node["name"]: node["basis"] for node in doc.family["nodes"]}
+        assert basis == {
+            "Galleron": MembershipBasis.MARRIED_IN,
+            "Alarysa": MembershipBasis.BORN,
+        }
+
+    def test_a_house_with_a_vacant_title_has_no_head(self) -> None:
+        realm = RealmFactory(name="Umbros")
+        family = FamilyFactory(name="House Katta")
+        crown = OrganizationFactory(name="Katta", family=family)
+        plant_rung(realm=realm, tier=TitleTier.KINGDOM, name="Umbros", held_by=crown)
+        member = KinspersonFactory(name="Alyssa")
+        add_membership(kinsperson=member, family=family, basis=MembershipBasis.BORN)
+
+        doc = document_for_house(crown, viewer=None, staff=True)
+
+        assert doc.family["head_id"] is None
+
     def test_realm_demesne_and_vassals_reach_beyond_the_top_chain(self) -> None:
         realm = RealmFactory(name="Inferna")
         crown = OrganizationFactory(name="Piropa")

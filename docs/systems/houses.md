@@ -818,7 +818,12 @@ kingdom | potential
   standing a Luxen house may take), `lands` (held baronies + what they produce), `estate` (owned
   buildings sitting under a city). `staff=True` reads the family with the omniscient viewer, so a
   believed death shows as a living person the world thinks is dead; every other viewer reads the
-  belief as the truth (see `docs/systems/kinship.md`).
+  belief as the truth (see `docs/systems/kinship.md`). `family` also carries the two stored facts
+  the tree is labelled by (#5114): `head_id`, whoever holds the house's top title today (null when
+  it holds none or the title is vacant), and each node's `basis`, their active membership's basis
+  in this family ("" for a relative who is not of the name). The page seats a couple by `basis`
+  (the one born to the name on top, the one who married in beside them as consort) and prints
+  "head of house" on `head_id`. It never reads either from the order people were entered in.
 
 Both reads share one in-memory pass over the realm's `Title`/`Area` graph (`_realm_graph`,
 `_build_rows`) rather than per-row queries — the area-closure materialized view is Postgres-only
