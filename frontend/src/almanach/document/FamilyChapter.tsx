@@ -24,10 +24,11 @@
  * something when `believed_deceased` is true OR any `parentage` edge
  * touching it (as parent or child) is `is_true: false` or `via_secret:
  * true`; a household row (no parentage edges of its own) checks only
- * `believed_deceased`. Relation words ("head of house"/"child"/
- * "grandchild") are similarly structural, not the plate's titled ranks
- * ("Grand Princess"/"heir presumptive") — no title/rank field exists on the
- * wire either.
+ * `believed_deceased`. Relation words ("child"/"grandchild") are similarly
+ * structural, not the plate's titled ranks ("Grand Princess"/"heir
+ * presumptive"). "head of house" is the one stored word: it goes on whoever
+ * holds the house's title (`family.head_id`), and a couple is seated by who
+ * was born to the name (`node.basis`), never by entry order (#5114).
  *
  * The plate's own `.panel` markup draws no Save button of its own (the
  * chapter-level savebar sits outside the tree instead) — `PersonPanel`
@@ -162,8 +163,13 @@ function householdStatusText(row: AlmanachHouseholdMember): string {
   return mark ? `${mark} household` : 'household';
 }
 
+const HEAD_OF_HOUSE = 'head of house';
+
+/** Where a row sits in the tree. The top row gets no word for being on top:
+ * the head of house is whoever holds the title (`family.head_id`), wherever
+ * they sit (#5114). */
 function relationLabel(depth: number): string {
-  if (depth === 0) return 'head of house';
+  if (depth === 0) return '';
   if (depth === 1) return 'child';
   if (depth === 2) return 'grandchild';
   return 'descendant';
@@ -195,7 +201,8 @@ interface TreeIndex {
  * having no incoming edge is a superset that includes it. A union whose
  * members ALL lack an incoming edge (e.g. a founder who IS the head, with
  * no recorded parents of her own, plus her equally parent-less spouse) has
- * nobody naturally "in line" to anchor on — the first member encountered
+ * nobody naturally "in line" to anchor on — the member born to the name
+ * (`anchorRank`, #5114), or failing that the first member encountered
  * (`family.nodes` order) becomes the root and the rest nest beside them,
  * rather than dropping the union as the old code did (leaving nobody
  * placed at all).
@@ -207,6 +214,12 @@ interface TreeIndex {
  * the child would still render once under each parent's own subtree
  * without a shared `renderedIds` guard across the whole tree walk.
  */
+const BORN_BASES = new Set(['born', 'founding']);
+
+function anchorRank(node: AlmanachFamilyNode): number {
+  return BORN_BASES.has(node.basis ?? '') ? 0 : 1;
+}
+
 function buildTreeIndex(family: AlmanachFamily): TreeIndex {
   const nodeById = new Map(family.nodes.map((n) => [n.id, n]));
   const childIds = new Set(family.parentage.map((e) => e.child_id));
@@ -241,7 +254,12 @@ function buildTreeIndex(family: AlmanachFamily): TreeIndex {
   // this same pass, and `claimed` alone would miss a partner who has an
   // incoming edge and so never entered this loop's `roots`/outsider logic
   // at all.
-  for (const node of family.nodes) {
+  // Of a couple with no parents on record, the one born to the name anchors
+  // the tree and the one who married in sits beside them (#5114). Before, it
+  // was whoever had been entered first. The sort is stable, so people the
+  // payload says nothing about (a founder's draft) keep their order.
+  const bornFirst = [...family.nodes].sort((a, b) => anchorRank(a) - anchorRank(b));
+  for (const node of bornFirst) {
     if (childIds.has(node.id) || claimed.has(node.id)) continue;
     const claimedPartnerId = (partnersOf.get(node.id) ?? []).find(
       (id) => childIds.has(id) || claimed.has(id)
@@ -329,7 +347,11 @@ export function FamilyChapter({
   ): ReactNode => {
     if (renderedIds.has(node.id)) return null;
     renderedIds.add(node.id);
-    const relation = relationOverrides?.[node.id] ?? relationOverride ?? relationLabel(depth);
+    const placed = relationOverrides?.[node.id] ?? relationOverride ?? relationLabel(depth);
+    const relation =
+      node.id === family.head_id
+        ? [placed, HEAD_OF_HOUSE].filter((word) => word !== '').join(' · ')
+        : placed;
     const selected = selectedId === node.id;
     // A consort rendered beside their partner never carries the union's
     // children: those hang under the partner who is in the line, so a

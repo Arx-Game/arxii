@@ -70,6 +70,10 @@ export interface AlmanachFamilyNode {
   age: number | null;
   description: string;
   believed_deceased: boolean;
+  /** How this person is of the family (#5114): their membership's basis
+   * ("born", "founding", "married_in", ...), "" for a relative on the tree who
+   * is not of the name. Absent on a founder's draft. */
+  basis?: string;
   /** The record's own facts (#4239): missing, and what it says of a death. */
   is_missing?: boolean;
   obituary?: string;
@@ -81,6 +85,9 @@ export interface AlmanachFamily {
   /** The Family pk (#4239), what Create Kin needs; null for a house with no family row.
    * Optional so the founder's draft shape, which has no row yet, still fits. */
   family_id?: number | null;
+  /** Who holds the house's top title today (#5114): the head of house. Null or
+   * absent when the house holds none, the title is vacant, or this is a draft. */
+  head_id?: number | null;
   nodes: AlmanachFamilyNode[];
   parentage: components['schemas']['ParentageEdge'][];
   unions: components['schemas']['UnionEdge'][];

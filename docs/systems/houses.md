@@ -190,7 +190,8 @@ the `derived_name` category so every degree form matches in telnet — called
 explicitly from `add_membership`/`end_membership` primary writes and CG
 finalize, never signals), `recognize_birth` (realm rules over
 public-record edges; mother's-option returns None — `acknowledge_into_family`
-is the explicit seam), `derive_succession_candidates` (omniscient public
+is the explicit seam for a house recognizing someone after the fact; no staff
+control calls it since #5114), `derive_succession_candidates` (omniscient public
 record; tanistry returns the unordered eligible pool; empty list = succession
 crisis, deliberately unresolved), `pass_title`, `swear_fealty` (cycle-refusing) and `release_fealty` (the one seam that removes an edge, taking its tithe with it; the admin's fealty page uses it, #4064)
 / `vassals_of` / `liege_chain_of`, `sign_marriage_pact` (executes DOWRY
@@ -817,7 +818,12 @@ kingdom | potential
   standing a Luxen house may take), `lands` (held baronies + what they produce), `estate` (owned
   buildings sitting under a city). `staff=True` reads the family with the omniscient viewer, so a
   believed death shows as a living person the world thinks is dead; every other viewer reads the
-  belief as the truth (see `docs/systems/kinship.md`).
+  belief as the truth (see `docs/systems/kinship.md`). `family` also carries the two stored facts
+  the tree is labelled by (#5114): `head_id`, whoever holds the house's top title today (null when
+  it holds none or the title is vacant), and each node's `basis`, their active membership's basis
+  in this family ("" for a relative who is not of the name). The page seats a couple by `basis`
+  (the one born to the name on top, the one who married in beside them as consort) and prints
+  "head of house" on `head_id`. It never reads either from the order people were entered in.
 
 Both reads share one in-memory pass over the realm's `Title`/`Area` graph (`_realm_graph`,
 `_build_rows`) rather than per-row queries — the area-closure materialized view is Postgres-only
@@ -957,9 +963,10 @@ carries the plain, model-free draft shapes a serializer builds):
   (`is_appable=True`, no sheet — the exact shape `open_slots_for` surfaces).
   Edges (`parent`/`parents`/`child`/`spouse`) wire unconditionally whenever
   given; membership is relation-driven (HEAD gets FOUNDING/BORN, SPOUSE gets
-  MARRIED_IN, CHILD with no explicit `basis` runs the same
-  `recognize_birth`/`acknowledge_into_family` walk the action always used,
-  any relation WITH a `basis` joins on it directly) — WARD rows never get a
+  MARRIED_IN, CHILD with no explicit `basis` runs `recognize_birth` and joins
+  as BORN when no rule enrolls them (#5114: never LEGITIMIZED, which wears the
+  taken-in particle), any relation WITH a `basis` joins on it directly; a
+  `born_into` naming the house's own family adds no second membership) — WARD rows never get a
   family membership (household retainers are staff-placed, not family), and a
   POSITION relation is refused outright: an open post is a bare `Vacancy`
   (`open_household_position`), never a person.

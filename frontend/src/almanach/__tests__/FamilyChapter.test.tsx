@@ -141,6 +141,8 @@ test('the "born into" pick renders and its value reaches the create payload', as
     data: {
       results: [
         { id: 21, name: 'Ardor', house_state: 'standing', published_at: null, family_id: 4 },
+        // The house being added to: the blank choice already means it (#5114).
+        { id: 9, name: 'Piropa', house_state: 'standing', published_at: null, family_id: 7 },
       ],
     },
   } as never);
@@ -158,6 +160,7 @@ test('the "born into" pick renders and its value reaches the create payload', as
   await userEvent.click(screen.getByRole('button', { name: 'Add household member' }));
   expect(screen.getByLabelText('born into')).toBeInTheDocument();
   expect(screen.getByRole('option', { name: 'Ardor' })).toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: 'Piropa' })).not.toBeInTheDocument();
   await userEvent.selectOptions(screen.getByLabelText('born into'), '4');
   await userEvent.type(screen.getByLabelText('name'), 'Tomas');
   await userEvent.click(screen.getByRole('button', { name: 'Add' }));
@@ -346,4 +349,41 @@ test('a child of a member and an outsider consort renders once, under the member
   const tempesta = screen.getByRole('button', { name: 'Tempesta' }).closest('li') as HTMLElement;
   expect(within(tempesta).getByText('child')).toBeInTheDocument();
   expect(screen.queryByText('grandchild')).toBeNull();
+});
+
+test('a couple is seated by who was born to the name, and the head is who holds the title', () => {
+  // #5114: Galleron married in, was entered first (he has the lower id and
+  // comes first in the payload) and holds the throne since his wife died. The
+  // tree used to put him on top as "head of house" with her as his consort.
+  vi.mocked(queries.useAllHouses).mockReturnValue({ data: { results: [] } } as never);
+  const person = (id: number, name: string, basis: string, is_deceased = false) => ({
+    ...family.nodes[0],
+    id,
+    name,
+    basis,
+    is_deceased,
+  });
+  const katta: AlmanachFamily = {
+    family_id: 4,
+    head_id: 10,
+    nodes: [
+      person(10, 'Galleron', 'married_in'),
+      person(11, 'Alarysa', 'born', true),
+      person(12, 'Alyssa', 'born'),
+    ],
+    parentage: [{ parent_id: 11, child_id: 12 }] as never,
+    unions: [{ member_ids: [10, 11] }] as never,
+  };
+  renderWithProviders(
+    <FamilyChapter houseId={9} houseName="Katta" family={katta} household={[]} onEdit={() => {}} />
+  );
+  const rows = Array.from(document.querySelectorAll('.who:has(.nm)')).map((row) => ({
+    name: row.querySelector('.nm')?.textContent,
+    rel: row.querySelector('.rel')?.textContent,
+  }));
+  expect(rows).toEqual([
+    { name: 'Alarysa', rel: '' },
+    { name: 'Galleron', rel: 'consort · head of house' },
+    { name: 'Alyssa', rel: 'child' },
+  ]);
 });
