@@ -8,7 +8,7 @@ import core.natural_keys
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0401_botch_immunity_category"),
+        ("arxii", "0403_channels_carry_from_evennia"),
     ]
 
     operations = [

@@ -45,8 +45,9 @@ export const DEFAULT_FEED_CHIPS: readonly FeedChip[] = [
   // Players talking out of character to the room (#4337): a question for the
   // table or a call for a GM. It shows; its wake flag is on like Visions', but
   // only interactions light the attention badges today (attention.ts), so a
-  // note's wake has no effect yet.
-  { id: 'oc', label: 'OOC', kinds: ['ooc'], on: true, wake: true, custom: false },
+  // note's wake has no effect yet. Player channel lines (#3299) are OOC too and
+  // sit here by default; a player can move `channel` to a custom chip.
+  { id: 'oc', label: 'OOC', kinds: ['ooc', 'channel'], on: true, wake: true, custom: false },
   {
     id: 'sy',
     label: 'System',
@@ -83,6 +84,7 @@ export const KIND_LABELS: Record<FeedKind, string> = {
   error: 'Command errors',
   page: 'Pages',
   ooc: 'Out of character',
+  channel: 'Channels',
   system: 'Everything else',
 };
 
@@ -231,6 +233,17 @@ function migrateLegacySystemChip(chips: FeedChip[], seenKinds: Set<FeedKind>): v
   }
 }
 
+/**
+ * A layout stored before `channel` existed (#3299) has no chip owning it, so
+ * its channel lines would sit outside the OOC chip and stay on when the player
+ * turns OOC off. They go to whichever chip owns `ooc`.
+ */
+function migrateChannelKind(chips: FeedChip[], seenKinds: Set<FeedKind>): void {
+  if (seenKinds.has('channel')) return;
+  const ooc = chips.find((chip) => chip.kinds.includes('ooc'));
+  if (ooc) ooc.kinds = [...ooc.kinds, 'channel'];
+}
+
 export function normalizeFeedChips(value: unknown): FeedChip[] {
   if (!Array.isArray(value) || value.length === 0) {
     return DEFAULT_FEED_CHIPS.map((chip) => ({ ...chip }));
@@ -248,6 +261,7 @@ export function normalizeFeedChips(value: unknown): FeedChip[] {
   }
   if (!chips.length) return DEFAULT_FEED_CHIPS.map((chip) => ({ ...chip }));
   migrateLegacySystemChip(chips, seenKinds);
+  migrateChannelKind(chips, seenKinds);
   return chips;
 }
 

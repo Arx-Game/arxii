@@ -25,6 +25,12 @@ export interface PlayPreferences {
   feedChips: FeedChip[];
   /** The All switch above the feed; off hides every kind. */
   feedAll: boolean;
+  /**
+   * Show channels in a sidebar mode instead of the main column (#3299, owner
+   * ruling 2026-11-12). Off by default: channel lines are feed lines under the
+   * OOC chip. On: the sidebar gets a Channels mode and the column drops them.
+   */
+  channelsInSidebar: boolean;
 }
 
 export const DEFAULT_PLAY_PREFERENCES: PlayPreferences = {
@@ -40,6 +46,7 @@ export const DEFAULT_PLAY_PREFERENCES: PlayPreferences = {
   readerMode: 'threads',
   feedChips: DEFAULT_FEED_CHIPS.map((chip) => ({ ...chip })),
   feedAll: true,
+  channelsInSidebar: false,
 };
 
 const STORAGE_PREFIX = 'arx:play-preferences:v2:account:';
@@ -87,6 +94,7 @@ export function loadPlayPreferences(accountId?: number | null): PlayPreferences 
       readerMode: value.readerMode === 'chronological' ? 'chronological' : 'threads',
       feedChips: normalizeFeedChips(value.feedChips),
       feedAll: value.feedAll !== false,
+      channelsInSidebar: value.channelsInSidebar === true,
     };
     if (accountId != null && !window.localStorage.getItem(playPreferencesKey(accountId))) {
       window.localStorage.setItem(playPreferencesKey(accountId), JSON.stringify(normalized));

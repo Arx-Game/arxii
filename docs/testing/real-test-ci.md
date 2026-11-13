@@ -18,24 +18,26 @@ queue.
 3. Starts the server with `arx start` and waits until `/api/status/` answers on :4001.
 4. Seeds the rows a spec needs beyond the account, after the server is up, through
    `arx manage shell` and a function in `src/integration_tests/live_seeds.py`
-   (test-factory rows; the database lives for one run). Today that is
-   `seed_motif_facet_spec`: a character the account plays holding one resonance, three
-   facets, and the account's creation draft at the Gift stage. The gift-substance and
-   thrown-strike seeds follow. The missives spec (#3289) has its own account,
-   `e2e_missives_account` (same password), seeded in its own step with
-   `seed_test_account` and `seed_missive_spec`, so nothing it writes or plays changes the
-   character `e2e_test_account` has selected, which the gift-substance spec reads. The
-   seed writes "Quill Lettersend" with coin and a brass locket, wearing an established
-   face, and a letter from "the Lantern Man" already delivered to her with 25 coppers
-   riding along; its ids go to `/tmp/missive-seed.json`, which the spec reads.
+   (test-factory rows; the database lives for one run). Today those are
+   `seed_motif_facet_spec` (a character the account plays holding one resonance, three
+   facets, and the account's creation draft at the Gift stage),
+   `seed_gift_substance_spec`, `seed_thrown_strike_spec` and `seed_channels_spec` (a
+   character played by its own account, `e2e_channels_reader`, in an organization with
+   its channel, and two other players' lines in Public, one of them from a player that
+   account blocks). The channels spec signs in as its own account because its play-page
+   test enters the world, which would change the character `e2e_test_account` acts as
+   in the specs that follow.
+   The missives spec (#3289) uses its own `e2e_missives_account` and
+   `seed_missive_spec`, which prepares a waiting letter, coin and an item and writes
+   its identifiers to `/tmp/missive-seed.json`.
 5. Runs the Playwright specs that need a live server, with one worker, using
    `frontend/e2e.backend.config.ts`: `e2e/account-settings.spec.ts`,
    `e2e/user-journey.spec.ts`, `e2e/motif-facets.spec.ts` (the Spellbook Facets
    panel and the creation facet field, #5021), `e2e/gift-substance.spec.ts` (#5018),
-   `e2e/thrown-and-enchanted-strike.spec.ts` (#5026) and `e2e/missives.spec.ts` (the
-   Missives drawer: a letter read and its coin accepted, a new letter with coin and an
-   item, a reply from the face the letter was written to, #3289). Every other spec
-   mocks the API and runs against `vite preview` under `frontend/playwright.config.ts`. A new spec that talks
+   `e2e/thrown-and-enchanted-strike.spec.ts` (#5026), `e2e/channels.spec.ts`
+   (#3299), `e2e/missives.spec.ts` (#3289), and `e2e/one-scale.spec.ts` (#5091).
+   Every other spec mocks the API and runs against `vite preview` under
+   `frontend/playwright.config.ts`. A new spec that talks
    to :4001 must be added to the spec list in the workflow, and its rows to
    `live_seeds.py` and the seed step.
 6. Always uploads one artifact, `real-test-<run id>-<attempt>`: a screenshot and a

@@ -231,6 +231,26 @@ describe('LineageStage', () => {
       expect(await screen.findByText('Open Positions in This House')).toBeInTheDocument();
     });
 
+    it("a house's card carries its line of introduction and opens the house's page (#5106)", async () => {
+      vi.mocked(api.getFamilies).mockResolvedValue([mockNobleFamily, mockNobleFamily2]);
+      vi.mocked(api.getFamilySlots).mockResolvedValue({ slots: [], pools: [] });
+      const onUpdate = vi.mocked(api.updateDraft);
+      onUpdate.mockClear();
+      const draft = createMockDraft({ ...mockDraftWithUpbringing, family_path: 'claimed' });
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient: createTestQueryClient(),
+      });
+
+      expect(await screen.findByText(mockNobleFamily.description)).toBeInTheDocument();
+      const links = screen.getAllByRole('link', { name: 'House page' });
+      expect(links[0]).toHaveAttribute('href', `/families/${mockNobleFamily.id}`);
+      expect(links[0]).toHaveAttribute('target', '_blank');
+      // Following the link reads about the house; it does not pick it.
+      links[0].addEventListener('click', (event) => event.preventDefault());
+      await userEvent.click(links[0]);
+      expect(onUpdate).not.toHaveBeenCalled();
+    });
+
     it('claim path shows a kin vacancy card instead of the kin-slot picker when kin vacancies are offered', async () => {
       vi.mocked(api.getVacancies).mockResolvedValue([mockVacancyKin]);
       const queryClient = createTestQueryClient();

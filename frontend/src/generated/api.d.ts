@@ -2871,6 +2871,169 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/channels/channels/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Channels the requester can read and post in. */
+    get: operations['channels_channels_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/channels/channels/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Channels the requester can read and post in. */
+    get: operations['channels_channels_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/channels/channels/{id}/identities/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Who the requester can speak as here: their own eligible tenures, by name. */
+    get: operations['channels_channels_identities_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/channels/messages/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description A channel's history, posting, and staff moderation.
+     *
+     *     List needs ``?channel=<id>``. Create runs ``PostToChannelAction``; destroy
+     *     (``DeleteChannelMessageAction``) and ``ban/`` (``BanChannelAuthorAction``) are staff
+     *     only. A refused action is 400 with its player-facing message as ``detail``.
+     */
+    get: operations['channels_messages_list'];
+    put?: never;
+    /** @description Post as the subscription's chosen identity (posting marks the channel read). */
+    post: operations['channels_messages_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/channels/messages/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** @description Staff: delete a message from every reader's history. */
+    delete: operations['channels_messages_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/channels/messages/{id}/ban/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Staff: ban this message's author from its channel. */
+    post: operations['channels_messages_ban_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/channels/subscriptions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The requester's own channel subscriptions. PATCH only (no PUT). */
+    get: operations['channels_subscriptions_list'];
+    put?: never;
+    /** @description The requester's own channel subscriptions. PATCH only (no PUT). */
+    post: operations['channels_subscriptions_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/channels/subscriptions/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The requester's own channel subscriptions. PATCH only (no PUT). */
+    get: operations['channels_subscriptions_retrieve'];
+    put?: never;
+    post?: never;
+    /** @description The requester's own channel subscriptions. PATCH only (no PUT). */
+    delete: operations['channels_subscriptions_destroy'];
+    options?: never;
+    head?: never;
+    /** @description The requester's own channel subscriptions. PATCH only (no PUT). */
+    patch: operations['channels_subscriptions_partial_update'];
+    trace?: never;
+  };
+  '/api/channels/subscriptions/{id}/mark-read/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Mark everything in this channel read for the requester. */
+    post: operations['channels_subscriptions_mark_read_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/chapters/': {
     parameters: {
       query?: never;
@@ -30850,6 +31013,102 @@ export interface components {
      * @enum {string}
      */
     ChangeEnum: 'opt_in' | 'opt_out' | 'cause' | 'drive' | 'drop_drive';
+    /** @description A channel the requester can reach, with their own subscription (or null). */
+    Channel: {
+      readonly id: number;
+      readonly name: string;
+      readonly description: string;
+      readonly kind: components['schemas']['ChannelKindEnum'];
+      readonly subscription: components['schemas']['ChannelSubscription'] | null;
+    };
+    ChannelActionResult: {
+      detail: string;
+    };
+    ChannelBanRequest: {
+      /** @default  */
+      reason: string;
+    };
+    /** @description One of the requester's own tenures eligible to speak in a channel. */
+    ChannelIdentity: {
+      readonly id: number;
+      readonly label: string;
+    };
+    /**
+     * @description * `public` - Public
+     *     * `org` - Organization
+     *     * `staff` - Staff
+     * @enum {string}
+     */
+    ChannelKindEnum: 'public' | 'org' | 'staff';
+    /**
+     * @description A channel message as this reader sees it. A blocked author's row comes back with
+     *     ``is_hidden`` true and an empty speaker and body (the client shows "N hidden").
+     */
+    ChannelMessage: {
+      readonly id: number;
+      readonly channel: number;
+      /** @description The author's speaker name ("Ariel" or "2nd player of Ariel"); empty if hidden. */
+      readonly speaker: string;
+      /** @description The message text; empty if hidden. */
+      readonly body: string;
+      /**
+       * @description Whether a block sits between this reader and the author: account-wide, or on
+       *     the author's character's primary persona. A reader's own posts are never hidden.
+       */
+      readonly is_hidden: boolean;
+      /** @description Whether the requester wrote it (under any of their tenures). */
+      readonly is_own: boolean;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description Post input. Emptiness, length, access and identity are refused by the post
+     *     action with the player-facing reason (400).
+     */
+    ChannelMessageCreateRequest: {
+      channel: number;
+      body: string;
+    };
+    /**
+     * @description * `all` - Every message
+     *     * `badge` - Unread count only
+     *     * `none` - Nothing
+     * @enum {string}
+     */
+    ChannelNotificationLevelEnum: 'all' | 'badge' | 'none';
+    /**
+     * @description The requester's own subscription row and its preferences.
+     *
+     *     ``channel`` is set on create only. ``display_tenure`` must be one of the requester's
+     *     tenures eligible for the channel (an alt outside the org is refused with 400).
+     */
+    ChannelSubscription: {
+      readonly id: number;
+      channel: number;
+      display_tenure?: number | null;
+      /** @description Who the requester speaks as here (the speaker name), or null if unchosen. */
+      readonly display_label: string | null;
+      muted?: boolean;
+      collapsed?: boolean;
+      notification_level?: components['schemas']['ChannelNotificationLevelEnum'];
+      sort_order?: number;
+      /** @description Unread messages; 0 for a muted channel or notification level "none". */
+      readonly unread_count: number;
+    };
+    /**
+     * @description The requester's own subscription row and its preferences.
+     *
+     *     ``channel`` is set on create only. ``display_tenure`` must be one of the requester's
+     *     tenures eligible for the channel (an alt outside the org is refused with 400).
+     */
+    ChannelSubscriptionRequest: {
+      channel: number;
+      display_tenure?: number | null;
+      muted?: boolean;
+      collapsed?: boolean;
+      notification_level?: components['schemas']['ChannelNotificationLevelEnum'];
+      sort_order?: number;
+    };
     /** @description Serializer for creating chapters */
     ChapterCreate: {
       story: number;
@@ -37995,6 +38254,8 @@ export interface components {
       state: string;
       is_seat_of: string;
       sworn_to: string;
+      sworn_to_house_id: number | null;
+      sworn_to_title_id: number | null;
       demesne: number;
       vassals: number;
       population: number;
@@ -42073,6 +42334,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['ChallengeTemplateList'][];
     };
+    PaginatedChannelMessageList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ChannelMessage'][];
+    };
     PaginatedChapterListList: {
       /** @example 123 */
       count: number;
@@ -45559,6 +45835,20 @@ export interface components {
       review_notes?: string;
       /** Format: date-time */
       resolved_at?: string | null;
+    };
+    /**
+     * @description The requester's own subscription row and its preferences.
+     *
+     *     ``channel`` is set on create only. ``display_tenure`` must be one of the requester's
+     *     tenures eligible for the channel (an alt outside the org is refused with 400).
+     */
+    PatchedChannelSubscriptionRequest: {
+      channel?: number;
+      display_tenure?: number | null;
+      muted?: boolean;
+      collapsed?: boolean;
+      notification_level?: components['schemas']['ChannelNotificationLevelEnum'];
+      sort_order?: number;
     };
     /** @description Full serializer for chapter details */
     PatchedChapterDetailRequest: {
@@ -59727,6 +60017,315 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SeanceManifestationOffer'];
+        };
+      };
+    };
+  };
+  channels_channels_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Channel'][];
+        };
+      };
+    };
+  };
+  channels_channels_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Channel'];
+        };
+      };
+    };
+  };
+  channels_channels_identities_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChannelIdentity'][];
+        };
+      };
+    };
+  };
+  channels_messages_list: {
+    parameters: {
+      query: {
+        channel: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedChannelMessageList'];
+        };
+      };
+    };
+  };
+  channels_messages_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChannelMessageCreateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChannelMessage'];
+        };
+      };
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChannelActionResult'];
+        };
+      };
+    };
+  };
+  channels_messages_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this channel message. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChannelActionResult'];
+        };
+      };
+    };
+  };
+  channels_messages_ban_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this channel message. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['ChannelBanRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChannelActionResult'];
+        };
+      };
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChannelActionResult'];
+        };
+      };
+    };
+  };
+  channels_subscriptions_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChannelSubscription'][];
+        };
+      };
+    };
+  };
+  channels_subscriptions_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChannelSubscriptionRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChannelSubscription'];
+        };
+      };
+    };
+  };
+  channels_subscriptions_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChannelSubscription'];
+        };
+      };
+    };
+  };
+  channels_subscriptions_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  channels_subscriptions_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedChannelSubscriptionRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChannelSubscription'];
+        };
+      };
+    };
+  };
+  channels_subscriptions_mark_read_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChannelSubscription'];
         };
       };
     };

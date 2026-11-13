@@ -7,6 +7,10 @@
  * can sort them. The union is closed on purpose: a chip lists kinds, a
  * preference file stores them, so a new kind is a deliberate addition here
  * and in the chip defaults, never an ad hoc string.
+ *
+ * `channel` (#3299) is a line from a player channel. It never arrives as a text
+ * frame: `useChannelFeedNotes` builds it from the channel message caches, so
+ * `classifyText` has no wire type for it.
  */
 export const FEED_KINDS = [
   'pose',
@@ -23,6 +27,7 @@ export const FEED_KINDS = [
   'error',
   'page',
   'ooc',
+  'channel',
   'system',
 ] as const;
 

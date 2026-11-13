@@ -68,6 +68,7 @@ describe('FEED_KINDS', () => {
       'error',
       'page',
       'ooc',
+      'channel',
       'system',
     ]);
   });

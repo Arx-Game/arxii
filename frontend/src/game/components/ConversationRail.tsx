@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
+import { IdentitySelect } from '@/channels/components/ChannelControls';
 import { PersonaMenu } from '@/scenes/components/PersonaMenu';
 import type { ThreadPersona } from '@/scenes/hooks/useThreading';
 import { usePlayPreferences } from '../playPreferences';
@@ -119,45 +120,56 @@ function Row({
   onPersonMenu: (event: ReactMouseEvent<HTMLElement>, person: ThreadPersona) => void;
 }) {
   const kindWord = RAIL_KIND_WORDS[row.kind];
+  // A channel nobody has chosen a speaker for (#3299): the choice is right here.
+  const needsIdentity = row.channel !== undefined && !row.channel.subscription.display_tenure;
   return (
-    <div
-      className={cn(
-        'flex items-center gap-2 rounded-md px-2 hover:bg-muted',
-        selected && 'bg-accent font-semibold'
-      )}
-      data-testid="rail-row"
-      data-rail-key={row.key}
-      onContextMenu={row.person ? (event) => onPersonMenu(event, row.person!) : undefined}
-    >
-      {row.person && (
-        <span className="flex shrink-0" data-testid="rail-face">
-          <PersonaMenu
-            personaId={row.person.id}
-            personaName={row.person.name}
-            thumbnailUrl={row.person.thumbnailUrl}
-            leftClick
-            contextMenu={false}
-          >
-            <span role="img" aria-label={row.person.name} className="flex">
-              <PersonaAvatar
-                source={{ name: row.person.name, thumbnailUrl: row.person.thumbnailUrl }}
-                size="xs"
-              />
-            </span>
-          </PersonaMenu>
-        </span>
-      )}
-      <button
-        type="button"
-        aria-current={selected ? 'true' : undefined}
-        onClick={onSelect}
-        className="flex min-h-9 min-w-0 flex-1 items-center gap-2 py-1 text-left text-sm"
+    <>
+      <div
+        className={cn(
+          'flex items-center gap-2 rounded-md px-2 hover:bg-muted',
+          selected && 'bg-accent font-semibold'
+        )}
+        data-testid="rail-row"
+        data-rail-key={row.key}
+        onContextMenu={row.person ? (event) => onPersonMenu(event, row.person!) : undefined}
       >
-        <span className="min-w-0 flex-1 truncate">{row.label}</span>
-        {kindWord && <span className="text-xs font-normal text-muted-foreground">{kindWord}</span>}
-        <Count count={row.unreadCount} />
-      </button>
-    </div>
+        {row.person && (
+          <span className="flex shrink-0" data-testid="rail-face">
+            <PersonaMenu
+              personaId={row.person.id}
+              personaName={row.person.name}
+              thumbnailUrl={row.person.thumbnailUrl}
+              leftClick
+              contextMenu={false}
+            >
+              <span role="img" aria-label={row.person.name} className="flex">
+                <PersonaAvatar
+                  source={{ name: row.person.name, thumbnailUrl: row.person.thumbnailUrl }}
+                  size="xs"
+                />
+              </span>
+            </PersonaMenu>
+          </span>
+        )}
+        <button
+          type="button"
+          aria-current={selected ? 'true' : undefined}
+          onClick={onSelect}
+          className="flex min-h-9 min-w-0 flex-1 items-center gap-2 py-1 text-left text-sm"
+        >
+          <span className="min-w-0 flex-1 truncate">{row.label}</span>
+          {kindWord && (
+            <span className="text-xs font-normal text-muted-foreground">{kindWord}</span>
+          )}
+          <Count count={row.unreadCount} />
+        </button>
+      </div>
+      {needsIdentity && row.channel ? (
+        <div className="px-2 pb-1" data-testid="rail-identity">
+          <IdentitySelect channel={row.channel} />
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -289,6 +301,7 @@ export function ConversationRail({
         </div>
         {group('Here', groups.here, 'rail-here')}
         {group('OOC Pages', groups.pages, 'rail-pages')}
+        {group('Channels', groups.channels, 'rail-channels')}
       </div>
       <div className="shrink-0 border-t p-2">
         <Input

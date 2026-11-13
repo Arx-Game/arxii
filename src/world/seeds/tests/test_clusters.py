@@ -79,6 +79,7 @@ class TestClusterRegistry(TestCase):
                 "roster",
                 "agriculture",
                 "traits",
+                "channels",
             },
         )
 

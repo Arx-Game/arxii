@@ -155,9 +155,7 @@ test('the "born into" pick renders and its value reaches the create payload', as
       onCreate={onCreate}
     />
   );
-  await userEvent.click(
-    screen.getByRole('button', { name: /a person of the household · a position/i })
-  );
+  await userEvent.click(screen.getByRole('button', { name: 'Add household member' }));
   expect(screen.getByLabelText('born into')).toBeInTheDocument();
   expect(screen.getByRole('option', { name: 'Ardor' })).toBeInTheDocument();
   await userEvent.selectOptions(screen.getByLabelText('born into'), '4');
@@ -179,7 +177,7 @@ test('the staff dialog\'s "of whom" pick sends relative_kinsperson_id for mother
       onCreate={onCreate}
     />
   );
-  await userEvent.click(screen.getByRole('button', { name: /a child · a spouse/i }));
+  await userEvent.click(screen.getByRole('button', { name: 'Add family member' }));
   await userEvent.selectOptions(screen.getByLabelText('relation'), 'mother');
   expect(screen.getByLabelText('of whom')).toBeInTheDocument();
   // No pick yet — Add stays refused even with a name.
@@ -207,7 +205,7 @@ test('is_household is forced for a ward/position row picked from the tree door, 
     />
   );
   // The TREE door, not the household door — `defaultHousehold` is false.
-  await userEvent.click(screen.getByRole('button', { name: /a child · a spouse/i }));
+  await userEvent.click(screen.getByRole('button', { name: 'Add family member' }));
   await userEvent.selectOptions(screen.getByLabelText('relation'), 'ward');
   await userEvent.type(screen.getByLabelText('name'), 'Petra');
   await userEvent.click(screen.getByRole('button', { name: 'Add' }));
@@ -228,7 +226,7 @@ test('the staff dialog refuses an empty name even for sibling, with every other 
       onCreate={vi.fn()}
     />
   );
-  await userEvent.click(screen.getByRole('button', { name: /a child · a spouse/i }));
+  await userEvent.click(screen.getByRole('button', { name: 'Add family member' }));
   await userEvent.selectOptions(screen.getByLabelText('relation'), 'sibling');
   // The "of whom" requirement is satisfied — name is the only thing left
   // blank, and that alone keeps Add refused (unlike the founder dialog).

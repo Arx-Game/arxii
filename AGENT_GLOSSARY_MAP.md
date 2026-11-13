@@ -111,6 +111,8 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [narrative](src/world/narrative/AGENT_GLOSSARY.md)
 - [boards](src/world/boards/AGENT_GLOSSARY.md)
 - [messengers](src/world/messengers/AGENT_GLOSSARY.md) - IC missives (#3289): Missive, Transmission method, Messenger, Undeliverable, Attachment resolution (_Avoid_: letter, mail for an IC missive)
+- [channels](src/world/channels/AGENT_GLOSSARY.md) (#3299, ADR-3299): Channel (OOC only), ORG channel, Speaker,
+  Display tenure, Subscription, Muted channel, Channel ban (_Avoid_: IC channel, account handle)
 
 ## Relationships (how the root concepts connect)
 
@@ -246,6 +248,11 @@ The bridge record linking one character (ObjectDB) to its Roster. _Avoid_: membe
 **RosterTenure**:
 A player↔character relationship over a span of time, carrying anonymity (player number)
 and approval data; `end_date` null means current. _Avoid_: ownership record.
+
+**Channel**:
+A persistent named out-of-character chat room (PUBLIC, ORG or STAFF, `world.channels`).
+Always OOC; a player speaks in one as a roster tenure they choose, never as their account
+(#3299, ADR-3299). _Avoid_: "IC channel" for say/pose/whisper, Evennia channel.
 
 **Two-factor authentication (2FA)**:
 The player-facing name for an account's second sign-in factor (TOTP plus recovery

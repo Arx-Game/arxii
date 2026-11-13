@@ -11,6 +11,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import secrets
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
+    from evennia.objects.models import ObjectDB
+
+    from world.channels.models import Channel
+    from world.roster.models import RosterTenure
 
 
 @dataclass(frozen=True)
@@ -511,6 +519,257 @@ def seed_gift_substance_spec(*, username: str) -> GiftSubstanceSeed:  # noqa: PL
 
 
 @dataclass(frozen=True)
+class ChannelsSeed:
+    """What `frontend/e2e/channels.spec.ts` reads back (#3299)."""
+
+    character_id: int
+    public_channel_id: int
+    org_channel_id: int
+    org_name: str
+    other_speaker: str
+    other_message: str
+    blocked_speaker: str
+
+
+#: Invented names for the channels spec; no game character.
+CHANNELS_SPEC_CHARACTER = "Linnea Channelwright"
+CHANNELS_SPEC_ROOM = "The Lantern Hall"
+CHANNELS_SPEC_ORG = "The Lantern Guild"
+CHANNELS_SPEC_OTHER_ACCOUNT = "channels_other_player"
+CHANNELS_SPEC_OTHER_CHARACTER = "Odo Brightwater"
+CHANNELS_SPEC_OTHER_MESSAGE = "Evening, all. Anyone walking the lantern route tonight?"
+CHANNELS_SPEC_BLOCKED_ACCOUNT = "channels_blocked_player"
+CHANNELS_SPEC_BLOCKED_CHARACTER = "Mara Thornquill"
+CHANNELS_SPEC_BLOCKED_MESSAGE = "This line is from a player the reader has blocked."
+
+
+def _account_named(name: str) -> AccountDB:
+    """The account *name*, made once (AccountFactory's ``_create`` always creates)."""
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+
+    from evennia_extensions.factories import AccountFactory  # noqa: PLC0415
+
+    return AccountDB.objects.filter(username=name).first() or AccountFactory(username=name)
+
+
+def _played_character(
+    account: AccountDB,
+    name: str,
+    room: ObjectDB,  # noqa: OBJECTDB_PARAM - a factory character's location; no RoomProfile
+) -> RosterTenure:
+    """The open first-player tenure of *account* on character *name* in *room*, made once.
+
+    The character carries the playable puppet lock, so the web client can enter the world
+    as it; a factory character only carries pperm(Developer).
+    """
+    from evennia_extensions.factories import CharacterFactory  # noqa: PLC0415
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+    from world.character_sheets.factories import CharacterSheetFactory  # noqa: PLC0415
+    from world.roster.factories import (  # noqa: PLC0415
+        RosterEntryFactory,
+        RosterTenureFactory,
+    )
+    from world.roster.models import RosterTenure  # noqa: PLC0415
+
+    player_data, _ = PlayerData.objects.get_or_create(account=account)
+    tenure = (
+        RosterTenure.objects.filter(
+            player_data=player_data,
+            end_date__isnull=True,
+            roster_entry__character_sheet__character__db_key=name,
+        )
+        .select_related("roster_entry__character_sheet__character")
+        .first()
+    )
+    if tenure is not None:
+        return tenure
+    character = CharacterFactory(db_key=name, location=room)
+    sheet = CharacterSheetFactory(character=character)
+    entry = RosterEntryFactory(character_sheet=sheet)
+    tenure = RosterTenureFactory(
+        roster_entry=entry, player_data=player_data, player_number=1, end_date=None
+    )
+    character.db_account = account
+    character.save()
+    account.at_post_create_character(character)
+    return tenure
+
+
+def _speaks_once(account: AccountDB, channel: Channel, tenure: RosterTenure, body: str) -> None:
+    """*account* subscribed to *channel* speaking as *tenure*, with *body* posted once."""
+    from world.channels.models import ChannelMessage  # noqa: PLC0415
+    from world.channels.services import (  # noqa: PLC0415
+        post_to_channel,
+        subscribe,
+        update_subscription,
+    )
+
+    subscription = subscribe(account, channel)
+    if subscription.display_tenure_id != tenure.pk:
+        update_subscription(subscription, display_tenure=tenure)
+    if not ChannelMessage.objects.filter(channel=channel, author_tenure=tenure).exists():
+        post_to_channel(account=account, channel=channel, body=body)
+
+
+def seed_channels_spec(*, username: str) -> ChannelsSeed:
+    """Public with one visible and one blocked post, and an org channel for *username*.
+
+    *username* plays "Linnea Channelwright" (an open first-player tenure, standing in a
+    room, puppetable from the web client) whose primary persona is an active member of
+    "The Lantern Guild", whose ORG channel is provisioned. A second account plays "Odo
+    Brightwater", is subscribed to Public speaking as him, and has posted once there. A
+    third account plays "Mara Thornquill" and has posted once in Public after Odo;
+    *username*'s account blocks that player at account level, so the reader's Public lane
+    shows Odo's line and a "1 hidden" divider. The account's selected character is left
+    alone, so the other live specs keep the character their own seeds chose.
+    """
+    from django.db import transaction  # noqa: PLC0415
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+    from evennia.utils import create  # noqa: PLC0415
+
+    from world.channels.services import (  # noqa: PLC0415
+        ensure_public_channel,
+        provision_org_channel,
+    )
+    from world.scenes.block_services import create_block  # noqa: PLC0415
+    from world.societies.factories import (  # noqa: PLC0415
+        OrganizationFactory,
+        OrganizationMembershipFactory,
+    )
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    with transaction.atomic():
+        public = ensure_public_channel()
+        reader = AccountDB.objects.get(username=username)
+        room = ObjectDB.objects.filter(
+            db_key=CHANNELS_SPEC_ROOM, db_typeclass_path="typeclasses.rooms.Room"
+        ).first() or create.create_object("typeclasses.rooms.Room", key=CHANNELS_SPEC_ROOM)
+        mine = _played_character(reader, CHANNELS_SPEC_CHARACTER, room)
+        persona = mine.roster_entry.character_sheet.primary_persona
+
+        organization = OrganizationFactory(name=CHANNELS_SPEC_ORG)
+        if not OrganizationMembership.objects.filter(
+            organization=organization, persona=persona, left_at__isnull=True
+        ).exists():
+            OrganizationMembershipFactory(organization=organization, persona=persona)
+        org_channel = provision_org_channel(organization)
+        if org_channel is None:
+            msg = f"{CHANNELS_SPEC_ORG} has no ORG channel (covert, or a covenant's org)."
+            raise RuntimeError(msg)
+
+        other = _account_named(CHANNELS_SPEC_OTHER_ACCOUNT)
+        other_tenure = _played_character(other, CHANNELS_SPEC_OTHER_CHARACTER, room)
+        _speaks_once(other, public, other_tenure, CHANNELS_SPEC_OTHER_MESSAGE)
+
+        blocked = _account_named(CHANNELS_SPEC_BLOCKED_ACCOUNT)
+        blocked_tenure = _played_character(blocked, CHANNELS_SPEC_BLOCKED_CHARACTER, room)
+        _speaks_once(blocked, public, blocked_tenure, CHANNELS_SPEC_BLOCKED_MESSAGE)
+        create_block(
+            blocker_account=reader,
+            blocker_persona=persona,
+            blocked_persona=blocked_tenure.roster_entry.character_sheet.primary_persona,
+            reason="Seeded for the channels live spec.",
+            account_level=True,
+        )
+
+    return ChannelsSeed(
+        character_id=mine.roster_entry.character_sheet.character_id,
+        public_channel_id=public.pk,
+        org_channel_id=org_channel.pk,
+        org_name=organization.name,
+        other_speaker=other_tenure.speaker_name,
+        other_message=CHANNELS_SPEC_OTHER_MESSAGE,
+        blocked_speaker=blocked_tenure.speaker_name,
+    )
+
+
+@dataclass(frozen=True)
+class OneScaleSeed:
+    """What `frontend/e2e/one-scale.spec.ts` reads back (#5091)."""
+
+    roster_entry_id: int
+    thread_id: int
+
+
+#: The character the one-scale spec opens; its stats, skill and thread read as stored.
+ONE_SCALE_SPEC_CHARACTER = "Odile Onescale"
+#: Stored values the sheet must show as-is (strength 30 used to read 3).
+ONE_SCALE_SPEC_STATS = {"strength": 30, "agility": 20}
+ONE_SCALE_SPEC_THREAD_LEVEL = 30
+
+
+def seed_one_scale_spec(*, username: str) -> OneScaleSeed:
+    """A level-3 character of *username*'s with stats 30/20 and a gift thread at 30.
+
+    The sheet shows strength 30 and agility 20 (stored values, #5091), the thread page
+    shows level 30 against a cap of 30, and the band caps are the stored 50/60/110/...
+    rows, and the pull-cost catalog is seeded so the thread page's Pull Preview reads real
+    costs. The account's creation draft is not touched here: the spec moves it to the
+    Attributes stage itself, after the specs that read it at another stage have run.
+    """
+    from django.db import transaction  # noqa: PLC0415
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+
+    from evennia_extensions.factories import CharacterFactory  # noqa: PLC0415
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+    from world.character_sheets.factories import CharacterSheetFactory  # noqa: PLC0415
+    from world.classes.factories import CharacterClassLevelFactory  # noqa: PLC0415
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+    from world.magic.factories import (  # noqa: PLC0415
+        CharacterResonanceFactory,
+        GiftFactory,
+        ResonanceFactory,
+        ThreadFactory,
+    )
+    from world.magic.models import Thread  # noqa: PLC0415
+    from world.progression.seeds import seed_maturation_stat_caps  # noqa: PLC0415
+    from world.roster.factories import (  # noqa: PLC0415
+        RosterEntryFactory,
+        RosterTenureFactory,
+    )
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+    from world.seeds.game_content.magic import seed_thread_pull_catalog  # noqa: PLC0415
+    from world.traits.models import CharacterTraitValue, Trait, TraitType  # noqa: PLC0415
+
+    with transaction.atomic():
+        seed_maturation_stat_caps()
+        seed_thread_pull_catalog()
+        account = AccountDB.objects.get(username=username)
+        player_data, _ = PlayerData.objects.get_or_create(account=account)
+        entry = RosterEntry.objects.filter(
+            character_sheet__character__db_key=ONE_SCALE_SPEC_CHARACTER
+        ).first()
+        if entry is None:
+            character = CharacterFactory(db_key=ONE_SCALE_SPEC_CHARACTER)
+            sheet = CharacterSheetFactory(character=character)
+            entry = RosterEntryFactory(character_sheet=sheet)
+            RosterTenureFactory(roster_entry=entry, player_data=player_data, end_date=None)
+            character.db_account = account
+            character.save()
+            CharacterClassLevelFactory(character=sheet, level=3, is_primary=True)
+            for name, value in ONE_SCALE_SPEC_STATS.items():
+                trait, _ = Trait.objects.get_or_create(
+                    name=name, defaults={"trait_type": TraitType.STAT}
+                )
+                CharacterTraitValue.objects.create(character=sheet, trait=trait, value=value)
+            resonance = ResonanceFactory(name="Quickmarrow")
+            CharacterResonanceFactory(
+                character_sheet=sheet, resonance=resonance, balance=10, lifetime_earned=10
+            )
+            ThreadFactory(
+                owner=sheet,
+                target_kind=TargetKind.GIFT,
+                target_trait=None,
+                target_gift=GiftFactory(name="Marrowcraft"),
+                resonance=resonance,
+                level=ONE_SCALE_SPEC_THREAD_LEVEL,
+            )
+        thread = Thread.objects.get(owner=entry.character_sheet)
+    return OneScaleSeed(roster_entry_id=entry.pk, thread_id=thread.pk)
+
+
+@dataclass(frozen=True)
 class MissiveSpecSeed:
     """What `frontend/e2e/missives.spec.ts` reads back (#3289)."""
 
@@ -662,88 +921,3 @@ def seed_missive_spec(*, username: str) -> MissiveSpecSeed:
         worn_face_name=MISSIVE_SPEC_WORN_FACE,
         writer_face_name=MISSIVE_SPEC_WRITER_FACE,
     )
-
-
-@dataclass(frozen=True)
-class OneScaleSeed:
-    """What `frontend/e2e/one-scale.spec.ts` reads back (#5091)."""
-
-    roster_entry_id: int
-    thread_id: int
-
-
-#: The character the one-scale spec opens; its stats, skill and thread read as stored.
-ONE_SCALE_SPEC_CHARACTER = "Odile Onescale"
-#: Stored values the sheet must show as-is (strength 30 used to read 3).
-ONE_SCALE_SPEC_STATS = {"strength": 30, "agility": 20}
-ONE_SCALE_SPEC_THREAD_LEVEL = 30
-
-
-def seed_one_scale_spec(*, username: str) -> OneScaleSeed:
-    """A level-3 character of *username*'s with stats 30/20 and a gift thread at 30.
-
-    The sheet shows strength 30 and agility 20 (stored values, #5091), the thread page
-    shows level 30 against a cap of 30, and the band caps are the stored 50/60/110/...
-    rows, and the pull-cost catalog is seeded so the thread page's Pull Preview reads real
-    costs. The account's creation draft is not touched here: the spec moves it to the
-    Attributes stage itself, after the specs that read it at another stage have run.
-    """
-    from django.db import transaction  # noqa: PLC0415
-    from evennia.accounts.models import AccountDB  # noqa: PLC0415
-
-    from evennia_extensions.factories import CharacterFactory  # noqa: PLC0415
-    from evennia_extensions.models import PlayerData  # noqa: PLC0415
-    from world.character_sheets.factories import CharacterSheetFactory  # noqa: PLC0415
-    from world.classes.factories import CharacterClassLevelFactory  # noqa: PLC0415
-    from world.magic.constants import TargetKind  # noqa: PLC0415
-    from world.magic.factories import (  # noqa: PLC0415
-        CharacterResonanceFactory,
-        GiftFactory,
-        ResonanceFactory,
-        ThreadFactory,
-    )
-    from world.magic.models import Thread  # noqa: PLC0415
-    from world.progression.seeds import seed_maturation_stat_caps  # noqa: PLC0415
-    from world.roster.factories import (  # noqa: PLC0415
-        RosterEntryFactory,
-        RosterTenureFactory,
-    )
-    from world.roster.models import RosterEntry  # noqa: PLC0415
-    from world.seeds.game_content.magic import seed_thread_pull_catalog  # noqa: PLC0415
-    from world.traits.models import CharacterTraitValue, Trait, TraitType  # noqa: PLC0415
-
-    with transaction.atomic():
-        seed_maturation_stat_caps()
-        seed_thread_pull_catalog()
-        account = AccountDB.objects.get(username=username)
-        player_data, _ = PlayerData.objects.get_or_create(account=account)
-        entry = RosterEntry.objects.filter(
-            character_sheet__character__db_key=ONE_SCALE_SPEC_CHARACTER
-        ).first()
-        if entry is None:
-            character = CharacterFactory(db_key=ONE_SCALE_SPEC_CHARACTER)
-            sheet = CharacterSheetFactory(character=character)
-            entry = RosterEntryFactory(character_sheet=sheet)
-            RosterTenureFactory(roster_entry=entry, player_data=player_data, end_date=None)
-            character.db_account = account
-            character.save()
-            CharacterClassLevelFactory(character=sheet, level=3, is_primary=True)
-            for name, value in ONE_SCALE_SPEC_STATS.items():
-                trait, _ = Trait.objects.get_or_create(
-                    name=name, defaults={"trait_type": TraitType.STAT}
-                )
-                CharacterTraitValue.objects.create(character=sheet, trait=trait, value=value)
-            resonance = ResonanceFactory(name="Quickmarrow")
-            CharacterResonanceFactory(
-                character_sheet=sheet, resonance=resonance, balance=10, lifetime_earned=10
-            )
-            ThreadFactory(
-                owner=sheet,
-                target_kind=TargetKind.GIFT,
-                target_trait=None,
-                target_gift=GiftFactory(name="Marrowcraft"),
-                resonance=resonance,
-                level=ONE_SCALE_SPEC_THREAD_LEVEL,
-            )
-        thread = Thread.objects.get(owner=entry.character_sheet)
-    return OneScaleSeed(roster_entry_id=entry.pk, thread_id=thread.pk)

@@ -1,9 +1,12 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
-import { Compass, History, Swords } from 'lucide-react';
+import { Compass, History, MessagesSquare, Swords } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { HistoryNavigator } from './HistoryNavigator';
 import { DisplaySettings } from './DisplaySettings';
 
-export type SidebarMode = 'here' | 'history';
+export type SidebarMode = 'here' | 'history' | 'channels';
+
+const NAV_COLUMNS = ['grid-cols-2', 'grid-cols-3', 'grid-cols-4'] as const;
 
 interface PlaySidebarProps {
   here: ReactNode;
@@ -24,11 +27,15 @@ interface PlaySidebarProps {
   hasActiveEncounter?: boolean;
   /** Required when `hasActiveEncounter` is true; the Combat button's click handler. */
   onJumpToCombat?: () => void;
+  /** The Channels mode body (#3299); omitted hides the Channels button. */
+  channels?: ReactNode;
+  /** Unread across unmuted channels not set to Nothing; shown on the Channels button. */
+  channelsUnread?: number;
 }
 
 /**
- * The one contextual sidebar for the narrative play workspace: Here and
- * History. Conversations live in the rail on the far left (#4129).
+ * The one contextual sidebar for the narrative play workspace: Here, History
+ * and Channels. Conversations live in the rail on the far left (#4129).
  */
 export function PlaySidebar({
   here,
@@ -39,6 +46,8 @@ export function PlaySidebar({
   onModeChange,
   hasActiveEncounter,
   onJumpToCombat,
+  channels,
+  channelsUnread = 0,
 }: PlaySidebarProps) {
   // #3759 review fix: the modes share ONE scroll container
   // (`play-sidebar-scroll`), so each mode needs its own remembered scroll
@@ -63,10 +72,12 @@ export function PlaySidebar({
     scrollPositionsRef.current.set(mode, el.scrollTop);
   };
 
+  const buttonCount = 2 + (channels ? 1 : 0) + (hasActiveEncounter ? 1 : 0);
+
   return (
     <aside className="flex h-full min-h-0 flex-col" aria-label="Play sidebar">
       <nav
-        className={`grid shrink-0 gap-1 border-b p-2 ${hasActiveEncounter ? 'grid-cols-3' : 'grid-cols-2'}`}
+        className={`grid shrink-0 gap-1 border-b p-2 ${NAV_COLUMNS[buttonCount - 2]}`}
         aria-label="Sidebar modes"
       >
         <button
@@ -87,6 +98,26 @@ export function PlaySidebar({
           <History className="h-3.5 w-3.5" />
           History
         </button>
+        {channels ? (
+          <button
+            type="button"
+            aria-current={mode === 'channels' ? 'page' : undefined}
+            onClick={() => onModeChange('channels')}
+            className={`flex min-h-11 items-center justify-center gap-1 rounded px-2 text-xs ${mode === 'channels' ? 'bg-accent font-medium' : 'text-muted-foreground hover:bg-accent/60'}`}
+          >
+            <MessagesSquare className="h-3.5 w-3.5" />
+            Channels
+            {channelsUnread > 0 ? (
+              <Badge
+                variant="destructive"
+                className="h-4 min-w-4 px-1 text-[10px]"
+                data-testid="channels-unread-badge"
+              >
+                {channelsUnread}
+              </Badge>
+            ) : null}
+          </button>
+        ) : null}
         {hasActiveEncounter && (
           <button
             type="button"
@@ -114,6 +145,7 @@ export function PlaySidebar({
         <div hidden={mode !== 'history'}>
           <HistoryNavigator onOpenReference={onOpenReference} />
         </div>
+        {channels ? <div hidden={mode !== 'channels'}>{channels}</div> : null}
       </div>
     </aside>
   );

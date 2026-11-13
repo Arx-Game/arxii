@@ -21,6 +21,7 @@ from django.utils.text import slugify
 
 from world.areas.constants import AreaLevel, GridOrigin
 from world.areas.models import Area
+from world.channels.services import provision_org_channel
 from world.locations.constants import HolderType, LocationParentType
 from world.locations.models import LocationOwnership
 from world.roster.constants import DefinitionTier, MembershipBasis
@@ -67,7 +68,6 @@ from world.societies.houses.services import (
     recognize_birth,
     release_fealty,
     swear_fealty,
-    sync_house_channel,
 )
 from world.societies.houses.types import CreatedFamily
 from world.societies.membership_services import active_membership_for_persona, join_organization
@@ -835,10 +835,10 @@ def set_house_state(house: Organization, state: str) -> Organization:
 
 
 def publish_house(house: Organization) -> Organization:
-    """Publish a house to the Almanach and sync its house channel's audience."""
+    """Publish a house to the Almanach and make sure it has its org channel (#3299)."""
     house.published_at = timezone.now()
     house.save(update_fields=["published_at"])
-    sync_house_channel(house)
+    provision_org_channel(house)
     return house
 
 

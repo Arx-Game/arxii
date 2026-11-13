@@ -824,6 +824,14 @@ class ActionRegistryTests(TestCase):
             "read_missive",
             "accept_missive",
             "refuse_missive",
+            # #3299 - player channels.
+            "post_to_channel",
+            "join_channel",
+            "leave_channel",
+            "set_channel_mute",
+            "set_channel_identity",
+            "delete_channel_message",
+            "ban_channel_author",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

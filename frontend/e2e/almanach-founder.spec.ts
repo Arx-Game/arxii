@@ -1,3 +1,5 @@
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test, expect, type Locator, type Route } from '@playwright/test';
 
 /**
@@ -23,6 +25,8 @@ import { test, expect, type Locator, type Route } from '@playwright/test';
  * checks; the overlap and the lost-claim defects the first evidence run found
  * were fixed in 0b43bf647.
  */
+const REPO_ROOT_5106 = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+
 async function safeClick(locator: Locator): Promise<void> {
   await locator.click();
 }
@@ -60,6 +64,8 @@ const LADDER_ROWS = [
     state: 'Held',
     is_seat_of: '',
     sworn_to: '',
+    sworn_to_house_id: null,
+    sworn_to_title_id: null,
     demesne: 1,
     vassals: 1,
     claimable: false,
@@ -80,6 +86,8 @@ const LADDER_ROWS = [
     state: 'Unclaimed',
     is_seat_of: '',
     sworn_to: HOUSE_NAME,
+    sworn_to_house_id: null,
+    sworn_to_title_id: null,
     demesne: 1,
     vassals: 1,
     claimable: true,
@@ -100,6 +108,8 @@ const LADDER_ROWS = [
     state: 'Unclaimed',
     is_seat_of: '',
     sworn_to: DUCHY_NAME,
+    sworn_to_house_id: null,
+    sworn_to_title_id: null,
     demesne: 0,
     vassals: 1,
     claimable: true,
@@ -120,6 +130,8 @@ const LADDER_ROWS = [
     state: 'Unclaimed',
     is_seat_of: '',
     sworn_to: DUCHY_NAME,
+    sworn_to_house_id: null,
+    sworn_to_title_id: null,
     demesne: 0,
     vassals: 0,
     claimable: true,
@@ -140,6 +152,8 @@ const LADDER_ROWS = [
     state: 'Unclaimed',
     is_seat_of: '',
     sworn_to: HOUSE_NAME,
+    sworn_to_house_id: null,
+    sworn_to_title_id: null,
     demesne: 0,
     vassals: 0,
     claimable: true,
@@ -160,6 +174,8 @@ const LADDER_ROWS = [
     state: 'Unclaimed',
     is_seat_of: '',
     sworn_to: HOUSE_NAME,
+    sworn_to_house_id: null,
+    sworn_to_title_id: null,
     demesne: 1,
     vassals: 0,
     claimable: true,
@@ -180,6 +196,8 @@ const LADDER_ROWS = [
     state: 'Unclaimed',
     is_seat_of: '',
     sworn_to: COUNTY_NAME,
+    sworn_to_house_id: null,
+    sworn_to_title_id: null,
     demesne: 0,
     vassals: 0,
     claimable: true,
@@ -478,6 +496,17 @@ test('a founder claims the demo duchy and submits a house claim', async ({ page 
   // : 'seat'` init), matching a founder who already claimed the duchy.
   await expect(page.getByText('Define a house')).toBeVisible();
 
+  // #5106: a player has no staff page to open, so the ladder's Held by and
+  // Sworn to stay text here; the staff ladder links them.
+  const founderLadder = page.locator('table.lad');
+  await expect(founderLadder).toBeVisible();
+  await expect(founderLadder.locator('td.held').first()).toBeVisible();
+  await expect(founderLadder.locator('a')).toHaveCount(0);
+  await page.screenshot({
+    path: path.join(REPO_ROOT_5106, 'docs', 'reviews', '5106', '6-cg-ladder-is-text.png'),
+    fullPage: true,
+  });
+
   // The Seat (plate F-I): claim the demo duchy for real; the House chapter follows.
   await page.getByRole('button', { name: `Claim ${DUCHY_NAME}` }).click();
 
@@ -494,7 +523,7 @@ test('a founder claims the demo duchy and submits a house claim', async ({ page 
   // (`founder_relation` defaults to `head`, so the founder herself is the
   // union's other half — `AddKinDialog`'s spouse picker offers her synthetic
   // node, named "Given name" until `CharacterDraft` carries a real one).
-  await safeClick(page.getByRole('button', { name: '⊕ a sibling · a spouse' }));
+  await safeClick(page.getByRole('button', { name: 'Add family member' }));
   await page.locator('#add-kin-name').fill('Lady Osrin');
   await safeClick(page.locator('#add-kin-relation'));
   await safeClick(page.getByRole('option', { name: 'spouse', exact: true }));

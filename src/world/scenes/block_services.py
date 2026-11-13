@@ -266,6 +266,33 @@ def hidden_persona_ids_for_viewer(*, viewer_account: Any) -> set[int]:
     return hidden
 
 
+def account_ids_hiding_persona(persona: Persona) -> set[int]:
+    """The inverse of ``hidden_persona_ids_for_viewer`` for one persona (#3299): the ids of
+    every account whose hidden set holds ``persona``. For a write-then-push seam that must
+    skip every reader a block hides the author's face from, in one query instead of one per
+    reader. PlayerData's pk is its account_id, so the ids are account pks."""
+    from world.roster.models import RosterTenure  # noqa: PLC0415
+
+    current_players = RosterTenure.objects.filter(
+        roster_entry__character_sheet_id=persona.character_sheet_id, end_date__isnull=True
+    ).values("player_data_id")
+    rows = (
+        _active_blocks()
+        .filter(
+            Q(blocked_persona=persona)
+            | Q(blocker_persona=persona, account_level=False)
+            | Q(account_level=True, owner_id__in=current_players)
+        )
+        .values_list("owner_id", "blocked_player_id", "blocked_persona_id")
+    )
+    ids: set[int] = set()
+    for owner_id, blocked_player_id, blocked_persona_id in rows:
+        # The owner blocked this exact face; otherwise this face (or every face its player
+        # plays, for an account-level block) blocked the other side.
+        ids.add(owner_id if blocked_persona_id == persona.pk else blocked_player_id)
+    return ids
+
+
 def _sheet_player(sheet: CharacterSheet) -> PlayerData | None:
     """The PlayerData currently playing this character sheet, or None (#1278)."""
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415

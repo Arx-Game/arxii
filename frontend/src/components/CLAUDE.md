@@ -37,8 +37,8 @@ Character-specific UI components:
   `useGMAttention` (`gm/queries.ts`, `GET /api/gm/attention/`), the same payload the
   Dashboard's "Waiting on you" strip reads, so badge and strip never disagree
   (ADR-4188). World is the lore shelf (Codex, Tidings, Journals, Realms); Crossover is
-  reached from the Dashboard strip. The phone sheet mirrors the groups and shows the
-  count in the group label.
+  reached from the Dashboard strip. Story also holds Channels (`/channels`, auth only,
+  #3299). The phone sheet mirrors the groups and shows the count in the group label.
 - **`SelectedCharacterChip.tsx`**: The docked-portrait chip the header renders when the
   account has a selected character (#3412). Selection is not presence, and the chip
   shows both (#3859, #4321): presence comes from `roster/useCharacterPresence.ts`, which
@@ -55,6 +55,8 @@ Character-specific UI components:
   which is why the chip must never read the route. `Header` refetches the roster list
   every 30 s while a chip is up. Degraded lifecycle states show `dockedStateLabel`
   instead of a presence claim.
+- **`HiddenDivider.tsx`**: The thin "N hidden" rule. Scenes' muted-pose divider wraps
+  it in an expanding button; channels show it as-is for blocked authors (#3299).
 - **`Footer.tsx`**: Application footer
 - **`AuthProvider.tsx`**: Authentication context provider
 

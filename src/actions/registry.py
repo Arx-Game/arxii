@@ -95,6 +95,15 @@ from actions.definitions.ceremonies import (
     RespondSeanceOfferAction,
     RespondWeddingConsentOfferAction,
 )
+from actions.definitions.channels import (
+    BanChannelAuthorAction,
+    DeleteChannelMessageAction,
+    JoinChannelAction,
+    LeaveChannelAction,
+    PostToChannelAction,
+    SetChannelIdentityAction,
+    SetChannelMuteAction,
+)
 from actions.definitions.charm_asset import CharmAssetAction
 from actions.definitions.coercion import coerce, reveal_secret
 from actions.definitions.collect_food import CollectFoodAction
@@ -1438,6 +1447,14 @@ _ALL_ACTIONS: list[Action] = [
     ReadMissiveAction(),
     AcceptMissiveAction(),
     RefuseMissiveAction(),
+    # #3299 - player channels (account-authorized: actor=None, account kwarg).
+    PostToChannelAction(),
+    JoinChannelAction(),
+    LeaveChannelAction(),
+    SetChannelMuteAction(),
+    SetChannelIdentityAction(),
+    DeleteChannelMessageAction(),
+    BanChannelAuthorAction(),
 ]
 
 # Lookup by key

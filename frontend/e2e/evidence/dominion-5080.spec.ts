@@ -276,6 +276,8 @@ const LADDER_ROW = (
   state: 'Held',
   is_seat_of: '',
   sworn_to: '',
+  sworn_to_house_id: null,
+  sworn_to_title_id: null,
   demesne: 1,
   vassals: 0,
   population: 1000,

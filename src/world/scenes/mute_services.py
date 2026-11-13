@@ -169,3 +169,13 @@ def muted_player_ids_for(*, viewer_player: PlayerData) -> set[int]:
             "muted_player_id", flat=True
         )
     )
+
+
+def account_muter_player_ids(*, target_player: PlayerData) -> set[int]:
+    """Player ids holding an account-level Mute on ``target_player``: the speaker-side twin of
+    ``muted_player_ids_for``, same policy as ``account_muted`` (one query, #3299)."""
+    return set(
+        Mute.objects.filter(account_level=True, muted_player=target_player).values_list(
+            "owner_id", flat=True
+        )
+    )

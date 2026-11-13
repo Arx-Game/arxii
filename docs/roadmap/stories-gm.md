@@ -460,7 +460,7 @@ web-only pattern.
 
 All MVP-blocking items from Phase 5's "What's Needed for MVP" section have landed. Remaining items are either blocked on other systems or represent quality-of-life improvements:
 
-- **Covenant / organization chat channels** — broader feature beyond stories scope; will land alongside the organizations system
+- ~~Organization chat channels~~ — SHIPPED (#3299): every non-covert organization has an ORG player channel (`docs/systems/channels.md`). Covenant chat is still open: covenant-backed orgs get no channel, because covenant membership is not `OrganizationMembership`
 - **DAG advanced editing** — multi-select, copy/paste, layout templates, drag-position persistence; Phase 5 delivered drag-to-add; richer graph editing is Phase 6+
 - **Cross-table GM availability marketplace** — the *player→GM* discovery direction shipped as #2119 (`GroupStoryRequest`, a covenant's broadcast ask any GM can browse/claim). A GM-directed (browse *players*/covenants wanting a GM, headhunting a specific one) direction remains a possible follow-up with no evidence of demand yet.
 - **Notification settings UI beyond story mute** — per-category toggles for atmosphere / visions / happenstance / system; Phase 6+
