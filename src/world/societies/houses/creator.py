@@ -50,7 +50,7 @@ from world.societies.houses.constants import (
 )
 from world.societies.houses.models import (
     Domain,
-    HouseCharterOption,
+    HouseCharterQuestion,
     HouseClaim,
     HouseClaimFacet,
     HouseClaimKin,
@@ -66,6 +66,7 @@ from world.societies.houses.models import (
 from world.societies.houses.services import (
     HousesServiceError,
     add_holding,
+    realm_for_house,
     swear_fealty,
 )
 from world.societies.houses.types import ClaimKinDraft, ClaimLandDraft, ClaimObservanceDraft
@@ -78,6 +79,11 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.realms.models import Realm
     from world.societies.models import CrewSlot, OrganizationType
+    from world.worship.models import WorshippedBeing
+
+#: Serializer-context key for ``patron_rows_by_tradition()`` (#5110): the gods each
+#: patron question offers, resolved once per response.
+PATRON_ROWS_BY_TRADITION = "patron_rows_by_tradition"
 
 _PRINCIPLE_AXES = ("mercy", "method", "status", "change", "allegiance", "power")
 # HouseClaim stores the status axis as ``status_principle`` (``status`` is the
@@ -217,6 +223,7 @@ def _validate_claim(  # noqa: PLR0913 — keyword-only; one arg per gate input
     colors: str,
     sigil_description: str,
     facet_picks: dict[int, list[int]],
+    patron_being_id: int | None,
     kin: list[ClaimKinDraft],
     lands: list[ClaimLandDraft],
     estate_name: str,
@@ -254,6 +261,7 @@ def _validate_claim(  # noqa: PLR0913 — keyword-only; one arg per gate input
     _validate_stylings(words=words, colors=colors, sigil_description=sigil_description)
     validate_observances(observances)
     _validate_facet_picks(template=template, facet_picks=facet_picks)
+    validate_patron_pick(template=template, patron_being_id=patron_being_id)
     for axis in _PRINCIPLE_AXES:
         value = principles.get(axis, 0)
         low = getattr(template, f"{axis}_min")
@@ -403,8 +411,12 @@ def _validate_estate_realm(*, draft: CharacterDraft, estate_name: str) -> None:
 # also calls it (#3648) - same cross-module pattern already used for
 # family_name_is_taken.
 def _validate_facet_picks(*, template: HouseTemplate, facet_picks: dict[int, list[int]]) -> None:
-    """The catalog fence (#2079, ADR-0101): picks only, counted, from the template."""
-    definitions = {d.pk: d for d in template.charter_questions.all()}
+    """The catalog fence (#2079, ADR-0101): picks only, counted, from the template.
+
+    The patron question is not answered here (#5110): its choices are gods, not
+    options, and ``validate_patron_pick`` checks that one.
+    """
+    definitions = {d.pk: d for d in template.charter_questions.all() if not d.sets_patron}
     unknown = set(facet_picks) - set(definitions)
     if unknown:
         msg = f"aspect picks for definitions {sorted(unknown)} not on template {template.pk}"
@@ -449,6 +461,7 @@ def submit_house_claim(  # noqa: PLR0913 — keyword-only; one arg per gate inpu
     colors: str = "",
     sigil_description: str = "",
     facet_picks: dict[int, list[int]] | None = None,
+    patron_being_id: int | None = None,
     kin: list[ClaimKinDraft] = (),
     lands: list[ClaimLandDraft] = (),
     estate_name: str = "",
@@ -475,6 +488,7 @@ def submit_house_claim(  # noqa: PLR0913 — keyword-only; one arg per gate inpu
         colors=colors,
         sigil_description=sigil_description,
         facet_picks=facet_picks,
+        patron_being_id=patron_being_id,
         kin=kin,
         lands=lands,
         estate_name=estate_name,
@@ -496,6 +510,7 @@ def submit_house_claim(  # noqa: PLR0913 — keyword-only; one arg per gate inpu
             estate_description=estate_description,
             founder_relation=founder_relation,
             founder_is_heir=founder_is_heir,
+            patron_being_id=patron_being_id,
             **field_values,
         )
         for definition_id, option_ids in facet_picks.items():
@@ -575,30 +590,118 @@ def _claim_facet_picks(claim: HouseClaim) -> dict[int, list[int]]:
     return picks
 
 
-def patron_option_from_picks(facet_picks: dict[int, list[int]]) -> HouseCharterOption | None:
-    """The one picked option on a ``sets_patron`` question (#4205), or ``None``.
+def patron_question(template: HouseTemplate) -> HouseCharterQuestion | None:
+    """The template's one patron question (#4205), or ``None``."""
+    return next((q for q in template.charter_questions.all() if q.sets_patron), None)
 
-    Two such picks cannot both be the patron, and an option on that question
-    without a name for the house to use is a catalog error the founder cannot
-    fix; both refuse rather than found a house with the wrong god.
+
+def patron_choices(question: HouseCharterQuestion) -> list[WorshippedBeing]:
+    """The gods a patron question offers (#5110): the active ones of the question's
+    kind of worship whose Codex page is public, by name.
+
+    The three tests live here and nowhere else. A house's patron is public backing
+    of a temple, so a god only an organization or a clue reaches (``visibility_of``
+    reads the same ``codex_entry.is_public``) is never offered, and neither is a god
+    of another worship. A question with no worship set offers none.
     """
-    option_ids = [option_id for ids in facet_picks.values() for option_id in ids]
-    if not option_ids:
-        return None
-    options = list(
-        HouseCharterOption.objects.filter(
-            pk__in=option_ids, definition__sets_patron=True
-        ).select_related("being_nickname")
+    from world.worship.models import WorshippedBeing  # noqa: PLC0415
+
+    if question.patron_tradition_id is None:
+        return []
+    return list(
+        WorshippedBeing.objects.filter(
+            tradition_id=question.patron_tradition_id,
+            is_active=True,
+            codex_entry__is_public=True,
+        ).order_by("name")
     )
-    if len(options) > 1:
-        msg = f"more than one patron pick: {[o.pk for o in options]}"
-        raise HousesServiceError(msg, user_message="A house serves one patron.")
-    if options and options[0].being_nickname_id is None:
-        msg = f"patron option {options[0].pk} has no being_nickname"
-        raise HousesServiceError(
-            msg, user_message="That patron has no name for the house to call it by."
+
+
+def _patron_row(being: WorshippedBeing) -> dict:
+    """A god in the shape a charter option is read in; ``id`` is the god's."""
+    return {
+        "id": being.pk,
+        "name": being.name,
+        "description": being.domains,
+        "codex_entry_id": None,
+        "being_id": being.pk,
+        "being_name": being.name,
+        "target_entry_id": being.codex_entry_id,
+    }
+
+
+def patron_choice_rows(question: HouseCharterQuestion) -> list[dict]:
+    """A patron question's gods in the shape a charter option is read in (#5110), so
+    the staff page and character creation draw them with the picker they already
+    have. ``id`` is the god's id: a patron pick is sent as ``patron_being_id``.
+
+    One query per call. A response that serializes many templates reads
+    ``patron_rows_by_tradition`` once instead and hands it down in serializer context.
+    """
+    return [_patron_row(being) for being in patron_choices(question)]
+
+
+def patron_rows_by_tradition() -> dict[int, list[dict]]:
+    """Every patron question's gods, keyed by the question's worship, in one query:
+    what a list response passes down as ``PATRON_ROWS_BY_TRADITION`` so a patron
+    question costs nothing per title or per template. Same three tests as
+    ``patron_choices``; a worship no patron question names is not read."""
+    from world.worship.models import WorshippedBeing  # noqa: PLC0415
+
+    rows: dict[int, list[dict]] = {}
+    beings = (
+        WorshippedBeing.objects.filter(
+            tradition__patron_questions__isnull=False,
+            is_active=True,
+            codex_entry__is_public=True,
         )
-    return options[0] if options else None
+        .distinct()
+        .order_by("name")
+    )
+    for being in beings:
+        rows.setdefault(being.tradition_id, []).append(_patron_row(being))
+    return rows
+
+
+def patron_choices_for_house(house: Organization) -> list[WorshippedBeing]:
+    """The gods staff may give an existing house as its patron (#5110): those the
+    patron question of its realm's templates offers. Empty for a house with no realm,
+    or a realm with no patron question."""
+    realm = realm_for_house(house)
+    if realm is None:
+        return []
+    question = (
+        HouseCharterQuestion.objects.filter(templates__realm_id=realm.pk, sets_patron=True)
+        .distinct()
+        .first()
+    )
+    return patron_choices(question) if question is not None else []
+
+
+def validate_patron_pick(
+    *, template: HouseTemplate, patron_being_id: int | None
+) -> WorshippedBeing | None:
+    """The god picked on ``template``'s patron question, checked against what the
+    question offers (#5110); ``None`` when the charter has no patron question, or
+    an optional one was left unanswered."""
+    question = patron_question(template)
+    if question is None:
+        if patron_being_id is not None:
+            msg = f"patron {patron_being_id} picked, template {template.pk} has no patron question"
+            raise HousesServiceError(msg, user_message="This charter does not name a patron.")
+        return None
+    if patron_being_id is None:
+        if question.min_picks >= 1:
+            msg = f"no patron picked for definition {question.pk}"
+            raise HousesServiceError(msg, user_message=f"{question.name}: choose one.")
+        return None
+    being = next((b for b in patron_choices(question) if b.pk == patron_being_id), None)
+    if being is None:
+        msg = f"being {patron_being_id} is not a choice on definition {question.pk}"
+        raise HousesServiceError(
+            msg, user_message=f"{question.name}: that is not one of the choices."
+        )
+    return being
 
 
 def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
@@ -607,6 +710,7 @@ def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
     *,
     description: str = "",
     facet_picks: dict[int, list[int]] | None = None,
+    patron: WorshippedBeing | None = None,
     served_house: Organization | None = None,
     created_by: AccountDB | None = None,
     origin_realm=None,
@@ -631,8 +735,9 @@ def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
 
     Shared by the noble title claim (which then seats the title, domain and
     holdings) and the CG name path (which adds nothing more). ``facet_picks``
-    is ``{definition_id: [option_id, ...]}``; ``served_house`` (else the
-    template's liege) receives the new org's fealty.
+    is ``{definition_id: [option_id, ...]}``; ``patron`` is the god picked on the
+    charter's patron question, already checked by ``validate_patron_pick`` (#5110);
+    ``served_house`` (else the template's liege) receives the new org's fealty.
     """
     from world.roster.models import KinSlotPool  # noqa: PLC0415
     from world.societies.membership_services import ensure_default_rank_ladder  # noqa: PLC0415
@@ -674,7 +779,7 @@ def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
         liege = served_house or template.liege
         if liege is not None:
             swear_fealty(vassal=org, liege=liege)
-    _stamp_facets(org, facet_picks or {})
+    _stamp_facets(org, facet_picks or {}, patron)
     for feature in template.features.all():
         OrganizationFeature.objects.create(organization=org, feature=feature)
     if template.starting_kin_slots:
@@ -691,22 +796,22 @@ def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
     return family, org
 
 
-def _stamp_facets(org: Organization, facet_picks: dict[int, list[int]]) -> None:
-    """Write the picks as the house's facets, and the patron the one patron pick names.
+def _stamp_facets(
+    org: Organization, facet_picks: dict[int, list[int]], patron: WorshippedBeing | None
+) -> None:
+    """Write the picks as the house's facets, and its patron.
 
-    The patron is fixed at founding (#4205): the pick on the charter's ``sets_patron``
-    question becomes the house's own name for its god. Nothing else writes the
-    column; staff change it in the org admin.
+    The patron is fixed at founding (#4205): the god picked on the charter's patron
+    question (#5110). Nothing else writes the column but staff's edit.
     """
     for definition_id, option_ids in facet_picks.items():
         for option_id in option_ids:
             OrganizationFacet.objects.create(
                 organization=org, definition_id=definition_id, option_id=option_id
             )
-    patron_option = patron_option_from_picks(facet_picks)
-    if patron_option is not None:
-        org.patron_nickname = patron_option.being_nickname
-        org.save(update_fields=["patron_nickname"])
+    if patron is not None:
+        org.patron = patron
+        org.save(update_fields=["patron"])
 
 
 def _place_claim_row(*, org: Organization, row: HouseClaimKin, **kin_kwargs) -> Kinsperson:
@@ -1001,6 +1106,7 @@ def materialize_house_claim(claim: HouseClaim, *, sheet: CharacterSheet) -> Orga
         claim.house_name,
         description=claim.backstory,
         facet_picks=_claim_facet_picks(claim),
+        patron=claim.patron_being,
         served_house=served_liege,
     )
     org.words = claim.words

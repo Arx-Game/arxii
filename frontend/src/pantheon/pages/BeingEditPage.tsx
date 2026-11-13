@@ -379,7 +379,7 @@ export function BeingEditPage() {
             type="button"
             variant="outline"
             size="sm"
-            title="An alternate name worshippers use; a house's patron shows its own nickname on its sheet."
+            title="An alternate name worshippers use."
             onClick={() => set('nicknames', [...draft.nicknames, ''])}
           >
             + Add nickname

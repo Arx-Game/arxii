@@ -125,6 +125,8 @@ function claimStatus(): HouseClaimStatus {
     lands: [],
     observances: [],
     estate_district_id: null,
+    patron_being_id: null,
+    patron_name: '',
   };
 }
 
@@ -135,6 +137,7 @@ test('the family line quotes every kin, styled and descriptored, a nameless kin 
       characterDraftId={42}
       template={template()}
       quiddityName="The Veiled"
+      quiddityLabel="house quiddity"
       seatName="Fervor"
       seatTier="duchy"
       swornTo="Piropa"
@@ -166,6 +169,7 @@ test('Submit for review posts the nested claim payload and reports success up', 
       characterDraftId={42}
       template={template()}
       quiddityName="The Veiled"
+      quiddityLabel="house quiddity"
       seatName="Fervor"
       seatTier="duchy"
       swornTo="Piropa"

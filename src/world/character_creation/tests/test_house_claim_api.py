@@ -185,21 +185,35 @@ class HouseClaimApiTests(TestCase):
         # the identity map may spare a query on the second read; it never adds one per title
         self.assertLessEqual(len(seven), len(one))
 
-    def test_house_titles_say_what_a_god_option_is_and_where_it_opens(self):
-        """#4205: an option that IS a god carries the being and opens its page."""
+    def _patron_question(self):
+        """A patron question on the template, with one public liturgy god and one
+        the question must not offer (its page is not public)."""
         from world.codex.factories import CodexEntryFactory
-        from world.worship.factories import BeingNicknameFactory, WorshippedBeingFactory
+        from world.worship.factories import WorshippedBeingFactory, WorshipTraditionFactory
 
-        entry = CodexEntryFactory(name="Calyx API")
-        calyx = WorshippedBeingFactory(name="Calyx API", codex_entry=entry)
-        knight = BeingNicknameFactory(being=calyx, name="The One True Knight")
-        patron = HouseCharterQuestion.objects.create(
-            name="Patron API", prompt="Whom does the house serve?", sets_patron=True
+        liturgy = WorshipTraditionFactory(name="Church Liturgy API")
+        entry = CodexEntryFactory(name="Calyx API", is_public=True)
+        calyx = WorshippedBeingFactory(
+            name="Calyx API", tradition=liturgy, codex_entry=entry, domains="Honorable combat"
         )
-        HouseCharterOption.objects.create(
-            definition=patron, name="Calyx API", being=calyx, being_nickname=knight
+        hidden = WorshippedBeingFactory(
+            name="Hidden API",
+            tradition=liturgy,
+            codex_entry=CodexEntryFactory(name="Hidden API", is_public=False),
+        )
+        patron = HouseCharterQuestion.objects.create(
+            name="Patron API",
+            prompt="Whom does the house serve?",
+            sets_patron=True,
+            patron_tradition=liturgy,
         )
         self.template.charter_questions.add(patron)
+        return patron, calyx, hidden, entry
+
+    def test_house_titles_offer_the_gods_of_the_patron_questions_worship(self):
+        """#5110: the patron question's choices are the active, public gods of its
+        worship, each carrying the god and opening its page; a hidden god is absent."""
+        _patron, calyx, _hidden, entry = self._patron_question()
 
         response = self.client.get("/api/character-creation/house-titles/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -207,10 +221,66 @@ class HouseClaimApiTests(TestCase):
         title = next(t for t in titles if t["id"] == self.title.pk)
         template = next(t for t in title["templates"] if t["id"] == self.template.pk)
         definition = next(d for d in template["charter_questions"] if d["name"] == "Patron API")
+        self.assertTrue(definition["sets_patron"])
+        self.assertEqual([option["name"] for option in definition["options"]], ["Calyx API"])
         option = definition["options"][0]
+        self.assertEqual(option["id"], calyx.pk)
         self.assertEqual(option["being_id"], calyx.pk)
-        self.assertEqual(option["being_name"], "Calyx API")
+        self.assertEqual(option["description"], "Honorable combat")
         self.assertEqual(option["target_entry_id"], entry.pk)
+
+    def test_house_titles_ask_for_the_patron_gods_once_however_many_titles(self):
+        """#5110: with a patron question on the realm's templates, the gods are read
+        once for the response, never once per title."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.societies.houses.almanach import plant_rung
+        from world.societies.houses.constants import TitleTier
+
+        _patron, calyx, _hidden, _entry = self._patron_question()
+
+        def patron_names(response):
+            titles = response.data["results"] if isinstance(response.data, dict) else response.data
+            return [
+                [option["name"] for option in question["options"]]
+                for title in titles
+                for template in title["templates"]
+                for question in template["charter_questions"]
+                if question["sets_patron"]
+            ]
+
+        with CaptureQueriesContext(connection) as before:
+            first = self.client.get("/api/character-creation/house-titles/")
+        for i in range(6):
+            plant_rung(realm=self.realm, tier=TitleTier.DUCHY, name=f"Patron Duchy {i}")
+        with CaptureQueriesContext(connection) as after:
+            second = self.client.get("/api/character-creation/house-titles/")
+
+        offered_before, offered_after = patron_names(first), patron_names(second)
+        self.assertGreaterEqual(len(offered_after), len(offered_before) + 6)
+        self.assertTrue(all(names == [calyx.name] for names in offered_after))
+        being_reads = [
+            query["sql"] for query in after if "arxii_worshippedbeing" in query["sql"].lower()
+        ]
+        self.assertEqual(len(being_reads), 1, being_reads)
+        self.assertEqual(len([q for q in before if "arxii_worshippedbeing" in q["sql"].lower()]), 1)
+
+    def test_post_claim_carries_the_patron_and_refuses_a_god_not_offered(self):
+        """#5110: the claim is refused without a patron and with a god the question
+        does not offer; with one it offers, the claim holds the god."""
+        _patron, calyx, hidden, _entry = self._patron_question()
+        url = f"/api/character-creation/drafts/{self.draft.pk}/house-claim/"
+
+        missing = self.client.post(url, self._payload(), format="json")
+        self.assertEqual(missing.status_code, status.HTTP_400_BAD_REQUEST, missing.data)
+        refused = self.client.post(url, self._payload(patron_being_id=hidden.pk), format="json")
+        self.assertEqual(refused.status_code, status.HTTP_400_BAD_REQUEST, refused.data)
+
+        response = self.client.post(url, self._payload(patron_being_id=calyx.pk), format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["patron_being_id"], calyx.pk)
+        self.assertEqual(response.data["patron_name"], "Calyx API")
 
     def test_post_full_claim_persists_picks_and_stylings(self):
         response = self.client.post(

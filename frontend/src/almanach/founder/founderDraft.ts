@@ -205,6 +205,7 @@ export function useFounderDraft(draftId: number): UseFounderDraftResult {
  * so every kin row submits `basis: ''` until a later task adds one.
  */
 export function toClaimPayload(d: FounderDraft, template: HouseTemplateOption): HouseClaimPayload {
+  const patronQuestion = template.charter_questions.find((question) => question.sets_patron);
   return {
     title: d.title_id ?? 0,
     template: template.id,
@@ -213,10 +214,15 @@ export function toClaimPayload(d: FounderDraft, template: HouseTemplateOption): 
     words: d.words,
     colors: d.colors,
     sigil_description: d.sigil_description,
-    facets: Object.entries(d.facet_picks).map(([definitionId, options]) => ({
-      definition: Number(definitionId),
-      options,
-    })),
+    // The patron question is answered with a god (#5110): its pick goes up as
+    // `patron_being_id`, never among the option picks.
+    facets: Object.entries(d.facet_picks)
+      .filter(([definitionId]) => Number(definitionId) !== patronQuestion?.id)
+      .map(([definitionId, options]) => ({
+        definition: Number(definitionId),
+        options,
+      })),
+    patron_being_id: patronQuestion ? (d.facet_picks[patronQuestion.id]?.[0] ?? null) : null,
     mercy: d.principles.mercy ?? 0,
     method: d.principles.method ?? 0,
     status: d.principles.status ?? 0,

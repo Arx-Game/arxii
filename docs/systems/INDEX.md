@@ -2173,12 +2173,14 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 
 - **Nobility is macro, the grid keeps developments (#5069, ADR-5069-A; slice 1 #5071):** a `Domain` exists only at BARONY and COUNTY (a barony is one pip, a county its baronies plus a rural-pool hinterland; a duchy and above are organization with no ground, their numbers sums on read, their prose on `Area.description`); `almanach.house_holding_area` answers who holds any rung; population is a read-time formula (`demography.population_now`, base + `population_rebased_at` toward `population_capacity`), capacity is terrain (`DomainTerrainCount` cached at every carve, times the authored `TerrainCalibration`, times `DominionConfig.barony_capacity_factor` on a barony); a Domain's TERRITORY gross is people times `DominionConfig.coppers_per_head` (ADR-0319 amended; a Turf still pays by rooms). Sited `DomainHolding`s (ADR-0320/0321/0322) are the grid layer and stay. **Dormancy (slice 3, #5078):** `Organization.dormant_since` marks a house (an organization with a family and income) nobody plays, stamped by one statement at the head of `run_weekly_economy` and cleared by a member's login or roster approval; the income, materials, interest and obligation phases skip it, the land keeps running by formula, every phase logs rows and wall time. **Regional events (slice 4, #5080):** `RegionalEventKind` (authored: capacity cut, prosperity and unrest deltas, the crisis an awake house gets) and `RegionalEvent` (one open row over an Area); `regional_events.open_regional_event` rebases the land beneath and opens one `DomainCrisis` (`CrisisOrigin.REGIONAL`) per awake house, `populations_now` reads the cut while the row is open, `close_regional_event` rebases again and the land recovers by formula; two `almanach_*` actions, two staff list endpoints, the title page's Events row and the Atlas's strike tint. Details: [houses.md](houses.md) Models and "House state / published lifecycle".
 - **Models** (`world/societies/houses/`): `NobiliaryParticle`, `HouseRecognitionRule`, `FealtyEdge`, `SuccessionLaw`, `Title`, `LandShape`, `Domain`, `DominionConfig`, `TerrainCalibration`, `DomainTerrainCount`, `RegionalEventKind`, `RegionalEvent`, `DomainGarrisonPost`, `HoldingKind`, `DomainHolding`, `DomainImprovementDetails`, `DomainCrisis`, `CrisisIntel`, `MarriagePact`, `PactCommitment`; plus `Organization.family` / `Organization.default_succession_law` / `Organization.house_state` / `Organization.published_at`
-- **Charter options point at real things (#4205, ADR-4205; "aspects" until #4532):** `HouseCharterOption.being` /
-  `being_nickname` (PROTECT, nullable) say an authored answer IS a god or a totem and
-  what a house calls it; `codex_entry` stays the lore target; `target_entry_id` is the
-  one entry a pick opens. `HouseCharterQuestion.sets_patron` marks the one question per
-  charter whose pick writes `Organization.patron_nickname` at founding
-  (`creator._stamp_facets`). Every house read goes through
+- **Charter options point at real things (#4205, ADR-4205; "aspects" until #4532):** `HouseCharterOption.being`
+  (PROTECT, nullable) says an authored answer IS a god or a totem; `codex_entry` stays the
+  lore target; `target_entry_id` is the one entry a pick opens. **The patron (#5110,
+  ADR-5110):** `HouseCharterQuestion.sets_patron` marks the one question per charter whose
+  answer is the house's patron, and `patron_tradition` names its worship; the choices are
+  derived (`creator.patron_choices`: active gods of that tradition with a public Codex
+  page), the pick travels as `patron_being_id`, and `creator._stamp_facets` writes
+  `Organization.patron` at founding. Every house read goes through
   `almanach_reads.facet_payload` / `patron_payload`; the deity's Codex companion lists
   its sworn houses. Member effects (quiddity, totem bonuses) are a later issue.
 - **Developments (#4060 slice 2, ADR-0320):** a `DomainHolding` is the physical
@@ -10432,8 +10434,7 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `Gift.codex_entry`/`Technique.codex_entry`/`HouseCharterOption.codex_entry`; visibility reads
   entirely through the linked entry's `is_public` tier)), `BeingFacet` (favored
   aesthetic Facets, #3776), `BeingNickname` (#3776: alternate names worshippers use, unique per
-  being+name; `societies.Organization.patron_nickname` reaches the being transitively through
-  it), `BeingResonance` (#3776: `resonance` FK + `tier` (`BeingResonanceTier`:
+  being+name; a house's patron is the god itself, `societies.Organization.patron`, #5110), `BeingResonance` (#3776: `resonance` FK + `tier` (`BeingResonanceTier`:
   FAVORED/ASSOCIATED), unique per being+resonance — FAVORED pays double on future worship-rite
   reward calculation, #3777), `BeingRelationship` (#3776: `being_a`/`being_b` FKs +
   `valence` (`BeingRelationshipValence`: ALLY/RIVAL/FEUD/UNKNOWN) + `story_from_a`/`story_from_b`

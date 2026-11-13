@@ -92,10 +92,10 @@ class HouseFacetSerializer(serializers.Serializer):
 
 
 class HousePatronSerializer(serializers.Serializer):
-    """The house's patron by its own name for it (#4205; mirrors
+    """The house's patron, the god by its own name (#4205, #5110; mirrors
     ``almanach_reads.patron_payload``)."""
 
-    nickname = serializers.CharField()
+    being_id = serializers.IntegerField()
     being_name = serializers.CharField()
     codex_entry_id = serializers.IntegerField(allow_null=True)
 
@@ -253,6 +253,12 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "house",
         ]
 
+    def _reader_is_staff(self) -> bool:
+        """Whether the request's user is staff; no request (a nested or test use)
+        reads as not staff, the narrower answer."""
+        request = self.context.get("request")
+        return bool(request is not None and request.user.is_staff)
+
     @extend_schema_field(HouseDetailSerializer(allow_null=True))
     def get_house(self, obj) -> dict | None:
         if obj.family is None:
@@ -277,9 +283,9 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "vassal_names": [edge.vassal.name for edge in obj.vassal_edges.all()],
             "titles": titles,
             "domains": obj.domains.all(),
-            # Both read the prefetched ``patron_nickname__being`` and
-            # ``facets__option__being`` relations (#4205).
-            "patron": patron_payload(obj),
+            # Both read prefetched relations: ``patron`` (#5110) and
+            # ``facets__option__being`` (#4205).
+            "patron": patron_payload(obj, public_only=not self._reader_is_staff()),
             "facets": [facet_payload(facet) for facet in obj.facets.all()],
             "features": [
                 {

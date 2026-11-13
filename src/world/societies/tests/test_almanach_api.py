@@ -352,6 +352,63 @@ class AlmanachApiTests(TestCase):
             "target_entry_id": None,
         }
 
+    def test_document_offers_the_gods_of_the_patron_questions_worship(self) -> None:
+        """#5110: on a house's page the patron question's choices are the active,
+        public gods of its worship (``id`` is the god's), and the house's patron reads
+        by the god's own name."""
+        from world.codex.factories import CodexEntryFactory
+        from world.worship.factories import WorshippedBeingFactory, WorshipTraditionFactory
+
+        liturgy = WorshipTraditionFactory(name="Church Liturgy")
+        veil_entry = CodexEntryFactory(name="Veil", is_public=True)
+        veil = WorshippedBeingFactory(
+            name="Veil", tradition=liturgy, codex_entry=veil_entry, domains="Secrets kept"
+        )
+        WorshippedBeingFactory(
+            name="Hidden",
+            tradition=liturgy,
+            codex_entry=CodexEntryFactory(name="Hidden", is_public=False),
+        )
+        WorshippedBeingFactory(
+            name="The Fleshreaper",
+            codex_entry=CodexEntryFactory(name="The Fleshreaper", is_public=True),
+        )
+        template = HouseTemplate.objects.create(
+            name="Umbral Nobility",
+            realm=self.crown.society.realm,
+            kind=FamilyKindFactory(name=NOBLE_KIND_NAME),
+            society=self.crown.society,
+            org_type=self.crown.org_type,
+        )
+        patron = HouseCharterQuestion.objects.create(
+            name="Umbral Patron Deity", prompt="Whom?", sets_patron=True, patron_tradition=liturgy
+        )
+        template.charter_questions.add(patron)
+        client = APIClient()
+        client.force_authenticate(self.staff)
+        url = f"/api/almanach/houses/{self.crown.pk}/document/"
+
+        house = client.get(url).data["house"]
+        assert house["patron"] is None
+        question = next(q for q in house["charter_questions"] if q["id"] == patron.pk)
+        assert question["sets_patron"] is True
+        assert question["options"] == [
+            {
+                "id": veil.pk,
+                "name": "Veil",
+                "description": "Secrets kept",
+                "target_entry_id": veil_entry.pk,
+            }
+        ]
+
+        self.crown.patron = veil
+        self.crown.save(update_fields=["patron"])
+        assert client.get(url).data["house"]["patron"] == {
+            "being_id": veil.pk,
+            "being_name": "Veil",
+            "codex_entry_id": veil_entry.pk,
+        }
+
     def test_charter_with_no_authored_rows_is_all_blank(self) -> None:
         empty_realm = RealmFactory(name="Charterless")
         client = APIClient()

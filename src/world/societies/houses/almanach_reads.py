@@ -646,31 +646,59 @@ def charter_questions_for_house(house: Organization) -> list[dict]:
             "min_picks": question.min_picks,
             "max_picks": question.max_picks,
             "sets_patron": question.sets_patron,
-            "options": [
-                {
-                    "id": option.pk,
-                    "name": option.name,
-                    "description": option.description,
-                    "target_entry_id": option.target_entry_id,
-                }
-                for option in options_by_question[question.pk]
-            ],
+            "options": _question_choices(question, options_by_question[question.pk]),
         }
         for question in questions
     ]
 
 
-def patron_payload(house: Organization) -> dict | None:
-    """The house's patron (#4205) by the house's own name for it, or ``None``:
-    ``{"nickname", "being_name", "codex_entry_id"}`` read through
-    ``Organization.patron_nickname`` (#3776)."""
-    nickname = house.patron_nickname
-    if nickname is None:
+def _question_choices(question: HouseCharterQuestion, options: list[HouseCharterOption]) -> list:
+    """What a charter question offers: its authored options, or, for the patron
+    question, the gods of its worship (#5110; ``id`` is then the god's)."""
+    from world.societies.houses.creator import patron_choice_rows  # noqa: PLC0415
+
+    rows = (
+        patron_choice_rows(question)
+        if question.sets_patron
+        else [
+            {
+                "id": option.pk,
+                "name": option.name,
+                "description": option.description,
+                "target_entry_id": option.target_entry_id,
+            }
+            for option in options
+        ]
+    )
+    return [
+        {
+            "id": row["id"],
+            "name": row["name"],
+            "description": row["description"],
+            "target_entry_id": row["target_entry_id"],
+        }
+        for row in rows
+    ]
+
+
+def patron_payload(house: Organization, *, public_only: bool = False) -> dict | None:
+    """The house's patron (#4205), the god under its own name (#5110), or ``None``:
+    ``{"being_id", "being_name", "codex_entry_id"}`` read from
+    ``Organization.patron``.
+
+    ``public_only`` is for a reader who is not staff: a god whose Codex page is not
+    public is not named to them. A god is public when it is picked, but its page can
+    stop being public afterwards, and the house keeps its patron either way.
+    """
+    being = house.patron
+    if being is None:
+        return None
+    if public_only and not (being.codex_entry is not None and being.codex_entry.is_public):
         return None
     return {
-        "nickname": nickname.name,
-        "being_name": nickname.being.name,
-        "codex_entry_id": nickname.being.codex_entry_id,
+        "being_id": being.pk,
+        "being_name": being.name,
+        "codex_entry_id": being.codex_entry_id,
     }
 
 

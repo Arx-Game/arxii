@@ -125,22 +125,19 @@ export function FounderHouseChapter({
     ? `${youName} ${particle ?? ''} ${draft.house_name}`.replace(/\s+/g, ' ').trim()
     : '';
 
-  const quiddity = template.charter_questions[0];
-  const quiddityPicks = quiddity ? (draft.facet_picks[quiddity.id] ?? []) : [];
-
-  const toggleQuiddityOption = (optionId: number, maxPicks: number) => {
-    if (!quiddity) return;
+  const toggleOption = (questionId: number, optionId: number, maxPicks: number) => {
+    const current = draft.facet_picks[questionId] ?? [];
     let next: number[];
-    if (quiddityPicks.includes(optionId)) {
-      next = quiddityPicks.filter((id) => id !== optionId);
+    if (current.includes(optionId)) {
+      next = current.filter((id) => id !== optionId);
     } else if (maxPicks === 1) {
       next = [optionId];
-    } else if (quiddityPicks.length >= maxPicks) {
+    } else if (current.length >= maxPicks) {
       return;
     } else {
-      next = [...quiddityPicks, optionId];
+      next = [...current, optionId];
     }
-    set('facet_picks', { ...draft.facet_picks, [quiddity.id]: next });
+    set('facet_picks', { ...draft.facet_picks, [questionId]: next });
   };
 
   return (
@@ -247,39 +244,50 @@ export function FounderHouseChapter({
         rows={draft.observances}
         onChange={(rows) => set('observances', rows)}
       />
-      {quiddity && (
-        <div className="field">
-          <span className="label">House Quiddity</span>
-          <p className="sub">{quiddity.prompt}</p>
-          <ul className="entries">
-            {quiddity.options.map((option) => {
-              const picked = quiddityPicks.includes(option.id);
-              return (
-                <li key={option.id} className={picked ? 'on' : undefined}>
-                  <span className="mark">{picked ? '◆' : ''}</span>
-                  <span>
-                    <button
-                      type="button"
-                      aria-pressed={picked}
-                      onClick={() => toggleQuiddityOption(option.id, quiddity.max_picks ?? 1)}
-                    >
-                      <span className="nm">{option.name}</span>
-                      {option.description && <span className="ds">{option.description}</span>}
-                    </button>
-                  </span>
-                  <span className="rt">
-                    {option.target_entry_id != null && (
-                      <a href={urls.codexEntry(option.target_entry_id)}>
-                        {option.being_name !== '' ? option.being_name : 'codex'}
-                      </a>
-                    )}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
+      {/* Each of the charter's questions under its own name (#5110): a realm's
+          question is not always a Quiddity, and the patron question's choices are
+          gods. Picks are kept by question; `toClaimPayload` sends a patron pick
+          as the god it is. */}
+      {template.charter_questions.map((question) => {
+        const picks = draft.facet_picks[question.id] ?? [];
+        return (
+          <div className="field" key={question.id}>
+            <span className="label">{question.name}</span>
+            <p className="sub">{question.prompt}</p>
+            <ul className="entries">
+              {question.options.map((option) => {
+                const picked = picks.includes(option.id);
+                return (
+                  <li key={option.id} className={picked ? 'on' : undefined}>
+                    <span className="mark">{picked ? '◆' : ''}</span>
+                    <span>
+                      <button
+                        type="button"
+                        aria-pressed={picked}
+                        onClick={() =>
+                          toggleOption(question.id, option.id, question.max_picks ?? 1)
+                        }
+                      >
+                        <span className="nm">{option.name}</span>
+                        {option.description && <span className="ds">{option.description}</span>}
+                      </button>
+                    </span>
+                    <span className="rt">
+                      {option.target_entry_id != null && (
+                        <a href={urls.codexEntry(option.target_entry_id)}>
+                          {option.being_name !== '' && option.being_name !== option.name
+                            ? option.being_name
+                            : 'codex'}
+                        </a>
+                      )}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      })}
       <div className="field">
         <span className="label">principles</span>
         {AXES.map((axis) => {

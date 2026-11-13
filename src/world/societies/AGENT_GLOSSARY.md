@@ -8,22 +8,28 @@ _Avoid_: faction, org, culture.
 A specific group within a Society — a noble family, guild, gang, business, or standalone covenant — carrying rank titles and optional principle overrides. It belongs to (or stands apart from) exactly one Society.
 _Avoid_: faction, guild (guild is one OrganizationType, not the general term).
 
-**Patron Nickname** (`Organization.patron_nickname`, #3776):
-The org's own name for its patron deity — a nullable FK to `worship.BeingNickname`,
-never a direct FK to `worship.WorshippedBeing`. The being is reached transitively via
-`patron_nickname.being`, so different organizations can each name the same god
-differently in their own records. Written once, at founding, from the pick on the
-charter's patron question (#4205); staff change it in admin afterwards.
-_Avoid_: patron deity FK (there is no such field), patron being.
+**Patron** (`Organization.patron`, #5110, ADR-5110):
+The god an organization stands behind: a nullable FK straight to
+`worship.WorshippedBeing`, shown by the god's own name. A house's is written once, at
+founding, from the god picked on its charter's patron question, and changed afterwards
+only by staff (`almanach_edit_house`'s `patron_being_id`, or the org admin).
+_Avoid_: patron nickname (the per-house name for a god, #3776, is gone), patron deity FK
+on Family (ADR-0268).
 
-**Charter option target** (`HouseCharterOption.being` / `being_nickname` / `codex_entry`, #4205):
-What an authored aspect answer IS: a god or totem (`being`, with the name a house calls
-it by in `being_nickname`) or a lore entry (`codex_entry`), never both. A pick opens that
-page from every house surface (`target_entry_id`). A **patron question** is the one
-`HouseCharterQuestion` per charter with `sets_patron` on; its pick names the house's
-patron. The target is a property of the catalog row, not a grant to anyone.
-_Avoid_: patron aspect (the question sets the patron; the option is a god), free-text
-aspect (ADR-0101), a geas as a house aspect (a geas is a personal Distinction, ruled #4205).
+**Patron question** (`HouseCharterQuestion.sets_patron` + `patron_tradition`, #4205, #5110):
+The one question per charter whose answer is the house's patron. It has no authored
+options: its choices are the active gods of `patron_tradition` (a `WorshipTradition`)
+whose Codex page is public, read by `creator.patron_choices`. A pick is a god's id and
+travels as `patron_being_id`, never among the option picks.
+_Avoid_: patron option, patron aspect (the choices are gods, not catalog rows).
+
+**Charter option target** (`HouseCharterOption.being` / `codex_entry`, #4205):
+What an authored answer IS: a god or totem (`being`) or a lore entry (`codex_entry`),
+never both. A pick opens that page from every house surface (`target_entry_id`). The
+target is a property of the catalog row, not a grant to anyone. Options belong to
+ordinary questions only; a patron question takes none.
+_Avoid_: free-text aspect (ADR-0101), a geas as a house aspect (a geas is a personal
+Distinction, ruled #4205).
 
 **OrganizationType**:
 A template categorizing organizations and supplying their default five-rank title set (e.g. noble_family, guild, secret_society, covenant).

@@ -8,7 +8,7 @@ import core.natural_keys
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0403_channels_carry_from_evennia"),
+        ("arxii", "0406_drop_patron_nicknames"),
     ]
 
     operations = [

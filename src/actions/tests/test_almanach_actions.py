@@ -736,38 +736,56 @@ class AlmanachActionTests(TestCase):
             )
         ) == [feature.pk]
 
-    def test_edit_house_patron_pick_names_the_houses_god(self) -> None:
-        """#5064: a staff pick on a ``sets_patron`` question sets ``patron_nickname``,
-        the same rule founding applies, and two such picks are refused."""
-        from world.societies.houses.models import HouseCharterOption, HouseCharterQuestion
-        from world.worship.factories import BeingNicknameFactory
+    def test_edit_house_sets_and_clears_the_patron_from_the_gods_offered(self) -> None:
+        """#5110: staff give a house a patron by ``patron_being_id``, one of the active
+        public gods of its realm's patron question; a god the question does not offer
+        is refused, ``None`` clears it, and an absent kwarg leaves it alone."""
+        from world.codex.factories import CodexEntryFactory
+        from world.societies.houses.factories import HouseTemplateFactory
+        from world.societies.houses.models import HouseCharterQuestion
+        from world.worship.factories import WorshippedBeingFactory, WorshipTraditionFactory
 
+        liturgy = WorshipTraditionFactory(name="Church Liturgy")
+        veil = WorshippedBeingFactory(
+            name="Veil",
+            tradition=liturgy,
+            codex_entry=CodexEntryFactory(name="Veil", is_public=True),
+        )
+        occult = WorshippedBeingFactory(
+            name="The Fleshreaper",
+            codex_entry=CodexEntryFactory(name="The Fleshreaper", is_public=True),
+        )
         patron = HouseCharterQuestion.objects.create(
-            name="Umbral Patron Deity", prompt="Whom?", sets_patron=True
+            name="Umbral Patron Deity", prompt="Whom?", sets_patron=True, patron_tradition=liturgy
         )
-        knight = BeingNicknameFactory(name="The One True Knight")
-        mother = BeingNicknameFactory(name="The Veiled Mother")
-        calyx = HouseCharterOption.objects.create(
-            definition=patron, name="Calyx", being=knight.being, being_nickname=knight
+        HouseTemplateFactory(realm=self.crown.society.realm).charter_questions.add(patron)
+
+        refused = AlmanachEditHouseAction().run(
+            self.staff, org_id=self.crown.pk, patron_being_id=occult.pk
         )
-        gloria = HouseCharterOption.objects.create(
-            definition=patron, name="Gloria", being=mother.being, being_nickname=mother
-        )
+        assert not refused.success
+        self.crown.refresh_from_db()
+        assert self.crown.patron_id is None
 
         result = AlmanachEditHouseAction().run(
-            self.staff, org_id=self.crown.pk, facet_option_ids=[calyx.pk]
+            self.staff, org_id=self.crown.pk, patron_being_id=veil.pk
         )
         assert result.success, result.message
         self.crown.refresh_from_db()
-        assert self.crown.patron_nickname_id == knight.pk
+        assert self.crown.patron_id == veil.pk
+
+        # a words-only edit leaves the patron where it was
+        result = AlmanachEditHouseAction().run(self.staff, org_id=self.crown.pk, words="Kept.")
+        assert result.success, result.message
+        self.crown.refresh_from_db()
+        assert self.crown.patron_id == veil.pk
 
         result = AlmanachEditHouseAction().run(
-            self.staff, org_id=self.crown.pk, facet_option_ids=[calyx.pk, gloria.pk]
+            self.staff, org_id=self.crown.pk, patron_being_id=None
         )
-        assert not result.success
-        assert result.message
+        assert result.success, result.message
         self.crown.refresh_from_db()
-        assert self.crown.patron_nickname_id == knight.pk
+        assert self.crown.patron_id is None
 
     def test_edit_house_replaces_observances_and_refuses_bad_rows(self) -> None:
         """#4206: ``observances`` replaces the house's days wholesale through the

@@ -1418,6 +1418,7 @@
 
 ### Service Functions
 - `accessible_channels_for(account: 'AccountDB') -> 'QuerySet[Channel]' - Active channels this account may read right now (and post in, given an eligible`
+- `account_ids_hiding_persona(persona: 'Persona') -> 'set[int]' - The inverse of ``hidden_persona_ids_for_viewer`` for one persona (#3299): the ids of`
 - `account_muter_player_ids(*, target_player: 'PlayerData') -> 'set[int]' - Player ids holding an account-level Mute on ``target_player``: the speaker-side twin of`
 - `ban_channel_author(*, message: 'ChannelMessage', staff_account: 'AccountDB', reason: 'str' = '') -> 'ChannelBan' - Ban the message author's account from the channel and drop its subscription.`
 - `blocked_player_ids_for(player: 'PlayerData') -> 'set[int]' - Account-level Block partner ids for this player, either direction (#2996).`
@@ -1430,6 +1431,8 @@
 - `ensure_public_channel() -> 'Channel' - Get or create the PUBLIC channel. Matches on name AND kind, so a non-public row that`
 - `findable_channels_for(account: 'AccountDB') -> 'QuerySet[Channel]' - Active channels this account may name, by name or id: those it can reach, is`
 - `hidden_author_player_ids(account: 'AccountDB') -> 'set[int]' - Players whose channel rows this account sees hidden: account blocks, either way.`
+- `hidden_author_sheet_ids(account: 'AccountDB') -> 'set[int]' - Characters whose channel rows this account sees hidden by a block on their PRIMARY`
+- `hidden_persona_ids_for_viewer(*, viewer_account: 'Any') -> 'set[int]' - Persona ids whose content is hidden from this viewer by an active block (#1278).`
 - `history_for(account: 'AccountDB', channel: 'Channel') -> 'QuerySet[ChannelMessage]' - The channel's messages for this reader, OOC-muted authors dropped. Blocked authors`
 - `mark_read(subscription: 'ChannelSubscription') -> 'None'`
 - `muted_player_ids_for(*, viewer_player: 'PlayerData') -> 'set[int]' - Account-level Mute target ids for this viewer (#2996).`
@@ -1437,7 +1440,7 @@
 - `provision_missing_org_channels() -> 'int' - Provision the ORG channel of every org that should have one and lacks it (seed and`
 - `provision_org_channel(organization: 'Organization') -> 'Channel | None' - Get or create the ORG channel for ``organization``.`
 - `prune_channel_history(*, cap: 'int' = 500) -> 'int' - Delete every message beyond the newest ``cap`` in each channel; return the count.`
-- `subscribe(account: 'AccountDB', channel: 'Channel') -> 'ChannelSubscription' - Join ``channel`` (idempotent), pre-filling the speaking identity.`
+- `subscribe(account: 'AccountDB', channel: 'Channel') -> 'ChannelSubscription' - Join ``channel`` (idempotent), pre-filling the speaking identity. A new subscriber`
 - `subscriptions_by_channel(account: 'AccountDB') -> 'dict[int, ChannelSubscription]' - The account's own subscriptions keyed by channel pk, with what a listing shows.`
 - `unread_count(subscription: 'ChannelSubscription') -> 'int' - Unread messages since ``last_read_at``; 0 for a muted channel or level NONE.`
 - `unread_counts(account: 'AccountDB', subscriptions: 'list[ChannelSubscription]') -> 'dict[int, int]' - Unread messages per subscription pk (one query for the lot): messages after`
@@ -3509,6 +3512,8 @@
 - `process_round_end(target: 'ObjectDB') -> world.conditions.types.RoundTickResult - Process end-of-round effects for all conditions on a target.`
 - `process_round_start(target: 'ObjectDB') -> world.conditions.types.RoundTickResult - Process start-of-round effects for all conditions on a target.`
 - `provoking_source_by_target(targets: collections.abc.Iterable['ObjectDB']) -> dict[int, int] - ObjectDB pk of each target's provoker from active forces_attack_on_source conditions.`
+- `rally_target_instance(target: 'ObjectDB') -> world.conditions.models.ConditionInstance | None - The condition instance a rally on *target* reaches, or None when nothing holds them.`
+- `record_rally_landed(instance: world.conditions.models.ConditionInstance) -> None - An ally's rally landed on *instance* (#4887): the one writer of ``rallied``.`
 - `register_detection(observer_sheet: 'CharacterSheet', target: 'ObjectDB') -> None - Record that observer_sheet has pierced target's active concealment(s) (#1225).`
 - `remove_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, remove_all_stacks: bool = True, include_suppressed: bool = False) -> bool - Remove a condition from a target.`
 - `remove_condition_by_name(*, payload: object, condition_name: str) -> bool - Remove a named condition from the character carried by the payload.`
@@ -4557,7 +4562,7 @@
 - `apply_disguise(character: 'Any', disguise_form: 'CharacterForm', *, kind: 'DisguiseKind' = DisguiseKind.MUNDANE, concealment_level: 'ConcealmentLevel' = ConcealmentLevel.NONE, kit_instance: 'Any' = None) -> 'CharacterFormState' - Paint a fake overlay over the character's real form (#1110).`
 - `assume_alternate_self(sheet: 'CharacterSheet', alt: 'AlternateSelf', instance_value: 'float' = 1.0) -> 'ActiveAlternateSelf' - Assume an alternate self — swap in form/persona facets, create the`
 - `assume_alternate_self_for_audere(sheet: 'CharacterSheet', alt: 'AlternateSelf') -> 'bool' - Put her in the alternate self whose reveal card she chose at Audere (#4731).`
-- `attempt_revert_form(sheet: 'CharacterSheet') -> 'CompulsionAttempt' - The player's entry point for changing back (#4802).`
+- `attempt_revert_form(sheet: 'CharacterSheet') -> 'CompulsionAttempt' - The player's entry point for changing back (#4802, #4887).`
 - `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' - Calculate weight in pounds from height and build.`
 - `change_appearance(character: 'Any', trait: 'FormTrait', new_option: 'FormTraitOption', *, persona: 'Persona', descriptor: 'str | None' = None, note: 'str' = '', actor_persona: 'Persona | None' = None, blend: 'bool' = False) -> 'CharacterFormValue' - Cosmetically edit one trait of the character's real form (hair dye, restyle).`
 - `create_true_form(character: 'Any', selections: 'dict[FormTrait, FormTraitOption]') -> 'CharacterForm' - Create the true form for a character during character creation.`
@@ -7597,11 +7602,11 @@
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, *, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> int - Preview the rank difference for a check without rolling.`
 - `property_damage_bonus(target: 'ObjectDB', damage_type: 'DamageType | None') -> 'int' - Sum PropertyDamageModifier.modifier_value for target's active Properties.`
 - `role_base_bonus_for_target(role: 'CovenantRole', target: 'ModifierTarget', character_level: 'int') -> 'int' - Authored covenant-role bonus for ``target``, scaled by character level (#985).`
-- `trait_modifiers_for_sheet(character_sheet: 'CharacterSheet', traits: 'Iterable[Trait]') -> 'dict[int, int]' - ``trait.pk`` to the modifier a roll on that stat or skill gets, for the sheet.`
 - `source_carries_required_mark(source: 'CapabilitySource', app: 'Application') -> 'bool' - Whether ``source`` carries the effect property ``app`` needs (or it needs none).`
 - `source_matches_application(source: 'CapabilitySource', app: 'Application') -> 'bool' - Whether ``source`` reaches ``app`` (#5066): the same capability, held above the`
 - `stage_property(target: 'ObjectDB', property_: 'Property', value: 'int' = 1) -> 'ObjectProperty' - GM improv: attach or refresh a Property on ``target`` (#2503).`
 - `thread_passive_capability_grants(character_sheet: 'CharacterSheet') -> dict[int, int] - Thread-passive capability grants (#751 B2), by capability pk.`
+- `trait_modifiers_for_sheet(character_sheet: 'CharacterSheet', traits: 'Iterable[Trait]') -> 'dict[int, int]' - ``trait.pk`` to the modifier a roll on that stat or skill gets, for the sheet.`
 - `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' - Update CharacterModifier values when rank changes.`
 - `volatile_object_property(target: 'ObjectDB') -> 'ObjectProperty | None' - Return the ``ObjectProperty`` making *target* volatile (detonatable), or None.`
 - `vow_stat_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum the vow-driven stat scaling across engaged PRIMARY roles (#2022).`
@@ -8324,13 +8329,14 @@
 - `grade_pact_period(project: 'Project', outcome_tier: 'CheckOutcome | None') -> 'None' - The PACT_PERIOD kind handler, run once by ``resolve_project``.`
 - `offered_pact_summary(pledge: 'Pledge') -> 'PactOfferSummary | None' - The pact ``pledge`` offers at its close, while that offer stands; else None.`
 - `open_pact_period(pact: 'CharacterPact', commitment: 'PactOfferCommitment | None') -> 'PactPeriodDetails' - Open one PACT_PERIOD project for ``commitment`` (None: an ease-out period).`
-- `pact_beings_for(sheet: 'CharacterSheet') -> 'list[WorshippedBeing]' - The beings she holds an active pact with, oldest pact first.`
-- `pact_card(pact: 'CharacterPact') -> 'PactCard' - One pact as its holder's card shows it: the open period, its favor by source,`
+- `pact_beings_for(sheet: 'CharacterSheet') -> 'list[WorshippedBeing]' - The beings whose active pact with her has an open commitment period, oldest first.`
+- `pact_card(pact: 'CharacterPact') -> 'PactCard' - One pact's card (``pact_cards`` for one).`
+- `pact_cards(pacts: 'list[CharacterPact]') -> 'list[PactCard]' - ``pacts`` as their holders' cards show them, in the given order: the open period,`
 - `pact_cards_for(sheet: 'CharacterSheet') -> 'list[PactCard]' - Her pact cards, newest first: active pacts, and ended pacts still easing out.`
 - `pact_deed_favor_this_week(sheet: 'CharacterSheet') -> 'int' - Base deed favor her pact credits took from this week's deed cap.`
 - `pact_offer_summary(offer: 'PactOffer') -> 'PactOfferSummary' - The offer as the pledge card shows it: being, text, commitments, period, stages.`
 - `record_pact_credit(sheet: 'CharacterSheet', being: 'WorshippedBeing', credited: 'int', source: 'FavorSource | None', *, base: 'int' = 0) -> 'list[PactCredit]' - Credit ``credited`` favor to every open commitment period of her pact with ``being``.`
-- `renounce_pact(sheet: 'CharacterSheet', being: 'WorshippedBeing') -> 'CharacterPact' - End her active pact with ``being`` (RENOUNCED): release (D5) and ease out.`
+- `renounce_pact(sheet: 'CharacterSheet', being: 'WorshippedBeing') -> 'RenouncedPact' - End her active pact with ``being`` (RENOUNCED): release (D5) and ease out.`
 - `resolve_pact_period(project: 'Project') -> 'None' - The PACT_PERIOD tiered resolver: Success when met (or easing out), else Failure.`
 - `sign_being_pact(sheet: 'CharacterSheet', offer: 'PactOffer') -> 'CharacterPact' - Sign ``offer`` for ``sheet`` (spec section 7, step 3).`
 
@@ -10388,12 +10394,12 @@
   - definition -> societies.HouseCharterQuestion [FK]
   - codex_entry -> codex.CodexEntry [FK] (nullable)
   - being -> worship.WorshippedBeing [FK] (nullable)
-  - being_nickname -> worship.BeingNickname [FK] (nullable)
 
 ### HouseCharterQuestion
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - patron_tradition -> worship.WorshipTradition [FK] (nullable)
 **Pointed to by:**
   - templates <- societies.HouseTemplate
   - options <- societies.HouseCharterOption
@@ -10404,6 +10410,7 @@
   - title -> societies.Title [FK]
   - template -> societies.HouseTemplate [FK]
   - estate_district -> areas.Area [FK] (nullable)
+  - patron_being -> worship.WorshippedBeing [FK] (nullable)
   - reviewed_by -> evennia.AccountDB [FK] (nullable)
 **Pointed to by:**
   - facets <- societies.HouseClaimFacet
@@ -10633,7 +10640,7 @@
   - default_succession_law -> societies.SuccessionLaw [FK] (nullable)
   - society -> societies.Society [FK] (nullable)
   - org_type -> societies.OrganizationType [FK]
-  - patron_nickname -> worship.BeingNickname [FK] (nullable)
+  - patron -> worship.WorshippedBeing [FK] (nullable)
 **Pointed to by:**
   - held_assets <- assets.NPCAsset
   - capture_consequence_effects <- checks.ConsequenceEffect
@@ -12075,9 +12082,6 @@
 ### BeingNickname
 **Foreign Keys:**
   - being -> worship.WorshippedBeing [FK]
-**Pointed to by:**
-  - patron_organizations <- societies.Organization
-  - house_charter_options <- societies.HouseCharterOption
 
 ### BeingRelationship
 **Foreign Keys:**
@@ -12316,6 +12320,7 @@
 **Foreign Keys:**
   - rites_specialization -> skills.Specialization [FK]
 **Pointed to by:**
+  - patron_questions <- societies.HouseCharterQuestion
   - beings <- worship.WorshippedBeing
 
 ### WorshippedBeing
@@ -12330,6 +12335,7 @@
   - modifier_targets <- mechanics.ModifierTarget
   - ceremonies <- ceremonies.Ceremony
   - sacrifices <- ceremonies.CeremonyOffering
+  - sworn_organizations <- societies.Organization
   - house_charter_options <- societies.HouseCharterOption
   - audere_majora_faith_variants <- magic.AudereMajoraFaithVariant
   - manifest_options <- magic.TechniqueManifestOption
@@ -12370,7 +12376,7 @@
 - `get_divine_intervention_config() -> 'DivineInterventionConfig' - Lazy-create the singleton (pk=1) divine intervention config (#2360).`
 - `gods_favorite_achievement_for(character_sheet: 'CharacterSheet') -> 'Achievement | None' - Resolve the gender-matched God's Favorite achievement row (Decision 6).`
 - `grant_chosen_distinction(sheet: 'CharacterSheet') -> None - Grant ``sheet`` the designated Chosen distinction at character creation (#4341),`
-- `grant_chosen_distinction_to_chosen(config: world.worship.models.ChosenFavorConfig) -> int - Grant the designated Chosen distinction to every Chosen who lacks it (#4341).`
+- `grant_chosen_distinction_to_chosen(config: world.worship.models.ChosenFavorConfig) -> world.worship.types.ChosenDistinctionGrants - Grant the designated Chosen distinction to every Chosen who lacks it (#4341).`
 - `grant_worship(being: world.worship.models.WorshippedBeing, amount: int, *, granted_by: 'CharacterSheet | None' = None, reason: str = '') -> world.worship.models.WorshipGrant - Add worship to a being's pool and record the audit ledger row.`
 - `install_divine_intervention_trigger(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing) -> None - Install the divine intervention Trigger on the character's ObjectDB.`
 - `intervention_cooldown_active(character) -> bool - Whether the divine intervention cooldown condition is on ``character``.`

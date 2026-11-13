@@ -224,13 +224,13 @@ function HouseSection({ orgId, house }: { orgId: number; house: HouseDetail }) {
           )}
           {house.patron && (
             <p>
-              <span className="text-muted-foreground">Patron:</span> {house.patron.nickname}{' '}
+              <span className="text-muted-foreground">Patron:</span>{' '}
               {house.patron.codex_entry_id != null ? (
                 <Link to={urls.codexEntry(house.patron.codex_entry_id)} className="underline">
-                  ({house.patron.being_name})
+                  {house.patron.being_name}
                 </Link>
               ) : (
-                <>({house.patron.being_name})</>
+                house.patron.being_name
               )}
             </p>
           )}

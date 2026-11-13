@@ -17,6 +17,10 @@
  * whose question is not in the catalog (a house whose realm has no templates)
  * renders read-only.
  *
+ * The patron question (#5110, `sets_patron`) is the same select over a different
+ * catalog: its options are the gods of the question's worship, their `id` a god's.
+ * Its pick is `house.patron`, never a facet, and is sent as `patron_being_id`.
+ *
  * Two ABSENT-catalog omissions remain, same root cause: nothing in the wire
  * payload lists the pickable rows.
  * - Features: `HouseFeature` has no list endpoint here — the chips render
@@ -59,6 +63,8 @@ export interface EditHouseFields {
   observances?: ObservanceRow[];
   /** The whole list of charter answers, replacing the house's facets (#5064). */
   facet_option_ids?: number[];
+  /** The god picked on the patron question, or null for none (#5110). */
+  patron_being_id?: number | null;
 }
 
 /** The house's answers by question id, the shape the pickers edit. */
@@ -69,6 +75,10 @@ function initialPicks(house: AlmanachHouseDocumentHouse): Picks {
   for (const facet of house.facets) {
     (picks[facet.definition_id] ??= []).push(facet.option_id);
   }
+  // The patron question is answered with a god (#5110): its pick is the house's
+  // patron, and the ids its select holds are gods' ids.
+  const patronQuestion = house.charter_questions.find((question) => question.sets_patron);
+  if (patronQuestion && house.patron) picks[patronQuestion.id] = [house.patron.being_id];
   return picks;
 }
 
@@ -77,12 +87,14 @@ function initialPicks(house: AlmanachHouseDocumentHouse): Picks {
 function flattenPicks(picks: Picks, house: AlmanachHouseDocumentHouse): number[] {
   const seen = new Set<number>();
   const out: number[] = [];
+  const patronIds = new Set(house.charter_questions.filter((q) => q.sets_patron).map((q) => q.id));
   const questionIds = [
     ...house.charter_questions.map((q) => q.id),
     ...Object.keys(picks).map(Number),
   ];
   for (const id of questionIds) {
-    if (seen.has(id)) continue;
+    // a patron pick is a god, sent as `patron_being_id`, never an option id
+    if (seen.has(id) || patronIds.has(id)) continue;
     seen.add(id);
     out.push(...(picks[id] ?? []));
   }
@@ -141,6 +153,7 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
   const [observances, setObservances] = useState<ObservanceRow[]>(() => editableObservances(house));
   const [picks, setPicks] = useState<Picks>(() => initialPicks(house));
   const catalogIds = new Set(house.charter_questions.map((q) => q.id));
+  const patronQuestion = house.charter_questions.find((question) => question.sets_patron);
   const readOnlyGroups = facetGroups.filter(
     ([, facets]) => !catalogIds.has(facets[0].definition_id)
   );
@@ -173,6 +186,10 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
       )
     )
       fields.facet_option_ids = chosen;
+    if (patronQuestion) {
+      const pickedPatron = picks[patronQuestion.id]?.[0] ?? null;
+      if (pickedPatron !== (house.patron?.being_id ?? null)) fields.patron_being_id = pickedPatron;
+    }
     if (Object.keys(fields).length === 0) return;
     onSave(fields);
     if (fields.words !== undefined) words.clearDraft();
@@ -239,17 +256,18 @@ export function HouseChapter({ house, realmTheme, onSave }: HouseChapterProps) {
           </div>
         </div>
       </div>
-      {house.patron && (
+      {/* The patron question below shows the god it picked; this line is for a
+          house whose realm asks no patron question but which has a patron. */}
+      {house.patron && !patronQuestion && (
         <div className="field">
           <span className="label">patron</span>
           <div className="val">
-            {house.patron.nickname}{' '}
             {house.patron.codex_entry_id != null ? (
               <Link to={urls.codexEntry(house.patron.codex_entry_id)}>
-                ({house.patron.being_name})
+                {house.patron.being_name}
               </Link>
             ) : (
-              <>({house.patron.being_name})</>
+              house.patron.being_name
             )}
           </div>
         </div>

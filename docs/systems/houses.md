@@ -417,36 +417,43 @@ two shapes; see Recipe 7 in `docs/systems/family-authoring-recipes.md`.
     the definition is the question the founder answers, not a lore subject.
   - **An option is a typed thing (#4205, ADR-4205).** Beside `codex_entry` (the
     lore target: a founding battle, a tradition), `HouseCharterOption.being`
-    (`WorshippedBeing`, PROTECT) says the option IS a god or a totem, and
-    `being_nickname` (`BeingNickname`, PROTECT, one of that being's own) is the
-    name a house on this option calls it by. `clean()` refuses a nickname of
-    another being, a being and a lore entry both claimed, and a patron
-    question's option without both. `target_entry_id` is the one Codex entry
-    the option opens: its own `codex_entry`, else the being's page. Beings and
-    nicknames are installation rows, so both FKs leave the content export
-    (`EXPORT_FIELD_EXCLUSIONS`, the `served_house_choices` precedent) and are
-    re-bound in admin elsewhere.
-  - **The patron question (#4205).** `HouseCharterQuestion.sets_patron` marks
-    the one question per charter (`HouseTemplate.clean()` refuses two) whose
-    pick names the house's patron: `build_family_org` writes
-    `Organization.patron_nickname` from it (`_stamp_facets` /
-    `patron_option_from_picks`), on the title path and the name path alike, in
-    the same transaction as the `OrganizationFacet` rows. Fixed at founding; after
-    it, `almanach_edit_house` writes it from a pick on the patron question
-    (`_patron_from_facets`, #5064: the House chapter's picker), and staff can
-    overwrite it in the org admin. Whether the question is required is the
-    definition's own `min_picks`.
+    (`WorshippedBeing`, PROTECT) says the option IS a god or a totem. `clean()`
+    refuses a being and a lore entry both claimed, and any option on a patron
+    question (#5110). `target_entry_id` is the one Codex entry the option opens:
+    its own `codex_entry`, else the being's page. Beings are installation rows,
+    so the FK leaves the content export (`EXPORT_FIELD_EXCLUSIONS`, the
+    `served_house_choices` precedent) and is re-bound in admin elsewhere.
+  - **The patron question (#4205, #5110, ADR-5110).** `HouseCharterQuestion.sets_patron`
+    marks the one question per charter (`HouseTemplate.clean()` refuses two)
+    whose answer is the house's patron, and `patron_tradition` (FK →
+    `worship.WorshipTradition`, required on such a question) says which worship
+    its gods are of. It has no options: `creator.patron_choices(question)` is the
+    active gods of that tradition whose Codex page is public, by name, and the
+    reads hand them out in the option shape with `id` the god's
+    (`patron_choice_rows`). A pick is a god: `validate_patron_pick` checks it
+    against the choices (required when `min_picks` is 1), and it travels as
+    `patron_being_id` on the claim (`HouseClaim.patron_being`), as
+    `draft_data["family_patron_being_id"]` on the name path, and as
+    `patron_being_id` on `almanach_edit_house` (`_apply_patron`, `None` clears).
+    `build_family_org(patron=...)` writes `Organization.patron` in the same
+    transaction as the facets, on the title path and the name path alike.
+    Fixed at founding; afterwards only staff change it. The worship is not set by
+    a migration (it is content): staff set it in the question's admin page, and
+    a patron question without one offers no gods.
   - **Reads.** Every house surface emits a pick through one reader,
     `almanach_reads.facet_payload` (`definition`, `option`, `description`,
     `being_name`, `target_entry_id`): the org payload's house block, the
     Almanach document, the family read and `family_views`' inherited facts;
     the house block and the document also carry `patron`
-    (`almanach_reads.patron_payload`: `nickname`, `being_name`,
-    `codex_entry_id`). `HouseCharterOptionSerializer` (CG) adds `being_id`,
-    `being_name`, `target_entry_id`, and the option cards link the target. The
-    deity's Codex companion (`worship/companion.py`) lists its **Sworn houses**:
-    published organisations whose `patron_nickname.being` is that god, each a
-    site-path link to its house page (`CompanionItem.href`).
+    (`almanach_reads.patron_payload`: `being_id`, `being_name`,
+    `codex_entry_id`). The org payload passes `public_only` for a reader who is
+    not staff, so a patron whose Codex page has stopped being public is not
+    named to them. `HouseCharterOptionSerializer` (CG) adds `being_id`,
+    `being_name`, `target_entry_id`, and the option cards link the target;
+    `HouseCharterQuestionSerializer` carries `sets_patron`. The deity's Codex
+    companion (`worship/companion.py`) lists its **Sworn houses**: published
+    organisations whose `patron` is that god, each a site-path link to its
+    house page (`CompanionItem.href`).
 - **Feature** — a structural cultural FACT, no player input.
   `HouseFeature` (name, unique `slug` as the stable code anchor, player-facing
   description) attaches via `HouseTemplate.features`; at CG it orients the
@@ -1096,8 +1103,8 @@ realm" above) (#4986),
 `AlmanachEditHouseAction` (`almanach_edit_house` — charter fields, house
 state, succession law default, and a wholesale `OrganizationFacet`/`OrganizationFeature`/
 `OrganizationObservance` replace; an `observances` row is `{ic_month, ic_day, name, lore}`,
-#4206; a `facet_option_ids` list that answers a `sets_patron` question also writes
-`patron_nickname`, two such picks refused, #5064), `AlmanachSwearAction` (`almanach_swear`), `AlmanachDescribeDemesneAction`
+#4206; `patron_being_id` sets the house's patron to a god its realm's patron question
+offers, `None` clears it, #5110), `AlmanachSwearAction` (`almanach_swear`), `AlmanachDescribeDemesneAction`
 (`almanach_describe_demesne`), `AlmanachAddHoldingAction` (`almanach_add_holding`),
 `AlmanachPlanEstateAction` (`almanach_plan_estate`), `AlmanachEditKinAction`
 (`almanach_edit_kin`), `AlmanachPublishAction` (`almanach_publish`).

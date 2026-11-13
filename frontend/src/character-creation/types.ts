@@ -1130,6 +1130,8 @@ export interface DraftData {
   crew_slot_id?: number | null;
   // Aspect picks for the chosen Family Template: definition id -> option ids (#3648).
   family_facet_picks?: Record<string, number[]>;
+  /** The god picked on the Family Template's patron question, or null (#5110). */
+  family_patron_being_id?: number | null;
   // "Make it yours" picks (#4099), keyed by the chosen technique's id (as a
   // string). An unselected technique's entry is ignored by costs,
   // validation and finalize; the UI prunes it on deselect.

@@ -110,20 +110,25 @@ function estateLineOf(estateName: string, capitalName: string | undefined): stri
   return estateName;
 }
 
-/** The picked template's first charter question's chosen option name(s)
- * (plate F-II's "quiddity" row, plate F-VI's `.row3` "quiddity" field) —
- * `''` before a template/pick exist. */
-function quiddityNameOf(
+/** What the founder has answered on the template's charter questions, for the
+ * record rail and the review page (plates F-II and F-VI): the chosen names across
+ * every question, under the question's own name when there is one question and
+ * "charter" when there are several (#5110: a realm's question is not always a
+ * Quiddity; Umbros asks for a patron). `text` is `''` before a pick exists. */
+function charterAnswerOf(
   template: HouseTemplateOption | undefined,
   picks: Record<number, number[]>
-): string {
-  const quiddity = template?.charter_questions[0];
-  if (!quiddity) return '';
-  const pickedIds = picks[quiddity.id] ?? [];
-  return quiddity.options
-    .filter((option) => pickedIds.includes(option.id))
+): { label: string; text: string } {
+  const questions = template?.charter_questions ?? [];
+  const text = questions
+    .flatMap((question) => {
+      const pickedIds = picks[question.id] ?? [];
+      return question.options.filter((option) => pickedIds.includes(option.id));
+    })
     .map((option) => option.name)
     .join(' · ');
+  const label = questions.length === 1 ? questions[0].name.toLowerCase() : 'charter';
+  return { label, text };
 }
 
 /**
@@ -264,7 +269,7 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
     fd.template_id != null
       ? title?.templates.find((t) => t.id === fd.template_id)
       : title?.templates[0];
-  const quiddityName = quiddityNameOf(template, fd.facet_picks);
+  const { label: quiddityLabel, text: quiddityName } = charterAnswerOf(template, fd.facet_picks);
   const features = (template?.features ?? []).map((feature) => ({
     name: feature.name,
     // `HouseFeature` (`src/generated/api.d.ts`) carries no codex link field
@@ -418,6 +423,7 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
             characterDraftId={draft.id}
             template={template}
             quiddityName={quiddityName}
+            quiddityLabel={quiddityLabel}
             seatName={seatRow?.name ?? ''}
             seatTier={seatRow?.tier ?? ''}
             swornTo={seatRow?.sworn_to ?? ''}
@@ -456,6 +462,7 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
           swornTo={seatRow?.sworn_to ?? ''}
           step={step}
           quiddityName={quiddityName !== '' ? quiddityName : undefined}
+          quiddityLabel={quiddityLabel}
           features={features.length > 0 ? features : undefined}
           youName={atOrPast(step, 'family') ? YOU_NAME : undefined}
           landText={atOrPast(step, 'land') ? landLineShort : undefined}

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from rest_framework import serializers
 
 from world.character_creation.constants import (
+    FAMILY_PATRON_BEING_ID,
     GIFT_FACETS_KEY,
     REQUIRED_STATS,
     STAT_ALLOCATION_STEP,
@@ -727,7 +728,10 @@ def _magic_skill_allocation_errors(draft: CharacterDraft) -> list[str]:
 
 
 def _get_aspect_pick_errors(draft: CharacterDraft, family_template: HouseTemplate) -> list[str]:
-    from world.societies.houses.creator import _validate_facet_picks  # noqa: PLC0415
+    from world.societies.houses.creator import (  # noqa: PLC0415
+        _validate_facet_picks,
+        validate_patron_pick,
+    )
     from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
 
     raw = draft.draft_data.get("family_facet_picks") or {}
@@ -739,6 +743,11 @@ def _get_aspect_pick_errors(draft: CharacterDraft, family_template: HouseTemplat
         return ["Your family's choices could not be read"]
     try:
         _validate_facet_picks(template=family_template, facet_picks=picks)
+        # the patron question is answered with a god, not an option (#5110)
+        validate_patron_pick(
+            template=family_template,
+            patron_being_id=draft.draft_data.get(FAMILY_PATRON_BEING_ID),
+        )
     except HousesServiceError as exc:
         return [exc.user_message]
     return []

@@ -30,6 +30,7 @@ from world.character_creation.constants import (
     FALLBACK_STARTING_ROOM_FIXTURE_KEY,
     FALLBACK_STARTING_ROOM_KEY,
     FALLBACK_STARTING_ROOM_TYPECLASS,
+    FAMILY_PATRON_BEING_ID,
     GIFT_FACETS_KEY,
     LINE_PARENT_FATE_KEY,
     OTHER_PARENT_FATE_KEY,
@@ -1492,11 +1493,16 @@ def _materialize_named_family(draft: CharacterDraft) -> None:
     }
     from world.character_creation.questionnaire import picked_family_standing  # noqa: PLC0415
     from world.character_creation.validators import _draft_crew_slot  # noqa: PLC0415
+    from world.societies.houses.creator import validate_patron_pick  # noqa: PLC0415
 
     family, _org = build_family_org(
         template,
         name,
         facet_picks=picks,
+        patron=validate_patron_pick(
+            template=template,
+            patron_being_id=draft.draft_data.get(FAMILY_PATRON_BEING_ID),
+        ),
         served_house=draft.served_house,
         created_by=draft.account,
         origin_realm=draft.selected_area.realm if draft.selected_area else None,
@@ -3640,6 +3646,7 @@ _UPBRINGING_DRAFT_KEYS = (
     "new_family_name",
     "family_template_id",
     "family_facet_picks",
+    FAMILY_PATRON_BEING_ID,
 )
 
 
