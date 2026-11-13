@@ -558,7 +558,8 @@ offers a realm select; a realm page's Characters section hands off with it.
 Web-only surface: compose at `/profile/mail` or in-scene via `MessagePlayerDialog` (pre-fills
 `ComposeMailForm` from the character card's "Message the player" quick action), unread badge
 in the header (`UnreadMailBadge`), mark-read-on-open in `ReceivedMailList`. No telnet mail
-command.
+command. In-character letters are a different, built system (persona-addressed, delayed,
+can carry coin and items): see [missives.md](missives.md).
 
 ### Applications (`/api/roster/applications/`) - staff review queue (#3265)
 - `GET /api/roster/applications/` - List applications; `?status=` filters by

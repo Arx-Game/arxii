@@ -39,6 +39,8 @@ export const WS_MESSAGE_TYPE = {
   KUDOS_RECEIVED: 'kudos_received',
   /** Inbound: a new letter arrived for one of the recipient's tenures (#2160). */
   MAIL_ARRIVED: 'mail_arrived',
+  /** Inbound: an IC missive came due for one of this character's personas (#3289). */
+  MISSIVE_ARRIVED: 'missive_arrived',
   /** Inbound: a message in a channel the account joined; never enters the IC feed (#3299). */
   CHANNEL_MESSAGE: 'channel_message',
   /** Inbound: staff deleted a channel message; drop the row (#3299). */
@@ -320,6 +322,17 @@ export interface MailArrivedPayload {
   mail_id: number;
   sender_display: string;
   subject: string;
+}
+
+/**
+ * Arrival ping for `missive_arrived` (#3289): an IC missive came due for one of this
+ * character's faces. `sender_display` is the sender as the reader knows them. Carries no
+ * body; clients refetch the missive list and unread count.
+ */
+export interface MissiveArrivedPayload {
+  missive_id: number;
+  recipient_persona_name: string;
+  sender_display: string;
 }
 
 /**

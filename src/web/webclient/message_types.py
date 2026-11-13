@@ -22,6 +22,7 @@ class WebsocketMessageType(str, Enum):
     COMBAT_ENCOUNTER_STATE = "combat_encounter_state"
     KUDOS_RECEIVED = "kudos_received"
     MAIL_ARRIVED = "mail_arrived"
+    MISSIVE_ARRIVED = "missive_arrived"
     HAZARD_PROMPT = "hazard_prompt"
     REQUEST_ROOM_STATE = "request_room_state"
     STATE_RESYNC = "state_resync"
@@ -201,6 +202,22 @@ class MailArrivedPayload:
     mail_id: int
     sender_display: str
     subject: str
+
+
+@dataclass
+class MissiveArrivedPayload:
+    """Payload for ``missive_arrived`` messages (#3289).
+
+    Sent to the recipient persona's character when an IC missive comes due. Persona-voiced
+    only: ``recipient_persona_name`` is the face the letter was addressed to (so a player with
+    several faces knows which one was written to) and ``sender_display`` is the sender persona
+    as this recipient sees it (``resolve_display_for_viewer``). Never a character, tenure or
+    account. Clients refetch the missive list / unread count on receipt.
+    """
+
+    missive_id: int
+    recipient_persona_name: str
+    sender_display: str
 
 
 @dataclass

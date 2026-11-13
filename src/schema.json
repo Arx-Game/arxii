@@ -28699,6 +28699,157 @@ paths:
               schema:
                 $ref: '#/components/schemas/GraphCheck'
           description: ''
+  /api/missives/:
+    get:
+      operationId: missives_list
+      description: |-
+        The acting character's missives, newest first.
+
+        Filters: ``direction`` (``received`` | ``sent``) and ``unread`` (received and not yet
+        read). A request that plays no character sees an empty list.
+      parameters:
+      - in: query
+        name: direction
+        schema:
+          type: string
+          enum:
+          - received
+          - sent
+        description: |-
+          * `received` - Received
+          * `sent` - Sent
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: The roster entry this tab acts as (#3479).
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: unread
+        schema:
+          type: string
+      tags:
+      - missives
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMissiveList'
+          description: ''
+  /api/missives/{id}/:
+    get:
+      operationId: missives_retrieve
+      description: |-
+        The acting character's missives, newest first.
+
+        Filters: ``direction`` (``received`` | ``sent``) and ``unread`` (received and not yet
+        read). A request that plays no character sees an empty list.
+      parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: The roster entry this tab acts as (#3479).
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this missive.
+        required: true
+      tags:
+      - missives
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Missive'
+          description: ''
+  /api/missives/addressees/:
+    get:
+      operationId: missives_addressees_list
+      description: |-
+        Faces a missive can be addressed to whose name contains ``search``.
+
+        Primary and established, non-system personas, by name, at most ten; id and name
+        only, never who plays them. A search shorter than two characters finds nobody.
+      parameters:
+      - in: query
+        name: direction
+        schema:
+          type: string
+          enum:
+          - received
+          - sent
+        description: |-
+          * `received` - Received
+          * `sent` - Sent
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: The roster entry this tab acts as (#3479).
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Part of the name; at least two characters.
+        required: true
+      - in: query
+        name: unread
+        schema:
+          type: string
+      tags:
+      - missives
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MissiveAddressee'
+          description: ''
+  /api/missives/unread-count/:
+    get:
+      operationId: missives_unread_count_retrieve
+      description: How many arrived missives to the acting character it has not read
+        yet.
+      parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: The roster entry this tab acts as (#3479).
+      tags:
+      - missives
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissiveUnreadCount'
+          description: ''
   /api/mutes/:
     get:
       operationId: mutes_list
@@ -70177,6 +70328,107 @@ components:
       description: |-
         * `open` - Open
         * `restricted` - Restricted
+    Missive:
+      type: object
+      description: One missive as the reading character sees it.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        direction:
+          type: string
+          readOnly: true
+        counterpart_name:
+          type: string
+          readOnly: true
+        own_persona_id:
+          type: integer
+          readOnly: true
+        own_persona_name:
+          type: string
+          readOnly: true
+        method_name:
+          type: string
+          readOnly: true
+        body:
+          type: string
+          readOnly: true
+        ic_date:
+          type: string
+          readOnly: true
+        sent_at:
+          type: string
+          format: date-time
+          readOnly: true
+        is_read:
+          type: boolean
+          readOnly: true
+        in_reply_to:
+          type: integer
+          readOnly: true
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/MissiveAttachment'
+          readOnly: true
+      required:
+      - attachments
+      - body
+      - counterpart_name
+      - direction
+      - ic_date
+      - id
+      - in_reply_to
+      - is_read
+      - method_name
+      - own_persona_id
+      - own_persona_name
+      - sent_at
+    MissiveAddressee:
+      type: object
+      description: |-
+        A face a missive can be addressed to, for the compose "To" picker: its id and name only.
+
+        Deliberately not ``PersonaSerializer``, which carries the persona's character sheet: who
+        plays a face is never something the picker may tell.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - name
+    MissiveAttachment:
+      type: object
+      description: One item or sum of coin riding on a missive.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        kind:
+          type: string
+          readOnly: true
+        label:
+          type: string
+          readOnly: true
+        resolution:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - kind
+      - label
+      - resolution
+    MissiveUnreadCount:
+      type: object
+      properties:
+        count:
+          type: integer
+      required:
+      - count
     Mode081Enum:
       enum:
       - open
@@ -76877,6 +77129,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MissionTemplate'
+    PaginatedMissiveList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Missive'
     PaginatedMoodOptionList:
       type: object
       required:

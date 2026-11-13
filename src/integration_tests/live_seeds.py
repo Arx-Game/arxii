@@ -767,3 +767,157 @@ def seed_one_scale_spec(*, username: str) -> OneScaleSeed:
             )
         thread = Thread.objects.get(owner=entry.character_sheet)
     return OneScaleSeed(roster_entry_id=entry.pk, thread_id=thread.pk)
+
+
+@dataclass(frozen=True)
+class MissiveSpecSeed:
+    """What `frontend/e2e/missives.spec.ts` reads back (#3289)."""
+
+    character_id: int
+    roster_entry_id: int
+    received_missive_id: int
+    character_name: str
+    addressed_face_name: str
+    worn_face_name: str
+    writer_face_name: str
+
+
+#: A letter-writer the account plays, and the stranger who has already written to her.
+MISSIVE_SPEC_CHARACTER = "Quill Lettersend"
+MISSIVE_SPEC_WORN_FACE = "the Inkwell"
+MISSIVE_SPEC_ROOM = "The Letter Office"
+MISSIVE_SPEC_WRITER = "Marrow Pike"
+MISSIVE_SPEC_WRITER_FACE = "the Lantern Man"
+MISSIVE_SPEC_METHOD = "Courier"
+MISSIVE_SPEC_ITEM = "brass locket"
+MISSIVE_SPEC_BODY = "Meet me under the bridge at dusk."
+MISSIVE_SPEC_PURSE = 1000
+MISSIVE_SPEC_COIN = 25
+
+
+def seed_missive_spec(*, username: str) -> MissiveSpecSeed:
+    """A letter-writer of *username*'s with coin, a locket, and one letter waiting for her.
+
+    "Quill Lettersend" stands in the Letter Office with 1000 coppers and a brass locket in
+    hand, wearing her established face "the Inkwell" (so a reply's preselected face, the
+    one the letter was written to, differs from the face she wears). "Marrow Pike", played
+    by nobody, has the established face "the Lantern Man", who has already written to
+    Quill's own name by the instant "Courier" with 25 coppers riding along, sent through
+    ``send_missive`` from his own purse so the coin's custody is real, and announced by the
+    arrival sweep.
+    """
+    from django.db import transaction  # noqa: PLC0415
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+    from evennia.utils import create  # noqa: PLC0415
+
+    from evennia_extensions.factories import CharacterFactory, ObjectDBFactory  # noqa: PLC0415
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+    from world.character_sheets.factories import CharacterSheetFactory  # noqa: PLC0415
+    from world.currency.services import get_or_create_purse, transfer  # noqa: PLC0415
+    from world.items.factories import ItemInstanceFactory, ItemTemplateFactory  # noqa: PLC0415
+    from world.messengers.models import Missive, TransmissionMethod  # noqa: PLC0415
+    from world.messengers.seeds import ensure_messenger_method  # noqa: PLC0415
+    from world.messengers.services import deliver_due_missives, send_missive  # noqa: PLC0415
+    from world.roster.factories import (  # noqa: PLC0415
+        RosterEntryFactory,
+        RosterTenureFactory,
+    )
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+    from world.roster.services.selection import set_selected_entry  # noqa: PLC0415
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+    from world.scenes.factories import PersonaFactory  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+    from world.scenes.services import set_active_persona  # noqa: PLC0415
+
+    with transaction.atomic():
+        ensure_messenger_method()
+        courier, _ = TransmissionMethod.objects.get_or_create(
+            name=MISSIVE_SPEC_METHOD,
+            defaults={
+                "description": "A courier rides the letter straight to its reader.",
+                "ic_delay_minutes": 0,
+                "can_carry_items": True,
+                "can_carry_coin": True,
+                "is_universal": True,
+            },
+        )
+        account = AccountDB.objects.get(username=username)
+        player_data, _ = PlayerData.objects.get_or_create(account=account)
+
+        entry = RosterEntry.objects.filter(
+            character_sheet__character__db_key=MISSIVE_SPEC_CHARACTER
+        ).first()
+        if entry is None:
+            room = create.create_object("typeclasses.rooms.Room", key=MISSIVE_SPEC_ROOM)
+            character = CharacterFactory(db_key=MISSIVE_SPEC_CHARACTER, location=room)
+            sheet = CharacterSheetFactory(character=character)
+            entry = RosterEntryFactory(character_sheet=sheet)
+            RosterTenureFactory(roster_entry=entry, player_data=player_data, end_date=None)
+            character.db_account = account
+            character.save()
+            # The playable puppet lock, so the web client can enter the world as her.
+            account.at_post_create_character(character)
+            worn = PersonaFactory(
+                character_sheet=sheet,
+                name=MISSIVE_SPEC_WORN_FACE,
+                persona_type=PersonaType.ESTABLISHED,
+                thumbnail_url="",
+            )
+            set_active_persona(sheet, worn)
+            transfer(
+                amount=MISSIVE_SPEC_PURSE,
+                reason="missive spec seed",
+                to_purse=get_or_create_purse(sheet),
+            )
+            ItemInstanceFactory(
+                template=ItemTemplateFactory(name=MISSIVE_SPEC_ITEM),
+                game_object=ObjectDBFactory(db_key=MISSIVE_SPEC_ITEM, location=character),
+                holder_character_sheet=sheet,
+            )
+
+            writer = CharacterFactory(db_key=MISSIVE_SPEC_WRITER, location=room)
+            writer_sheet = CharacterSheetFactory(character=writer)
+            writer_face = PersonaFactory(
+                character_sheet=writer_sheet,
+                name=MISSIVE_SPEC_WRITER_FACE,
+                persona_type=PersonaType.ESTABLISHED,
+                thumbnail_url="",
+            )
+            transfer(
+                amount=MISSIVE_SPEC_COIN,
+                reason="missive spec seed",
+                to_purse=get_or_create_purse(writer_sheet),
+            )
+            send_missive(
+                sender_persona=writer_face,
+                recipient_persona=sheet.primary_persona,
+                body=MISSIVE_SPEC_BODY,
+                method=courier,
+                coin_amount=MISSIVE_SPEC_COIN,
+            )
+        set_selected_entry(player_data, entry)
+        # Inside the block, so the letter is never visible to the live server as due but
+        # unannounced. The server's own missives.deliver sweep can run while this seed is
+        # writing; if it caught the letter in between it would load the account's
+        # PlayerData into the server's identity map with the selection as it stood at
+        # that moment, and every later page would read that stale selection.
+        deliver_due_missives()
+
+    sheet = entry.character_sheet
+    writer_face = Persona.objects.get(
+        name=MISSIVE_SPEC_WRITER_FACE, persona_type=PersonaType.ESTABLISHED
+    )
+    received = Missive.objects.get(
+        sender_persona=writer_face,
+        recipient_persona=sheet.primary_persona,
+        body=MISSIVE_SPEC_BODY,
+    )
+    return MissiveSpecSeed(
+        character_id=sheet.character_id,
+        roster_entry_id=entry.pk,
+        received_missive_id=received.pk,
+        character_name=MISSIVE_SPEC_CHARACTER,
+        addressed_face_name=sheet.primary_persona.name,
+        worn_face_name=MISSIVE_SPEC_WORN_FACE,
+        writer_face_name=MISSIVE_SPEC_WRITER_FACE,
+    )

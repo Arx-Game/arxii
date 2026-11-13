@@ -597,10 +597,12 @@ def _register_external_app_tasks() -> None:
     ceremony + vogue-momentum decay (items). #2846: sunlight reconcile
     (species — stationary dawn pickup + escalation). #3760: PoseSubmission
     idempotency-ledger cleanup (scenes). #4333: held pledge answers (worship).
+    #3289: missive arrival sweep (messengers).
     #3299: channel history pruning (channels).
     """
     from world.channels.tasks import register_all_tasks as register_channels_tasks
     from world.items.tasks import register_all_tasks as register_fashion_tasks
+    from world.messengers.tasks import register_all_tasks as register_missive_tasks
     from world.scenes.tasks import register_all_tasks as register_scenes_tasks
     from world.societies.tasks import register_all_tasks as register_renown_tasks
     from world.species.tasks import register_all_tasks as register_species_tasks
@@ -611,6 +613,7 @@ def _register_external_app_tasks() -> None:
     register_species_tasks()
     register_scenes_tasks()
     register_worship_tasks()
+    register_missive_tasks()
     register_channels_tasks()
 
 

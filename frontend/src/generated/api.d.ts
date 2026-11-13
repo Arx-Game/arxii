@@ -18455,6 +18455,89 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/missives/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The acting character's missives, newest first.
+     *
+     *     Filters: ``direction`` (``received`` | ``sent``) and ``unread`` (received and not yet
+     *     read). A request that plays no character sees an empty list.
+     */
+    get: operations['missives_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missives/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The acting character's missives, newest first.
+     *
+     *     Filters: ``direction`` (``received`` | ``sent``) and ``unread`` (received and not yet
+     *     read). A request that plays no character sees an empty list.
+     */
+    get: operations['missives_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missives/addressees/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Faces a missive can be addressed to whose name contains ``search``.
+     *
+     *     Primary and established, non-system personas, by name, at most ten; id and name
+     *     only, never who plays them. A search shorter than two characters finds nobody.
+     */
+    get: operations['missives_addressees_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missives/unread-count/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description How many arrived missives to the acting character it has not read yet. */
+    get: operations['missives_unread_count_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/mutes/': {
     parameters: {
       query?: never;
@@ -39745,6 +39828,42 @@ export interface components {
      * @enum {string}
      */
     MissionVisibilityEnum: 'open' | 'restricted';
+    /** @description One missive as the reading character sees it. */
+    Missive: {
+      readonly id: number;
+      readonly direction: string;
+      readonly counterpart_name: string;
+      readonly own_persona_id: number;
+      readonly own_persona_name: string;
+      readonly method_name: string;
+      readonly body: string;
+      readonly ic_date: string;
+      /** Format: date-time */
+      readonly sent_at: string;
+      readonly is_read: boolean;
+      readonly in_reply_to: number;
+      readonly attachments: components['schemas']['MissiveAttachment'][];
+    };
+    /**
+     * @description A face a missive can be addressed to, for the compose "To" picker: its id and name only.
+     *
+     *     Deliberately not ``PersonaSerializer``, which carries the persona's character sheet: who
+     *     plays a face is never something the picker may tell.
+     */
+    MissiveAddressee: {
+      readonly id: number;
+      readonly name: string;
+    };
+    /** @description One item or sum of coin riding on a missive. */
+    MissiveAttachment: {
+      readonly id: number;
+      readonly kind: string;
+      readonly label: string;
+      readonly resolution: string;
+    };
+    MissiveUnreadCount: {
+      count: number;
+    };
     /**
      * @description * `open` - Open (immediate, unbounded)
      *     * `pose_order` - Pose order (immediate, quota-gated)
@@ -43421,6 +43540,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['MissionTemplate'][];
+    };
+    PaginatedMissiveList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Missive'][];
     };
     PaginatedMoodOptionList: {
       /** @example 123 */
@@ -80493,6 +80627,115 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['GraphCheck'];
+        };
+      };
+    };
+  };
+  missives_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description * `received` - Received
+         *     * `sent` - Sent
+         */
+        direction?: 'received' | 'sent';
+        /** @description The roster entry this tab acts as (#3479). */
+        entry_id?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        unread?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedMissiveList'];
+        };
+      };
+    };
+  };
+  missives_retrieve: {
+    parameters: {
+      query?: {
+        /** @description The roster entry this tab acts as (#3479). */
+        entry_id?: number;
+      };
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this missive. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Missive'];
+        };
+      };
+    };
+  };
+  missives_addressees_list: {
+    parameters: {
+      query: {
+        /**
+         * @description * `received` - Received
+         *     * `sent` - Sent
+         */
+        direction?: 'received' | 'sent';
+        /** @description The roster entry this tab acts as (#3479). */
+        entry_id?: number;
+        /** @description Part of the name; at least two characters. */
+        search: string;
+        unread?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissiveAddressee'][];
+        };
+      };
+    };
+  };
+  missives_unread_count_retrieve: {
+    parameters: {
+      query?: {
+        /** @description The roster entry this tab acts as (#3479). */
+        entry_id?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissiveUnreadCount'];
         };
       };
     };

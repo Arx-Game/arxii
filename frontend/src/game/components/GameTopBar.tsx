@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import { isStoryNpc } from '@/roster/persona';
+import { actingPersonaId, isStoryNpc } from '@/roster/persona';
 import { initials } from '@/lib/initials';
 import { Link, useNavigate } from 'react-router-dom';
 import { Menu, ScrollText, Swords, X } from 'lucide-react';
@@ -37,6 +37,7 @@ import { AttentionBadge } from '@/game/components/AttentionBadge';
 // is configured at all), so the smallest change is importing directly
 // rather than relocating the hook.
 import { useClockQuery } from '@/home/hall/queries';
+import { MissivesButton } from '@/missives/components/MissivesSheet';
 
 import { FormSwitcher } from './FormSwitcher';
 import { PersonaSwitcher } from './PersonaSwitcher';
@@ -411,6 +412,13 @@ export function GameTopBar({
           ))}
 
         <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
+          {activeCharacter && (
+            <MissivesButton
+              entryId={activeCharacter.id}
+              characterId={activeCharacter.character_id}
+              activePersonaId={actingPersonaId(activeCharacter)}
+            />
+          )}
           <ComfortWidget characterId={activeCharacter?.character_id ?? null} />
           <ClockReadout />
           <WeatherWidget />

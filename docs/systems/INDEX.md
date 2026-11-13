@@ -3423,7 +3423,8 @@ Character lifecycle management with web-first applications and player anonymity.
   (`MessagePlayerDialog` pre-filling `ComposeMailForm`) from the character card, an
   `UnreadMailBadge` in the header, and a mark-read-on-open flow in `ReceivedMailList`. No
   telnet mail command exists or is planned. PlayerMail is OOC between players; IC missives
-  are #3289's separate system (ADR-0226).
+  are the separate, built system in `world.messengers` (#3289, ADR-0226; see
+  [missives.md](missives.md)).
 - **Game invites (#2483):** `GameInvite` model + `GameInviteViewSet` for
   player-to-friend contextual invites. Any authenticated player may send one;
   `registration_open` is the only gate (#3182, #3726 — the `PlayerTrust`
@@ -6859,6 +6860,41 @@ table-scoped) - see `docs/adr/0228-board-posts-are-authored-by-persona.md`.
 - **Source:** `src/world/boards/` (see the app's `AGENT_GLOSSARY.md` and
   `docs/systems/boards.md` for the full write-up).
 
+### Missives (IC letters between personas - #3289)
+In-character letters carried from one persona to another by a staff-tuned
+`TransmissionMethod` (a seeded universal "Messenger" at MVP), delayed in game time, with
+optional coin and items held until the recipient accepts or refuses them. Not `PlayerMail`
+(OOC, tenure-routed, ADR-0226); authored and addressed by `scenes.Persona`. Full write-up:
+[missives.md](missives.md); decision: ADR-3289-A.
+
+- **Models** (`world.messengers.models`): `TransmissionMethod` (natural key `name`,
+  `ic_delay_minutes`, `can_carry_items`/`can_carry_coin`, `is_universal`,
+  `required_capability` hook; the only one with an admin), `Missive` (sender/recipient
+  Persona PROTECT, `method`, `body`, `ic_sent_at`, `available_at`, `arrival_notified_at`,
+  `undeliverable`, `read_at`, `in_reply_to`), `MissiveAttachment` (item XOR coin check
+  constraint, one pending attachment per item, `AttachmentResolution`). No admin for
+  `Missive`/`MissiveAttachment` (private letters).
+- **Services** (`world.messengers.services`): `send_missive`, `read_missive`,
+  `accept_missive`, `refuse_missive`, `visible_missives_for`, `unread_count_for`,
+  `get_visible_missive`, `available_methods_for`, `addressable_personas`,
+  `find_addressable_persona`, `addressable_persona`, `reply_sender_for`, `sent_by`/`sent_by_q`, `deliver_due_missives`.
+  Display rule in `world.messengers.display` (`display_map_for`, `shown_name`,
+  `missive_correspondents`): a mask stays a mask, a typed name stays as typed.
+- **Delivery:** availability is lazy (`available_at` has passed); the `missives.deliver`
+  cron (every 5 real minutes, `world.messengers.tasks`) announces arrivals; a block placed in
+  transit is re-checked at read time as well as in the sweep. Blocks are write-then-suppress
+  (`undeliverable`, never shown; attachments stay held).
+- **Actions + telnet:** `send_missive`, `reply_missive`, `read_missive`, `accept_missive`,
+  `refuse_missive` (`actions/definitions/missives.py`); telnet `CmdMissive`
+  (`missive`, `/read`, `/send <name>[+coin 5s][+item x]=<msg>`, `/reply`, `/accept`,
+  `/refuse`); web writes go through `POST /api/actions/characters/<id>/dispatch/`.
+- **API:** read-only `MissiveViewSet` at `/api/missives/` (list with `direction`/`unread`
+  filters, retrieve, `unread-count/`, `addressees/?search=` for the compose To picker, id and
+  name only). Push frame `missive_arrived`
+  (`MissiveArrivedPayload`): ids and persona-voiced names only.
+- **Web:** `frontend/src/missives/` (`MissivesSheet`, `MissiveList`, `MissiveComposeDialog`),
+  opened from the top bar.
+- **Source:** `src/world/messengers/` (see the app's `AGENT_GLOSSARY.md`).
 ### Channels (player OOC channels - #3299)
 Persistent named out-of-character chat: one PUBLIC channel, one ORG channel per
 non-covert, non-covenant organization, optional STAFF channels. Our own models;

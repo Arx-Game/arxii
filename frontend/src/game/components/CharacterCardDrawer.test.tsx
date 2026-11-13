@@ -22,6 +22,10 @@ vi.mock('@/roster/queries', () => ({
 vi.mock('@/friends/queries', () => ({
   useAddFriendMutation: vi.fn(),
 }));
+vi.mock('@/missives/components/MissiveComposeDialog', () => ({
+  MissiveComposeDialog: ({ open, recipient }: { open: boolean; recipient: { name: string } }) =>
+    open ? <p>Writing to {recipient.name}</p> : null,
+}));
 
 import { useRosterEntryByNameQuery, useRosterEntryQuery } from '@/roster/queries';
 import { useAddFriendMutation } from '@/friends/queries';
@@ -247,6 +251,33 @@ describe('CharacterCardDrawer', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  // #3289: any face can be written to, roster match or not, by a viewer playing someone.
+  it('offers "Send a missive" for an off-roster face and opens the letter addressed to it', () => {
+    mockNoSearchResult(false);
+    const { unmount } = renderWithProviders(
+      <CharacterCardDrawer
+        persona={PERSONA}
+        onClose={vi.fn()}
+        viewerEntryId={7}
+        onWhisper={vi.fn()}
+        viewerCharacterId={12}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Send a missive' }));
+    expect(screen.getByText('Writing to Alice')).toBeInTheDocument();
+    unmount();
+
+    renderWithProviders(
+      <CharacterCardDrawer
+        persona={PERSONA}
+        onClose={vi.fn()}
+        viewerEntryId={7}
+        onWhisper={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole('button', { name: 'Send a missive' })).not.toBeInTheDocument();
   });
 
   describe('the tie door (#3957)', () => {

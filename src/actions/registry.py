@@ -390,6 +390,13 @@ from actions.definitions.market import (
     ServiceCraftAction,
     SetServiceOfferAction,
 )
+from actions.definitions.missives import (
+    AcceptMissiveAction,
+    ReadMissiveAction,
+    RefuseMissiveAction,
+    ReplyMissiveAction,
+    SendMissiveAction,
+)
 from actions.definitions.mood import SenseMoodAction, SetMoodAction
 from actions.definitions.motif_facet import BindMotifFacetAction, UnbindMotifFacetAction
 from actions.definitions.motif_style import (
@@ -1434,6 +1441,12 @@ _ALL_ACTIONS: list[Action] = [
     PostToBoardAction(),
     EditBoardPostAction(),
     RemoveBoardPostAction(),
+    # #3289 — IC missives.
+    SendMissiveAction(),
+    ReplyMissiveAction(),
+    ReadMissiveAction(),
+    AcceptMissiveAction(),
+    RefuseMissiveAction(),
     # #3299 - player channels (account-authorized: actor=None, account kwarg).
     PostToChannelAction(),
     JoinChannelAction(),

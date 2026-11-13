@@ -29,6 +29,7 @@ import type {
   InteractionWsPayload,
   KudosReceivedPayload,
   MailArrivedPayload,
+  MissiveArrivedPayload,
   ChannelMessagePayload,
   ChannelMessageRemovedPayload,
   OutgoingMessage,
@@ -51,6 +52,7 @@ import {
 import type { BattleStatePayload } from '@/battles/types';
 import { handleKudosReceivedPayload } from './handleKudosReceivedPayload';
 import { handleMailArrivedPayload } from './handleMailArrivedPayload';
+import { handleMissiveArrivedPayload } from './handleMissiveArrivedPayload';
 import {
   handleChannelMessagePayload,
   handleChannelMessageRemovedPayload,
@@ -442,6 +444,9 @@ function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefi
     case WS_MESSAGE_TYPE.MAIL_ARRIVED:
       return ({ kwargs }) => handleMailArrivedPayload(kwargs as unknown as MailArrivedPayload);
 
+    case WS_MESSAGE_TYPE.MISSIVE_ARRIVED:
+      return ({ kwargs }) =>
+        handleMissiveArrivedPayload(kwargs as unknown as MissiveArrivedPayload);
     case WS_MESSAGE_TYPE.CHANNEL_MESSAGE:
       return ({ kwargs }) =>
         handleChannelMessagePayload(kwargs as unknown as ChannelMessagePayload | undefined);

@@ -1392,6 +1392,11 @@ actions, backends, and service functions.
   `integration_tests/test_earning_your_keep_journeys.py` (`KeepingAJournal`, #3657 tranche 12),
   as is `goal` below (`SettingGoals`); the hand-built `tests/test_journals_goals_journey_e2e.py`
   is gone. A new journal or goal verb gets its lines there.
+- **`missives.py`**: `CmdMissive` (`missive`, #3289): IC letters between personas. Bare
+  `missive` or `missive/list` lists visible missives newest first (`* #12 From Ada - ...`, `*`
+  for unread received); `missive/read|accept|refuse <id>`, `missive/send
+  <name>[+coin <n>][+item <item>]...=<message>` and `missive/reply <id>[+coin..][+item..]=<message>`
+  dispatch the five actions in `actions/definitions/missives.py`. Parsing only.
 - **`goals.py`**: `CmdGoal` (`goal`, #1350) — the goal authoring namespace. One `ArxCommand`
   routes a leading subverb (`goal add domain=<id|name> points=<n> [notes=<text>]` (shares the
   same weekly revision limit as `set`) / `set domain=<id>:points=<n>[,...]` / `log

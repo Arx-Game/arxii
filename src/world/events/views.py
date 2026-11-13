@@ -65,7 +65,7 @@ if TYPE_CHECKING:
 def _persona_player(persona: Persona) -> "PlayerData | None":
     """The PlayerData currently playing this persona's character, or None (#2996).
 
-    Mirrors ``world.scenes.block_services._persona_player`` — kept local (not imported) so
+    Mirrors ``world.scenes.block_services.persona_player`` — kept local (not imported) so
     this module stays self-contained, matching the convention already used by
     ``world.scenes.mute_services._persona_player``.
     """

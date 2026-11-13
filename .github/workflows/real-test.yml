@@ -185,7 +185,7 @@ jobs:
           ls -la src/server/logs || true
           tail -n 80 src/server/logs/*.log || true
           exit 1
-      - name: Seed the rows the facet, gift substance and channels specs read
+      - name: Seed the rows the facet, gift substance, channels and one-scale specs read
         # After the server is up, so Evennia's first-start setup has run on an
         # otherwise empty object table. Test-factory rows in a throwaway database:
         # see src/integration_tests/live_seeds.py.
@@ -217,6 +217,21 @@ jobs:
           open('/tmp/thrown-strike-seed.json', 'w').write(json.dumps(dataclasses.asdict(seed)))
           print({k: v for k, v in dataclasses.asdict(seed).items() if k != 'staff_password'})
           "
+      - name: Seed the missives spec's own account and letters
+        # #3289: the missives spec signs in as its own account, e2e_missives_account, so
+        # nothing it seeds or plays changes e2e_test_account's selected character, which
+        # the gift substance spec reads. Its ids go to the JSON file the spec reads
+        # (MISSIVE_SEED in frontend/e2e/missives.spec.ts).
+        run: |
+          uv run arx manage shell -c "
+          import dataclasses, json
+          from world.seeds.test_account import seed_test_account
+          print(seed_test_account(username='e2e_missives_account', email='e2e_missives@example.com', password='TestPass123!'))
+          from integration_tests.live_seeds import seed_missive_spec
+          missive_seed = seed_missive_spec(username='e2e_missives_account')
+          open('/tmp/missive-seed.json', 'w').write(json.dumps(dataclasses.asdict(missive_seed)))
+          print(missive_seed)
+          "
       - name: Run the live-server Playwright specs
         working-directory: frontend
         # The only specs that talk to :4001 are these (the rest mock the API
@@ -226,7 +241,7 @@ jobs:
           npx playwright test --config e2e.backend.config.ts --workers=1
           e2e/account-settings.spec.ts e2e/user-journey.spec.ts
           e2e/motif-facets.spec.ts e2e/gift-substance.spec.ts
-          e2e/thrown-and-enchanted-strike.spec.ts e2e/channels.spec.ts e2e/one-scale.spec.ts
+          e2e/thrown-and-enchanted-strike.spec.ts e2e/missives.spec.ts e2e/channels.spec.ts e2e/one-scale.spec.ts
       - name: Stop the server
         if: always()
         run: uv run arx stop || true

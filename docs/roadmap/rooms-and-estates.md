@@ -275,8 +275,9 @@ defenses:
   `actions.definitions.movement.HomeAction` (the `home` command). Telnet:
   `expel <character>` / `expel/lift <character>`.
 - **Descoped**: player-to-player message-carrying between characters —
-  the issue's original ask — is folded into a future Arx-1-style messenger
-  system instead (ratified amendment); household servants carry no
+  the issue's original ask — is folded into the Arx-1-style messenger
+  system instead (ratified amendment; built as IC missives, #3289, see
+  `docs/systems/missives.md`); household servants carry no
   messages. Household-scoped word-spread (notify all household members) was
   evaluated against `world.tidings.services.house_feed_for` and found to be
   a read-only aggregator with no generic push-a-message write path, not a
@@ -357,8 +358,8 @@ building rooms (that lives in [Tooling](tooling.md)).
     household-provisioning/food-vitals system exists to hook a mechanical
     meal payoff into.
   - ~~Carrying messages~~ between rooms in the estate — **descoped** (#2989
-    ratified amendment): player-to-player IC messaging is its own future
-    Arx-1-style messenger system; household servants carry no messages.
+    ratified amendment): player-to-player IC messaging is its own Arx-1-style
+    messenger system (built, #3289); household servants carry no messages.
   - **Guard / announce** behaviors when visitors enter. **Built** (#2989) as
     deterministic DOORMAN arrival announcement (no check, no access
     challenge — "turning away the unwanted" needs a real invitation/
@@ -480,8 +481,8 @@ ledger in issue **#1514**; security/access half (windows-as-egress, guards/defen
   ambience). No distinct entity was needed: the existing SERVANT
   `NPCAssignment` (Functionary or NPCAsset) covers fetch/meal/bath —
   verified as a non-gap in the #2989 spec's anti-reinvention ledger.
-  Servant-carried message-carrying stays deferred to the future
-  Arx-1-style player-to-player messenger system (#2989 ratified amendment).
+  Servant-carried message-carrying stays out of scope: player-to-player messaging is
+  the built IC missive system (#3289, #2989 ratified amendment).
 - **Property purchase / construction economy — BUILT-MVP (#2991).** `BuildingListing` +
   `purchase_building()` is the coin front door onto the existing `LocationOwnership`
   cascade: staff/content-curated sale inventory only (mirrors `PropertyGrantProfile`'s

@@ -110,6 +110,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [distinctions](src/world/distinctions/AGENT_GLOSSARY.md) - also holds rank size, the size a sized effect steps to at a rank (#4660)
 - [narrative](src/world/narrative/AGENT_GLOSSARY.md)
 - [boards](src/world/boards/AGENT_GLOSSARY.md)
+- [messengers](src/world/messengers/AGENT_GLOSSARY.md) - IC missives (#3289): Missive, Transmission method, Messenger, Undeliverable, Attachment resolution (_Avoid_: letter, mail for an IC missive)
 - [channels](src/world/channels/AGENT_GLOSSARY.md) (#3299, ADR-3299): Channel (OOC only), ORG channel, Speaker,
   Display tenure, Subscription, Muted channel, Channel ban (_Avoid_: IC channel, account handle)
 

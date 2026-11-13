@@ -9,6 +9,7 @@ import { useRosterEntryByNameQuery, useRosterEntryQuery } from '@/roster/queries
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import { JournalComposerDialog } from '@/journals/components/JournalComposerDialog';
 import { MessagePlayerDialog } from './MessagePlayerDialog';
+import { MissiveComposeDialog } from '@/missives/components/MissiveComposeDialog';
 import { NO_DESCRIPTION } from '@/components/ui/dialog';
 
 export interface CharacterCardDrawerProps {
@@ -19,6 +20,10 @@ export interface CharacterCardDrawerProps {
   viewerEntryId: number | null;
   /** Fired with the persona's name; caller sets composer mode + closes. */
   onWhisper: (name: string) => void;
+  /** The viewer's active character (dispatch target for "Send a missive"). */
+  viewerCharacterId?: number | null;
+  /** The face the viewer wears now; the missive's default sender. */
+  viewerActivePersonaId?: number | null;
 }
 
 /**
@@ -51,6 +56,10 @@ export interface CharacterCardDrawerProps {
  * live tenure, since a vacant character has no one to address (same gating
  * philosophy as the FriendButton viewer-required gate below).
  *
+ * "Send a missive" (#3289) opens `MissiveComposeDialog` addressed to the clicked persona.
+ * It is offered for any face, roster match or not: addressing is by persona, and the
+ * server refuses a face that cannot be written to (a mask) without saying whose it is.
+ *
  * Radix note: `SheetContent`'s `hideOverlay` only removes the dimming backdrop —
  * the underlying Dialog is still `modal` (focus-trapped, outside pointer events
  * disabled) unless `Sheet` itself is given `modal={false}`, which most of this
@@ -65,6 +74,8 @@ export function CharacterCardDrawer({
   onClose,
   viewerEntryId,
   onWhisper,
+  viewerCharacterId = null,
+  viewerActivePersonaId = null,
 }: CharacterCardDrawerProps) {
   const { data: searchResult, isLoading: searching } = useRosterEntryByNameQuery(persona?.name);
   const match = searchResult?.results.find((entry) => entry.character.name === persona?.name);
@@ -74,6 +85,7 @@ export function CharacterCardDrawer({
 
   const [journalOpen, setJournalOpen] = useState(false);
   const [messageOpen, setMessageOpen] = useState(false);
+  const [missiveOpen, setMissiveOpen] = useState(false);
 
   const handleWhisper = () => {
     if (!persona) return;
@@ -174,6 +186,16 @@ export function CharacterCardDrawer({
                   Message the player
                 </Button>
               )}
+              {viewerCharacterId != null && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setMissiveOpen(true)}
+                >
+                  Send a missive
+                </Button>
+              )}
             </div>
 
             {entry && (
@@ -189,6 +211,16 @@ export function CharacterCardDrawer({
                 onClose={() => setMessageOpen(false)}
                 recipientTenureId={liveTenure.id}
                 recipientDisplay={entry.character.name}
+              />
+            )}
+
+            {viewerCharacterId != null && (
+              <MissiveComposeDialog
+                open={missiveOpen}
+                onClose={() => setMissiveOpen(false)}
+                characterId={viewerCharacterId}
+                activePersonaId={viewerActivePersonaId}
+                recipient={{ id: persona.id, name: persona.name }}
               />
             )}
 

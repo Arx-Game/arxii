@@ -205,6 +205,35 @@ IC-authored correspondence surface. Closed end-to-end:
 
 Details: `docs/systems/boards.md`, ADR-0230 (IC-persona authorship).
 
+## Built - IC Missives (#3289)
+
+The Arx I messenger loop: write an in-character letter to another persona, wait for it to
+travel, read it, answer it, and take or refuse the coin and items that came with it. Built
+end-to-end in `world/messengers`:
+
+- **Models:** `TransmissionMethod` (staff-tuned ways a letter travels: IC delay, can it carry
+  items and coin, universal or gated by a capability), `Missive` (persona to persona,
+  `available_at`, `undeliverable`, `in_reply_to`), `MissiveAttachment` (one item or one sum
+  of coin, held until accepted or refused). The seeded universal "Messenger" method rides
+  the Big Button (`messengers` cluster).
+- **Delivery:** availability is lazy; a `missives.deliver` cron (every 5 real minutes)
+  pushes arrival notices; a block placed in transit is re-checked at read time too.
+- **Privacy:** addressed by persona; masks stay masks (a reply goes out under the face
+  written to); the owner join is never serialized; a block is write-then-suppress
+  (ADR-3289-A); no admin for letters.
+- **Actions + telnet + API + web:** `send_missive` / `reply_missive` / `read_missive` /
+  `accept_missive` / `refuse_missive` (ADR-0001); telnet `missive`; read-only
+  `/api/missives/`; `missive_arrived` push; `frontend/src/missives/` sheet, list and compose
+  dialog.
+- **Overridable defaults, not yet ruled on:** any primary or established persona is
+  addressable by exact name with no discovery gate; attachments on a blocked letter stay
+  held, never returned; the seeded Messenger delay is a 30 IC-minute placeholder.
+- **Not built:** magical transmission methods (the `required_capability` hook exists, no
+  rows), letters to groups or organizations, read receipts (a sender never learns a letter
+  was read).
+
+Details: `docs/systems/missives.md`, ADR-3289-A, ADR-0226 (why this is not `PlayerMail`).
+
 ## Built - Gatefold Landing Page (#3305)
 
 Replaces the #2162-era branded-hero homepage with a scroll-through folio

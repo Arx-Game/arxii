@@ -683,7 +683,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
     def _account_player_for_persona(self, persona: Persona | None) -> "PlayerData | None":
         """Resolve + memoize a persona's current player (#2996), cached per request.
 
-        Mirrors ``world.scenes.block_services._persona_player``'s walk. Memoized on the
+        Mirrors ``world.scenes.block_services.persona_player``'s walk. Memoized on the
         serializer context (keyed by persona id) so a reactor who appears on several poses
         in one page is only resolved once.
         """

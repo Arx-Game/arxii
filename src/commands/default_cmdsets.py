@@ -139,6 +139,7 @@ from commands.locations import CmdRoom
 from commands.manifest import CmdManifest
 from commands.market import CmdMarket
 from commands.missions import CmdMission
+from commands.missives import CmdMissive  # #3289
 from commands.mood import CmdFeel, CmdSense  # #2994
 from commands.motif import CmdMotif
 from commands.network import CmdNetwork  # #2820
@@ -552,6 +553,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPledge,
             CmdSacrifice,
             CmdKeepsake,
+            # #3289 — IC missives.
+            CmdMissive,
             # #1511 — organization membership lifecycle.
             CmdOrg,
             # #3293 — appeals to organizations.
