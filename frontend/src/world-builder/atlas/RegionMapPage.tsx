@@ -326,9 +326,12 @@ export function RegionMapPage({
     if (anchorFootprint) return [anchorFootprint];
     return rootsOf(data?.footprints ?? [], realmId);
   }, [anchorFootprint, data, realmId]);
+  // What the view is drawn around: that domain's name, else the realm's. While carving
+  // the anchor is the domain being carved, not the selection the panel shows beneath, so
+  // the caption never says "selected" (#5118: it read "no domain selected" over one).
   const anchorCaption = anchorFootprint
     ? anchorFootprint.name || `unnamed ${anchorFootprint.level_display.toLowerCase()}`
-    : `no domain selected: ${realms.find((r) => r.id === realmId)?.name ?? 'the map'}`;
+    : (realms.find((r) => r.id === realmId)?.name ?? 'all realms');
   // The domain being carved is always drawn, whatever the view: Geography while carving
   // shows the terrain and only that one outline (#5030).
   const visible = useMemo(() => {

@@ -257,7 +257,8 @@ describe('RegionMapPage', () => {
     unmount();
     renderWithProviders(<RegionMapPage regionId={1} />);
     expect(screen.getByTestId('region-map-viewport')).toHaveAttribute('data-map-view', 'geography');
-    expect(screen.getByTestId('map-view-anchor')).toHaveTextContent('no domain selected');
+    // no domain and no realm picked: the caption names what is drawn, never "selected"
+    expect(screen.getByTestId('map-view-anchor')).toHaveTextContent(/^all realms$/);
   });
 
   it('Domain view borders the tier below the selected domain (#5056)', async () => {
