@@ -524,6 +524,31 @@ test.describe('Dominion slice 4 (#5080)', () => {
     expect(errors).toEqual([]);
   });
 
+  test('#5118: the view caption names what is drawn, never "no domain selected"', async ({
+    page,
+  }) => {
+    const shot5118 = (name: string) => path.join(REPO_ROOT, 'docs', 'reviews', '5118', name);
+    const errors = trackErrors(page);
+    await page.goto(`/staff/world-builder/map/1?focus=${PERDITION_AREA}`);
+    const panel = page.getByTestId('region-map-panel');
+    const caption = page.getByTestId('map-view-anchor');
+    await expect(panel.getByRole('heading', { level: 3 })).toHaveText('Perdition');
+    await expect(caption).toHaveText('Perdition');
+    // Carve with no domain picked to carve: the view is drawn around the realm,
+    // and the panel still shows the barony selected a moment ago.
+    await page.getByRole('button', { name: 'Carve', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Carve', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    await expect(panel.getByRole('heading', { level: 3 })).toHaveText('Perdition');
+    console.log('carve caption:', JSON.stringify(await caption.textContent()));
+    await expect(caption).toHaveText('Inferna');
+    await expect(page.getByText('no domain selected')).toHaveCount(0);
+    await page.screenshot({ path: shot5118('1-carve-caption.png'), fullPage: true });
+    expect(errors).toEqual([]);
+  });
+
   test('#5112: under a held title the seat control says it changes the holder', async ({
     page,
   }) => {
