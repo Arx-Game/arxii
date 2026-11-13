@@ -417,7 +417,9 @@ test('a vacant rung seats an existing house from its page', async () => {
     renderWithProviders(<TitlePage titleId={3} />);
     const seat = screen.getByRole('button', { name: 'Seat' });
     expect(seat).toBeDisabled();
-    await userEvent.selectOptions(screen.getByLabelText('house'), 'House Vampa');
+    const select = screen.getByLabelText('house');
+    expect(within(select).getAllByRole('option')[0]).toHaveTextContent('pick a house');
+    await userEvent.selectOptions(select, 'House Vampa');
     await userEvent.click(seat);
     expect(mutate).toHaveBeenCalledWith({ title_id: 3, org_id: 12 });
   } finally {
@@ -425,10 +427,17 @@ test('a vacant rung seats an existing house from its page', async () => {
   }
 });
 
-test('a held rung can change hands but leaves its own holder out of the list', () => {
+test('a held rung says the control changes its holder, and leaves the holder out of the list (#5112)', async () => {
+  mutate.mockClear();
   renderWithProviders(<TitlePage titleId={3} />);
-  const options = within(screen.getByLabelText('house')).getAllByRole('option');
-  expect(options.map((o) => o.textContent)).toEqual(['pick a house', 'House Vampa']);
+  // Under a title that shows its house, "house / pick a house" read as a house not set.
+  expect(screen.queryByLabelText('house')).toBeNull();
+  const select = screen.getByLabelText('change holder');
+  const options = within(select).getAllByRole('option');
+  expect(options.map((o) => o.textContent)).toEqual(['pick another house', 'House Vampa']);
+  await userEvent.selectOptions(select, 'House Vampa');
+  await userEvent.click(screen.getByRole('button', { name: 'Seat' }));
+  expect(mutate).toHaveBeenCalledWith({ title_id: 3, org_id: 12 });
 });
 
 test("a rung inside a higher title's own chain offers no house picker", () => {
