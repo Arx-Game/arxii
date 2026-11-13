@@ -18,15 +18,14 @@ created/touched rows' ids in ``data`` so a caller can chain a follow-up call
 ``Kinsperson.family`` to the house's family at creation time, even though its
 kwargs mirror ``HouseClaimKin`` field-for-field: ``Kinsperson.family`` is
 documented as a denorm "maintained by the membership services"
-(``world/roster/models/families.py``), and ``acknowledge_into_family`` (the
-``recognize_birth`` fallback for the ``child`` relation) refuses outright
-when the child already carries the target family — presetting it would make
-every child-relation call whose realm has no matching
-``HouseRecognitionRule`` refuse itself. The relation-specific service calls
-(``record_parentage`` + ``recognize_birth``/``acknowledge_into_family`` for
-``child``; ``record_union`` + ``add_membership`` for ``spouse``;
-``add_membership`` directly for ``head``) are the sole writers of ``family``,
-exactly as they already are for every other caller of those services.
+(``world/roster/models/families.py``), and ``recognize_birth`` skips a child
+who already carries a family, so presetting it would keep the realm's birth
+law from ever enrolling one. The relation-specific service calls
+(``record_parentage`` + ``recognize_birth``, then a ``BORN`` ``add_membership``
+when no rule enrolls the child (#5114), for ``child``; ``record_union`` +
+``add_membership`` for ``spouse``; ``add_membership`` directly for ``head``)
+are the sole writers of ``family``, exactly as they already are for every
+other caller of those services.
 """
 
 from __future__ import annotations

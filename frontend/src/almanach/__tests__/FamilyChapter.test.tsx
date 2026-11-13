@@ -141,6 +141,8 @@ test('the "born into" pick renders and its value reaches the create payload', as
     data: {
       results: [
         { id: 21, name: 'Ardor', house_state: 'standing', published_at: null, family_id: 4 },
+        // The house being added to: the blank choice already means it (#5114).
+        { id: 9, name: 'Piropa', house_state: 'standing', published_at: null, family_id: 7 },
       ],
     },
   } as never);
@@ -158,6 +160,7 @@ test('the "born into" pick renders and its value reaches the create payload', as
   await userEvent.click(screen.getByRole('button', { name: 'Add household member' }));
   expect(screen.getByLabelText('born into')).toBeInTheDocument();
   expect(screen.getByRole('option', { name: 'Ardor' })).toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: 'Piropa' })).not.toBeInTheDocument();
   await userEvent.selectOptions(screen.getByLabelText('born into'), '4');
   await userEvent.type(screen.getByLabelText('name'), 'Tomas');
   await userEvent.click(screen.getByRole('button', { name: 'Add' }));

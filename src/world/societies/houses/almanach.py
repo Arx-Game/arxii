@@ -63,7 +63,6 @@ from world.societies.houses.models import (
 )
 from world.societies.houses.services import (
     HousesServiceError,
-    acknowledge_into_family,
     liege_chain_of,
     recognize_birth,
     release_fealty,
@@ -1107,12 +1106,18 @@ def _record_kin_memberships(*, house, node, relation, basis, born_into) -> None:
     elif relation == ClaimKinRelation.SPOUSE:
         add_membership(kinsperson=node, family=house.family, basis=MembershipBasis.MARRIED_IN)
     elif relation == ClaimKinRelation.CHILD and not basis:
+        # A child placed in the tree is a born member whether or not the realm's
+        # birth law enrolls them on its own (#5114). ``LEGITIMIZED`` is for a
+        # house recognizing someone after the fact, and wears the taken-in
+        # particle, so it is only written when a row asks for it by ``basis``.
         if recognize_birth(node) is None:
-            acknowledge_into_family(node, house.family)
+            add_membership(kinsperson=node, family=house.family, basis=MembershipBasis.BORN)
     elif basis:
         add_membership(kinsperson=node, family=house.family, basis=basis)
 
-    if born_into is not None:
+    # The house's own family is not a second birth house: the membership above
+    # already says so (#5114).
+    if born_into is not None and born_into.pk != house.family_id:
         add_membership(
             kinsperson=node, family=born_into, basis=MembershipBasis.BORN, is_primary=False
         )
@@ -1156,9 +1161,9 @@ def record_kin(  # noqa: PLR0913 — keyword-only public service API
     unconditionally whenever given, independent of ``relation``. Membership
     is relation-driven: HEAD gets FOUNDING (or BORN when the family already
     has a member other than this node) and SPOUSE gets MARRIED_IN, always;
-    CHILD with no explicit ``basis`` runs the same realm-recognition walk
-    the action always used (``recognize_birth`` falling back to
-    ``acknowledge_into_family``); any relation WITH an explicit ``basis``
+    CHILD with no explicit ``basis`` runs the realm's birth law
+    (``recognize_birth``) and, when no rule enrolls them, joins as BORN all
+    the same (#5114); any relation WITH an explicit ``basis``
     (the materialize path, for MOTHER/FATHER/GRANDPARENT/SIBLING/CHILD rows
     the founder wrote in directly) joins the house's family on that basis.
     WARD rows never get a family membership — household retainers are

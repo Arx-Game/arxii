@@ -146,8 +146,11 @@ export function AddKinDialog({
 }: AddKinDialogProps) {
   const { data: genders } = useGenders();
   const { data: houses } = useAllHouses();
+  // The house being added to is the blank choice ("the house itself"), so it is
+  // not offered by name as well (#5114).
   const bornIntoOptions = (houses?.results ?? []).filter(
-    (house): house is typeof house & { family_id: number } => house.family_id != null
+    (house): house is typeof house & { family_id: number } =>
+      house.family_id != null && house.id !== houseId
   );
   const relationChoices = relations
     ? RELATION_CHOICES.filter((choice) => relations.includes(choice.value))

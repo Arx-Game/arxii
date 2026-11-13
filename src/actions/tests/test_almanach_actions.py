@@ -900,6 +900,53 @@ class AlmanachActionTests(TestCase):
         heir = Kinsperson.objects.get(pk=heir_id)
         assert heir.family_id == self.family.pk
 
+    def test_edit_kin_child_is_a_born_member_when_no_birth_rule_enrolls_them(self) -> None:
+        """#5114: the fallback used to stamp the child ``LEGITIMIZED``, which
+        wears the house's taken-in particle. ``self.crown``'s realm has no
+        recognition rule, so nothing but the fallback writes this membership."""
+        from world.roster.constants import MembershipBasis
+        from world.roster.models import FamilyMembership
+
+        parent = KinspersonFactory(family=self.family, name="Consort Alden")
+        result = AlmanachEditKinAction().run(
+            self.staff,
+            org_id=self.crown.pk,
+            name="Heir Casella",
+            relation="child",
+            parent_kinsperson_id=parent.pk,
+            is_deceased=False,
+            believed_deceased=False,
+            is_household=False,
+        )
+        assert result.success, result.message
+
+        rows = FamilyMembership.objects.filter(kinsperson_id=result.data["kinsperson_id"])
+        assert [(row.family_id, row.basis, row.is_primary) for row in rows] == [
+            (self.family.pk, MembershipBasis.BORN, True)
+        ]
+
+    def test_edit_kin_child_born_into_the_house_itself_adds_no_second_membership(self) -> None:
+        """#5114: picking the house being added to as the birth house wrote a
+        second, non-primary ``BORN`` row in the same family."""
+        from world.roster.models import FamilyMembership
+
+        parent = KinspersonFactory(family=self.family, name="Consort Alden")
+        result = AlmanachEditKinAction().run(
+            self.staff,
+            org_id=self.crown.pk,
+            name="Heir Casella",
+            relation="child",
+            parent_kinsperson_id=parent.pk,
+            born_into_family_id=self.family.pk,
+            is_deceased=False,
+            believed_deceased=False,
+            is_household=False,
+        )
+        assert result.success, result.message
+        assert (
+            FamilyMembership.objects.filter(kinsperson_id=result.data["kinsperson_id"]).count() == 1
+        )
+
     def test_edit_kin_child_second_edit_does_not_remint_relation_effects(self) -> None:
         """#3983 review fix 1: an update (``kinsperson_id`` given) touches only
         plain fields — it must never re-run the create-time relation wiring."""
