@@ -239,6 +239,43 @@ class AlmanachPagesTests(TestCase):
         close_regional_event(event)
         self.assertEqual(rung_document(self.duchy).events, [])
 
+    def test_the_way_up_names_every_rung_above_inner_chain_rungs_included(self):
+        """#5116: a county planted under the empire's own duchy read realm, empire,
+        county. The kingdom and duchy share the empire's seat and were dropped."""
+        realm = RealmFactory(name="Imperial Umbros")
+        katta = OrganizationFactory(name="Katta")
+        empire = plant_rung(realm=realm, tier=TitleTier.EMPIRE, name="Umbral Empire", held_by=katta)
+        inner = {
+            t.tier: t
+            for t in Title.objects.filter(seat_domain=empire.seat_domain).exclude(pk=empire.pk)
+        }
+        inner[TitleTier.KINGDOM].name = "Nightfall"
+        inner[TitleTier.KINGDOM].save(update_fields=["name"])
+        inner[TitleTier.DUCHY].name = "Erebus Deep"
+        inner[TitleTier.DUCHY].save(update_fields=["name"])
+        county = plant_rung(
+            realm=realm,
+            tier=TitleTier.COUNTY,
+            name="Hollowmere",
+            parent_title=inner[TitleTier.DUCHY],
+        )
+
+        chain = rung_document(county).chain
+
+        self.assertEqual(
+            [(c["name"], c["tier"]) for c in chain],
+            [
+                ("Imperial Umbros", "realm"),
+                ("Umbral Empire", "empire"),
+                ("Nightfall", "kingdom"),
+                ("Erebus Deep", "duchy"),
+            ],
+        )
+        self.assertEqual(
+            [c["title_id"] for c in chain],
+            [None, empire.pk, inner[TitleTier.KINGDOM].pk, inner[TitleTier.DUCHY].pk],
+        )
+
     def test_rung_document_for_an_inner_chain_rung(self):
         """The empire's own chain kingdom (planted with it, sharing its seat) gets a
         page: sworn to the empire by its chain, not refused as a non-top (#5011)."""

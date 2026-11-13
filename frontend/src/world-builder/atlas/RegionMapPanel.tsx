@@ -3,7 +3,7 @@
  * Historical Charter (#4983) and the terrain legend. It folds to a thin rail (#4993); the
  * selection and the view live on the page, so folding loses nothing.
  */
-import { PanelRightClose, PanelRightOpen, type LucideIcon } from 'lucide-react';
+import { ArrowUp, PanelRightClose, PanelRightOpen, type LucideIcon } from 'lucide-react';
 
 import type { LadderRow } from '@/almanach/types';
 import { Plate, PlateHead } from '@/components/folio';
@@ -78,6 +78,10 @@ interface RegionMapPanelProps {
   events?: { id: number; kind: string; area: string }[];
   /** Offered only while carving: make the selected footprint the domain being carved. */
   onCarveThis?: (footprint: RegionMapFootprint) => void;
+  /** The domain the selected one lies in (#5116), when it is on this map: the
+   * way up, one rung at a time. Null at the top, and while carving. */
+  above?: RegionMapFootprint | null;
+  onUp?: (footprint: RegionMapFootprint) => void;
 }
 
 function SelectionDetails({
@@ -86,18 +90,42 @@ function SelectionDetails({
   onToggleCharter,
   charterFootprints,
   onCarveThis,
+  above,
+  onUp,
 }: Pick<
   RegionMapPanelProps,
-  'selection' | 'charterOn' | 'onToggleCharter' | 'charterFootprints' | 'onCarveThis'
+  | 'selection'
+  | 'charterOn'
+  | 'onToggleCharter'
+  | 'charterFootprints'
+  | 'onCarveThis'
+  | 'above'
+  | 'onUp'
 >) {
   const { selected, selectedLandless, selectedLadderRow, stationWord, focusTitleId } = selection;
   const landless = selectedLandless ?? selectedLadderRow;
   return (
     <div>
       <PlateHead as="div">{selected ? selected.level_display : (landless?.tier ?? '')}</PlateHead>
-      <h3 className="theme-heading mt-1 text-lg font-semibold [font-variant:small-caps]">
-        {(selected ? selected.name : landless?.name) || 'Unnamed'}
-      </h3>
+      <div className="mt-1 flex items-center gap-1">
+        <h3 className="theme-heading text-lg font-semibold [font-variant:small-caps]">
+          {(selected ? selected.name : landless?.name) || 'Unnamed'}
+        </h3>
+        {above && onUp && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 p-0"
+            aria-label={`Up to ${above.name || `unnamed ${above.level_display.toLowerCase()}`}`}
+            title={above.name || `unnamed ${above.level_display.toLowerCase()}`}
+            data-testid="selection-up"
+            onClick={() => onUp(above)}
+          >
+            <ArrowUp className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        )}
+      </div>
       {stationWord && (
         <p className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">{stationWord}</p>
       )}
@@ -169,6 +197,8 @@ export function RegionMapPanel({
   terrains,
   events = [],
   onCarveThis,
+  above,
+  onUp,
 }: RegionMapPanelProps) {
   const hasSelection =
     selection.selected || selection.selectedLandless || selection.selectedLadderRow;
@@ -220,6 +250,8 @@ export function RegionMapPanel({
               onToggleCharter={onToggleCharter}
               charterFootprints={charterFootprints}
               onCarveThis={onCarveThis}
+              above={above}
+              onUp={onUp}
             />
           ) : (
             <div>

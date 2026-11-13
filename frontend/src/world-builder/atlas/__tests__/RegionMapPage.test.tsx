@@ -279,6 +279,41 @@ describe('RegionMapPage', () => {
     expect(viewport).toHaveAttribute('data-bordered', '0');
   });
 
+  it('the up arrow beside the selected domain walks to the domain it lies in, and stops at the top (#5116)', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useRegionMapPipsQuery).mockReturnValue({
+      data: { ...payload, footprints: [...payload.footprints, SEAT_BARONY] },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useRegionMapPipsQuery>);
+    renderWithProviders(<RegionMapPage regionId={1} focusAreaId={11} />);
+    const panel = screen.getByTestId('region-map-panel');
+    expect(within(panel).getByRole('heading', { name: 'Salvation Seat' })).toBeInTheDocument();
+
+    await user.click(within(panel).getByRole('button', { name: 'Up to Salvation' }));
+
+    expect(within(panel).getByRole('heading', { name: 'Salvation' })).toBeInTheDocument();
+    expect(within(panel).getByRole('link', { name: 'Open in the Almanach' })).toHaveAttribute(
+      'href',
+      '/staff/almanach/titles/100'
+    );
+    // The county lies in nothing on this map: no way further up.
+    expect(within(panel).queryByTestId('selection-up')).not.toBeInTheDocument();
+  });
+
+  it('offers no up arrow while carving (#5116)', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useRegionMapPipsQuery).mockReturnValue({
+      data: { ...payload, footprints: [...payload.footprints, SEAT_BARONY] },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useRegionMapPipsQuery>);
+    renderWithProviders(<RegionMapPage regionId={1} focusAreaId={11} />);
+    expect(screen.getByTestId('selection-up')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Carve' }));
+    expect(screen.queryByTestId('selection-up')).not.toBeInTheDocument();
+  });
+
   it('Carve mode starts on Domain-Vassal, keeps a change, and Select gets its own view back (#5030)', async () => {
     const user = userEvent.setup();
     renderWithProviders(<RegionMapPage regionId={1} focusAreaId={10} />);
