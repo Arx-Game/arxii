@@ -227,6 +227,7 @@ export function ThreadDetailPage() {
       {/* ImbuePanel */}
       {showImbuePanel && (
         <ImbuePanel
+          key={thread.id}
           thread={thread}
           balance={spendableBalance}
           held={heldResonances}

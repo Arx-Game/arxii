@@ -370,5 +370,45 @@ describe('ImbuePanel', () => {
       expect(screen.getByTestId('imbue-amount').textContent).toBe('2');
       expect(screen.getByTestId('imbue-increment')).toBeDisabled();
     });
+
+    it('offers only the resonances a restricted Gift thread supports', () => {
+      const three = [...held, { resonance_id: 3, resonance_name: 'Wonder', balance: 4 }];
+      render(
+        <ImbuePanel
+          thread={makeThread({ allowed_resonance_ids: [1, 3] })}
+          balance={10}
+          held={three}
+          characterSheetId={100}
+        />,
+        { wrapper: createWrapper() }
+      );
+      expect(screen.getByTestId('imbue-payer-1')).toBeInTheDocument();
+      expect(screen.getByTestId('imbue-payer-3')).toBeInTheDocument();
+      expect(screen.queryByTestId('imbue-payer-2')).not.toBeInTheDocument();
+    });
+
+    it('starts on the first held resonance when the leader is not held, and sends it', () => {
+      const mockMutate = vi.fn();
+      vi.mocked(magicQueries.useImbueThread).mockReturnValue(
+        makeMutation({ mutate: mockMutate }) as unknown as ReturnType<
+          typeof magicQueries.useImbueThread
+        >
+      );
+      render(
+        <ImbuePanel
+          thread={makeThread({ id: 5, resonance: 9 })}
+          balance={0}
+          held={held}
+          characterSheetId={200}
+        />,
+        { wrapper: createWrapper() }
+      );
+      expect(screen.getByTestId('imbue-payer-1')).toHaveAttribute('aria-checked', 'true');
+      fireEvent.click(screen.getByTestId('imbue-button'));
+      expect(mockMutate).toHaveBeenCalledWith(
+        { characterSheetId: 200, threadId: 5, amount: 1, resonanceId: 1 },
+        expect.any(Object)
+      );
+    });
   });
 });

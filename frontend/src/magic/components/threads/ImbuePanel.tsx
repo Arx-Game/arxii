@@ -76,10 +76,19 @@ export function ImbuePanel({
   onResult,
 }: ImbuePanelProps) {
   const [amount, setAmount] = useState(1);
-  const [payerId, setPayerId] = useState(thread.resonance);
-  const hasChoice = held.length > 1;
-  const payer = held.find((h) => h.resonance_id === payerId);
-  const balance = hasChoice && payer ? payer.balance : leadingBalance;
+  // A restricted Gift thread only takes its Gift's resonances; the rest are not offered.
+  const allowed = thread.allowed_resonance_ids;
+  const options = allowed ? held.filter((h) => allowed.includes(h.resonance_id)) : held;
+  // Start on the thread's leading resonance, or the first the character can spend when the
+  // leader is not one of them (a Fall can leave a thread leading a resonance she holds no row for).
+  const [payerId, setPayerId] = useState(
+    options.some((h) => h.resonance_id === thread.resonance)
+      ? thread.resonance
+      : (options[0]?.resonance_id ?? thread.resonance)
+  );
+  const hasChoice = options.length > 1;
+  const payer = options.find((h) => h.resonance_id === payerId);
+  const balance = payer ? payer.balance : leadingBalance;
   const [lastResult, setLastResult] = useState<ImbueResponse | null>(null);
 
   const { mutate, isPending, error, isError } = useImbueThread();
@@ -89,7 +98,7 @@ export function ImbuePanel({
   const handleIncrement = () => setAmount((a) => Math.min(balance, a + 1));
 
   const handlePayer = (resonanceId: number) => {
-    const next = held.find((h) => h.resonance_id === resonanceId);
+    const next = options.find((h) => h.resonance_id === resonanceId);
     setPayerId(resonanceId);
     setAmount((a) => Math.min(a, next?.balance ?? a));
   };
@@ -101,7 +110,7 @@ export function ImbuePanel({
         characterSheetId,
         threadId: thread.id,
         amount,
-        ...(hasChoice ? { resonanceId: payerId } : {}),
+        ...(hasChoice || payerId !== thread.resonance ? { resonanceId: payerId } : {}),
       },
       {
         onSuccess: (result) => {
@@ -128,7 +137,7 @@ export function ImbuePanel({
           data-testid="imbue-payers"
         >
           <span className="text-sm">Spend:</span>
-          {held.map((h) => (
+          {options.map((h) => (
             <button
               key={h.resonance_id}
               type="button"
