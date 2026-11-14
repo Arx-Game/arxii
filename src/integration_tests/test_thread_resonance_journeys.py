@@ -1,17 +1,19 @@
-"""Journeys through moving a thread to another resonance (slice 6 of #4672).
+"""Journeys through retuning a thread: moving part of one resonance to another (#5123).
 
 Ysmay is a Celestial character with a thread on Bene (Celestial), anchored to a trait, holding
-40 developed points. Staff have authored the retune rite: a SERVICE ritual found by its service
-path, whose offering must tie to the resonance the thread moves to.
+40 developed points, all of them Bene (its one resonance row holds 40). Staff have authored the
+retune rite: a SERVICE ritual found by its service path, whose offering must tie to the
+resonance the thread moves to. The retune moves an amount of one resonance row to another row
+on the same thread; the thread's level and developed points never change.
 
 The pair rates are the ones ``ensure_conversion_pairs`` authors (the production values):
 Celestial -> Primal is a Fall at 1.20, Celestial -> Abyssal a Fall at 1.50, Abyssal ->
 Celestial a Redemption at 0.50. Expected numbers are worked out by hand from those rows:
 
-* Within Celestial (Bene -> Lumen) the 40 points stay 40.
+* Within Celestial (Bene -> Lumen) the points moved arrive one for one.
 * Bene -> Praedari (Primal) is a Fall: int(40 x 1.20) = 48.
 * Bene -> Ruin (Abyssal) is a Fall: int(40 x 1.50) = 60.
-* A 1-point Ruin thread redeemed to Bene: int(1 x 0.50) = 0, floored to 1.
+* A 1-point Ruin row redeemed to Bene: int(1 x 0.50) = 0, floored to 1.
 """
 
 from __future__ import annotations
@@ -53,6 +55,7 @@ from world.magic.models import (
     SanctumDetails,
     SanctumOwnerMode,
     Thread,
+    ThreadResonance,
 )
 from world.magic.services.resonance import grant_resonance
 from world.magic.services.thread_resonance import (
@@ -79,6 +82,13 @@ def stored(thread: Thread) -> dict:
     return Thread.objects.filter(pk=thread.pk).values(
         "resonance_id", "developed_points", "level", "retired_at"
     )[0]
+
+
+def rows(thread: Thread) -> dict[str, int]:
+    """``{resonance name: amount}`` of the thread's resonance rows, as the database holds them."""
+    return dict(
+        ThreadResonance.objects.filter(thread=thread).values_list("resonance__name", "amount")
+    )
 
 
 class ThreadRetuneCase(JourneyCase):
@@ -122,49 +132,78 @@ class ThreadRetuneCase(JourneyCase):
         materialize_item_game_object(item, character.sheet_data)
         return item.pk
 
-    def retune(self, thread: Thread, resonance=None, character=None) -> str:
+    def retune(
+        self, thread: Thread, resonance=None, character=None, *, source=None, amount=None
+    ) -> str:
         line = f"ritual {RITE} thread={thread.pk}"
+        if source is not None:
+            line += f" from={source.pk}"
+        if amount is not None:
+            line += f" amount={amount}"
         if resonance is not None:
             line += f" resonance={resonance.pk}"
         return strip_ansi(self.telnet(character or self.ysmay, line))
 
 
 class RetuningAtTheKeyboard(ThreadRetuneCase):
-    def test_a_retune_within_her_affinity_keeps_every_point(self) -> None:
+    def test_a_retune_within_her_affinity_moves_the_points_one_for_one(self) -> None:
         candle = self.carry(self.ysmay, self.lumen, "Lumen Candle")
-        told = self.retune(self.thread, self.lumen)
+        told = self.retune(self.thread, self.lumen, source=self.bene, amount=15)
         trait = self.thread.target_trait.name
         self.assertIn(
-            f"You perform {RITE}. Your {trait} thread left Bene and now channels Lumen "
-            "(40 points, now 40).",
+            f"You perform {RITE}. Your {trait} thread moved 15 Bene into Lumen. "
+            "It now holds 25 Bene and 15 Lumen.",
             told,
         )
+        self.assertEqual(rows(self.thread), {"Bene": 25, "Lumen": 15})
         row = stored(self.thread)
-        self.assertEqual(row["resonance_id"], self.lumen.pk)
-        self.assertEqual(row["developed_points"], 40)
+        self.assertEqual(row["resonance_id"], self.bene.pk)
+        self.assertEqual((row["level"], row["developed_points"]), (0, 40))
         self.assertIsNone(row["retired_at"])
         self.assertTrue(consumed(candle))
 
-    def test_a_fall_converts_her_points_at_the_pair_rate(self) -> None:
+    def test_moving_most_of_a_row_makes_the_other_resonance_lead(self) -> None:
+        self.carry(self.ysmay, self.lumen, "Lumen Candle")
+        self.retune(self.thread, self.lumen, source=self.bene, amount=30)
+        self.assertEqual(rows(self.thread), {"Bene": 10, "Lumen": 30})
+        row = stored(self.thread)
+        self.assertEqual(row["resonance_id"], self.lumen.pk)
+        self.assertEqual((row["level"], row["developed_points"]), (0, 40))
+
+    def test_a_fall_converts_the_points_moved_at_the_pair_rate(self) -> None:
         fang = self.carry(self.ysmay, self.praedari, "Praedari Fang")
         self.thread.name = "Mercy of the Healer"
         self.thread.save(update_fields=["name"])
         told = self.retune(self.thread, self.praedari)
         self.assertIn(
-            "Mercy of the Healer left Bene and now channels Praedari (40 points, now 48).", told
+            "Mercy of the Healer moved 40 Bene into Praedari, which became 48. "
+            "It now holds 0 Bene and 48 Praedari.",
+            told,
         )
+        self.assertEqual(rows(self.thread), {"Bene": 0, "Praedari": 48})
         row = stored(self.thread)
         self.assertEqual(row["resonance_id"], self.praedari.pk)
-        self.assertEqual(row["developed_points"], 48)
+        self.assertEqual(row["developed_points"], 40)
         self.assertTrue(consumed(fang))
 
-    def test_a_redemption_shrinks_a_thread_but_never_empties_it(self) -> None:
+    def test_a_redemption_shrinks_the_amount_but_never_loses_it(self) -> None:
         thin = ThreadFactory(owner=self.sheet, resonance=self.ruin, developed_points=1)
         self.carry(self.ysmay, self.bene, "Bene Lamp")
         self.retune(thin, self.bene)
-        row = stored(thin)
-        self.assertEqual(row["resonance_id"], self.bene.pk)
-        self.assertEqual(row["developed_points"], 1)
+        self.assertEqual(rows(thin), {"Ruin": 0, "Bene": 1})
+        self.assertEqual(stored(thin)["resonance_id"], self.bene.pk)
+
+    def test_an_amount_past_the_row_is_refused_and_nothing_is_spent(self) -> None:
+        candle = self.carry(self.ysmay, self.lumen, "Lumen Candle")
+        told = self.retune(self.thread, self.lumen, amount=41)
+        self.assertIn("This thread holds 40 Bene; name an amount from 1 to 40.", told)
+        self.assertFalse(consumed(candle))
+        self.assertEqual(rows(self.thread), {"Bene": 40})
+
+    def test_a_resonance_the_thread_holds_nothing_of_is_refused(self) -> None:
+        self.carry(self.ysmay, self.bene, "Bene Lamp")
+        told = self.retune(self.thread, self.bene, source=self.ruin)
+        self.assertIn("This thread holds no Ruin. It holds: Bene 40.", told)
 
     def test_naming_no_resonance_lists_where_the_thread_can_go(self) -> None:
         candle = self.carry(self.ysmay, self.lumen, "Lumen Candle")
@@ -182,14 +221,14 @@ class RetuningAtTheKeyboard(ThreadRetuneCase):
         # Sylvan is Primal, but Bene's Primal counterpart is Praedari: no route to Sylvan.
         moss = self.carry(self.ysmay, self.sylvan, "Sylvan Moss")
         told = self.retune(self.thread, self.sylvan)
-        self.assertIn("This thread cannot move to Sylvan.", told)
+        self.assertIn("Bene cannot move to Sylvan.", told)
         self.assertFalse(consumed(moss))
         self.assertEqual(stored(self.thread)["resonance_id"], self.bene.pk)
-        self.assertEqual(stored(self.thread)["developed_points"], 40)
+        self.assertEqual(rows(self.thread), {"Bene": 40})
 
     def test_its_own_resonance_is_not_a_target(self) -> None:
         told = self.retune(self.thread, self.bene)
-        self.assertIn("This thread cannot move to Bene.", told)
+        self.assertIn("Bene cannot move to Bene.", told)
 
     def test_an_offering_that_does_not_count_is_refused(self) -> None:
         moss = self.carry(self.ysmay, self.sylvan, "Sylvan Moss")
@@ -225,7 +264,7 @@ class RetuningAtTheKeyboard(ThreadRetuneCase):
 
         self.carry(self.ysmay, self.sylvan, "Sylvan Moss")
         told = self.retune(self.thread, self.sylvan)
-        self.assertIn("This thread cannot move to Sylvan.", told)
+        self.assertIn("Bene cannot move to Sylvan.", told)
         self.assertEqual(anima(), 10)
 
         self.carry(self.ysmay, self.lumen, "Lumen Candle")
@@ -266,19 +305,63 @@ class RetuningThroughTheWebClient(ThreadRetuneCase):
         result = response.data["result"]
         self.assertEqual(result["thread_id"], self.thread.pk)
         self.assertEqual(result["to_resonance_id"], self.ruin.pk)
-        self.assertEqual(result["points_after"], 60)
+        self.assertEqual(result["amount_moved"], 40)
+        self.assertEqual(result["points_gained"], 60)
+        self.assertEqual(result["to_amount_after"], 60)
         self.assertEqual(result["conversion_type"], "FALL")
-        self.assertFalse(result["merged"])
         self.assertEqual(response.data["message"], f"You perform {RITE}. {result['message']}")
-        self.assertIn("left Bene and now channels Ruin (40 points, now 60).", result["message"])
-        self.assertEqual(stored(self.thread)["developed_points"], 60)
+        self.assertIn("moved 40 Bene into Ruin, which became 60.", result["message"])
+        self.assertEqual(rows(self.thread), {"Bene": 0, "Ruin": 60})
+        self.assertEqual(stored(self.thread)["developed_points"], 40)
         self.assertTrue(consumed(fang))
+
+    def test_the_web_client_names_the_row_and_the_amount(self) -> None:
+        candle = self.carry(self.ysmay, self.lumen, "Lumen Candle")
+        response = self.post(
+            self.ysmay,
+            {
+                "character_sheet_id": self.sheet.pk,
+                "ritual_id": self.rite.pk,
+                "kwargs": {
+                    "thread_id": self.thread.pk,
+                    "from_resonance": self.bene.pk,
+                    "target_resonance": self.lumen.pk,
+                    "amount": 5,
+                },
+                "components": [candle],
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(rows(self.thread), {"Bene": 35, "Lumen": 5})
+        self.assertEqual(stored(self.thread)["resonance_id"], self.bene.pk)
+        self.assertTrue(consumed(candle))
+
+    def test_an_amount_that_is_not_a_whole_number_is_a_plain_400(self) -> None:
+        for amount in (0, -3, "abc", True):
+            with self.subTest(amount=amount):
+                response = self.post(
+                    self.ysmay,
+                    {
+                        "character_sheet_id": self.sheet.pk,
+                        "ritual_id": self.rite.pk,
+                        "kwargs": {
+                            "thread_id": self.thread.pk,
+                            "target_resonance": self.lumen.pk,
+                            "amount": amount,
+                        },
+                    },
+                )
+                self.assertEqual(response.status_code, 400, response.content)
+                self.assertEqual(
+                    response.data["detail"], "Name a whole number of points to move, at least 1."
+                )
+        self.assertEqual(rows(self.thread), {"Bene": 40})
 
     def test_the_web_client_is_refused_a_target_and_spends_nothing(self) -> None:
         moss = self.carry(self.ysmay, self.sylvan, "Sylvan Moss")
         response = self.perform(self.thread, self.sylvan, [moss])
         self.assertEqual(response.status_code, 400, response.content)
-        self.assertIn("This thread cannot move to Sylvan.", response.data["detail"])
+        self.assertIn("Bene cannot move to Sylvan.", response.data["detail"])
         self.assertFalse(consumed(moss))
 
     def test_ids_that_are_not_numbers_are_a_plain_400(self) -> None:
@@ -339,7 +422,6 @@ class RetuningThroughTheWebClient(ThreadRetuneCase):
                 option["affinity_name"],
                 option["conversion_type"],
                 option["projected_points"],
-                option["merges_into_thread_id"],
                 [(item["item_id"], item["mode"]) for item in option["qualifying"]],
             )
             for option in data["options"]
@@ -347,11 +429,27 @@ class RetuningThroughTheWebClient(ThreadRetuneCase):
         self.assertEqual(
             shown,
             {
-                "Lumen": ("Celestial", None, 40, None, [(candle, "material")]),
-                "Ruin": ("Abyssal", "FALL", 60, None, []),
-                "Praedari": ("Primal", "FALL", 48, None, []),
+                "Lumen": ("Celestial", None, 40, [(candle, "material")]),
+                "Ruin": ("Abyssal", "FALL", 60, []),
+                "Praedari": ("Primal", "FALL", 48, []),
             },
         )
+
+    def test_the_options_follow_the_row_and_amount_named(self) -> None:
+        response = self.api(self.account_of(self.ysmay)).get(
+            OPTIONS_URL.format(self.thread.pk),
+            {"from_resonance": self.bene.pk, "amount": 5},
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        shown = {o["resonance_name"]: o["projected_points"] for o in response.data["options"]}
+        # int(5 x 1.20) = 6 and int(5 x 1.50) = 7 across affinities; one for one within.
+        self.assertEqual(shown, {"Lumen": 5, "Ruin": 7, "Praedari": 6})
+
+    def test_options_for_a_bad_row_or_amount_are_a_plain_400(self) -> None:
+        client = self.api(self.account_of(self.ysmay))
+        url = OPTIONS_URL.format(self.thread.pk)
+        self.assertEqual(client.get(url, {"from_resonance": "abc"}).status_code, 400)
+        self.assertEqual(client.get(url, {"amount": "0"}).status_code, 400)
 
     def test_a_rite_that_asks_no_offering_lists_none_to_pick(self) -> None:
         self.carry(self.ysmay, self.lumen, "Lumen Candle")
@@ -472,7 +570,7 @@ class AnchorsThatHoldAResonance(ThreadRetuneCase):
 
         candle = self.carry(self.ysmay, self.lumen, "Lumen Candle")
         told = self.retune(woven, self.lumen)
-        self.assertIn("This thread cannot move to Lumen. It can move to: Ruin (Fall).", told)
+        self.assertIn("Bene cannot move to Lumen. It can move to: Ruin (Fall).", told)
         self.assertFalse(consumed(candle))
         self.assertEqual(stored(woven)["resonance_id"], self.bene.pk)
 
@@ -552,15 +650,16 @@ class TheDashboardFlagsASecondRetuneRite(ThreadRetuneCase):
         self.assertIn(f"the Spellbook offers only {RITE}", result.detail)
 
 
-class AFallAfterAMergeReanchorsOntoTheRetiredPlace(JourneyCase):
-    """The full Fall re-anchors every thread; a retired thread in the target holds no place."""
+class TheFallConvertsAThreadsRows(JourneyCase):
+    """The full Fall converts every resonance row in the affinity, on one thread."""
 
-    def test_the_fall_moves_her_thread_where_a_retired_one_sits(self) -> None:
-        celestial, primal, _abyssal = ensure_conversion_pairs()
-        bene = ResonanceFactory(name="Bene", affinity=celestial)
-        praedari = ResonanceFactory(name="Praedari", affinity=primal)
+    def setUp(self) -> None:
+        super().setUp()
+        celestial, self.primal, _abyssal = ensure_conversion_pairs()
+        self.bene = ResonanceFactory(name="Bene", affinity=celestial)
+        self.praedari = ResonanceFactory(name="Praedari", affinity=self.primal)
         ResonanceConversion.objects.create(
-            source_resonance=bene, target_affinity=primal, target_resonance=praedari
+            source_resonance=self.bene, target_affinity=self.primal, target_resonance=self.praedari
         )
         RitualFactory(
             name="Ritual of Falling",
@@ -568,28 +667,53 @@ class AFallAfterAMergeReanchorsOntoTheRetiredPlace(JourneyCase):
             service_function_path="world.magic.services.fall_redemption.perform_fall",
         )
         room = self.make_room("The Threshold")
-        ysmay = self.make_player("Ysmay", room=room)
-        sheet = ysmay.sheet_data
+        self.ysmay = self.make_player("Ysmay", room=room)
+        self.sheet = self.ysmay.sheet_data
         set_aura_split(
-            CharacterAuraFactory(character=sheet), celestial="50", primal="45", abyssal="5"
+            CharacterAuraFactory(character=self.sheet), celestial="50", primal="45", abyssal="5"
         )
-        grant_resonance(sheet, bene, 100, source=GainSource.STAFF_GRANT)
-        grant_resonance(sheet, praedari, 100, source=GainSource.STAFF_GRANT)
-        live = ThreadFactory(owner=sheet, resonance=bene, developed_points=10)
+        grant_resonance(self.sheet, self.bene, 100, source=GainSource.STAFF_GRANT)
+        grant_resonance(self.sheet, self.praedari, 100, source=GainSource.STAFF_GRANT)
+
+    def fall(self) -> str:
+        return self.telnet(self.ysmay, f"ritual Ritual of Falling target_affinity={self.primal.pk}")
+
+    def test_the_fall_converts_her_thread_and_leaves_a_retired_one_alone(self) -> None:
+        live = ThreadFactory(owner=self.sheet, resonance=self.bene, developed_points=10)
         retired = ThreadFactory(
-            owner=sheet,
-            resonance=praedari,
+            owner=self.sheet,
+            resonance=self.praedari,
             target_trait=live.target_trait,
             developed_points=5,
             retired_at=timezone.now(),
         )
 
-        told = self.telnet(ysmay, f"ritual Ritual of Falling target_affinity={primal.pk}")
+        told = self.fall()
 
         self.assertIn("You perform Ritual of Falling.", told)
         row = stored(live)
-        self.assertEqual(row["resonance_id"], praedari.pk)
-        # Celestial -> Primal is a Fall at 1.20: int(10 x 1.20) = 12.
+        self.assertEqual(row["resonance_id"], self.praedari.pk)
+        # Celestial -> Primal is a Fall at 1.20: int(10 x 1.20) = 12, rows and points alike.
+        self.assertEqual(rows(live), {"Praedari": 12})
         self.assertEqual(row["developed_points"], 12)
         self.assertIsNone(row["retired_at"])
         self.assertEqual(stored(retired)["developed_points"], 5)
+        self.assertEqual(rows(retired), {"Praedari": 5})
+
+    def test_the_fall_merges_the_rows_of_one_thread(self) -> None:
+        thread = ThreadFactory(owner=self.sheet, resonance=self.bene, developed_points=15)
+        leading = ThreadResonance.objects.get(thread=thread, resonance=self.bene)
+        leading.amount = 10
+        leading.save(update_fields=["amount"])
+        ThreadResonance.objects.create(thread=thread, resonance=self.praedari, amount=5)
+
+        self.fall()
+
+        # Bene's 10 become 12 and join the 5 already on Praedari: one row, one thread.
+        self.assertEqual(rows(thread), {"Praedari": 17})
+        row = stored(thread)
+        self.assertEqual(row["resonance_id"], self.praedari.pk)
+        self.assertIsNone(row["retired_at"])
+        self.assertEqual(
+            Thread.objects.filter(owner=self.sheet, retired_at__isnull=True).count(), 1
+        )
