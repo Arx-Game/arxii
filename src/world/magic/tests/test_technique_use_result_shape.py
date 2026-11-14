@@ -234,7 +234,10 @@ class TechniqueUseResultFieldTests(TestCase):
             resonance_spent=7,
         )
         # What a pull spent is charged to its threads' own resonances (#5066).
-        pull.threads.add(ThreadFactory(owner=sheet, resonance=self.resonance))
+        pull.threads.add(
+            ThreadFactory(owner=sheet, resonance=self.resonance),
+            through_defaults={"paying_resonance": self.resonance},
+        )
 
         # Invalidate cached_property so the new pull is visible
         self.character.combat_pulls.__dict__.pop("_active", None)

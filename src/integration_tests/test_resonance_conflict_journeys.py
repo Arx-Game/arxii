@@ -1,8 +1,8 @@
 """Journeys for Resonance Conflict from carried drift (#4732).
 
 Ysmay's true aura leads Celestial. She carries 100 Celestial resonance and some Abyssal.
-With the authored defaults (threshold 50% of the dominant balance, floor 20, a step per 20
-points past it, focus difficulty 10 + 2 per step, one step for an off-aura pull) her
+With the drift numbers staged below (threshold 50% of the dominant balance, floor 20, a
+step per 20 points past it, focus difficulty 10 + 2 per step) her
 Abyssal balance is drift: at 50 it sits on the threshold and nothing happens; past it,
 each cast she makes calls for a focus roll first. A failed roll lays "Resonance Conflict"
 on her, and its authored -10 on her cast check reaches the very cast that failed.
@@ -55,29 +55,21 @@ from world.conditions.factories import (
     ConditionTemplateFactory,
 )
 from world.conditions.models import ConditionInstance
-from world.magic.constants import EffectKind, TargetKind
 from world.magic.factories import (
-    AffinityInteractionFactory,
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
     CharacterAuraFactory,
     CharacterResonanceFactory,
     CharacterTechniqueFactory,
-    CharacterThreadWeavingUnlockFactory,
     EffectTypeFactory,
     GiftFactory,
     ResonanceFactory,
     TechniqueFactory,
-    ThreadPullCostFactory,
-    ThreadPullEffectFactory,
-    ThreadWeavingUnlockFactory,
     ensure_canonical_affinities,
 )
 from world.magic.models import Affinity, AffinityInteraction
 from world.magic.services.drift import get_drift_config
-from world.magic.services.threads import weave_thread
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
-from world.magic.types.pull import CastPullDeclaration
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory
 from world.scenes.tests.cast_test_helpers import grant_technique
@@ -151,6 +143,10 @@ def _author_conflict(cast_check_type):
     cfg = get_drift_config()
     cfg.focus_check_type = focus_type
     cfg.conflict_condition = condition
+    # Task 1 bridge (#5123): the drift reading still counts balance points, with the
+    # floor and severity step standing in the two fields that replaced the old ones.
+    cfg.unsettled_tolerance_percent = 20
+    cfg.unsettled_step_percent = 20
     cfg.save()
     return focus_type, condition
 
@@ -239,18 +235,6 @@ class DriftOnTheThresholdCallsForNothing(_Drifting):
         self.assertEqual(rec.focus_difficulties, [])
         self.assertIsNone(self.conflict())
 
-    def test_a_softer_authored_pair_weighs_less(self) -> None:
-        """Abyssal against Celestial at half weight: 100 Abyssal carries 50 drift."""
-        self.abyssal_row.balance = 100
-        self.abyssal_row.save(update_fields=["balance"])
-        AffinityInteractionFactory(
-            source_affinity=self.abyssal,
-            environment_affinity=self.celestial,
-            conflict_weight=Decimal("0.50"),
-        )
-        AffinityInteraction.objects.clear_cache()
-        self.assertEqual(self.cast().focus_difficulties, [])
-
 
 class AnUnsetConflictConditionRollsNothing(_Drifting):
     """Staff have not named the conflict condition yet: the Required content dashboard
@@ -300,36 +284,6 @@ class DriftPastTheThreshold(_Drifting):
         self.cast(focus="Failure")
         self.cast(focus="Success")
         self.assertEqual(self.conflict().severity, 3)
-
-
-class AnOffAuraPullAddsAStep(_Drifting):
-    """Pulling an Abyssal thread while Celestial-led adds a step: difficulty 14."""
-
-    def test_the_focus_roll_is_harder(self) -> None:
-        ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=0)
-        ThreadPullEffectFactory(
-            target_kind=TargetKind.TRAIT,
-            resonance=self.abyssal_resonance,
-            tier=1,
-            flat_bonus_amount=1,
-            effect_kind=EffectKind.FLAT_BONUS,
-        )
-        CharacterThreadWeavingUnlockFactory(
-            character=self.sheet,
-            unlock=ThreadWeavingUnlockFactory(
-                target_kind=TargetKind.TRAIT, unlock_trait=self.cast_stat
-            ),
-        )
-        thread = weave_thread(
-            self.sheet, TargetKind.TRAIT, self.cast_stat, self.abyssal_resonance, name="Ash"
-        )
-        unpulled = self.cast(focus="Success")
-        pulled = self.cast(
-            focus="Success",
-            cast_pull=CastPullDeclaration(tier=1, threads=(thread,)),
-        )
-        self.assertEqual(unpulled.focus_difficulties, [12])
-        self.assertEqual(pulled.focus_difficulties, [14])
 
 
 class TheAlternateSelfTurnsTheMeasureAround(_Drifting):
@@ -459,41 +413,6 @@ class ACombatCastRollsFocusOnce(_DriftingInCombat):
         )
         self.assertEqual(len(rec.cast_breakdowns), 1)
         self.assertEqual(_labels(rec.cast_breakdowns[0]).get(CONFLICT), PENALTY)
-
-
-class ACombatRoundPullAddsAStep(_DriftingInCombat):
-    """Ysmay pulls an Abyssal thread with her combat cast. The pull is committed when she
-    declares, and the round's resolution counts it toward her focus roll: one step for
-    her drift (59 Abyssal after the pull's cost) and one for the off-aura pull,
-    difficulty 14."""
-
-    def test_the_committed_pull_makes_the_focus_roll_harder(self) -> None:
-        ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=0)
-        ThreadPullEffectFactory(
-            target_kind=TargetKind.TRAIT,
-            resonance=self.abyssal_resonance,
-            tier=1,
-            flat_bonus_amount=1,
-            effect_kind=EffectKind.FLAT_BONUS,
-        )
-        CharacterThreadWeavingUnlockFactory(
-            character=self.sheet,
-            unlock=ThreadWeavingUnlockFactory(
-                target_kind=TargetKind.TRAIT, unlock_trait=self.cast_stat
-            ),
-        )
-        weave_thread(
-            self.sheet, TargetKind.TRAIT, self.cast_stat, self.abyssal_resonance, name="Ash"
-        )
-        success = CheckOutcome.objects.get(name="Success")
-        with (
-            _Recorder(focus_type=self.focus_type, cast_type=self.cast_type) as rec,
-            force_check_outcome(success),
-        ):
-            told = self.telnet(self.ysmay, "cast Ember Lash at Gristle pull=Ash resonance=Ashfall")
-            self.ysmay.resonances.invalidate()
-            resolve_round(self.encounter)
-        self.assertEqual(rec.focus_difficulties, [14], told)
 
 
 class AClashContributionRollsFocus(_DriftingInCombat):
