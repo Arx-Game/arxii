@@ -241,7 +241,7 @@ def _validated_source(
         msg = f"You may convert at most {cap_value} toward that resonance."
         raise DriftConversionInvalidError(msg)
     if source.pk not in {row.resonance_id for row in convertible_drift(sheet, target)}:
-        msg = "That resonance is not drift you can convert."
+        msg = "You have nothing in that resonance to atone for."
         raise DriftConversionInvalidError(msg)
     try:
         pair = conversion_pair(source.affinity, target.affinity)

@@ -270,7 +270,7 @@ class CmdAura(ArxCommand):
                 None,
             )
             if option is None or option.max_amount <= 0:
-                msg = "That resonance is not drift you can convert toward that one."
+                msg = "You have nothing in that resonance to atone for."
                 raise CommandError(msg)
             amount = option.max_amount
         return {
@@ -296,7 +296,7 @@ class CmdAura(ArxCommand):
                 for source in preview.sources
             )
             if not preview.sources:
-                lines.append("  You hold no drift you can convert toward it.")
+                lines.append("  You have nothing to atone for toward it.")
             if preview.focus_bonus > 0:
                 lines.append(f"  Your focus adds {preview.focus_bonus} to the rite.")
             spent = [q for q in option.qualifying if q.mode == ComponentMode.MATERIAL]

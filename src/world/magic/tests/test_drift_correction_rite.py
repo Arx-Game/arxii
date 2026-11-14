@@ -263,7 +263,9 @@ class RefusalTests(DriftRiteTestBase):
         _hold(self.sheet, self.sunrise, 20)
         with self.assertRaises(DriftConversionInvalidError) as ctx:
             self.perform(amount=5, source=self.sunrise)
-        self.assertEqual(ctx.exception.user_message, "That resonance is not drift you can convert.")
+        self.assertEqual(
+            ctx.exception.user_message, "You have nothing in that resonance to atone for."
+        )
         self.assert_nothing_moved()
         self.assertEqual(_balance(self.sheet, self.sunrise), 20)
 

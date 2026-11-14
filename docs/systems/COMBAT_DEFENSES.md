@@ -147,7 +147,7 @@ the first time she is attacked in a round with no pull of her own, her saved def
 (`defense_pull_tier`) is committed before a technique dodge rolls
 (`world/combat/services/auto_pull.py`). It pulls every thread, of any resonance, that relates to
 the dodge and is not already working for her on the defense roll, each paid from its own
-resonance (maintainer ruling 2026-11-11); when nothing is left it commits and charges
+leading resonance (maintainer ruling 2026-11-11; the thread's payer defaults to it, #5123); when nothing is left it commits and charges
 nothing.
 
 **The same power on her turn [BUILT & WIRED] (#5019, #5066).** A source matching an application

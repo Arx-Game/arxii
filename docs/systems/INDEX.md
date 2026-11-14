@@ -11153,8 +11153,10 @@ Thin telnet compatibility layer that delegates to Actions.
   rituals; CEREMONY creates `PendingRitualEffect`), `CmdWeaveThread` (finisher for Rite of
   Weaving; consumes pending effect, calls `weave_thread`), `CmdImbue` (finisher for Rite of
   Imbuing; consumes pending effect, calls `spend_resonance_for_imbuing`).
-- **Combat declaration pull (#1455):** A thread pull is a **modifier on `cast`/`clash`**,
-  not a standalone command. `cast … pull=<thread>[,…] resonance=<name> [tier=<1-3>]` and
+- **Combat declaration pull (#1455):** A thread pull is a **modifier on `cast`/`clash`**
+  or, since #5066, declared on its own (`combat pull <tier>=<thread>[:<resonance>][,...]`).
+  `cast … pull=<thread>[:<resonance>][,…] resonance=<name> [tier=<1-3>]` (`:<resonance>` names
+  the held resonance paying for that thread, #5123; `resonance=` names the burn's) and
   `clash … pull=…` parsed by the shared `_CombatCommandMixin` pull parser. Both converge on
   `commit_combat_pull` / `request_technique_cast(cast_pull=…)` via
   `world/combat/pull_helpers.py`. Shared helpers: `build_cast_pull_declaration`,

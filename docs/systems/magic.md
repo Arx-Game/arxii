@@ -2041,8 +2041,10 @@ below level 10), so a second resonance never out-multiplies the leader; a resona
 or a row at zero (a creation pick not yet imbued), gets no perks but still pays. The read level
 feeds the `min_thread_level` gate and the multiplier. Tier 0 resolves only for the leading
 resonance, and the always-on passives outside pulls key on `Thread.resonance`. A pull is refused
-as perkless only when no thread's payer has perks (ruling 13: a perkless pull is an ordinary one),
-and applicability (`pull_applicability`) counts a thread when any resonance with a row would have
+as having no effect ("This pull would have no effect on that action.") only when none of its
+payers has perks that apply and none of its threads is paid by a held resonance with no row on
+that thread (ruling 13: paying with such a resonance is an ordinary pull; the check is `any`
+across the pull's threads, not per payer), and applicability (`pull_applicability`) counts a thread when any resonance with a row would have
 an effect, since it runs before the payer is picked.
 
 **Preview:** `preview_resonance_pull` (`POST /api/magic/thread-pull-preview/`) is the read-only

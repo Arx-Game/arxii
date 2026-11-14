@@ -1130,9 +1130,8 @@ resonance=<id>`, web `kwargs.{target_resonance, from_resonance, amount}`, `GET /
 telnet and web both show, Required content rows `thread-resonance-ritual`,
 `thread-resonance-ritual-single` (TUNING: a second rite on the path) and
 `thread-resonance-ritual-web-payable` (TUNING: a rite with a template or touchstone component the
-web cannot pay), and migration 0322
-(its live-thread-only uniqueness is superseded by #5123's one-thread-per-anchor constraints, which
-also ignore retired threads). Journey: `integration_tests/test_thread_resonance_journeys.py`.
+web cannot pay). The thread uniqueness constraints are one thread per anchor since #5123, and
+they also ignore retired threads. Journey: `integration_tests/test_thread_resonance_journeys.py`.
 
 Anchor rules (ruled on the final review): a GIFT thread moves only within its gift's supported
 resonances when the gift names any; a SANCTUM thread has no options (the Ritual of Purging changes

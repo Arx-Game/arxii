@@ -1011,7 +1011,8 @@ perks read is `thread_rows.payer_level_read(thread, payer)`: the leading resonan
 `thread.level`; another resonance with a nonzero row reads `max(0, level -
 DriftConfig.second_resonance_level_step)`, falling back to the leader's level when the lower
 level's `thread_level_multiplier` would beat the leader's (the curve is not monotonic below
-10); a resonance with no row, or a row at 0, gets `None` and no perks, but still pays an ordinary
+10); another resonance with no row, or a row at 0, gets `None` and no perks (the leading resonance
+always reads the thread's level, even at 0), but still pays an ordinary
 pull (the cost and the pull's plain benefit). That level feeds both the `min_thread_level` gate
 and the multiplier. Tier 0 (always-on) resolves only when the payer is the leading resonance,
 and the tier-0 passives outside pulls (`handlers.py`, `mechanics/services.py`,
