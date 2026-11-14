@@ -210,6 +210,8 @@ _ERR_IMBUING_REQUIRES_THREAD = "Imbuing ritual requires thread_id in kwargs (int
 _ERR_IMBUING_REQUIRES_AMOUNT = "Imbuing ritual requires amount in kwargs (positive int)."
 _KWARG_TARGET_AFFINITY = "target_affinity"
 _KWARG_TARGET_RESONANCE = "target_resonance"
+_KWARG_FROM_RESONANCE = "from_resonance"
+_KWARG_AMOUNT = "amount"
 _KWARG_THREAD_ID = "thread_id"
 
 # =============================================================================
@@ -1117,11 +1119,15 @@ class ThreadViewSet(viewsets.ModelViewSet):
 
         GET /api/magic/threads/{id}/resonance-options/  (slice 6 of #4672)
 
+        Query: ``from_resonance`` (id of one of the thread's resonances, default the leading
+        one) and ``amount`` (points to move, default all of that resonance's row).
+
         Response: ``{ritual_id, offering_required, offering_count, unavailable_reason,
         options: [{resonance_id, resonance_name, affinity_name, conversion_type,
-        projected_points, merges_into_thread_id, qualifying: [{item_id, name, mode}]}]}``.
+        projected_points, qualifying: [{item_id, name, mode}]}]}``.
         ``ritual_id`` is null while no retune rite is authored; perform it through
-        ``POST /api/magic/rituals/perform/`` with ``kwargs: {thread_id, target_resonance}``.
+        ``POST /api/magic/rituals/perform/`` with
+        ``kwargs: {thread_id, target_resonance, from_resonance?, amount?}``.
         ``qualifying`` is filled only when the rite asks for a target-resonance offering.
         """
         from world.magic.services.drift import (  # noqa: PLC0415
@@ -1139,7 +1145,19 @@ class ThreadViewSet(viewsets.ModelViewSet):
 
         thread = self.get_object()
         ritual = thread_resonance_ritual()
-        options = thread_resonance_options(thread) if ritual is not None else []
+        options: list = []
+        if ritual is not None:
+            query: dict = {}
+            for key in (_KWARG_FROM_RESONANCE, _KWARG_AMOUNT):
+                # Two parameters of this one detail action, not a list filter.
+                if key in request.query_params:  # noqa: USE_FILTERSET
+                    query[key] = request.query_params[key]  # noqa: USE_FILTERSET
+            error = _resolve_retune_kwargs(query)
+            if error is not None:
+                return error
+            options = thread_resonance_options(
+                thread, query.get(_KWARG_FROM_RESONANCE), query.get(_KWARG_AMOUNT)
+            )
         offering_count = target_resonance_offering_count(ritual) if ritual is not None else 0
         qualifying = {}
         if offering_count:
@@ -1346,6 +1364,28 @@ def _validate_imbuing_amount(kwargs: dict) -> Response | None:
     return None
 
 
+def _resolve_retune_kwargs(kwargs: dict) -> Response | None:
+    """Resolve the retune's optional ``from_resonance`` id and ``amount`` in place (#5123).
+
+    ``from_resonance`` becomes a ``Resonance`` and ``amount`` a positive int; either that
+    is not one is a 400. Both share their resolvers with the telnet ``ritual`` command.
+    """
+    from world.magic.exceptions import ThreadResonanceChangeError  # noqa: PLC0415
+    from world.magic.services.thread_resonance import (  # noqa: PLC0415
+        resolve_retune_amount,
+        resolve_target_resonance,
+    )
+
+    try:
+        if kwargs.get(_KWARG_FROM_RESONANCE) is not None:
+            kwargs[_KWARG_FROM_RESONANCE] = resolve_target_resonance(kwargs[_KWARG_FROM_RESONANCE])
+        if _KWARG_AMOUNT in kwargs:
+            kwargs[_KWARG_AMOUNT] = resolve_retune_amount(kwargs[_KWARG_AMOUNT])
+    except (UnknownResonance, ThreadResonanceChangeError) as err:
+        return Response({"detail": err.user_message}, status=status.HTTP_400_BAD_REQUEST)
+    return None
+
+
 def _model_ref_dict(pairs: list[tuple[str, object]]) -> dict:
     """``asdict`` dict factory that sends a model instance as its ``{id, name}`` reference.
 
@@ -1482,6 +1522,9 @@ class RitualPerformView(APIView):
                 return error
         if ritual.service_function_path == THREAD_RESONANCE_SERVICE_PATH:
             error = self._resolve_owned_thread_kwargs(sheet, kwargs)
+            if error is not None:
+                return error
+            error = _resolve_retune_kwargs(kwargs)
             if error is not None:
                 return error
         error = self._resolve_target_resonance_kwargs(kwargs)

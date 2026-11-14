@@ -259,6 +259,8 @@ class PerformRitualAction(Action):
                 performer_sheet,
                 thread=kwargs.get("thread"),
                 target_resonance=kwargs.get("target_resonance"),
+                from_resonance=kwargs.get("from_resonance"),
+                amount=kwargs.get("amount"),
             )
 
     def _validate_components(
@@ -319,10 +321,10 @@ def _spend_restored_on_raise(components: list[Any], anima: Any) -> Iterator[None
     """Put what a perform spends back in memory when the perform raises after spending it.
 
     The perform consumes its components and channels the performer's anima inside its
-    transaction, then dispatches; a service that refuses after that (the retune's
-    ``ThreadAnchorTakenError``, any caught ritual exception) rolls the tables back, but the
-    identity-mapped items, their game objects and the anima row keep the spend (#4735). Entered
-    outside ``transaction.atomic()`` so it runs after the rollback, for every ritual alike.
+    transaction, then dispatches; a service that refuses after that (any caught ritual
+    exception) rolls the tables back, but the identity-mapped items, their game objects and
+    the anima row keep the spend (#4735). Entered outside ``transaction.atomic()`` so it runs
+    after the rollback, for every ritual alike.
     ``anima`` is the performer's ``CharacterAnima`` when the rite channels it, else None.
     """
     from core.identity_map import CacheGuard  # noqa: PLC0415

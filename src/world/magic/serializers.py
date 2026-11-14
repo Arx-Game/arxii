@@ -4453,9 +4453,8 @@ class ThreadResonanceOptionSerializer(serializers.Serializer):
     ``qualifying`` reads ``context["qualifying"]``: the carried items that pay, keyed by
     resonance pk, worked out once for every option by the view
     (``qualifying_components_by_target``), so this serializer queries nothing per option.
-    ``conversion_type`` is null for a retune within the thread's own affinity.
-    ``merges_into_thread_id`` is the live thread on the same anchor the move would merge
-    into, null when the thread moves on its own.
+    ``conversion_type`` is null for a retune within the source resonance's own affinity.
+    ``projected_points`` is what the target's row would gain from the amount being moved.
     """
 
     resonance_id = serializers.IntegerField(source="resonance.pk")
@@ -4463,7 +4462,6 @@ class ThreadResonanceOptionSerializer(serializers.Serializer):
     affinity_name = serializers.CharField(source="resonance.affinity.name")
     conversion_type = serializers.ChoiceField(choices=ConversionType.choices, allow_null=True)
     projected_points = serializers.IntegerField()
-    merges_into_thread_id = serializers.IntegerField(allow_null=True)
     qualifying = serializers.SerializerMethodField()
 
     @extend_schema_field(DriftQualifyingComponentSerializer(many=True))

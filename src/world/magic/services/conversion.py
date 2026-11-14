@@ -10,7 +10,8 @@ Key invariants:
   (modulo the multiplier). See the spec's "Monotonicity invariant — revised
   after reviewer finding" section.
 - ``balance`` is zeroed (full) or reduced (partial) on the source resonance.
-- ``Thread.resonance`` FK is re-anchored (full conversion only).
+- Each thread's ``ThreadResonance`` rows in the source affinity are converted (full
+  conversion only), and its leading resonance refreshed.
 - ``ResonanceGrant`` audit rows are written for the target-side grant.
 """
 
@@ -22,25 +23,23 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from django.db import IntegrityError, transaction
-from django.utils import timezone
+from django.db import transaction
 
 from world.magic.constants import GainSource
 from world.magic.exceptions import ConversionMappingError
+from world.magic.models.affinity import Resonance
 from world.magic.models.aura import CharacterResonance
 from world.magic.models.fall_redemption import (
     FallRedemptionConfig,
     ResonanceConversion,
 )
 from world.magic.models.resonance_environment import AffinityInteraction
+from world.magic.models.threads import ThreadResonance
 from world.magic.services.resonance import grant_resonance
 
 if TYPE_CHECKING:
-    from django.db.models import QuerySet
-
     from world.character_sheets.models import CharacterSheet
-    from world.magic.models import Thread
-    from world.magic.models.affinity import Affinity, Resonance
+    from world.magic.models.affinity import Affinity
 
 
 @dataclass(frozen=True)
@@ -325,8 +324,8 @@ def convert_resonance(  # noqa: PLR0913
     3. Transfer a proportional fraction of lifetime_earned to the target.
     4. Zero the source balance (full) or reduce by penance_amount (partial).
     5. Grant the converted amount to the target via grant_resonance.
-    6. Re-anchor all Threads on the source resonance to the target resonance
-       (full conversion only).
+    6. Convert every thread's resonance rows in the source affinity to the target
+       resonances, scaling amounts and developed points (full conversion only).
 
     Args:
         character_sheet: The character undergoing conversion.
@@ -382,7 +381,7 @@ def convert_resonance(  # noqa: PLR0913
     threads_reanchored = 0
     if not partial and converted:
         threads_reanchored = _reanchor_threads(
-            character_sheet, converted, multiplier, source_affinity
+            character_sheet, converted, multiplier, source_affinity, target_affinity
         )
 
     # Batch aura recomputation
@@ -402,25 +401,27 @@ def convert_resonance(  # noqa: PLR0913
 def conversion_restored_on_raise(character_sheet: CharacterSheet) -> Iterator[None]:
     """Put the character's resonance and thread rows back in memory if the block raises.
 
-    The full conversion zeroes resonance balances, grants their targets and re-anchors
-    threads one by one, each written in place on the identity-mapped row. A raise part way
-    (a re-anchor the unique index refuses, ``ThreadAnchorTakenError``) rolls every write
-    back in the database, but the rows already moved would keep the move in memory (#4735).
-    Enter this OUTSIDE the conversion's ``transaction.atomic()`` so it runs after the
-    rollback. It keeps every ``CharacterResonance`` row and live thread the character holds
-    before anything changes; on a raise it writes them back onto the same objects
-    (``core.identity_map.CacheGuard``), evicts any resonance row the rolled-back
-    conversion created, clears the sheet's cached properties and the character's thread
-    and resonance handlers, and re-raises.
+    The full conversion zeroes resonance balances, grants their targets and converts
+    thread rows one by one, each written in place on the identity-mapped row. A raise part
+    way rolls every write back in the database, but the rows already moved would keep the
+    move in memory (#4735). Enter this OUTSIDE the conversion's ``transaction.atomic()`` so
+    it runs after the rollback. It keeps every ``CharacterResonance`` row, live thread and
+    thread resonance row the character holds before anything changes; on a raise it writes
+    them back onto the same objects (``core.identity_map.CacheGuard``), evicts any
+    resonance row the rolled-back conversion created, clears the sheet's cached
+    properties and the character's thread and resonance handlers, and re-raises.
     """
     from core.identity_map import CacheGuard  # noqa: PLC0415
     from evennia_extensions.mixins import clear_django_cached_properties  # noqa: PLC0415
-    from world.magic.models import Thread  # noqa: PLC0415
+    from world.magic.models import Thread, ThreadResonance  # noqa: PLC0415
 
     guard = CacheGuard()
     guard.keep(
         *CharacterResonance.objects.filter(character_sheet=character_sheet),
         *Thread.objects.filter(owner=character_sheet, retired_at__isnull=True),
+        *ThreadResonance.objects.filter(
+            thread__owner=character_sheet, thread__retired_at__isnull=True
+        ),
     )
     guard.watch_created(CharacterResonance)
     try:
@@ -438,110 +439,97 @@ def _reanchor_threads(
     converted: list[ConvertedResonance],
     multiplier: Decimal,
     source_affinity: Affinity,
+    target_affinity: Affinity,
 ) -> int:
-    """Re-anchor all Threads on source resonances to their target resonances.
+    """Convert every thread's resonance rows in ``source_affinity`` to their targets (#5123).
 
-    If a target-resonance thread with the same anchor already exists, the
-    source thread is retired and its developed_points are merged into the
-    existing target thread (``_reanchor_thread``).
+    Each ``ThreadResonance`` row in the source affinity moves to its conversion target with
+    its amount scaled by ``multiplier``. A thread that already holds a row for that target
+    takes the scaled amount onto it and the source row goes (a merge of rows on one thread).
+    The thread's ``developed_points`` scale by the same rate over the share of its rows that
+    converted, so a thread wholly in the source affinity scales entirely and one that is
+    half in it scales by half. ``level`` is left as it is. Each thread's leading resonance is
+    refreshed afterwards. A row whose resonance has no authored target stays where it is.
+    Returns how many threads changed.
     """
-    from world.magic.models import Thread  # noqa: PLC0415
+    from world.magic.services.thread_rows import refresh_leading_resonance  # noqa: PLC0415
 
-    # Build a mapping: source_resonance_id → target_resonance_id
     resonance_map = {c.source_resonance_id: c.target_resonance_id for c in converted}
-
-    threads = Thread.objects.filter(
-        owner=character_sheet,
-        resonance__affinity=source_affinity,
-        retired_at__isnull=True,
-    )
+    mapped = Resonance.objects.in_bulk(set(resonance_map.values()))
+    by_thread: dict[int, list[ThreadResonance]] = {}
+    for row in ThreadResonance.objects.filter(
+        thread__owner=character_sheet, thread__retired_at__isnull=True
+    ).select_related("thread", "resonance"):
+        by_thread.setdefault(row.thread_id, []).append(row)
 
     count = 0
-    for thread in threads:
-        target_resonance_id = resonance_map.get(thread.resonance_id)
-        if target_resonance_id is None:
+    for rows in by_thread.values():
+        source_rows = [r for r in rows if r.resonance.affinity_id == source_affinity.pk]
+        if not source_rows:
             continue
-        # Scale developed_points by the multiplier
-        new_points = max(0, int(Decimal(thread.developed_points) * multiplier))
-        _reanchor_thread(thread, target_resonance_id, new_points)
-        count += 1
+        targets = {
+            r.resonance_id: _target_for_row(r.resonance, resonance_map, mapped, target_affinity)
+            for r in source_rows
+        }
+        if _reanchor_thread_rows(rows, source_rows, targets, multiplier):
+            refresh_leading_resonance(rows[0].thread)
+            count += 1
 
     if count:
         character_sheet.character.threads.invalidate()
     return count
 
 
-def _reanchor_thread(thread: Thread, target_resonance_id: int, new_points: int) -> Thread:
-    """Move ``thread`` onto ``target_resonance_id`` carrying ``new_points``; return the survivor.
-
-    When the owner already holds a live thread on the same anchor in the target resonance,
-    ``new_points`` are added to that thread and ``thread`` is retired: the existing thread
-    survives. Otherwise ``thread`` itself is re-anchored with ``new_points`` and survives.
-    ``level`` is left as it is either way. The caller scales the points (the full
-    conversion and a single-thread retune floor them differently).
-
-    Raises:
-        ThreadAnchorTakenError: Another process put a live thread on the same anchor in the
-            target resonance after the lookup, so the partial unique index refused the move.
-            The save runs in a savepoint and ``thread``'s cached fields are put back, so the
-            shared instance does not claim a move the database never made.
-    """
-    existing = _find_existing_target_thread(thread, target_resonance_id)
-    if existing is not None:
-        from world.magic.models import Thread  # noqa: PLC0415
-
-        # Lock the survivor and add to the points the database holds, not the shared cached
-        # instance's: two merges into the same thread then both count.
-        held = (
-            Thread.objects.select_for_update()
-            .filter(pk=existing.pk)
-            .values_list("developed_points", flat=True)[0]
-        )
-        existing.developed_points = held + new_points
-        existing.save(update_fields=["developed_points"])
-        thread.retired_at = timezone.now()
-        thread.save(update_fields=["retired_at"])
-        return existing
-    from world.magic.exceptions import ThreadAnchorTakenError  # noqa: PLC0415
-
-    old_resonance_id, old_points = thread.resonance_id, thread.developed_points
-    thread.resonance_id = target_resonance_id
-    thread.developed_points = new_points
+def _target_for_row(
+    resonance: Resonance,
+    resonance_map: dict[int, int],
+    mapped: dict[int, Resonance],
+    target_affinity: Affinity,
+) -> Resonance | None:
+    """The resonance ``resonance`` converts to, or None when no mapping is authored."""
+    target_id = resonance_map.get(resonance.pk)
+    if target_id is not None:
+        return mapped[target_id]
     try:
-        with transaction.atomic():
-            thread.save(update_fields=["resonance", "developed_points"])
-    except IntegrityError as exc:
-        thread.resonance_id = old_resonance_id
-        thread.developed_points = old_points
-        raise ThreadAnchorTakenError from exc
-    return thread
+        return _resolve_target_resonance(resonance, target_affinity)
+    except ConversionMappingError:
+        return None
 
 
-def same_anchor_threads(source_thread: Thread) -> QuerySet[Thread]:
-    """The owner's other live threads on ``source_thread``'s anchor, at any resonance.
-
-    Two threads share an anchor when they share ``target_kind`` and the typed target FK.
-    Every typed FK is compared, null included, so only the one the kind sets can match.
-    """
-    from world.magic.models import Thread  # noqa: PLC0415
-
-    return Thread.objects.filter(
-        owner_id=source_thread.owner_id,
-        retired_at__isnull=True,
-        target_kind=source_thread.target_kind,
-        target_trait_id=source_thread.target_trait_id,
-        target_technique_id=source_thread.target_technique_id,
-        target_facet_id=source_thread.target_facet_id,
-        target_relationship_id=source_thread.target_relationship_id,
-        target_capstone_id=source_thread.target_capstone_id,
-        target_covenant_role_id=source_thread.target_covenant_role_id,
-        target_gift_id=source_thread.target_gift_id,
-        target_mantle_id=source_thread.target_mantle_id,
-        target_sanctum_details_id=source_thread.target_sanctum_details_id,
-        target_organization_id=source_thread.target_organization_id,
-    ).exclude(pk=source_thread.pk)
-
-
-def _find_existing_target_thread(source_thread: Thread, target_resonance_id: int) -> Thread | None:
-    """Find the owner's live thread on the target resonance with the same anchor, if any."""
-    return same_anchor_threads(source_thread).filter(resonance_id=target_resonance_id).first()
+def _reanchor_thread_rows(
+    rows: list[ThreadResonance],
+    source_rows: list[ThreadResonance],
+    targets: dict[int, Resonance | None],
+    multiplier: Decimal,
+) -> bool:
+    """Move one thread's ``source_rows`` onto ``targets``; scale its points. True if any moved."""
+    thread = rows[0].thread
+    held = {r.resonance_id: r for r in rows}
+    total = sum(r.amount for r in rows)
+    moved_total = 0
+    changed = False
+    for row in source_rows:
+        target = targets[row.resonance_id]
+        if target is None:
+            continue
+        changed = True
+        moved_total += row.amount
+        new_amount = max(0, int(Decimal(row.amount) * multiplier))
+        existing = held.get(target.pk)
+        del held[row.resonance_id]
+        if existing is not None:
+            existing.amount += new_amount
+            existing.save(update_fields=["amount"])
+            row.delete()
+        else:
+            row.resonance = target
+            row.amount = new_amount
+            row.save(update_fields=["resonance", "amount"])
+            held[target.pk] = row
+    if changed and total:
+        scaled = Decimal(thread.developed_points) * (
+            Decimal(total - moved_total) + Decimal(moved_total) * multiplier
+        )
+        thread.developed_points = max(0, int(scaled / Decimal(total)))
+        thread.save(update_fields=["developed_points"])
+    return changed

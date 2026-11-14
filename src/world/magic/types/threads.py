@@ -62,38 +62,49 @@ class ThreadSurvivabilitySaves:
 
 @dataclass(frozen=True)
 class ThreadResonanceOption:
-    """One resonance a thread may be moved to (slice 6 of #4672).
+    """One resonance part of a thread's investment may be moved to (#5123).
 
-    ``conversion_type`` is None for a retune within the thread's own affinity (rate 1),
-    else the authored pair's Fall / Redemption type. ``projected_points`` is what the
-    thread's ``developed_points`` become at ``multiplier``. ``merges_into_thread_id`` is the
-    owner's live thread on the same anchor already at ``resonance``, which the move would
-    merge into, or None.
+    ``conversion_type`` is None for a retune within the source resonance's own affinity
+    (rate 1), else the authored pair's Fall / Redemption type. ``projected_points`` is what
+    the target's row gains from the amount being moved, at ``multiplier``.
     """
 
     resonance: Resonance
     conversion_type: str | None
     multiplier: Decimal
     projected_points: int
-    merges_into_thread_id: int | None = None
+
+
+@dataclass(frozen=True)
+class ThreadRetuneMove:
+    """A retune that may be made: ``amount`` of ``from_resonance``'s row into ``option``.
+
+    ``from_amount`` is the source row's total before the move.
+    """
+
+    from_resonance: Resonance
+    from_amount: int
+    amount: int
+    option: ThreadResonanceOption
 
 
 @dataclass(frozen=True)
 class ThreadResonanceChangeResult:
-    """The outcome of moving a thread to another resonance.
+    """The outcome of moving part of a thread's investment to another of its resonances.
 
-    ``thread_id`` is the surviving thread: the moved thread itself, or, when ``merged``,
-    the live thread on the same anchor that took its points (the moved one is retired).
-    ``points_after`` is the survivor's ``developed_points``. ``message`` is the line the
-    performer reads (``PerformRitualAction`` appends it, so telnet and web say the same).
+    ``amount_moved`` left the ``from_resonance_id`` row; ``points_gained`` arrived on the
+    ``to_resonance_id`` row (the pair rate applied across affinities). ``from_amount_after``
+    and ``to_amount_after`` are the two rows' totals. The thread's level and
+    ``developed_points`` are unchanged. ``message`` is the line the performer reads
+    (``PerformRitualAction`` appends it, so telnet and web say the same).
     """
 
     thread_id: int
     from_resonance_id: int
     to_resonance_id: int
-    points_before: int
-    points_moved: int
-    points_after: int
-    merged: bool
+    amount_moved: int
+    points_gained: int
+    from_amount_after: int
+    to_amount_after: int
     conversion_type: str | None
     message: str
