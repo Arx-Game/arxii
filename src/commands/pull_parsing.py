@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from commands.exceptions import CommandError
+from commands.utils.held_resonance import held_resonance
 from world.magic.constants import MAX_RESONANCE_BURN
 
 if TYPE_CHECKING:
@@ -215,7 +216,7 @@ class PullParsingMixin:
             CommandError: No such active thread, or a resonance that is unknown or that the
                 character does not hold. Each in plain words.
         """
-        from world.magic.models import CharacterResonance, Thread  # noqa: PLC0415
+        from world.magic.models import Thread  # noqa: PLC0415
 
         qs = Thread.objects.filter(owner=sheet, retired_at__isnull=True)
 
@@ -240,23 +241,7 @@ class PullParsingMixin:
         if not payer_text:
             msg = f"Name the resonance that pays for {thread.name}: pull={thread.name}:<resonance>."
             raise CommandError(msg)
-        row = (
-            CharacterResonance.objects.filter(
-                character_sheet=sheet, resonance__name__iexact=payer_text
-            )
-            .select_related("resonance")
-            .first()
-        )
-        if row is None:
-            held = sorted(
-                CharacterResonance.objects.filter(character_sheet=sheet).values_list(
-                    "resonance__name", flat=True
-                )
-            )
-            suffix = f" Your resonances: {', '.join(held)}." if held else ""
-            msg = f"You hold no resonance called '{payer_text}'.{suffix}"
-            raise CommandError(msg)
-        return thread, row.resonance
+        return thread, held_resonance(sheet, payer_text)
 
     def _resolve_cast_pull(
         self,

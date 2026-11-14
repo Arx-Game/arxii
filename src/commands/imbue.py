@@ -16,11 +16,13 @@ from typing import Any
 from actions.definitions.imbue import ImbueAction
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
+from commands.utils.held_resonance import held_resonance
 
 _THREAD_KWARG = "thread"
 _AMOUNT_KWARG = "amount"
 _RESONANCE_KWARG = "resonance"
 _KEYS = (_THREAD_KWARG, _AMOUNT_KWARG, _RESONANCE_KWARG)
+_MULTIWORD_KEYS = (_THREAD_KWARG, _RESONANCE_KWARG)
 
 
 class CmdImbue(ArxCommand):
@@ -68,49 +70,34 @@ class CmdImbue(ArxCommand):
         kwargs: dict[str, Any] = {"thread": thread, "amount": int(amount_str)}
         resonance_val = parsed.get(_RESONANCE_KWARG, "").strip()
         if _RESONANCE_KWARG in parsed:
-            kwargs["resonance_id"] = self._held_resonance_id(sheet, resonance_val)
+            kwargs["resonance_id"] = held_resonance(sheet, resonance_val).pk
         return kwargs
-
-    @staticmethod
-    def _held_resonance_id(sheet: Any, typed: str) -> int:
-        """The id of the resonance the character holds under ``typed`` (any case)."""
-        from world.magic.models import CharacterResonance  # noqa: PLC0415
-
-        if not typed:
-            msg = "Name the resonance that pays: resonance=<name>."
-            raise CommandError(msg)
-        row = CharacterResonance.objects.filter(
-            character_sheet=sheet, resonance__name__iexact=typed
-        ).first()
-        if row is None:
-            held = sorted(
-                CharacterResonance.objects.filter(character_sheet=sheet).values_list(
-                    "resonance__name", flat=True
-                )
-            )
-            suffix = f" Your resonances: {', '.join(held)}." if held else ""
-            msg = f"You hold no resonance called '{typed}'.{suffix}"
-            raise CommandError(msg)
-        return row.resonance_id
 
     @staticmethod
     def _parse_kwargs(args: str) -> dict[str, str]:
         """Parse ``key=value`` tokens left to right.
 
-        A value runs on, across spaces, until the next ``thread=``, ``amount=`` or
-        ``resonance=`` token, so a thread or a resonance may have a name of several words.
+        ``amount`` is a single whitespace-delimited token (a stray word after it is
+        ignored). ``thread`` and ``resonance`` run on across spaces until the next
+        ``thread=``, ``amount=`` or ``resonance=`` token, so either may have a name of
+        several words.
         """
         out: dict[str, str] = {}
         key: str | None = None
         words: list[str] = []
         for token in args.split():
             head, sep, value = token.partition("=")
-            if sep and head.lower() in _KEYS:
+            head = head.lower()
+            if sep and head in _KEYS:
                 if key is not None:
                     out[key] = " ".join(words).strip()
-                key, words = head.lower(), [value]
-            elif key is not None:
+                key, words = head, [value]
+                if key == _AMOUNT_KWARG:
+                    out[key], key = value, None
+            elif key in _MULTIWORD_KEYS:
                 words.append(token)
+            elif sep:
+                out[head] = value
         if key is not None:
             out[key] = " ".join(words).strip()
         return out

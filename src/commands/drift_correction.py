@@ -25,6 +25,7 @@ from actions.definitions.drift_correction import (
 )
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
+from commands.utils.held_resonance import held_resonance
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -142,27 +143,6 @@ def _offering(
     return [item for item in carried if item.pk not in qualifying] + [chosen]
 
 
-def _own_resonance(sheet: CharacterSheet, typed: str) -> Resonance:
-    """Resolve a player-typed resonance name among the resonances the character holds."""
-    from world.magic.models import CharacterResonance  # noqa: PLC0415
-
-    row = (
-        CharacterResonance.objects.filter(character_sheet=sheet, resonance__name__iexact=typed)
-        .select_related("resonance__affinity")
-        .first()
-    )
-    if row is None:
-        held = sorted(
-            CharacterResonance.objects.filter(character_sheet=sheet).values_list(
-                "resonance__name", flat=True
-            )
-        )
-        suffix = f" Your resonances: {', '.join(held)}" if held else ""
-        msg = f"You hold no resonance called '{typed}'.{suffix}"
-        raise CommandError(msg)
-    return row.resonance
-
-
 def _split_amount(text: str) -> tuple[str, int | None]:
     """Split ``<resonance name> [<amount>]`` on a trailing whole number."""
     name, _, last = text.rpartition(" ")
@@ -278,8 +258,8 @@ class CmdAura(ArxCommand):
         sheet = _own_sheet(self.caller)
         offer = _open_offer(sheet)
         _require_rite_ready()
-        source = _own_resonance(sheet, source_text.strip())
-        target = _own_resonance(sheet, target_text)
+        source = held_resonance(sheet, source_text.strip())
+        target = held_resonance(sheet, target_text)
         if amount is None:
             option = next(
                 (

@@ -222,6 +222,20 @@ class ImbuingWithAResonance(JourneyCase):
         # Three points at a point a level (stored level 0): the thread climbs three levels.
         self.assertEqual(self.thread.level, 3)
 
+    def test_a_stray_word_after_the_amount_is_ignored_and_resonance_still_reads(self) -> None:
+        told = self.imbue("amount=2 please resonance=ember")
+
+        self.assertIn("You complete the rite, imbuing Loom Strand.", told)
+        self.assertEqual(self.balance(self.ember), 10 - 2)
+        self.assertEqual(self.balance(self.veil), 10)
+
+    def test_a_stray_word_after_the_amount_alone_still_takes_the_amount(self) -> None:
+        told = self.imbue("amount=3 please")
+
+        self.assertIn("You complete the rite, imbuing Loom Strand.", told)
+        self.assertEqual(self.balance(self.veil), 10 - 3)
+        self.assertEqual(self.balance(self.ember), 10)
+
     def test_a_named_resonance_she_does_not_hold_is_refused_in_words(self) -> None:
         told = self.imbue("amount=3 resonance=Nonesuch")
 
