@@ -203,16 +203,21 @@ def convert_resonance_amount(  # noqa: PLR0913
     amount: int,
     multiplier: Decimal,
     gain_source: str,
+    mire_amount: int = 0,
 ) -> tuple[int, int]:
-    """Convert ``amount`` of one resonance's balance into another resonance.
+    """Convert ``amount`` of one resonance's lifetime into another resonance (#5123).
 
-    A proportional share of the source's lifetime_earned moves with it, so
-    ``recompute_aura`` follows the move. Unlike the Atonement path, an uphill
-    conversion always leaves the target more than zero: a multiplier that floors
-    the grant to 0 still grants 1. Returns ``(granted_balance, granted_lifetime)``.
+    This changes who the character has become, so lifetime moves by ``amount`` and the
+    aura follows (``recompute_aura``); the source's spendable balance moves only as far as
+    it exists (``min(amount, balance)``), and only that part is granted to the target at the
+    pair rate (a multiplier that floors the grant to 0 still grants 1). Resonance already
+    spent is still converted: the lifetime moves with no balance behind it. ``mire_amount``
+    is the part of ``amount`` taken from the source's Mire lifetime (Mire excess first); the
+    source's ``mire_lifetime`` shrinks by it and is clamped to the lifetime left. The target
+    receives the lifetime as its own. Returns ``(granted_balance, granted_lifetime)``.
 
-    Raises ValueError when ``amount`` is not positive, exceeds the source balance,
-    or the character holds no row for the source resonance.
+    Raises ValueError when ``amount`` is not positive, exceeds the source's lifetime, or
+    the character holds no row for the source resonance.
     """
     from world.magic.services.aura import recompute_aura  # noqa: PLC0415
 
@@ -223,20 +228,32 @@ def convert_resonance_amount(  # noqa: PLR0913
     except CharacterResonance.DoesNotExist as exc:
         msg = f"The character holds no {source_resonance.name} resonance to convert."
         raise ValueError(msg) from exc
-    if amount <= 0 or amount > cr.balance:
-        msg = f"Cannot convert {amount} of a {cr.balance} balance."
+    if amount <= 0 or amount > cr.lifetime_earned:
+        msg = f"Cannot convert {amount} of {cr.lifetime_earned} lifetime resonance."
         raise ValueError(msg)
 
-    result = _move_partial(
-        cr,
-        character_sheet,
-        target_resonance,
-        amount_to_convert=amount,
-        granted_balance=max(1, int(Decimal(amount) * multiplier)),
-        gain_source=gain_source,
+    balance_moved = min(amount, cr.balance)
+    granted_balance = max(1, int(Decimal(balance_moved) * multiplier)) if balance_moved else 0
+    mire_moved = min(mire_amount, amount, cr.mire_lifetime)
+    cr.balance -= balance_moved
+    cr.lifetime_earned -= amount
+    cr.mire_lifetime = min(cr.mire_lifetime - mire_moved, cr.lifetime_earned)
+    cr.save(update_fields=["balance", "lifetime_earned", "mire_lifetime"])
+
+    if granted_balance > 0:
+        grant_resonance(character_sheet, target_resonance, granted_balance, source=gain_source)
+    target_cr, _ = CharacterResonance.objects.get_or_create(
+        character_sheet=character_sheet,
+        resonance=target_resonance,
+        defaults={"balance": 0, "lifetime_earned": 0},
     )
+    # grant_resonance added granted_balance to the lifetime; the target takes the moved
+    # lifetime instead.
+    if amount != granted_balance:
+        target_cr.lifetime_earned += amount - granted_balance
+        target_cr.save(update_fields=["lifetime_earned"])
     recompute_aura(character_sheet)
-    return result
+    return granted_balance, amount
 
 
 def _convert_full(

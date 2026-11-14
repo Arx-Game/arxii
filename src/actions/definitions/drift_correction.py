@@ -88,6 +88,11 @@ class PerformDriftCorrectionAction(Action):
             return ActionResult(success=False, message=exc.user_message)
         if result.converted_amount == 0:
             message = "The rite fails; nothing is converted."
+        elif result.granted_amount == 0:
+            message = (
+                f"{result.outcome_name}: {result.converted_amount} {source_resonance.name} "
+                f"turned to {target_resonance.name}."
+            )
         else:
             message = (
                 f"{result.outcome_name}: {result.converted_amount} {source_resonance.name} became "

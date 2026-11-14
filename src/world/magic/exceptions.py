@@ -964,6 +964,12 @@ class DriftConversionInvalidError(DriftCorrectionError):
             self.user_message = user_message
 
 
+class NotUnsettledError(MagicError):
+    """Accepting the changes to the aura was asked of a character who is not unsettled (#5123)."""
+
+    user_message = "You are not unsettled, so there is nothing to accept."
+
+
 class ThreadResonanceChangeError(MagicError):
     """A thread cannot be moved to the asked-for resonance (slice 6 of #4672).
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -27,7 +27,8 @@ class DriftReading:
     is the resonance contributing most to the excess. ``mire_share_percent`` is the Mire's
     share of all the character's lifetime resonance, shown apart from their own.
     ``main_affinity`` is None, and every number 0, when she has no settled aura to measure
-    against.
+    against. ``own_excess_points`` and ``mire_excess_points`` are the excess per affinity pk
+    in lifetime points, which is what atoning may convert (the Mire part first).
     """
 
     steps_past: int
@@ -36,6 +37,27 @@ class DriftReading:
     excess_percent: Decimal
     mire_share_percent: Decimal
     own_shares: dict[int, Decimal]
+    settled_shares: dict[int, Decimal]
+    own_excess_points: dict[int, int] = field(default_factory=dict)
+    mire_excess_points: dict[int, int] = field(default_factory=dict)
+
+    def convertible_points(self, affinity_id: int) -> int:
+        """Lifetime points that atoning may convert away from ``affinity_id`` (0 if none)."""
+        return self.own_excess_points.get(affinity_id, 0) + self.mire_excess_points.get(
+            affinity_id, 0
+        )
+
+
+@dataclass(frozen=True)
+class AcceptAuraResult:
+    """What accepting the changes to the aura did.
+
+    ``mire_moved`` is the lifetime resonance taken from the Mire that became the
+    character's own; ``settled_shares`` is who they are now, per affinity pk.
+    """
+
+    mire_moved: int
+    main_affinity: Affinity | None
     settled_shares: dict[int, Decimal]
 
 

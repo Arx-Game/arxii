@@ -148,11 +148,15 @@ def grant_resonance(  # noqa: PLR0913
 
     Raises:
         InvalidImbueAmount: If amount <= 0.
-        ValueError: If source/kwarg shape is invalid.
+        ValueError: If source/kwarg shape is invalid, or ``from_mire`` is set for a source
+            other than ``GainSource.SINEATING``.
     """
     if amount <= 0:
         msg = "Resonance grant amount must be positive."
         raise InvalidImbueAmount(msg)
+    if from_mire and source != GainSource.SINEATING:
+        msg = "Only a Sineating grant can take resonance from the Mire."
+        raise ValueError(msg)
 
     _validate_grant_source_shape(
         source,

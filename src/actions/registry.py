@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from actions.base import Action
+from actions.definitions.accept_aura import AcceptAuraChangeAction
 from actions.definitions.accusations import (
     DenounceFramerAction,
     RefuteAccusationAction,
@@ -886,6 +887,7 @@ _ALL_ACTIONS: list[Action] = [
     PerformRitualAction(),
     PerformDriftCorrectionAction(),
     DeclineDriftCorrectionAction(),
+    AcceptAuraChangeAction(),
     # #3292 - tavern games: coin-stakes dice gambling open/join/roll/leave.
     OpenGameAction(),
     JoinGameAction(),

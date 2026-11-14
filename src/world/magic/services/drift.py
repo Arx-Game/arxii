@@ -8,12 +8,14 @@ runs once per cast, before the cast's modifiers are gathered, and on a failed fo
 applies (or deepens) the authored conflict condition, whose own check modifier then reaches
 the same cast's roll. Its numbers live in ``DriftConfig``.
 
-Drift correction (#4733) is still read from spendable balance here: ``drift_holdings`` is
-resonance held off the main affinity. A deed (a grant from a ``DEED_GAIN_SOURCES`` source)
-that grows a resonance of the character's main affinity, made in a live scene by a character
-who has convertible drift, opens a ``DriftConversionOffer`` for that scene and adds to the
-cap of converting drift toward the resonance the deed grew. The offer lapses when the scene
-finishes.
+Atoning (#4733, #5123) is read on lifetime, so it works even when the excess was already
+spent: ``drift_holdings`` is resonance held in a non-main affinity that has grown past who
+the character is. A deed (a grant from a ``DEED_GAIN_SOURCES`` source) that grows a
+resonance of the character's main affinity, made in a live scene by a character who is
+unsettled and has convertible drift, opens a ``DriftConversionOffer`` for that scene and adds
+to the cap of converting drift toward the resonance the deed grew. The offer lapses when the
+scene finishes. The other exit, ``accept_aura_change``, moves who the character is to where
+they have got to.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 
 from world.magic.constants import DEED_GAIN_SOURCES, ComponentMode
-from world.magic.exceptions import ConversionMappingError
+from world.magic.exceptions import ConversionMappingError, NotUnsettledError
 from world.magic.models.aura import CharacterResonance
 from world.magic.models.drift import (
     DriftConfig,
@@ -37,7 +39,12 @@ from world.magic.models.drift import (
 )
 from world.magic.models.motifs import MotifResonanceAssociation
 from world.magic.services.conversion import conversion_pair
-from world.magic.types.drift import DriftReading, FocusOutcome, QualifyingComponent
+from world.magic.types.drift import (
+    AcceptAuraResult,
+    DriftReading,
+    FocusOutcome,
+    QualifyingComponent,
+)
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -126,6 +133,8 @@ def drift_for(sheet: CharacterSheet) -> DriftReading:
     own_shares = {aff: _share_of(life, total_own) for aff, life in own_lifetime.items()}
 
     excess_by_affinity: dict[int, Decimal] = {}
+    own_excess_points: dict[int, int] = {}
+    mire_excess_points: dict[int, int] = {}
     for affinity_id in own_shares.keys() | mire_lifetime.keys() | settled_shares.keys():
         if affinity_id == main.pk:
             continue
@@ -141,6 +150,12 @@ def drift_for(sheet: CharacterSheet) -> DriftReading:
         excess = max(Decimal(0), past_settled) + max(Decimal(0), past_allowance)
         if excess > 0:
             excess_by_affinity[affinity_id] = excess
+        # The same excess as lifetime points, rounded up so a sliver past the line can
+        # still be atoned for: what the rite may convert away from this affinity.
+        if past_settled > 0:
+            own_excess_points[affinity_id] = ceil(past_settled * total_own / _ONE_HUNDRED)
+        if past_allowance > 0:
+            mire_excess_points[affinity_id] = ceil(past_allowance * total_lifetime / _ONE_HUNDRED)
 
     excess_total = sum(excess_by_affinity.values(), Decimal(0))
     leading: Resonance | None = None
@@ -156,6 +171,8 @@ def drift_for(sheet: CharacterSheet) -> DriftReading:
         mire_share_percent=_share_of(sum(mire_lifetime.values()), total_lifetime),
         own_shares=own_shares,
         settled_shares=settled_shares,
+        own_excess_points=own_excess_points,
+        mire_excess_points=mire_excess_points,
     )
 
 
@@ -247,18 +264,65 @@ def own_affinity(sheet: CharacterSheet) -> Affinity | None:
 
 
 def drift_holdings(sheet: CharacterSheet) -> list[CharacterResonance]:
-    """Resonance held off the main affinity: positive balance, any other affinity.
+    """Resonance held in an affinity that has grown past who the character is.
 
-    Largest balance first. Empty when the character has no own affinity.
+    Read on lifetime, not balance, so a streak whose points were already spent still
+    counts (#5123): every resonance of a non-main affinity with lifetime earned, in an
+    affinity whose excess (own, or the Mire's past its allowance) is above zero. Largest
+    lifetime first. Empty when the character is settled or has no main affinity.
     """
     own = own_affinity(sheet)
     if own is None:
         return []
-    return list(
-        CharacterResonance.objects.filter(character_sheet=sheet, balance__gt=0)
+    reading = drift_for(sheet)
+    rows = (
+        CharacterResonance.objects.filter(character_sheet=sheet, lifetime_earned__gt=0)
         .exclude(resonance__affinity=own)
         .select_related("resonance__affinity")
-        .order_by("-balance")
+        .order_by("-lifetime_earned", "resonance_id")
+    )
+    return [row for row in rows if reading.convertible_points(row.resonance.affinity_id) > 0]
+
+
+@transaction.atomic
+def accept_aura_change(sheet: CharacterSheet) -> AcceptAuraResult:
+    """Accept the changes to the aura: who the character is becomes who they have become.
+
+    Refused unless ``sheet`` is unsettled. A Sineater's Mire lifetime becomes their own
+    (``mire_lifetime`` is set to 0 on every row), then each ``settled_percent`` is set to
+    the resulting own share, so ``steps_past`` is 0 afterwards and the main affinity is the
+    largest share. Writes no corruption: Abyssal resonance brings corruption the usual way
+    (#5123, rulings 8 and 28).
+
+    Raises:
+        NotUnsettledError: The character is not unsettled.
+    """
+    from world.magic.services.aura import recompute_aura  # noqa: PLC0415
+
+    if drift_for(sheet).steps_past <= 0:
+        raise NotUnsettledError
+    mire_moved = 0
+    for row in list(
+        CharacterResonance.objects.select_for_update().filter(
+            character_sheet=sheet, mire_lifetime__gt=0
+        )
+    ):
+        mire_moved += row.mire_lifetime
+        row.mire_lifetime = 0
+        row.save(update_fields=["mire_lifetime"])
+    # The aura's percents are shares of lifetime resonance, Mire included, so moving the Mire
+    # into their own changes none of them; recomputing makes sure a row exists for every
+    # affinity held, and they sum to exactly 100.00 to be settled as they stand.
+    recompute_aura(sheet)
+    aura = sheet.aura_or_none
+    settled: dict[int, Decimal] = {}
+    for share in aura.cached_shares if aura is not None else []:
+        settled[share.affinity_id] = share.percent
+        if share.settled_percent != share.percent:
+            share.settled_percent = share.percent
+            share.save(update_fields=["settled_percent"])
+    return AcceptAuraResult(
+        mire_moved=mire_moved, main_affinity=_main_affinity(aura), settled_shares=settled
     )
 
 

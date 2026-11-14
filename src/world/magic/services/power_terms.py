@@ -144,23 +144,63 @@ def _apply_standing_cap(standing: int, current_level: int) -> int:
     return band.cap + (standing - band.cap) * band.diminish_pct // 100
 
 
+def _payer_affinities(ctx: PowerTermContext) -> list:
+    """The distinct affinities of the resonances paying this cast's pulled threads.
+
+    A pulled thread is paid by its ``payer`` (the leading resonance when none was named).
+    Empty when the cast pulls nothing.
+    """
+    seen: set[int] = set()
+    affinities = []
+    for applicable in ctx.applicable_threads:
+        if applicable.pull_tier < 1:
+            continue
+        resonance = applicable.payer or applicable.thread.resonance
+        if resonance.affinity_id not in seen:
+            seen.add(resonance.affinity_id)
+            affinities.append(resonance.affinity)
+    return affinities
+
+
 def _aura_alignment(ctx: PowerTermContext, config: AuraPowerConfig, resonances: list) -> int:
-    """Affinity-alignment contribution: the acting aura's % per distinct affinity."""
+    """Affinity-alignment contribution: one bonus, the best over the cast's affinities.
+
+    A worn alternate self keeps its acting-aura reading: the aura's percent in the
+    affinity she acts in. Otherwise the cast works in the affinities of the resonances
+    paying its pulled threads (the gift's resonances when it pulls nothing), and a mixed
+    character is never penalised for it (#5123, ruling 26): the bonus is the largest over
+    those affinities, the full ``affinity_alignment_bonus`` for an affinity that is part of
+    who she is (a settled share above zero), else her current percent of it.
+    """
     from world.magic.services.acting_aura import (  # noqa: PLC0415
         acting_aura,
         working_affinities,
     )
+    from world.magic.specialization.services import active_alt_self_resonance  # noqa: PLC0415
 
     if not config.affinity_alignment_bonus:
         return 0
-    aura = acting_aura(ctx.sheet)
-    if aura is None:
+    if active_alt_self_resonance(ctx.sheet) is not None:
+        aura = acting_aura(ctx.sheet)
+        if aura is None:
+            return 0
+        return sum(
+            int(aura.percent_for(affinity) / 100 * config.affinity_alignment_bonus)
+            for affinity in working_affinities(ctx.sheet, resonances)
+        )
+    true_aura = ctx.sheet.aura_or_none
+    if true_aura is None:
         return 0
-    alignment = 0
-    for affinity in working_affinities(ctx.sheet, resonances):
-        pct = aura.percent_for(affinity)
-        alignment += int(pct / 100 * config.affinity_alignment_bonus)
-    return alignment
+    affinities = _payer_affinities(ctx) or working_affinities(ctx.sheet, resonances)
+    settled = {share.affinity_id: share.settled_percent for share in true_aura.cached_shares}
+    best = 0
+    for affinity in affinities:
+        if settled.get(affinity.pk, 0) > 0:
+            return config.affinity_alignment_bonus
+        best = max(
+            best, int(true_aura.percent_for(affinity) / 100 * config.affinity_alignment_bonus)
+        )
+    return best
 
 
 def _aura_standing(ctx: PowerTermContext, config: AuraPowerConfig, resonances: list) -> int:
