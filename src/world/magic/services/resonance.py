@@ -1356,13 +1356,8 @@ def _payer_options_per_thread(
                     cost=each,
                     balance=cr.balance,
                     affordable=cr.balance >= each,
-                    effects=resolve_pull_effects(
-                        [thread],
-                        tier,
-                        in_combat=in_combat,
-                        target=target,
-                        character_sheet=character_sheet,
-                        payers={thread.pk: cr.resonance},
+                    effects=_effects_if_paid_by(
+                        character_sheet, tier, thread, cr.resonance, in_combat, target
                     ),
                     level_read=_option_level_read(thread, cr.resonance),
                 )
@@ -1371,6 +1366,30 @@ def _payer_options_per_thread(
         )
         for thread in threads
     ]
+
+
+def _effects_if_paid_by(  # noqa: PLR0913 - one preview row's whole resolution context
+    character_sheet: CharacterSheet,
+    tier: int,
+    thread: Thread,
+    payer: ResonanceModel,
+    in_combat: bool,
+    target: ObjectDB | None,
+) -> list[ResolvedPullEffect]:
+    """What pulling ``thread`` paid by ``payer`` alone would deliver: its perks plus the
+    distinction bonus on that payer, exactly as ``spend_resonance_for_pull`` resolves them."""
+    payers = {thread.pk: payer}
+    resolved = resolve_pull_effects(
+        [thread],
+        tier,
+        in_combat=in_combat,
+        target=target,
+        character_sheet=character_sheet,
+        payers=payers,
+    )
+    return _fold_distinction_pull_bonus(
+        resolved, character_sheet=character_sheet, threads=[thread], payers=payers
+    )
 
 
 def _option_level_read(thread: Thread, payer: ResonanceModel) -> int:

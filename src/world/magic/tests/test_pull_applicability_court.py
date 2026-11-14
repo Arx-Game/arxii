@@ -24,7 +24,12 @@ from world.covenants.factories import (
     CovenantRoleFactory,
 )
 from world.magic.constants import InapplicabilityReason, RegardPolarity, TargetKind
-from world.magic.factories import ThreadFactory, ThreadPullEffectFactory
+from world.magic.factories import (
+    ResonanceFactory,
+    ThreadFactory,
+    ThreadPullEffectFactory,
+    ThreadResonanceFactory,
+)
 from world.magic.services.pull_applicability import (
     PullActionContext,
     compute_thread_applicability,
@@ -114,6 +119,31 @@ class CourtLeaderNoStakeApplicabilityTests(TestCase):
         self.assertEqual(len(rows), 1)
         self.assertFalse(rows[0].applicable)
         self.assertEqual(rows[0].reason, InapplicabilityReason.COURT_LEADER_NO_STAKE.value)
+
+    def test_second_resonance_with_a_matching_effect_makes_the_thread_applicable(self) -> None:
+        leader_sheet, covenant, role = self._setup_leader_and_role()
+        thread = self._servant_thread(covenant=covenant, role=role)
+        # The leading resonance's only effect is offensive; positive regard leaves it unmet.
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.COVENANT_ROLE,
+            resonance=thread.resonance,
+            regard_polarity=RegardPolarity.OFFENSIVE,
+        )
+        # A second resonance the player can pick as payer has a protective effect.
+        second = ResonanceFactory()
+        ThreadResonanceFactory(thread=thread, resonance=second, amount=0)
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.COVENANT_ROLE,
+            resonance=second,
+            regard_polarity=RegardPolarity.PROTECTIVE,
+        )
+        target_sheet = CharacterSheetFactory()
+        self._regard(leader_sheet=leader_sheet, target_sheet=target_sheet, value=500)
+        context = _context(active_persona_for_sheet(target_sheet).pk)
+
+        rows = compute_thread_applicability(thread.owner, context)
+
+        self.assertTrue(rows[0].applicable)
 
     def test_offensive_only_thread_applicable_vs_negative_regard_target(self) -> None:
         leader_sheet, covenant, role = self._setup_leader_and_role()

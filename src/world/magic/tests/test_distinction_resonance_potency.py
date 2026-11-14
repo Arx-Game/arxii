@@ -126,6 +126,26 @@ class DistinctionResonancePotencyTests(TestCase):
         )
         self.assertEqual(flat_bonus_total, 6)
 
+    def test_payer_option_effects_carry_the_bonus_of_that_payer(self) -> None:
+        """The perk list a payer option shows equals what paying with it delivers (#5123)."""
+        other = ResonanceFactory(name="Meek")
+        for resonance in (self.resonance, other):
+            CharacterResonanceFactory(
+                character_sheet=self.sheet, resonance=resonance, balance=10, lifetime_earned=10
+            )
+        CharacterAnimaFactory(character=self.sheet, current=10, maximum=10)
+        ThreadPullCostFactory(tier=1, resonance_cost=2, anima_per_thread=1)
+        thread = ThreadFactory(owner=self.sheet, resonance=self.resonance, level=1)
+
+        preview = preview_resonance_pull(self.sheet, tier=1, threads=[thread])
+
+        options = {o.resonance.pk: o for o in preview.per_thread[0].options}
+        bonus = {
+            pk: sum(e.scaled_value or 0 for e in o.effects if e.kind == EffectKind.FLAT_BONUS)
+            for pk, o in options.items()
+        }
+        self.assertEqual(bonus, {self.resonance.pk: 6, other.pk: 0})
+
     def test_thread_pull_on_a_different_resonance_is_not_boosted(self) -> None:
         """Gate check: the distinction bonus is resonance-scoped, not a blanket pull buff."""
         other_resonance = ResonanceFactory(name="Serene")

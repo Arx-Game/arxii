@@ -115,3 +115,4 @@ class PayerPerkTests(TestCase):
         self.assertEqual([e.scaled_value for e in options[self.guile.pk].effects], [10])
         self.assertEqual(options[self.guile.pk].level_read, 20)
         self.assertEqual(options[self.unheld.pk].effects, [])
+        self.assertEqual(options[self.unheld.pk].level_read, thread.level)

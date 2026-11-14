@@ -171,6 +171,7 @@ def _court_pull_would_have_effect(thread: Thread, target_persona_id: int) -> boo
         _regard_polarity_matches,
         _resolve_court_leader_persona,
     )
+    from world.magic.services.thread_rows import payer_level_read  # noqa: PLC0415
     from world.npc_services.regard import get_regard  # noqa: PLC0415
     from world.scenes.models import Persona  # noqa: PLC0415
 
@@ -192,8 +193,16 @@ def _court_pull_would_have_effect(thread: Thread, target_persona_id: int) -> boo
     if regard == 0:
         return False
 
-    rows = get_pull_effects_for_thread(thread, thread.resonance, min_thread_level__lte=thread.level)
-    return any(_regard_polarity_matches(row.regard_polarity, regard) for row in rows)
+    # The player may pick any resonance the thread holds as its payer (#5123), so the thread
+    # is applicable when any of them has an effect that would be empowered.
+    for payer in thread.owner.character.threads.resonances_of(thread) or [thread.resonance]:
+        level_read = payer_level_read(thread, payer)
+        if level_read is None:
+            continue
+        rows = get_pull_effects_for_thread(thread, payer, min_thread_level__lte=level_read)
+        if any(_regard_polarity_matches(row.regard_polarity, regard) for row in rows):
+            return True
+    return False
 
 
 def _relationship_pull_would_have_effect(thread: Thread, target_persona_id: int) -> bool:
