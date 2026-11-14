@@ -59,6 +59,7 @@ def _make_web_pull_setup(
     tier: int = 1,
     flat_bonus_amount: int = 3,
     intensity_bump_amount: int | None = None,
+    narrative_snippet: str = "",
 ) -> dict:
     """Build a full pull-enabled combat scene and return a dict of useful objects.
 
@@ -111,6 +112,7 @@ def _make_web_pull_setup(
             effect_kind=EffectKind.INTENSITY_BUMP,
             intensity_bump_amount=intensity_bump_amount if intensity_bump_amount else 2,
             flat_bonus_amount=None,
+            narrative_snippet=narrative_snippet,
         )
     else:
         ThreadPullEffectFactory(
@@ -399,6 +401,31 @@ class CombatCastWebPullTests(TestCase):
             data["technique"].intensity + 2,
             "compute_intensity_for_clash must include the INTENSITY_BUMP pull bonus.",
         )
+
+    def test_numeric_perk_with_a_narrative_snippet_commits_with_a_blank_snippet(self) -> None:
+        """A numeric perk's flavour text is not copied onto its combat row (#5123).
+
+        The row's CHECK constraint forbids a snippet on an INTENSITY_BUMP; the pull used to
+        be refused with the "already pulled" sentence when the perk carried one.
+        """
+        from world.combat.models import CombatPullResolvedEffect
+
+        data = _make_web_pull_setup(
+            effect_kind=EffectKind.INTENSITY_BUMP,
+            intensity_bump_amount=10,
+            narrative_snippet="The rhythm quickens under her hand.",
+        )
+        action = self._import_cast_action()
+
+        result = action.round_declaration(
+            data["ctx"], technique_id=data["technique"].pk, **data["web_kwargs"]
+        )
+
+        self.assertIsNotNone(result)
+        row = CombatPullResolvedEffect.objects.get(pull__participant=data["participant"])
+        self.assertEqual(row.kind, EffectKind.INTENSITY_BUMP)
+        self.assertEqual(row.narrative_snippet, "")
+        self.assertGreater(row.scaled_value, 0)
 
     def test_second_web_pull_same_round_fails_with_already_committed(self) -> None:
         """A second web-form pull in the same round raises PULL_ALREADY_COMMITTED."""

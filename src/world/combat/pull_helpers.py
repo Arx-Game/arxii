@@ -471,6 +471,11 @@ def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belo
             burned_for=burned_for if cast_pull.burn > 0 else "",
         )
     except IntegrityError as exc:
+        # Only the one-pull-per-round unique key means "already pulled". The transaction
+        # has rolled back by now, so a pull row for this round is there only when it was
+        # committed before; any other integrity failure is a real fault and propagates.
+        if not _pull_committed_this_round(participant, encounter):
+            raise
         raise ActionDispatchError(ActionDispatchError.PULL_ALREADY_COMMITTED) from exc
     except MagicError as exc:
         raise ActionDispatchError(ActionDispatchError.PULL_INVALID) from exc
@@ -478,6 +483,15 @@ def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belo
         from world.magic.services.burn import announce_burn  # noqa: PLC0415
 
         announce_burn(sheet.character, burn_result)
+
+
+def _pull_committed_this_round(participant: CombatParticipant, encounter: CombatEncounter) -> bool:
+    """Whether ``participant`` already has a ``CombatPull`` row for the encounter's round."""
+    from world.combat.models import CombatPull  # noqa: PLC0415
+
+    return CombatPull.objects.filter(
+        participant=participant, round_number=encounter.round_number
+    ).exists()
 
 
 def _with_style_skill(sheet: CharacterSheet, trait_ids: tuple[int, ...]) -> tuple[int, ...]:

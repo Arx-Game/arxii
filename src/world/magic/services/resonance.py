@@ -1467,6 +1467,13 @@ def _option_level_read(thread: Thread, payer: ResonanceModel) -> int:
     return thread.level if level is None else level
 
 
+#: The effect kinds a ``CombatPullResolvedEffect`` may carry a narrative snippet for; the
+#: model's per-kind payload constraints require it empty on every numeric kind.
+_SNIPPET_KINDS_ON_COMBAT_ROW = frozenset(
+    {EffectKind.NARRATIVE_ONLY, EffectKind.CORRUPTION_RESISTANCE}
+)
+
+
 def _persist_combat_pull(  # noqa: PLR0913
     *,
     ctx: PullActionContext,
@@ -1536,7 +1543,12 @@ def _persist_combat_pull(  # noqa: PLR0913
             source_tier=r.source_tier,
             granted_capability=r.granted_capability,
             capability_grant_value=r.capability_grant_value,
-            narrative_snippet=r.narrative_snippet,
+            # Only the kinds whose payload constraint allows prose keep their snippet; a
+            # numeric perk's snippet is flavour text the scene path shows, and the row's
+            # CHECK constraint requires it empty (#5123).
+            narrative_snippet=(
+                r.narrative_snippet if r.kind in _SNIPPET_KINDS_ON_COMBAT_ROW else ""
+            ),
             resistance_damage_type=r.resistance_damage_type,
         )
 
