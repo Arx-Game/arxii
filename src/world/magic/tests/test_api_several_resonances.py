@@ -418,6 +418,6 @@ class DraftWeightsTests(APITestCase):
         self.assertEqual(twice.status_code, status.HTTP_400_BAD_REQUEST)
         over = save([{"resonance_id": fury.pk, "weight": 11}])
         self.assertEqual(over.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("Spread exactly 10 points", str(over.data))
+        self.assertIn("You have only 10 points to spread", str(over.data))
         draft.refresh_from_db()
         self.assertEqual(draft.draft_data["gift_resonance_weights"], partial)

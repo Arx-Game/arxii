@@ -2043,7 +2043,7 @@ or a row at zero (a creation pick not yet imbued), gets no perks but still pays.
 feeds the `min_thread_level` gate and the multiplier. Tier 0 resolves only for the leading
 resonance, and the always-on passives outside pulls key on `Thread.resonance`. A pull is refused
 as having no effect ("This pull would have no effect on that action.") only when none of its
-payers has perks that apply and none of its threads is paid by a held resonance with no row on
+payers has perks that apply and none of its threads is paid by a held resonance with no row, or a row at zero, on
 that thread (ruling 13: paying with such a resonance is an ordinary pull; the check is `any`
 across the pull's threads, not per payer), and applicability (`pull_applicability`) counts a thread when any resonance with a row would have
 an effect, since it runs before the payer is picked.

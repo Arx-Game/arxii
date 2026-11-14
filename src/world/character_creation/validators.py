@@ -571,7 +571,9 @@ def resonance_weights_error(
         return "Give every resonance you pick at least 1 point"
     points = get_drift_config().creation_points
     spent = sum(pick.weight for pick in weights)
-    if spent > points or (require_full_spread and spent != points):
+    if spent > points:
+        return f"You have only {points} points to spread across your resonances"
+    if require_full_spread and spent != points:
         return f"Spread exactly {points} points across your resonances"
     return None
 

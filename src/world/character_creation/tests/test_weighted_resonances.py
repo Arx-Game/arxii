@@ -9,9 +9,11 @@ the heaviest leading, and the codex grants an entry for every pick.
 from decimal import Decimal
 
 from django.test import TestCase
+from rest_framework import serializers
 
 from evennia_extensions.factories import AccountFactory
 from world.character_creation.factories import CharacterDraftFactory
+from world.character_creation.serializers import CharacterDraftSerializer
 from world.character_creation.services import finalize_magic_data
 from world.character_creation.validators import compute_magic_errors
 from world.character_sheets.factories import CharacterSheetFactory
@@ -251,7 +253,28 @@ class TheGiftStageChecksTheSpread(TestCase):
         self.assertEqual(self._errors(_weights((self.first, 10))), [])
         spread = ["Spread exactly 10 points across your resonances"]
         self.assertEqual(self._errors(_weights((self.first, 6), (self.second, 3))), spread)
-        self.assertEqual(self._errors(_weights((self.first, 6), (self.second, 5))), spread)
+        # More than the points is not "exactly": it says how many there are to spend.
+        over = ["You have only 10 points to spread across your resonances"]
+        self.assertEqual(self._errors(_weights((self.first, 6), (self.second, 5))), over)
+
+    def test_a_draft_saves_a_partial_spread_but_the_stage_stays_incomplete(self) -> None:
+        partial = _weights((self.first, 6), (self.second, 3))
+        check = CharacterDraftSerializer._validate_gift_resonance_weights
+
+        check({"gift_resonance_weights": partial})  # saves: nothing raised
+
+        self.assertEqual(self._errors(partial), ["Spread exactly 10 points across your resonances"])
+
+    def test_a_draft_refuses_an_overspend_in_the_over_spend_wording(self) -> None:
+        check = CharacterDraftSerializer._validate_gift_resonance_weights
+
+        with self.assertRaises(serializers.ValidationError) as caught:
+            check({"gift_resonance_weights": _weights((self.first, 6), (self.second, 5))})
+
+        self.assertEqual(
+            caught.exception.detail["gift_resonance_weights"],
+            "You have only 10 points to spread across your resonances",
+        )
 
     def test_each_pick_needs_a_point_and_a_resonance_once(self) -> None:
         self.assertEqual(
