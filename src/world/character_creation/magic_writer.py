@@ -225,7 +225,7 @@ def link_gift_and_techniques(sheet: CharacterSheet, picks: MagicPicks) -> None:
 def _glimpse(sheet: CharacterSheet, picks: MagicPicks) -> CharacterAura:
     """The aura row, its Glimpse tags by axis, and its prose (versioned through the services).
 
-    The shares come later, from the seeded resonance (``_seed_resonances``).
+    The shares come later: the settled self and the seeded resonance (``_seed_resonances``).
     """
     from world.magic.constants import GlimpseTagAxis  # noqa: PLC0415
     from world.magic.models import CharacterAura, GlimpseTag  # noqa: PLC0415
@@ -284,22 +284,83 @@ def _anima(sheet: CharacterSheet, picks: MagicPicks) -> None:
     )
 
 
-def _seed_resonances(sheet: CharacterSheet, picks: MagicPicks, aura: CharacterAura) -> None:
-    """Seed each pick's lifetime from its weight, then settle who the character is (#5123).
+def _split_by_weight(total: int, weights: list[int]) -> list[int]:
+    """``total`` shared out by ``weights`` (largest remainder), every part at least 1.
 
-    The aura is recomputed from the seeded lifetime, and the settled shares are set to it, so
-    a fresh character reads no unsettled steps and their first gain extends the aura rather
-    than wiping it.
+    The caller guarantees ``total`` is at least ``len(weights)``.
     """
-    from world.magic.services.aura import recompute_aura, settle_aura_shares  # noqa: PLC0415
+    weight_sum = sum(weights)
+    parts = [total * weight // weight_sum for weight in weights]
+    by_remainder = sorted(
+        range(len(weights)), key=lambda i: (-(total * weights[i] % weight_sum), i)
+    )
+    for i in by_remainder[: total - sum(parts)]:
+        parts[i] += 1
+    for i, part in enumerate(parts):
+        if part == 0:
+            parts[parts.index(max(parts))] -= 1
+            parts[i] = 1
+    return parts
+
+
+def _seed_resonances(sheet: CharacterSheet, picks: MagicPicks, aura: CharacterAura) -> None:
+    """Settle who the character is, then seed each pick's lifetime to match it (#5123).
+
+    The settled shares start as the picks' weights (over any lifetime the sheet already
+    holds), the Glimpse nudge moves them (the one place that nudge is written), and the
+    lifetime is seeded from the nudged settled shares: each affinity's resonance gets its
+    settled share of the total, split across that affinity's picks by weight. So a fresh
+    character's aura is their settled self, they read no unsettled steps (a nudge of two
+    same-affinity tags included), and their first gain extends the aura rather than wiping
+    it. With no nudge a pick's lifetime is exactly its weight x ``creation_seed_per_point``.
+    """
+    from decimal import ROUND_HALF_UP, Decimal  # noqa: PLC0415
+
+    from world.magic.models import CharacterResonance  # noqa: PLC0415
+    from world.magic.services.aura import recompute_aura, set_settled_shares  # noqa: PLC0415
     from world.magic.services.drift import get_drift_config  # noqa: PLC0415
+    from world.magic.services.glimpse import apply_glimpse_affinity_nudge  # noqa: PLC0415
     from world.magic.services.resonance import seed_creation_resonance  # noqa: PLC0415
+    from world.magic.types import AffinityShare  # noqa: PLC0415
 
     per_point = get_drift_config().creation_seed_per_point
+    affinities = {}
+    existing: dict[int, int] = {}
+    for row in CharacterResonance.objects.filter(character_sheet=sheet).select_related(
+        "resonance__affinity"
+    ):
+        affinity = row.resonance.affinity
+        affinities[affinity.pk] = affinity
+        existing[affinity.pk] = existing.get(affinity.pk, 0) + row.lifetime_earned
+    by_affinity: dict[int, list[WeightedResonance]] = {}
     for pick in picks.ordered_resonances:
-        seed_creation_resonance(sheet, pick.resonance, pick.weight * per_point)
+        affinities[pick.resonance.affinity.pk] = pick.resonance.affinity
+        by_affinity.setdefault(pick.resonance.affinity_id, []).append(pick)
+    base = {
+        pk: existing.get(pk, 0) + sum(pick.weight for pick in by_affinity.get(pk, ())) * per_point
+        for pk in affinities
+    }
+    grand_total = sum(base.values())
+    if grand_total == 0:
+        return
+    set_settled_shares(
+        aura,
+        [
+            AffinityShare(affinity=affinities[pk], percent=Decimal(total) * 100 / grand_total)
+            for pk, total in base.items()
+            if total
+        ],
+    )
+    apply_glimpse_affinity_nudge(aura)
+    settled = {share.affinity_id: share.settled_percent for share in aura.cached_shares}
+    denominator = sum(settled.get(pk, Decimal(0)) for pk in base if base[pk]) or Decimal(100)
+    for pk, group in by_affinity.items():
+        target = Decimal(grand_total) * settled.get(pk, Decimal(0)) / denominator
+        wanted = int((target - existing.get(pk, 0)).to_integral_value(ROUND_HALF_UP))
+        amounts = _split_by_weight(max(wanted, len(group)), [pick.weight for pick in group])
+        for pick, amount in zip(group, amounts, strict=True):
+            seed_creation_resonance(sheet, pick.resonance, amount)
     recompute_aura(sheet)
-    settle_aura_shares(aura)
 
 
 @transaction.atomic
@@ -317,7 +378,6 @@ def provision_magic(
     """
     from world.codex.models import TraditionCodexGrant  # noqa: PLC0415
     from world.magic.models import CharacterTradition  # noqa: PLC0415
-    from world.magic.services.glimpse import apply_glimpse_affinity_nudge  # noqa: PLC0415
     from world.species.services import (  # noqa: PLC0415
         provision_species_gifts,
         provision_starting_languages,
@@ -344,7 +404,6 @@ def provision_magic(
     if hooks.after_aura:
         hooks.after_aura(aura)
     _seed_resonances(sheet, picks, aura)
-    apply_glimpse_affinity_nudge(aura)
     _anima(sheet, picks)
     codex_entry_ids = [
         pick.resonance.codex_entry_id

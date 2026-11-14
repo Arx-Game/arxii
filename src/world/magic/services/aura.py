@@ -99,20 +99,6 @@ def set_aura_shares(aura: CharacterAura, shares: Sequence[AffinityShare]) -> Non
     aura.__dict__.pop("cached_shares", None)
 
 
-def settle_aura_shares(aura: CharacterAura) -> None:
-    """Make who the character is equal to the aura they have: each settled share is its share.
-
-    Character creation's step after the weighted picks are seeded (#5123): the starting
-    aura is the starting settled self, so a fresh character reads zero unsettled steps.
-    Accepting the changes to the aura does the same through ``accept_aura_change``.
-    """
-    for share in aura.shares.all():
-        if share.settled_percent != share.percent:
-            share.settled_percent = share.percent
-            share.save(update_fields=["settled_percent"])
-    aura.__dict__.pop("cached_shares", None)
-
-
 @transaction.atomic
 def set_settled_shares(aura: CharacterAura, shares: Sequence[AffinityShare]) -> None:
     """Write who the character is, per affinity, without touching the aura they have.

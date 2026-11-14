@@ -192,11 +192,13 @@ for the five-branch validation gate this data must satisfy before submission.
   pick reads "Select a gift resonance"). `provision_magic` writes them in order: the Gift
   thread (and species gift threads) are provisioned with a `ThreadResonance` row per pick at
   amount 0, the heaviest leading, on first provision (an existing thread ignores the list);
-  each pick is then seeded by `seed_creation_resonance` (`lifetime_earned` = weight x
-  `creation_seed_per_point`, no balance, a `CHARACTER_CREATION` ledger row), `recompute_aura`
-  derives the starting aura, `settle_aura_shares` makes the settled self equal it (so a fresh
-  character reads zero unsettled steps and a later gain extends the aura), and the Glimpse
-  nudge then moves the settled shares only. The heaviest pick is the one resonance creation
+  the settled shares start as the weights, the Glimpse nudge moves them (the one place it is
+  written), and each pick is then seeded by `seed_creation_resonance` from the NUDGED settled
+  shares (an affinity's settled share of the total, split across its picks by weight; with no
+  nudge exactly weight x `creation_seed_per_point`; no balance, a `CHARACTER_CREATION`
+  ledger row). `recompute_aura` then derives the starting aura, equal to the settled self, so
+  a fresh character reads zero unsettled steps (two same-affinity Glimpse tags included) and
+  a later gain extends the aura. The heaviest pick is the one resonance creation
   needs where it can use only one (the anima ritual, the Motif seed, the facet ties, the
   teaching fit); every pick's codex entry is granted. Staff's Grant magic puts all the points
   on its single pick. `starting_aura_shares` and its 80/20 split are gone.

@@ -19,9 +19,10 @@ from world.classes.factories import PathFactory
 from world.codex.constants import CodexKnowledgeStatus
 from world.codex.factories import CodexEntryFactory
 from world.codex.models import CharacterCodexKnowledge
-from world.magic.constants import GainSource, GiftKind, TargetKind
+from world.magic.constants import GainSource, GiftKind, GlimpseTagAxis, TargetKind
 from world.magic.factories import (
     GiftFactory,
+    GlimpseTagFactory,
     PathGiftGrantFactory,
     ResonanceFactory,
     TechniqueFactory,
@@ -157,6 +158,31 @@ class TheStartingAuraComesFromTheWeights(_WeightedPicksCase):
         reading = drift_for(sheet)
         self.assertEqual(reading.steps_past, 0)
         self.assertEqual(reading.main_affinity, self.primal)
+
+    def test_two_glimpse_tags_on_one_affinity_leave_a_fresh_character_settled(self) -> None:
+        """A TONE and a TRIGGER tag both Primal nudge the settled self by 6 in all.
+
+        The seed follows the nudged settled shares, so the aura and who she is agree and
+        she is not unsettled before she has cast (nor after a small minor-affinity gain).
+        """
+        tags = [
+            GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="warm-tone", affinity=self.primal),
+            GlimpseTagFactory(
+                axis=GlimpseTagAxis.TRIGGER, slug="warm-trigger", affinity=self.primal
+            ),
+        ]
+        sheet, _ = self._finalize(
+            [(self.fury, 7), (self.domination, 3)], glimpse_tag_ids=[tag.pk for tag in tags]
+        )
+        aura = CharacterAura.objects.get(character=sheet)
+        settled = {row.affinity_id: row.settled_percent for row in aura.shares.all()}
+        self.assertEqual(
+            settled, {self.primal.pk: Decimal("76.00"), self.abyssal.pk: Decimal("24.00")}
+        )
+        self.assertEqual(aura.percent_for(self.primal), Decimal("76.00"))
+        self.assertEqual(drift_for(sheet).steps_past, 0)
+        grant_resonance(sheet, self.domination, 3, source=GainSource.STAFF_GRANT)
+        self.assertEqual(drift_for(sheet).steps_past, 0)
 
     def test_one_affinity_picks_start_wholly_in_it(self) -> None:
         sheet, _ = self._finalize([(self.domination, 10)])
