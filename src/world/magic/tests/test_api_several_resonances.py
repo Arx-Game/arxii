@@ -242,7 +242,8 @@ class PreviewPayloadTests(_CharacterWithResonances):
         (perk,) = fury["effects"]
         self.assertEqual(perk["kind"], "CAPABILITY_GRANT")
         self.assertEqual(perk["capability_name"], "Cowed")
-        self.assertIsNotNone(perk["capability_value"])
+        # No capability power curve is authored here, so the authored base stands.
+        self.assertEqual(perk["capability_value"], 2)
         self.assertIsNone(perk["resistance_damage_type_name"])
 
 

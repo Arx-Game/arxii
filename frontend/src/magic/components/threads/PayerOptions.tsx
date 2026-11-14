@@ -9,7 +9,7 @@
  * and are never summed across threads. A held resonance the thread never took in pays an
  * ordinary pull and lists no perks.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   defaultPayerId,
@@ -25,13 +25,17 @@ interface PayerOptionsProps {
   thread: Thread;
   /** The thread's payer options from the pull preview, one per resonance the player holds. */
   options: PayerOption[];
-  /**
-   * The resonance the player picked to pay; undefined until they pick. The list starts on
-   * the leading resonance (or the first that can pay when the leader cannot), and reports
-   * that start through `onSelect` so a cast sends what the player sees.
-   */
+  /** The resonance the player picked to pay; undefined until they pick. */
   selectedResonanceId: number | undefined;
+  /** The player picked a payer. */
   onSelect: (resonanceId: number) => void;
+  /**
+   * The payer the pull has to name for this thread, or null for none. It is the picked (or
+   * starting) payer while the choice is shown and that payer is not the leading resonance;
+   * with no choice shown, or on the leader, it is null, so a pick made where the choice was
+   * shown never outlives it. Cleared when the list leaves the screen.
+   */
+  onResolve?: (resonanceId: number | null) => void;
 }
 
 function PerkRows({ thread, option }: { thread: Thread; option: PayerOption }) {
@@ -85,18 +89,28 @@ export function PayerOptions({
   options,
   selectedResonanceId,
   onSelect,
+  onResolve,
 }: PayerOptionsProps) {
   const [inspecting, setInspecting] = useState<PayerOption | null>(null);
   const hasChoice = showsPayerChoice(thread, options);
   const startingId = defaultPayerId(thread, options);
-  const chosenId = selectedResonanceId ?? startingId;
+  const picked =
+    selectedResonanceId !== undefined && options.some((o) => o.resonance_id === selectedResonanceId)
+      ? selectedResonanceId
+      : undefined;
+  const chosenId = picked ?? startingId;
+  const toSend = hasChoice && chosenId !== thread.resonance ? chosenId : null;
 
-  // A start other than the leading resonance is a pick the cast has to send.
+  // Report what the pull has to name; only the latest callback is called, so a new inline
+  // function each render does not re-run this.
+  const resolveRef = useRef(onResolve);
   useEffect(() => {
-    if (hasChoice && selectedResonanceId === undefined && startingId !== thread.resonance) {
-      onSelect(startingId);
-    }
-  }, [hasChoice, selectedResonanceId, startingId, thread.resonance, onSelect]);
+    resolveRef.current = onResolve;
+  });
+  useEffect(() => {
+    resolveRef.current?.(toSend);
+  }, [toSend]);
+  useEffect(() => () => resolveRef.current?.(null), []);
 
   // A thread with one resonance pays with it; show that payer alone, no choice.
   if (!hasChoice) {

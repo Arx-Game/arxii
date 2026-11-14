@@ -694,15 +694,15 @@ describe('ThreadPullPicker — payer per thread (#5123)', () => {
         ],
       })
     );
-    const onPayerChange = vi.fn();
-    render(<ThreadPullPicker {...defaultProps({ selectedPulls: { 1: 1 }, onPayerChange })} />, {
+    const onPayerResolve = vi.fn();
+    render(<ThreadPullPicker {...defaultProps({ selectedPulls: { 1: 1 }, onPayerResolve })} />, {
       wrapper: createWrapper(),
     });
     expect(await screen.findByTestId('payer-options-1')).toBeInTheDocument();
     expect(screen.queryByTestId('payer-fixed-1')).not.toBeInTheDocument();
     // The tier stays open, and the first resonance that can pay is where it starts.
     expect(screen.getByTestId('tier-btn-1-1')).not.toBeDisabled();
-    await waitFor(() => expect(onPayerChange).toHaveBeenCalledWith(1, 2));
+    await waitFor(() => expect(onPayerResolve).toHaveBeenLastCalledWith(1, 2));
   });
 
   it('disables a tier on a single-resonance thread whose own resonance cannot pay it', async () => {

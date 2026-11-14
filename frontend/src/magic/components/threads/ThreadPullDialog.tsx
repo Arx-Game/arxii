@@ -29,7 +29,7 @@ import {
   NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { previewPull } from '../../api';
-import { defaultPayerId, pulledResonances } from '../../burn';
+import { pulledResonances } from '../../burn';
 import { useCharacterResonances, useThreads } from '../../queries';
 import type { PayerOption, PullPreviewResponse, Thread } from '../../types';
 import { PayerOptions, ThreadMakeup } from './PayerOptions';
@@ -116,7 +116,7 @@ function payLine(
   const costs = new Map<string, number>();
   for (const thread of threads) {
     const options = preview.per_thread?.find((row) => row.thread_id === thread.id)?.options ?? [];
-    const payerId = payers[thread.id] ?? defaultPayerId(thread, options);
+    const payerId = payers[thread.id] ?? thread.resonance;
     const chosen = options.find((o) => o.resonance_id === payerId);
     if (!chosen) return null;
     costs.set(chosen.resonance_name, (costs.get(chosen.resonance_name) ?? 0) + chosen.cost);
@@ -141,6 +141,10 @@ export function ThreadPullDialog({
 
   const [selectedTier, setSelectedTier] = useState<1 | 2 | 3>(1);
   const [selectedThreadIds, setSelectedThreadIds] = useState<number[]>([]);
+  // The player's picks, and the payers each thread's list names for the pull (a pick only
+  // counts while that list shows the choice, so a pick made at one tier cannot follow the
+  // player to another).
+  const [payerPicks, setPayerPicks] = useState<Record<number, number>>({});
   const [payers, setPayers] = useState<Record<number, number>>({});
   const [preview, setPreview] = useState<PullPreviewResponse | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -153,6 +157,7 @@ export function ThreadPullDialog({
     if (open) {
       setSelectedTier(1);
       setSelectedThreadIds([]);
+      setPayerPicks({});
       setPayers({});
       setPreview(null);
       setPreviewLoading(false);
@@ -171,7 +176,7 @@ export function ThreadPullDialog({
   const anyBalance = (resonances ?? []).some((r) => (r.balance ?? 0) > 0);
   const offeredThreads = anyBalance ? eligibleThreads : [];
 
-  // The picks the player made for threads that are still chosen.
+  // The payers named for threads that are still chosen.
   const pickedPayers = useMemo(
     () =>
       Object.fromEntries(
@@ -221,7 +226,18 @@ export function ThreadPullDialog({
   }
 
   const pickPayer = useCallback((threadId: number, resonanceId: number) => {
-    setPayers((prev) => ({ ...prev, [threadId]: resonanceId }));
+    setPayerPicks((prev) => ({ ...prev, [threadId]: resonanceId }));
+  }, []);
+
+  const resolvePayer = useCallback((threadId: number, resonanceId: number | null) => {
+    setPayers((prev) => {
+      if (resonanceId === null) {
+        if (prev[threadId] === undefined) return prev;
+        const { [threadId]: _dropped, ...rest } = prev;
+        return rest;
+      }
+      return prev[threadId] === resonanceId ? prev : { ...prev, [threadId]: resonanceId };
+    });
   }, []);
 
   function optionsFor(threadId: number): PayerOption[] {
@@ -318,8 +334,9 @@ export function ThreadPullDialog({
                         <PayerOptions
                           thread={thread}
                           options={options}
-                          selectedResonanceId={payers[thread.id]}
+                          selectedResonanceId={payerPicks[thread.id]}
                           onSelect={(resonanceId) => pickPayer(thread.id, resonanceId)}
+                          onResolve={(resonanceId) => resolvePayer(thread.id, resonanceId)}
                         />
                       </div>
                     )}

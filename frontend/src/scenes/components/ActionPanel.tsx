@@ -969,8 +969,9 @@ export function ActionPanel({ sceneId }: Props) {
                             onToggleInapplicable={pull.setShowInapplicable}
                             onAutoRevertNotice={pull.setPullNotice}
                             balanceByResonanceId={pull.balanceByResonanceId}
-                            payers={pull.payers}
+                            payers={pull.payerPicks}
                             onPayerChange={pull.setPayer}
+                            onPayerResolve={pull.resolvePayer}
                           />
                           {pull.pullNotice && (
                             <p className="mt-1 text-xs text-amber-400">{pull.pullNotice}</p>

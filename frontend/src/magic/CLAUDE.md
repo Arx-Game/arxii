@@ -419,8 +419,7 @@ there is no choice to show and nothing is sent.
 The pull's "Pay with" choice, for one pulled thread, drawn from `per_thread` in the pull
 preview. `PayerOptions` lists each payer with `cost` Name `· you have` balance and its own
 perk rows (label, value, flavor snippet), starting on the thread's leading resonance (or
-the first that can pay when the leader cannot, reported through `onSelect` so the cast sends
-it); a payer that cannot afford the cost cannot be picked, and one the thread never took in
+the first that can pay when the leader cannot); a payer that cannot afford the cost cannot be picked, and one the thread never took in
 reads "No perks on this thread". A thread holding one resonance shows "Pays with X" and its
 perks with no radio, unless its own resonance cannot pay: `showsPayerChoice` (`burn.ts`) is
 true for several rows or an unaffordable own resonance, and the picker's tier strip uses the
@@ -434,14 +433,20 @@ leading resonance). Perk labels and values come from `effectLabel` / `effectValu
 
 ### `components/threads/ThreadPullPicker.tsx` and `ThreadPullDialog.tsx`
 
-Both pick a tier and pulled threads; each pulled thread is paid by one resonance. The picker
-takes `payers` / `onPayerChange` (state lives in `useCastPullSelection`, which sends only the
-picks the player made, as `pull.payers`; a thread without one is paid by its leading
-resonance) and its tier strip stays open while ANY held resonance can pay. The dialog keeps its
-own `payers`, sends them to the preview and returns them on `PullSelection.payers` beside
-`resonances` (the distinct payers, which a mixed pull's burn picks from). The dialog offers a
-thread while any held resonance has a balance, and its cost line reads "3 Fury, 3
-Domination" from the chosen payers, not a flat total.
+Both pick a tier and pulled threads; each pulled thread is paid by one resonance. A payer
+list (`PayerOptions`) keeps the player's pick (`onSelect`) apart from what the pull has to
+name (`onResolve`): the picked or starting payer, only while the list shows the choice and
+the payer is not the leading resonance, otherwise nobody (and nobody once the list leaves the
+screen). So a pick made at tier 3, where the leader cannot pay, does not follow the player to
+tier 1, where the row reads "Pays with Leader" and nothing is sent. The picker takes
+`payers` (the picks), `onPayerChange` and `onPayerResolve`; `useCastPullSelection` keeps
+`payerPicks` / `setPayer` and `payers` / `resolvePayer`, and sends `payers` as `pull.payers`
+(a thread without one is paid by its leading resonance). The tier strip stays open while ANY
+held resonance can pay. The dialog does the same with its own state, sends the named payers
+to the preview and returns them on `PullSelection.payers` beside `resonances` (the distinct
+payers, which a mixed pull's burn picks from). The dialog offers a thread while any held
+resonance has a balance, and its cost line reads "3 Fury, 3 Domination" from the named
+payers, not a flat total.
 In combat, `combat/dodging.ts` (`roundPullRequest`) and `combat/sections/YourTurn.tsx` forward
 `selection.payers` as the `pull_payers` kwarg (and `payers` on the burn preview), so a pick made
 in the dialog reaches the declaration.

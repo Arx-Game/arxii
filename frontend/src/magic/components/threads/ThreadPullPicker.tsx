@@ -62,6 +62,8 @@ export interface ThreadPullPickerProps {
    */
   payers?: Record<number, number>;
   onPayerChange?: (threadId: number, resonanceId: number) => void;
+  /** A thread's payer list reports the resonance the pull must name for it, or null. */
+  onPayerResolve?: (threadId: number, resonanceId: number | null) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -239,6 +241,7 @@ interface ApplicableRowProps {
   /** The resonance the player picked to pay this thread (#5123); undefined until picked. */
   payerId: number | undefined;
   onPayerChange: (resonanceId: number) => void;
+  onPayerResolve: (resonanceId: number | null) => void;
   /** The live target this pull's action would be directed at (#2035), when one
    *  is currently selected in the cast/clash UI. Optional — passed through to
    *  the tier previews so a relationship-bond/Court-regard modulated amount is
@@ -255,6 +258,7 @@ function ApplicableRow({
   onOpenDetails,
   payerId,
   onPayerChange,
+  onPayerResolve,
   targetPersonaId,
 }: ApplicableRowProps) {
   const tierPreviews = useRowTierPreviews(thread, characterSheetId, targetPersonaId);
@@ -302,6 +306,7 @@ function ApplicableRow({
           options={payerOptions}
           selectedResonanceId={payerId}
           onSelect={onPayerChange}
+          onResolve={onPayerResolve}
         />
       )}
       {selectedTier > 0 && selectedPreview !== null && payerOptions.length === 0 && (
@@ -397,6 +402,7 @@ export function ThreadPullPicker({
   balanceByResonanceId = {},
   payers = {},
   onPayerChange,
+  onPayerResolve,
 }: ThreadPullPickerProps) {
   const [nameFilter, setNameFilter] = useState('');
   const [detailThread, setDetailThread] = useState<Thread | null>(null);
@@ -524,6 +530,7 @@ export function ThreadPullPicker({
             onOpenDetails={handleOpenDetails}
             payerId={payers[thread.id]}
             onPayerChange={(resonanceId) => onPayerChange?.(thread.id, resonanceId)}
+            onPayerResolve={(resonanceId) => onPayerResolve?.(thread.id, resonanceId)}
             targetPersonaId={actionContext.target_persona_id}
           />
         ))}

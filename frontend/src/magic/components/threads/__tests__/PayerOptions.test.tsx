@@ -150,33 +150,82 @@ describe('PayerOptions', () => {
       resonances: [{ resonance_id: 1, resonance_name: 'Fury', amount: 30, leads: true }],
     });
     const onSelect = vi.fn();
+    const onResolve = vi.fn();
     render(
       <PayerOptions
         thread={single}
         options={[option(1, 'Fury', 1, []), OPTIONS[1]]}
         selectedResonanceId={undefined}
         onSelect={onSelect}
+        onResolve={onResolve}
       />
     );
     expect(screen.getByRole('radiogroup')).toBeInTheDocument();
     expect(screen.getByTestId('payer-1-1')).toBeDisabled();
-    // It starts on the first payer that can pay, and reports that start.
+    // It starts on the first payer that can pay, names it to the pull, and is no pick.
     expect(screen.getByTestId('payer-1-2')).toHaveAttribute('aria-checked', 'true');
-    expect(onSelect).toHaveBeenCalledWith(2);
+    expect(onResolve).toHaveBeenLastCalledWith(2);
+    expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it('starts on the leading resonance, reporting nothing, when it can pay', () => {
-    const onSelect = vi.fn();
+  it('starts on the leading resonance, naming nobody, when it can pay', () => {
+    const onResolve = vi.fn();
     render(
       <PayerOptions
         thread={makeThread()}
         options={OPTIONS}
         selectedResonanceId={undefined}
-        onSelect={onSelect}
+        onSelect={vi.fn()}
+        onResolve={onResolve}
       />
     );
     expect(screen.getByTestId('payer-1-1')).toHaveAttribute('aria-checked', 'true');
-    expect(onSelect).not.toHaveBeenCalled();
+    expect(onResolve).toHaveBeenLastCalledWith(null);
+  });
+
+  it('names a picked payer, and nobody once the choice is no longer shown', () => {
+    const single = makeThread({
+      resonances: [{ resonance_id: 1, resonance_name: 'Fury', amount: 30, leads: true }],
+    });
+    const onResolve = vi.fn();
+    const { rerender } = render(
+      <PayerOptions
+        thread={single}
+        options={[option(1, 'Fury', 1, []), OPTIONS[1]]}
+        selectedResonanceId={2}
+        onSelect={vi.fn()}
+        onResolve={onResolve}
+      />
+    );
+    expect(onResolve).toHaveBeenLastCalledWith(2);
+    // The tier drops and the leader can pay: no choice, so the pick is not named.
+    rerender(
+      <PayerOptions
+        thread={single}
+        options={OPTIONS}
+        selectedResonanceId={2}
+        onSelect={vi.fn()}
+        onResolve={onResolve}
+      />
+    );
+    expect(screen.getByTestId('payer-fixed-1')).toHaveTextContent('Pays with Fury');
+    expect(onResolve).toHaveBeenLastCalledWith(null);
+  });
+
+  it('names nobody when the list leaves the screen', () => {
+    const onResolve = vi.fn();
+    const { unmount } = render(
+      <PayerOptions
+        thread={makeThread()}
+        options={OPTIONS}
+        selectedResonanceId={2}
+        onSelect={vi.fn()}
+        onResolve={onResolve}
+      />
+    );
+    expect(onResolve).toHaveBeenLastCalledWith(2);
+    unmount();
+    expect(onResolve).toHaveBeenLastCalledWith(null);
   });
 
   it('names no resonance twice for a single-resonance thread makeup', () => {

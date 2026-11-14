@@ -341,6 +341,55 @@ describe('ThreadPullDialog', () => {
       });
     });
 
+    it('drops a payer named at one tier when another tier shows no choice', async () => {
+      // At tier 3 the leader cannot pay, so the list starts on Tidecall; at tier 1 it can.
+      vi.mocked(previewPull).mockImplementation((body) =>
+        Promise.resolve(previewOf([pyre(body.tier === 3 ? 1 : 20)]))
+      );
+      const onSelect = vi.fn();
+      render(<ThreadPullDialog {...defaultProps} onSelect={onSelect} />);
+      fireEvent.click(screen.getByTestId('tier-btn-3'));
+      fireEvent.click(within(screen.getByTestId('thread-checkbox-8')).getByRole('checkbox'));
+      await waitFor(() =>
+        expect(previewPull).toHaveBeenLastCalledWith({
+          character_sheet_id: 12,
+          tier: 3,
+          thread_ids: [8],
+          payers: { 8: 9 },
+        })
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId('payer-8-9')).toHaveAttribute('aria-checked', 'true')
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId('preview-resonance-cost')).toHaveTextContent('3 Tidecall')
+      );
+
+      fireEvent.click(screen.getByTestId('tier-btn-1'));
+      // The row, the cost line and the request agree: the leader pays, nobody is named.
+      await waitFor(() =>
+        expect(previewPull).toHaveBeenLastCalledWith({
+          character_sheet_id: 12,
+          tier: 1,
+          thread_ids: [8],
+        })
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId('payer-8-7')).toHaveAttribute('aria-checked', 'true')
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId('preview-resonance-cost')).toHaveTextContent('3 Flamevein')
+      );
+      await waitFor(() => expect(screen.getByTestId('commit-pull-btn')).not.toBeDisabled());
+      fireEvent.click(screen.getByTestId('commit-pull-btn'));
+      expect(onSelect).toHaveBeenCalledWith({
+        tier: 1,
+        thread_ids: [8],
+        resonances: [{ id: 7, name: 'Flamevein' }],
+        payers: {},
+      });
+    });
+
     it('sums the cost by the resonance that pays: "3 Flamevein, 3 Tidecall"', async () => {
       vi.mocked(previewPull).mockResolvedValue(
         previewOf([{ thread_id: 1, options: [option(7, 'Flamevein', 20, [])] }, pyre(20)])

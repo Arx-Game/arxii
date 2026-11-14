@@ -12,7 +12,7 @@
  *   successful cast or when the dialog closes.
  */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import { useThreads, useCharacterResonances, usePullBurnPreview } from '@/magic/queries';
 import type {
   Thread,
@@ -47,10 +47,15 @@ export interface CastPullSelection {
   /** The chosen pull's tier, for the ceiling line; null with no paid pull. */
   pullTier: 1 | 2 | 3 | null;
   balanceByResonanceId: Record<number, number>;
-  /** Thread id → the resonance the player chose to pay it (#5123); a thread left out is
-   *  paid by its leading resonance. */
-  payers: Record<number, number>;
+  /** Thread id → the resonance the player picked to pay it (#5123), for the list to show. */
+  payerPicks: Record<number, number>;
   setPayer: (threadId: number, resonanceId: number) => void;
+  /** Thread id → the resonance the pull names to pay it, as reported by that thread's payer
+   *  list: only while it shows the choice and the payer is not the leading resonance. A
+   *  thread left out is paid by its leading resonance. */
+  payers: Record<number, number>;
+  /** The payer list reports the resonance to name for a thread, or null for none. */
+  resolvePayer: (threadId: number, resonanceId: number | null) => void;
   handlePullsChange: (next: Record<number, 0 | 1 | 2 | 3>) => void;
   /** Returns ``{ pull }`` (or ``{}``) on success, or ``{ error }`` when the
    *  threads cache hasn't resolved for the changed thread yet. */
@@ -79,6 +84,7 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
   const [pullNotice, setPullNotice] = useState<string | null>(null);
   const [burn, setBurn] = useState(0);
   const [chosenBurnResonanceId, setBurnResonanceId] = useState<number | null>(null);
+  const [payerPicks, setPayerPicks] = useState<Record<number, number>>({});
   const [payers, setPayers] = useState<Record<number, number>>({});
 
   // A burn is sized against the technique's ceiling; a new technique starts over.
@@ -129,7 +135,7 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
     const threads = paid.map(([id]) => threadById.get(Number(id)));
     if (threads.some((thread) => thread === undefined)) return null;
     const threadIds = paid.map(([id]) => Number(id));
-    // Only the picks the player made for threads that are still pulled.
+    // Only the payers the lists name, for threads that are still pulled.
     const picked = Object.fromEntries(
       threadIds.filter((id) => payers[id] !== undefined).map((id) => [id, payers[id]])
     );
@@ -223,11 +229,24 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
   }
 
   function setPayer(threadId: number, resonanceId: number): void {
-    setPayers((prev) => ({ ...prev, [threadId]: resonanceId }));
+    setPayerPicks((prev) => ({ ...prev, [threadId]: resonanceId }));
   }
+
+  // The payer list reports what the pull names; null (or the same value) changes nothing.
+  const resolvePayer = useCallback((threadId: number, resonanceId: number | null): void => {
+    setPayers((prev) => {
+      if (resonanceId === null) {
+        if (prev[threadId] === undefined) return prev;
+        const { [threadId]: _dropped, ...rest } = prev;
+        return rest;
+      }
+      return prev[threadId] === resonanceId ? prev : { ...prev, [threadId]: resonanceId };
+    });
+  }, []);
 
   function reset(): void {
     setSelectedPulls({});
+    setPayerPicks({});
     setPayers({});
     setPullNotice(null);
     setBurn(0);
@@ -249,8 +268,10 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
     burnPreview,
     pullTier,
     balanceByResonanceId,
-    payers,
+    payerPicks,
     setPayer,
+    payers,
+    resolvePayer,
     handlePullsChange,
     buildPullPayload,
     reset,
