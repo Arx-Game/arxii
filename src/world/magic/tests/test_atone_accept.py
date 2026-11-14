@@ -143,15 +143,21 @@ class AtoneTests(DriftRiteTestBase):
         other = ResonanceFactory(name="Atone Other Dread", affinity=self.abyssal)
         # The Mire sits in the Dread row; the player atones from the other Abyssal row.
         _set(self.sheet, self.dread, balance=60, lifetime=60, mire=60)
-        _set(self.sheet, other, balance=20, lifetime=20)
-        _set(self.sheet, self.dawnlight, balance=0, lifetime=100)
+        _set(self.sheet, other, balance=20, lifetime=50)
+        _set(self.sheet, self.dawnlight, balance=0, lifetime=60)
+        self.cap.cap = 500
+        self.cap.save()
         reading = drift_for(self.sheet)
         own = reading.own_excess_points[self.abyssal.pk]
         self.assertGreater(reading.mire_excess_points[self.abyssal.pk], 0)
         self.assertEqual(reading.convertible_points(self.abyssal.pk, 0), own)
 
-        with self.assertRaises(DriftConversionInvalidError):
+        # The other row's lifetime covers the amount, so the refusal is the convertible cap.
+        with self.assertRaises(DriftConversionInvalidError) as raised:
             self.perform(amount=own + 1, source=other)
+        self.assertEqual(
+            raised.exception.user_message, f"Only {own} of that resonance is past who you are."
+        )
         self.perform(amount=own, source=other)
 
         self.assertEqual(_row(self.sheet, self.dread).mire_lifetime, 60)
