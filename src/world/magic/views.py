@@ -44,7 +44,10 @@ from world.magic.constants import (
     is_ghost_tutor_ritual,
     is_imbuing_ritual,
 )
-from world.magic.crossing.handlers import open_labels_by_relationship_id
+from world.magic.crossing.handlers import (
+    THREAD_LABEL_RELATED,
+    open_labels_by_relationship_id,
+)
 from world.magic.exceptions import (
     DuplicateTechniqueName,
     InvalidImbueAmount,
@@ -1099,13 +1102,9 @@ class ThreadViewSet(viewsets.ModelViewSet):
             .select_related(
                 "owner",
                 "owner__character",
-                "resonance",
                 "resonance__affinity",
-                "target_trait",
-                "target_technique",
-                "target_relationship",
-                "target_capstone",
-                "target_gift",
+                # Everything a thread's display name reads, so a list costs no query per thread.
+                *THREAD_LABEL_RELATED,
             )
             .order_by("-pk")
         )

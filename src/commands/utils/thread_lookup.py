@@ -11,26 +11,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from commands.exceptions import CommandError
+from world.magic.crossing.handlers import THREAD_LABEL_RELATED
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import Thread
     from world.relationships.models import RelationshipLabel
-
-# What reading a thread's anchor label touches, so listing the labels costs no query per thread.
-THREAD_LABEL_RELATED = (
-    "resonance",
-    "target_trait",
-    "target_facet",
-    "target_gift",
-    "target_technique",
-    "target_mantle",
-    "target_relationship__target__character",
-    "target_relationship__target_companion",
-    "target_capstone__relationship__target__character",
-    "target_capstone__relationship__target_companion",
-    "target_sanctum_details__feature_instance__room_profile__objectdb",
-)
 
 
 def active_threads(sheet: CharacterSheet) -> list[Thread]:

@@ -296,6 +296,98 @@ class PreviewPayloadTests(_CharacterWithResonances):
         self.assertEqual(self._resonance_row_queries(1), 1)
         self.assertEqual(self._resonance_row_queries(4), 1)
 
+    def _one_thread_of_every_anchor_kind(self) -> None:
+        """A thread on each anchor kind a display name reads: every kind but a bare trait."""
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.items.factories import MantleFactory
+        from world.magic.constants import SanctumSlotKind
+        from world.magic.factories import FacetFactory, TechniqueFactory
+        from world.magic.models import SanctumDetails, SanctumOwnerMode
+        from world.room_features.factories import RoomFeatureInstanceFactory
+
+        gift = GiftFactory()
+        gift.resonances.add(self.fury)
+        provision_latent_gift_thread(self.sheet, gift, resonances=[self.fury])
+        ThreadFactory(owner=self.sheet, resonance=self.fury, as_track_thread=True)
+        ThreadFactory(owner=self.sheet, resonance=self.fury, as_capstone_thread=True)
+        ThreadFactory(
+            owner=self.sheet,
+            resonance=self.fury,
+            target_kind=TargetKind.FACET,
+            target_trait=None,
+            target_facet=FacetFactory(),
+        )
+        ThreadFactory(
+            owner=self.sheet,
+            resonance=self.fury,
+            target_kind=TargetKind.MANTLE,
+            target_trait=None,
+            target_mantle=MantleFactory(),
+        )
+        ThreadFactory(
+            owner=self.sheet,
+            resonance=self.fury,
+            target_kind=TargetKind.TECHNIQUE,
+            target_trait=None,
+            target_technique=TechniqueFactory(),
+        )
+        sanctum = SanctumDetails.objects.create(
+            feature_instance=RoomFeatureInstanceFactory(room_profile=RoomProfileFactory()),
+            resonance_type=self.fury,
+            owner_mode=SanctumOwnerMode.PERSONAL,
+        )
+        ThreadFactory(
+            owner=self.sheet,
+            resonance=self.fury,
+            target_kind=TargetKind.SANCTUM,
+            target_trait=None,
+            target_sanctum_details=sanctum,
+            slot_kind=SanctumSlotKind.HELPER,
+        )
+
+    def _thread_list_queries(self) -> tuple[int, dict[int, str]]:
+        """Queries the list costs once the idmapper holds none of the rows it reads.
+
+        The identity map answers a lazy foreign-key read without a query for any row it
+        already holds, so every cache is emptied first; otherwise a missing select_related
+        would pass.
+        """
+        from django.apps import apps
+        from evennia.utils.idmapper.models import SharedMemoryModel
+
+        # One read first, so one-time costs (config singletons, handler caches) are not counted.
+        self.client.get(reverse("magic:thread-list"))
+
+        for model in apps.get_models():
+            if issubclass(model, SharedMemoryModel) and hasattr(model, "__dbclass__"):
+                model.flush_instance_cache(force=True)
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(reverse("magic:thread-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        names = {row["id"]: row["display_name"] for row in response.data["results"]}
+        # The caps each thread reports read the owner's class levels and a bond's reverse
+        # side per thread; they are not part of the display name, so they are left out.
+        counted = [
+            q["sql"]
+            for q in queries.captured_queries
+            if '"arxii_characterclasslevel"' not in q["sql"]
+            and '"arxii_characterrelationship"."target_id" =' not in q["sql"]
+        ]
+        return len(counted), names
+
+    def test_thread_list_names_every_anchor_kind_without_a_query_per_thread(self) -> None:
+        self._one_thread_of_every_anchor_kind()
+        one_set, names = self._thread_list_queries()
+        self.assertEqual(len(names), 7)
+        self.assertTrue(all(name.strip() for name in names.values()), names)
+
+        # Two sets still fit on the first page; the cost must not grow with the threads.
+        self._one_thread_of_every_anchor_kind()
+        two_sets, names = self._thread_list_queries()
+
+        self.assertEqual(len(names), 14)
+        self.assertEqual(two_sets, one_set)
+
     def test_thread_list_reads_every_gifts_supported_set_in_one_query(self) -> None:
         for name in ("Kindling", "Tidecall", "Gale"):
             gift = GiftFactory(name=name)

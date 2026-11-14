@@ -339,6 +339,22 @@ class TraitCrossingHandler(_CrossingChoiceHandler):
     target_kind = TargetKind.TRAIT
 
 
+# What reading a thread's anchor label touches, so listing the labels costs no query per thread.
+THREAD_LABEL_RELATED = (
+    "resonance",
+    "target_trait",
+    "target_facet",
+    "target_gift",
+    "target_technique",
+    "target_mantle",
+    "target_relationship__target__character",
+    "target_relationship__target_companion",
+    "target_capstone__relationship__target__character",
+    "target_capstone__relationship__target_companion",
+    "target_sanctum_details__feature_instance__room_profile__objectdb",
+)
+
+
 def open_labels_by_relationship_id(
     threads: Iterable[Thread],
 ) -> dict[int, RelationshipLabel]:
