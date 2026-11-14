@@ -438,6 +438,22 @@ describe('useCastPullSelection', () => {
       expect(result.current.buildPullPayload()).toEqual({ pull: { tier: 2, thread_ids: [1] } });
     });
 
+    it("still names a pulled thread's payer when its row is hidden, but not once deselected", () => {
+      const wrapper = createWrapper();
+      const { result } = renderHook(() => useCastPullSelection(baseParams), { wrapper });
+      act(() => result.current.handlePullsChange({ 1: 2, 3: 2 }));
+      act(() => result.current.resolvePayer(1, 20));
+      // A hidden row reports nothing, so the cast still names the pick.
+      expect(result.current.buildPullPayload()).toEqual({
+        pull: { tier: 2, thread_ids: [1, 3], payers: { 1: 20 } },
+      });
+      // Deselecting the thread leaves it out of the pull, and its payer with it.
+      act(() => result.current.handlePullsChange({ 1: 0, 3: 2 }));
+      expect(result.current.buildPullPayload()).toEqual({
+        pull: { tier: 2, thread_ids: [3] },
+      });
+    });
+
     it('lets the picked payer choose which resonance a burn can come from', () => {
       setupResonances([
         { resonance: 10, resonance_name: 'Dawnlight', balance: 5 },

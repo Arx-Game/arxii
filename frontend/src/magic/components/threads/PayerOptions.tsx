@@ -33,7 +33,9 @@ interface PayerOptionsProps {
    * The payer the pull has to name for this thread, or null for none. It is the picked (or
    * starting) payer while the choice is shown and that payer is not the leading resonance;
    * with no choice shown, or on the leader, it is null, so a pick made where the choice was
-   * shown never outlives it. Cleared when the list leaves the screen.
+   * shown never outlives it. Nothing is reported when the list unmounts: a thread whose row is
+   * only hidden (a name filter) is still pulled, and the pulls filter to the threads still
+   * pulled themselves.
    */
   onResolve?: (resonanceId: number | null) => void;
 }
@@ -110,7 +112,6 @@ export function PayerOptions({
   useEffect(() => {
     resolveRef.current?.(toSend);
   }, [toSend]);
-  useEffect(() => () => resolveRef.current?.(null), []);
 
   // A thread with one resonance pays with it; show that payer alone, no choice.
   if (!hasChoice) {

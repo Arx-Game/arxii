@@ -212,7 +212,7 @@ describe('PayerOptions', () => {
     expect(onResolve).toHaveBeenLastCalledWith(null);
   });
 
-  it('names nobody when the list leaves the screen', () => {
+  it('reports nothing when the list leaves the screen: the thread may still be pulled', () => {
     const onResolve = vi.fn();
     const { unmount } = render(
       <PayerOptions
@@ -224,8 +224,9 @@ describe('PayerOptions', () => {
       />
     );
     expect(onResolve).toHaveBeenLastCalledWith(2);
+    onResolve.mockClear();
     unmount();
-    expect(onResolve).toHaveBeenLastCalledWith(null);
+    expect(onResolve).not.toHaveBeenCalled();
   });
 
   it('names no resonance twice for a single-resonance thread makeup', () => {

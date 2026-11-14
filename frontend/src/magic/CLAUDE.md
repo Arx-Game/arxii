@@ -436,8 +436,9 @@ leading resonance). Perk labels and values come from `effectLabel` / `effectValu
 Both pick a tier and pulled threads; each pulled thread is paid by one resonance. A payer
 list (`PayerOptions`) keeps the player's pick (`onSelect`) apart from what the pull has to
 name (`onResolve`): the picked or starting payer, only while the list shows the choice and
-the payer is not the leading resonance, otherwise nobody (and nobody once the list leaves the
-screen). So a pick made at tier 3, where the leader cannot pay, does not follow the player to
+the payer is not the leading resonance, otherwise nobody. A list that unmounts reports
+nothing (a name filter only hides a pulled thread's row); the pulls keep only the payers of
+threads still pulled. So a pick made at tier 3, where the leader cannot pay, does not follow the player to
 tier 1, where the row reads "Pays with Leader" and nothing is sent. The picker takes
 `payers` (the picks), `onPayerChange` and `onPayerResolve`; `useCastPullSelection` keeps
 `payerPicks` / `setPayer` and `payers` / `resolvePayer`, and sends `payers` as `pull.payers`

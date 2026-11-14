@@ -390,6 +390,30 @@ describe('ThreadPullDialog', () => {
       });
     });
 
+    it('stops naming a payer once its thread is unchecked', async () => {
+      const onSelect = vi.fn();
+      render(<ThreadPullDialog {...defaultProps} onSelect={onSelect} />);
+      fireEvent.click(within(screen.getByTestId('thread-checkbox-8')).getByRole('checkbox'));
+      fireEvent.click(within(screen.getByTestId('thread-checkbox-1')).getByRole('checkbox'));
+      fireEvent.click(await screen.findByTestId('payer-8-9'));
+      await waitFor(() =>
+        expect(previewPull).toHaveBeenLastCalledWith(expect.objectContaining({ payers: { 8: 9 } }))
+      );
+      fireEvent.click(within(screen.getByTestId('thread-checkbox-8')).getByRole('checkbox'));
+      await waitFor(() =>
+        expect(previewPull).toHaveBeenLastCalledWith({
+          character_sheet_id: 12,
+          tier: 1,
+          thread_ids: [1],
+        })
+      );
+      await waitFor(() => expect(screen.getByTestId('commit-pull-btn')).not.toBeDisabled());
+      fireEvent.click(screen.getByTestId('commit-pull-btn'));
+      expect(onSelect).toHaveBeenCalledWith(
+        expect.objectContaining({ thread_ids: [1], payers: {} })
+      );
+    });
+
     it('sums the cost by the resonance that pays: "3 Flamevein, 3 Tidecall"', async () => {
       vi.mocked(previewPull).mockResolvedValue(
         previewOf([{ thread_id: 1, options: [option(7, 'Flamevein', 20, [])] }, pyre(20)])

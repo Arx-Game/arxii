@@ -722,4 +722,23 @@ describe('ThreadPullPicker — payer per thread (#5123)', () => {
     render(<ThreadPullPicker {...defaultProps()} />, { wrapper: createWrapper() });
     await waitFor(() => expect(screen.getByTestId('tier-btn-1-1')).toBeDisabled());
   });
+  it('keeps naming a payer for a pulled thread whose row a name filter hides', async () => {
+    mockThreads([mixed]);
+    mockApplicable([makeApplicabilityRow(1, true)]);
+    mockMixedPreview();
+    const onPayerResolve = vi.fn();
+    render(
+      <ThreadPullPicker
+        {...defaultProps({ selectedPulls: { 1: 1 }, payers: { 1: 2 }, onPayerResolve })}
+      />,
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => expect(onPayerResolve).toHaveBeenLastCalledWith(1, 2));
+    onPayerResolve.mockClear();
+
+    await userEvent.type(screen.getByTestId('thread-name-filter'), 'zzz');
+    await waitFor(() => expect(screen.queryByTestId('payer-options-1')).not.toBeInTheDocument());
+    // The row is hidden, not dropped from the pull: nothing is reported for it.
+    expect(onPayerResolve).not.toHaveBeenCalled();
+  });
 });
