@@ -49,11 +49,17 @@ const UNSETTLED_AURA: CharacterAura = {
   dominant_affinity_display: 'Primal',
   unsettled: true,
   unsettled_line: 'Your Domination has grown strong enough to make you unsettled.',
+  unsettled_affinity_name: 'Abyssal',
   mire_share_words: 'none',
   glimpse_state: 'NOT_STARTED',
   updated_at: '2026-11-14T00:00:00Z',
 };
-const SETTLED_AURA: CharacterAura = { ...UNSETTLED_AURA, unsettled: false, unsettled_line: '' };
+const SETTLED_AURA: CharacterAura = {
+  ...UNSETTLED_AURA,
+  unsettled: false,
+  unsettled_line: '',
+  unsettled_affinity_name: '',
+};
 
 const OFFER: DriftConversionOffer = {
   id: 12,
@@ -659,6 +665,24 @@ describe('SettleAuraDialog - Atone and Accept exits (#5123)', () => {
     // The word the player never reads, and no figures.
     expect(screen.getByRole('dialog')).not.toHaveTextContent(/accepted/i);
     expect(screen.getByRole('dialog')).not.toHaveTextContent('42');
+  });
+
+  it('names the affinity the server names, not the one whose share grew most', async () => {
+    // Primal grew most in raw terms (+10), but only the Abyssal passed its settled share
+    // plus the tolerance, and that is the one accepting will name.
+    const aura: CharacterAura = {
+      ...UNSETTLED_AURA,
+      shares: [
+        { affinity_id: 1, affinity_name: 'Primal', percent: '70.00', settled_percent: '60.00' },
+        { affinity_id: 3, affinity_name: 'Celestial', percent: '10.00', settled_percent: '30.00' },
+        { affinity_id: 2, affinity_name: 'Abyssal', percent: '20.00', settled_percent: '10.00' },
+      ],
+    };
+    renderGate([OFFER], 101, [aura]);
+
+    expect(await screen.findByTestId('settle-accept-line')).toHaveTextContent(
+      /^You become more abyssal\.$/
+    );
   });
 
   it('hides Atone when no offer is open and still offers Accept', async () => {

@@ -303,6 +303,7 @@ function makeOwnAura(overrides: Partial<CharacterAura> = {}): CharacterAura {
     dominant_affinity_display: 'Primal',
     unsettled: false,
     unsettled_line: '',
+    unsettled_affinity_name: '',
     mire_share_words: 'none',
     glimpse_state: 'COMPLETE',
     updated_at: '2026-11-14T00:00:00Z',

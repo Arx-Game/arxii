@@ -125,6 +125,35 @@ class AuraPayloadTests(_CharacterWithResonances):
         # No Abyssal share has been settled, so it has no row at all.
         self.assertNotIn(self.abyssal.name, shares)
 
+    def test_aura_names_the_affinity_the_server_says_you_become_more(self) -> None:
+        """Settled Celestial 60, Primal 30, Abyssal 10; now Celestial 70, Primal 10, Abyssal 20.
+
+        Celestial grew most in raw terms, but only the Abyssal has passed what was settled
+        plus the tolerance, so the aura names Abyssal, as accepting will.
+        """
+        aura = CharacterAuraFactory(character=self.sheet)
+        set_aura_split(aura, celestial="60", primal="30", abyssal="10")
+        self._hold(self.wonder, balance=70, lifetime=70)
+        self._hold(self.fury, balance=10, lifetime=10)
+        self._hold(self.domination, balance=20, lifetime=20)
+        self.aura = aura
+
+        response = self.client.get(self._aura_url())
+
+        self.assertEqual(response.data["unsettled_affinity_name"], self.abyssal.name)
+        done = self.client.post(self._aura_url("accept/"))
+        self.assertEqual(done.data["detail"], "You become more abyssal.")
+        self.assertEqual(done.data["aura"]["unsettled_affinity_name"], "")
+
+    def test_each_aura_reads_its_resonances_once(self) -> None:
+        self._primal_character_who_has_grown_abyssal(mire=10)
+        table = CharacterResonance._meta.db_table
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(self._aura_url())
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        reads = sum(1 for q in queries.captured_queries if f'"{table}"' in q["sql"])
+        self.assertEqual(reads, 1)
+
     def test_a_settled_aura_says_nothing_of_it(self) -> None:
         aura = CharacterAuraFactory(character=self.sheet)
         set_aura_split(aura, celestial="0", primal="100", abyssal="0")

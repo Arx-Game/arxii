@@ -183,6 +183,7 @@ from world.magic.serializers import (
     ThreadResonanceOptionsSerializer,
     ThreadSerializer,
     ThreadWeavingTeachingOfferSerializer,
+    aura_drift_readings,
     primary_persona_names_for,
     thread_rows_by_thread,
 )
@@ -691,6 +692,17 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
             aura_shares_prefetch()
         )
 
+    def get_serializer(self, *args, **kwargs):
+        """Hand the serializer every aura's drift reading, each read once (ADR-0260)."""
+        instance = args[0] if args else kwargs.get("instance")
+        if instance is not None:
+            auras = list(instance) if kwargs.get("many") else [instance]
+            kwargs["context"] = {
+                **self.get_serializer_context(),
+                "drift_readings": aura_drift_readings(auras),
+            }
+        return super().get_serializer(*args, **kwargs)
+
     @extend_schema(request=None, responses={200: AcceptAuraResponseSerializer})
     @action(detail=True, methods=["post"], url_path="accept")
     def accept(self, request: Request, pk: int | None = None) -> Response:
@@ -708,7 +720,15 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
         result = AcceptAuraChangeAction().run(actor=aura.character.character)
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(AcceptAuraResponseSerializer({"detail": result.message, "aura": aura}).data)
+        context = {
+            **self.get_serializer_context(),
+            "drift_readings": aura_drift_readings([aura]),
+        }
+        return Response(
+            AcceptAuraResponseSerializer(
+                {"detail": result.message, "aura": aura}, context=context
+            ).data
+        )
 
     @extend_schema(request=GlimpseSetTagsSerializer, responses={200: CharacterAuraSerializer})
     @action(detail=True, methods=["post"], url_path="set-glimpse-tags")
@@ -732,7 +752,7 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
                 {"detail": exc.messages[0] if exc.messages else "Invalid tag selection."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        return Response(CharacterAuraSerializer(aura).data)
+        return Response(self.get_serializer(aura).data)
 
     @extend_schema(request=GlimpseSetProseSerializer, responses={200: CharacterAuraSerializer})
     @action(detail=True, methods=["post"], url_path="set-glimpse-prose")
@@ -742,7 +762,7 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         aura = self.get_object()
         glimpse_services.set_glimpse_prose(aura, serializer.validated_data["text"])
-        return Response(CharacterAuraSerializer(aura).data)
+        return Response(self.get_serializer(aura).data)
 
     @extend_schema(
         request=GlimpseDistinctionLinkSerializer, responses={200: CharacterAuraSerializer}
@@ -765,7 +785,7 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
                 {"detail": exc.messages[0] if exc.messages else "Cannot link."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        return Response(CharacterAuraSerializer(aura).data)
+        return Response(self.get_serializer(aura).data)
 
     @extend_schema(
         request=GlimpseDistinctionLinkSerializer, responses={200: CharacterAuraSerializer}
@@ -782,7 +802,7 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
             character=aura.character,
         )
         glimpse_services.unlink_distinction_from_glimpse(character_distinction)
-        return Response(CharacterAuraSerializer(aura).data)
+        return Response(self.get_serializer(aura).data)
 
 
 class CharacterResonanceViewSet(viewsets.ModelViewSet):

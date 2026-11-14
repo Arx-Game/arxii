@@ -66,20 +66,9 @@ function driftSystemLine(cap: DriftConversionCap): string | null {
   return `The ${joinNames(held)} you gained turns to ${cap.target_resonance.name}.`;
 }
 
-/** The affinity the aura has grown toward past who they are, lowercase; null when none. */
-function grownAffinity(aura: CharacterAura): string | null {
-  let best: { name: string; past: number } | null = null;
-  for (const share of aura.shares) {
-    const past = Number(share.percent) - Number(share.settled_percent);
-    if (past > 0 && (best === null || past > best.past)) {
-      best = { name: share.affinity_name.toLowerCase(), past };
-    }
-  }
-  return best?.name ?? null;
-}
-
 function acceptLine(aura: CharacterAura): string {
-  const affinity = grownAffinity(aura);
+  // The server's own choice of affinity (the one accepting names), never worked out here.
+  const affinity = aura.unsettled_affinity_name.toLowerCase();
   return affinity ? `You become more ${affinity}.` : 'You settle into who you have become.';
 }
 

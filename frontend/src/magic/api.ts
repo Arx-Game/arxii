@@ -933,7 +933,7 @@ export async function respondToEntryFlourish(
  */
 export async function getPendingDriftConversionOffers(): Promise<PaginatedDriftConversionOfferList> {
   const res = await apiFetch(`${DRIFT_CORRECTION_URL}/pending/`);
-  if (!res.ok) throw new Error('Failed to load pending drift conversion offers');
+  if (!res.ok) throw new Error('Failed to load your chances to atone');
   return res.json() as Promise<PaginatedDriftConversionOfferList>;
 }
 

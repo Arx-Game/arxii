@@ -797,7 +797,7 @@ side by side, each with a small `AuraHalo` of the aura after it).
   server's own rounding.
 - **Accept the changes to your Aura** shows whenever the character is unsettled, with or without an
   offer; opened from the sheet outside a scene it is the only exit. A line "You become more
-  <affinity>." (the affinity grown most past who they are, computed client-side before the click;
+  <affinity>." (the aura's `unsettled_affinity_name`, the affinity the accept action itself names;
   the server's own line replaces it after) and an Accept button that calls `useAcceptAura`.
 - The footer "Not now" declines an open offer, else just closes; the character stays unsettled.
   The word "accepted" is never shown to the player.

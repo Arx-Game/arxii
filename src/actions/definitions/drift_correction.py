@@ -44,7 +44,7 @@ class PerformDriftCorrectionAction(Action):
     """
 
     key: str = "perform_drift_correction"
-    name: str = "Correct Drift"
+    name: str = "Atone"
     icon: str = "sparkles"
     category: str = "magic"
     target_type: TargetType = TargetType.SELF
@@ -110,7 +110,7 @@ class DeclineDriftCorrectionAction(Action):
     """Let an open drift conversion offer go. Free; the offer is deleted."""
 
     key: str = "decline_drift_correction"
-    name: str = "Decline Drift Correction"
+    name: str = "Let the chance to atone pass"
     icon: str = "x"
     category: str = "magic"
     target_type: TargetType = TargetType.SELF

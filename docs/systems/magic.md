@@ -4566,10 +4566,12 @@ affinity of the resonance that made them unsettled (read before accepting), for 
 (`CharacterAuraViewSet.accept`, which dispatches `AcceptAuraChangeAction` for an aura of a
 character the requester plays; a refusal is a 400 `{detail}`). The aura payload
 (`CharacterAuraSerializer`) carries `unsettled`, `unsettled_line` (the same sentence as above,
-blank when settled), `mire_share_words` (`share_in_words`, `services/drift.py`, the scale the
+blank when settled), `unsettled_affinity_name` (the affinity accepting names, blank when settled), `mire_share_words` (`share_in_words`, `services/drift.py`, the scale the
 sheet's `shareInWords` uses) and a `settled_percent` on each share. A thread's payload lists
 every `ThreadResonance` row as `resonances` (`resonance_id`, `resonance_name`, `amount`,
-`leads`), leading first, beside the leading `resonance`. The pull preview's `per_thread` keeps
+`leads`), leading first, beside the leading `resonance`, and `allowed_resonance_ids` (null when any
+resonance may be imbued; a restricted Gift thread lists its Gift's set). The thread list reads every
+thread's rows in one query (`thread_rows_by_thread`, passed as serializer context). The pull preview's `per_thread` keeps
 each payer's effects apart, and a resolved effect names what it grants: `capability_name` and
 `capability_value` for a capability perk, `resistance_damage_type_name` for a resistance (null
 otherwise). A Rite of Imbuing POST's `kwargs.resonance_id` must be a
@@ -5484,7 +5486,7 @@ client flow writes them directly.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/character-auras/` | GET (POST/PATCH/DELETE staff only) | Character aura data: each share's `percent` and `settled_percent`, and the unsettled reading (`unsettled`, `unsettled_line`, `mire_share_words`; #5123) |
+| `/character-auras/` | GET (POST/PATCH/DELETE staff only) | Character aura data: each share's `percent` and `settled_percent`, and the unsettled reading (`unsettled`, `unsettled_line`, `unsettled_affinity_name`, `mire_share_words`; #5123) |
 | `/character-auras/{id}/accept/` | POST | Accept the changes to your Aura (`AcceptAuraChangeAction`); 400 `{detail}` unless the character is unsettled (#5123) |
 | `/character-auras/{id}/set-glimpse-tags/`, `set-glimpse-prose/`, `link-glimpse-distinction/`, `unlink-glimpse-distinction/` | POST | The player's own Glimpse edits (the web client's aura writers) |
 | `/character-resonances/` | GET (POST/PATCH/DELETE staff only) | Character resonances (balance + lifetime_earned per Spec A §2.2; players change them through service functions, not REST mutations) |

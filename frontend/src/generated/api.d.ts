@@ -31289,6 +31289,13 @@ export interface components {
       readonly unsettled: boolean;
       /** @description The sentence naming the resonance that made them unsettled; blank when settled. */
       readonly unsettled_line: string;
+      /**
+       * @description The affinity "You become more ..." names on accepting; blank when settled.
+       *
+       *     The same one the accept action names (``accept_aura_change``): the affinity of the
+       *     resonance that grew most past who they are.
+       */
+      readonly unsettled_affinity_name: string;
       /** @description The Mire's share of everything they have gained, in words. */
       readonly mire_share_words: string;
       /**

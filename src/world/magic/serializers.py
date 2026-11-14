@@ -24,6 +24,7 @@ from world.character_sheets.models import CharacterSheet
 
 if TYPE_CHECKING:
     from world.magic.audere import AudereThreshold
+    from world.magic.types.drift import DriftReading
     from world.magic.types.threads import ThreadResonanceOption
 from world.conditions.models import (
     CapabilityType,
@@ -592,6 +593,13 @@ class CharacterAuraShareSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+def aura_drift_readings(auras: list[CharacterAura]) -> "dict[int, DriftReading]":
+    """Each aura's drift reading, read once, for serializer ``context["drift_readings"]``."""
+    from world.magic.services.drift import drift_for  # noqa: PLC0415
+
+    return {aura.pk: drift_for(aura.character) for aura in auras}
+
+
 class CharacterAuraSerializer(serializers.ModelSerializer):
     """Serializer for CharacterAura records."""
 
@@ -602,6 +610,7 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
     # the Mire's share of all their resonance in words (never a number).
     unsettled = serializers.SerializerMethodField()
     unsettled_line = serializers.SerializerMethodField()
+    unsettled_affinity_name = serializers.SerializerMethodField()
     mire_share_words = serializers.SerializerMethodField()
 
     class Meta:
@@ -614,6 +623,7 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
             "dominant_affinity_display",
             "unsettled",
             "unsettled_line",
+            "unsettled_affinity_name",
             "mire_share_words",
             "glimpse_state",
             "updated_at",
@@ -625,28 +635,50 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
             "dominant_affinity_display",
             "unsettled",
             "unsettled_line",
+            "unsettled_affinity_name",
             "mire_share_words",
             "glimpse_state",
             "updated_at",
         ]
 
-    def get_unsettled(self, obj: CharacterAura) -> bool:
-        """True when an affinity other than the main one has grown past who they are."""
+    def _reading(self, obj: CharacterAura) -> "DriftReading":
+        """The aura's drift reading: the view's, read once per aura, else read now.
+
+        ``context["drift_readings"]`` maps an aura's pk to its reading (``aura_drift_readings``).
+        Without it (a staff write answering with the row it saved) the reading is taken here.
+        """
         from world.magic.services.drift import drift_for  # noqa: PLC0415
 
-        return drift_for(obj.character).steps_past > 0
+        reading = self.context.get("drift_readings", {}).get(obj.pk)
+        return reading if reading is not None else drift_for(obj.character)
+
+    def get_unsettled(self, obj: CharacterAura) -> bool:
+        """True when an affinity other than the main one has grown past who they are."""
+        return self._reading(obj).steps_past > 0
 
     def get_unsettled_line(self, obj: CharacterAura) -> str:
         """The sentence naming the resonance that made them unsettled; blank when settled."""
-        from world.magic.services.drift import drift_for, unsettled_line  # noqa: PLC0415
+        from world.magic.services.drift import unsettled_line  # noqa: PLC0415
 
-        return unsettled_line(drift_for(obj.character))
+        return unsettled_line(self._reading(obj))
+
+    def get_unsettled_affinity_name(self, obj: CharacterAura) -> str:
+        """The affinity "You become more ..." names on accepting; blank when settled.
+
+        The same one the accept action names (``accept_aura_change``): the affinity of the
+        resonance that grew most past who they are.
+        """
+        reading = self._reading(obj)
+        leading = reading.leading_excess_resonance
+        if reading.steps_past <= 0 or leading is None:
+            return ""
+        return leading.affinity.name
 
     def get_mire_share_words(self, obj: CharacterAura) -> str:
         """The Mire's share of everything they have gained, in words."""
-        from world.magic.services.drift import drift_for, share_in_words  # noqa: PLC0415
+        from world.magic.services.drift import share_in_words  # noqa: PLC0415
 
-        return share_in_words(drift_for(obj.character).mire_share_percent)
+        return share_in_words(self._reading(obj).mire_share_percent)
 
     def get_dominant_affinity(self, obj: CharacterAura) -> str:
         """The dominant affinity's name, blank before the aura holds any share."""
@@ -4477,7 +4509,7 @@ def _own_drift_offer(offer_id: int, request: Request) -> DriftConversionOffer:
         .first()
     )
     if offer is None:
-        msg = "No open drift conversion offer found."
+        msg = "You have no open chance to atone."
         raise NotFound(msg)
     return offer
 

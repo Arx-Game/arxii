@@ -52202,6 +52202,14 @@ components:
           description: The sentence naming the resonance that made them unsettled;
             blank when settled.
           readOnly: true
+        unsettled_affinity_name:
+          type: string
+          description: |-
+            The affinity "You become more ..." names on accepting; blank when settled.
+
+            The same one the accept action names (``accept_aura_change``): the affinity of the
+            resonance that grew most past who they are.
+          readOnly: true
         mire_share_words:
           type: string
           description: The Mire's share of everything they have gained, in words.
@@ -52229,6 +52237,7 @@ components:
       - mire_share_words
       - shares
       - unsettled
+      - unsettled_affinity_name
       - unsettled_line
       - updated_at
     CharacterAuraRequest:
