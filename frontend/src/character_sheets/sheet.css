@@ -993,13 +993,16 @@
   background: var(--aura-mire);
 }
 
-/* The Settle your aura dialog portals out of `.refsheet`, so the rust the sheet falls back
-   on for a visitor with no realm (see the top of this file) does not reach it. Its Accept
-   and Not now buttons read `--primary` and must match the sheet's own Settle your aura
-   button beside them, so the dialog carries the same fallback. A realm still wins. */
+/* The Settle your aura dialog and the Pull Threads dialog portal out of `.refsheet`, so the
+   rust the sheet falls back on for a visitor with no realm (see the top of this file) does
+   not reach them. Their buttons read `--primary` (Accept and Not now; the selected tier and
+   Select Pull) and must match the sheet's own rust, so each dialog carries the same
+   fallback. A realm still wins. */
+:root:not([data-realm]) .thread-pull-dialog,
 :root:not([data-realm]) .aura-settle-dialog {
   --primary: 10 60% 34%;
 }
+:root:not([data-realm]).dark .thread-pull-dialog,
 :root:not([data-realm]).dark .aura-settle-dialog {
   --primary: 43 45% 50%;
 }

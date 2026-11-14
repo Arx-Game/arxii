@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ThreadPullDialog } from '../ThreadPullDialog';
@@ -146,6 +149,31 @@ describe('ThreadPullDialog', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('carries the sheet rust for a visitor with no realm, the Settle dialog way', () => {
+    render(<ThreadPullDialog {...defaultProps} />);
+    // The dialog portals out of `.refsheet`, so its own class holds the fallback `--primary`
+    // behind the selected tier and Select Pull.
+    expect(screen.getByTestId('thread-pull-dialog')).toHaveClass('thread-pull-dialog');
+    const css = readFileSync(
+      path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        '..',
+        '..',
+        '..',
+        '..',
+        'character_sheets',
+        'sheet.css'
+      ),
+      'utf8'
+    );
+    expect(css).toMatch(
+      /:root:not\(\[data-realm\]\) \.thread-pull-dialog,\s*:root:not\(\[data-realm\]\) \.aura-settle-dialog \{\s*--primary: 10 60% 34%/
+    );
+    expect(css).toMatch(
+      /:root:not\(\[data-realm\]\)\.dark \.thread-pull-dialog,\s*:root:not\(\[data-realm\]\)\.dark \.aura-settle-dialog \{\s*--primary: 43 45% 50%/
+    );
   });
 
   it('renders the dialog when open', () => {
