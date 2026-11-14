@@ -41,6 +41,9 @@ The magic system for Arx II. Power flows from identity and connection.
   takes `payers` and returns `per_thread`: every resonance the character holds as a
   `PayerOption` (cost, balance, affordable, the perks it would resolve with and the
   `level_read`) for each pulled thread.
+  A tier with no authored `ThreadPullCost` row is refused with "That pull tier is not
+  available yet." on preview, cast and commit: `get_pull_cost` raises `PullTierNotAvailable`
+  (an `InvalidImbueAmount`) and `build_cast_pull_declaration` checks it up front.
 - **Burning resonance (#4736)**: a pull may also burn resonance as a Strain option
   (`services/burn.py`: `resolve_resonance_burn`, `value_burn`, `preview_burn`). The burn rides the
   pull and is debited with it in `spend_resonance_for_pull(burn=)`; a combat burn is resolved and

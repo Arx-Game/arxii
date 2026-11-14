@@ -91,7 +91,6 @@ from world.magic.models import (
     Technique,
     TechniqueStyle,
     Thread,
-    ThreadPullCost,
     ThreadWeavingTeachingOffer,
     aura_shares_prefetch,
 )
@@ -216,7 +215,6 @@ from world.stories.pagination import StandardResultsSetPagination
 # Error messages — module constants keep tests stable and satisfy STRING_LITERAL.
 _ERR_THREAD_NOT_FOUND = "Thread not found or not owned by the actor."
 _ERR_RESONANCE_NOT_FOUND = "Resonance not found."
-_ERR_PULL_TIER_NOT_SET_UP = "That pull tier is not available yet."
 _ERR_IMBUING_REQUIRES_THREAD = "Imbuing ritual requires thread_id in kwargs (int)."
 _ERR_IMBUING_REQUIRES_AMOUNT = "Imbuing ritual requires amount in kwargs (positive int)."
 _KWARG_TARGET_AFFINITY = "target_affinity"
@@ -1365,13 +1363,6 @@ class ThreadPullPreviewView(APIView):
         except InvalidImbueAmount as exc:
             return Response(
                 {"detail": exc.user_message},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        except ThreadPullCost.DoesNotExist:
-            # The picker previews every tier; staff may not have authored a cost row for
-            # the higher ones yet. That is a refusal for this tier, not a server error.
-            return Response(
-                {"detail": _ERR_PULL_TIER_NOT_SET_UP},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

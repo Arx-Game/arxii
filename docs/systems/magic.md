@@ -2053,7 +2053,7 @@ preview endpoint and remains the way to preview cost + effects before committing
 `payers` and returns, beside the pull totals, `per_thread`: for every pulled thread, every
 resonance she holds as a `PayerOption` (`cost`, `balance`, `affordable`, the `effects` it would
 resolve with, and the `level_read`), which the pull dialog's Pay with list and Inspect perks
-read. Per-thread effects are shown as they are, never summed across threads (an unscoped
+read. A tier with no authored `ThreadPullCost` row is refused with "That pull tier is not available yet." on preview, cast and commit alike: `get_pull_cost` raises `PullTierNotAvailable` (an `InvalidImbueAmount`), and `build_cast_pull_declaration` checks it up front. Per-thread effects are shown as they are, never summed across threads (an unscoped
 distinction POWER bonus is folded into every option; the spend applies it once per pull).
 
 **Models (live in `world/combat`):**
@@ -4572,7 +4572,7 @@ sheet's `shareInWords` uses) and a `settled_percent` on each share. A thread's p
 every `ThreadResonance` row as `resonances` (`resonance_id`, `resonance_name`, `amount`,
 `leads`), leading first, beside the leading `resonance`, and `allowed_resonance_ids` (null when any
 resonance may be imbued; a restricted Gift thread lists its Gift's set). The thread list reads every
-thread's rows in one query (`thread_rows_by_thread`, passed as serializer context). The pull preview's `per_thread` keeps
+thread's rows in one query (`thread_rows_by_thread`, passed as serializer context), and `display_name` (the thread's own name, else its anchor's, so a Gift thread reads as its Gift; the viewset selects `THREAD_LABEL_RELATED`, so the list costs no query per thread for it). The pull preview's `per_thread` keeps
 each payer's effects apart, and a resolved effect names what it grants: `capability_name` and
 `capability_value` for a capability perk, `resistance_damage_type_name` for a resistance (null
 otherwise). A Rite of Imbuing POST's `kwargs.resonance_id` must be a

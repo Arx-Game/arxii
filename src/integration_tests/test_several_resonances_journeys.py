@@ -715,6 +715,22 @@ class ImbuingAndPullingTheMix(_TheLoom):
         self.assertEqual(self.balance(self.fury), 16 - 3)
         self.assertEqual(self.balance(self.wonder), 20)
 
+    def test_a_cast_pull_at_a_tier_with_no_cost_row_is_refused_in_a_sentence(self) -> None:
+        """Only tier 1 has an authored cost row; the cast refuses tier 2 rather than 500."""
+        response = self.api(self.account_of(self.ysmay)).post(
+            reverse("sceneactionrequest-cast"),
+            {
+                "scene": self.scene.pk,
+                "initiator_persona": self.sheet.primary_persona.pk,
+                "technique_id": self.technique.pk,
+                "pull": {"tier": 2, "thread_ids": [self.thread.pk]},
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+        self.assertIn("That pull tier is not available yet.", str(response.json()))
+
     def test_a_resonance_never_imbued_pays_and_brings_no_perks(self) -> None:
         body = self.cast_with_pull(self.wonder)
 

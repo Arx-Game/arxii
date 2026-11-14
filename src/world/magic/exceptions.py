@@ -138,6 +138,16 @@ class InvalidImbueAmount(MagicError):
     user_message = "Invalid imbue amount."
 
 
+class PullTierNotAvailable(InvalidImbueAmount):
+    """A pull at a tier staff have not authored a cost row for.
+
+    Raised by ``get_pull_cost``, the one place every pull path (preview, cast, commit)
+    resolves the cost, so each refuses with the same sentence instead of a server error.
+    """
+
+    user_message = "That pull tier is not available yet."
+
+
 class PullValidationError(InvalidImbueAmount):
     """A pull declaration that names a payer or burn the pull cannot use (#5123).
 

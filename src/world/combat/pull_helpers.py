@@ -105,10 +105,13 @@ def build_cast_pull_declaration(  # noqa: PLR0913 - the pull's whole declaration
     )
     from world.magic.models import Resonance, Thread  # noqa: PLC0415
     from world.magic.services.pull_payers import resolve_pull_payers  # noqa: PLC0415
+    from world.magic.services.threads import get_pull_cost  # noqa: PLC0415
     from world.magic.types.pull import CastPullDeclaration as _CastPullDeclaration  # noqa: PLC0415
 
     if not 0 <= burn <= MAX_RESONANCE_BURN:
         raise ResonanceBurnInvalid
+    # Refuse a tier with no authored cost row here, before the cast or commit reads it.
+    get_pull_cost(tier, None)
     threads = list(
         Thread.objects.filter(
             pk__in=thread_ids,

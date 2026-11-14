@@ -33,6 +33,7 @@ from world.magic.exceptions import (
     AnchorCapExceeded,
     InvalidImbueAmount,
     MantleNotClearedError,
+    PullTierNotAvailable,
     RelationshipBondNotOwned,
     RelationshipTierTooLow,
     ThreadAnchorTakenError,
@@ -405,14 +406,18 @@ def get_pull_cost(tier: int, target_kind: str | None) -> ThreadPullCost:
 
     Raises:
         ValueError: If ``target_kind`` is not a valid ``TargetKind`` value.
-        ThreadPullCost.DoesNotExist: If no universal row exists for ``tier``.
+        PullTierNotAvailable: If no universal row exists for ``tier`` (a player-facing
+            refusal, "That pull tier is not available yet.").
     """
     if target_kind is not None:
         TargetKind(target_kind)  # validate; raises ValueError on bad input
         specific = ThreadPullCost.objects.filter(tier=tier, target_kind=target_kind).first()
         if specific is not None:
             return specific
-    return ThreadPullCost.objects.get(tier=tier, target_kind__isnull=True)
+    try:
+        return ThreadPullCost.objects.get(tier=tier, target_kind__isnull=True)
+    except ThreadPullCost.DoesNotExist:
+        raise PullTierNotAvailable from None
 
 
 def get_imbue_cost_multiplier(target_kind: str | None) -> int:
@@ -430,7 +435,7 @@ def get_imbue_cost_multiplier(target_kind: str | None) -> int:
     """
     try:
         return get_pull_cost(1, target_kind).imbue_cost_multiplier
-    except ThreadPullCost.DoesNotExist:
+    except PullTierNotAvailable:
         return 1
 
 
