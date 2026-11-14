@@ -821,6 +821,7 @@ def _resolve_cast_pull(
             declaration.tier,
             threads,
             payers=payers,
+            with_options=False,  # only ``affordable`` is read here
         )
         if threads
         else None

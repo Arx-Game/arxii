@@ -175,6 +175,15 @@ class PullPayerTests(TestCase):
         self.assertTrue(options[self.guile.pk].affordable)
         self.assertEqual(options[self.guile.pk].effects, [])
 
+    def test_a_preview_without_options_still_says_whether_it_is_affordable(self) -> None:
+        full = preview_resonance_pull(self.sheet, 1, [self.first], payers={})
+        bare = preview_resonance_pull(self.sheet, 1, [self.first], payers={}, with_options=False)
+
+        self.assertEqual(bare.per_thread, [])
+        self.assertTrue(full.per_thread)
+        self.assertEqual(bare.affordable, full.affordable)
+        self.assertEqual(bare.resonance_cost, full.resonance_cost)
+
     def test_a_payer_that_cannot_cover_its_threads_is_not_affordable(self) -> None:
         drained = CharacterResonance.objects.get(character_sheet=self.sheet, resonance=self.guile)
         drained.balance = 1

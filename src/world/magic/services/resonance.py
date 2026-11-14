@@ -1256,6 +1256,7 @@ def preview_resonance_pull(  # noqa: PLR0913
     technique: Technique | None = None,
     burn_resonance: ResonanceModel | None = None,
     payers: Mapping[int, ResonanceModel] | None = None,
+    with_options: bool = True,
 ) -> PullPreviewResult:
     """Read-only preview of a resonance pull (Spec A §5.6).
 
@@ -1266,7 +1267,9 @@ def preview_resonance_pull(  # noqa: PLR0913
 
     ``payers`` (#5123) names the resonance paying for each thread, keyed by thread id; a
     thread it leaves out is paid by its leading resonance. The result's ``per_thread``
-    lists, for every pulled thread, each resonance the character holds as a payer option.
+    lists, for every pulled thread, each resonance the character holds as a payer option;
+    ``with_options=False`` leaves ``per_thread`` empty, for a caller that only reads
+    ``affordable`` (the options cost a full effect resolution per held resonance per thread).
 
     Validates ownership + non-empty threads (the threads may be of any resonances; each
     is paid by its payer, #5066, #5123), computes the
@@ -1380,8 +1383,12 @@ def preview_resonance_pull(  # noqa: PLR0913
         resolved_effects=resolved,
         capped_intensity=capped_intensity,
         burn=burn,
-        per_thread=_payer_options_per_thread(
-            character_sheet, tier, threads, in_combat=in_combat, target=target
+        per_thread=(
+            _payer_options_per_thread(
+                character_sheet, tier, threads, in_combat=in_combat, target=target
+            )
+            if with_options
+            else []
         ),
     )
 
