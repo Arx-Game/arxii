@@ -1,0 +1,437 @@
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { test, expect, type Page, type Route } from '@playwright/test';
+import {
+  createMockDraft,
+  mockBeginnings,
+  mockCGExplanations,
+  mockPath,
+  mockStartingArea,
+  mockTradition,
+  mockCGGiftOptions,
+  mockCGTechniqueOptions,
+} from '../../src/character-creation/__tests__/fixtures';
+
+/**
+ * Demo-fidelity capture for #5123. The approved demo is rendered from a local copy of the
+ * published artifact; the built surfaces are rendered by the real app (vite dev server) with
+ * every /api call answered by fixtures. Viewport 1280x900, light theme, no web fonts (the
+ * sandbox has no network), so the serif/sans fallbacks stand in on both sides.
+ */
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const OUT = path.resolve(__dirname, '..', '..', '..', 'docs', 'reviews', 'issue-5123');
+const shot = (name: string) => path.join(OUT, name);
+const DEMO =
+  'file:///tmp/claude-1000/-workspaces-arxii/0208c4cb-2ffa-4410-bfdb-db3b2ea03f69/scratchpad/issue-5123-several-resonances.html';
+
+const empty = { count: 0, next: null, previous: null, results: [] };
+const account = {
+  id: 1,
+  username: 'walk-e2e',
+  display_name: 'Walk E2E',
+  email: '',
+  email_verified: true,
+  last_login: null,
+  can_create_characters: true,
+  is_staff: false,
+  is_gm: false,
+  available_characters: [],
+  pending_applications: [],
+  selected_entry_id: null,
+  selected_entry: null,
+};
+
+test.beforeEach(async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.emulateMedia({ colorScheme: 'light' });
+});
+
+// ---------------------------------------------------------------- the demo itself
+test('demo screens', async ({ page }) => {
+  await page.goto(DEMO, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(800);
+  const sections = page.locator('main > section');
+  const names = ['screen1', 'screen2', 'screen3', 'screen4', 'screen5'];
+  for (let i = 0; i < names.length; i += 1) {
+    await sections.nth(i).screenshot({ path: shot(`demo-${names[i]}.png`) });
+  }
+  // The player frames on their own, in the demo's order.
+  const frames = page.locator('.frame');
+  const count = await frames.count();
+  for (let i = 0; i < count; i += 1) {
+    await frames.nth(i).screenshot({ path: shot(`demo-frame-${String(i + 1).padStart(2, '0')}.png`) });
+  }
+});
+
+// ---------------------------------------------------------------- screen 1
+const RES = [
+  { id: 11, name: 'Fury', affinity: 2, affinity_name: 'Primal', description: 'The heat of a grievance that will not cool.', codex_entry_id: null },
+  { id: 12, name: 'Wonder', affinity: 2, affinity_name: 'Primal', description: 'The held breath at something larger than you.', codex_entry_id: null },
+  { id: 13, name: 'Domination', affinity: 3, affinity_name: 'Abyssal', description: 'The pleasure of a will bent to yours.', codex_entry_id: null },
+  { id: 14, name: 'Mercy', affinity: 1, affinity_name: 'Celestial', description: 'The joy of seeing someone helped.', codex_entry_id: null },
+];
+
+async function mockCg(page: Page, weights: { resonance_id: number; weight: number }[]) {
+  const draft = createMockDraft({
+    id: 7,
+    current_stage: 6,
+    selected_area: mockStartingArea,
+    selected_beginnings: mockBeginnings,
+    selected_path: mockPath,
+    selected_tradition: mockTradition,
+    stage_completion: { 1: true, 2: true, 3: true, 4: true, 5: true, 6: false, 7: false, 8: false, 9: false, 10: false, 11: false } as never,
+    draft_data: { selected_gift_id: 1, selected_technique_ids: [10], gift_resonance_weights: weights },
+  });
+  const unknown: string[] = [];
+  await page.route((url) => url.pathname.startsWith('/api/'), async (route: Route) => {
+    const u = new URL(route.request().url());
+    const p = u.pathname;
+    const method = route.request().method();
+    const j = (json: unknown) => route.fulfill({ json });
+    if (p === '/api/user/') return j(account);
+    if (p === '/api/roster/entries/mine/') return j([]);
+    if (p === '/api/backgrounds/') return j([]);
+    if (p === '/api/character-creation/can-create/') return j({ can_create: true, reason: '' });
+    if (p === '/api/character-creation/explanations/') return j(mockCGExplanations);
+    if (p === '/api/character-creation/drafts/' && method === 'GET') return j([draft]);
+    if (p === '/api/character-creation/drafts/7/' && method === 'PATCH') {
+      const body = route.request().postDataJSON() as { draft_data?: Record<string, unknown> };
+      if (body.draft_data) Object.assign(draft.draft_data, body.draft_data);
+      return j(draft);
+    }
+    if (p === '/api/character-creation/drafts/7/') return j(draft);
+    if (p === '/api/magic/resonances/') return j(RES);
+    if (p === '/api/character-creation/cg-budgets/') return j({ starting_points: 100 });
+    if (p === '/api/character-creation/drafts/7/cg-points/')
+      return j({ spent: 0, remaining: 100, budget: 100, lines: [] });
+    if (p === '/api/character-creation/traditions/') return j([mockTradition]);
+    if (p === '/api/character-creation/gifts/') return j(mockCGGiftOptions);
+    if (p === '/api/character-creation/combat-styles/') return j([]);
+    if (p === '/api/character-creation/technique-options/') return j(mockCGTechniqueOptions);
+    if (p === '/api/roster/mail/unread-count/') return j({ count: 0 });
+    if (p === '/api/character-creation/glimpse-tags/') return j([]);
+    if (p === '/api/character-creation/drafts/7/offers/') return j({ offers: [], terms: [] });
+    if (p.endsWith('/perspectives/')) return j([]);
+    if (p.includes('stat-definitions') || p.includes('with_specializations')) return j([]);
+    unknown.push(`${method} ${p}`);
+    if (method === 'GET') return j([]);
+    return route.fulfill({ status: 404, json: { detail: 'Not provided by this fixture.' } });
+  });
+  return { draft, unknown };
+}
+
+test('screen 1: Gift stage, resonance step', async ({ page }) => {
+  const { unknown } = await mockCg(page, [
+    { resonance_id: 11, weight: 6 },
+    { resonance_id: 12, weight: 1 },
+    { resonance_id: 13, weight: 2 },
+  ]);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/characters/create');
+  page.on('console', (m) => console.log('CONSOLE', m.type(), m.text().slice(0, 200)));
+  await page.waitForTimeout(3000);
+  await page.screenshot({ path: '/tmp/claude-1000/-workspaces-arxii/0208c4cb-2ffa-4410-bfdb-db3b2ea03f69/scratchpad/dbg.png', fullPage: true });
+  console.log('UNKNOWN0', JSON.stringify([...new Set(unknown)]), JSON.stringify(errors));
+  const step = page.locator('.resonance-rows');
+  await expect(step).toBeVisible();
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: shot('app-screen1-9of10-1280.png'), fullPage: true });
+  await expect(page.getByText('9 of 10 placed')).toBeVisible();
+  // Interaction: one more point on Domination fills the budget; the plus buttons lock.
+  await page.getByRole('button', { name: 'More Domination' }).click();
+  await expect(page.locator('.resonance-budget')).toHaveText('10 of 10 placed');
+  // The step is done, so it closes itself; open it again to read it.
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: shot('app-screen1-complete-step-closed-1280.png'), fullPage: true });
+  await page.getByText('Your Resonance', { exact: true }).first().click();
+  await expect(page.locator('.resonance-budget')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'More Mercy' })).toBeDisabled();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: shot('app-screen1-10of10-1280.png'), fullPage: true });
+  await page.locator('.resonance-weights').screenshot({ path: shot('app-screen1-resonance-step.png') });
+  console.log('UNKNOWN', JSON.stringify([...new Set(unknown)]));
+  console.log('ERRORS', JSON.stringify(errors));
+});
+
+// ---------------------------------------------------------------- screen 2
+const rows = [
+  { resonance_id: 11, resonance_name: 'Fury', amount: 60, leads: true },
+  { resonance_id: 13, resonance_name: 'Domination', amount: 30, leads: false },
+];
+function thread(id: number, over: Record<string, unknown>) {
+  return {
+    id, owner: 1, resonance: 11, resonance_name: 'Fury', resonances: rows, allowed_resonance_ids: null,
+    target_kind: 'FACET', target_trait_id: null, target_technique_id: null, name: '', description: '',
+    level: 3, developed_points: 0, level_cap: 10, anchor_cap: 10, effective_cap: 10, retired_at: null,
+    created_at: '2026-11-14T00:00:00Z', updated_at: '2026-11-14T00:00:00Z', ...over,
+  };
+}
+const THREADS = [
+  thread(1, { name: 'Pyromancy', target_kind: 'GIFT' }),
+  thread(2, {
+    name: 'The Iron Baron', target_kind: 'RELATIONSHIP_TRACK', resonance: 13, resonance_name: 'Domination',
+    resonances: [{ resonance_id: 13, resonance_name: 'Domination', amount: 20, leads: true }], level: 2,
+  }),
+  thread(3, { name: 'Cinders', target_kind: 'FACET' }),
+];
+function eff(kind: string, scaled: number | null, tier: number, level: number, tid: number, over: Record<string, unknown> = {}) {
+  return {
+    kind, authored_value: scaled, level_multiplier: 1, scaled_value: scaled, vital_target: null,
+    source_thread_id: tid, source_thread_level: level, source_tier: tier, narrative_snippet: '',
+    inactive: false, inactive_reason: null, capability_name: null, capability_value: null,
+    resistance_damage_type_name: null, ...over,
+  };
+}
+function mixedOptions(tid: number, tier: number) {
+  return [
+    { resonance_id: 11, resonance_name: 'Fury', cost: 3, balance: 22, affordable: true, level_read: 3, effects: [
+      eff('FLAT_BONUS', 4, tier, 3, tid), eff('INTENSITY_BUMP', 2, tier, 3, tid, { narrative_snippet: 'The flames answer your anger before you call them.' }) ] },
+    { resonance_id: 13, resonance_name: 'Domination', cost: 3, balance: 14, affordable: true, level_read: 2, effects: [
+      eff('CAPABILITY_GRANT', null, tier, 2, tid, { capability_name: 'Cowed', capability_value: 2 }),
+      eff('FLAT_BONUS', 2, tier, 2, tid, { narrative_snippet: 'The fire bends toward whoever you mean to break.' }) ] },
+    { resonance_id: 12, resonance_name: 'Wonder', cost: 3, balance: 9, affordable: true, level_read: 0, effects: [] },
+  ];
+}
+async function mockPull(page: Page) {
+  const previews: string[] = [];
+  await page.route((url) => url.pathname.startsWith('/api/'), async (route: Route) => {
+    const p = new URL(route.request().url()).pathname;
+    const method = route.request().method();
+    const j = (json: unknown) => route.fulfill({ json });
+    if (p === '/api/user/') return j(account);
+    if (p === '/api/magic/threads/') return j({ count: 3, next: null, previous: null, results: THREADS });
+    if (p === '/api/magic/character-resonances/')
+      return j([11, 13, 12].map((id, i) => ({
+        id: i + 1, character_sheet: 1, resonance: id, resonance_name: ['Fury', 'Domination', 'Wonder'][i],
+        resonance_detail: {}, balance: [22, 14, 9][i], lifetime_earned: 50, claimed_at: '2026-11-01T00:00:00Z', flavor_text: '' })));
+    if (p === '/api/magic/applicable-pulls/')
+      return j(THREADS.map((t) => ({ thread_id: t.id, applicable: t.id !== 3, inapplicable_reason: null })));
+    if (p === '/api/magic/thread-pull-preview/') {
+      const body = route.request().postDataJSON() as { tier: number; thread_ids: number[]; payers?: Record<string, number> };
+      previews.push(JSON.stringify(body));
+      const per_thread = body.thread_ids.map((tid) => ({
+        thread_id: tid,
+        options: tid === 2
+          ? [{ resonance_id: 13, resonance_name: 'Domination', cost: 3, balance: 14, affordable: true, level_read: 2,
+              effects: [eff('FLAT_BONUS', 3, body.tier, 2, tid)] }]
+          : mixedOptions(tid, body.tier),
+      }));
+      return j({ resonance_cost: 6, anima_cost: 4, affordable: true, resolved_effects: [], capped_intensity: false, burn: null, per_thread });
+    }
+    if (method === 'GET') return j([]);
+    return route.fulfill({ status: 404, json: { detail: 'Not provided by this fixture.' } });
+  });
+  return previews;
+}
+
+test('screen 2: pull dialog', async ({ page }) => {
+  const previews = await mockPull(page);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/review5123.html?s=pull');
+  const dlg = page.getByTestId('thread-pull-dialog');
+  await expect(dlg).toBeVisible();
+  await page.waitForTimeout(500);
+  await dlg.screenshot({ path: shot('app-screen2-dialog-initial.png') });
+  // Gift thread (id 1) is not offered; the Facet thread (3) and the Relationship thread (2) are.
+  await expect(page.getByTestId('thread-checkbox-1')).toHaveCount(0);
+  await page.getByTestId('tier-btn-2').click();
+  await page.getByTestId('thread-checkbox-3').click();
+  await page.getByTestId('thread-checkbox-2').click();
+  await expect(page.getByTestId('payer-options-3')).toBeVisible();
+  await expect(page.getByTestId('payer-fixed-2')).toBeVisible();
+  await expect(page.getByTestId('preview-panel')).toBeVisible();
+  await page.waitForTimeout(500);
+  await dlg.screenshot({ path: shot('app-screen2-dialog-fury-pays.png') });
+  // Interaction: pay with Domination.
+  await page.getByTestId('payer-3-13').click();
+  await expect(page.getByTestId('payer-3-13')).toHaveAttribute('aria-checked', 'true');
+  await page.waitForTimeout(700);
+  await dlg.screenshot({ path: shot('app-screen2-dialog-domination-pays.png') });
+  console.log('PREVIEW BODIES', previews.slice(-2).join(' | '));
+  // Inspect perks on Domination.
+  await page.getByTestId('payer-inspect-3-13').click();
+  await expect(page.getByTestId('perk-inspect')).toBeVisible();
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: shot('app-screen2-inspect-over-dialog.png') });
+  await page.getByTestId('perk-inspect').screenshot({ path: shot('app-screen2-inspect-perks.png') });
+  console.log('ERRORS', JSON.stringify(errors));
+});
+
+test('screen 2: pull picker (scene cast)', async ({ page }) => {
+  await mockPull(page);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/review5123.html?s=picker');
+  await expect(page.getByTestId('payer-options-1')).toBeVisible();
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: shot('app-screen2-picker.png'), fullPage: true });
+  console.log('ERRORS', JSON.stringify(errors));
+});
+
+// ---------------------------------------------------------------- screens 3 and 4 (sheet)
+const ENTRY_ID = 1;
+const SHEET_ID = 20;
+type Share = [string, number, number, number]; // name, id, percent, settled
+const STATES: Record<string, { shares: Share[]; unsettled: boolean; line: string; affinity: string; mire: string }> = {
+  settled: { shares: [['Celestial', 1, 0, 0], ['Primal', 2, 66, 66], ['Abyssal', 3, 34, 34]], unsettled: false, line: '', affinity: '', mire: 'none' },
+  unsettled: { shares: [['Celestial', 1, 0, 0], ['Primal', 2, 58, 66], ['Abyssal', 3, 42, 34]], unsettled: true,
+    line: 'Your Domination has grown strong enough to make you unsettled.', affinity: 'Abyssal', mire: 'none' },
+  faded: { shares: [['Celestial', 1, 0, 0], ['Primal', 2, 94, 66], ['Abyssal', 3, 6, 34]], unsettled: false, line: '', affinity: '', mire: 'none' },
+  sineater: { shares: [['Celestial', 1, 56, 56], ['Primal', 2, 0, 0], ['Abyssal', 3, 44, 44]], unsettled: false, line: '', affinity: '', mire: 'a third' },
+};
+
+function sheet(state: string) {
+  const st = STATES[state];
+  return {
+    id: SHEET_ID, can_edit: true,
+    identity: { name: 'Ilsavet du Verane', fullname: 'Ilsavet du Verane', concept: '', quote: '', age: 27, birthday: null,
+      chronological_age: null, biological_age: null, withered_years: null, gender: { id: 1, name: 'Woman' },
+      pronouns: { subject: 'she', object: 'her', possessive: 'hers' }, species: { id: 2, name: 'Human' }, heritage: null,
+      beginnings: [], family: null, tarot_card: null, origin: null, path: null, worship: null, worship_sincere: null,
+      current_mood: null, vacancy: null },
+    appearance: { height_inches: null, height_band: 'Tall', build: null, description: '', form_traits: [] },
+    stats: {}, skills: [], path: null, distinctions: [],
+    magic: {
+      gifts: [], motif: null, anima_ritual: null, resonances: [], ultimates: [],
+      aura: { id: 42, shares: st.shares.map(([n, id, pct]) => ({ affinity_id: id, affinity_name: n, percent: pct })).sort((a, b) => b.percent - a.percent),
+        dominant_affinity: 'Primal', glimpse_story: '', glimpse_state: 'COMPLETE', glimpse_tags: [], can_finish_glimpse: false },
+    },
+    story: { background: '', origin_story_state: 'NOT_STARTED', origin_slots: [] },
+    actor_sheet: { never_do: '', protect: '', fear: '', enemy_public_line: '', enemy: null, introductions: [] },
+    goals: [], beats: [], personas: [], theming: {}, profile_picture: null, viewer_is_friend: true, current_residence: null,
+    looks: [], plate_ink: 'ember', worn: [], mentors: [], domains: [], keyring: [], standing: { memberships: [], reputations: [] },
+    covenants: [], ties: [], ties_ap_this_week: 0,
+  };
+}
+function ownAura(state: string) {
+  const st = STATES[state];
+  return [{ id: 42, character: SHEET_ID,
+    shares: st.shares.map(([n, id, pct, settled]) => ({ affinity_id: id, affinity_name: n, percent: String(pct), settled_percent: String(settled) })),
+    dominant_affinity: 'Primal', dominant_affinity_display: 'Primal', unsettled: st.unsettled, unsettled_line: st.line,
+    unsettled_affinity_name: st.affinity, mire_share_words: st.mire, glimpse_state: 'COMPLETE', updated_at: '2026-11-14T00:00:00Z' }];
+}
+async function mockSheet(page: Page, state: string) {
+  const accepted: string[] = [];
+  await page.route((url) => url.pathname.startsWith('/api/'), async (route: Route) => {
+    const p = new URL(route.request().url()).pathname;
+    const method = route.request().method();
+    const j = (json: unknown) => route.fulfill({ json });
+    if (p === '/api/user/') return j(account);
+    if (p === '/api/roster/entries/mine/')
+      return j([{ id: ENTRY_ID, name: 'Ilsavet du Verane', character_id: SHEET_ID, profile_picture_url: null, primary_persona_id: 9,
+        active_persona_id: 9, unread_narrative_count: 0, lifecycle_state: 'ALIVE', roster_type: 'Active', character_type: 'PC' }]);
+    if (p === `/api/roster/entries/${ENTRY_ID}/`)
+      return j({ id: ENTRY_ID, character: { id: SHEET_ID, name: 'Ilsavet du Verane' }, profile_picture_url: null, tenures: [], can_apply: false,
+        fullname: 'Ilsavet du Verane', quote: '', description: '', creation_provenance: 'player', creation_provenance_display: 'Player-created', created_for_table_name: null });
+    if (p === `/api/character-sheets/${SHEET_ID}/`) return j(sheet(state));
+    if (p === '/api/magic/character-auras/') return j(ownAura(state));
+    if (p === '/api/magic/character-auras/42/accept/' && method === 'POST') {
+      accepted.push('accept');
+      return j({ detail: 'You settle into who you have become.' });
+    }
+    if (p === '/api/roster/mail/unread-count/') return j({ count: 0 });
+    if (p === '/api/roster/tenure-media/usage/') return j({ used_bytes: 0, quota_bytes: 104857600 });
+    if (p === '/api/roster/tenure-media/') return j(empty);
+    if (p === '/api/character-sheets/mood-options/') return j(empty);
+    if (p === `/api/roster/kin/tree/${SHEET_ID}/`) return j({ family: null, nodes: [], parentage: [], unions: [] });
+    if (p.startsWith('/api/vitals/')) return route.fulfill({ status: 404, json: { detail: 'n/a' } });
+    if (['/api/relationships/types/', '/api/relationships/relationships/', '/api/personas/', '/api/journals/entries/', '/api/narrative/my-messages/'].includes(p)) return j(empty);
+    if (method === 'GET') return j([]);
+    return route.fulfill({ status: 404, json: { detail: 'Not provided by this fixture.' } });
+  });
+  return accepted;
+}
+
+async function openMagic(page: Page) {
+  await page
+    .getByRole('navigation', { name: 'Character sheet sections' })
+    .getByRole('button', { name: 'Magic' })
+    .click();
+}
+
+for (const state of ['settled', 'unsettled', 'faded', 'sineater']) {
+  test(`screen 3: sheet aura, ${state}`, async ({ page }) => {
+    await mockSheet(page, state);
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(`/characters/${ENTRY_ID}`);
+    await openMagic(page);
+    const aura = page.getByTestId('spellbook-aura');
+    await expect(aura).toBeVisible();
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: shot(`app-screen3-${state}-page-1280.png`), fullPage: true });
+    const box = (await page.getByTestId('aura-halo').boundingBox())!;
+    await page.screenshot({
+      fullPage: true,
+      path: shot(`app-screen3-${state}.png`),
+      clip: { x: Math.max(0, box.x - 16), y: Math.max(0, box.y - 16), width: box.width + 32, height: box.height + 32 },
+    });
+    console.log(state, 'SENTENCE', await page.getByTestId('aura-halo-sentence').innerText(), 'RING', await page.getByTestId('aura-halo-ring').count());
+    console.log('ERRORS', JSON.stringify(errors));
+  });
+}
+
+test('screen 4: Accept from the sheet (no scene, so no Atone)', async ({ page }) => {
+  const accepted = await mockSheet(page, 'unsettled');
+  await page.goto(`/characters/${ENTRY_ID}`);
+  await openMagic(page);
+  await page.getByTestId('settle-aura-button').click();
+  await expect(page.getByTestId('settle-exit-accept')).toBeVisible();
+  await expect(page.getByTestId('settle-exit-atone')).toHaveCount(0);
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: shot('app-screen4-sheet-accept-only.png') });
+  await page.getByTestId('settle-accept-button').click();
+  await expect(page.getByTestId('drift-result')).toBeVisible();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: shot('app-screen4-sheet-after-accept.png') });
+  console.log('ACCEPT POSTS', accepted.length);
+});
+
+test('screen 4: Settle your aura in a scene (Atone and Accept)', async ({ page }) => {
+  await mockPull(page);
+  await page.goto('/review5123.html?s=settle');
+  const atone = page.getByTestId('settle-exit-atone');
+  await expect(atone).toBeVisible();
+  await expect(page.getByTestId('settle-exit-accept')).toBeVisible();
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: shot('app-screen4-scene-atone-and-accept-1280.png') });
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: shot('app-screen4-scene-atone-and-accept-390.png'), fullPage: true });
+});
+
+test('dark theme: unsettled aura, app and demo', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto(DEMO, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(600);
+  await page.locator('.frame').nth(4).screenshot({ path: shot('demo-dark-frame-unsettled.png') });
+  await mockSheet(page, 'unsettled');
+  await page.goto(`/characters/${ENTRY_ID}`);
+  await openMagic(page);
+  const aura = page.getByTestId('spellbook-aura');
+  await expect(aura).toBeVisible();
+  await page.waitForTimeout(600);
+  const box = (await page.getByTestId('aura-halo').boundingBox())!;
+  await page.screenshot({
+    fullPage: true,
+    path: shot('app-dark-screen3-unsettled.png'),
+    clip: { x: Math.max(0, box.x - 16), y: Math.max(0, box.y - 16), width: box.width + 32, height: box.height + 32 },
+  });
+});
+
+test('colour tokens reach the CG page and the sheet', async ({ page }) => {
+  const read = () =>
+    page.evaluate(() => {
+      const cs = getComputedStyle(document.documentElement);
+      return ['celestial', 'primal', 'abyssal', 'mire', 'celestial-glow', 'primal-glow', 'abyssal-glow', 'mire-glow'].map(
+        (n) => `${n}=${cs.getPropertyValue(`--aura-${n}`).trim()}`
+      );
+    });
+  await mockCg(page, [{ resonance_id: 11, weight: 6 }, { resonance_id: 13, weight: 3 }]);
+  await page.goto('/characters/create');
+  await expect(page.locator('.aura-halo-disc')).toBeVisible();
+  console.log('CG TOKENS', (await read()).join(' '));
+  console.log('CG HALO BG', await page.locator('.aura-halo-disc').evaluate((e) => getComputedStyle(e).backgroundImage));
+});

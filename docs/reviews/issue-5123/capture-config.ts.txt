@@ -1,0 +1,11 @@
+import { defineConfig } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './e2e/evidence',
+  testMatch: /review-5123\.spec\.ts/,
+  timeout: 60_000,
+  retries: 0,
+  workers: 1,
+  use: { baseURL: 'http://localhost:5199', headless: true, colorScheme: 'light' },
+  projects: [{ name: 'chromium', use: { browserName: 'chromium', launchOptions: { executablePath: '/home/vscode/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell' } } }],
+});

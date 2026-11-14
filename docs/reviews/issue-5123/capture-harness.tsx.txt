@@ -1,0 +1,145 @@
+// THROWAWAY review harness for #5123: mounts the real dialogs under the real app providers
+// and CSS, against a mocked API. Not committed.
+import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { Provider } from 'react-redux';
+import { store } from './store/store';
+import { queryClient } from './queryClient';
+import { ThemeProvider } from './components/theme-provider';
+import { RealmThemeProvider } from './components/realm-theme-provider';
+import { ThreadPullDialog } from './magic/components/threads/ThreadPullDialog';
+import { useState } from 'react';
+import { ThreadPullPicker } from './magic/components/threads/ThreadPullPicker';
+import { SettleAuraDialog } from './magic/components/SettleAuraDialog';
+import './index.css';
+
+const params = new URLSearchParams(window.location.search);
+const screen = params.get('s');
+
+const AURA = {
+  id: 1,
+  character: 1,
+  shares: [
+    { affinity_id: 1, affinity_name: 'Celestial', percent: '0', settled_percent: '0' },
+    { affinity_id: 2, affinity_name: 'Primal', percent: '58', settled_percent: '66' },
+    { affinity_id: 3, affinity_name: 'Abyssal', percent: '42', settled_percent: '34' },
+  ],
+  dominant_affinity: 'Primal',
+  dominant_affinity_display: 'Primal',
+  unsettled: true,
+  unsettled_line: 'Your Domination has grown strong enough to make you unsettled.',
+  unsettled_affinity_name: 'Abyssal',
+  mire_share_words: 'none',
+  glimpse_state: 'NOT_STARTED',
+  updated_at: '2026-11-14T00:00:00Z',
+};
+
+const OFFER = {
+  id: 5,
+  scene_id: 9,
+  character_id: 1,
+  rite_ready: true,
+  rite_not_ready_message: '',
+  caps: [
+    {
+      target_resonance: { id: 11, name: 'Fury' },
+      cap_remaining: 4,
+      focus_bonus: 0,
+      sources: [
+        {
+          resonance_id: 13,
+          resonance_name: 'Domination',
+          balance: 4,
+          multiplier: '1.00',
+          conversion_type: 'FALL',
+          max_amount: 4,
+          projected_output: 4,
+        },
+      ],
+      qualifying_components: [{ item_id: 71, name: 'Ember censer', mode: 'burn' }],
+    },
+  ],
+};
+
+function Picker() {
+  const [pulls, setPulls] = useState<Record<number, 0 | 1 | 2 | 3>>({ 1: 2 });
+  const [payers, setPayers] = useState<Record<number, number>>({});
+  const [show, setShow] = useState(false);
+  return (
+    <div className="mx-auto max-w-xl p-4">
+      <ThreadPullPicker
+        characterSheetId={1}
+        actionContext={{ character_sheet_id: 1 }}
+        selectedPulls={pulls}
+        onPullsChange={setPulls}
+        showInapplicable={show}
+        onToggleInapplicable={setShow}
+        balanceByResonanceId={{ 11: 22, 13: 14, 12: 9 }}
+        payers={payers}
+        onPayerChange={(t, r) => setPayers((p) => ({ ...p, [t]: r }))}
+      />
+    </div>
+  );
+}
+
+function Screen() {
+  if (screen === 'picker') return <Picker />;
+  if (screen === 'pull') {
+    return (
+      <ThreadPullDialog
+        characterSheetId={1}
+        open
+        onClose={() => {}}
+        combat={{
+          encounterId: 1,
+          participantId: 1,
+          involvedTraitIds: [],
+          involvedTechniqueIds: [],
+        }}
+        onSelect={() => {}}
+      />
+    );
+  }
+  if (screen === 'settle') {
+    return (
+      <SettleAuraDialog
+        aura={AURA as never}
+        offer={OFFER as never}
+        resultLine={null}
+        onResult={() => {}}
+        open
+        onOpenChange={() => {}}
+        onClose={() => {}}
+      />
+    );
+  }
+  if (screen === 'settle-sheet') {
+    return (
+      <SettleAuraDialog
+        aura={AURA as never}
+        offer={null}
+        resultLine={null}
+        onResult={() => {}}
+        open
+        onOpenChange={() => {}}
+        onClose={() => {}}
+      />
+    );
+  }
+  return <p>no screen</p>;
+}
+
+createRoot(document.getElementById('root')!).render(
+  <Provider store={store}>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+          <RealmThemeProvider>
+            <Screen />
+          </RealmThemeProvider>
+        </ThemeProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
+  </Provider>
+);
