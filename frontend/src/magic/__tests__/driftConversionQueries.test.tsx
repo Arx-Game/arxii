@@ -27,7 +27,16 @@ const PENDING_FIXTURE: PaginatedDriftConversionOfferList = {
   count: 1,
   next: null,
   previous: null,
-  results: [{ id: 12, scene_id: 101, caps: [], rite_ready: true, rite_not_ready_message: '' }],
+  results: [
+    {
+      id: 12,
+      scene_id: 101,
+      character_id: 55,
+      caps: [],
+      rite_ready: true,
+      rite_not_ready_message: '',
+    },
+  ],
 };
 
 const RESULT_FIXTURE: DriftCorrectionResult = {
