@@ -227,6 +227,7 @@ class CharacterThreadHandler:
         for t in gift_threads:
             rows = get_pull_effects_for_thread(
                 t,
+                t.resonance,
                 tier=0,
                 effect_kind=EffectKind.VITAL_BONUS,
                 vital_target=vital_target,
@@ -271,7 +272,9 @@ class CharacterThreadHandler:
         """Flat RESISTANCE total from GIFT threads (gift-specific preference, per-thread)."""
         total = 0
         for t in gift_threads:
-            rows = get_pull_effects_for_thread(t, tier=0, effect_kind=EffectKind.RESISTANCE)
+            rows = get_pull_effects_for_thread(
+                t, t.resonance, tier=0, effect_kind=EffectKind.RESISTANCE
+            )
             for row in rows:
                 if row.min_thread_level > t.level or row.resistance_amount is None:
                     continue
@@ -793,6 +796,7 @@ class CharacterThreadHandler:
         for t in gift_threads:
             rows = get_pull_effects_for_thread(
                 t,
+                t.resonance,
                 tier=0,
                 effect_kind=EffectKind.CAPABILITY_GRANT,
             )

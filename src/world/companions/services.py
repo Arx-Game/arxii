@@ -106,7 +106,9 @@ def companion_capacity(character_sheet: CharacterSheet, gift: Gift) -> int:
     Adds a flat Stables capacity bonus (#1863).
     """
     thread = _companion_thread(character_sheet, gift)
-    rows = get_pull_effects_for_thread(thread, tier=0, effect_kind=EffectKind.FLAT_BONUS)
+    rows = get_pull_effects_for_thread(
+        thread, thread.resonance, tier=0, effect_kind=EffectKind.FLAT_BONUS
+    )
     base = sum(row.flat_bonus_amount for row in rows if row.min_thread_level <= thread.level)
     return base + stables_capacity_bonus_for_sheet(character_sheet)
 

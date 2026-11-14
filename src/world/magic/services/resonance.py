@@ -29,6 +29,7 @@ from world.magic.models import (
     ThreadLevelUnlock,
 )
 from world.magic.services.pull_effects import get_pull_effects_for_thread
+from world.magic.services.thread_rows import payer_level_read
 from world.magic.services.threads import (
     cap_exceeded_error,
     compute_anchor_cap,
@@ -993,6 +994,7 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
     beseech_bonus_thread_id: int | None = None,
     beseech_bonus: int = 0,
     character_sheet: CharacterSheet | None = None,
+    payers: Mapping[int, ResonanceModel] | None = None,
 ) -> list[ResolvedPullEffect]:
     """Resolve every (thread × effect_tier 0..tier) pair into ResolvedPullEffect rows.
 
@@ -1012,6 +1014,12 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
     resolution's multiplier only — ``ResolvedPullEffect.source_thread_level``
     still reports the thread's REAL level (the bonus is a resolution-time
     override, never a persisted fact).
+
+    ``payers`` (#5123) maps a thread id to the resonance paying for it (the thread's
+    leading resonance when absent). Perks are the payer's: its rows, read at
+    ``payer_level_read``'s level (which feeds the ``min_thread_level`` gate and the
+    multiplier), tier 0 only when the payer is the leading resonance, and nothing at all
+    for a payer the thread holds no row for.
     """
 
     # #2730: CAPABILITY_GRANT rows are curved at resolve time using the same
@@ -1026,12 +1034,19 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
 
     resolved: list[ResolvedPullEffect] = []
     for t in threads:
-        effective_level = t.level
+        payer = pull_payer(t, payers)
+        level_read = payer_level_read(t, payer)
+        if level_read is None:
+            continue
+        effective_level = level_read
         if beseech_bonus_thread_id is not None and t.pk == beseech_bonus_thread_id:
-            effective_level = t.level + beseech_bonus
+            effective_level = level_read + beseech_bonus
         multiplier = thread_level_multiplier(effective_level)
-        for effect_tier in range(tier + 1):
-            rows = get_pull_effects_for_thread(t, tier=effect_tier, min_thread_level__lte=t.level)
+        first_tier = 0 if payer.pk == t.resonance_id else 1
+        for effect_tier in range(first_tier, tier + 1):
+            rows = get_pull_effects_for_thread(
+                t, payer, tier=effect_tier, min_thread_level__lte=level_read
+            )
             for row in rows:
                 effect = _resolve_one_pull_effect(
                     t,
@@ -1265,7 +1280,12 @@ def preview_resonance_pull(  # noqa: PLR0913
 
     in_combat = combat_encounter is not None
     resolved = resolve_pull_effects(
-        threads, tier, in_combat=in_combat, target=target, character_sheet=character_sheet
+        threads,
+        tier,
+        in_combat=in_combat,
+        target=target,
+        character_sheet=character_sheet,
+        payers=payers,
     )
     resolved = _fold_distinction_pull_bonus(
         resolved, character_sheet=character_sheet, threads=threads, payers=payers
@@ -1298,20 +1318,28 @@ def preview_resonance_pull(  # noqa: PLR0913
         resolved_effects=resolved,
         capped_intensity=capped_intensity,
         burn=burn,
-        per_thread=_payer_options_per_thread(character_sheet, tier, threads),
+        per_thread=_payer_options_per_thread(
+            character_sheet, tier, threads, in_combat=in_combat, target=target
+        ),
     )
 
 
 def _payer_options_per_thread(
-    character_sheet: CharacterSheet, tier: int, threads: list[Thread]
+    character_sheet: CharacterSheet,
+    tier: int,
+    threads: list[Thread],
+    *,
+    in_combat: bool,
+    target: ObjectDB | None,
 ) -> list[ThreadPayerPreview]:
     """Every held resonance as a payer option for each pulled thread (#5123).
 
     Each option's ``affordable`` prices that one thread alone, not the whole pull.
 
     One thread's option is what paying with that resonance alone would cost and whether
-    its balance covers it. ``effects`` stays empty and ``level_read`` the thread's own
-    level until the perk lookup by payer fills them.
+    its balance covers it, the perks it would resolve (the payer's, at its level read) and
+    the level they are read at. A resonance the thread holds no row for lists no perks and
+    reads the thread's own level.
     """
     each = get_pull_cost(tier, None).resonance_cost
     held = list(
@@ -1328,13 +1356,27 @@ def _payer_options_per_thread(
                     cost=each,
                     balance=cr.balance,
                     affordable=cr.balance >= each,
-                    level_read=thread.level,
+                    effects=resolve_pull_effects(
+                        [thread],
+                        tier,
+                        in_combat=in_combat,
+                        target=target,
+                        character_sheet=character_sheet,
+                        payers={thread.pk: cr.resonance},
+                    ),
+                    level_read=_option_level_read(thread, cr.resonance),
                 )
                 for cr in held
             ],
         )
         for thread in threads
     ]
+
+
+def _option_level_read(thread: Thread, payer: ResonanceModel) -> int:
+    """The level ``payer``'s perks read at in a preview; the thread's own when it has no perks."""
+    level = payer_level_read(thread, payer)
+    return thread.level if level is None else level
 
 
 def _persist_combat_pull(  # noqa: PLR0913
@@ -1599,6 +1641,7 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         beseech_bonus_thread_id=beseech_bonus_thread_id,
         beseech_bonus=beseech_bonus,
         character_sheet=character_sheet,
+        payers=payers,
     )
     resolved = _fold_distinction_pull_bonus(
         resolved, character_sheet=character_sheet, threads=threads, payers=payers

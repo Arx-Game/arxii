@@ -111,8 +111,13 @@ def build_applicable_threads(
         for thread in cast_pull.threads:
             resolved_threads[thread.pk] = thread
             by_thread[thread.pk] = max(by_thread.get(thread.pk, 0), cast_pull.tier)
+    pulled = {thread.pk: thread for thread in cast_pull.threads} if cast_pull else {}
     return [
-        ApplicableThread(thread=resolved_threads[pk], pull_tier=tier)
+        ApplicableThread(
+            thread=resolved_threads[pk],
+            pull_tier=tier,
+            payer=cast_pull.payer_for(pulled[pk]) if cast_pull and pk in pulled else None,
+        )
         for pk, tier in sorted(by_thread.items())
     ]
 

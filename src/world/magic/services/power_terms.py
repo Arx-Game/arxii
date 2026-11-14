@@ -22,6 +22,7 @@ if TYPE_CHECKING:
         AuraPowerConfig,
         CovenantRoleBlendConfig,
         LevelPowerConfig,
+        Resonance,
         Technique,
         Thread,
     )
@@ -38,6 +39,7 @@ class ApplicableThread:
 
     thread: Thread
     pull_tier: int  # 0 = passive, 1–3 = actively pulled
+    payer: Resonance | None = None  # the resonance paying a pull (#5123); None = leading
 
 
 @dataclass(frozen=True)
@@ -219,7 +221,10 @@ def thread_power_term(ctx: PowerTermContext) -> int:
 
     total = 0
     for applicable in ctx.applicable_threads:
-        resolved = resolve_pull_effects([applicable.thread], applicable.pull_tier, in_combat=False)
+        payers = {applicable.thread.pk: applicable.payer} if applicable.payer else None
+        resolved = resolve_pull_effects(
+            [applicable.thread], applicable.pull_tier, in_combat=False, payers=payers
+        )
         total += sum(
             r.scaled_value
             for r in resolved
