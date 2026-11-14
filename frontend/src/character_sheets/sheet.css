@@ -859,6 +859,10 @@
   --aura-mire: #4b4a35;
   --aura-mire-glow: #8a8660;
   --aura-other: #8a8a8a;
+  --aura-warn: hsl(28 70% 36%);
+}
+:root.dark {
+  --aura-warn: hsl(32 80% 62%);
 }
 
 .aura-halo-wrap {
@@ -947,8 +951,8 @@
 .aura-halo-status {
   display: inline-flex;
   align-items: center;
-  border: 1px solid hsl(var(--destructive));
-  color: hsl(var(--destructive));
+  border: 1px solid var(--aura-warn);
+  color: var(--aura-warn);
   border-radius: 999px;
   padding: 0.1rem 0.65rem;
   font-family: var(--sheet-sans);

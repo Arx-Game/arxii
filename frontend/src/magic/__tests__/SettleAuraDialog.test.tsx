@@ -58,6 +58,7 @@ const SETTLED_AURA: CharacterAura = { ...UNSETTLED_AURA, unsettled: false, unset
 const OFFER: DriftConversionOffer = {
   id: 12,
   scene_id: 101,
+  character_id: 55,
   caps: [
     {
       target_resonance: { id: 20, name: 'Dawnlight', affinity: 'Celestial' },
@@ -219,13 +220,13 @@ describe('SettleAuraDialog Atone exit (via DriftConversionOfferGate)', () => {
     );
   });
 
-  it('Perform the rite is disabled until a component is chosen and the amount is valid', async () => {
+  it('Begin the rite is disabled until a component is chosen and the amount is valid', async () => {
     const user = userEvent.setup();
     renderGate([OFFER]);
 
     await screen.findByRole('dialog');
     const perform = screen.getByTestId('drift-perform-20');
-    expect(perform).toHaveTextContent('Perform the rite');
+    expect(perform).toHaveTextContent('Begin the rite');
     expect(perform).toBeDisabled();
 
     await user.click(screen.getByTestId('drift-component-502'));
@@ -280,7 +281,7 @@ describe('SettleAuraDialog Atone exit (via DriftConversionOfferGate)', () => {
     expect(screen.getByTestId('drift-component-503')).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('Perform the rite posts the exact body and shows the result line', async () => {
+  it('Begin the rite posts the exact body and shows the result line', async () => {
     const user = userEvent.setup();
     vi.mocked(api.convertDrift).mockResolvedValue(RESULT);
     renderGate([OFFER]);
@@ -533,7 +534,7 @@ describe('SettleAuraDialog - readable in the light theme', () => {
     const glow = screen.getByTestId('drift-conversion-gate-glow');
     expect(strip).not.toHaveClass('animate-pulse');
     expect(label).not.toHaveClass('animate-pulse');
-    expect(label).toHaveTextContent('Conversion offer');
+    expect(label).toHaveTextContent('Settle your aura');
     expect(glow).toHaveClass('animate-pulse', 'motion-reduce:animate-none');
     expect(glow).toHaveAttribute('aria-hidden', 'true');
   });
@@ -623,7 +624,7 @@ describe('SettleAuraDialog - the approved Screen 4 box', () => {
     );
   });
 
-  it('holds Perform the rite in a right-aligned row inside the Atone exit, and Not now below', async () => {
+  it('holds Begin the rite in a right-aligned row inside the Atone exit, and Not now below', async () => {
     renderGate([OFFER]);
 
     const dialog = await screen.findByRole('dialog');
@@ -631,7 +632,7 @@ describe('SettleAuraDialog - the approved Screen 4 box', () => {
     expect(row).toHaveClass('justify-end');
     expect(screen.getByTestId('settle-exit-atone')).toContainElement(row);
     const buttons = Array.from(row.querySelectorAll('button')).map((b) => b.textContent);
-    expect(buttons).toEqual(['Perform the rite']);
+    expect(buttons).toEqual(['Begin the rite']);
     // Not now appears once, in the dialog's own footer.
     expect(screen.getAllByRole('button', { name: 'Not now' })).toHaveLength(1);
     expect(dialog).toContainElement(screen.getByTestId('settle-not-now'));
@@ -699,6 +700,43 @@ describe('SettleAuraDialog - Atone and Accept exits (#5123)', () => {
     expect(await screen.findByTestId('drift-result')).toHaveTextContent(
       /^You become more abyssal\.$/
     );
+  });
+
+  it('reads only the offer character aura and accepts for it, never another unsettled alt', async () => {
+    const user = userEvent.setup();
+    const alt: CharacterAura = {
+      ...UNSETTLED_AURA,
+      id: 8,
+      character: 99,
+      unsettled_line: 'Your Spite has grown strong enough to make you unsettled.',
+    };
+    // The mocked endpoint hands back both alts, as it would for staff; the gate must pick.
+    await user.click(await screen.findByTestId('settle-accept-button'));
+
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalledWith('/api/magic/character-auras/7/accept/', {
+        method: 'POST',
+      });
+    });
+    expect(apiFetchMock).not.toHaveBeenCalledWith(
+      '/api/magic/character-auras/8/accept/',
+      expect.anything()
+    );
+    // The read was for the offer's character only.
+    expect(apiFetchMock).toHaveBeenCalledWith('/api/magic/character-auras/?character=55');
+    expect(screen.getByRole('dialog')).not.toHaveTextContent('Your Spite');
+  });
+
+  it('does not read any aura while no offer is open', async () => {
+    renderGate([], 101, [UNSETTLED_AURA]);
+
+    await waitFor(() => {
+      expect(api.getPendingDriftConversionOffers).toHaveBeenCalled();
+    });
+    await act(async () => {
+      await vi.mocked(api.getPendingDriftConversionOffers).mock.results[0].value;
+    });
+    expect(apiFetchMock).not.toHaveBeenCalled();
   });
 
   it('offers no Accept once the character is settled', async () => {

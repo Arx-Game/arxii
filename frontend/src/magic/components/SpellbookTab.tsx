@@ -44,6 +44,7 @@ import { TechniqueProgressPanel } from './TechniqueProgressPanel';
 import { StaffEditable } from '@/character_sheets/components/sheet/StaffEdit';
 import { useStaffEditing } from '@/character_sheets/components/sheet/staffEditContext';
 import { GlimpseEditorDialog } from './glimpse/GlimpseEditorDialog';
+import { Button } from '@/components/ui/button';
 import { AuraHalo } from './AuraHalo';
 import { SettleAuraDialog } from './SettleAuraDialog';
 import { useCharacterAuras } from '@/magic/auraQueries';
@@ -380,14 +381,13 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
               unsettledLine={ownAura?.unsettled_line ?? ''}
             >
               {ownAura?.unsettled ? (
-                <button
-                  type="button"
-                  className="refsheet-quiet-door"
+                <Button
+                  size="sm"
                   onClick={() => setSettleOpen(true)}
                   data-testid="settle-aura-button"
                 >
                   Settle your aura
-                </button>
+                </Button>
               ) : null}
             </AuraHalo>
           ) : (

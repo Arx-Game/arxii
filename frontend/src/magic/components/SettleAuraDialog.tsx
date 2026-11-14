@@ -276,7 +276,7 @@ function CapBlock({ offerId, cap, notReadyMessage, onResult }: CapBlockProps) {
           data-testid={`drift-perform-${targetId}`}
         >
           <Flame className="mr-1.5 h-4 w-4" />
-          Perform the rite
+          Begin the rite
         </Button>
       </div>
     </section>
