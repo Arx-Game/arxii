@@ -135,7 +135,7 @@ def preview_conversion(offer: DriftConversionOffer, target: Resonance) -> DriftC
         max_amount = min(
             cap_remaining,
             row.lifetime_earned,
-            reading.convertible_points(row.resonance.affinity_id),
+            reading.convertible_points(row.resonance.affinity_id, row.mire_lifetime),
         )
         sources.append(
             DriftSourceOption(
@@ -250,12 +250,12 @@ def _validated_source(
         raise DriftConversionInvalidError(msg) from exc
     rows = CharacterResonance.objects.filter(character_sheet=sheet, resonance=source)
     list(rows.select_for_update())
-    lifetime = rows.values_list("lifetime_earned", flat=True).first() or 0
+    lifetime, row_mire = rows.values_list("lifetime_earned", "mire_lifetime").first() or (0, 0)
     if amount > lifetime:
         msg = f"You have earned only {lifetime} of that resonance."
         raise DriftConversionInvalidError(msg)
     reading = drift_for(sheet)
-    convertible = reading.convertible_points(source.affinity_id)
+    convertible = reading.convertible_points(source.affinity_id, row_mire)
     if amount > convertible:
         msg = f"Only {convertible} of that resonance is past who you are."
         raise DriftConversionInvalidError(msg)

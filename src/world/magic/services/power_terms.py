@@ -166,11 +166,11 @@ def _aura_alignment(ctx: PowerTermContext, config: AuraPowerConfig, resonances: 
     """Affinity-alignment contribution: one bonus, the best over the cast's affinities.
 
     A worn alternate self keeps its acting-aura reading: the aura's percent in the
-    affinity she acts in. Otherwise the cast works in the affinities of the resonances
-    paying its pulled threads (the gift's resonances when it pulls nothing), and a mixed
-    character is never penalised for it (#5123, ruling 26): the bonus is the largest over
-    those affinities, the full ``affinity_alignment_bonus`` for an affinity that is part of
-    who she is (a settled share above zero), else her current percent of it.
+    affinity she acts in. Otherwise the cast works in the gift's affinities and
+    those of the resonances paying its pulled threads, so pulling never lowers the bonus,
+    and a mixed character is never penalised for it (#5123, ruling 26): the bonus is the
+    largest over those affinities, the full ``affinity_alignment_bonus`` for an affinity
+    that is part of who she is (a settled share above zero), else her current percent of it.
     """
     from world.magic.services.acting_aura import (  # noqa: PLC0415
         acting_aura,
@@ -191,10 +191,13 @@ def _aura_alignment(ctx: PowerTermContext, config: AuraPowerConfig, resonances: 
     true_aura = ctx.sheet.aura_or_none
     if true_aura is None:
         return 0
-    affinities = _payer_affinities(ctx) or working_affinities(ctx.sheet, resonances)
+    # Pulling never lowers the bonus below the unpulled cast: the payers' affinities join
+    # the cast's own working affinities, and the best of them counts.
+    affinities = {a.pk: a for a in working_affinities(ctx.sheet, resonances)}
+    affinities.update({a.pk: a for a in _payer_affinities(ctx)})
     settled = {share.affinity_id: share.settled_percent for share in true_aura.cached_shares}
     best = 0
-    for affinity in affinities:
+    for affinity in affinities.values():
         if settled.get(affinity.pk, 0) > 0:
             return config.affinity_alignment_bonus
         best = max(

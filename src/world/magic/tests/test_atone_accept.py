@@ -137,6 +137,25 @@ class AtoneTests(DriftRiteTestBase):
         dawn = _row(self.sheet, self.dawnlight)
         self.assertEqual(dawn.mire_lifetime, 0)
 
+    def test_atone_from_a_row_without_the_mire_converts_at_most_own_excess(self) -> None:
+        from world.magic.exceptions import DriftConversionInvalidError
+
+        other = ResonanceFactory(name="Atone Other Dread", affinity=self.abyssal)
+        # The Mire sits in the Dread row; the player atones from the other Abyssal row.
+        _set(self.sheet, self.dread, balance=60, lifetime=60, mire=60)
+        _set(self.sheet, other, balance=20, lifetime=20)
+        _set(self.sheet, self.dawnlight, balance=0, lifetime=100)
+        reading = drift_for(self.sheet)
+        own = reading.own_excess_points[self.abyssal.pk]
+        self.assertGreater(reading.mire_excess_points[self.abyssal.pk], 0)
+        self.assertEqual(reading.convertible_points(self.abyssal.pk, 0), own)
+
+        with self.assertRaises(DriftConversionInvalidError):
+            self.perform(amount=own + 1, source=other)
+        self.perform(amount=own, source=other)
+
+        self.assertEqual(_row(self.sheet, self.dread).mire_lifetime, 60)
+
     def test_mire_never_exceeds_lifetime_after_atone(self) -> None:
         _set(self.sheet, self.dread, balance=60, lifetime=80, mire=60)
 
@@ -199,7 +218,8 @@ class AcceptTests(TestCase):
         result = accept_aura_change(self.sheet)
 
         self.assertEqual(result.mire_moved, 60)
-        self.assertEqual(_row(self.sheet, self.dread).mire_lifetime, 0)
+        dread = _row(self.sheet, self.dread)
+        self.assertEqual((dread.mire_lifetime, dread.lifetime_earned), (0, 60))
         self.assertEqual(drift_for(self.sheet).steps_past, 0)
 
     def test_accept_refused_when_settled(self) -> None:
@@ -298,6 +318,24 @@ class AlignmentPowerTests(TestCase):
 
         self.assertEqual(pure_bonus, 20)
         self.assertEqual(mixed_bonus, pure_bonus)
+
+    def test_pulling_a_thread_paid_by_an_unsettled_minor_never_lowers_the_bonus(self) -> None:
+        sheet, technique = self._caster(self.dawnlight, celestial="100")
+        _set(sheet, self.dawnlight, balance=70, lifetime=70)
+        _set(sheet, self.dread, balance=30, lifetime=30)
+        from world.magic.services.aura import recompute_aura
+
+        recompute_aura(sheet)
+        thread = ThreadFactory(owner=sheet, resonance=self.dread)
+
+        unpulled = aura_power_term(self._ctx(sheet, technique))
+        pulled = aura_power_term(
+            self._ctx(sheet, technique, [ApplicableThread(thread, 1, payer=self.dread)])
+        )
+
+        # The gift's own (settled) Celestial gives the full bonus; the unsettled 30 percent
+        # Abyssal payer would give only 6, and must not replace it.
+        self.assertEqual((unpulled, pulled), (20, 20))
 
 
 class MireBookkeepingTests(TestCase):

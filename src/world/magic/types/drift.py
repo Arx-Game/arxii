@@ -41,11 +41,18 @@ class DriftReading:
     own_excess_points: dict[int, int] = field(default_factory=dict)
     mire_excess_points: dict[int, int] = field(default_factory=dict)
 
-    def convertible_points(self, affinity_id: int) -> int:
-        """Lifetime points that atoning may convert away from ``affinity_id`` (0 if none)."""
-        return self.own_excess_points.get(affinity_id, 0) + self.mire_excess_points.get(
-            affinity_id, 0
-        )
+    def convertible_points(self, affinity_id: int, row_mire: int | None = None) -> int:
+        """Lifetime points that atoning may convert away from ``affinity_id`` (0 if none).
+
+        ``row_mire`` is the Mire lifetime of the one resonance row being converted from: the
+        Mire excess can only be taken from the row that holds it, so it counts at most that
+        much. Left as None, the whole affinity's Mire excess counts (is the affinity
+        convertible at all).
+        """
+        mire = self.mire_excess_points.get(affinity_id, 0)
+        if row_mire is not None:
+            mire = min(mire, row_mire)
+        return self.own_excess_points.get(affinity_id, 0) + mire
 
 
 @dataclass(frozen=True)

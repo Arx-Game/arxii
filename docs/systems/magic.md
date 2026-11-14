@@ -3294,8 +3294,8 @@ returns an `ActingAura` (`percent_for(affinity)`, `dominant_affinity`, `is_alter
 `CharacterAura`. Readers that follow it (what she acts with):
 
 - the technique cast aura-alignment term (`_aura_alignment`, `services/power_terms.py`). A worn
-  self keeps this reading; otherwise (#5123, ruling 26) the cast works in the affinities of the
-  resonances paying its pulled threads (the gift's resonances when it pulls nothing) on the TRUE
+  self keeps this reading; otherwise (#5123, ruling 26) the cast works in the gift's affinities plus
+  those of the resonances paying its pulled threads (so pulling never lowers it) on the TRUE
   aura, and the bonus is the largest over them: the full `affinity_alignment_bonus` for an affinity
   with a settled share above zero, else its current percent, so a mixed character never gets less
   than a pure one;
