@@ -47,7 +47,7 @@ from world.magic.models import (
     ThreadPullCost,
     ThreadXPLockedLevel,
 )
-from world.magic.services.thread_rows import write_resonance_rows
+from world.magic.services.thread_rows import gift_allowed_resonance_ids, write_resonance_rows
 from world.magic.types import ThreadSurvivabilitySaves, ThreadXPLockProspect
 from world.magic.types.pull import pull_payer
 
@@ -968,11 +968,23 @@ def imbue_ready_threads(character_sheet: CharacterSheet) -> list[Thread]:
         ).select_related("resonance")
     ]
     level_cap = compute_level_cap(character_sheet)
-    return [
-        t
-        for t in threads
-        if any(t.level < min(level_cap, compute_anchor_cap(t, resonance)) for resonance in funded)
-    ]
+    return [t for t in threads if _can_be_imbued_by_any(t, funded, level_cap)]
+
+
+def _can_be_imbued_by_any(thread: Thread, funded: list[ResonanceModel], level_cap: int) -> bool:
+    """Whether some funded resonance the thread may take can raise its level.
+
+    A restricted Gift thread only takes its Gift's supported resonances (the rule
+    ``spend_resonance_for_imbuing`` enforces). The anchor cap is read once unless the
+    anchor's cap keys on the resonance being spent (FACET, ORGANIZATION).
+    """
+    allowed = gift_allowed_resonance_ids(thread)
+    usable = [r for r in funded if allowed is None or r.pk in allowed]
+    if not usable:
+        return False
+    if thread.target_kind in _RESONANCE_KEYED_ANCHORS:
+        return any(thread.level < min(level_cap, compute_anchor_cap(thread, r)) for r in usable)
+    return thread.level < min(level_cap, compute_anchor_cap(thread))
 
 
 def near_xp_lock_threads(

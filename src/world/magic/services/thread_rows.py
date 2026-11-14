@@ -10,12 +10,25 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from world.magic.constants import TargetKind
 from world.magic.models.threads import ThreadResonance
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from world.magic.models import Resonance, Thread
+
+
+def gift_allowed_resonance_ids(thread: Thread) -> set[int] | None:
+    """A GIFT thread's supported resonance pks, or None when any resonance is allowed.
+
+    The one rule weaving, creation, retuning and imbuing share: an empty supported set
+    is unrestricted.
+    """
+    if thread.target_kind != TargetKind.GIFT or thread.target_gift_id is None:
+        return None
+    supported = {resonance.pk for resonance in thread.target_gift.cached_resonances}
+    return supported or None
 
 
 def refresh_leading_resonance(thread: Thread) -> Resonance:

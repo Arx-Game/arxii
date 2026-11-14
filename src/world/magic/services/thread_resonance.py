@@ -37,7 +37,10 @@ from world.magic.models import Resonance, Ritual, Thread, ThreadResonance
 from world.magic.models.fall_redemption import ConversionType, ResonanceConversion
 from world.magic.seeds_sanctum import PURGING_RITUAL_NAME
 from world.magic.services.conversion import conversion_pair
-from world.magic.services.thread_rows import refresh_leading_resonance
+from world.magic.services.thread_rows import (
+    gift_allowed_resonance_ids,
+    refresh_leading_resonance,
+)
 from world.magic.types.threads import (
     ThreadResonanceChangeResult,
     ThreadResonanceOption,
@@ -141,17 +144,6 @@ def thread_resonance_refusal(thread: Thread) -> str:
     return ""
 
 
-def _gift_allows(thread: Thread) -> set[int] | None:
-    """A GIFT thread's supported resonance pks, or None when any resonance is allowed.
-
-    The rule ``weave_thread`` enforces: an empty supported set is unrestricted.
-    """
-    if thread.target_kind != TargetKind.GIFT or thread.target_gift_id is None:
-        return None
-    supported = {resonance.pk for resonance in thread.target_gift.cached_resonances}
-    return supported or None
-
-
 def thread_row_amounts(thread: Thread) -> dict[int, int]:
     """``{resonance pk: amount}`` for each row ``thread`` holds, read in one query."""
     return dict(ThreadResonance.objects.filter(thread=thread).values_list("resonance_id", "amount"))
@@ -179,7 +171,7 @@ def _options_for(thread: Thread, source: Resonance, moving: int) -> list[ThreadR
         candidates.append(
             (mapping.target_resonance, pair.conversion_type, pair.conversion_multiplier)
         )
-    allowed = _gift_allows(thread)
+    allowed = gift_allowed_resonance_ids(thread)
     if allowed is not None:
         candidates = [c for c in candidates if c[0].pk in allowed]
     options = [

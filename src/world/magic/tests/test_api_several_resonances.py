@@ -20,6 +20,7 @@ from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterAuraFactory,
     CharacterResonanceFactory,
+    GiftFactory,
     ImbuingRitualFactory,
     ResonanceFactory,
     ThreadFactory,
@@ -31,6 +32,7 @@ from world.magic.factories import (
 )
 from world.magic.models import CharacterResonance, PendingRitualEffect, ThreadResonance
 from world.magic.services.thread_rows import refresh_leading_resonance
+from world.magic.specialization.services import provision_latent_gift_thread
 from world.roster.factories import RosterTenureFactory
 from world.traits.factories import TraitFactory
 
@@ -298,6 +300,24 @@ class ImbuePayerTests(_CharacterWithResonances):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("resonance_id", response.data)
         self.assertFalse(PendingRitualEffect.objects.filter(character=self.sheet).exists())
+
+    def test_imbue_refuses_a_resonance_a_restricted_gift_does_not_support(self) -> None:
+        gift = GiftFactory()
+        gift.resonances.add(self.fury, self.wonder)
+        gift_thread = provision_latent_gift_thread(self.sheet, gift, resonances=[self.fury])
+
+        response = self._imbue(thread_id=gift_thread.pk, amount=5, resonance_id=self.domination.pk)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertFalse(
+            ThreadResonance.objects.filter(thread=gift_thread, resonance=self.domination).exists()
+        )
+        self.assertEqual(
+            CharacterResonance.objects.get(
+                character_sheet=self.sheet, resonance=self.domination
+            ).balance,
+            20,
+        )
 
 
 class DraftWeightsTests(APITestCase):
