@@ -1,7 +1,10 @@
 /**
  * DriftConversionOfferGate (#4733) - polls the account's open drift conversion
- * offers, renders a call-out strip, and auto-opens DriftConversionOfferDialog
- * once per offer id (re-openable from the strip). Mirrors EntryFlourishOfferGate.
+ * offers, renders a call-out strip, and auto-opens SettleAuraDialog (#5123) once per
+ * offer id (re-openable from the strip). Mirrors EntryFlourishOfferGate.
+ *
+ * The offer row carries no character id, so the dialog's aura is the account's
+ * unsettled one: the Accept exit sits beside Atone while a character is unsettled.
  *
  * Mounted on every surface a live player sits on (the scene page and the game
  * page), once per surface. The inbox is account-scoped and carries no character
@@ -16,7 +19,8 @@ import { useState } from 'react';
 import { Flame } from 'lucide-react';
 import { usePendingDriftConversionOffers } from '@/magic/queries';
 import { useAutoOpenOncePerOffer } from '@/magic/hooks';
-import { DriftConversionOfferDialog } from './DriftConversionOfferDialog';
+import { useCharacterAuras } from '@/magic/auraQueries';
+import { SettleAuraDialog } from './SettleAuraDialog';
 
 interface DriftConversionOfferGateProps {
   sceneId: number | null;
@@ -24,10 +28,13 @@ interface DriftConversionOfferGateProps {
 
 export function DriftConversionOfferGate({ sceneId }: DriftConversionOfferGateProps) {
   const { data } = usePendingDriftConversionOffers(sceneId !== null);
+  const { data: auras } = useCharacterAuras(null, sceneId !== null);
   const [resultLine, setResultLine] = useState<string | null>(null);
 
   const offer =
     sceneId === null ? null : (data?.results?.find((o) => o.scene_id === sceneId) ?? null);
+
+  const aura = auras?.find((row) => row.unsettled) ?? null;
 
   const { dialogOpen, setDialogOpen } = useAutoOpenOncePerOffer(offer?.id ?? null);
 
@@ -57,7 +64,8 @@ export function DriftConversionOfferGate({ sceneId }: DriftConversionOfferGatePr
           <span data-testid="drift-conversion-gate-label">Conversion offer</span>
         </button>
       ) : null}
-      <DriftConversionOfferDialog
+      <SettleAuraDialog
+        aura={aura}
         offer={offer}
         resultLine={resultLine}
         onResult={setResultLine}

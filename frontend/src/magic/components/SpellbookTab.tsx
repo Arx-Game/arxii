@@ -44,6 +44,10 @@ import { TechniqueProgressPanel } from './TechniqueProgressPanel';
 import { StaffEditable } from '@/character_sheets/components/sheet/StaffEdit';
 import { useStaffEditing } from '@/character_sheets/components/sheet/staffEditContext';
 import { GlimpseEditorDialog } from './glimpse/GlimpseEditorDialog';
+import { AuraHalo } from './AuraHalo';
+import { SettleAuraDialog } from './SettleAuraDialog';
+import { useCharacterAuras } from '@/magic/auraQueries';
+import { wordsToPart } from '@/magic/aura';
 
 interface Props {
   /** CharacterSheet pk (shared with the character ObjectDB pk). */
@@ -175,36 +179,6 @@ function TechniqueForms({ technique }: { technique: CharacterSheetTechnique }) {
   );
 }
 
-/** A CSS-safe class suffix for an affinity name ("Celestial" -> "celestial"). */
-function affinitySlug(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-}
-
-/**
- * The aura as a proportional strip: one segment per affinity held, sized by its share,
- * with the split said in words underneath rather than printed on them. An aura with
- * nothing in it renders no strip — there is nothing to be proportional to.
- */
-function AuraStrip({ aura }: { aura: CharacterSheetAura }) {
-  const held = aura.shares.filter((share) => share.percent > 0);
-  if (held.length === 0) return null;
-  return (
-    <div className="refsheet-aura" data-testid="spellbook-aura-strip">
-      {held.map((share) => {
-        const slug = affinitySlug(share.affinity_name);
-        return (
-          <span
-            key={share.affinity_id}
-            className={`refsheet-aura-seg refsheet-aura-${slug}`}
-            style={{ flexGrow: share.percent }}
-            data-testid={`aura-segment-${slug}`}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
 /** Where the owner stands with their Glimpse, in a line. */
 function glimpseStateLine(state: CharacterSheetAura['glimpse_state']): string {
   if (state === 'COMPLETE') return 'Your Glimpse is written.';
@@ -212,51 +186,15 @@ function glimpseStateLine(state: CharacterSheetAura['glimpse_state']): string {
   return 'You have not looked into your own aura yet.';
 }
 
-/**
- * A share of the aura, in words. The magic app's standing rule is that player-facing
- * data is narrative rather than numerical, and the sheet's spec asks for the split to
- * be said in words beside the strip — so this is the one place the figures turn
- * into language, and the figures themselves never reach the page.
- */
-function shareInWords(share: number, total: number): string {
-  const part = total > 0 ? share / total : 0;
-  if (part <= 0) return 'none';
-  if (part < 0.08) return 'a trace';
-  if (part < 0.18) return 'a tenth';
-  if (part < 0.28) return 'a fifth';
-  if (part < 0.4) return 'a third';
-  if (part < 0.58) return 'half';
-  if (part < 0.8) return 'most';
-  return 'nearly all';
-}
-
-/**
- * The aura's split as one sentence: the smaller shares named, the largest called "the
- * rest", in the demo's own shape ("A fifth celestial, a third primal, the rest
- * abyssal."). Silent when the aura is unformed and every share is zero.
- */
-function auraSplitSentence(aura: CharacterSheetAura): string {
-  const total = aura.shares.reduce((sum, share) => sum + share.percent, 0);
-  const held = aura.shares
-    .filter((row) => row.percent > 0)
-    .map((row) => ({ name: row.affinity_name.toLowerCase(), share: row.percent }))
-    .sort((a, b) => a.share - b.share);
-
-  if (held.length === 0) return '';
-  if (held.length === 1) return `All of it ${held[0].name}.`;
-
-  const rest = held[held.length - 1];
-  const named = held
-    .slice(0, -1)
-    .map((row) => `${shareInWords(row.share, total)} ${row.name}`)
-    .join(', ');
-  const sentence = `${named}, the rest ${rest.name}.`;
-  return sentence.charAt(0).toUpperCase() + sentence.slice(1);
-}
-
 export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props) {
   const { data: payload, isLoading } = useCharacterSheetQuery(characterId);
   const [glimpseDialogOpen, setGlimpseDialogOpen] = useState(false);
+  const [settleOpen, setSettleOpen] = useState(false);
+  const [settleResult, setSettleResult] = useState<string | null>(null);
+  // Who the character is, whether they are unsettled and the Mire's share are the
+  // owner's to see; the sheet payload carries the shares only.
+  const { data: ownAuras } = useCharacterAuras(characterId, isMyCharacter);
+  const ownAura = ownAuras?.find((row) => row.character === characterId) ?? null;
   const staffEditing = useStaffEditing();
 
   if (isLoading) {
@@ -420,16 +358,42 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
       {drawsRail && magic?.aura && (
         <div className="refsheet-stack" data-testid="spellbook-aura">
           <Subheading>Aura</Subheading>
-          {/* The strip is proportional, never labelled with its figures: the three
-              shares size the segments and the sentence beneath says the split in
-              words. The demo draws it this way, and the magic app's narrative-not-
-              numerical rule is why the numbers stay off the page. */}
-          <AuraStrip aura={magic.aura} />
-          {(auraSplitSentence(magic.aura) || magic.aura.dominant_affinity) && (
-            <Ledger>
-              {auraSplitSentence(magic.aura) ||
-                `It reads as ${magic.aura.dominant_affinity.toLowerCase()}.`}
-            </Ledger>
+          {/* The halo is proportional, never labelled with its figures: the shares size
+              its stretches and the sentence beside it says the split in words. The magic
+              app's narrative-not-numerical rule is why the numbers stay off the page. */}
+          {magic.aura.shares.some((share) => share.percent > 0) ? (
+            <AuraHalo
+              shares={magic.aura.shares.map((share) => ({
+                name: share.affinity_name,
+                percent: share.percent,
+              }))}
+              settled={ownAura?.shares.map((share) => ({
+                name: share.affinity_name,
+                percent: Number(share.settled_percent),
+              }))}
+              mire={
+                ownAura
+                  ? { words: ownAura.mire_share_words, part: wordsToPart(ownAura.mire_share_words) }
+                  : null
+              }
+              unsettled={ownAura?.unsettled ?? false}
+              unsettledLine={ownAura?.unsettled_line ?? ''}
+            >
+              {ownAura?.unsettled ? (
+                <button
+                  type="button"
+                  className="refsheet-quiet-door"
+                  onClick={() => setSettleOpen(true)}
+                  data-testid="settle-aura-button"
+                >
+                  Settle your aura
+                </button>
+              ) : null}
+            </AuraHalo>
+          ) : (
+            magic.aura.dominant_affinity && (
+              <Ledger>{`It reads as ${magic.aura.dominant_affinity.toLowerCase()}.`}</Ledger>
+            )
           )}
           {isMyCharacter && <Ledger>{glimpseStateLine(magic.aura.glimpse_state)}</Ledger>}
           {magic.aura.glimpse_tags.length > 0 && (
@@ -470,6 +434,24 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
             </Stack>
           )}
         </div>
+      )}
+
+      {drawsRail && isMyCharacter && ownAura && (ownAura.unsettled || settleOpen) && (
+        <SettleAuraDialog
+          aura={ownAura}
+          offer={null}
+          resultLine={settleResult}
+          onResult={setSettleResult}
+          open={settleOpen}
+          onOpenChange={(next) => {
+            setSettleOpen(next);
+            if (!next) setSettleResult(null);
+          }}
+          onClose={() => {
+            setSettleOpen(false);
+            setSettleResult(null);
+          }}
+        />
       )}
 
       {drawsRail && isMyCharacter && magic?.aura && (

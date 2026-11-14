@@ -148,6 +148,19 @@ vi.mock('@/magic/api', async (importOriginal) => ({
   getPendingDriftConversionOffers: (...args: unknown[]) => getDriftOffers(...args),
 }));
 
+// #5123: the Settle your aura dialog reads the aura and can accept its changes; no aura
+// here, so the gate shows only the offer's own exit.
+vi.mock('@/magic/auraQueries', () => ({
+  useCharacterAuras: () => ({ data: [] }),
+  useAcceptAura: () => ({
+    mutate: vi.fn(),
+    reset: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
+}));
+
 // #4418: the Guide's offers; empty unless a test sets one.
 const npcOffers = vi.hoisted(() => ({ current: [] as unknown[] }));
 vi.mock('@/gm/npcs/queries', async (importOriginal) => ({

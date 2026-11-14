@@ -13,6 +13,9 @@
 
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { SpellbookTab } from './SpellbookTab';
@@ -91,6 +94,34 @@ vi.mock('@/magic/queries', () => ({
   // The technique picker (#4341): no manifesting technique, so it renders nothing.
   useManifestChoices: () => ({ data: [] }),
   useSetManifestChoice: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  // The Settle your aura dialog (#5123) mounts these when the owner opens it.
+  useDeclineDriftConversion: () => ({
+    mutate: vi.fn(),
+    reset: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
+  useConvertDrift: () => ({
+    mutate: vi.fn(),
+    reset: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
+}));
+
+// Who the character is, unsettled or not, and the Mire's share come from the aura endpoint;
+// the sheet payload carries the shares only.
+vi.mock('@/magic/auraQueries', () => ({
+  useCharacterAuras: vi.fn(),
+  useAcceptAura: () => ({
+    mutate: vi.fn(),
+    reset: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
 }));
 
 // GlimpseEditorDialog reads the catalog via the character-creation module's
@@ -102,6 +133,8 @@ vi.mock('@/character-creation/queries', () => ({
 
 import * as queries from '@/character_sheets/queries';
 import * as magicQueries from '@/magic/queries';
+import * as auraQueries from '@/magic/auraQueries';
+import type { CharacterAura } from '@/magic/auraQueries';
 import * as cgQueries from '@/character-creation/queries';
 
 function mockMotifStyleQueries() {
@@ -258,9 +291,35 @@ function makeMagic(overrides: Partial<CharacterSheetMagic> = {}): CharacterSheet
   };
 }
 
+function makeOwnAura(overrides: Partial<CharacterAura> = {}): CharacterAura {
+  return {
+    id: 42,
+    character: 1,
+    shares: [
+      { affinity_id: 2, affinity_name: 'Primal', percent: '58.00', settled_percent: '66.00' },
+      { affinity_id: 3, affinity_name: 'Abyssal', percent: '42.00', settled_percent: '34.00' },
+    ],
+    dominant_affinity: 'Primal',
+    dominant_affinity_display: 'Primal',
+    unsettled: false,
+    unsettled_line: '',
+    mire_share_words: 'none',
+    glimpse_state: 'COMPLETE',
+    updated_at: '2026-11-14T00:00:00Z',
+    ...overrides,
+  };
+}
+
+function mockOwnAuras(auras: CharacterAura[]) {
+  vi.mocked(auraQueries.useCharacterAuras).mockReturnValue({
+    data: auras,
+  } as unknown as ReturnType<typeof auraQueries.useCharacterAuras>);
+}
+
 describe('SpellbookTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockOwnAuras([]);
     mockMotifStyleQueries();
     mockGlimpseQueries();
   });
@@ -290,9 +349,9 @@ describe('SpellbookTab', () => {
     expect(screen.queryByText(/70/)).not.toBeInTheDocument();
   });
 
-  it('draws the aura as a proportional strip and says the split in words (#3898)', () => {
-    // The spec asks for three segments sized by their share, with the split in words
-    // beside them. The strip carries the proportions; the figures never reach the page.
+  it('draws the aura as a halo and says the split in words (#5123)', () => {
+    // The halo carries the proportions and the sentence says them; the figures never
+    // reach the page.
     mockPayload(
       makeMagic({
         aura: makeAura({
@@ -307,14 +366,89 @@ describe('SpellbookTab', () => {
     );
     renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
 
-    const strip = screen.getByTestId('spellbook-aura-strip');
-    expect(strip).toBeInTheDocument();
-    expect(within(strip).getByTestId('aura-segment-celestial')).toHaveStyle({ flexGrow: '20' });
-    expect(within(strip).getByTestId('aura-segment-abyssal')).toHaveStyle({ flexGrow: '50' });
-    expect(
-      screen.getByText('A fifth celestial, a third primal, the rest abyssal.')
-    ).toBeInTheDocument();
+    const halo = screen.getByTestId('aura-halo');
+    expect(halo).toHaveAttribute('data-affinities', 'abyssal primal celestial');
+    expect(within(halo).getByTestId('aura-halo-sentence')).toHaveTextContent(
+      'Half abyssal, a third primal, a fifth celestial.'
+    );
     expect(screen.queryByText(/20|30|50/)).not.toBeInTheDocument();
+    // A viewer who is not the owner sees no settled ring and no Settle button.
+    expect(screen.queryByTestId('aura-halo-ring')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('settle-aura-button')).not.toBeInTheDocument();
+  });
+
+  it('draws the dashed settled ring for the owner (#5123)', () => {
+    mockPayload(makeMagic());
+    mockOwnAuras([makeOwnAura()]);
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter />);
+
+    expect(screen.getByTestId('aura-halo-ring')).toBeInTheDocument();
+    expect(screen.queryByTestId('aura-halo-status')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('settle-aura-button')).not.toBeInTheDocument();
+  });
+
+  it('shows Unsettled, the ruled line and Settle your aura when the owner is unsettled', async () => {
+    const user = userEvent.setup();
+    const line = 'Your Domination has grown strong enough to make you unsettled.';
+    mockPayload(makeMagic());
+    mockOwnAuras([makeOwnAura({ unsettled: true, unsettled_line: line })]);
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter />);
+
+    expect(screen.getByTestId('aura-halo-status')).toHaveTextContent('Unsettled');
+    expect(screen.getByTestId('aura-halo-sentence')).toHaveTextContent(line);
+    await user.click(screen.getByTestId('settle-aura-button'));
+
+    // Outside a scene there is no offer: Accept and Not now only.
+    expect(await screen.findByTestId('settle-exit-accept')).toBeInTheDocument();
+    expect(screen.queryByTestId('settle-exit-atone')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Not now' })).toBeInTheDocument();
+  });
+
+  it('draws the Mire apart from the Sineater own Abyssal (#5123)', () => {
+    mockPayload(
+      makeMagic({
+        aura: makeAura({
+          shares: [
+            { affinity_id: 1, affinity_name: 'Celestial', percent: 56 },
+            { affinity_id: 3, affinity_name: 'Abyssal', percent: 44 },
+          ],
+          dominant_affinity: 'Celestial',
+        }),
+      })
+    );
+    mockOwnAuras([makeOwnAura({ mire_share_words: 'a third' })]);
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter />);
+
+    expect(screen.getByTestId('aura-halo')).toHaveAttribute(
+      'data-affinities',
+      'celestial abyssal mire'
+    );
+    const key = screen.getByTestId('aura-halo-mire-key');
+    expect(key).toHaveTextContent('your own');
+    expect(key).toHaveTextContent('from the Mire');
+    expect(screen.getByTestId('aura-halo-sentence')).toHaveTextContent(
+      'A third of what you have gained came from the Mire.'
+    );
+  });
+
+  it('has a sheet.css rule for every aura halo class it draws', () => {
+    mockPayload(makeMagic());
+    mockOwnAuras([makeOwnAura({ unsettled: true, unsettled_line: 'Unsettled line.' })]);
+    const { container } = renderWithProviders(<SpellbookTab characterId={1} isMyCharacter />);
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(
+      path.resolve(here, '..', '..', 'character_sheets', 'sheet.css'),
+      'utf8'
+    );
+    const drawn = new Set<string>();
+    container.querySelectorAll('[class]').forEach((node) => {
+      node.classList.forEach((name) => {
+        if (name.startsWith('aura-halo')) drawn.add(name);
+      });
+    });
+
+    expect(drawn.size).toBeGreaterThan(4);
+    for (const name of drawn) expect(css).toContain(`.${name}`);
   });
 
   it('draws the anima ritual, which the payload carried and nothing rendered (#3898)', () => {
@@ -337,10 +471,10 @@ describe('SpellbookTab', () => {
     expect(screen.getByText('Composure')).toBeInTheDocument();
   });
 
-  it('draws no strip for an aura with nothing in it', () => {
+  it('draws no halo for an aura with nothing in it', () => {
     mockPayload(makeMagic({ aura: makeAura({ shares: [], dominant_affinity: '' }) }));
     renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
-    expect(screen.queryByTestId('spellbook-aura-strip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('aura-halo')).not.toBeInTheDocument();
   });
 
   it('renders resonance balances (#3042)', () => {
