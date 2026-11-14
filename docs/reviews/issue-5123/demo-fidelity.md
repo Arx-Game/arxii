@@ -1,25 +1,39 @@
-# Demo fidelity review: #5123 "A character with several resonances" (round 2, after the fixes)
+# Demo fidelity review: #5123 "A character with several resonances" (round 3, after the real-testing fixes)
 
-**Verdict: PASS** for everything rendered. All six defects from round 1 (F1 to F6) are
-fixed and re-checked on screen, and the two divergences the fixes were meant to close
-(the settled ring, the Gift thread in the Pull Threads dialog) now match the demo. What is
-left is four open scope questions for the human (S1 to S4 below) and the BLOCKED items in
-"Not exercised"; none of them is a rendered defect the fixes could have closed.
+**Verdict: PASS** for everything rendered. Round 1's six defects (F1 to F6) stay fixed, and
+the surfaces the real-testing fixes touched were re-captured and re-checked: the Pull Threads
+dialog now renders rust with no stored realm (**S2 is closed**), a Gift thread reads as its
+Gift in the dialog and the picker (and the picker's filter finds it by that name), and the
+Settle your aura dialog now redraws after an accept and closes once an atone has spent its
+offer, which round 2 could not show (that item is no longer BLOCKED). What is left is three
+open scope questions for the human (S1, S3, S4) and the BLOCKED items in "Not exercised".
 
 ## Identity of what was reviewed
 
 | Item | Value |
 |---|---|
-| Reviewed commit | `02979e9ea1d0f14612e5e703c4a63287213dbf2b` (branch `feature-5123-a-character-with-several-resonances-mixe`). It is the first parent of this evidence commit. Round 1 reviewed `29881d52b`; the fixes are `291592a07` and `02979e9ea`, on top of round 1's own evidence commit `4bf61de4b`. |
+| Reviewed commit | `84786ebf47b554814e773695274bde82781d6646` (branch `feature-5123-a-character-with-several-resonances-mixe`). It is the first parent of this evidence commit. Round 1 reviewed `29881d52b`; round 2 reviewed `02979e9ea` (the F1 to F6 fixes `291592a07` and `02979e9ea`); this round covers `05d7298ce..84786ebf4` plus the docs commit `ed3990d6f`, on top of the round 2 evidence commit `21f6097e9`. The separate real-testing report in this folder was not read or touched. |
 | Approved design | Demo, round 3: https://claude.ai/artifact/CghH6yiEwjFns6E8nLrs1Y (linked from the issue body). Read from the local copy of the published source, `issue-5123-several-resonances.html` (493 lines, read in full in round 1; re-rendered unchanged this round). |
 | Issue rulings read | Issue body and comments (`gh issue view 5123`): spec rulings 15-18 and the Frontend list. No comment overrides the demo on any item below. The fix notes (`.superpowers/sdd/plan-5123/demo-fix-report.md`) were read for what was changed, not trusted for what renders. |
 | Environment | Local workstation. Chromium headless shell (Playwright 1.65 driving the installed 1208 build). vite dev server on :5199 serving the real app code at the reviewed commit. No Evennia server, nothing on :4001/:4002, no database created (`rt_5123` was never made). |
 | Viewport and theme | 1280 x 900, light theme, for the demo and the app. One dark pair for the unsettled aura. 390 x 900 for one Settle dialog shot. Web fonts could not load (no network), so serif/sans fallbacks stand in on **both** sides. |
 | Fixture versus live | **Everything the app drew was fixture data**: every `/api/**` call answered by Playwright route fixtures shaped like the serializers (types from `frontend/src/generated/api.d.ts`; the CG fixtures are the repo's own `character-creation/__tests__/fixtures.ts`). The frontend code, CSS, routing, providers and React Query were real. No live backend answered any UI shot. |
-| Real pages versus harness | Screen 1: the real `/characters/create` page, Gift stage. Screen 3 and the Accept-only dialog: the real `/characters/1` sheet, Magic section. Screen 2 (Pull Threads dialog, Pull picker) and Screen 4's scene dialog (Atone + Accept): **a throwaway harness** mounting the real `ThreadPullDialog`, `ThreadPullPicker` and `SettleAuraDialog` under the app's real providers and `index.css`, because those are reached in play only through combat or a live scene. |
+| Real pages versus harness | Screen 1: the real `/characters/create` page, Gift stage. Screen 3 and the Accept-only dialog: the real `/characters/1` sheet, Magic section. Screen 2 (Pull Threads dialog, Pull picker), Screen 4's scene dialog (Atone + Accept) and, new this round, the real `DriftConversionOfferGate` (the call-out strip plus the dialog it opens, polling and refetching through the real React Query hooks): **a throwaway harness** mounting the real components under the app's real providers and `index.css`, because they are reached in play only through combat or a live scene. |
 | Capture sources | `capture-spec.ts.txt`, `capture-harness.tsx.txt`, `capture-config.ts.txt` in this directory (renamed `.txt` so no linter or runner picks them up). To rerun: copy the spec to `frontend/e2e/evidence/review-5123.spec.ts`, the harness to `frontend/src/review5123.tsx` plus a root `review5123.html` that loads it, start `pnpm exec vite --port 5199`, run Playwright with the config. |
-| Backend check (Screen 5) | Not re-run this round: the fixes touch frontend files only (`git diff 4bf61de4b..HEAD --stat` lists no backend file). Round 1's run of `world.character_creation.tests.test_weighted_resonances` (16 tests, OK) stands for the rows. |
-| Screenshots | All 37 PNGs in this directory were deleted and re-captured at the reviewed commit. `demo-*.png` come from the demo's own page, `app-*.png` from the app. The dialog Gift-thread case is in them: the fixture now offers the Gift thread and the spec ticks it. |
+| Backend check (Screen 5) | Not re-run. This round's commits do touch the backend (the offer close, the thread `display_name`, the pull-tier refusal, the cast result's focus lines), but none of them is a creation row, so round 1's run of `world.character_creation.tests.test_weighted_resonances` (16 tests, OK) stands for the Screen 5 rows. The backend changes were seen only through their fixture shapes (`display_name`) in the UI shots. |
+| Screenshots | Every `demo-*.png` and `app-*.png` in this directory was deleted and re-captured at the reviewed commit (42 PNGs; the real-testing folder is untouched). `demo-*.png` come from the demo's own page, `app-*.png` from the app. New this round: `app-screen2-picker-filtered-pyro.png`, `app-screen4-sheet-settled-after-close.png`, `app-screen4-gate-open-offer.png`, `app-screen4-gate-after-atone.png`, `app-screen4-gate-closed.png`. |
+
+## What changed since round 2, re-checked
+
+| Change | Result | Evidence |
+|---|---|---|
+| The Pull Threads dialog renders rust with no stored realm (was S2) | **MATCH, S2 closed.** The harness stores no realm (`data-realm` absent on `<html>`, asserted). The selected tier and Select Pull now compute to `rgb(139, 52, 35)` (the sheet's rust, `hsl(10 60% 34%)`); the selected Pay with row's radio, its tint and the "Inspect perks" links follow. Round 2 showed near-black. | `app-screen2-dialog-initial.png`, `-fury-pays.png`, `-domination-pays.png`; run log `NO-REALM tier-1 selected bg rgb(139, 52, 35)`, `NO-REALM Select Pull bg rgb(139, 52, 35)` |
+| A Gift thread displays its Gift's name (`display_name`) | **MATCH.** The Gift thread's own name is empty in the fixture and `display_name` is "Pyromancy"; the dialog's checkbox row, the picker's card heading and the Inspect perks title ("Domination through Pyromancy") all read it. | `app-screen2-dialog-initial.png`, `app-screen2-picker.png`, `app-screen2-inspect-perks.png` |
+| The picker's name filter matches a Gift thread by its Gift's name | **MATCH.** Typing "pyro" leaves the Pyromancy card and hides the other thread. | `app-screen2-picker-filtered-pyro.png` |
+| The Settle your aura dialog refetches after an accept | **MATCH, and no longer BLOCKED.** From the sheet, pressing Accept posts once; the aura refetched settled: the halo redraws "Mostly primal, a third abyssal.", the Unsettled pill and the Settle your aura button are gone, and the dialog shows "You settle into who you have become." until closed; after Close the sheet shows the settled halo. (The fixture flips to the settled aura on the Accept POST, standing in for the server; the redraw itself is the real hooks refetching.) | `app-screen4-sheet-after-accept.png`, `app-screen4-sheet-settled-after-close.png` |
+| After an atone the offer closes and the aura refetches | **MATCH.** Through the real offer gate: the call-out strip "Settle your aura" and the dialog with both exits open; chose the component and pressed "Begin the rite"; the convert request carried `{"offer_id":5,"source_resonance_id":13,"target_resonance_id":11,"amount":4,"component_ids":[71]}`; the dialog then shows only "Success: 4 Domination became 4 Fury." with a Close button, neither exit left (the offer is spent and the aura now settled); after Close the strip is gone. | `app-screen4-gate-open-offer.png`, `-gate-after-atone.png`, `-gate-closed.png` |
+| The web cast card prints the focus lines for an unsettled caster | **Not in the demo; not compared.** The demo has no cast result card. It is a text block in `ActionPanel` (`cast-focus-lines`); not rendered in this harness. | n/a |
+| Casting or pulling at an unauthored tier is refused with "That pull tier is not available yet." | **Not in the demo; not compared.** A server refusal (the preview now answers in a sentence), not a drawn screen. | n/a |
 
 ## Round 1 defects, re-checked
 
@@ -31,8 +45,8 @@ left is four open scope questions for the human (S1 to S4 below) and the BLOCKED
 | F4 | Accept and Not now black and neutral | **FIXED.** Accept is solid rust, Not now and Begin the rite are rust outlines, on the sheet route with no realm set (the state that failed). | `app-screen4-sheet-accept-only.png`, `app-screen4-sheet-after-accept.png` |
 | F5 | "Your aura" below the sentence; sentence upright | **FIXED.** "YOUR AURA" is a small caps label above an italic sentence. | `app-screen1-resonance-step.png` |
 | F6 | Plain text perk rows | **FIXED.** Each perk is a shaded bar, label left, value right-aligned, the narrative snippet a second line inside the bar. Applies in the dialog and the picker. | `app-screen2-dialog-fury-pays.png`, `app-screen2-picker.png` |
-| S1 | `ThreadPullDialog` never offered a Gift thread | **FIXED.** The Pull Threads dialog lists "Pyromancy" (a Gift thread) with the other threads, and ticking it shows its Pay with list (Fury, Domination, Wonder) with the perks per resonance, the makeup line "Level 3 - mostly Fury, some Domination", Inspect perks, and the cost line. The request carried the payer (`payers: {"1": 13}`). | `app-screen2-dialog-initial.png`, `-fury-pays.png`, `-domination-pays.png`, `-inspect-perks.png` |
-| S2 | Settled ring drawn in the settled affinities' colours | **FIXED.** One thin neutral dashed ring, as in the demo; while unsettled it is tinted in the glow of the affinity unsettling the character (the pink-violet ring in the unsettled frame, as in the demo's). Neutral on the settled and faded halos. | `app-screen3-*.png`, `app-dark-screen3-unsettled.png` |
+| S1 (round 1 numbering) | `ThreadPullDialog` never offered a Gift thread | **FIXED.** The Pull Threads dialog lists "Pyromancy" (a Gift thread) with the other threads, and ticking it shows its Pay with list (Fury, Domination, Wonder) with the perks per resonance, the makeup line "Level 3 - mostly Fury, some Domination", Inspect perks, and the cost line. The request carried the payer (`payers: {"1": 13}`). | `app-screen2-dialog-initial.png`, `-fury-pays.png`, `-domination-pays.png`, `-inspect-perks.png` |
+| S2 (round 1 numbering) | Settled ring drawn in the settled affinities' colours | **FIXED.** One thin neutral dashed ring, as in the demo; while unsettled it is tinted in the glow of the affinity unsettling the character (the pink-violet ring in the unsettled frame, as in the demo's). Neutral on the settled and faded halos. | `app-screen3-*.png`, `app-dark-screen3-unsettled.png` |
 
 ## Open scope questions for the human (not counted as FAIL)
 
@@ -42,12 +56,10 @@ left is four open scope questions for the human (S1 to S4 below) and the BLOCKED
   affordance nobody wrote down: either add the field and the row or strike it from the
   approved design. (The panel also shows "Amount" where the demo says "Strength", and
   adds a "Worked out: 2 x 1" row; the demo flags its copy as placeholder.)
-- **S2. Pull Threads dialog colours with no realm.** The dialog's selected tier and its
-  confirm button render near-black in the harness, where the demo draws them rust. The
-  dialog's primary is the realm's, and nothing sets a realm in the harness (the same
-  cause as F4, which the fixes closed for the Settle dialog only). Whether a real game
-  session has a realm set is not visible from here. If one can reach the dialog with none, it
-  needs the same fallback.
+- **S2. CLOSED (round 3).** The Pull Threads dialog's selected tier, confirm button and
+  Pay with accents rendered near-black with no realm; the dialog now carries the sheet's
+  rust fallback as the Settle dialog does, and renders rust with no stored realm (see
+  "What changed since round 2").
 - **S3. Step label on Screen 1.** Ruled acceptable in round 1 and still the case: the
   step is "Your Resonance" with the tag "Step 4 of 5" in the funnel; the demo's "IV -
   Resonance" label and separate h3 are not drawn. Not recorded in the spec.
@@ -89,8 +101,8 @@ the step closed itself as done; reopened by pressing the step name. No page erro
 | Demo element | Result |
 |---|---|
 | Title "Cast - Pull threads" | DIFF in wording only: "Pull Threads" (existing dialog title) |
-| Tier 1 / 2 / 3, tier 2 selected | MATCH in behaviour; labels read "Tier 1", "Tier 2" |
-| Gift thread "Pyromancy" with "Level 3 - mostly Fury, some Domination" | MATCH in the dialog and in the picker (S1 round 1 fixed) |
+| Tier 1 / 2 / 3, tier 2 selected | MATCH in behaviour and colour (the selected tier is rust); labels read "Tier 1", "Tier 2" |
+| Gift thread "Pyromancy" with "Level 3 - mostly Fury, some Domination" | MATCH in the dialog and in the picker; the name comes from the thread's `display_name` (the fixture's own name is empty), and the picker's filter finds it by that name |
 | "Pay with" label and three payers, starting on the leading one | MATCH (Fury selected first) |
 | Payer row: radio, name, "3 Fury - you have 22" | MATCH, word for word |
 | Fury perks: Bonus to this cast +4; Intensity +2 with its snippet | MATCH, shaded bars with right-aligned values (F6 fixed) |
@@ -99,14 +111,15 @@ the step closed itself as done; reopened by pressing the step name. No page erro
 | "Inspect perks" link on Fury and Domination only | MATCH |
 | Rival thread: "Pays with Domination", "3 Domination", "+3" | MATCH (fixed payer, no choice, shaded bar) |
 | Preview line "3 Fury, 3 Domination - 4 anima" | DIFF in form: "Resonance cost: 3 Fury, 3 Domination   Anima cost: 4" (existing panel; amounts agree); with Domination chosen, "6 Domination" |
-| Cancel / Pull | MATCH in layout; the confirm button reads "Select Pull"; colours DIFF (S2) |
-| Inspect panel title "Domination through Pyromancy" | MATCH |
+| Cancel / Pull | MATCH in layout and colour (rust with no realm, S2 closed); the confirm button reads "Select Pull" |
+| Inspect panel title "Domination through Pyromancy" | MATCH (read from `display_name`) |
 | Inspect rows: Strength, From, Thread level used, Lasts | DIFF: "Amount" for "Strength"; no "Lasts" row (S1) |
 | Inspect "Thread level used: 2 (thread is 3; Domination is its second resonance)" | DIFF in wording: "(thread is 3; Domination is not its leading resonance)"; same facts |
 | Inspect "From: Domination pull perk for Gift threads, tier 2" | MATCH |
 | (not in demo) "Worked out: 2 x 1" row | Extra row the demo does not have |
 
-Tested interactions: ticked the Gift thread and the Relationship thread; the mixed thread
+Tested interactions: typed "pyro" into the picker's filter (the Gift thread stays, the other
+thread hides); ticked the Gift thread and the Relationship thread; the mixed thread
 expanded to the Pay with list and the one-resonance thread to "Pays with Domination" with
 no choice; chose Domination; the next preview request carried `"payers":{"1":13}` and the
 cost line moved from "3 Fury, 3 Domination" to "6 Domination"; opened Inspect perks on
@@ -151,13 +164,16 @@ button opens the dialog.
 | "Accept" solid rust button, left | MATCH (F4 fixed) |
 | "Not now" rust outline, bottom right | MATCH (F4 fixed) |
 | Outside a scene: Accept and Not now only | MATCH (F3 fixed: the Accept card is full width) |
+| After Accept (outside a scene) | MATCH in behaviour: the halo and sentence redraw settled, the Unsettled pill and Settle your aura button disappear; the dialog keeps the result line until closed |
+| After an atone that spends the offer (in a scene) | MATCH in behaviour: both exits go, the result line and a Close button remain; closing removes the call-out strip |
+| Call-out strip "Settle your aura" above the dialog (not in the demo's frame) | Drawn for the first time (`app-screen4-gate-open-offer.png`): an amber strip with a flame, existing styling; the demo's note says the same prompt appears where the drift offer does |
 | Exit arrangement | Two-up at 1280, stacked at 390; the demo's frame stacks them (the demo's own grid is auto-fit) |
 
 Tested interactions: from the sheet pressed "Settle your aura": only the Accept exit
 shows; pressed Accept: one POST to `/api/magic/character-auras/42/accept/` and the result
-line "You settle into who you have become." showed. The fixture does not change the aura
-after accept, so the redraw to a settled halo is **not** evidenced here. In the scene
-harness both exits show.
+line "You settle into who you have become." showed; the aura then refetched settled (see
+"What changed since round 2"). In the scene harness both exits show; the gate case above
+covers an atone end to end.
 
 ### Screen 5: What creation and play write (data)
 
@@ -176,17 +192,17 @@ Imbuing, Pull, Sineating, Atone and Accept rows were not reviewed here.
 | Exact reviewed commit named | PASS |
 | Approved design reachable and read in full | PASS |
 | Rendered the built surfaces (not source reading) | PASS (fixture data; see boundary table) |
-| Screenshots committed beside this report | PASS (37 PNGs, all re-captured at the reviewed commit) |
+| Screenshots committed beside this report | PASS (42 PNGs, all re-captured at the reviewed commit) |
 | Rules reach the page (finding 1): approved aura colours; halo, ring and dialog CSS | PASS. Tokens resolved on the running pages; the Settle dialog's rust now reaches the page with no realm set. Run on the vite dev server, not the production bundle. |
-| Host CSS contract (finding 2) | PASS for CG (`cg.css`), the sheet and the Settle dialog. The Pull Threads dialog's colours with no realm are S2. |
+| Host CSS contract (finding 2) | PASS for CG (`cg.css`), the sheet, the Settle dialog and the Pull Threads dialog (rust with no realm). |
 | Layout the demo shows (finding 3) | PASS (F2, F3, F6 fixed) |
 | Approved copy dropped (finding 4) | PASS with notes: intro, "Pay with", cost lines, "No perks on this thread", the Unsettled line, the Atone/Accept headings, the Atone opening line are all present. The remaining wording differences are placeholder-flagged ("against your target", "Strength", "second resonance", "Pull"). |
-| Demo affordance silently unbuilt (finding 5) | OPEN: the "Lasts" row (S1), unrecorded in the spec. The Gift thread in the dialog is now built. |
+| Demo affordance silently unbuilt (finding 5) | OPEN: the "Lasts" row (S1), unrecorded in the spec. The Gift thread in the dialog is built. |
 | Divergence the build got right (finding 6) | Accepted: funnel step label (S3), the rite's controls |
 | Screen 1 verdict | **Matches** (cosmetic gaps only) |
-| Screen 2 verdict | **Matches with noted gaps** (S1, S2; placeholder wording) |
+| Screen 2 verdict | **Matches with noted gaps** (S1; placeholder wording) |
 | Screen 3 verdict | **Matches** |
-| Screen 4 verdict | **Matches** (the rite's own controls are extra, justified) |
+| Screen 4 verdict | **Matches** (the rite's own controls are extra, justified); redraw after accept and close after atone now evidenced |
 | Screen 5 verdict | **Matches** |
 
 ## Not exercised (BLOCKED, never inferred as pass)
@@ -197,7 +213,10 @@ Imbuing, Pull, Sineating, Atone and Accept rows were not reviewed here.
   with an open Atone offer (scene page via `DriftConversionOfferGate`) were mounted in a
   harness. The auto-open strip ("Settle your aura" call-out) was not drawn.
 - **BLOCKED: production bundle.** The vite dev server was used.
-- **BLOCKED: post-Accept redraw** (the fixture does not change the aura).
+- Not BLOCKED any more: the post-Accept redraw is evidenced (the fixture stands in for the
+  server's aura change; the refetch is the real hooks').
+- The web cast card's focus lines and the unauthored-tier refusal are not in the demo and
+  were not rendered here.
 - Telnet `aura`, `aura atone`, `aura accept` are not UI and were not compared.
 - Fonts: Cinzel and EB Garamond could not load, so type sizes were compared, not faces.
 
@@ -209,5 +228,6 @@ Imbuing, Pull, Sineating, Atone and Accept rows were not reviewed here.
 - A style test that, for every `--aura-*` token and every `aura-halo*` / `resonance-*` /
   `aura-settle-dialog` class the three surfaces emit, asserts a rule exists in the CSS reached
   from the rendered page's imports (the shape of `BuilderStylingTest`).
-- If S2 is confirmed, a test that renders `ThreadPullDialog` outside any realm and asserts
-  the confirm button's computed colour is the folio primary, not the shadcn default.
+- A test that renders `ThreadPullDialog` and `SettleAuraDialog` outside any realm and
+  asserts the confirm button's computed colour is the folio rust, not the shadcn default
+  (guards S2, now closed, against returning).

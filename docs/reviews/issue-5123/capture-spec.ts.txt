@@ -165,10 +165,11 @@ function thread(id: number, over: Record<string, unknown>) {
     target_kind: 'FACET', target_trait_id: null, target_technique_id: null, name: '', description: '',
     level: 3, developed_points: 0, level_cap: 10, anchor_cap: 10, effective_cap: 10, retired_at: null,
     created_at: '2026-11-14T00:00:00Z', updated_at: '2026-11-14T00:00:00Z', ...over,
+    display_name: (over.display_name as string | undefined) ?? (over.name as string) ?? '',
   };
 }
 const THREADS = [
-  thread(1, { name: 'Pyromancy', target_kind: 'GIFT' }),
+  thread(1, { name: '', display_name: 'Pyromancy', target_kind: 'GIFT' }),
   thread(2, {
     name: 'The Iron Baron', target_kind: 'RELATIONSHIP_TRACK', resonance: 13, resonance_name: 'Domination',
     resonances: [{ resonance_id: 13, resonance_name: 'Domination', amount: 20, leads: true }], level: 2,
@@ -234,6 +235,11 @@ test('screen 2: pull dialog', async ({ page }) => {
   await expect(dlg).toBeVisible();
   await page.waitForTimeout(500);
   await dlg.screenshot({ path: shot('app-screen2-dialog-initial.png') });
+  // No realm is stored: the dialog's own rust fallback is what colours it.
+  expect(await page.evaluate(() => document.documentElement.getAttribute('data-realm'))).toBeNull();
+  await expect(page.getByTestId('thread-checkbox-1')).toContainText('Pyromancy');
+  const bg = (id: string) => page.getByTestId(id).evaluate((e) => getComputedStyle(e).backgroundColor);
+  console.log('NO-REALM tier-1 selected bg', await bg('tier-btn-1'));
   // The Gift thread (1), the Facet thread (3) and the Relationship thread (2) are all offered.
   await expect(page.getByTestId('thread-checkbox-1')).toBeVisible();
   await expect(page.getByTestId('thread-checkbox-2')).toBeVisible();
@@ -242,6 +248,7 @@ test('screen 2: pull dialog', async ({ page }) => {
   await page.getByTestId('thread-checkbox-1').click();
   await page.getByTestId('thread-checkbox-2').click();
   await expect(page.getByTestId('payer-options-1')).toBeVisible();
+  console.log('NO-REALM Select Pull bg', await bg('commit-pull-btn'));
   await expect(page.getByTestId('payer-fixed-2')).toBeVisible();
   await expect(page.getByTestId('preview-panel')).toBeVisible();
   await page.waitForTimeout(500);
@@ -269,6 +276,12 @@ test('screen 2: pull picker (scene cast)', async ({ page }) => {
   await expect(page.getByTestId('payer-options-1')).toBeVisible();
   await page.waitForTimeout(600);
   await page.screenshot({ path: shot('app-screen2-picker.png'), fullPage: true });
+  // The name filter matches the Gift thread by its Gift's name.
+  await page.getByPlaceholder(/Filter by name/).fill('pyro');
+  await expect(page.getByTestId('applicable-row-1')).toBeVisible();
+  await expect(page.getByTestId('applicable-row-2')).toHaveCount(0);
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: shot('app-screen2-picker-filtered-pyro.png'), fullPage: true });
   console.log('ERRORS', JSON.stringify(errors));
 });
 
@@ -314,8 +327,9 @@ function ownAura(state: string) {
     dominant_affinity: 'Primal', dominant_affinity_display: 'Primal', unsettled: st.unsettled, unsettled_line: st.line,
     unsettled_affinity_name: st.affinity, mire_share_words: st.mire, glimpse_state: 'COMPLETE', updated_at: '2026-11-14T00:00:00Z' }];
 }
-async function mockSheet(page: Page, state: string) {
+async function mockSheet(page: Page, initial: string) {
   const accepted: string[] = [];
+  const cur = { state: initial };
   await page.route((url) => url.pathname.startsWith('/api/'), async (route: Route) => {
     const p = new URL(route.request().url()).pathname;
     const method = route.request().method();
@@ -327,10 +341,11 @@ async function mockSheet(page: Page, state: string) {
     if (p === `/api/roster/entries/${ENTRY_ID}/`)
       return j({ id: ENTRY_ID, character: { id: SHEET_ID, name: 'Ilsavet du Verane' }, profile_picture_url: null, tenures: [], can_apply: false,
         fullname: 'Ilsavet du Verane', quote: '', description: '', creation_provenance: 'player', creation_provenance_display: 'Player-created', created_for_table_name: null });
-    if (p === `/api/character-sheets/${SHEET_ID}/`) return j(sheet(state));
-    if (p === '/api/magic/character-auras/') return j(ownAura(state));
+    if (p === `/api/character-sheets/${SHEET_ID}/`) return j(sheet(cur.state));
+    if (p === '/api/magic/character-auras/') return j(ownAura(cur.state));
     if (p === '/api/magic/character-auras/42/accept/' && method === 'POST') {
       accepted.push('accept');
+      cur.state = 'settled';
       return j({ detail: 'You settle into who you have become.' });
     }
     if (p === '/api/roster/mail/unread-count/') return j({ count: 0 });
@@ -388,6 +403,13 @@ test('screen 4: Accept from the sheet (no scene, so no Atone)', async ({ page })
   await expect(page.getByTestId('drift-result')).toBeVisible();
   await page.waitForTimeout(400);
   await page.screenshot({ path: shot('app-screen4-sheet-after-accept.png') });
+  // The aura refetched: the halo redraws settled and the Unsettled status and button are gone.
+  await expect(page.getByTestId('aura-halo-status')).toHaveCount(0);
+  await expect(page.getByTestId('settle-aura-button')).toHaveCount(0);
+  await expect(page.getByTestId('aura-halo-sentence')).toHaveText('Mostly primal, a third abyssal.');
+  await page.getByTestId('settle-not-now').click();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: shot('app-screen4-sheet-settled-after-close.png') });
   console.log('ACCEPT POSTS', accepted.length);
 });
 
@@ -436,4 +458,58 @@ test('colour tokens reach the CG page and the sheet', async ({ page }) => {
   await expect(page.locator('.aura-halo-disc')).toBeVisible();
   console.log('CG TOKENS', (await read()).join(' '));
   console.log('CG HALO BG', await page.locator('.aura-halo-disc').evaluate((e) => getComputedStyle(e).backgroundImage));
+});
+
+// ---------------------------------------------------------------- screen 4, atone through the gate
+test('screen 4: atone through the offer gate, offer spent, aura refetched', async ({ page }) => {
+  const cur = { spent: false };
+  const aura = (settled: boolean) => [{ id: 1, character: 1,
+    shares: [['Celestial', 1, 0, 0], ['Primal', 2, settled ? 66 : 58, 66], ['Abyssal', 3, settled ? 34 : 42, 34]].map(([n, id, pct, st]) => ({
+      affinity_id: id, affinity_name: n, percent: String(pct), settled_percent: String(st) })),
+    dominant_affinity: 'Primal', dominant_affinity_display: 'Primal', unsettled: !settled,
+    unsettled_line: settled ? '' : 'Your Domination has grown strong enough to make you unsettled.',
+    unsettled_affinity_name: settled ? '' : 'Abyssal', mire_share_words: 'none', glimpse_state: 'NOT_STARTED', updated_at: '2026-11-14T00:00:00Z' }];
+  const offer = { id: 5, scene_id: 9, character_id: 1, rite_ready: true, rite_not_ready_message: '',
+    caps: [{ target_resonance: { id: 11, name: 'Fury' }, cap_remaining: 4, focus_bonus: 0,
+      sources: [{ resonance_id: 13, resonance_name: 'Domination', balance: 4, multiplier: '1.00', conversion_type: 'FALL', max_amount: 4, projected_output: 4 }],
+      qualifying_components: [{ item_id: 71, name: 'Ember censer', mode: 'burn' }] }] };
+  const posts: string[] = [];
+  await page.route((url) => url.pathname.startsWith('/api/'), async (route: Route) => {
+    const p = new URL(route.request().url()).pathname;
+    const method = route.request().method();
+    const j = (json: unknown) => route.fulfill({ json });
+    if (p === '/api/user/') return j(account);
+    if (p === '/api/magic/drift-correction/pending/')
+      return j({ count: cur.spent ? 0 : 1, next: null, previous: null, results: cur.spent ? [] : [offer] });
+    if (p === '/api/magic/character-auras/') return j(aura(cur.spent));
+    if (p === '/api/magic/drift-correction/convert/' && method === 'POST') {
+      posts.push(route.request().postData() ?? '');
+      cur.spent = true;
+      return j({ source_resonance_id: 13, target_resonance_id: 11, attempted_amount: 4, converted_amount: 4, granted_amount: 4,
+        outcome_name: 'Success', success_level: 1, conversion_type: 'FALL', focus_bonus: 0 });
+    }
+    if (method === 'GET') return j([]);
+    return route.fulfill({ status: 404, json: { detail: 'Not provided by this fixture.' } });
+  });
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/review5123.html?s=gate');
+  await expect(page.getByTestId('settle-exit-atone')).toBeVisible();
+  await expect(page.getByTestId('settle-exit-accept')).toBeVisible();
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: shot('app-screen4-gate-open-offer.png') });
+  await page.getByTestId('drift-component-71').click();
+  await page.getByTestId('drift-perform-11').click();
+  await expect(page.getByTestId('drift-result')).toBeVisible();
+  await page.waitForTimeout(800);
+  // The offer is spent and the character settled: neither exit remains, only the result.
+  await expect(page.getByTestId('settle-exit-atone')).toHaveCount(0);
+  await expect(page.getByTestId('settle-exit-accept')).toHaveCount(0);
+  await page.screenshot({ path: shot('app-screen4-gate-after-atone.png') });
+  console.log('CONVERT POSTS', posts.join(' | '), await page.getByTestId('drift-result').innerText());
+  await page.getByTestId('settle-not-now').click();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: shot('app-screen4-gate-closed.png') });
+  await expect(page.getByTestId('drift-conversion-gate-strip')).toHaveCount(0);
+  console.log('ERRORS', JSON.stringify(errors));
 });

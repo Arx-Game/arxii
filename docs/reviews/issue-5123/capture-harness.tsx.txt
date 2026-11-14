@@ -11,6 +11,7 @@ import { RealmThemeProvider } from './components/realm-theme-provider';
 import { ThreadPullDialog } from './magic/components/threads/ThreadPullDialog';
 import { useState } from 'react';
 import { ThreadPullPicker } from './magic/components/threads/ThreadPullPicker';
+import { DriftConversionOfferGate } from './magic/components/DriftConversionOfferGate';
 import { SettleAuraDialog } from './magic/components/SettleAuraDialog';
 import './index.css';
 
@@ -85,6 +86,7 @@ function Picker() {
 
 function Screen() {
   if (screen === 'picker') return <Picker />;
+  if (screen === 'gate') return <DriftConversionOfferGate sceneId={9} />;
   if (screen === 'pull') {
     return (
       <ThreadPullDialog
