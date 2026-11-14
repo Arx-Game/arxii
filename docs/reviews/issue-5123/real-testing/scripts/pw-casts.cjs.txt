@@ -1,0 +1,36 @@
+const { open, login, shot, EV } = require('./lib.cjs');
+const fs = require('fs');
+(async () => {
+  const out = []; const log = (s) => { console.log(s); out.push(s); };
+  const { browser, page } = await open();
+  await login(page, 'rt_ysmay');
+  const bal = async () => {
+    const r = await (await page.request.get('/api/magic/character-resonances/')).json();
+    return JSON.stringify(Object.fromEntries((r.results ?? r).map(x => [x.resonance_name, x.balance])));
+  };
+  log('balances at start ' + await bal());
+  const ids = { Domination: 3, Fury: 1, Wonder: 2 };
+  for (const payer of ['Domination', 'Fury', 'Wonder']) {
+    await page.goto('/scenes/1');
+    await page.waitForTimeout(2000);
+    await page.locator('button:has(svg.lucide-swords)').click();
+    await page.getByRole('button', { name: /Cast/ }).click();
+    await page.waitForTimeout(800);
+    await page.locator('#cast-section').getByRole('button', { name: /Lantern Ward/ }).first().click();
+    await page.waitForTimeout(2000);
+    await page.getByTestId('tier-btn-1-1').click();
+    await page.waitForTimeout(2000);
+    await page.getByTestId(`payer-1-${ids[payer]}`).click();
+    await page.waitForTimeout(800);
+    await shot(page, `flow2-04-cast-pay-with-${payer.toLowerCase()}`);
+    await page.getByRole('button', { name: /^Cast Lantern Ward/ }).click();
+    await page.waitForTimeout(4000);
+    const led = page.getByTestId('cast-ledger-result');
+    const txt = (await led.count()) ? (await led.innerText()).replace(/\n+/g, ' | ') : '(no ledger card) ' + (await page.locator('#cast-section').innerText()).replace(/\n+/g, ' | ').slice(0, 600);
+    log(`PAY WITH ${payer}: ledger => ${txt}`);
+    await shot(page, `flow2-05-cast-result-${payer.toLowerCase()}`);
+    log('balances after ' + payer + ' pull: ' + await bal());
+  }
+  fs.writeFileSync(`${EV}/flow2-casts-web-transcript.txt`, out.join('\n') + '\n');
+  await browser.close();
+})();

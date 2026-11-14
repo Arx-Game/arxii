@@ -1,0 +1,8 @@
+from world.magic.models import ThreadPullEffect
+from world.magic.constants import TargetKind, EffectKind
+for e in ThreadPullEffect.objects.filter(target_kind=TargetKind.GIFT):
+    e.effect_kind = EffectKind.INTENSITY_BUMP
+    e.intensity_bump_amount = e.flat_bonus_amount
+    e.flat_bonus_amount = None
+    e.save()
+    print(e.resonance.name, e.min_thread_level, e.intensity_bump_amount)

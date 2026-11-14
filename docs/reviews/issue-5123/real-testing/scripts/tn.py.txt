@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+"""Tiny telnet driver: tn.py <transcript-file> <user> <char> <cmd> [<cmd> ...]
+Connects to the real server on :4000, logs in, puppets <char>, sends each command and records the reply."""
+import re, socket, sys, time
+IAC = 255
+def strip_telnet(b: bytes) -> str:
+    out = bytearray(); i = 0
+    while i < len(b):
+        if b[i] == IAC and i + 1 < len(b):
+            i += 3 if b[i+1] in (251, 252, 253, 254) else 2
+            if b[i-1] == 250 if False else False: pass
+            continue
+        out.append(b[i]); i += 1
+    s = out.decode("utf-8", "replace")
+    return re.sub(r"\x1b\[[0-9;]*m", "", s)
+def read(sock, wait=1.5):
+    sock.settimeout(0.5); buf = b""; end = time.time() + wait
+    while time.time() < end:
+        try:
+            d = sock.recv(65536)
+            if not d: break
+            buf += d; end = time.time() + 0.6
+        except socket.timeout: pass
+    return strip_telnet(buf)
+def main():
+    path, user, char, *cmds = sys.argv[1:]
+    s = socket.create_connection(("localhost", 4000)); log = []
+    def say(line, wait=1.5):
+        s.sendall(line.encode() + b"\r\n"); r = read(s, wait)
+        log.append(f"> {line if not line.startswith('connect') else 'connect ' + user + ' ********'}\n{r.strip()}\n"); return r
+    log.append(read(s, 2.0).strip() + "\n")
+    say(f"connect {user} RtPass5123!", 2.5)
+    say(f"ic {char}", 2.5)
+    for c in cmds:
+        if c.startswith("sleep:"):
+            time.sleep(float(c[6:])); continue
+        say(c, 2.5)
+    s.sendall(b"quit\r\n"); time.sleep(0.5); s.close()
+    text = "\n".join(log)
+    open(path, "a").write(f"=== {user} as {char} ===\n" + text + "\n")
+    print(text)
+main()

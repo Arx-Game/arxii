@@ -1,0 +1,21 @@
+#!/usr/bin/env python3
+"""tn_hold.py <transcript> <user> <char> <seconds>: stay connected as <char> and record whatever the game tells them."""
+import sys, time, socket
+sys.argv_backup = sys.argv
+sys.path.insert(0, "/tmp/claude-1000/-workspaces-arxii/0208c4cb-2ffa-4410-bfdb-db3b2ea03f69/scratchpad")
+import importlib.util
+src = open("/tmp/claude-1000/-workspaces-arxii/0208c4cb-2ffa-4410-bfdb-db3b2ea03f69/scratchpad/tn.py").read().replace("\nmain()\n", "\n")
+ns = {}; exec(src, ns)
+path, user, char, secs, *initial = sys.argv[1:]
+s = socket.create_connection(("localhost", 4000)); log = []
+ns["read"](s, 2.0)
+s.sendall(f"connect {user} RtPass5123!\r\n".encode()); log.append(ns["read"](s, 2.5))
+s.sendall(f"ic {char}\r\n".encode()); log.append(ns["read"](s, 2.0))
+for c in initial:
+    s.sendall(c.encode() + b"\r\n"); log.append("> " + c + "\n" + ns["read"](s, 2.5))
+end = time.time() + float(secs)
+while time.time() < end:
+    r = ns["read"](s, 1.0)
+    if r.strip(): log.append("[unsolicited " + time.strftime("%H:%M:%S") + "] " + r.strip())
+s.sendall(b"quit\r\n"); time.sleep(0.3); s.close()
+open(path, "a").write(f"=== held session: {user} as {char} ({secs}s) ===\n" + "\n".join(x.strip() for x in log) + "\n")

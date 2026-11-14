@@ -1,0 +1,33 @@
+from django.db import transaction
+with transaction.atomic():
+    from actions.factories import ActionTemplateFactory
+    from evennia.objects.models import ObjectDB
+    from evennia_extensions.factories import RoomProfileFactory
+    from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
+    from world.combat.constants import ActionCategory, ParticipantStatus, PaceMode
+    from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory, CombatParticipantFactory
+    from world.scenes.constants import RoundStatus
+    from world.magic.factories import CharacterTechniqueFactory, EffectTypeFactory, TechniqueFactory
+    from world.magic.models import Gift
+    from world.scenes.factories import SceneFactory, SceneParticipationFactory
+    from world.scenes.interaction_services import invalidate_active_scene_cache
+    from world.character_sheets.models import CharacterSheet
+    from world.traits.factories import StatTraitFactory
+    from evennia.accounts.models import AccountDB
+    lantern = ObjectDB.objects.get(db_key="The Lantern")
+    scene = SceneFactory(location=RoomProfileFactory.__call__ if False else None, name="Lantern Night III", is_active=True) if False else None
+    from world.scenes.models import Scene
+    old = Scene.objects.filter(name="Lantern Night")
+    scene = SceneFactory(location=lantern.room_profile if hasattr(lantern, "room_profile") else RoomProfileFactory(objectdb=lantern), is_active=True, name="Lantern Night III")
+    invalidate_active_scene_cache(lantern)
+    ys = CharacterSheet.objects.get(character__db_key="Ysmay")
+    SceneParticipationFactory(scene=scene, account=AccountDB.objects.get(username="rt_ysmay"))
+    ct = CheckTypeFactory(); CheckTypeTraitFactory(check_type=ct, trait=StatTraitFactory(), weight=1)
+    gift = Gift.objects.get(name="Kindling")
+    tech = TechniqueFactory(name="Ember Lash", gift=gift, anima_cost=1, effect_type=EffectTypeFactory(base_power=10),
+        action_category=ActionCategory.PHYSICAL, action_template=ActionTemplateFactory(check_type=ct), clash_capable=True)
+    CharacterTechniqueFactory(character=ys, technique=tech)
+    enc = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1, room=lantern, pace_mode=PaceMode.MANUAL)
+    CombatParticipantFactory(encounter=enc, character_sheet=ys, status=ParticipantStatus.ACTIVE)
+    CombatOpponentFactory(encounter=enc, name="Gristle")
+    print("scene", scene.pk, "enc", enc.pk)

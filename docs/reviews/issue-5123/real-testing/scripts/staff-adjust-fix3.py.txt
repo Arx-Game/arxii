@@ -1,0 +1,7 @@
+from world.magic.factories import ThreadPullEffectFactory
+from world.magic.models import Resonance
+from world.magic.constants import TargetKind, EffectKind
+for name, amt, text in (("Domination", 8, "Domination sharpens at full depth."), ("Dread", 10, "Dread settles over the whole working.")):
+    ThreadPullEffectFactory(target_kind=TargetKind.TECHNIQUE, resonance=Resonance.objects.get(name=name), tier=1, min_thread_level=20,
+        effect_kind=EffectKind.FLAT_BONUS, flat_bonus_amount=amt, narrative_snippet=text)
+print("ok")

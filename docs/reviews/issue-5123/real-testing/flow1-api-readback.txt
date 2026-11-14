@@ -1,0 +1,8 @@
+GET /api/user/ -> 200
+user: {"id":2,"username":"e2e_test_account","display_name":"","last_login":"2026-11-14T20:00:51.826537Z","email":"e2e_test@example.com","email_verified":true,"can_create_characters":true,"character_slots":{"total":4,"used":1,"activity_total":1,"activity_used":0,"holders":[{"kind":"character","name":"Brannoch Fatui","roster_entry_id":6,"counts":true,"activity":false}]},"is_staff":false,"is_gm":false,"is_
+GET /api/magic/character-auras/ -> 200
+AURAS: [{"id":6,"character":12,"shares":[{"affinity_id":3,"affinity_name":"Abyssal","percent":"30.00","settled_percent":"30.00"},{"affinity_id":2,"affinity_name":"Primal","percent":"70.00","settled_percent":"70.00"}],"dominant_affinity":"Primal","dominant_affinity_display":"Primal","unsettled":false,"unsettled_line":"","unsettled_affinity_name":"","mire_share_words":"none","glimpse_state":"NOT_STARTED","updated_at":"2026-11-14T20:00:42.498944Z"}]
+GET /api/magic/character-resonances/ -> 200
+RESONANCES: [["Fury",60,0],["Wonder",10,0],["Domination",30,0]]
+GET /api/magic/threads/ -> 200
+THREADS: [[3,"GIFT","Fury",0,[["Fury",0,true],["Domination",0,false],["Wonder",0,false]]]]

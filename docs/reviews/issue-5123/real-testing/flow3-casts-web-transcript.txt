@@ -1,0 +1,8 @@
+rt_veyra cast #1: 0 anima spent | Power ledger | Channeled intensity channeled intensity | =1 → 1 | Total power | 1 | Done
+  focus lines in page: ["Keeping Focus (trait_1)"]
+rt_veyra cast #2: 0 anima spent | Power ledger | Channeled intensity channeled intensity | =1 → 1 | Total power | 1 | Done
+  focus lines in page: ["Keeping Focus (trait_1)"]
+rt_veyra cast #3: 0 anima spent | Power ledger | Channeled intensity channeled intensity | =1 → 1 | Total power | 1 | Done
+  focus lines in page: ["Keeping Focus (trait_1)"]
+rt_veyra cast #4: 0 anima spent | Power ledger | Channeled intensity channeled intensity | =1 → 1 | Total power | 1 | Done
+  focus lines in page: ["Keeping Focus (trait_1)"]

@@ -1,0 +1,27 @@
+const { createRequire } = require('module');
+const FE = '/workspaces/arxii/.claude/worktrees/feature-5123-a-character-with-several-resonances-mixe/frontend';
+const req = createRequire(FE + '/package.json');
+const { chromium } = req('@playwright/test');
+const EV = '/workspaces/arxii/.claude/worktrees/feature-5123-a-character-with-several-resonances-mixe/docs/reviews/issue-5123/real-testing';
+const fs = require('fs');
+fs.mkdirSync(EV, { recursive: true });
+async function open(width = 1280, height = 900) {
+  const browser = await chromium.launch({ executablePath: '/home/vscode/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell' });
+  const ctx = await browser.newContext({ viewport: { width, height }, baseURL: 'http://localhost:4001' });
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE.ERR', m.text().slice(0, 300)); });
+  return { browser, ctx, page };
+}
+async function login(page, user, pw = 'RtPass5123!') {
+  await page.goto('/login');
+  await page.getByPlaceholder('Username or Email').fill(user);
+  await page.getByPlaceholder('Password').fill(pw);
+  await page.getByRole('button', { name: 'Log In', exact: true }).click();
+  await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 20000 });
+}
+async function shot(page, name, opts = {}) {
+  await page.screenshot({ path: `${EV}/${name}.png`, fullPage: opts.full !== false });
+  console.log('SHOT', name);
+}
+module.exports = { open, login, shot, EV };

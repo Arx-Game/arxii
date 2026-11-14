@@ -1,0 +1,36 @@
+const { open, login, shot, EV } = require('./lib.cjs');
+const fs = require('fs');
+(async () => {
+  const { browser, page } = await open();
+  const out = [];
+  const log = (s) => { console.log(s); out.push(s); };
+  await login(page, 'e2e_test_account', 'TestPass123!');
+  await page.goto('/characters/create');
+  await page.waitForTimeout(2500);
+  // Picks were saved to the draft: reload shows the step closed with the picks listed.
+  log('STEP HEADER AFTER RELOAD: ' + (await page.locator('body').innerText()).match(/Your Resonance[^\n]*\n?[^\n]*/)[0].replace(/\n/g,' '));
+  await page.getByText('Your Resonance', { exact: false }).first().click();
+  await page.waitForSelector('[aria-label="Resonances"]', { state: 'visible' });
+  await page.waitForTimeout(800);
+  log('BUDGET (reopened): ' + (await page.getByText(/of 10 placed/).innerText()));
+  for (const name of ['Fury', 'Wonder', 'Domination', 'Mercy', 'Dread', 'Dawnlight']) {
+    const el = page.getByLabel(new RegExp(`^${name}: \\d+ points?$`));
+    log(`${name}: ` + ((await el.count()) ? await el.first().getAttribute('aria-label') : 'no weight shown'));
+  }
+  const txt = await page.locator('body').innerText();
+  const m = txt.match(/YOUR AURA[\s\S]{0,200}/i) || txt.match(/Mostly[^\n]*/);
+  log('AURA: ' + (m ? m[0].replace(/\n/g, ' | ') : 'not found'));
+  await shot(page, 'flow1-03-resonance-step-reopened-after-reload');
+  // 9 of 10: take one point off Fury and show the halo while the step stays open
+  await page.getByRole('button', { name: 'Less Fury', exact: true }).click();
+  await page.waitForTimeout(1500);
+  log('BUDGET at 9: ' + (await page.getByText(/of 10 placed/).innerText()));
+  const txt2 = await page.locator('body').innerText();
+  const m2 = txt2.match(/YOUR AURA[\s\S]{0,200}/i);
+  log('AURA at 9 (Fury 5, Wonder 1, Domination 3): ' + (m2 ? m2[0].replace(/\n/g, ' | ') : 'not found'));
+  await shot(page, 'flow1-04-halo-at-nine-of-ten');
+  await page.getByRole('button', { name: 'More Fury', exact: true }).click();
+  await page.waitForTimeout(1500);
+  fs.writeFileSync(`${EV}/flow1-web-transcript.txt`, out.join('\n') + '\n');
+  await browser.close();
+})();

@@ -1,0 +1,198 @@
+=== rt_veyra as Veyra ===
+==============================================================
+ Welcome to Arx, version 5.0.1!
+
+ If you have an existing account, connect to it by typing:
+      connect <username> <password>
+
+ New accounts come from the website during alpha, invite-only — the
+ telnet create command is closed. Once you've registered there, run
+ account email <address> here to verify the email your account needs.
+
+ If you have spaces in your username, enclose it in quotes.
+ Enter help for more info. look will re-show this screen.
+
+==============================================================
+
+> connect rt_veyra ********
+You become Veyra.
+The Lantern
+This is a room.
+Characters: Ysmay and Veyra
+Now controlling Veyra.
+
+> ic Veyra
+Already controlling Veyra.
+
+> aura
+Your aura: Primal (nearly all), Abyssal (a tenth).
+Your Domination has grown strong enough to make you unsettled.
+You have no open chance to atone.
+
+=== rt_marrow as Marrow ===
+==============================================================
+ Welcome to Arx, version 5.0.1!
+
+ If you have an existing account, connect to it by typing:
+      connect <username> <password>
+
+ New accounts come from the website during alpha, invite-only — the
+ telnet create command is closed. Once you've registered there, run
+ account email <address> here to verify the email your account needs.
+
+ If you have spaces in your username, enclose it in quotes.
+ Enter help for more info. look will re-show this screen.
+
+==============================================================
+
+> connect rt_marrow ********
+You become Marrow.
+The Lantern
+This is a room.
+Characters: Ysmay and Marrow
+Now controlling Marrow.
+
+> ic Marrow
+Already controlling Marrow.
+
+> moment tag Veyra=Fury Flare
+You tagged Veyra with 'Fury Flare'. 20 Fury and renown awarded.
+
+=== rt_veyra as Veyra ===
+==============================================================
+ Welcome to Arx, version 5.0.1!
+
+ If you have an existing account, connect to it by typing:
+      connect <username> <password>
+
+ New accounts come from the website during alpha, invite-only — the
+ telnet create command is closed. Once you've registered there, run
+ account email <address> here to verify the email your account needs.
+
+ If you have spaces in your username, enclose it in quotes.
+ Enter help for more info. look will re-show this screen.
+
+==============================================================
+
+> connect rt_veyra ********
+You become Veyra.
+[NARRATIVE] ✦ Fury Flare earns minor renown.
+The Lantern
+This is a room.
+Characters: Ysmay and Veyra
+Now controlling Veyra.
+
+> ic Veyra
+Already controlling Veyra.
+
+> aura
+Your aura: Primal (nearly all), Abyssal (a tenth).
+Your Domination has grown strong enough to make you unsettled.
+You have no open chance to atone.
+
+=== rt_marrow as Marrow ===
+==============================================================
+ Welcome to Arx, version 5.0.1!
+
+ If you have an existing account, connect to it by typing:
+      connect <username> <password>
+
+ New accounts come from the website during alpha, invite-only — the
+ telnet create command is closed. Once you've registered there, run
+ account email <address> here to verify the email your account needs.
+
+ If you have spaces in your username, enclose it in quotes.
+ Enter help for more info. look will re-show this screen.
+
+==============================================================
+
+> connect rt_marrow ********
+You become Marrow.
+The Lantern
+This is a room.
+Characters: Ysmay, Veyra, and Marrow
+Now controlling Marrow.
+Veyra has left the game.
+
+> ic Marrow
+Already controlling Marrow.
+
+> moment tag Veyra=Dominating Stare
+You tagged Veyra with 'Dominating Stare'. 30 Domination and renown awarded.
+
+=== rt_marrow as Marrow ===
+==============================================================
+ Welcome to Arx, version 5.0.1!
+
+ If you have an existing account, connect to it by typing:
+      connect <username> <password>
+
+ New accounts come from the website during alpha, invite-only — the
+ telnet create command is closed. Once you've registered there, run
+ account email <address> here to verify the email your account needs.
+
+ If you have spaces in your username, enclose it in quotes.
+ Enter help for more info. look will re-show this screen.
+
+==============================================================
+
+> connect rt_marrow ********
+You become Marrow.
+The Lantern
+This is a room.
+Characters: Ysmay and Marrow
+Now controlling Marrow.
+
+> ic Marrow
+Already controlling Marrow.
+
+> moment tag Veyra=Fury Flare
+You tagged Veyra with 'Fury Flare'. 20 Fury and renown awarded.
+
+=== rt_marrow as Marrow ===
+==============================================================
+ Welcome to Arx, version 5.0.1!
+
+ If you have an existing account, connect to it by typing:
+      connect <username> <password>
+
+ New accounts come from the website during alpha, invite-only — the
+ telnet create command is closed. Once you've registered there, run
+ account email <address> here to verify the email your account needs.
+
+ If you have spaces in your username, enclose it in quotes.
+ Enter help for more info. look will re-show this screen.
+
+==============================================================
+
+> connect rt_marrow ********
+You become Marrow.
+The Lantern
+This is a room.
+Characters: Ysmay, Veyra, and Marrow
+Now controlling Marrow.
+
+> ic Marrow
+Already controlling Marrow.
+
+> moment tag Veyra=Dominating Stare
+You tagged Veyra with 'Dominating Stare'. 30 Domination and renown awarded.
+
+> moment tag Veyra=Fury Flare
+You tagged Veyra with 'Fury Flare'. 20 Fury and renown awarded.
+
+=== held session: rt_veyra as Veyra (40s) ===
+You become Veyra.
+[NARRATIVE] ✦ Dominating Stare earns minor renown.
+[NARRATIVE] ✦ Fury Flare earns minor renown.
+[NARRATIVE] ✦ You've become a Talked About.
+The Lantern
+This is a room.
+Characters: Ysmay and Veyra
+Now controlling Veyra.
+Already controlling Veyra.
+[unsolicited 20:20:01] Marrow has entered the game.
+[unsolicited 20:20:03] [NARRATIVE] ✦ Dominating Stare earns minor renown.
+[unsolicited 20:20:04] You have grown unsettled. Use aura to see how you can atone.
+[NARRATIVE] ✦ Fury Flare earns minor renown.
+[unsolicited 20:20:05] Marrow has left the game.

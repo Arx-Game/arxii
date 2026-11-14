@@ -1,0 +1,97 @@
+=== rt_marrow as Marrow ===
+==============================================================
+ Welcome to Arx, version 5.0.1!
+
+ If you have an existing account, connect to it by typing:
+      connect <username> <password>
+
+ New accounts come from the website during alpha, invite-only — the
+ telnet create command is closed. Once you've registered there, run
+ account email <address> here to verify the email your account needs.
+
+ If you have spaces in your username, enclose it in quotes.
+ Enter help for more info. look will re-show this screen.
+
+==============================================================
+
+> connect rt_marrow ********
+You become Marrow.
+The Lantern
+This is a room.
+Characters: Ysmay and Marrow
+Now controlling Marrow.
+
+> ic Marrow
+Already controlling Marrow.
+
+> moment tag Veyra=Dominating Stare
+You tagged Veyra with 'Dominating Stare'. 30 Domination and renown awarded.
+
+=== rt_veyra as Veyra ===
+==============================================================
+ Welcome to Arx, version 5.0.1!
+
+ If you have an existing account, connect to it by typing:
+      connect <username> <password>
+
+ New accounts come from the website during alpha, invite-only — the
+ telnet create command is closed. Once you've registered there, run
+ account email <address> here to verify the email your account needs.
+
+ If you have spaces in your username, enclose it in quotes.
+ Enter help for more info. look will re-show this screen.
+
+==============================================================
+
+> connect rt_veyra ********
+You become Veyra.
+[NARRATIVE] ✦ Dominating Stare earns minor renown.
+The Lantern
+This is a room.
+Characters: Ysmay and Veyra
+Now controlling Veyra.
+
+> ic Veyra
+Already controlling Veyra.
+
+> aura
+Your aura: Primal (nearly all), Abyssal (a tenth).
+Your Domination has grown strong enough to make you unsettled.
+You have no open chance to atone.
+
+=== rt_veyra as Veyra ===
+==============================================================
+ Welcome to Arx, version 5.0.1!
+
+ If you have an existing account, connect to it by typing:
+      connect <username> <password>
+
+ New accounts come from the website during alpha, invite-only — the
+ telnet create command is closed. Once you've registered there, run
+ account email <address> here to verify the email your account needs.
+
+ If you have spaces in your username, enclose it in quotes.
+ Enter help for more info. look will re-show this screen.
+
+==============================================================
+
+> connect rt_veyra ********
+You become Veyra.
+The Lantern
+This is a room.
+Characters: Ysmay and Veyra
+Now controlling Veyra.
+
+> ic Veyra
+Already controlling Veyra.
+
+> cast Lantern Ward
+Your Domination has grown strong enough to make you unsettled. You must keep your focus.
+Veyra casts Lantern Ward: Success.
+Your technique resolves.
+
+> cast Lantern Ward
+You must wait before acting again.
+
+> cast Lantern Ward
+You must wait before acting again.

@@ -1,0 +1,7 @@
+from world.magic.factories import ThreadPullEffectFactory
+from world.magic.models import Resonance
+from world.magic.constants import TargetKind, EffectKind
+for name, amt, text in (("Fury", 4, "Fury builds behind the working."), ("Domination", 6, "Your will closes around the working.")):
+    ThreadPullEffectFactory(target_kind=TargetKind.GIFT, resonance=Resonance.objects.get(name=name), tier=1, min_thread_level=5,
+        effect_kind=EffectKind.FLAT_BONUS, flat_bonus_amount=amt, narrative_snippet=text)
+print("ok")

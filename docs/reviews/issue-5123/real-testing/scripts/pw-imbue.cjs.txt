@@ -1,0 +1,26 @@
+const { open, login, shot, EV } = require('./lib.cjs');
+const fs = require('fs');
+(async () => {
+  const out = []; const log = (s) => { console.log(s); out.push(s); };
+  const { browser, page } = await open();
+  await login(page, 'rt_ysmay');
+  await page.goto('/threads/1');
+  await page.waitForSelector('[data-testid=imbue-panel]');
+  const stat = async (tag) => { const t = await page.locator('body').innerText(); log(tag + ' :: ' + t.match(/THREAD STATS[\s\S]*?Level Cap/)?.[0].replace(/\n/g,' ') + ' | balance line: ' + t.match(/Available balance: \d+/)?.[0] + ' | payers: ' + (await page.getByTestId('imbue-payers').innerText()).replace(/\n/g,' ')); };
+  await stat('before');
+  const doImbue = async (resName, amt) => {
+    await page.getByRole('radio', { name: new RegExp('^' + resName) }).click();
+    for (let i = 1; i < amt; i++) await page.getByTestId('imbue-increment').click();
+    log(`amount shown: ${await page.getByTestId('imbue-amount').innerText()} paying ${resName}`);
+    await page.getByTestId('imbue-button').click();
+    await page.waitForTimeout(3000);
+    await stat(`after imbuing ${resName} ${amt}`);
+  };
+  await doImbue('Fury', 4);
+  await doImbue('Domination', 8);
+  const t = await page.locator('body').innerText();
+  log('PAGE after: ' + t.slice(t.indexOf('Threads/'), t.indexOf('Threads/') + 1500).replace(/\n+/g, ' | '));
+  await shot(page, 'flow2-02-thread-after-imbue');
+  fs.writeFileSync(`${EV}/flow2-imbue-web-transcript.txt`, out.join('\n') + '\n');
+  await browser.close();
+})();
