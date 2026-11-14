@@ -554,8 +554,10 @@ actions, backends, and service functions.
   helper the crossing ceremony uses; a Gift thread reads as its Gift's name). Each line prints
   the name a player can type (`thread_label`, `commands/utils/thread_lookup.py`). That module
   is the one thread lookup (`find_thread` / `resolve_thread`): `imbue thread=` and `pull=`
-  resolve a thread by its own name, else its anchor's name (a Gift thread by the Gift's name),
-  else its number, and a name that fits two threads is refused with each candidate's number. `threads crossing list` shows pending crossing
+  resolve a thread by its own name or its anchor's name (a Gift thread by the Gift's name), or
+  its number; a name that fits two threads (including one thread's own name and another's
+  anchor) is refused with each candidate's number, and `threads` prints `[number N]` for a
+  thread whose names another shares. `threads crossing list` shows pending crossing
   offers + available `CrossingOption` rows; `threads crossing choose <id>` resolves a
   pending offer via `ResolveCrossingOfferAction` (the same action the web
   `CrossingRespondView` uses). Replaces the former standalone `crossing` command.

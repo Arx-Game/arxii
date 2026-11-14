@@ -248,6 +248,12 @@ class PullingAGiftThreadByTheGiftsName(_BurningResonance):
         self.assertEqual(self.balance(self.ysmay, self.veil), 10 - 1)
         self.assertEqual(self.balance(self.ysmay, self.ember), 10)
 
+    def test_the_number_pulls_it_too(self) -> None:
+        told = self.cast(f"{self.thread.pk}:Ember")
+
+        self.assertIn("Your technique resolves.", told)
+        self.assertEqual(self.balance(self.ysmay, self.ember), 10 - 1)
+
     def test_the_gifts_name_and_a_resonance_pays_with_that_resonance(self) -> None:
         told = self.cast("kindling:Ember")
 
@@ -357,8 +363,8 @@ class ImbuingWithAResonance(JourneyCase):
         self.assertIn("Veil Flame (level 0)", told)
         self.assertIn("Loom Strand", told)
 
-    def test_a_threads_own_name_beats_another_threads_anchor_name(self) -> None:
-        self._gift_thread()
+    def test_a_threads_own_name_that_is_another_threads_anchor_name_is_refused(self) -> None:
+        gift_thread = self._gift_thread()
         named = ThreadFactory(
             owner=self.sheet, resonance=self.ember, level=2, _trait_value=200, name="Flame"
         )
@@ -366,8 +372,30 @@ class ImbuingWithAResonance(JourneyCase):
         self.telnet(self.ysmay, "ritual Rite of Imbuing")
         told = strip_ansi(self.telnet(self.ysmay, "imbue thread=Flame amount=3"))
 
+        self.assertIn("More than one thread answers to 'Flame'", told)
+        self.assertIn(f"number {gift_thread.pk} is Veil", told)
+        self.assertIn(f"number {named.pk} is Ember", told)
+        self.assertEqual(self.balance(self.ember), 10)
+        self.assertEqual(self.balance(self.veil), 10)
+
+    def test_the_gift_thread_is_reached_by_its_number_and_threads_prints_it(self) -> None:
+        gift_thread = self._gift_thread()
+        ThreadFactory(
+            owner=self.sheet, resonance=self.ember, level=2, _trait_value=200, name="Flame"
+        )
+
+        listed = strip_ansi(self.telnet(self.ysmay, "threads"))
+        self.assertIn(f"Flame [number {gift_thread.pk}]", listed)
+
+        self.telnet(self.ysmay, "ritual Rite of Imbuing")
+        told = strip_ansi(
+            self.telnet(self.ysmay, f"imbue thread={gift_thread.pk} amount=3 resonance=ember")
+        )
+
         self.assertIn("You complete the rite, imbuing Flame.", told)
-        self.assertEqual(ThreadResonance.objects.get(thread=named, resonance=self.ember).amount, 3)
+        self.assertEqual(
+            ThreadResonance.objects.get(thread=gift_thread, resonance=self.ember).amount, 3
+        )
 
     def test_a_name_two_anchors_share_is_refused_with_the_numbers(self) -> None:
         first = self._gift_thread()

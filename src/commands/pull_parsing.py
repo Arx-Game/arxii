@@ -212,7 +212,7 @@ class PullParsingMixin:
         named resonance must be one the character holds; it need not be one the thread
         carries (it pays, and brings no perks). A thread whose own name holds a colon still
         resolves by its whole name before the entry is split. A thread answers to its own
-        name or its anchor's (a Gift thread by the Gift's name), see ``find_thread``.
+        name, its anchor's (a Gift thread by the Gift's name) or its number, see ``find_thread``.
 
         Raises:
             CommandError: No such active thread, or a resonance that is unknown or that the

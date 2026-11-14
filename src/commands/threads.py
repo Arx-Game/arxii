@@ -12,7 +12,12 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from commands.command import ArxCommand
-from commands.utils.thread_lookup import active_threads, open_labels_for, thread_label
+from commands.utils.thread_lookup import (
+    active_threads,
+    anchor_labels,
+    shared_name_pks,
+    thread_label,
+)
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -84,7 +89,6 @@ class CmdThreads(ArxCommand):
             self.msg("Usage: threads list | threads crossing list | threads crossing choose <id>")
 
     def _list_threads(self, sheet: CharacterSheet) -> None:
-        from world.magic.crossing.handlers import anchor_label_for  # noqa: PLC0415
         from world.magic.models import ThreadResonance  # noqa: PLC0415
 
         threads = active_threads(sheet)
@@ -92,16 +96,17 @@ class CmdThreads(ArxCommand):
             self.msg("You have no active threads.")
             return
 
-        open_labels = open_labels_for(threads)
+        anchors = anchor_labels(threads)
+        shared = shared_name_pks(threads, anchors)
         # One query, read fresh: a prefetch would stay on the shared Thread instances.
         rows_by_thread: dict[int, list[ThreadResonance]] = {}
         for row in ThreadResonance.objects.filter(thread__in=threads).select_related("resonance"):
             rows_by_thread.setdefault(row.thread_id, []).append(row)
         lines = ["|wYour threads:|n"]
         for thread in threads:
-            anchor = anchor_label_for(thread, open_labels)
             mix = _resonance_mix(thread, rows_by_thread.get(thread.pk, []))
-            lines.append(f"  {mix} {thread_label(thread, anchor)} (level {thread.level})")
+            label = thread_label(thread, anchors[thread.pk], show_number=thread.pk in shared)
+            lines.append(f"  {mix} {label} (level {thread.level})")
         self.msg("\n".join(lines))
 
     def _list_crossing_offers(self, sheet: object) -> None:
@@ -119,6 +124,8 @@ class CmdThreads(ArxCommand):
                 "thread__resonance",
                 "thread__target_trait",
                 "thread__target_facet",
+                "thread__target_gift",
+                "thread__target_technique",
                 "thread__target_mantle",
                 "thread__target_relationship__target__character",
                 "thread__target_relationship__target_companion",
