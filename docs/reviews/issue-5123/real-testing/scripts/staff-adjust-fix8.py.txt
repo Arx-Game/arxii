@@ -1,4 +1,0 @@
-from world.magic.models import DramaticMomentType, CharacterResonance
-for t in DramaticMomentType.objects.all():
-    t.per_scene_cap = 10; t.save()
-print(list(CharacterResonance.objects.filter(character_sheet__character__db_key="Veyra").values_list("resonance__name","balance","lifetime_earned")))

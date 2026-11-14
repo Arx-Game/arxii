@@ -1,7 +1,0 @@
-BEFORE thread: level=20 developed=40 leads=Domination rows=[["Domination",40]]; thread count for Ysmay=2
-BEFORE pull preview (thread 2): [["Domination","level_read",20,"perks",[8,16]],["Dread","level_read",20,"perks",[]],["Fury","level_read",20,"perks",[]],["Wonder","level_read",20,"perks",[]]]
-points to move shown: 5
-PROJECTED: 5 points → 5
-DIALOG AFTER: (closed)
-AFTER thread: level=20 developed=40 leads=Domination rows=[["Domination",35],["Dread",5]]; thread count for Ysmay=2
-AFTER pull preview (thread 2): [["Domination","level_read",20,"perks",[8,16]],["Dread","level_read",10,"perks",[6]],["Fury","level_read",20,"perks",[]],["Wonder","level_read",20,"perks",[]]]

@@ -1,6 +1,0 @@
-BEFORE: unsettled=true line="Your Domination has grown strong enough to make you unsettled." mire="none" dominant=Primal shares=[["Abyssal","10.00","10.00"],["Primal","90.00","90.00"]]
-pending offers: 0
-DIALOG: Your Domination has grown strong enough to make you unsettled. | Accept the changes to your Aura | You become more abyssal. | Nearly all primal, a tenth abyssal. | Accept | Not now | Close
-DIALOG AFTER ACCEPT: Settle your aura | You become more abyssal. | Close | Close
-AFTER: unsettled=false line="" mire="none" dominant=Primal shares=[["Abyssal","20.00","20.00"],["Primal","80.00","80.00"]]
-SHEET AURA TEXT: Aura | Nearly all primal, a fifth abyssal. | You have not looked into your own aura yet. | Finish your Glimpse | Codex | Roster | Scenes | Log in | Powered by Evennia

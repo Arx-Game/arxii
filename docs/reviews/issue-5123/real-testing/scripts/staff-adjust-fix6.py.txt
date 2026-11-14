@@ -1,7 +1,0 @@
-from world.magic.models import CharacterResonance
-from world.conditions.models import ConditionInstance
-for res, v in (("Fury", 200), ("Domination", 10)):
-    r = CharacterResonance.objects.get(character_sheet__character__db_key="Veyra", resonance__name=res)
-    r.balance = v; r.lifetime_earned = v; r.save()
-ConditionInstance.objects.filter(target__db_key="Veyra").delete()
-print("reset ok")

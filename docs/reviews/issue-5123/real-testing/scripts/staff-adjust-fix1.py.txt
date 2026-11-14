@@ -1,5 +1,0 @@
-from world.magic.models import CharacterResonance
-for res, bal in (("Fury", 70), ("Wonder", 10), ("Domination", 25), ("Dread", 5)):
-    r = CharacterResonance.objects.get(character_sheet__character__db_key="Ysmay", resonance__name=res)
-    r.balance = bal; r.lifetime_earned = bal; r.save()
-    print(res, bal)

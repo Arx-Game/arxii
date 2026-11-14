@@ -1,7 +1,0 @@
-balances at start {"Dread":5,"Domination":11,"Fury":63,"Wonder":7}
-PAY WITH Domination: ledger => 0 anima spent | Power ledger | Channeled intensity channeled intensity | =1 → 1 | Power term thread power | +8 → 9 | Total power | 9 | Done
-balances after Domination pull: {"Dread":5,"Fury":63,"Wonder":7,"Domination":8}
-PAY WITH Fury: ledger => 0 anima spent | Power ledger | Channeled intensity channeled intensity | =1 → 1 | Power term thread power | +6 → 7 | Total power | 7 | Done
-balances after Fury pull: {"Dread":5,"Wonder":7,"Domination":8,"Fury":60}
-PAY WITH Wonder: ledger => 0 anima spent | Power ledger | Channeled intensity channeled intensity | =1 → 1 | Total power | 1 | Done
-balances after Wonder pull: {"Dread":5,"Domination":8,"Fury":60,"Wonder":4}

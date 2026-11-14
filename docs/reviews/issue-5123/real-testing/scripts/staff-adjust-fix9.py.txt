@@ -1,7 +1,0 @@
-from world.character_sheets.models import CharacterSheet
-from world.magic.models import Resonance
-from world.magic.constants import GainSource
-from world.magic.services.resonance import grant_resonance
-ss = CharacterSheet.objects.get(character__db_key="Sorrel")
-grant_resonance(ss, Resonance.objects.get(name="Domination"), 200, source=GainSource.SINEATING, from_mire=True)
-print("second 200 Mire taken")

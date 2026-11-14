@@ -1,6 +1,0 @@
-BEFORE: unsettled=true line="Your Domination has grown strong enough to make you unsettled." mire="a third" dominant=Celestial shares=[["Abyssal","36.36","0.00"],["Celestial","63.64","100.00"]]
-pending offers: 0
-DIALOG: Your Domination has grown strong enough to make you unsettled. | Accept the changes to your Aura | You become more abyssal. | Mostly celestial, a third abyssal. | Accept | Not now | Close
-DIALOG AFTER ACCEPT: Settle your aura | You become more abyssal. | Close | Close
-AFTER: unsettled=false line="" mire="none" dominant=Celestial shares=[["Abyssal","36.36","36.36"],["Celestial","63.64","63.64"]]
-SHEET AURA TEXT: Aura | Mostly celestial, a third abyssal. | You have not looked into your own aura yet. | Finish your Glimpse | Codex | Roster | Scenes | Log in | Powered by Evennia

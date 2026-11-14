@@ -1,4 +1,0 @@
-from world.magic.factories import DramaticMomentTypeFactory
-from world.magic.models import Resonance
-DramaticMomentTypeFactory(label="Dominating Stare", resonance=Resonance.objects.get(name="Domination"), per_scene_cap=3, resonance_amount=30)
-print("ok")
