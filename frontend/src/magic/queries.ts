@@ -14,6 +14,7 @@ import { performRitual } from '@/rituals/api';
 import type { PerformRitualRequest } from '@/rituals/types';
 import { useAppSelector } from '@/store/hooks';
 import { combatKeys } from '@/combat/queries';
+import { auraKeys } from './auraQueries';
 import { availableActionsKeys } from '@/scenes/actionQueries';
 import type {
   AcceptTeachingOfferRequest,
@@ -898,9 +899,11 @@ export function usePendingDriftConversionOffers(enabled: boolean = true) {
 /**
  * Perform the drift correction rite under an open offer.
  *
- * On success invalidates the pending inbox (the cap shrinks or the offer closes)
- * and magicKeys.characterResonanceList() (the source loses and the target gains
- * balance; prefix match covers every per-sheet entry).
+ * On success invalidates the pending inbox (the cap shrinks or the offer closes),
+ * magicKeys.characterResonanceList() (the source loses and the target gains balance;
+ * prefix match covers every per-sheet entry), the auras and the character sheets (an
+ * atonement can leave the character settled, so the dialog must not keep reading her
+ * as unsettled).
  */
 export function useConvertDrift() {
   const qc = useQueryClient();
@@ -909,6 +912,8 @@ export function useConvertDrift() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: magicKeys.driftConversionPending() }).catch(() => {});
       qc.invalidateQueries({ queryKey: magicKeys.characterResonanceList() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: auraKeys.all }).catch(() => {});
+      qc.invalidateQueries({ queryKey: ['character-sheets'] }).catch(() => {});
     },
   });
 }

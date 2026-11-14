@@ -840,6 +840,77 @@ describe('SettleAuraDialog - Atone and Accept exits (#5123)', () => {
   });
 });
 
+describe('SettleAuraDialog - reads the new state after it settles the character (#5123)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /** Reads of the aura answer with `current()`; the accept POST answers a settled aura. */
+  function serveAuras(current: () => CharacterAura[]) {
+    apiFetchMock.mockImplementation(async (_url: string, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? new Response(JSON.stringify({ detail: 'You become more abyssal.', aura: SETTLED_AURA }), {
+            status: 200,
+          })
+        : new Response(JSON.stringify(current()), { status: 200 })
+    );
+  }
+
+  const auraReads = () =>
+    apiFetchMock.mock.calls.filter(
+      ([url, init]) => String(url).includes('character-auras/?character=') && !init?.method
+    );
+
+  it('an atonement that settles her drops the unsettled header and the Accept card', async () => {
+    const user = userEvent.setup();
+    let settled = false;
+    vi.mocked(api.convertDrift).mockResolvedValue(RESULT);
+    renderGate([OFFER], 101, [UNSETTLED_AURA]);
+    serveAuras(() => [settled ? SETTLED_AURA : UNSETTLED_AURA]);
+    await screen.findByTestId('settle-exit-accept');
+    expect(screen.getByRole('dialog')).toHaveTextContent('has grown strong enough');
+    const readsBefore = auraReads().length;
+
+    // The server closes the offer and reads her settled once the rite has run.
+    settled = true;
+    vi.mocked(api.getPendingDriftConversionOffers).mockResolvedValue(paginated([]));
+    await user.click(screen.getByTestId('drift-component-502'));
+    await user.click(screen.getByTestId('drift-perform-20'));
+
+    expect(await screen.findByTestId('drift-result')).toHaveTextContent('Partial Success');
+    await waitFor(() => {
+      expect(screen.queryByTestId('settle-exit-accept')).not.toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('settle-exit-atone')).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog')).not.toHaveTextContent('has grown strong enough');
+    // The aura was asked for again, not just left as it was read at open.
+    expect(auraReads().length).toBeGreaterThan(readsBefore);
+  });
+
+  it('accepting refetches the offers, so the leftover Atone card goes with the offer', async () => {
+    const user = userEvent.setup();
+    let settled = false;
+    renderGate([OFFER], 101, [UNSETTLED_AURA]);
+    serveAuras(() => [settled ? SETTLED_AURA : UNSETTLED_AURA]);
+    const acceptButton = await screen.findByTestId('settle-accept-button');
+    // Accepting settles her; from then on the offer endpoint answers empty.
+    settled = true;
+    vi.mocked(api.getPendingDriftConversionOffers).mockResolvedValue(paginated([]));
+    await user.click(acceptButton);
+
+    await waitFor(() => {
+      expect(vi.mocked(api.getPendingDriftConversionOffers).mock.calls.length).toBeGreaterThan(1);
+    });
+    expect(await screen.findByTestId('drift-result')).toHaveTextContent(
+      /^You become more abyssal\.$/
+    );
+    await waitFor(() => {
+      expect(screen.queryByTestId('settle-exit-atone')).not.toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('settle-exit-accept')).not.toBeInTheDocument();
+  });
+});
+
 describe('DriftConversionOfferGate - auto-open once per offer id', () => {
   beforeEach(() => {
     vi.clearAllMocks();

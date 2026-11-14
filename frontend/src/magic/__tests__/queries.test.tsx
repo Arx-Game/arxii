@@ -790,7 +790,7 @@ describe('useImbueThread', () => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(api.imbueThreadAuto).toHaveBeenCalledWith(10, 7, 5);
+    expect(api.imbueThreadAuto).toHaveBeenCalledWith(10, 7, 5, undefined);
   });
 
   it('surfaces error on failure', async () => {

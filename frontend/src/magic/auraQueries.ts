@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
 import { readErrorDetail } from '@/lib/errors';
 import type { components } from '@/generated/api';
+import { magicKeys } from './queries';
 
 export type CharacterAura = components['schemas']['CharacterAura'];
 export type AcceptAuraResponse = components['schemas']['AcceptAuraResponse'];
@@ -53,7 +54,8 @@ export function useCharacterAuras(characterId: number | null, enabled: boolean =
 
 /**
  * Accept the changes to the aura. On success the aura and the character sheet refetch,
- * so the halo redraws settled.
+ * so the halo redraws settled, and the conversion offers refetch too: accepting settles
+ * the character, so the server closes the offer she held.
  */
 export function useAcceptAura() {
   const qc = useQueryClient();
@@ -62,6 +64,7 @@ export function useAcceptAura() {
       acceptAuraChanges(auraId),
     onSuccess: (_data, { characterSheetId }) => {
       qc.invalidateQueries({ queryKey: auraKeys.all }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.driftConversionPending() }).catch(() => {});
       qc.invalidateQueries({ queryKey: ['character-sheets', characterSheetId] }).catch(() => {});
     },
   });
