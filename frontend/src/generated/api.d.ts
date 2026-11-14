@@ -14428,9 +14428,10 @@ export interface paths {
      * @description Accept the changes to the aura: settle who the character has become (#5123).
      *
      *     Dispatches ``AcceptAuraChangeAction`` (the same action telnet ``aura accept`` runs)
-     *     for the character the aura belongs to. ``get_object`` only finds an aura of a
-     *     character the requester plays, so nobody accepts for another's character. Refused
-     *     with the action's own sentence while the character is not unsettled.
+     *     for the character the aura belongs to. ``get_object`` finds the auras of characters
+     *     the requester plays and, for staff, every aura, so staff may accept for any
+     *     character. Refused with the action's own sentence while the character is not
+     *     unsettled.
      */
     post: operations['magic_character_auras_accept_create'];
     delete?: never;
@@ -17001,17 +17002,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description ViewSet for Thread records (Spec A §4.5).
-     *
-     *     list / retrieve: returns threads the requesting account owns (staff can
-     *     see all), excluding soft-retired rows.
-     *     create: delegates to the serializer, which calls ``weave_thread``. The
-     *     caller MUST supply ``character_sheet_id`` identifying which owned sheet
-     *     to weave the thread for — no implicit first-sheet selection.
-     *     destroy: soft-retire — sets ``retired_at`` rather than deleting the row,
-     *     so historical references remain.
-     */
+    /** @description List the page of threads, reading every thread's resonance rows in one query. */
     get: operations['magic_threads_list'];
     put?: never;
     /**
@@ -54394,6 +54385,7 @@ export interface components {
       resonance: number;
       readonly resonance_name: string;
       readonly resonances: components['schemas']['ThreadResonanceRow'][];
+      readonly allowed_resonance_ids: number[] | null;
       /**
        * @description Discriminator selecting which target_* FK is populated.
        *

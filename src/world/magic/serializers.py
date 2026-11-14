@@ -1050,7 +1050,25 @@ class ThreadResonanceRowSerializer(serializers.ModelSerializer):
 
     def get_leads(self, obj: ThreadResonance) -> bool:
         """True for the row ``Thread.resonance`` copies (the largest amount)."""
-        return obj.resonance_id == self.context["leading_resonance_id"]
+        leading_id = self.context.get("leading_resonance_id")
+        if leading_id is None:
+            leading_id = obj.thread.resonance_id
+        return obj.resonance_id == leading_id
+
+
+def thread_rows_by_thread(threads: list[Thread]) -> dict[int, list[ThreadResonance]]:
+    """Every resonance row of ``threads``, grouped by thread id, in one query (#5123).
+
+    A list endpoint passes this through serializer ``context=`` as ``thread_rows``. It is
+    not a ``to_attr`` prefetch on the threads: they are identity-mapped instances,
+    so a prefetched list would stick to the shared instance and go stale across requests
+    (see ``CharacterThreadHandler._rows_by_thread``).
+    """
+    grouped: dict[int, list[ThreadResonance]] = {thread.pk: [] for thread in threads}
+    rows = ThreadResonance.objects.filter(thread__in=list(grouped)).select_related("resonance")
+    for row in rows:
+        grouped[row.thread_id].append(row)
+    return grouped
 
 
 class ThreadSerializer(serializers.ModelSerializer):
@@ -1073,6 +1091,8 @@ class ThreadSerializer(serializers.ModelSerializer):
     # #5123: every resonance the thread holds, leading one first; ``resonance`` above stays
     # the leading resonance.
     resonances = serializers.SerializerMethodField()
+    # Null when any resonance may be imbued; a restricted Gift thread lists its Gift's set.
+    allowed_resonance_ids = serializers.SerializerMethodField()
     target_id = serializers.IntegerField(write_only=True, required=True)
     # The anchor of a TRAIT / TECHNIQUE thread, read back so a combat pull dialog can offer
     # the threads related to what she is using (#5066); null for every other kind.
@@ -1100,6 +1120,7 @@ class ThreadSerializer(serializers.ModelSerializer):
             "resonance",
             "resonance_name",
             "resonances",
+            "allowed_resonance_ids",
             "target_kind",
             "target_id",
             "target_trait_id",
@@ -1132,11 +1153,28 @@ class ThreadSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(ThreadResonanceRowSerializer(many=True))
     def get_resonances(self, obj: Thread) -> list[dict]:
-        """Every resonance row of the thread, the leading one first (#5123)."""
-        rows = ThreadResonance.objects.filter(thread=obj).select_related("resonance")
+        """Every resonance row of the thread, the leading one first (#5123).
+
+        A list view passes every row in one query as ``context["thread_rows"]``
+        (``thread_rows_by_thread``); a single thread reads its own.
+        """
+        rows = self.context.get("thread_rows", {}).get(obj.pk)
+        if rows is None:
+            rows = ThreadResonance.objects.filter(thread=obj).select_related("resonance")
         return ThreadResonanceRowSerializer(
             rows, many=True, context={"leading_resonance_id": obj.resonance_id}
         ).data
+
+    @extend_schema_field(serializers.ListField(child=serializers.IntegerField(), allow_null=True))
+    def get_allowed_resonance_ids(self, obj: Thread) -> list[int] | None:
+        """The resonances this thread may take when imbued; null when any may (#5123).
+
+        Only a Gift thread whose Gift supports a set of resonances is restricted.
+        """
+        from world.magic.services.thread_rows import gift_allowed_resonance_ids  # noqa: PLC0415
+
+        allowed = gift_allowed_resonance_ids(obj)
+        return None if allowed is None else sorted(allowed)
 
     def get_level_cap(self, obj: Thread) -> int:
         """Return the character-level cap for this thread's owner (#4585)."""

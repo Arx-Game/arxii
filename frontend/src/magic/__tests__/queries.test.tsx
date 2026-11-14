@@ -153,6 +153,7 @@ const mockThread = {
   resonance: 3,
   resonance_name: 'Starfire',
   resonances: [],
+  allowed_resonance_ids: null,
   target_kind: 'RELATIONSHIP_CAPSTONE' as const,
   target_trait_id: null,
   target_technique_id: null,

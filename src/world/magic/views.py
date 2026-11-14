@@ -184,6 +184,7 @@ from world.magic.serializers import (
     ThreadSerializer,
     ThreadWeavingTeachingOfferSerializer,
     primary_persona_names_for,
+    thread_rows_by_thread,
 )
 from world.magic.services import (
     facets as facet_services,
@@ -696,9 +697,10 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
         """Accept the changes to the aura: settle who the character has become (#5123).
 
         Dispatches ``AcceptAuraChangeAction`` (the same action telnet ``aura accept`` runs)
-        for the character the aura belongs to. ``get_object`` only finds an aura of a
-        character the requester plays, so nobody accepts for another's character. Refused
-        with the action's own sentence while the character is not unsettled.
+        for the character the aura belongs to. ``get_object`` finds the auras of characters
+        the requester plays and, for staff, every aura, so staff may accept for any
+        character. Refused with the action's own sentence while the character is not
+        unsettled.
         """
         from actions.definitions.accept_aura import AcceptAuraChangeAction  # noqa: PLC0415
 
@@ -1078,6 +1080,7 @@ class ThreadViewSet(viewsets.ModelViewSet):
                 "target_technique",
                 "target_relationship",
                 "target_capstone",
+                "target_gift",
             )
             .order_by("-pk")
         )
@@ -1087,6 +1090,23 @@ class ThreadViewSet(viewsets.ModelViewSet):
             cast(AccountDB, user),
         ).character_ids()
         return qs.filter(owner_id__in=character_ids)
+
+    def list(self, request: Request, *args, **kwargs) -> Response:
+        """List the page of threads, reading every thread's resonance rows in one query."""
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        threads = list(queryset) if page is None else page
+        serializer = self.get_serializer(
+            threads,
+            many=True,
+            context={
+                **self.get_serializer_context(),
+                "thread_rows": thread_rows_by_thread(threads),
+            },
+        )
+        if page is None:
+            return Response(serializer.data)
+        return self.get_paginated_response(serializer.data)
 
     def destroy(self, request: Request, *args, **kwargs) -> Response:
         """Soft-retire the thread by stamping ``retired_at`` instead of deleting.

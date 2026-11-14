@@ -8,6 +8,8 @@ that pays, and the character creation draft takes the weighted resonance picks.
 
 from __future__ import annotations
 
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -247,6 +249,42 @@ class PreviewPayloadTests(_CharacterWithResonances):
         # No capability power curve is authored here, so the authored base stands.
         self.assertEqual(perk["capability_value"], 2)
         self.assertIsNone(perk["resistance_damage_type_name"])
+
+    def _resonance_row_queries(self, thread_count: int) -> int:
+        for _ in range(thread_count):
+            thread = ThreadFactory(
+                owner=self.sheet, resonance=self.fury, target_trait=TraitFactory(), level=2
+            )
+            ThreadResonanceFactory(thread=thread, resonance=self.fury, amount=10)
+            ThreadResonanceFactory(thread=thread, resonance=self.domination, amount=15)
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(reverse("magic:thread-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        table = ThreadResonance._meta.db_table
+        return sum(1 for q in queries.captured_queries if f'"{table}"' in q["sql"])
+
+    def test_thread_list_reads_the_resonance_rows_in_one_query(self) -> None:
+        self.assertEqual(self._resonance_row_queries(1), 1)
+        self.assertEqual(self._resonance_row_queries(4), 1)
+
+    def test_thread_list_carries_each_threads_rows_and_allowed_set(self) -> None:
+        gift = GiftFactory()
+        gift.resonances.add(self.fury, self.wonder)
+        gift_thread = provision_latent_gift_thread(self.sheet, gift, resonances=[self.fury])
+        plain = ThreadFactory(owner=self.sheet, resonance=self.fury, target_trait=TraitFactory())
+
+        response = self.client.get(reverse("magic:thread-list"))
+
+        by_id = {row["id"]: row for row in response.data["results"]}
+        self.assertEqual(
+            by_id[gift_thread.pk]["allowed_resonance_ids"],
+            sorted([self.fury.pk, self.wonder.pk]),
+        )
+        self.assertIsNone(by_id[plain.pk]["allowed_resonance_ids"])
+        self.assertEqual(
+            [row["resonance_id"] for row in by_id[gift_thread.pk]["resonances"]],
+            [self.fury.pk],
+        )
 
 
 class ImbuePayerTests(_CharacterWithResonances):
