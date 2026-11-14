@@ -61,10 +61,13 @@ class AcceptAuraResult:
 
     ``mire_moved`` is the lifetime resonance taken from the Mire that became the
     character's own; ``settled_shares`` is who they are now, per affinity pk.
+    ``grown_affinity`` is the affinity they grew toward: the affinity of the resonance that
+    made them unsettled, read before accepting. It is what "You become more ..." names.
     """
 
     mire_moved: int
     main_affinity: Affinity | None
+    grown_affinity: Affinity | None
     settled_shares: dict[int, Decimal]
 
 

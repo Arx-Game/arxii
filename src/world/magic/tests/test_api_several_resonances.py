@@ -143,7 +143,7 @@ class AcceptEndpointTests(_CharacterWithResonances):
         again = self.client.post(self._aura_url("accept/"))
 
         self.assertEqual(done.status_code, status.HTTP_200_OK, done.data)
-        self.assertEqual(done.data["detail"], "You become more primal.")
+        self.assertEqual(done.data["detail"], "You become more abyssal.")
         self.assertIs(done.data["aura"]["unsettled"], False)
         settled = {row["affinity_name"]: row for row in done.data["aura"]["shares"]}
         self.assertEqual(float(settled[self.abyssal.name]["settled_percent"]), 30.0)

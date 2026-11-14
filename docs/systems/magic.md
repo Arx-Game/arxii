@@ -4506,7 +4506,8 @@ front by `rite_is_ready`; a tier whose share is 0.00 converts nothing, spends th
 offering and leaves the cap intact. The other exit, `accept_aura_change` (`services/drift.py`;
 `AcceptAuraChangeAction`), is refused unless unsettled, moves the Sineater's Mire lifetime into
 their own, sets every `settled_percent` to the resulting share (so `steps_past` is 0) and writes
-no corruption. The web reaches it at `POST /api/magic/character-auras/<id>/accept/`
+no corruption. Its line, "You become more abyssal.", names `AcceptAuraResult.grown_affinity`, the
+affinity of the resonance that made them unsettled (read before accepting), for web and telnet alike. The web reaches it at `POST /api/magic/character-auras/<id>/accept/`
 (`CharacterAuraViewSet.accept`, which dispatches `AcceptAuraChangeAction` for an aura of a
 character the requester plays; a refusal is a 400 `{detail}`). The aura payload
 (`CharacterAuraSerializer`) carries `unsettled`, `unsettled_line` (the same sentence as above,

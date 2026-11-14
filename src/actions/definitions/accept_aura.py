@@ -51,8 +51,9 @@ class AcceptAuraChangeAction(Action):
             result = accept_aura_change(sheet)
         except NotUnsettledError as exc:
             return ActionResult(success=False, message=exc.user_message)
-        if result.main_affinity is None:
+        # The affinity they grew toward (what made them unsettled), not the unchanged main one.
+        if result.grown_affinity is None:
             message = "You accept the changes to your aura."
         else:
-            message = f"You become more {result.main_affinity.name.lower()}."
+            message = f"You become more {result.grown_affinity.name.lower()}."
         return ActionResult(success=True, message=message, data={"accept_aura_result": result})

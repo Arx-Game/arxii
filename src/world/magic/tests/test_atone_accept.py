@@ -255,7 +255,7 @@ class AcceptTests(TestCase):
         again = action.run(self.sheet.character)
 
         self.assertTrue(done.success)
-        self.assertEqual(done.message, "You become more celestial.")
+        self.assertEqual(done.message, "You become more abyssal.")
         self.assertFalse(again.success)
         self.assertNotIn("accepted", again.message)
 

@@ -94,7 +94,7 @@ class AcceptingTheChanges(_TheAura):
 
         told = strip_ansi(self.telnet(self.ysmay, "aura accept"))
 
-        self.assertIn("You become more celestial.", told)
+        self.assertIn("You become more abyssal.", told)
         self.assertNotIn("accepted", told.lower())
         self.assertEqual(self.abyssal_settled(self.ysmay), 30)
         self.assertNotIn("unsettled", strip_ansi(self.telnet(self.ysmay, "aura")))

@@ -2090,7 +2090,9 @@ older sense (shift in aura percentages). Do not mix the two in names. The other 
 unsettled is `accept_aura_change(sheet)` (`services/drift.py`, `AcceptAuraChangeAction`, key
 `accept_aura_change`): refused with `NotUnsettledError` unless `steps_past > 0`; moves every
 `mire_lifetime` into the character's own, sets each `settled_percent` to the resulting share,
-writes no corruption.
+writes no corruption. `AcceptAuraResult.grown_affinity` is the affinity of the resonance that
+made them unsettled, read before accepting; it is what the action's "You become more
+abyssal." names (the main affinity is unchanged by an accept, so it cannot say what grew).
 - Models (`models/drift.py`): `DriftCorrectionConfig` (singleton; `rite`, `check_type` null until
   staff author them; `check_difficulty`; `cap_percent`), `DriftCorrectionOutcomeShare` (an
   `OutcomeTierAward`; `converted_share` is the fraction of the requested amount that converts,

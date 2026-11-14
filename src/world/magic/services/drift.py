@@ -335,8 +335,11 @@ def accept_aura_change(sheet: CharacterSheet) -> AcceptAuraResult:
     """
     from world.magic.services.aura import recompute_aura  # noqa: PLC0415
 
-    if drift_for(sheet).steps_past <= 0:
+    reading = drift_for(sheet)
+    if reading.steps_past <= 0:
         raise NotUnsettledError
+    leading = reading.leading_excess_resonance
+    grown = leading.affinity if leading is not None else None
     mire_moved = 0
     for row in list(
         CharacterResonance.objects.select_for_update().filter(
@@ -358,7 +361,10 @@ def accept_aura_change(sheet: CharacterSheet) -> AcceptAuraResult:
             share.settled_percent = share.percent
             share.save(update_fields=["settled_percent"])
     return AcceptAuraResult(
-        mire_moved=mire_moved, main_affinity=_main_affinity(aura), settled_shares=settled
+        mire_moved=mire_moved,
+        main_affinity=_main_affinity(aura),
+        grown_affinity=grown,
+        settled_shares=settled,
     )
 
 
