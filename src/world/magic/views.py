@@ -2449,7 +2449,7 @@ class PendingDriftConversionOfferViewSet(viewsets.ReadOnlyModelViewSet):
     GET /api/magic/drift-correction/pending/{id}/
 
     Scoped to the authenticated user's character sheets (active tenures), and to offers
-    whose scene has not finished, the same rule telnet's ``drift`` uses. A finish route
+    whose scene has not finished, the same rule telnet's ``aura`` uses. A finish route
     that skips ``Scene.finish_scene`` can leave an offer row behind; it is never listed.
     """
 
