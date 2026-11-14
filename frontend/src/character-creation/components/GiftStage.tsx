@@ -22,9 +22,7 @@ import { useDraftDistinctions } from '@/hooks/useDistinctions';
 import type { DraftDistinctionEntry } from '@/types/distinctions';
 import {
   ChapterLeaf,
-  CodexLine,
   Entry,
-  EntryDoors,
   EntryList,
   Field,
   Marginalia,
@@ -43,14 +41,16 @@ import {
   useStatDefinitions,
   useUpdateDraft,
 } from '../queries';
-import type { CharacterDraft, Tradition, VisibleOffer } from '../types';
+import type { CharacterDraft, ResonanceWeightPick, Tradition, VisibleOffer } from '../types';
 import { Stage } from '../types';
 import { AnimaCheckStep } from './gift/AnimaCheckStep';
 import { GiftFacetsField } from './gift/GiftFacetsField';
 import { GiftSelector } from './gift/GiftSelector';
 import { GlimpseSection } from './gift/GlimpseSection';
 import { MagicTrainingBlock } from './gift/MagicTrainingBlock';
+import { ResonanceWeights } from './gift/ResonanceWeights';
 import { StyleStep } from './gift/StyleStep';
+import { heaviestFirst, leadResonanceId, placedPoints } from './gift/resonanceWeights';
 import { hasMagicTraining, isTrainingSpent, trainingHeading } from './gift/magicTraining';
 import { TechniqueSelector } from './gift/TechniqueSelector';
 import { TraditionStep } from './gift/TraditionStep';
@@ -207,7 +207,8 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
 
   const draftData = draft.draft_data;
   const giftId = draftData.selected_gift_id ?? null;
-  const selectedResonanceId = draftData.selected_gift_resonance_id ?? null;
+  const resonanceWeights = draftData.gift_resonance_weights ?? [];
+  const creationPoints = draft.resonance_creation_points;
   const selectedTechniqueIds = draftData.selected_technique_ids ?? [];
   const picks = draft.starting_technique_picks;
 
@@ -215,7 +216,8 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
     tradition: draft.selected_tradition != null,
     gift: giftId != null,
     techniques: selectedTechniqueIds.length > 0,
-    resonance: selectedResonanceId != null,
+    // The step is done only when every creation point is placed (#5123).
+    resonance: resonanceWeights.length > 0 && placedPoints(resonanceWeights) === creationPoints,
     anima: draftData.anima_check_stat_id != null && draftData.anima_check_skill_id != null,
   };
 
@@ -226,7 +228,15 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   // selects a tradition).
   const { data: cgGifts } = useCGGifts(completion.tradition ? draft.id : undefined);
   const giftName = cgGifts?.find((gift) => gift.id === giftId)?.name;
-  const resonanceName = resonances.find((r) => r.id === selectedResonanceId)?.name;
+  // The picks heaviest first: the step's gloss and the rail name them all, and the facets
+  // below belong to the heaviest.
+  const pickedNames = heaviestFirst(resonanceWeights)
+    .map((pick) => resonances.find((r) => r.id === pick.resonance_id)?.name)
+    .filter((name): name is string => name != null);
+  const resonanceName = pickedNames.length > 0 ? pickedNames.join(', ') : undefined;
+  const leadResonanceName = resonances.find(
+    (r) => r.id === leadResonanceId(resonanceWeights)
+  )?.name;
   const techniqueCountLine = `${selectedTechniqueIds.length} of ${picks} chosen`;
 
   // Magical training (#4659) is its own step after the Resonance: its fit bonuses count
@@ -281,14 +291,10 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   const animaCheckLine =
     animaStatName && animaSkillName ? `${animaStatName} + ${animaSkillName}` : undefined;
 
-  const handleSelectResonance = (resonanceId: number) => {
+  const handleResonanceWeights = (weights: ResonanceWeightPick[]) => {
     updateDraft.mutate({
       draftId: draft.id,
-      data: {
-        draft_data: {
-          selected_gift_resonance_id: resonanceId,
-        },
-      },
+      data: { draft_data: { gift_resonance_weights: weights } },
     });
   };
 
@@ -421,29 +427,12 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
           gateReason="Choose your techniques first"
           open={completion.techniques && !completion.resonance}
         >
-          <EntryList label="Resonances">
-            {resonances.map((resonance) => {
-              const isSelected = selectedResonanceId === resonance.id;
-              return (
-                <Entry
-                  key={resonance.id}
-                  name={resonance.name}
-                  tag={resonance.affinity_name}
-                  chosen={isSelected}
-                  open={isSelected}
-                  onChoose={() => handleSelectResonance(resonance.id)}
-                >
-                  {resonance.description && <p>{resonance.description}</p>}
-                  <CodexLine entryId={resonance.codex_entry_id} name={resonance.name} />
-                  <EntryDoors
-                    chooseLabel={`Select ${resonance.name}`}
-                    onChoose={() => handleSelectResonance(resonance.id)}
-                    chosen={isSelected}
-                  />
-                </Entry>
-              );
-            })}
-          </EntryList>
+          <ResonanceWeights
+            resonances={resonances}
+            weights={resonanceWeights}
+            budget={creationPoints}
+            onChange={handleResonanceWeights}
+          />
         </FunnelStep>
 
         {showStyle && (
@@ -496,7 +485,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
       <Field id="motif" label="Motif" hint={copy?.magic_motif_desc}>
         <textarea id="motif" rows={4} {...register('motif_description')} />
       </Field>
-      <GiftFacetsField draft={draft} resonanceName={resonanceName} />
+      <GiftFacetsField draft={draft} resonanceName={leadResonanceName} />
 
       <h2 className="section-h" id="glimpse-heading">
         {copy?.magic_glimpse_heading ?? 'The Glimpse'}

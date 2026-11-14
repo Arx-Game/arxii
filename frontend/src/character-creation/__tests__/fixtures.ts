@@ -782,6 +782,7 @@ export const mockEmptyDraft: CharacterDraft = {
   stats_points_remaining: 5,
   stats_budget: 5,
   starting_technique_picks: 1,
+  resonance_creation_points: 10,
   magic_training: {
     base_sources: [],
     gift_bonus: 0,

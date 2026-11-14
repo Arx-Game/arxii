@@ -118,6 +118,75 @@ describe('GiftStage (folio)', () => {
     expect(screen.getByText('Whispers of Shadow', { selector: '.tag' })).toBeInTheDocument();
   });
 
+  describe('the resonance step (#5123)', () => {
+    const pickedDraft = (weights: { resonance_id: number; weight: number }[]) =>
+      createMockDraft({
+        selected_path: mockPath,
+        selected_tradition: mockTradition,
+        draft_data: {
+          selected_gift_id: 1,
+          selected_technique_ids: [1],
+          gift_resonance_weights: weights,
+        },
+      });
+
+    it('saves the spread as gift_resonance_weights, the whole list each time', async () => {
+      renderWithCharacterCreationProviders(
+        <GiftStage
+          draft={pickedDraft([{ resonance_id: 1, weight: 4 }])}
+          onRegisterBeforeLeave={vi.fn()}
+        />
+      );
+      expect(screen.getByText('4 of 10 placed')).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'More Flame' }));
+      expect(updateDraftMutate).toHaveBeenCalledWith({
+        draftId: 1,
+        data: {
+          draft_data: {
+            gift_resonance_weights: [
+              { resonance_id: 1, weight: 4 },
+              { resonance_id: 2, weight: 1 },
+            ],
+          },
+        },
+      });
+    });
+
+    it('stays open and gates what follows until every point is placed', () => {
+      renderWithCharacterCreationProviders(
+        <GiftStage
+          draft={pickedDraft([{ resonance_id: 1, weight: 4 }])}
+          onRegisterBeforeLeave={vi.fn()}
+        />
+      );
+      const steps = Array.from(
+        screen.getByRole('list', { name: 'Gift steps' }).children
+      ) as HTMLElement[];
+      expect(steps[3]).not.toHaveClass('chosen');
+      expect(steps[3].querySelector('details')).toHaveAttribute('open');
+      expect(steps[4]).toHaveClass('closed');
+      expect(steps[4]).toHaveTextContent('Choose a resonance first');
+    });
+
+    it('reads as chosen, naming every resonance heaviest first, once all are placed', () => {
+      renderWithCharacterCreationProviders(
+        <GiftStage
+          draft={pickedDraft([
+            { resonance_id: 2, weight: 3 },
+            { resonance_id: 1, weight: 7 },
+          ])}
+          onRegisterBeforeLeave={vi.fn()}
+        />
+      );
+      const steps = Array.from(
+        screen.getByRole('list', { name: 'Gift steps' }).children
+      ) as HTMLElement[];
+      expect(steps[3]).toHaveClass('chosen');
+      expect(steps[3]).toHaveTextContent('Shadow, Flame');
+      expect(steps[4]).not.toHaveClass('closed');
+    });
+  });
+
   describe('the magical training step (#4659)', () => {
     const trainedDraft = (
       allocated: number,
@@ -126,7 +195,11 @@ describe('GiftStage (folio)', () => {
       createMockDraft({
         selected_path: mockPath,
         selected_tradition: mockTradition,
-        draft_data: { selected_gift_id: giftId, selected_gift_resonance_id: resonanceId },
+        draft_data: {
+          selected_gift_id: giftId,
+          gift_resonance_weights:
+            resonanceId == null ? [] : [{ resonance_id: resonanceId, weight: 10 }],
+        },
         magic_training: {
           ...createMockDraft().magic_training,
           base_sources: [{ name: 'Tradition Training', rank: 1, points: 20, show_rank: true }],
@@ -229,7 +302,10 @@ describe('GiftStage (folio)', () => {
         selected_path: mockPath,
         selected_tradition: mockTradition,
         selected_combat_style: styleId,
-        draft_data: { selected_gift_id: 1, selected_gift_resonance_id: 1 },
+        draft_data: {
+          selected_gift_id: 1,
+          gift_resonance_weights: [{ resonance_id: 1, weight: 10 }],
+        },
         magic_training: {
           ...createMockDraft().magic_training,
           total: 20,

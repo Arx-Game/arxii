@@ -471,6 +471,8 @@ export interface CharacterDraft {
   stats_budget: number;
   /** Gift-stage technique pick budget (base 1 + distinction bonus, #2426). */
   starting_technique_picks: number;
+  /** The points the Gift stage's resonance step spreads (DriftConfig.creation_points, #5123). */
+  resonance_creation_points: number;
   /** The Magic-skill training pool, its fit bonuses and the allocation against it (#4659). */
   magic_training: MagicTraining;
   /** The age range CG accepts for this draft; the server composes every cap (#3663). */
@@ -915,6 +917,12 @@ export interface Affinity {
 }
 
 /** A Resonance row from /api/magic/resonances/ (ResonanceSerializer). */
+/** One resonance and the creation points spread onto it (#5123). */
+export interface ResonanceWeightPick {
+  resonance_id: number;
+  weight: number;
+}
+
 export interface Resonance {
   id: number;
   name: string;
@@ -1102,8 +1110,10 @@ export interface DraftData {
   // The Glimpse guided flow (#2427)
   glimpse_story?: string;
   glimpse_tag_ids?: number[];
-  // Magic fields - Gift resonance (anchors the latent GIFT thread at CG finalization, #1620)
-  selected_gift_resonance_id?: number | null;
+  // Magic fields - the weighted resonances that anchor the latent GIFT thread at CG
+  // finalization (#1620, #5123). A partial spread may be saved; the stage reads complete
+  // only when every creation point is placed.
+  gift_resonance_weights?: ResonanceWeightPick[];
   // Optional facets tied to the gift resonance at finalize (#5021), at most five
   selected_gift_facet_ids?: number[];
   magic_complete?: boolean;

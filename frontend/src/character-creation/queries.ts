@@ -72,6 +72,7 @@ import {
   withdrawDraft,
 } from './api';
 import type { FinalizeForTablePayload } from './api';
+import { leadResonanceId } from './components/gift/resonanceWeights';
 import type { CharacterDraft, CharacterDraftUpdate, OfferChapter } from './types';
 
 export const characterCreationKeys = {
@@ -555,7 +556,7 @@ export function useCGTechniqueOptions(
  */
 export function usePersonalizationOptions(draft: CharacterDraft) {
   const ids = draft.draft_data.selected_technique_ids ?? [];
-  const resonanceId = draft.draft_data.selected_gift_resonance_id ?? null;
+  const resonanceId = leadResonanceId(draft.draft_data.gift_resonance_weights ?? []);
   const facetIds = draft.draft_data.selected_gift_facet_ids ?? [];
   return useQuery({
     queryKey: characterCreationKeys.personalizationOptions(draft.id, resonanceId, ids, facetIds),
