@@ -318,10 +318,10 @@ def next_signatures_by_technique(
     """Per technique pk, the next flourish its TECHNIQUE thread will unlock (#4099).
 
     One catalog query per sheet build, and none when the character holds no active
-    TECHNIQUE thread. A character can hold several TECHNIQUE threads on the SAME
-    technique (one per resonance, ``uniq_thread_technique``) — the nearest flourish
-    wins, by ``min_crossing_level``, then name, then pk, so the pick never depends
-    on dict-overwrite order.
+    TECHNIQUE thread. A technique has one thread per owner (``uniq_thread_technique``, #5123),
+    so the flourishes in play are the ones gated on that thread's leading resonance; the
+    nearest wins, by ``min_crossing_level``, then name, then pk, so the pick never depends
+    on catalog order.
     """
     from world.magic.models import SignatureMotifBonus  # noqa: PLC0415
     from world.magic.services.signature import next_signature_bonus  # noqa: PLC0415

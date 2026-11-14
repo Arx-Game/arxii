@@ -1938,6 +1938,7 @@ class ThreadResonanceInline(admin.TabularInline):
     """The resonances a thread holds, written only by services (#5123)."""
 
     model = ThreadResonance
+    formset = OneRowPerFormSet
     extra = 0
     can_delete = False
     fields = ["resonance", "amount", "created_at"]

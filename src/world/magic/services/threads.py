@@ -842,8 +842,10 @@ def weave_thread(  # noqa: PLR0913
     kwargs[_ANCHOR_FIELDS[target_kind]] = target
     thread = Thread.objects.create(**kwargs)
     write_resonance_rows(thread, [resonance])
-    recompute_max_health_with_threads(character_sheet)
+    # Invalidate first: the weave's own checks may have loaded the handler's cache, and the
+    # recompute reads the baseline from it (it must see the thread just woven).
     character_sheet.character.threads.invalidate()
+    recompute_max_health_with_threads(character_sheet)
 
     # For ORGANIZATION threads, mint CharacterTechnique rows for the org's
     # acquired gifts whose supported-resonance set contains the thread's chosen
