@@ -101,6 +101,7 @@ from world.magic.permissions import (
     IsThreadOwner,
 )
 from world.magic.serializers import (
+    AcceptAuraResponseSerializer,
     AcceptSoulTetherSerializer,
     AcceptTeachingOfferResponseSerializer,
     AcceptTeachingOfferSerializer,
@@ -688,6 +689,24 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
         return CharacterAura.objects.filter(character_id__in=character_ids).prefetch_related(
             aura_shares_prefetch()
         )
+
+    @extend_schema(request=None, responses={200: AcceptAuraResponseSerializer})
+    @action(detail=True, methods=["post"], url_path="accept")
+    def accept(self, request: Request, pk: int | None = None) -> Response:
+        """Accept the changes to the aura: settle who the character has become (#5123).
+
+        Dispatches ``AcceptAuraChangeAction`` (the same action telnet ``aura accept`` runs)
+        for the character the aura belongs to. ``get_object`` only finds an aura of a
+        character the requester plays, so nobody accepts for another's character. Refused
+        with the action's own sentence while the character is not unsettled.
+        """
+        from actions.definitions.accept_aura import AcceptAuraChangeAction  # noqa: PLC0415
+
+        aura = self.get_object()
+        result = AcceptAuraChangeAction().run(actor=aura.character.character)
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(AcceptAuraResponseSerializer({"detail": result.message, "aura": aura}).data)
 
     @extend_schema(request=GlimpseSetTagsSerializer, responses={200: CharacterAuraSerializer})
     @action(detail=True, methods=["post"], url_path="set-glimpse-tags")

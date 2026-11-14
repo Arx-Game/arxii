@@ -547,8 +547,14 @@ def _technique_personalization_errors(
     )
 
 
-def _resonance_weights_error(raw: object, weights: list[ResonanceWeight]) -> str | None:
-    """Why the weighted resonance picks are not a valid spread of the creation points."""
+def resonance_weights_error(
+    raw: object, weights: list[ResonanceWeight], *, require_full_spread: bool = True
+) -> str | None:
+    """Why the weighted resonance picks are not a valid spread of the creation points.
+
+    ``require_full_spread=False`` lets a draft that is still being spread through (fewer
+    than all the points placed) pass; spending more than the points is refused either way.
+    """
     from world.magic.models import Resonance  # noqa: PLC0415
     from world.magic.services.drift import get_drift_config  # noqa: PLC0415
 
@@ -564,7 +570,8 @@ def _resonance_weights_error(raw: object, weights: list[ResonanceWeight]) -> str
     if any(pick.weight < 1 for pick in weights):
         return "Give every resonance you pick at least 1 point"
     points = get_drift_config().creation_points
-    if sum(pick.weight for pick in weights) != points:
+    spent = sum(pick.weight for pick in weights)
+    if spent > points or (require_full_spread and spent != points):
         return f"Spread exactly {points} points across your resonances"
     return None
 
@@ -644,7 +651,7 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
     # fails validation here rather than raising GiftResonanceUnresolvable at submit.
     raw_weights = draft.draft_data.get(GIFT_RESONANCE_WEIGHTS_KEY)
     weights = parse_resonance_weights(raw_weights)
-    weights_error = _resonance_weights_error(raw_weights, weights)
+    weights_error = resonance_weights_error(raw_weights, weights)
     if weights_error:
         return [weights_error]
     resonance_id = weights[0].resonance_id

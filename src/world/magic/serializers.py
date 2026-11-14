@@ -76,6 +76,7 @@ from world.magic.models import (
     TechniqueStyle,
     Thread,
     ThreadLevelUnlock,
+    ThreadResonance,
     ThreadWeavingTeachingOffer,
 )
 from world.magic.models.dramatic_moment import (
@@ -587,7 +588,7 @@ class CharacterAuraShareSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CharacterAuraShare
-        fields = ["affinity_id", "affinity_name", "percent"]
+        fields = ["affinity_id", "affinity_name", "percent", "settled_percent"]
         read_only_fields = fields
 
 
@@ -597,6 +598,11 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
     shares = CharacterAuraShareSerializer(source="cached_shares", many=True, read_only=True)
     dominant_affinity = serializers.SerializerMethodField()
     dominant_affinity_display = serializers.SerializerMethodField()
+    # #5123: whether the character is unsettled, the sentence naming what made them so, and
+    # the Mire's share of all their resonance in words (never a number).
+    unsettled = serializers.SerializerMethodField()
+    unsettled_line = serializers.SerializerMethodField()
+    mire_share_words = serializers.SerializerMethodField()
 
     class Meta:
         model = CharacterAura
@@ -606,6 +612,9 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
             "shares",
             "dominant_affinity",
             "dominant_affinity_display",
+            "unsettled",
+            "unsettled_line",
+            "mire_share_words",
             "glimpse_state",
             "updated_at",
         ]
@@ -614,9 +623,30 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
             "shares",
             "dominant_affinity",
             "dominant_affinity_display",
+            "unsettled",
+            "unsettled_line",
+            "mire_share_words",
             "glimpse_state",
             "updated_at",
         ]
+
+    def get_unsettled(self, obj: CharacterAura) -> bool:
+        """True when an affinity other than the main one has grown past who they are."""
+        from world.magic.services.drift import drift_for  # noqa: PLC0415
+
+        return drift_for(obj.character).steps_past > 0
+
+    def get_unsettled_line(self, obj: CharacterAura) -> str:
+        """The sentence naming the resonance that made them unsettled; blank when settled."""
+        from world.magic.services.drift import drift_for, unsettled_line  # noqa: PLC0415
+
+        return unsettled_line(drift_for(obj.character))
+
+    def get_mire_share_words(self, obj: CharacterAura) -> str:
+        """The Mire's share of everything they have gained, in words."""
+        from world.magic.services.drift import drift_for, share_in_words  # noqa: PLC0415
+
+        return share_in_words(drift_for(obj.character).mire_share_percent)
 
     def get_dominant_affinity(self, obj: CharacterAura) -> str:
         """The dominant affinity's name, blank before the aura holds any share."""
@@ -625,6 +655,13 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
     def get_dominant_affinity_display(self, obj: CharacterAura) -> str:
         """The dominant affinity's name for display."""
         return self.get_dominant_affinity(obj)
+
+
+class AcceptAuraResponseSerializer(serializers.Serializer):
+    """What accepting the changes to the aura answers: the line told, and the aura as it now is."""
+
+    detail = serializers.CharField()
+    aura = CharacterAuraSerializer()
 
 
 class GlimpseSetTagsSerializer(serializers.Serializer):
@@ -999,6 +1036,23 @@ class AlterationResolutionResponseSerializer(serializers.Serializer):
 # =============================================================================
 
 
+class ThreadResonanceRowSerializer(serializers.ModelSerializer):
+    """One resonance a thread holds, with how much of it went in and whether it leads (#5123)."""
+
+    resonance_id = serializers.IntegerField(read_only=True)
+    resonance_name = serializers.CharField(source="resonance.name", read_only=True)
+    leads = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ThreadResonance
+        fields = ["resonance_id", "resonance_name", "amount", "leads"]
+        read_only_fields = fields
+
+    def get_leads(self, obj: ThreadResonance) -> bool:
+        """True for the row ``Thread.resonance`` copies (the largest amount)."""
+        return obj.resonance_id == self.context["leading_resonance_id"]
+
+
 class ThreadSerializer(serializers.ModelSerializer):
     """Serializer for Thread records (Spec A §4.5).
 
@@ -1016,6 +1070,9 @@ class ThreadSerializer(serializers.ModelSerializer):
     """
 
     resonance_name = serializers.CharField(source=_SOURCE_RESONANCE_NAME, read_only=True)
+    # #5123: every resonance the thread holds, leading one first; ``resonance`` above stays
+    # the leading resonance.
+    resonances = serializers.SerializerMethodField()
     target_id = serializers.IntegerField(write_only=True, required=True)
     # The anchor of a TRAIT / TECHNIQUE thread, read back so a combat pull dialog can offer
     # the threads related to what she is using (#5066); null for every other kind.
@@ -1042,6 +1099,7 @@ class ThreadSerializer(serializers.ModelSerializer):
             "owner",
             "resonance",
             "resonance_name",
+            "resonances",
             "target_kind",
             "target_id",
             "target_trait_id",
@@ -1071,6 +1129,14 @@ class ThreadSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    @extend_schema_field(ThreadResonanceRowSerializer(many=True))
+    def get_resonances(self, obj: Thread) -> list[dict]:
+        """Every resonance row of the thread, the leading one first (#5123)."""
+        rows = ThreadResonance.objects.filter(thread=obj).select_related("resonance")
+        return ThreadResonanceRowSerializer(
+            rows, many=True, context={"leading_resonance_id": obj.resonance_id}
+        ).data
 
     def get_level_cap(self, obj: Thread) -> int:
         """Return the character-level cap for this thread's owner (#4585)."""
@@ -1825,6 +1891,7 @@ class RitualPerformRequestSerializer(serializers.Serializer):
         ``views_sanctum.py``'s ``SanctumViewSet.install``.
         """
         actor = attrs.get("character_sheet_id")
+        self._validate_imbuing_payer(attrs, actor)
         instances = attrs.get("components") or []
         if actor is not None and instances:
             not_owned = [
@@ -1834,6 +1901,31 @@ class RitualPerformRequestSerializer(serializers.Serializer):
                 msg = f"ItemInstance(s) not in your inventory: {sorted(not_owned)}."
                 raise serializers.ValidationError(msg)
         return attrs
+
+    @staticmethod
+    def _validate_imbuing_payer(attrs: dict, sheet: CharacterSheet | None) -> None:
+        """An imbue's ``resonance_id`` names a resonance the character holds (#5123).
+
+        Left alone when absent (the thread's leading resonance pays) or not an integer
+        (the view refuses that on its own).
+        """
+        ritual = attrs.get("ritual_id")
+        resonance_id = (attrs.get("kwargs") or {}).get("resonance_id")
+        if (
+            sheet is None
+            or ritual is None
+            or not isinstance(resonance_id, int)
+            or isinstance(resonance_id, bool)
+            or not is_imbuing_ritual(
+                name=ritual.name, service_function_path=ritual.service_function_path
+            )
+        ):
+            return
+        if not CharacterResonance.objects.filter(
+            character_sheet=sheet, resonance_id=resonance_id
+        ).exists():
+            msg = "You do not hold that resonance."
+            raise serializers.ValidationError({"resonance_id": msg})
 
 
 # =============================================================================

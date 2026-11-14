@@ -58,6 +58,18 @@ if TYPE_CHECKING:
     from world.scenes.models import Scene
 
 _ONE_HUNDRED = Decimal(100)
+# (exclusive upper bound as a fraction of the whole, words); the first bound a share is
+# under wins, and a share past the last reads "nearly all".
+_SHARE_WORDS: tuple[tuple[Decimal, str], ...] = (
+    (Decimal("0.08"), "a trace"),
+    (Decimal("0.18"), "a tenth"),
+    (Decimal("0.28"), "a fifth"),
+    (Decimal("0.4"), "a third"),
+    (Decimal("0.58"), "half"),
+    (Decimal("0.8"), "most"),
+)
+_SHARE_WORDS_NONE = "none"
+_SHARE_WORDS_MOST = "nearly all"
 
 
 def get_drift_config() -> DriftConfig:
@@ -174,6 +186,30 @@ def drift_for(sheet: CharacterSheet) -> DriftReading:
         own_excess_points=own_excess_points,
         mire_excess_points=mire_excess_points,
     )
+
+
+def share_in_words(percent: Decimal) -> str:
+    """A share of a whole, in words, never a number (#5123).
+
+    ``percent`` is 0-100. The same scale as the sheet's ``shareInWords``
+    (``frontend/src/magic/components/SpellbookTab.tsx``), so the aura reads the same in
+    every surface.
+    """
+    if percent <= 0:
+        return _SHARE_WORDS_NONE
+    part = percent / _ONE_HUNDRED
+    for ceiling, words in _SHARE_WORDS:
+        if part < ceiling:
+            return words
+    return _SHARE_WORDS_MOST
+
+
+def unsettled_line(reading: DriftReading) -> str:
+    """The sentence naming what has made the character unsettled; blank when settled."""
+    leading = reading.leading_excess_resonance
+    if reading.steps_past <= 0 or leading is None:
+        return ""
+    return f"Your {leading.name} has grown strong enough to make you unsettled."
 
 
 def check_resonance_focus(
