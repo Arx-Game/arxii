@@ -3428,6 +3428,7 @@ of it lives in `world/magic/services/drift.py` and the `DriftConfig` singleton
   failure also tells her the condition took hold. A success level of 1 or more changes nothing.
   Below that, severity is `steps + (1 - success_level)` (a worse roll never costs less);
   already holding the condition, its severity advances by one instead.
+  The sentences she is told are built once, on `FocusOutcome.lines` (`types/drift.py`): telnet prints them as the check happens, and the web cast result carries them as `technique_result.focus_lines`, which the cast card shows (#5123).
 - Shaking it off: `ConditionCategory.self_shakeable` (default False) is separate from
   `alters_behavior`, which drives `in_control`, consent and form revert and is never set for
   Resonance Conflict. `breakable_condition_filter()` (`world/conditions/services.py`) is
@@ -4590,6 +4591,8 @@ performer at or over the bar). Results are ordered material, facet, keepsake, so
 order burns a plain material first. Items already allocated to a template or touchstone row are
 not offered again.
 
+**Closing spent offers (#5123).** `close_spent_conversion_offers(sheet)` (`services/drift.py`) is the one writer that ends an offer early: it deletes each cap whose target has no convertible drift, then the offer once no cap is left. The rite and `accept_aura_change` both call it after they write, so an atone or accept that leaves her settled closes every offer she holds; an offer with drift still left stays open.
+
 **Focus.** `focus_bonus(sheet, target)` = `equipment_walk_total` on the target resonance's
 modifier target + `touchstone_cast_bonus`. It adds to the check, not to the output.
 
@@ -5518,7 +5521,7 @@ Telnet parity: `train <technique> [=<ap>]` / bare `train` for the meter list (`C
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/threads/` | GET | List threads owned by requesting account (staff see all); excludes retired |
+| `/threads/` | GET | List threads owned by requesting account (staff see all); excludes retired. Each row's `display_name` is the thread's own name, else its anchor's (`thread_display_name`, `crossing/handlers.py`; a Gift thread is minted unnamed, so it reads as its Gift; #5123) |
 | `/threads/` | POST | Weave a new thread. Body must include `character_sheet_id`; serializer delegates to `weave_thread`. For `target_kind=RELATIONSHIP_TRACK`, `target_id` is the `RelationshipType` **catalog** id (not a relationship row pk) and `target_persona_id` (required, that kind only) names the partner — see the RELATIONSHIP_TRACK contract note below (#2159, #3957) |
 | `/threads/{id}/` | GET | Thread detail with anchor + the leading `resonance` and `resonances[]` (every `ThreadResonance` row: `resonance_id`, `resonance_name`, `amount`, `leads`; #5123) |
 | `/threads/{id}/resonance-options/` | GET | The retune rite's targets for a thread (`?from_resonance=&amount=`; see "Thread retune") |

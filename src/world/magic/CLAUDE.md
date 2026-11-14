@@ -926,6 +926,7 @@ admin all converge on the same service layer.
   Anchor cap = `sanctum.feature_instance.level × 10`. The thread is pull-applicable
   ("in-sanctum boost") while the character is inside the Sanctum's room.
   **Bare ROOM `target_kind` removed** — use SANCTUM for room-anchored threads.
+  `ThreadSerializer.display_name` (#5123) is the thread's own name, else `thread_display_name` (`crossing/handlers.py`): its anchor's label, so a Gift thread reads as its Gift.
 - `ThreadResonance` (#5123, ADR-5123-A) - One resonance's `amount` inside a Thread: the
   CUMULATIVE total of that resonance ever imbued, never lowered by a level-up spending
   `developed_points` (so it does NOT sum to `developed_points`). Unique `(thread, resonance)`;
@@ -1852,6 +1853,7 @@ and the excess in lifetime points (what atoning may convert). A character with n
 dashboard, which also flags a conflict condition with `break_free_mode` NONE or no
 `ConditionCheckModifier`. The penalty is the conflict condition's authored
 `ConditionCheckModifier`; never set `alters_behavior` for it (use `ConditionCategory.self_shakeable`).
+The focus sentences are built once on `FocusOutcome.lines` (`types/drift.py`): telnet prints them, and the web cast result's `technique_result.focus_lines` carries them (#5123).
 Stirring it up is an authored social action applying the condition at a severity (the higher wins), not code.
 
 `models/renown_config.py` — `RenownAwardConfig`: **abstract base** (SharedMemoryModel)
@@ -2200,6 +2202,7 @@ abyssal." names (the main affinity is unchanged by an accept, so it cannot say w
   `focus_bonus` adds to the check, not the output. `max_yield_per_earned_point` is the anti-farm
   estimator (per point). A cap grows by `amount x cap_percent // 100` per deed; only the deed
   that creates the cap row is floored at 1; `cap_percent` 0 opens no offer.
+- Closing: `close_spent_conversion_offers(sheet)` (`services/drift.py`, #5123) is the one writer that ends an offer early: it deletes the caps whose target has no convertible drift left, and the offer with its last cap. The rite and `accept_aura_change` call it after they write.
 - Surfaces: actions in `actions/definitions/drift_correction.py`, telnet `aura`
   (`commands/drift_correction.py`), REST `/api/magic/drift-correction/`, React gate on the scene
   and game pages (`frontend/src/magic/CLAUDE.md`). Required content row `drift-correction-config`.
