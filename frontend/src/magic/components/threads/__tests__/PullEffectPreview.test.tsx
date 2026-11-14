@@ -59,6 +59,7 @@ const makePreviewResponse = (
   affordable: true,
   capped_intensity: false,
   resolved_effects: [],
+  per_thread: [],
   burn: null,
   ...overrides,
 });

@@ -9,7 +9,8 @@ affinities it is a Fall or a Redemption: the moved amount converts at the author
 (``conversion_pair``) toward the ``ResonanceConversion`` counterpart of the source
 resonance, floored at 1 so a Redemption shrinks the amount but never loses it entirely.
 
-The thread's ``level`` and ``developed_points`` are untouched, and so are the character's
+A row moved down to nothing is deleted. The thread's ``level`` and ``developed_points`` are
+untouched, and so are the character's
 resonance balances and lifetime (the aura needs no recompute). Only the rows move, then
 ``refresh_leading_resonance`` follows who now leads.
 
@@ -263,6 +264,8 @@ def change_message(  # noqa: PLR0913 - every number the line names
     moved = f"{label} moved {amount_moved} {from_name} into {to_name}"
     if points_gained != amount_moved:
         moved += f", which became {points_gained}"
+    if from_amount_after == 0:
+        return f"{moved}. It holds no {from_name} now, and {to_amount_after} {to_name}."
     return f"{moved}. It now holds {from_amount_after} {from_name} and {to_amount_after} {to_name}."
 
 
@@ -422,6 +425,9 @@ def change_thread_resonance(
     else:
         target_row.amount += gained
         target_row.save(update_fields=["amount"])
+    if source_row.amount == 0:
+        # An emptied row goes (the target row now exists, so it is never the only one).
+        source_row.delete()
     refresh_leading_resonance(thread)
     character_sheet.character.threads.invalidate()
     return ThreadResonanceChangeResult(

@@ -8,7 +8,7 @@
  * options endpoint names. When the thread cannot move (no rite, an anchor that holds its
  * resonance, no options) the server's `unavailable_reason` stands in for the pills.
  * Offerings are picked only when the rite asks for them (`offering_required`), up to
- * `offering_count`. A move that merges into another thread opens the survivor afterwards.
+ * `offering_count`. When the result names a different thread, that thread opens afterwards.
  */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -165,14 +165,6 @@ export function ThreadResonanceDialog({ thread, open, onOpenChange }: ThreadReso
                     )}`}
                   />
                   {o.resonance_name} {optionSuffix(o)}
-                  {o.merges_into_thread_id !== null ? (
-                    <span
-                      className="rounded-sm border border-current px-1 text-xs"
-                      data-testid={`resonance-merges-${o.resonance_id}`}
-                    >
-                      merges
-                    </span>
-                  ) : null}
                 </button>
               ))}
             </div>

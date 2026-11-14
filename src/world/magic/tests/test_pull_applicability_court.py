@@ -129,9 +129,10 @@ class CourtLeaderNoStakeApplicabilityTests(TestCase):
             resonance=thread.resonance,
             regard_polarity=RegardPolarity.OFFENSIVE,
         )
-        # A second resonance the player can pick as payer has a protective effect.
+        # A second resonance the player can pick as payer has a protective effect. It has
+        # something imbued in it: a row at zero gives no perks (ruling 13).
         second = ResonanceFactory()
-        ThreadResonanceFactory(thread=thread, resonance=second, amount=0)
+        ThreadResonanceFactory(thread=thread, resonance=second, amount=2)
         ThreadPullEffectFactory(
             target_kind=TargetKind.COVENANT_ROLE,
             resonance=second,

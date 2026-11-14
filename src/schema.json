@@ -6392,8 +6392,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this title.
+          type: string
         required: true
       tags:
       - character-creation
@@ -24024,6 +24023,7 @@ paths:
         schema:
           type: string
           enum:
+          - CHARACTER_CREATION
           - COMBO_DISCOVERY
           - COMPROMISE
           - CORRUPTION_CLEANSING
@@ -24075,6 +24075,7 @@ paths:
           * `DRIFT_CORRECTION` - Drift correction
           * `CORRUPTION_CLEANSING` - Corruption cleansing payout
           * `SINEATING` - Sineating payout
+          * `CHARACTER_CREATION` - Character creation
       tags:
       - magic
       security:
@@ -25967,11 +25968,15 @@ paths:
 
         GET /api/magic/threads/{id}/resonance-options/  (slice 6 of #4672)
 
+        Query: ``from_resonance`` (id of one of the thread's resonances, default the leading
+        one) and ``amount`` (points to move, default all of that resonance's row).
+
         Response: ``{ritual_id, offering_required, offering_count, unavailable_reason,
         options: [{resonance_id, resonance_name, affinity_name, conversion_type,
-        projected_points, merges_into_thread_id, qualifying: [{item_id, name, mode}]}]}``.
+        projected_points, qualifying: [{item_id, name, mode}]}]}``.
         ``ritual_id`` is null while no retune rite is authored; perform it through
-        ``POST /api/magic/rituals/perform/`` with ``kwargs: {thread_id, target_resonance}``.
+        ``POST /api/magic/rituals/perform/`` with
+        ``kwargs: {thread_id, target_resonance, from_resonance?, amount?}``.
         ``qualifying`` is filled only when the rite asks for a target-resonance offering.
       parameters:
       - in: path
@@ -50979,6 +50984,12 @@ components:
           items:
             type: integer
           maxItems: 20
+        payers:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Thread id -> the id of the resonance paying for that thread
+            (#5123); a thread left out is paid by its leading resonance.
       required:
       - thread_ids
       - tier
@@ -50998,6 +51009,12 @@ components:
           items:
             type: integer
           maxItems: 20
+        payers:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Thread id -> the id of the resonance paying for that thread
+            (#5123); a thread left out is paid by its leading resonance.
         burn:
           type: integer
           maximum: 2147483647
@@ -83525,7 +83542,8 @@ components:
       properties:
         resonance:
           type: integer
-          description: Resonance this thread channels.
+          description: 'Leading resonance: a denormalized copy of the first ThreadResonance
+            row, written only by refresh_leading_resonance.'
         target_kind:
           allOf:
           - $ref: '#/components/schemas/ThreadTargetKindEnum'
@@ -84112,6 +84130,35 @@ components:
       - skill_id
       - skill_name
       - suggested_value
+    PayerOption:
+      type: object
+      description: One resonance that could pay for a pulled thread, with its cost
+        and balance (#5123).
+      properties:
+        resonance_id:
+          type: integer
+        resonance_name:
+          type: string
+        cost:
+          type: integer
+        balance:
+          type: integer
+        affordable:
+          type: boolean
+        effects:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResolvedPullEffect'
+        level_read:
+          type: integer
+      required:
+      - affordable
+      - balance
+      - cost
+      - effects
+      - level_read
+      - resonance_id
+      - resonance_name
     PendingAlteration:
       type: object
       description: Read-only serializer for pending alterations shown on character
@@ -88940,6 +88987,7 @@ components:
             * `DRIFT_CORRECTION` - Drift correction
             * `CORRUPTION_CLEANSING` - Corruption cleansing payout
             * `SINEATING` - Sineating payout
+            * `CHARACTER_CREATION` - Character creation
         granted_at:
           type: string
           format: date-time
@@ -88997,6 +89045,7 @@ components:
       - DRIFT_CORRECTION
       - CORRUPTION_CLEANSING
       - SINEATING
+      - CHARACTER_CREATION
       type: string
       description: |-
         * `POSE_ENDORSEMENT` - Pose endorsement
@@ -89023,6 +89072,7 @@ components:
         * `DRIFT_CORRECTION` - Drift correction
         * `CORRUPTION_CLEANSING` - Corruption cleansing payout
         * `SINEATING` - Sineating payout
+        * `CHARACTER_CREATION` - Character creation
     ResonanceLine:
       type: object
       properties:
@@ -98246,7 +98296,8 @@ components:
           readOnly: true
         resonance:
           type: integer
-          description: Resonance this thread channels.
+          description: 'Leading resonance: a denormalized copy of the first ThreadResonance
+            row, written only by refresh_leading_resonance.'
         resonance_name:
           type: string
           readOnly: true
@@ -98394,6 +98445,19 @@ components:
       - weavable_techniques
       - weavable_traits
       - weaving_eligibility
+    ThreadPayerPreview:
+      type: object
+      description: Every held resonance as a payer option for one pulled thread (#5123).
+      properties:
+        thread_id:
+          type: integer
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/PayerOption'
+      required:
+      - options
+      - thread_id
     ThreadPullPreviewRequestRequest:
       type: object
       description: |-
@@ -98415,6 +98479,10 @@ components:
         burn_resonance_id:
           type: integer
           nullable: true
+        payers:
+          type: object
+          additionalProperties:
+            type: integer
         action_context:
           $ref: '#/components/schemas/PullActionContextRequest'
         scene_id:
@@ -98450,11 +98518,16 @@ components:
           allOf:
           - $ref: '#/components/schemas/BurnPreview'
           nullable: true
+        per_thread:
+          type: array
+          items:
+            $ref: '#/components/schemas/ThreadPayerPreview'
       required:
       - affordable
       - anima_cost
       - burn
       - capped_intensity
+      - per_thread
       - resolved_effects
       - resonance_cost
     ThreadRequest:
@@ -98476,7 +98549,8 @@ components:
       properties:
         resonance:
           type: integer
-          description: Resonance this thread channels.
+          description: 'Leading resonance: a denormalized copy of the first ThreadResonance
+            row, written only by refresh_leading_resonance.'
         target_kind:
           allOf:
           - $ref: '#/components/schemas/ThreadTargetKindEnum'
@@ -98522,9 +98596,8 @@ components:
         ``qualifying`` reads ``context["qualifying"]``: the carried items that pay, keyed by
         resonance pk, worked out once for every option by the view
         (``qualifying_components_by_target``), so this serializer queries nothing per option.
-        ``conversion_type`` is null for a retune within the thread's own affinity.
-        ``merges_into_thread_id`` is the live thread on the same anchor the move would merge
-        into, null when the thread moves on its own.
+        ``conversion_type`` is null for a retune within the source resonance's own affinity.
+        ``projected_points`` is what the target's row would gain from the amount being moved.
       properties:
         resonance_id:
           type: integer
@@ -98539,9 +98612,6 @@ components:
           - $ref: '#/components/schemas/NullEnum'
         projected_points:
           type: integer
-        merges_into_thread_id:
-          type: integer
-          nullable: true
         qualifying:
           type: array
           items:
@@ -98550,7 +98620,6 @@ components:
       required:
       - affinity_name
       - conversion_type
-      - merges_into_thread_id
       - projected_points
       - qualifying
       - resonance_id

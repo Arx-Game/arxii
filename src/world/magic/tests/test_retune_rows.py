@@ -95,6 +95,10 @@ class RetuneMovesAmountTests(RetuneRowsCase):
 
     def test_retune_flips_leading_when_it_should(self) -> None:
         thread = self.mixed_thread()
+        # Warm the handler's cache first, so the assertion below proves it was invalidated.
+        self.assertEqual(
+            thread.owner.character.threads.resonances_of(thread), [self.bene, self.lumen]
+        )
 
         change_thread_resonance(
             thread.owner,
@@ -107,14 +111,20 @@ class RetuneMovesAmountTests(RetuneRowsCase):
         thread.refresh_from_db()
         self.assertEqual(thread.resonance, self.lumen)
         self.assertEqual(amounts(thread), {"Bene": 2, "Lumen": 11})
-        self.assertEqual(thread.owner.character.threads.resonances_of(thread)[0], self.lumen)
+        self.assertEqual(
+            thread.owner.character.threads.resonances_of(thread), [self.lumen, self.bene]
+        )
 
     def test_from_defaults_to_the_leading_resonance_and_amount_to_all_of_it(self) -> None:
         thread = self.mixed_thread()
+        self.assertEqual(len(thread.owner.character.threads.resonances_of(thread)), 2)
 
-        change_thread_resonance(thread.owner, thread=thread, target_resonance=self.lumen)
+        result = change_thread_resonance(thread.owner, thread=thread, target_resonance=self.lumen)
 
-        self.assertEqual(amounts(thread), {"Bene": 0, "Lumen": 13})
+        # The emptied Bene row is deleted, and the handler no longer lists it.
+        self.assertEqual(amounts(thread), {"Lumen": 13})
+        self.assertEqual(thread.owner.character.threads.resonances_of(thread), [self.lumen])
+        self.assertIn("It holds no Bene now, and 13 Lumen.", result.message)
         thread.refresh_from_db()
         self.assertEqual(thread.resonance, self.lumen)
 
@@ -151,7 +161,7 @@ class RetuneMovesAmountTests(RetuneRowsCase):
         change_thread_resonance(thread.owner, thread=thread, target_resonance=self.bene)
 
         # Abyssal -> Celestial is a Redemption at 0.50: int(1 x 0.50) = 0, floored to 1.
-        self.assertEqual(amounts(thread), {"Ruin": 0, "Bene": 1})
+        self.assertEqual(amounts(thread), {"Bene": 1})
 
     def test_options_are_computed_for_the_chosen_row(self) -> None:
         thread = self.mixed_thread()
@@ -255,6 +265,7 @@ class FallConvertsRowsTests(RetuneRowsCase):
     def test_fall_converts_rows_in_affinity(self) -> None:
         thread = ThreadFactory(owner=self.sheet, resonance=self.bene, level=20, developed_points=10)
         size_row(thread, thread.resonance, 10)
+        self.assertEqual(self.sheet.character.threads.resonances_of(thread), [self.bene])
 
         self.fall()
 
@@ -269,9 +280,11 @@ class FallConvertsRowsTests(RetuneRowsCase):
         thread = ThreadFactory(owner=self.sheet, resonance=self.bene, developed_points=15)
         size_row(thread, thread.resonance, 10)
         ThreadResonanceFactory(thread=thread, resonance=self.praedari, amount=5)
+        self.assertEqual(len(self.sheet.character.threads.resonances_of(thread)), 2)
 
         self.fall()
 
+        self.assertEqual(self.sheet.character.threads.resonances_of(thread), [self.praedari])
         # Bene's 10 become 12 and land on the Praedari row already there: one row, 17.
         # Points: int(15 x (5 + 10 x 1.2) / 15) = 17.
         self.assertEqual(amounts(thread), {"Praedari": 17})
@@ -311,3 +324,46 @@ class FallConvertsRowsTests(RetuneRowsCase):
 
         self.assertEqual(amounts(untouched), {"Praedari": 7})
         self.assertEqual(amounts(retired), {"Bene": 9})
+
+    def redeem(self) -> None:
+        convert_resonance(
+            self.sheet,
+            source_affinity=self.abyssal,
+            target_affinity=self.celestial,
+            multiplier=Decimal("0.50"),
+            partial=False,
+        )
+
+    def test_a_redemption_lossy_enough_to_empty_a_row_deletes_it(self) -> None:
+        grant_resonance(self.sheet, self.ruin, 50, source=GainSource.STAFF_GRANT)
+        thread = ThreadFactory(owner=self.sheet, resonance=self.lumen, developed_points=10)
+        size_row(thread, thread.resonance, 10)
+        ThreadResonanceFactory(thread=thread, resonance=self.ruin, amount=1)
+        self.assertEqual(len(self.sheet.character.threads.resonances_of(thread)), 2)
+
+        self.redeem()
+
+        # Abyssal -> Celestial is a Redemption at 0.50: int(1 x 0.50) = 0, so the Ruin row goes.
+        self.assertEqual(amounts(thread), {"Lumen": 10})
+        self.assertEqual(self.sheet.character.threads.resonances_of(thread), [self.lumen])
+
+    def test_a_redemption_keeps_the_only_row_even_at_zero(self) -> None:
+        grant_resonance(self.sheet, self.ruin, 50, source=GainSource.STAFF_GRANT)
+        thread = ThreadFactory(owner=self.sheet, resonance=self.ruin, developed_points=1)
+        size_row(thread, thread.resonance, 1)
+
+        self.redeem()
+
+        self.assertEqual(amounts(thread), {"Bene": 0})
+        thread.refresh_from_db()
+        self.assertEqual(thread.resonance, self.bene)
+
+    def test_a_creation_pick_already_at_zero_follows_the_fall(self) -> None:
+        thread = ThreadFactory(owner=self.sheet, resonance=self.bene, developed_points=10)
+        size_row(thread, thread.resonance, 10)
+        ThreadResonanceFactory(thread=thread, resonance=self.lumen, amount=0)
+
+        self.fall()
+
+        # Both Celestial rows convert to Praedari; the 0 one adds nothing, and is not "emptied".
+        self.assertEqual(amounts(thread), {"Praedari": 12})

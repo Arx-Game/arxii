@@ -55,7 +55,6 @@ const makeOptions = (overrides: Partial<ThreadResonanceOptions> = {}): ThreadRes
       affinity_name: 'Celestial',
       conversion_type: null,
       projected_points: 40,
-      merges_into_thread_id: null,
       qualifying: [
         { item_id: 55, name: 'Silver ring', mode: 'keepsake' },
         { item_id: 56, name: 'Lumen candle', mode: 'material' },
@@ -67,7 +66,6 @@ const makeOptions = (overrides: Partial<ThreadResonanceOptions> = {}): ThreadRes
       affinity_name: 'Abyssal',
       conversion_type: 'FALL',
       projected_points: 30,
-      merges_into_thread_id: 12,
       qualifying: [],
     },
   ],
@@ -148,20 +146,18 @@ describe('ThreadResonanceDialog', () => {
     expect(screen.getByTestId('resonance-retune')).toBeDisabled();
   });
 
-  it('marks an option that merges and opens the surviving thread afterwards', async () => {
+  it('opens the thread the result names when it is a different one', async () => {
     vi.mocked(magicApi.getThreadResonanceOptions).mockResolvedValue(
       makeOptions({ offering_required: false, offering_count: 0 })
     );
     vi.mocked(ritualsApi.performRitual).mockResolvedValue({
       ritual_id: 9,
       execution_kind: 'SERVICE',
-      message: 'Merged.',
-      result: { thread_id: 12, merged: true },
+      message: 'Moved.',
+      result: { thread_id: 12 },
     });
     renderDialog();
-    expect(await screen.findByTestId('resonance-merges-3')).toHaveTextContent('merges');
-    expect(screen.queryByTestId('resonance-merges-2')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('resonance-option-3'));
+    fireEvent.click(await screen.findByTestId('resonance-option-3'));
     fireEvent.click(screen.getByTestId('resonance-retune'));
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/threads/12'));
   });

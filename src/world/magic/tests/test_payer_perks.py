@@ -29,8 +29,10 @@ class PayerPerkTests(TestCase):
         self.unheld = ResonanceFactory(name="Unimbued")
 
     def _thread(self, level: int):
-        thread = ThreadFactory(owner=self.sheet, resonance=self.fury, level=level)
-        ThreadResonanceFactory(thread=thread, resonance=self.guile, amount=0)
+        thread = ThreadFactory(
+            owner=self.sheet, resonance=self.fury, level=level, developed_points=10
+        )
+        ThreadResonanceFactory(thread=thread, resonance=self.guile, amount=3)
         return thread
 
     def _perk(self, resonance, *, tier: int = 1, amount: int = 1, min_level: int = 0) -> None:
@@ -83,6 +85,30 @@ class PayerPerkTests(TestCase):
 
         self.assertIsNone(payer_level_read(thread, self.unheld))
         self.assertEqual(effects, [])
+
+    def test_a_creation_style_zero_row_pays_with_no_perks_until_imbued(self) -> None:
+        thread = ThreadFactory(owner=self.sheet, resonance=self.fury, level=30, developed_points=10)
+        ThreadResonanceFactory(thread=thread, resonance=self.guile, amount=0)
+        self._perk(self.guile, tier=1, amount=5)
+
+        before = resolve_pull_effects([thread], 1, in_combat=False, payers={thread.pk: self.guile})
+
+        self.assertIsNone(payer_level_read(thread, self.guile))
+        self.assertEqual(before, [])
+
+        # What imbuing does to the row: its amount grows and the handler cache is cleared.
+        ThreadResonanceFactory(thread=thread, resonance=self.guile, amount=2)
+        self.sheet.character.threads.invalidate()
+        after = resolve_pull_effects([thread], 1, in_combat=False, payers={thread.pk: self.guile})
+
+        self.assertEqual(payer_level_read(thread, self.guile), 20)
+        self.assertEqual([e.scaled_value for e in after], [10])
+
+    def test_the_leading_row_is_eligible_even_at_zero(self) -> None:
+        thread = ThreadFactory(owner=self.sheet, resonance=self.fury, level=30)
+        self._perk(self.fury, tier=1, amount=2)
+
+        self.assertEqual(payer_level_read(thread, self.fury), 30)
 
     def test_tier_zero_only_for_leading_payer(self) -> None:
         thread = self._thread(30)

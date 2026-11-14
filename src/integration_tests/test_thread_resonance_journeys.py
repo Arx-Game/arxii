@@ -177,10 +177,10 @@ class RetuningAtTheKeyboard(ThreadRetuneCase):
         told = self.retune(self.thread, self.praedari)
         self.assertIn(
             "Mercy of the Healer moved 40 Bene into Praedari, which became 48. "
-            "It now holds 0 Bene and 48 Praedari.",
+            "It holds no Bene now, and 48 Praedari.",
             told,
         )
-        self.assertEqual(rows(self.thread), {"Bene": 0, "Praedari": 48})
+        self.assertEqual(rows(self.thread), {"Praedari": 48})
         row = stored(self.thread)
         self.assertEqual(row["resonance_id"], self.praedari.pk)
         self.assertEqual(row["developed_points"], 40)
@@ -190,7 +190,7 @@ class RetuningAtTheKeyboard(ThreadRetuneCase):
         thin = ThreadFactory(owner=self.sheet, resonance=self.ruin, developed_points=1)
         self.carry(self.ysmay, self.bene, "Bene Lamp")
         self.retune(thin, self.bene)
-        self.assertEqual(rows(thin), {"Ruin": 0, "Bene": 1})
+        self.assertEqual(rows(thin), {"Bene": 1})
         self.assertEqual(stored(thin)["resonance_id"], self.bene.pk)
 
     def test_an_amount_past_the_row_is_refused_and_nothing_is_spent(self) -> None:
@@ -311,7 +311,7 @@ class RetuningThroughTheWebClient(ThreadRetuneCase):
         self.assertEqual(result["conversion_type"], "FALL")
         self.assertEqual(response.data["message"], f"You perform {RITE}. {result['message']}")
         self.assertIn("moved 40 Bene into Ruin, which became 60.", result["message"])
-        self.assertEqual(rows(self.thread), {"Bene": 0, "Ruin": 60})
+        self.assertEqual(rows(self.thread), {"Ruin": 60})
         self.assertEqual(stored(self.thread)["developed_points"], 40)
         self.assertTrue(consumed(fang))
 

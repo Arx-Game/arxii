@@ -70,15 +70,16 @@ def payer_level_read(thread: Thread, payer: Resonance) -> int | None:
     a row for reads ``second_resonance_level_step`` levels lower, but never so low that its
     multiplier would beat the leader's (``thread_level_multiplier`` is not monotonic below
     level 10: 1 at level 0, 0.1 at level 1), in which case it reads the leader's level.
-    A resonance the thread holds no row for gets ``None``: it pays, and brings no perks.
+    A resonance the thread holds no row for, or holds a row of nothing for (creation writes
+    its picks at zero, and a retune or Fall deletes a row that empties, so a zero row is one
+    nothing was imbued into yet), gets ``None``: it pays, and brings no perks (ruling 13).
     """
     from world.magic.services.drift import get_drift_config  # noqa: PLC0415
     from world.magic.services.threads import thread_level_multiplier  # noqa: PLC0415
 
     if payer.pk == thread.resonance_id:
         return thread.level
-    held = thread.owner.character.threads.resonances_of(thread)
-    if all(resonance.pk != payer.pk for resonance in held):
+    if not thread.owner.character.threads.amount_of(thread, payer):
         return None
     candidate = max(0, thread.level - get_drift_config().second_resonance_level_step)
     if thread_level_multiplier(candidate) <= thread_level_multiplier(thread.level):

@@ -17102,11 +17102,15 @@ export interface paths {
      *
      *     GET /api/magic/threads/{id}/resonance-options/  (slice 6 of #4672)
      *
+     *     Query: ``from_resonance`` (id of one of the thread's resonances, default the leading
+     *     one) and ``amount`` (points to move, default all of that resonance's row).
+     *
      *     Response: ``{ritual_id, offering_required, offering_count, unavailable_reason,
      *     options: [{resonance_id, resonance_name, affinity_name, conversion_type,
-     *     projected_points, merges_into_thread_id, qualifying: [{item_id, name, mode}]}]}``.
+     *     projected_points, qualifying: [{item_id, name, mode}]}]}``.
      *     ``ritual_id`` is null while no retune rite is authored; perform it through
-     *     ``POST /api/magic/rituals/perform/`` with ``kwargs: {thread_id, target_resonance}``.
+     *     ``POST /api/magic/rituals/perform/`` with
+     *     ``kwargs: {thread_id, target_resonance, from_resonance?, amount?}``.
      *     ``qualifying`` is filled only when the rite asks for a target-resonance offering.
      */
     get: operations['magic_threads_resonance_options_retrieve'];
@@ -30740,6 +30744,10 @@ export interface components {
     CastPullRequestRequest: {
       tier: number;
       thread_ids: number[];
+      /** @description Thread id -> the id of the resonance paying for that thread (#5123); a thread left out is paid by its leading resonance. */
+      payers?: {
+        [key: string]: number;
+      };
     };
     /**
      * @description The cast endpoint's pull, which may also burn resonance for strain (#4736).
@@ -30749,6 +30757,10 @@ export interface components {
     CastPullWithBurnRequestRequest: {
       tier: number;
       thread_ids: number[];
+      /** @description Thread id -> the id of the resonance paying for that thread (#5123); a thread left out is paid by its leading resonance. */
+      payers?: {
+        [key: string]: number;
+      };
       /** @default 0 */
       burn: number;
       /** @description Which pulled resonance the burn comes from (#5066); needed only when the pull's threads mix resonances. */
@@ -47430,7 +47442,7 @@ export interface components {
      *     - effective_cap: min(level_cap, anchor_cap)
      */
     PatchedThreadRequest: {
-      /** @description Resonance this thread channels. */
+      /** @description Leading resonance: a denormalized copy of the first ThreadResonance row, written only by refresh_leading_resonance. */
       resonance?: number;
       /**
        * @description Discriminator selecting which target_* FK is populated.
@@ -47795,6 +47807,16 @@ export interface components {
       suggested_value: number;
       /** @description Order for display in CG */
       display_order?: number;
+    };
+    /** @description One resonance that could pay for a pulled thread, with its cost and balance (#5123). */
+    PayerOption: {
+      resonance_id: number;
+      resonance_name: string;
+      cost: number;
+      balance: number;
+      affordable: boolean;
+      effects: components['schemas']['ResolvedPullEffect'][];
+      level_read: number;
     };
     /** @description Read-only serializer for pending alterations shown on character sheet. */
     PendingAlteration: {
@@ -49996,6 +50018,7 @@ export interface components {
        *     * `DRIFT_CORRECTION` - Drift correction
        *     * `CORRUPTION_CLEANSING` - Corruption cleansing payout
        *     * `SINEATING` - Sineating payout
+       *     * `CHARACTER_CREATION` - Character creation
        */
       readonly source: components['schemas']['ResonanceGrantSourceEnum'];
       /** Format: date-time */
@@ -50030,6 +50053,7 @@ export interface components {
      *     * `DRIFT_CORRECTION` - Drift correction
      *     * `CORRUPTION_CLEANSING` - Corruption cleansing payout
      *     * `SINEATING` - Sineating payout
+     *     * `CHARACTER_CREATION` - Character creation
      * @enum {string}
      */
     ResonanceGrantSourceEnum:
@@ -50056,7 +50080,8 @@ export interface components {
       | 'WORSHIP_RITE'
       | 'DRIFT_CORRECTION'
       | 'CORRUPTION_CLEANSING'
-      | 'SINEATING';
+      | 'SINEATING'
+      | 'CHARACTER_CREATION';
     ResonanceLine: {
       resonance: number;
       tier: components['schemas']['ResonanceLineTierEnum'];
@@ -54318,7 +54343,7 @@ export interface components {
       readonly id: number;
       /** @description Character who owns this thread. */
       readonly owner: number;
-      /** @description Resonance this thread channels. */
+      /** @description Leading resonance: a denormalized copy of the first ThreadResonance row, written only by refresh_leading_resonance. */
       resonance: number;
       readonly resonance_name: string;
       /**
@@ -54386,6 +54411,11 @@ export interface components {
       weavable_techniques: components['schemas']['_WeavableTechnique'][];
       weavable_relationship_type_ids: number[];
     };
+    /** @description Every held resonance as a payer option for one pulled thread (#5123). */
+    ThreadPayerPreview: {
+      thread_id: number;
+      options: components['schemas']['PayerOption'][];
+    };
     /**
      * @description Request serializer for POST /api/magic/thread-pull-preview/.
      *
@@ -54397,6 +54427,9 @@ export interface components {
       tier: number;
       thread_ids: number[];
       burn_resonance_id?: number | null;
+      payers?: {
+        [key: string]: number;
+      };
       action_context?: components['schemas']['PullActionContextRequest'];
       scene_id?: number | null;
       /** @default false */
@@ -54411,6 +54444,7 @@ export interface components {
       resolved_effects: components['schemas']['ResolvedPullEffect'][];
       capped_intensity: boolean;
       burn: components['schemas']['BurnPreview'] | null;
+      per_thread: components['schemas']['ThreadPayerPreview'][];
     };
     /**
      * @description Serializer for Thread records (Spec A §4.5).
@@ -54428,7 +54462,7 @@ export interface components {
      *     - effective_cap: min(level_cap, anchor_cap)
      */
     ThreadRequest: {
-      /** @description Resonance this thread channels. */
+      /** @description Leading resonance: a denormalized copy of the first ThreadResonance row, written only by refresh_leading_resonance. */
       resonance: number;
       /**
        * @description Discriminator selecting which target_* FK is populated.
@@ -54459,9 +54493,8 @@ export interface components {
      *     ``qualifying`` reads ``context["qualifying"]``: the carried items that pay, keyed by
      *     resonance pk, worked out once for every option by the view
      *     (``qualifying_components_by_target``), so this serializer queries nothing per option.
-     *     ``conversion_type`` is null for a retune within the thread's own affinity.
-     *     ``merges_into_thread_id`` is the live thread on the same anchor the move would merge
-     *     into, null when the thread moves on its own.
+     *     ``conversion_type`` is null for a retune within the source resonance's own affinity.
+     *     ``projected_points`` is what the target's row would gain from the amount being moved.
      */
     ThreadResonanceOption: {
       resonance_id: number;
@@ -54470,7 +54503,6 @@ export interface components {
       conversion_type:
         (components['schemas']['ConversionTypeEnum'] | components['schemas']['NullEnum']) | null;
       projected_points: number;
-      merges_into_thread_id: number | null;
       readonly qualifying: components['schemas']['DriftQualifyingComponent'][];
     };
     /**
@@ -61821,8 +61853,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this title. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -76810,8 +76841,10 @@ export interface operations {
          *     * `DRIFT_CORRECTION` - Drift correction
          *     * `CORRUPTION_CLEANSING` - Corruption cleansing payout
          *     * `SINEATING` - Sineating payout
+         *     * `CHARACTER_CREATION` - Character creation
          */
         source?:
+          | 'CHARACTER_CREATION'
           | 'COMBO_DISCOVERY'
           | 'COMPROMISE'
           | 'CORRUPTION_CLEANSING'

@@ -446,6 +446,8 @@ def _reanchor_threads(
     Each ``ThreadResonance`` row in the source affinity moves to its conversion target with
     its amount scaled by ``multiplier``. A thread that already holds a row for that target
     takes the scaled amount onto it and the source row goes (a merge of rows on one thread).
+    A row with points that scales to 0 is deleted (a lossy Redemption, ADR-0054) unless it is
+    the thread's only row; a row already at 0 (a creation pick) moves on at 0.
     The thread's ``developed_points`` scale by the same rate over the share of its rows that
     converted, so a thread wholly in the source affinity scales entirely and one that is
     half in it scales by half. ``level`` is left as it is. Each thread's leading resonance is
@@ -520,6 +522,10 @@ def _reanchor_thread_rows(
         if existing is not None:
             existing.amount += new_amount
             existing.save(update_fields=["amount"])
+            row.delete()
+        elif new_amount == 0 and row.amount > 0 and held:
+            # A Redemption lossy enough to empty the row (ADR-0054) deletes it, unless it is
+            # the thread's only row. A creation pick already at 0 is not emptied: it follows.
             row.delete()
         else:
             row.resonance = target

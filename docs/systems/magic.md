@@ -4577,8 +4577,12 @@ Staff author the row and its `RitualComponentRequirement` rows; code finds it wi
   character's balances and lifetime are untouched (no `recompute_aura`). `refresh_leading_resonance`
   runs afterwards, so a move that makes the target the largest row changes `Thread.resonance`
   (and the tier-0 passives that key on it); `character.threads.invalidate()` runs too. A row
-  moved down to zero stays (the thread still holds the resonance, with no points in it). There
-  is no second thread and no merge: one thread per anchor.
+  moved down to zero is deleted (the target row exists by then, so it is never the only row).
+  There is no second thread and no merge: one thread per anchor.
+- **Zero rows give no perks** (ruling 13): `payer_level_read` returns `None` for a non-leading
+  resonance whose row amount is 0 (`CharacterThreadHandler.amount_of`), so a creation pick, written
+  at zero, pays a pull but brings no perks until something is imbued into it; the leading resonance
+  is always eligible.
 - **Targets** (`thread_resonance_options(thread, from_resonance=None, amount=None)` ->
   `ThreadResonanceOption`): computed for the chosen "from" row. Every other resonance of the
   source resonance's affinity (rate 1, `conversion_type` None), plus, for each other affinity, the
@@ -4670,6 +4674,8 @@ target stays). Each row's amount scales by the pair multiplier (`int(amount x mu
 thread that already holds a row for the target takes the scaled amount onto it and the source row
 is deleted (a merge of rows on one thread; `_find_existing_target_thread`, `_reanchor_thread`,
 `same_anchor_threads` and the unique-index race are gone with the old merge of two threads).
+A row with points that scales to 0 is deleted (a Redemption lossy enough to empty it, ADR-0054)
+unless it is the thread's only row; a row already at 0 (a creation pick) moves on at 0.
 `developed_points` scale by the same rate over the share of the thread's row amounts that
 converted: `int(points x (unconverted + converted x multiplier) / total)`, so a thread wholly in
 the source affinity scales entirely and a half-converted one scales by half; `level` is

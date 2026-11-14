@@ -70,24 +70,31 @@ class CharacterThreadHandler:
         )
 
     @cached_property
-    def _resonances_by_thread(self) -> dict[int, list[Resonance]]:
-        """Each thread's resonances, leading first (the rows' Meta ordering), one query.
+    def _rows_by_thread(self) -> dict[int, list[tuple[Resonance, int]]]:
+        """Each thread's ``(resonance, amount)`` rows, leading first (Meta ordering), one query.
 
         Held here and not as a ``prefetch_related`` on the threads: threads are idmapper
         instances, which keep a prefetch cache across reloads and would serve rows from
         before an imbue (#5123). Services that write rows call ``invalidate()``.
         """
-        out: dict[int, list[Resonance]] = {}
+        out: dict[int, list[tuple[Resonance, int]]] = {}
         rows = ThreadResonance.objects.filter(
             thread__owner_id=self.character.pk, thread__retired_at__isnull=True
         ).select_related("resonance")
         for row in rows:
-            out.setdefault(row.thread_id, []).append(row.resonance)
+            out.setdefault(row.thread_id, []).append((row.resonance, row.amount))
         return out
 
     def resonances_of(self, thread: Thread) -> list[Resonance]:
-        """The resonances ``thread`` holds, leading first."""
-        return self._resonances_by_thread.get(thread.pk, [])
+        """The resonances ``thread`` holds a row for (at any amount), leading first."""
+        return [resonance for resonance, _amount in self._rows_by_thread.get(thread.pk, [])]
+
+    def amount_of(self, thread: Thread, resonance: Resonance) -> int | None:
+        """How much of ``resonance`` ``thread`` holds, or None when it holds no row for it."""
+        for held, amount in self._rows_by_thread.get(thread.pk, []):
+            if held.pk == resonance.pk:
+                return amount
+        return None
 
     def all(self) -> list[Thread]:
         """Return all threads owned by this character."""
@@ -868,7 +875,7 @@ class CharacterThreadHandler:
         active-pull snapshot must be refreshed alongside the thread list.
         """
         self.__dict__.pop("_all", None)
-        self.__dict__.pop("_resonances_by_thread", None)
+        self.__dict__.pop("_rows_by_thread", None)
         self.__dict__.pop("_passive_capability_grants_cache", None)
         self.__dict__.pop("_crossing_choices", None)
         self.__dict__.pop("context_free_power", None)
