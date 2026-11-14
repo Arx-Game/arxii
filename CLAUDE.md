@@ -13,6 +13,22 @@ self-direction (e.g. "Checking whether the skill expects a reviewer dispatch
 step." — not "Does the skill expect a reviewer dispatch step?"). When in doubt, no
 `?` in user-facing text outside `AskUserQuestion`.
 
+**Heavy replies to the owner are reviewed before they are sent.** A reply that
+carries a question or a decision, or runs past a few sentences, goes to the
+`plain-prose-reviewer` agent (Haiku, `tools/agents/`) as a draft, and you fix
+its findings before sending. Short status lines skip it. A Fable-family session
+skips it, and so does any subagent, because the owner does not read subagent
+output. Issue bodies, specs and demos get the same review (see
+`issue-to-merged-pr` Step 2 and `demoing-a-feature`).
+
+**Write rules and claims as full sentences, and name things in words.** A heading,
+bullet or table cell that states a rule or a claim is a full sentence in which a
+person or thing does something. Do not use a clipped phrase that packs a clause,
+such as "a rule hinted at instead of stated", which leaves the reader to rebuild
+the missing subject and verb. Do not coin a label or code ("Ruling 1", "Slice A3")
+and then use it as shorthand: say what the thing is, or define the label where it
+is first used. Names, numbers and issue or PR numbers stay short.
+
 ## Tool & Subagent Sequencing
 
 **Repo-mutating operations (`git`, `rm`, `Edit`, `Write`, and implementer

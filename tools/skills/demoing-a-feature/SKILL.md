@@ -96,7 +96,9 @@ recommendation first, and in the spec's Decisions section as pending.
    field in the schema delta or to a ruling.
 4. **Copy on the leaf is placeholder for shape.** Say so on the page. Run `deslop`
    on it anyway; no em or en dashes anywhere on the page (grep for both before
-   publishing). Never let placeholder names become content rows.
+   publishing). Never let placeholder names become content rows. Then dispatch the
+   `plain-prose-reviewer` agent (Haiku) on the page's text and fix every finding
+   before the owner sees it. Skip it in a Fable-family session.
 5. **Publish** with no capabilities; the page is read-only.
 6. **Post the spec with the demo link at the top**, its working assumptions on
    open forks listed as pending in Decisions, and each user story naming a
