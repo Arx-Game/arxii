@@ -482,6 +482,60 @@ class CombatCastWebPullTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+class RefusedWebDeclarationTests(TestCase):
+    """A declaration refused after its pull committed leaves memory as the database is (#5123)."""
+
+    def setUp(self) -> None:
+        idmapper_models.flush_cache()
+
+    def test_refused_declaration_puts_the_spent_resonance_and_anima_back(self) -> None:
+        """The refusal rolls the pull back; the cached rows read what the database holds."""
+        from actions.constants import ActionBackend, CombatActionSlot
+        from actions.errors import ActionDispatchError
+        from actions.types import ActionRef, PlayerAction
+        from world.fatigue.constants import EffortLevel
+        from world.magic.models import CharacterAnima, CharacterResonance
+
+        data = _make_web_pull_setup()
+        player_action = PlayerAction(
+            backend=ActionBackend.COMBAT,
+            display_name="Cast",
+            ref=ActionRef(
+                backend=ActionBackend.COMBAT,
+                technique_id=data["technique"].pk,
+                action_slot=CombatActionSlot.FOCUSED,
+            ),
+        )
+        # A strain far over her budget: the declaration is refused after the pull committed.
+        kwargs = {
+            "effort_level": EffortLevel.MEDIUM,
+            "confirm_soulfray_risk": True,
+            "strain_commitment": 10_000,
+            **data["web_kwargs"],
+        }
+        resonance = CharacterResonance.objects.get(
+            character_sheet=data["sheet"], resonance=data["resonance"]
+        )
+        anima = CharacterAnima.objects.get(character=data["sheet"])
+        balance, current = resonance.balance, anima.current
+
+        with self.assertRaises(ActionDispatchError) as cm:
+            data["ctx"].record_declaration(data["sheet"], player_action, kwargs)
+
+        self.assertEqual(cm.exception.code, ActionDispatchError.STRAIN_OVER_BUDGET)
+        self.assertFalse(CombatPull.objects.filter(participant=data["participant"]).exists())
+        # The database was rolled back ...
+        self.assertEqual(
+            CharacterResonance.objects.filter(pk=resonance.pk).values_list("balance", flat=True)[0],
+            balance,
+        )
+        # ... and so are the cached rows every later read hands back.
+        cached = CharacterResonance.objects.get(pk=resonance.pk)
+        self.assertEqual(cached.balance, balance)
+        self.assertEqual(CharacterAnima.objects.get(pk=anima.pk).current, current)
+        self.assertEqual(data["sheet"].character.resonances.balance(data["resonance"]), balance)
+
+
 class ClashWebPullTests(TestCase):
     """_dispatch_clash_contribution carrying web-form IDs commits a CombatPull."""
 
