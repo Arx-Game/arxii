@@ -8,7 +8,7 @@
 import { AuraHalo } from '@/magic/components/AuraHalo';
 import { CodexLine } from '../../folio';
 import type { Resonance, ResonanceWeightPick } from '../../types';
-import { placedPoints, weightOf, withWeight } from './resonanceWeights';
+import { placedPoints, weightOf, withWeight } from '../../resonanceWeights';
 
 interface ResonanceWeightsProps {
   resonances: Resonance[];
@@ -35,10 +35,10 @@ function auraShares(resonances: Resonance[], weights: ResonanceWeightPick[]) {
 export function ResonanceWeights({ resonances, weights, budget, onChange }: ResonanceWeightsProps) {
   const placed = placedPoints(weights);
   const full = placed >= budget;
+  const aura = auraShares(resonances, weights);
 
   return (
     <div className="resonance-weights">
-      <h3 className="resonance-weights-title">Your Resonance</h3>
       <div className="leaf-body">
         <p>
           Resonance is what powers your magic. It is the feeling that invigorates you, drives you or
@@ -100,10 +100,11 @@ export function ResonanceWeights({ resonances, weights, budget, onChange }: Reso
           );
         })}
       </ul>
-      <div className="resonance-aura">
-        <span className="resonance-aura-label">Your aura</span>
-        <AuraHalo shares={auraShares(resonances, weights)} />
-      </div>
+      {aura.length > 0 && (
+        <AuraHalo shares={aura}>
+          <span className="resonance-aura-label">Your aura</span>
+        </AuraHalo>
+      )}
     </div>
   );
 }

@@ -916,13 +916,13 @@ export interface Affinity {
   description: string;
 }
 
-/** A Resonance row from /api/magic/resonances/ (ResonanceSerializer). */
 /** One resonance and the creation points spread onto it (#5123). */
 export interface ResonanceWeightPick {
   resonance_id: number;
   weight: number;
 }
 
+/** A Resonance row from /api/magic/resonances/ (ResonanceSerializer). */
 export interface Resonance {
   id: number;
   name: string;

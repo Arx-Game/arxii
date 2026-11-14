@@ -5,7 +5,7 @@
  * the creation points); these only keep the stepper in step with them.
  */
 
-import type { ResonanceWeightPick } from '../../types';
+import type { ResonanceWeightPick } from './types';
 
 /** The points placed so far across every pick. */
 export function placedPoints(weights: ResonanceWeightPick[]): number {

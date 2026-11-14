@@ -50,7 +50,7 @@ import { GlimpseSection } from './gift/GlimpseSection';
 import { MagicTrainingBlock } from './gift/MagicTrainingBlock';
 import { ResonanceWeights } from './gift/ResonanceWeights';
 import { StyleStep } from './gift/StyleStep';
-import { heaviestFirst, leadResonanceId, placedPoints } from './gift/resonanceWeights';
+import { heaviestFirst, leadResonanceId, placedPoints } from '../resonanceWeights';
 import { hasMagicTraining, isTrainingSpent, trainingHeading } from './gift/magicTraining';
 import { TechniqueSelector } from './gift/TechniqueSelector';
 import { TraditionStep } from './gift/TraditionStep';
@@ -167,6 +167,8 @@ interface LaterStepsInput {
   styleChosen: boolean;
   giftDone: boolean;
   resonanceDone: boolean;
+  /** What the Resonance step still waits on, worded for the step it gates. */
+  resonanceGate: string;
 }
 
 /**
@@ -180,6 +182,7 @@ function laterSteps({
   styleChosen,
   giftDone,
   resonanceDone,
+  resonanceGate,
 }: LaterStepsInput) {
   const styleNumber = 5;
   const trainingNumber = styleNumber + (showStyle ? 1 : 0);
@@ -187,7 +190,7 @@ function laterSteps({
   const trainingReady = giftDone && resonanceDone && (!showStyle || styleChosen);
   let trainingGate = 'Choose a style first';
   if (!giftDone) trainingGate = 'Choose a gift first';
-  else if (!resonanceDone) trainingGate = 'Choose a resonance first';
+  else if (!resonanceDone) trainingGate = resonanceGate;
   return {
     styleNumber,
     trainingNumber,
@@ -237,6 +240,9 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   const leadResonanceName = resonances.find(
     (r) => r.id === leadResonanceId(resonanceWeights)
   )?.name;
+  // A spread saved part-way has picked a resonance; it still has points to place (#5123).
+  const resonanceGate =
+    resonanceWeights.length > 0 ? 'Place all your points first' : 'Choose a resonance first';
   const techniqueCountLine = `${selectedTechniqueIds.length} of ${picks} chosen`;
 
   // Magical training (#4659) is its own step after the Resonance: its fit bonuses count
@@ -259,6 +265,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
       styleChosen: chosenStyle != null,
       giftDone: completion.gift,
       resonanceDone: completion.resonance,
+      resonanceGate,
     });
   const trainingValue = showTraining ? `${training.allocated} of ${training.total}` : undefined;
 
@@ -420,7 +427,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
         <FunnelStep
           n={4}
           total={stepCount}
-          name="Resonance"
+          name="Your Resonance"
           value={resonanceName}
           done={completion.resonance}
           gated={!completion.techniques}
@@ -443,7 +450,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
             value={chosenStyle?.name}
             done={chosenStyle != null}
             gated={!completion.resonance}
-            gateReason="Choose a resonance first"
+            gateReason={resonanceGate}
             open={completion.resonance && chosenStyle == null}
           >
             <StyleStep draft={draft} styles={styles} />
@@ -472,7 +479,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
           value={animaCheckLine}
           done={completion.anima}
           gated={!completion.resonance}
-          gateReason="Choose a resonance first"
+          gateReason={resonanceGate}
           open={completion.resonance && !completion.anima}
         >
           <AnimaCheckStep draft={draft} register={register} />

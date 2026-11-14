@@ -58,9 +58,8 @@ beforeEach(() => {
 });
 
 describe('ResonanceWeights', () => {
-  it('shows the intro, the heading and the budget from the server', () => {
+  it('shows the intro and the budget from the server', () => {
     render(<Harness budget={7} />);
-    expect(screen.getByRole('heading', { name: 'Your Resonance' })).toBeInTheDocument();
     expect(screen.getByText(/Resonance is what powers your magic/)).toBeInTheDocument();
     expect(screen.getByText(/Choose what powers you, and how strongly/)).toBeInTheDocument();
     expect(screen.getByText('0 of 7 placed')).toBeInTheDocument();
@@ -107,7 +106,9 @@ describe('ResonanceWeights', () => {
   it('says the aura in words as the points move, never in numbers', async () => {
     render(<Harness budget={10} />);
     expect(screen.queryByTestId('aura-halo-sentence')).not.toBeInTheDocument();
+    expect(screen.queryByText('Your aura')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'More Fury' }));
+    expect(screen.getByText('Your aura')).toBeInTheDocument();
     expect(screen.getByTestId('aura-halo-sentence')).toHaveTextContent('All of it primal.');
     await userEvent.click(screen.getByRole('button', { name: 'More Domination' }));
     expect(screen.getByTestId('aura-halo-sentence')).toHaveTextContent(

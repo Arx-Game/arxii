@@ -2212,13 +2212,6 @@
   display: grid;
   gap: 0.9rem;
 }
-.interview .resonance-weights-title {
-  margin: 0;
-  font-family: 'Cinzel', serif;
-  font-size: 1rem;
-  letter-spacing: 0.1em;
-  color: var(--cg-text);
-}
 .interview .resonance-budget {
   margin: 0;
   font-size: 0.85rem;
@@ -2301,10 +2294,6 @@
 }
 .interview .resonance-row-body .ledger-line {
   font-style: normal;
-}
-.interview .resonance-aura {
-  display: grid;
-  gap: 0.4rem;
 }
 .interview .resonance-aura-label {
   font-family: 'Cinzel', serif;

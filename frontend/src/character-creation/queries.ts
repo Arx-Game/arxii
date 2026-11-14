@@ -72,7 +72,7 @@ import {
   withdrawDraft,
 } from './api';
 import type { FinalizeForTablePayload } from './api';
-import { leadResonanceId } from './components/gift/resonanceWeights';
+import { leadResonanceId } from './resonanceWeights';
 import type { CharacterDraft, CharacterDraftUpdate, OfferChapter } from './types';
 
 export const characterCreationKeys = {

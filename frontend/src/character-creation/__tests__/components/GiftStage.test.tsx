@@ -165,7 +165,9 @@ describe('GiftStage (folio)', () => {
       expect(steps[3]).not.toHaveClass('chosen');
       expect(steps[3].querySelector('details')).toHaveAttribute('open');
       expect(steps[4]).toHaveClass('closed');
-      expect(steps[4]).toHaveTextContent('Choose a resonance first');
+      expect(steps[4]).toHaveTextContent('Place all your points first');
+      expect(steps[3]).toHaveTextContent('Your Resonance');
+      expect(screen.getAllByText('Your Resonance')).toHaveLength(1);
     });
 
     it('reads as chosen, naming every resonance heaviest first, once all are placed', () => {
