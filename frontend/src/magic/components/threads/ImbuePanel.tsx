@@ -129,6 +129,12 @@ export function ImbuePanel({
         <span className="font-medium tabular-nums">{balance}</span>
       </p>
 
+      {!hasChoice && payer && payerId !== thread.resonance && (
+        <p className="text-sm" data-testid="imbue-lone-payer">
+          Spends {payer.resonance_name}
+        </p>
+      )}
+
       {hasChoice && (
         <div
           className="flex flex-wrap items-center gap-2"

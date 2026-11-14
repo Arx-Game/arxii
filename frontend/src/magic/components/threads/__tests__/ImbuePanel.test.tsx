@@ -410,5 +410,27 @@ describe('ImbuePanel', () => {
         expect.any(Object)
       );
     });
+
+    it('names the lone resonance that pays when it is not the leader', () => {
+      render(
+        <ImbuePanel
+          thread={makeThread({ allowed_resonance_ids: [2] })}
+          balance={10}
+          held={held}
+          characterSheetId={100}
+        />,
+        { wrapper: createWrapper() }
+      );
+      expect(screen.queryByTestId('imbue-payers')).not.toBeInTheDocument();
+      expect(screen.getByTestId('imbue-lone-payer')).toHaveTextContent('Spends Domination');
+    });
+
+    it('names no payer when the lone resonance is the leader', () => {
+      render(
+        <ImbuePanel thread={makeThread()} balance={10} held={[held[0]]} characterSheetId={100} />,
+        { wrapper: createWrapper() }
+      );
+      expect(screen.queryByTestId('imbue-lone-payer')).not.toBeInTheDocument();
+    });
   });
 });
