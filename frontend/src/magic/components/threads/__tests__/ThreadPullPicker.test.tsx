@@ -523,3 +523,150 @@ describe('ThreadPullPicker — details affordance', () => {
     expect(screen.getByTestId('pull-detail-modal-stub')).toHaveTextContent('Deep Tide');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Payers (#5123)
+// ---------------------------------------------------------------------------
+
+describe('ThreadPullPicker — payer per thread (#5123)', () => {
+  const effect = (kind: string, value: number) => ({
+    kind,
+    authored_value: value,
+    level_multiplier: 1,
+    scaled_value: value,
+    vital_target: null,
+    source_thread_id: 1,
+    source_thread_level: 3,
+    source_tier: 1,
+    narrative_snippet: '',
+    inactive: false,
+    inactive_reason: null,
+  });
+  const option = (id: number, name: string, balance: number, effects: unknown[]) => ({
+    resonance_id: id,
+    resonance_name: name,
+    cost: 3,
+    balance,
+    affordable: balance >= 3,
+    effects,
+    level_read: 3,
+  });
+  const mixed = makeThread({
+    id: 1,
+    resonance: 1,
+    resonance_name: 'Fury',
+    resonances: [
+      { resonance_id: 1, resonance_name: 'Fury', amount: 30, leads: true },
+      { resonance_id: 2, resonance_name: 'Domination', amount: 10, leads: false },
+    ],
+  });
+
+  function mockMixedPreview(threadId = 1) {
+    mockedPreviewPull.mockResolvedValue(
+      makePreviewResponse({
+        per_thread: [
+          {
+            thread_id: threadId,
+            options: [
+              option(1, 'Fury', 22, [effect('FLAT_BONUS', 4)]),
+              option(2, 'Domination', 14, [effect('INTENSITY_BUMP', 2)]),
+              option(3, 'Wonder', 9, []),
+            ],
+          },
+        ],
+      })
+    );
+  }
+
+  it('lists every payer with its cost, balance and own perks once a paid tier is chosen', async () => {
+    mockThreads([mixed]);
+    mockApplicable([makeApplicabilityRow(1, true)]);
+    mockMixedPreview();
+    render(<ThreadPullPicker {...defaultProps({ selectedPulls: { 1: 1 } })} />, {
+      wrapper: createWrapper(),
+    });
+    expect(await screen.findByTestId('payer-options-1')).toBeInTheDocument();
+    expect(screen.getByTestId('payer-1-1')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('payer-1-1')).toHaveTextContent('3 Fury · you have 22');
+    expect(screen.getByTestId('payer-perks-1-1')).toHaveTextContent('Bonus to this cast+4');
+    expect(screen.getByTestId('payer-perks-1-2')).toHaveTextContent('Intensity+2');
+    expect(screen.getByTestId('payer-no-perks-1')).toBeInTheDocument();
+    expect(screen.getByTestId('thread-makeup-1')).toHaveTextContent(
+      'Level 10 · mostly Fury, some Domination'
+    );
+  });
+
+  it('starts on the picked payer and reports a change', async () => {
+    mockThreads([mixed]);
+    mockApplicable([makeApplicabilityRow(1, true)]);
+    mockMixedPreview();
+    const onPayerChange = vi.fn();
+    render(
+      <ThreadPullPicker
+        {...defaultProps({ selectedPulls: { 1: 1 }, payers: { 1: 2 }, onPayerChange })}
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(await screen.findByTestId('payer-1-2')).toHaveAttribute('aria-checked', 'true');
+    await userEvent.click(screen.getByTestId('payer-1-3'));
+    expect(onPayerChange).toHaveBeenCalledWith(1, 3);
+  });
+
+  it('shows no choice on a thread with one resonance', async () => {
+    const single = makeThread({
+      id: 1,
+      resonance: 1,
+      resonance_name: 'Domination',
+      resonances: [{ resonance_id: 1, resonance_name: 'Domination', amount: 20, leads: true }],
+    });
+    mockThreads([single]);
+    mockApplicable([makeApplicabilityRow(1, true)]);
+    mockedPreviewPull.mockResolvedValue(
+      makePreviewResponse({
+        per_thread: [
+          { thread_id: 1, options: [option(1, 'Domination', 14, [effect('FLAT_BONUS', 3)])] },
+        ],
+      })
+    );
+    render(<ThreadPullPicker {...defaultProps({ selectedPulls: { 1: 1 } })} />, {
+      wrapper: createWrapper(),
+    });
+    expect(await screen.findByTestId('payer-fixed-1')).toHaveTextContent('Pays with Domination');
+    expect(screen.queryByRole('radio', { name: /Domination/ })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('payer-options-1')).not.toBeInTheDocument();
+  });
+
+  it('opens Inspect perks with the source and the level read', async () => {
+    mockThreads([mixed]);
+    mockApplicable([makeApplicabilityRow(1, true)]);
+    mockMixedPreview();
+    render(<ThreadPullPicker {...defaultProps({ selectedPulls: { 1: 1 } })} />, {
+      wrapper: createWrapper(),
+    });
+    await userEvent.click(await screen.findByTestId('payer-inspect-1-2'));
+    const panel = await screen.findByTestId('perk-inspect');
+    expect(panel).toHaveTextContent('Domination through Tidal Anchor');
+    expect(panel).toHaveTextContent('Domination pull perk for Facet threads, tier 1');
+    expect(panel).toHaveTextContent('Thread level used');
+    expect(panel).toHaveTextContent('3 (thread is 10; Domination is not its leading resonance)');
+  });
+
+  it('keeps a tier open while any held resonance can pay', async () => {
+    mockThreads([mixed]);
+    mockApplicable([makeApplicabilityRow(1, true)]);
+    mockedPreviewPull.mockResolvedValue(
+      makePreviewResponse({
+        affordable: false,
+        per_thread: [
+          {
+            thread_id: 1,
+            options: [option(1, 'Fury', 1, []), option(2, 'Domination', 14, [])],
+          },
+        ],
+      })
+    );
+    render(<ThreadPullPicker {...defaultProps()} />, { wrapper: createWrapper() });
+    await waitFor(() => expect(mockedPreviewPull).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(screen.getByTestId('tier-btn-1-1')).not.toBeDisabled());
+  });
+});

@@ -122,11 +122,13 @@ REST API client for all soul-tether, thread, character-resonance, thread-spendin
 - `getCharacterResonances()` — GET `/api/magic/character-resonances/`
 - `getThreadHubSummary(characterSheetId?)` — GET `/api/magic/thread-hub-summary/`
 - `getTeachingOffers()` — GET `/api/magic/teaching-offers/`
-- `getThreadResonanceOptions(id)` — GET `/api/magic/threads/{id}/resonance-options/` →
+- `getThreadResonanceOptions(id, move?)` — GET `/api/magic/threads/{id}/resonance-options/` →
   `ThreadResonanceOptions` (`{ritual_id, offering_required, offering_count,
 unavailable_reason, options: [{resonance_id, resonance_name, affinity_name,
-conversion_type, projected_points, merges_into_thread_id, qualifying}]}`; owner-only,
-  slice 6 of #4672)
+conversion_type, projected_points, qualifying}]}`; owner-only, slice 6 of #4672).
+  `move` is `{fromResonance?, amount?}`, sent as `from_resonance` / `amount`: which of the
+  thread's own resonance rows the points come from (default the leading one) and how many
+  (default all of the row). `projected_points` is what the target's row would gain (#5123)
 
 **Thread mutations:**
 
@@ -135,14 +137,21 @@ conversion_type, projected_points, merges_into_thread_id, qualifying}]}`; owner-
 - `retireThread(id)` — DELETE `/api/magic/threads/{id}/` → `void`
 - `crossXPLock(threadId, body)` — POST `/api/magic/threads/{id}/cross_xp_lock/` → `CrossXPLockResponse` (`{thread_id, unlocked_level, xp_spent}`)
 - `imbueThread(body)` — wraps `performRitual` with imbuing ritual id + kwargs
-- `imbueThreadAuto(characterSheetId, threadId, amount)` — resolves the Rite of
+- `imbueThreadAuto(characterSheetId, threadId, amount, resonanceId?)` — resolves the Rite of
   Imbuing via the serialized `is_imbuing` flag (NOT `service_function_path`,
   which the serializer never sends — the old filter made web imbuing dead on
   every server, #audit2), then POSTs `rituals/perform/` with
-  `{ thread_id, amount }`. The canonical rite is CEREMONY-kind and the web is
+  `{ thread_id, amount, resonance_id? }` (`resonance_id` is the held resonance that pays;
+  omitted, the thread's leading resonance pays, #5123). The canonical rite is CEREMONY-kind and the web is
   its client-hosted UI, so the backend fuses the `imbue` finisher into that
   one POST (performing the ceremony alone would only mint the pending effect).
-- `previewPull(body)` — POST `/api/magic/thread-pull-preview/` → `PullPreviewResponse`
+- `previewPull(body)` — POST `/api/magic/thread-pull-preview/` → `PullPreviewResponse`.
+  The request may carry `payers` (thread id to the resonance paying for it; a thread left
+  out is paid by its leading resonance). The response's `per_thread` lists, for each pulled
+  thread, one `PayerOption` per resonance the character holds: `{resonance_id,
+resonance_name, cost, balance, affordable, effects, level_read}`, the effects being that
+  payer's own on that thread (never summed across threads) and `level_read` the thread
+  level they were read at (#5123)
 
 **Teaching offer mutations:**
 
@@ -268,11 +277,12 @@ React Query hooks with a `magicKeys` query key factory.
 - `useWeaveThread()` — invalidates `threadList`, `threadHubSummary`
 - `usePatchThreadNarrative(id)` — invalidates `thread(id)`, `threadList`
 - `useRetireThread()` — invalidates `threadList`, `threadHubSummary`
-- `useThreadResonanceOptions(threadId, enabled)` — read hook for the retune dialog's
-  options (`threadResonanceOptions(id)`, `gcTime: 0`, fetched only while the dialog is open)
+- `useThreadResonanceOptions(threadId, enabled, move?)` — read hook for the retune dialog's
+  options (`threadResonanceOptions(id, fromResonance, amount)`, `gcTime: 0`, fetched only
+  while the dialog is open; each from-row or amount is its own query)
 - `useRetuneThread()` — performs the retune rite through `performRitual`; invalidates
   `threads()`, `thread-hub-summary`, `characterResonances()`
-- `useImbueThread()` — takes `{ characterSheetId, threadId, amount }`;
+- `useImbueThread()` — takes `{ characterSheetId, threadId, amount, resonanceId? }`;
   invalidates `thread(id)`, `threadHubSummary`, `characterResonanceList`
 - `useCrossXPLock()` — takes `{ threadId, body }`;
   invalidates `thread(id)`, `threadHubSummary`
@@ -373,6 +383,8 @@ that opens `WeaveThreadWizard`. Links to `/threads/:id` and `/threads/teaching`.
 Thread detail page at `/threads/:id`. Renders the full thread record with `ImbuePanel`,
 `XPLockBoundaryPanel`, `PullEffectPreview`, `ThreadRenameDialog`, `ThreadRetireDialog`, and
 `ThreadResonanceDialog` (opened by the "Change resonance" button, shown on a live thread).
+The Resonance stat says the thread's mix in words (`threadMixInWords`), and `ImbuePanel`
+gets every resonance the character holds from `useCharacterResonances` (#5123).
 
 ### `pages/WeavingTeachingOffersPage.tsx`
 
@@ -390,12 +402,43 @@ Small badge that maps a thread's `state` field to a colored label (Active, Dorma
 
 ### `components/threads/ThreadCard.tsx`
 
-Card for a single thread in the hub grid. Shows name, state badge, resonance, XP-lock level,
-and a link to the detail page.
+Card for a single thread in the hub grid. Shows name, state badge, the thread's resonance
+mix in words ("mostly Fury, some Domination"; the leading resonance's name when the thread
+has no rows), XP-lock level, and a link to the detail page.
 
 ### `components/threads/ImbuePanel.tsx`
 
 Panel in `ThreadDetailPage` for spending resonance to imbue a thread. Calls `useImbueThread`.
+With more than one held resonance (`held` prop) it shows a "Spend" pill per resonance with
+its balance, starting on the thread's leading resonance; the amount stepper stops at the
+picked resonance's balance and the pick goes out as `resonanceId`. With one held resonance
+there is no choice to show and nothing is sent.
+
+### `components/threads/PayerOptions.tsx`, `PerkInspect.tsx` (#5123)
+
+The pull's "Pay with" choice, for one pulled thread, drawn from `per_thread` in the pull
+preview. `PayerOptions` lists each payer with `cost` Name `· you have` balance and its own
+perk rows (label, value, flavor snippet), starting on the thread's leading resonance; a
+payer that cannot afford the cost cannot be picked, and one the thread never took in reads
+"No perks on this thread". A thread holding one resonance (`thread.resonances.length <= 1`)
+shows "Pays with X" and its perks with no radio. `ThreadMakeup` is the "Level 3 · mostly Fury,
+some Domination" line. "Inspect perks" opens `PerkInspect`: per perk the amount, how it was
+worked out (authored value x level multiplier), its source ("{Resonance} pull perk for {kind}
+threads, tier N") and "Thread level used" (`level_read`, with a note when the payer is not the
+leading resonance). Perk labels and values come from `effectLabel` / `effectValue` in
+`burn.ts`. Mounted in `ThreadPullPicker` rows (the cast flow) and `ThreadPullDialog`
+(combat declarations).
+
+### `components/threads/ThreadPullPicker.tsx` and `ThreadPullDialog.tsx`
+
+Both pick a tier and pulled threads; each pulled thread is paid by one resonance. The picker
+takes `payers` / `onPayerChange` (state lives in `useCastPullSelection`, which sends only the
+picks the player made, as `pull.payers`; a thread without one is paid by its leading
+resonance) and its tier strip stays open while ANY held resonance can pay. The dialog keeps its
+own `payers`, sends them to the preview and returns them on `PullSelection.payers` beside
+`resonances` (the distinct payers, which a mixed pull's burn picks from). The dialog offers a
+thread while any held resonance has a balance, and its cost line reads "3 Fury, 3
+Domination" from the chosen payers, not a flat total.
 
 ### `components/threads/XPLockBoundaryPanel.tsx`
 
@@ -416,12 +459,16 @@ Dialog for renaming a thread (patching `name` + `description`). Calls `usePatchT
 Moves a thread to another resonance (slice 6 of #4672, Screen 6 of the #4735 demo). Reads
 `useThreadResonanceOptions`; shows the server's `unavailable_reason` in place of the "Change
 to" pills when the thread cannot move (no rite, a sanctum thread, a signed technique thread,
-no options). Each pill carries a swatch for the move kind (retune / Fall / Redemption, keyed
-on `conversion_type`) and a "merges" chip when `merges_into_thread_id` is set. Offering pills
-appear only when `offering_required`, and exactly `min(offering_count, qualifying.length)`
-picks enable the button. Performs via `useRetuneThread` with `kwargs: {thread_id,
-target_resonance}`; a 400 shows the server's detail; after a merge it navigates to the
-surviving thread (`result.thread_id`). Tests: `__tests__/ThreadResonanceDialog.test.tsx`.
+no options). A thread holds several resonance rows (`thread.resonances`), so the dialog
+has a "Move from" pill per row (hidden for a one-row thread; default the leading row) and a
+"Points to move" stepper with an "All" reset (default all of the row); both go to the options
+endpoint, and `projected_points` is what the target's row gains. Each "Change to" pill carries
+a swatch for the move kind (retune / Fall / Redemption, keyed on `conversion_type`). Offering
+pills appear only when `offering_required`, and exactly `min(offering_count,
+qualifying.length)` picks enable the button. Performs via `useRetuneThread` with `kwargs:
+{thread_id, target_resonance, from_resonance?, amount?}` (`amount` only when the player chose
+one); a 400 shows the server's detail; a result naming a different thread navigates to it
+(`result.thread_id`). Tests: `__tests__/ThreadResonanceDialog.test.tsx`.
 
 ### `components/pillClass.ts`
 

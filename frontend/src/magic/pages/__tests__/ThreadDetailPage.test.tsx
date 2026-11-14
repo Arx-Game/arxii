@@ -359,4 +359,26 @@ describe('ThreadDetailPage', () => {
     render(<ThreadDetailPage />, { wrapper: createWrapper() });
     expect(screen.getByText('Thread not found.')).toBeInTheDocument();
   });
+  it('says the mix in words and offers each held resonance as the imbue payer (#5123)', () => {
+    vi.mocked(magicQueries.useThread).mockReturnValue(
+      makeQueryResult(
+        makeThread({
+          resonances: [
+            { resonance_id: 1, resonance_name: 'Bene', amount: 30, leads: true },
+            { resonance_id: 2, resonance_name: 'Gale', amount: 10, leads: false },
+          ],
+        })
+      ) as ReturnType<typeof magicQueries.useThread>
+    );
+    vi.mocked(magicQueries.useCharacterResonances).mockReturnValue(
+      makeQueryResult([
+        makeCharacterResonance(),
+        makeCharacterResonance({ id: 11, resonance: 2, resonance_name: 'Gale', balance: 7 }),
+      ]) as ReturnType<typeof magicQueries.useCharacterResonances>
+    );
+    render(<ThreadDetailPage />, { wrapper: createWrapper() });
+    expect(screen.getByTestId('thread-stat-resonance')).toHaveTextContent('mostly Bene, some Gale');
+    expect(screen.getByTestId('imbue-payer-1')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('imbue-payer-2')).toHaveTextContent('Gale 7');
+  });
 });

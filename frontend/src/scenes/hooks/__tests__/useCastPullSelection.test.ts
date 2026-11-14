@@ -387,4 +387,52 @@ describe('useCastPullSelection', () => {
       expect(result.current.burn).toBe(0);
     });
   });
+  // -------------------------------------------------------------------------
+  // Payers (#5123)
+  // -------------------------------------------------------------------------
+  describe('payers', () => {
+    it('sends only the payers the player picked, for threads still pulled', () => {
+      const wrapper = createWrapper();
+      const { result } = renderHook(() => useCastPullSelection(baseParams), { wrapper });
+      act(() => result.current.handlePullsChange({ 1: 2, 3: 2 }));
+      act(() => result.current.setPayer(1, 20));
+      act(() => result.current.setPayer(2, 20));
+      // Thread 2 is not pulled, so its pick is left out; thread 3 has no pick.
+      expect(result.current.buildPullPayload()).toEqual({
+        pull: { tier: 2, thread_ids: [1, 3], payers: { 1: 20 } },
+      });
+    });
+
+    it('omits payers when nobody picked one: the leading resonance pays', () => {
+      const wrapper = createWrapper();
+      const { result } = renderHook(() => useCastPullSelection(baseParams), { wrapper });
+      act(() => result.current.handlePullsChange({ 1: 2 }));
+      expect(result.current.buildPullPayload()).toEqual({ pull: { tier: 2, thread_ids: [1] } });
+    });
+
+    it('lets the picked payer choose which resonance a burn can come from', () => {
+      setupResonances([
+        { resonance: 10, resonance_name: 'Dawnlight', balance: 5 },
+        { resonance: 20, resonance_name: 'Gloam', balance: 3 },
+      ] as never);
+      const wrapper = createWrapper();
+      const { result } = renderHook(() => useCastPullSelection(baseParams), { wrapper });
+      act(() => result.current.handlePullsChange({ 1: 2 }));
+      act(() => result.current.setPayer(1, 20));
+      expect(result.current.pulledResonances).toEqual([{ id: 20, name: 'Gloam' }]);
+      expect(result.current.burnResonanceId).toBe(20);
+    });
+
+    it('sends the picks to the burn preview and clears them on reset', () => {
+      const wrapper = createWrapper();
+      const { result } = renderHook(() => useCastPullSelection(baseParams), { wrapper });
+      act(() => result.current.handlePullsChange({ 1: 2 }));
+      act(() => result.current.setPayer(1, 20));
+      expect(mockUsePullBurnPreview).toHaveBeenLastCalledWith(
+        expect.objectContaining({ thread_ids: [1], payers: { 1: 20 } })
+      );
+      act(() => result.current.reset());
+      expect(result.current.payers).toEqual({});
+    });
+  });
 });

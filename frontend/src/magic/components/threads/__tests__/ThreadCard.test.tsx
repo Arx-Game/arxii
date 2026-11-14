@@ -148,4 +148,27 @@ describe('ThreadCard', () => {
     expect(handleClick).toHaveBeenCalledOnce();
     expect(handleClick).toHaveBeenCalledWith(thread);
   });
+  it('says the thread mix in words when it holds several resonances', () => {
+    render(
+      <ThreadCard
+        thread={makeThread({
+          id: 3,
+          resonances: [
+            { resonance_id: 1, resonance_name: 'Fury', amount: 30, leads: true },
+            { resonance_id: 2, resonance_name: 'Domination', amount: 10, leads: false },
+          ],
+        })}
+        summary={makeSummary()}
+        onClick={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId('thread-card-mix-3')).toHaveTextContent(
+      'mostly Fury, some Domination'
+    );
+  });
+
+  it('names the leading resonance when the thread has no rows', () => {
+    render(<ThreadCard thread={makeThread({ id: 4 })} summary={makeSummary()} onClick={vi.fn()} />);
+    expect(screen.getByTestId('thread-card-mix-4')).toHaveTextContent('Bene');
+  });
 });
