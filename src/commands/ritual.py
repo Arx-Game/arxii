@@ -559,12 +559,33 @@ class CmdRitual(ArxCommand):
 
         self._move_target_resonance(raw_kwargs, service_kwargs)
         self._move_from_resonance(ritual, raw_kwargs, service_kwargs)
+        self._name_imbuing_payer(ritual, service_kwargs)
         self._refuse_incomplete_retune(ritual, service_kwargs)
 
         service_kwargs.update(raw_kwargs)
 
         components = self._gather_components()
         return {"ritual": ritual, "components_provided": components, **service_kwargs}
+
+    @staticmethod
+    def _name_imbuing_payer(ritual: Any, service_kwargs: dict[str, Any]) -> None:
+        """Give a SERVICE-dispatched imbuing rite the resonance that pays (#5123).
+
+        The imbuing service takes ``resonance=``; the player's ``resonance=<id>`` was moved
+        under ``target_resonance`` above for the rites that move one, so it is taken back
+        here, and a thread named with none is paid from its leading resonance, as the web
+        does (``RitualPerformView._resolve_imbuing_kwargs``).
+        """
+        from world.magic.constants import is_imbuing_ritual  # noqa: PLC0415
+
+        thread = service_kwargs.get("thread")
+        if thread is None or not is_imbuing_ritual(
+            name=ritual.name, service_function_path=ritual.service_function_path
+        ):
+            return
+        service_kwargs[_RESONANCE_KWARG] = (
+            service_kwargs.pop(_TARGET_RESONANCE_KWARG, None) or thread.resonance
+        )
 
     @staticmethod
     def _refuse_incomplete_retune(ritual: Any, service_kwargs: dict[str, Any]) -> None:

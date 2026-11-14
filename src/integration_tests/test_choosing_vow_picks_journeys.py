@@ -35,6 +35,7 @@ from world.covenants.factories import (
 )
 from world.covenants.models import CharacterCovenantRole, CharacterVowFocusPick, VowFocusPick
 from world.magic.constants import IMBUING_SERVICE_PATH, TargetKind
+from world.magic.crossing.handlers import thread_display_name
 from world.magic.factories import (
     CharacterAuraFactory,
     CharacterResonanceFactory,
@@ -377,7 +378,7 @@ class ImbuingOpensNewPicks(_ImbuingCase):
         thread.refresh_from_db()
         self.assertEqual(thread.level, 20)
         # The level the thread now stands at, never the climb of 10.
-        self.assertIn(f"{thread.name} is now level 20.", told)
+        self.assertIn(f"{thread_display_name(thread)} is now level 20.", told)
         self.assertIn("Vow level 20: 4 pts of new picks.", told)
 
     def test_an_imbue_within_a_pick_level_names_the_level_and_opens_no_picks(self) -> None:
@@ -387,9 +388,9 @@ class ImbuingOpensNewPicks(_ImbuingCase):
 
         thread.refresh_from_db()
         self.assertEqual(thread.level, 15)
-        self.assertIn(f"You complete the rite, imbuing {thread.name}.", told)
+        self.assertIn(f"You complete the rite, imbuing {thread_display_name(thread)}.", told)
         # A climb says where the thread now stands, but 15 opens no pick level.
-        self.assertIn(f"{thread.name} is now level 15.", told)
+        self.assertIn(f"{thread_display_name(thread)} is now level 15.", told)
         self.assertNotIn("new picks", told)
 
     def test_the_web_finisher_says_so_and_names_the_level(self) -> None:
@@ -408,7 +409,7 @@ class ImbuingOpensNewPicks(_ImbuingCase):
 
         self.assertEqual(response.status_code, 200, response.content)
         self.assertIn("Vow level 20: 4 pts of new picks.", response.json()["message"])
-        self.assertIn(f"{thread.name} is now level 20.", response.json()["message"])
+        self.assertIn(f"{thread_display_name(thread)} is now level 20.", response.json()["message"])
         self.assertEqual(response.json()["opened_pick_levels"], [20])
         self.assertEqual(response.json()["new_picks"], [{"level": 20, "points": 4}])
 

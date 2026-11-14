@@ -21,6 +21,7 @@ from world.action_points.models import ActionPointConfig, ActionPointPool
 from world.classes.factories import CharacterClassFactory
 from world.classes.services import set_primary_class_level
 from world.magic.constants import TargetKind
+from world.magic.crossing.handlers import thread_display_name
 from world.magic.factories import (
     CharacterAuraFactory,
     CharacterResonanceFactory,
@@ -110,7 +111,7 @@ class ACrossingArrivesAtThirty(_ThreadCase):
 
         told = self.imbue(thread, imbue_cost(29, 30))
 
-        self.assertIn(f"You complete the rite, imbuing {thread.name}.", told)
+        self.assertIn(f"You complete the rite, imbuing {thread_display_name(thread)}.", told)
         self.assertEqual(thread.level, 30)
         self.assertIn("Crossing level 30", self.crossing_list())
         self.assertTrue(
