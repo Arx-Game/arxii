@@ -2,6 +2,9 @@
 
 Grammar: ``imbue thread=<name or id> amount=<n> [resonance=<name>]``
 
+    A thread is named by its own name or its anchor's (a Gift thread by the Gift's name);
+    ``threads`` lists the names.
+
 ``resonance=`` names the resonance that pays; left out, the thread's leading resonance
 pays (#5123). It must be one the character holds.
 
@@ -17,6 +20,7 @@ from actions.definitions.imbue import ImbueAction
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 from commands.utils.held_resonance import held_resonance
+from commands.utils.thread_lookup import resolve_thread
 
 _THREAD_KWARG = "thread"
 _AMOUNT_KWARG = "amount"
@@ -43,8 +47,6 @@ class CmdImbue(ArxCommand):
 
     def resolve_action_args(self) -> dict[str, Any]:
         """Parse ``imbue thread=<name or id> amount=<n>`` into action kwargs."""
-        from world.magic.models import Thread  # noqa: PLC0415
-
         args = self.require_args("Imbue what? (imbue thread=<name or id> amount=<n>)")
         parsed = self._parse_kwargs(args)
 
@@ -59,12 +61,8 @@ class CmdImbue(ArxCommand):
             raise CommandError(msg)
 
         sheet = self.caller.sheet_data
-        thread = self.resolve_by_name_or_id(
-            Thread,
-            thread_val,
-            not_found_msg=f"No thread found for '{thread_val}'.",
-            owner=sheet,
-            retired_at__isnull=True,
+        thread = resolve_thread(
+            sheet, thread_val, not_found_msg=f"No thread found for '{thread_val}'."
         )
 
         kwargs: dict[str, Any] = {"thread": thread, "amount": int(amount_str)}

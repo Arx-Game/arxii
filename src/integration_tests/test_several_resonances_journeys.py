@@ -56,6 +56,7 @@ from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterAuraFactory,
     CharacterResonanceFactory,
+    GiftFactory,
     ImbuingRitualFactory,
     ResonanceFactory,
     ThreadFactory,
@@ -69,9 +70,10 @@ from world.magic.models import Affinity, CharacterResonance, Resonance, Thread, 
 from world.magic.models.aura import CharacterAuraShare
 from world.magic.services.drift import get_drift_config
 from world.magic.services.resonance import grant_resonance
+from world.magic.specialization.services import provision_latent_gift_thread
 from world.scenes.factories import SceneFactory
 from world.scenes.tests.cast_test_helpers import grant_technique, make_benign_castable_technique
-from world.traits.factories import CheckSystemSetupFactory
+from world.traits.factories import CheckSystemSetupFactory, TraitFactory
 from world.vitals.models import CharacterVitals
 
 
@@ -206,6 +208,54 @@ class PullingWithANamedPayer(_BurningResonance):
         self.assertEqual(self.balance(self.ysmay, self.ember), 10)
 
 
+class PullingAGiftThreadByTheGiftsName(_BurningResonance):
+    """A Gift thread has no name of its own, so ``pull=`` names it by its Gift."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.ysmay = self.caster("Ysmay")
+        self.veil = ResonanceFactory(name="Veil", affinity=self.primal)
+        self.ember = ResonanceFactory(name="Ember", affinity=self.primal)
+        sheet = self.ysmay.sheet_data
+        self.gift = GiftFactory(name="Kindling")
+        self.thread = provision_latent_gift_thread(sheet, self.gift, resonances=[self.veil])
+        _hold(sheet, self.veil, 10)
+        _hold(sheet, self.ember, 10)
+        for resonance in (self.veil, self.ember):
+            ThreadPullEffectFactory(
+                target_kind=TargetKind.GIFT,
+                resonance=resonance,
+                tier=1,
+                flat_bonus_amount=2,
+                effect_kind=EffectKind.FLAT_BONUS,
+            )
+        ThreadResonance.objects.create(thread=self.thread, resonance=self.ember, amount=5)
+        self.thread.developed_points = 5
+        self.thread.save(update_fields=["developed_points"])
+
+    def cast(self, pulled: str) -> str:
+        told, _channeled = self.cast_with_outcome(
+            self.ysmay, f"cast {self.technique.name} pull={pulled}", "Success"
+        )
+        return strip_ansi(told)
+
+    def test_the_gifts_name_pulls_it_paid_by_the_leading_resonance(self) -> None:
+        self.assertEqual(self.thread.name, "")
+
+        told = self.cast("Kindling")
+
+        self.assertIn("Your technique resolves.", told)
+        self.assertEqual(self.balance(self.ysmay, self.veil), 10 - 1)
+        self.assertEqual(self.balance(self.ysmay, self.ember), 10)
+
+    def test_the_gifts_name_and_a_resonance_pays_with_that_resonance(self) -> None:
+        told = self.cast("kindling:Ember")
+
+        self.assertIn("Your technique resolves.", told)
+        self.assertEqual(self.balance(self.ysmay, self.ember), 10 - 1)
+        self.assertEqual(self.balance(self.ysmay, self.veil), 10)
+
+
 class ImbuingWithAResonance(JourneyCase):
     def setUp(self) -> None:
         super().setUp()
@@ -281,6 +331,60 @@ class ImbuingWithAResonance(JourneyCase):
             "You hold no resonance called 'Nonesuch'. Your resonances: Ember, Veil.", told
         )
         self.assertEqual(self.balance(self.ember), 10)
+        self.assertEqual(self.balance(self.veil), 10)
+
+    def _gift_thread(self, gift_name: str = "Flame") -> Thread:
+        gift = GiftFactory(name=gift_name)
+        return provision_latent_gift_thread(self.sheet, gift, resonances=[self.veil])
+
+    def test_a_gift_thread_is_imbued_by_the_gifts_name(self) -> None:
+        gift_thread = self._gift_thread()
+        self.assertEqual(gift_thread.name, "")  # no name of its own: the Gift's name is it
+
+        self.telnet(self.ysmay, "ritual Rite of Imbuing")
+        told = strip_ansi(self.telnet(self.ysmay, "imbue thread=flame amount=3 resonance=ember"))
+
+        self.assertIn("You complete the rite, imbuing Flame.", told)
+        self.assertEqual(self.balance(self.ember), 10 - 3)
+        row = ThreadResonance.objects.get(thread=gift_thread, resonance=self.ember)
+        self.assertEqual(row.amount, 3)
+
+    def test_threads_prints_the_name_a_player_can_type(self) -> None:
+        self._gift_thread()
+
+        told = strip_ansi(self.telnet(self.ysmay, "threads"))
+
+        self.assertIn("Veil Flame (level 0)", told)
+        self.assertIn("Loom Strand", told)
+
+    def test_a_threads_own_name_beats_another_threads_anchor_name(self) -> None:
+        self._gift_thread()
+        named = ThreadFactory(
+            owner=self.sheet, resonance=self.ember, level=2, _trait_value=200, name="Flame"
+        )
+
+        self.telnet(self.ysmay, "ritual Rite of Imbuing")
+        told = strip_ansi(self.telnet(self.ysmay, "imbue thread=Flame amount=3"))
+
+        self.assertIn("You complete the rite, imbuing Flame.", told)
+        self.assertEqual(ThreadResonance.objects.get(thread=named, resonance=self.ember).amount, 3)
+
+    def test_a_name_two_anchors_share_is_refused_with_the_numbers(self) -> None:
+        first = self._gift_thread()
+        second = ThreadFactory(
+            owner=self.sheet,
+            resonance=self.ember,
+            target_trait=TraitFactory(name="Flame"),
+            name="",
+            _trait_value=200,
+        )
+
+        self.telnet(self.ysmay, "ritual Rite of Imbuing")
+        told = strip_ansi(self.telnet(self.ysmay, "imbue thread=Flame amount=3"))
+
+        self.assertIn("More than one thread answers to 'Flame'", told)
+        self.assertIn(f"number {first.pk} is Veil", told)
+        self.assertIn(f"number {second.pk} is Ember", told)
         self.assertEqual(self.balance(self.veil), 10)
 
     def test_threads_lists_the_mix_in_words(self) -> None:

@@ -551,7 +551,11 @@ actions, backends, and service functions.
 - **`threads.py`**: `CmdThreads` (`threads`, #1993) — the thread management hub. Bare
   `threads`/`threads list` shows all the caller's active threads (anchor, each resonance with
   its share of the thread in words, display level) via `anchor_label_for` (`world/magic/crossing/handlers.py`, the same
-  helper the crossing ceremony uses). `threads crossing list` shows pending crossing
+  helper the crossing ceremony uses; a Gift thread reads as its Gift's name). Each line prints
+  the name a player can type (`thread_label`, `commands/utils/thread_lookup.py`). That module
+  is the one thread lookup (`find_thread` / `resolve_thread`): `imbue thread=` and `pull=`
+  resolve a thread by its own name, else its anchor's name (a Gift thread by the Gift's name),
+  else its number, and a name that fits two threads is refused with each candidate's number. `threads crossing list` shows pending crossing
   offers + available `CrossingOption` rows; `threads crossing choose <id>` resolves a
   pending offer via `ResolveCrossingOfferAction` (the same action the web
   `CrossingRespondView` uses). Replaces the former standalone `crossing` command.

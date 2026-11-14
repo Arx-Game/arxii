@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 
 from commands.exceptions import CommandError
 from commands.utils.held_resonance import held_resonance
+from commands.utils.thread_lookup import find_thread
 from world.magic.constants import MAX_RESONANCE_BURN
 
 if TYPE_CHECKING:
@@ -210,36 +211,31 @@ class PullParsingMixin:
         A bare thread is paid by its leading resonance (the payer comes back ``None``). A
         named resonance must be one the character holds; it need not be one the thread
         carries (it pays, and brings no perks). A thread whose own name holds a colon still
-        resolves by its whole name before the entry is split.
+        resolves by its whole name before the entry is split. A thread answers to its own
+        name or its anchor's (a Gift thread by the Gift's name), see ``find_thread``.
 
         Raises:
             CommandError: No such active thread, or a resonance that is unknown or that the
                 character does not hold. Each in plain words.
         """
-        from world.magic.models import Thread  # noqa: PLC0415
-
-        qs = Thread.objects.filter(owner=sheet, retired_at__isnull=True)
-
-        def find(text: str) -> Thread | None:
-            if text.isdigit():
-                return qs.filter(pk=int(text)).first()
-            return qs.filter(name__iexact=text).first()
-
-        whole = find(val) if _PAYER_SEPARATOR in val else None
+        whole = find_thread(sheet, val) if _PAYER_SEPARATOR in val else None
         if whole is not None:
             return whole, None
         thread_text, separator, payer_text = val.rpartition(_PAYER_SEPARATOR)
         if not separator:
             thread_text, payer_text = val, ""
         thread_text, payer_text = thread_text.strip(), payer_text.strip()
-        thread = find(thread_text)
+        thread = find_thread(sheet, thread_text)
         if thread is None:
             msg = f"No active thread '{thread_text}' found. Check that the thread is active."
             raise CommandError(msg)
         if not separator:
             return thread, None
         if not payer_text:
-            msg = f"Name the resonance that pays for {thread.name}: pull={thread.name}:<resonance>."
+            from world.magic.crossing.handlers import thread_display_name  # noqa: PLC0415
+
+            name = thread_display_name(thread)
+            msg = f"Name the resonance that pays for {name}: pull={name}:<resonance>."
             raise CommandError(msg)
         return thread, held_resonance(sheet, payer_text)
 

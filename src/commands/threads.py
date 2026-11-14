@@ -12,8 +12,10 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from commands.command import ArxCommand
+from commands.utils.thread_lookup import active_threads, open_labels_for, thread_label
 
 if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
     from world.magic.models import Thread, ThreadResonance
 
 
@@ -81,35 +83,16 @@ class CmdThreads(ArxCommand):
         else:
             self.msg("Usage: threads list | threads crossing list | threads crossing choose <id>")
 
-    def _list_threads(self, sheet: object) -> None:
-        from world.magic.crossing.handlers import (  # noqa: PLC0415
-            _open_labels_by_relationship_id,
-            anchor_label_for,
-        )
-        from world.magic.models import Thread, ThreadResonance  # noqa: PLC0415
+    def _list_threads(self, sheet: CharacterSheet) -> None:
+        from world.magic.crossing.handlers import anchor_label_for  # noqa: PLC0415
+        from world.magic.models import ThreadResonance  # noqa: PLC0415
 
-        threads = list(
-            Thread.objects.filter(
-                owner=sheet,
-                retired_at__isnull=True,
-            ).select_related(
-                "resonance",
-                "target_trait",
-                "target_facet",
-                "target_technique",
-                "target_mantle",
-                "target_relationship__target__character",
-                "target_relationship__target_companion",
-                "target_capstone__relationship__target__character",
-                "target_capstone__relationship__target_companion",
-                "target_sanctum_details__feature_instance__room_profile__objectdb",
-            )
-        )
+        threads = active_threads(sheet)
         if not threads:
             self.msg("You have no active threads.")
             return
 
-        open_labels = _open_labels_by_relationship_id(threads)
+        open_labels = open_labels_for(threads)
         # One query, read fresh: a prefetch would stay on the shared Thread instances.
         rows_by_thread: dict[int, list[ThreadResonance]] = {}
         for row in ThreadResonance.objects.filter(thread__in=threads).select_related("resonance"):
@@ -118,7 +101,7 @@ class CmdThreads(ArxCommand):
         for thread in threads:
             anchor = anchor_label_for(thread, open_labels)
             mix = _resonance_mix(thread, rows_by_thread.get(thread.pk, []))
-            lines.append(f"  {mix} {anchor} (level {thread.level})")
+            lines.append(f"  {mix} {thread_label(thread, anchor)} (level {thread.level})")
         self.msg("\n".join(lines))
 
     def _list_crossing_offers(self, sheet: object) -> None:

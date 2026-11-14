@@ -424,6 +424,10 @@ def anchor_label_for(
         return thread.target_trait.name
     if kind == TargetKind.FACET and thread.target_facet is not None:
         return thread.target_facet.name
+    if kind == TargetKind.GIFT and thread.target_gift is not None:
+        return thread.target_gift.name
+    if kind == TargetKind.TECHNIQUE and thread.target_technique is not None:
+        return thread.target_technique.name
     if kind == TargetKind.RELATIONSHIP_TRACK:
         return _relationship_track_label_for(thread, open_label_by_relationship_id) or fallback
     if kind == TargetKind.RELATIONSHIP_CAPSTONE:
@@ -437,6 +441,17 @@ def anchor_label_for(
         room = sanctum.feature_instance.room_profile.objectdb
         return f"sanctum in {room.db_key}"
     return fallback
+
+
+def thread_display_name(
+    thread: Thread,
+    open_label_by_relationship_id: dict[int, RelationshipLabel] | None = None,
+) -> str:
+    """The name a player calls the thread by: its own name, else its anchor's (#5123).
+
+    A Gift thread is minted with no name, so it reads as its Gift's name.
+    """
+    return thread.name.strip() or anchor_label_for(thread, open_label_by_relationship_id)
 
 
 def _compose_crossing_message(thread: Thread, crossing_level: int) -> str:

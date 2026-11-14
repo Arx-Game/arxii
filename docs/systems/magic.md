@@ -1978,7 +1978,8 @@ left it commits and charges nothing. Both telnet and web converge on the same co
 pull and anima was `anima_per_thread x (n - 1)`.
 
 **Telnet surface:** `cast`/`clash` accept `pull=<thread>[:<resonance>][,…] resonance=<name> [tier=<1-3>]`
-parsed by the shared `_CombatCommandMixin` pull parser; `:<resonance>` names the held resonance
+parsed by the shared `_CombatCommandMixin` pull parser (a thread answers to its own name, its anchor's
+name, so a Gift thread to its Gift's name, or its number; `imbue thread=` resolves the same way); `:<resonance>` names the held resonance
 that pays for that thread (a bare thread is paid by its leading resonance; an unheld one is
 refused in words, nothing charged), and `resonance=` names the burn's resonance, one of the
 payers. A pull on its own is `combat pull <tier>=<thread>[:<resonance>][,…]`. The pull rides the declaration;
