@@ -398,11 +398,17 @@ describe('SpellbookTab', () => {
     const user = userEvent.setup();
     const line = 'Your Domination has grown strong enough to make you unsettled.';
     mockPayload(makeMagic());
-    mockOwnAuras([makeOwnAura({ unsettled: true, unsettled_line: line })]);
+    mockOwnAuras([
+      makeOwnAura({ unsettled: true, unsettled_line: line, unsettled_affinity_name: 'Abyssal' }),
+    ]);
     renderWithProviders(<SpellbookTab characterId={1} isMyCharacter />);
 
     expect(screen.getByTestId('aura-halo-status')).toHaveTextContent('Unsettled');
     expect(screen.getByTestId('aura-halo-sentence')).toHaveTextContent(line);
+    // The ring is tinted in the glow of the affinity that is unsettling them (as in the demo).
+    expect(screen.getByTestId('aura-halo-ring').getAttribute('style')).toContain(
+      '--aura-abyssal-glow'
+    );
     await user.click(screen.getByTestId('settle-aura-button'));
 
     // Outside a scene there is no offer: Accept and Not now only.

@@ -911,7 +911,8 @@
   box-shadow: none;
 }
 /* Who the character is: one thin neutral dashed ring just outside the halo. The halo
-   growing past it is what unsettled means. */
+   growing past it is what unsettled means. While unsettled the ring is tinted inline in the
+   glow of the affinity that is unsettling the character (AuraHalo). */
 .aura-halo-ring {
   position: absolute;
   inset: -0.375rem;

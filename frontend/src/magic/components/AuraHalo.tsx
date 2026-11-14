@@ -11,7 +11,9 @@
  *   key naming the two. The sentence reads every share against the whole the halo draws,
  *   Mire included, and says the Mire's share as its own sentence after the character's.
  * - `unsettled` makes the halo restless and shows the Unsettled status in place of the
- *   split sentence.
+ *   split sentence. `unsettledAffinity` (the affinity name the aura payload carries as
+ *   `unsettled_affinity_name`) tints the ring in that affinity's glow while unsettled; a
+ *   settled ring stays neutral.
  * - `label` is a small caps line above the sentence ("Your aura").
  *
  * The halo's `children` sit under the words (the sheet's Settle your aura button).
@@ -47,6 +49,8 @@ export interface AuraHaloProps {
   unsettled?: boolean;
   /** The sentence naming what made them unsettled; shown in place of the split. */
   unsettledLine?: string;
+  /** The affinity that is unsettling the character; tints the ring while `unsettled`. */
+  unsettledAffinity?: string;
   /** `mini` is the small halo beside a sentence, for a dialog exit. */
   size?: 'full' | 'mini';
   /** Overrides the sentence built from the shares. */
@@ -82,6 +86,7 @@ export function AuraHalo({
   mire,
   unsettled = false,
   unsettledLine = '',
+  unsettledAffinity = '',
   size = 'full',
   sentence,
   label,
@@ -125,7 +130,18 @@ export function AuraHalo({
       >
         <div className="aura-halo-disc" style={{ background: haloGradient(segments) }} />
         {settled && !mini ? (
-          <span className="aura-halo-ring" aria-hidden="true" data-testid="aura-halo-ring" />
+          <span
+            className="aura-halo-ring"
+            aria-hidden="true"
+            data-testid="aura-halo-ring"
+            style={
+              unsettled && unsettledAffinity
+                ? {
+                    borderColor: `var(--aura-${affinitySlug(unsettledAffinity)}-glow, var(--aura-other))`,
+                  }
+                : undefined
+            }
+          />
         ) : null}
       </div>
       <div className="aura-halo-words">

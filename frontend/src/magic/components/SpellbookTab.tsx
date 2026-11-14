@@ -376,6 +376,7 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
               }
               unsettled={ownAura?.unsettled ?? false}
               unsettledLine={ownAura?.unsettled_line ?? ''}
+              unsettledAffinity={ownAura?.unsettled_affinity_name ?? ''}
             >
               {ownAura?.unsettled ? (
                 <Button
