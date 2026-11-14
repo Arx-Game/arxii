@@ -167,10 +167,17 @@ class _BurningResonance(JourneyCase):
             flat_bonus_amount=2,
             effect_kind=EffectKind.FLAT_BONUS,
         )
-        if not sheet.thread_weaving_unlocks.filter(unlock=self.skill_unlock).exists():
-            CharacterThreadWeavingUnlockFactory(character=sheet, unlock=self.skill_unlock)
+        # One thread per anchor (#5123): a second resonance's thread takes a skill of its own.
+        skill, unlock = self.skill, self.skill_unlock
+        if sheet.character.threads.threads_of_kind(TargetKind.TRAIT):
+            skill = SkillFactory()
+            unlock = ThreadWeavingUnlockFactory(target_kind=TargetKind.TRAIT, unlock_trait=skill)
+            CharacterTraitValue.objects.create(character=sheet, trait=skill, value=10)
+        if not sheet.thread_weaving_unlocks.filter(unlock=unlock).exists():
+            CharacterThreadWeavingUnlockFactory(character=sheet, unlock=unlock)
+            sheet.character.weaving_unlocks.invalidate()
         return weave_thread(
-            sheet, TargetKind.TRAIT, self.skill, resonance, name=f"{resonance.name} Strand"
+            sheet, TargetKind.TRAIT, skill, resonance, name=f"{resonance.name} Strand"
         )
 
     @staticmethod
