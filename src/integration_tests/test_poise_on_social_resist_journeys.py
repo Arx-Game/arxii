@@ -11,10 +11,16 @@ way but one:
 - Tam is Flustered, a condition staff gave a -10 modifier on Composure checks, applied
   through ``apply_condition``.
 
+- Oriel wears a circlet whose template carries +3 on Composure checks.
+- Brann has a staff roll modifier of +4 on his sheet. A roll modifier shifts the dice of a
+  roll its bearer makes; being persuaded is not his roll, so it changes nothing here.
+- Sella is Steeled, a once-only condition worth +6 on Composure checks.
+
 Each Persuade is sent to ``/api/action-requests/``, the request the browser sends, and the
 difficulty the roll was graded at is read off the check itself. A target resists with what
 they would bring to a Composure roll: Marta is 7 harder to persuade than Hobb, Tam 10
-easier.
+easier, Oriel 3 harder, Sella 6 harder, Brann the same. Being persuaded is not Sella's
+roll, so she is still Steeled afterwards and just as hard to persuade a second time.
 """
 
 from __future__ import annotations
@@ -26,11 +32,16 @@ from actions.factories import ActionTemplateFactory
 from integration_tests.harness import JourneyCase
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
 from world.checks.test_helpers import force_check_outcome
+from world.conditions.constants import DurationType
 from world.conditions.factories import ConditionCheckModifierFactory, ConditionTemplateFactory
+from world.conditions.models import ConditionInstance
 from world.conditions.services import apply_condition
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.distinctions.services import grant_distinction
 from world.distinctions.types import DistinctionOrigin
+from world.items.constants import BodyRegion, EquipmentLayer
+from world.items.factories import EquippedItemFactory, ItemInstanceFactory, ItemTemplateFactory
+from world.items.models import ItemCheckModifier
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.roster.factories import RosterFactory
 from world.roster.models.choices import RosterType
@@ -44,6 +55,9 @@ from world.traits.models import PointConversionRange, TraitType
 
 POISE = 7
 FLUSTERED = -10
+CIRCLET = 3
+ROLL_MODIFIER = 4
+STEELED = 6
 
 
 def persona_of(character: ObjectDB):
@@ -56,10 +70,11 @@ class PoiseOnSocialResist(JourneyCase):
         self.room = self.make_room("The Lantern")
         self.ysmay = self.make_player("Ysmay", room=self.room)
         npcs = RosterFactory(roster_type=RosterType.NPC)
-        self.hobb, self.marta, self.tam = (
-            self.make_player(name, room=self.room) for name in ("Hobb", "Marta", "Tam")
-        )
-        for npc in (self.hobb, self.marta, self.tam):
+        self.hobb, self.marta, self.tam, self.oriel, self.brann, self.sella = self.cast = [
+            self.make_player(name, room=self.room)
+            for name in ("Hobb", "Marta", "Tam", "Oriel", "Brann", "Sella")
+        ]
+        for npc in self.cast:
             npc.sheet_data.roster_entry.move_to_roster(npcs)
         self.scene = SceneFactory(room=self.room)
         ActionTemplateFactory(name="Persuade", check_type=CheckTypeFactory(name="Persuasion"))
@@ -73,7 +88,7 @@ class PoiseOnSocialResist(JourneyCase):
             min_value=1,
             defaults={"max_value": 100, "points_per_level": 1},
         )
-        for npc in (self.hobb, self.marta, self.tam):
+        for npc in self.cast:
             CharacterTraitValueFactory(character=npc.sheet_data, trait=stat, value=30)
         self.landed = CheckOutcomeFactory(name="PoiseJourneySuccess", success_level=1)
 
@@ -91,6 +106,30 @@ class PoiseOnSocialResist(JourneyCase):
             condition=flustered, check_type=self.composure, modifier_value=FLUSTERED
         )
         apply_condition(self.tam, flustered)
+
+        circlet = ItemTemplateFactory(name="Circlet of State")
+        ItemCheckModifier.objects.create(
+            template=circlet, check_type=self.composure, modifier_value=CIRCLET
+        )
+        EquippedItemFactory(
+            character=self.oriel.sheet_data,
+            item_instance=ItemInstanceFactory(template=circlet),
+            body_region=BodyRegion.HEAD,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        self.oriel.equipped_items.invalidate()
+
+        brann_sheet = self.brann.sheet_data
+        brann_sheet.rollmod = ROLL_MODIFIER
+        brann_sheet.save(update_fields=["rollmod"])
+
+        self.steeled = ConditionTemplateFactory(
+            name="Steeled", default_duration_type=DurationType.UNTIL_USED
+        )
+        ConditionCheckModifierFactory(
+            condition=self.steeled, check_type=self.composure, modifier_value=STEELED
+        )
+        apply_condition(self.sella, self.steeled)
 
     def persuade(self, target: ObjectDB) -> int:
         """Ysmay persuades ``target``; the difficulty her roll was graded at."""
@@ -115,3 +154,18 @@ class PoiseOnSocialResist(JourneyCase):
 
     def test_a_flustered_target_is_easier_to_persuade_by_the_penalty(self) -> None:
         self.assertEqual(self.persuade(self.tam) - self.persuade(self.hobb), FLUSTERED)
+
+    def test_a_worn_item_with_a_composure_modifier_counts(self) -> None:
+        self.assertEqual(self.persuade(self.oriel) - self.persuade(self.hobb), CIRCLET)
+
+    def test_a_staff_roll_modifier_on_the_target_changes_nothing(self) -> None:
+        """It shifts the dice of his own rolls; the resist is points and has no roll."""
+        self.assertEqual(self.brann.sheet_data.rollmod, ROLL_MODIFIER)
+        self.assertEqual(self.persuade(self.brann), self.persuade(self.hobb))
+
+    def test_a_once_only_condition_counts_and_is_still_held_afterwards(self) -> None:
+        plain = self.persuade(self.hobb)
+        self.assertEqual(self.persuade(self.sella) - plain, STEELED)
+        held = ConditionInstance.objects.filter(target=self.sella, condition=self.steeled)
+        self.assertTrue(held.exists())
+        self.assertEqual(self.persuade(self.sella) - plain, STEELED)

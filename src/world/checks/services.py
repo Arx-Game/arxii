@@ -1500,7 +1500,8 @@ def compute_resist_increment(
     Composure penalty lowers it. Left out: scene check modifiers and the fashion bonus,
     which need a scene this function is not given. A once-only condition counts while
     held and is never spent here; only a real roll spends one. A character with no sheet
-    carries nothing and resists by rating and effort alone.
+    carries nothing and resists by rating and effort alone. A staff roll modifier
+    (``get_rollmod``) is not counted: it shifts the dice of a roll, and there is none here.
 
     Perk points remain 0 here: this function has no ``situation_ctx`` parameter, so
     ``_situational_perk_check_bonus`` short-circuits before firing — deliberately,
@@ -1578,7 +1579,7 @@ def compute_resist_increment(
 
     modifier = EFFORT_CHECK_MODIFIER.get(resist_effort_level, 0)
     # Everything the defender carries on a Composure roll counts toward how hard they are
-    # to sway (#4720): Poise, a condition, a worn item, a roll modifier. Gathered through
+    # to sway (#4720): Poise, a condition, a worn item. Gathered through
     # the same seam a modifier-aware roll uses; nothing is rolled, spent or announced.
     sheet = _sheet_or_none(defender_character)
     if sheet is not None:
