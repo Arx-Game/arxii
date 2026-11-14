@@ -4,13 +4,15 @@
  * - Tier 1/2/3 radio selector
  * - Debounced preview call (250ms) via api.previewPull on every tier change
  * - Shows cost (resonance + anima), affordability flag, capped_intensity warning
- * - Lists resolved_effects with kind/scaled_value/inactive_reason
+ * - Lists resolved_effects as perk rows (effectLabel / effectValue, the wording every perk
+ *   row uses) with inactive_reason
  *
  * Standalone pull commit is not available here — pulls must be declared inline
  * during a combat cast/clash dispatch. This panel is read-only preview only.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { previewPull } from '../../api';
+import { effectLabel, effectValue } from '../../burn';
 import type { PreviewedEffect, PullPreviewResponse, Thread } from '../../types';
 
 // ---------------------------------------------------------------------------
@@ -34,8 +36,8 @@ function EffectRow({ effect }: EffectRowProps) {
       data-testid={`effect-row-${effect.kind}`}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="font-medium">{effect.kind.replace(/_/g, ' ')}</span>
-        <span className="tabular-nums">{effect.scaled_value}</span>
+        <span className="font-medium">{effectLabel(effect)}</span>
+        <span className="tabular-nums">{effectValue(effect)}</span>
       </div>
       {effect.inactive && effect.inactive_reason && (
         <p className="text-muted-foreground" data-testid="effect-inactive-reason">
