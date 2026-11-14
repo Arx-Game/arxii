@@ -23,6 +23,7 @@ from world.magic.factories import (
     CharacterAuraFactory,
     CharacterResonanceFactory,
     CharacterThreadWeavingUnlockFactory,
+    GiftFactory,
     ImbuingRitualFactory,
     IntensityTierFactory,
     ResonanceFactory,
@@ -1146,6 +1147,52 @@ class RitualPerformViewTests(APITestCase):
                 ritual=self.ritual,
             ).exists(),
         )
+
+    def test_a_refused_imbue_does_not_leave_the_rite_in_progress(self) -> None:
+        """An imbue off a restricted Gift's supported set is refused and ends the rite (#5123).
+
+        The next valid imbue then goes through, not "already in progress".
+        """
+        from world.magic.specialization.services import provision_latent_gift_thread
+
+        gift = GiftFactory()
+        outside = ResonanceFactory()
+        gift.resonances.add(self.resonance)
+        gift_thread = provision_latent_gift_thread(self.sheet, gift, resonances=[self.resonance])
+        CharacterResonanceFactory(
+            character_sheet=self.sheet, resonance=outside, balance=20, lifetime_earned=20
+        )
+        self.client.force_authenticate(user=self.account)
+        url = reverse("magic:ritual-perform")
+
+        refused = self.client.post(
+            url,
+            {
+                "character_sheet_id": self.sheet.pk,
+                "ritual_id": self.ritual.pk,
+                "kwargs": {"thread_id": gift_thread.pk, "amount": 5, "resonance_id": outside.pk},
+            },
+            format="json",
+        )
+
+        self.assertEqual(refused.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(
+            PendingRitualEffect.objects.filter(character=self.sheet, ritual=self.ritual).exists()
+        )
+        valid = self.client.post(
+            url,
+            {
+                "character_sheet_id": self.sheet.pk,
+                "ritual_id": self.ritual.pk,
+                "kwargs": {
+                    "thread_id": gift_thread.pk,
+                    "amount": 5,
+                    "resonance_id": self.resonance.pk,
+                },
+            },
+            format="json",
+        )
+        self.assertEqual(valid.status_code, status.HTTP_200_OK, valid.data)
 
     def test_imbuing_ceremony_requires_thread_kwargs(self) -> None:
         """A bare imbuing perform 400s — the web has no finisher to consume it."""

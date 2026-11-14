@@ -81,6 +81,7 @@ from world.magic.models import (
     Gift,
     GlimpseTag,
     PendingAlteration,
+    PendingRitualEffect,
     PoseEndorsement,
     Resonance,
     ResonanceGrant,
@@ -1665,6 +1666,10 @@ class RitualPerformView(APIView):
             resonance_id=kwargs["resonance"].pk,
         )
         if not finisher_result.success:
+            # The web sends one POST and has no later finisher to complete the rite, so a
+            # refused imbue ends it: left pending, the next valid imbue would be answered
+            # "A Rite of Imbuing is already in progress." (#5123).
+            PendingRitualEffect.objects.filter(character=sheet, ritual=ritual).delete()
             return Response({"detail": finisher_result.message}, status=status.HTTP_400_BAD_REQUEST)
         imbue_result = finisher_result.data.get("result")
         return Response(
