@@ -2147,7 +2147,10 @@ becomes available when the target affinity crosses
   conversion (Atonement) does NOT touch threads.
 - `services/fall_redemption.py` — `grant_compromise_resonance()` (thin
   wrapper over `grant_resonance`), `perform_fall()` (the full ceremony,
-  gated by aura threshold + irreversibility), `get_fall_redemption_config()`.
+  gated by aura threshold + irreversibility; after the conversion it calls
+  `drift.settle_shares`, the settle step `accept_aura_change` also uses, so a Fall or
+  Redemption also moves who she is: her `settled_percent` follows her new own shares and
+  `steps_past` reads 0, #5123), `get_fall_redemption_config()`.
 
 **Extended Rite of Atonement (`services/atonement.py`):**
 The existing Rite of Atonement is extended to do BOTH:

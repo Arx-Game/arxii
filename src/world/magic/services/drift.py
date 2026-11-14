@@ -326,6 +326,27 @@ def drift_holdings(sheet: CharacterSheet) -> list[CharacterResonance]:
 
 
 @transaction.atomic
+def settle_shares(sheet: CharacterSheet) -> dict[int, Decimal]:
+    """Set each ``settled_percent`` to the aura's own share now: who she is becomes who she is.
+
+    Recomputes the aura first, so a row exists for every affinity held and the percents sum
+    to exactly 100.00 to be settled as they stand, then writes each share's ``settled_percent``
+    to its ``percent``. ``steps_past`` reads 0 afterwards. The one settle step both accepting
+    the aura's change and a Fall or Redemption use (#5123). Returns affinity id -> settled share.
+    """
+    from world.magic.services.aura import recompute_aura  # noqa: PLC0415
+
+    recompute_aura(sheet)
+    aura = sheet.aura_or_none
+    settled: dict[int, Decimal] = {}
+    for share in aura.cached_shares if aura is not None else []:
+        settled[share.affinity_id] = share.percent
+        if share.settled_percent != share.percent:
+            share.settled_percent = share.percent
+            share.save(update_fields=["settled_percent"])
+    return settled
+
+
 def accept_aura_change(sheet: CharacterSheet) -> AcceptAuraResult:
     """Accept the changes to the aura: who the character is becomes who they have become.
 
@@ -338,8 +359,6 @@ def accept_aura_change(sheet: CharacterSheet) -> AcceptAuraResult:
     Raises:
         NotUnsettledError: The character is not unsettled.
     """
-    from world.magic.services.aura import recompute_aura  # noqa: PLC0415
-
     reading = drift_for(sheet)
     if reading.steps_past <= 0:
         raise NotUnsettledError
@@ -354,17 +373,8 @@ def accept_aura_change(sheet: CharacterSheet) -> AcceptAuraResult:
         mire_moved += row.mire_lifetime
         row.mire_lifetime = 0
         row.save(update_fields=["mire_lifetime"])
-    # The aura's percents are shares of lifetime resonance, Mire included, so moving the Mire
-    # into their own changes none of them; recomputing makes sure a row exists for every
-    # affinity held, and they sum to exactly 100.00 to be settled as they stand.
-    recompute_aura(sheet)
+    settled = settle_shares(sheet)
     aura = sheet.aura_or_none
-    settled: dict[int, Decimal] = {}
-    for share in aura.cached_shares if aura is not None else []:
-        settled[share.affinity_id] = share.percent
-        if share.settled_percent != share.percent:
-            share.settled_percent = share.percent
-            share.save(update_fields=["settled_percent"])
     close_spent_conversion_offers(sheet)
     return AcceptAuraResult(
         mire_moved=mire_moved,

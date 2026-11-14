@@ -4561,7 +4561,7 @@ deleted, and the offer with it when no cap is left. A tier with no share row is 
 front by `rite_is_ready`; a tier whose share is 0.00 converts nothing, spends the
 offering and leaves the cap intact. The other exit, `accept_aura_change` (`services/drift.py`;
 `AcceptAuraChangeAction`), is refused unless unsettled, moves the Sineater's Mire lifetime into
-their own, sets every `settled_percent` to the resulting share (so `steps_past` is 0) and writes
+their own, sets every `settled_percent` to the resulting share through `settle_shares` (so `steps_past` is 0) and writes
 no corruption. Its line, "You become more abyssal.", names `AcceptAuraResult.grown_affinity`, the
 affinity of the resonance that made them unsettled (read before accepting), for web and telnet alike. The web reaches it at `POST /api/magic/character-auras/<id>/accept/`
 (`CharacterAuraViewSet.accept`, which dispatches `AcceptAuraChangeAction` for an aura of a
@@ -4757,7 +4757,11 @@ unless it is the thread's only row; a row already at 0 (a creation pick) moves o
 converted: `int(points x (unconverted + converted x multiplier) / total)`, so a thread wholly in
 the source affinity scales entirely and a half-converted one scales by half; `level` is
 unchanged. `refresh_leading_resonance` runs per thread, and `character.threads.invalidate()`
-once. Penance (`partial=True`) still touches no thread. Journeys and tests:
+once. Penance (`partial=True`) still touches no thread. A Fall or Redemption also moves who she
+is: `perform_fall` ends by calling `settle_shares` (`services/drift.py`, the settle step
+`accept_aura_change` shares), so her `settled_percent` follows her new own shares and she comes
+out of the rite settled, `steps_past == 0` (owner ruling 2026-11-14). Penance leaves her settled
+shares alone. Journeys and tests:
 `integration_tests/test_thread_resonance_journeys.py` (`TheFallConvertsAThreadsRows`),
 `world/magic/tests/test_retune_rows.py`.
 
