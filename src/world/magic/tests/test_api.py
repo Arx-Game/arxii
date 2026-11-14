@@ -773,6 +773,20 @@ class ThreadPullPreviewTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_preview_of_a_tier_with_no_cost_row_is_a_refusal_not_a_server_error(self) -> None:
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:thread-pull-preview"),
+            {
+                "character_sheet_id": self.sheet.pk,
+                "tier": 2,  # only tier 1 has an authored cost row
+                "thread_ids": [self.thread.pk],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+        self.assertEqual(response.data["detail"], "That pull tier is not available yet.")
+
     def test_preview_rejects_bad_tier(self) -> None:
         self.client.force_authenticate(user=self.account)
         response = self.client.post(

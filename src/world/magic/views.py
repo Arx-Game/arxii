@@ -21,6 +21,7 @@ from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
 from evennia.accounts.models import AccountDB
+from evennia.objects.models import ObjectDB
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -87,6 +88,7 @@ from world.magic.models import (
     Technique,
     TechniqueStyle,
     Thread,
+    ThreadPullCost,
     ThreadWeavingTeachingOffer,
     aura_shares_prefetch,
 )
@@ -211,6 +213,7 @@ from world.stories.pagination import StandardResultsSetPagination
 # Error messages — module constants keep tests stable and satisfy STRING_LITERAL.
 _ERR_THREAD_NOT_FOUND = "Thread not found or not owned by the actor."
 _ERR_RESONANCE_NOT_FOUND = "Resonance not found."
+_ERR_PULL_TIER_NOT_SET_UP = "That pull tier is not available yet."
 _ERR_IMBUING_REQUIRES_THREAD = "Imbuing ritual requires thread_id in kwargs (int)."
 _ERR_IMBUING_REQUIRES_AMOUNT = "Imbuing ritual requires amount in kwargs (positive int)."
 _KWARG_TARGET_AFFINITY = "target_affinity"
@@ -1248,6 +1251,35 @@ class ThreadViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+def _pull_preview_target(sheet: CharacterSheet, action_ctx: dict) -> ObjectDB | None:
+    """The live target a pull preview modulates against, or None (#2035)."""
+    # #2035: resolve the optional live target so relationship-bond/Court-regard
+    # pull modulation (apply_target_modulation) shows up in the preview exactly
+    # as it would at commit time (spend_resonance_for_pull). Gated by
+    # can_perceive — this is a free, repeatable, uncommitted read, so (unlike
+    # the commit path) it must not become an oracle for probing private
+    # regard/relationship facts about personas the requester cannot perceive
+    # (mirrors pull_applicability.py's _court_pull_would_have_effect /
+    # _relationship_pull_would_have_effect gates, ADR-0086). An unresolvable or
+    # unperceivable target silently degrades to the unmodulated preview.
+    target = None
+    target_persona_id = action_ctx.get("target_persona_id") if action_ctx else None
+    if target_persona_id:
+        from world.conditions.services import can_perceive  # noqa: PLC0415
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        target_persona = (
+            Persona.objects.select_related("character_sheet__character")
+            .filter(pk=target_persona_id)
+            .first()
+        )
+        if target_persona is not None:
+            target_character = target_persona.character_sheet.character
+            if can_perceive(sheet.character, target_character):
+                target = target_character
+    return target
+
+
 class ThreadPullPreviewView(APIView):
     """Read-only preview of a resonance pull (Spec A §5.6).
 
@@ -1308,30 +1340,7 @@ class ThreadPullPreviewView(APIView):
 
             combat_encounter = get_object_or_404(CombatEncounter, pk=encounter_id)
 
-        # #2035: resolve the optional live target so relationship-bond/Court-regard
-        # pull modulation (apply_target_modulation) shows up in the preview exactly
-        # as it would at commit time (spend_resonance_for_pull). Gated by
-        # can_perceive — this is a free, repeatable, uncommitted read, so (unlike
-        # the commit path) it must not become an oracle for probing private
-        # regard/relationship facts about personas the requester cannot perceive
-        # (mirrors pull_applicability.py's _court_pull_would_have_effect /
-        # _relationship_pull_would_have_effect gates, ADR-0086). An unresolvable or
-        # unperceivable target silently degrades to the unmodulated preview.
-        target = None
-        target_persona_id = action_ctx.get("target_persona_id") if action_ctx else None
-        if target_persona_id:
-            from world.conditions.services import can_perceive  # noqa: PLC0415
-            from world.scenes.models import Persona  # noqa: PLC0415
-
-            target_persona = (
-                Persona.objects.select_related("character_sheet__character")
-                .filter(pk=target_persona_id)
-                .first()
-            )
-            if target_persona is not None:
-                target_character = target_persona.character_sheet.character
-                if can_perceive(sheet.character, target_character):
-                    target = target_character
+        target = _pull_preview_target(sheet, action_ctx)
 
         technique = None
         technique_id = data.get("technique_id")
@@ -1357,6 +1366,13 @@ class ThreadPullPreviewView(APIView):
         except InvalidImbueAmount as exc:
             return Response(
                 {"detail": exc.user_message},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except ThreadPullCost.DoesNotExist:
+            # The picker previews every tier; staff may not have authored a cost row for
+            # the higher ones yet. That is a refusal for this tier, not a server error.
+            return Response(
+                {"detail": _ERR_PULL_TIER_NOT_SET_UP},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
