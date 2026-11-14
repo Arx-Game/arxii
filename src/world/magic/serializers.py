@@ -1103,6 +1103,21 @@ def thread_rows_by_thread(threads: list[Thread]) -> dict[int, list[ThreadResonan
     return grouped
 
 
+def gift_supported_resonances(threads: list[Thread]) -> dict[int, set[int]]:
+    """Each pulled Gift thread's Gift's supported resonance pks, read in one query (#5123).
+
+    Keyed by Gift id; a Gift with no supported set is absent (any resonance is allowed).
+    Passed through serializer ``context["gift_resonances"]`` beside ``thread_rows``.
+    """
+    gift_ids = {t.target_gift_id for t in threads if t.target_gift_id is not None}
+    supported: dict[int, set[int]] = {}
+    for gift_id, resonance_id in Gift.resonances.through.objects.filter(
+        gift_id__in=gift_ids
+    ).values_list("gift_id", "resonance_id"):
+        supported.setdefault(gift_id, set()).add(resonance_id)
+    return supported
+
+
 class ThreadSerializer(serializers.ModelSerializer):
     """Serializer for Thread records (Spec A §4.5).
 
@@ -1205,7 +1220,13 @@ class ThreadSerializer(serializers.ModelSerializer):
         """
         from world.magic.services.thread_rows import gift_allowed_resonance_ids  # noqa: PLC0415
 
-        allowed = gift_allowed_resonance_ids(obj)
+        supported = self.context.get("gift_resonances")
+        if supported is None:
+            allowed = gift_allowed_resonance_ids(obj)
+        elif obj.target_kind == TargetKind.GIFT and obj.target_gift_id is not None:
+            allowed = supported.get(obj.target_gift_id)
+        else:
+            allowed = None
         return None if allowed is None else sorted(allowed)
 
     def get_level_cap(self, obj: Thread) -> int:

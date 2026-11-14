@@ -32,7 +32,7 @@ from world.magic.factories import (
     ensure_canonical_affinities,
     set_aura_split,
 )
-from world.magic.models import CharacterResonance, PendingRitualEffect, ThreadResonance
+from world.magic.models import CharacterResonance, Gift, PendingRitualEffect, ThreadResonance
 from world.magic.services.thread_rows import refresh_leading_resonance
 from world.magic.specialization.services import provision_latent_gift_thread
 from world.roster.factories import RosterTenureFactory
@@ -295,6 +295,18 @@ class PreviewPayloadTests(_CharacterWithResonances):
     def test_thread_list_reads_the_resonance_rows_in_one_query(self) -> None:
         self.assertEqual(self._resonance_row_queries(1), 1)
         self.assertEqual(self._resonance_row_queries(4), 1)
+
+    def test_thread_list_reads_every_gifts_supported_set_in_one_query(self) -> None:
+        for name in ("Kindling", "Tidecall", "Gale"):
+            gift = GiftFactory(name=name)
+            gift.resonances.add(self.fury, self.wonder)
+            provision_latent_gift_thread(self.sheet, gift, resonances=[self.fury])
+        through = Gift.resonances.through._meta.db_table
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(reverse("magic:thread-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        reads = [q["sql"] for q in queries.captured_queries if f'"{through}"' in q["sql"]]
+        self.assertEqual(len(reads), 1)
 
     def test_thread_list_carries_each_threads_rows_and_allowed_set(self) -> None:
         gift = GiftFactory()
