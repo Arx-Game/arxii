@@ -601,6 +601,11 @@ export interface CastPullRequestBody {
   tier: 1 | 2 | 3;
   /** The threads may mix resonances; each is paid from its own (#5066). */
   thread_ids: number[];
+  /**
+   * Thread id -> the resonance id paying for that thread (#5123). A thread left out is
+   * paid by its leading resonance.
+   */
+  payers?: Record<number, number>;
   /** Resonance burned for strain (#4736); omitted when 0. */
   burn?: number;
   /** Which pulled resonance the burn comes from, when the pull mixes several (#5066). */

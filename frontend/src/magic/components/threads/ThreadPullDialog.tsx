@@ -10,9 +10,10 @@
  * Combat mode (`combat` prop set): TRAIT/TECHNIQUE threads additionally
  * eligible when their anchor appears in the involved-ID lists.
  *
- * The threads may be of different resonances; each is paid from its own (#5066), so
- * there is no resonance to pick first. A thread whose resonance has no balance is not
- * offered.
+ * The threads may be of different resonances, and each is paid for by one resonance (#5123).
+ * A thread holding several resonances shows them as payers, starting on its leading one, with
+ * the perks each would give; a thread with one resonance shows no choice. A thread is offered
+ * while any resonance the character holds has a balance to pay with.
  *
  * Live preview: every change debounces a previewPull call (250ms).
  */
@@ -28,9 +29,10 @@ import {
   NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { previewPull } from '../../api';
-import { pulledResonances } from '../../burn';
+import { payerFor, pulledResonances } from '../../burn';
 import { useCharacterResonances, useThreads } from '../../queries';
-import type { PullPreviewResponse, Thread } from '../../types';
+import type { PayerOption, PullPreviewResponse, Thread } from '../../types';
+import { PayerOptions, ThreadMakeup } from './PayerOptions';
 
 // ---------------------------------------------------------------------------
 // Pull selection shape — returned via onSelect in combat / inline mode.
@@ -39,8 +41,13 @@ import type { PullPreviewResponse, Thread } from '../../types';
 export interface PullSelection {
   tier: 1 | 2 | 3;
   thread_ids: number[];
-  /** The distinct resonances of the chosen threads (a burn picks one when several). */
+  /** The distinct resonances paying for the chosen threads (a burn picks one when several). */
   resonances: { id: number; name: string }[];
+  /**
+   * Thread id → the resonance the player chose to pay it (#5123), for the chosen threads
+   * where they picked; a thread left out is paid by its leading resonance.
+   */
+  payers: Record<number, number>;
 }
 
 // ---------------------------------------------------------------------------
@@ -97,6 +104,26 @@ function isThreadEligible(thread: Thread, combat: ThreadPullDialogProps['combat'
   return false;
 }
 
+/**
+ * What the chosen payers cost together, by resonance: "3 Fury, 3 Domination". Null while the
+ * preview has no payer row for one of the threads, so the caller falls back to the total.
+ */
+function payLine(
+  preview: PullPreviewResponse,
+  threads: Thread[],
+  payers: Record<number, number>
+): string | null {
+  const costs = new Map<string, number>();
+  for (const thread of threads) {
+    const options = preview.per_thread?.find((row) => row.thread_id === thread.id)?.options;
+    const chosen = options?.find((o) => o.resonance_id === payerFor(thread, payers));
+    if (!chosen) return null;
+    costs.set(chosen.resonance_name, (costs.get(chosen.resonance_name) ?? 0) + chosen.cost);
+  }
+  if (costs.size === 0) return null;
+  return [...costs].map(([name, cost]) => `${cost} ${name}`).join(', ');
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -113,6 +140,7 @@ export function ThreadPullDialog({
 
   const [selectedTier, setSelectedTier] = useState<1 | 2 | 3>(1);
   const [selectedThreadIds, setSelectedThreadIds] = useState<number[]>([]);
+  const [payers, setPayers] = useState<Record<number, number>>({});
   const [preview, setPreview] = useState<PullPreviewResponse | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -124,6 +152,7 @@ export function ThreadPullDialog({
     if (open) {
       setSelectedTier(1);
       setSelectedThreadIds([]);
+      setPayers({});
       setPreview(null);
       setPreviewLoading(false);
       setPreviewError(null);
@@ -135,9 +164,18 @@ export function ThreadPullDialog({
     (t) => t.retired_at == null && isThreadEligible(t, combat)
   );
 
-  // A thread is offered when its resonance has a balance to pay from.
+  // A thread is offered while any resonance the character holds has a balance to pay with.
   const balanceOf = new Map((resonances ?? []).map((r) => [r.resonance, r.balance ?? 0]));
-  const offeredThreads = eligibleThreads.filter((t) => (balanceOf.get(t.resonance) ?? 0) > 0);
+  const nameOf = (id: number) => resonances?.find((r) => r.resonance === id)?.resonance_name;
+  const anyBalance = (resonances ?? []).some((r) => (r.balance ?? 0) > 0);
+  const offeredThreads = anyBalance ? eligibleThreads : [];
+
+  // The picks the player made for threads that are still chosen.
+  const pickedPayers = Object.fromEntries(
+    selectedThreadIds.filter((id) => payers[id] !== undefined).map((id) => [id, payers[id]])
+  );
+  const pickedKey = JSON.stringify(pickedPayers);
+  const chosenThreads = offeredThreads.filter((t) => selectedThreadIds.includes(t.id));
 
   // Debounced live preview.
   const runPreview = useCallback(() => {
@@ -152,6 +190,7 @@ export function ThreadPullDialog({
       character_sheet_id: characterSheetId,
       tier: selectedTier,
       thread_ids: selectedThreadIds,
+      ...(Object.keys(pickedPayers).length > 0 ? { payers: pickedPayers } : {}),
     })
       .then((result) => {
         setPreview(result);
@@ -161,7 +200,9 @@ export function ThreadPullDialog({
         setPreviewError(err instanceof Error ? err.message : 'Failed to load preview.');
         setPreviewLoading(false);
       });
-  }, [characterSheetId, selectedTier, selectedThreadIds]);
+    // pickedPayers is derived from payers + selectedThreadIds; its key stands in for it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pickedKey is pickedPayers' value
+  }, [characterSheetId, selectedTier, selectedThreadIds, pickedKey]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -177,12 +218,21 @@ export function ThreadPullDialog({
     );
   }
 
+  function optionsFor(threadId: number): PayerOption[] {
+    return preview?.per_thread?.find((row) => row.thread_id === threadId)?.options ?? [];
+  }
+
   function handleSelect() {
     if (selectedThreadIds.length === 0) return;
     onSelect({
       tier: selectedTier,
       thread_ids: selectedThreadIds,
-      resonances: pulledResonances(offeredThreads.filter((t) => selectedThreadIds.includes(t.id))),
+      resonances: pulledResonances(
+        offeredThreads.filter((t) => selectedThreadIds.includes(t.id)),
+        pickedPayers,
+        nameOf
+      ),
+      payers: pickedPayers,
     });
     onClose();
   }
@@ -237,24 +287,39 @@ export function ThreadPullDialog({
               )}
               {offeredThreads.map((thread) => {
                 const checked = selectedThreadIds.includes(thread.id);
+                const options = optionsFor(thread.id);
                 return (
-                  <label
-                    key={thread.id}
-                    className="flex cursor-pointer items-center gap-2 rounded border border-border bg-card/60 px-3 py-2 text-sm hover:bg-muted"
-                    data-testid={`thread-checkbox-${thread.id}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleThread(thread.id)}
-                      className="accent-primary"
-                    />
-                    <span>{thread.name || `Thread #${thread.id}`}</span>
-                    <span className="ml-auto text-xs text-muted-foreground">
-                      {thread.resonance_name}{' '}
-                      <span className="tabular-nums">{balanceOf.get(thread.resonance)}</span>
-                    </span>
-                  </label>
+                  <div key={thread.id} className="space-y-1.5">
+                    <label
+                      className="flex cursor-pointer items-center gap-2 rounded border border-border bg-card/60 px-3 py-2 text-sm hover:bg-muted"
+                      data-testid={`thread-checkbox-${thread.id}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleThread(thread.id)}
+                        className="accent-primary"
+                      />
+                      <span>{thread.name || `Thread #${thread.id}`}</span>
+                      <span className="ml-auto text-xs text-muted-foreground">
+                        {thread.resonance_name}{' '}
+                        <span className="tabular-nums">{balanceOf.get(thread.resonance) ?? 0}</span>
+                      </span>
+                    </label>
+                    {checked && options.length > 0 && (
+                      <div className="space-y-1 pl-6">
+                        <ThreadMakeup thread={thread} />
+                        <PayerOptions
+                          thread={thread}
+                          options={options}
+                          selectedResonanceId={payerFor(thread, payers)}
+                          onSelect={(resonanceId) =>
+                            setPayers((prev) => ({ ...prev, [thread.id]: resonanceId }))
+                          }
+                        />
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -277,9 +342,11 @@ export function ThreadPullDialog({
               data-testid="preview-panel"
             >
               <div className="flex flex-wrap gap-x-4 gap-y-1">
-                <span>
+                <span data-testid="preview-resonance-cost">
                   Resonance cost:{' '}
-                  <span className="font-medium tabular-nums">{preview.resonance_cost}</span>
+                  <span className="font-medium tabular-nums">
+                    {payLine(preview, chosenThreads, payers) ?? preview.resonance_cost}
+                  </span>
                 </span>
                 <span>
                   Anima cost: <span className="font-medium tabular-nums">{preview.anima_cost}</span>
@@ -294,21 +361,6 @@ export function ThreadPullDialog({
                 <p className="text-yellow-700 dark:text-yellow-400">
                   Intensity has been capped by thread level or tier constraints.
                 </p>
-              )}
-              {preview.resolved_effects.length > 0 && (
-                <ul className="space-y-1">
-                  {preview.resolved_effects.map((effect, i) => (
-                    <li
-                      key={i}
-                      className={`flex items-center justify-between rounded px-2 py-1 text-xs ${
-                        effect.inactive ? 'opacity-50' : 'bg-background'
-                      }`}
-                    >
-                      <span>{effect.kind.replace(/_/g, ' ')}</span>
-                      <span className="tabular-nums">{effect.scaled_value}</span>
-                    </li>
-                  ))}
-                </ul>
               )}
             </div>
           )}

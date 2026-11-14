@@ -5,19 +5,33 @@
  * On success, displays the levels climbed, the thread's new level, and blocked_by.
  * On error, shows the typed user_message inline. When the imbue opened new vow pick
  * levels (#4929), "Choose picks" leads to the character's sheet, where they are chosen.
+ *
+ * A character holding several resonances picks which one pays (#5123), starting on the
+ * thread's leading one; the amount goes into the thread as that resonance's. With one held
+ * resonance there is no choice to show.
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { extractErrorMessage } from '@/lib/errors';
+import { pillClass } from '../pillClass';
 import { useImbueThread } from '../../queries';
 import type { ImbueResponse, Thread } from '../../types';
 
+/** A resonance the character holds and can spend on the thread. */
+export interface HeldResonance {
+  resonance_id: number;
+  resonance_name: string;
+  balance: number;
+}
+
 interface ImbuePanelProps {
   thread: Thread;
-  /** Spendable resonance balance for this thread's resonance. */
+  /** Spendable resonance balance for this thread's leading resonance. */
   balance: number;
+  /** Every resonance the character holds; with more than one, the player picks the payer. */
+  held?: HeldResonance[];
   characterSheetId: number;
   onResult?: (result: ImbueResponse) => void;
 }
@@ -54,8 +68,18 @@ function ChoosePicksLink({ characterSheetId }: { characterSheetId: number }) {
   );
 }
 
-export function ImbuePanel({ thread, balance, characterSheetId, onResult }: ImbuePanelProps) {
+export function ImbuePanel({
+  thread,
+  balance: leadingBalance,
+  held = [],
+  characterSheetId,
+  onResult,
+}: ImbuePanelProps) {
   const [amount, setAmount] = useState(1);
+  const [payerId, setPayerId] = useState(thread.resonance);
+  const hasChoice = held.length > 1;
+  const payer = held.find((h) => h.resonance_id === payerId);
+  const balance = hasChoice && payer ? payer.balance : leadingBalance;
   const [lastResult, setLastResult] = useState<ImbueResponse | null>(null);
 
   const { mutate, isPending, error, isError } = useImbueThread();
@@ -64,10 +88,21 @@ export function ImbuePanel({ thread, balance, characterSheetId, onResult }: Imbu
   const handleDecrement = () => setAmount((a) => Math.max(0, a - 1));
   const handleIncrement = () => setAmount((a) => Math.min(balance, a + 1));
 
+  const handlePayer = (resonanceId: number) => {
+    const next = held.find((h) => h.resonance_id === resonanceId);
+    setPayerId(resonanceId);
+    setAmount((a) => Math.min(a, next?.balance ?? a));
+  };
+
   const handleImbue = () => {
     setLastResult(null);
     mutate(
-      { characterSheetId, threadId: thread.id, amount },
+      {
+        characterSheetId,
+        threadId: thread.id,
+        amount,
+        ...(hasChoice ? { resonanceId: payerId } : {}),
+      },
       {
         onSuccess: (result) => {
           setLastResult(result);
@@ -84,6 +119,31 @@ export function ImbuePanel({ thread, balance, characterSheetId, onResult }: Imbu
         Spend resonance to advance this thread. Available balance:{' '}
         <span className="font-medium tabular-nums">{balance}</span>
       </p>
+
+      {hasChoice && (
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="radiogroup"
+          aria-label="Spend resonance"
+          data-testid="imbue-payers"
+        >
+          <span className="text-sm">Spend:</span>
+          {held.map((h) => (
+            <button
+              key={h.resonance_id}
+              type="button"
+              role="radio"
+              aria-checked={h.resonance_id === payerId}
+              onClick={() => handlePayer(h.resonance_id)}
+              disabled={isPending}
+              data-testid={`imbue-payer-${h.resonance_id}`}
+              className={pillClass(h.resonance_id === payerId)}
+            >
+              {h.resonance_name} <span className="tabular-nums">{h.balance}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Amount stepper */}
       <div className="flex items-center gap-3">

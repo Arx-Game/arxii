@@ -17,6 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { useCharacterResonances, useThread, useThreadHubSummary } from '../queries';
 import { useAccountProgressionQuery } from '@/progression/queries';
+import { threadMixInWords } from '../burn';
 import { ImbuePanel } from '../components/threads/ImbuePanel';
 import { XPLockBoundaryPanel } from '../components/threads/XPLockBoundaryPanel';
 import { PullEffectPreview } from '../components/threads/PullEffectPreview';
@@ -90,6 +91,14 @@ export function ThreadDetailPage() {
   // Find resonance name from character resonances (fallback to resonance_name from thread).
   const characterResonance = characterResonances?.find((cr) => cr.resonance === thread.resonance);
   const resonanceName = characterResonance?.resonance_name ?? thread.resonance_name;
+
+  // Every resonance the character holds, for the imbue payer choice (#5123).
+  const heldResonances = (characterResonances ?? []).map((cr) => ({
+    resonance_id: cr.resonance,
+    resonance_name: cr.resonance_name,
+    balance: cr.balance ?? 0,
+  }));
+  const threadMix = threadMixInWords(thread.resonances ?? []);
 
   // Determine if the thread is retired.
   const isRetired = thread.retired_at !== null;
@@ -179,7 +188,7 @@ export function ThreadDetailPage() {
           <div>
             <dt className="text-muted-foreground">Resonance</dt>
             <dd className="font-medium" data-testid="thread-stat-resonance">
-              {resonanceName}
+              {threadMix || resonanceName}
             </dd>
           </div>
           <div>
@@ -220,6 +229,7 @@ export function ThreadDetailPage() {
         <ImbuePanel
           thread={thread}
           balance={spendableBalance}
+          held={heldResonances}
           characterSheetId={characterSheetId}
         />
       )}

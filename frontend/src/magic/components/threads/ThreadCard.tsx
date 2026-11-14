@@ -1,3 +1,4 @@
+import { threadMixInWords } from '../../burn';
 import type { Thread, ThreadHubSummary } from '../../types';
 import { ThreadStateBadge } from './ThreadStateBadge';
 
@@ -52,7 +53,9 @@ export function ThreadCard({ thread, summary, onClick }: ThreadCardProps) {
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span>Level {thread.level}</span>
-            <span>{thread.resonance_name}</span>
+            <span data-testid={`thread-card-mix-${thread.id}`}>
+              {threadMixInWords(thread.resonances ?? []) || thread.resonance_name}
+            </span>
           </div>
         </div>
         <div className="shrink-0">

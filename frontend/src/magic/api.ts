@@ -455,8 +455,16 @@ export async function getThread(id: number): Promise<Thread> {
  * The resonances a thread can be retuned to, with projected points and the
  * carried items that pay the rite. Owner-only.
  */
-export async function getThreadResonanceOptions(id: number): Promise<ThreadResonanceOptions> {
-  const res = await apiFetch(`${THREADS_URL}/${id}/resonance-options/`);
+export async function getThreadResonanceOptions(
+  id: number,
+  move?: { fromResonance?: number | null; amount?: number | null }
+): Promise<ThreadResonanceOptions> {
+  const query = new URLSearchParams();
+  if (move?.fromResonance != null) query.set('from_resonance', String(move.fromResonance));
+  if (move?.amount != null) query.set('amount', String(move.amount));
+  const queryString = query.toString();
+  const suffix = queryString ? `?${queryString}` : '';
+  const res = await apiFetch(`${THREADS_URL}/${id}/resonance-options/${suffix}`);
   if (!res.ok) await readErrorDetail(res, 'Failed to load resonance options');
   return res.json() as Promise<ThreadResonanceOptions>;
 }
@@ -626,13 +634,18 @@ export async function imbueThread(body: ImbueRequest): Promise<ImbueResponse> {
 export async function imbueThreadAuto(
   characterSheetId: number,
   threadId: number,
-  amount: number
+  amount: number,
+  resonanceId?: number | null
 ): Promise<ImbueResponse> {
   const ritualId = await getImbuingRitualId();
   return imbueThread({
     ritual_id: ritualId,
     character_sheet_id: characterSheetId,
-    kwargs: { thread_id: threadId, amount },
+    kwargs: {
+      thread_id: threadId,
+      amount,
+      ...(resonanceId != null ? { resonance_id: resonanceId } : {}),
+    },
   });
 }
 

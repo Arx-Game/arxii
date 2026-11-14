@@ -66,8 +66,14 @@ export const magicKeys = {
   threads: () => [...magicKeys.all, 'threads'] as const,
   threadList: () => [...magicKeys.threads(), 'list'] as const,
   thread: (id: number) => [...magicKeys.threads(), id] as const,
-  threadResonanceOptions: (id: number) =>
-    [...magicKeys.threads(), id, 'resonance-options'] as const,
+  threadResonanceOptions: (id: number, fromResonance?: number | null, amount?: number | null) =>
+    [
+      ...magicKeys.threads(),
+      id,
+      'resonance-options',
+      fromResonance ?? null,
+      amount ?? null,
+    ] as const,
 
   // Scoped by sheet id (2026-07 audit): an unscoped key cached one alt's
   // balances/prospects and served them to every other character the account
@@ -420,10 +426,14 @@ export function usePatchThreadNarrative(id: number) {
 }
 
 /** Resonance options for retuning a thread; fetched only while the dialog is open. */
-export function useThreadResonanceOptions(threadId: number, enabled: boolean) {
+export function useThreadResonanceOptions(
+  threadId: number,
+  enabled: boolean,
+  move?: { fromResonance?: number | null; amount?: number | null }
+) {
   return useQuery({
-    queryKey: magicKeys.threadResonanceOptions(threadId),
-    queryFn: () => api.getThreadResonanceOptions(threadId),
+    queryKey: magicKeys.threadResonanceOptions(threadId, move?.fromResonance, move?.amount),
+    queryFn: () => api.getThreadResonanceOptions(threadId, move),
     enabled,
     gcTime: 0,
   });
@@ -479,11 +489,14 @@ export function useImbueThread() {
       characterSheetId,
       threadId,
       amount,
+      resonanceId,
     }: {
       characterSheetId: number;
       threadId: number;
       amount: number;
-    }) => api.imbueThreadAuto(characterSheetId, threadId, amount),
+      /** The held resonance that pays (#5123); omitted, the thread's leading one pays. */
+      resonanceId?: number | null;
+    }) => api.imbueThreadAuto(characterSheetId, threadId, amount, resonanceId),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: magicKeys.thread(variables.threadId) }).catch(() => {});
       qc.invalidateQueries({
