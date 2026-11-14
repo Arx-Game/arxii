@@ -21,7 +21,7 @@ Result is MATCH where the rendered app and the demo render agree at the same vie
 
 | Element | Expected | Result | Evidence |
 |---|---|---|---|
-| Creation step label and heading | A small step label above the heading "Your Resonance" | MATCH | Heading words match; the step reads "Step 4 of 5" in the funnel entry, accepted by owner ruling S3. [app-screen1-10of10-1280.png](docs/reviews/issue-5123/app-screen1-10of10-1280.png) vs [demo-frame-01.png](docs/reviews/issue-5123/demo-frame-01.png) |
+| Creation step label and heading | A small step label above the heading "Your Resonance" | MATCH | Heading words match; the step reads "Step 4 of 5" in the funnel entry, accepted by coordinator ruling S3 (matches the other funnel steps). [app-screen1-10of10-1280.png](docs/reviews/issue-5123/app-screen1-10of10-1280.png) vs [demo-frame-01.png](docs/reviews/issue-5123/demo-frame-01.png) |
 | Creation intro text | Two paragraphs, "Resonance is what powers your magic ..." and "Most people are moved by more than one thing ..." | MATCH | Word for word. [app-screen1-resonance-step.png](docs/reviews/issue-5123/app-screen1-resonance-step.png) |
 | Creation budget line | "10 of 10 placed" | MATCH | [app-screen1-resonance-step.png](docs/reviews/issue-5123/app-screen1-resonance-step.png); reads 9 of 10 mid-spread, [app-screen1-9of10-1280.png](docs/reviews/issue-5123/app-screen1-9of10-1280.png) |
 | Fury row | Name, PRIMAL tag, minus, six pips, plus | MATCH | Stepper buttons are grey outlines where the demo has rust outlines (cosmetic). [app-screen1-resonance-step.png](docs/reviews/issue-5123/app-screen1-resonance-step.png) |
@@ -53,7 +53,7 @@ Result is MATCH where the rendered app and the demo render agree at the same vie
 | Approved aura colours | Celestial e6c55a, Primal 2f8a74, Abyssal 5b2a6f, Mire 4b4a35, with the demo's glows | MATCH | Read from the running pages' computed styles; the CG halo's computed gradient uses them. [app-screen3-sineater.png](docs/reviews/issue-5123/app-screen3-sineater.png), [app-screen1-resonance-step.png](docs/reviews/issue-5123/app-screen1-resonance-step.png) |
 | Settle dialog heading | The Unsettled sentence | MATCH | [app-screen4-scene-atone-and-accept-1280.png](docs/reviews/issue-5123/app-screen4-scene-atone-and-accept-1280.png) vs [demo-frame-08.png](docs/reviews/issue-5123/demo-frame-08.png) |
 | Atone card | Heading, one opening paragraph naming what turns to Fury, mini halo with its sentence, left-aligned rust outline Begin the rite | MATCH | The rite's own controls (cap, source, amount, component, rate line) are extra and required by today's rite. [app-screen4-scene-atone-and-accept-1280.png](docs/reviews/issue-5123/app-screen4-scene-atone-and-accept-1280.png), [app-screen4-scene-atone-and-accept-390.png](docs/reviews/issue-5123/app-screen4-scene-atone-and-accept-390.png) |
-| Atone preview halo | The aura a full atonement would leave | MATCH | Draws the best case, as the demo does; accepted by owner ruling S4. [app-screen4-scene-atone-and-accept-1280.png](docs/reviews/issue-5123/app-screen4-scene-atone-and-accept-1280.png) |
+| Atone preview halo | The aura a full atonement would leave | MATCH | Draws the best case, as the demo does; accepted as S4: the demo draws the same picture. [app-screen4-scene-atone-and-accept-1280.png](docs/reviews/issue-5123/app-screen4-scene-atone-and-accept-1280.png) |
 | Accept card | Heading, "You become more abyssal.", mini halo with its sentence, solid rust Accept, left | MATCH | [app-screen4-scene-atone-and-accept-1280.png](docs/reviews/issue-5123/app-screen4-scene-atone-and-accept-1280.png) |
 | Not now button | Rust outline, bottom right | MATCH | [app-screen4-scene-atone-and-accept-1280.png](docs/reviews/issue-5123/app-screen4-scene-atone-and-accept-1280.png) |
 | Dialog opened outside a scene | Accept and Not now only, Accept card full width | MATCH | [app-screen4-sheet-accept-only.png](docs/reviews/issue-5123/app-screen4-sheet-accept-only.png) |
@@ -82,9 +82,9 @@ Result is MATCH where the rendered app and the demo render agree at the same vie
 | V3 | PASS | Screen 3 matches the demo in all five states. [app-screen3-unsettled-page-1280.png](docs/reviews/issue-5123/app-screen3-unsettled-page-1280.png) | |
 | V4 | PASS | Screen 4 matches the demo. [app-screen4-scene-atone-and-accept-1280.png](docs/reviews/issue-5123/app-screen4-scene-atone-and-accept-1280.png) | |
 | V5 | PASS | Creation writes a CharacterResonance per pick at balance 0, aura shares with settled equal to the weights, and a level 0 Gift thread holding a zero-amount ThreadResonance per pick (backend test module test_weighted_resonances, 16 tests, round 1). [demo-screen5.png](docs/reviews/issue-5123/demo-screen5.png) | |
-| S1 | OUT_OF_SCOPE | The demo's Lasts row under a perk is not built; the API carries no duration field. [app-screen2-inspect-perks.png](docs/reviews/issue-5123/app-screen2-inspect-perks.png) | Owner ruling relayed by the coordinator: the Lasts row is dropped, effects last until the next round. Not found in the issue thread at review time. |
-| S3 | PASS | The step reads "Step 4 of 5" in the funnel. [app-screen1-10of10-1280.png](docs/reviews/issue-5123/app-screen1-10of10-1280.png) | Owner ruling relayed by the coordinator: the Step 4 of 5 label is acceptable. Not found in the issue thread at review time. |
-| S4 | PASS | The Atone preview draws the best case, as the demo does. [app-screen4-scene-atone-and-accept-1280.png](docs/reviews/issue-5123/app-screen4-scene-atone-and-accept-1280.png) | Owner ruling relayed by the coordinator: the preview draws the best case, as the demo does. Not found in the issue thread at review time. |
+| S1 | OUT_OF_SCOPE | The demo's Lasts row under a perk is not built; the API carries no duration field. [app-screen2-inspect-perks.png](docs/reviews/issue-5123/app-screen2-inspect-perks.png) | Owner ruling in chat 2026-11-14, recorded in the owner's rulings ledger (rounds-and-durations): virtually everything lasts until the next round, so pull perks carry no duration and the Lasts row is dropped. |
+| S3 | PASS | The step reads "Step 4 of 5" in the funnel. [app-screen1-10of10-1280.png](docs/reviews/issue-5123/app-screen1-10of10-1280.png) | Coordinator ruling during the build: the step label follows the funnel's other steps ("Step N of 5"); the heading words match the demo. |
+| S4 | PASS | The Atone preview draws the best case, as the demo does. [app-screen4-scene-atone-and-accept-1280.png](docs/reviews/issue-5123/app-screen4-scene-atone-and-accept-1280.png) | No ruling needed: the demo's own Atone preview draws the same best case. |
 
 ## Unresolved findings
 
@@ -136,11 +136,10 @@ The sections below are the detailed review record (identity, round history, per-
 
 ## Scope questions and how they were settled
 
-S1, S3 and S4 below were put to the owner and ruled (S1: the "Lasts" row is dropped, effects last
-until the next round; S3: the "Step 4 of 5" label is acceptable; S4: the Atone preview draws the
-best case, as the demo does). **Provenance:** these rulings reached this review through the
-coordinator's message; they are not in the issue's comment thread as of this review (the issue
-body and its two comments were re-read), so the ledger records them as relayed owner rulings.
+S1 was put to the owner and ruled in chat on 2026-11-14 (the "Lasts" row is dropped: effects last
+until the next round; recorded in the owner's rulings ledger). S3 is a coordinator ruling (the step
+label follows the funnel's other steps). S4 needs no ruling: the demo's own preview draws the same
+best case. None of the three is in the issue's comment thread.
 The text of each question is kept as asked.
 
 - **S1. The demo's "Lasts" row.** The Inspect perks panel in the demo shows "Lasts: until
