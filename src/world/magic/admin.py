@@ -133,6 +133,7 @@ from world.magic.models import (
     ThreadLevelUnlock,
     ThreadPullCost,
     ThreadPullEffect,
+    ThreadResonance,
     ThreadSurvivabilityTuning,
     ThreadWeavingTeachingOffer,
     ThreadWeavingUnlock,
@@ -218,7 +219,6 @@ class AffinityInteractionAdmin(admin.ModelAdmin):
         "kind",
         "aggressor",
         "severity_multiplier",
-        "conflict_weight",
         "conversion_type",
         "conversion_multiplier",
     ]
@@ -1934,6 +1934,19 @@ class ThreadLevelUnlockInline(admin.TabularInline):
     readonly_fields = ["acquired_at"]
 
 
+class ThreadResonanceInline(admin.TabularInline):
+    """The resonances a thread holds, written only by services (#5123)."""
+
+    model = ThreadResonance
+    extra = 0
+    can_delete = False
+    fields = ["resonance", "amount", "created_at"]
+    readonly_fields = ["resonance", "amount", "created_at"]
+
+    def has_add_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+
 @admin.register(Thread)
 class ThreadAdmin(admin.ModelAdmin):
     list_display = ["id", "owner", "resonance", "target_kind", "level", "developed_points"]
@@ -1949,7 +1962,7 @@ class ThreadAdmin(admin.ModelAdmin):
     ]
     list_select_related = ["owner", "resonance"]
     readonly_fields = ["created_at", "updated_at"]
-    inlines = [ThreadLevelUnlockInline]
+    inlines = [ThreadResonanceInline, ThreadLevelUnlockInline]
 
 
 @admin.register(ThreadLevelUnlock)
@@ -3083,10 +3096,10 @@ class DriftConfigAdmin(admin.ModelAdmin):
 
     list_display = (
         "pk",
-        "threshold_percent",
-        "threshold_floor",
-        "severity_step",
-        "off_aura_pull_steps",
+        "unsettled_tolerance_percent",
+        "unsettled_step_percent",
+        "creation_points",
+        "mire_allowance_percent",
         "focus_check_type",
         "conflict_condition",
         "updated_at",

@@ -18,7 +18,6 @@ own check modifier then reaches the same cast's roll. Its numbers live in ``Drif
 from __future__ import annotations
 
 from collections.abc import Iterable
-from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -48,8 +47,10 @@ if TYPE_CHECKING:
     from world.scenes.models import Scene
 
 
-# A pair with no authored AffinityInteraction row counts at full weight.
-_UNAUTHORED_PAIR_WEIGHT = Decimal(1)
+# Task 1 bridge (#5123): DriftConfig.threshold_percent was removed with the old drift
+# units. Until the unsettled rewrite replaces this reading, the percent of the main
+# balance stays at its old default.
+_BRIDGE_THRESHOLD_PERCENT = 50
 
 
 def get_drift_config() -> DriftConfig:
@@ -65,13 +66,12 @@ def drift_for(sheet: CharacterSheet) -> DriftReading:
 
     The dominant affinity is the acting aura's (an active alternate self's affinity
     while one is worn). Her balances in that affinity are her main balance; every
-    other balance counts as drift, weighted by the authored
-    ``AffinityInteraction.conflict_weight`` of (its affinity, the dominant one). The
-    threshold is ``max(threshold_floor, threshold_percent of the main balance)``;
-    drift strictly past it is one step, plus one per further ``severity_step``.
+    other balance counts as drift at full weight. The threshold is
+    ``max(unsettled_tolerance_percent, half the main balance)``; drift strictly past it is
+    one step, plus one per further ``unsettled_step_percent``. (Bridge: the unsettled
+    rewrite replaces this reading.)
     A character with no aura to measure against reads zero.
     """
-    from world.magic.models import AffinityInteraction  # noqa: PLC0415
     from world.magic.services.acting_aura import acting_aura  # noqa: PLC0415
 
     aura = acting_aura(sheet)
@@ -81,21 +81,18 @@ def drift_for(sheet: CharacterSheet) -> DriftReading:
 
     cfg = get_drift_config()
     main = 0
-    weighted_drift = Decimal(0)
+    drift = 0
     for row in sheet.character.resonances.all():
         affinity = row.resonance.affinity
         if affinity.pk == dominant.pk:
             main += row.balance
             continue
-        interaction = AffinityInteraction.objects.interaction_for(affinity, dominant)
-        weight = interaction.conflict_weight if interaction is not None else _UNAUTHORED_PAIR_WEIGHT
-        weighted_drift += row.balance * weight
+        drift += row.balance
 
-    drift = int(weighted_drift)
-    threshold = max(cfg.threshold_floor, main * cfg.threshold_percent // 100)
+    threshold = max(cfg.unsettled_tolerance_percent, main * _BRIDGE_THRESHOLD_PERCENT // 100)
     steps_past = 0
     if drift > threshold:
-        steps_past = 1 + (drift - threshold - 1) // cfg.severity_step
+        steps_past = 1 + (drift - threshold - 1) // cfg.unsettled_step_percent
     return DriftReading(
         drift=drift, threshold=threshold, steps_past=steps_past, dominant_affinity=dominant
     )
@@ -105,7 +102,7 @@ def check_resonance_focus(
     character: ObjectDB,  # noqa: OBJECTDB_PARAM - rolls, conditions and messages take the character
     technique: Technique,
     *,
-    pulled_resonances: tuple[Resonance, ...] = (),
+    pulled_resonances: tuple[Resonance, ...] = (),  # noqa: ARG001 - bridge, unused until rewrite
 ) -> FocusOutcome | None:
     """Roll the caster's focus against her carried drift, once per cast.
 
@@ -114,9 +111,8 @@ def check_resonance_focus(
     reaches the same cast's roll. A pull is part of its cast, not a roll of its own:
     ``pulled_resonances`` are the resonances this cast pulls, which the caller names
     (the declared cast pull's threads', or the combat round's committed pull's); empty
-    means the cast pulls nothing. Working any of them outside her dominant affinity adds
-    ``off_aura_pull_steps`` (once; a pull may mix resonances since #5066, maintainer
-    ruling 2026-11-11).
+    means the cast pulls nothing. (Bridge: the old off-aura pull step was removed with
+    ``off_aura_pull_steps``; the pulled resonances no longer add a step.)
 
     Returns None, rolling nothing, when the config's focus check type or conflict
     condition is unset (the Required content dashboard lists both) or when there are
@@ -144,8 +140,6 @@ def check_resonance_focus(
     if reading.dominant_affinity is None:
         return None
     steps = reading.steps_past
-    if any(r.affinity_id != reading.dominant_affinity.pk for r in pulled_resonances):
-        steps += cfg.off_aura_pull_steps
     if steps <= 0:
         return None
 

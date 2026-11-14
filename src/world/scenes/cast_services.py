@@ -57,7 +57,11 @@ from world.scenes.action_constants import (
     CAST_DIFFICULTY_BANDS,
     ActionRequestStatus,
 )
-from world.scenes.action_models import SceneActionPullDeclaration, SceneActionRequest
+from world.scenes.action_models import (
+    SceneActionPullDeclaration,
+    SceneActionRequest,
+    ScenePullThread,
+)
 from world.scenes.constants import InteractionMode, InteractionVisibility
 from world.scenes.interaction_services import (
     create_interaction,
@@ -1493,7 +1497,14 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
                 burn=cast_pull.burn,
                 burn_resonance=cast_pull.burned_resonance if cast_pull.burn else None,
             )
-            declaration.threads.set(cast_pull.threads)
+            # Task 1 bridge (#5123): each thread pays with its leading resonance until
+            # the cast pull carries a chosen payer.
+            ScenePullThread.objects.bulk_create(
+                ScenePullThread(
+                    declaration=declaration, thread=thread, paying_resonance_id=thread.resonance_id
+                )
+                for thread in cast_pull.threads
+            )
     return CastResult(request=request)
 
 

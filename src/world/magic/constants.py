@@ -342,6 +342,9 @@ class GainSource(models.TextChoices):
     DRIFT_CORRECTION = "DRIFT_CORRECTION", "Drift correction"
     CORRUPTION_CLEANSING = "CORRUPTION_CLEANSING", "Corruption cleansing payout"
     SINEATING = "SINEATING", "Sineating payout"
+    # #5123: the lifetime resonance seeded from a new character's creation points. No
+    # typed source FK (like STAFF_GRANT); lifetime only, no spendable balance.
+    CHARACTER_CREATION = "CHARACTER_CREATION", "Character creation"
 
 
 # ADR-0041 total classification of GainSource: which sources are eligible for the
@@ -387,6 +390,8 @@ NON_ACCELERATED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.DRIFT_CORRECTION,
         GainSource.SINEATING,
         GainSource.CORRUPTION_CLEANSING,
+        # #5123: seeded from the character's own creation picks, never witnessed.
+        GainSource.CHARACTER_CREATION,
     }
 )
 
@@ -426,6 +431,7 @@ NON_DEED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.DRIFT_CORRECTION,
         GainSource.SINEATING,
         GainSource.CORRUPTION_CLEANSING,
+        GainSource.CHARACTER_CREATION,
     }
 )
 

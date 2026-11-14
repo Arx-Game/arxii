@@ -18,9 +18,9 @@ if TYPE_CHECKING:
 class DriftReading:
     """How much off-aura drift a character carries against her acting aura.
 
-    ``drift`` is the weighted sum of her balances in affinities other than the
+    ``drift`` is the sum of her balances in affinities other than the
     dominant one; ``threshold`` is the point it must pass; ``steps_past`` is how
-    many ``severity_step`` bands it has passed by (0 at or below the threshold).
+    many ``unsettled_step_percent`` bands it has passed by (0 at or below the threshold).
     ``dominant_affinity`` is None, and every number 0, when she has no aura to
     measure against.
     """

@@ -2430,6 +2430,7 @@ class CombatPull(SharedMemoryModel):
     tier = models.PositiveSmallIntegerField()  # 1, 2, or 3
     threads = models.ManyToManyField(
         "arxii.Thread",
+        through="arxii.CombatPullThread",
         related_name="combat_pulls",
     )
     resonance_spent = models.PositiveIntegerField()
@@ -2487,6 +2488,39 @@ class CombatPull(SharedMemoryModel):
             f"CombatPull(participant={self.participant_id} "
             f"round={self.round_number} tier={self.tier})"
         )
+
+
+class CombatPullThread(SharedMemoryModel):
+    """One thread in a committed combat pull, with the resonance that pays for it (#5123).
+
+    The payer is a fact about a (pull, thread) pair, and may be a resonance the thread
+    holds no row for (the character holds it, so it can pay; it just brings no perks).
+    """
+
+    pull = models.ForeignKey(
+        CombatPull,
+        on_delete=models.CASCADE,
+        related_name="pull_threads",
+    )
+    thread = models.ForeignKey(
+        "arxii.Thread",
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+    paying_resonance = models.ForeignKey(
+        "arxii.Resonance",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The resonance this pull charges for the thread, and whose perks apply.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["pull", "thread"], name="uniq_combat_pull_thread"),
+        ]
+
+    def __str__(self) -> str:
+        return f"CombatPullThread(pull={self.pull_id} thread={self.thread_id})"
 
 
 class CombatPullResolvedEffect(SharedMemoryModel):

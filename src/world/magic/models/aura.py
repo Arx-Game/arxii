@@ -123,6 +123,16 @@ class CharacterAuraShare(RelatedCacheClearingMixin, SharedMemoryModel):
         validators=[MinValueValidator(Decimal(0)), MaxValueValidator(Decimal(100))],
         help_text="This affinity's share of the aura, 0-100.",
     )
+    settled_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal(0),
+        validators=[MinValueValidator(Decimal(0)), MaxValueValidator(Decimal(100))],
+        help_text=(
+            "Who the character is, per affinity, 0-100: set at creation and by accepting "
+            "the changes to the aura. The main affinity is the largest settled share."
+        ),
+    )
 
     class Meta:
         ordering = ["aura", "affinity"]
@@ -173,6 +183,13 @@ class CharacterResonance(RelatedCacheClearingMixin, SharedMemoryModel):
     lifetime_earned = models.PositiveIntegerField(
         default=0,
         help_text="Monotonic total of resonance earned (never decremented).",
+    )
+    mire_lifetime = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "The part of lifetime_earned taken from the Mire as a Sineater. Never exceeds "
+            "lifetime_earned; moves with lifetime when resonance is converted."
+        ),
     )
     claimed_at = models.DateTimeField(
         auto_now_add=True,

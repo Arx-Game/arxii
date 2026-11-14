@@ -597,6 +597,28 @@ class ResonanceGrant(SharedMemoryModel):
                 )
                 | ~Q(source="DRIFT_CORRECTION"),
             ),
+            # #5123 CHARACTER_CREATION: no typed source FK; the grant seeds lifetime from
+            # the character's creation picks.
+            models.CheckConstraint(
+                name="res_grant_character_creation_shape",
+                check=(
+                    Q(source="CHARACTER_CREATION")
+                    & Q(source_room_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
+                    & Q(source_sanctum_details__isnull=True)
+                    & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
+                    & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
+                )
+                | ~Q(source="CHARACTER_CREATION"),
+            ),
             # WORSHIP_RITE (#3777): the performance row is the source and stays
             # (PROTECT), so the FK is required whenever the discriminator says so.
             models.CheckConstraint(

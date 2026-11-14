@@ -36,6 +36,7 @@ from world.scenes.action_models import (
     SceneActionPullDeclaration,
     SceneActionRequest,
     SceneActionTarget,
+    ScenePullThread,
 )
 from world.scenes.action_resolvers import get_resolver
 from world.scenes.boon_services import BOON_ACTION_KEYS
@@ -679,7 +680,14 @@ def create_action_request(  # noqa: PLR0913 - the one dispatch orchestrator
             request=request,
             tier=pull.tier,
         )
-        decl.threads.set(pull.threads)
+        # Task 1 bridge (#5123): each thread pays with its leading resonance until the
+        # pull carries a chosen payer.
+        ScenePullThread.objects.bulk_create(
+            ScenePullThread(
+                declaration=decl, thread=thread, paying_resonance_id=thread.resonance_id
+            )
+            for thread in pull.threads
+        )
     # #2540: persist the boon payload BEFORE auto-resolving NPC targets so the ask
     # exists when the NPC-side cost band and the boon resolver fire during auto-resolve.
     if boon is not None:

@@ -111,6 +111,7 @@ from world.magic.models import (
     ThreadLevelUnlock,
     ThreadPullCost,
     ThreadPullEffect,
+    ThreadResonance,
     ThreadSurvivabilityTuning,
     ThreadWeavingTeachingOffer,
     ThreadWeavingUnlock,
@@ -1883,6 +1884,42 @@ class ThreadFactory(factory.django.DjangoModelFactory):
         self.target_kind = TargetKind.COVENANT_ROLE
         self.target_covenant_role = role
         self.target_trait = None  # type: ignore[assignment]
+
+    # Declared last: every thread holds a row for its resonance (#5123), sized to the
+    # points the factory gave the thread so the rows' sum equals ``developed_points``.
+    @factory.post_generation  # type: ignore[misc]
+    def _resonance_row(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:
+        if not create:
+            return
+        ThreadResonance.objects.get_or_create(
+            thread=self,
+            resonance=self.resonance,
+            defaults={"amount": self.developed_points},
+        )
+
+
+class ThreadResonanceFactory(factory.django.DjangoModelFactory):
+    """Factory for ThreadResonance.
+
+    ``ThreadFactory`` already writes the row for the thread's own resonance, so asking
+    for that pair again updates its amount instead of failing on the unique constraint.
+    """
+
+    class Meta:
+        model = ThreadResonance
+
+    thread = factory.SubFactory(ThreadFactory)
+    resonance = factory.SubFactory(ResonanceFactory)
+    amount = 0
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        row, _ = model_class.objects.update_or_create(
+            thread=kwargs.pop("thread"),
+            resonance=kwargs.pop("resonance"),
+            defaults=kwargs,
+        )
+        return row
 
 
 class ThreadLevelUnlockFactory(factory.django.DjangoModelFactory):

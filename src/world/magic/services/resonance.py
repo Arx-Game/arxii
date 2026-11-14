@@ -323,6 +323,7 @@ def _validate_grant_source_shape(  # noqa: PLR0913
         GainSource.DRIFT_CORRECTION,
         GainSource.SINEATING,
         GainSource.CORRUPTION_CLEANSING,
+        GainSource.CHARACTER_CREATION,
     ):
         # No typed source FK — the grant is attributed by discriminator only.
         return
@@ -1289,6 +1290,7 @@ def _persist_combat_pull(  # noqa: PLR0913
     from world.combat.models import (  # noqa: PLC0415
         CombatPull,
         CombatPullResolvedEffect,
+        CombatPullThread,
     )
 
     encounter = ctx.combat_encounter
@@ -1309,7 +1311,12 @@ def _persist_combat_pull(  # noqa: PLR0913
         burn_hasty_fall=burn_valuation.hasty_fall if burn_valuation else False,
         burned_for=burned_for,
     )
-    pull.threads.set(threads)
+    # Task 1 bridge (#5123): each thread pays with its leading resonance until the pull
+    # carries a chosen payer.
+    CombatPullThread.objects.bulk_create(
+        CombatPullThread(pull=pull, thread=thread, paying_resonance_id=thread.resonance_id)
+        for thread in threads
+    )
     for r in resolved:
         # ``ASSUME_ALTERNATE_SELF`` is applied at cast resolution (a transformative
         # side-effect of the technique), never at combat-pull commit time, and
