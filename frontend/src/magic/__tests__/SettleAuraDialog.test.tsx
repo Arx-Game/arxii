@@ -711,6 +711,8 @@ describe('SettleAuraDialog - Atone and Accept exits (#5123)', () => {
       unsettled_line: 'Your Spite has grown strong enough to make you unsettled.',
     };
     // The mocked endpoint hands back both alts, as it would for staff; the gate must pick.
+    renderGate([OFFER], 101, [alt, UNSETTLED_AURA]);
+
     await user.click(await screen.findByTestId('settle-accept-button'));
 
     await waitFor(() => {
