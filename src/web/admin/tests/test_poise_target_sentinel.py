@@ -1,7 +1,8 @@
-"""The poise modifier target's required-content sentinel (#4720).
+"""The Poise modifier target's required-content sentinel (#4720).
 
-The seed only looks the row up on production, so staff author it; the dashboard lists it
-until a ``poise`` target exists in ``roll_modifier`` and is scoped to the Composure check.
+Staff author the row; the dashboard lists it until an active modifier target is scoped to
+the Composure check. The probe goes by that scope, not by the row's name: production
+calls it "Poise", the example seed "poise", and the check seam reads neither.
 """
 
 from __future__ import annotations
@@ -27,18 +28,16 @@ class PoiseTargetProbeTests(TestCase):
         cls.category = ModifierCategoryFactory(name="roll_modifier")
         cls.composure = CheckTypeFactory(name="Composure")
 
-    def test_no_poise_target_is_reported(self) -> None:
+    def test_no_target_scoped_to_composure_is_reported(self) -> None:
         result = _resolve()
         self.assertFalse(result.present)
-        self.assertIn("No modifier target named poise", result.detail)
+        self.assertIn("No modifier target is scoped to the Composure check", result.detail)
 
-    def test_a_poise_target_scoped_to_no_check_is_reported(self) -> None:
+    def test_a_target_named_poise_but_scoped_to_no_check_is_reported(self) -> None:
         ModifierTargetFactory(name="poise", category=self.category)
-        result = _resolve()
-        self.assertFalse(result.present)
-        self.assertIn("not Composure", result.detail)
+        self.assertFalse(_resolve().present)
 
-    def test_a_poise_target_scoped_to_another_check_is_reported(self) -> None:
+    def test_a_target_scoped_to_another_check_is_reported(self) -> None:
         ModifierTargetFactory(
             name="poise",
             category=self.category,
@@ -46,17 +45,20 @@ class PoiseTargetProbeTests(TestCase):
         )
         self.assertFalse(_resolve().present)
 
-    def test_an_inactive_poise_target_is_reported(self) -> None:
+    def test_an_inactive_target_is_reported_by_name(self) -> None:
         ModifierTargetFactory(
-            name="poise",
+            name="Poise",
             category=self.category,
             target_check_type=self.composure,
             is_active=False,
         )
-        self.assertFalse(_resolve().present)
+        result = _resolve()
+        self.assertFalse(result.present)
+        self.assertIn("(Poise) is inactive", result.detail)
 
-    def test_a_poise_target_scoped_to_composure_closes_the_gap(self) -> None:
+    def test_the_target_closes_the_gap_whatever_it_is_named(self) -> None:
+        """Production names it "Poise", capitalised; a lowercase lookup missed it."""
         ModifierTargetFactory(
-            name="poise", category=self.category, target_check_type=self.composure
+            name="Poise", category=self.category, target_check_type=self.composure
         )
         self.assertTrue(_resolve().present)

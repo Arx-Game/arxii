@@ -165,8 +165,10 @@ totalled via `mechanics.services.get_modifier_total(sheet, target)`. Canonical r
   scoped to the Composure check type (``ensure_poise_target``). Counts on every roll of
   that check (a condition's resist or break-free check pointed at Composure) and on a
   defender's social resist (#4720, ADR-4720). It does not reach the other checks that
-  weigh the Composure stat (Concentration, Magic Defense). Staff author the row on
-  production; the Required content dashboard lists it while missing.
+  weigh the Composure stat (Concentration, Magic Defense). The row is authored content
+  (named "Poise" on production, "poise" in the example seed) and is read by its scope,
+  never by name; the Required content dashboard lists it when no active target is scoped
+  to Composure.
 - **the five levers** (#4394): `income`, `reputation_gain` (+ `_society`, `_organization`),
   `relationship_gain`, `comfort`, `fatigue_cost`, each its own category with a target of the
   same name, read at one seam each through `world/mechanics/levers.py` (allowance and asset

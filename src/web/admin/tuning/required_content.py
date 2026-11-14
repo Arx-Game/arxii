@@ -1540,31 +1540,28 @@ _COMPOSURE_CHECK_NAME = "Composure"
 
 
 def _probe_poise_target() -> ProbeResult:
-    """A ``poise`` modifier target exists and is scoped to the Composure check (#4720).
+    """An active modifier target is scoped to the Composure check: Poise (#4720).
 
-    The seed only looks the row up on production (ModifierTarget is authored content), so
-    staff create it. Without it a card's ``+N poise`` has nothing to attach to; scoped to
-    no check, or the wrong one, it counts on no Composure roll and raises no resist.
+    Found by its scope, never by name: the check seam reads a check's own scoped target
+    (the reverse of ``ModifierTarget.target_check_type``), so that is what makes a card's
+    poise count on a Composure roll and on a defender's resist. Staff author the row and
+    name it as they like ("Poise" on production). With no target scoped to Composure, or
+    an inactive one, nothing a card grants reaches either.
     """
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
 
-    target = (
-        ModifierTarget.objects.filter(name="poise", category__name="roll_modifier")
-        .select_related("target_check_type")
-        .first()
-    )
+    target = ModifierTarget.objects.filter(target_check_type__name=_COMPOSURE_CHECK_NAME).first()
     if target is None:
         return ProbeResult(
             present=False,
-            detail="No modifier target named poise exists in the roll_modifier category.",
+            detail="No modifier target is scoped to the Composure check.",
         )
     if not target.is_active:
-        return ProbeResult(present=False, detail="The poise modifier target is inactive.")
-    scoped_to = target.target_check_type
-    if scoped_to is None or scoped_to.name != _COMPOSURE_CHECK_NAME:
         return ProbeResult(
             present=False,
-            detail="The poise modifier target's check type is not Composure.",
+            detail=(
+                f"The modifier target scoped to the Composure check ({target.name}) is inactive."
+            ),
         )
     return ProbeResult(present=True)
 
@@ -3807,7 +3804,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="poise-target-scoped-to-composure",
-            label="Poise modifier target scoped to the Composure check",
+            label="A modifier target scoped to the Composure check (Poise)",
             tier=DependencyTier.REQUIRED,
             consumer=(
                 "world/checks/services.py compute_resist_increment() and every Composure "
