@@ -110,6 +110,25 @@ class AtoneTests(DriftRiteTestBase):
         with self.assertRaises(DriftConversionInvalidError):
             self.perform(amount=excess + 1)
 
+    def test_atone_that_leaves_her_settled_closes_the_offer(self) -> None:
+        _set(self.sheet, self.dread, balance=0, lifetime=30)
+        excess = drift_for(self.sheet).convertible_points(self.abyssal.pk)
+
+        self.perform(amount=excess)
+
+        self.assertEqual(drift_for(self.sheet).steps_past, 0)
+        self.assertFalse(DriftConversionOffer.objects.filter(pk=self.offer.pk).exists())
+        self.assertFalse(DriftConversionCap.objects.filter(offer_id=self.offer.pk).exists())
+
+    def test_atone_that_leaves_drift_keeps_the_offer_open(self) -> None:
+        _set(self.sheet, self.dread, balance=0, lifetime=30)
+
+        self.perform(amount=12)
+
+        self.assertGreater(drift_for(self.sheet).steps_past, 0)
+        self.assertEqual(self.cap_value(), 28)
+        self.assertTrue(DriftConversionOffer.objects.filter(pk=self.offer.pk).exists())
+
     def _sineater(self) -> None:
         # 60 of 180 is a third Mire: 6 points past the allowance (54) to atone for; the
         # Sineater's own 20 Abyssal stand 11.7 past a line of nothing, 14 points.
@@ -258,6 +277,17 @@ class AcceptTests(TestCase):
         self.assertEqual(done.message, "You become more abyssal.")
         self.assertFalse(again.success)
         self.assertNotIn("accepted", again.message)
+
+
+class AcceptClosesTheOfferTests(DriftRiteTestBase):
+    def test_accepting_closes_the_offer_the_character_held(self) -> None:
+        self.assertGreater(drift_for(self.sheet).steps_past, 0)
+        self.assertTrue(DriftConversionOffer.objects.filter(pk=self.offer.pk).exists())
+
+        accept_aura_change(self.sheet)
+
+        self.assertFalse(DriftConversionOffer.objects.filter(pk=self.offer.pk).exists())
+        self.assertFalse(DriftConversionCap.objects.filter(offer_id=self.offer.pk).exists())
 
 
 class AlignmentPowerTests(TestCase):

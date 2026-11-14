@@ -37,6 +37,7 @@ from world.magic.models.drift import (
 from world.magic.models.resonance_environment import AffinityInteraction
 from world.magic.services.conversion import conversion_pair, convert_resonance_amount
 from world.magic.services.drift import (
+    close_spent_conversion_offers,
     convertible_drift,
     drift_for,
     get_drift_correction_config,
@@ -364,6 +365,9 @@ def perform_drift_correction_rite(
             cap.delete()
             if not DriftConversionCap.objects.filter(offer=offer).exists():
                 offer.delete()
+        # Atoning can leave her settled with cap still unspent: nothing is left to convert,
+        # so the offer closes (one writer for that, shared with accepting).
+        close_spent_conversion_offers(sheet)
 
     return DriftCorrectionResult(
         source_resonance_id=source_resonance.pk,

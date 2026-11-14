@@ -360,6 +360,7 @@ def accept_aura_change(sheet: CharacterSheet) -> AcceptAuraResult:
         if share.settled_percent != share.percent:
             share.settled_percent = share.percent
             share.save(update_fields=["settled_percent"])
+    close_spent_conversion_offers(sheet)
     return AcceptAuraResult(
         mire_moved=mire_moved,
         main_affinity=_main_affinity(aura),
@@ -493,6 +494,31 @@ def lapse_conversion_offers(scene: Scene) -> int:
             lambda character=character: _tell_non_web(character, _OFFER_LAPSED_TEXT)
         )
     return lapsed
+
+
+def close_spent_conversion_offers(sheet: CharacterSheet) -> int:
+    """Delete the caps of ``sheet``'s open offers that have nothing left to convert.
+
+    The one writer that ends an offer early (#5123): a cap whose target has no convertible
+    drift behind it is deleted, and an offer left with no cap goes with them. A character
+    who is no longer unsettled has no convertible drift, so atoning or accepting that
+    settles her closes every offer she holds, while an offer with drift still left to atone
+    for stays open. Returns how many offers closed. Called by the rite and by
+    ``accept_aura_change``, after they write.
+    """
+    closed = 0
+    for offer in DriftConversionOffer.objects.filter(character_sheet=sheet):
+        for cap in list(
+            DriftConversionCap.objects.filter(offer=offer).select_related(
+                "target_resonance__affinity"
+            )
+        ):
+            if not convertible_drift(sheet, cap.target_resonance):
+                cap.delete()
+        if not DriftConversionCap.objects.filter(offer=offer).exists():
+            offer.delete()
+            closed += 1
+    return closed
 
 
 def qualifying_components(
