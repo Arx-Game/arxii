@@ -243,7 +243,7 @@ def _validate_pull_declaration(attrs: dict, *, hostile_check: bool = False) -> d
             thread_ids=pull["thread_ids"],
             burn=pull.get("burn", 0),
             burn_resonance_id=pull.get("burn_resonance_id"),
-            payer_ids={int(thread): res for thread, res in pull.get("payers", {}).items()},
+            payer_ids=pull.get("payers"),
         )
     except InvalidImbueAmount as exc:
         raise serializers.ValidationError({"pull": exc.user_message}) from exc

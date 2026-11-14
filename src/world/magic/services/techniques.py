@@ -1431,15 +1431,15 @@ def _resolve_cast_burn(
     if sheet is None:
         return None
     from world.covenants.perks.context import SituationContext  # noqa: PLC0415
-    from world.magic.exceptions import InvalidImbueAmount  # noqa: PLC0415
+    from world.magic.exceptions import PullValidationError  # noqa: PLC0415
     from world.magic.services.burn import resolve_resonance_burn  # noqa: PLC0415
     from world.magic.services.threads import pull_resonance_costs  # noqa: PLC0415
 
     burned = cast_pull.burned_resonance
     if burned is None:
-        # A mixed pull's burn must name one of the pulled resonances (#5066).
-        msg = "Name which of the pulled resonances to burn."
-        raise InvalidImbueAmount(msg)
+        # A burn must name one of the resonances paying for the pull (#5066, #5123).
+        msg = "The burn must come from a resonance you are paying with."
+        raise PullValidationError(msg)
     burn_ctx = (
         situation_ctx
         if isinstance(situation_ctx, SituationContext)

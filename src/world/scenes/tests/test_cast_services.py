@@ -740,6 +740,34 @@ class TestCastPullThroughCastServices(CastScenarioMixin):
             self.STARTING_BALANCE - self.PULL_RESONANCE_COST,
         )
 
+    def test_consent_accept_charges_the_stored_non_leading_payer(self) -> None:
+        """A cast request stores the picked payer; accepting debits that resonance (#5123)."""
+        technique, character_resonance, pull = self._make_pull_fixture()
+        other = ResonanceFactory()
+        paying = CharacterResonanceFactory(
+            character_sheet=self.caster.character_sheet,
+            resonance=other,
+            balance=self.STARTING_BALANCE,
+            lifetime_earned=self.STARTING_BALANCE,
+        )
+        pull = CastPullDeclaration(
+            tier=pull.tier, threads=pull.threads, payers={pull.threads[0].pk: other}
+        )
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            target_persona=self.target,
+            technique=technique,
+            cast_pull=pull,
+        )
+
+        resolve_accepted_cast(cast.request)
+
+        character_resonance.refresh_from_db()
+        paying.refresh_from_db()
+        self.assertEqual(character_resonance.balance, self.STARTING_BALANCE)
+        self.assertEqual(paying.balance, self.STARTING_BALANCE - self.PULL_RESONANCE_COST)
+
     def test_consent_accept_fizzles_unaffordable_pull(self) -> None:
         """If the committed resonance is gone at accept time, the cast resolves pull-less."""
         technique, character_resonance, pull = self._make_pull_fixture()

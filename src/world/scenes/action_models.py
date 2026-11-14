@@ -19,6 +19,7 @@ from world.scenes.action_constants import (
 )
 
 if TYPE_CHECKING:
+    from world.magic.models import Resonance
     from world.scenes.models import Persona
 
 _PERSONA_MODEL = "arxii.Persona"
@@ -495,6 +496,13 @@ class SceneActionPullDeclaration(SharedMemoryModel):
         help_text="Cached FLAT_BONUS total from the first charge, returned on "
         "idempotent subsequent calls without re-charging (#1919).",
     )
+
+    def payers(self) -> dict[int, Resonance]:
+        """Thread id -> the resonance that pays for it, as recorded when it was declared."""
+        return {
+            row.thread_id: row.paying_resonance
+            for row in self.pull_threads.select_related("paying_resonance")
+        }
 
     def __str__(self) -> str:
         return f"Action pull (tier {self.tier}) for request {self.request_id}"

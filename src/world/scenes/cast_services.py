@@ -814,10 +814,7 @@ def _resolve_cast_pull(
     if declaration is None:
         return None, None
     threads = list(declaration.threads.filter(retired_at__isnull=True))
-    payers = {
-        row.thread_id: row.paying_resonance
-        for row in declaration.pull_threads.select_related("paying_resonance")
-    }
+    payers = declaration.payers()
     preview = (
         preview_resonance_pull(
             initiator_persona.character_sheet,

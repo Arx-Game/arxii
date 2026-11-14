@@ -1220,10 +1220,7 @@ def _charge_social_pull(
         # even if the declaration somehow carried a bonus.
         beseech_bonus=0,
         anima_cost_override=anima_cost_override,
-        payers={
-            row.thread_id: row.paying_resonance
-            for row in declaration.pull_threads.select_related("paying_resonance")
-        },
+        payers=declaration.payers(),
     )
 
     pull_flat_bonus = 0

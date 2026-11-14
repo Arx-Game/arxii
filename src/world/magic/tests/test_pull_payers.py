@@ -19,6 +19,7 @@ from world.magic.factories import (
 )
 from world.magic.models import CharacterResonance
 from world.magic.services import preview_resonance_pull, spend_resonance_for_pull
+from world.magic.services.pull_payers import resolve_pull_payers
 from world.magic.services.threads import pull_resonance_costs
 from world.magic.types import PullActionContext
 from world.magic.types.pull import CastPullDeclaration
@@ -224,3 +225,37 @@ class PullPayerTests(TestCase):
         self.assertIsNotNone(declaration)
         self.assertEqual(declaration.payer_for(self.first), self.fury)
         self.assertEqual(declaration.payer_for(self.second), self.guile)
+
+    def test_a_non_numeric_payer_is_refused_not_raised(self) -> None:
+        for bad in ({"abc": self.guile.pk}, {self.first.pk: "abc"}, {self.first.pk: None}):
+            with self.subTest(bad=bad), self.assertRaises(PullValidationError):
+                resolve_pull_payers(self.sheet.pk, [self.first.pk], bad)
+        with self.assertRaises(PullValidationError):
+            resolve_pull_from_kwargs(
+                self.sheet,
+                {
+                    "pull_tier": 1,
+                    "pull_thread_ids": [self.first.pk],
+                    "pull_payers": {"abc": self.guile.pk},
+                },
+            )
+        with self.assertRaises(PullValidationError):
+            resolve_pull_from_kwargs(
+                self.sheet,
+                {"pull_tier": 1, "pull_thread_ids": [self.first.pk], "pull_payers": [1, 2]},
+            )
+
+    def test_web_burn_from_a_non_payer_is_refused_with_the_burn_message(self) -> None:
+        with self.assertRaises(PullValidationError) as raised:
+            build_cast_pull_declaration(
+                self.sheet.pk,
+                tier=1,
+                thread_ids=[self.first.pk],
+                burn=1,
+                burn_resonance_id=self.guile.pk,
+            )
+
+        self.assertEqual(
+            raised.exception.user_message,
+            "The burn must come from a resonance you are paying with.",
+        )

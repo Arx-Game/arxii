@@ -1307,6 +1307,8 @@ def _payer_options_per_thread(
 ) -> list[ThreadPayerPreview]:
     """Every held resonance as a payer option for each pulled thread (#5123).
 
+    Each option's ``affordable`` prices that one thread alone, not the whole pull.
+
     One thread's option is what paying with that resonance alone would cost and whether
     its balance covers it. ``effects`` stays empty and ``level_read`` the thread's own
     level until the perk lookup by payer fills them.

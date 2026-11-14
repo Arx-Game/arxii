@@ -53,6 +53,9 @@ if TYPE_CHECKING:
     from world.magic.types.pull import CastPullDeclaration, PullActionContext
 
 
+_BURN_NOT_A_PAYER = "The burn must come from a resonance you are paying with."
+
+
 def build_cast_pull_declaration(  # noqa: PLR0913 - the pull's whole declaration
     owner_sheet_id: int,
     *,
@@ -60,7 +63,7 @@ def build_cast_pull_declaration(  # noqa: PLR0913 - the pull's whole declaration
     thread_ids: list[int],
     burn: int = 0,
     burn_resonance_id: int | None = None,
-    payer_ids: Mapping[int, int] | None = None,
+    payer_ids: Mapping[Any, Any] | None = None,
 ) -> CastPullDeclaration:
     """Resolve raw pull IDs into a ``CastPullDeclaration`` scoped to *owner_sheet_id*.
 
@@ -99,7 +102,11 @@ def build_cast_pull_declaration(  # noqa: PLR0913 - the pull's whole declaration
             maps it to a ``ValidationError`` at the serializer boundary.
     """
     from world.magic.constants import MAX_RESONANCE_BURN  # noqa: PLC0415
-    from world.magic.exceptions import InvalidImbueAmount, ResonanceBurnInvalid  # noqa: PLC0415
+    from world.magic.exceptions import (  # noqa: PLC0415
+        InvalidImbueAmount,
+        PullValidationError,
+        ResonanceBurnInvalid,
+    )
     from world.magic.models import Resonance, Thread  # noqa: PLC0415
     from world.magic.services.pull_payers import resolve_pull_payers  # noqa: PLC0415
     from world.magic.types.pull import CastPullDeclaration as _CastPullDeclaration  # noqa: PLC0415
@@ -128,8 +135,7 @@ def build_cast_pull_declaration(  # noqa: PLR0913 - the pull's whole declaration
         payers=resolve_pull_payers(owner_sheet_id, thread_ids, payer_ids),
     )
     if burn > 0 and declaration.burned_resonance is None:
-        msg = "Name which of the pulled resonances to burn."
-        raise InvalidImbueAmount(msg)
+        raise PullValidationError(_BURN_NOT_A_PAYER)
     return declaration
 
 
@@ -195,11 +201,7 @@ def resolve_pull_from_kwargs(
             thread_ids=[int(t) for t in thread_ids],
             burn=burn,
             burn_resonance_id=int(burn_resonance_id) if burn_resonance_id is not None else None,
-            payer_ids=(
-                {int(thread): int(resonance) for thread, resonance in raw_payers.items()}
-                if raw_payers
-                else None
-            ),
+            payer_ids=raw_payers or None,
         )
     if burn > 0:
         from actions.errors import ActionDispatchError  # noqa: PLC0415
