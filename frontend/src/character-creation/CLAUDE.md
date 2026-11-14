@@ -61,6 +61,12 @@ character-creation/
     ├── AttributesStage.tsx  # Stage 7: Attributes & Skills (mounts SkillsSection)
     ├── GiftStage.tsx        # Stage 6 (Gift): vertical funnel — Tradition → Gift →
     │                        #   [magical training, #4659] → Techniques → Gift Resonance
+    │                        #   (several resonances weighted by points, #5123: opens with
+    │                        #   text on what resonance is, point steppers against the
+    │                        #   server's `resonance_creation_points`, a live halo in words;
+    │                        #   saves `draft_data.gift_resonance_weights`, a partial spread
+    │                        #   may be saved but the step stays open until every point is
+    │                        #   placed; `resonanceWeights.ts` holds the pure helpers)
     │                        #   → Anima Check, plus an
     │                        #   always-visible Motif textarea and the guided Glimpse
     │                        #   flow (#2426 Task 10; Glimpse redesign #2427)
@@ -110,6 +116,9 @@ character-creation/
     │                        #   entry in TraditionPicker (#3281, #3630)
     ├── gift/                # GiftStage funnel steps (#2426 Task 10)
     │   ├── TraditionStep.tsx    # Wraps TraditionPicker
+    │   ├── ResonanceWeights.tsx # The Resonance step body (#5123): a stepper per resonance,
+    │   │                        #   the points left, and the `AuraHalo` (`@/magic/components`)
+    │   │                        #   of the spread in words
     │   ├── GiftSelector.tsx     # Gifts as entries (GET .../gifts/?draft_id=); a Gift the
     │   │                        #   Tradition favors is tagged "Teaches well" (#4659)
     │   ├── MagicTrainingBlock.tsx # Body of GiftStage's own "What <Tradition> taught you"

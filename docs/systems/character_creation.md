@@ -190,7 +190,8 @@ delegate to them. A staff write raises `SheetWriteError` (with `user_message`) o
 hooks, require_roster_entry)` gives a sheet its magic in finalize's order from a `MagicPicks`
 of rows: gift and technique links, species gifts, languages, tradition and Academy
 obligation, tradition codex, aura and Glimpse, aura recompute and affinity nudge, anima
-pools and the player anima ritual, resonance codex. `finalize_magic_data` builds the picks
+pools and the player anima ritual, resonance codex (#5123: the aura row, then the settled
+shares and the seeded starting resonance, `_seed_resonances`). `finalize_magic_data` builds the picks
 from the draft and passes its draft-only steps as `MagicHooks`; staff edit mode calls
 `validate_staff_magic` (the stage's structural rules, without costs) first.
 `technique_pick_limit(sheet)` reads the starting-technique bonus from held distinctions.
@@ -364,8 +365,9 @@ allocation fails the stage and the draft cannot submit; the funnel step reopens 
 teach any Major Gift, ADR-4659-A).
 
 Finalize: `_create_skill_values` writes exactly the allocated Magic skills (CHARACTER_CREATION
-provenance), replacing the floor write. `magic_writer._glimpse` starts a new `CharacterAura` at the model
-defaults (Primal 80); a starting aura that follows the picked resonance waits on #4672. The skills stage
+provenance), replacing the floor write. `magic_writer._glimpse` makes the `CharacterAura` row only; the shares come from the picked
+resonances (#5123, "Starting aura" in magic.md): `_seed_resonances` settles the weights, applies the Glimpse
+nudge and seeds each pick's lifetime. The skills stage
 refuses points in a Magic skill or one of its specializations (`CharacterDraft._check_no_magic_points`,
 from `validate_path_skills`), so the training pool is the only creation source of Magic skills. Full
 account: [magic.md](magic.md), "Tradition training and Academy skill courses".

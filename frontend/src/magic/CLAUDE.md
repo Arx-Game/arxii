@@ -391,6 +391,30 @@ gets every resonance the character holds from `useCharacterResonances` (#5123).
 Teaching-offer inbox at `/threads/teaching`. Lists incoming `ThreadWeavingTeachingOffer`
 rows via `TeachingOfferCard`; each card opens `AcceptOfferDialog` to pay XP and accept.
 
+### `aura.ts`, `auraQueries.ts`, `components/AuraHalo.tsx` (#5123)
+
+The aura in words and as a halo. `aura.ts` is the one place an aura's figures become language
+(never a number to a player): `shareInWords(share, total)` (the backend `share_in_words`
+thresholds in `world/magic/services/drift.py`, so every surface reads alike), `auraSentence(shares)`
+("Mostly primal, a third abyssal."), `wordsToPart(words)` (the midpoint of a word's band, for
+sizing a segment where the API sends only a word), `affinitySlug` and `haloGradient(segments)` (the
+conic gradient over the `--aura-*` tokens in `character_sheets/sheet.css`). `auraQueries.ts` holds
+`useCharacterAuras(characterId | null, enabled)` (GET `/api/magic/character-auras/[?character=]`,
+the owner's own auras with `settled_percent`, `unsettled`, `unsettled_line`, `mire_share_words`) and
+`useAcceptAura()` (POST `.../{id}/accept/`; invalidates the aura keys and `['character-sheets', id]`).
+They live apart from `api.ts` and `queries.ts`, so a test that mocks `@/magic/queries` wholesale
+must also mock `@/magic/auraQueries`. `AuraHalo` replaces the old `AuraStrip`: props `shares`,
+optional `settled` (a dashed ring of who they are), `mire {words, part}` (a Sineater's Mire share
+drawn apart from their own Abyssal, with a key), `unsettled` and `unsettledLine` (restless halo,
+the Unsettled status and the ruled line in place of the split sentence), `size 'full' | 'mini'`,
+`sentence` and `children`; it imports `sheet.css` itself so the creation page gets the colours,
+and renders nothing without shares. The sheet payload carries no settled or unsettled data: the
+settled ring, the Mire key and the Unsettled status show to the owner only (`isMyCharacter`,
+read from `useCharacterAuras`); everyone else sees the halo and the words. Mounted by
+`SpellbookTab` (with a "Settle your aura" button while unsettled) and by the Gift stage's resonance
+step in character creation (`character-creation/components/gift/ResonanceWeights.tsx`, with
+`auraSentence` of the weighted picks).
+
 ### `components/threads/ResonanceBalanceCard.tsx`
 
 HoverCard showing a single resonance balance (current balance + lifetime earned + flavor text).
@@ -485,7 +509,7 @@ one); a 400 shows the server's detail; a result naming a different thread naviga
 ### `components/pillClass.ts`
 
 `pillClass(selected)`: the outlined / filled pill classes shared by
-`DriftConversionOfferDialog` and `ThreadResonanceDialog`.
+`SettleAuraDialog` and `ThreadResonanceDialog`.
 
 ### `components/threads/ThreadRetireDialog.tsx`
 
@@ -719,16 +743,17 @@ non-integer AP input (e.g. `2.5`) is treated as unset rather than sent fractiona
 success-outcome line after a train call resolves; the 400 `detail` message renders under
 the row that failed.
 
-### Drift conversion offers (#4733, slice 4 of #4672)
+### Settle your aura: conversion offers and accepting (#4733, #5123)
 
-A deed in a live scene opens a conversion offer; the player answers it with the drift
-correction rite. Mirrors the entry-flourish front end (gate, dialog, 5 s poll).
+A deed in the main affinity in a live scene opens a conversion offer; the player answers it with
+the drift correction rite (Atone). Accepting the changes to the aura needs no offer. Mirrors the
+entry-flourish front end (gate, dialog, 5 s poll).
 
 **Wire contract** (`/api/magic/drift-correction/`, generated types, re-exported in `types.ts`):
 
 - `getPendingDriftConversionOffers()` - GET `pending/` -> `PaginatedDriftConversionOfferList`.
-  Account-scoped (the row carries no character id). Each `DriftConversionOffer` is
-  `{ id, scene_id, caps[], rite_ready, rite_not_ready_message }` (`rite_ready` is false while
+  Account-scoped (`character_id` names the character the offer was made for). Each `DriftConversionOffer` is
+  `{ id, scene_id, character_id, caps[], rite_ready, rite_not_ready_message }` (`rite_ready` is false while
   the rite, its check type or a tier's share is missing; the message is the rite's own refusal, empty
   while ready); each cap is `{ target_resonance {id, name, affinity},
 cap_remaining, focus_bonus, sources[], qualifying_components[] }`. A source is
@@ -747,28 +772,39 @@ target_resonance_id, amount, component_ids }` -> `DriftCorrectionResult`
 polls every 5 s, no `throwOnError`), `useConvertDrift()` (invalidates the pending key and
 `characterResonanceList()`), `useDeclineDriftConversion()` (invalidates the pending key).
 
-**Components:** `DriftConversionOfferGate` (strip + auto-open once per offer id via
-`useAutoOpenOncePerOffer`; takes `sceneId` and shows the offer whose `scene_id` matches it,
-polling only once the scene is known; keeps the result line after an exhausted
-offer leaves the inbox; only an `aria-hidden` glow behind the strip pulses, so its words
-keep full contrast) and `DriftConversionOfferDialog` (Screen 5, one framed box: the small-caps
-title "Conversion offer · this scene"; per cap a system line "You hold <sources with a balance,
-joined with commas and 'and'> that does not fit you. Convert it to <target>." beside the cap
-remaining; a quiet row with the source picker (a plain chip when there is one source) and an
-amount bounded by the chosen source's `max_amount`, defaulting to it; single-select component
-pills `<name> · <mode>`, the chosen one filled `bg-primary text-primary-foreground`, the rest
-outlined; a rate line built from the source's `multiplier` ("Redemption: 12 Ruin becomes about
-6 Dawnlight", plus "; a focus adds N" only when `focus_bonus > 0`); the result and error lines;
-and one right-aligned row with Decline and "Perform the rite" (primary), Perform disabled until
-a component is chosen and the amount is valid; with several caps Decline sits in the last cap's
-row). While `rite_ready` is false each block shows `rite_not_ready_message` in place of the
-component pills and the button stays disabled. The yield for a typed amount is
-`max(1, floor(amount * multiplier))`, the server's own rounding.
+**Components:** `DriftConversionOfferGate` (strip headed "Settle your aura" + auto-open once per
+offer id via `useAutoOpenOncePerOffer`; takes `sceneId` and shows the offer whose `scene_id` matches
+it, polling only once the scene is known; keeps the result line after an exhausted offer leaves the
+inbox; only an `aria-hidden` glow behind the strip pulses, so its words keep full contrast; it reads
+the aura of the offer's own `character_id` through `useCharacterAuras` and only while an offer is
+open, so Accept never writes to another character's aura) and `SettleAuraDialog` (Screen 4, one
+framed box titled with the unsettled line, falling back to "Settle your aura", with up to two exits
+side by side, each with a small `AuraHalo` of the aura after it).
+
+- **Atone** shows only with an open offer (in a scene). Per cap, a system line "The <sources with a
+  balance, joined with commas and 'and'> you gained turns to <target>." beside the cap remaining; a
+  quiet row with the source picker (a plain chip when there is one source) and an amount bounded by
+  the chosen source's `max_amount`, defaulting to it; single-select component pills `<name> ·
+<mode>`, the chosen one filled `bg-primary text-primary-foreground`, the rest outlined; a rate line
+  built from the source's `multiplier` ("Redemption: 12 Ruin becomes about 6 Dawnlight", plus "; a
+  focus adds N" only when `focus_bonus > 0`); the result and error lines; and "Begin the rite"
+  (primary), disabled until a component is chosen and the amount is valid. While `rite_ready` is
+  false each block shows `rite_not_ready_message` in place of the component pills and the button
+  stays disabled. The yield for a typed amount is `max(1, floor(amount * multiplier))`, the
+  server's own rounding.
+- **Accept the changes to your Aura** shows whenever the character is unsettled, with or without an
+  offer; opened from the sheet outside a scene it is the only exit. A line "You become more
+  <affinity>." (the affinity grown most past who they are, computed client-side before the click;
+  the server's own line replaces it after) and an Accept button that calls `useAcceptAura`.
+- The footer "Not now" declines an open offer, else just closes; the character stays unsettled.
+  The word "accepted" is never shown to the player.
 
 **Mounts (once per surface):** `SceneDetailPage` (`isActive` guard, beside
 `EntryFlourishOfferGate`, `sceneId` from the scene) and `GamePage`'s `GameCenter` (when the
-session has a scene, `sceneId` from the session's scene). Tests that
-mock `@/magic/queries` wholesale (`SceneDetailPage.test.tsx`) must add the three drift hooks.
+session has a scene, `sceneId` from the session's scene); the sheet's `SpellbookTab` opens
+`SettleAuraDialog` itself with no offer. Tests that mock `@/magic/queries` wholesale
+(`SceneDetailPage.test.tsx`) must add the three drift hooks and mock `@/magic/auraQueries`
+(`GamePage.test.tsx` and `SceneDetailPage.test.tsx` do, so the gate never fetches).
 
 ## Data Flow
 

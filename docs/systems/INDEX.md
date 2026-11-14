@@ -69,7 +69,7 @@
   the student's Major Gift thread in the Academy), tuned by the `TraditionTeachingConfig`
   singleton. Fit adds a flat bonus to the pool only when the draft has some training, and eases
   Academy course checks; it never gates. The Gift stage validates `draft_data["magic_skills"]`
-  against the pool and finalize writes it. Aura-based fit and starting aura are #4672.
+  against the pool and finalize writes it. Aura-based fit is #4672; the starting aura comes from the weighted resonance picks (#5123).
   `SCHOOLING_MAX_RANK_BY_STATE`
   (`character_creation/constants.py`) sets which states open which stances: LIVING_MASTERS up to
   rank 2, TEACHERS_GONE up to rank 1, SELF_TAUGHT none. CG skill points never buy a Magic skill or
@@ -102,7 +102,7 @@
   `DriftConversionInvalidError`, `NotUnsettledError`. Actions `perform_drift_correction`,
   `decline_drift_correction` and `accept_aura_change` (`accept_aura_change` service, #5123); telnet `aura` / `aura atone` / `aura decline` / `aura accept`; REST `/api/magic/drift-correction/`
   (`pending/`, `convert/`, `decline/`); React `DriftConversionOfferGate` and
-  `DriftConversionOfferDialog` on the scene page and game page. One Required content row,
+  `SettleAuraDialog` on the scene page and game page, and `AuraHalo` on the sheet. One Required content row,
   `drift-correction-config`. Details: [magic.md](magic.md) "Drift correction".
 
 - **Thread retune (slice 6 of #4672, reshaped by #5123):** `services/thread_resonance.py` moves
