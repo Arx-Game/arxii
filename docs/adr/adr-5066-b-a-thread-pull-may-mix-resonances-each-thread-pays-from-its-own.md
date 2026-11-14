@@ -31,3 +31,5 @@ holds equally).
 > `src/world/magic/services/techniques.py` (`_add_thread_spends`),
 > `src/world/magic/services/drift.py` (`check_resonance_focus`) and
 > `src/world/combat/services/auto_pull.py`.
+
+> Partly superseded by ADR-5123-A: each thread pays from the resonance the player names for it (default: its leading resonance), stored on `CombatPullThread` / `ScenePullThread`, not always the thread's own. ADR-5123-B removes the drift focus roll's off-aura steps (`off_aura_pull_steps`).

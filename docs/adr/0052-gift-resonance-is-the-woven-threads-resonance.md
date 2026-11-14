@@ -11,3 +11,5 @@ dazzling-combinations goal. Combined with the character's path, this resonance a
 gift's techniques specialize — see the shared specialization engine (ADR-0055).
 
 > Status: accepted · Source: design discussion 2026-06-27 · Confidence: verify against code — changes `Gift.resonances` consumers in `world/magic/services`
+
+> Partly superseded by ADR-5123-A: a thread now holds several resonances; the gift's resonance is the thread's leading one (`Thread.resonance`), with the full set on its `ThreadResonance` rows and returned in order by `gift_resonances_for`.
