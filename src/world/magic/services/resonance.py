@@ -1032,6 +1032,7 @@ def _resolve_one_pull_effect(  # noqa: PLR0913 - mirrors resolve_pull_effects' i
         # CombatPullResolvedEffect.level_multiplier, a PositiveSmallIntegerField);
         # round() the transient Decimal multiplier to an int for the snapshot (#1718).
         level_multiplier=round(multiplier),
+        level_multiplier_exact=multiplier,
         scaled_value=0 if inactive else base_scaled,
         vital_target=row.vital_target,
         source_thread=thread,

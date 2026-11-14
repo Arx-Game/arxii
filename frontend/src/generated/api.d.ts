@@ -50001,6 +50001,7 @@ export interface components {
     ResolvedPullEffect: {
       kind: string;
       authored_value: number | null;
+      /** Format: double */
       level_multiplier: number;
       scaled_value: number;
       vital_target: string | null;

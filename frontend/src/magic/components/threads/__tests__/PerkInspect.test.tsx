@@ -96,6 +96,21 @@ describe('PerkInspect', () => {
     );
     expect(screen.getByTestId('perk-inspect-0')).toHaveTextContent('Not in a sanctum.');
   });
+  it('shows the multiplier unrounded and the rounding, so the working matches the amount', () => {
+    const level9 = { ...effect, authored_value: 6, level_multiplier: 0.9, scaled_value: 5 };
+    render(
+      <PerkInspect
+        thread={thread}
+        option={option(1, 'Fury', 9, [level9])}
+        open
+        onOpenChange={vi.fn()}
+      />
+    );
+    const panel = screen.getByTestId('perk-inspect-0');
+    expect(panel).toHaveTextContent('Amount+5');
+    expect(panel).toHaveTextContent('Worked out6 x 0.9 = 5.4, rounded to 5');
+  });
+
   it('names the capability a perk grants instead of a generic label', () => {
     const cowed = {
       ...effect,

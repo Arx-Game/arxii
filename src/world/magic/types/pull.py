@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.utils.functional import cached_property
@@ -106,6 +107,10 @@ class ResolvedPullEffect:
     # CAPABILITY_GRANT only: the frozen curved magnitude (#2730). None for
     # every other kind. Computed at resolve time via apply_capability_curve.
     capability_grant_value: int | None = None
+    # The thread-level multiplier before ``level_multiplier`` rounds it to the int a combat
+    # row stores (0.9 at level 9). The pull preview shows this, so "authored x multiplier"
+    # reads the same as the scaled value (#5123).
+    level_multiplier_exact: Decimal = Decimal(1)
 
 
 @dataclass(frozen=True)

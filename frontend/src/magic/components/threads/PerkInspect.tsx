@@ -15,7 +15,7 @@ import {
   DialogTitle,
   NO_DESCRIPTION,
 } from '@/components/ui/dialog';
-import { effectLabel, effectValue, levelReadLine, perkWords } from '../../burn';
+import { effectLabel, effectValue, levelReadLine, perkWords, perkWorking } from '../../burn';
 import type { PayerOption, Thread } from '../../types';
 
 interface PerkInspectProps {
@@ -47,12 +47,10 @@ export function PerkInspect({ thread, option, open, onOpenChange }: PerkInspectP
                 <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
                   <dt className="text-muted-foreground">Amount</dt>
                   <dd className="tabular-nums">{effectValue(effect) || 'none'}</dd>
-                  {effect.authored_value !== null && (
+                  {perkWorking(effect) !== null && (
                     <>
                       <dt className="text-muted-foreground">Worked out</dt>
-                      <dd className="tabular-nums">
-                        {effect.authored_value} x {effect.level_multiplier}
-                      </dd>
+                      <dd className="tabular-nums">{perkWorking(effect)}</dd>
                     </>
                   )}
                   <dt className="text-muted-foreground">From</dt>

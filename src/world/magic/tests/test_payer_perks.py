@@ -50,6 +50,21 @@ class PayerPerkTests(TestCase):
         self.assertEqual([e.scaled_value for e in effects], [6])
         self.assertEqual(effects[0].level_multiplier, 3)
 
+    def test_the_wire_multiplier_is_exact_so_the_working_matches_the_amount(self) -> None:
+        """At level 9 a 6 reads 6 x 0.9 = 5.4 and scales to 5; the wire says 0.9, not 1."""
+        from world.magic.serializers import ResolvedPullEffectSerializer
+
+        thread = self._thread(9)
+        self._perk(self.fury, tier=1, amount=6)
+
+        effects = resolve_pull_effects([thread], 1, in_combat=False)
+        wire = ResolvedPullEffectSerializer(effects[0]).data
+
+        self.assertEqual(effects[0].level_multiplier, 1)  # the int a combat row stores
+        self.assertEqual(float(wire["level_multiplier"]), 0.9)
+        self.assertEqual(wire["authored_value"], 6)
+        self.assertEqual(wire["scaled_value"], round(6 * float(wire["level_multiplier"])))
+
     def test_second_payer_gets_its_own_perks_one_step_lower(self) -> None:
         thread = self._thread(30)
         self._perk(self.fury, tier=1, amount=2)

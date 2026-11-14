@@ -88946,7 +88946,12 @@ components:
           type: integer
           nullable: true
         level_multiplier:
-          type: integer
+          type: number
+          format: double
+          maximum: 10000
+          minimum: -10000
+          exclusiveMaximum: true
+          exclusiveMinimum: true
         scaled_value:
           type: integer
         vital_target:

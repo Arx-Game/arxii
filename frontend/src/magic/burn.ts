@@ -202,6 +202,20 @@ export function effectValue(effect: PreviewedEffect): string {
 }
 
 /**
+ * How a numeric perk's amount was worked out: the authored value times the level
+ * multiplier. A product that is not whole is shown with its rounding ("6 x 0.9 = 5.4,
+ * rounded to 5"), so the working always reads the same as the amount beside it.
+ */
+export function perkWorking(effect: PreviewedEffect): string | null {
+  if (effect.authored_value === null) return null;
+  const times = `${effect.authored_value} x ${effect.level_multiplier}`;
+  // Multipliers move in tenths; fix the float product to one place before comparing.
+  const product = Number((effect.authored_value * effect.level_multiplier).toFixed(1));
+  if (Number.isInteger(product) || Math.round(product) !== effect.scaled_value) return times;
+  return `${times} = ${product}, rounded to ${effect.scaled_value}`;
+}
+
+/**
  * Where the thread level a perk was read at comes from. The leading resonance reads the
  * thread's full level; another resonance on the thread reads lower.
  */

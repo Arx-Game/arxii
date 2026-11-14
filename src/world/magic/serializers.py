@@ -1858,7 +1858,11 @@ class ResolvedPullEffectSerializer(serializers.Serializer):
 
     kind = serializers.CharField()
     authored_value = serializers.IntegerField(allow_null=True)
-    level_multiplier = serializers.IntegerField()
+    # The exact thread-level multiplier (0.9 at level 9), not the rounded int a combat row
+    # stores, so authored x multiplier reads the same as scaled_value (#5123).
+    level_multiplier = serializers.DecimalField(
+        source="level_multiplier_exact", max_digits=5, decimal_places=1, coerce_to_string=False
+    )
     scaled_value = serializers.IntegerField()
     vital_target = serializers.CharField(allow_null=True)
     source_thread_id = serializers.SerializerMethodField()
