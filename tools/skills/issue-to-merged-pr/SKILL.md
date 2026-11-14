@@ -314,6 +314,14 @@ filed with `file-followup.sh` when implementation starts, slice 1 included) and
 its PR closes that child, never the parent. Never slice a sequence where each
 part builds on the last; that is one PR.
 
+**Before posting the spec, and before any issue body you file, dispatch the
+`plain-prose-reviewer` agent (Haiku, `tools/agents/`) on the text** and fix every
+finding. It catches the phrasing that makes the owner read a sentence twice: an
+idea made the actor of a verb, and a trailing clause that points at a rule the
+text never states. Skip it in a Fable-family session, which does not have these
+habits, and in any subagent, because the owner does not read subagent output.
+Record ran or skipped in the PR Notes.
+
 Then hand off for **spec review** and exit:
 
 1. Run `tools/skills/issue-to-merged-pr/scripts/transition-issue-phase.sh <N> status:spec-draft status:spec-review`.

@@ -13,6 +13,14 @@ self-direction (e.g. "Checking whether the skill expects a reviewer dispatch
 step." — not "Does the skill expect a reviewer dispatch step?"). When in doubt, no
 `?` in user-facing text outside `AskUserQuestion`.
 
+**Heavy replies to the owner are reviewed before they are sent.** A reply that
+carries a question or a decision, or runs past a few sentences, goes to the
+`plain-prose-reviewer` agent (Haiku, `tools/agents/`) as a draft, and you fix
+its findings before sending. Short status lines skip it. A Fable-family session
+skips it, and so does any subagent, because the owner does not read subagent
+output. Issue bodies, specs and demos get the same review (see
+`issue-to-merged-pr` Step 2 and `demoing-a-feature`).
+
 ## Tool & Subagent Sequencing
 
 **Repo-mutating operations (`git`, `rm`, `Edit`, `Write`, and implementer

@@ -74,7 +74,10 @@ which are the signature of agent prose:
 - metaphorical field or label names where a plain name would do;
 - lyrical phrasing in a rules or UI label.
 Also flag any described situation that does not begin with "Example:" when it
-is a situation a reader is meant to picture. Quote the sentence you flag.
+is a situation a reader is meant to picture. Quote the sentence you flag. The fuller prose-voice check, including the
+noun-verb-preposition shape and the dangling trailing clause, belongs to
+`plain-prose-reviewer` (`tools/agents/plain-prose-reviewer.md`); flag only what
+you meet and leave the full pass to it.
 
 **5. Authoring surface.** Flag authored data shown only as a descriptive table
 when the owner would author it in the Django admin. The design should show an
