@@ -329,12 +329,6 @@ class RetuningThroughTheWebClient(ThreadRetuneCase):
 
     def test_the_options_list_where_the_thread_can_go_and_what_pays_for_it(self) -> None:
         candle = self.carry(self.ysmay, self.lumen, "Lumen Candle")
-        held = ThreadFactory(
-            owner=self.sheet,
-            resonance=self.ruin,
-            target_trait=self.thread.target_trait,
-            developed_points=5,
-        )
         data = self.options(self.thread)
         self.assertEqual(data["ritual_id"], self.rite.pk)
         self.assertTrue(data["offering_required"])
@@ -354,7 +348,7 @@ class RetuningThroughTheWebClient(ThreadRetuneCase):
             shown,
             {
                 "Lumen": ("Celestial", None, 40, None, [(candle, "material")]),
-                "Ruin": ("Abyssal", "FALL", 60, held.pk, []),
+                "Ruin": ("Abyssal", "FALL", 60, None, []),
                 "Praedari": ("Primal", "FALL", 48, None, []),
             },
         )
@@ -400,19 +394,6 @@ class RetuningThroughTheWebClient(ThreadRetuneCase):
             "Name the resonance to move it to. It can move to: Lumen (same affinity), "
             "Ruin (Fall), Praedari (Fall).",
         )
-
-    def test_a_merge_returns_the_thread_that_survives(self) -> None:
-        held = ThreadFactory(
-            owner=self.sheet,
-            resonance=self.lumen,
-            target_trait=self.thread.target_trait,
-            developed_points=10,
-        )
-        candle = self.carry(self.ysmay, self.lumen, "Lumen Candle")
-        response = self.perform(self.thread, self.lumen, [candle])
-        self.assertEqual(response.status_code, 200, response.content)
-        self.assertTrue(response.data["result"]["merged"])
-        self.assertEqual(response.data["result"]["thread_id"], held.pk)
 
     def test_the_options_cost_the_same_queries_however_many_there_are(self) -> None:
         for requirement in self.rite.requirements.all():

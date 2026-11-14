@@ -1965,6 +1965,10 @@ class ThreadAdmin(admin.ModelAdmin):
     readonly_fields = ["resonance", "created_at", "updated_at"]
     inlines = [ThreadResonanceInline, ThreadLevelUnlockInline]
 
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        # Threads are created by the weave and creation services, which write their rows.
+        return False
+
 
 @admin.register(ThreadLevelUnlock)
 class ThreadLevelUnlockAdmin(admin.ModelAdmin):
