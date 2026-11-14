@@ -1,7 +1,7 @@
 """Drift correction actions (#4733, slice 4 of #4672).
 
 ``PerformDriftCorrectionAction`` performs the rite under an open ``DriftConversionOffer``;
-``DeclineDriftCorrectionAction`` lets the character let the offer go. Telnet ``drift`` and the
+``DeclineDriftCorrectionAction`` lets the character let the offer go. Telnet ``aura`` and the
 REST ``/api/magic/drift-correction/`` endpoints converge here.
 
 World imports are lazy inside ``execute()``: the action registry is imported very early and

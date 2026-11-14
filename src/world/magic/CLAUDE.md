@@ -2114,7 +2114,7 @@ writes no corruption.
   `RitualCheckConfig` sidecar. Never match the rite, check or affinities by name.
   `rite_is_ready(config=None)` (rite, check type and a tier's share all present; one query,
   through `outcome_tiers_without_a_share()`, which the Required content probe reads too) is the
-  one readiness test; while it is false the rite, telnet `drift`/`drift convert` and the
+  one readiness test; while it is false the rite, telnet `aura`/`aura atone` and the
   pending serializer (`rite_ready`, `rite_not_ready_message`, from the view's
   `context["rite_ready"]`, once per request) say `RITE_NOT_READY_MESSAGE`, the exception's own
   `user_message`.
@@ -2122,7 +2122,7 @@ writes no corruption.
   `focus_bonus` adds to the check, not the output. `max_yield_per_earned_point` is the anti-farm
   estimator (per point). A cap grows by `amount x cap_percent // 100` per deed; only the deed
   that creates the cap row is floored at 1; `cap_percent` 0 opens no offer.
-- Surfaces: actions in `actions/definitions/drift_correction.py`, telnet `drift`
+- Surfaces: actions in `actions/definitions/drift_correction.py`, telnet `aura`
   (`commands/drift_correction.py`), REST `/api/magic/drift-correction/`, React gate on the scene
   and game pages (`frontend/src/magic/CLAUDE.md`). Required content row `drift-correction-config`.
   Details: `docs/systems/magic.md` "Drift correction".

@@ -4540,10 +4540,10 @@ modifier target + `touchstone_cast_bonus`. It adds to the check, not to the outp
 **Surfaces.** Actions `perform_drift_correction` and `decline_drift_correction`
 (`actions/definitions/drift_correction.py`); the rite's result line leads with the outcome tier
 ("Partial Success: 4 Ruin became 2 Dawnlight.", or "The rite fails; nothing is converted." when
-nothing converts), and the web dialog composes the same words from the result; telnet `drift`, `drift convert <from>=<into>
+nothing converts), and the web dialog composes the same words from the result; telnet `aura`, `aura atone <from>=<into>
 [<amount>] [with <item>]` (by default offers every carried item except those that count only
 as a facet or a keepsake, so a plain material is spent; `with <item>` names a faceted item or
-keepsake to spend instead), `drift decline`; REST `GET /api/magic/drift-correction/pending/` (+ `{id}/`), `POST .../convert/`,
+keepsake to spend instead), `aura decline`, `aura accept`; REST `GET /api/magic/drift-correction/pending/` (+ `{id}/`), `POST .../convert/`,
 `POST .../decline/`, all scoped to the caller's own characters. React:
 `DriftConversionOfferGate` polls the inbox and `DriftConversionOfferDialog` answers it; the gate
 is mounted on `SceneDetailPage` and `GamePage`, keyed by scene id so each shows the offer of the
@@ -4556,7 +4556,7 @@ the rite and check type are set and every tier has a share, the rite refuses ("n
 though offers still open; the `drift-correction-config` Required content probe reports it.
 While the rite, the check type or a tier's share is missing (`rite_is_ready()` false;
 the tiers come from `outcome_tiers_without_a_share()`, which the probe reads too), telnet
-`drift` and `drift convert` refuse with the same sentence (`RITE_NOT_READY_MESSAGE`, the
+`aura` and `aura atone` say the same sentence (`RITE_NOT_READY_MESSAGE`, the
 exception's `user_message`) instead of listing an offering, the rite refuses with it before
 checking the cap or the request, and the pending serializer carries `rite_ready: false` and
 `rite_not_ready_message`, which the dialog shows in place of the offering pills, with

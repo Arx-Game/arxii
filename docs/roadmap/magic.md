@@ -1173,7 +1173,7 @@ turn some of it into the resonance the deed grew, once per scene, with a rite.
 - Offering: a third `RitualComponentRequirement` mode (`matches_target_resonance`,
   `min_item_meaning`) accepting an item tied to the target resonance, carrying a motif facet of it,
   or meaning enough to the performer.
-- Surfaces: two actions, telnet `drift`, REST `/api/magic/drift-correction/`, and the React gate
+- Surfaces: two actions, telnet `aura` (`aura atone`, `aura decline`, `aura accept`), REST `/api/magic/drift-correction/`, and the React gate
   and dialog on the scene page and game page; admin pages for the tuning rows; Required content row
   `drift-correction-config`. Journey: `integration_tests/test_drift_correction_journeys.py`.
 

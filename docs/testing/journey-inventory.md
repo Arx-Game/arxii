@@ -682,6 +682,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `accuse` |  | `commands.social.accusations.CmdAccuse` | `src/integration_tests/test_minding_your_own_affairs_journeys.py` |
 | `afk` | /afk | `commands.presence.CmdAfk` | `src/integration_tests/test_faces_silences_and_the_floor_journeys.py` |
 | `appeal` |  | `commands.organizations.CmdAppeal` | `src/world/societies/tests/test_org_appeals.py` |
+| `aura` |  | `commands.drift_correction.CmdAura` | `src/commands/tests/test_drift_correction_command.py`, `src/commands/tests/test_manageroom_command.py`, `src/integration_tests/test_acting_aura_journeys.py`, `src/integration_tests/test_drift_correction_journeys.py` (+3) |
 | `ban` | bans | `evennia.commands.default.admin.CmdBan` | none |
 | `batchcode` | batchcodes | `evennia.commands.default.batchprocess.CmdBatchCode` | none |
 | `batchcommands` | batchcmd, batchcommand | `evennia.commands.default.batchprocess.CmdBatchCommands` | none |
@@ -719,7 +720,6 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `domain` |  | `commands.domains.CmdDomain` | `src/actions/tests/test_goals_actions.py`, `src/integration_tests/test_granting_and_staging_journeys.py`, `src/web/admin/tests/test_authoring_views.py`, `src/web/admin/tests/test_reviewed_delete.py` (+8) |
 | `doorman` | doormen | `commands.doorman.CmdDoorman` | none |
 | `drain` |  | `commands.consent.CmdDrain` | `src/actions/tests/test_base.py` |
-| `drift` |  | `commands.drift_correction.CmdDrift` | `frontend/src/scenes/pages/__tests__/SceneDetailPage.test.tsx`, `src/commands/tests/test_drift_correction_command.py`, `src/integration_tests/test_drift_correction_journeys.py` |
 | `drop` |  | `commands.evennia_overrides.movement.CmdDrop` | `src/actions/tests/test_action_events.py`, `src/actions/tests/test_base.py`, `src/actions/tests/test_target_menu_api.py`, `src/actions/tests/test_typed_get_drop.py` (+4) |
 | `duel` |  | `commands.duels.CmdDuel` | `src/commands/tests/test_duel_command.py`, `src/commands/tests/test_duel_command_journey.py`, `src/world/battles/tests/test_command.py`, `src/world/combat/tests/test_duel_models.py` (+1) |
 | `durance` |  | `commands.durance.CmdDurance` | `src/commands/tests/test_durance_command.py`, `src/integration_tests/pipeline/test_durance_telnet_e2e.py`, `src/world/progression/tests/test_select_path.py` |

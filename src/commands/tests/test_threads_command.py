@@ -127,7 +127,8 @@ class CmdThreadsListRelationshipLabelQueryCountTests(TestCase):
         from world.magic.models import Thread
 
         Thread.objects.filter(owner=self.sheet).exclude(pk=self.threads[0].pk).delete()
-        with self.assertNumQueries(2):
+        # The threads, their relationship labels, and the threads' resonance rows (#5123).
+        with self.assertNumQueries(3):
             msg_one = self._run_list()
         self.assertIn(self.rel_type.name, msg_one)
 
@@ -144,7 +145,7 @@ class CmdThreadsListRelationshipLabelQueryCountTests(TestCase):
                 level=2,
             )
             RelationshipLabelFactory(relationship=thread.target_relationship, type=self.rel_type)
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(3):
             msg_many = self._run_list()
         self.assertEqual(msg_many.count(self.rel_type.name), 3)
 

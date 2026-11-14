@@ -59,7 +59,7 @@ from world.magic.models import (
     Resonance,
     ResonanceGrant,
 )
-from world.magic.services.drift import get_drift_correction_config
+from world.magic.services.drift import get_drift_config, get_drift_correction_config
 from world.magic.services.resonance import grant_resonance
 from world.scenes.factories import SceneFactory, SceneOwnerParticipationFactory
 from world.scenes.interaction_services import get_active_scene, invalidate_active_scene_cache
@@ -107,7 +107,8 @@ class DriftJourneyCase(JourneyCase):
     """The Lantern, a live scene, the seeded affinities and the authored rite.
 
     ``self.ysmay`` is Celestial: 500 lifetime Dawnlight (balance 0, so a deed's gain is
-    all there is to read back), 30 Ruin (Abyssal) drift, an aura of 80/10/10.
+    all there is to read back), 30 Ruin (Abyssal) of unsettled excess (an aura of 100/0/0,
+    no tolerance).
     """
 
     def setUp(self) -> None:
@@ -139,10 +140,15 @@ class DriftJourneyCase(JourneyCase):
         self.hold(self.ysmay, self.ruin, 30)
         set_aura_split(
             CharacterAuraFactory(character=self.ysmay.sheet_data),
-            celestial="80",
-            primal="10",
-            abyssal="10",
+            celestial="100",
+            primal="0",
+            abyssal="0",
         )
+        # Nothing of Ruin is who she is and no tolerance is allowed it, so all 30 of it is
+        # unsettled excess, which is what the rite may convert.
+        tolerance = get_drift_config()
+        tolerance.unsettled_tolerance_percent = 0
+        tolerance.save()
         self.dawn_flourish = DramaticMomentTypeFactory(
             label="Dawn Flourish", resonance=self.dawnlight, per_scene_cap=3, resonance_amount=20
         )
@@ -668,9 +674,9 @@ class AFallingCharacterCorrectsTheOtherWay(DriftJourneyCase):
         self.hold(bram, self.dawnlight, 30)
         set_aura_split(
             CharacterAuraFactory(character=bram.sheet_data),
-            celestial="10",
-            primal="10",
-            abyssal="80",
+            celestial="0",
+            primal="0",
+            abyssal="100",
         )
         ruin_flourish = DramaticMomentTypeFactory(
             label="Ruin Flourish", resonance=self.ruin, per_scene_cap=3, resonance_amount=20

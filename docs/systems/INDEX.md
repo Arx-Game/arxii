@@ -100,7 +100,7 @@
   `preview_conversion`, `offer_options`, `max_yield_per_earned_point`. Exceptions:
   `DriftCorrectionError` with `DriftCorrectionNotConfiguredError`, `DriftOfferNotFoundError`,
   `DriftConversionInvalidError`, `NotUnsettledError`. Actions `perform_drift_correction`,
-  `decline_drift_correction` and `accept_aura_change` (`accept_aura_change` service, #5123); telnet `drift`; REST `/api/magic/drift-correction/`
+  `decline_drift_correction` and `accept_aura_change` (`accept_aura_change` service, #5123); telnet `aura` / `aura atone` / `aura decline` / `aura accept`; REST `/api/magic/drift-correction/`
   (`pending/`, `convert/`, `decline/`); React `DriftConversionOfferGate` and
   `DriftConversionOfferDialog` on the scene page and game page. One Required content row,
   `drift-correction-config`. Details: [magic.md](magic.md) "Drift correction".
