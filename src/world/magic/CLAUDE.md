@@ -2060,8 +2060,9 @@ becomes available when the target affinity crosses
   `lifetime_earned` (scaled by multiplier) from source to target resonance.
   `lifetime_earned` is transferred, not decremented — the total is preserved
   modulo the multiplier, so `recompute_aura` shifts correctly. Full
-  conversion re-anchors `Thread.resonance` FK (merging into existing
-  target-resonance threads if needed, retiring duplicates). Partial
+  conversion converts each live thread's `ThreadResonance` rows in the affinity (scaling
+  amounts and points, merging rows that land on one resonance, then
+  `refresh_leading_resonance`). Partial
   conversion (Atonement) does NOT touch threads.
 - `services/fall_redemption.py` — `grant_compromise_resonance()` (thin
   wrapper over `grant_resonance`), `perform_fall()` (the full ceremony,
@@ -2126,18 +2127,20 @@ writes no corruption.
   and game pages (`frontend/src/magic/CLAUDE.md`). Required content row `drift-correction-config`.
   Details: `docs/systems/magic.md` "Drift correction".
 
-**Thread retune (#4735, slice 6 of #4672).** `services/thread_resonance.py` moves ONE thread
-through the SERVICE ritual at `THREAD_RESONANCE_SERVICE_PATH` (found by path, never by name):
-same affinity one to one, across affinities at the `conversion_pair` rate floored at 1, merging
-into a live same-anchor thread via `conversion._reanchor_thread` (shared with the full Fall).
-`PerformRitualAction._precheck` calls `check_thread_resonance_change` before components and anima
-are spent; `kwargs["target_resonance"]` is the components' `resonance_context`. A refusal after the
-spend (`ThreadAnchorTakenError`, or any caught exception a SERVICE raises) rolls the perform back,
+**Thread retune (#4735, slice 6 of #4672; reshaped by #5123).** `services/thread_resonance.py` moves
+part of ONE `ThreadResonance` row of a thread to another resonance's row through the SERVICE
+ritual at `THREAD_RESONANCE_SERVICE_PATH` (found by path, never by name): same affinity one to one,
+across affinities at the `conversion_pair` rate floored at 1, "from" defaulting to the leading
+resonance and the amount to all of that row. Level and `developed_points` are unchanged;
+`refresh_leading_resonance` runs after. `PerformRitualAction._precheck` calls
+`check_thread_resonance_change` before components and anima are spent;
+`kwargs["target_resonance"]` is the components' `resonance_context`. A refusal after the
+spend (any caught exception a SERVICE raises) rolls the perform back,
 and `_spend_restored_on_raise` puts the cached items, their game objects, the holder's contents
-and the anima row back to match, for every ritual; `perform_fall` does the same for the resonance
-and thread rows a half-done Fall moved (`conversion_restored_on_raise`). Both sit OUTSIDE the
+and the anima row back to match, for every ritual; `perform_fall` does the same for the resonance,
+thread and thread-row state a half-done Fall moved (`conversion_restored_on_raise`). Both sit OUTSIDE the
 `transaction.atomic()` they guard, so they run after the rollback. Telnet
-`resonance=<id>`, REST `GET /api/magic/threads/{id}/resonance-options/`. A SANCTUM thread or a
+`from=<id> amount=<n> resonance=<id>`, REST `GET /api/magic/threads/{id}/resonance-options/`. A SANCTUM thread or a
 TECHNIQUE thread whose signature bonus requires a resonance cannot move
 (`thread_resonance_refusal`); a GIFT thread stays within a non-empty `gift.cached_resonances`.
 Required content rows `thread-resonance-ritual`, `thread-resonance-ritual-single`,

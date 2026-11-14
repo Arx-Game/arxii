@@ -105,18 +105,20 @@
   `DriftConversionOfferDialog` on the scene page and game page. One Required content row,
   `drift-correction-config`. Details: [magic.md](magic.md) "Drift correction".
 
-- **Thread retune (slice 6 of #4672):** `services/thread_resonance.py` moves one thread to
-  another resonance through the SERVICE ritual at `THREAD_RESONANCE_SERVICE_PATH`
-  (`thread_resonance_ritual`, `thread_resonance_options` -> `ThreadResonanceOption`,
-  `check_thread_resonance_change`, `change_thread_resonance` -> `ThreadResonanceChangeResult`,
-  `ThreadResonanceChangeError`); within the affinity one to one, across it at the authored pair
-  rate floored at 1, merging into a live same-anchor thread via `conversion._reanchor_thread`.
+- **Thread retune (slice 6 of #4672, reshaped by #5123):** `services/thread_resonance.py` moves
+  part of one `ThreadResonance` row of a thread to another resonance's row through the SERVICE
+  ritual at `THREAD_RESONANCE_SERVICE_PATH` (`thread_resonance_ritual`, `thread_resonance_options`
+  -> `ThreadResonanceOption`, `check_thread_resonance_change` -> `ThreadRetuneMove`,
+  `change_thread_resonance` -> `ThreadResonanceChangeResult`, `ThreadResonanceChangeError`); within
+  the source resonance's affinity one to one, across it at the authored pair rate floored at 1.
+  Level and `developed_points` do not change; `refresh_leading_resonance` follows. The Fall and
+  Redemption convert and merge a thread's rows (`conversion._reanchor_threads`).
   `PerformRitualAction._precheck` refuses before anything is spent. Telnet `ritual <rite>
-  thread=<id> resonance=<id>`; REST `GET /api/magic/threads/{id}/resonance-options/`; the
-  Spellbook's `ThreadResonanceDialog`. Anchor rules: `thread_resonance_refusal` (sanctum,
-  signed technique), gift threads narrowed to the gift's resonances; `ThreadAnchorTakenError` on
-  a lost unique-index race. Required content rows `thread-resonance-ritual`,
-  `thread-resonance-ritual-single`, `thread-resonance-ritual-web-payable`. Details: [magic.md](magic.md) "Thread retune".
+  thread=<id> [from=<id>] [amount=<n>] resonance=<id>`; REST `GET
+  /api/magic/threads/{id}/resonance-options/`. Anchor rules: `thread_resonance_refusal` (sanctum,
+  signed technique), gift threads narrowed to the gift's resonances. Required content rows
+  `thread-resonance-ritual`, `thread-resonance-ritual-single`, `thread-resonance-ritual-web-payable`.
+  Details: [magic.md](magic.md) "Thread retune".
 
 - **Facet vocabulary guards (#4197, ADR-4197):** `Facet` is a flat vocabulary typed by many
   hands. `world/magic/services/facets.py` holds the one spelling rule (`facet_key`),

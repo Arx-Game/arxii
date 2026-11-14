@@ -1112,12 +1112,15 @@ the skill how good they are at it.
 - Admin: the skill picker is on the Technique style form; the Path and Gift forms carry only the
   style.
 
-## Changing a thread's resonance (#4735, slice 6 of #4672, BUILT 2026-10-27)
+## Changing a thread's resonance (#4735, slice 6 of #4672, BUILT 2026-10-27; reshaped by #5123)
 
-A player can move one of their threads to another resonance through a rite: a retune within the
-thread's affinity keeps every point, a Fall or Redemption across affinities converts them at the
-authored pair rate (a Redemption never empties a thread), and a live thread already on the same
-anchor in the new resonance takes the points while the moved one retires.
+A player can move part of one of a thread's resonances to another through a rite (#5123, ruling
+31: a thread at its cap cannot change its mix by imbuing). A retune within the source resonance's
+affinity moves the points one for one, a Fall or Redemption across affinities converts them at the
+authored pair rate (a Redemption never loses the amount entirely). The thread's level and
+developed points do not change; its resonance rows move, and the leading resonance follows. With
+one thread per anchor there is no merging of two threads: the Fall and Redemption merge rows on one
+thread instead.
 
 **Built (backend, telnet, web API, Spellbook dialog):** `services/thread_resonance.py` (options, a pre-spend check,
 the change), the shared `conversion._reanchor_thread` merge (and `_find_existing_target_thread`
