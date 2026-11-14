@@ -15,6 +15,13 @@ one resonance to another) or an accept. After every step:
 - an accept leaves her with ``steps_past == 0`` and no Mire, whoever she was (a Sineater past
   the Mire allowance included), and refuses when she was not unsettled.
 
+The atone rite itself (``perform_drift_correction_rite``, the service a deed's offer and the
+web dialog and ``aura atone`` all reach) is fuzzed on a Sineater: whatever she converts, the
+Mire excess goes first (her Mire shrinks by the amount up to the excess, her own lifetime is
+untouched while the Mire excess covers it), the Mire never exceeds the lifetime left, and
+total lifetime is conserved. The random atone in the history above is the conversion
+primitive alone, with a random Mire amount, for the clamp.
+
 The thread. A thread's ``ThreadResonance`` amounts are cumulative per resonance (the total
 ever imbued), NOT the points still in the bucket: ``developed_points`` is what is left after
 levelling spent from it, so the rows' sum and ``developed_points`` diverge as soon as the
@@ -40,20 +47,29 @@ inside the example, the shared catalog (resonances, affinity pairs) once in ``se
 from __future__ import annotations
 
 from decimal import Decimal
+from math import ceil
 
-from hypothesis import given, strategies as st
+from hypothesis import example, given, strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
 
 from world.action_points.models import ActionPointConfig, ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckTypeFactory
+from world.checks.test_helpers import force_check_outcome
+from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.magic.constants import GainSource
-from world.magic.exceptions import NotUnsettledError
+from world.magic.exceptions import DriftConversionInvalidError, NotUnsettledError
 from world.magic.factories import (
     CharacterAuraFactory,
+    DriftConversionCapFactory,
+    DriftConversionOfferFactory,
+    DriftCorrectionRiteFactory,
     ResonanceFactory,
+    ResonanceTierFactory,
     ThreadFactory,
     ensure_canonical_affinities,
     ensure_conversion_pairs,
+    set_aura_split,
 )
 from world.magic.models import (
     Affinity,
@@ -61,18 +77,29 @@ from world.magic.models import (
     CharacterAura,
     CharacterAuraShare,
     CharacterResonance,
+    DriftCorrectionOutcomeShare,
     ResonanceConversion,
+    Thread,
     ThreadResonance,
 )
 from world.magic.services.aura import recompute_aura, set_settled_shares
 from world.magic.services.conversion import convert_resonance, convert_resonance_amount
-from world.magic.services.drift import accept_aura_change, drift_for
+from world.magic.services.drift import (
+    accept_aura_change,
+    drift_for,
+    get_drift_config,
+    get_drift_correction_config,
+)
+from world.magic.services.drift_correction import perform_drift_correction_rite
 from world.magic.services.resonance import grant_resonance, spend_resonance_for_imbuing
 from world.magic.services.thread_resonance import (
     ThreadResonanceChangeError,
     change_thread_resonance,
 )
 from world.magic.types import AffinityShare
+from world.scenes.factories import SceneFactory
+from world.traits.constants import CANONICAL_OUTCOME_LEVELS
+from world.traits.services import ensure_canonical_check_outcome
 
 # --- the aura ----------------------------------------------------------------------------
 
@@ -100,8 +127,8 @@ steps = st.tuples(
     st.sampled_from([Decimal("0.5"), Decimal(1), Decimal("1.5")]),
 )
 
-# A bonded Sineater far past the Mire allowance (400 of 1100 is 36 percent against 30), who
-# accepts: she must come out with nothing past anything.
+# A Sineater's Mire (the Soul Tether bond is not modelled) far past the allowance (400 of
+# 1100 is 36 percent against 30), who accepts: she must come out with nothing past anything.
 SINEATER = ((10, 0, 0), [(700, 0), (0, 0), (0, 0), (0, 0), (400, 100), (0, 0)])
 
 
@@ -223,6 +250,138 @@ class UnsettledAuraInvariants(HypothesisTestCase):
         self.assertEqual(drift_for(sheet).steps_past, 0)
 
 
+# --- the atone rite on a Sineater ---------------------------------------------------------
+
+
+class AtoningTakesTheMireFirst(HypothesisTestCase):
+    """A Sineater is settled Celestial with Dawnlight lifetime D and Ruin (Abyssal) lifetime R,
+    of which M is Mire. She atones Ruin into Dawnlight through the real rite, the check forced
+    to a full-share Success.
+
+    The rule (#5123): the Mire's excess converts first. With the shipped allowance, the Mire
+    excess is the Mire's share of all lifetime past the allowance, in points rounded up. The
+    amount she converts comes off her Mire up to that excess, and only then off her own
+    lifetime; so her Mire is M less the converted amount (up to the excess, never below zero),
+    capped by the lifetime she has left. What the rite refuses (more than is past who she is)
+    changes nothing.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        Affinity.objects.clear_cache()
+        AffinityInteraction.objects.clear_cache()
+        cls.celestial, _primal, cls.abyssal = ensure_conversion_pairs()
+        AffinityInteraction.objects.clear_cache()
+        cls.dawnlight = ResonanceFactory(name="Dawnlight", affinity=cls.celestial)
+        cls.ruin = ResonanceFactory(name="Ruin", affinity=cls.abyssal)
+        cls.scene = SceneFactory(is_active=True)
+        config = get_drift_correction_config()
+        config.rite = DriftCorrectionRiteFactory()
+        config.check_type = CheckTypeFactory()
+        config.check_difficulty = 0
+        config.cap_percent = 50
+        config.save()
+        cls.outcomes = {
+            name: ensure_canonical_check_outcome(name) for name in CANONICAL_OUTCOME_LEVELS
+        }
+        for outcome in cls.outcomes.values():
+            DriftCorrectionOutcomeShare.objects.update_or_create(
+                outcome_tier=outcome, defaults={"converted_share": Decimal("1.00")}
+            )
+
+    def sineater(self, dawn: int, ruin: int, mire: int):
+        sheet = CharacterSheetFactory()
+        set_aura_split(
+            CharacterAuraFactory(character=sheet), celestial="100", primal="0", abyssal="0"
+        )
+        CharacterResonance.objects.create(
+            character_sheet=sheet, resonance=self.dawnlight, balance=dawn, lifetime_earned=dawn
+        )
+        CharacterResonance.objects.create(
+            character_sheet=sheet,
+            resonance=self.ruin,
+            balance=ruin,
+            lifetime_earned=ruin,
+            mire_lifetime=mire,
+        )
+        recompute_aura(sheet)
+        return sheet
+
+    def atone(self, dawn: int, ruin: int, mire: int, amount: int) -> bool:
+        """Atone ``amount``; True when the rite ran, False when it refused (nothing changed)."""
+        sheet = self.sineater(dawn, ruin, mire)
+        offer = DriftConversionOfferFactory(character_sheet=sheet, scene=self.scene)
+        DriftConversionCapFactory(offer=offer, target_resonance=self.dawnlight, cap=1000)
+        offering = ItemInstanceFactory(
+            template=ItemTemplateFactory(
+                tied_resonance=self.dawnlight, resonance_tier=ResonanceTierFactory()
+            )
+        )
+        total = dawn + ruin
+        allowance = get_drift_config().mire_allowance_percent
+        past = Decimal(mire) * ONE_HUNDRED / total - allowance
+        mire_excess = ceil(past * total / ONE_HUNDRED) if past > 0 else 0
+
+        try:
+            with force_check_outcome(self.outcomes["Success"]):
+                perform_drift_correction_rite(
+                    offer,
+                    source_resonance=self.ruin,
+                    target_resonance=self.dawnlight,
+                    amount=amount,
+                    components=[offering],
+                )
+        except DriftConversionInvalidError:
+            row = CharacterResonance.objects.get(character_sheet=sheet, resonance=self.ruin)
+            self.assertEqual((row.lifetime_earned, row.mire_lifetime), (ruin, mire))
+            return False
+
+        row = CharacterResonance.objects.get(character_sheet=sheet, resonance=self.ruin)
+        self.assertEqual(row.lifetime_earned, ruin - amount)
+        # The Mire's excess is taken first: up to the excess, the amount comes off the Mire.
+        taken = min(amount, mire_excess, mire)
+        self.assertEqual(row.mire_lifetime, min(mire - taken, ruin - amount))
+        if amount <= min(mire_excess, mire):
+            own_before = ruin - mire
+            self.assertEqual(row.lifetime_earned - row.mire_lifetime, own_before)
+        self.assertLessEqual(row.mire_lifetime, row.lifetime_earned)
+        self.assertEqual(
+            sum(
+                CharacterResonance.objects.filter(character_sheet=sheet).values_list(
+                    "lifetime_earned", flat=True
+                )
+            ),
+            total,
+        )
+        return True
+
+    @given(
+        dawn=st.integers(100, 700),
+        ruin=st.integers(1, 300),
+        mire_percent=st.integers(0, 100),
+        amount=st.integers(1, 300),
+    )
+    @example(dawn=600, ruin=300, mire_percent=100, amount=20)
+    @example(dawn=600, ruin=300, mire_percent=100, amount=30)
+    @example(dawn=500, ruin=300, mire_percent=50, amount=40)
+    def test_the_mire_excess_goes_first(self, dawn, ruin, mire_percent, amount) -> None:
+        self.atone(dawn, ruin, ruin * mire_percent // 100, min(amount, ruin))
+
+    def test_a_sineater_past_the_allowance_is_able_to_atone(self) -> None:
+        # 300 Mire of 900 is 33.3 percent against 30: 30 points of Mire excess, and no
+        # share of her own Ruin: the rite converts exactly the excess, all of it Mire.
+        self.assertTrue(self.atone(600, 300, 300, 30))
+        # Past the excess there is nothing of her own to convert: refused, nothing moves.
+        self.assertFalse(self.atone(600, 300, 300, 31))
+
+    def test_her_own_ruin_goes_after_the_mires_excess(self) -> None:
+        # 200 Mire of 300 Ruin, 300 Dawnlight: the Mire is 33.3 percent of 600, 20 points past
+        # the allowance, and her own 100 Ruin is past her line too. Converting 50 takes the
+        # Mire's 20 first and 30 of her own (the atone asserts the Mire falls to 180 and
+        # her own lifetime from 100 to 70).
+        self.assertTrue(self.atone(300, 300, 200, 50))
+
+
 # --- a thread's resonance rows -----------------------------------------------------------
 
 # Pair rates as ``ensure_conversion_pairs`` authors them (the production values).
@@ -295,7 +454,6 @@ class ThreadRowInvariants(HypothesisTestCase):
     @staticmethod
     def stored(thread) -> tuple[int, int, int]:
         """``(resonance pk, level, developed points)`` as the database holds them."""
-        from world.magic.models import Thread
 
         return Thread.objects.filter(pk=thread.pk).values_list(
             "resonance_id", "level", "developed_points"
