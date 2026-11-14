@@ -359,11 +359,17 @@ class FallConvertsRowsTests(RetuneRowsCase):
         self.assertEqual(thread.resonance, self.bene)
 
     def test_a_creation_pick_already_at_zero_follows_the_fall(self) -> None:
+        # Dawn maps to a different Primal resonance than the leader does, so its zero row
+        # is moved onto Sylvan rather than merged into the leader's Praedari row.
+        dawn = ResonanceFactory(name="Dawn", affinity=self.celestial)
+        ResonanceConversion.objects.create(
+            source_resonance=dawn, target_affinity=self.primal, target_resonance=self.sylvan
+        )
         thread = ThreadFactory(owner=self.sheet, resonance=self.bene, developed_points=10)
         size_row(thread, thread.resonance, 10)
-        ThreadResonanceFactory(thread=thread, resonance=self.lumen, amount=0)
+        ThreadResonanceFactory(thread=thread, resonance=dawn, amount=0)
 
         self.fall()
 
-        # Both Celestial rows convert to Praedari; the 0 one adds nothing, and is not "emptied".
-        self.assertEqual(amounts(thread), {"Praedari": 12})
+        # The 0 row is not "emptied" (it held nothing): it follows to its own target.
+        self.assertEqual(amounts(thread), {"Praedari": 12, "Sylvan": 0})
