@@ -73,7 +73,7 @@ from commands.door import CmdBreak, CmdLock, CmdPick, CmdUnlock
 from commands.doorman import CmdDoorman  # #2989
 from commands.dramatic_moments import CmdMoment
 from commands.dreams import CmdSleep  # #2290
-from commands.drift_correction import CmdDrift  # #4733
+from commands.drift_correction import CmdAura  # #4733, #5123
 from commands.duels import CmdDuel
 from commands.durance import CmdDurance
 from commands.encounter import CmdEncounter
@@ -344,7 +344,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdEnter,
             CmdFlourish,
             # #4733 - drift correction rite: show, convert, decline.
-            CmdDrift,
+            CmdAura,
             CmdThreads,
             CmdEndorse,
             CmdPoses,

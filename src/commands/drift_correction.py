@@ -1,8 +1,10 @@
-"""Telnet command for the drift correction rite (#4733, slice 4 of #4672).
+"""Telnet command for the aura: being unsettled, atoning and accepting (#4733, #5123).
 
-``drift`` shows the open conversion offer, ``drift convert <from>=<into> [<amount>]
-[with <item>]`` performs the rite and ``drift decline`` lets the offer go. Thin: every rule
-lives in the actions and ``world.magic.services.drift_correction``.
+``aura`` shows the aura in words, whether the character is unsettled, and the open chance to
+atone; ``aura atone <from>=<into> [<amount>] [with <item>]`` performs the rite (it was
+``drift convert``), ``aura decline`` lets the chance go and ``aura accept`` accepts the
+changes to the aura, the other way out of being unsettled. Thin: every rule lives in the
+actions and ``world.magic.services.drift_correction`` / ``world.magic.services.drift``.
 
 An item that counts only by the facet or keepsake route is offered only when the player
 names it with ``with``: the rite spends the first item that counts, and a worn faceted
@@ -16,6 +18,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from actions.definitions.accept_aura import AcceptAuraChangeAction
 from actions.definitions.drift_correction import (
     DeclineDriftCorrectionAction,
     PerformDriftCorrectionAction,
@@ -32,12 +35,13 @@ if TYPE_CHECKING:
     from world.magic.types.drift import QualifyingComponent
 
 _USAGE = (
-    "Usage: drift | drift convert <from resonance>=<into resonance> [<amount>] "
-    "[with <item>] | drift decline"
+    "Usage: aura | aura atone <from resonance>=<into resonance> [<amount>] "
+    "[with <item>] | aura decline | aura accept"
 )
-_NO_OFFER = "You have no open chance to correct drift."
+_NO_OFFER = "You have no open chance to atone."
 _DECLINE = "decline"
-_CONVERT = "convert"
+_ATONE = "atone"
+_ACCEPT = "accept"
 # `` with <item>`` after the target; a bare trailing ``with`` is caught too, to refuse it.
 _WITH = re.compile(r"\s+with(?:\s+|$)", re.IGNORECASE)
 
@@ -167,45 +171,96 @@ def _split_amount(text: str) -> tuple[str, int | None]:
     return text.strip(), None
 
 
-class CmdDrift(ArxCommand):
-    """Correct drift: convert resonance held off your aura toward one you are growing.
+class CmdAura(ArxCommand):
+    """See your aura, atone for being unsettled, or accept the changes to it.
 
     Usage:
-        drift
-        drift convert <from resonance>=<into resonance> [<amount>] [with <item>]
-        drift decline
+        aura
+        aura atone <from resonance>=<into resonance> [<amount>] [with <item>]
+        aura decline
+        aura accept
 
-    Bare `drift` shows your open chance: what you may convert, at what rate, and the
-    items you carry that count as the offering. `convert` performs the rite; with no
-    amount it converts the most you may. It spends a plain material you carry; to spend
-    a faceted item or a keepsake instead, name it with `with <item>`. `decline` lets the
-    chance pass. While staff have not set the rite up, `drift` and `drift convert` say so.
+    Bare `aura` shows who you are in words, whether you are unsettled, and your open
+    chance to atone: what you may convert, at what rate, and the items you carry that count
+    as the offering. `atone` performs the rite; with no amount it converts the most you may.
+    It spends a plain material you carry; to spend a faceted item or a keepsake instead, name
+    it with `with <item>`. `decline` lets the chance pass. `accept` accepts the changes to
+    your aura: who you are becomes where you have got to. While staff have not set the rite
+    up, `aura` and `aura atone` say so.
     """
 
-    key = "drift"
+    key = "aura"
     locks = "cmd:all()"
     action = PerformDriftCorrectionAction()
     decline_action = DeclineDriftCorrectionAction()
+    accept_action = AcceptAuraChangeAction()
 
     def _execute(self) -> None:
         args = (self.args or "").strip()
         word, _, rest = args.partition(" ")
+        word = word.lower()
         sheet = _own_sheet(self.caller)
         if not args:
-            offer = _open_offer(sheet)
-            _require_rite_ready()
-            self.msg(self._describe_offer(offer, sheet))
-        elif word.lower() == _DECLINE and not rest.strip():
+            self.msg(self._describe_aura(sheet))
+        elif word == _DECLINE and not rest.strip():
             result = self.decline_action.run(actor=self.caller, offer=_open_offer(sheet))
             self.send_result(result.message or "", failed=not result.success)
-        elif word.lower() == _CONVERT:
+        elif word == _ACCEPT and not rest.strip():
+            result = self.accept_action.run(actor=self.caller)
+            self.send_result(result.message or "", failed=not result.success)
+        elif word == _ATONE:
             result = self.action.run(actor=self.caller, **self.resolve_action_args())
             self.send_result(result.message or "", failed=not result.success)
         else:
             raise CommandError(_USAGE)
 
+    def _describe_aura(self, sheet: CharacterSheet) -> str:
+        """The aura in words, the unsettled line, and the open chance to atone (or why not)."""
+        from world.magic.services.drift import (  # noqa: PLC0415
+            drift_for,
+            share_in_words,
+            unsettled_line,
+        )
+
+        lines = []
+        aura = sheet.aura_or_none
+        shares = sorted(
+            (share for share in (aura.cached_shares if aura else []) if share.percent > 0),
+            key=lambda share: (-share.percent, share.affinity_id),
+        )
+        if shares:
+            held = ", ".join(
+                f"{share.affinity.name} ({share_in_words(share.percent)})" for share in shares
+            )
+            lines.append(f"Your aura: {held}.")
+        else:
+            lines.append("Your aura has not taken shape yet.")
+        reading = drift_for(sheet)
+        unsettled = unsettled_line(reading)
+        if unsettled:
+            lines.append(unsettled)
+        if reading.mire_share_percent > 0:
+            lines.append(f"The Mire holds {share_in_words(reading.mire_share_percent)} of you.")
+        lines.append(self._offer_text(sheet))
+        return "\n".join(lines)
+
+    def _offer_text(self, sheet: CharacterSheet) -> str:
+        """The open chance to atone, or the plain reason there is none."""
+        from world.magic.services.drift_correction import (  # noqa: PLC0415
+            RITE_NOT_READY_MESSAGE,
+            rite_is_ready,
+        )
+
+        try:
+            offer = _open_offer(sheet)
+        except CommandError as exc:
+            return exc.msg
+        if not rite_is_ready():
+            return RITE_NOT_READY_MESSAGE
+        return self._describe_offer(offer, sheet)
+
     def resolve_action_args(self) -> dict:
-        """Parse ``convert <from>=<into> [<amount>] [with <item>]`` into the action's kwargs."""
+        """Parse ``atone <from>=<into> [<amount>] [with <item>]`` into the action's kwargs."""
         from world.magic.services.drift_correction import preview_conversion  # noqa: PLC0415
 
         _, _, rest = (self.args or "").strip().partition(" ")
@@ -250,9 +305,7 @@ class CmdDrift(ArxCommand):
         from world.magic.constants import ComponentMode  # noqa: PLC0415
         from world.magic.services.drift_correction import offer_options  # noqa: PLC0415
 
-        lines = [
-            "You may correct drift. Use |wdrift convert <from>=<into> [<amount>] [with <item>]|n."
-        ]
+        lines = ["You may atone. Use |waura atone <from>=<into> [<amount>] [with <item>]|n."]
         for option in offer_options(offer, _carried(self.caller, sheet)):
             preview = option.preview
             lines.append(f"Toward {option.target_resonance.name}: up to {preview.cap_remaining}.")

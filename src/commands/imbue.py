@@ -1,6 +1,9 @@
 """Telnet ``imbue`` command — finisher for the Rite of Imbuing ceremony.
 
-Grammar: ``imbue thread=<name or id> amount=<n>``
+Grammar: ``imbue thread=<name or id> amount=<n> [resonance=<name>]``
+
+``resonance=`` names the resonance that pays; left out, the thread's leading resonance
+pays (#5123). It must be one the character holds.
 
 Requires a PendingRitualEffect for 'Rite of Imbuing' (ImbueAction's
 prerequisite enforces this). Resolves the thread by name (iexact) or pk.
@@ -16,6 +19,8 @@ from commands.exceptions import CommandError
 
 _THREAD_KWARG = "thread"
 _AMOUNT_KWARG = "amount"
+_RESONANCE_KWARG = "resonance"
+_KEYS = (_THREAD_KWARG, _AMOUNT_KWARG, _RESONANCE_KWARG)
 
 
 class CmdImbue(ArxCommand):
@@ -24,10 +29,10 @@ class CmdImbue(ArxCommand):
     Must have performed ``ritual Rite of Imbuing`` first.
 
     Syntax:
-        ``imbue thread=<name or id> amount=<n>``
+        ``imbue thread=<name or id> amount=<n> [resonance=<name>]``
 
     Example:
-        ``imbue thread=Ember of Endurance amount=5``
+        ``imbue thread=Ember of Endurance amount=5 resonance=Domination``
     """
 
     key = "imbue"
@@ -60,37 +65,52 @@ class CmdImbue(ArxCommand):
             retired_at__isnull=True,
         )
 
-        return {"thread": thread, "amount": int(amount_str)}
+        kwargs: dict[str, Any] = {"thread": thread, "amount": int(amount_str)}
+        resonance_val = parsed.get(_RESONANCE_KWARG, "").strip()
+        if _RESONANCE_KWARG in parsed:
+            kwargs["resonance_id"] = self._held_resonance_id(sheet, resonance_val)
+        return kwargs
+
+    @staticmethod
+    def _held_resonance_id(sheet: Any, typed: str) -> int:
+        """The id of the resonance the character holds under ``typed`` (any case)."""
+        from world.magic.models import CharacterResonance  # noqa: PLC0415
+
+        if not typed:
+            msg = "Name the resonance that pays: resonance=<name>."
+            raise CommandError(msg)
+        row = CharacterResonance.objects.filter(
+            character_sheet=sheet, resonance__name__iexact=typed
+        ).first()
+        if row is None:
+            held = sorted(
+                CharacterResonance.objects.filter(character_sheet=sheet).values_list(
+                    "resonance__name", flat=True
+                )
+            )
+            suffix = f" Your resonances: {', '.join(held)}." if held else ""
+            msg = f"You hold no resonance called '{typed}'.{suffix}"
+            raise CommandError(msg)
+        return row.resonance_id
 
     @staticmethod
     def _parse_kwargs(args: str) -> dict[str, str]:
         """Parse ``key=value`` tokens left to right.
 
-        ``amount`` is a single whitespace-delimited token; once a ``thread=`` token
-        is seen, the remainder of the line (up to ``amount=``) is its value, so thread
-        names may contain spaces.
+        A value runs on, across spaces, until the next ``thread=``, ``amount=`` or
+        ``resonance=`` token, so a thread or a resonance may have a name of several words.
         """
         out: dict[str, str] = {}
-        tokens = args.split()
-        index = 0
-        while index < len(tokens):
-            token = tokens[index]
-            if "=" not in token:
-                index += 1
-                continue
-            key, _, value = token.partition("=")
-            if key == _THREAD_KWARG:
-                # Greedily consume remaining tokens until we hit ``amount=``
-                remaining: list[str] = [value]
-                index += 1
-                while index < len(tokens):
-                    next_token = tokens[index]
-                    if next_token.startswith(f"{_AMOUNT_KWARG}="):
-                        break
-                    remaining.append(next_token)
-                    index += 1
-                out[_THREAD_KWARG] = " ".join(remaining).strip()
-                continue
-            out[key] = value
-            index += 1
+        key: str | None = None
+        words: list[str] = []
+        for token in args.split():
+            head, sep, value = token.partition("=")
+            if sep and head.lower() in _KEYS:
+                if key is not None:
+                    out[key] = " ".join(words).strip()
+                key, words = head.lower(), [value]
+            elif key is not None:
+                words.append(token)
+        if key is not None:
+            out[key] = " ".join(words).strip()
         return out
