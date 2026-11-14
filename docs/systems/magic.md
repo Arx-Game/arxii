@@ -4506,7 +4506,18 @@ front by `rite_is_ready`; a tier whose share is 0.00 converts nothing, spends th
 offering and leaves the cap intact. The other exit, `accept_aura_change` (`services/drift.py`;
 `AcceptAuraChangeAction`), is refused unless unsettled, moves the Sineater's Mire lifetime into
 their own, sets every `settled_percent` to the resulting share (so `steps_past` is 0) and writes
-no corruption. `_move_partial` (`conversion.py`, the Rite of Atonement's penance path, no longer
+no corruption. The web reaches it at `POST /api/magic/character-auras/<id>/accept/`
+(`CharacterAuraViewSet.accept`, which dispatches `AcceptAuraChangeAction` for an aura of a
+character the requester plays; a refusal is a 400 `{detail}`). The aura payload
+(`CharacterAuraSerializer`) carries `unsettled`, `unsettled_line` (the same sentence as above,
+blank when settled), `mire_share_words` (`share_in_words`, `services/drift.py`, the scale the
+sheet's `shareInWords` uses) and a `settled_percent` on each share. A thread's payload lists
+every `ThreadResonance` row as `resonances` (`resonance_id`, `resonance_name`, `amount`,
+`leads`), leading first, beside the leading `resonance`. The pull preview's `per_thread` keeps
+each payer's effects apart. A Rite of Imbuing POST's `kwargs.resonance_id` must be a
+resonance the character holds (`RitualPerformRequestSerializer`), and a character creation
+draft's `draft_data["gift_resonance_weights"]` is checked with the stage's own
+`resonance_weights_error`, allowing a spread still short of the creation points. `_move_partial` (`conversion.py`, the Rite of Atonement's penance path, no longer
 the drift rite's) works its proportional share out in integers as `amount x lifetime // balance`: exact when the
 ratio is whole (4 of a 30 balance with 30 lifetime moves 4), rounded down on a true fraction.
 
