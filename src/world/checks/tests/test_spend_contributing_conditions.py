@@ -276,6 +276,9 @@ _NOT_A_ROLL = {
     # gathers for its two callers, which spend: resolve_challenge
     # (spend_contributing_conditions) and _resolve_via_template (spend_or_defer_condition_uses)
     "world/mechanics/challenge_resolution.py::_gather_challenge_modifiers",
+    # grades the difficulty of someone else's roll: the defender is not rolling, so a
+    # once-only condition counts toward their resist and stays until they do (ADR-4720)
+    "world/checks/services.py::compute_resist_increment",
 }
 # Calls that settle a breakdown's once-only terms (the second defers to the resume).
 _SPENDERS = {"spend_contributing_conditions", "spend_or_defer_condition_uses"}
