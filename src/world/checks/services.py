@@ -1489,8 +1489,18 @@ def compute_resist_increment(
 
     Resolves the Composure CheckType by name (category-agnostic) and returns the
     defender's FULL pre-roll rating on it (trait, specialization, aspect, and
-    capability points) plus the effort-level modifier. Result is clamped to ≥ 0 —
-    resistance never lowers the attacker's difficulty.
+    capability points) plus the effort-level modifier, plus every modifier the defender
+    carries on a Composure roll. Result is clamped to ≥ 0 — resistance never lowers the
+    attacker's difficulty.
+
+    The carried modifiers (#4720, ADR-4720): ``collect_check_modifiers`` for the Composure
+    check, summed as ``extra_modifiers_total`` (capability points already ride the rating,
+    #4453) and tapered by the check lane like any roll. So a defender resists with what
+    they would bring to a Composure roll: a ``poise`` modifier raises it, a condition's
+    Composure penalty lowers it. Left out: scene check modifiers and the fashion bonus,
+    which need a scene this function is not given. A once-only condition counts while
+    held and is never spent here; only a real roll spends one. A character with no sheet
+    carries nothing and resists by rating and effort alone.
 
     Perk points remain 0 here: this function has no ``situation_ctx`` parameter, so
     ``_situational_perk_check_bonus`` short-circuits before firing — deliberately,
@@ -1567,6 +1577,14 @@ def compute_resist_increment(
         return 0
 
     modifier = EFFORT_CHECK_MODIFIER.get(resist_effort_level, 0)
+    # Everything the defender carries on a Composure roll counts toward how hard they are
+    # to sway (#4720): Poise, a condition, a worn item, a roll modifier. Gathered through
+    # the same seam a modifier-aware roll uses; nothing is rolled, spent or announced.
+    sheet = _sheet_or_none(defender_character)
+    if sheet is not None:
+        modifier += collect_check_modifiers(
+            sheet, composure_check_type, skip_fashion=True
+        ).extra_modifiers_total
     rating = compute_check_rating(
         defender_character,
         composure_check_type,

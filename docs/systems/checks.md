@@ -339,7 +339,11 @@ from world.checks.services import compute_resist_increment, level_opposition
 # rating — trait, specialization, aspect, and capability points (NOT perk
 # points: compute_check_rating takes no situation_ctx, so
 # _situational_perk_check_bonus short-circuits to 0 rather than firing its
-# announcement side effect) — plus the effort-level modifier. Clamped >= 0.
+# announcement side effect) — plus the effort-level modifier, plus every modifier
+# the defender carries on a Composure roll (#4720, ADR-4720): collect_check_modifiers
+# for the Composure check, summed as extra_modifiers_total and tapered like a roll.
+# A poise modifier raises it; a condition's Composure penalty lowers it. No scene
+# modifiers or fashion (no scene here); nothing is spent or announced. Clamped >= 0.
 increment = compute_resist_increment(defender_character, resist_effort_level="high")
 
 # level_override (whole-branch-review fix, #2707): compute_check_rating /

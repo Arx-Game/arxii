@@ -286,8 +286,9 @@ def ensure_poise_target() -> None:
     Named by ApostateCD 2026-10-26 so character-creation cards stop leaning on the broad
     Composure stat. Scoping it to Composure (``target_check_type``, a OneToOne) lets a
     ``+N poise`` effect reach every Composure roll the character makes through the
-    ``collect_check_modifiers`` seam, as menace reaches Intimidation. Social-only
-    narrowing, and making the defender's resist honor it, are #4720.
+    ``collect_check_modifiers`` seam, as menace reaches Intimidation. A defender's social
+    resist counts it too (#4720, ADR-4720). It reaches rolls of the Composure check type
+    only, never the other checks that weigh the Composure stat.
 
     ``mechanics.ModifierCategory``/``ModifierTarget`` are content-repo-owned (#2698):
     looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on, so on
