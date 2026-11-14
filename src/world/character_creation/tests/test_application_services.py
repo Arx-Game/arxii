@@ -12,6 +12,7 @@ from world.character_creation.factories import (
     CharacterDraftFactory,
     DraftApplicationFactory,
     make_unknown_upbringing,
+    single_resonance_weights,
 )
 from world.character_creation.models import (
     Beginnings,
@@ -758,7 +759,7 @@ class ApproveApplicationIntegrationTests(TestCase):
         """
         draft.draft_data["selected_gift_id"] = self.gift.id
         draft.draft_data["selected_technique_ids"] = [self.technique.id]
-        draft.draft_data["selected_gift_resonance_id"] = self.resonance.id
+        draft.draft_data["gift_resonance_weights"] = single_resonance_weights(self.resonance)
         draft.draft_data["anima_check_stat_id"] = self.stat_trait.id
         draft.draft_data["anima_check_skill_id"] = self.skill.id
         draft.save(update_fields=["draft_data"])

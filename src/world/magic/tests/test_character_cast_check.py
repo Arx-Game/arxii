@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.test import TestCase, override_settings
 from evennia.accounts.models import AccountDB
 
-from world.character_creation.factories import make_unknown_upbringing
+from world.character_creation.factories import make_unknown_upbringing, single_resonance_weights
 from world.character_creation.models import Beginnings, StartingArea
 from world.character_creation.services import finalize_character
 from world.character_sheets.factories import CharacterSheetFactory
@@ -240,7 +240,7 @@ class ProvisionUsesPerCharacterCheckTests(TestCase):
                 "tarot_reversed": False,
                 "selected_gift_id": self.gift.id,
                 "selected_technique_ids": [self.technique.id],
-                "selected_gift_resonance_id": self.resonance.id,
+                "gift_resonance_weights": single_resonance_weights(self.resonance),
                 "anima_check_stat_id": self.anima_stat.id,
                 "anima_check_skill_id": self.skill.id,
                 "skills": {str(self.skill.pk): 20},
@@ -391,7 +391,7 @@ class GetCharacterCastCheckTests(TestCase):
                 "tarot_reversed": False,
                 "selected_gift_id": self.gift.id,
                 "selected_technique_ids": [self.technique.id],
-                "selected_gift_resonance_id": self.resonance.id,
+                "gift_resonance_weights": single_resonance_weights(self.resonance),
                 "anima_check_stat_id": self.anima_stat.id,
                 "anima_check_skill_id": self.skill.id,
                 "skills": {str(self.skill.pk): 20},

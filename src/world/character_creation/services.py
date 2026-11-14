@@ -2614,22 +2614,22 @@ def _finalize_gift_and_techniques(draft: CharacterDraft, sheet: CharacterSheet) 
         MagicPicks,
         link_gift_and_techniques,
         resolve_rows,
+        resolve_weighted_resonances,
     )
     from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
-    from world.magic.models import Gift, Resonance, Technique  # noqa: PLC0415
+    from world.magic.models import Gift, Technique  # noqa: PLC0415
 
     data = draft.draft_data
     gift_id = data.get("selected_gift_id")
     if not gift_id:
         return
-    resonance_id = data.get("selected_gift_resonance_id")
     link_gift_and_techniques(
         sheet,
         MagicPicks(
             tradition=draft.selected_tradition,
             gift=Gift.objects.get(pk=gift_id),
             techniques=resolve_rows(Technique, data.get("selected_technique_ids") or []),
-            resonance=Resonance.objects.filter(pk=resonance_id).first() if resonance_id else None,
+            resonances=resolve_weighted_resonances(data),
             anima_stat=None,
             anima_skill=None,
             ritual_name="",
@@ -2723,6 +2723,9 @@ def _finalize_technique_personalizations(draft: CharacterDraft, sheet: Character
     tied to that resonance before the flourishes are signed, so a facet-gated flourish
     bought in creation qualifies when ``set_signature_bonus`` checks it.
     """
+    from world.character_creation.resonance_weights import (  # noqa: PLC0415
+        draft_lead_resonance_id,
+    )
     from world.magic.models import Resonance  # noqa: PLC0415
     from world.magic.services.creation_personalization import (  # noqa: PLC0415
         apply_creation_personalizations,
@@ -2733,7 +2736,7 @@ def _finalize_technique_personalizations(draft: CharacterDraft, sheet: Character
         seed_motif_from_gift_resonance,
     )
 
-    resonance_id = draft.draft_data.get("selected_gift_resonance_id")
+    resonance_id = draft_lead_resonance_id(draft.draft_data)
     resonance = Resonance.objects.filter(pk=resonance_id).first() if resonance_id else None
     if resonance is not None:
         motif_resonance = seed_motif_from_gift_resonance(sheet, resonance)
@@ -2762,9 +2765,10 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         MagicPicks,
         provision_magic,
         resolve_rows,
+        resolve_weighted_resonances,
     )
     from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
-    from world.magic.models import Gift, Resonance, Technique  # noqa: PLC0415
+    from world.magic.models import Gift, Technique  # noqa: PLC0415
     from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import Trait  # noqa: PLC0415
 
@@ -2782,7 +2786,7 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         tradition=draft.selected_tradition,
         gift=Gift.objects.get(pk=gift_id) if gift_id else None,
         techniques=resolve_rows(Technique, data.get("selected_technique_ids") or []),
-        resonance=by_id(Resonance, "selected_gift_resonance_id"),
+        resonances=resolve_weighted_resonances(data),
         anima_stat=by_id(Trait, "anima_check_stat_id"),
         anima_skill=by_id(Skill, "anima_check_skill_id"),
         ritual_name=data.get("anima_ritual_name") or f"{character_name}'s Anima Ritual",

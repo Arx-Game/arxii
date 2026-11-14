@@ -27,15 +27,15 @@ class GrantGiftToCharacterTests(TestCase):
 
     def test_mints_gift_and_latent_thread(self):
         sheet = CharacterSheetFactory()
-        cg, created = grant_gift_to_character(sheet, self.gift, resonance=self.res)
+        cg, created = grant_gift_to_character(sheet, self.gift, resonances=[self.res])
         self.assertTrue(created)
         self.assertEqual(cg.character_id, sheet.pk)
         self.assertTrue(self._has_thread(sheet))
 
     def test_idempotent(self):
         sheet = CharacterSheetFactory()
-        grant_gift_to_character(sheet, self.gift, resonance=self.res)
-        _, created = grant_gift_to_character(sheet, self.gift, resonance=self.res)
+        grant_gift_to_character(sheet, self.gift, resonances=[self.res])
+        _, created = grant_gift_to_character(sheet, self.gift, resonances=[self.res])
         self.assertFalse(created)
         self.assertEqual(CharacterGift.objects.filter(character=sheet, gift=self.gift).count(), 1)
 
@@ -47,7 +47,7 @@ class GrantGiftToCharacterTests(TestCase):
         sheet = CharacterSheetFactory()
         CharacterResonanceFactory(character_sheet=sheet, resonance=self.res, lifetime_earned=1)
 
-        _, created = grant_gift_to_character(sheet, self.gift, resonance=None)
+        _, created = grant_gift_to_character(sheet, self.gift)
 
         self.assertTrue(created)
         self.assertTrue(self._has_thread(sheet))
@@ -58,4 +58,4 @@ class GrantGiftToCharacterTests(TestCase):
         sheet = CharacterSheetFactory()
 
         with self.assertRaises(GiftResonanceUnresolvable):
-            grant_gift_to_character(sheet, self.gift, resonance=None)
+            grant_gift_to_character(sheet, self.gift)

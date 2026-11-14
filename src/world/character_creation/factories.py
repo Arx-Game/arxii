@@ -2,6 +2,8 @@
 Factory definitions for character creation system tests.
 """
 
+from typing import TYPE_CHECKING
+
 import factory
 import factory.django as factory_django
 
@@ -39,6 +41,9 @@ from world.character_creation.models import (
 from world.realms.models import Realm
 from world.roster.constants import COMMONER_KIND_NAME
 from world.roster.factories import FamilyKindFactory
+
+if TYPE_CHECKING:
+    from world.magic.models import Resonance
 
 
 class RealmFactory(factory_django.DjangoModelFactory):
@@ -299,3 +304,10 @@ class OfferFirstLookFactory(factory_django.DjangoModelFactory):
 
     offer = factory.SubFactory(DistinctionOfferFactory)
     beginning = factory.SubFactory(BeginningsFactory)
+
+
+def single_resonance_weights(resonance: "Resonance") -> list[dict[str, int]]:
+    """A draft's ``gift_resonance_weights`` putting every creation point on one resonance."""
+    from world.magic.services.drift import get_drift_config
+
+    return [{"resonance_id": resonance.pk, "weight": get_drift_config().creation_points}]

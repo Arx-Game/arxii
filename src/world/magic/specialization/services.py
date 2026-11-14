@@ -171,7 +171,7 @@ def grant_gift_to_character(
     sheet: CharacterSheet,
     gift: Gift,
     *,
-    resonance: Resonance | None = None,
+    resonances: Sequence[Resonance] = (),
     origin: str = AcquisitionOrigin.CHARACTER_CREATION,
 ) -> tuple[CharacterGift, bool]:
     """Mint (idempotently) the CharacterGift link + the latent GIFT thread.
@@ -181,9 +181,11 @@ def grant_gift_to_character(
     path-crossing grant (#1579) and species-gift provisioning (#1580) so there is
     one place that does this, not a per-source copy.
 
-    ``resonance`` is the caller's preferred resonance for the latent thread, if any;
-    ``None`` (the default) means "resolve one for me." Either way, the resonance is
-    run through ``_resolve_grant_resonance`` (#2971) and a thread is ALWAYS
+    ``resonances`` are the caller's preferred resonances for the latent thread, leading
+    first (character creation's weighted picks, heaviest first); empty (the default)
+    means "resolve one for me." Each preference outside a non-empty supported set is
+    dropped, and when none is left the resonance is resolved through
+    ``_resolve_grant_resonance`` (#2971); a thread is ALWAYS
     provisioned — a granted gift with an empty supported set no longer silently
     skips thread provisioning, since that left characters holding a gift and its
     techniques with no GIFT thread to read a resonance from anywhere downstream
@@ -206,11 +208,14 @@ def grant_gift_to_character(
     """
     from world.magic.models import CharacterGift  # noqa: PLC0415
 
-    resolved = _resolve_grant_resonance(sheet, gift, preferred=resonance)
+    supported = gift.cached_resonances
+    supported_ids = {member.pk for member in supported}
+    held = [r for r in resonances if not supported_ids or r.pk in supported_ids]
+    held = held or [_resolve_grant_resonance(sheet, gift)]
     character_gift, created = CharacterGift.objects.get_or_create(
         character=sheet, gift=gift, defaults={"origin": origin}
     )
-    provision_latent_gift_thread(sheet, gift, resonances=[resolved])
+    provision_latent_gift_thread(sheet, gift, resonances=held)
     from world.items.services.natural_weapons import provision_natural_weapon  # noqa: PLC0415
 
     provision_natural_weapon(sheet, gift)

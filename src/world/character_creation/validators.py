@@ -14,6 +14,7 @@ from rest_framework import serializers
 from world.character_creation.constants import (
     FAMILY_PATRON_BEING_ID,
     GIFT_FACETS_KEY,
+    GIFT_RESONANCE_WEIGHTS_KEY,
     REQUIRED_STATS,
     STAT_ALLOCATION_STEP,
     STAT_MAX_VALUE,
@@ -25,6 +26,7 @@ from world.character_creation.constants import (
     QuestionKind,
     Stage,
 )
+from world.character_creation.resonance_weights import ResonanceWeight, parse_resonance_weights
 from world.character_creation.types import StageValidationErrors
 
 if TYPE_CHECKING:
@@ -545,6 +547,28 @@ def _technique_personalization_errors(
     )
 
 
+def _resonance_weights_error(raw: object, weights: list[ResonanceWeight]) -> str | None:
+    """Why the weighted resonance picks are not a valid spread of the creation points."""
+    from world.magic.models import Resonance  # noqa: PLC0415
+    from world.magic.services.drift import get_drift_config  # noqa: PLC0415
+
+    if not raw:
+        return "Select a gift resonance"
+    if not isinstance(raw, list) or len(weights) != len(raw):
+        return "Your resonance picks are not readable"
+    ids = [pick.resonance_id for pick in weights]
+    if len(set(ids)) != len(ids):
+        return "Pick each resonance once"
+    if Resonance.objects.filter(pk__in=ids).count() != len(ids):
+        return "Select a gift resonance"
+    if any(pick.weight < 1 for pick in weights):
+        return "Give every resonance you pick at least 1 point"
+    points = get_drift_config().creation_points
+    if sum(pick.weight for pick in weights) != points:
+        return f"Spread exactly {points} points across your resonances"
+    return None
+
+
 def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
     """Compute validation errors for the Magic stage (Gift/technique picks, #2426).
 
@@ -556,7 +580,9 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
        ready pool ∪ signature availability set ∪ the selected species' gift
        techniques, and no more than ``draft.starting_technique_picks``. An
        available technique without an action template is rejected as unfinished.
-    4. Must have selected_gift_resonance_id (anchors the latent GIFT thread, #1620).
+    4. Must have ``gift_resonance_weights`` (anchors the latent GIFT thread, #1620): distinct
+       resonances that exist, each weighted at least 1, the weights summing to
+       ``DriftConfig.creation_points`` (#5123).
     5. Must have a valid anima_check_stat_id (a Trait with trait_type=STAT) and a
        valid anima_check_skill_id (an active Skill outside the magic category, which
        magical rolls add as terms) — the character's Anima Check.
@@ -564,7 +590,6 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
     Between 4 and 5, a Tradition that teaches a combat style needs one of its styles
     chosen (#4921).
     """
-    from world.magic.models import Resonance  # noqa: PLC0415
     from world.magic.services.cg_catalog import (  # noqa: PLC0415
         get_gift_options,
         get_species_technique_options,
@@ -613,13 +638,16 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
     if len(technique_ids) > picks:
         return [f"You may select at most {picks} techniques"]
 
-    # Resonance is required — anchors the latent GIFT thread (#1620). The pick
-    # must also still RESOLVE: a stale id (pointing at a since-deleted Resonance)
-    # is worthless to the grant-time resolver at finalize (#2971), so it fails
-    # validation here rather than raising GiftResonanceUnresolvable at submit.
-    resonance_id = draft.draft_data.get("selected_gift_resonance_id")
-    if not resonance_id or not Resonance.objects.filter(pk=resonance_id).exists():
-        return ["Select a gift resonance"]
+    # Resonances are required: they anchor the latent GIFT thread (#1620) and seed the
+    # aura. Each pick must still RESOLVE: a stale id (pointing at a since-deleted
+    # Resonance) is worthless to the grant-time resolver at finalize (#2971), so it
+    # fails validation here rather than raising GiftResonanceUnresolvable at submit.
+    raw_weights = draft.draft_data.get(GIFT_RESONANCE_WEIGHTS_KEY)
+    weights = parse_resonance_weights(raw_weights)
+    weights_error = _resonance_weights_error(raw_weights, weights)
+    if weights_error:
+        return [weights_error]
+    resonance_id = weights[0].resonance_id
 
     style_error = _combat_style_error(draft)
     if style_error:

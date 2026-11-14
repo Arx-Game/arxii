@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from django.test import TestCase
 
+from world.character_creation.factories import single_resonance_weights
 from world.currency.models import FavorTokenDetails
 from world.currency.services import mint_favor_token
 from world.items.constants import OwnershipEventType
@@ -222,7 +223,7 @@ class SettleObligationLoopEndToEndTests(TestCase):
             "tarot_reversed": False,
             "selected_gift_id": gift.id,
             "selected_technique_ids": [cg_technique.id],
-            "selected_gift_resonance_id": resonance.id,
+            "gift_resonance_weights": single_resonance_weights(resonance),
             "anima_check_stat_id": stat.id,
             "anima_check_skill_id": skill.id,
         }

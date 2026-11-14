@@ -984,7 +984,7 @@ class CompanionBindingRollSiteTests(ActivityTermTestCase):
         sheet.character.location = create_object("typeclasses.rooms.Room", key="Bind Roll Room")
         sheet.character.save()
         gift = ensure_companion_content()
-        grant_gift_to_character(sheet, gift, resonance=gift.resonances.first())
+        grant_gift_to_character(sheet, gift, resonances=[gift.resonances.first()])
         thread = Thread.objects.get(owner=sheet, target_kind=TargetKind.GIFT, target_gift=gift)
         thread.level = 10
         thread.save(update_fields=["level"])

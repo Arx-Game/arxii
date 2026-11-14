@@ -35,8 +35,9 @@ from world.magic.factories import (
     ensure_canonical_affinities,
 )
 from world.magic.models import Affinity, CharacterAura
-from world.magic.services.aura import set_aura_shares, starting_aura_shares
+from world.magic.services.aura import set_aura_shares
 from world.magic.services.resonance import grant_resonance
+from world.magic.types import AffinityShare
 
 
 def _shares(payload: dict) -> dict[str, Decimal]:
@@ -114,9 +115,15 @@ class AuraAffinityAtTheAcademy(_AcademyCourseCase):
         tradition.favored_affinities.add(self.dawn)
         self.role.teaches_tradition = tradition
         self.role.save()
-        # She began with the split character creation gives a Primal pick.
+        # She began mostly Primal, with an Abyssal streak.
         aura = CharacterAura.objects.create(character=self.sheet)
-        set_aura_shares(aura, starting_aura_shares(ResonanceFactory(affinity=self.primal)))
+        set_aura_shares(
+            aura,
+            [
+                AffinityShare(affinity=self.primal, percent=Decimal("80.00")),
+                AffinityShare(affinity=self.abyssal, percent=Decimal("20.00")),
+            ],
+        )
         self.dawn_resonance = ResonanceFactory(name="Daybreak Hymn", affinity=self.dawn)
 
     def fit_line(self) -> str:

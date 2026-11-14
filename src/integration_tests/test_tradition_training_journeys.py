@@ -35,6 +35,7 @@ from world.character_creation.factories import (
     DistinctionOfferFactory,
     DraftApplicationFactory,
     SchoolingLineFactory,
+    single_resonance_weights,
 )
 from world.character_creation.models import CharacterDraft, DistinctionOffer
 from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
@@ -455,7 +456,7 @@ class MagicTrainingAllocationJourney(JourneyCase):
             "distinctions": [{"distinction_id": training.pk, "rank": 1}],
             "selected_gift_id": gift.pk,
             "selected_technique_ids": [technique.pk],
-            "selected_gift_resonance_id": cls.resonance.pk,
+            "gift_resonance_weights": single_resonance_weights(cls.resonance),
             "anima_check_stat_id": StatTraitFactory(name="strength").pk,
             "anima_check_skill_id": SkillFactory().pk,
         }
@@ -502,7 +503,7 @@ class MagicTrainingAllocationJourney(JourneyCase):
 
     def test_resonance_picker_lists_rows_a_player_can_save(self) -> None:
         """The Gift stage's Resonance step: list resonances, save one, the error clears."""
-        draft = self._new_draft(selected_gift_resonance_id=True)
+        draft = self._new_draft(gift_resonance_weights=True)
         client = self.api(self.account)
         url = f"/api/character-creation/drafts/{draft.pk}/"
         stage = str(CharacterDraft.Stage.GIFT)
@@ -515,7 +516,9 @@ class MagicTrainingAllocationJourney(JourneyCase):
         self.assertEqual(rows[self.resonance.pk]["affinity_name"], self.resonance.affinity.name)
 
         response = client.patch(
-            url, {"draft_data": {"selected_gift_resonance_id": self.resonance.pk}}, format="json"
+            url,
+            {"draft_data": {"gift_resonance_weights": single_resonance_weights(self.resonance)}},
+            format="json",
         )
         self.assertEqual(response.status_code, 200, response.content)
         errors = client.get(url).json()["stage_errors"][stage]

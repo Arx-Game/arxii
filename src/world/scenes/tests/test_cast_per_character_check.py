@@ -24,7 +24,7 @@ from django.test import TestCase
 from evennia import create_object
 from evennia.accounts.models import AccountDB
 
-from world.character_creation.factories import make_unknown_upbringing
+from world.character_creation.factories import make_unknown_upbringing, single_resonance_weights
 from world.character_creation.models import Beginnings, CharacterDraft, StartingArea
 from world.character_creation.services import finalize_character
 from world.character_sheets.models import CharacterSheet, Gender
@@ -194,7 +194,7 @@ class CastUsesPerCharacterCheckTests(TestCase):
                 "tarot_reversed": False,
                 "selected_gift_id": self.gift.id,
                 "selected_technique_ids": [self.technique.id],
-                "selected_gift_resonance_id": self.resonance.id,
+                "gift_resonance_weights": single_resonance_weights(self.resonance),
                 "anima_check_stat_id": self.anima_stat.id,
                 "anima_check_skill_id": self.skill.id,
                 "skills": {str(self.skill.pk): 20},

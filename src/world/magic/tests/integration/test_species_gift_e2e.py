@@ -43,7 +43,7 @@ from unittest.mock import patch
 
 from django.test import TestCase, tag
 
-from world.character_creation.factories import CharacterDraftFactory
+from world.character_creation.factories import CharacterDraftFactory, single_resonance_weights
 from world.character_creation.services import finalize_magic_data
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
@@ -147,7 +147,7 @@ class _SpeciesGiftJourneyBase(TestCase):
             draft_data={
                 "selected_gift_id": self.major_gift.id,
                 "selected_technique_ids": [self.major_technique.id],
-                "selected_gift_resonance_id": self.resonance.id,
+                "gift_resonance_weights": single_resonance_weights(self.resonance),
             },
         )
         ensure_canonical_affinities()

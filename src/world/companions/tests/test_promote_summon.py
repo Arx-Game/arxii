@@ -29,7 +29,7 @@ class PromoteSummonTests(TestCase):
 
         self.gift = ensure_companion_content()
         self.resonance = self.gift.resonances.first()
-        grant_gift_to_character(self.sheet, self.gift, resonance=self.resonance)
+        grant_gift_to_character(self.sheet, self.gift, resonances=[self.resonance])
 
         # Seed charm content for the charmed-enemy-path tests.
         from world.conditions.charm_content import ensure_charm_content

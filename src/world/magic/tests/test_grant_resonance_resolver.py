@@ -199,10 +199,10 @@ class GrantGiftToCharacterAlwaysProvisionsTests(TestCase):
 
         # Descendant (child-gift) thread minted FIRST (lower pk) — covers the
         # parent via lineage, but is NOT a direct hold on it.
-        grant_gift_to_character(sheet, child_gift, resonance=descendant_resonance)
+        grant_gift_to_character(sheet, child_gift, resonances=[descendant_resonance])
         # Direct thread on the parent gift itself, minted SECOND (higher pk),
         # at a different resonance.
-        grant_gift_to_character(sheet, parent_gift, resonance=direct_resonance)
+        grant_gift_to_character(sheet, parent_gift, resonances=[direct_resonance])
         thread_count_before = Thread.objects.filter(owner=sheet).count()
 
         resolved = _resolve_grant_resonance(sheet, parent_gift)
@@ -230,8 +230,8 @@ class GrantGiftToCharacterAlwaysProvisionsTests(TestCase):
         earlier_resonance = ResonanceFactory()
         own_resonance = ResonanceFactory()
 
-        grant_gift_to_character(sheet, other_gift, resonance=earlier_resonance)
-        grant_gift_to_character(sheet, gift, resonance=own_resonance)
+        grant_gift_to_character(sheet, other_gift, resonances=[earlier_resonance])
+        grant_gift_to_character(sheet, gift, resonances=[own_resonance])
         thread_count_before = Thread.objects.filter(owner=sheet).count()
 
         _character_gift, created = grant_gift_to_character(sheet, gift)

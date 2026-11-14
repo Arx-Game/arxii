@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from world.character_creation.factories import make_unknown_upbringing
+from world.character_creation.factories import make_unknown_upbringing, single_resonance_weights
 from world.character_creation.models import Beginnings, CharacterDraft, StartingArea
 from world.character_sheets.models import Gender
 from world.classes.factories import PathFactory
@@ -154,7 +154,7 @@ class FinalizationTestMixin:
         """
         draft.draft_data["selected_gift_id"] = self.gift.id
         draft.draft_data["selected_technique_ids"] = [self.technique.id]
-        draft.draft_data["selected_gift_resonance_id"] = self.resonance.id
+        draft.draft_data["gift_resonance_weights"] = single_resonance_weights(self.resonance)
         draft.draft_data["anima_check_stat_id"] = self.stat_trait.id
         draft.draft_data["anima_check_skill_id"] = self.skill.id
         draft.save(update_fields=["draft_data"])

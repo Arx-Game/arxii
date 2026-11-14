@@ -18,6 +18,7 @@ from __future__ import annotations
 from evennia.accounts.models import AccountDB
 
 from integration_tests.harness import JourneyCase
+from world.character_creation.factories import single_resonance_weights
 from world.items.factories import ItemFacetFactory, ItemInstanceFactory
 from world.magic.constants import ComponentMode, TargetKind
 from world.magic.factories import (
@@ -357,7 +358,7 @@ class PickingFacetsInCreation(JourneyCase):
             draft_data={
                 "selected_gift_id": gift.pk,
                 "selected_technique_ids": [self.technique.pk],
-                "selected_gift_resonance_id": self.frost.pk,
+                "gift_resonance_weights": single_resonance_weights(self.frost),
             },
         )
 

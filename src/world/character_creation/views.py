@@ -1006,6 +1006,9 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=[HTTPMethod.GET], url_path="personalization-options")
     def personalization_options(self, request: Request, pk: int | None = None) -> Response:
         """The make-it-yours options for each technique this draft has chosen (#4099)."""
+        from world.character_creation.resonance_weights import (  # noqa: PLC0415
+            draft_lead_resonance_id,
+        )
         from world.magic.models import Technique  # noqa: PLC0415
         from world.magic.services.creation_personalization import (  # noqa: PLC0415
             creation_personalization_options,
@@ -1015,7 +1018,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         ids = draft.draft_data.get("selected_technique_ids") or []
         by_id = Technique.objects.in_bulk(ids)
         techniques = [by_id[i] for i in ids if i in by_id]
-        resonance_id = draft.draft_data.get("selected_gift_resonance_id")
+        resonance_id = draft_lead_resonance_id(draft.draft_data)
         option_sets = creation_personalization_options(
             techniques,
             resonance_id=resonance_id,

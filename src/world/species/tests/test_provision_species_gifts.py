@@ -9,7 +9,7 @@ _build_bulk_context which uses DISTINCT ON (PG-only). CI PG shard covers these.
 
 from django.test import TestCase, tag
 
-from world.character_creation.factories import CharacterDraftFactory
+from world.character_creation.factories import CharacterDraftFactory, single_resonance_weights
 from world.character_creation.services import (
     _finalize_gift_and_techniques,
     finalize_magic_data,
@@ -52,7 +52,7 @@ class ProvisionSpeciesGiftsTests(TestCase):
     def test_grants_minor_gift_and_latent_thread(self):
         """provision_species_gifts creates CharacterGift + level-0 GIFT Thread at resonance."""
         sheet = CharacterSheetFactory(species=self.parent_species)
-        provision_species_gifts(sheet, resonance=self.resonance)
+        provision_species_gifts(sheet, resonances=[self.resonance])
         self.assertTrue(
             CharacterGift.objects.filter(character=sheet, gift=self.minor_gift).exists(),
             "CharacterGift should be created for the species' Minor Gift",
@@ -69,7 +69,7 @@ class ProvisionSpeciesGiftsTests(TestCase):
     def test_subspecies_inherits_parent_grants(self):
         """A subspecies sheet gets grants from the parent species."""
         sheet = CharacterSheetFactory(species=self.subspecies)
-        provision_species_gifts(sheet, resonance=self.resonance)
+        provision_species_gifts(sheet, resonances=[self.resonance])
         self.assertTrue(
             CharacterGift.objects.filter(character=sheet, gift=self.minor_gift).exists(),
             "Subspecies should inherit parent's species gift grant",
@@ -86,8 +86,8 @@ class ProvisionSpeciesGiftsTests(TestCase):
     def test_idempotent(self):
         """Calling provision_species_gifts twice creates no duplicate CharacterGift / Thread."""
         sheet = CharacterSheetFactory(species=self.parent_species)
-        provision_species_gifts(sheet, resonance=self.resonance)
-        provision_species_gifts(sheet, resonance=self.resonance)
+        provision_species_gifts(sheet, resonances=[self.resonance])
+        provision_species_gifts(sheet, resonances=[self.resonance])
         self.assertEqual(
             CharacterGift.objects.filter(character=sheet, gift=self.minor_gift).count(),
             1,
@@ -113,7 +113,7 @@ class ProvisionSpeciesGiftsTests(TestCase):
     def test_resonance_falls_back_to_gift_supported_set(self):
         """When resonance=None, falls back to grant.gift.resonances.first()."""
         sheet = CharacterSheetFactory(species=self.parent_species)
-        provision_species_gifts(sheet, resonance=None)
+        provision_species_gifts(sheet)
         thread = Thread.objects.filter(
             owner=sheet,
             target_kind=TargetKind.GIFT,
@@ -131,7 +131,7 @@ class ProvisionSpeciesGiftsTests(TestCase):
         from world.conditions.models import ConditionInstance
 
         sheet = CharacterSheetFactory(species=self.parent_species)
-        provision_species_gifts(sheet, resonance=self.resonance)
+        provision_species_gifts(sheet, resonances=[self.resonance])
         self.assertFalse(
             ConditionInstance.objects.filter(target=sheet.character).exists(),
             "No condition should be applied when grant has no drawback_condition",
@@ -142,7 +142,7 @@ class ProvisionSpeciesGiftsTests(TestCase):
         from world.conditions.models import ConditionInstance
 
         sheet = CharacterSheetFactory(species=self.parent_species)
-        provision_species_gifts(sheet, resonance=self.resonance)
+        provision_species_gifts(sheet, resonances=[self.resonance])
         self.assertFalse(
             ConditionInstance.objects.filter(target=sheet.character).exists(),
             "No condition should be applied when grant has no benefit_condition",
@@ -158,7 +158,7 @@ class ProvisionSpeciesGiftsTests(TestCase):
         )
         grant.gift.resonances.add(self.resonance)
         sheet = CharacterSheetFactory(species=grant.species)
-        provision_species_gifts(sheet, resonance=self.resonance)
+        provision_species_gifts(sheet, resonances=[self.resonance])
         cd = CharacterDistinction.objects.get(character=sheet, distinction=distinction)
         self.assertEqual(cd.origin, DistinctionOrigin.SPECIES)
 
@@ -172,8 +172,8 @@ class ProvisionSpeciesGiftsTests(TestCase):
         )
         grant.gift.resonances.add(self.resonance)
         sheet = CharacterSheetFactory(species=grant.species)
-        provision_species_gifts(sheet, resonance=self.resonance)
-        provision_species_gifts(sheet, resonance=self.resonance)
+        provision_species_gifts(sheet, resonances=[self.resonance])
+        provision_species_gifts(sheet, resonances=[self.resonance])
         rows = CharacterDistinction.objects.filter(character=sheet, distinction=distinction)
         self.assertEqual(rows.count(), 1)
         self.assertEqual(rows.first().rank, 1)
@@ -206,7 +206,7 @@ class InheritableFlagTests(TestCase):
     def test_child_inherits_inheritable_grant(self):
         """A child species inherits grants marked inheritable=True (default)."""
         sheet = CharacterSheetFactory(species=self.child_species)
-        provision_species_gifts(sheet, resonance=self.resonance)
+        provision_species_gifts(sheet, resonances=[self.resonance])
         self.assertTrue(
             CharacterGift.objects.filter(character=sheet, gift=self.inheritable_gift).exists(),
             "Child should inherit the inheritable grant from parent",
@@ -215,7 +215,7 @@ class InheritableFlagTests(TestCase):
     def test_child_does_not_inherit_non_inheritable_grant(self):
         """A child species does NOT inherit grants marked inheritable=False."""
         sheet = CharacterSheetFactory(species=self.child_species)
-        provision_species_gifts(sheet, resonance=self.resonance)
+        provision_species_gifts(sheet, resonances=[self.resonance])
         self.assertFalse(
             CharacterGift.objects.filter(character=sheet, gift=self.non_inheritable_gift).exists(),
             "Child should NOT inherit the non-inheritable grant from parent",
@@ -224,7 +224,7 @@ class InheritableFlagTests(TestCase):
     def test_parent_gets_both_grants(self):
         """The parent species itself gets all its own grants (inheritable or not)."""
         sheet = CharacterSheetFactory(species=self.parent_species)
-        provision_species_gifts(sheet, resonance=self.resonance)
+        provision_species_gifts(sheet, resonances=[self.resonance])
         self.assertTrue(
             CharacterGift.objects.filter(character=sheet, gift=self.inheritable_gift).exists(),
             "Parent should get its own inheritable grant",
@@ -311,7 +311,7 @@ class ProvisionSpeciesGiftsFinalizeIntegrationTest(TestCase):
         draft = CharacterDraftFactory(
             selected_tradition=self.tradition,
             draft_data={
-                "selected_gift_resonance_id": self.resonance.id,
+                "gift_resonance_weights": single_resonance_weights(self.resonance),
             },
         )
         finalize_magic_data(draft, sheet)
@@ -340,7 +340,7 @@ class ProvisionSpeciesGiftsFinalizeIntegrationTest(TestCase):
             draft_data={
                 "selected_gift_id": self.major_gift.id,
                 "selected_technique_ids": [self.minor_technique.id],
-                "selected_gift_resonance_id": self.resonance.id,
+                "gift_resonance_weights": single_resonance_weights(self.resonance),
             },
         )
 
@@ -377,7 +377,7 @@ class ProvisionSpeciesGiftsDrawbackTest(TestCase):
         from world.conditions.models import ConditionInstance
 
         sheet = CharacterSheetFactory(species=self.species)
-        provision_species_gifts(sheet, resonance=self.resonance)
+        provision_species_gifts(sheet, resonances=[self.resonance])
 
         self.assertTrue(
             ConditionInstance.objects.filter(
@@ -411,8 +411,8 @@ class ProvisionSpeciesGiftsDrawbackTest(TestCase):
         )
         sheet = CharacterSheetFactory(species=species)
 
-        provision_species_gifts(sheet, resonance=resonance)
-        provision_species_gifts(sheet, resonance=resonance)
+        provision_species_gifts(sheet, resonances=[resonance])
+        provision_species_gifts(sheet, resonances=[resonance])
 
         instances = ConditionInstance.objects.filter(
             target=sheet.character,
@@ -451,7 +451,7 @@ class ProvisionSpeciesGiftsBenefitTest(TestCase):
         from world.conditions.models import ConditionInstance
 
         sheet = CharacterSheetFactory(species=self.species)
-        provision_species_gifts(sheet, resonance=self.resonance)
+        provision_species_gifts(sheet, resonances=[self.resonance])
 
         self.assertTrue(
             ConditionInstance.objects.filter(
@@ -480,8 +480,8 @@ class ProvisionSpeciesGiftsBenefitTest(TestCase):
         )
         sheet = CharacterSheetFactory(species=species)
 
-        provision_species_gifts(sheet, resonance=resonance)
-        provision_species_gifts(sheet, resonance=resonance)
+        provision_species_gifts(sheet, resonances=[resonance])
+        provision_species_gifts(sheet, resonances=[resonance])
 
         instances = ConditionInstance.objects.filter(
             target=sheet.character,
@@ -523,7 +523,7 @@ class ProvisionSpeciesGiftsBenefitTest(TestCase):
         )
         sheet = CharacterSheetFactory(species=species)
 
-        provision_species_gifts(sheet, resonance=resonance)
+        provision_species_gifts(sheet, resonances=[resonance])
 
         result = get_check_modifier(sheet, resist_check)
         self.assertEqual(

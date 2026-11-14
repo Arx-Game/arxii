@@ -325,12 +325,14 @@ class StaffSheetRowsMixin:
         """
         from world.character_creation.magic_writer import (  # noqa: PLC0415
             MagicPicks,
+            WeightedResonance,
             provision_magic,
             validate_staff_magic,
         )
         from world.character_creation.sheet_writers import creation_beginnings  # noqa: PLC0415
         from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
         from world.magic.exceptions import MagicError  # noqa: PLC0415
+        from world.magic.services.drift import get_drift_config  # noqa: PLC0415
 
         sheet = self._npc_owner_sheet(request)
         data = self._validated(StaffMagicSerializer, request, sheet)
@@ -339,7 +341,8 @@ class StaffSheetRowsMixin:
             tradition=data["tradition"],
             gift=data["gift"],
             techniques=data["techniques"],
-            resonance=data["resonance"],
+            # Staff pick one resonance: it takes all the creation points.
+            resonances=[WeightedResonance(data["resonance"], get_drift_config().creation_points)],
             anima_stat=data["anima_stat"],
             anima_skill=data["anima_skill"],
             ritual_name=data.get("ritual_name") or f"{sheet.character.db_key}'s Anima Ritual",

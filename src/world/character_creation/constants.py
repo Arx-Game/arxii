@@ -703,3 +703,9 @@ TECHNIQUE_PERSONALIZATIONS_KEY = "technique_personalizations"
 #: up to five ``Facet`` ids. It opens facet-gated flourishes in "make it yours", and
 #: finalize ties them to the gift resonance on the new character's Motif. Free.
 GIFT_FACETS_KEY = "selected_gift_facet_ids"
+
+#: ``draft_data`` key for the gift stage's weighted resonance picks (#5123): a list of
+#: ``{"resonance_id": int, "weight": int}``. The weights spread ``DriftConfig.creation_points``
+#: across the picked resonances; finalize seeds each resonance's lifetime from its weight
+#: and the aura, the settled self and the Gift thread's rows follow.
+GIFT_RESONANCE_WEIGHTS_KEY = "gift_resonance_weights"

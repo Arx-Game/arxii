@@ -287,6 +287,43 @@ def grant_resonance(  # noqa: PLR0913
     return cr
 
 
+@transaction.atomic
+def seed_creation_resonance(
+    character_sheet: CharacterSheet, resonance: ResonanceModel, lifetime: int
+) -> ResonanceGrant:
+    """Seed a new character's starting resonance: lifetime only, never spendable (#5123).
+
+    A creation pick is who the character already is, not currency they earned: it adds
+    ``lifetime`` to the row's ``lifetime_earned`` and leaves ``balance`` alone, writes a
+    ``CHARACTER_CREATION`` ledger row, then recomputes the aura so the starting shares come
+    from the weights. Unlike ``grant_resonance`` it fires no thresholds, offers or pledge
+    favor, since nothing happened in play.
+
+    Raises:
+        InvalidImbueAmount: If ``lifetime`` <= 0.
+    """
+    if lifetime <= 0:
+        msg = "Creation resonance must be positive."
+        raise InvalidImbueAmount(msg)
+    row, _ = CharacterResonance.objects.get_or_create(
+        character_sheet=character_sheet,
+        resonance=resonance,
+        defaults={"balance": 0, "lifetime_earned": 0},
+    )
+    row.lifetime_earned += lifetime
+    row.save(update_fields=["lifetime_earned"])
+    grant = ResonanceGrant.objects.create(
+        character_sheet=character_sheet,
+        resonance=resonance,
+        amount=lifetime,
+        source=GainSource.CHARACTER_CREATION,
+    )
+    from world.magic.services.aura import recompute_aura  # noqa: PLC0415
+
+    recompute_aura(character_sheet)
+    return grant
+
+
 def _validate_grant_source_shape(  # noqa: PLR0913
     source: str,
     *,

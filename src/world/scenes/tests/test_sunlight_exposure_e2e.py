@@ -75,7 +75,7 @@ class SunlightExposureE2ETests(TestCase):
         # skips CG entirely, so give it the same guarantee explicitly: a CG pick
         # always resolves (#2971 — grant_gift_to_character now raises
         # GiftResonanceUnresolvable instead of silently minting a threadless gift).
-        provision_species_gifts(sheet, resonance=ResonanceFactory())
+        provision_species_gifts(sheet, resonances=[ResonanceFactory()])
         self.vampire = sheet.character
         self.vampire.db_location = self.room
         self.vampire.save(update_fields=["db_location"])
