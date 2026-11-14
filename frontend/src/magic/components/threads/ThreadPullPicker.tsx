@@ -429,7 +429,7 @@ export function ThreadPullPicker({
     return applicableIds
       .map((id) => threadById.get(id))
       .filter((t): t is Thread => t !== undefined)
-      .filter((t) => !filter || (t.name || '').toLowerCase().includes(filter));
+      .filter((t) => !filter || (t.display_name || t.name || '').toLowerCase().includes(filter));
   }, [applicableIds, threadById, nameFilter]);
 
   const filteredInapplicable = useMemo<Array<{ thread: Thread; row: ThreadApplicability }>>(() => {
@@ -437,7 +437,10 @@ export function ThreadPullPicker({
     return inapplicableRows
       .map((row) => ({ row, thread: threadById.get(row.thread_id) }))
       .filter((x): x is { thread: Thread; row: ThreadApplicability } => x.thread !== undefined)
-      .filter(({ thread }) => !filter || (thread.name || '').toLowerCase().includes(filter));
+      .filter(
+        ({ thread }) =>
+          !filter || (thread.display_name || thread.name || '').toLowerCase().includes(filter)
+      );
   }, [inapplicableRows, threadById, nameFilter]);
 
   // Set of currently-applicable thread IDs (for auto-revert)

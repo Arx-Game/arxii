@@ -183,6 +183,20 @@ describe('ThreadPullPicker — applicable list renders', () => {
     expect(screen.queryByText('Thread #1')).not.toBeInTheDocument();
   });
 
+  it("finds an unnamed Gift thread by typing its Gift's name in the filter", async () => {
+    const gift = makeThread({ id: 1, name: '', display_name: 'Kindling' });
+    const other = makeThread({ id: 2, name: 'Tidal Anchor' });
+    mockApplicable([makeApplicabilityRow(1, true), makeApplicabilityRow(2, true)]);
+    mockThreads([gift, other]);
+
+    render(<ThreadPullPicker {...defaultProps()} />, { wrapper: createWrapper() });
+
+    await userEvent.type(await screen.findByTestId('thread-name-filter'), 'kindl');
+
+    expect(screen.getByText('Kindling')).toBeInTheDocument();
+    expect(screen.queryByText('Tidal Anchor')).not.toBeInTheDocument();
+  });
+
   it('shows the applicable count in the header', async () => {
     const thread = makeThread({ id: 1, name: 'Vow Thread' });
     mockApplicable([makeApplicabilityRow(1, true)]);
