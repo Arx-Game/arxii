@@ -33,5 +33,5 @@ def refresh_leading_resonance(thread: Thread) -> Resonance:
         raise ValueError(msg)
     if thread.resonance_id != leading.resonance_id:
         thread.resonance = leading.resonance
-        thread.save(update_fields=["resonance"])
+        thread.save(update_fields=["resonance", "updated_at"])
     return leading.resonance

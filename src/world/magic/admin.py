@@ -1952,7 +1952,6 @@ class ThreadAdmin(admin.ModelAdmin):
     list_display = ["id", "owner", "resonance", "target_kind", "level", "developed_points"]
     list_filter = ["target_kind", "resonance"]
     search_fields = ["owner__character__db_key", "resonance__name", "name"]
-    autocomplete_fields = ["resonance"]
     raw_id_fields = [
         "owner",
         "target_trait",
@@ -1961,7 +1960,9 @@ class ThreadAdmin(admin.ModelAdmin):
         "target_capstone",
     ]
     list_select_related = ["owner", "resonance"]
-    readonly_fields = ["created_at", "updated_at"]
+    # ``resonance`` is the denormalized leading resonance, written only by
+    # refresh_leading_resonance from the ThreadResonance rows (#5123).
+    readonly_fields = ["resonance", "created_at", "updated_at"]
     inlines = [ThreadResonanceInline, ThreadLevelUnlockInline]
 
 

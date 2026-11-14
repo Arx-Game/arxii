@@ -342,8 +342,8 @@ class GainSource(models.TextChoices):
     DRIFT_CORRECTION = "DRIFT_CORRECTION", "Drift correction"
     CORRUPTION_CLEANSING = "CORRUPTION_CLEANSING", "Corruption cleansing payout"
     SINEATING = "SINEATING", "Sineating payout"
-    # #5123: the lifetime resonance seeded from a new character's creation points. No
-    # typed source FK (like STAFF_GRANT); lifetime only, no spendable balance.
+    # #5123: the resonance seeded from a new character's creation points. No typed
+    # source FK (like STAFF_GRANT); the creation seed writes its own lifetime-only path.
     CHARACTER_CREATION = "CHARACTER_CREATION", "Character creation"
 
 
