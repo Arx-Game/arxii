@@ -22,7 +22,6 @@ from __future__ import annotations
 
 from decimal import Decimal
 import re
-from unittest.mock import patch
 
 from django.test import override_settings
 from django.urls import reverse
@@ -34,11 +33,12 @@ from evennia_extensions.factories import AccountFactory
 from integration_tests.harness import JourneyCase
 from integration_tests.test_drift_correction_journeys import (
     CONVERT,
+    NOTICE,
     PENDING,
     DriftJourneyCase,
     post,
 )
-from integration_tests.test_resonance_conflict_journeys import _Drifting
+from integration_tests.test_resonance_conflict_journeys import CONFLICT, _Drifting
 from integration_tests.test_resonance_strain_journeys import _BurningResonance
 from integration_tests.test_thread_resonance_journeys import (
     ThreadRetuneCase,
@@ -67,7 +67,7 @@ from world.magic.factories import (
 )
 from world.magic.models import Affinity, CharacterResonance, Resonance, Thread, ThreadResonance
 from world.magic.models.aura import CharacterAuraShare
-from world.magic.services.drift import get_drift_config, share_in_words
+from world.magic.services.drift import get_drift_config
 from world.magic.services.resonance import grant_resonance
 from world.scenes.factories import SceneFactory
 from world.scenes.tests.cast_test_helpers import grant_technique, make_benign_castable_technique
@@ -340,10 +340,21 @@ class CreatingACharacterWithSeveralResonances(FinalizationTestMixin, JourneyCase
     def _finalized_with(self, picks: list[tuple[Resonance, int]]):
         self.account = self.staff
         draft = self._create_base_draft(first_name="Several")
-        draft.draft_data["gift_resonance_weights"] = [
-            {"resonance_id": resonance.pk, "weight": weight} for resonance, weight in picks
-        ]
-        draft.save(update_fields=["draft_data"])
+        # The picks go in the way the Gift stage sends them: a PATCH of the draft (which
+        # merges its draft_data), so the stage's own validation is on the journey's path.
+        picked = self.api(self.staff).patch(
+            f"/api/character-creation/drafts/{draft.pk}/",
+            {
+                "draft_data": {
+                    "gift_resonance_weights": [
+                        {"resonance_id": resonance.pk, "weight": weight}
+                        for resonance, weight in picks
+                    ]
+                }
+            },
+            format="json",
+        )
+        self.assertEqual(picked.status_code, status.HTTP_200_OK, picked.content)
         added = self.api(self.staff).post(
             f"/api/character-creation/drafts/{draft.pk}/add-to-roster/", {}, format="json"
         )
@@ -363,7 +374,12 @@ class CreatingACharacterWithSeveralResonances(FinalizationTestMixin, JourneyCase
         self.assertEqual(payload["dominant_affinity"], "Primal")
         self.assertIs(payload["unsettled"], False)
         self.assertEqual(payload["unsettled_line"], "")
-        self.assertEqual(share_in_words(shares["Abyssal"][0]), "a third")
+        # What she reads of it: the aura verb says the same shares in words (the halo's own
+        # sentence, "Mostly primal, a third abyssal", is drawn by the sheet from these).
+        told = strip_ansi(self.telnet(character, "aura"))
+        self.assertIn("Primal (most)", told)
+        self.assertIn("Abyssal (a third)", told)
+        self.assertIsNone(re.search(r"\d", told), told)
 
         held = client.get(f"/api/magic/character-resonances/?character_sheet={character.pk}")
         self.assertEqual(held.status_code, status.HTTP_200_OK, held.content)
@@ -460,10 +476,6 @@ class _TheLoom(JourneyCase):
                     as_intensity_bump=True,
                     intensity_bump_amount=amount,
                 )
-        # Kudos accrual reads game-week rows this journey does not build.
-        accrue = patch("world.scenes.action_services.accrue")
-        accrue.start()
-        self.addCleanup(accrue.stop)
 
     def balance(self, resonance) -> int:
         return CharacterResonance.objects.get(
@@ -598,27 +610,31 @@ class BecomingUnsettled(_Drifting):
             f"Your {self.abyssal_resonance.name} has grown strong enough to make you unsettled.",
         )
         self.assertEqual(payload["dominant_affinity"], "Celestial")
+        self.watch(self.ysmay)
 
         rec = self.cast(focus="Failure")
 
         self.assertEqual(rec.focus_difficulties, [16])
         self.assertIsNotNone(self.conflict())
+        self.assertTold(
+            self.ysmay,
+            f"Your {self.abyssal_resonance.name} has grown strong enough to make you unsettled",
+        )
+        self.assertTold(self.ysmay, f"You lose your focus as you work Lantern Ward: {CONFLICT}.")
 
+    def test_accepting_ends_the_check(self) -> None:
+        client = self.api(self.account_of(self.ysmay))
+        payload = self.aura()
 
-class AStillSettledCharacter(_Drifting):
-    """25 of 100 is her settled 20 plus the tolerance of 5: the sheet says nothing, no roll."""
+        done = client.post(f"{AURAS}{payload['id']}/accept/")
 
-    celestial_lifetime = 75
-    abyssal_lifetime = 25
-
-    def test_no_state_and_no_check(self) -> None:
-        payload = _aura_payload(self.api(self.account_of(self.ysmay)), self.ysmay)
-        self.assertIs(payload["unsettled"], False)
-        self.assertEqual(payload["unsettled_line"], "")
-
-        rec = self.cast()
-
-        self.assertEqual(rec.focus_difficulties, [])
+        self.assertEqual(done.status_code, status.HTTP_200_OK, done.data)
+        self.assertEqual(done.data["detail"], "You become more abyssal.")
+        after = self.aura()
+        self.assertIs(after["unsettled"], False)
+        self.assertEqual(after["unsettled_line"], "")
+        # Who she is moved to where she has got to, so the next cast rolls no focus at all.
+        self.assertEqual(self.cast().focus_difficulties, [])
         self.assertIsNone(self.conflict())
 
 
@@ -653,9 +669,12 @@ class AtoningOrAccepting(DriftJourneyCase):
         return _aura_payload(self.api(self.account_of(character)), character)
 
     def test_a_deed_in_the_scene_offers_atone_and_atoning_settles_her(self) -> None:
+        self.connect_telnet(self.ysmay)
+        self.watch(self.ysmay)
         self.assertIs(self.aura(self.ysmay)["unsettled"], True)
         offering = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
         self.deed(self.ysmay)
+        self.assertIn(NOTICE, strip_ansi(self.said(self.ysmay)))
 
         ysmay_api = self.api(self.account_of(self.ysmay))
         (offer,) = ysmay_api.get(PENDING).data["results"]
@@ -682,11 +701,16 @@ class AtoningOrAccepting(DriftJourneyCase):
         payload = self.aura(self.ysmay)
         self.assertIs(payload["unsettled"], False)
         self.assertEqual(payload["unsettled_line"], "")
+        self.assertNotIn("unsettled", strip_ansi(self.telnet(self.ysmay, "aura")))
 
     def test_outside_a_scene_there_is_only_accept_and_it_ends_the_unsettled_state(self) -> None:
         hobb_api = self.api(self.account_of(self.hobb))
         before = self.aura(self.hobb)
         self.assertIs(before["unsettled"], True)
+        self.assertIn(
+            "Your Ruin has grown strong enough to make you unsettled.",
+            strip_ansi(self.telnet(self.hobb, "aura")),
+        )
         self.assertEqual(hobb_api.get(PENDING).data["results"], [])
         # Her Abyssal streak is no part of who she is: not even a share row for it yet.
         self.assertNotIn("Abyssal", _share_rows(before))
@@ -697,6 +721,8 @@ class AtoningOrAccepting(DriftJourneyCase):
         self.assertEqual(done.data["detail"], "You become more abyssal.")
         after = self.aura(self.hobb)
         self.assertIs(after["unsettled"], False)
+        self.assertEqual(after["unsettled_line"], "")
+        self.assertNotIn("unsettled", strip_ansi(self.telnet(self.hobb, "aura")))
         # 40 of 540 is 7.41: who she is moved up to where she has got to, the line with it.
         self.assertEqual(_share_rows(after)["Abyssal"], (Decimal("7.41"), Decimal("7.41")))
         self.assertEqual(after["dominant_affinity"], "Celestial")
