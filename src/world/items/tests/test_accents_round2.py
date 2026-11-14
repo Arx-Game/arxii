@@ -191,23 +191,25 @@ class ThreadCheckEdgeTests(TestCase):
     """Woven threads add to the craft roll, not just the ceiling (#2886)."""
 
     def test_thread_contribution_built_per_thread(self) -> None:
+        from world.items.crafting.constants import THREAD_CRAFT_CHECK_BONUS
         from world.items.crafting.services import _thread_check_contributions
         from world.items.factories import wire_enchanting_crafting
-        from world.magic.factories import ThreadFactory
+        from world.magic.factories import ThreadFactory, ThreadResonanceFactory
 
         recipe = wire_enchanting_crafting(base_difficulty=0)
         sheet = CharacterSheetFactory()
         self.assertEqual(_thread_check_contributions(sheet.character, recipe), [])
-        ThreadFactory(owner=sheet, target_trait=recipe.skill_trait)
-        ThreadFactory(
-            owner=sheet,
-            target_trait=recipe.skill_trait,
-            resonance__name="SecondResonance",
-        )
+        # One thread per anchor (#5123): a second resonance is a row on this thread, so
+        # the skill holds one thread however many resonances it carries.
+        thread = ThreadFactory(owner=sheet, target_trait=recipe.skill_trait)
+        ThreadResonanceFactory(thread=thread, resonance__name="SecondResonance")
         contribs = _thread_check_contributions(sheet.character, recipe)
         self.assertEqual(len(contribs), 1)
-        self.assertEqual(contribs[0].value, 20)
+        self.assertEqual(contribs[0].value, THREAD_CRAFT_CHECK_BONUS)
         self.assertEqual(contribs[0].source_label, "Woven threads")
+        # The contribution scales per thread when the caller already counted several.
+        counted = _thread_check_contributions(sheet.character, recipe, thread_count=2)
+        self.assertEqual(counted[0].value, 2 * THREAD_CRAFT_CHECK_BONUS)
 
 
 class AccentArchetypeAllowanceTests(TestCase):
