@@ -49,9 +49,10 @@ from world.magic.models import (
 )
 from world.magic.services.thread_rows import write_resonance_rows
 from world.magic.types import ThreadSurvivabilitySaves, ThreadXPLockProspect
+from world.magic.types.pull import pull_payer
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Mapping
 
     from evennia.objects.models import ObjectDB
 
@@ -360,16 +361,22 @@ def pull_cost_totals(tier: int, n_threads: int) -> PullCostTotals:
     )
 
 
-def pull_resonance_costs(tier: int, threads: Iterable[Thread]) -> dict[int, int]:
-    """What a pull at ``tier`` costs each resonance, keyed by resonance id (#5066).
+def pull_resonance_costs(
+    tier: int,
+    threads: Iterable[Thread],
+    payers: Mapping[int, ResonanceModel] | None = None,
+) -> dict[int, int]:
+    """What a pull at ``tier`` costs each paying resonance, keyed by resonance id (#5066).
 
-    A pull may mix threads of several resonances; each thread pays the tier's resonance
-    cost from its own resonance (maintainer ruling 2026-11-11).
+    Each thread pays the tier's resonance cost from its payer: the resonance picked for it
+    in ``payers`` (keyed by thread id), else its leading resonance (#5123; maintainer
+    ruling 2026-11-11). Threads may be paid by different resonances.
     """
     each = get_pull_cost(tier, None).resonance_cost
     costs: dict[int, int] = {}
     for thread in threads:
-        costs[thread.resonance_id] = costs.get(thread.resonance_id, 0) + each
+        payer_id = pull_payer(thread, payers).pk
+        costs[payer_id] = costs.get(payer_id, 0) + each
     return costs
 
 

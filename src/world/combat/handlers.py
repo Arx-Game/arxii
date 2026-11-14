@@ -27,6 +27,7 @@ from world.combat.models import (
     CombatParticipant,
     CombatPull,
     CombatPullResolvedEffect,
+    CombatPullThread,
     CombatRoundAction,
 )
 from world.magic.constants import EffectKind
@@ -59,6 +60,12 @@ class CharacterCombatPullHandler:
                 # a round's cast pulled, are read off the threads.
                 Prefetch(  # noqa: PREFETCH_STRING - read as pull.threads.all() by every reader
                     "threads", queryset=Thread.objects.select_related("resonance")
+                ),
+                # What each thread was paid by (#5123): the payer, not the thread's
+                # leading resonance, is who was charged and whose drift a cast carries.
+                Prefetch(  # noqa: PREFETCH_STRING - read as pull.pull_threads.all()
+                    "pull_threads",
+                    queryset=CombatPullThread.objects.select_related("paying_resonance"),
                 ),
                 Prefetch(
                     "resolved_effects",

@@ -60,7 +60,7 @@ if TYPE_CHECKING:
     from world.checks.types import CheckResult
     from world.combat.models import CombatPull
     from world.forms.models import FormCombatProfile
-    from world.magic.models import Resonance, Restriction, Technique, Thread
+    from world.magic.models import Resonance, Restriction, Technique
     from world.magic.services.fury import FuryCast
     from world.magic.services.power_terms import ApplicableThread
     from world.magic.services.resonance_environment import ResonanceEnvironmentEffect
@@ -219,7 +219,11 @@ def _pull_spends_for_cast(  # noqa: PLR0913 - the cast, its charged pull, the re
             # Character has no CharacterSheet (e.g., NPCs); treat as no active pulls.
             active_pulls = []
     for pull in active_pulls:
-        _add_thread_spends(spends, pull.resonance_spent, list(pull.threads.all()))
+        _add_payer_spends(
+            spends,
+            pull.resonance_spent,
+            [row.paying_resonance for row in pull.pull_threads.all()],
+        )
         if (
             pull.resonance_burned > 0
             and combat_burn_for
@@ -233,7 +237,11 @@ def _pull_spends_for_cast(  # noqa: PLR0913 - the cast, its charged pull, the re
                 hasty_fall=pull.burn_hasty_fall,
             )
     if cast_pull is not None:
-        _add_thread_spends(spends, cast_pull_spent, list(cast_pull.threads))
+        _add_payer_spends(
+            spends,
+            cast_pull_spent,
+            [cast_pull.payer_for(thread) for thread in cast_pull.threads],
+        )
         if burn_result is not None:
             valuation = burn_result.valuation
             burned = burn_result.resonance
@@ -245,21 +253,21 @@ def _pull_spends_for_cast(  # noqa: PLR0913 - the cast, its charged pull, the re
     return spends
 
 
-def _add_thread_spends(
-    spends: dict[int, tuple[Resonance, _PullSpend]], spent: int, threads: list[Thread]
+def _add_payer_spends(
+    spends: dict[int, tuple[Resonance, _PullSpend]], spent: int, payers: list[Resonance]
 ) -> None:
-    """Add what a pull paid to each of its threads' own resonances (#5066).
+    """Add what a pull paid to each of its threads' paying resonances (#5066, #5123).
 
-    A pull may mix resonances; each thread paid the same tier cost from its own resonance
-    (maintainer ruling 2026-11-11), so the pull's recorded ``spent`` is split evenly over
-    its threads (any remainder to the first) and charged to each thread's resonance.
+    A pull may mix payers; each thread paid the same tier cost from its payer (maintainer
+    ruling 2026-11-11), so the pull's recorded ``spent`` is split evenly over its threads
+    (any remainder to the first) and charged to each thread's payer.
     """
-    if not threads or spent <= 0:
+    if not payers or spent <= 0:
         return
-    each, remainder = divmod(spent, len(threads))
-    for index, thread in enumerate(threads):
+    each, remainder = divmod(spent, len(payers))
+    for index, payer in enumerate(payers):
         share = each + (remainder if index == 0 else 0)
-        entry = spends.setdefault(thread.resonance_id, (thread.resonance, _PullSpend()))
+        entry = spends.setdefault(payer.pk, (payer, _PullSpend()))
         entry[1].raw += share
 
 
@@ -1221,6 +1229,7 @@ def _charge_cast_pull(  # noqa: PLR0913 - one pull charge, each argument is a di
         beseech_bonus=applied_bonus,
         burn=burn_result.reached if burn_result is not None else 0,
         burn_resonance=burn_result.resonance if burn_result is not None else None,
+        payers=cast_pull.payers,
     )
     if burn_result is not None:
         from world.magic.services.burn import announce_burn  # noqa: PLC0415
@@ -1441,7 +1450,9 @@ def _resolve_cast_burn(
         resonance=burned,
         requested=cast_pull.burn,
         runtime_intensity=runtime_intensity,
-        pull_cost=pull_resonance_costs(cast_pull.tier, cast_pull.threads)[burned.pk],
+        pull_cost=pull_resonance_costs(cast_pull.tier, cast_pull.threads, cast_pull.payers)[
+            burned.pk
+        ],
         situation_ctx=burn_ctx,
     )
 

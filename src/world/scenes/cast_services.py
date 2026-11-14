@@ -814,11 +814,16 @@ def _resolve_cast_pull(
     if declaration is None:
         return None, None
     threads = list(declaration.threads.filter(retired_at__isnull=True))
+    payers = {
+        row.thread_id: row.paying_resonance
+        for row in declaration.pull_threads.select_related("paying_resonance")
+    }
     preview = (
         preview_resonance_pull(
             initiator_persona.character_sheet,
             declaration.tier,
             threads,
+            payers=payers,
         )
         if threads
         else None
@@ -829,6 +834,7 @@ def _resolve_cast_pull(
             threads=tuple(threads),
             burn=declaration.burn,
             burn_resonance=declaration.burn_resonance,
+            payers=payers,
         )
         return cast_pull, None
     return None, _PULL_FIZZLE_NOTE
@@ -1497,11 +1503,11 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
                 burn=cast_pull.burn,
                 burn_resonance=cast_pull.burned_resonance if cast_pull.burn else None,
             )
-            # Task 1 bridge (#5123): each thread pays with its leading resonance until
-            # the cast pull carries a chosen payer.
             ScenePullThread.objects.bulk_create(
                 ScenePullThread(
-                    declaration=declaration, thread=thread, paying_resonance_id=thread.resonance_id
+                    declaration=declaration,
+                    thread=thread,
+                    paying_resonance_id=cast_pull.payer_for(thread).pk,
                 )
                 for thread in cast_pull.threads
             )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from django.utils.functional import cached_property
@@ -117,14 +118,29 @@ class ResonancePullResult:
     resonance_burned: int = 0
 
 
+def pull_payer(thread: Thread, payers: Mapping[int, Resonance] | None) -> Resonance:
+    """The resonance that pays for ``thread`` in a pull (#5123).
+
+    The one the player picked for it (``payers`` is keyed by thread id), else the thread's
+    leading resonance. A payer may be a resonance the thread holds no row for: the
+    character holds it, so it pays, and it brings no perks.
+    """
+    if payers:
+        picked = payers.get(thread.pk)
+        if picked is not None:
+            return picked
+    return thread.resonance
+
+
 @dataclass(frozen=True)
 class CastPullDeclaration:
     """A paid thread pull declared with a cast, a clash, or on its own (#768, #5066).
 
     The caster pulls ``threads`` at ``tier``; charged via ``spend_resonance_for_pull``
-    only after the cast clears its soulfray/pre-cast gates. The threads may be of
-    different resonances: each is paid from its own resonance at the tier's cost
-    (maintainer ruling 2026-11-11). Every thread must pass the anchor-in-action check.
+    only after the cast clears its soulfray/pre-cast gates. Each thread is paid by a
+    resonance the caster picks for it (``payers``, keyed by thread id; the thread's
+    leading resonance when none is named), at the tier's cost (maintainer ruling
+    2026-11-11, #5123). Every thread must pass the anchor-in-action check.
     """
 
     tier: int
@@ -137,15 +153,23 @@ class CastPullDeclaration:
     """Resonance points the caster asks to burn on top of the pull, for strain (#4736).
     0 (default) means no burn. The reached amount is resolved at cast time."""
     burn_resonance: Resonance | None = None
-    """The pulled resonance the burn comes from, when the player named one (#5066). A pull
-    of one resonance burns that one without naming it; see ``burned_resonance``."""
+    """The paying resonance the burn comes from, when the player named one (#5066). A pull
+    paid by one resonance burns that one without naming it; see ``burned_resonance``."""
+    payers: Mapping[int, Resonance] = field(default_factory=dict)
+    """Thread id -> the resonance paying for that thread (#5123). A thread not named here
+    is paid by its leading resonance."""
+
+    def payer_for(self, thread: Thread) -> Resonance:
+        """The resonance paying for ``thread`` in this pull."""
+        return pull_payer(thread, self.payers)
 
     @property
     def resonances(self) -> tuple[Resonance, ...]:
-        """The distinct resonances of the pulled threads, in thread order."""
+        """The distinct paying resonances of the pulled threads, in thread order."""
         seen: dict[int, Resonance] = {}
         for thread in self.threads:
-            seen.setdefault(thread.resonance_id, thread.resonance)
+            payer = self.payer_for(thread)
+            seen.setdefault(payer.pk, payer)
         return tuple(seen.values())
 
     @property
@@ -161,6 +185,30 @@ class CastPullDeclaration:
             named = self.burn_resonance.pk
             return next((r for r in pulled if r.pk == named), None)
         return pulled[0] if len(pulled) == 1 else None
+
+
+@dataclass(frozen=True)
+class PayerOption:
+    """One resonance that could pay for one pulled thread, with what paying would cost (#5123).
+
+    ``effects`` are the perks the thread would resolve with this payer and ``level_read``
+    the thread level those perks are read at; both are filled by the perk lookup by payer.
+    """
+
+    resonance: Resonance
+    cost: int
+    balance: int
+    affordable: bool
+    effects: list[ResolvedPullEffect] = field(default_factory=list)
+    level_read: int = 0
+
+
+@dataclass(frozen=True)
+class ThreadPayerPreview:
+    """Every resonance the character holds, as a payer option for one pulled thread."""
+
+    thread_id: int
+    options: list[PayerOption]
 
 
 @dataclass(frozen=True)
@@ -182,3 +230,5 @@ class PullPreviewResult:
     #: The burn ceiling and per-point value for the technique the pull rides (#4736);
     #: None when the preview names no technique.
     burn: BurnPreview | None = None
+    #: Per pulled thread, every held resonance as a payer option (#5123).
+    per_thread: list[ThreadPayerPreview] = field(default_factory=list)

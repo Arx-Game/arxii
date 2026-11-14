@@ -81,6 +81,7 @@ def _build_pull_from_validated(validated_data: dict) -> CastPullDeclaration | No
     return CastPullDeclaration(
         tier=pull_data["tier"],
         threads=tuple(pull_data["threads"]),
+        payers=pull_data.get("payer_map", {}),
     )
 
 
@@ -760,6 +761,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 threads=tuple(pull_data["threads"]),
                 burn=pull_data.get("burn", 0),
                 burn_resonance=pull_data.get("burn_resonance"),
+                payers=pull_data.get("payer_map", {}),
             )
 
         try:

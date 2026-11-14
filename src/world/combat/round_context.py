@@ -374,7 +374,7 @@ class CombatRoundContext(RoundContext):
         """True when this round's committed pull is the one ``cast_pull`` declares (#4736).
 
         A pull is one per participant per round. When the web resubmits a focused cast
-        whose pull already committed, the same resonance, tier, threads and burn are a
+        whose pull already committed, the same payers, tier, threads and burn are a
         no-op. Any other pull already committed this round is refused.
 
         The burn matches when one was asked for both times (``burned_for`` is the focused
@@ -394,8 +394,8 @@ class CombatRoundContext(RoundContext):
         expected_burned_for = PullBurnAction.CAST if cast_pull.burn > 0 else ""
         same = (
             existing.tier == cast_pull.tier
-            and set(existing.threads.values_list("pk", flat=True))
-            == {thread.pk for thread in cast_pull.threads}
+            and set(existing.pull_threads.values_list("thread_id", "paying_resonance_id"))
+            == {(thread.pk, cast_pull.payer_for(thread).pk) for thread in cast_pull.threads}
             and existing.burned_for == expected_burned_for
             and existing.resonance_burned <= cast_pull.burn
         )

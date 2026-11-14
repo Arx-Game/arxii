@@ -193,6 +193,7 @@ from world.magic.services import (
 from world.magic.services.auth import _resolve_actor_sheet, _resolve_endorser_sheet
 from world.magic.services.gain import account_for_sheet, retract_pose_endorsement
 from world.magic.services.pull_applicability import PullActionContext, compute_thread_applicability
+from world.magic.services.pull_payers import resolve_pull_payers
 from world.magic.services.technique_builder import (
     PlayerPolicy,
     StaffPolicy,
@@ -1171,9 +1172,10 @@ class ThreadPullPreviewView(APIView):
 
     POST /api/magic/thread-pull-preview/
 
-    Request body: ``{tier, thread_ids[], burn_resonance_id?, action_context?, technique_id?}``
-    (the threads may mix resonances, #5066).
-    Response: ``{resonance_cost, anima_cost, affordable, resolved_effects[],
+    Request body: ``{tier, thread_ids[], payers?, burn_resonance_id?, action_context?,
+    technique_id?}`` (``payers`` maps a thread id to the resonance id paying for it, else
+    its leading resonance, #5123).
+    Response: ``{resonance_cost, anima_cost, affordable, resolved_effects[], per_thread[],
     capped_intensity, burn}``; ``burn`` is null without ``technique_id`` (#4736).
     Never mutates state.
     """
@@ -1211,6 +1213,11 @@ class ThreadPullPreviewView(APIView):
                 {"detail": _ERR_THREAD_NOT_FOUND},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        try:
+            payers = resolve_pull_payers(sheet.pk, thread_ids, data.get("payers"))
+        except InvalidImbueAmount as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
 
         combat_encounter = None
         action_ctx = data.get("action_context") or {}
@@ -1264,6 +1271,7 @@ class ThreadPullPreviewView(APIView):
                 excluded_kinds=frozenset({TargetKind.GIFT}) if data.get("exclude_gift") else None,
                 target=target,
                 burn_resonance=burn_resonance,
+                payers=payers,
             )
         except InvalidImbueAmount as exc:
             return Response(

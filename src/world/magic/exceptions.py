@@ -138,6 +138,21 @@ class InvalidImbueAmount(MagicError):
     user_message = "Invalid imbue amount."
 
 
+class PullValidationError(InvalidImbueAmount):
+    """A pull declaration that names a payer or burn the pull cannot use (#5123).
+
+    The raise site authors the player-facing text, so a message passed in becomes the
+    ``user_message``.
+    """
+
+    user_message = "This pull cannot be paid that way."
+
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
+        if args and isinstance(args[0], str) and args[0]:
+            self.user_message = args[0]
+
+
 class CovenantRoleNotEngagedError(InvalidImbueAmount):
     """A COVENANT_ROLE Thread pull was attempted while no engaged membership matches."""
 

@@ -1659,6 +1659,9 @@ class ThreadPullPreviewRequestSerializer(serializers.Serializer):
     # #5066: which pulled resonance a burn would come from; the burn preview uses it, and
     # a pull of one resonance needs none.
     burn_resonance_id = serializers.IntegerField(required=False, allow_null=True)
+    # #5123: thread id -> the id of the resonance paying for that thread; a thread left out
+    # is paid by its leading resonance.
+    payers = serializers.DictField(child=serializers.IntegerField(), required=False, default=dict)
     action_context = PullActionContextSerializer(required=False)
     # #1919: Optional scene-scoped params for social-action pull previews.
     # scene_id: when provided, the preview computes the combat/DANGER state
@@ -1719,6 +1722,25 @@ class BurnPreviewSerializer(serializers.Serializer):
     ceiling_tier_name = serializers.CharField(allow_null=True)
 
 
+class PayerOptionSerializer(serializers.Serializer):
+    """One resonance that could pay for a pulled thread, with its cost and balance (#5123)."""
+
+    resonance_id = serializers.IntegerField(source="resonance.pk")
+    resonance_name = serializers.CharField(source="resonance.name")
+    cost = serializers.IntegerField()
+    balance = serializers.IntegerField()
+    affordable = serializers.BooleanField()
+    effects = ResolvedPullEffectSerializer(many=True)
+    level_read = serializers.IntegerField()
+
+
+class ThreadPayerPreviewSerializer(serializers.Serializer):
+    """Every held resonance as a payer option for one pulled thread (#5123)."""
+
+    thread_id = serializers.IntegerField()
+    options = PayerOptionSerializer(many=True)
+
+
 class ThreadPullPreviewResponseSerializer(serializers.Serializer):
     """Response serializer for POST /api/magic/thread-pull-preview/."""
 
@@ -1728,6 +1750,7 @@ class ThreadPullPreviewResponseSerializer(serializers.Serializer):
     resolved_effects = ResolvedPullEffectSerializer(many=True)
     capped_intensity = serializers.BooleanField()
     burn = BurnPreviewSerializer(allow_null=True)
+    per_thread = ThreadPayerPreviewSerializer(many=True)
 
 
 # ---------------------------------------------------------------------------

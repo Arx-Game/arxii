@@ -680,11 +680,9 @@ def create_action_request(  # noqa: PLR0913 - the one dispatch orchestrator
             request=request,
             tier=pull.tier,
         )
-        # Task 1 bridge (#5123): each thread pays with its leading resonance until the
-        # pull carries a chosen payer.
         ScenePullThread.objects.bulk_create(
             ScenePullThread(
-                declaration=decl, thread=thread, paying_resonance_id=thread.resonance_id
+                declaration=decl, thread=thread, paying_resonance_id=pull.payer_for(thread).pk
             )
             for thread in pull.threads
         )
@@ -1222,6 +1220,10 @@ def _charge_social_pull(
         # even if the declaration somehow carried a bonus.
         beseech_bonus=0,
         anima_cost_override=anima_cost_override,
+        payers={
+            row.thread_id: row.paying_resonance
+            for row in declaration.pull_threads.select_related("paying_resonance")
+        },
     )
 
     pull_flat_bonus = 0

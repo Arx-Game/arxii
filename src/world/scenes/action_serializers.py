@@ -158,6 +158,15 @@ class CastPullRequestSerializer(serializers.Serializer):
         allow_empty=False,
         max_length=20,
     )
+    payers = serializers.DictField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=dict,
+        help_text=(
+            "Thread id -> the id of the resonance paying for that thread (#5123); a thread "
+            "left out is paid by its leading resonance."
+        ),
+    )
 
 
 class CastPullWithBurnRequestSerializer(CastPullRequestSerializer):
@@ -234,11 +243,13 @@ def _validate_pull_declaration(attrs: dict, *, hostile_check: bool = False) -> d
             thread_ids=pull["thread_ids"],
             burn=pull.get("burn", 0),
             burn_resonance_id=pull.get("burn_resonance_id"),
+            payer_ids={int(thread): res for thread, res in pull.get("payers", {}).items()},
         )
     except InvalidImbueAmount as exc:
         raise serializers.ValidationError({"pull": exc.user_message}) from exc
 
     pull["threads"] = list(declaration.threads)
+    pull["payer_map"] = dict(declaration.payers)
     pull["burn_resonance"] = declaration.burned_resonance if declaration.burn else None
     return attrs
 
