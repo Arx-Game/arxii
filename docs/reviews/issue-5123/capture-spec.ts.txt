@@ -234,24 +234,26 @@ test('screen 2: pull dialog', async ({ page }) => {
   await expect(dlg).toBeVisible();
   await page.waitForTimeout(500);
   await dlg.screenshot({ path: shot('app-screen2-dialog-initial.png') });
-  // Gift thread (id 1) is not offered; the Facet thread (3) and the Relationship thread (2) are.
-  await expect(page.getByTestId('thread-checkbox-1')).toHaveCount(0);
+  // The Gift thread (1), the Facet thread (3) and the Relationship thread (2) are all offered.
+  await expect(page.getByTestId('thread-checkbox-1')).toBeVisible();
+  await expect(page.getByTestId('thread-checkbox-2')).toBeVisible();
+  await expect(page.getByTestId('thread-checkbox-3')).toBeVisible();
   await page.getByTestId('tier-btn-2').click();
-  await page.getByTestId('thread-checkbox-3').click();
+  await page.getByTestId('thread-checkbox-1').click();
   await page.getByTestId('thread-checkbox-2').click();
-  await expect(page.getByTestId('payer-options-3')).toBeVisible();
+  await expect(page.getByTestId('payer-options-1')).toBeVisible();
   await expect(page.getByTestId('payer-fixed-2')).toBeVisible();
   await expect(page.getByTestId('preview-panel')).toBeVisible();
   await page.waitForTimeout(500);
   await dlg.screenshot({ path: shot('app-screen2-dialog-fury-pays.png') });
   // Interaction: pay with Domination.
-  await page.getByTestId('payer-3-13').click();
-  await expect(page.getByTestId('payer-3-13')).toHaveAttribute('aria-checked', 'true');
+  await page.getByTestId('payer-1-13').click();
+  await expect(page.getByTestId('payer-1-13')).toHaveAttribute('aria-checked', 'true');
   await page.waitForTimeout(700);
   await dlg.screenshot({ path: shot('app-screen2-dialog-domination-pays.png') });
   console.log('PREVIEW BODIES', previews.slice(-2).join(' | '));
   // Inspect perks on Domination.
-  await page.getByTestId('payer-inspect-3-13').click();
+  await page.getByTestId('payer-inspect-1-13').click();
   await expect(page.getByTestId('perk-inspect')).toBeVisible();
   await page.waitForTimeout(500);
   await page.screenshot({ path: shot('app-screen2-inspect-over-dialog.png') });
