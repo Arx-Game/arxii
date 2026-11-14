@@ -22,7 +22,7 @@ from world.magic.factories import (
     TechniqueFactory,
     TechniqueVariantFactory,
 )
-from world.magic.models import CharacterGift, Thread
+from world.magic.models import CharacterGift, Thread, ThreadResonance
 from world.magic.services.gift_acquisition import (
     charge_and_learn,
     count_techniques_for_gift,
@@ -34,6 +34,13 @@ from world.magic.specialization.services import (
     gift_resonances_for,
     resolve_specialized_variant,
 )
+
+
+def create_gift_thread(**kwargs) -> Thread:
+    """A GIFT thread with the resonance row every thread holds (#5123)."""
+    thread = Thread.objects.create(**kwargs)
+    ThreadResonance.objects.create(thread=thread, resonance=kwargs["resonance"])
+    return thread
 
 
 class GiftLineageModelTests(TestCase):
@@ -96,7 +103,7 @@ class InheritedTechniqueAcquisitionTests(TestCase):
         self.kind.resonances.add(self.resonance)
         # The character holds ONLY the kind gift, with ONE thread on it.
         CharacterGift.objects.create(character=self.sheet, gift=self.kind)
-        Thread.objects.create(
+        create_gift_thread(
             owner=self.sheet,
             resonance=self.resonance,
             target_kind=TargetKind.GIFT,
@@ -142,7 +149,7 @@ class InheritedTechniqueAcquisitionTests(TestCase):
         """Inheritance runs one way. Holding Khati does not grant the Vulpi kind's own."""
         other_sheet = CharacterSheetFactory()
         CharacterGift.objects.create(character=other_sheet, gift=self.umbrella)
-        Thread.objects.create(
+        create_gift_thread(
             owner=other_sheet,
             resonance=self.resonance,
             target_kind=TargetKind.GIFT,
@@ -198,7 +205,7 @@ class InheritedTechniqueTeachingPathTests(TestCase):
         self.umbrella.resonances.add(self.resonance)
         self.kind.resonances.add(self.resonance)
         CharacterGift.objects.create(character=self.sheet, gift=self.kind)
-        Thread.objects.create(
+        create_gift_thread(
             owner=self.sheet,
             resonance=self.resonance,
             target_kind=TargetKind.GIFT,
@@ -244,7 +251,7 @@ class InheritedTechniqueCastTests(TestCase):
         cls.kind = GiftFactory(kind=GiftKind.MINOR, parent=cls.umbrella)
         cls.kind.resonances.add(cls.thread_resonance)
         CharacterGift.objects.create(character=cls.sheet, gift=cls.kind)
-        Thread.objects.create(
+        create_gift_thread(
             owner=cls.sheet,
             resonance=cls.thread_resonance,
             target_kind=TargetKind.GIFT,
@@ -283,7 +290,7 @@ class ParentlessGiftUnchangedTests(TestCase):
         self.gift = GiftFactory(kind=GiftKind.MINOR)
         self.gift.resonances.add(self.resonance)
         CharacterGift.objects.create(character=self.sheet, gift=self.gift)
-        Thread.objects.create(
+        create_gift_thread(
             owner=self.sheet,
             resonance=self.resonance,
             target_kind=TargetKind.GIFT,

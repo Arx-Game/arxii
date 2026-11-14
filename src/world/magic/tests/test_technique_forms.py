@@ -23,6 +23,7 @@ from world.magic.factories import (
     GiftFactory,
     ResonanceFactory,
     TechniqueFactory,
+    ThreadResonanceFactory,
 )
 from world.magic.models import Gift, Resonance, Technique, Thread
 from world.magic.services.technique_effects import invalidate_variant_payload_caches
@@ -199,23 +200,24 @@ class AvailableTechniqueFormsTest(TestCase):
         variant_ids = [f["variant_id"] for f in forms if f["variant_id"] is not None]
         self.assertEqual(variant_ids, [deeper.pk])
 
-    def test_multi_resonance_caster_gets_one_form_per_thread(self) -> None:
-        """#1619: a second thread at another resonance adds its own form."""
-        tide_variant = TechniqueVariant.objects.create(
+    def test_forms_read_the_leading_resonance_of_a_multi_resonance_thread(self) -> None:
+        """#5123: a thread holding a second resonance lists the leading resonance's form."""
+        TechniqueVariant.objects.create(
             parent_technique=self.technique,
             resonance=self.other_resonance,
             unlock_thread_level=30,
             name_override="Tidewrack Lash",
         )
         self.technique.__dict__.pop("cached_variants", None)
-        self._thread_at(30)
-        self._thread_at(30, resonance=self.other_resonance)
+        thread = self._thread_at(30)
+        ThreadResonanceFactory(thread=thread, resonance=self.other_resonance)
+        self.sheet.character.threads.invalidate()
 
         forms = available_technique_forms(self.sheet.character, self.technique)
+
         names = {f["name"] for f in forms}
         self.assertIn("Ashfall Lash", names)
-        self.assertIn("Tidewrack Lash", names)
-        self.assertIn(tide_variant.pk, {f["variant_id"] for f in forms})
+        self.assertNotIn("Tidewrack Lash", names)
         self.assertEqual(sum(1 for f in forms if f["is_default"]), 1)
 
     def test_each_form_carries_its_own_effect_summary(self) -> None:
