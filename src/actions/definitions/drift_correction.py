@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
     from actions.types import ActionContext
 
-_NOT_YOUR_OFFER = "That chance to correct drift is not yours."
+_NOT_YOUR_OFFER = "That chance to atone is not yours."
 _NOT_CARRIED = "You are not carrying everything you offered."
 
 
@@ -127,4 +127,4 @@ class DeclineDriftCorrectionAction(Action):
         if sheet_pk is None or offer.character_sheet_id != sheet_pk:
             return ActionResult(success=False, message=_NOT_YOUR_OFFER)
         offer.delete()
-        return ActionResult(success=True, message="You let the chance to correct drift pass.")
+        return ActionResult(success=True, message="You let the chance to atone pass.")

@@ -385,10 +385,8 @@ def convertible_drift(sheet: CharacterSheet, target: Resonance) -> list[Characte
     ]
 
 
-_OFFER_OPENED_TEXT = (
-    "You carry resonance that does not fit you. Use |waura|n to see what you can correct."
-)
-_OFFER_LAPSED_TEXT = "The chance to correct drift passes with the scene."
+_OFFER_OPENED_TEXT = "You have grown unsettled. Use |waura|n to see how you can atone."
+_OFFER_LAPSED_TEXT = "The chance to atone passes with the scene."
 
 
 def _tell_non_web(character: ObjectDB, text: str) -> None:

@@ -341,8 +341,8 @@ class LapseTests(DriftOfferTestBase):
         self.assertEqual(list(DriftConversionOffer.objects.all()), [other])
 
 
-OPENED = "You carry resonance that does not fit you. Use |waura|n to see what you can correct."
-LAPSED = "The chance to correct drift passes with the scene."
+OPENED = "You have grown unsettled. Use |waura|n to see how you can atone."
+LAPSED = "The chance to atone passes with the scene."
 
 
 class OfferNoticeTests(DriftOfferTestBase):

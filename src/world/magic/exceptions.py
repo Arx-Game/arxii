@@ -950,7 +950,7 @@ class DriftCorrectionNotConfiguredError(DriftCorrectionError):
 class DriftOfferNotFoundError(DriftCorrectionError):
     """The offer is gone, its scene has finished, or it holds no cap toward the target."""
 
-    user_message = "You have no open chance to correct drift toward that resonance."
+    user_message = "You have no open chance to atone toward that resonance."
 
 
 class DriftConversionInvalidError(DriftCorrectionError):

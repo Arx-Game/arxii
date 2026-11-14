@@ -581,7 +581,13 @@ actions, backends, and service functions.
     the shared `_CombatCommandMixin` pull parser. The pull rides the `cast` or `clash`
     declaration — there is no standalone `pull` verb. In combat, one pull is allowed per
     round (a second attempt surfaces `PULL_ALREADY_COMMITTED`). `pull=` lists comma-separated
-    thread names or ids; `resonance=` names the resonance to spend from; `tier=` is 1, 2, or 3
+    thread names or ids, each optionally `<thread>:<resonance>` (`pull=Loom Strand:Ember`,
+    #5123) to name the held resonance that pays for that thread: a bare thread is paid by its
+    leading resonance, and an unknown resonance or one the character does not hold is refused
+    in words (`commands/utils/held_resonance.py`, the one lookup `aura atone` and `imbue
+    resonance=` share) with nothing charged. A standalone `combat pull <tier>=<thread>[:<resonance>][,...]`
+    reads the same way. `resonance=` names the resonance a burn comes from (it must be one of
+    the payers; formerly the resonance to spend from); `tier=` is 1, 2, or 3
     (default 1). Effects that don't apply to the current context are silently applied as
     far as they fit; the declaration is refused without charge only if none apply
     (inert-effect rule).

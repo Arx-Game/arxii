@@ -1965,8 +1965,11 @@ left it commits and charges nothing. Both telnet and web converge on the same co
 `preview_resonance_pull` and the auto-pull). Before #5066 the resonance cost was paid once per
 pull and anima was `anima_per_thread x (n - 1)`.
 
-**Telnet surface:** `cast`/`clash` accept `pull=<thread>[,…] resonance=<name> [tier=<1-3>]`
-parsed by the shared `_CombatCommandMixin` pull parser. The pull rides the declaration;
+**Telnet surface:** `cast`/`clash` accept `pull=<thread>[:<resonance>][,…] resonance=<name> [tier=<1-3>]`
+parsed by the shared `_CombatCommandMixin` pull parser; `:<resonance>` names the held resonance
+that pays for that thread (a bare thread is paid by its leading resonance; an unheld one is
+refused in words, nothing charged), and `resonance=` names the burn's resonance, one of the
+payers. A pull on its own is `combat pull <tier>=<thread>[:<resonance>][,…]`. The pull rides the declaration;
 one pull per combat round (cap → `PULL_ALREADY_COMMITTED`).
 
 **Web surface:**

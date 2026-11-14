@@ -69,8 +69,8 @@ from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 from world.traits.services import ensure_canonical_check_outcome
 
 NO_OFFER = "You have no open chance to atone."
-NOTICE = "You carry resonance that does not fit you. Use aura to see what you can correct."
-LAPSE = "The chance to correct drift passes with the scene."
+NOTICE = "You have grown unsettled. Use aura to see how you can atone."
+LAPSE = "The chance to atone passes with the scene."
 NOT_READY = "The rite of correction is not set up yet; tell staff."
 PENDING = "/api/magic/drift-correction/pending/"
 CONVERT = "/api/magic/drift-correction/convert/"
@@ -338,7 +338,7 @@ class LettingTheChancePassOrFailingTheRite(DriftJourneyCase):
         thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
         self.deed(self.ysmay)
         told = self.telnet(self.ysmay, "aura decline")
-        self.assertIn("You let the chance to correct drift pass.", told)
+        self.assertIn("You let the chance to atone pass.", told)
         self.assertIsNone(self.offer_of(self.ysmay))
         self.assertFalse(consumed(thread))
         self.assertEqual(balance(self.ysmay, self.ruin), 30)
@@ -508,7 +508,7 @@ class TheSameChanceOnTheWeb(DriftJourneyCase):
         offer_id = ysmay_api.get(PENDING).data["results"][0]["id"]
         done = post(ysmay_api, DECLINE, {"offer_id": offer_id})
         self.assertEqual(done.status_code, 200)
-        self.assertEqual(done.data["detail"], "You let the chance to correct drift pass.")
+        self.assertEqual(done.data["detail"], "You let the chance to atone pass.")
         self.assertEqual(ysmay_api.get(PENDING).data["results"], [])
         self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura"))
         self.assertFalse(consumed(mine))
