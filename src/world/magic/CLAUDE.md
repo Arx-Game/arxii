@@ -1038,7 +1038,10 @@ acting-aura reading.
   a pull. Captures `kind`, `authored_value`, `level_multiplier`, `scaled_value`,
   `vital_target`, `resistance_damage_type` (RESISTANCE only; null = all types, #1580),
   `source_thread`, `source_thread_level`, `source_tier`,
-  `granted_capability`, `narrative_snippet`. Cascades from CombatPull;
+  `granted_capability`, `narrative_snippet` (copied only for the kinds whose payload
+  constraint allows prose, NARRATIVE_ONLY and CORRUPTION_RESISTANCE; blank on a numeric
+  kind). `level_multiplier` is the rounded int; the preview's wire field of that name is the
+  exact one (`ResolvedPullEffect.level_multiplier_exact`, 0.9 at level 9). Cascades from CombatPull;
   edits to authoring or Thread.level mid-round cannot retroactively alter
   what a committed pull granted.
 
