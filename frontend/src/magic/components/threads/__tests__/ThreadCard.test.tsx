@@ -14,6 +14,7 @@ const makeThread = (overrides: Partial<Thread> = {}): Thread => ({
   target_trait_id: null,
   target_technique_id: null,
   name: 'Test Thread',
+  display_name: overrides.name ?? 'Test Thread',
   description: '',
   level: 30,
   developed_points: 50,
@@ -44,11 +45,16 @@ describe('ThreadCard', () => {
     expect(screen.getByText('Test Thread')).toBeInTheDocument();
   });
 
-  it('renders "(unnamed)" when name is empty', () => {
+  it('names an unnamed Gift thread by its Gift, the server display name', () => {
     render(
-      <ThreadCard thread={makeThread({ name: '' })} summary={makeSummary()} onClick={vi.fn()} />
+      <ThreadCard
+        thread={makeThread({ name: '', display_name: 'Kindling' })}
+        summary={makeSummary()}
+        onClick={vi.fn()}
+      />
     );
-    expect(screen.getByText('(unnamed)')).toBeInTheDocument();
+    expect(screen.getByText('Kindling')).toBeInTheDocument();
+    expect(screen.queryByText('(unnamed)')).not.toBeInTheDocument();
   });
 
   it('renders target_kind badge', () => {

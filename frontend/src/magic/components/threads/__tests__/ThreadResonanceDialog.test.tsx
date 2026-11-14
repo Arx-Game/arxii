@@ -32,6 +32,7 @@ const thread = {
   resonance_name: 'Bene',
   target_kind: 'TRAIT',
   name: 'Oath',
+  display_name: 'Oath',
   description: '',
   level: 30,
   developed_points: 40,

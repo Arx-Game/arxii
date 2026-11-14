@@ -72,6 +72,7 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     target_trait_id: null,
     target_technique_id: null,
     name: 'Tidal Anchor',
+    display_name: overrides.name ?? 'Tidal Anchor',
     description: '',
     level: 10,
     developed_points: 20,
@@ -167,6 +168,19 @@ describe('ThreadPullPicker — applicable list renders', () => {
     await waitFor(() => {
       expect(screen.getByText('Tidal Anchor')).toBeInTheDocument();
     });
+  });
+
+  it('names an unnamed Gift thread by its Gift, never "Thread #N"', async () => {
+    const thread = makeThread({ id: 1, name: '', display_name: 'Kindling' });
+    mockApplicable([makeApplicabilityRow(1, true)]);
+    mockThreads([thread]);
+
+    render(<ThreadPullPicker {...defaultProps()} />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getByText('Kindling')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Thread #1')).not.toBeInTheDocument();
   });
 
   it('shows the applicable count in the header', async () => {

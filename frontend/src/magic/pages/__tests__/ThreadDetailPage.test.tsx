@@ -81,6 +81,7 @@ const makeThread = (overrides: Partial<Thread> = {}): Thread => ({
   target_trait_id: null,
   target_technique_id: null,
   name: 'Ember Thread',
+  display_name: overrides.name ?? 'Ember Thread',
   description: 'A test description.',
   level: 10,
   developed_points: 25,
@@ -206,6 +207,17 @@ describe('ThreadDetailPage', () => {
   it('renders the thread name as heading', () => {
     render(<ThreadDetailPage />, { wrapper: createWrapper() });
     expect(screen.getByTestId('thread-detail-title')).toHaveTextContent('Ember Thread');
+  });
+
+  it('titles an unnamed Gift thread by its Gift, never "(unnamed)"', () => {
+    vi.mocked(magicQueries.useThread).mockReturnValue(
+      makeQueryResult(makeThread({ name: '', display_name: 'Kindling' })) as ReturnType<
+        typeof magicQueries.useThread
+      >
+    );
+    render(<ThreadDetailPage />, { wrapper: createWrapper() });
+    expect(screen.getByTestId('thread-detail-title')).toHaveTextContent('Kindling');
+    expect(screen.getByTestId('thread-detail-title')).not.toHaveTextContent('(unnamed)');
   });
 
   it('renders the breadcrumb with Threads link', () => {

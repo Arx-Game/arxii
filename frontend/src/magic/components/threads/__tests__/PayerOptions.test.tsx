@@ -48,6 +48,7 @@ const makeThread = (overrides: Partial<Thread> = {}): Thread =>
     ],
     target_kind: 'GIFT',
     name: 'Pyromancy',
+    display_name: 'Pyromancy',
     level: 3,
     ...overrides,
   }) as Thread;

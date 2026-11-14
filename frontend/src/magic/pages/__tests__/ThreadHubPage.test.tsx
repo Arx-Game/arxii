@@ -72,6 +72,7 @@ const makeThread = (overrides: Partial<Thread> = {}): Thread => ({
   target_trait_id: null,
   target_technique_id: null,
   name: 'Thread Alpha',
+  display_name: overrides.name ?? 'Thread Alpha',
   description: '',
   level: 20,
   developed_points: 40,

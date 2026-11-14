@@ -26,7 +26,7 @@ interface PerkInspectProps {
 }
 
 export function PerkInspect({ thread, option, open, onOpenChange }: PerkInspectProps) {
-  const threadName = thread.name.trim() || `Thread #${thread.id}`;
+  const threadName = thread.display_name;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent {...NO_DESCRIPTION} className="max-w-md" data-testid="perk-inspect">

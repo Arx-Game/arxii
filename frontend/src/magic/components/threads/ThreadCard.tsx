@@ -34,7 +34,7 @@ function deriveThreadState(threadId: number, summary: ThreadHubSummary): ThreadS
  */
 export function ThreadCard({ thread, summary, onClick }: ThreadCardProps) {
   const state = deriveThreadState(thread.id, summary);
-  const displayName = thread.name.trim() || '(unnamed)';
+  const displayName = thread.display_name;
 
   return (
     <button

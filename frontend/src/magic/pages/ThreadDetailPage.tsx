@@ -71,7 +71,7 @@ export function ThreadDetailPage() {
   // Derive display data
   // ---------------------------------------------------------------------------
 
-  const displayName = thread.name.trim() || '(unnamed)';
+  const displayName = thread.display_name;
 
   // Find the resonance balance for this thread's resonance from hub summary.
   const resonanceBalance = summary?.balances.find((b) => b.resonance_id === thread.resonance);

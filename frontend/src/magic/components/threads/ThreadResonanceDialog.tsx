@@ -156,8 +156,7 @@ export function ThreadResonanceDialog({ thread, open, onOpenChange }: ThreadReso
         data-testid="thread-resonance-dialog"
       >
         <DialogTitle className="text-sm font-semibold">
-          Thread: {thread.name.trim() || '(unnamed)'} · level {thread.level} ·{' '}
-          {thread.resonance_name}
+          Thread: {thread.display_name} · level {thread.level} · {thread.resonance_name}
         </DialogTitle>
 
         {isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}

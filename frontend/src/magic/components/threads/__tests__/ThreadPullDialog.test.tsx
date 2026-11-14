@@ -16,6 +16,7 @@ const mockThreads = {
     {
       id: 1,
       name: 'Bond of Flame',
+      display_name: 'Bond of Flame',
       target_kind: 'FACET',
       resonance: 7,
       resonance_name: 'Flamevein',
@@ -26,6 +27,7 @@ const mockThreads = {
     {
       id: 2,
       name: 'Earth Covenant',
+      display_name: 'Earth Covenant',
       target_kind: 'TRAIT', // not always-in-action — ephemeral ineligible
       resonance: 7,
       owner: 12,
@@ -35,6 +37,7 @@ const mockThreads = {
     {
       id: 4,
       name: 'Step Strand',
+      display_name: 'Step Strand',
       target_kind: 'TECHNIQUE',
       target_technique_id: 41,
       target_trait_id: null,
@@ -46,6 +49,7 @@ const mockThreads = {
     {
       id: 5,
       name: 'Lash Strand',
+      display_name: 'Lash Strand',
       target_kind: 'TECHNIQUE',
       target_technique_id: 99,
       target_trait_id: null,
@@ -57,6 +61,7 @@ const mockThreads = {
     {
       id: 6,
       name: 'Tide Bond',
+      display_name: 'Tide Bond',
       target_kind: 'FACET',
       resonance: 9,
       resonance_name: 'Tidecall',
@@ -67,6 +72,7 @@ const mockThreads = {
     {
       id: 7,
       name: 'Stone Bond',
+      display_name: 'Stone Bond',
       target_kind: 'FACET',
       resonance: 8,
       resonance_name: 'Stoneheart',
@@ -77,6 +83,7 @@ const mockThreads = {
     {
       id: 10,
       name: 'Pyromancy',
+      display_name: 'Pyromancy',
       target_kind: 'GIFT',
       resonance: 7,
       resonance_name: 'Flamevein',
@@ -91,6 +98,7 @@ const mockThreads = {
     {
       id: 8,
       name: 'Pyre Bond',
+      display_name: 'Pyre Bond',
       target_kind: 'FACET',
       resonance: 7,
       resonance_name: 'Flamevein',
@@ -105,6 +113,7 @@ const mockThreads = {
     {
       id: 3,
       name: 'Fire Retired',
+      display_name: 'Fire Retired',
       target_kind: 'FACET',
       resonance: 7,
       owner: 12,

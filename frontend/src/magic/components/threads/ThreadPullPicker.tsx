@@ -275,9 +275,7 @@ function ApplicableRow({
     >
       {/* Head */}
       <div>
-        <p className="text-sm font-semibold text-foreground">
-          {thread.name || `Thread #${thread.id}`}
-        </p>
+        <p className="text-sm font-semibold text-foreground">{thread.display_name}</p>
         <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
           {anchorDescription(thread)}
         </p>
@@ -354,9 +352,7 @@ function InapplicableRow({ thread, applicabilityRow }: InapplicableRowProps) {
     >
       {/* Head */}
       <div>
-        <p className="text-sm font-semibold text-foreground">
-          {thread.name || `Thread #${thread.id}`}
-        </p>
+        <p className="text-sm font-semibold text-foreground">{thread.display_name}</p>
         <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
           {anchorDescription(thread)}
         </p>
@@ -463,7 +459,7 @@ export function ThreadPullPicker({
       } else {
         reverted++;
         const thread = threadById.get(tid);
-        revertedNames.push(thread?.name ?? `Thread #${tid}`);
+        revertedNames.push(thread?.display_name ?? `Thread #${tid}`);
       }
     }
 

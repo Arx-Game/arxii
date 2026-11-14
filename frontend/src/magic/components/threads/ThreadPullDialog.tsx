@@ -332,7 +332,7 @@ export function ThreadPullDialog({
                         onChange={() => toggleThread(thread.id)}
                         className="accent-primary"
                       />
-                      <span>{thread.name || `Thread #${thread.id}`}</span>
+                      <span>{thread.display_name}</span>
                       <span className="ml-auto text-xs text-muted-foreground">
                         {thread.resonance_name}{' '}
                         <span className="tabular-nums">{balanceOf.get(thread.resonance) ?? 0}</span>

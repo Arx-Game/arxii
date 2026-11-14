@@ -158,6 +158,7 @@ const mockThread = {
   target_trait_id: null,
   target_technique_id: null,
   name: 'Bond of Stars',
+  display_name: 'Bond of Stars',
   description: '',
   level: 10,
   developed_points: 100,
