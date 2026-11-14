@@ -439,6 +439,9 @@ own `payers`, sends them to the preview and returns them on `PullSelection.payer
 `resonances` (the distinct payers, which a mixed pull's burn picks from). The dialog offers a
 thread while any held resonance has a balance, and its cost line reads "3 Fury, 3
 Domination" from the chosen payers, not a flat total.
+In combat, `combat/dodging.ts` (`roundPullRequest`) and `combat/sections/YourTurn.tsx` forward
+`selection.payers` as the `pull_payers` kwarg (and `payers` on the burn preview), so a pick made
+in the dialog reaches the declaration.
 
 ### `components/threads/XPLockBoundaryPanel.tsx`
 
