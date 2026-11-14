@@ -22,3 +22,21 @@ export function CastSpendLine({ result }: { result: CastResultPayload }) {
     </p>
   );
 }
+
+/**
+ * What an unsettled caster is told about her focus (#5123): the server's own sentences,
+ * the ones telnet prints. Nothing for a settled caster.
+ */
+export function CastFocusLines({ result }: { result: CastResultPayload }) {
+  const lines = result.technique_result?.focus_lines ?? [];
+  if (lines.length === 0) {
+    return null;
+  }
+  return (
+    <div className="space-y-0.5 text-xs" data-testid="cast-focus-lines">
+      {lines.map((line) => (
+        <p key={line}>{line}</p>
+      ))}
+    </div>
+  );
+}

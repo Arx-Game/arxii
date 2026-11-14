@@ -406,6 +406,11 @@ export interface TechniqueResultData {
   mishap_label: string | null;
   /** What calling up her gift's substance took on this cast (#5018), if anything. */
   substance_call_up?: SubstanceCallUpData | null;
+  /**
+   * What an unsettled caster is told about her focus on this cast (#5123), the sentences
+   * telnet prints; empty when she was settled.
+   */
+  focus_lines?: string[];
 }
 
 export interface SubstanceCallUpData {
