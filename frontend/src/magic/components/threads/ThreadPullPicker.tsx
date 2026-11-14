@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useApplicablePulls, useThreads } from '@/magic/queries';
 import { previewPull } from '@/magic/api';
+import { showsPayerChoice } from '@/magic/burn';
 import { PullDetailModal } from './PullDetailModal';
 import { PayerOptions, ThreadMakeup } from './PayerOptions';
 import type {
@@ -91,15 +92,20 @@ function optionsFor(preview: PullPreviewResponse | null, threadId: number): Paye
 }
 
 /**
- * Whether a tier cannot be paid at all: no resonance the character holds can pay it. A
- * preview without payer rows (a thread read before the options arrived) falls back to the
- * overall answer, which is the leading resonance's.
+ * Whether a tier cannot be paid at all. Where the player picks the payer (several
+ * resonances on the thread, or its own cannot pay), that is no held resonance able to pay;
+ * otherwise its own resonance pays, so its own answer stands. A preview without payer rows
+ * falls back to the overall answer, which is the leading resonance's.
  */
-function tierUnaffordable(preview: PullPreviewResponse | null, threadId: number): boolean {
+function tierUnaffordable(
+  preview: PullPreviewResponse | null,
+  thread: Pick<Thread, 'id' | 'resonance' | 'resonances'>
+): boolean {
   if (preview === null) return false;
-  const options = optionsFor(preview, threadId);
+  const options = optionsFor(preview, thread.id);
   if (options.length === 0) return !preview.affordable;
-  return options.every((option) => !option.affordable);
+  if (showsPayerChoice(thread, options)) return options.every((option) => !option.affordable);
+  return options.some((option) => option.resonance_id === thread.resonance && !option.affordable);
 }
 
 function useRowTierPreviews(
@@ -148,9 +154,7 @@ function useRowTierPreviews(
 // ---------------------------------------------------------------------------
 
 interface TierStripProps {
-  threadId: number;
-  resonanceId: number;
-  resonanceName: string;
+  thread: Thread;
   selectedTier: TierValue;
   onSelectTier: (tier: TierValue) => void;
   tierPreviews: TierPreviews;
@@ -158,16 +162,16 @@ interface TierStripProps {
 }
 
 function TierStrip({
-  threadId,
-  resonanceId,
-  resonanceName,
+  thread,
   selectedTier,
   onSelectTier,
   tierPreviews,
   balanceByResonanceId,
 }: TierStripProps) {
   const tiers: TierValue[] = [0, 1, 2, 3];
-  const currentBalance = balanceByResonanceId[resonanceId] ?? 0;
+  const threadId = thread.id;
+  const resonanceName = thread.resonance_name;
+  const currentBalance = balanceByResonanceId[thread.resonance] ?? 0;
 
   return (
     <div
@@ -183,15 +187,16 @@ function TierStrip({
         // For paid tiers: use the pre-fetched preview to determine affordability.
         // null means preview hasn't resolved yet — leave tentatively enabled.
         const paidPreview = tier > 0 ? tierPreviews[tier as PaidTier] : null;
-        const isUnaffordable = tierUnaffordable(paidPreview, threadId);
+        const isUnaffordable = tierUnaffordable(paidPreview, thread);
 
         let tooltipText: string | undefined;
         if (isTier0) {
           tooltipText = 'Always-on passive (no cost)';
         } else if (isUnaffordable && paidPreview !== null) {
           tooltipText = `Need ${paidPreview.resonance_cost} ${resonanceName}; have ${currentBalance}`;
-          const held = optionsFor(paidPreview, threadId);
-          if (held.length > 1) tooltipText = 'No resonance you hold can pay this tier';
+          if (showsPayerChoice(thread, optionsFor(paidPreview, threadId))) {
+            tooltipText = 'No resonance you hold can pay this tier';
+          }
         }
 
         return (
@@ -231,8 +236,8 @@ interface ApplicableRowProps {
   characterSheetId: number;
   balanceByResonanceId: Record<number, number>;
   onOpenDetails: (thread: Thread) => void;
-  /** The resonance chosen to pay this thread (#5123); its leading one until picked. */
-  payerId: number;
+  /** The resonance the player picked to pay this thread (#5123); undefined until picked. */
+  payerId: number | undefined;
   onPayerChange: (resonanceId: number) => void;
   /** The live target this pull's action would be directed at (#2035), when one
    *  is currently selected in the cast/clash UI. Optional — passed through to
@@ -277,9 +282,7 @@ function ApplicableRow({
 
       {/* Tier strip */}
       <TierStrip
-        threadId={thread.id}
-        resonanceId={thread.resonance}
-        resonanceName={thread.resonance_name}
+        thread={thread}
         selectedTier={selectedTier}
         onSelectTier={onSelectTier}
         tierPreviews={tierPreviews}
@@ -519,7 +522,7 @@ export function ThreadPullPicker({
             characterSheetId={characterSheetId}
             balanceByResonanceId={balanceByResonanceId}
             onOpenDetails={handleOpenDetails}
-            payerId={payers[thread.id] ?? thread.resonance}
+            payerId={payers[thread.id]}
             onPayerChange={(resonanceId) => onPayerChange?.(thread.id, resonanceId)}
             targetPersonaId={actionContext.target_persona_id}
           />

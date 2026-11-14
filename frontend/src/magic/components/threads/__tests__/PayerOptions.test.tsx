@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { PayerOptions } from '../PayerOptions';
+import { PayerOptions, ThreadMakeup } from '../PayerOptions';
 import type { PayerOption, Thread } from '../../../types';
 
 const effect = (kind: string, value: number, snippet = '') => ({
@@ -141,5 +141,46 @@ describe('PayerOptions', () => {
     expect(panel).toHaveTextContent('Domination through Pyromancy');
     expect(panel).toHaveTextContent('Domination pull perk for Gift threads, tier 2');
     expect(panel).toHaveTextContent('2 (thread is 3; Domination is not its leading resonance)');
+  });
+  it('shows the choice on a single-resonance thread whose own resonance cannot pay', () => {
+    const single = makeThread({
+      resonances: [{ resonance_id: 1, resonance_name: 'Fury', amount: 30, leads: true }],
+    });
+    const onSelect = vi.fn();
+    render(
+      <PayerOptions
+        thread={single}
+        options={[option(1, 'Fury', 1, []), OPTIONS[1]]}
+        selectedResonanceId={undefined}
+        onSelect={onSelect}
+      />
+    );
+    expect(screen.getByRole('radiogroup')).toBeInTheDocument();
+    expect(screen.getByTestId('payer-1-1')).toBeDisabled();
+    // It starts on the first payer that can pay, and reports that start.
+    expect(screen.getByTestId('payer-1-2')).toHaveAttribute('aria-checked', 'true');
+    expect(onSelect).toHaveBeenCalledWith(2);
+  });
+
+  it('starts on the leading resonance, reporting nothing, when it can pay', () => {
+    const onSelect = vi.fn();
+    render(
+      <PayerOptions
+        thread={makeThread()}
+        options={OPTIONS}
+        selectedResonanceId={undefined}
+        onSelect={onSelect}
+      />
+    );
+    expect(screen.getByTestId('payer-1-1')).toHaveAttribute('aria-checked', 'true');
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('names no resonance twice for a single-resonance thread makeup', () => {
+    const single = makeThread({
+      resonances: [{ resonance_id: 1, resonance_name: 'Fury', amount: 30, leads: true }],
+    });
+    render(<ThreadMakeup thread={single} />);
+    expect(screen.getByTestId('thread-makeup-1')).toHaveTextContent(/^Level 3$/);
   });
 });

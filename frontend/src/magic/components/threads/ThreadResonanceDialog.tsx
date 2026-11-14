@@ -5,8 +5,8 @@
  * One framed box headed "Thread: <name> · level <n> · <resonance>", a "Move from" row of the
  * thread's own resonances (when it holds more than one), a "Points to move" stepper (all of
  * the row by default), a "Change to" row of resonance pills, the component pills for the
- * chosen option, the points that land, and a right-aligned Retune thread button. The rite is the authored retune ritual the
- * options endpoint names. When the thread cannot move (no rite, an anchor that holds its
+ * chosen option, the points that land, and a right-aligned Retune thread button. The rite is
+ * the authored retune ritual the options endpoint names. When the thread cannot move (no rite, an anchor that holds its
  * resonance, no options) the server's `unavailable_reason` stands in for the pills.
  * Offerings are picked only when the rite asks for them (`offering_required`), up to
  * `offering_count`. When the result names a different thread, that thread opens afterwards.

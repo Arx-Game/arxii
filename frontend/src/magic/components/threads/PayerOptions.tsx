@@ -2,15 +2,22 @@
  * PayerOptions (#5123, Screen 2 of the approved demo): the resonances that can pay for one
  * pulled thread, each with its cost, what you hold, and the perks it would give on this
  * thread. A thread holding several resonances shows the choice and starts on its leading
- * one; a thread with one resonance shows what it pays with and no choice.
+ * one; a thread with one resonance shows what it pays with and no choice, unless its own
+ * resonance cannot pay, when any held resonance may.
  *
  * Each pulled thread is paid for by one resonance, so the effects here are that payer's alone
  * and are never summed across threads. A held resonance the thread never took in pays an
  * ordinary pull and lists no perks.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { effectLabel, effectValue, threadMixInWords } from '../../burn';
+import {
+  defaultPayerId,
+  effectLabel,
+  effectValue,
+  showsPayerChoice,
+  threadMixInWords,
+} from '../../burn';
 import type { PayerOption, Thread } from '../../types';
 import { PerkInspect } from './PerkInspect';
 
@@ -18,8 +25,12 @@ interface PayerOptionsProps {
   thread: Thread;
   /** The thread's payer options from the pull preview, one per resonance the player holds. */
   options: PayerOption[];
-  /** The resonance chosen to pay; the thread's leading resonance until the player picks. */
-  selectedResonanceId: number;
+  /**
+   * The resonance the player picked to pay; undefined until they pick. The list starts on
+   * the leading resonance (or the first that can pay when the leader cannot), and reports
+   * that start through `onSelect` so a cast sends what the player sees.
+   */
+  selectedResonanceId: number | undefined;
   onSelect: (resonanceId: number) => void;
 }
 
@@ -58,7 +69,9 @@ function costLine(option: PayerOption): string {
 
 /** The one-line "Level 3 · mostly Fury, some Domination" a thread's makeup reads as. */
 export function ThreadMakeup({ thread }: { thread: Thread }) {
-  const mix = threadMixInWords(thread.resonances ?? []);
+  // A thread of one resonance is named by its anchor line; the mix is for several.
+  const rows = thread.resonances ?? [];
+  const mix = rows.length > 1 ? threadMixInWords(rows) : '';
   return (
     <span className="text-xs text-muted-foreground" data-testid={`thread-makeup-${thread.id}`}>
       Level {thread.level}
@@ -74,7 +87,16 @@ export function PayerOptions({
   onSelect,
 }: PayerOptionsProps) {
   const [inspecting, setInspecting] = useState<PayerOption | null>(null);
-  const hasChoice = (thread.resonances ?? []).length > 1;
+  const hasChoice = showsPayerChoice(thread, options);
+  const startingId = defaultPayerId(thread, options);
+  const chosenId = selectedResonanceId ?? startingId;
+
+  // A start other than the leading resonance is a pick the cast has to send.
+  useEffect(() => {
+    if (hasChoice && selectedResonanceId === undefined && startingId !== thread.resonance) {
+      onSelect(startingId);
+    }
+  }, [hasChoice, selectedResonanceId, startingId, thread.resonance, onSelect]);
 
   // A thread with one resonance pays with it; show that payer alone, no choice.
   if (!hasChoice) {
@@ -101,7 +123,7 @@ export function PayerOptions({
       </span>
       <div role="radiogroup" aria-labelledby={`payer-label-${thread.id}`} className="space-y-1.5">
         {options.map((option) => {
-          const selected = option.resonance_id === selectedResonanceId;
+          const selected = option.resonance_id === chosenId;
           return (
             <div
               key={option.resonance_id}

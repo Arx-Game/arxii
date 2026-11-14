@@ -18,7 +18,7 @@
  * Live preview: every change debounces a previewPull call (250ms).
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -29,7 +29,7 @@ import {
   NO_DESCRIPTION,
 } from '@/components/ui/dialog';
 import { previewPull } from '../../api';
-import { payerFor, pulledResonances } from '../../burn';
+import { defaultPayerId, pulledResonances } from '../../burn';
 import { useCharacterResonances, useThreads } from '../../queries';
 import type { PayerOption, PullPreviewResponse, Thread } from '../../types';
 import { PayerOptions, ThreadMakeup } from './PayerOptions';
@@ -115,8 +115,9 @@ function payLine(
 ): string | null {
   const costs = new Map<string, number>();
   for (const thread of threads) {
-    const options = preview.per_thread?.find((row) => row.thread_id === thread.id)?.options;
-    const chosen = options?.find((o) => o.resonance_id === payerFor(thread, payers));
+    const options = preview.per_thread?.find((row) => row.thread_id === thread.id)?.options ?? [];
+    const payerId = payers[thread.id] ?? defaultPayerId(thread, options);
+    const chosen = options.find((o) => o.resonance_id === payerId);
     if (!chosen) return null;
     costs.set(chosen.resonance_name, (costs.get(chosen.resonance_name) ?? 0) + chosen.cost);
   }
@@ -171,10 +172,13 @@ export function ThreadPullDialog({
   const offeredThreads = anyBalance ? eligibleThreads : [];
 
   // The picks the player made for threads that are still chosen.
-  const pickedPayers = Object.fromEntries(
-    selectedThreadIds.filter((id) => payers[id] !== undefined).map((id) => [id, payers[id]])
+  const pickedPayers = useMemo(
+    () =>
+      Object.fromEntries(
+        selectedThreadIds.filter((id) => payers[id] !== undefined).map((id) => [id, payers[id]])
+      ),
+    [payers, selectedThreadIds]
   );
-  const pickedKey = JSON.stringify(pickedPayers);
   const chosenThreads = offeredThreads.filter((t) => selectedThreadIds.includes(t.id));
 
   // Debounced live preview.
@@ -200,9 +204,7 @@ export function ThreadPullDialog({
         setPreviewError(err instanceof Error ? err.message : 'Failed to load preview.');
         setPreviewLoading(false);
       });
-    // pickedPayers is derived from payers + selectedThreadIds; its key stands in for it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- pickedKey is pickedPayers' value
-  }, [characterSheetId, selectedTier, selectedThreadIds, pickedKey]);
+  }, [characterSheetId, selectedTier, selectedThreadIds, pickedPayers]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -217,6 +219,10 @@ export function ThreadPullDialog({
       prev.includes(threadId) ? prev.filter((id) => id !== threadId) : [...prev, threadId]
     );
   }
+
+  const pickPayer = useCallback((threadId: number, resonanceId: number) => {
+    setPayers((prev) => ({ ...prev, [threadId]: resonanceId }));
+  }, []);
 
   function optionsFor(threadId: number): PayerOption[] {
     return preview?.per_thread?.find((row) => row.thread_id === threadId)?.options ?? [];
@@ -312,10 +318,8 @@ export function ThreadPullDialog({
                         <PayerOptions
                           thread={thread}
                           options={options}
-                          selectedResonanceId={payerFor(thread, payers)}
-                          onSelect={(resonanceId) =>
-                            setPayers((prev) => ({ ...prev, [thread.id]: resonanceId }))
-                          }
+                          selectedResonanceId={payers[thread.id]}
+                          onSelect={(resonanceId) => pickPayer(thread.id, resonanceId)}
                         />
                       </div>
                     )}

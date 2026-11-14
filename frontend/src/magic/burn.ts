@@ -3,6 +3,7 @@
  * the burn is capped at the preview ceiling and its strain units are floored.
  */
 
+import { shareInWords } from './aura';
 import type { BurnPreview, PayerOption, PreviewedEffect, Thread } from './types';
 
 /** The burn state a Strain area renders: the preview plus the chosen amount. */
@@ -70,8 +71,9 @@ export function pulledResonances(
 
 /**
  * A thread's resonance mix in words, never numbers: "mostly Fury, some Domination". A
- * thread with one resonance names it alone. The leader is "mostly" once it holds half the
- * thread; a smaller one is "some" from a tenth up and "a little" below that.
+ * thread with one resonance names it alone. The words come from `shareInWords`, the same
+ * thresholds the aura reads: the leader is "mostly" once it is most of the thread, another
+ * resonance is "some", or "a little" when it is a trace.
  */
 export function threadMixInWords(
   rows: { resonance_name: string; amount: number; leads: boolean }[]
@@ -85,11 +87,44 @@ export function threadMixInWords(
   );
   return ordered
     .map((row, index) => {
-      const part = total > 0 ? row.amount / total : 0;
-      if (index === 0) return part >= 0.5 ? `mostly ${row.resonance_name}` : row.resonance_name;
-      return `${part >= 0.1 ? 'some' : 'a little'} ${row.resonance_name}`;
+      const words = shareInWords(row.amount, total);
+      if (index === 0) {
+        return words === 'most' || words === 'nearly all'
+          ? `mostly ${row.resonance_name}`
+          : row.resonance_name;
+      }
+      return `${words === 'a trace' ? 'a little' : 'some'} ${row.resonance_name}`;
     })
     .join(', ');
+}
+
+/**
+ * Whether the player picks who pays a pulled thread: when it holds several resonances, or
+ * when its own resonance cannot pay the cost (any held resonance may pay, so the player
+ * must be able to name another). A thread of one resonance that can pay itself shows no
+ * choice.
+ */
+export function showsPayerChoice(
+  thread: { resonance: number; resonances?: unknown[] },
+  options: { resonance_id: number; affordable: boolean }[]
+): boolean {
+  if ((thread.resonances ?? []).length > 1) return true;
+  const own = options.find((o) => o.resonance_id === thread.resonance);
+  return own !== undefined && !own.affordable;
+}
+
+/**
+ * The payer a thread starts on: its leading resonance, or the first one that can pay when
+ * the leader cannot. With no payer able to afford it, the leader, so the shortfall shows
+ * on the leading resonance's own row.
+ */
+export function defaultPayerId(
+  thread: { resonance: number },
+  options: { resonance_id: number; affordable: boolean }[]
+): number {
+  const own = options.find((o) => o.resonance_id === thread.resonance);
+  if (own === undefined || own.affordable) return thread.resonance;
+  return options.find((o) => o.affordable)?.resonance_id ?? thread.resonance;
 }
 
 /**
@@ -147,11 +182,13 @@ export function effectValue(effect: PreviewedEffect): string {
   return signed && effect.scaled_value > 0 ? `+${effect.scaled_value}` : `${effect.scaled_value}`;
 }
 
-/** Where the thread level a perk was read at comes from, in a sentence. */
+/**
+ * Where the thread level a perk was read at comes from. The leading resonance reads the
+ * thread's full level; another resonance on the thread reads lower.
+ */
 export function levelReadLine(thread: Thread, option: PayerOption): string {
-  const rows = thread.resonances ?? [];
-  const row = rows.find((r) => r.resonance_id === option.resonance_id);
-  if (!row) return `${option.level_read} (${option.resonance_name} was never put into this thread)`;
-  if (row.leads) return `${option.level_read}`;
-  return `${option.level_read} (thread is ${thread.level}; ${option.resonance_name} is not its leading resonance)`;
+  const row = (thread.resonances ?? []).find((r) => r.resonance_id === option.resonance_id);
+  if (row?.leads !== false) return `${option.level_read}`;
+  const name = option.resonance_name;
+  return `${option.level_read} (thread is ${thread.level}; ${name} is not its leading resonance)`;
 }

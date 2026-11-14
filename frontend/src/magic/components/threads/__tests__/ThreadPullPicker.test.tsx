@@ -44,7 +44,7 @@ import * as magicQueries from '@/magic/queries';
 import * as magicApi from '@/magic/api';
 import { ThreadPullPicker } from '../ThreadPullPicker';
 import type { ThreadPullPickerProps } from '../ThreadPullPicker';
-import type { PullPreviewResponse, Thread, ThreadApplicability } from '@/magic/types';
+import type { PayerOption, PullPreviewResponse, Thread, ThreadApplicability } from '@/magic/types';
 import type { ApplicablePullsRequest } from '@/magic/types';
 
 // ---------------------------------------------------------------------------
@@ -529,7 +529,7 @@ describe('ThreadPullPicker — details affordance', () => {
 // ---------------------------------------------------------------------------
 
 describe('ThreadPullPicker — payer per thread (#5123)', () => {
-  const effect = (kind: string, value: number) => ({
+  const effect = (kind: string, value: number): PayerOption['effects'][number] => ({
     kind,
     authored_value: value,
     level_multiplier: 1,
@@ -542,7 +542,12 @@ describe('ThreadPullPicker — payer per thread (#5123)', () => {
     inactive: false,
     inactive_reason: null,
   });
-  const option = (id: number, name: string, balance: number, effects: unknown[]) => ({
+  const option = (
+    id: number,
+    name: string,
+    balance: number,
+    effects: PayerOption['effects']
+  ): PayerOption => ({
     resonance_id: id,
     resonance_name: name,
     cost: 3,
@@ -668,5 +673,50 @@ describe('ThreadPullPicker — payer per thread (#5123)', () => {
     render(<ThreadPullPicker {...defaultProps()} />, { wrapper: createWrapper() });
     await waitFor(() => expect(mockedPreviewPull).toHaveBeenCalledTimes(3));
     await waitFor(() => expect(screen.getByTestId('tier-btn-1-1')).not.toBeDisabled());
+  });
+  it('lets a single-resonance thread whose own resonance cannot pay name another payer', async () => {
+    const single = makeThread({
+      id: 1,
+      resonance: 1,
+      resonance_name: 'Domination',
+      resonances: [{ resonance_id: 1, resonance_name: 'Domination', amount: 20, leads: true }],
+    });
+    mockThreads([single]);
+    mockApplicable([makeApplicabilityRow(1, true)]);
+    mockedPreviewPull.mockResolvedValue(
+      makePreviewResponse({
+        affordable: false,
+        per_thread: [
+          { thread_id: 1, options: [option(1, 'Domination', 1, []), option(2, 'Fury', 22, [])] },
+        ],
+      })
+    );
+    const onPayerChange = vi.fn();
+    render(<ThreadPullPicker {...defaultProps({ selectedPulls: { 1: 1 }, onPayerChange })} />, {
+      wrapper: createWrapper(),
+    });
+    expect(await screen.findByTestId('payer-options-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('payer-fixed-1')).not.toBeInTheDocument();
+    // The tier stays open, and the first resonance that can pay is where it starts.
+    expect(screen.getByTestId('tier-btn-1-1')).not.toBeDisabled();
+    await waitFor(() => expect(onPayerChange).toHaveBeenCalledWith(1, 2));
+  });
+
+  it('disables a tier on a single-resonance thread whose own resonance cannot pay it', async () => {
+    const single = makeThread({
+      id: 1,
+      resonance: 1,
+      resonances: [{ resonance_id: 1, resonance_name: 'Bene', amount: 20, leads: true }],
+    });
+    mockThreads([single]);
+    mockApplicable([makeApplicabilityRow(1, true)]);
+    mockedPreviewPull.mockResolvedValue(
+      makePreviewResponse({
+        affordable: false,
+        per_thread: [{ thread_id: 1, options: [option(1, 'Bene', 1, [])] }],
+      })
+    );
+    render(<ThreadPullPicker {...defaultProps()} />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByTestId('tier-btn-1-1')).toBeDisabled());
   });
 });

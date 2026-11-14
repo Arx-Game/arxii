@@ -16,7 +16,7 @@ const thread = {
   ],
 } as Thread;
 
-const effect = {
+const effect: PayerOption['effects'][number] = {
   kind: 'FLAT_BONUS',
   authored_value: 2,
   level_multiplier: 3,

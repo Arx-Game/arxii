@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { payerFor, pulledResonances, threadMixInWords } from '../burn';
+import {
+  defaultPayerId,
+  payerFor,
+  pulledResonances,
+  showsPayerChoice,
+  threadMixInWords,
+} from '../burn';
 
 const fury = { id: 1, resonance: 10, resonance_name: 'Fury' };
 
@@ -63,5 +69,32 @@ describe('threadMixInWords', () => {
 
   it('is empty for a thread with no rows', () => {
     expect(threadMixInWords([])).toBe('');
+  });
+});
+
+describe('showsPayerChoice and defaultPayerId (#5123)', () => {
+  const options = (own: boolean, other: boolean) => [
+    { resonance_id: 10, affordable: own },
+    { resonance_id: 20, affordable: other },
+  ];
+
+  it('shows the choice on a thread with several resonance rows', () => {
+    const thread = { resonance: 10, resonances: [{}, {}] };
+    expect(showsPayerChoice(thread, options(true, true))).toBe(true);
+  });
+
+  it('shows no choice on a one-resonance thread whose own resonance can pay', () => {
+    expect(showsPayerChoice({ resonance: 10, resonances: [{}] }, options(true, true))).toBe(false);
+  });
+
+  it('shows the choice on a one-resonance thread whose own resonance cannot pay', () => {
+    expect(showsPayerChoice({ resonance: 10, resonances: [{}] }, options(false, true))).toBe(true);
+  });
+
+  it('starts on the leader when it can pay, else the first that can, else the leader', () => {
+    expect(defaultPayerId({ resonance: 10 }, options(true, true))).toBe(10);
+    expect(defaultPayerId({ resonance: 10 }, options(false, true))).toBe(20);
+    expect(defaultPayerId({ resonance: 10 }, options(false, false))).toBe(10);
+    expect(defaultPayerId({ resonance: 10 }, [])).toBe(10);
   });
 });

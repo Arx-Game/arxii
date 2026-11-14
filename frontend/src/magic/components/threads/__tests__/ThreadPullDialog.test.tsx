@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ThreadPullDialog } from '../ThreadPullDialog';
 import { previewPull } from '../../../api';
+import type { PayerOption, PullPreviewResponse } from '../../../types';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -202,8 +203,8 @@ describe('ThreadPullDialog', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  describe('payers on a thread holding several resonances (#5123)', () => {
-    const effect = (kind: string, value: number) => ({
+  describe('payers (#5123)', () => {
+    const effect = (kind: string, value: number): PayerOption['effects'][number] => ({
       kind,
       authored_value: value,
       level_multiplier: 1,
@@ -216,7 +217,12 @@ describe('ThreadPullDialog', () => {
       inactive: false,
       inactive_reason: null,
     });
-    const option = (id: number, name: string, balance: number, effects: unknown[]) => ({
+    const option = (
+      id: number,
+      name: string,
+      balance: number,
+      effects: PayerOption['effects']
+    ): PayerOption => ({
       resonance_id: id,
       resonance_name: name,
       cost: 3,
@@ -225,37 +231,29 @@ describe('ThreadPullDialog', () => {
       effects,
       level_read: 3,
     });
+    const previewOf = (perThread: PullPreviewResponse['per_thread']): PullPreviewResponse => ({
+      resonance_cost: 3,
+      anima_cost: 1,
+      affordable: true,
+      capped_intensity: false,
+      resolved_effects: [],
+      burn: null,
+      per_thread: perThread,
+    });
+    const pyre = (flamevein: number) => ({
+      thread_id: 8,
+      options: [
+        option(7, 'Flamevein', flamevein, [effect('FLAT_BONUS', 4)]),
+        option(9, 'Tidecall', 5, []),
+      ],
+    });
 
     beforeEach(() => {
-      vi.mocked(previewPull).mockImplementation(() =>
-        Promise.resolve({
-          resonance_cost: 3,
-          anima_cost: 1,
-          affordable: true,
-          capped_intensity: false,
-          resolved_effects: [],
-          burn: null,
-          per_thread: [
-            {
-              thread_id: 8,
-              options: [
-                option(7, 'Flamevein', 20, [effect('FLAT_BONUS', 4)]),
-                option(9, 'Tidecall', 5, []),
-              ],
-            },
-          ],
-        } as never)
-      );
+      vi.mocked(previewPull).mockResolvedValue(previewOf([pyre(20)]));
     });
 
     afterEach(() => {
-      vi.mocked(previewPull).mockResolvedValue({
-        resonance_cost: 6,
-        anima_cost: 2,
-        affordable: true,
-        capped_intensity: false,
-        resolved_effects: [],
-      } as never);
+      vi.mocked(previewPull).mockResolvedValue({ ...previewOf([]), resonance_cost: 6 });
     });
 
     it('shows each payer with its perks, starting on the leading resonance', async () => {
@@ -290,6 +288,72 @@ describe('ThreadPullDialog', () => {
         resonances: [{ id: 9, name: 'Tidecall' }],
         payers: { 8: 9 },
       });
+    });
+
+    it('starts on the first payer that can pay when the leader cannot, and sends it', async () => {
+      vi.mocked(previewPull).mockResolvedValue(previewOf([pyre(1)]));
+      const onSelect = vi.fn();
+      render(<ThreadPullDialog {...defaultProps} onSelect={onSelect} />);
+      fireEvent.click(within(screen.getByTestId('thread-checkbox-8')).getByRole('checkbox'));
+      await waitFor(() =>
+        expect(screen.getByTestId('payer-8-9')).toHaveAttribute('aria-checked', 'true')
+      );
+      await waitFor(() => expect(screen.getByTestId('commit-pull-btn')).not.toBeDisabled());
+      fireEvent.click(screen.getByTestId('commit-pull-btn'));
+      expect(onSelect).toHaveBeenCalledWith(
+        expect.objectContaining({ thread_ids: [8], payers: { 8: 9 } })
+      );
+    });
+
+    it('lets a single-resonance thread whose own resonance cannot pay name another', async () => {
+      vi.mocked(previewPull).mockResolvedValue(
+        previewOf([
+          {
+            thread_id: 7,
+            options: [option(8, 'Stoneheart', 0, []), option(7, 'Flamevein', 20, [])],
+          },
+        ])
+      );
+      const onSelect = vi.fn();
+      render(<ThreadPullDialog {...defaultProps} onSelect={onSelect} />);
+      fireEvent.click(within(screen.getByTestId('thread-checkbox-7')).getByRole('checkbox'));
+      expect(await screen.findByTestId('payer-options-7')).toBeInTheDocument();
+      expect(screen.getByTestId('payer-7-8')).toBeDisabled();
+      fireEvent.click(screen.getByTestId('payer-7-7'));
+      await waitFor(() =>
+        expect(previewPull).toHaveBeenLastCalledWith({
+          character_sheet_id: 12,
+          tier: 1,
+          thread_ids: [7],
+          payers: { 7: 7 },
+        })
+      );
+      await waitFor(() => expect(screen.getByTestId('commit-pull-btn')).not.toBeDisabled());
+      fireEvent.click(screen.getByTestId('commit-pull-btn'));
+      expect(onSelect).toHaveBeenCalledWith({
+        tier: 1,
+        thread_ids: [7],
+        resonances: [{ id: 7, name: 'Flamevein' }],
+        payers: { 7: 7 },
+      });
+    });
+
+    it('sums the cost by the resonance that pays: "3 Flamevein, 3 Tidecall"', async () => {
+      vi.mocked(previewPull).mockResolvedValue(
+        previewOf([{ thread_id: 1, options: [option(7, 'Flamevein', 20, [])] }, pyre(20)])
+      );
+      render(<ThreadPullDialog {...defaultProps} />);
+      fireEvent.click(within(screen.getByTestId('thread-checkbox-1')).getByRole('checkbox'));
+      fireEvent.click(within(screen.getByTestId('thread-checkbox-8')).getByRole('checkbox'));
+      await waitFor(() =>
+        expect(screen.getByTestId('preview-resonance-cost')).toHaveTextContent('6 Flamevein')
+      );
+      fireEvent.click(await screen.findByTestId('payer-8-9'));
+      await waitFor(() =>
+        expect(screen.getByTestId('preview-resonance-cost')).toHaveTextContent(
+          '3 Flamevein, 3 Tidecall'
+        )
+      );
     });
   });
 
