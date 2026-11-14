@@ -40,11 +40,13 @@ from world.magic.constants import EffectKind, TargetKind
 from world.magic.factories import (
     CharacterResonanceFactory,
     ResonanceFactory,
+    TechniqueFactory,
     ThreadFactory,
     ThreadPullCostFactory,
     ThreadPullEffectFactory,
 )
 from world.magic.models import CharacterResonance
+from world.progression.factories import TechniqueKnownRequirementFactory
 from world.traits.factories import StatTraitFactory
 
 FLAT_BONUS = 2
@@ -272,12 +274,18 @@ class APullMixingResonances(_PullsInTheCellar):
             effect_kind=EffectKind.FLAT_BONUS,
             flat_bonus_amount=FLAT_BONUS,
         )
+        # One thread per anchor (#5123): Ember's thread sits on a technique Blink Step
+        # requires, which a thread woven into a prerequisite empowers it at full level.
+        self.ember_step = TechniqueFactory()
+        TechniqueKnownRequirementFactory(
+            technique=self.blink_step, required_technique=self.ember_step
+        )
         self.ember_strand = ThreadFactory(
             owner=self.ondrelle.sheet_data,
             resonance=self.ember,
             target_kind=TargetKind.TECHNIQUE,
             target_trait=None,
-            target_technique=self.blink_step,
+            target_technique=self.ember_step,
             level=10,
             name="Ember Strand",
         )
@@ -311,6 +319,20 @@ class APullMixingResonances(_PullsInTheCellar):
 
         self.assertIn("You pull 2 threads for the round.", told)
         self.assertEqual((self.balance(), self.ember_balance()), (9, 5))
+
+    def test_a_named_payer_typed_on_telnet_pays_for_its_thread(self) -> None:
+        told = self.telnet(self.ondrelle, "combat pull 1=Step Strand:Ember")
+
+        self.assertIn("You pull 1 thread for the round.", told)
+        # Step Strand leads with Veil, but Ember was named: Ember pays, Veil is untouched.
+        self.assertEqual((self.balance(), self.ember_balance()), (10, 5))
+
+    def test_a_named_payer_she_does_not_hold_is_refused_and_nothing_is_paid(self) -> None:
+        told = self.telnet(self.ondrelle, "combat pull 1=Step Strand:Nonesuch")
+
+        self.assertIn("You hold no resonance called 'Nonesuch'. Your resonances:", told)
+        self.assertEqual((self.balance(), self.ember_balance()), (10, 6))
+        self.assertFalse(CombatPull.objects.exists())
 
     def test_one_resonance_short_debits_nothing(self) -> None:
         self.ember_hold.balance = 0

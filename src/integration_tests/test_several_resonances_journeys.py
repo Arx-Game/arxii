@@ -146,14 +146,16 @@ class PullingWithANamedPayer(_BurningResonance):
         return strip_ansi(told)
 
     def test_cast_pull_with_named_payer(self) -> None:
-        self.cast(f"{self.thread.name}:{self.ember.name}")
+        told = self.cast(f"{self.thread.name}:{self.ember.name}")
 
+        self.assertIn("Your technique resolves.", told)
         self.assertEqual(self.balance(self.ysmay, self.ember), 10 - 1)
         self.assertEqual(self.balance(self.ysmay, self.veil), 10)
 
     def test_a_bare_pull_is_paid_by_the_leading_resonance(self) -> None:
-        self.cast(self.thread.name)
+        told = self.cast(self.thread.name)
 
+        self.assertIn("Your technique resolves.", told)
         self.assertEqual(self.balance(self.ysmay, self.veil), 10 - 1)
         self.assertEqual(self.balance(self.ysmay, self.ember), 10)
 
