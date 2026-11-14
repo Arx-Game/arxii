@@ -66,6 +66,7 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     owner: 100,
     resonance: 1,
     resonance_name: 'Bene',
+    resonances: [],
     target_kind: 'FACET',
     target_trait_id: null,
     target_technique_id: null,

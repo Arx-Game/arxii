@@ -14415,6 +14415,30 @@ export interface paths {
     patch: operations['magic_character_auras_partial_update'];
     trace?: never;
   };
+  '/api/magic/character-auras/{id}/accept/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Accept the changes to the aura: settle who the character has become (#5123).
+     *
+     *     Dispatches ``AcceptAuraChangeAction`` (the same action telnet ``aura accept`` runs)
+     *     for the character the aura belongs to. ``get_object`` only finds an aura of a
+     *     character the requester plays, so nobody accepts for another's character. Refused
+     *     with the action's own sentence while the character is not unsettled.
+     */
+    post: operations['magic_character_auras_accept_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/character-auras/{id}/link-glimpse-distinction/': {
     parameters: {
       query?: never;
@@ -15694,7 +15718,7 @@ export interface paths {
      * @description Read-only list of Resonance rows with their Affinity, for pickers.
      *
      *     The character-creation Gift stage lists every Resonance and stores the chosen
-     *     pk as ``draft_data["selected_gift_resonance_id"]``. Filter by ``?affinity=<pk>``.
+     *     picks as ``draft_data["gift_resonance_weights"]``. Filter by ``?affinity=<pk>``.
      */
     get: operations['magic_resonances_list'];
     put?: never;
@@ -15716,7 +15740,7 @@ export interface paths {
      * @description Read-only list of Resonance rows with their Affinity, for pickers.
      *
      *     The character-creation Gift stage lists every Resonance and stores the chosen
-     *     pk as ``draft_data["selected_gift_resonance_id"]``. Filter by ``?affinity=<pk>``.
+     *     picks as ``draft_data["gift_resonance_weights"]``. Filter by ``?affinity=<pk>``.
      */
     get: operations['magic_resonances_retrieve'];
     put?: never;
@@ -28212,6 +28236,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** @description What accepting the changes to the aura answers: the line told, and the aura as it now is. */
+    AcceptAuraResponse: {
+      detail: string;
+      aura: components['schemas']['CharacterAura'];
+    };
     /**
      * @description Write serializer for forming a Soul Tether (Spec B §12).
      *
@@ -31265,6 +31294,12 @@ export interface components {
       readonly dominant_affinity: string;
       /** @description The dominant affinity's name for display. */
       readonly dominant_affinity_display: string;
+      /** @description True when an affinity other than the main one has grown past who they are. */
+      readonly unsettled: boolean;
+      /** @description The sentence naming the resonance that made them unsettled; blank when settled. */
+      readonly unsettled_line: string;
+      /** @description The Mire's share of everything they have gained, in words. */
+      readonly mire_share_words: string;
       /**
        * @description Deferral/progress state of the Glimpse (#2427). Cache of prose+tag truth — maintained by world.magic.services.glimpse, never written directly.
        *
@@ -31290,6 +31325,11 @@ export interface components {
        * @description This affinity's share of the aura, 0-100.
        */
       readonly percent: string;
+      /**
+       * Format: decimal
+       * @description Who the character is, per affinity, 0-100: set at creation and by accepting the changes to the aura. The main affinity is the largest settled share.
+       */
+      readonly settled_percent: string;
     };
     /** @description Full serializer for character class detail with core traits. */
     CharacterClass: {
@@ -54346,6 +54386,7 @@ export interface components {
       /** @description Leading resonance: a denormalized copy of the first ThreadResonance row, written only by refresh_leading_resonance. */
       resonance: number;
       readonly resonance_name: string;
+      readonly resonances: components['schemas']['ThreadResonanceRow'][];
       /**
        * @description Discriminator selecting which target_* FK is populated.
        *
@@ -54519,6 +54560,15 @@ export interface components {
       offering_count: number;
       unavailable_reason: string;
       options: components['schemas']['ThreadResonanceOption'][];
+    };
+    /** @description One resonance a thread holds, with how much of it went in and whether it leads (#5123). */
+    ThreadResonanceRow: {
+      readonly resonance_id: number;
+      readonly resonance_name: string;
+      /** @description Development points this resonance put into the thread. */
+      readonly amount: number;
+      /** @description True for the row ``Thread.resonance`` copies (the largest amount). */
+      readonly leads: boolean;
     };
     /**
      * @description * `TRAIT` - Trait
@@ -75293,6 +75343,27 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CharacterAura'];
+        };
+      };
+    };
+  };
+  magic_character_auras_accept_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AcceptAuraResponse'];
         };
       };
     };

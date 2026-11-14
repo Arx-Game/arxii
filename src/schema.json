@@ -22154,6 +22154,33 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/magic/character-auras/{id}/accept/:
+    post:
+      operationId: magic_character_auras_accept_create
+      description: |-
+        Accept the changes to the aura: settle who the character has become (#5123).
+
+        Dispatches ``AcceptAuraChangeAction`` (the same action telnet ``aura accept`` runs)
+        for the character the aura belongs to. ``get_object`` only finds an aura of a
+        character the requester plays, so nobody accepts for another's character. Refused
+        with the action's own sentence while the character is not unsettled.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptAuraResponse'
+          description: ''
   /api/magic/character-auras/{id}/link-glimpse-distinction/:
     post:
       operationId: magic_character_auras_link_glimpse_distinction_create
@@ -45649,6 +45676,18 @@ paths:
           description: ''
 components:
   schemas:
+    AcceptAuraResponse:
+      type: object
+      description: 'What accepting the changes to the aura answers: the line told,
+        and the aura as it now is.'
+      properties:
+        detail:
+          type: string
+        aura:
+          $ref: '#/components/schemas/CharacterAura'
+      required:
+      - aura
+      - detail
     AcceptSoulTetherRequest:
       type: object
       description: |-
@@ -52160,6 +52199,20 @@ components:
           type: string
           description: The dominant affinity's name for display.
           readOnly: true
+        unsettled:
+          type: boolean
+          description: True when an affinity other than the main one has grown past
+            who they are.
+          readOnly: true
+        unsettled_line:
+          type: string
+          description: The sentence naming the resonance that made them unsettled;
+            blank when settled.
+          readOnly: true
+        mire_share_words:
+          type: string
+          description: The Mire's share of everything they have gained, in words.
+          readOnly: true
         glimpse_state:
           allOf:
           - $ref: '#/components/schemas/GlimpseStateEnum'
@@ -52180,7 +52233,10 @@ components:
       - dominant_affinity_display
       - glimpse_state
       - id
+      - mire_share_words
       - shares
+      - unsettled
+      - unsettled_line
       - updated_at
     CharacterAuraRequest:
       type: object
@@ -52207,10 +52263,19 @@ components:
           pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
           readOnly: true
           description: This affinity's share of the aura, 0-100.
+        settled_percent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+          readOnly: true
+          description: 'Who the character is, per affinity, 0-100: set at creation
+            and by accepting the changes to the aura. The main affinity is the largest
+            settled share.'
       required:
       - affinity_id
       - affinity_name
       - percent
+      - settled_percent
     CharacterClass:
       type: object
       description: Full serializer for character class detail with core traits.
@@ -98301,6 +98366,11 @@ components:
         resonance_name:
           type: string
           readOnly: true
+        resonances:
+          type: array
+          items:
+            $ref: '#/components/schemas/ThreadResonanceRow'
+          readOnly: true
         target_kind:
           allOf:
           - $ref: '#/components/schemas/ThreadTargetKindEnum'
@@ -98377,6 +98447,7 @@ components:
       - owner
       - resonance
       - resonance_name
+      - resonances
       - retired_at
       - target_kind
       - target_technique_id
@@ -98653,6 +98724,30 @@ components:
       - options
       - ritual_id
       - unavailable_reason
+    ThreadResonanceRow:
+      type: object
+      description: One resonance a thread holds, with how much of it went in and whether
+        it leads (#5123).
+      properties:
+        resonance_id:
+          type: integer
+          readOnly: true
+        resonance_name:
+          type: string
+          readOnly: true
+        amount:
+          type: integer
+          readOnly: true
+          description: Development points this resonance put into the thread.
+        leads:
+          type: boolean
+          description: True for the row ``Thread.resonance`` copies (the largest amount).
+          readOnly: true
+      required:
+      - amount
+      - leads
+      - resonance_id
+      - resonance_name
     ThreadTargetKindEnum:
       enum:
       - TRAIT
