@@ -52649,6 +52649,9 @@ components:
         starting_technique_picks:
           type: integer
           readOnly: true
+        resonance_creation_points:
+          type: integer
+          readOnly: true
         magic_training:
           type: object
           additionalProperties: {}
@@ -52751,6 +52754,7 @@ components:
       - magic_training
       - organization_choices
       - public_worship
+      - resonance_creation_points
       - second_parent_species
       - secret_worship
       - selected_area

@@ -31504,6 +31504,7 @@ export interface components {
       /** @description Get total stat point budget (base + bonuses). */
       readonly stats_budget: number;
       readonly starting_technique_picks: number;
+      readonly resonance_creation_points: number;
       readonly magic_training: {
         [key: string]: unknown;
       };

@@ -1521,6 +1521,9 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     # base 1 + any distinction bonus; the GiftStage funnel's technique picker
     # needs it for the "n of m chosen" budget banner.
     starting_technique_picks = serializers.IntegerField(read_only=True)
+    # The points the Gift stage's resonance step spreads (#5123): DriftConfig's
+    # creation_points, so the stepper's budget is never a number the frontend owns.
+    resonance_creation_points = serializers.SerializerMethodField()
     # The Magic-skill training pool and the player's allocation of it (#4659).
     magic_training = serializers.SerializerMethodField()
     # The age range CG accepts for this draft: the general cap tightened by
@@ -1610,6 +1613,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stats_points_remaining",
             "stats_budget",
             "starting_technique_picks",
+            "resonance_creation_points",
             "magic_training",
             "age_min",
             "age_max",
@@ -1649,6 +1653,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stats_points_remaining",
             "stats_budget",
             "starting_technique_picks",
+            "resonance_creation_points",
             "magic_training",
             "bundled_distinctions",
             "derived_anchors",
@@ -1744,6 +1749,11 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     def get_stats_budget(self, obj: CharacterDraft) -> int:
         """Get total stat point budget (base + bonuses)."""
         return obj.calculate_stat_budget()
+
+    def get_resonance_creation_points(self, _obj: CharacterDraft) -> int:
+        from world.magic.services.drift import get_drift_config  # noqa: PLC0415
+
+        return get_drift_config().creation_points
 
     def get_age_min(self, obj: CharacterDraft) -> int:
         return age_bounds(obj.selected_species, obj.selected_beginnings, get_ic_now()).minimum
