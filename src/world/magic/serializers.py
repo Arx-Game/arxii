@@ -1154,6 +1154,9 @@ class ThreadSerializer(serializers.ModelSerializer):
     target_persona_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     character_sheet_id = serializers.IntegerField(write_only=True, required=True)
     name = serializers.CharField(required=False, allow_blank=True, default="")
+    # The name a player calls the thread by (#5123): its own name, else its anchor's, so a
+    # Gift thread (minted with no name) reads as its Gift. The same text telnet prints.
+    display_name = serializers.SerializerMethodField()
     description = serializers.CharField(required=False, allow_blank=True, default="")
     level_cap = serializers.SerializerMethodField()
     anchor_cap = serializers.SerializerMethodField()
@@ -1175,6 +1178,7 @@ class ThreadSerializer(serializers.ModelSerializer):
             "target_persona_id",
             "character_sheet_id",
             "name",
+            "display_name",
             "description",
             "level",
             "developed_points",
@@ -1188,6 +1192,7 @@ class ThreadSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "owner",
+            "display_name",
             "level",
             "developed_points",
             "level_cap",
@@ -1197,6 +1202,17 @@ class ThreadSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    @extend_schema_field(serializers.CharField())
+    def get_display_name(self, obj: Thread) -> str:
+        """The thread's own name, else its anchor's (``thread_display_name``).
+
+        A list view passes each relationship thread's open label in one query as
+        ``context["open_labels"]``; a single thread reads its own.
+        """
+        from world.magic.crossing.handlers import thread_display_name  # noqa: PLC0415
+
+        return thread_display_name(obj, self.context.get("open_labels"))
 
     @extend_schema_field(ThreadResonanceRowSerializer(many=True))
     def get_resonances(self, obj: Thread) -> list[dict]:

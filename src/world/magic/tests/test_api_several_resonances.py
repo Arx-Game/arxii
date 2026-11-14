@@ -322,6 +322,27 @@ class PreviewPayloadTests(_CharacterWithResonances):
             sorted([self.fury.pk, self.wonder.pk]),
         )
         self.assertIsNone(by_id[plain.pk]["allowed_resonance_ids"])
+
+    def test_a_gift_thread_reads_as_its_gifts_name_and_a_named_thread_as_its_own(self) -> None:
+        gift = GiftFactory(name="Kindling")
+        gift.resonances.add(self.fury, self.wonder)
+        gift_thread = provision_latent_gift_thread(self.sheet, gift, resonances=[self.fury])
+        named = ThreadFactory(
+            owner=self.sheet, resonance=self.fury, target_trait=TraitFactory(), name="My Oath"
+        )
+        anchored = ThreadFactory(
+            owner=self.sheet, resonance=self.fury, target_trait=TraitFactory(name="Brawn")
+        )
+
+        response = self.client.get(reverse("magic:thread-list"))
+        one = self.client.get(reverse("magic:thread-detail", args=[gift_thread.pk]))
+
+        by_id = {row["id"]: row for row in response.data["results"]}
+        self.assertEqual(by_id[gift_thread.pk]["name"], "")
+        self.assertEqual(by_id[gift_thread.pk]["display_name"], "Kindling")
+        self.assertEqual(by_id[named.pk]["display_name"], "My Oath")
+        self.assertEqual(by_id[anchored.pk]["display_name"], "Brawn")
+        self.assertEqual(one.data["display_name"], "Kindling")
         self.assertEqual(
             [row["resonance_id"] for row in by_id[gift_thread.pk]["resonances"]],
             [self.fury.pk],

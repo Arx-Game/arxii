@@ -54412,6 +54412,7 @@ export interface components {
       readonly target_technique_id: number | null;
       /** @default  */
       name: string;
+      readonly display_name: string;
       /** @default  */
       description: string;
       /** @description Current level on the internal scale (multiples of 10). */

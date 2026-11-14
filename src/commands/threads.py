@@ -111,8 +111,8 @@ class CmdThreads(ArxCommand):
 
     def _list_crossing_offers(self, sheet: object) -> None:
         from world.magic.crossing.handlers import (  # noqa: PLC0415
-            _open_labels_by_relationship_id,
             anchor_label_for,
+            open_labels_by_relationship_id,
         )
         from world.magic.models.crossing import (  # noqa: PLC0415
             CrossingOption,
@@ -137,7 +137,7 @@ class CmdThreads(ArxCommand):
         if not offers:
             self.msg("You have no pending crossing offers.")
             return
-        open_labels = _open_labels_by_relationship_id(offer.thread for offer in offers)
+        open_labels = open_labels_by_relationship_id(offer.thread for offer in offers)
         for offer in offers:
             anchor_label = anchor_label_for(offer.thread, open_labels)
             res_name = offer.thread.resonance.name if offer.thread.resonance else "???"

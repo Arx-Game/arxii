@@ -339,7 +339,7 @@ class TraitCrossingHandler(_CrossingChoiceHandler):
     target_kind = TargetKind.TRAIT
 
 
-def _open_labels_by_relationship_id(
+def open_labels_by_relationship_id(
     threads: Iterable[Thread],
 ) -> dict[int, RelationshipLabel]:
     """Batch-fetch each RELATIONSHIP_TRACK thread's earliest open label in ONE query.
@@ -405,7 +405,7 @@ def anchor_label_for(
     generic placeholder.
 
     ``open_label_by_relationship_id``, when given, is a pre-built batch lookup
-    from ``_open_labels_by_relationship_id`` — the caller listing several
+    from ``open_labels_by_relationship_id`` — the caller listing several
     threads builds it once and passes it in, avoiding a query per thread.
     When omitted (a single-thread caller, e.g. ``_compose_crossing_message``,
     called once per crossing event — never in a loop), this queries directly;

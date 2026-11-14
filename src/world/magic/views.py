@@ -43,6 +43,7 @@ from world.magic.constants import (
     is_ghost_tutor_ritual,
     is_imbuing_ritual,
 )
+from world.magic.crossing.handlers import open_labels_by_relationship_id
 from world.magic.exceptions import (
     DuplicateTechniqueName,
     InvalidImbueAmount,
@@ -1124,6 +1125,7 @@ class ThreadViewSet(viewsets.ModelViewSet):
                 **self.get_serializer_context(),
                 "thread_rows": thread_rows_by_thread(threads),
                 "gift_resonances": gift_supported_resonances(threads),
+                "open_labels": open_labels_by_relationship_id(threads),
             },
         )
         if page is None:

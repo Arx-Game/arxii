@@ -46,9 +46,9 @@ def active_threads(sheet: CharacterSheet) -> list[Thread]:
 
 def open_labels_for(threads: list[Thread]) -> dict[int, RelationshipLabel]:
     """The open relationship label of each relationship thread, read in one batch."""
-    from world.magic.crossing.handlers import _open_labels_by_relationship_id  # noqa: PLC0415
+    from world.magic.crossing.handlers import open_labels_by_relationship_id  # noqa: PLC0415
 
-    return _open_labels_by_relationship_id(threads)
+    return open_labels_by_relationship_id(threads)
 
 
 def anchor_labels(threads: list[Thread]) -> dict[int, str]:
