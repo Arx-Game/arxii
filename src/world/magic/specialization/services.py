@@ -103,13 +103,12 @@ def _first_gift_thread_resonance(sheet: CharacterSheet) -> Resonance | None:
 def _resolve_grant_resonance(
     sheet: CharacterSheet, gift: Gift, *, preferred: Resonance | None = None
 ) -> Resonance:
-    """Grant-time resonance policy (#2971). Empty supported set = unrestricted (#2968).
+    """Grant-time resonance policy (#2971). The gift's ``resonances`` list is a default
+    here, never a limit (#5123).
 
     In order, taking the first that resolves:
 
-    1. ``preferred`` (the caller's explicit pick), when the gift's supported set is
-       empty OR contains it — an explicit pick outside a non-empty set is NOT used
-       verbatim; it falls through to the set policy below instead.
+    1. ``preferred`` (the caller's explicit pick), whatever the gift's list holds.
     2. An existing active GIFT thread already covering ``gift`` (lineage-aware, via
        ``gift_threads_for``) — its resonance, regardless of the supported-set shape.
        Without this step, an unconditional re-grant (e.g. ``grant_path_magic`` looping
@@ -129,7 +128,7 @@ def _resolve_grant_resonance(
     from world.magic.models import CharacterResonance  # noqa: PLC0415
 
     supported = gift.cached_resonances
-    if preferred is not None and (not supported or any(r.pk == preferred.pk for r in supported)):
+    if preferred is not None:
         return preferred
     covering = gift_threads_for(sheet.character, gift)
     if covering:
@@ -183,9 +182,9 @@ def grant_gift_to_character(
 
     ``resonances`` are the caller's preferred resonances for the latent thread, leading
     first (character creation's weighted picks, heaviest first); empty (the default)
-    means "resolve one for me." Each preference outside a non-empty supported set is
-    dropped, and when none is left the resonance is resolved through
-    ``_resolve_grant_resonance`` (#2971); a thread is ALWAYS
+    means "resolve one for me" through ``_resolve_grant_resonance`` (#2971). Every pick
+    is kept: the gift's ``resonances`` list limits nothing, it is the default that
+    resolver reaches for when no pick is named (#5123). A thread is ALWAYS
     provisioned — a granted gift with an empty supported set no longer silently
     skips thread provisioning, since that left characters holding a gift and its
     techniques with no GIFT thread to read a resonance from anywhere downstream
@@ -208,10 +207,7 @@ def grant_gift_to_character(
     """
     from world.magic.models import CharacterGift  # noqa: PLC0415
 
-    supported = gift.cached_resonances
-    supported_ids = {member.pk for member in supported}
-    held = [r for r in resonances if not supported_ids or r.pk in supported_ids]
-    held = held or [_resolve_grant_resonance(sheet, gift)]
+    held = list(resonances) or [_resolve_grant_resonance(sheet, gift)]
     character_gift, created = CharacterGift.objects.get_or_create(
         character=sheet, gift=gift, defaults={"origin": origin}
     )

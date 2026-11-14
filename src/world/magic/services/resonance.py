@@ -18,7 +18,6 @@ from world.magic.exceptions import (
     NoMatchingWornFacetItemsError,
     PullValidationError,
     ResonanceInsufficient,
-    UnsupportedGiftResonanceError,
 )
 from world.magic.models import (
     CharacterAnima,
@@ -30,7 +29,7 @@ from world.magic.models import (
     ThreadLevelUnlock,
 )
 from world.magic.services.pull_effects import get_pull_effects_for_thread
-from world.magic.services.thread_rows import gift_allowed_resonance_ids, payer_level_read
+from world.magic.services.thread_rows import payer_level_read
 from world.magic.services.threads import (
     cap_exceeded_error,
     compute_anchor_cap,
@@ -516,20 +515,15 @@ def _charge_imbue_ap(character_sheet: CharacterSheet) -> ActionPointPool:
     return ap_pool
 
 
-def _check_imbue_request(
-    character_sheet: CharacterSheet, thread: Thread, resonance: ResonanceModel, amount: int
-) -> None:
-    """Refuse an imbue the thread cannot take: a bad amount, a stranger's thread, or a
-    resonance outside a restricted Gift's supported set (the rule weaving uses)."""
+def _check_imbue_request(character_sheet: CharacterSheet, thread: Thread, amount: int) -> None:
+    """Refuse an imbue the thread cannot take: a bad amount or a stranger's thread. Any
+    resonance may feed any thread, a Gift's included (#5123)."""
     if amount < 0:
         msg = "Imbue amount must be non-negative."
         raise InvalidImbueAmount(msg)
     if thread.owner_id != character_sheet.pk:
         msg = "Character does not own thread."
         raise InvalidImbueAmount(msg)
-    allowed = gift_allowed_resonance_ids(thread)
-    if allowed is not None and resonance.pk not in allowed:
-        raise UnsupportedGiftResonanceError
 
 
 @transaction.atomic
@@ -564,8 +558,6 @@ def spend_resonance_for_imbuing(
 
     Raises:
         InvalidImbueAmount: If amount < 0 or thread.owner != character_sheet.
-        UnsupportedGiftResonanceError: A Gift thread whose Gift supports a set of
-            resonances that does not include ``resonance`` (the rule weaving uses).
         AnchorCapExceeded: If thread is already at effective cap (``LevelCapExceeded``,
             a subclass, when the character-level cap is the one binding it).
         ResonanceInsufficient: If the character holds too little of ``resonance``.
@@ -579,7 +571,7 @@ def spend_resonance_for_imbuing(
     if character_sheet.is_protagonism_locked:
         raise ProtagonismLockedError
 
-    _check_imbue_request(character_sheet, thread, resonance, amount)
+    _check_imbue_request(character_sheet, thread, amount)
     cap = compute_effective_cap(thread, resonance)
     if thread.level >= cap:
         msg = "Thread already at effective cap."

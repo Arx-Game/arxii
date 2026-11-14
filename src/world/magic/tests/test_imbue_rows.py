@@ -9,7 +9,6 @@ from world.magic.exceptions import (
     ANCHOR_ALREADY_WOVEN_MESSAGE,
     ResonanceInsufficient,
     ThreadAnchorTakenError,
-    UnsupportedGiftResonanceError,
 )
 from world.magic.factories import (
     CharacterResonanceFactory,
@@ -151,31 +150,27 @@ class ImbueRowsTests(TestCase):
         self._set_balances()
         self.assertNotIn(thread, imbue_ready_threads(self.sheet))
 
-    def test_restricted_gift_thread_takes_only_its_supported_resonances(self) -> None:
+    def test_gift_thread_takes_a_resonance_off_the_gifts_list(self) -> None:
         gift = GiftFactory()
         gift.resonances.add(self.fury, self.wonder)
         thread = provision_latent_gift_thread(self.sheet, gift, resonances=[self.fury])
 
-        with self.assertRaises(UnsupportedGiftResonanceError):
-            spend_resonance_for_imbuing(self.sheet, thread, self.domination, 5)
-        self.assertFalse(
+        spend_resonance_for_imbuing(self.sheet, thread, self.domination, 5)
+
+        self.assertTrue(
             ThreadResonance.objects.filter(thread=thread, resonance=self.domination).exists()
         )
-        spend_resonance_for_imbuing(self.sheet, thread, self.wonder, 5)
-        self.assertTrue(
-            ThreadResonance.objects.filter(thread=thread, resonance=self.wonder).exists()
-        )
 
-    def test_restricted_gift_thread_is_not_ready_on_an_unsupported_resonance(self) -> None:
+    def test_gift_thread_is_ready_on_any_funded_resonance(self) -> None:
         gift = GiftFactory()
         gift.resonances.add(self.fury)
         thread = provision_latent_gift_thread(self.sheet, gift, resonances=[self.fury])
 
         self._set_balances(domination=3)
-        self.assertNotIn(thread, imbue_ready_threads(self.sheet))
-
-        self._set_balances(fury=3)
         self.assertIn(thread, imbue_ready_threads(self.sheet))
+
+        self._set_balances()
+        self.assertNotIn(thread, imbue_ready_threads(self.sheet))
 
     def test_action_names_the_paying_resonance(self) -> None:
         thread = self._thread()

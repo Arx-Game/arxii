@@ -23,7 +23,6 @@ from world.magic.factories import (
     CharacterAuraFactory,
     CharacterResonanceFactory,
     CharacterThreadWeavingUnlockFactory,
-    GiftFactory,
     ImbuingRitualFactory,
     IntensityTierFactory,
     ResonanceFactory,
@@ -1149,18 +1148,17 @@ class RitualPerformViewTests(APITestCase):
         )
 
     def test_a_refused_imbue_does_not_leave_the_rite_in_progress(self) -> None:
-        """An imbue off a restricted Gift's supported set is refused and ends the rite (#5123).
+        """An imbue the finisher refuses (more than she holds) ends the rite (#5123).
 
         The next valid imbue then goes through, not "already in progress".
         """
-        from world.magic.specialization.services import provision_latent_gift_thread
-
-        gift = GiftFactory()
-        outside = ResonanceFactory()
-        gift.resonances.add(self.resonance)
-        gift_thread = provision_latent_gift_thread(self.sheet, gift, resonances=[self.resonance])
-        CharacterResonanceFactory(
-            character_sheet=self.sheet, resonance=outside, balance=20, lifetime_earned=20
+        # Her own thread: the class-level one is shared with the other imbue tests.
+        thread = ThreadFactory(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_trait=TraitFactory(),
+            level=2,
+            _trait_value=9,
         )
         self.client.force_authenticate(user=self.account)
         url = reverse("magic:ritual-perform")
@@ -1170,7 +1168,7 @@ class RitualPerformViewTests(APITestCase):
             {
                 "character_sheet_id": self.sheet.pk,
                 "ritual_id": self.ritual.pk,
-                "kwargs": {"thread_id": gift_thread.pk, "amount": 5, "resonance_id": outside.pk},
+                "kwargs": {"thread_id": thread.pk, "amount": 500},
             },
             format="json",
         )
@@ -1184,11 +1182,7 @@ class RitualPerformViewTests(APITestCase):
             {
                 "character_sheet_id": self.sheet.pk,
                 "ritual_id": self.ritual.pk,
-                "kwargs": {
-                    "thread_id": gift_thread.pk,
-                    "amount": 5,
-                    "resonance_id": self.resonance.pk,
-                },
+                "kwargs": {"thread_id": thread.pk, "amount": 5},
             },
             format="json",
         )

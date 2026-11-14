@@ -4,8 +4,8 @@ An authored gift can carry an empty ``resonances`` supported set (meaning
 "unrestricted" per #2968) — but a granted gift must ALWAYS get a GIFT thread,
 or downstream reads (cast resolution, dramatic-moment grants, ...) have
 nowhere to read a resonance from. ``_resolve_grant_resonance`` is the shared
-policy that fills in a resonance when none is explicitly chosen (or when the
-explicit choice doesn't fit a non-empty supported set); ``grant_gift_to_character``
+policy that fills in a resonance when none is explicitly chosen (the gift's
+``resonances`` list is a default there, never a limit, #5123); ``grant_gift_to_character``
 runs every grant through it and always provisions the thread, raising
 ``GiftResonanceUnresolvable`` only when nothing resolves at all.
 """
@@ -100,7 +100,7 @@ class ResolveGrantResonanceTests(TestCase):
 
         self.assertEqual(resolved, first)
 
-    def test_preferred_excluded_by_non_empty_set_falls_through_to_set_policy(self):
+    def test_preferred_off_the_gifts_list_is_still_used(self):
         sheet = CharacterSheetFactory()
         affinity = AffinityFactory()
         in_set = ResonanceFactory(affinity=affinity, name="AAA_grr7")
@@ -112,8 +112,8 @@ class ResolveGrantResonanceTests(TestCase):
 
         resolved = _resolve_grant_resonance(sheet, gift, preferred=outside_set)
 
-        self.assertEqual(resolved, also_in_set)
-        self.assertNotEqual(resolved, outside_set)
+        # The gift's list is a default, not a limit (#5123): an explicit pick wins.
+        self.assertEqual(resolved, outside_set)
 
     def test_preferred_in_set_wins(self):
         sheet = CharacterSheetFactory()
@@ -130,6 +130,28 @@ class ResolveGrantResonanceTests(TestCase):
 
 class GrantGiftToCharacterAlwaysProvisionsTests(TestCase):
     """``grant_gift_to_character`` always provisions a thread (#2971)."""
+
+    def test_every_pick_stays_on_the_gift_thread_whatever_the_gifts_list_holds(self):
+        """Character creation's picks are all kept: the gift's list limits nothing (#5123)."""
+        from world.magic.models import ThreadResonance
+
+        sheet = CharacterSheetFactory()
+        gift = GiftFactory()
+        listed = ResonanceFactory()
+        off_list_a = ResonanceFactory()
+        off_list_b = ResonanceFactory()
+        gift.resonances.add(listed)
+
+        grant_gift_to_character(sheet, gift, resonances=[off_list_a, listed, off_list_b])
+
+        thread = Thread.objects.get(owner=sheet, target_gift=gift)
+        self.assertEqual(
+            set(
+                ThreadResonance.objects.filter(thread=thread).values_list("resonance_id", flat=True)
+            ),
+            {off_list_a.pk, listed.pk, off_list_b.pk},
+        )
+        self.assertEqual(thread.resonance, off_list_a)
 
     def test_resonance_none_on_empty_set_gift_provisions_a_thread(self):
         sheet = CharacterSheetFactory()

@@ -67,7 +67,6 @@ const makeThread = (overrides: Partial<Thread> = {}): Thread => ({
   resonance: 1,
   resonance_name: 'Bene',
   resonances: [],
-  allowed_resonance_ids: null,
   target_kind: 'TRAIT',
   target_trait_id: null,
   target_technique_id: null,

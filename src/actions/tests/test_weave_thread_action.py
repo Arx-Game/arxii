@@ -3,7 +3,7 @@
 The happy-path weave (thread created + pending effect consumed) is covered by
 the E2E journey test ``test_weave_imbue_pull_journey_e2e.py`` (Step 2). These
 tests retain only the failure-path edge cases the journey does NOT cover:
-missing unlock, missing pending effect, and unsupported GIFT resonance.
+missing unlock, missing pending effect, and a GIFT woven at a resonance off its list.
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ from django.test import TestCase
 from actions.definitions.threads import WeaveThreadAction
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import TargetKind
-from world.magic.exceptions import UnsupportedGiftResonanceError
 from world.magic.factories import (
     CharacterThreadWeavingUnlockFactory,
     GiftFactory,
@@ -21,7 +20,7 @@ from world.magic.factories import (
     ThreadWeavingUnlockFactory,
     WeavingCeremonyFactory,
 )
-from world.magic.models import PendingRitualEffect
+from world.magic.models import PendingRitualEffect, Thread
 from world.traits.factories import TraitFactory
 
 
@@ -65,21 +64,19 @@ class WeaveThreadActionTests(TestCase):
         self.assertFalse(result.success)
         self.assertIn("Rite of Weaving", result.message)
 
-    def test_run_returns_failure_for_unsupported_gift_resonance(self) -> None:
-        # GIFT weaving sidesteps the unlock gate (the GIFT branch in weave_thread
-        # runs before _has_weaving_unlock). An unsupported resonance raises
-        # UnsupportedGiftResonanceError in the service; the action must catch it
-        # and return a failure ActionResult rather than propagating a 500.
+    def test_a_gift_thread_is_woven_at_a_resonance_off_the_gifts_list(self) -> None:
+        # A Gift's ``resonances`` list limits nothing (#5123): any resonance can feed any
+        # Gift's thread, so weaving one the list does not name succeeds.
         gift = GiftFactory()
-        supported = ResonanceFactory()
-        gift.resonances.add(supported)
-        unsupported = ResonanceFactory()
+        gift.resonances.add(ResonanceFactory())
+        off_list = ResonanceFactory()
         action = WeaveThreadAction()
         result = action.run(
             actor=self.sheet.character,
             target_kind=TargetKind.GIFT,
             target=gift,
-            resonance=unsupported,
+            resonance=off_list,
         )
-        self.assertFalse(result.success)
-        self.assertEqual(result.message, UnsupportedGiftResonanceError.user_message)
+        self.assertTrue(result.success, result.message)
+        thread = Thread.objects.get(owner=self.sheet, target_gift=gift)
+        self.assertEqual(thread.resonance, off_list)

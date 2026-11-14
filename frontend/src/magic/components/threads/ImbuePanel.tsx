@@ -76,9 +76,8 @@ export function ImbuePanel({
   onResult,
 }: ImbuePanelProps) {
   const [amount, setAmount] = useState(1);
-  // A restricted Gift thread only takes its Gift's resonances; the rest are not offered.
-  const allowed = thread.allowed_resonance_ids;
-  const options = allowed ? held.filter((h) => allowed.includes(h.resonance_id)) : held;
+  // Any held resonance may feed any thread, a Gift's included.
+  const options = held;
   // Start on the thread's leading resonance, or the first the character can spend when the
   // leader is not one of them (a Fall can leave a thread leading a resonance she holds no row for).
   const [payerId, setPayerId] = useState(

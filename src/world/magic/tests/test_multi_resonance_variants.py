@@ -16,7 +16,6 @@ from world.forms.factories import (
 from world.forms.models import FormType
 from world.forms.services import assume_alternate_self
 from world.magic.constants import TargetKind
-from world.magic.exceptions import UnsupportedGiftResonanceError
 from world.magic.factories import GiftFactory, ResonanceFactory, TechniqueFactory
 from world.magic.services.threads import weave_thread
 from world.magic.specialization.models import TechniqueVariant
@@ -76,12 +75,13 @@ class MultiResonanceTests(TestCase):
         alt = AlternateSelfFactory(character=self.sheet, resonance=resonance)
         assume_alternate_self(self.sheet, alt)
 
-    def test_weave_rejects_unsupported_resonance(self) -> None:
-        """Weaving a gift thread at a resonance outside the gift's supported set is refused."""
+    def test_weave_takes_a_resonance_off_the_gifts_list(self) -> None:
+        """A gift's ``resonances`` list limits nothing: any resonance can be woven (#5123)."""
         outsider = ResonanceFactory(name="Outsider")
 
-        with self.assertRaises(UnsupportedGiftResonanceError):
-            weave_thread(self.sheet, TargetKind.GIFT, self.gift, outsider)
+        thread = weave_thread(self.sheet, TargetKind.GIFT, self.gift, outsider)
+
+        self.assertEqual(thread.resonance, outsider)
 
     def test_provision_latent_idempotent_on_the_gift(self) -> None:
         t1 = provision_latent_gift_thread(self.sheet, self.gift, resonances=[self.celestial])

@@ -39,7 +39,6 @@ const makeThread = (overrides: Partial<Thread> = {}): Thread => ({
   resonance: 1,
   resonance_name: 'Bene',
   resonances: [],
-  allowed_resonance_ids: null,
   target_kind: 'TRAIT',
   target_trait_id: null,
   target_technique_id: null,
@@ -372,11 +371,11 @@ describe('ImbuePanel', () => {
       expect(screen.getByTestId('imbue-increment')).toBeDisabled();
     });
 
-    it('offers only the resonances a restricted Gift thread supports', () => {
+    it('offers every held resonance, whatever Gift the thread is on', () => {
       const three = [...held, { resonance_id: 3, resonance_name: 'Wonder', balance: 4 }];
       render(
         <ImbuePanel
-          thread={makeThread({ allowed_resonance_ids: [1, 3] })}
+          thread={makeThread({ target_kind: 'GIFT' })}
           balance={10}
           held={three}
           characterSheetId={100}
@@ -384,8 +383,8 @@ describe('ImbuePanel', () => {
         { wrapper: createWrapper() }
       );
       expect(screen.getByTestId('imbue-payer-1')).toBeInTheDocument();
+      expect(screen.getByTestId('imbue-payer-2')).toBeInTheDocument();
       expect(screen.getByTestId('imbue-payer-3')).toBeInTheDocument();
-      expect(screen.queryByTestId('imbue-payer-2')).not.toBeInTheDocument();
     });
 
     it('starts on the first held resonance when the leader is not held, and sends it', () => {
@@ -415,15 +414,15 @@ describe('ImbuePanel', () => {
     it('names the lone resonance that pays when it is not the leader', () => {
       render(
         <ImbuePanel
-          thread={makeThread({ allowed_resonance_ids: [2] })}
+          thread={makeThread({ resonance: 2 })}
           balance={10}
-          held={held}
+          held={[held[0]]}
           characterSheetId={100}
         />,
         { wrapper: createWrapper() }
       );
       expect(screen.queryByTestId('imbue-payers')).not.toBeInTheDocument();
-      expect(screen.getByTestId('imbue-lone-payer')).toHaveTextContent('Spends Domination');
+      expect(screen.getByTestId('imbue-lone-payer')).toHaveTextContent('Spends Fury');
     });
 
     it('names no payer when the lone resonance is the leader', () => {

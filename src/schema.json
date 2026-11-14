@@ -98405,12 +98405,6 @@ components:
           items:
             $ref: '#/components/schemas/ThreadResonanceRow'
           readOnly: true
-        allowed_resonance_ids:
-          type: array
-          items:
-            type: integer
-          nullable: true
-          readOnly: true
         target_kind:
           allOf:
           - $ref: '#/components/schemas/ThreadTargetKindEnum'
@@ -98480,7 +98474,6 @@ components:
           format: date-time
           readOnly: true
       required:
-      - allowed_resonance_ids
       - anchor_cap
       - created_at
       - developed_points

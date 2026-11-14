@@ -79,7 +79,6 @@ class PerformRitualAction(Action):
             RitualPoolError,
             ThreadResonanceChangeError,
             UltimateNotLearnable,
-            UnsupportedGiftResonanceError,
             XPInsufficient,
         )
         from world.magic.services.ritual_dispatch import dispatch_ritual  # noqa: PLC0415
@@ -155,7 +154,6 @@ class PerformRitualAction(Action):
             HonorRefused,
             UltimateNotLearnable,
             ThreadResonanceChangeError,
-            UnsupportedGiftResonanceError,
             VowFocusPickRefusedError,
         ) as exc:
             return ActionResult(success=False, message=exc.user_message)

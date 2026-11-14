@@ -567,10 +567,6 @@ class DramaticMomentSuggestionWrongKind(MagicError):
 # =============================================================================
 
 
-class UnsupportedGiftResonanceError(MagicError):
-    user_message = "That resonance is not supported by this gift."
-
-
 class GiftResonanceUnresolvable(MagicError):
     """Raised when granting a gift (#2971) cannot resolve ANY resonance for its
     latent GIFT thread — no explicit pick, no supported-set member, no existing

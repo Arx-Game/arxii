@@ -38,7 +38,6 @@ from world.magic.models.fall_redemption import ConversionType, ResonanceConversi
 from world.magic.seeds_sanctum import PURGING_RITUAL_NAME
 from world.magic.services.conversion import conversion_pair
 from world.magic.services.thread_rows import (
-    gift_allowed_resonance_ids,
     refresh_leading_resonance,
 )
 from world.magic.types.threads import (
@@ -149,7 +148,7 @@ def thread_row_amounts(thread: Thread) -> dict[int, int]:
     return dict(ThreadResonance.objects.filter(thread=thread).values_list("resonance_id", "amount"))
 
 
-def _options_for(thread: Thread, source: Resonance, moving: int) -> list[ThreadResonanceOption]:
+def _options_for(source: Resonance, moving: int) -> list[ThreadResonanceOption]:
     """The options for moving ``moving`` points of ``source``'s row, sorted for display."""
     candidates: list[tuple[Resonance, str | None, Decimal]] = [
         (resonance, None, Decimal(1))
@@ -171,9 +170,6 @@ def _options_for(thread: Thread, source: Resonance, moving: int) -> list[ThreadR
         candidates.append(
             (mapping.target_resonance, pair.conversion_type, pair.conversion_multiplier)
         )
-    allowed = gift_allowed_resonance_ids(thread)
-    if allowed is not None:
-        candidates = [c for c in candidates if c[0].pk in allowed]
     options = [
         ThreadResonanceOption(
             resonance=resonance,
@@ -214,7 +210,7 @@ def thread_resonance_options(
     held = thread_row_amounts(thread).get(source.pk)
     if not held:
         return []
-    return _options_for(thread, source, held if amount is None else amount)
+    return _options_for(source, held if amount is None else amount)
 
 
 def thread_resonance_unavailable_reason(
@@ -351,7 +347,7 @@ def check_thread_resonance_change(
     if refusal:
         raise ThreadResonanceChangeError(refusal)
     source, available, moving = _resolve_source_row(thread, from_resonance, amount)
-    options = _options_for(thread, source, moving)
+    options = _options_for(source, moving)
     if target_resonance is None:
         msg = f"{NAME_A_RESONANCE_MESSAGE} {options_sentence(options)}"
         raise ThreadResonanceChangeError(msg)

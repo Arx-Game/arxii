@@ -190,7 +190,6 @@ from world.magic.serializers import (
     ThreadSerializer,
     ThreadWeavingTeachingOfferSerializer,
     aura_drift_readings,
-    gift_supported_resonances,
     primary_persona_names_for,
     thread_rows_by_thread,
 )
@@ -1125,7 +1124,6 @@ class ThreadViewSet(viewsets.ModelViewSet):
             context={
                 **self.get_serializer_context(),
                 "thread_rows": thread_rows_by_thread(threads),
-                "gift_resonances": gift_supported_resonances(threads),
                 "open_labels": open_labels_by_relationship_id(threads),
             },
         )

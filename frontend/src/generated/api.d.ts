@@ -54393,7 +54393,6 @@ export interface components {
       resonance: number;
       readonly resonance_name: string;
       readonly resonances: components['schemas']['ThreadResonanceRow'][];
-      readonly allowed_resonance_ids: number[] | null;
       /**
        * @description Discriminator selecting which target_* FK is populated.
        *

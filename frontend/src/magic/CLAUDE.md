@@ -435,10 +435,10 @@ has no rows), XP-lock level, and a link to the detail page.
 Panel in `ThreadDetailPage` for spending resonance to imbue a thread. Calls `useImbueThread`.
 With more than one held resonance (`held` prop) it shows a "Spend" pill per resonance with
 its balance, starting on the thread's leading resonance; the amount stepper stops at the
-picked resonance's balance and the pick goes out as `resonanceId`. A restricted Gift thread
-(`thread.allowed_resonance_ids`, null when any resonance may be imbued) offers only its Gift's
-resonances. The panel is keyed on the thread id (`ThreadDetailPage`) and starts on the first
-offered resonance when the leader is not one of them. With one offered resonance that is the
+picked resonance's balance and the pick goes out as `resonanceId`. Every held resonance is
+offered, whatever the thread's Gift lists (a Gift's `resonances` limits nothing). The panel is
+keyed on the thread id (`ThreadDetailPage`) and starts on the first held resonance when the
+leader is not one of them. With one offered resonance that is the
 leader there is no choice to show and nothing is sent.
 
 ### `components/threads/PayerOptions.tsx`, `PerkInspect.tsx` (#5123)

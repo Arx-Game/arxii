@@ -17,6 +17,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import GainSource
 from world.magic.exceptions import ThreadResonanceChangeError
 from world.magic.factories import (
+    GiftFactory,
     ResonanceFactory,
     ThreadFactory,
     ThreadResonanceFactory,
@@ -29,7 +30,9 @@ from world.magic.services.thread_resonance import (
     change_thread_resonance,
     check_thread_resonance_change,
     resolve_retune_amount,
+    thread_resonance_options,
 )
+from world.magic.specialization.services import provision_latent_gift_thread
 
 
 def size_row(thread, resonance, amount: int) -> None:
@@ -92,6 +95,27 @@ class RetuneMovesAmountTests(RetuneRowsCase):
         self.assertEqual(thread.resonance, self.bene)
         self.assertIn("moved 2 Bene into Lumen", result.message)
         self.assertIn("It now holds 8 Bene and 5 Lumen.", result.message)
+
+    def test_a_gift_thread_retunes_into_a_resonance_off_the_gifts_list(self) -> None:
+        """A Gift's ``resonances`` list limits nothing: every option is offered (#5123)."""
+        sheet = CharacterSheetFactory()
+        gift = GiftFactory()
+        gift.resonances.add(self.bene)
+        thread = provision_latent_gift_thread(sheet, gift, resonances=[self.bene])
+        size_row(thread, self.bene, 10)
+        sheet.character.threads.invalidate()
+
+        offered = [option.resonance for option in thread_resonance_options(thread, self.bene)]
+        change_thread_resonance(
+            sheet,
+            thread=thread,
+            from_resonance=self.bene,
+            target_resonance=self.lumen,
+            amount=2,
+        )
+
+        self.assertIn(self.lumen, offered)
+        self.assertEqual(amounts(thread), {"Bene": 8, "Lumen": 2})
 
     def test_retune_flips_leading_when_it_should(self) -> None:
         thread = self.mixed_thread()

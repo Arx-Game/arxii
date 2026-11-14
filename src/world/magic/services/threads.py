@@ -48,7 +48,7 @@ from world.magic.models import (
     ThreadPullCost,
     ThreadXPLockedLevel,
 )
-from world.magic.services.thread_rows import gift_allowed_resonance_ids, write_resonance_rows
+from world.magic.services.thread_rows import write_resonance_rows
 from world.magic.types import ThreadSurvivabilitySaves, ThreadXPLockProspect
 from world.magic.types.pull import pull_payer
 
@@ -531,23 +531,8 @@ def _weave_gift_thread(
     A gift carries one thread per character (#5123); it holds every resonance on its
     rows. A character who already has a thread on the gift is told to imbue it instead.
     """
-    # Resonance-in-supported-set check: read the gift's cached resonance list
-    # (list-comp) rather than ``gift.resonances.filter(pk=…).exists()`` per
-    # project cached-property rule.
-    #
-    # An EMPTY supported set means UNRESTRICTED, not "nothing allowed" (ruled
-    # 2026-08-04). Resonance comes from the thread the player weaves, not from
-    # the gift; the set is only an optional narrowing. Every one of the 17
-    # authored gifts carries an empty set, so the old reading locked all of
-    # them out of this path. Character creation goes through
-    # ``grant_gift_to_character`` (#2971), which resolves a resonance via
-    # ``_resolve_grant_resonance`` and always provisions a thread — an empty
-    # supported set is UNRESTRICTED there too, not a skip.
-    supported = gift.cached_resonances
-    if supported and not any(r.pk == resonance.pk for r in supported):
-        from world.magic.exceptions import UnsupportedGiftResonanceError  # noqa: PLC0415
-
-        raise UnsupportedGiftResonanceError
+    # The gift's ``resonances`` list limits nothing here: a Gift is the substance and any
+    # resonance the character holds can feed its thread (owner ruling 2026-11-14, #5123).
 
     # Read the existing threads through the cached ``character.threads``
     # handler (same cached queryset the resolver reads), not a fresh
@@ -979,18 +964,15 @@ def imbue_ready_threads(character_sheet: CharacterSheet) -> list[Thread]:
 
 
 def _can_be_imbued_by_any(thread: Thread, funded: list[ResonanceModel], level_cap: int) -> bool:
-    """Whether some funded resonance the thread may take can raise its level.
+    """Whether some funded resonance can raise the thread's level.
 
-    A restricted Gift thread only takes its Gift's supported resonances (the rule
-    ``spend_resonance_for_imbuing`` enforces). The anchor cap is read once unless the
+    Every funded resonance may feed any thread. The anchor cap is read once unless the
     anchor's cap keys on the resonance being spent (FACET, ORGANIZATION).
     """
-    allowed = gift_allowed_resonance_ids(thread)
-    usable = [r for r in funded if allowed is None or r.pk in allowed]
-    if not usable:
+    if not funded:
         return False
     if thread.target_kind in _RESONANCE_KEYED_ANCHORS:
-        return any(thread.level < min(level_cap, compute_anchor_cap(thread, r)) for r in usable)
+        return any(thread.level < min(level_cap, compute_anchor_cap(thread, r)) for r in funded)
     return thread.level < min(level_cap, compute_anchor_cap(thread))
 
 

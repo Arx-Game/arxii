@@ -47,7 +47,6 @@ class WeaveThreadAction(Action):
             RelationshipBondNotOwned,
             RelationshipTierTooLow,
             TechniqueNotOwned,
-            UnsupportedGiftResonanceError,
             WeavingUnlockMissing,
         )
         from world.magic.services import weave_thread  # noqa: PLC0415
@@ -66,7 +65,6 @@ class WeaveThreadAction(Action):
             WeavingUnlockMissing,
             CovenantRoleNeverHeldError,
             MantleNotClearedError,
-            UnsupportedGiftResonanceError,
             RelationshipBondNotOwned,
             RelationshipTierTooLow,
             TechniqueNotOwned,

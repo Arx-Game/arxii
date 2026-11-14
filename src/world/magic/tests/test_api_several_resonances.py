@@ -32,7 +32,7 @@ from world.magic.factories import (
     ensure_canonical_affinities,
     set_aura_split,
 )
-from world.magic.models import CharacterResonance, Gift, PendingRitualEffect, ThreadResonance
+from world.magic.models import CharacterResonance, PendingRitualEffect, ThreadResonance
 from world.magic.services.thread_rows import refresh_leading_resonance
 from world.magic.specialization.services import provision_latent_gift_thread
 from world.roster.factories import RosterTenureFactory
@@ -388,19 +388,7 @@ class PreviewPayloadTests(_CharacterWithResonances):
         self.assertEqual(len(names), 14)
         self.assertEqual(two_sets, one_set)
 
-    def test_thread_list_reads_every_gifts_supported_set_in_one_query(self) -> None:
-        for name in ("Kindling", "Tidecall", "Gale"):
-            gift = GiftFactory(name=name)
-            gift.resonances.add(self.fury, self.wonder)
-            provision_latent_gift_thread(self.sheet, gift, resonances=[self.fury])
-        through = Gift.resonances.through._meta.db_table
-        with CaptureQueriesContext(connection) as queries:
-            response = self.client.get(reverse("magic:thread-list"))
-        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
-        reads = [q["sql"] for q in queries.captured_queries if f'"{through}"' in q["sql"]]
-        self.assertEqual(len(reads), 1)
-
-    def test_thread_list_carries_each_threads_rows_and_allowed_set(self) -> None:
+    def test_thread_list_carries_no_allowed_set_for_a_gift_thread(self) -> None:
         gift = GiftFactory()
         gift.resonances.add(self.fury, self.wonder)
         gift_thread = provision_latent_gift_thread(self.sheet, gift, resonances=[self.fury])
@@ -409,11 +397,9 @@ class PreviewPayloadTests(_CharacterWithResonances):
         response = self.client.get(reverse("magic:thread-list"))
 
         by_id = {row["id"]: row for row in response.data["results"]}
-        self.assertEqual(
-            by_id[gift_thread.pk]["allowed_resonance_ids"],
-            sorted([self.fury.pk, self.wonder.pk]),
-        )
-        self.assertIsNone(by_id[plain.pk]["allowed_resonance_ids"])
+        # A Gift's resonances list limits nothing, so no thread says what it may take (#5123).
+        self.assertNotIn("allowed_resonance_ids", by_id[gift_thread.pk])
+        self.assertNotIn("allowed_resonance_ids", by_id[plain.pk])
 
     def test_a_gift_thread_reads_as_its_gifts_name_and_a_named_thread_as_its_own(self) -> None:
         gift = GiftFactory(name="Kindling")
@@ -493,22 +479,22 @@ class ImbuePayerTests(_CharacterWithResonances):
         self.assertIn("resonance_id", response.data)
         self.assertFalse(PendingRitualEffect.objects.filter(character=self.sheet).exists())
 
-    def test_imbue_refuses_a_resonance_a_restricted_gift_does_not_support(self) -> None:
+    def test_imbue_takes_a_resonance_off_the_gifts_list(self) -> None:
         gift = GiftFactory()
         gift.resonances.add(self.fury, self.wonder)
         gift_thread = provision_latent_gift_thread(self.sheet, gift, resonances=[self.fury])
 
         response = self._imbue(thread_id=gift_thread.pk, amount=5, resonance_id=self.domination.pk)
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
-        self.assertFalse(
-            ThreadResonance.objects.filter(thread=gift_thread, resonance=self.domination).exists()
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(
+            ThreadResonance.objects.get(thread=gift_thread, resonance=self.domination).amount, 5
         )
         self.assertEqual(
             CharacterResonance.objects.get(
                 character_sheet=self.sheet, resonance=self.domination
             ).balance,
-            20,
+            15,
         )
 
 

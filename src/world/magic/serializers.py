@@ -1103,21 +1103,6 @@ def thread_rows_by_thread(threads: list[Thread]) -> dict[int, list[ThreadResonan
     return grouped
 
 
-def gift_supported_resonances(threads: list[Thread]) -> dict[int, set[int]]:
-    """Each pulled Gift thread's Gift's supported resonance pks, read in one query (#5123).
-
-    Keyed by Gift id; a Gift with no supported set is absent (any resonance is allowed).
-    Passed through serializer ``context["gift_resonances"]`` beside ``thread_rows``.
-    """
-    gift_ids = {t.target_gift_id for t in threads if t.target_gift_id is not None}
-    supported: dict[int, set[int]] = {}
-    for gift_id, resonance_id in Gift.resonances.through.objects.filter(
-        gift_id__in=gift_ids
-    ).values_list("gift_id", "resonance_id"):
-        supported.setdefault(gift_id, set()).add(resonance_id)
-    return supported
-
-
 class ThreadSerializer(serializers.ModelSerializer):
     """Serializer for Thread records (Spec A §4.5).
 
@@ -1139,7 +1124,6 @@ class ThreadSerializer(serializers.ModelSerializer):
     # the leading resonance.
     resonances = serializers.SerializerMethodField()
     # Null when any resonance may be imbued; a restricted Gift thread lists its Gift's set.
-    allowed_resonance_ids = serializers.SerializerMethodField()
     target_id = serializers.IntegerField(write_only=True, required=True)
     # The anchor of a TRAIT / TECHNIQUE thread, read back so a combat pull dialog can offer
     # the threads related to what she is using (#5066); null for every other kind.
@@ -1170,7 +1154,6 @@ class ThreadSerializer(serializers.ModelSerializer):
             "resonance",
             "resonance_name",
             "resonances",
-            "allowed_resonance_ids",
             "target_kind",
             "target_id",
             "target_trait_id",
@@ -1227,23 +1210,6 @@ class ThreadSerializer(serializers.ModelSerializer):
         return ThreadResonanceRowSerializer(
             rows, many=True, context={"leading_resonance_id": obj.resonance_id}
         ).data
-
-    @extend_schema_field(serializers.ListField(child=serializers.IntegerField(), allow_null=True))
-    def get_allowed_resonance_ids(self, obj: Thread) -> list[int] | None:
-        """The resonances this thread may take when imbued; null when any may (#5123).
-
-        Only a Gift thread whose Gift supports a set of resonances is restricted.
-        """
-        from world.magic.services.thread_rows import gift_allowed_resonance_ids  # noqa: PLC0415
-
-        supported = self.context.get("gift_resonances")
-        if supported is None:
-            allowed = gift_allowed_resonance_ids(obj)
-        elif obj.target_kind == TargetKind.GIFT and obj.target_gift_id is not None:
-            allowed = supported.get(obj.target_gift_id)
-        else:
-            allowed = None
-        return None if allowed is None else sorted(allowed)
 
     def get_level_cap(self, obj: Thread) -> int:
         """Return the character-level cap for this thread's owner (#4585)."""

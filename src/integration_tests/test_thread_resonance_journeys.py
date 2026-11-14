@@ -554,7 +554,7 @@ class AnchorsThatHoldAResonance(ThreadRetuneCase):
         self.assertEqual(response.status_code, 200, response.content)
         return response.data
 
-    def test_a_gift_thread_moves_only_within_its_gifts_resonances(self) -> None:
+    def test_a_gifts_resonance_list_narrows_nothing_for_its_thread(self) -> None:
         gift = GiftFactory(name="Gift of the Long Dark")
         gift.resonances.add(self.bene, self.ruin)
         woven = ThreadFactory(
@@ -565,30 +565,16 @@ class AnchorsThatHoldAResonance(ThreadRetuneCase):
             target_gift=gift,
             developed_points=20,
         )
+        # Every option is offered, Lumen and Praedari too, though the Gift lists neither (#5123).
         data = self.options(woven)
-        self.assertEqual([o["resonance_name"] for o in data["options"]], ["Ruin"])
+        self.assertEqual(
+            sorted(o["resonance_name"] for o in data["options"]), ["Lumen", "Praedari", "Ruin"]
+        )
 
         candle = self.carry(self.ysmay, self.lumen, "Lumen Candle")
-        told = self.retune(woven, self.lumen)
-        self.assertIn("Bene cannot move to Lumen. It can move to: Ruin (Fall).", told)
-        self.assertFalse(consumed(candle))
-        self.assertEqual(stored(woven)["resonance_id"], self.bene.pk)
-
-        shard = self.carry(self.ysmay, self.ruin, "Ruin Shard")
-        self.assertIn(f"You perform {RITE}.", self.retune(woven, self.ruin))
-        self.assertEqual(stored(woven)["resonance_id"], self.ruin.pk)
-        self.assertTrue(consumed(shard))
-
-    def test_a_gift_that_names_no_resonance_does_not_narrow_the_options(self) -> None:
-        woven = ThreadFactory(
-            owner=self.sheet,
-            resonance=self.bene,
-            target_kind=TargetKind.GIFT,
-            target_trait=None,
-            target_gift=GiftFactory(name="Gift of Open Hands"),
-            developed_points=20,
-        )
-        self.assertEqual(len(self.options(woven)["options"]), 3)
+        self.assertIn(f"You perform {RITE}.", self.retune(woven, self.lumen))
+        self.assertEqual(stored(woven)["resonance_id"], self.lumen.pk)
+        self.assertTrue(consumed(candle))
 
     def test_a_sanctum_thread_is_sent_to_the_ritual_of_purging(self) -> None:
         sanctum = SanctumDetails.objects.create(
