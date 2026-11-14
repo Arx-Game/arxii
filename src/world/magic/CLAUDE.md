@@ -2082,9 +2082,14 @@ Repeatable (not a Fall); each conversion loses half the value.
 (MISSION_REPORT shape). Three new `ResonanceGrant` CheckConstraints.
 `DRIFT_CORRECTION` (#4733) joins them with `res_grant_drift_correction_shape`.
 
-**Drift correction (#4733, slice 4 of #4672).** "Drift" here is `CharacterResonance` balance
-held off the aura's dominant affinity (`drift_holdings`); `AuraDrift` / `recompute_aura` is the
-older sense (shift in aura percentages). Do not mix the two in names.
+**Drift correction (#4733, slice 4 of #4672).** Atoning (#5123) reads
+lifetime, not balance: `drift_holdings` is resonance of a non-main affinity that stands past who
+the character is (`DriftReading.convertible_points`); `AuraDrift` / `recompute_aura` is the
+older sense (shift in aura percentages). Do not mix the two in names. The other exit from being
+unsettled is `accept_aura_change(sheet)` (`services/drift.py`, `AcceptAuraChangeAction`, key
+`accept_aura_change`): refused with `NotUnsettledError` unless `steps_past > 0`; moves every
+`mire_lifetime` into the character's own, sets each `settled_percent` to the resulting share,
+writes no corruption.
 - Models (`models/drift.py`): `DriftCorrectionConfig` (singleton; `rite`, `check_type` null until
   staff author them; `check_difficulty`; `cap_percent`), `DriftCorrectionOutcomeShare` (an
   `OutcomeTierAward`; `converted_share` is the fraction of the requested amount that converts,
@@ -2101,8 +2106,10 @@ older sense (shift in aura percentages). Do not mix the two in names.
   `lapse_conversion_offers`.
 - The rite (`services/drift_correction.py`): `perform_drift_correction_rite` refuses before it
   consumes anything unless the config has a rite, a check type and a share for every
-  `CheckOutcome`; converts `floor(amount x share)` through `convert_resonance_amount` as
-  `DRIFT_CORRECTION`; failure consumes the offering and leaves the cap. The check type is NOT a
+  `CheckOutcome`; converts `floor(amount x share)` lifetime points through `convert_resonance_amount` as
+  `DRIFT_CORRECTION` (lifetime moves by the points, the Mire's excess first; balance moves only as
+  far as it exists and only that part is granted at the pair rate; amount is capped by the cap, the
+  source's lifetime and its affinity's excess); failure consumes the offering and leaves the cap. The check type is NOT a
   `RitualCheckConfig` sidecar. Never match the rite, check or affinities by name.
   `rite_is_ready(config=None)` (rite, check type and a tier's share all present; one query,
   through `outcome_tiers_without_a_share()`, which the Required content probe reads too) is the

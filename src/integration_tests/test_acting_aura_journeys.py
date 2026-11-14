@@ -203,6 +203,11 @@ class AlignmentFollowsTheAlternateSelfOnACast(_ACaster):
         return entries[0]["amount"]
 
     def test_an_abyssal_cast_reads_the_alternate_selfs_aura_while_worn(self) -> None:
+        # Her Abyssal streak is not part of who she is (settled 0), so as herself the cast
+        # reads her current 20%; a settled share would give the full bonus (#5123).
+        share = self.sheet.aura.shares.get(affinity=self.abyssal)
+        share.settled_percent = Decimal(0)
+        share.save()
         technique = self.technique_of(self.abyssal)
         self.assertEqual(self.alignment_term(technique), 20)  # true aura: 20% Abyssal
         self.shift(self.ysmay)
@@ -210,10 +215,15 @@ class AlignmentFollowsTheAlternateSelfOnACast(_ACaster):
         self.revert(self.ysmay)
         self.assertEqual(self.alignment_term(technique), 20)
 
+    def test_a_settled_minor_affinity_casts_at_full_alignment_as_herself(self) -> None:
+        """Her Abyssal 20 is part of who she is, so it casts at full strength (ruling 26)."""
+        technique = self.technique_of(self.abyssal)
+        self.assertEqual(self.alignment_term(technique), 100)  # settled 20%: the full bonus
+
     def test_her_own_celestial_gift_cast_in_the_abyssal_self_keeps_full_alignment(self) -> None:
         """The worn self's resonance replaces the gift's, as it does for variants."""
         technique = self.technique_of(self.celestial)
-        self.assertEqual(self.alignment_term(technique), 80)  # true aura: 80% Celestial
+        self.assertEqual(self.alignment_term(technique), 100)  # settled Celestial: the full bonus
         self.shift(self.ysmay)
         self.assertEqual(self.alignment_term(technique), 100)  # works in Abyssal, 100%
 

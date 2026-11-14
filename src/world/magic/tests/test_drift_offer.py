@@ -74,10 +74,11 @@ class DriftOfferTestBase(EvenniaTestCase):
         self.scene = SceneFactory(room=self.room)
         invalidate_active_scene_cache(self.room)
         aura = CharacterAuraFactory(character=self.sheet)
-        set_aura_split(aura, celestial="80", primal="10", abyssal="10")
-        # grant_resonance recomputes the aura from lifetime earned, so the Celestial
-        # history is real: a long Celestial record that the Abyssal holding does not outweigh.
-        _hold(self.sheet, self.dawnlight, 0, lifetime=500)
+        # Who she is: wholly Celestial. grant_resonance recomputes the aura from lifetime
+        # earned, so the history is real: 30 Abyssal on 170 Celestial is 15 percent, ten
+        # past the tolerance, so she is unsettled and atoning has something to convert.
+        set_aura_split(aura, celestial="100", primal="0", abyssal="0")
+        _hold(self.sheet, self.dawnlight, 0, lifetime=170)
         _hold(self.sheet, self.dread, 30)
 
     def deed(self, resonance=None, amount=20):
@@ -217,10 +218,16 @@ class OpenOfferTests(DriftOfferTestBase):
         self.assertFalse(DriftConversionOffer.objects.exists())
         self.assertTrue(ResonanceGrant.objects.filter(resonance=self.dawnlight).exists())
 
-    def test_drift_with_zero_balance_opens_nothing(self) -> None:
+    def test_drift_with_zero_balance_still_opens_an_offer(self) -> None:
+        # Atoning changes who she has become, so it works on lifetime: spent excess counts.
         row = CharacterResonance.objects.get(resonance=self.dread)
         row.balance = 0
         row.save(update_fields=["balance"])
+        self.deed()
+        self.assertTrue(DriftConversionOffer.objects.exists())
+
+    def test_a_settled_character_opens_nothing(self) -> None:
+        set_aura_split(self.sheet.aura_or_none, celestial="85", primal="0", abyssal="15")
         self.deed()
         self.assertFalse(DriftConversionOffer.objects.exists())
 

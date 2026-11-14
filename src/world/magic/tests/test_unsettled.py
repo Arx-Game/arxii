@@ -24,7 +24,7 @@ from world.magic.factories import (
 )
 from world.magic.models import Affinity, CharacterResonance
 from world.magic.services.aura import recompute_aura
-from world.magic.services.conversion import convert_resonance_amount
+from world.magic.services.conversion import _convert_partial
 from world.magic.services.drift import check_resonance_focus, drift_for, get_drift_config
 from world.magic.services.resonance import grant_resonance
 from world.magic.services.soul_tether import _grant_sineating_resonance
@@ -272,14 +272,7 @@ class MovePartialMireTests(_UnsettledCase):
     def test_move_partial_moves_mire_proportionally(self) -> None:
         source = _hold(self.sheet, self.dread, 100, mire=40)
 
-        convert_resonance_amount(
-            self.sheet,
-            source_resonance=self.dread,
-            target_resonance=self.dawnlight,
-            amount=50,
-            multiplier=Decimal(1),
-            gain_source=GainSource.PENANCE,
-        )
+        _convert_partial(source, self.sheet, self.dawnlight, Decimal(1), 50)
 
         source.refresh_from_db()
         self.assertEqual(source.lifetime_earned, 50)
@@ -298,14 +291,7 @@ class MovePartialMireTests(_UnsettledCase):
             mire_lifetime=9,
         )
 
-        convert_resonance_amount(
-            self.sheet,
-            source_resonance=self.dread,
-            target_resonance=self.dawnlight,
-            amount=2,
-            multiplier=Decimal(1),
-            gain_source=GainSource.PENANCE,
-        )
+        _convert_partial(source, self.sheet, self.dawnlight, Decimal(1), 2)
 
         source.refresh_from_db()
         self.assertLessEqual(source.mire_lifetime, source.lifetime_earned)

@@ -164,9 +164,10 @@ class TwoCharacterAccountTests(DriftCorrectionViewTestBase):
             roster_entry=RosterEntryFactory(character_sheet=self.second),
         )
         set_aura_split(
-            CharacterAuraFactory(character=self.second), celestial="80", primal="10", abyssal="10"
+            CharacterAuraFactory(character=self.second), celestial="100", primal="0", abyssal="0"
         )
-        _hold(self.second, self.dawnlight, 0, lifetime=500)
+        # 30 Abyssal on 170 Celestial: unsettled, with something to atone for.
+        _hold(self.second, self.dawnlight, 0, lifetime=170)
         _hold(self.second, self.dread, 30)
         self.second_offer = DriftConversionOfferFactory(
             character_sheet=self.second, scene=SceneFactory()

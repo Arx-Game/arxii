@@ -213,9 +213,10 @@ class FallDirectionTests(DriftRiteTestBase):
         scene = SceneFactory(room=room)
         invalidate_active_scene_cache(room)
         set_aura_split(
-            CharacterAuraFactory(character=sheet), celestial="10", primal="10", abyssal="80"
+            CharacterAuraFactory(character=sheet), celestial="0", primal="0", abyssal="100"
         )
-        _hold(sheet, self.dread, 0, lifetime=500)
+        # Wholly Abyssal, with 30 Celestial on 70 Abyssal: well past the tolerance.
+        _hold(sheet, self.dread, 0, lifetime=70)
         _hold(sheet, self.dawnlight, 30)
         offer = DriftConversionOfferFactory(character_sheet=sheet, scene=scene)
         DriftConversionCapFactory(offer=offer, target_resonance=self.dread, cap=10)

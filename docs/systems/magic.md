@@ -3293,7 +3293,12 @@ returns an `ActingAura` (`percent_for(affinity)`, `dominant_affinity`, `is_alter
 100% of the active alternate self's resonance affinity when it has one, else the sheet's
 `CharacterAura`. Readers that follow it (what she acts with):
 
-- the technique cast aura-alignment term (`_aura_alignment`, `services/power_terms.py`);
+- the technique cast aura-alignment term (`_aura_alignment`, `services/power_terms.py`). A worn
+  self keeps this reading; otherwise (#5123, ruling 26) the cast works in the affinities of the
+  resonances paying its pulled threads (the gift's resonances when it pulls nothing) on the TRUE
+  aura, and the bonus is the largest over them: the full `affinity_alignment_bonus` for an affinity
+  with a settled share above zero, else its current percent, so a mixed character never gets less
+  than a pure one;
 - the place-of-power alignment boon on arrival (`refresh_resonance_alignment` via
   `evaluate_resonance_environment` with no technique);
 - the place reaction during a cast (`use_technique` evaluates
@@ -4431,10 +4436,10 @@ before `CharacterAura`'s stored-percentage mechanism existed — were removed in
 
 ### Drift correction (#4733, slice 4 of #4672) [BUILT & WIRED]
 
-**Vocabulary.** "Drift" here is resonance a character holds that sits off their aura: a
-`CharacterResonance` with `balance > 0` whose resonance's affinity differs from the aura's
-`dominant_affinity` (`drift_holdings`, `world/magic/services/drift.py`). It has no threshold in
-this slice. `AuraDrift` / `recompute_aura` (the section above) is the older, different sense:
+**Vocabulary.** "Drift" here is resonance a character holds in a non-main affinity that has
+grown past who they are (#5123): `drift_holdings` (`world/magic/services/drift.py`) reads
+lifetime, not balance, so a streak whose points were already spent still counts, and
+`DriftReading.convertible_points` is the lifetime points of excess atoning may convert. `AuraDrift` / `recompute_aura` (the section above) is the older, different sense:
 the shift in the aura's stored percentages. Drift correction converts held drift into the
 character's own resonances through deeds; it is separate from Fall and Redemption, which change
 affinity. Drift correction reuses their pair rates (`AffinityInteraction.conversion_multiplier`).
@@ -4484,19 +4489,24 @@ from converting less than a worse one. `perform_drift_correction_rite` (`drift_c
 in one transaction: locks the offer; refuses unless `rite_is_ready(config)` (an unset rite or
 check type, or any `CheckOutcome` with no share row: `DriftCorrectionNotConfiguredError`,
 before anything is consumed); validates
-the amount against the cap and the held balance and the source against `convertible_drift`;
+the amount (lifetime points) against the cap, the source's lifetime and its affinity's excess,
+and the source against `convertible_drift`;
 picks the offering with `resolve_ritual_components` (no writes) with the target as
 `resonance_context`; rolls the check with `focus_bonus` as extra modifiers; converts
-`floor(amount x share)` of the source through `convert_resonance_amount`, granted as
-`GainSource.DRIFT_CORRECTION` at `max(1, floor(converted x pair multiplier))` (an uphill pair
-never rounds to zero); and only then spends the offering with `consume_materials`. Every step
+`floor(amount x share)` of the source through `convert_resonance_amount`: lifetime moves by the
+points (the Mire's excess first, so the Sineater's `mire_lifetime` shrinks first and is clamped to
+the lifetime left) and the aura follows; balance moves only as far as it exists, and only that part
+is granted as `GainSource.DRIFT_CORRECTION` at `max(1, floor(moved x pair multiplier))` (an uphill
+pair never rounds to zero); and only then spends the offering with `consume_materials`. Every step
 that can raise runs before the first item write, so a refusal never leaves a cached item or
 balance ahead of the rolled-back table. The cap shrinks by what converted; an empty cap row is
 deleted, and the offer with it when no cap is left. A tier with no share row is refused up
 front by `rite_is_ready`; a tier whose share is 0.00 converts nothing, spends the
-offering and leaves the cap intact. Source and target lifetime move by the proportional share, so the
-aura follows (`recompute_aura`). `_move_partial` (`conversion.py`, shared with the Rite of
-Atonement) works that share out in integers as `amount x lifetime // balance`: exact when the
+offering and leaves the cap intact. The other exit, `accept_aura_change` (`services/drift.py`;
+`AcceptAuraChangeAction`), is refused unless unsettled, moves the Sineater's Mire lifetime into
+their own, sets every `settled_percent` to the resulting share (so `steps_past` is 0) and writes
+no corruption. `_move_partial` (`conversion.py`, the Rite of Atonement's penance path, no longer
+the drift rite's) works its proportional share out in integers as `amount x lifetime // balance`: exact when the
 ratio is whole (4 of a 30 balance with 30 lifetime moves 4), rounded down on a true fraction.
 
 **Component modes.** `RitualComponentRequirement` has a third mode, `matches_target_resonance`

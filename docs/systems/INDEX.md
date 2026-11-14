@@ -92,15 +92,15 @@
   `lapse_conversion_offers` from `Scene.finish_scene`). The player performs a configured rite:
   `DriftCorrectionConfig` (singleton: `rite`, `check_type`, `check_difficulty`, `cap_percent`)
   and `DriftCorrectionOutcomeShare` (share of the requested amount converted per `CheckOutcome`) feed
-  `perform_drift_correction_rite` (`services/drift_correction.py`), which converts through
-  `convert_resonance_amount` (`services/conversion.py`) as `GainSource.DRIFT_CORRECTION` at the
+  `perform_drift_correction_rite` (`services/drift_correction.py`), which converts lifetime
+  points (Mire excess first) through `convert_resonance_amount` (`services/conversion.py`) as `GainSource.DRIFT_CORRECTION` at the
   `AffinityInteraction` pair rate. `RitualComponentRequirement.matches_target_resonance` +
   `min_item_meaning` add a third component mode (`ComponentMode`: material, facet, keepsake;
   `qualifying_components`). Helpers: `drift_holdings`, `convertible_drift`, `focus_bonus`,
   `preview_conversion`, `offer_options`, `max_yield_per_earned_point`. Exceptions:
   `DriftCorrectionError` with `DriftCorrectionNotConfiguredError`, `DriftOfferNotFoundError`,
-  `DriftConversionInvalidError`. Actions `perform_drift_correction` and
-  `decline_drift_correction`; telnet `drift`; REST `/api/magic/drift-correction/`
+  `DriftConversionInvalidError`, `NotUnsettledError`. Actions `perform_drift_correction`,
+  `decline_drift_correction` and `accept_aura_change` (`accept_aura_change` service, #5123); telnet `drift`; REST `/api/magic/drift-correction/`
   (`pending/`, `convert/`, `decline/`); React `DriftConversionOfferGate` and
   `DriftConversionOfferDialog` on the scene page and game page. One Required content row,
   `drift-correction-config`. Details: [magic.md](magic.md) "Drift correction".
