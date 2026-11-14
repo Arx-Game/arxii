@@ -1648,7 +1648,10 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
     )
 
     applicable = [e for e in resolved if not e.inactive]
-    if not applicable:
+    # A thread paid by a resonance it holds no row for is an ordinary pull with no perks
+    # (#5123, ruling 13): the player chose it, so an empty effect list is not a refusal.
+    perkless = any(payer_level_read(t, pull_payer(t, payers)) is None for t in threads)
+    if not applicable and not perkless:
         msg = "This pull would have no effect on that action."
         raise InvalidImbueAmount(msg)
 
