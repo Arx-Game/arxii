@@ -20,6 +20,15 @@ separately.
 > read `src/world/relationships/CLAUDE.md` and `docs/systems/magic.md`; this document stays
 > as the record of the design as approved.
 
+> **Superseded in part by #5123 (ADR-5123-A, ADR-5123-B), 2026-11-14.** A thread no longer
+> belongs to one resonance: it is one thread per anchor holding several resonances on
+> `ThreadResonance` rows, `Thread.resonance` is the leading one, and every uniqueness constraint
+> below is `(owner, target)` without the resonance. `spend_resonance_for_imbuing` takes the
+> resonance that pays, each pulled thread names its paying resonance, and a pull's perks are the
+> payer's. "Drift" (off-aura balance weighted by `conflict_weight`) is replaced by the unsettled
+> reading on the aura (`drift_for`, `settled_percent`, `mire_lifetime`). Read
+> `docs/systems/magic.md` for the current shapes.
+
 ---
 
 ## 1. Scope & Core Pivot
@@ -726,7 +735,7 @@ The spend service uses `effective_cap`. The My Threads page surfaces both
 component values so players see *which* gate is the active one ("path-locked"
 vs. "anchor-locked").
 - `CharacterResonance.balance ≥ 0` — enforced at spend sites.
-- `Thread` uniqueness: one thread per (owner, target, resonance) triple, via partial
+- `Thread` uniqueness: one thread per (owner, target) anchor (#5123; it was per resonance too), via partial
   unique indexes keyed to `target_kind`. One partial unique per `target_kind` value,
   each constraining the matching `target_*` FK column. **Note:** Capstone *threads* still
   get their own partial unique (`target_capstone` keyed to
@@ -773,6 +782,7 @@ Two distinct spend paths:
 def spend_resonance_for_imbuing(
     character: CharacterSheet,
     thread: Thread,
+    resonance: Resonance,        # #5123: the held resonance that pays
     amount: int,                 # resonance to convert into developed_points
 ) -> ThreadImbueResult:
     """
@@ -2023,7 +2033,7 @@ is purely for spec organization.
 
 Service functions to add in `world/magic/services.py`:
 - `grant_resonance(character, resonance, amount, source, source_ref=None)`
-- `spend_resonance_for_imbuing(character, thread, amount)` — bucket-fill +
+- `spend_resonance_for_imbuing(character, thread, resonance, amount)` — bucket-fill +
   greedy advancement; the Imbuing-ritual dispatch target (called by
   `PerformRitualAction("Rite of Imbuing", thread_id, amount)`)
 - `cross_thread_xp_lock(character, thread, boundary_level)` — pays XP for

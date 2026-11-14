@@ -85,8 +85,8 @@
 
 - **Drift correction (#4733, slice 4 of #4672):** a deed (`DEED_GAIN_SOURCES` /
   `NON_DEED_GAIN_SOURCES` in `constants.py`, a total classification of `GainSource`) that grows
-  a resonance of the character's own affinity, made in a live scene by a character holding
-  convertible off-aura resonance ("drift", not the older `AuraDrift`), opens a
+  a resonance of the character's main affinity, made in a live scene by a character who is unsettled
+  (#5123) and holds convertible resonance past who they are ("drift", not the older `AuraDrift`), opens a
   `DriftConversionOffer` (one per sheet and scene) with a `DriftConversionCap` per target
   resonance (`open_or_extend_conversion_offer`, called from `grant_resonance`;
   `lapse_conversion_offers` from `Scene.finish_scene`). The player performs a configured rite:
@@ -163,7 +163,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `intensity-tiers-never-lower-control`. See magic.md.
 - **Models:**
   - **Identity/aura/techniques:** `Affinity`, `Resonance`, `CharacterAura`,
-    `CharacterResonance` (reshaped Spec A §2.2 — `balance` + `lifetime_earned`),
+    `CharacterResonance` (reshaped Spec A §2.2 — `balance` + `lifetime_earned`, plus `mire_lifetime`,
+    the Sineater's Mire part of lifetime, #5123; `CharacterAuraShare.settled_percent` is who the
+    character is),
     `Gift` (self-FK `parent`, PROTECT — **gift lineage** (#2891, ADR-0192): holding a
     gift reaches its ancestors' techniques on ONE thread and ONE cap, so shared species
     material lives once in an umbrella gift; `Gift.lineage` / `lineage_ids` /
@@ -239,7 +241,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     via `resolve_specialized_variant(entity, character)` (`resolve_effective_role` is a
     shim); discovery beat generalized as `fire_variant_discoveries` (dispatch on
     `target_kind`). GIFT thread substrate: `TargetKind.GIFT` + `Thread.target_gift` +
-    latent provisioning at CG + `gift_resonances_for` (the four cast sites).
+    latent provisioning at CG + `gift_resonances_for` (the four cast sites; the thread's
+    resonances in row order, #5123).
   - **Anima / rituals:** `CharacterAnima`, the personal anima ritual (a SCENE_ACTION
     `Ritual`; performed through `PerformRitualAction`, web Perform button and
     telnet `ritual anima`, #4451), `AnimaRitualPerformance`, `SoulfrayConfig`, `MishapPoolTier`,
@@ -267,7 +270,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `target_trait` / `target_technique` / `target_facet` / `target_relationship`
     / `target_capstone` / `target_covenant_role` / `target_gift` / `target_mantle`
     / `target_sanctum_details` — bare `ROOM` removed; SANCTUM is the leveled room
-    anchor, cap = sanctum level × 10, in-sanctum pull boost), `ThreadLevelUnlock`, `ThreadPullCost`,
+    anchor, cap = sanctum level × 10, in-sanctum pull boost; one thread per anchor, `Thread.resonance`
+    is the LEADING resonance), `ThreadResonance` (#5123: a thread's resonances, one row per
+    `(thread, resonance)` with a cumulative `amount`; ADR-5123-A), `ThreadLevelUnlock`, `ThreadPullCost`,
     `ThreadXPLockedLevel`, `ThreadPullEffect`, `ImbuingProseTemplate`,
     `Ritual` (four dispatch kinds: SERVICE → `service_function_path`; FLOW →
     `FlowDefinition`; CEREMONY → `PendingRitualEffect` + finisher command; SCENE_ACTION →
@@ -292,8 +297,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     universal thread survivability baseline — `vital_target` unique choice,
     `coefficient`, `cap`, `half_saturation`; one row each for DR and MAX_HEALTH;
     seeded via `seed_thread_survivability_tuning()`, staff-tunable in admin, #1175)
-  - **Combat-side Spec A surface (in `world/combat`):** `CombatPull`,
-    `CombatPullResolvedEffect`. A pull's per-use bonuses (FLAT_BONUS, INTENSITY_BUMP)
+  - **Combat-side Spec A surface (in `world/combat`):** `CombatPull`, `CombatPullThread`
+    (a pulled thread with its `paying_resonance`, #5123; the scene-action twin is
+    `ScenePullThread` in `world/scenes`), `CombatPullResolvedEffect`. A pull's per-use bonuses (FLAT_BONUS, INTENSITY_BUMP)
     reach only the uses its threads relate to: `pull_helpers.round_pull_bonus` matches
     each effect's thread with `_anchor_in_action` against the use's `pull_action_context`,
     the context `commit_combat_pull` validates against (#5067); dodges and blinks read it too
@@ -482,7 +488,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
 - **Handlers:**
   - `character.threads` (`CharacterThreadHandler`) — cached thread list,
     `passive_vital_bonuses(vital_target)` for tier-0 VITAL_BONUS
-    aggregation
+    aggregation, and the thread rows (#5123): `resonances_of(thread)` (leading first),
+    `amount_of(thread, resonance)`; every writer of `ThreadResonance` rows calls
+    `character.threads.invalidate()`
   - `character.resonances` (`CharacterResonanceHandler`) —
     `balance(resonance)`, `lifetime(resonance)`, `get_or_create(resonance)`,
     `most_recently_earned()` (used by Mage Scars)
@@ -505,10 +513,19 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `src/web/admin/CLAUDE.md`'s "Soulfray Stage Builder" section and `docs/systems/magic.md`'s
     "Soulfray" section.
   - Economy: `grant_resonance(character_sheet, resonance, amount, source, source_ref=None)`,
-    `spend_resonance_for_imbuing(character_sheet, thread, amount) -> ThreadImbueResult`,
-    `spend_resonance_for_pull(...)` (low-level spend; called by the pull helpers),
-    `preview_resonance_pull(...) -> PullPreviewResult` (read-only preview, unchanged),
-    `resolve_pull_effects(threads, tier, *, in_combat, target=None)`,
+    `spend_resonance_for_imbuing(character_sheet, thread, resonance, amount) -> ThreadImbueResult`
+    (spends that held resonance and grows the thread's `ThreadResonance` row for it, #5123),
+    `spend_resonance_for_pull(..., payers=None)` (low-level spend; called by the pull helpers; each
+    thread pays from its payer, default its leading resonance),
+    `preview_resonance_pull(..., payers=None) -> PullPreviewResult` (read-only preview; `per_thread`
+    lists every held resonance as a payer option with its cost, perks and level read),
+    `resolve_pull_effects(threads, tier, *, in_combat, target=None, ..., payers=None)`,
+    `resolve_pull_payers(owner_sheet_id, thread_ids, payer_ids)` (`services/pull_payers.py`: the
+    wire's thread-id to resonance-id map into held resonances),
+    `refresh_leading_resonance(thread)`, `add_to_resonance_row`, `write_resonance_rows`,
+    `payer_level_read(thread, payer)` (`services/thread_rows.py`: the level a payer's perks read at,
+    `None` for no perks), `seed_creation_resonance(sheet, resonance, lifetime)` (creation's
+    lifetime-only seed, `GainSource.CHARACTER_CREATION`),
     `cross_thread_xp_lock(character_sheet, thread, level)`.
     Pull commit is routed through `world/combat/pull_helpers.py`:
     `commit_combat_pull` (combat cast + clash), `build_cast_pull_declaration`,
@@ -591,9 +608,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `_ResolvedTechnique` value object with variant deltas; CovenantRole → cached-handler
     read; `resolve_effective_role` is a shim over it),
     `gift_resonances_for(character, gift) -> list[Resonance]` (derive-on-read seam
-    replacing `technique.gift.resonances.all()` at the four cast sites),
-    `provision_latent_gift_thread(sheet, gift, *, resonance)` (idempotent level-0 GIFT
-    thread at CG, write-once on resonance). Discovery ceremony
+    replacing `technique.gift.resonances.all()` at the four cast sites; the thread's resonances,
+    leading first),
+    `provision_latent_gift_thread(sheet, gift, *, resonances)` (idempotent level-0 GIFT
+    thread at CG, one thread per gift with a row at 0 per resonance). Discovery ceremony
     `fire_variant_discoveries(*, thread, starting_level, new_level)` in
     `world/covenants/discovery.py` dispatches on `target_kind` (COVENANT_ROLE → single
     parent; GIFT → iterate `gift.techniques`); called from `spend_resonance_for_imbuing`.
@@ -808,7 +826,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `grant_resonance(source=DRAMATIC_MOMENT)`, and calls `fire_renown_award` for the
     primary persona (skipped if none)
 - **Key Methods:** `CharacterAura.dominant_affinity` / `percent_for(affinity)` (shares are `CharacterAuraShare` rows), `Affinity.objects.get_celestial_affinity()` and siblings,
-  `Thread.target` (populated FK), `Thread.display_name`,
+  `Thread.target` (populated FK), `Thread.display_name`, `Thread.resonance_rows` (the
+  `ThreadResonance` rows, leading first),
   `ThreadWeavingUnlock.display_name`
 - **Enums:** `TargetKind` (Thread discriminator — values: TRAIT,
   TECHNIQUE, FACET, RELATIONSHIP_TRACK, RELATIONSHIP_CAPSTONE, COVENANT_ROLE,
@@ -1465,7 +1484,7 @@ ADR-0214), and species-gift provisioning.
   condition drawback, benefit condition, drawback distinction, CG point cost — plus the
   all-null/0 free-weak-gift default; per-species shape assignment is lore-repo content.
   See [species.md](species.md).)
-- **Key Services:** `provision_species_gifts(sheet, *, resonance=None)` (`world/species/services.py`) —
+- **Key Services:** `provision_species_gifts(sheet, *, resonances=())` (`world/species/services.py`) —
   mints the MINOR `CharacterGift`, the latent level-0 GIFT thread (via
   `provision_latent_gift_thread`), applies any drawback/benefit condition, and grants any
   forced `drawback_distinction` (via `distinctions.services.grant_distinction`,

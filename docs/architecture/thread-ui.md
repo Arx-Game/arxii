@@ -27,6 +27,15 @@ and all Imbue/Weave surfaces remain accurate. Original approved spec below.
 > read `src/world/relationships/CLAUDE.md` and `docs/systems/magic.md`; this document stays
 > as the record of the design as approved.
 
+> **Superseded in part by #5123 (ADR-5123-A), 2026-11-14.** A thread now holds several
+> resonances on `ThreadResonance` rows (`Thread.resonance` is the leading one), one thread per
+> anchor. `spend_resonance_for_imbuing(character_sheet, thread, resonance, amount)` names the
+> held resonance that pays and a Rite of Imbuing POST carries `kwargs: { thread_id, resonance_id,
+> amount }`. A pull no longer names one resonance up front: each pulled thread names its paying
+> resonance (`payers`, thread id to resonance id; default its leading resonance), the
+> preview returns `per_thread` payer options with the perks each would give, and the pull
+> perks are the payer's. Read `docs/systems/magic.md` for the current shapes.
+
 ---
 
 ## Goal
@@ -49,7 +58,7 @@ This is the first full management surface for a major Spec A model family. It se
 
 **Models (all in `world.magic.models.threads`):**
 
-- `Thread` (discriminator + typed-FK; owner, resonance, target_kind, target_*, name, description, level, developed_points, hollow_current, retired_at)
+- `Thread` (discriminator + typed-FK; owner, resonance (the leading one; the rows are `ThreadResonance`, #5123), target_kind, target_*, name, description, level, developed_points, hollow_current, retired_at)
 - `ThreadLevelUnlock` — per-thread XP-locked-boundary receipt
 - `ThreadPullCost` — per-tier tuning (resonance_cost, anima_per_thread)
 - `ThreadXPLockedLevel` — global level-boundary price list
@@ -62,7 +71,7 @@ This is the first full management surface for a major Spec A model family. It se
 
 - `weave_thread(character_sheet, target_kind, target, resonance, *, name, description) -> Thread` — eligibility + create
 - `update_thread_narrative(thread, *, name, description) -> Thread` — rename/redescribe
-- `spend_resonance_for_imbuing(character_sheet, thread, amount) -> ThreadImbueResult` — per-tier imbue with `blocked_by` enum (NONE, INSUFFICIENT_BUCKET, XP_LOCK, LEVEL_CAP, ANCHOR_CAP)
+- `spend_resonance_for_imbuing(character_sheet, thread, resonance, amount) -> ThreadImbueResult`: per-tier imbue with one held resonance (#5123), with `blocked_by` enum (NONE, INSUFFICIENT_BUCKET, XP_LOCK, LEVEL_CAP, ANCHOR_CAP)
 - `cross_thread_xp_lock(character_sheet, thread, boundary_level) -> ThreadLevelUnlock` — pay XP at a boundary
 - `compute_level_cap(character_sheet)`, `compute_anchor_cap(thread)`, `compute_effective_cap(thread)`
 - `imbue_ready_threads(character_sheet) -> list[Thread]`
@@ -70,14 +79,14 @@ This is the first full management surface for a major Spec A model family. It se
 - `threads_blocked_by_cap(character_sheet) -> list[Thread]`
 - `compute_thread_weaving_xp_cost(unlock, learner) -> int`
 - `accept_thread_weaving_unlock(learner, offer) -> CharacterThreadWeavingUnlock`
-- `preview_resonance_pull(character_sheet, resonance, tier, threads, *, combat_encounter=None) -> PullPreviewResult`
-- `spend_resonance_for_pull(character_sheet, resonance, tier, threads, action_context) -> ResonancePullResult`
+- `preview_resonance_pull(character_sheet, tier, threads, *, combat_encounter=None, ..., payers=None) -> PullPreviewResult` (#5123: no single pull resonance; each thread's payer)
+- `spend_resonance_for_pull(character_sheet, tier, threads, action_context, ..., payers=None) -> ResonancePullResult` (#5123)
 
 **API:**
 
 - `GET/POST/PATCH/DELETE /api/magic/threads/` — `ThreadViewSet`. DELETE is soft-retire.
 - `GET /api/magic/character-resonances/` — `CharacterResonanceViewSet`. Returns full balance/lifetime/flavor per resonance the character has.
-- `POST /api/magic/rituals/perform/` — `RitualPerformView`. Imbuing is a SERVICE-dispatched Ritual (`Rite of Imbuing`, `service_function_path = "world.magic.services.spend_resonance_for_imbuing"`); `thread_id` is resolved server-side from kwargs into a Thread instance before dispatch.
+- `POST /api/magic/rituals/perform/` — `RitualPerformView`. Imbuing is a SERVICE-dispatched Ritual (`Rite of Imbuing`, `service_function_path = "world.magic.services.spend_resonance_for_imbuing"`); `thread_id` is resolved server-side from kwargs into a Thread instance before dispatch, and `resonance_id` must be a resonance the character holds (#5123).
 - `POST /api/magic/thread-pull-preview/` — read-only preview, accepts `thread_ids[]`, `tier`, optional `action_context` (with `combat_encounter_id`).
 - `GET /api/magic/teaching-offers/` — `ThreadWeavingTeachingOfferViewSet` (read-only).
 
@@ -677,7 +686,7 @@ Add a "Threads" link to the magic submenu of the main navigation, alongside "Rit
 ### Imbuing
 
 1. Player on `/threads/:id` enters amount, clicks `[Confirm Imbue]`.
-2. `useImbueThread` → `POST /api/magic/rituals/perform/` with `{ ritual_id, character_sheet_id, kwargs: { thread_id, amount } }`.
+2. `useImbueThread` → `POST /api/magic/rituals/perform/` with `{ ritual_id, character_sheet_id, kwargs: { thread_id, resonance_id, amount } }`.
 3. `RitualPerformView` resolves `thread_id` → Thread instance, dispatches `PerformRitualAction` → `spend_resonance_for_imbuing`.
 4. Service returns `ThreadImbueResult` (resonance_spent, levels_gained, new_level, blocked_by).
 5. Response payload is the result asdict; UI shows toast/inline summary, invalidates queries.

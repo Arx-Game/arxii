@@ -2639,8 +2639,9 @@ ceremony-direct testing. (`world/covenants/discovery.py` re-exports it as
 
 **GIFT thread substrate (#1578):**
 - `TargetKind.GIFT` + `Thread.target_gift` FK (PROTECT) — a thread anchored to a Gift.
-  One active GIFT thread per `(owner, gift)` for now (multi-resonance chooser is a deferred
-  needs-design follow-up).
+  One active GIFT thread per `(owner, gift)`, holding every resonance put into the gift on its
+  `ThreadResonance` rows (#5123; the multi-resonance chooser is built: imbuing names the resonance,
+  a pull names its payer).
 - **Grant-time resonance resolution (#2971, ADR-0203)** — `grant_gift_to_character(sheet,
   gift, *, resonances=())` (`world/magic/specialization/services.py`) is the shared
   gift-acquisition primitive every grant call site uses: CG's `_finalize_gift_and_techniques`
@@ -5422,7 +5423,7 @@ preview = preview_resonance_pull(
 )
 # preview.resonance_cost / preview.anima_cost / preview.affordable
 # preview.resolved_effects — list of scaled per-effect snapshots
-# preview.per_thread — per pulled thread, every held resonance as a PayerOption
+# preview.per_thread: per pulled thread, every held resonance as a PayerOption
 #   (resonance, cost, balance, affordable, effects, level_read)
 ```
 

@@ -1067,8 +1067,8 @@ students better than others.
 - Admin: the tradition slate shows a stance's points read-only; the `schooling-magic-skill-floors`
   Required content row now lists stances whose distinction has no training effect.
 
-**Not built:** a per-Tradition skill list. Fit by the character's aura, and a starting aura that
-follows the picked resonance, wait on normalizing the aura's three columns (#4672).
+**Not built:** a per-Tradition skill list and fit by the character's aura (#4672). The starting
+aura now follows the picked resonances (#5123).
 
 ## Magical skills: Magic skills only (#4547, BUILT 2026-10-21)
 
@@ -1123,16 +1123,16 @@ one thread per anchor there is no merging of two threads: the Fall and Redemptio
 thread instead.
 
 **Built (backend, telnet, web API, Spellbook dialog):** `services/thread_resonance.py` (options, a pre-spend check,
-the change), the shared `conversion._reanchor_thread` merge (and `_find_existing_target_thread`
-without `getattr`), `PerformRitualAction._precheck` so a refused move spends nothing, the
-target-resonance offering paid toward the chosen resonance, telnet `resonance=<id>`, web
-`kwargs.target_resonance`, `GET /api/magic/threads/{id}/resonance-options/`, a result line that
+the change; #5123 reshaped it onto `ThreadResonance` rows), `PerformRitualAction._precheck` so a
+refused move spends nothing, the
+target-resonance offering paid toward the chosen resonance, telnet `from=<id> amount=<n>
+resonance=<id>`, web `kwargs.{target_resonance, from_resonance, amount}`, `GET /api/magic/threads/{id}/resonance-options/`, a result line that
 telnet and web both show, Required content rows `thread-resonance-ritual`,
 `thread-resonance-ritual-single` (TUNING: a second rite on the path) and
 `thread-resonance-ritual-web-payable` (TUNING: a rite with a template or touchstone component the
-web cannot pay), and migration 0322:
-the trait, technique, relationship-track and relationship-capstone thread unique constraints now
-apply to live threads only, so a retired thread no longer blocks a later move (retune or Fall). Journey: `integration_tests/test_thread_resonance_journeys.py`.
+web cannot pay), and migration 0322
+(its live-thread-only uniqueness is superseded by #5123's one-thread-per-anchor constraints, which
+also ignore retired threads). Journey: `integration_tests/test_thread_resonance_journeys.py`.
 
 Anchor rules (ruled on the final review): a GIFT thread moves only within its gift's supported
 resonances when the gift names any; a SANCTUM thread has no options (the Ritual of Purging changes
@@ -1140,10 +1140,10 @@ its sanctum's resonance); a TECHNIQUE thread whose signature bonus requires a re
 until the signature is cleared.
 
 **Built (frontend):** `ThreadResonanceDialog` on `ThreadDetailPage` ("Change resonance" button,
-not the thread card): "Change to" pills with a move-kind swatch and a "merges" chip, offering
+not the thread card): a "Move from" pill per resonance row and a "Points to move" stepper
+(#5123), "Change to" pills with a move-kind swatch, offering
 pills only when the rite asks for them (`offering_count` picks), the server's
-`unavailable_reason` in place of the pills, the server's 400 detail on a refusal, and navigation
-to the surviving thread after a merge. Vitest:
+`unavailable_reason` in place of the pills, and the server's 400 detail on a refusal. Vitest:
 `frontend/src/magic/components/threads/__tests__/ThreadResonanceDialog.test.tsx`.
 
 **Not built here:** web pickers for item-template or touchstone components on the retune rite
@@ -1152,10 +1152,11 @@ ritual, the dashboard row lists it.
 
 ---
 
-## Drift correction: the conversion offer and rite (#4733, slice 4 of #4672, BUILT 2026-10-27)
+## Drift correction: the conversion offer and rite (#4733, slice 4 of #4672, BUILT 2026-10-27; reread by #5123)
 
-A character who earns resonance from a deed while holding resonance that sits off their aura can
-turn some of it into the resonance the deed grew, once per scene, with a rite.
+A character who earns resonance from a deed in their main affinity while unsettled (#5123) can
+atone: turn resonance of an affinity grown past who they are into the resonance the deed grew,
+once per scene, with a rite. It is read on lifetime, so it works after the excess was spent.
 
 **Built:**
 - Deed classification: `DEED_GAIN_SOURCES` / `NON_DEED_GAIN_SOURCES` beside the accelerated sets,
@@ -1173,12 +1174,13 @@ turn some of it into the resonance the deed grew, once per scene, with a rite.
 - Offering: a third `RitualComponentRequirement` mode (`matches_target_resonance`,
   `min_item_meaning`) accepting an item tied to the target resonance, carrying a motif facet of it,
   or meaning enough to the performer.
-- Surfaces: two actions, telnet `aura` (`aura atone`, `aura decline`, `aura accept`), REST `/api/magic/drift-correction/`, and the React gate
-  and dialog on the scene page and game page; admin pages for the tuning rows; Required content row
+- Surfaces: two actions (plus `accept_aura_change`, #5123), telnet `aura` (`aura atone`, `aura
+  decline`, `aura accept`), REST `/api/magic/drift-correction/`, and the React gate
+  and `SettleAuraDialog` on the scene page and game page; admin pages for the tuning rows; Required content row
   `drift-correction-config`. Journey: `integration_tests/test_drift_correction_journeys.py`.
 
-**Not built:** drift thresholds (slice 3, #4732) and the acting persona's aura (slice 2, #4731).
-Nothing is authored yet: until staff set the rite, check type and a share for every outcome tier,
+Drift thresholds (slice 3, #4732) were built after this slice and replaced by the unsettled reading
+(#5123, below). Nothing is authored yet: until staff set the rite, check type and a share for every outcome tier,
 the rite refuses and the dashboard row says so.
 
 ---
@@ -1221,20 +1223,62 @@ twice. Not built: the demo's intensity-after and anima-cost projection rows. Jou
 `integration_tests/test_resonance_strain_journeys.py`. Unauthored until staff set a strain check
 type, the `StrainBurnReach` rows and the `burn_value` of each affinity.
 
-## Drift and Resonance Conflict (#4732, slice 3 of #4672, BUILT 2026-10-27)
+## Drift and Resonance Conflict (#4732, slice 3 of #4672, BUILT 2026-10-27; the reading replaced by #5123)
 
-Resonance carried outside the affinity she acts with is drift. Drift strictly past an authored
-threshold makes casting call for a focus check (once per cast inside `use_technique`, before modifiers, on every cast path); a failed check applies the authored Resonance Conflict condition for its authored duration (the scene), whose
+Originally resonance carried outside the affinity she acts with was drift, measured on spendable
+balance and weighted per affinity pair; #5123 replaced that reading with being unsettled (below,
+ADR-5123-B). Being unsettled strictly past the tolerance makes casting call for a focus check (once per cast inside `use_technique`, before modifiers, on every cast path); a failed check applies the authored Resonance Conflict condition for its authored duration (the scene), whose
 check modifier is a labelled penalty on that same roll, severity rising with a worse roll.
 Built: `DriftConfig` singleton (every number plus the focus check type and conflict condition
-designations), `AffinityInteraction.conflict_weight`, `MagicActivity.KEEPING_FOCUS`, `drift_for`,
+designations; `AffinityInteraction.conflict_weight`, `threshold_percent`, `threshold_floor`,
+`severity_step` and `off_aura_pull_steps` of the first build were removed by #5123),
+`MagicActivity.KEEPING_FOCUS`, `drift_for`,
 `check_resonance_focus`, `ConditionCategory.self_shakeable` with `breakable_condition_filter()`
 so `breakfree`, `rally` and the break-free tick reach it while `in_control` stays on
 `alters_behavior`, Required content probes, and journeys in
 `integration_tests/test_resonance_conflict_journeys.py` (including an unset condition rolling nothing and an enchanted flirt rolling focus) and
 `integration_tests/test_conditions_journeys.py`. Stirring it up is authored content (a social
 action's consequence pool applying the condition). Content (the condition, its modifier, the
-check type, weights) is for staff to author.
+check type) is for staff to author.
+
+## A character with several resonances (#5123, ADR-5123-A and B, BUILT 2026-11-14)
+
+A mixed character is the normal case. Built, as one PR:
+
+- **A thread holds several resonances.** `ThreadResonance` rows (cumulative amount per resonance)
+  under one thread per anchor; `Thread.resonance` is the leading resonance, written only by
+  `refresh_leading_resonance`; imbuing names the held resonance that pays; the retune rite moves
+  part of one row to another; the Fall and Redemption convert and merge rows. A GIFT thread made
+  in character creation holds every pick at zero from the start.
+- **Each pulled thread names its paying resonance.** `CombatPullThread` / `ScenePullThread`
+  carry it; cost, perks and the corruption spend follow it; the leading resonance reads the
+  thread's level, a second resonance `DriftConfig.second_resonance_level_step` lower (never beating
+  the leader), a held resonance with no imbued row pays and gives no perks. The pull preview lists
+  every held resonance's perks per thread, and the pull dialog's Pay with list and Inspect perks
+  show them. Telnet `pull=<thread>:<resonance>`, `imbue ... resonance=`.
+- **Unsettled replaces drift.** `CharacterAuraShare.settled_percent` is who the character is
+  (set at creation from the weighted picks, nudged by the Glimpse, moved by accepting);
+  `CharacterResonance.mire_lifetime` is a Sineater's Mire share with its own allowance. A
+  non-main affinity grown past its settled share plus the tolerance makes the character
+  unsettled; a pull outside the main affinity calls for no check of its own. Exits: Atone (in a
+  live scene, lifetime-based, Mire first) and Accept the changes to your Aura. A mixed character
+  casts at the full alignment bonus in every affinity they are settled in.
+- **Creation.** The Gift stage's resonance step spreads `DriftConfig.creation_points` across
+  several resonances with a live halo in words; `provision_magic` seeds lifetime (a
+  `CHARACTER_CREATION` ledger row) so a new character reads exactly settled. The 80/20
+  `starting_aura_shares` is gone.
+- **Surfaces.** The sheet's `AuraHalo` (settled line, Mire share apart, Unsettled status and a
+  Settle your aura button), `SettleAuraDialog`, telnet `aura` / `aura atone` / `aura accept`,
+  `POST /api/magic/character-auras/{id}/accept/`.
+- **Removed:** `DriftConfig.threshold_percent`, `threshold_floor`, `severity_step`,
+  `off_aura_pull_steps`, `AffinityInteraction.conflict_weight`, `provision_additional_gift_thread`,
+  the telnet `drift` command, the merge-two-threads paths (ADR-0237: deliberate discards of tuning
+  numbers; no threads or real characters existed, so no data was carried).
+- **Journeys and fuzz:** `integration_tests/test_several_resonances_journeys.py` and the unsettled
+  fuzz invariants (`integration_tests/fuzz/test_unsettled_invariants.py`).
+
+Not built here: what causes a resonance gain (#5124) and substances and Primum (#5125). Staff
+still author the per-resonance pull perks and the `DriftConfig` numbers in admin.
 
 ## Audere earlier with control; Soulfray's anima-0 stage (#4740, slice 4 of #4727, BUILT 2026-10-27)
 

@@ -37,7 +37,7 @@ The magic system for Arx II. Power flows from identity and connection.
   lives in `world/combat/pull_helpers.py`:
   `commit_combat_pull` (combat contexts), `build_cast_pull_declaration`,
   `resolve_pull_from_kwargs`. Non-combat cast uses `request_technique_cast(cast_pull=…)`.
-  Preview: `preview_resonance_pull` (`POST /api/magic/thread-pull-preview/`) — read-only;
+  Preview: `preview_resonance_pull` (`POST /api/magic/thread-pull-preview/`): read-only;
   takes `payers` and returns `per_thread`: every resonance the character holds as a
   `PayerOption` (cost, balance, affordable, the perks it would resolve with and the
   `level_read`) for each pulled thread.
@@ -1140,7 +1140,7 @@ also standalone-callable. (`world/covenants/discovery.py` re-exports it as
   `ThreadResonance` row at amount 0 per resonance in the order given (the first leads a tie),
   then `refresh_leading_resonance`. An existing thread on the gift is returned unchanged
   (the list is ignored). Not called directly by any grant call site anymore.
-- `weave_thread(target_kind=GIFT)` — provisions the character's one thread on the gift at the
+- `weave_thread(target_kind=GIFT)`: provisions the character's one thread on the gift at the
   named resonance (validates the resonance is in the gift's supported set, else
   `UnsupportedGiftResonanceError`, caught by `WeaveThreadAction`); a gift that already has a
   thread raises `ThreadAnchorTakenError` ("imbue it instead"), as does every other anchor kind.
