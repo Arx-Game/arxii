@@ -1604,8 +1604,6 @@ def _complete_technique_cast(  # noqa: PLR0913
     effective_strain,
     price_payment=None,
     defer_soulfray_reveal: bool = False,
-    cast_pull: CastPullDeclaration | None = None,
-    pulled_resonances: tuple[Resonance, ...] = (),
     substance_plan: SubstancePlan | None = None,
 ) -> TechniqueUseResult:
     """Deduct anima, resolve the cast, and emit all post-cast effects."""
@@ -1633,15 +1631,11 @@ def _complete_technique_cast(  # noqa: PLR0913
             room_changed=False,
             blocked=substance_plan.blocked,
         )
-    # Carried drift (#4732): one focus roll per cast, on every cast path, before
+    # Unsettled (#4732, #5123): one focus roll per cast, on every cast path, before
     # resolve_fn gathers the cast's modifiers so a conflict it applies reaches this roll.
     from world.magic.services.drift import check_resonance_focus  # noqa: PLC0415
 
-    check_resonance_focus(
-        character,
-        technique,
-        pulled_resonances=(cast_pull.resonances if cast_pull is not None else pulled_resonances),
-    )
+    check_resonance_focus(character, technique)
     resolution_result, price_payment = _resolve_and_settle_price(
         character=character,
         technique=technique,
@@ -1770,7 +1764,6 @@ def use_technique(  # noqa: PLR0913
     defer_soulfray_reveal: bool = False,
     cast_check: CastCheck | None = None,
     combat_burn_for: str = "",
-    pulled_resonances: tuple[Resonance, ...] = (),
     fury: FuryCast | None = None,
 ) -> TechniqueUseResult:
     """Orchestrate technique use from cost validation through post-cast events.
@@ -1786,11 +1779,6 @@ def use_technique(  # noqa: PLR0913
     and valued at declaration with the round's pull; a combat caller names the action
     it resolves as ``combat_burn_for`` (``PullBurnAction``) and only a burn declared
     for that action strains it, once.
-
-    ``pulled_resonances`` are the resonances a pull committed before this cast works,
-    for a caller whose pull is not ``cast_pull`` (a combat round's committed
-    ``CombatPull``); the carried-drift focus roll reads it (#4732). A ``cast_pull``
-    charged by this cast takes precedence.
 
     ``cast_check`` is the check this cast rolls, when the caller already holds it (#4450);
     a paid cast pull builds its involved traits from it. ``None`` re-resolves the caster's
@@ -1908,7 +1896,5 @@ def use_technique(  # noqa: PLR0913
         effective_strain=effective_strain,
         price_payment=price_payment,
         defer_soulfray_reveal=defer_soulfray_reveal,
-        cast_pull=cast_pull,
-        pulled_resonances=pulled_resonances,
         substance_plan=substance_plan,
     )

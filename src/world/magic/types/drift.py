@@ -1,4 +1,4 @@
-"""Drift types: carried drift and the focus check (#4732); drift correction (#4733)."""
+"""Drift types: the unsettled reading and focus check (#4732, #5123); correction (#4733)."""
 
 from __future__ import annotations
 
@@ -16,19 +16,27 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class DriftReading:
-    """How much off-aura drift a character carries against her acting aura.
+    """Whether a character is unsettled: affinities grown past who they are (#5123).
 
-    ``drift`` is the sum of her balances in affinities other than the
-    dominant one; ``threshold`` is the point it must pass; ``steps_past`` is how
-    many ``unsettled_step_percent`` bands it has passed by (0 at or below the threshold).
-    ``dominant_affinity`` is None, and every number 0, when she has no aura to
-    measure against.
+    Read on the true aura. ``own_shares`` is each affinity's percent of the character's own
+    lifetime resonance (the Mire excluded); ``settled_shares`` is who they are, per
+    affinity. ``main_affinity`` is the largest settled share. ``excess_percent`` is how far
+    the non-main affinities stand past their settled shares plus the tolerance, with the
+    Sineater's Mire share past its allowance added; ``steps_past`` is how many
+    ``unsettled_step_percent`` bands that is (0 when settled). ``leading_excess_resonance``
+    is the resonance contributing most to the excess. ``mire_share_percent`` is the Mire's
+    share of all the character's lifetime resonance, shown apart from their own.
+    ``main_affinity`` is None, and every number 0, when she has no settled aura to measure
+    against.
     """
 
-    drift: int
-    threshold: int
     steps_past: int
-    dominant_affinity: Affinity | None
+    main_affinity: Affinity | None
+    leading_excess_resonance: Resonance | None
+    excess_percent: Decimal
+    mire_share_percent: Decimal
+    own_shares: dict[int, Decimal]
+    settled_shares: dict[int, Decimal]
 
 
 @dataclass(frozen=True)

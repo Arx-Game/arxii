@@ -25,9 +25,6 @@ resolution to this helper so the logic lives in exactly one place.
 (``CastTechniqueAction.round_declaration`` and
 ``_dispatch_clash_contribution``) call this helper instead of reading
 ``kwargs["cast_pull"]`` directly so both transports converge transparently.
-
-``round_pull_resonances`` reads the committed pull back at resolution, for the
-carried-drift focus roll the cast makes (#4732).
 """
 
 from __future__ import annotations
@@ -47,7 +44,6 @@ if TYPE_CHECKING:
         CombatPullResolvedEffect,
     )
     from world.covenants.perks.context import SituationContext
-    from world.magic.models import Resonance
     from world.magic.types.burn import ResonanceBurnResult
     from world.magic.types.magic_skills import CastCheck
     from world.magic.types.pull import CastPullDeclaration, PullActionContext
@@ -229,22 +225,6 @@ def _parse_pull_burn(raw: object) -> int:
     if isinstance(raw, bool) or not isinstance(raw, int) or not 0 <= raw <= MAX_RESONANCE_BURN:
         raise ActionDispatchError(ActionDispatchError.BURN_INVALID)
     return raw
-
-
-def round_pull_resonances(participant: CombatParticipant) -> tuple[Resonance, ...]:
-    """The resonances that paid for ``participant``'s pulls this round, if any (#4732, #5123).
-
-    A combat cast's pull is committed as a ``CombatPull`` at declaration, so the
-    round resolver hands its paying resonances (each thread's recorded payer) to
-    ``use_technique(pulled_resonances=...)`` for the cast's carried-drift focus roll.
-    """
-    character = participant.character_sheet.character
-    pulls = character.combat_pulls.active_for_encounter(participant.encounter)
-    seen: dict[int, Resonance] = {}
-    for pull in pulls:
-        for row in pull.pull_threads.all():
-            seen.setdefault(row.paying_resonance_id, row.paying_resonance)
-    return tuple(seen.values())
 
 
 def pull_action_context(

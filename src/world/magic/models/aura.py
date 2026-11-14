@@ -227,6 +227,12 @@ class CharacterResonance(RelatedCacheClearingMixin, SharedMemoryModel):
 
     class Meta:
         unique_together = (("character_sheet", "resonance"),)
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(mire_lifetime__lte=models.F("lifetime_earned")),
+                name="characterresonance_mire_within_lifetime",
+            )
+        ]
         verbose_name = "Character Resonance"
         verbose_name_plural = "Character Resonances"
 

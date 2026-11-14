@@ -123,10 +123,12 @@ def _move_partial(  # noqa: PLR0913
 ) -> tuple[int, int]:
     """Move ``amount_to_convert`` of ``cr``'s balance, with its share of lifetime, across.
 
-    The lifetime share is proportional to the fraction of balance moved. The target
-    receives ``granted_balance`` through ``grant_resonance`` (which writes the audit
-    row under ``gain_source``), then its lifetime is corrected to the transferred
-    share. Returns ``(granted_balance, granted_lifetime)``.
+    The lifetime share is proportional to the fraction of balance moved, and the
+    source's Mire part of lifetime shrinks in the same proportion (never past its
+    remaining lifetime), so what is left stays exact (#5123). The target receives
+    ``granted_balance`` through ``grant_resonance`` (which writes the audit row under
+    ``gain_source``), then its lifetime is corrected to the transferred share. Returns
+    ``(granted_balance, granted_lifetime)``.
     """
     if cr.balance > 0:
         # Integer arithmetic: exact when the ratio is whole (4 of a 30 balance with 30
@@ -137,10 +139,14 @@ def _move_partial(  # noqa: PLR0913
         lifetime_fraction = 0
 
     granted_lifetime = lifetime_fraction
+    mire_fraction = (
+        lifetime_fraction * cr.mire_lifetime // cr.lifetime_earned if cr.lifetime_earned else 0
+    )
 
     cr.balance -= amount_to_convert
     cr.lifetime_earned -= lifetime_fraction
-    cr.save(update_fields=["balance", "lifetime_earned"])
+    cr.mire_lifetime = min(cr.mire_lifetime - mire_fraction, cr.lifetime_earned)
+    cr.save(update_fields=["balance", "lifetime_earned", "mire_lifetime"])
 
     if granted_balance > 0:
         grant_resonance(
@@ -259,7 +265,8 @@ def _convert_full(
 
     cr.balance = 0
     cr.lifetime_earned = 0
-    cr.save(update_fields=["balance", "lifetime_earned"])
+    cr.mire_lifetime = 0
+    cr.save(update_fields=["balance", "lifetime_earned", "mire_lifetime"])
 
     target_cr, created = CharacterResonance.objects.get_or_create(
         character_sheet=character_sheet,

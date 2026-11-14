@@ -111,6 +111,7 @@ def grant_resonance(  # noqa: PLR0913
     mission_deed_reward_line: MissionDeedRewardLine | None = None,
     source_character_distinction: CharacterDistinction | None = None,
     worship_rite_performance: WorshipRitePerformance | None = None,
+    from_mire: bool = False,
 ) -> CharacterResonance:
     """Atomically grant resonance AND write the ResonanceGrant ledger row.
 
@@ -139,6 +140,8 @@ def grant_resonance(  # noqa: PLR0913
         mission_deed_reward_line: Required for MISSION_REWARD source (#1737).
         source_character_distinction: Required for DISTINCTION source (#1834).
         worship_rite_performance: Required for WORSHIP_RITE source (#3777).
+        from_mire: True when a Sineater takes the resonance from the Mire (#5123); the
+            grant also counts toward the row's ``mire_lifetime``.
 
     Returns:
         The updated CharacterResonance instance.
@@ -197,7 +200,11 @@ def grant_resonance(  # noqa: PLR0913
     )
     cr.balance += amount
     cr.lifetime_earned += amount
-    cr.save(update_fields=["balance", "lifetime_earned"])
+    update_fields = ["balance", "lifetime_earned"]
+    if from_mire:
+        cr.mire_lifetime += amount
+        update_fields.append("mire_lifetime")
+    cr.save(update_fields=update_fields)
     if created and cached_resonances is not None:
         character_sheet.cached_resonances = [*cached_resonances, cr]
 

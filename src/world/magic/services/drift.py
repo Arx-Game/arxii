@@ -1,23 +1,26 @@
-"""Drift holdings and the conversion offer a deed opens (#4733, slice 4 of #4672).
+"""The unsettled reading, the focus check, and the conversion offer a deed opens.
 
-Drift is resonance a character holds that sits off their own aura: any
-``CharacterResonance`` with a positive balance whose affinity differs from the aura's
-dominant affinity. Converting it needs no threshold. A deed (a grant from a ``DEED_GAIN_SOURCES``
-source) that grows a resonance of the character's own affinity, made in a live scene by a
-character who has convertible drift, opens a ``DriftConversionOffer`` for that scene and
-adds to the cap of converting drift toward the resonance the deed grew. The offer lapses
-when the scene finishes.
+A character is unsettled (#5123) when an affinity other than their main one has grown
+past who they are: its share of their aura (their lifetime resonance) stands over its
+settled share by more than the tolerance. A Sineater's Mire burden is read apart and has
+its own allowance. ``drift_for`` is that reading, on the true aura; ``check_resonance_focus``
+runs once per cast, before the cast's modifiers are gathered, and on a failed focus roll
+applies (or deepens) the authored conflict condition, whose own check modifier then reaches
+the same cast's roll. Its numbers live in ``DriftConfig``.
 
-Carried drift (#4732) is the weighted pull of those holdings against the acting aura.
-``drift_for`` measures it against the acting aura's dominant affinity;
-``check_resonance_focus`` runs once per cast, before the cast's modifiers are gathered,
-and on a failed focus roll applies (or deepens) the authored conflict condition, whose
-own check modifier then reaches the same cast's roll. Its numbers live in ``DriftConfig``.
+Drift correction (#4733) is still read from spendable balance here: ``drift_holdings`` is
+resonance held off the main affinity. A deed (a grant from a ``DEED_GAIN_SOURCES`` source)
+that grows a resonance of the character's main affinity, made in a live scene by a character
+who has convertible drift, opens a ``DriftConversionOffer`` for that scene and adds to the
+cap of converting drift toward the resonance the deed grew. The offer lapses when the scene
+finishes.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable
+from decimal import Decimal
+from math import ceil
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -43,14 +46,11 @@ if TYPE_CHECKING:
     from world.items.models import ItemInstance
     from world.magic.models import Technique
     from world.magic.models.affinity import Affinity, Resonance
+    from world.magic.models.aura import CharacterAura
     from world.magic.models.gain import ResonanceGrant
     from world.scenes.models import Scene
 
-
-# Task 1 bridge (#5123): DriftConfig.threshold_percent was removed with the old drift
-# units. Until the unsettled rewrite replaces this reading, the percent of the main
-# balance stays at its old default.
-_BRIDGE_THRESHOLD_PERCENT = 50
+_ONE_HUNDRED = Decimal(100)
 
 
 def get_drift_config() -> DriftConfig:
@@ -61,58 +61,114 @@ def get_drift_config() -> DriftConfig:
     return cfg
 
 
-def drift_for(sheet: CharacterSheet) -> DriftReading:
-    """The off-aura drift ``sheet``'s character carries against the aura she acts with.
+def _main_affinity(aura: CharacterAura | None) -> Affinity | None:
+    """The affinity holding the largest settled share (ties: lowest affinity id), or None.
 
-    The dominant affinity is the acting aura's (an active alternate self's affinity
-    while one is worn). Her balances in that affinity are her main balance; every
-    other balance counts as drift at full weight. The threshold is
-    ``max(unsettled_tolerance_percent, half the main balance)``; drift strictly past it is
-    one step, plus one per further ``unsettled_step_percent``. (Bridge: the unsettled
-    rewrite replaces this reading.)
-    A character with no aura to measure against reads zero.
+    None when there is no aura or none of its shares has been settled yet.
     """
-    from world.magic.services.acting_aura import acting_aura  # noqa: PLC0415
+    if aura is None:
+        return None
+    settled = [share for share in aura.cached_shares if share.settled_percent > 0]
+    if not settled:
+        return None
+    return min(settled, key=lambda share: (-share.settled_percent, share.affinity_id)).affinity
 
-    aura = acting_aura(sheet)
-    dominant = aura.dominant_affinity if aura is not None else None
-    if dominant is None:
-        return DriftReading(drift=0, threshold=0, steps_past=0, dominant_affinity=None)
+
+def _share_of(part: int, whole: int) -> Decimal:
+    """``part`` as a percent of ``whole``; 0 when there is no whole."""
+    return Decimal(part) * _ONE_HUNDRED / Decimal(whole) if whole else Decimal(0)
+
+
+def drift_for(sheet: CharacterSheet) -> DriftReading:
+    """Whether ``sheet``'s character is unsettled, and by how much (#5123).
+
+    Read on the true aura: a worn alternate self does not change who the character is.
+    An affinity's own share is its lifetime resonance less the part taken from the Mire,
+    as a percent of all the character's own lifetime resonance; its Mire share is the
+    Mire part as a percent of all lifetime resonance. For every affinity other than the
+    main one (the largest settled share), the excess is how far its own share stands past
+    its settled share plus ``unsettled_tolerance_percent``, plus how far its Mire share
+    stands past ``mire_allowance_percent``. ``steps_past`` is the total excess in
+    ``unsettled_step_percent`` bands, rounded up.
+
+    A character with no aura, or an aura with nothing settled yet, reads zero.
+    """
+    aura = sheet.aura_or_none
+    main = _main_affinity(aura)
+    if aura is None or main is None:
+        return DriftReading(
+            steps_past=0,
+            main_affinity=None,
+            leading_excess_resonance=None,
+            excess_percent=Decimal(0),
+            mire_share_percent=Decimal(0),
+            own_shares={},
+            settled_shares={},
+        )
 
     cfg = get_drift_config()
-    main = 0
-    drift = 0
-    for row in sheet.character.resonances.all():
-        affinity = row.resonance.affinity
-        if affinity.pk == dominant.pk:
-            main += row.balance
-            continue
-        drift += row.balance
+    settled_shares = {share.affinity_id: share.settled_percent for share in aura.cached_shares}
+    rows = list(
+        CharacterResonance.objects.filter(character_sheet=sheet).select_related(
+            "resonance__affinity"
+        )
+    )
+    total_lifetime = sum(row.lifetime_earned for row in rows)
+    total_own = total_lifetime - sum(row.mire_lifetime for row in rows)
+    own_lifetime: dict[int, int] = {}
+    mire_lifetime: dict[int, int] = {}
+    for row in rows:
+        affinity_id = row.resonance.affinity_id
+        own_lifetime[affinity_id] = own_lifetime.get(affinity_id, 0) + (
+            row.lifetime_earned - row.mire_lifetime
+        )
+        mire_lifetime[affinity_id] = mire_lifetime.get(affinity_id, 0) + row.mire_lifetime
+    own_shares = {aff: _share_of(life, total_own) for aff, life in own_lifetime.items()}
 
-    threshold = max(cfg.unsettled_tolerance_percent, main * _BRIDGE_THRESHOLD_PERCENT // 100)
-    steps_past = 0
-    if drift > threshold:
-        steps_past = 1 + (drift - threshold - 1) // cfg.unsettled_step_percent
+    excess_by_affinity: dict[int, Decimal] = {}
+    for affinity_id in own_shares.keys() | mire_lifetime.keys() | settled_shares.keys():
+        if affinity_id == main.pk:
+            continue
+        past_settled = (
+            own_shares.get(affinity_id, Decimal(0))
+            - settled_shares.get(affinity_id, Decimal(0))
+            - cfg.unsettled_tolerance_percent
+        )
+        past_allowance = (
+            _share_of(mire_lifetime.get(affinity_id, 0), total_lifetime)
+            - cfg.mire_allowance_percent
+        )
+        excess = max(Decimal(0), past_settled) + max(Decimal(0), past_allowance)
+        if excess > 0:
+            excess_by_affinity[affinity_id] = excess
+
+    excess_total = sum(excess_by_affinity.values(), Decimal(0))
+    leading: Resonance | None = None
+    if excess_by_affinity:
+        worst = min(excess_by_affinity, key=lambda aff: (-excess_by_affinity[aff], aff))
+        in_worst = [row for row in rows if row.resonance.affinity_id == worst]
+        leading = min(in_worst, key=lambda row: (-row.lifetime_earned, row.resonance_id)).resonance
     return DriftReading(
-        drift=drift, threshold=threshold, steps_past=steps_past, dominant_affinity=dominant
+        steps_past=ceil(excess_total / cfg.unsettled_step_percent),
+        main_affinity=main,
+        leading_excess_resonance=leading,
+        excess_percent=excess_total,
+        mire_share_percent=_share_of(sum(mire_lifetime.values()), total_lifetime),
+        own_shares=own_shares,
+        settled_shares=settled_shares,
     )
 
 
 def check_resonance_focus(
     character: ObjectDB,  # noqa: OBJECTDB_PARAM - rolls, conditions and messages take the character
     technique: Technique,
-    *,
-    pulled_resonances: tuple[Resonance, ...] = (),  # noqa: ARG001 - bridge, unused until rewrite
 ) -> FocusOutcome | None:
-    """Roll the caster's focus against her carried drift, once per cast.
+    """Roll the caster's focus while she is unsettled, once per cast.
 
     ``use_technique`` calls it for every cast, after anima is deducted and before
     ``resolve_fn`` gathers the cast's check modifiers, so a condition applied here
-    reaches the same cast's roll. A pull is part of its cast, not a roll of its own:
-    ``pulled_resonances`` are the resonances this cast pulls, which the caller names
-    (the declared cast pull's threads', or the combat round's committed pull's); empty
-    means the cast pulls nothing. (Bridge: the old off-aura pull step was removed with
-    ``off_aura_pull_steps``; the pulled resonances no longer add a step.)
+    reaches the same cast's roll. Only being unsettled calls for the roll: a pull
+    outside her main affinity adds no steps of its own (#5123).
 
     Returns None, rolling nothing, when the config's focus check type or conflict
     condition is unset (the Required content dashboard lists both) or when there are
@@ -137,17 +193,16 @@ def check_resonance_focus(
     except ObjectDoesNotExist:
         return None
     reading = drift_for(sheet)
-    if reading.dominant_affinity is None:
-        return None
     steps = reading.steps_past
     if steps <= 0:
         return None
 
     difficulty = cfg.focus_base_difficulty + steps * cfg.focus_difficulty_per_step
-    character.msg(
-        f"Focus check: you are carrying drift past your threshold against your "
-        f"{reading.dominant_affinity.name} aura."
-    )
+    if reading.leading_excess_resonance is not None:
+        character.msg(
+            f"Your {reading.leading_excess_resonance.name} has grown strong enough to make "
+            "you unsettled. You must keep your focus."
+        )
     result = perform_check_with_modifiers(
         character,
         cfg.focus_check_type,
@@ -184,18 +239,15 @@ def get_drift_correction_config() -> DriftCorrectionConfig:
 
 
 def own_affinity(sheet: CharacterSheet) -> Affinity | None:
-    """The affinity the character's aura is mostly made of, or None.
+    """The character's main affinity (the largest settled share), or None.
 
-    None when the sheet has no aura yet or the aura holds no shares. Never raises.
+    None when the sheet has no aura yet or nothing in it is settled. Never raises.
     """
-    aura = sheet.aura_or_none
-    if aura is None or not aura.cached_shares:
-        return None
-    return aura.dominant_affinity
+    return _main_affinity(sheet.aura_or_none)
 
 
 def drift_holdings(sheet: CharacterSheet) -> list[CharacterResonance]:
-    """Resonance held off the aura: positive balance, affinity other than the aura's own.
+    """Resonance held off the main affinity: positive balance, any other affinity.
 
     Largest balance first. Empty when the character has no own affinity.
     """

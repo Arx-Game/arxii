@@ -835,8 +835,15 @@ def _grant_sineating_resonance(offer: SineatingOffer, units: int) -> None:
     from world.magic.constants import GainSource  # noqa: PLC0415
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
 
-    for sheet in (offer.sinner_sheet, offer.sineater_sheet):
-        grant_resonance(sheet, offer.resonance, units, source=GainSource.SINEATING)
+    grant_resonance(offer.sinner_sheet, offer.resonance, units, source=GainSource.SINEATING)
+    # The Sinner's gain is their own; the Sineater's is the Mire's, read apart (#5123).
+    grant_resonance(
+        offer.sineater_sheet,
+        offer.resonance,
+        units,
+        source=GainSource.SINEATING,
+        from_mire=True,
+    )
 
 
 def resolve_sineating(

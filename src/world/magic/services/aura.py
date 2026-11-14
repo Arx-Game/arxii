@@ -37,14 +37,25 @@ def aura_percentages(aura: CharacterAura) -> AuraPercentages:
     )
 
 
+def _retire_absent_shares(aura: CharacterAura, kept_affinity_ids: list[int]) -> None:
+    """Drop share rows for affinities not kept; one holding a settled share stays at 0.00."""
+    absent = aura.shares.exclude(affinity_id__in=kept_affinity_ids)
+    absent.filter(settled_percent=0).delete()
+    for row in absent.filter(settled_percent__gt=0, percent__gt=0):
+        row.percent = Decimal(0)
+        row.save()
+
+
 @transaction.atomic
 def set_aura_shares(aura: CharacterAura, shares: Sequence[AffinityShare]) -> None:
     """Replace an aura's share rows. The only writer of CharacterAuraShare.
 
-    Upserts a row per share, deletes rows for affinities not given, rounds each
-    percent to 0.01 and folds any rounding remainder into the largest share (ties:
-    lowest affinity pk) so the shares sum to exactly 100.00. Clears the aura's share
-    cache.
+    Upserts a row per share, rounds each percent to 0.01 and folds any rounding
+    remainder into the largest share (ties: lowest affinity pk) so the shares sum to
+    exactly 100.00. A row for an affinity not given is deleted, unless it still holds a
+    settled share: that row stays at 0.00 so a faded streak's line survives and the
+    streak can return up to it without unsettling the character (#5123). Clears the
+    aura's share cache.
 
     Raises ValueError if the shares are empty, repeat an affinity, or are not within
     rounding of 100.
@@ -67,7 +78,7 @@ def set_aura_shares(aura: CharacterAura, shares: Sequence[AffinityShare]) -> Non
         affinity, pct = rounded[largest_pk]
         rounded[largest_pk] = (affinity, pct + remainder)
 
-    aura.shares.exclude(affinity_id__in=list(rounded)).delete()
+    _retire_absent_shares(aura, list(rounded))
     existing = {row.affinity_id: row for row in aura.shares.all()}
     for pk, (affinity, pct) in rounded.items():
         row = existing.get(pk)
