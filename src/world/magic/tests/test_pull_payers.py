@@ -7,7 +7,7 @@ from django.test import TestCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.combat.models import CombatPullThread
-from world.combat.pull_helpers import build_cast_pull_declaration
+from world.combat.pull_helpers import build_cast_pull_declaration, resolve_pull_from_kwargs
 from world.magic.exceptions import InvalidImbueAmount, PullValidationError
 from world.magic.factories import (
     CharacterAnimaFactory,
@@ -210,3 +210,17 @@ class PullPayerTests(TestCase):
                 thread_ids=[self.first.pk],
                 payer_ids={self.second.pk: self.guile.pk},
             )
+
+    def test_web_kwargs_carry_the_payers_through(self) -> None:
+        declaration = resolve_pull_from_kwargs(
+            self.sheet,
+            {
+                "pull_tier": 1,
+                "pull_thread_ids": [self.first.pk, self.second.pk],
+                "pull_payers": {str(self.second.pk): self.guile.pk},
+            },
+        )
+
+        self.assertIsNotNone(declaration)
+        self.assertEqual(declaration.payer_for(self.first), self.fury)
+        self.assertEqual(declaration.payer_for(self.second), self.guile)
