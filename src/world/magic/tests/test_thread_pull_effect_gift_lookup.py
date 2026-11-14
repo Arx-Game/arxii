@@ -78,6 +78,7 @@ class GiftSpecificLookupTests(TestCase):
         """Lookup for a GIFT thread returns the gift-specific row, not the fallback."""
         rows = get_pull_effects_for_thread(
             self.thread,
+            self.thread.resonance,
             tier=0,
             effect_kind=EffectKind.FLAT_BONUS,
         )
@@ -94,6 +95,7 @@ class GiftSpecificLookupTests(TestCase):
         )
         rows = get_pull_effects_for_thread(
             other_thread,
+            other_thread.resonance,
             tier=0,
             effect_kind=EffectKind.FLAT_BONUS,
         )
@@ -112,6 +114,7 @@ class GiftSpecificLookupTests(TestCase):
         )
         rows = get_pull_effects_for_thread(
             empty_thread,
+            empty_thread.resonance,
             tier=0,
             effect_kind=EffectKind.FLAT_BONUS,
         )
@@ -142,6 +145,7 @@ class GiftFallbackOnlyTests(TestCase):
         """When no gift-specific row exists the null-fallback row is returned."""
         rows = get_pull_effects_for_thread(
             self.thread,
+            self.thread.resonance,
             tier=0,
             effect_kind=EffectKind.FLAT_BONUS,
         )
@@ -190,6 +194,7 @@ class CovenantRoleNonRegressionTests(TestCase):
         """COVENANT_ROLE resolver returns the null-target_gift row (non-regression)."""
         rows = get_pull_effects_for_thread(
             self.thread,
+            self.thread.resonance,
             tier=1,
             effect_kind=EffectKind.FLAT_BONUS,
         )
@@ -210,6 +215,7 @@ class CovenantRoleNonRegressionTests(TestCase):
         )
         rows = get_pull_effects_for_thread(
             self.thread,
+            self.thread.resonance,
             tier=1,
             effect_kind=EffectKind.FLAT_BONUS,
         )
@@ -324,7 +330,9 @@ class GiftLookupIdColumnTests(TestCase):
             target_gift_id=self.gift.pk,
         )
 
-        rows = get_pull_effects_for_thread(stub, tier=0, effect_kind=EffectKind.FLAT_BONUS)
+        rows = get_pull_effects_for_thread(
+            stub, stub.resonance, tier=0, effect_kind=EffectKind.FLAT_BONUS
+        )
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].pk, self.pull_row.pk)
