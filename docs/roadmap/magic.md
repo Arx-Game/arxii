@@ -1133,8 +1133,8 @@ telnet and web both show, Required content rows `thread-resonance-ritual`,
 web cannot pay). The thread uniqueness constraints are one thread per anchor since #5123, and
 they also ignore retired threads. Journey: `integration_tests/test_thread_resonance_journeys.py`.
 
-Anchor rules (ruled on the final review): a GIFT thread moves only within its gift's supported
-resonances when the gift names any; a SANCTUM thread has no options (the Ritual of Purging changes
+Anchor rules (ruled on the final review): a GIFT thread moves between any resonances (a Gift's
+`resonances` list limits nothing, owner ruling 2026-11-14, #5123); a SANCTUM thread has no options (the Ritual of Purging changes
 its sanctum's resonance); a TECHNIQUE thread whose signature bonus requires a resonance is held
 until the signature is cleared.
 

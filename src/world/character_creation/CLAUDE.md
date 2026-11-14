@@ -205,7 +205,7 @@ for the five-branch validation gate this data must satisfy before submission.
 - With no preferred resonances, as of #2971, thread provisioning is no longer skipped:
   `grant_gift_to_character` always runs it through the shared grant-time resolver
   (`_resolve_grant_resonance`: an existing thread already on this gift → the
-  gift's supported-set policy → the character's own main-resonance fallbacks) and
+  gift's `resonances` list as a default, never a limit → the character's own main-resonance fallbacks) and
   ALWAYS provisions the latent GIFT thread. If nothing resolves at all (a fresh CG
   character with no claimed resonance, no thread, and no anima ritual — the common
   case here, since the gift/technique link (Step 1) runs before the anima ritual is

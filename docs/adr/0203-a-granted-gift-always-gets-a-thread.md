@@ -26,3 +26,13 @@ policy duplicated per caller drifts, and a fifth future call site would silently
 
 > Status: accepted · Source: #2971 (spec references #2968) · Related: ADR-0052 (`Gift.resonances`
 > is the weave-time supported set, not the cast-time value), ADR-0055 (specialization engine)
+
+## Addendum (2026-11-14, #5123, owner ruling): the list is a default, not a limit
+
+`Gift.resonances` no longer limits which resonances a Gift thread holds (weaving, imbuing, the
+retune rite, creation's picks): a Gift is the substance and resonance is how the character feels
+using it, so any resonance she holds can feed any Gift's thread. In the resolver above, the
+caller's explicit pick is therefore used whatever the list holds, and the list survives only as
+the default the claimed-or-first step reaches for when a grant names none. This supersedes the
+"supported set" readings of ADR-0052 and the explicit-pick rule in the decision above;
+`UnsupportedGiftResonanceError` and the `allowed_resonance_ids` API field are deleted.

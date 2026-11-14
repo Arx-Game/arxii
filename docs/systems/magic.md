@@ -80,7 +80,7 @@ and the 5-axis Thread model no longer exist.
 | `Facet` | Flat imagery/symbolism vocabulary — every facet is a peer (Wolf, Silk, Scythe, Red). The Category > Subcategory > Specific hierarchy and its `parent` self-FK were removed by #3776 (ADR-0289): depth made a node's mechanical reach uneven, so a facet's reach is now the same whichever one you pick. Owner-agnostic — characters bind facets via `Motif`, a `WorshippedBeing` via `worship.BeingFacet`, an `ItemTemplate` via `inherent_facets`, all from this one shared pool. Typed by many hands, so it drifts; three guards share one spelling rule, `services.facets.facet_key` (#4197, ADR-4197): a picker shows the near-matches (`GET /api/magic/facets/near/`) before it offers to create, `POST /api/magic/facets/` (staff) answers a spelling that already resolves with `matched: true` instead of a near-duplicate, and the admin action **Merge into...** (`merge_facets`) repoints every binding to a survivor and retires the losers as aliases. | `name` (unique), `description` |
 | `FacetAlias` | Another spelling that routes to a facet (#4197): the names a merge retired, and any spelling staff add by hand. Resolved by the pickers' search and the create endpoint; never shown to a player. Content (`CONTENT_MODELS`, natural key `name`); cascades with its facet. | `name` (unique), `facet` FK |
 | `FacetEffectBonus` | A facet's always-on bonus to one maneuver effect (#4815, slice 4 of #4783): the facet names the effect, whatever its thread's resonance ("Wolf: +2 Charge: damage"). Counted by `passive_facet_bonuses` while the character wears an item carrying the facet and has a FACET thread on it: `amount x item quality x attachment quality x max(1, thread_rung(level))` (per 10 thread levels) per worn item facet. Authored in the Facet admin's inline; `merge_facets` moves the rows. Content (`CONTENT_MODELS`, natural key `(facet, target)`). | `facet` FK (CASCADE), `target` FK `ModifierTarget` ("maneuver_effect" category only), `amount` (non-zero); unique per `(facet, target)` |
-| `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance`, the **supported set**, a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonances, leading first, via `gift_resonances_for`, ADR-0052, ADR-5123-A), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050), `parent` (self-FK, PROTECT, `related_name="children"`: the umbrella gift this one hangs beneath; see "Gift lineage" below, #2891, ADR-0192), `natural_weapon_template` (nullable FK to an Unarmed `ItemTemplate`, PROTECT: claws or a bite the gift gives its holder, made and equipped by `grant_gift_to_character`, marked `ItemInstance.natural_weapon_gift`, and removed only when the gift is lost; #4898, see docs/systems/items.md "Natural weapons") |
+| `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance`; limits no Gift thread, only the default a grant naming no resonance reaches for (#5123), and not the cast-time value; the cast reads the character's GIFT-thread resonances, leading first, via `gift_resonances_for`, ADR-0052, ADR-5123-A), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050), `parent` (self-FK, PROTECT, `related_name="children"`: the umbrella gift this one hangs beneath; see "Gift lineage" below, #2891, ADR-0192), `natural_weapon_template` (nullable FK to an Unarmed `ItemTemplate`, PROTECT: claws or a bite the gift gives its holder, made and equipped by `grant_gift_to_character`, marked `ItemInstance.natural_weapon_gift`, and removed only when the gift is lost; #4898, see docs/systems/items.md "Natural weapons") |
 | `Affinity` | Celestial / Primal / Abyssal rows; `Affinity.objects.get_celestial_affinity()` / `get_primal_affinity()` / `get_abyssal_affinity()` are the canonical getters | `name`, `corruption_coefficient` (integer tenths of corruption per cast tick), optional OneToOne `modifier_target`. Listed read-only at `GET /api/magic/affinities/` (`AffinityViewSet`) |
 | `Resonance` | Identity resonance tags | `name`, `affinity` FK, `opposite` self-OneToOne, optional `modifier_target` OneToOne. Listed read-only, unpaginated, at `GET /api/magic/resonances/` (`ResonanceViewSet`, `ResonanceSerializer` with `affinity_name`; `?affinity=<pk>` filters): the CG Gift stage's Resonance picker reads it (#4665) |
 
@@ -208,7 +208,7 @@ drift apart.
 | `count_techniques_for_gift` | Counts `technique__gift_id__in=gift.lineage_ids` — one thread, one cap; inherited techniques are not a second budget. |
 | `get_technique_cap_for_gift` / `_gift_thread_depth` | Unchanged; always called with the held gift, whose thread exists. |
 | `gift_threads_for(character, gift)` (`specialization/services.py`) | GIFT threads *covering* `gift` — on `gift` itself or on a descendant. A direct hold sorts first. |
-| `gift_resonances_for` | Reads `gift_threads_for`, so an inherited technique manifests at the character's thread resonances (the rows in order, leading first, #5123) instead of the ancestor's authored supported set. |
+| `gift_resonances_for` | Reads `gift_threads_for`, so an inherited technique manifests at the character's thread resonances (the rows in order, leading first, #5123) instead of the ancestor's authored `Gift.resonances` list. |
 | `_resolve_technique_variant` | Reads `gift_threads_for` via `_gift_thread_for_variant`, so an inherited technique specializes at the child thread's level. |
 | `crossing/handlers._parents_for` | GIFT branch returns `thread.target_gift.inherited_techniques` — variant discovery on a child thread sees the inherited techniques. |
 | `societies/handlers.acquired_techniques_for` | A granted gift carries its ancestors' techniques with it. |
@@ -2657,16 +2657,14 @@ ceremony-direct testing. (`world/covenants/discovery.py` re-exports it as
   **always** provisions the gift's latent level-0 GIFT thread — resonance is resolved by
   `_resolve_grant_resonance` *before* the `CharacterGift` row is minted, so a raise leaves no
   partial state (a `CharacterGift` with no thread — the exact corrupted state #2971 eliminates —
-  can never be created). The caller's explicit picks (each one the gift's supported set is empty
-  or contains) become the thread's `ThreadResonance` rows at amount 0, leading with the first;
-  when none survives, the single resonance is resolved in this order: an existing active GIFT
+  can never be created). The caller's explicit picks (every one kept, whatever the gift lists)
+  become the thread's `ThreadResonance` rows at amount 0, leading with the first;
+  when none is named, the single resonance is resolved in this order: an existing active GIFT
   thread already covering the
   gift (lineage-aware, via `gift_threads_for` — makes a re-grant a true no-op; its leading
-  resonance) → the supported
-  set's claimed-or-first member → the character's own earliest GIFT thread's resonance → their
+  resonance) → the `Gift.resonances` list's claimed-or-first member (its default role) → the character's own earliest GIFT thread's resonance → their
   highest-`lifetime_earned` claimed resonance → the anima-ritual resonance. Raises
-  `GiftResonanceUnresolvable` when none of those resolves — an empty `Gift.resonances` (the
-  "unrestricted" weave-gate meaning, ADR-0052/#2967) no longer means "skip provisioning the
+  `GiftResonanceUnresolvable` when none of those resolves — an empty `Gift.resonances` no longer means "skip provisioning the
   thread"; a fresh CG character with nothing else resolved is exactly the case CG guards
   against by also always supplying `gift_resonance_weights`.
   `provision_latent_gift_thread(sheet, gift, *, resonances)` is the idempotent level-0 GIFT
@@ -2674,17 +2672,19 @@ ceremony-direct testing. (`world/covenants/discovery.py` re-exports it as
   gift, a row at 0 per resonance in the order given, then `refresh_leading_resonance`; an
   existing thread is returned unchanged. No grant call site invokes it directly anymore.
 - **Weaving a GIFT thread** — `weave_thread(target_kind=GIFT)` provisions the character's one
-  thread on the gift at the named resonance (validates the resonance is in the gift's
-  supported set, else raises `UnsupportedGiftResonanceError`, which `WeaveThreadAction` catches
-  into a failure `ActionResult`). A gift that already has a thread, like any anchor that already
+  thread on the gift at the named resonance (any resonance: `Gift.resonances` limits nothing and
+  `UnsupportedGiftResonanceError` is gone, #5123). A gift that already has a thread, like any anchor that already
   has one, raises `ThreadAnchorTakenError` ("imbue it instead"); a second resonance comes from
   imbuing with it. `provision_additional_gift_thread` (#1619) is gone.
 - **`gift_resonances_for(character, gift)`** — the derive-on-read seam replacing direct
   `technique.gift.resonances.all()` reads at the four cast sites (`power_terms`,
   `techniques` ×2, `resonance_environment` ×2). Returns the active GIFT thread's resonances in
-  row order, leading first (#5123); falls back to the authored `Gift.resonances` supported set when no thread exists.
-- **`Gift.resonances`** is repurposed to the **supported set** (a weave constraint, not the
-  cast-time value) per ADR-0052.
+  row order, leading first (#5123); falls back to the authored `Gift.resonances` list when no thread exists.
+- **`Gift.resonances`** limits nothing (owner ruling 2026-11-14, #5123): a Gift is the substance
+  and resonance is how the character feels using it, so any resonance she holds can be woven,
+  imbued or retuned into any Gift's thread. It is the default a grant naming no resonance
+  reaches for, never the cast-time value (ADR-0052). The field stays (authored content); its
+  `help_text` says so.
 
 **GIFT anchor cap (#1580, #4585):** `compute_anchor_cap` handles `TargetKind.GIFT` by
 returning `compute_level_cap(thread.owner)` (character level × 10,
@@ -4570,8 +4570,8 @@ character the requester plays; a refusal is a 400 `{detail}`). The aura payload
 blank when settled), `unsettled_affinity_name` (the affinity accepting names, blank when settled), `mire_share_words` (`share_in_words`, `services/drift.py`, the scale the
 sheet's `shareInWords` uses) and a `settled_percent` on each share. A thread's payload lists
 every `ThreadResonance` row as `resonances` (`resonance_id`, `resonance_name`, `amount`,
-`leads`), leading first, beside the leading `resonance`, and `allowed_resonance_ids` (null when any
-resonance may be imbued; a restricted Gift thread lists its Gift's set). The thread list reads every
+`leads`), leading first, beside the leading `resonance`; any held resonance may be imbued, so
+there is no allowed set. The thread list reads every
 thread's rows in one query (`thread_rows_by_thread`, passed as serializer context), and `display_name` (the thread's own name, else its anchor's, so a Gift thread reads as its Gift; the viewset selects `THREAD_LABEL_RELATED`, so the list costs no query per thread for it). The pull preview's `per_thread` keeps
 each payer's effects apart, and a resolved effect names what it grants: `capability_name` and
 `capability_value` for a capability perk, `resistance_damage_type_name` for a resistance (null

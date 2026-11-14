@@ -102,7 +102,7 @@ The magic system for Arx II. Power flows from identity and connection.
   by the web Status tab and the `sheet/status` telnet section
 
 ### Gifts & Techniques
-- `Gift` - Thematic collections of magical techniques (M2M to Resonance — the **supported set**: a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052). Carries a `kind` column (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable — species abilities and in-play powers are delivered as Minor Gifts; ADR-0050, #1577)
+- `Gift` - Thematic collections of magical techniques (M2M to Resonance — a default only: it limits no Gift thread, any held resonance can be woven, imbued or retuned into one; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052). Carries a `kind` column (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable — species abilities and in-play powers are delivered as Minor Gifts; ADR-0050, #1577)
 - **Gift lineage (#2891, ADR-0192)** — `Gift.parent` (self-FK, PROTECT, `related_name="children"`)
   hangs a gift beneath an umbrella gift. **Holding a gift reaches the techniques of that gift and
   of every ancestor, and the GIFT thread on the held gift is the thread for all of them** — one
@@ -1098,7 +1098,7 @@ exposing `name`/`intensity`/`control` with deltas; raw parent `Technique` when n
 matches). `CovenantRole` → the matching sub-role variant. Both paths read the active
 thread through the cached `character.threads` handler (the same cached queryset the
 passive bonuses read), never a fresh `Thread.objects.filter()`; a character with no
-`CharacterSheet` degrades gracefully (returns the parent entity / supported set). The
+`CharacterSheet` degrades gracefully (returns the parent entity / the Gift's `resonances` list). The
 GIFT-thread write-paths (`provision_latent_gift_thread`, `_weave_gift_thread`) call
 `character.threads.invalidate()` after mutation, mirroring the covenant-role
 invalidation contract. `_ResolvedTechnique`'s payload accessors
@@ -1127,41 +1127,45 @@ also standalone-callable. (`world/covenants/discovery.py` re-exports it as
   a second thread (`provision_additional_gift_thread` is gone).
 - `grant_gift_to_character(sheet, gift, *, resonances=(), origin=...)`
   (`world/magic/specialization/services.py`; `resonances` are the preferred resonances, leading
-  first, each outside a non-empty supported set dropped, none left means resolve one) — the shared gift-acquisition primitive
+  first, every one kept on the Gift thread, none named means resolve one) — the shared gift-acquisition primitive
   (path-crossing grant, species-gift provisioning, CG's gift-stage finalize, and
   `charge_and_learn`'s implicit gift acquisition all call this, not
   `provision_latent_gift_thread` directly). Mints (idempotently) the `CharacterGift` link
   and **always** provisions the gift's latent level-0 GIFT thread — resonance is resolved by
   `_resolve_grant_resonance` **before** the `CharacterGift` row is minted, so a raise leaves
   no partial state. In order (the single-resonance fallback, used when no preferred resonance
-  survives): the caller's explicit pick (when the gift's supported set is empty or contains
-  it); an existing active GIFT thread already covering
+  is named): the caller's explicit pick, whatever the gift lists; an existing active GIFT thread already covering
   this gift, lineage-aware via `gift_threads_for` (makes a re-grant a true no-op; its leading
   resonance); a
-  non-empty supported set's claimed-or-first member; the character's own earliest GIFT
+  non-empty `Gift.resonances` list's claimed-or-first member (the list's one role: a default);
+  the character's own earliest GIFT
   thread's resonance (their "main" one); their highest-`lifetime_earned` claimed resonance;
   the anima-ritual resonance. Raises `GiftResonanceUnresolvable` if nothing resolves — an
-  empty `Gift.resonances` (the "unrestricted" weave-gate meaning, ADR-0052/#2967) no longer
-  means "skip provisioning the thread" (#2971); see ADR-0203.
+  empty `Gift.resonances` no longer means "skip provisioning the thread" (#2971); see ADR-0203.
 - `provision_latent_gift_thread(sheet, gift, *, resonances)` — the idempotent level-0 GIFT
   thread writer `grant_gift_to_character` calls once resonances are resolved; it writes a
   `ThreadResonance` row at amount 0 per resonance in the order given (the first leads a tie),
   then `refresh_leading_resonance`. An existing thread on the gift is returned unchanged
   (the list is ignored). Not called directly by any grant call site anymore.
 - `weave_thread(target_kind=GIFT)`: provisions the character's one thread on the gift at the
-  named resonance (validates the resonance is in the gift's supported set, else
-  `UnsupportedGiftResonanceError`, caught by `WeaveThreadAction`); a gift that already has a
+  named resonance (any resonance: the gift's `resonances` list limits nothing, and
+  `UnsupportedGiftResonanceError` is gone, #5123); a gift that already has a
   thread raises `ThreadAnchorTakenError` ("imbue it instead"), as does every other anchor kind.
 - `gift_resonances_for(character, gift) -> list[Resonance]` — the derive-on-read seam
   replacing `technique.gift.resonances.all()` at the four cast sites (`power_terms`,
   `techniques` ×2, `resonance_environment` ×2). Reads the active GIFT thread through the
   cached `character.threads` handler; returns the thread's resonances in row order (leading
-  first, #5123), falling back to `gift.cached_resonances` (the authored supported set) when
+  first, #5123), falling back to `gift.cached_resonances` (the authored `Gift.resonances` list) when
   no thread or no sheet. `_first_gift_thread_resonance`, `_effective_variant_resonance` and
   the technique forms read the leading resonance; `technique_forms` lists a form for every
   resonance the thread holds.
-- `Gift.resonances` is repurposed to the **supported set** (weave constraint, not the
-  cast-time value) per ADR-0052.
+- `Gift.resonances` limits nothing (owner ruling 2026-11-14, #5123): a Gift is the substance
+  and resonance is how the character feels using it, so any resonance she holds can feed any
+  Gift's thread. The list is only the default `_resolve_grant_resonance` reaches for when a
+  grant names no resonance (and what a sheetless character's gift manifests as). It is not the
+  cast-time value (ADR-0052). Weaving, imbuing (`imbue_ready_threads`, the retune rite's
+  options, `ImbuePanel`) and creation read no list; the thread payload has no
+  `allowed_resonance_ids`.
 
 **GIFT anchor cap (#1580, #4585):** `compute_anchor_cap` handles `TargetKind.GIFT` by
 returning `compute_level_cap(thread.owner)` (character level × 10). GIFT threads are
@@ -1214,8 +1218,8 @@ resonance picker is built (`GiftStage`, #1620/#2426 Task 10 — writes
   mints, idempotently, `CharacterGift` + the latent GIFT thread (reusing
   `provision_latent_gift_thread`) + `CharacterTechnique` rows for the path's `PathGiftGrant`
   sets, then announces via `announce_access_change` (`AccessChangeSource.PATH_ADVANCEMENT`).
-  Resonance for the latent thread = a claimed resonance in the gift's supported set, else the
-  gift's first supported resonance (the player commits the real choice later via the Rite of
+  Resonance for the latent thread = a claimed resonance in the gift's `resonances` list (its default role), else the
+  list's first (the player commits the real choice later via the Rite of
   Weaving). XP/advancement *gates* the crossing (ADR-0053); the grant is a consequence of path
   membership (ADR-0050), not an XP purchase.
 - **Hook:** `cross_threshold` (`audere_majora.py`) calls `grant_path_magic(sheet, chosen_path)`

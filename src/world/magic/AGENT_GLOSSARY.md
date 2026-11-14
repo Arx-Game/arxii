@@ -76,7 +76,7 @@ The `Distinction` (slug `unbound`, negative `cost_per_rank`) carried for free by
 _Avoid_: conflating this with the `Unbound` Tradition row itself (see "Tradition" above) — the Tradition is the school-of-practice entity; this is the drawback distinction a traditionless character carries while in it.
 
 **Gift-thread**:
-The one Thread a character holds on a Gift: its level sets the Gift's strength (more and stronger techniques) and its **Leading resonance** sets the Gift's affinity, with every resonance it holds on its rows (#5123). The costliest thread kind, because it gates magical power. (ADR-0051, ADR-0052.)
+The one Thread a character holds on a Gift: its level sets the Gift's strength (more and stronger techniques) and its **Leading resonance** sets the Gift's affinity, with every resonance it holds on its rows (#5123). Any resonance she holds can feed it: the Gift's own `resonances` list limits nothing, it is only the default a grant naming no resonance reaches for. The costliest thread kind, because it gates magical power. (ADR-0051, ADR-0052.)
 
 **Thread level** (#4585, ADR-5091):
 The stored `Thread.level`, which is also the number a player sees (a thread at 30 reads 30),
