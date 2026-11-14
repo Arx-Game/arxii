@@ -52,7 +52,7 @@ class EarlyFormTests(TestCase):
             unlock_thread_level=10,
             creation_point_cost=4,
         )
-        provision_latent_gift_thread(cls.sheet, cls.gift, resonance=cls.frost)  # level 0
+        provision_latent_gift_thread(cls.sheet, cls.gift, resonances=[cls.frost])  # level 0
 
     def _hold(self, early_form=None):
         hold = CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
@@ -108,7 +108,7 @@ class EarlyFormTests(TestCase):
         """A true non-buyer: a second character's own hold, same resonance, no pick."""
         other_sheet = CharacterSheetFactory()
         CharacterTechniqueFactory(character=other_sheet, technique=self.technique)
-        provision_latent_gift_thread(other_sheet, self.gift, resonance=self.frost)
+        provision_latent_gift_thread(other_sheet, self.gift, resonances=[self.frost])
 
         resolved = resolve_specialized_variant(
             entity=self.technique, character=other_sheet.character

@@ -194,7 +194,7 @@ class _SpeciesGiftJourneyBase(TestCase):
             balance=dp,
             lifetime_earned=dp,
         )
-        result = spend_resonance_for_imbuing(sheet, thread, amount=dp)
+        result = spend_resonance_for_imbuing(sheet, thread, thread.resonance, amount=dp)
         self.assertEqual(result.new_level, target_level, "imbue should reach the target level")
         sheet.character.threads.invalidate()
 
@@ -332,7 +332,7 @@ class SpeciesGiftSpineSQLiteTest(_SpeciesGiftJourneyBase):
         # on an unrelated Major gift, at a resonance the empty-set minor gift
         # could not have chosen on its own.
         other_resonance = ResonanceFactory(name="Other_e2e")
-        provision_latent_gift_thread(sheet, self.major_gift, resonance=other_resonance)
+        provision_latent_gift_thread(sheet, self.major_gift, resonances=[other_resonance])
 
         empty_gift = GiftFactory(name="Bare Nightform_e2e", kind=GiftKind.MINOR)
         SpeciesGiftGrantFactory(species=isolated_species, gift=empty_gift, drawback_condition=None)

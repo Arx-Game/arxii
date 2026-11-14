@@ -96,7 +96,9 @@ class EmergencyDrawNonCombatE2ETests(CastScenarioMixin):
         # must actually be imbued to 10 for there to be an
         # applicable effect.
         ThreadLevelUnlock.objects.create(thread=cls.thread, unlocked_level=10, xp_spent=0)
-        spend_resonance_for_imbuing(cls.caster.character_sheet, cls.thread, 10)
+        spend_resonance_for_imbuing(
+            cls.caster.character_sheet, cls.thread, cls.thread.resonance, 10
+        )
         cls.thread.refresh_from_db()
         cls.starting_thread_level = cls.thread.level
         assert cls.starting_thread_level == 10

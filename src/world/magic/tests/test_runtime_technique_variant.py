@@ -35,7 +35,7 @@ class RuntimeTechniqueVariantTests(TestCase):
             intensity_delta=5,
             control_delta=2,
         )
-        provision_latent_gift_thread(cls.sheet, cls.gift, resonance=cls.resonance)
+        provision_latent_gift_thread(cls.sheet, cls.gift, resonances=[cls.resonance])
         thread = next(
             t for t in cls.sheet.character.threads.all() if t.target_kind == TargetKind.GIFT
         )

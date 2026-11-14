@@ -124,7 +124,9 @@ class AvailableTechniqueFormsTest(TestCase):
 
     def _thread_at(self, level: int, resonance: Resonance | None = None) -> Thread:
         """A GIFT thread at ``level``."""
-        provision_latent_gift_thread(self.sheet, self.gift, resonance=resonance or self.resonance)
+        provision_latent_gift_thread(
+            self.sheet, self.gift, resonances=[resonance or self.resonance]
+        )
         thread = Thread.objects.get(
             owner=self.sheet,
             target_kind=TargetKind.GIFT,

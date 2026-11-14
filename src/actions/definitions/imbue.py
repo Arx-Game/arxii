@@ -58,19 +58,30 @@ class ImbueAction(Action):
             LevelCapExceeded,
             MagicError,
             ProtagonismLockedError,
+            UnknownResonance,
         )
-        from world.magic.models import PendingRitualEffect  # noqa: PLC0415
+        from world.magic.models import PendingRitualEffect, Resonance  # noqa: PLC0415
         from world.magic.services.resonance import spend_resonance_for_imbuing  # noqa: PLC0415
 
         sheet = actor.sheet_data
         thread = kwargs["thread"]
         amount = kwargs["amount"]
+        # The resonance that pays; the thread's leading one when none is named (#5123).
+        resonance_id = kwargs.get("resonance_id")
+        resonance = thread.resonance
+        if resonance_id is not None:
+            resonance = Resonance.objects.filter(pk=resonance_id).first()
+            if resonance is None:
+                return ActionResult(
+                    success=False, message=UnknownResonance(resonance_id).user_message
+                )
 
         try:
             with transaction.atomic():
                 result = spend_resonance_for_imbuing(
                     character_sheet=sheet,
                     thread=thread,
+                    resonance=resonance,
                     amount=amount,
                 )
                 PendingRitualEffect.objects.filter(

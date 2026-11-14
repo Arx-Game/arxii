@@ -26,7 +26,7 @@ class GiftAnchorCapTests(TestCase):
     def _gift_thread(self, **sheet_kwargs: object) -> Thread:
         """Return a level-0 GIFT thread on a sheet built with ``sheet_kwargs``."""
         sheet = CharacterSheetFactory(**sheet_kwargs)
-        provision_latent_gift_thread(sheet, self.gift, resonance=self.resonance)
+        provision_latent_gift_thread(sheet, self.gift, resonances=[self.resonance])
         return Thread.objects.get(
             owner=sheet,
             target_kind="GIFT",

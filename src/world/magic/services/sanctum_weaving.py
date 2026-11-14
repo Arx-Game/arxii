@@ -26,6 +26,7 @@ from world.locations.constants import HolderType
 from world.locations.services import effective_owner
 from world.magic.constants import SanctumSlotKind, TargetKind
 from world.magic.models import Thread
+from world.magic.services.thread_rows import write_resonance_rows
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -76,13 +77,15 @@ def weave_sanctum_thread(
     """
     _validate_weave_eligibility(sanctum, weaver, slot_kind)
 
-    return Thread.objects.create(
+    thread = Thread.objects.create(
         owner=weaver,
         resonance=sanctum.resonance_type,
         target_kind=TargetKind.SANCTUM,
         target_sanctum_details=sanctum,
         slot_kind=slot_kind,
     )
+    write_resonance_rows(thread, [sanctum.resonance_type])
+    return thread
 
 
 @transaction.atomic

@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from django.utils.functional import cached_property
 
 from world.magic.constants import SHIP_VITAL_BONUS_TARGETS, EffectKind, TargetKind
-from world.magic.models import CharacterResonance, Thread, ThreadPullEffect
+from world.magic.models import CharacterResonance, Thread, ThreadPullEffect, ThreadResonance
 from world.magic.models.techniques import Technique
 from world.magic.services.pull_effects import get_pull_effects_for_thread
 from world.magic.services.resonance import _anchor_ambiently_active, resolve_gift_ids_by_technique
@@ -68,6 +68,26 @@ class CharacterThreadHandler:
                 "target_sanctum_details__feature_instance__room_profile",
             )
         )
+
+    @cached_property
+    def _resonances_by_thread(self) -> dict[int, list[Resonance]]:
+        """Each thread's resonances, leading first (the rows' Meta ordering), one query.
+
+        Held here and not as a ``prefetch_related`` on the threads: threads are idmapper
+        instances, which keep a prefetch cache across reloads and would serve rows from
+        before an imbue (#5123). Services that write rows call ``invalidate()``.
+        """
+        out: dict[int, list[Resonance]] = {}
+        rows = ThreadResonance.objects.filter(
+            thread__owner_id=self.character.pk, thread__retired_at__isnull=True
+        ).select_related("resonance")
+        for row in rows:
+            out.setdefault(row.thread_id, []).append(row.resonance)
+        return out
+
+    def resonances_of(self, thread: Thread) -> list[Resonance]:
+        """The resonances ``thread`` holds, leading first."""
+        return self._resonances_by_thread.get(thread.pk, [])
 
     def all(self) -> list[Thread]:
         """Return all threads owned by this character."""
@@ -844,6 +864,7 @@ class CharacterThreadHandler:
         active-pull snapshot must be refreshed alongside the thread list.
         """
         self.__dict__.pop("_all", None)
+        self.__dict__.pop("_resonances_by_thread", None)
         self.__dict__.pop("_passive_capability_grants_cache", None)
         self.__dict__.pop("_crossing_choices", None)
         self.__dict__.pop("context_free_power", None)

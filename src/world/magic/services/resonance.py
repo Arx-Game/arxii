@@ -390,6 +390,7 @@ def _check_imbue_level_advance(  # noqa: PLR0913
     *,
     amount: int,
     imbue_multiplier: int,
+    resonance: ResonanceModel,
 ) -> tuple[bool, str, list[str]]:
     """Evaluate whether a thread can advance to ``next_level``.
 
@@ -416,7 +417,7 @@ def _check_imbue_level_advance(  # noqa: PLR0913
     if next_level > cap:
         blocked_by = (
             "LEVEL_CAP"
-            if compute_level_cap(character_sheet) <= compute_anchor_cap(thread)
+            if compute_level_cap(character_sheet) <= compute_anchor_cap(thread, resonance)
             else "ANCHOR_CAP"
         )
         return False, blocked_by, []
@@ -464,12 +465,18 @@ def _charge_imbue_ap(character_sheet: CharacterSheet) -> ActionPointPool:
 def spend_resonance_for_imbuing(
     character_sheet: CharacterSheet,
     thread: Thread,
+    resonance: ResonanceModel,
     amount: int,
     **_ritual_dispatch_kwargs: object,  # ritual dispatch also forwards ``ritual=``
 ) -> ThreadImbueResult:
-    """Deduct resonance balance and greedily advance thread level.
+    """Deduct ``resonance`` balance, add it to the thread's row, and advance the thread level.
 
-    Spec A §3.2. Cost formula: max((current_level - 9) * 100, 1) dp per level.
+    Spec A §3.2, #5123. The thread keeps how much of each resonance went into it on its
+    ``ThreadResonance`` rows (created on first use of a resonance); the rows' amounts sum
+    to ``developed_points``, so the points a level costs come out of the rows in
+    proportion. The leading resonance is refreshed afterwards, so a resonance that
+    overtakes the others becomes ``thread.resonance``. Cost formula:
+    max((current_level - 9) * 100, 1) dp per level.
     Sub-10 levels each cost 1 dp. Advancement continues until the bucket is
     exhausted, the next level hits an XP-lock gate, or the effective cap is
     reached.
@@ -477,6 +484,8 @@ def spend_resonance_for_imbuing(
     Args:
         character_sheet: Character performing the imbuing.
         thread: Thread to advance (must be owned by character_sheet).
+        resonance: The resonance whose balance pays. Anchor caps keyed on a
+            resonance (facet, organization) key on this one.
         amount: Resonance balance to spend (0 = drain existing bucket only).
 
     Returns:
@@ -486,9 +495,14 @@ def spend_resonance_for_imbuing(
         InvalidImbueAmount: If amount < 0 or thread.owner != character_sheet.
         AnchorCapExceeded: If thread is already at effective cap (``LevelCapExceeded``,
             a subclass, when the character-level cap is the one binding it).
-        ResonanceInsufficient: If balance < amount.
+        ResonanceInsufficient: If the character holds too little of ``resonance``.
     """
     from world.magic.exceptions import ProtagonismLockedError  # noqa: PLC0415
+    from world.magic.services.thread_rows import (  # noqa: PLC0415
+        add_to_resonance_row,
+        consume_row_points,
+        refresh_leading_resonance,
+    )
 
     if character_sheet.is_protagonism_locked:
         raise ProtagonismLockedError
@@ -499,17 +513,17 @@ def spend_resonance_for_imbuing(
     if thread.owner_id != character_sheet.pk:
         msg = "Character does not own thread."
         raise InvalidImbueAmount(msg)
-    cap = compute_effective_cap(thread)
+    cap = compute_effective_cap(thread, resonance)
     if thread.level >= cap:
         msg = "Thread already at effective cap."
-        raise cap_exceeded_error(thread)(msg)
+        raise cap_exceeded_error(thread, resonance)(msg)
 
-    cr = CharacterResonance.objects.get(
+    cr = CharacterResonance.objects.filter(
         character_sheet=character_sheet,
-        resonance=thread.resonance,
-    )
-    if amount and cr.balance < amount:
-        msg = "Need " + str(amount) + ", have " + str(cr.balance) + "."
+        resonance=resonance,
+    ).first()
+    if amount and (cr is None or cr.balance < amount):
+        msg = "Need " + str(amount) + ", have " + str(cr.balance if cr else 0) + "."
         raise ResonanceInsufficient(msg)
 
     # AP charge (development time) — flat per rite, Unbound surcharge applies.
@@ -519,9 +533,11 @@ def spend_resonance_for_imbuing(
     if amount:
         cr.balance -= amount
         thread.developed_points += amount
+        add_to_resonance_row(thread, resonance, amount)
 
     blocked_by: str = "NONE"
     blocked_requirement_messages: list[str] = []
+    spent_on_levels = 0
     imbue_multiplier = get_imbue_cost_multiplier(thread.target_kind)
     while True:
         next_level = thread.level + 1
@@ -532,15 +548,21 @@ def spend_resonance_for_imbuing(
             character_sheet,
             amount=amount,
             imbue_multiplier=imbue_multiplier,
+            resonance=resonance,
         )
         if not should_advance:
             break
         cost = max((thread.level - 9) * 100, 1) * imbue_multiplier
         thread.level = next_level
         thread.developed_points -= cost
+        spent_on_levels += cost
 
-    cr.save(update_fields=["balance"])
+    if cr is not None:
+        cr.save(update_fields=["balance"])
     thread.save(update_fields=["level", "developed_points"])
+    consume_row_points(thread, spent_on_levels)
+    refresh_leading_resonance(thread)
+    character_sheet.character.threads.invalidate()
 
     recompute_max_health_with_threads(character_sheet)
 

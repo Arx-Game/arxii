@@ -53,7 +53,7 @@ class MultiResonanceTests(TestCase):
 
     def _level_thread(self, resonance) -> Thread:
         """Provision and level a GIFT thread at the given resonance."""
-        provision_latent_gift_thread(self.sheet, self.gift, resonance=resonance)
+        provision_latent_gift_thread(self.sheet, self.gift, resonances=[resonance])
         thread = Thread.objects.get(
             owner=self.sheet,
             target_kind=TargetKind.GIFT,
@@ -77,8 +77,8 @@ class MultiResonanceTests(TestCase):
 
     def test_provision_latent_idempotent_on_same_resonance(self) -> None:
         """provision_latent_gift_thread is idempotent on (owner, gift, resonance)."""
-        t1 = provision_latent_gift_thread(self.sheet, self.gift, resonance=self.celestial)
-        t2 = provision_latent_gift_thread(self.sheet, self.gift, resonance=self.celestial)
+        t1 = provision_latent_gift_thread(self.sheet, self.gift, resonances=[self.celestial])
+        t2 = provision_latent_gift_thread(self.sheet, self.gift, resonances=[self.celestial])
         self.assertEqual(t1.pk, t2.pk)
 
     def test_gift_resonances_for_single_when_one_thread(self) -> None:

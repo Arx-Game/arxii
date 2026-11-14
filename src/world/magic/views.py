@@ -48,6 +48,7 @@ from world.magic.exceptions import (
     InvalidImbueAmount,
     TechniqueAuthoringNotPermitted,
     TechniqueBudgetExceeded,
+    UnknownResonance,
 )
 from world.magic.filters import (
     CharacterAnimaFilter,
@@ -1374,7 +1375,9 @@ class RitualPerformView(APIView):
         """Resolve/validate the imbuing ``thread_id``/``amount`` kwargs in place.
 
         Returns a 400 ``Response`` on invalid input, else ``None`` (with
-        ``kwargs["thread"]`` resolved to an owned, non-retired Thread).
+        ``kwargs["thread"]`` resolved to an owned, non-retired Thread and
+        ``kwargs["resonance"]`` to the resonance that pays: the optional ``resonance_id``,
+        else the thread's leading one, #5123).
         """
         thread_id = kwargs.pop("thread_id", None)
         if not isinstance(thread_id, int):
@@ -1393,6 +1396,16 @@ class RitualPerformView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         kwargs["thread"] = thread
+        resonance_id = kwargs.pop("resonance_id", None)
+        resonance = thread.resonance
+        if resonance_id is not None:
+            resonance = Resonance.objects.filter(pk=resonance_id).first()
+            if resonance is None:
+                return Response(
+                    {"detail": UnknownResonance(resonance_id).user_message},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        kwargs["resonance"] = resonance
         return _validate_imbuing_amount(kwargs)
 
     @staticmethod
@@ -1498,7 +1511,6 @@ class RitualPerformView(APIView):
         Shares ``resolve_target_resonance`` with telnet's ``resonance=``: a non-integer or
         unknown id is a 400.
         """
-        from world.magic.exceptions import UnknownResonance  # noqa: PLC0415
         from world.magic.services.thread_resonance import (  # noqa: PLC0415
             resolve_target_resonance,
         )
@@ -1525,7 +1537,10 @@ class RitualPerformView(APIView):
         from actions.definitions.imbue import ImbueAction  # noqa: PLC0415
 
         finisher_result = ImbueAction().run(
-            actor=sheet.character, thread=kwargs["thread"], amount=kwargs["amount"]
+            actor=sheet.character,
+            thread=kwargs["thread"],
+            amount=kwargs["amount"],
+            resonance_id=kwargs["resonance"].pk,
         )
         if not finisher_result.success:
             return Response({"detail": finisher_result.message}, status=status.HTTP_400_BAD_REQUEST)

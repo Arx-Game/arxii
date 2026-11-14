@@ -73,7 +73,7 @@ class VariantStrictBonusCostTests(TestCase):
         anima = CharacterAnimaFactory(character=sheet, current=50, maximum=50)
         CharacterEngagementFactory(character=sheet)
         if with_variant:
-            provision_latent_gift_thread(sheet, self.gift, resonance=self.resonance)
+            provision_latent_gift_thread(sheet, self.gift, resonances=[self.resonance])
             thread = next(
                 t for t in sheet.character.threads.all() if t.target_kind == TargetKind.GIFT
             )

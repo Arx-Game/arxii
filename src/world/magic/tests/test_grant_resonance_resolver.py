@@ -37,7 +37,7 @@ class ResolveGrantResonanceTests(TestCase):
         sheet = CharacterSheetFactory()
         gift = GiftFactory()
         resonance = ResonanceFactory()
-        provision_latent_gift_thread(sheet, gift, resonance=resonance)
+        provision_latent_gift_thread(sheet, gift, resonances=[resonance])
 
         resolved = _resolve_grant_resonance(sheet, gift)
 

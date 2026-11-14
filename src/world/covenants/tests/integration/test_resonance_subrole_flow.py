@@ -101,7 +101,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
 
     def test_currently_engaged_roles_returns_subrole_after_threshold(self) -> None:
         """After crossing unlock_thread_level, currently_engaged_roles() returns the sub-role."""
-        spend_resonance_for_imbuing(self.sheet, self.thread, IMBUE_TO_THIRTY)
+        spend_resonance_for_imbuing(self.sheet, self.thread, self.thread.resonance, IMBUE_TO_THIRTY)
 
         char = self.sheet.character
         # Invalidate both the thread cache (so resolve_effective_role sees the updated level)
@@ -123,7 +123,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
 
     def test_covenant_role_base_total_positive_after_resolution(self) -> None:
         """covenant_role_base_total returns > 0 once the sub-role resolves."""
-        spend_resonance_for_imbuing(self.sheet, self.thread, IMBUE_TO_THIRTY)
+        spend_resonance_for_imbuing(self.sheet, self.thread, self.thread.resonance, IMBUE_TO_THIRTY)
 
         char = self.sheet.character
         char.threads.invalidate()
@@ -142,7 +142,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
 
     def test_discovery_created(self) -> None:
         """Discovery row is created for the sub-role's achievement on first crossing."""
-        spend_resonance_for_imbuing(self.sheet, self.thread, IMBUE_TO_THIRTY)
+        spend_resonance_for_imbuing(self.sheet, self.thread, self.thread.resonance, IMBUE_TO_THIRTY)
 
         ach = self.subrole.discovery_achievement
         self.assertIsNotNone(ach)
@@ -153,7 +153,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
 
     def test_character_achievement_granted(self) -> None:
         """CharacterAchievement row is created for the discovering character."""
-        spend_resonance_for_imbuing(self.sheet, self.thread, IMBUE_TO_THIRTY)
+        spend_resonance_for_imbuing(self.sheet, self.thread, self.thread.resonance, IMBUE_TO_THIRTY)
 
         ach = self.subrole.discovery_achievement
         self.assertTrue(
@@ -165,7 +165,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
 
     def test_codex_knowledge_created_with_known_status(self) -> None:
         """CharacterCodexKnowledge(status=KNOWN) is created for the sub-role's codex_entry."""
-        spend_resonance_for_imbuing(self.sheet, self.thread, IMBUE_TO_THIRTY)
+        spend_resonance_for_imbuing(self.sheet, self.thread, self.thread.resonance, IMBUE_TO_THIRTY)
 
         entry = self.subrole.codex_entry
         self.assertIsNotNone(entry)
@@ -179,7 +179,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
 
     def test_gamewide_narrative_message_reaches_other_active_sheet(self) -> None:
         """First-ever discovery sends a gamewide message; the other active sheet receives it."""
-        spend_resonance_for_imbuing(self.sheet, self.thread, IMBUE_TO_THIRTY)
+        spend_resonance_for_imbuing(self.sheet, self.thread, self.thread.resonance, IMBUE_TO_THIRTY)
 
         self.assertTrue(
             NarrativeMessageDelivery.objects.filter(
@@ -190,7 +190,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
 
     def test_gamewide_narrative_message_reaches_discovering_sheet(self) -> None:
         """The discovering character also receives the gamewide message."""
-        spend_resonance_for_imbuing(self.sheet, self.thread, IMBUE_TO_THIRTY)
+        spend_resonance_for_imbuing(self.sheet, self.thread, self.thread.resonance, IMBUE_TO_THIRTY)
 
         self.assertTrue(
             NarrativeMessageDelivery.objects.filter(recipient_character_sheet=self.sheet).exists(),
@@ -203,7 +203,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
 
     def test_anchor_role_in_returns_parent_after_subrole_resolution(self) -> None:
         """anchor_role_in() must return the stored parent role regardless of sub-role resolution."""
-        spend_resonance_for_imbuing(self.sheet, self.thread, IMBUE_TO_THIRTY)
+        spend_resonance_for_imbuing(self.sheet, self.thread, self.thread.resonance, IMBUE_TO_THIRTY)
 
         char = self.sheet.character
         char.threads.invalidate()

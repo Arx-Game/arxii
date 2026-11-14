@@ -97,7 +97,7 @@ class GiftSpecializationE2ETest(TestCase):
 
     def test_full_journey(self) -> None:
         # 1. CG: provision the latent level-0 GIFT thread at the chosen resonance.
-        provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)
+        provision_latent_gift_thread(self.sheet, self.gift, resonances=[self.resonance])
 
         # 2. Read at level 0: the resolver returns the parent (no variant yet).
         resolved = resolve_specialized_variant(
@@ -202,7 +202,7 @@ class GiftSpecializationE2ETest(TestCase):
         """
         from world.magic.services.techniques import get_runtime_technique_stats
 
-        provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)
+        provision_latent_gift_thread(self.sheet, self.gift, resonances=[self.resonance])
         thread = next(
             t for t in self.sheet.character.threads.all() if t.target_kind == TargetKind.GIFT
         )
@@ -234,7 +234,7 @@ class GiftSpecializationE2ETest(TestCase):
     def test_imbuing_to_unlock_fires_discovery(self) -> None:
         """Real imbue path: spending resonance to level 3 fires the discovery ceremony.
 
-        ``spend_resonance_for_imbuing(character_sheet, thread, amount)`` advances the
+        ``spend_resonance_for_imbuing(character_sheet, thread, resonance, amount)`` advances the
         thread greedily by spending ``amount`` developed-points.  From stored 29 the
         next level costs (29 - 9) × 100 = 2000 dp and lands on 30 (crossing
         ``unlock_thread_level=30``), once the stored-30 XP boundary is
@@ -243,7 +243,7 @@ class GiftSpecializationE2ETest(TestCase):
 
         The GIFT anchor cap is the level-3 owner's level cap, 30 (#4585).
         """
-        provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)
+        provision_latent_gift_thread(self.sheet, self.gift, resonances=[self.resonance])
         thread = next(
             t for t in self.sheet.character.threads.all() if t.target_kind == TargetKind.GIFT
         )
@@ -261,7 +261,7 @@ class GiftSpecializationE2ETest(TestCase):
         thread.level = 29
         thread.save(update_fields=["level"])
         ThreadLevelUnlock.objects.create(thread=thread, unlocked_level=30, xp_spent=0)
-        spend_resonance_for_imbuing(self.sheet, thread, 2000)
+        spend_resonance_for_imbuing(self.sheet, thread, thread.resonance, 2000)
         self.assertEqual(thread.level, 30)
 
         # The discovery ceremony fires internally; achievement must now exist.
@@ -313,7 +313,9 @@ class BaseFormCastE2ETest(CastScenarioMixin):
         # Grant the technique to the caster.
         CharacterTechniqueFactory(character=cls.caster.character_sheet, technique=cls.technique)
         # Provision the GIFT thread and advance it to level 3 so the variant is unlocked.
-        provision_latent_gift_thread(cls.caster.character_sheet, cls.gift, resonance=cls.resonance)
+        provision_latent_gift_thread(
+            cls.caster.character_sheet, cls.gift, resonances=[cls.resonance]
+        )
         thread = Thread.objects.get(
             owner=cls.caster.character_sheet,
             target_kind=TargetKind.GIFT,

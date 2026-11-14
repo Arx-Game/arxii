@@ -107,14 +107,20 @@ class ImbueCostMultiplierTests(TestCase):
 
         # GIFT: 2 dp to advance 0→1 (1 base × 2 multiplier).
         gift_result = spend_resonance_for_imbuing(
-            character_sheet=self.sheet, thread=gift_thread, amount=2
+            character_sheet=self.sheet,
+            thread=gift_thread,
+            resonance=gift_thread.resonance,
+            amount=2,
         )
         self.assertEqual(gift_thread.level, 1)
         self.assertEqual(gift_result.levels_gained, 1)
 
         # TRAIT: 1 dp to advance 0→1 (1 base × 1 multiplier).
         trait_result = spend_resonance_for_imbuing(
-            character_sheet=self.sheet, thread=trait_thread, amount=1
+            character_sheet=self.sheet,
+            thread=trait_thread,
+            resonance=trait_thread.resonance,
+            amount=1,
         )
         self.assertEqual(trait_thread.level, 1)
         self.assertEqual(trait_result.levels_gained, 1)

@@ -964,16 +964,21 @@ class ThreadResonanceChangeError(MagicError):
             self.user_message = user_message
 
 
-class ThreadAnchorTakenError(ThreadResonanceChangeError):
-    """Another process put a live thread on the same anchor at the target resonance first.
+ANCHOR_ALREADY_WOVEN_MESSAGE = "You already have a thread on that. Imbue it instead."
 
-    The partial unique index refused the re-anchor; nothing moved.
+
+class ThreadAnchorTakenError(ThreadResonanceChangeError):
+    """A live thread already holds the anchor, so a second one cannot be woven there.
+
+    One thread per anchor (#5123): weaving onto a held anchor names it and
+    points the player at imbuing; the partial unique index refusing a re-anchor raises it
+    with the default message. Nothing moved either way.
     """
 
     user_message = "Another thread has just taken that place; look at your threads again."
 
-    def __init__(self) -> None:
-        super().__init__(ThreadAnchorTakenError.user_message)
+    def __init__(self, user_message: str | None = None) -> None:
+        super().__init__(user_message or ThreadAnchorTakenError.user_message)
 
 
 class UnknownResonance(MagicError):

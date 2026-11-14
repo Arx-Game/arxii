@@ -102,7 +102,7 @@ class KeepingACompanion(JourneyCase):
         wolf.save(update_fields=["is_mount"])
         CharacterGiftFactory(character=self.sheet, gift=self.gift)
         wild_bond = Resonance.objects.get(name="Wild Bond")
-        self.thread = provision_latent_gift_thread(self.sheet, self.gift, resonance=wild_bond)
+        self.thread = provision_latent_gift_thread(self.sheet, self.gift, resonances=[wild_bond])
         self.thread.level = 10
         self.thread.save(update_fields=["level"])
         self.watch(self.hobb)
