@@ -179,16 +179,28 @@ for the five-branch validation gate this data must satisfy before submission.
 
 - `draft.draft_data["selected_gift_id"]` names the chosen catalog `Gift`.
   `world.magic.specialization.services.grant_gift_to_character(sheet, gift,
-  resonance=...)` mints the `CharacterGift` link and provisions the latent level-0
+  resonances=...)` mints the `CharacterGift` link and provisions the latent level-0
   GIFT thread (#1578, ADR-0055) in one call — the same primitive `grant_path_magic`
   uses for path-crossing grants. No-op (early return, nothing created) when the
   draft has no `selected_gift_id` — only legacy/test-only draft_data reaches this,
   since `compute_magic_errors` requires the key on any draft that reaches submission.
-- The resonance is read from `draft.draft_data["selected_gift_resonance_id"]`
-  (required by `compute_magic_errors`, which as of #2971 also rejects a stale pick —
-  a pk pointing at a since-deleted `Resonance` — with the same "Select a gift
-  resonance" error as an unset one) and resolved to a `Resonance` row; `None` when
-  unset or invalid. As of #2971, `None` no longer skips thread provisioning —
+- **Several weighted resonances (#5123).** The picks are read from
+  `draft.draft_data["gift_resonance_weights"]` (`GIFT_RESONANCE_WEIGHTS_KEY`), a list of
+  `{resonance_id, weight}` parsed in one place, `resonance_weights.py` (heaviest first, a tie
+  keeping the order given). `compute_magic_errors` requires distinct, existing resonances,
+  each weighted at least 1, summing to `DriftConfig.creation_points` (a stale or missing
+  pick reads "Select a gift resonance"). `provision_magic` writes them in order: the Gift
+  thread (and species gift threads) are provisioned with a `ThreadResonance` row per pick at
+  amount 0, the heaviest leading, on first provision (an existing thread ignores the list);
+  each pick is then seeded by `seed_creation_resonance` (`lifetime_earned` = weight x
+  `creation_seed_per_point`, no balance, a `CHARACTER_CREATION` ledger row), `recompute_aura`
+  derives the starting aura, `settle_aura_shares` makes the settled self equal it (so a fresh
+  character reads zero unsettled steps and a later gain extends the aura), and the Glimpse
+  nudge then moves the settled shares only. The heaviest pick is the one resonance creation
+  needs where it can use only one (the anima ritual, the Motif seed, the facet ties, the
+  teaching fit); every pick's codex entry is granted. Staff's Grant magic puts all the points
+  on its single pick. `starting_aura_shares` and its 80/20 split are gone.
+- With no preferred resonances, as of #2971, thread provisioning is no longer skipped:
   `grant_gift_to_character` always runs it through the shared grant-time resolver
   (`_resolve_grant_resonance`: an existing thread already on this gift → the
   gift's supported-set policy → the character's own main-resonance fallbacks) and
@@ -199,9 +211,9 @@ for the five-branch validation gate this data must satisfy before submission.
   `GiftResonanceUnresolvable` and `finalize_magic_data` fails loudly rather than
   minting a character holding a gift with no thread to cast from.
 - **The anima ritual now carries the CG pick too (#2971 Task 3).** The anima ritual
-  IS the character's magical identity, so `_finalize_anima_ritual` resolves the same
-  `selected_gift_resonance_id` (the identical pattern `finalize_magic_data` uses for
-  the gift thread) and passes it to `provision_player_anima_ritual(...,
+  IS the character's magical identity, so `_finalize_anima_ritual` resolves
+  the heaviest `gift_resonance_weights` pick (the identical pattern `finalize_magic_data`
+  uses for the gift thread) and passes it to `provision_player_anima_ritual(...,
   resonance=...)`, which writes it onto the created `RitualCheckConfig.resonance`.
   `world.magic.services.gain.anima_ritual_resonance(sheet)` — one of the grant-time
   resolver's own fallback rungs above — now resolves for every freshly finalized
@@ -218,8 +230,8 @@ for the five-branch validation gate this data must satisfy before submission.
   (`world.magic.services.teaching_fit.teaching_fit`), the bonuses only when the base is above 0,
   rounded down to a skill step. The player spends it on `draft_data["magic_skills"]`;
   `_magic_skill_allocation_errors` (in `compute_magic_errors`) requires exactly `required_spend`;
-  `_create_skill_values` writes the allocation; `_glimpse` starts a new aura at the model defaults
-  (a starting aura that follows the picked resonance is #4672). `SchoolingLine.magic_skill_floor`
+  `_create_skill_values` writes the allocation; `_glimpse` makes the aura row, and the
+  shares come from the seeded picks (#5123). `SchoolingLine.magic_skill_floor`
   is gone (migration 0299, no carry: production held no schooling lines, ADR-0237 "empty in
   production"). Any
   Tradition may teach any Major Gift: `get_gift_options` does not read `TraditionGiftGrant`.

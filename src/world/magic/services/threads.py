@@ -205,6 +205,11 @@ def _bound_covenant_role_cap_by_court_grant(
     return min(base_cap, granted if granted is not None else 0)
 
 
+#: Anchor kinds whose cap keys on a resonance, so an unsaved thread with none set (the
+#: creation-time TECHNIQUE probe) never reads one it does not need.
+_RESONANCE_KEYED_ANCHORS = frozenset({TargetKind.FACET, TargetKind.ORGANIZATION})
+
+
 def compute_anchor_cap(thread: Thread, resonance: ResonanceModel | None = None) -> int:  # noqa: C901
     """Return the anchor-side cap for this thread (Spec A §2.4).
 
@@ -237,7 +242,8 @@ def compute_anchor_cap(thread: Thread, resonance: ResonanceModel | None = None) 
     ``resonance`` is the resonance being imbued (#5123); the FACET and ORGANIZATION caps
     key on it. It defaults to the thread's leading resonance.
     """
-    resonance = resonance or thread.resonance
+    if resonance is None and thread.target_kind in _RESONANCE_KEYED_ANCHORS:
+        resonance = thread.resonance
     match thread.target_kind:
         case TargetKind.TRAIT:
             value = (

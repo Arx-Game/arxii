@@ -49,7 +49,6 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
 from world.magic.constants import EffectKind, GiftKind, TargetKind
 from world.magic.factories import (
-    CharacterResonanceFactory,
     GiftFactory,
     ResonanceFactory,
     TechniqueFactory,
@@ -180,7 +179,7 @@ class _SpeciesGiftJourneyBase(TestCase):
         """
         from world.classes.factories import CharacterClassFactory
         from world.classes.services import set_primary_class_level
-        from world.magic.models import ThreadLevelUnlock
+        from world.magic.models import CharacterResonance, ThreadLevelUnlock
 
         set_primary_class_level(sheet.character, CharacterClassFactory(), -(-target_level // 10))
         for boundary in range(10, target_level + 1, 10):
@@ -188,12 +187,14 @@ class _SpeciesGiftJourneyBase(TestCase):
                 thread=thread, unlocked_level=boundary, defaults={"xp_spent": 0}
             )
         dp = sum(max((level - 9) * 100, 1) for level in range(thread.level, target_level))
-        CharacterResonanceFactory(
-            character_sheet=sheet,
-            resonance=self.resonance,
-            balance=dp,
-            lifetime_earned=dp,
+        # Creation already seeded this row (lifetime only), so top it up rather than
+        # re-create it: the factory's get_or_create would drop the balance.
+        row, _ = CharacterResonance.objects.get_or_create(
+            character_sheet=sheet, resonance=self.resonance
         )
+        row.balance += dp
+        row.lifetime_earned += dp
+        row.save()
         result = spend_resonance_for_imbuing(sheet, thread, thread.resonance, amount=dp)
         self.assertEqual(result.new_level, target_level, "imbue should reach the target level")
         sheet.character.threads.invalidate()

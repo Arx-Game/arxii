@@ -248,7 +248,7 @@ class ResonanceViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only list of Resonance rows with their Affinity, for pickers.
 
     The character-creation Gift stage lists every Resonance and stores the chosen
-    pk as ``draft_data["selected_gift_resonance_id"]``. Filter by ``?affinity=<pk>``.
+    picks as ``draft_data["gift_resonance_weights"]``. Filter by ``?affinity=<pk>``.
     """
 
     queryset = Resonance.objects.select_related("affinity").order_by("affinity__name", "name")

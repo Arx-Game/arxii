@@ -2597,25 +2597,26 @@ ceremony-direct testing. (`world/covenants/discovery.py` re-exports it as
   One active GIFT thread per `(owner, gift)` for now (multi-resonance chooser is a deferred
   needs-design follow-up).
 - **Grant-time resonance resolution (#2971, ADR-0203)** — `grant_gift_to_character(sheet,
-  gift, *, resonance=None)` (`world/magic/specialization/services.py`) is the shared
+  gift, *, resonances=())` (`world/magic/specialization/services.py`) is the shared
   gift-acquisition primitive every grant call site uses: CG's `_finalize_gift_and_techniques`
-  (reading `selected_gift_resonance_id` from `draft.draft_data` — frontend picker built #1620,
-  the `GiftStage` funnel writes the key, #2426 Task 10; `compute_magic_errors` requires it and,
-  as of #2971, also rejects a stale pick pointing at a deleted `Resonance`), the path-crossing
+  (reading `gift_resonance_weights` from `draft.draft_data` — frontend picker built #1620,
+  the `GiftStage` funnel writes the key, #2426 Task 10; as of #5123 a weighted list, heaviest
+  first, that `compute_magic_errors` checks sums to `creation_points` with each pick existing,
+  distinct and at least 1), the path-crossing
   grant (`grant_path_magic`), species-gift provisioning (`provision_species_gifts`), and
   `charge_and_learn`'s implicit gift acquisition. It mints the `CharacterGift` link and
   **always** provisions the gift's latent level-0 GIFT thread — resonance is resolved by
   `_resolve_grant_resonance` *before* the `CharacterGift` row is minted, so a raise leaves no
   partial state (a `CharacterGift` with no thread — the exact corrupted state #2971 eliminates —
-  can never be created). Resolution order: the caller's explicit pick (when the gift's
-  supported set is empty or contains it) → an existing active GIFT thread already covering the
+  can never be created). Resolution order: the caller's explicit picks (each one the gift's
+  supported set is empty or contains; the thread holds all of them, leading with the first) → an existing active GIFT thread already covering the
   gift (lineage-aware, via `gift_threads_for` — makes a re-grant a true no-op) → the supported
   set's claimed-or-first member → the character's own earliest GIFT thread's resonance → their
   highest-`lifetime_earned` claimed resonance → the anima-ritual resonance. Raises
   `GiftResonanceUnresolvable` when none of those resolves — an empty `Gift.resonances` (the
   "unrestricted" weave-gate meaning, ADR-0052/#2967) no longer means "skip provisioning the
   thread"; a fresh CG character with nothing else resolved is exactly the case CG guards
-  against by also always supplying a `selected_gift_resonance_id`.
+  against by also always supplying `gift_resonance_weights`.
   `provision_latent_gift_thread(sheet, gift, *, resonance)` is the idempotent level-0 GIFT
   thread writer `grant_gift_to_character` calls once resonance is resolved (write-once on
   resonance) — no grant call site invokes it directly anymore.
@@ -2641,7 +2642,7 @@ resonance → advance past `unlock_thread_level=30` → variant resolve (name/in
 deltas) → discovery beat fires (achievement + codex).
 
 **The anima ritual records the same CG pick too (#2971).** `_finalize_anima_ritual`
-(`world.character_creation.services`) resolves `selected_gift_resonance_id` the same way
+(`world.character_creation.services`) resolves the heaviest `gift_resonance_weights` pick the same way
 `_finalize_gift_and_techniques` does and passes it to `provision_player_anima_ritual(...,
 resonance=...)`, which writes it onto the created `RitualCheckConfig.resonance` — the anima
 ritual IS the character's magical identity, so CG now populates it there instead of leaving it
@@ -5239,7 +5240,8 @@ from world.magic.models import CharacterAura
 
 aura, created = CharacterAura.objects.get_or_create(character=character)
 if created:
-    set_aura_shares(aura, starting_aura_shares(None))  # 80 Primal / 20 Abyssal
+    # A creation pick seeds lifetime resonance (no balance); the aura derives from it.
+    seed_creation_resonance(sheet, resonance, lifetime=100)
 ```
 
 ### Get character's techniques from a specific gift

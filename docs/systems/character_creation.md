@@ -742,7 +742,9 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
   technique, the flourishes/forms/prices offered in creation at the draft's gift resonance
   (#4099, `creation_personalization_options`; see `docs/systems/magic.md`'s "Technique
   personalization" section)
-- Magic selections (`selected_gift_id`, `selected_technique_ids`, `selected_gift_resonance_id`,
+- Magic selections (`selected_gift_id`, `selected_technique_ids`, `gift_resonance_weights` (a list of
+  `{resonance_id, weight}`: the weights spread `DriftConfig.creation_points` across the picked
+  resonances, #5123),
   `anima_check_stat_id`, `anima_check_skill_id`, `anima_ritual_name`, `motif_description`,
   `glimpse_story`) are stored in `draft_data` JSON via draft PATCH — see `GiftStage` (frontend)
   and `compute_magic_errors` (validation)

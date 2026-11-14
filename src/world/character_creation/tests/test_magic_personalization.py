@@ -377,7 +377,7 @@ class PersonalizationOptionsEndpointTests(_Catalog, TestCase):
         self.client.force_authenticate(self.account)
 
     def _draft(self, resonance_id):
-        weights = single_resonance_weights(Resonance.objects.get(pk=resonance_id))
+        weights = None if resonance_id is None else [{"resonance_id": resonance_id, "weight": 10}]
         return CharacterDraftFactory(
             account=self.account,
             draft_data={

@@ -247,7 +247,7 @@ catalog pick (see below). CG finalization also provisions the anima ritual itsel
 `provision_player_anima_ritual` at finalize, not post-CG. The player-authored `Ritual` row
 (SCENE_ACTION) carries check configuration via its `RitualCheckConfig` sidecar (stat, skill,
 resonance, check_type); as of #2971, that `resonance` is also populated at CG time — resolved
-from the same `selected_gift_resonance_id` pick the gift-thread grant resolves (see "GIFT
+from the heaviest `gift_resonance_weights` pick the gift-thread grant leads with (see "GIFT
 thread substrate" below) — since the anima ritual IS the character's magical identity.
 
 **Anima/severity budget per outcome tier (#1207):** `anima._budget_for_outcome` reads
@@ -1067,7 +1067,7 @@ also standalone-callable. (`world/covenants/discovery.py` re-exports it as
 **GIFT thread substrate:**
 - `TargetKind.GIFT` + `Thread.target_gift` FK (PROTECT) — a thread anchored to a Gift. One
   active GIFT thread per `(owner, gift)` for now (multi-resonance chooser deferred).
-- `grant_gift_to_character(sheet, gift, *, resonance=None)`
+- `grant_gift_to_character(sheet, gift, *, resonances=())`
   (`world/magic/specialization/services.py`) — the shared gift-acquisition primitive
   (path-crossing grant, species-gift provisioning, CG's gift-stage finalize, and
   `charge_and_learn`'s implicit gift acquisition all call this, not
@@ -1100,12 +1100,12 @@ also standalone-callable. (`world/covenants/discovery.py` re-exports it as
 returning `compute_level_cap(thread.owner)` (character level × 10). GIFT threads are
 always in-action (`_ALWAYS_IN_ACTION_KINDS`; a species gift is intrinsic). The frontend CG
 resonance picker is built (`GiftStage`, #1620/#2426 Task 10 — writes
-`selected_gift_resonance_id`). Proven end-to-end by
+`gift_resonance_weights`). Proven end-to-end by
 `world/magic/tests/integration/test_gift_specialization_e2e.py` (#1578) and
 `world/magic/tests/integration/test_species_gift_e2e.py` (#1580).
 - **Species gift provisioning** — `SpeciesGiftGrant` (`world/species/models.py`; natural key
   `(species, gift)`) is the through-model linking a species to MINOR Gifts with an optional
-  `drawback_condition` FK. `provision_species_gifts(sheet, *, resonance=None)`
+  `drawback_condition` FK. `provision_species_gifts(sheet, *, resonances=())`
   (`world/species/services.py`) is called from `finalize_magic_data` after the Major-gift
   block; mints the MINOR `CharacterGift` via `grant_gift_to_character`, applies any
   drawback idempotently. `resonance=None` (the common case — this call has no CG-picker
