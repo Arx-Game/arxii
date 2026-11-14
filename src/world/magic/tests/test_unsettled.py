@@ -266,6 +266,8 @@ class FocusCheckTests(_UnsettledCase):
         told = " ".join(call.args[0] for call in msg.call_args_list)
         self.assertIn("Your Unsettled Dread has grown strong enough to make you unsettled", told)
         self.assertNotIn("drift", told)
+        # The web cast result reads these same sentences off the outcome, never a copy.
+        self.assertEqual(list(outcome.lines), [call.args[0] for call in msg.call_args_list])
 
 
 class MovePartialMireTests(_UnsettledCase):

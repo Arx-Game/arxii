@@ -251,11 +251,10 @@ def check_resonance_focus(
         return None
 
     difficulty = cfg.focus_base_difficulty + steps * cfg.focus_difficulty_per_step
+    lines: list[str] = []
     if reading.leading_excess_resonance is not None:
-        character.msg(
-            f"Your {reading.leading_excess_resonance.name} has grown strong enough to make "
-            "you unsettled. You must keep your focus."
-        )
+        lines.append(f"{unsettled_line(reading)} You must keep your focus.")
+        character.msg(lines[0])
     result = perform_check_with_modifiers(
         character,
         cfg.focus_check_type,
@@ -264,7 +263,9 @@ def check_resonance_focus(
     )
     success_level = result.success_level
     if success_level >= 1:
-        return FocusOutcome(success_level=success_level, steps=steps, applied_severity=0)
+        return FocusOutcome(
+            success_level=success_level, steps=steps, applied_severity=0, lines=tuple(lines)
+        )
 
     condition = cfg.conflict_condition
     existing = get_condition_instance(character, condition)
@@ -279,8 +280,12 @@ def check_resonance_focus(
             severity=applied,
             source_technique=technique,
         )
-    character.msg(f"You lose your focus as you work {technique.name}: {condition.name}.")
-    return FocusOutcome(success_level=success_level, steps=steps, applied_severity=applied)
+    lost_line = f"You lose your focus as you work {technique.name}: {condition.name}."
+    lines.append(lost_line)
+    character.msg(lost_line)
+    return FocusOutcome(
+        success_level=success_level, steps=steps, applied_severity=applied, lines=tuple(lines)
+    )
 
 
 def get_drift_correction_config() -> DriftCorrectionConfig:

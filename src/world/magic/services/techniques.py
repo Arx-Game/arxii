@@ -1635,7 +1635,7 @@ def _complete_technique_cast(  # noqa: PLR0913
     # resolve_fn gathers the cast's modifiers so a conflict it applies reaches this roll.
     from world.magic.services.drift import check_resonance_focus  # noqa: PLC0415
 
-    check_resonance_focus(character, technique)
+    focus_outcome = check_resonance_focus(character, technique)
     resolution_result, price_payment = _resolve_and_settle_price(
         character=character,
         technique=technique,
@@ -1703,6 +1703,7 @@ def _complete_technique_cast(  # noqa: PLR0913
         price_paid=price_payment.price if price_payment is not None else None,
         runtime_intensity=stats.intensity,
         substance_call_up=substance_call_up,
+        focus=focus_outcome,
     )
     from world.magic.audere import maybe_create_audere_offer  # noqa: PLC0415
 

@@ -822,6 +822,17 @@ class TechniqueResultSerializer(serializers.Serializer):
     mishap_label = serializers.SerializerMethodField()
     # #5018: what calling up her gift's substance took on this cast, if anything.
     substance_call_up = serializers.SerializerMethodField()
+    # #5123: the sentences an unsettled caster is told about her focus on this cast, the
+    # same ones telnet prints (empty when she was settled).
+    focus_lines = serializers.SerializerMethodField()
+
+    @extend_schema_field(serializers.ListField(child=serializers.CharField()))
+    def get_focus_lines(self, obj: object) -> list[str]:
+        from world.magic.types import TechniqueUseResult  # noqa: PLC0415
+
+        if not isinstance(obj, TechniqueUseResult) or obj.focus is None:
+            return []
+        return list(obj.focus.lines)
 
     @extend_schema_field(SubstanceCallUpSerializer(allow_null=True))
     def get_substance_call_up(self, obj: object) -> dict | None:

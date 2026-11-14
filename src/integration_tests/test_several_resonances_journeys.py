@@ -72,8 +72,10 @@ from world.magic.services.drift import get_drift_config
 from world.magic.services.resonance import grant_resonance
 from world.magic.specialization.services import provision_latent_gift_thread
 from world.scenes.factories import SceneFactory
+from world.scenes.models import Scene
 from world.scenes.tests.cast_test_helpers import grant_technique, make_benign_castable_technique
 from world.traits.factories import CheckSystemSetupFactory, TraitFactory
+from world.traits.models import CheckOutcome
 from world.vitals.models import CharacterVitals
 
 
@@ -753,6 +755,50 @@ class BecomingUnsettled(_Drifting):
             f"Your {self.abyssal_resonance.name} has grown strong enough to make you unsettled",
         )
         self.assertTold(self.ysmay, f"You lose your focus as you work Lantern Ward: {CONFLICT}.")
+
+    def web_cast_result(self, *, focus: str | None) -> dict:
+        """Ysmay casts through the scene's web cast endpoint; the response's ``result``."""
+        scene = Scene.objects.get(location_id=self.room.pk)
+        body = {
+            "scene": scene.pk,
+            "initiator_persona": self.sheet.primary_persona.pk,
+            "technique_id": self.technique.pk,
+        }
+        self.ysmay.resonances.invalidate()
+        client = self.api(self.account_of(self.ysmay))
+        if focus is None:
+            response = client.post(reverse("sceneactionrequest-cast"), body, format="json")
+        else:
+            with force_check_outcome(CheckOutcome.objects.get(name=focus)):
+                response = client.post(reverse("sceneactionrequest-cast"), body, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        return response.json()["result"]
+
+    def test_the_web_cast_result_carries_the_focus_lines_telnet_prints(self) -> None:
+        self.watch(self.ysmay)
+        intro = (
+            f"Your {self.abyssal_resonance.name} has grown strong enough to make you unsettled. "
+            "You must keep your focus."
+        )
+        lost = f"You lose your focus as you work Lantern Ward: {CONFLICT}."
+
+        result = self.web_cast_result(focus="Failure")
+
+        self.assertEqual(result["technique_result"]["focus_lines"], [intro, lost])
+        self.assertTold(self.ysmay, intro)
+        self.assertTold(self.ysmay, lost)
+
+    def test_a_kept_focus_still_tells_her_to_keep_it_and_a_settled_cast_says_nothing(self) -> None:
+        kept = self.web_cast_result(focus="Success")
+        self.assertEqual(len(kept["technique_result"]["focus_lines"]), 1)
+        self.assertIn("You must keep your focus.", kept["technique_result"]["focus_lines"][0])
+
+        client = self.api(self.account_of(self.ysmay))
+        accepted = client.post(f"{AURAS}{self.aura()['id']}/accept/")
+        self.assertEqual(accepted.status_code, status.HTTP_200_OK, accepted.content)
+
+        settled = self.web_cast_result(focus=None)
+        self.assertEqual(settled["technique_result"]["focus_lines"], [])
 
     def test_accepting_ends_the_check(self) -> None:
         client = self.api(self.account_of(self.ysmay))

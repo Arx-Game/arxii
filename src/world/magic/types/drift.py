@@ -76,12 +76,15 @@ class FocusOutcome:
     """The result of one focus check against being unsettled.
 
     ``steps`` is the severity the check was rolled at; ``applied_severity`` is the
-    severity added to the conflict condition (0 when she kept her focus).
+    severity added to the conflict condition (0 when she kept her focus). ``lines`` are the
+    sentences the player is told, in order: telnet prints them as they happen and the web
+    cast result carries them, so the wording lives in one place.
     """
 
     success_level: int
     steps: int
     applied_severity: int
+    lines: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
