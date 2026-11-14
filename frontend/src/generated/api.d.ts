@@ -50012,6 +50012,11 @@ export interface components {
       narrative_snippet: string;
       inactive: boolean;
       inactive_reason: string | null;
+      /** @description The granted capability's name, or None for any other kind of effect. */
+      readonly capability_name: string | null;
+      capability_value: number | null;
+      /** @description The damage type a RESISTANCE mitigates, or None (all types, or not a resistance). */
+      readonly resistance_damage_type_name: string | null;
     };
     /** @description Serializer for Resonance records. */
     Resonance: {

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import type { PreviewedEffect } from '../types';
 import {
   defaultPayerId,
+  effectLabel,
+  effectValue,
   payerFor,
   pulledResonances,
   showsPayerChoice,
@@ -96,5 +99,58 @@ describe('showsPayerChoice and defaultPayerId (#5123)', () => {
     expect(defaultPayerId({ resonance: 10 }, options(false, true))).toBe(20);
     expect(defaultPayerId({ resonance: 10 }, options(false, false))).toBe(10);
     expect(defaultPayerId({ resonance: 10 }, [])).toBe(10);
+  });
+});
+
+describe('effectLabel and effectValue name the actual effect (#5123)', () => {
+  const effect = (overrides: Partial<PreviewedEffect>): PreviewedEffect => ({
+    kind: 'FLAT_BONUS',
+    authored_value: 4,
+    level_multiplier: 1,
+    scaled_value: 4,
+    vital_target: null,
+    source_thread_id: 1,
+    source_thread_level: 3,
+    source_tier: 1,
+    narrative_snippet: '',
+    inactive: false,
+    inactive_reason: null,
+    capability_name: null,
+    capability_value: null,
+    resistance_damage_type_name: null,
+    ...overrides,
+  });
+
+  it('reads a bonus with a sign', () => {
+    expect(effectLabel(effect({}))).toBe('Bonus to this cast');
+    expect(effectValue(effect({}))).toBe('+4');
+  });
+
+  it('names the capability a perk grants and shows its magnitude', () => {
+    const cowed = effect({
+      kind: 'CAPABILITY_GRANT',
+      authored_value: null,
+      scaled_value: null as unknown as number,
+      capability_name: 'Cowed',
+      capability_value: 2,
+    });
+    expect(effectLabel(cowed)).toBe('Grants Cowed');
+    expect(effectValue(cowed)).toBe('2');
+  });
+
+  it('names the damage type a resistance mitigates, or all damage', () => {
+    expect(effectLabel(effect({ kind: 'RESISTANCE', resistance_damage_type_name: 'Fire' }))).toBe(
+      'Resistance to Fire'
+    );
+    expect(effectLabel(effect({ kind: 'RESISTANCE' }))).toBe('Resistance to all damage');
+  });
+
+  it('gives a perk with no number an empty value, never the word null', () => {
+    expect(
+      effectValue(effect({ kind: 'NARRATIVE_ONLY', scaled_value: null as unknown as number }))
+    ).toBe('');
+    expect(
+      effectValue(effect({ kind: 'VITAL_BONUS', scaled_value: null as unknown as number }))
+    ).toBe('');
   });
 });

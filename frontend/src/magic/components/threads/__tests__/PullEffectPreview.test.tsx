@@ -179,6 +179,9 @@ describe('PullEffectPreview', () => {
             narrative_snippet: 'A flat bonus.',
             inactive: false,
             inactive_reason: null,
+            capability_name: null,
+            capability_value: null,
+            resistance_damage_type_name: null,
           },
         ],
       })
@@ -211,6 +214,9 @@ describe('PullEffectPreview', () => {
             narrative_snippet: '',
             inactive: true,
             inactive_reason: 'Requires higher tier',
+            capability_name: null,
+            capability_value: null,
+            resistance_damage_type_name: null,
           },
         ],
       })

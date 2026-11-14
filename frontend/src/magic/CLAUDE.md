@@ -418,15 +418,18 @@ there is no choice to show and nothing is sent.
 
 The pull's "Pay with" choice, for one pulled thread, drawn from `per_thread` in the pull
 preview. `PayerOptions` lists each payer with `cost` Name `· you have` balance and its own
-perk rows (label, value, flavor snippet), starting on the thread's leading resonance; a
-payer that cannot afford the cost cannot be picked, and one the thread never took in reads
-"No perks on this thread". A thread holding one resonance (`thread.resonances.length <= 1`)
-shows "Pays with X" and its perks with no radio. `ThreadMakeup` is the "Level 3 · mostly Fury,
-some Domination" line. "Inspect perks" opens `PerkInspect`: per perk the amount, how it was
+perk rows (label, value, flavor snippet), starting on the thread's leading resonance (or
+the first that can pay when the leader cannot, reported through `onSelect` so the cast sends
+it); a payer that cannot afford the cost cannot be picked, and one the thread never took in
+reads "No perks on this thread". A thread holding one resonance shows "Pays with X" and its
+perks with no radio, unless its own resonance cannot pay: `showsPayerChoice` (`burn.ts`) is
+true for several rows or an unaffordable own resonance, and the picker's tier strip uses the
+same rule. `ThreadMakeup` is the "Level 3 · mostly Fury,
+some Domination" line (just "Level 3" for one resonance). "Inspect perks" opens `PerkInspect`: per perk the amount, how it was
 worked out (authored value x level multiplier), its source ("{Resonance} pull perk for {kind}
 threads, tier N") and "Thread level used" (`level_read`, with a note when the payer is not the
 leading resonance). Perk labels and values come from `effectLabel` / `effectValue` in
-`burn.ts`. Mounted in `ThreadPullPicker` rows (the cast flow) and `ThreadPullDialog`
+`burn.ts`; a capability perk reads "Grants {capability_name}" with its `capability_value`, a resistance "Resistance to {damage type}" (the preview effect carries `capability_name`, `capability_value`, `resistance_damage_type_name`; no perk has an authored duration). Mounted in `ThreadPullPicker` rows (the cast flow) and `ThreadPullDialog`
 (combat declarations).
 
 ### `components/threads/ThreadPullPicker.tsx` and `ThreadPullDialog.tsx`

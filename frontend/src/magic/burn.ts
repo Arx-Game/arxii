@@ -169,17 +169,36 @@ export function perkWords(raw: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
-/** The label a perk row carries: what it does, in play words. */
+/**
+ * The label a perk row carries: what it does, in play words. A capability perk names the
+ * capability it grants and a resistance names the damage type, so the row says the actual
+ * effect.
+ */
 export function effectLabel(effect: PreviewedEffect): string {
+  if (effect.kind === 'CAPABILITY_GRANT') {
+    return effect.capability_name ? `Grants ${effect.capability_name}` : 'Grants a capability';
+  }
+  if (effect.kind === 'RESISTANCE') {
+    return `Resistance to ${effect.resistance_damage_type_name ?? 'all damage'}`;
+  }
   const base = EFFECT_LABELS[effect.kind] ?? perkWords(effect.kind);
   return effect.vital_target ? `${base}: ${perkWords(effect.vital_target)}` : base;
 }
 
-/** The value a perk row carries; a flavor-only perk has none. */
+/**
+ * The value a perk row carries. A capability perk carries its curved magnitude; a perk
+ * with no number (flavor only) has none.
+ */
 export function effectValue(effect: PreviewedEffect): string {
   if (effect.kind === 'NARRATIVE_ONLY') return '';
+  if (effect.kind === 'CAPABILITY_GRANT') {
+    return effect.capability_value === null ? '' : `${effect.capability_value}`;
+  }
+  // A perk with no number reaches the wire as null, whatever the type says.
+  const value = effect.scaled_value as number | null;
+  if (value === null) return '';
   const signed = effect.kind === 'FLAT_BONUS' || effect.kind === 'INTENSITY_BUMP';
-  return signed && effect.scaled_value > 0 ? `+${effect.scaled_value}` : `${effect.scaled_value}`;
+  return signed && value > 0 ? `+${value}` : `${value}`;
 }
 
 /**

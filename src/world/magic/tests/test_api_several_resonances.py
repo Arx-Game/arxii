@@ -212,6 +212,39 @@ class PreviewPayloadTests(_CharacterWithResonances):
         )
         self.assertIn("level_read", options["Fury"])
 
+    def test_preview_perk_names_the_capability_it_grants(self) -> None:
+        """A capability perk row carries the capability's name and its magnitude."""
+        trait = TraitFactory()
+        thread = ThreadFactory(owner=self.sheet, resonance=self.fury, target_trait=trait, level=20)
+        ThreadResonanceFactory(thread=thread, resonance=self.fury, amount=10)
+        self.character.threads.invalidate()
+        ThreadPullCostFactory(tier=1, resonance_cost=3, anima_per_thread=2)
+        CharacterAnimaFactory(character=self.sheet, current=10, maximum=10)
+        self._hold(self.fury, balance=10, lifetime=10)
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.TRAIT,
+            resonance=self.fury,
+            tier=1,
+            as_capability_grant=True,
+            capability_grant__name="Cowed",
+            capability_grant_value=2,
+        )
+
+        response = self.client.post(
+            reverse("magic:thread-pull-preview"),
+            {"character_sheet_id": self.sheet.pk, "tier": 1, "thread_ids": [thread.pk]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        (pulled,) = response.data["per_thread"]
+        (fury,) = [row for row in pulled["options"] if row["resonance_name"] == "Fury"]
+        (perk,) = fury["effects"]
+        self.assertEqual(perk["kind"], "CAPABILITY_GRANT")
+        self.assertEqual(perk["capability_name"], "Cowed")
+        self.assertIsNotNone(perk["capability_value"])
+        self.assertIsNone(perk["resistance_damage_type_name"])
+
 
 class ImbuePayerTests(_CharacterWithResonances):
     def _imbue(self, **kwargs):

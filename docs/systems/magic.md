@@ -4518,7 +4518,9 @@ blank when settled), `mire_share_words` (`share_in_words`, `services/drift.py`, 
 sheet's `shareInWords` uses) and a `settled_percent` on each share. A thread's payload lists
 every `ThreadResonance` row as `resonances` (`resonance_id`, `resonance_name`, `amount`,
 `leads`), leading first, beside the leading `resonance`. The pull preview's `per_thread` keeps
-each payer's effects apart. A Rite of Imbuing POST's `kwargs.resonance_id` must be a
+each payer's effects apart, and a resolved effect names what it grants: `capability_name` and
+`capability_value` for a capability perk, `resistance_damage_type_name` for a resistance (null
+otherwise). A Rite of Imbuing POST's `kwargs.resonance_id` must be a
 resonance the character holds (`RitualPerformRequestSerializer`), and a character creation
 draft's `draft_data["gift_resonance_weights"]` is checked with the stage's own
 `resonance_weights_error`, allowing a spread still short of the creation points. `_move_partial` (`conversion.py`, the Rite of Atonement's penance path, no longer

@@ -1760,10 +1760,24 @@ class ResolvedPullEffectSerializer(serializers.Serializer):
     narrative_snippet = serializers.CharField()
     inactive = serializers.BooleanField()
     inactive_reason = serializers.CharField(allow_null=True)
+    # #5123: the perk row names what it grants. A CAPABILITY_GRANT carries the capability's
+    # name and its curved magnitude; a RESISTANCE names the damage type (null = all types).
+    capability_name = serializers.SerializerMethodField()
+    capability_value = serializers.IntegerField(source="capability_grant_value", allow_null=True)
+    resistance_damage_type_name = serializers.SerializerMethodField()
 
     def get_source_thread_id(self, obj) -> int:
         """Expose the source thread's PK (the dataclass carries the Thread instance)."""
         return obj.source_thread.pk
+
+    def get_capability_name(self, obj) -> str | None:
+        """The granted capability's name, or None for any other kind of effect."""
+        return obj.granted_capability.name if obj.granted_capability is not None else None
+
+    def get_resistance_damage_type_name(self, obj) -> str | None:
+        """The damage type a RESISTANCE mitigates, or None (all types, or not a resistance)."""
+        damage_type = obj.resistance_damage_type
+        return damage_type.name if damage_type is not None else None
 
 
 class BurnPreviewSerializer(serializers.Serializer):

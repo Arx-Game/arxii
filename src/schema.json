@@ -88961,13 +88961,31 @@ components:
         inactive_reason:
           type: string
           nullable: true
+        capability_name:
+          type: string
+          nullable: true
+          description: The granted capability's name, or None for any other kind of
+            effect.
+          readOnly: true
+        capability_value:
+          type: integer
+          nullable: true
+        resistance_damage_type_name:
+          type: string
+          nullable: true
+          description: The damage type a RESISTANCE mitigates, or None (all types,
+            or not a resistance).
+          readOnly: true
       required:
       - authored_value
+      - capability_name
+      - capability_value
       - inactive
       - inactive_reason
       - kind
       - level_multiplier
       - narrative_snippet
+      - resistance_damage_type_name
       - scaled_value
       - source_thread_id
       - source_thread_level

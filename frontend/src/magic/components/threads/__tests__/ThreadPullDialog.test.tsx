@@ -216,6 +216,9 @@ describe('ThreadPullDialog', () => {
       narrative_snippet: '',
       inactive: false,
       inactive_reason: null,
+      capability_name: null,
+      capability_value: null,
+      resistance_damage_type_name: null,
     });
     const option = (
       id: number,

@@ -28,6 +28,9 @@ const effect: PayerOption['effects'][number] = {
   narrative_snippet: 'The fire bends toward whoever you mean to break.',
   inactive: false,
   inactive_reason: null,
+  capability_name: null,
+  capability_value: null,
+  resistance_damage_type_name: null,
 };
 
 const option = (id: number, name: string, levelRead: number, effects = [effect]): PayerOption => ({
@@ -92,5 +95,27 @@ describe('PerkInspect', () => {
       />
     );
     expect(screen.getByTestId('perk-inspect-0')).toHaveTextContent('Not in a sanctum.');
+  });
+  it('names the capability a perk grants instead of a generic label', () => {
+    const cowed = {
+      ...effect,
+      kind: 'CAPABILITY_GRANT',
+      authored_value: null,
+      scaled_value: null as unknown as number,
+      capability_name: 'Cowed',
+      capability_value: 2,
+    };
+    render(
+      <PerkInspect
+        thread={thread}
+        option={option(2, 'Domination', 20, [cowed])}
+        open
+        onOpenChange={vi.fn()}
+      />
+    );
+    const panel = screen.getByTestId('perk-inspect-0');
+    expect(panel).toHaveTextContent('Grants Cowed');
+    expect(panel).toHaveTextContent('Amount2');
+    expect(panel).not.toHaveTextContent('Grants a capability');
   });
 });
