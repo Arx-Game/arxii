@@ -316,9 +316,10 @@ part builds on the last; that is one PR.
 
 **Before posting the spec, and before any issue body you file, dispatch the
 `plain-prose-reviewer` agent (Haiku, `tools/agents/`) on the text** and fix every
-finding. It catches the phrasing that makes the owner read a sentence twice: an
-idea made the actor of a verb, and a trailing clause that points at a rule the
-text never states. Skip it in a Fable-family session, which does not have these
+finding. It catches phrasing that makes the owner read a sentence twice: an idea
+as the subject of a verb, a trailing clause whose meaning the text never states,
+short phrases that pack a whole clause, and invented labels such as "Ruling 1" or
+"Slice A3" (it lists labels as smells, which you may keep). Skip it in a Fable-family session, which does not have these
 habits, and in any subagent, because the owner does not read subagent output.
 Record ran or skipped in the PR Notes.
 

@@ -21,6 +21,14 @@ skips it, and so does any subagent, because the owner does not read subagent
 output. Issue bodies, specs and demos get the same review (see
 `issue-to-merged-pr` Step 2 and `demoing-a-feature`).
 
+**Write rules and claims as full sentences, and name things in words.** A heading,
+bullet or table cell that states a rule or a claim is a full sentence in which a
+person or thing does something. Do not use a clipped phrase that packs a clause,
+such as "a rule hinted at instead of stated", which leaves the reader to rebuild
+the missing subject and verb. Do not coin a label or code ("Ruling 1", "Slice A3")
+and then use it as shorthand: say what the thing is, or define the label where it
+is first used. Names, numbers and issue or PR numbers stay short.
+
 ## Tool & Subagent Sequencing
 
 **Repo-mutating operations (`git`, `rm`, `Edit`, `Write`, and implementer
