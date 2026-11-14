@@ -3095,7 +3095,7 @@ class CastOutcomeLevelShiftAdmin(admin.ModelAdmin):
 
 @admin.register(DriftConfig)
 class DriftConfigAdmin(admin.ModelAdmin):
-    """Singleton tuning config for carried drift and the focus contest (#4732)."""
+    """Singleton tuning config for being unsettled and the focus contest (#4732)."""
 
     autocomplete_fields = ["focus_check_type", "conflict_condition", "updated_by"]
 

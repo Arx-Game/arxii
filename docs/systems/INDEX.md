@@ -141,12 +141,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   (`world/forms/services`): a self chosen in the Audere reveal is assumed on the choice's
   commit and reverted from `end_audere` and encounter cleanup; `working_affinities(sheet, resonances)` makes a cast
   work in the worn self's affinity. See magic.md.
-- **Drift and Resonance Conflict (#4732):** `DriftConfig` (singleton, `get_drift_config()`),
-  `AffinityInteraction.conflict_weight`, `drift_for(sheet)`, and `check_resonance_focus` (once per
-  cast, inside `use_technique`'s `_complete_technique_cast`, so every cast path rolls it; the combat
-  round and clash name their committed pull through `use_technique(pulled_resonances=...)`, read
-  by `world/combat/pull_helpers.py` `round_pull_resonances`); the conflict condition is authored and
-  `ConditionCategory.self_shakeable` lets `breakfree`/`rally` reach it. See magic.md.
+- **Unsettled and Resonance Conflict (#4732, #5123):** `DriftConfig` (singleton, `get_drift_config()`),
+  `CharacterAuraShare.settled_percent`, `CharacterResonance.mire_lifetime`, `drift_for(sheet)` (the
+  unsettled reading on the true aura), and `check_resonance_focus` (once per cast, inside
+  `use_technique`'s `_complete_technique_cast`, so every cast path rolls it); the conflict
+  condition is authored and `ConditionCategory.self_shakeable` lets `breakfree`/`rally` reach it.
+  See magic.md.
 - **Audere control step and Soulfray anima-0 stage (#4740):**
   `AudereThreshold.control_per_stage_earlier` + `required_stage_order(threshold,
   runtime_control)` (`world/magic/audere.py`) let high control open the Audere offer at an

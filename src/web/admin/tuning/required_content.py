@@ -3824,8 +3824,8 @@ def _declarations() -> tuple[ContentDependency, ...]:
             tier=DependencyTier.REQUIRED,
             consumer="world/magic/services/drift.py check_resonance_focus()",
             consequence=(
-                "A character carrying drift toward an affinity other than her aura's "
-                "has no check to roll to keep her focus, so the contest cannot resolve."
+                "A character unsettled by an affinity other than her main one has no "
+                "check to roll to keep her focus, so the contest cannot resolve."
             ),
             probe=CustomProbe(fn=_probe_drift_focus_check_type),
             admin_model="DriftConfig",
@@ -3836,7 +3836,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             tier=DependencyTier.REQUIRED,
             consumer="world/magic/services/drift.py check_resonance_focus()",
             consequence=(
-                "A failed focus roll has no condition to apply, so carried drift "
+                "A failed focus roll has no condition to apply, so being unsettled "
                 "never costs the character anything."
             ),
             probe=CustomProbe(fn=_probe_drift_conflict_condition),

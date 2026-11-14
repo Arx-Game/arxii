@@ -1760,14 +1760,13 @@ ACTS with (cast alignment, place of power on arrival and during a cast, defileme
 attacker affinity); `working_affinities` puts a cast in the worn self's affinity. Fall, Soul
 Tether and the sheet display keep the true `CharacterAura`. See `docs/systems/magic.md`.
 
-**Drift and Resonance Conflict (#4732):** `services/drift.py` holds `drift_for(sheet)` (weighted
-off-aura balance against `acting_aura(sheet).dominant_affinity`, via
-`AffinityInteraction.conflict_weight`) and `check_resonance_focus(character, technique, *,
-pulled_resonances=())`, called once per cast from `_complete_technique_cast` inside
+**Unsettled and Resonance Conflict (#4732, #5123):** `services/drift.py` holds `drift_for(sheet)`
+(whether the character is unsettled: on the TRUE aura, each non-main affinity's own share of
+lifetime resonance against its `CharacterAuraShare.settled_percent` plus the tolerance, and a
+Sineater's `mire_lifetime` share against its allowance) and `check_resonance_focus(character,
+technique)`, called once per cast from `_complete_technique_cast` inside
 `use_technique` (after anima, before `resolve_fn` runs), so every cast path rolls it; a pull is
-part of its cast. The pulled resonances are the cast's own `cast_pull` threads', else the
-`use_technique(pulled_resonances=...)` the combat round resolver and clash pass from the round's
-committed pull; nothing else reads combat pulls. Scene casts, combat casts, clash
+part of its cast and adds no steps, only being unsettled calls for the roll. Scene casts, combat casts, clash
 contributions and standoffs gather modifiers inside `resolve_fn` (scene casts after the
 PRE_CAST triggers too), so the conflict counts on the same roll. Technique-enhanced social
 actions gather modifiers before `use_technique`, so the penalty counts from her next roll;

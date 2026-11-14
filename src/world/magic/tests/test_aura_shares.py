@@ -62,6 +62,10 @@ class AuraShareTests(TestCase):
             ],
         )
         assert sum(s.percent for s in aura.cached_shares) == Decimal("100.00")
+        # The factory settled the shares where they stood; this one no longer is.
+        unsettled = aura.shares.get(affinity=self.abyssal)
+        unsettled.settled_percent = Decimal(0)
+        unsettled.save()
         set_aura_shares(
             aura,
             [
@@ -71,6 +75,14 @@ class AuraShareTests(TestCase):
         )
         assert aura.percent_for(self.abyssal) == Decimal(0)
         assert aura.shares.count() == 2
+
+    def test_set_aura_shares_keeps_a_settled_row_at_zero(self):
+        aura = CharacterAuraFactory(character=self.sheet, celestial=0, primal=70, abyssal=30)
+        set_aura_shares(aura, [AffinityShare(affinity=self.primal, percent=Decimal(100))])
+        kept = aura.shares.get(affinity=self.abyssal)
+        assert kept.percent == Decimal(0)
+        assert kept.settled_percent == Decimal(30)
+        assert aura.percent_for(self.primal) == Decimal(100)
 
     def test_set_aura_shares_refuses_a_bad_total(self):
         aura = CharacterAuraFactory(character=self.sheet)

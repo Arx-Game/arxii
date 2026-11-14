@@ -41,7 +41,7 @@ class DriftReading:
 
 @dataclass(frozen=True)
 class FocusOutcome:
-    """The result of one focus check against carried drift.
+    """The result of one focus check against being unsettled.
 
     ``steps`` is the severity the check was rolled at; ``applied_severity`` is the
     severity added to the conflict condition (0 when she kept her focus).

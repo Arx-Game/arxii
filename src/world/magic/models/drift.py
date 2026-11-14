@@ -7,8 +7,8 @@ their aura back toward resonances they want to grow. A deed in a scene opens one
 that cap was measured from). Staff tune the rite through ``DriftCorrectionConfig`` and how
 much of the cap a roll converts through ``DriftCorrectionOutcomeShare``.
 
-Carried drift (#4732) is measured and contested through ``DriftConfig``: a character
-carrying drift past its threshold rolls to keep her focus when she works her magic.
+Being unsettled (#4732, #5123) is measured and contested through ``DriftConfig``: a
+character grown past who they are rolls to keep her focus when she works her magic.
 """
 
 from __future__ import annotations
