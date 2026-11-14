@@ -1535,6 +1535,37 @@ def _probe_soulfray_condition_set() -> ProbeResult:
     return ProbeResult(present=True)
 
 
+# The check a defender resists with and Poise is scoped to (``compute_resist_increment``).
+_COMPOSURE_CHECK_NAME = "Composure"
+
+
+def _probe_poise_target() -> ProbeResult:
+    """An active modifier target is scoped to the Composure check: Poise (#4720).
+
+    Found by its scope, never by name: the check seam reads a check's own scoped target
+    (the reverse of ``ModifierTarget.target_check_type``), so that is what makes a card's
+    poise count on a Composure roll and on a defender's resist. Staff author the row and
+    name it as they like ("Poise" on production). With no target scoped to Composure, or
+    an inactive one, nothing a card grants reaches either.
+    """
+    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+
+    target = ModifierTarget.objects.filter(target_check_type__name=_COMPOSURE_CHECK_NAME).first()
+    if target is None:
+        return ProbeResult(
+            present=False,
+            detail="No modifier target is scoped to the Composure check.",
+        )
+    if not target.is_active:
+        return ProbeResult(
+            present=False,
+            detail=(
+                f"The modifier target scoped to the Composure check ({target.name}) is inactive."
+            ),
+        )
+    return ProbeResult(present=True)
+
+
 def _drift_config():
     """The drift configuration row, or None when none exists (never creates one)."""
     from world.magic.models import DriftConfig  # noqa: PLC0415
@@ -3770,6 +3801,22 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_soulfray_condition_set),
             admin_model="SoulfrayConfig",
+        ),
+        ContentDependency(
+            key="poise-target-scoped-to-composure",
+            label="A modifier target scoped to the Composure check (Poise)",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/checks/services.py compute_resist_increment() and every Composure "
+                "roll (collect_check_modifiers)"
+            ),
+            consequence=(
+                "A card or item that grants poise has nothing to attach to, or attaches to "
+                "a target no Composure roll reads: its holder is no harder to sway and no "
+                "better at shaking off a condition."
+            ),
+            probe=CustomProbe(fn=_probe_poise_target),
+            admin_model="ModifierTarget",
         ),
         ContentDependency(
             key="drift-focus-check-type",

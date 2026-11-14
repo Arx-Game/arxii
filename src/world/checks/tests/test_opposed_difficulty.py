@@ -221,7 +221,11 @@ class OpposedDifficultyTests(TestCase):
         self.assertGreater(rich, bare)
 
     def test_resist_increment_is_exactly_rating_plus_effort(self):
-        """compute_resist_increment adds no term beyond the Composure rating + effort.
+        """compute_resist_increment adds no LEVEL term beyond the Composure rating + effort.
+
+        For a defender carrying no modifier on Composure rolls, which this one is; the
+        modifiers a defender does carry are pinned in ResistCountsComposureModifiersTests
+        (#4720).
 
         Pins the exact composition rather than restating the implementation: the
         active-half result must equal compute_check_rating(defender, Composure) plus
@@ -280,3 +284,178 @@ class OpposedDifficultyTests(TestCase):
         # LEVEL_POINTS_PER_LEVEL * 10 term stacked on top (as if level_override fed
         # an ADDED level_opposition-style term rather than substituting).
         self.assertNotEqual(overridden, own_level_three + LEVEL_POINTS_PER_LEVEL * 10)
+
+
+class ResistCountsComposureModifiersTests(TestCase):
+    """#4720: a defender resists with what they would bring to a Composure roll.
+
+    Before, ``compute_resist_increment`` was rating plus effort and nothing a
+    character carried on Composure rolls reached it: not Poise, not a condition.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.distinctions.factories import (
+            CharacterDistinctionFactory,
+            DistinctionEffectFactory,
+            DistinctionFactory,
+        )
+        from world.mechanics.factories import (
+            CharacterModifierFactory,
+            DistinctionModifierSourceFactory,
+            ModifierCategoryFactory,
+            ModifierTargetFactory,
+        )
+
+        Trait.flush_instance_cache()
+        PointConversionRange.objects.get_or_create(
+            trait_type=TraitType.STAT,
+            min_value=1,
+            defaults={"max_value": 100, "points_per_level": 1},
+        )
+        cls.composure = create_resistance_check_types()["Composure"]
+        willpower = StatTraitFactory(name="willpower")
+
+        def defender():
+            character = CharacterSheetFactory().character
+            CharacterTraitValue.objects.create(
+                character=character.sheet_data, trait=willpower, value=10
+            )
+            return character
+
+        cls.plain = defender()
+        cls.poised = defender()
+        cls.flustered = defender()
+        cls.once_only = defender()
+
+        # Poise: a roll_modifier target scoped to the Composure check, as the seed makes it.
+        cls.poise = ModifierTargetFactory(
+            name="poise",
+            category=ModifierCategoryFactory(name="roll_modifier"),
+            target_check_type=cls.composure,
+        )
+        good_breeding = DistinctionFactory(name="Good Breeding")
+        effect = DistinctionEffectFactory(
+            distinction=good_breeding, target=cls.poise, value_per_rank=7
+        )
+        CharacterModifierFactory(
+            character=cls.poised.sheet_data,
+            value=7,
+            target=cls.poise,
+            source=DistinctionModifierSourceFactory(
+                distinction_effect=effect,
+                character_distinction=CharacterDistinctionFactory(distinction=good_breeding),
+            ),
+        )
+
+        rattled = ConditionTemplateFactory(name="ResistTestFlustered")
+        ConditionCheckModifierFactory(
+            condition=rattled, check_type=cls.composure, modifier_value=-10
+        )
+        ConditionInstanceFactory(target=cls.flustered, condition=rattled)
+
+        from world.conditions.constants import DurationType
+
+        steeled = ConditionTemplateFactory(
+            name="ResistTestSteeled", default_duration_type=DurationType.UNTIL_USED
+        )
+        ConditionCheckModifierFactory(condition=steeled, check_type=cls.composure, modifier_value=6)
+        cls.steeled_instance = ConditionInstanceFactory(target=cls.once_only, condition=steeled)
+
+    def setUp(self):
+        Trait.flush_instance_cache()
+        CharacterTraitValue.flush_instance_cache()
+
+    def test_poise_raises_resist_by_its_value(self):
+        plain = compute_resist_increment(self.plain, "medium")
+        poised = compute_resist_increment(self.poised, "medium")
+        self.assertEqual(poised - plain, 7)
+
+    def test_a_condition_penalty_on_composure_lowers_resist_by_its_value(self):
+        plain = compute_resist_increment(self.plain, "medium")
+        flustered = compute_resist_increment(self.flustered, "medium")
+        self.assertEqual(plain - flustered, 10)
+
+    def test_resist_is_the_rating_plus_effort_plus_the_gathered_modifiers(self):
+        """The same sum a modifier-aware Composure roll adds, without the roll: capability
+        points ride the rating, so the gathered total is the one that leaves them out."""
+        from world.checks.services import collect_check_modifiers
+
+        for character in (self.plain, self.poised, self.flustered, self.once_only):
+            gathered = collect_check_modifiers(
+                character.sheet_data, self.composure, skip_fashion=True
+            ).extra_modifiers_total
+            rating = compute_check_rating(character, self.composure)
+            self.assertEqual(
+                compute_resist_increment(character, "medium"),
+                max(0, rating + EFFORT_CHECK_MODIFIER["medium"] + gathered),
+            )
+
+    def test_a_once_only_condition_counts_and_is_not_used_up(self):
+        """Grading a difficulty is not a roll: the condition is still there afterwards."""
+        from world.conditions.models import ConditionInstance
+
+        plain = compute_resist_increment(self.plain, "medium")
+        first = compute_resist_increment(self.once_only, "medium")
+        second = compute_resist_increment(self.once_only, "medium")
+        self.assertEqual(first - plain, 6)
+        self.assertEqual(second, first)
+        self.assertTrue(ConditionInstance.objects.filter(pk=self.steeled_instance.pk).exists())
+
+    def test_more_modifier_rows_cost_no_more_queries(self):
+        """The resist is graded once per target on every social check, so what it costs
+        must not grow with how much the target carries."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.distinctions.factories import (
+            CharacterDistinctionFactory,
+            DistinctionEffectFactory,
+            DistinctionFactory,
+        )
+        from world.mechanics.factories import (
+            CharacterModifierFactory,
+            DistinctionModifierSourceFactory,
+        )
+
+        def queries() -> int:
+            Trait.flush_instance_cache()
+            CharacterTraitValue.flush_instance_cache()
+            with CaptureQueriesContext(connection) as captured:
+                compute_resist_increment(self.poised, "medium")
+            return len(captured)
+
+        def another_poise_distinction(name: str) -> None:
+            distinction = DistinctionFactory(name=name)
+            effect = DistinctionEffectFactory(
+                distinction=distinction, target=self.poise, value_per_rank=2
+            )
+            CharacterModifierFactory(
+                character=self.poised.sheet_data,
+                value=2,
+                target=self.poise,
+                source=DistinctionModifierSourceFactory(
+                    distinction_effect=effect,
+                    character_distinction=CharacterDistinctionFactory(distinction=distinction),
+                ),
+            )
+
+        # Each count is taken warm, as a scene is: the first read after new rows refills
+        # what those rows invalidated, and is not the steady cost.
+        another_poise_distinction("Court Manners")
+        queries()
+        with_two = queries()
+        for name in ("Unflappable", "Stone Faced", "Iron Nerve", "Cool Head"):
+            another_poise_distinction(name)
+        queries()
+        self.assertEqual(queries(), with_two)
+
+    def test_a_defender_with_no_sheet_resists_by_rating_and_effort_alone(self):
+        from evennia_extensions.factories import CharacterFactory
+
+        bare = CharacterFactory(db_key="ResistTestNoSheet")
+        rating = compute_check_rating(bare, self.composure)
+        self.assertEqual(
+            compute_resist_increment(bare, "medium"),
+            max(0, rating + EFFORT_CHECK_MODIFIER["medium"]),
+        )

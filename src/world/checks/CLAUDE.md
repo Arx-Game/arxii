@@ -161,6 +161,12 @@ exclusive** — a call site uses one or the other, never both:
   before firing, deliberately, since it has the side effect of announcing perk firings
   and a difficulty computation must never announce anything) plus the effort-level
   modifier, clamped >= 0. Already contains the defender's level points internally.
+  Since #4720 (ADR-4720) it also adds every modifier the defender carries on a Composure
+  roll: `collect_check_modifiers(sheet, Composure, skip_fashion=True)` with no scene,
+  summed as `extra_modifiers_total`. A `poise` modifier raises the resist and a
+  condition's Composure penalty lowers it; nothing is spent or announced; a sheet-less
+  defender carries nothing; a staff roll modifier is not counted (it shifts dice, and
+  there is no roll here).
 - `level_opposition(check_type, *, level, character=None) -> int` — the PASSIVE half:
   `LEVEL_POINTS_PER_LEVEL * level` always, plus (when `character` is given) the acting
   check's aspects scored against the DEFENDER's Path. `character=None` (an ephemeral

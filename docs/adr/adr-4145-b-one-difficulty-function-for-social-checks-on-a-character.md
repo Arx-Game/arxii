@@ -5,3 +5,5 @@ Scene social actions, the combat social verbs (Demoralize, Taunt, Parley) and st
 > Status: accepted · Source: issue #4145 (umbrella #4121); verify against `src/world/checks/social_target.py`
 
 Call paths: the standoff verbs, combat's `_social_combat_difficulty`, and the two scene overrides in `scenes/action_services.py` (the scenes pass the defender's already-computed resist increment, so a PC's declared effort keeps its development award and fatigue where they are charged). Relationship-gated Allure (`perceiver_sheet`) is applied by scenes at check-modifier time and is not yet applied in combat or standoffs; that is a later slice, and scenes must not also pass `perceiver_sheet` or it would count twice.
+
+Amended by ADR-4720 (`adr-4720-a-defender-resists-with-what-they-would-roll.md`): the defender's resist also counts every modifier they carry on a Composure roll.
