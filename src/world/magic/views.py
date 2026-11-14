@@ -1399,12 +1399,14 @@ class RitualPerformView(APIView):
         resonance_id = kwargs.pop("resonance_id", None)
         resonance = thread.resonance
         if resonance_id is not None:
-            resonance = Resonance.objects.filter(pk=resonance_id).first()
-            if resonance is None:
-                return Response(
-                    {"detail": UnknownResonance(resonance_id).user_message},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            from world.magic.services.thread_resonance import (  # noqa: PLC0415
+                resolve_target_resonance,
+            )
+
+            try:
+                resonance = resolve_target_resonance(resonance_id)
+            except UnknownResonance as err:
+                return Response({"detail": err.user_message}, status=status.HTTP_400_BAD_REQUEST)
         kwargs["resonance"] = resonance
         return _validate_imbuing_amount(kwargs)
 

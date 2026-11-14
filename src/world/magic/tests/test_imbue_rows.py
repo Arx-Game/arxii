@@ -167,6 +167,20 @@ class ImbueRowsTests(TestCase):
         row = ThreadResonance.objects.get(thread=thread, resonance=self.domination)
         self.assertEqual(row.amount, 12)
 
+    def test_action_refuses_a_resonance_id_that_is_not_one(self) -> None:
+        thread = self._thread()
+        PendingRitualEffect.objects.get_or_create(
+            character=self.sheet, ritual=ImbuingRitualFactory()
+        )
+
+        for bad in ("abc", 0, 10**9):
+            result = ImbueAction().run(
+                actor=self.sheet.character, thread=thread, amount=1, resonance_id=bad
+            )
+            self.assertFalse(result.success)
+            self.assertEqual(result.message, f"No resonance with id {bad}.")
+        self.assertEqual(ThreadResonance.objects.get(thread=thread).amount, 0)
+
     def test_action_defaults_to_the_leading_resonance(self) -> None:
         thread = self._thread()
         PendingRitualEffect.objects.get_or_create(

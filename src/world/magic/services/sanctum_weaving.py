@@ -85,6 +85,7 @@ def weave_sanctum_thread(
         slot_kind=slot_kind,
     )
     write_resonance_rows(thread, [sanctum.resonance_type])
+    weaver.character.threads.invalidate()
     return thread
 
 

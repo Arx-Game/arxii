@@ -32,6 +32,7 @@ from world.magic.models import (
     CharacterResonance,
     Thread,
     ThreadLevelUnlock,
+    ThreadResonance,
 )
 from world.magic.models.crossing import CrossingChoice, PendingCrossingOffer
 
@@ -206,6 +207,7 @@ class AGiftThreadIsHeldByHerLevel(_ThreadCase):
             target_gift=GiftFactory(),
             level=19,
         )
+        ThreadResonance.objects.create(thread=thread, resonance=self.resonance)
         self.boundaries_paid(thread, 30)
 
         told = self.imbue(thread, imbue_cost(19, 25))
@@ -233,6 +235,7 @@ class AnOrganizationThreadTakesTheLowerCap(_ThreadCase):
             target_organization=org,
             level=level,
         )
+        ThreadResonance.objects.create(thread=thread, resonance=self.resonance)
         self.boundaries_paid(thread, 40)
         return thread
 

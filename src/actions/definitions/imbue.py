@@ -60,8 +60,11 @@ class ImbueAction(Action):
             ProtagonismLockedError,
             UnknownResonance,
         )
-        from world.magic.models import PendingRitualEffect, Resonance  # noqa: PLC0415
+        from world.magic.models import PendingRitualEffect  # noqa: PLC0415
         from world.magic.services.resonance import spend_resonance_for_imbuing  # noqa: PLC0415
+        from world.magic.services.thread_resonance import (  # noqa: PLC0415
+            resolve_target_resonance,
+        )
 
         sheet = actor.sheet_data
         thread = kwargs["thread"]
@@ -70,11 +73,10 @@ class ImbueAction(Action):
         resonance_id = kwargs.get("resonance_id")
         resonance = thread.resonance
         if resonance_id is not None:
-            resonance = Resonance.objects.filter(pk=resonance_id).first()
-            if resonance is None:
-                return ActionResult(
-                    success=False, message=UnknownResonance(resonance_id).user_message
-                )
+            try:
+                resonance = resolve_target_resonance(resonance_id)
+            except UnknownResonance as exc:
+                return ActionResult(success=False, message=exc.user_message)
 
         try:
             with transaction.atomic():
