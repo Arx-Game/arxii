@@ -15,6 +15,7 @@ vi.mock('@/magic/components/threads/ThreadPullDialog', () => ({
       tier: 1 | 2 | 3;
       thread_ids: number[];
       resonances: { id: number; name: string }[];
+      payers: Record<number, number>;
     }) => void;
   }) =>
     open ? (
@@ -31,10 +32,25 @@ vi.mock('@/magic/components/threads/ThreadPullDialog', () => ({
                 { id: 5, name: 'Veil' },
                 { id: 6, name: 'Ember' },
               ],
+              payers: {},
             })
           }
         >
           Simulate Select Pull
+        </button>
+        <button
+          type="button"
+          data-testid="simulate-pull-select-payer"
+          onClick={() =>
+            onSelect({
+              tier: 2,
+              thread_ids: [10, 11],
+              resonances: [{ id: 6, name: 'Ember' }],
+              payers: { 10: 6 },
+            })
+          }
+        >
+          Simulate Select Pull With Payer
         </button>
       </div>
     ) : null,
@@ -289,6 +305,17 @@ describe('RoundThreadPull', () => {
       kwargs: { pull_tier: 2, pull_thread_ids: [10, 11] },
     });
     await waitFor(() => expect(screen.queryByTestId('round-pull-btn')).not.toBeInTheDocument());
+  });
+
+  it('sends the resonance the player picked to pay a thread as pull_payers (#5123)', async () => {
+    const dispatch = vi.fn().mockResolvedValue({ success: true, message: 'You pull.' });
+    renderPull(dispatch);
+    await userEvent.click(screen.getByRole('button', { name: 'Pull threads for the round' }));
+    await userEvent.click(screen.getByTestId('simulate-pull-select-payer'));
+    expect(dispatch).toHaveBeenCalledWith({
+      ref: { backend: 'registry', registry_key: 'combat_pull' },
+      kwargs: { pull_tier: 2, pull_thread_ids: [10, 11], pull_payers: { 10: 6 } },
+    });
   });
 
   it('keeps the button when the pull is refused', async () => {
