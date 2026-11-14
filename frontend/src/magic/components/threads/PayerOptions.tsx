@@ -50,18 +50,24 @@ function PerkRows({ thread, option }: { thread: Thread; option: PayerOption }) {
   }
   return (
     <ul
-      className="space-y-0.5 text-xs"
+      className="grid gap-1 text-xs"
       data-testid={`payer-perks-${thread.id}-${option.resonance_id}`}
     >
       {option.effects.map((effect, index) => (
         <li
           key={`${effect.kind}-${index}`}
-          className={cn('flex flex-wrap items-baseline gap-x-2', effect.inactive && 'opacity-50')}
+          data-testid="payer-perk-row"
+          className={cn(
+            'grid grid-cols-[1fr_auto] gap-x-2 rounded bg-muted px-2 py-1',
+            effect.inactive && 'opacity-50'
+          )}
         >
           <span>{effectLabel(effect)}</span>
-          <span className="font-medium tabular-nums">{effectValue(effect)}</span>
+          <span className="text-right font-semibold tabular-nums">{effectValue(effect)}</span>
           {effect.narrative_snippet && (
-            <span className="italic text-muted-foreground">{effect.narrative_snippet}</span>
+            <span className="col-span-2 italic text-muted-foreground">
+              {effect.narrative_snippet}
+            </span>
           )}
         </li>
       ))}

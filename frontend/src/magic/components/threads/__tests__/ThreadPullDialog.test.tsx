@@ -72,6 +72,20 @@ const mockThreads = {
       level: 4,
     },
     {
+      id: 10,
+      name: 'Pyromancy',
+      target_kind: 'GIFT',
+      resonance: 7,
+      resonance_name: 'Flamevein',
+      resonances: [
+        { resonance_id: 7, resonance_name: 'Flamevein', amount: 30, leads: true },
+        { resonance_id: 9, resonance_name: 'Tidecall', amount: 10, leads: false },
+      ],
+      owner: 12,
+      retired_at: null,
+      level: 3,
+    },
+    {
       id: 8,
       name: 'Pyre Bond',
       target_kind: 'FACET',
@@ -153,6 +167,13 @@ describe('ThreadPullDialog', () => {
     render(<ThreadPullDialog {...defaultProps} />);
     expect(screen.getByTestId('thread-checkbox-1')).toBeInTheDocument();
     expect(screen.queryByTestId('thread-checkbox-2')).not.toBeInTheDocument();
+  });
+
+  it('offers a Gift thread, the one thread every mixed character starts with (#5123)', () => {
+    // The server always counts a Gift thread in action for a cast; only a social pull
+    // excludes it (`exclude_gift`, #1919), and this combat dialog is not one.
+    render(<ThreadPullDialog {...defaultProps} />);
+    expect(screen.getByTestId('thread-checkbox-10')).toHaveTextContent('Pyromancy');
   });
 
   it('in combat, offers a technique thread only when its technique is involved (#5066)', () => {

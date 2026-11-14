@@ -472,7 +472,7 @@ tier 1, where the row reads "Pays with Leader" and nothing is sent. The picker t
 (a thread without one is paid by its leading resonance). The tier strip stays open while ANY
 held resonance can pay. The dialog does the same with its own state, sends the named payers
 to the preview and returns them on `PullSelection.payers` beside `resonances` (the distinct
-payers, which a mixed pull's burn picks from). The dialog offers a thread while any held
+payers, which a mixed pull's burn picks from). The dialog offers Gift threads (its always-in-action kinds mirror the server's; only a social pull excludes a Gift thread, via `exclude_gift`, #1919, which the dialog never sends) and a thread while any held
 resonance has a balance, and its cost line reads "3 Fury, 3 Domination" from the named
 payers, not a flat total.
 In combat, `combat/dodging.ts` (`roundPullRequest`) and `combat/sections/YourTurn.tsx` forward

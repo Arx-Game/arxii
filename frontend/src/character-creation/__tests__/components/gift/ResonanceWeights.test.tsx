@@ -109,6 +109,13 @@ describe('ResonanceWeights', () => {
     expect(screen.queryByText('Your aura')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'More Fury' }));
     expect(screen.getByText('Your aura')).toBeInTheDocument();
+    // The label sits above the sentence, as in the approved demo.
+    expect(
+      screen
+        .getByText('Your aura')
+        .compareDocumentPosition(screen.getByTestId('aura-halo-sentence')) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
     expect(screen.getByTestId('aura-halo-sentence')).toHaveTextContent('All of it primal.');
     await userEvent.click(screen.getByRole('button', { name: 'More Domination' }));
     expect(screen.getByTestId('aura-halo-sentence')).toHaveTextContent(

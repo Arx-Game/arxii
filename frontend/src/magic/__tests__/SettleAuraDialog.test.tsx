@@ -630,12 +630,31 @@ describe('SettleAuraDialog - the approved Screen 4 box', () => {
     );
   });
 
-  it('holds Begin the rite in a right-aligned row inside the Atone exit, and Not now below', async () => {
+  it('opens the Atone exit with the rite and what it turns, as one line', async () => {
+    renderGate([OFFER]);
+
+    await screen.findByRole('dialog');
+    const opening = screen.getByTestId('settle-atone-line');
+    expect(opening).toHaveTextContent(
+      /^Perform the rite of atonement\. The Ruin and Spite you gained turns to Dawnlight\.$/
+    );
+    expect(opening).toContainElement(screen.getByTestId('drift-system-line-20'));
+    // The line leads the card; it is not squeezed into the cap block beside the cap.
+    expect(screen.getByTestId('drift-cap-20')).not.toContainElement(
+      screen.getByTestId('drift-system-line-20')
+    );
+  });
+
+  it('holds Begin the rite in a left-aligned outline row inside the Atone exit, and Not now below', async () => {
     renderGate([OFFER]);
 
     const dialog = await screen.findByRole('dialog');
     const row = screen.getByTestId('drift-actions-20');
-    expect(row).toHaveClass('justify-end');
+    expect(row).toHaveClass('justify-start');
+    expect(row).not.toHaveClass('justify-end');
+    // An outline button in the sheet's rust, as in the demo, not a solid one.
+    expect(screen.getByTestId('drift-perform-20')).toHaveClass('border-primary', 'text-primary');
+    expect(screen.getByTestId('drift-perform-20')).not.toHaveClass('bg-primary');
     expect(screen.getByTestId('settle-exit-atone')).toContainElement(row);
     const buttons = Array.from(row.querySelectorAll('button')).map((b) => b.textContent);
     expect(buttons).toEqual(['Begin the rite']);
@@ -708,6 +727,47 @@ describe('SettleAuraDialog - Atone and Accept exits (#5123)', () => {
     expect(await screen.findByTestId('settle-exit-accept')).toBeInTheDocument();
     expect(screen.queryByTestId('settle-exit-atone')).not.toBeInTheDocument();
     expect(screen.queryByText('Atone')).not.toBeInTheDocument();
+  });
+
+  it('gives a lone Accept exit the dialog width, not half a two-column grid', async () => {
+    const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    render(
+      <SettleAuraDialog
+        aura={UNSETTLED_AURA}
+        offer={null}
+        resultLine={null}
+        onResult={vi.fn()}
+        open
+        onOpenChange={vi.fn()}
+        onClose={vi.fn()}
+      />,
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        ),
+      }
+    );
+
+    const exits = await screen.findByTestId('settle-exits');
+    expect(exits).not.toHaveClass('sm:grid-cols-2');
+    expect(exits).toContainElement(screen.getByTestId('settle-exit-accept'));
+  });
+
+  it('puts the two exits side by side only when both show', async () => {
+    renderGate([OFFER], 101, [UNSETTLED_AURA]);
+
+    await screen.findByTestId('settle-exit-accept');
+    expect(screen.getByTestId('settle-exits')).toHaveClass('sm:grid-cols-2');
+  });
+
+  it('draws Accept solid and Not now outlined, both in the sheet rust', async () => {
+    renderGate([OFFER], 101, [UNSETTLED_AURA]);
+
+    const accept = await screen.findByTestId('settle-accept-button');
+    expect(accept).toHaveClass('bg-primary');
+    expect(screen.getByTestId('settle-not-now')).toHaveClass('border-primary', 'text-primary');
+    // `.aura-settle-dialog` carries the rust fallback the portal would otherwise miss.
+    expect(screen.getByRole('dialog')).toHaveClass('aura-settle-dialog');
   });
 
   it('Accept posts to the aura accept endpoint and shows the server line', async () => {

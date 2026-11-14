@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { SpellbookTab } from './SpellbookTab';
+import { shareInWords } from '@/magic/aura';
 import type {
   CharacterSheetPayload,
   CharacterSheetMagic,
@@ -383,7 +384,12 @@ describe('SpellbookTab', () => {
     mockOwnAuras([makeOwnAura()]);
     renderWithProviders(<SpellbookTab characterId={1} isMyCharacter />);
 
-    expect(screen.getByTestId('aura-halo-ring')).toBeInTheDocument();
+    // One thin neutral dashed ring, not an arc per settled affinity in its own colour.
+    const ring = screen.getByTestId('aura-halo-ring');
+    expect(ring).toBeInTheDocument();
+    expect(ring.childElementCount).toBe(0);
+    expect(ring.querySelector('svg, circle')).toBeNull();
+    expect(ring).not.toHaveAttribute('style');
     expect(screen.queryByTestId('aura-halo-status')).not.toBeInTheDocument();
     expect(screen.queryByTestId('settle-aura-button')).not.toBeInTheDocument();
   });
@@ -427,8 +433,61 @@ describe('SpellbookTab', () => {
     const key = screen.getByTestId('aura-halo-mire-key');
     expect(key).toHaveTextContent('your own');
     expect(key).toHaveTextContent('from the Mire');
-    expect(screen.getByTestId('aura-halo-sentence')).toHaveTextContent(
-      'A third of what you have gained came from the Mire.'
+    // The sentence reads every share against the whole the halo draws, Mire included:
+    // 56 of 100 is half, not "nearly all", and the own Abyssal is a tenth, not a fifth.
+    const sentence = screen.getByTestId('aura-halo-sentence');
+    expect(sentence).toHaveTextContent(/^Half celestial, a tenth abyssal\./);
+    // The Mire's part is said apart, as its own sentence after the character's.
+    expect(screen.getByTestId('aura-halo-mire-line')).toHaveTextContent(
+      /^A third of what you have gained came from the Mire\.$/
+    );
+    expect(sentence).toContainElement(screen.getByTestId('aura-halo-mire-line'));
+  });
+
+  it('says a Sineater share in the same words the halo draws it (#5123)', () => {
+    // Celestial 56, Abyssal 44, a third of everything from the Mire: the halo draws the
+    // celestial stretch as 56% of the whole, so the first word is shareInWords(56, 100).
+    mockPayload(
+      makeMagic({
+        aura: makeAura({
+          shares: [
+            { affinity_id: 1, affinity_name: 'Celestial', percent: 56 },
+            { affinity_id: 3, affinity_name: 'Abyssal', percent: 44 },
+          ],
+          dominant_affinity: 'Celestial',
+        }),
+      })
+    );
+    mockOwnAuras([makeOwnAura({ mire_share_words: 'a third' })]);
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter />);
+
+    const lead = shareInWords(56, 100);
+    expect(lead).toBe('half');
+    expect(screen.getByTestId('aura-halo-sentence').textContent?.toLowerCase()).toMatch(
+      new RegExp(`^${lead} celestial`)
+    );
+  });
+
+  it('sets the sentence in italics and the ring as one neutral dashed line (#5123)', () => {
+    const css = readFileSync(
+      path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        '..',
+        '..',
+        'character_sheets',
+        'sheet.css'
+      ),
+      'utf8'
+    );
+    const rule = (selector: string) =>
+      css.match(new RegExp(`${selector.replace('.', '\\.')} \\{([^}]*)\\}`))?.[1] ?? '';
+    expect(rule('.aura-halo-sentence')).toContain('font-style: italic');
+    expect(rule('.aura-halo-ring')).toContain('1.5px dashed hsl(var(--muted-foreground))');
+    // The old ring took each settled affinity's own colour from the aura tokens.
+    expect(rule('.aura-halo-ring')).not.toContain('--aura-');
+    // The Settle dialog portals out of .refsheet, so it carries the sheet's rust itself.
+    expect(css).toMatch(
+      /:root:not\(\[data-realm\]\) \.aura-settle-dialog \{\s*--primary: 10 60% 34%/
     );
   });
 

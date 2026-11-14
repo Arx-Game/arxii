@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { PayerOptions, ThreadMakeup } from '../PayerOptions';
 import type { PayerOption, Thread } from '../../../types';
@@ -85,6 +85,30 @@ describe('PayerOptions', () => {
     expect(screen.getByTestId('payer-perks-1-2')).not.toHaveTextContent('+4');
     // A held resonance the thread never took in pays with no perks.
     expect(screen.getByTestId('payer-no-perks-1')).toHaveTextContent('No perks on this thread');
+  });
+
+  it('draws each perk as a shaded bar with the value in its own right-hand cell', () => {
+    render(
+      <PayerOptions
+        thread={makeThread()}
+        options={OPTIONS}
+        selectedResonanceId={1}
+        onSelect={vi.fn()}
+      />
+    );
+    const rows = within(screen.getByTestId('payer-perks-1-1')).getAllByTestId('payer-perk-row');
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row).toHaveClass('bg-muted', 'grid');
+    }
+    // The label and the value are separate cells, so a column of values reads down.
+    const [label, value, snippet] = Array.from(rows[1].children);
+    expect(label).toHaveTextContent('Intensity');
+    expect(value).toHaveTextContent('+2');
+    expect(value).toHaveClass('text-right');
+    // The snippet is the second line inside the same bar.
+    expect(snippet).toHaveTextContent('The flames answer your anger before you call them.');
+    expect(snippet).toHaveClass('col-span-2', 'italic');
   });
 
   it('reports the payer picked', () => {

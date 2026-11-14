@@ -54,11 +54,16 @@ export interface PullSelection {
 // Constants
 // ---------------------------------------------------------------------------
 
+// Mirrors the server's always-in-action kinds (`_ALWAYS_IN_ACTION_KINDS`, resonance.py). A
+// Gift thread belongs here: it is intrinsic to the character and every mixed character
+// starts with one (#5123). The social-pull exclusion of Gift threads (#1919) is the
+// server's `exclude_gift`, which this combat dialog never sends.
 const ALWAYS_IN_ACTION_KINDS = new Set([
   'RELATIONSHIP_TRACK',
   'RELATIONSHIP_CAPSTONE',
   'FACET',
   'COVENANT_ROLE',
+  'GIFT',
 ]);
 
 // ---------------------------------------------------------------------------

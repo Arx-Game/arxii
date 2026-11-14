@@ -68,17 +68,20 @@ function phrase(words: string, name: string, leading: boolean): string {
 
 /**
  * The aura's split as one sentence, largest share first: "Mostly primal, a third
- * abyssal." Silent when the aura is unformed and every share is zero.
+ * abyssal." Silent when the aura is unformed and every share is zero. `whole` is what the
+ * shares are read against when it is more than their own sum (a halo that draws a Mire
+ * stretch beside the character's own shares), so the words agree with the drawing.
  */
-export function auraSentence(shares: AuraShareInput[]): string {
+export function auraSentence(shares: AuraShareInput[], whole?: number): string {
   const held = shares
     .filter((row) => row.percent > 0)
     .map((row) => ({ name: row.name.toLowerCase(), percent: row.percent }))
     .sort((a, b) => b.percent - a.percent);
   if (held.length === 0) return '';
-  if (held.length === 1) return `All of it ${held[0].name}.`;
+  const heldTotal = held.reduce((sum, row) => sum + row.percent, 0);
+  const total = Math.max(whole ?? heldTotal, heldTotal);
+  if (held.length === 1 && total <= heldTotal) return `All of it ${held[0].name}.`;
 
-  const total = held.reduce((sum, row) => sum + row.percent, 0);
   const parts = held.map((row, index) =>
     phrase(shareInWords(row.percent, total), row.name, index === 0)
   );

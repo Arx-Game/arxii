@@ -6,18 +6,22 @@
  * to two exits side by side:
  *
  * - Atone: the drift correction rite a deed in a live scene opens, shown only while an
- *   open offer exists (the gate's data). The cap remaining, a source picker when there is
- *   more than one source (one source is a plain chip), the amount, the component pills and
- *   the rate line all live in this exit; with more than one cap each cap gets its own
+ *   open offer exists (the gate's data). Its opening line is the rite and what it turns
+ *   ("Perform the rite of atonement. The Domination you gained turns to Fury."); the cap
+ *   remaining, a source picker when there is more than one source (one source is a plain
+ *   chip), the amount, the component pills, the rate line and the left-aligned Begin the
+ *   rite button all live in this exit; with more than one cap each cap gets its own
  *   section.
  * - Accept the changes to your Aura: no roll, the player's call, shown while the character
  *   is unsettled. Opened from the sheet outside a scene, this is the only exit.
  *
- * Each exit carries a small halo of what the aura will look like. Not now leaves the
- * character unsettled (and lets an open offer go).
+ * A lone exit takes the dialog's full width; two sit side by side. Each carries a small
+ * halo of what the aura will look like. Accept is solid and Not now an outline, both in the
+ * sheet's rust (`.aura-settle-dialog` in `sheet.css`, because the dialog portals out of
+ * `.refsheet`). Not now leaves the character unsettled (and lets an open offer go).
  */
 
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Flame } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle, NO_DESCRIPTION } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -72,6 +76,9 @@ function acceptLine(aura: CharacterAura): string {
   return affinity ? `You become more ${affinity}.` : 'You settle into who you have become.';
 }
 
+/** The demo's outline button: a rust border and rust words, on the sheet's `--primary`. */
+const RUST_OUTLINE = 'border-primary text-primary hover:bg-primary/10 hover:text-primary';
+
 const CHIP_CLASS = 'rounded-full border border-input px-3 py-1 text-sm text-muted-foreground';
 
 function sourceLabel(s: DriftSourceOption): string {
@@ -111,7 +118,6 @@ function CapBlock({ offerId, cap, notReadyMessage, onResult }: CapBlockProps) {
   const amountValid = Number.isInteger(amount) && amount >= 1 && amount <= maxAmount;
   const canPerform =
     notReadyMessage === null && source !== undefined && componentId !== null && amountValid;
-  const systemLine = driftSystemLine(cap);
 
   function pickSource(next: number) {
     convert.reset();
@@ -153,24 +159,15 @@ function CapBlock({ offerId, cap, notReadyMessage, onResult }: CapBlockProps) {
 
   return (
     <section className="space-y-3 py-3 first:pt-0 last:pb-0" data-testid={`drift-cap-${targetId}`}>
-      <div className="flex items-baseline justify-between gap-2">
-        {systemLine ? (
-          <p className="text-sm" data-testid={`drift-system-line-${targetId}`}>
-            {systemLine}
-          </p>
-        ) : (
-          <span />
-        )}
-        <span className="shrink-0 text-xs text-muted-foreground">
-          Cap remaining{' '}
-          <span
-            className="font-semibold text-foreground"
-            data-testid={`drift-cap-remaining-${targetId}`}
-          >
-            {cap.cap_remaining}
-          </span>
+      <p className="text-xs text-muted-foreground">
+        Cap remaining{' '}
+        <span
+          className="font-semibold text-foreground"
+          data-testid={`drift-cap-remaining-${targetId}`}
+        >
+          {cap.cap_remaining}
         </span>
-      </div>
+      </p>
 
       <div className="flex flex-wrap items-center gap-2">
         {cap.sources.length > 1 ? (
@@ -258,8 +255,10 @@ function CapBlock({ offerId, cap, notReadyMessage, onResult }: CapBlockProps) {
         </div>
       ) : null}
 
-      <div className="flex justify-end gap-2" data-testid={`drift-actions-${targetId}`}>
+      <div className="flex justify-start gap-2" data-testid={`drift-actions-${targetId}`}>
         <Button
+          variant="outline"
+          className={RUST_OUTLINE}
           onClick={handlePerform}
           disabled={!canPerform || convert.isPending}
           data-testid={`drift-perform-${targetId}`}
@@ -334,7 +333,10 @@ export function SettleAuraDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent {...NO_DESCRIPTION} className="max-h-[90vh] space-y-3 overflow-y-auto">
+      <DialogContent
+        {...NO_DESCRIPTION}
+        className="aura-settle-dialog max-h-[90vh] space-y-3 overflow-y-auto"
+      >
         <DialogTitle className="text-base font-semibold">
           {aura?.unsettled_line || 'Settle your aura'}
         </DialogTitle>
@@ -346,14 +348,30 @@ export function SettleAuraDialog({
         ) : null}
 
         {showAtone || showAccept ? (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div
+            className={showAtone && showAccept ? 'grid gap-3 sm:grid-cols-2' : 'grid gap-3'}
+            data-testid="settle-exits"
+          >
             {showAtone && offer ? (
               <section
                 className="space-y-2 rounded-lg border border-border p-3.5"
                 data-testid="settle-exit-atone"
               >
                 <h3 className="font-semibold">Atone</h3>
-                <p className="text-sm">Perform the rite of atonement.</p>
+                <p className="text-sm" data-testid="settle-atone-line">
+                  Perform the rite of atonement.
+                  {caps.map((cap) => {
+                    const line = driftSystemLine(cap);
+                    return line ? (
+                      <Fragment key={cap.target_resonance.id}>
+                        {' '}
+                        <span data-testid={`drift-system-line-${cap.target_resonance.id}`}>
+                          {line}
+                        </span>
+                      </Fragment>
+                    ) : null;
+                  })}
+                </p>
                 {settledShares.some((share) => share.percent > 0) ? (
                   <AuraHalo shares={settledShares} size="mini" />
                 ) : null}
@@ -409,6 +427,7 @@ export function SettleAuraDialog({
         <div className="flex justify-end gap-2">
           <Button
             variant="outline"
+            className={RUST_OUTLINE}
             onClick={handleNotNow}
             disabled={decline.isPending}
             data-testid="settle-not-now"

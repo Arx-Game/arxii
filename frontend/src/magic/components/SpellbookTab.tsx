@@ -368,10 +368,7 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
                 name: share.affinity_name,
                 percent: share.percent,
               }))}
-              settled={ownAura?.shares.map((share) => ({
-                name: share.affinity_name,
-                percent: Number(share.settled_percent),
-              }))}
+              settled={ownAura?.shares.some((share) => Number(share.settled_percent) > 0) ?? false}
               mire={
                 ownAura
                   ? { words: ownAura.mire_share_words, part: wordsToPart(ownAura.mire_share_words) }

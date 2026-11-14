@@ -101,9 +101,7 @@ export function ResonanceWeights({ resonances, weights, budget, onChange }: Reso
         })}
       </ul>
       {aura.length > 0 && (
-        <AuraHalo shares={aura}>
-          <span className="resonance-aura-label">Your aura</span>
-        </AuraHalo>
+        <AuraHalo shares={aura} label={<span className="resonance-aura-label">Your aura</span>} />
       )}
     </div>
   );
