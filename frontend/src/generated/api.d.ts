@@ -33963,6 +33963,7 @@ export interface components {
     DriftConversionOffer: {
       readonly id: number;
       readonly scene_id: number;
+      readonly character_id: number;
       readonly caps: components['schemas']['DriftConversionCap'][];
       readonly rite_ready: boolean;
       readonly rite_not_ready_message: string;

@@ -58099,6 +58099,9 @@ components:
         scene_id:
           type: integer
           readOnly: true
+        character_id:
+          type: integer
+          readOnly: true
         caps:
           type: array
           items:
@@ -58112,6 +58115,7 @@ components:
           readOnly: true
       required:
       - caps
+      - character_id
       - id
       - rite_not_ready_message
       - rite_ready

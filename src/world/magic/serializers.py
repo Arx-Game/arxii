@@ -4298,13 +4298,23 @@ class DriftConversionOfferSerializer(serializers.ModelSerializer):
     queries it per offer.
     """
 
+    # The offer's character: the aura the Settle your aura dialog reads and accepts for
+    # (a CharacterAura's ``character`` is the same sheet pk, #5123).
+    character_id = serializers.IntegerField(source="character_sheet_id", read_only=True)
     caps = serializers.SerializerMethodField()
     rite_ready = serializers.SerializerMethodField()
     rite_not_ready_message = serializers.SerializerMethodField()
 
     class Meta:
         model = DriftConversionOffer
-        fields = ["id", "scene_id", "caps", "rite_ready", "rite_not_ready_message"]
+        fields = [
+            "id",
+            "scene_id",
+            "character_id",
+            "caps",
+            "rite_ready",
+            "rite_not_ready_message",
+        ]
         read_only_fields = fields
 
     @extend_schema_field(serializers.BooleanField())

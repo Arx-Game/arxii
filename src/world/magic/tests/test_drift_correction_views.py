@@ -83,6 +83,8 @@ class PendingOfferTests(DriftCorrectionViewTestBase):
         response = self.client.get(_PENDING_URL)
         row = response.data["results"][0]
         self.assertEqual(row["scene_id"], self.scene.pk)
+        # The Settle your aura dialog reads and accepts this character's aura (#5123).
+        self.assertEqual(row["character_id"], self.sheet.pk)
         (cap,) = row["caps"]
         self.assertEqual(cap["target_resonance"]["id"], self.dawnlight.pk)
         self.assertEqual(cap["target_resonance"]["name"], "Drift Dawnlight")

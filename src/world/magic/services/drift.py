@@ -192,7 +192,7 @@ def share_in_words(percent: Decimal) -> str:
     """A share of a whole, in words, never a number (#5123).
 
     ``percent`` is 0-100. The same scale as the sheet's ``shareInWords``
-    (``frontend/src/magic/components/SpellbookTab.tsx``), so the aura reads the same in
+    (``frontend/src/magic/aura.ts``), so the aura reads the same in
     every surface.
     """
     if percent <= 0:
