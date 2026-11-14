@@ -472,10 +472,10 @@ def spend_resonance_for_imbuing(
     """Deduct ``resonance`` balance, add it to the thread's row, and advance the thread level.
 
     Spec A §3.2, #5123. The thread keeps how much of each resonance went into it on its
-    ``ThreadResonance`` rows (created on first use of a resonance); the rows' amounts sum
-    to ``developed_points``, so the points a level costs come out of the rows in
-    proportion. The leading resonance is refreshed afterwards, so a resonance that
-    overtakes the others becomes ``thread.resonance``. Cost formula:
+    ``ThreadResonance`` rows (created on first use of a resonance), each a cumulative
+    total: levelling spends ``developed_points`` and never lowers a row. The leading
+    resonance is refreshed afterwards, so a resonance whose total overtakes the others
+    becomes ``thread.resonance``. Cost formula:
     max((current_level - 9) * 100, 1) dp per level.
     Sub-10 levels each cost 1 dp. Advancement continues until the bucket is
     exhausted, the next level hits an XP-lock gate, or the effective cap is
@@ -500,7 +500,6 @@ def spend_resonance_for_imbuing(
     from world.magic.exceptions import ProtagonismLockedError  # noqa: PLC0415
     from world.magic.services.thread_rows import (  # noqa: PLC0415
         add_to_resonance_row,
-        consume_row_points,
         refresh_leading_resonance,
     )
 
@@ -537,7 +536,6 @@ def spend_resonance_for_imbuing(
 
     blocked_by: str = "NONE"
     blocked_requirement_messages: list[str] = []
-    spent_on_levels = 0
     imbue_multiplier = get_imbue_cost_multiplier(thread.target_kind)
     while True:
         next_level = thread.level + 1
@@ -555,12 +553,10 @@ def spend_resonance_for_imbuing(
         cost = max((thread.level - 9) * 100, 1) * imbue_multiplier
         thread.level = next_level
         thread.developed_points -= cost
-        spent_on_levels += cost
 
     if cr is not None:
         cr.save(update_fields=["balance"])
     thread.save(update_fields=["level", "developed_points"])
-    consume_row_points(thread, spent_on_levels)
     refresh_leading_resonance(thread)
     character_sheet.character.threads.invalidate()
 

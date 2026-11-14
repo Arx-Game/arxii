@@ -63,8 +63,8 @@ def _candidate_threads(character, technique: Technique, character_technique) -> 
     - A role-granted technique (``CharacterTechnique.role_source`` set, #2022)
       specializes by the vow's depth, so the COVENANT_ROLE thread is the only
       candidate.
-    - Otherwise every active GIFT thread on the technique's gift is a candidate
-      (a multi-resonance character holds more than one, #1619).
+    - Otherwise the active GIFT thread on the technique's gift is the candidate; every
+      resonance it holds is a form (#1619, #5123).
 
     Read through the cached ``character.threads`` handler with a list-comp, never
     a fresh ``Thread.objects.filter()`` (project cached-property rule).
@@ -173,7 +173,7 @@ def available_technique_forms(
     """Every form of ``technique`` that ``character`` can work, plus the next locked one.
 
     The base form always leads. Each specialized form the caster has unlocked
-    follows, at most one per thread resonance (``matching_variant`` picks the
+    follows, at most one per resonance a thread holds (#5123; ``matching_variant`` picks the
     highest qualifying variant per resonance, so lower tiers are shadowed rather
     than listed alongside). Locked entries come last and carry ``is_locked=True``.
 
@@ -217,12 +217,17 @@ def available_technique_forms(
 
     seen_variant_ids: set[int] = set()
     locked: list[TechniqueFormPayload] = []
-    for thread in threads:
+    candidates = [
+        (thread, resonance)
+        for thread in threads
+        for resonance in character.threads.resonances_of(thread) or [thread.resonance]
+    ]
+    for thread, resonance in candidates:
         resolved = resolve_specialized_variant(
             entity=technique,
             character=character,
             character_technique=character_technique,
-            preferred_resonance=thread.resonance,
+            preferred_resonance=resonance,
             _sheet=sheet,
         )
         if isinstance(resolved, _ResolvedTechnique) and resolved.variant.pk not in seen_variant_ids:
@@ -242,7 +247,7 @@ def available_technique_forms(
             )
 
         ahead = _next_locked_variant(
-            technique, resonance_id=thread.resonance_id, thread_level=thread.level
+            technique, resonance_id=resonance.pk, thread_level=thread.level
         )
         if ahead is not None and ahead.pk not in seen_variant_ids:
             seen_variant_ids.add(ahead.pk)

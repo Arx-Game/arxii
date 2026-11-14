@@ -42,8 +42,9 @@ def refresh_leading_resonance(thread: Thread) -> Resonance:
 def add_to_resonance_row(thread: Thread, resonance: Resonance, amount: int) -> ThreadResonance:
     """Add ``amount`` points to ``resonance``'s row on ``thread``, creating the row if needed.
 
-    Writes the row only: the caller owns ``thread.developed_points`` (the rows' amounts sum
-    to it) and calls ``refresh_leading_resonance`` once its writes are done.
+    ``amount`` is cumulative: the total of this resonance ever imbued. The caller owns
+    ``thread.developed_points`` (the bucket level-ups spend from, which this never
+    touches) and calls ``refresh_leading_resonance`` once its writes are done.
     """
     row, _created = ThreadResonance.objects.get_or_create(thread=thread, resonance=resonance)
     if amount:
@@ -60,28 +61,3 @@ def write_resonance_rows(thread: Thread, resonances: Sequence[Resonance]) -> Non
     """
     for resonance in resonances:
         ThreadResonance.objects.get_or_create(thread=thread, resonance=resonance)
-
-
-def consume_row_points(thread: Thread, spent: int) -> None:
-    """Take ``spent`` points out of the rows, in proportion to what each holds.
-
-    Raising a level spends development points; the rows' amounts sum to the thread's
-    ``developed_points``, so the rows pay the same total. Each row pays its share rounded
-    down, and the remainder goes one point at a time to the rows with the largest
-    fractions (ties to the row first in order), so the rows' sum drops by exactly
-    ``spent`` and the mix keeps its shape. The caller refreshes the leading resonance.
-    """
-    if spent <= 0:
-        return
-    rows = list(ThreadResonance.objects.filter(thread=thread))
-    total = sum(row.amount for row in rows)
-    spent = min(spent, total)
-    if spent == 0:
-        return
-    shares = [divmod(spent * row.amount, total) for row in rows]
-    left = spent - sum(whole for whole, _fraction in shares)
-    order = sorted(range(len(rows)), key=lambda i: -shares[i][1])
-    extra = set(order[:left])
-    for index, row in enumerate(rows):
-        row.amount -= shares[index][0] + (1 if index in extra else 0)
-        row.save(update_fields=["amount"])

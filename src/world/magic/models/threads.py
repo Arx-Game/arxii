@@ -1083,11 +1083,12 @@ class Thread(SharedMemoryModel):
 class ThreadResonance(SharedMemoryModel):
     """One resonance's development points inside a Thread (#5123).
 
-    A thread holds several resonances. ``amount`` is the development points this
-    resonance put into the thread; the rows' amounts sum to the thread's
-    ``developed_points``. The first row by Meta ordering (largest amount, then
-    earliest created) is the leading resonance, which ``Thread.resonance``
-    copies. Written only by services; shown read-only in admin.
+    A thread holds several resonances. ``amount`` is the cumulative total of that
+    resonance ever imbued into the thread: spending ``developed_points`` on a level
+    never lowers it, and rows change only by imbuing (and by the retune and Fall
+    moves). The first row by Meta ordering (largest amount, then earliest created)
+    is the leading resonance, which ``Thread.resonance`` copies. Written only by
+    services; shown read-only in admin.
     """
 
     thread = models.ForeignKey(

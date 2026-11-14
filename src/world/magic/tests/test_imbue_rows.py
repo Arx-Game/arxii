@@ -1,6 +1,5 @@
 """Imbuing, weaving and gift provisioning write ThreadResonance rows (#5123)."""
 
-from django.db.models import Sum
 from django.test import TestCase
 
 from actions.definitions.imbue import ImbueAction
@@ -32,10 +31,6 @@ from world.magic.services import spend_resonance_for_imbuing
 from world.magic.services.threads import imbue_ready_threads, thread_level_multiplier, weave_thread
 from world.magic.specialization.services import gift_resonances_for, provision_latent_gift_thread
 from world.traits.factories import TraitFactory
-
-
-def _row_sum(thread: Thread) -> int:
-    return ThreadResonance.objects.filter(thread=thread).aggregate(total=Sum("amount"))["total"]
 
 
 class ImbueRowsTests(TestCase):
@@ -72,7 +67,6 @@ class ImbueRowsTests(TestCase):
         row = ThreadResonance.objects.get(thread=thread, resonance=self.domination)
         self.assertEqual(row.amount, 30)
         self.assertEqual(thread.developed_points, 30)
-        self.assertEqual(_row_sum(thread), thread.developed_points)
         balance = self.sheet.character.resonances.balance(self.domination)
         self.assertEqual(balance, 970)
 
@@ -85,20 +79,20 @@ class ImbueRowsTests(TestCase):
         rows = {r.resonance_id: r.amount for r in ThreadResonance.objects.filter(thread=thread)}
         self.assertEqual(rows, {self.fury.pk: 0, self.wonder.pk: 5})
 
-    def test_level_costs_come_out_of_the_rows_in_proportion(self) -> None:
+    def test_levelling_never_lowers_a_row(self) -> None:
         thread = self._thread()
 
         spend_resonance_for_imbuing(self.sheet, thread, self.fury, 60)
         spend_resonance_for_imbuing(self.sheet, thread, self.domination, 90)
 
         thread.refresh_from_db()
-        self.assertEqual(thread.level, 11)  # 150 in the bucket paid the 100 for level 11
+        self.assertEqual(thread.level, 11)  # the 150 in the bucket paid 100 for level 11
+        self.assertEqual(thread.developed_points, 50)
         rows = {r.resonance_id: r.amount for r in ThreadResonance.objects.filter(thread=thread)}
-        self.assertEqual(rows, {self.fury.pk: 20, self.domination.pk: 30})
-        self.assertEqual(_row_sum(thread), thread.developed_points)
+        self.assertEqual(rows, {self.fury.pk: 60, self.domination.pk: 90})
 
     def test_leading_flips_when_second_overtakes(self) -> None:
-        thread = self._thread()
+        thread = self._thread(level=9)  # Fury's 10 raises it to level 10 before Domination
         fury_bump = ThreadPullEffectFactory(
             target_kind=TargetKind.TRAIT, resonance=self.fury, as_intensity_bump=True
         )
@@ -109,9 +103,10 @@ class ImbueRowsTests(TestCase):
             intensity_bump_amount=7,
         )
         handler = self.sheet.character.threads
-        scale = thread_level_multiplier(thread.level)
 
         spend_resonance_for_imbuing(self.sheet, thread, self.fury, 10)
+        self.assertEqual(thread.level, 10)
+        scale = thread_level_multiplier(thread.level)
         self.assertEqual(thread.resonance, self.fury)
         self.assertEqual(
             handler._tier0_intensity_bumps[thread.pk],
@@ -121,6 +116,8 @@ class ImbueRowsTests(TestCase):
         spend_resonance_for_imbuing(self.sheet, thread, self.domination, 15)
 
         thread.refresh_from_db()
+        rows = {r.resonance_id: r.amount for r in ThreadResonance.objects.filter(thread=thread)}
+        self.assertEqual(rows, {self.fury.pk: 10, self.domination.pk: 15})
         self.assertEqual(thread.resonance, self.domination)
         self.assertEqual(
             self.sheet.character.threads._tier0_intensity_bumps[thread.pk],

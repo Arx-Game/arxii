@@ -200,9 +200,9 @@ class AvailableTechniqueFormsTest(TestCase):
         variant_ids = [f["variant_id"] for f in forms if f["variant_id"] is not None]
         self.assertEqual(variant_ids, [deeper.pk])
 
-    def test_forms_read_the_leading_resonance_of_a_multi_resonance_thread(self) -> None:
-        """#5123: a thread holding a second resonance lists the leading resonance's form."""
-        TechniqueVariant.objects.create(
+    def test_two_row_gift_thread_lists_both_resonances_forms(self) -> None:
+        """#5123: every resonance the gift thread holds adds its own form."""
+        tide_variant = TechniqueVariant.objects.create(
             parent_technique=self.technique,
             resonance=self.other_resonance,
             unlock_thread_level=30,
@@ -217,8 +217,10 @@ class AvailableTechniqueFormsTest(TestCase):
 
         names = {f["name"] for f in forms}
         self.assertIn("Ashfall Lash", names)
-        self.assertNotIn("Tidewrack Lash", names)
-        self.assertEqual(sum(1 for f in forms if f["is_default"]), 1)
+        self.assertIn("Tidewrack Lash", names)
+        self.assertIn(tide_variant.pk, {f["variant_id"] for f in forms})
+        defaults = [f for f in forms if f["is_default"]]
+        self.assertEqual([f["name"] for f in defaults], ["Ashfall Lash"])  # the leading row's
 
     def test_each_form_carries_its_own_effect_summary(self) -> None:
         """The block #2898 built, per form rather than per technique."""
