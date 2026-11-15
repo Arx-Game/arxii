@@ -38,7 +38,7 @@ from world.checks.types import (
 result.outcome_name   # str: outcome name or "Unknown"
 result.success_level  # int: outcome success_level or 0
 result.chart_name     # str: chart name or "No Chart Found"
-result.rank_text      # str: "Master (rank 10), 38% toward Rank 11 (rank 11)" (#4601, #5093)
+result.rank_text      # str: "Master (rank 10), 38% toward Rank 11" (#4601, #5093)
 result.target_rank_text  # str: the target's rank with number and band position
 result.standing_text  # str: "<roller> against <target>", each with band position
 ```
@@ -714,14 +714,14 @@ anything below -8 resolves to chart -8 (there is no clamp).
   through that rank's band. `load_ranks()` builds the ladder (`RankStep(rank, name, min_points)`)
   from the `CheckRank` names joined to the CHECK lane's baselines: rank N starts at
   `baseline(N)`, rank 0 at 0 (#5093; `CheckRank.min_points` is gone). With the seeded baselines
-  (18 + 8 x (level - 1)), 40 points is "Competent (rank 3), 75% toward Rank 4 (rank 4)". The top
+  (18 + 8 x (level - 1)), 40 points is "Competent (rank 3), 75% toward Rank 4". The top
   rank has no next rank (share 0); 5 points is rank 0 with rank 1 next; a total below rank 0
   (negative) has no rank and counts as rank number 0.
   Tier jumps (#5093, below) put a character several ranks above where her level alone would, so
   the ladder runs past the top baseline level: rank N above that level starts one level's width
   (the top level's) further on per rank, until the ladder holds the top level's baseline plus
   its tier bonus (rank 45, at 370 points, with the seeded rows). A rank above the highest
-  `CheckRank` row has no name row and is named by its number ("Rank 31 (rank 31)"); staff may
+  `CheckRank` row has no name row and is named by its number ("Rank 31"); staff may
   author name rows for it. With no `LevelTier` rows the ladder ends at the highest authored rank.
 - **Fractional difference.** Roller position minus target position. The whole part picks
   the chart; the remainder is how far it slides toward the next.

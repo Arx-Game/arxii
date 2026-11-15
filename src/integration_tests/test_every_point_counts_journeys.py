@@ -194,8 +194,6 @@ class EveryPointCounts(JourneyCase):
         # 12 x (1 + 7/8 + (7/8)^2 + (7/8)^3 + 6 x 2/3) = 87.7 -> 88, not the plain 120.
         self.assertEqual(result.total_points, 9 + 88)
         # 97 points: Master (rank 10, starts at 90), 7/8 through, against rank 13: chart -3.
-        self.assertEqual(
-            result.standing.roller.text, "Master (rank 10), 88% toward Rank 11 (rank 11)"
-        )
+        self.assertEqual(result.standing.roller.text, "Master (rank 10), 88% toward Rank 11")
         self.assertEqual(result.rank_difference, -3)
         self.assertGreater(result.standing.slid.at_least(1), 0)

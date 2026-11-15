@@ -477,9 +477,9 @@ class StaffTuneTheValueTable(JourneyCase):
         )
         # A level-6 character's typical total is 58 plus the tier's 24 = 82, the start of rank
         # 9; 82 + 29 = 111 is rank 12 (starts at 106).
-        self.assertEqual(pile.rank_before, "Rank 9 (rank 9)")
-        self.assertEqual(pile.rank_after, "Rank 12 (rank 12)")
-        self.assertContains(response, "+29: Rank 12 (rank 12)")
+        self.assertEqual(pile.rank_before, "Rank 9")
+        self.assertEqual(pile.rank_after, "Rank 12")
+        self.assertContains(response, "+29: Rank 12")
 
 
 def _set_rows(technique: Technique, **fields: object) -> None:

@@ -43,7 +43,7 @@ class BandPositionTests(SlideTestBase):
         position = band_position(40)
         self.assertEqual(position.rank.rank, 3)
         self.assertAlmostEqual(position.share, 0.75)
-        self.assertEqual(position.text, "Competent (rank 3), 75% toward Rank 4 (rank 4)")
+        self.assertEqual(position.text, "Competent (rank 3), 75% toward Rank 4")
 
     def test_a_threshold_total_shows_the_bare_rank(self):
         self.assertEqual(band_position(34).text, "Competent (rank 3)")
@@ -54,7 +54,7 @@ class BandPositionTests(SlideTestBase):
         position = band_position(400)
         self.assertEqual(position.rank.rank, 45)
         self.assertEqual(position.share, 0.0)
-        self.assertEqual(position.text, "Rank 45 (rank 45)")
+        self.assertEqual(position.text, "Rank 45")
 
     def test_the_old_top_rank_now_has_a_next_rank(self):
         position = band_position(250)

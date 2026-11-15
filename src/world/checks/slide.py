@@ -96,12 +96,19 @@ class BandPosition:
         """For example "Expert (rank 3), 67% toward Master (rank 4)"."""
         if self.rank is None:
             if self.next_rank is not None:
-                return f"Below {self.next_rank.name} (rank {self.next_rank.rank})"
+                return f"Below {_rank_label(self.next_rank)}"
             return "No rank"
-        here = f"{self.rank.name} (rank {self.rank.rank})"
+        here = _rank_label(self.rank)
         if self.next_rank is None or self.percent == 0:
             return here
-        return f"{here}, {self.percent}% toward {self.next_rank.name} (rank {self.next_rank.rank})"
+        return f"{here}, {self.percent}% toward {_rank_label(self.next_rank)}"
+
+
+def _rank_label(step: RankStep) -> str:
+    """A rank's name with its number, once: "Expert (rank 3)", but "Rank 17" for an unnamed one."""
+    if step.name == f"Rank {step.rank}":
+        return step.name
+    return f"{step.name} (rank {step.rank})"
 
 
 # A level's width is the step between two baseline rows, so extending past the top needs two.

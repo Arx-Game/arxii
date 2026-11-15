@@ -5,7 +5,7 @@ modifier) and Maren casts Sure Grip on her (+5 to Climbing, a technique buff tha
 as a condition). Her own Climbing total is 9 points, her level term (half of level 1's 18-point
 baseline): Incompetent (rank 0), 50% toward Novice (rank 1), on the seeded rank ladder (rank N
 starts at 18 + 8 x (N - 1)). With the gloves and the buff it is 19: Novice (rank 1), 12% toward
-Rank 2 (rank 2).
+Rank 2.
 
 Every way she rolls Climbing counts both: her own ``check`` by telnet and from the web,
 answering a GM's call, a Senior GM's ``gm check`` on her, and a challenge she takes on
@@ -72,7 +72,7 @@ OWN = 9
 GEARED = 19
 OWN_STANDING = "Incompetent (rank 0), 50% toward Novice (rank 1)"
 # 19 is Novice (rank 1, starts at 18), 1 of its 8 points: 12.5%, shown as 12%.
-GEARED_STANDING = "Novice (rank 1), 12% toward Rank 2 (rank 2)"
+GEARED_STANDING = "Novice (rank 1), 12% toward Rank 2"
 # Trivial is 15 points: 15 of rank 0's 18 points.
 AGAINST_TRIVIAL = "against Incompetent (rank 0), 83% toward Novice (rank 1)"
 # The quarry face challenge is authored at level 1: its baseline, 18 points, where rank 1 starts.
@@ -317,7 +317,7 @@ class AChallengeCountsHerGear(_TheOldQuarry):
         # 24 points: Novice (rank 1, starts at 18), 6 of its 8 points.
         self.assertEqual(
             roll.standing_text,
-            "Novice (rank 1), 75% toward Rank 2 (rank 2) " + AGAINST_QUARRY_FACE,
+            "Novice (rank 1), 75% toward Rank 2 " + AGAINST_QUARRY_FACE,
         )
         outcome = self.stored()
         self.assertEqual(

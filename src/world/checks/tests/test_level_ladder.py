@@ -78,7 +78,7 @@ class LevelLadderTests(TestCase):
         position = band_position(102)
         self.assertEqual(position.rank.rank, 11)
         self.assertEqual(position.share, 0.5)
-        self.assertEqual(position.text, "Rank 11 (rank 11), 50% toward Rank 12 (rank 12)")
+        self.assertEqual(position.text, "Rank 11, 50% toward Rank 12")
 
     def test_a_total_below_rank_one_is_rank_zero_with_rank_one_next(self) -> None:
         # Review focus 2: a level-0 or brand-new character never crashes.

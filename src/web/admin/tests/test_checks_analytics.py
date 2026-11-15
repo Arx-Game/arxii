@@ -261,7 +261,7 @@ class SlideAnalyticsTests(TestCase):
         assert matchup is not None
         assert matchup.rank_difference == -1
         assert round(matchup.success_probability, 4) == round(0.22 + 0.5 * 0.18, 4)
-        assert matchup.standing.roller.text == "Rank 2 (rank 2), 50% toward Competent (rank 3)"
+        assert matchup.standing.roller.text == "Rank 2, 50% toward Competent (rank 3)"
 
     def test_a_pile_of_modifiers_lifts_the_matchup_off_an_impossible_chart(self) -> None:
         plain = compute_matchup(roller_points=20, target_difficulty=74)
@@ -354,8 +354,8 @@ class SlideAnalyticsTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         body = resp.content.decode()
-        assert "Rank 5 (rank 5)" in body
-        assert "Rank 8 (rank 8)" in body
+        assert "Rank 5" in body
+        assert "Rank 8" in body
         assert "rank difference -3" in body
         assert "Pinned" not in body
         assert "Hopeless" not in body

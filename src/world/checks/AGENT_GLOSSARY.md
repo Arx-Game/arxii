@@ -9,7 +9,7 @@ The level someone is acting at (#5093). A `CheckRank` row holds only the rank nu
 _Avoid_: tier, grade, rank band
 
 **Band position** (#4601):
-How far a total sits through its check rank's band, as a share: with the seeded baselines, 40 points is Competent (rank 3), 75% toward rank 4. 0 at the rank's own threshold; 0 at the top rank. Both the roller's total and the difficulty have one (`world.checks.slide.band_position`), and result text shows it ("Master (rank 10), 38% toward Rank 11 (rank 11)").
+How far a total sits through its check rank's band, as a share: with the seeded baselines, 40 points is Competent (rank 3), 75% toward rank 4. 0 at the rank's own threshold; 0 at the top rank. Both the roller's total and the difficulty have one (`world.checks.slide.band_position`), and result text shows it ("Master (rank 10), 38% toward Rank 11").
 _Avoid_: progress, fraction of a rank, partial rank
 
 **Slide** (#4601):

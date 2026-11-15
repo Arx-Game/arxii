@@ -213,11 +213,11 @@ class TierLadderTests(TestCase):
         position = band_position(262)
         self.assertEqual(position.rank.rank, 31)
         self.assertEqual(position.share, 0.5)
-        self.assertEqual(position.text, "Rank 31 (rank 31), 50% toward Rank 32 (rank 32)")
+        self.assertEqual(position.text, "Rank 31, 50% toward Rank 32")
         top = band_position(370)
         self.assertEqual(top.rank.rank, 45)
         self.assertIsNone(top.next_rank)
-        self.assertEqual(top.text, "Rank 45 (rank 45)")
+        self.assertEqual(top.text, "Rank 45")
 
     def test_rank_for_points_and_difference_read_the_extended_ladder(self) -> None:
         self.assertEqual(CheckRank.get_rank_for_points(370).rank, 45)
