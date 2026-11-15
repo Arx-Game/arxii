@@ -63,7 +63,8 @@ const KATTA_SEATS: Seats = {
   slots: [
     seat(11, 'Kathryn', { name_locked: true, head_relation: 'child', allowed_genders: ['Female'] }),
     seat(12, 'Tobren', { head_relation: 'niece/nephew', age_min: 16, age_max: 24 }),
-    seat(13, 'Marrow'),
+    seat(13, 'Isolde', { head_relation: 'kin' }),
+    seat(14, 'Marrow'),
   ],
   pools: [
     {
@@ -109,6 +110,8 @@ test.describe('character creation: an established family is joined through a sea
     await expect(page.getByRole('button', { name: /^Tobren/ })).toContainText(
       'Niece or nephew of Alarysa'
     );
+    // Past sibling, cousin, niece or nephew the card says kin.
+    await expect(page.getByRole('button', { name: /^Isolde/ })).toContainText('Kin of Alarysa');
     // A written name is the seat's; only one the player may change is marked.
     await expect(kathryn).not.toContainText('*');
     await expect(page.getByRole('button', { name: /^Tobren/ })).toContainText('Tobren*');

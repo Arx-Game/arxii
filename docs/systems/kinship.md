@@ -188,8 +188,10 @@ person.
   `full_name`/`short_name`),
   `families/:id/slots/` (the open seats: `{head_name, slots, pools}`, empty for a
   non-playable family; since #5130 each seat carries `head_relation`, what it is to
-  the holder of the house's top title on the public record, null when there is no
-  head or no relation on record, and each family row on the list carries
+  the holder of the house's top title on the public record (a `RelationshipType`
+  value, or `kin` where the two share a line or the family's name and the walk has
+  no closer word), null when there is no head or no relation on record, and each
+  family row on the list carries
   `has_open_seat`, which is what character creation offers a family by). The
   same `FamilyViewSet` is also
   mounted at `GET /api/character-creation/families/` (`character_creation/

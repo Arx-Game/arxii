@@ -411,6 +411,8 @@ const HEAD_RELATION_WORDS: Partial<Record<HeadRelation, string>> = {
   'aunt/uncle': 'Aunt or uncle',
   'niece/nephew': 'Niece or nephew',
   cousin: 'Cousin',
+  // Past these the card says kin, never "second cousin once removed".
+  kin: 'Kin',
 };
 
 /**

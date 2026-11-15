@@ -162,8 +162,12 @@ export interface CrewSlot {
   rooms: string[];
 }
 
-/** What a seat is to the head of the house: the kinship walk's label (#5130). */
+/**
+ * What a seat is to the head of the house (#5130): the kinship walk's label, or
+ * 'kin' where the two are related and the walk has no closer word.
+ */
 export type HeadRelation =
+  | 'kin'
   | 'self'
   | 'parent'
   | 'child'

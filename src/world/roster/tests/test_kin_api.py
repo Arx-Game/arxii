@@ -16,8 +16,8 @@ from rest_framework.test import APIClient, APITestCase
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
-from world.roster.constants import DefinitionTier, RelationshipType
-from world.roster.factories import FamilyFactory, RosterTenureFactory
+from world.roster.constants import KIN_AT_A_REMOVE, DefinitionTier, RelationshipType
+from world.roster.factories import FamilyFactory, KinspersonFactory, RosterTenureFactory
 from world.roster.services import kinship
 
 
@@ -737,7 +737,7 @@ class OpenSeatsViewTests(APITestCase):
     def setUpTestData(cls) -> None:
         from world.character_creation.factories import RealmFactory
         from world.roster.constants import NOBLE_KIND_NAME
-        from world.roster.factories import FamilyKindFactory, KinSlotPoolFactory
+        from world.roster.factories import FamilyKindFactory
         from world.societies.factories import OrganizationFactory, SocietyFactory
         from world.societies.houses.constants import TitleTier
         from world.societies.houses.models import Title
@@ -779,12 +779,20 @@ class OpenSeatsViewTests(APITestCase):
             node.save()
             return node
 
-        # Her daughter, with a fixed name; her nephew; a seat with no kin on record.
+        # Her daughter, with a fixed name; her nephew; a cousin written into the
+        # house with no parents on record.
         cls.daughter = seat("Kathryn", name_locked=True)
         kinship.record_parentage(child=cls.daughter, parent=cls.alarysa)
         cls.nephew = seat("Tobren")
         kinship.record_parentage(child=cls.nephew, parent=cls.brother)
         cls.stray = seat("Marrow")
+        # Her great-grandchild, not of the name: past what the walk has a word for.
+        grandchild = kinship.create_person(name="Edda")
+        kinship.record_parentage(child=grandchild, parent=cls.daughter)
+        cls.great_grandchild = KinspersonFactory(name="Isolde", family=cls.katta, is_appable=True)
+        kinship.record_parentage(child=cls.great_grandchild, parent=grandchild)
+        # On the house's books with no membership and no kin on record at all.
+        cls.unplaced = KinspersonFactory(name="Brannoch", family=cls.katta, is_appable=True)
         # A child nobody acknowledges: the hidden edge must not name her mother.
         cls.unacknowledged = seat("Wren")
         kinship.record_parentage(
@@ -810,6 +818,12 @@ class OpenSeatsViewTests(APITestCase):
         cls.untitled_seat = kinship.create_person(name="Tam", family=cls.untitled)
         cls.untitled_seat.is_appable = True
         cls.untitled_seat.save(update_fields=["is_appable"])
+
+        cls._seat_the_list_families()
+
+    @classmethod
+    def _seat_the_list_families(cls) -> None:
+        from world.roster.factories import KinSlotPoolFactory
 
         # Families for the list: one offering only a counted opening, one whose
         # only seat is taken, one with nobody to seat.
@@ -841,16 +855,40 @@ class OpenSeatsViewTests(APITestCase):
         relation = {row["name"]: row["head_relation"] for row in data["slots"]}
         self.assertEqual(relation["Kathryn"], RelationshipType.CHILD)
         self.assertEqual(relation["Tobren"], RelationshipType.NIECE_NEPHEW)
-        self.assertIsNone(relation["Marrow"])
+
+    def test_kin_the_walk_has_no_word_for_read_as_kin(self) -> None:
+        """Past sibling, cousin, niece or nephew the card says kin (owner ruling
+        2026-11-15), never "great-grandchild" or "second cousin once removed"."""
+        relation = {row["name"]: row["head_relation"] for row in self._seats(self.katta)["slots"]}
+        # A shared line on the public record, three generations down.
+        self.assertEqual(relation["Isolde"], KIN_AT_A_REMOVE)
+        # Born to the same name as the head, with no parents on record.
+        self.assertEqual(relation["Marrow"], KIN_AT_A_REMOVE)
+        # Neither a line nor the name: nothing to say.
+        self.assertIsNone(relation["Brannoch"])
 
     def test_a_hidden_parentage_is_not_on_the_card(self) -> None:
+        """Wren is born to the name, so she is kin; that she is the head's own
+        child is a hidden fact and reads to nobody here, staff included."""
         relation = {row["name"]: row["head_relation"] for row in self._seats(self.katta)["slots"]}
-        self.assertIsNone(relation["Wren"])
-        # Staff asking the same endpoint read the same public record.
+        self.assertEqual(relation["Wren"], KIN_AT_A_REMOVE)
         self.client.force_authenticate(user=AccountFactory(is_staff=True))
         response = self.client.get(f"/api/roster/families/{self.katta.pk}/slots/")
         staff = {row["name"]: row["head_relation"] for row in response.data["slots"]}
-        self.assertIsNone(staff["Wren"])
+        self.assertEqual(staff["Wren"], KIN_AT_A_REMOVE)
+
+    def test_the_kin_walk_costs_the_same_for_one_seat_or_five(self) -> None:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        # The walk is one query a generation of the deepest line, whoever else rides it.
+        one = [self.great_grandchild]
+        five = [self.great_grandchild, self.stray, self.unplaced, self.unacknowledged, self.nephew]
+        with CaptureQueriesContext(connection) as ctx_one:
+            kinship._kin_at_a_remove(self.alarysa, one)
+        with CaptureQueriesContext(connection) as ctx_five:
+            kinship._kin_at_a_remove(self.alarysa, five)
+        self.assertEqual(len(ctx_one.captured_queries), len(ctx_five.captured_queries))
 
     def test_the_heads_own_seat_is_the_head(self) -> None:
         data = self._seats(self.vacant)

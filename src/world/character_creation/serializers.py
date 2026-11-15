@@ -1693,8 +1693,10 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         return data
 
     def get_stage_completion(self, _obj: CharacterDraft) -> dict[int, bool]:
-        """Completion status for each stage: ``to_representation`` fills it from the
-        same validator pass as ``stage_errors``, so this getter makes none."""
+        """Get completion status for each stage."""
+        # ``to_representation`` fills it from the same validator pass as
+        # ``stage_errors``, so this getter makes none. The docstring above is the
+        # schema's description of the field: a reworded one is an API-types drift.
         return {}
 
     def get_stage_errors(self, obj: CharacterDraft) -> StageValidationErrors:

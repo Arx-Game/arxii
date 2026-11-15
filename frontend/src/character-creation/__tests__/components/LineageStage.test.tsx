@@ -295,6 +295,7 @@ describe('LineageStage', () => {
           seat({ id: 2, name: 'Alarysa', head_relation: 'self' }),
           seat({ id: 3, name: 'Tobren', head_relation: 'niece/nephew' }),
           seat({ id: 4, name: 'Marrow', head_relation: null }),
+          seat({ id: 5, name: 'Isolde', head_relation: 'kin' }),
         ]);
         const kathryn = await screen.findByRole('button', { name: /Kathryn/ });
         expect(kathryn).toHaveTextContent('Child of Alarysa');
@@ -302,6 +303,8 @@ describe('LineageStage', () => {
         expect(screen.getByRole('button', { name: /Tobren/ })).toHaveTextContent(
           'Niece or nephew of Alarysa'
         );
+        // Kin at a remove the walk has no word for reads as kin.
+        expect(screen.getByRole('button', { name: /Isolde/ })).toHaveTextContent('Kin of Alarysa');
         // No relation on record and no description: the card prints its name alone.
         expect(screen.getByRole('button', { name: /Marrow/ })).toHaveTextContent(/^Marrow$/);
         expect(screen.queryByText(/pre-authored/i)).not.toBeInTheDocument();

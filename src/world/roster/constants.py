@@ -35,6 +35,15 @@ class RelationshipType(models.TextChoices):
     LATER_INCARNATION = "later-incarnation", "Later Incarnation"
 
 
+# What an open seat is to the head of its house when the two are kin and the
+# derivation walk has no closer word (#5130, owner ruling 2026-11-15): past
+# sibling, cousin, niece or nephew, where it would be "second cousin once
+# removed", the card says kin. Sent beside the ``RelationshipType`` values by
+# ``kinship.relations_to``; not a member of that enum, since
+# ``derive_relationship`` never returns it.
+KIN_AT_A_REMOVE = "kin"
+
+
 class DefinitionTier(models.TextChoices):
     """How defined a Kinsperson is — aligned with the real NPC ladder (#2062).
 

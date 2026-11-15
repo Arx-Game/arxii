@@ -275,8 +275,9 @@ class OpenSeatSerializer(KinSlotSerializer):
     the head of the house (#5130).
 
     ``head_relation`` is read from the view's ``head_relations`` context (person
-    pk to ``RelationshipType`` value, public record only); null when the house
-    has no head on record or the seat is no known relation of theirs.
+    pk to a ``RelationshipType`` value or ``KIN_AT_A_REMOVE``, public record
+    only); null when the house has no head on record or the seat is no known
+    relation of theirs.
     """
 
     head_relation = serializers.SerializerMethodField()
@@ -285,7 +286,7 @@ class OpenSeatSerializer(KinSlotSerializer):
         fields = [*KinSlotSerializer.Meta.fields, "head_relation"]
         read_only_fields = fields
 
-    @extend_schema_field(serializers.ChoiceField(choices=RelationshipType.choices, allow_null=True))
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_head_relation(self, obj: Kinsperson) -> str | None:
         return self.context.get("head_relations", {}).get(obj.pk)
 

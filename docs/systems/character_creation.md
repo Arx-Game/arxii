@@ -1050,7 +1050,10 @@ something to stand beside. The seat cards (`KinSlotPicker`, headed like the Vaca
 picker with copy `vacancy_heading`) read `GET /api/roster/families/<id>/slots/`, whose
 seats each carry `head_relation`, what the seat is to whoever holds the house's top title
 (`houses.services.head_of_family`, `kinship.relations_to`, public record only), beside
-the response's `head_name`: a card reads "Head of house" or "Child of <head>" and so on,
+the response's `head_name`: a card reads "Head of house" or "Child of <head>" and so on;
+where the two are kin and the walk has no closer word than that (a shared ancestor on the
+public record past cousin, or both born to the family's name with no parents on record)
+it reads "Kin of <head>" (`KIN_AT_A_REMOVE`, `kinship._kin_at_a_remove`),
 then the seat's description when staff wrote one. "(name set)" is gone; a named seat whose
 name the player may change shows it with an asterisk. No parents are asked for on the
 claim path, and `_bind_invented_parents` skips it: a seat's parents are the ones staff

@@ -24,6 +24,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from world.roster.constants import (
+    KIN_AT_A_REMOVE,
     DefinitionTier,
     MaritalStatus,
     MembershipBasis,
@@ -1265,10 +1266,69 @@ def relations_to(head: Kinsperson | None, people: Iterable[Kinsperson]) -> dict[
     """What each person is to ``head`` on the public record, by person pk (#5130).
 
     ``RelationshipType.SELF`` for ``head``'s own node, ``CHILD`` for a child of
-    ``head``, and so on; None where no relationship is on record or there is no
+    ``head``, and so on. Where the walk has no word and the two are kin all the
+    same, ``KIN_AT_A_REMOVE`` (owner ruling 2026-11-15: no "second cousin once
+    removed" on a card). None where no relationship is on record or there is no
     head. Read as an anonymous viewer, so a hidden parentage never shows: this
     feeds the seat cards in character creation, which anyone may read.
     """
+    people = list(people)
     if head is None:
         return {person.pk: None for person in people}
-    return {person.pk: derive_relationship(head, person, None) for person in people}
+    relations = {person.pk: derive_relationship(head, person, None) for person in people}
+    unnamed = [person for person in people if relations[person.pk] is None]
+    for pk in _kin_at_a_remove(head, unnamed):
+        relations[pk] = KIN_AT_A_REMOVE
+    return relations
+
+
+# How far up the public record the kin walk climbs: one query a generation for
+# every seat together, so the bound is a cost ceiling, not a rule of kinship.
+_KIN_WALK_GENERATIONS = 8
+
+_BORN_TO_THE_NAME = (MembershipBasis.BORN, MembershipBasis.FOUNDING)
+
+
+def _kin_at_a_remove(head: Kinsperson, people: list[Kinsperson]) -> set[int]:
+    """Which of ``people`` are kin of ``head`` though the walk named no relation.
+
+    Two stored facts make kin: a shared ancestor on the public record (one of
+    the two may be that ancestor), or both born to the same family's name, which
+    is how a cousin written into a house with no parents on record is kin of its
+    head.
+    """
+    if not people:
+        return set()
+    lines = _public_ancestor_lines([head, *people])
+    kin = {person.pk for person in people if lines[head.pk] & lines[person.pk]}
+    born = FamilyMembership.objects.filter(
+        kinsperson__in=[head, *people], ended_at__isnull=True, basis__in=_BORN_TO_THE_NAME
+    ).values_list("kinsperson_id", "family_id")
+    families: dict[int, set[int]] = defaultdict(set)
+    for kinsperson_id, family_id in born:
+        families[kinsperson_id].add(family_id)
+    kin |= {person.pk for person in people if families[head.pk] & families[person.pk]}
+    return kin
+
+
+def _public_ancestor_lines(people: list[Kinsperson]) -> dict[int, set[int]]:
+    """Each person's ancestors on the public record, themselves included.
+
+    Foster parents are not lineage, as in ``parents_of``. Climbs every line at
+    once, one query a generation, up to ``_KIN_WALK_GENERATIONS``.
+    """
+    lines = {person.pk: {person.pk} for person in people}
+    frontiers = {person.pk: {person.pk} for person in people}
+    for _ in range(_KIN_WALK_GENERATIONS):
+        wanted = set().union(*frontiers.values())
+        if not wanted:
+            break
+        parents: dict[int, set[int]] = defaultdict(set)
+        for edge in _visible_edges(Q(child_id__in=wanted), None):
+            if edge.kind != ParentageKind.FOSTER:
+                parents[edge.child_id].add(edge.parent_id)
+        for pk, frontier in frontiers.items():
+            climbed = set().union(*(parents[child] for child in frontier)) - lines[pk]
+            lines[pk] |= climbed
+            frontiers[pk] = climbed
+    return lines
