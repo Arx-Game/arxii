@@ -1894,7 +1894,14 @@ class CharacterDraft(SharedMemoryModel):
         Returns dict mapping stage number to completion boolean. Derived from
         get_stage_validation_errors(): a stage is complete when it has no errors.
         """
-        errors = self.get_stage_validation_errors()
+        return self.stage_completion_from(self.get_stage_validation_errors())
+
+    def stage_completion_from(self, errors: StageValidationErrors) -> dict[int, bool]:
+        """Completion read off a validator pass the caller already made (#5130).
+
+        A response that carries both the errors and the completion makes one pass
+        and reads it both ways; the pass is most of what a draft response costs.
+        """
         return {
             stage: not errors.get(stage, []) for stage in self.Stage if stage != self.Stage.REVIEW
         } | {self.Stage.REVIEW: False}

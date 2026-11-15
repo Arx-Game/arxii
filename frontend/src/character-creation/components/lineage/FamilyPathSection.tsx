@@ -83,11 +83,9 @@ export function FamilyPathSection({
   const setPath = (next: string) =>
     updateDraft.mutate({ draftId: draft.id, data: { family_path: next as FamilyPath } });
 
-  const showInventedParents =
-    (path === 'named' || path === 'claimed') &&
-    !draft.claimed_kin_slot &&
-    !draft.claimed_kin_pool &&
-    !draft.defer_parents;
+  // An established family is joined through a seat, and a seat's parents are the
+  // ones staff wrote (#5130): only a family of the player's own has parents to name.
+  const showInventedParents = path === 'named' && !draft.defer_parents;
 
   const adoptive = template.parentage === 'adoptive';
 
@@ -314,10 +312,15 @@ function ClaimedFamilyPath({
     });
   };
 
-  const houseFamilies = families?.filter((f) => f.kind.styles_as_house) ?? [];
-  const otherFamilies = families?.filter((f) => !f.kind.styles_as_house) ?? [];
+  // A family with no seat to take is not offered (#5130). The one the draft
+  // already holds stays, so its error has something to stand beside.
+  const offered = families?.filter((f) => f.has_open_seat || f.id === draft.family?.id) ?? [];
+  const houseFamilies = offered.filter((f) => f.kind.styles_as_house);
+  const otherFamilies = offered.filter((f) => !f.kind.styles_as_house);
+  // Founding asks whether this beginning claims houses at all, seats or no seats.
+  const claimsHouses = families?.some((f) => f.kind.styles_as_house) ?? false;
   const showHouseFounding =
-    !draft.family && (template.claimable_kind_ids.length === 0 || houseFamilies.length > 0);
+    !draft.family && (template.claimable_kind_ids.length === 0 || claimsHouses);
   const selectedFamily = families?.find((f) => f.id === draft.family?.id);
 
   return (
@@ -360,7 +363,7 @@ function ClaimedFamilyPath({
             </div>
           )}
 
-          {(families?.length ?? 0) === 0 && (
+          {offered.length === 0 && (
             <p className="text-sm text-muted-foreground">
               No families are open to this upbringing. Contact staff.
             </p>
@@ -402,12 +405,13 @@ function ClaimVacancies({
   const kin = (data ?? []).filter(
     (v) => v.basis === 'kin' && v.organization.family?.id === organizationFamilyId
   );
-  if (kin.length === 0) return <KinSlotPicker draft={draft} familyId={organizationFamilyId} />;
+  const heading = copy?.vacancy_heading ?? 'Your place in the family';
+  if (kin.length === 0) {
+    return <KinSlotPicker draft={draft} familyId={organizationFamilyId} heading={heading} />;
+  }
   return (
     <div className="space-y-2">
-      <Label className="text-sm font-medium text-muted-foreground">
-        {copy?.vacancy_heading ?? 'Your place in the family'}
-      </Label>
+      <Label className="text-sm font-medium text-muted-foreground">{heading}</Label>
       <VacancyPicker
         draft={draft}
         vacancies={kin}

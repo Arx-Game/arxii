@@ -115,7 +115,14 @@ Societies > Vacancies > Add): name, description, link a `KinSlotPool` on that fa
 of the family's influence), and `count_remaining` (openings left). A Vacancy with a
 `kin_pool` or `kin_node` set is a **kin** Vacancy (`basis == "kin"`): claiming the
 staff family on the claim path requires taking it when the family offers one, in place
-of the free kin-slot picker. Cost = `cg_point_cost + cost_per_influence * family.influence`.
+of the seat picker. Cost = `cg_point_cost + cost_per_influence * family.influence`.
+
+A family is offered in character creation only while it has a seat to take (#5130,
+ADR-5130): an open seat on a person (the Almanach person page's "open for claiming",
+with its age range, genders and whether the name is fixed) or a `KinSlotPool` with
+openings left (Admin > Roster > Kin slot pools: the family, the parents, how many).
+To let more players in as cousins, add a pool or raise its count; to close a family,
+let its seats fill. Do not: expect a family with no seat to appear in the list.
 
 ## Recipe 12: a standing retainer Vacancy
 Same admin path as Recipe 11, but leave `kin_pool`/`kin_node` unset (a **retainer**

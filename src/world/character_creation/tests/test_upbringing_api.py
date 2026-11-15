@@ -4,7 +4,7 @@ from django.test import TestCase
 from evennia.accounts.models import AccountDB
 from rest_framework.test import APIClient
 
-from world.character_creation.constants import AnchorSource, FamilyPath, QuestionKind
+from world.character_creation.constants import AnchorSource, FamilyPath, QuestionKind, Stage
 from world.character_creation.factories import (
     BeginningsFactory,
     CharacterDraftFactory,
@@ -221,6 +221,82 @@ class DraftUpbringingPatchTest(TestCase):
         assert draft.family is None
         assert draft.claimed_kin_slot is None
         assert draft.claimed_kin_pool is None
+
+    def test_a_response_makes_one_validator_pass_and_reads_it_both_ways(self):
+        """``stage_completion`` and ``stage_errors`` come from the same pass (#5130):
+        the validators are most of a draft response's cost, and it used to run twice."""
+        from unittest import mock
+
+        from world.character_creation import validators
+
+        with mock.patch.object(
+            validators, "get_all_stage_errors", wraps=validators.get_all_stage_errors
+        ) as passes:
+            body = self.client.get(self.url).json()
+        assert passes.call_count == 1
+        draft = CharacterDraft.objects.get(pk=self.draft.pk)
+        expected = {str(int(stage)): done for stage, done in draft.get_stage_completion().items()}
+        assert body["stage_completion"] == expected
+        # A stage with an error is not complete, and the two keys agree on which.
+        assert body["stage_errors"][str(int(Stage.LINEAGE))]
+        assert body["stage_completion"][str(int(Stage.LINEAGE))] is False
+
+    def _claim(self, family):
+        """Put the draft on the claim path with ``family`` picked; the last response."""
+        self.client.patch(
+            self.url, {"selected_origin_template_id": self.template.id}, format="json"
+        )
+        self.client.patch(self.url, {"family_path": FamilyPath.CLAIMED}, format="json")
+        return self.client.patch(self.url, {"family_id": family.id}, format="json")
+
+    @staticmethod
+    def _lineage_errors(response) -> list[str]:
+        return response.json()["stage_errors"].get(str(int(Stage.LINEAGE)), [])
+
+    def test_a_seat_is_picked_through_the_draft_and_completes_the_family(self):
+        """The seat picker's own request, end to end (#5130): a claimed family is
+        incomplete until a seat of it is picked, and the answer names the seat."""
+        realm = self.template.beginning.starting_area.realm
+        family = FamilyFactory(origin_realm=realm)
+        seat = KinspersonFactory(family=family, is_appable=True)
+
+        res = self._claim(family)
+        assert res.status_code == 200
+        assert "Choose your place in the family" in self._lineage_errors(res)
+
+        res = self.client.patch(
+            self.url, {"claimed_kin_slot_id": seat.id, "claimed_kin_pool_id": None}, format="json"
+        )
+        assert res.status_code == 200
+        assert res.json()["claimed_kin_slot"] == seat.id
+        assert "Choose your place in the family" not in self._lineage_errors(res)
+
+        # Letting the seat go leaves the family without a place again.
+        res = self.client.patch(
+            self.url, {"claimed_kin_slot_id": None, "claimed_kin_pool_id": None}, format="json"
+        )
+        assert res.json()["claimed_kin_slot"] is None
+        assert "Choose your place in the family" in self._lineage_errors(res)
+
+    def test_changing_the_family_lets_go_of_the_old_familys_seat(self):
+        """A seat belongs to one family (#5130): it does not follow the draft."""
+        realm = self.template.beginning.starting_area.realm
+        first = FamilyFactory(origin_realm=realm)
+        second = FamilyFactory(origin_realm=realm)
+        seat = KinspersonFactory(family=first, is_appable=True)
+        pool = KinSlotPoolFactory(family=first)
+        self._claim(first)
+        self.client.patch(self.url, {"claimed_kin_slot_id": seat.id}, format="json")
+
+        res = self.client.patch(self.url, {"family_id": second.id}, format="json")
+        assert res.json()["claimed_kin_slot"] is None
+        assert "Choose your place in the family" in self._lineage_errors(res)
+
+        # The same for a counted opening.
+        self.client.patch(self.url, {"family_id": first.id}, format="json")
+        self.client.patch(self.url, {"claimed_kin_pool_id": pool.id}, format="json")
+        res = self.client.patch(self.url, {"family_id": second.id}, format="json")
+        assert res.json()["claimed_kin_pool"] is None
 
     def test_clearing_the_upbringing_also_clears_the_vacancy_and_served_house(self):
         """A PATCH that nulls the Upbringing must drop a stale Vacancy pick too (#3648 review).

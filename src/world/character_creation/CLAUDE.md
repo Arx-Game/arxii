@@ -14,7 +14,9 @@ Character creation is a multi-stage process that guides players through creating
    ritual); typed prompts with costed pick-list choices priced by the claimed
    family's influence, plus a Service panel offering any reachable retainer Vacancy
    on any path (#3617, #3648; see `docs/systems/character_creation.md`'s Lineage
-   step section and ADR-0273). Plus kin-slot claim/mint/defer and invented parents
+   step section and ADR-0273). An established family is joined only through a seat
+   staff opened (#5130, ADR-5130: `_get_seat_errors`; no free entry, no invented parents
+   on the claim path). Plus kin-slot claim/mint/defer and invented parents
    (#2815: names/genders in draft_data, `second_parent_species` for a
    cross-species parent, unlocks that line's colors in Appearance; finalize
    creates the nodes and pins back-inference). No spouse, child or twin is built here
@@ -309,5 +311,9 @@ Checks if account can create characters (email verified, under the character lim
   instance is process-wide, not per-request: it froze the first request's verdict
   and every later response replayed it, which read to the player as finished stages
   still flagged incomplete and a complete draft refused at submit. Each response
-  therefore runs the validator pass twice (once per field); if that cost ever
-  matters, make the validators cheaper rather than caching their result on the draft.
+  makes one validator pass and reads it both ways (#5130:
+  `CharacterDraftSerializer.to_representation` fills `stage_completion` from the
+  `stage_errors` it just computed, through `CharacterDraft.stage_completion_from`).
+  The pass was 120 of the 171 queries a complete draft's response made when each
+  field ran its own, so it is still the first place to look if a draft save is slow:
+  make the validators cheaper rather than caching their result on the draft.

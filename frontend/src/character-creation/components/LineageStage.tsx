@@ -40,7 +40,15 @@ import {
 import { Input } from '@/components/ui/input';
 import { ChapterLeaf, Paragraphs } from '../folio';
 import { PARENT_FATES, resolveFamilyPath, Stage, STAGE_LABELS } from '../types';
-import type { CharacterDraft, Family, KinSlot, KinSlotPool, ParentFate, TarotCard } from '../types';
+import type {
+  CharacterDraft,
+  Family,
+  HeadRelation,
+  KinSlot,
+  KinSlotPool,
+  ParentFate,
+  TarotCard,
+} from '../types';
 import { UpbringingPrompts } from './lineage/UpbringingPrompts';
 import { LifeGrids } from './lineage/LifeGrids';
 import { FamilyPathSection } from './lineage/FamilyPathSection';
@@ -376,15 +384,73 @@ export function FamilyNamePreview({
 }
 
 // =============================================================================
-// KinSlotPicker — open app-in positions for the chosen family (#2062)
+// KinSlotPicker: the open seats of the chosen family (#2062, #5130)
 // =============================================================================
 
 interface KinSlotPickerProps {
   draft: CharacterDraft;
   familyId: number;
+  heading: string;
 }
 
-export function KinSlotPicker({ draft, familyId }: KinSlotPickerProps) {
+/** A seat's relation to the head of the house, in the words a card prints. */
+const HEAD_RELATION_WORDS: Partial<Record<HeadRelation, string>> = {
+  parent: 'Parent',
+  child: 'Child',
+  sibling: 'Sibling',
+  'half-sibling': 'Half-sibling',
+  'step-parent': 'Stepparent',
+  'step-child': 'Stepchild',
+  'foster-parent': 'Foster parent',
+  'foster-child': 'Foster child',
+  'foster-sibling': 'Foster sibling',
+  spouse: 'Spouse',
+  'in-law': 'In-law',
+  grandparent: 'Grandparent',
+  grandchild: 'Grandchild',
+  'aunt/uncle': 'Aunt or uncle',
+  'niece/nephew': 'Niece or nephew',
+  cousin: 'Cousin',
+};
+
+/**
+ * "Head of house" for the head's own seat, "Child of Aldric" and the like for a
+ * relative; '' when the house has no head on record or the seat is no known
+ * relation of theirs.
+ */
+function headRelationLine(relation: HeadRelation | null | undefined, headName: string): string {
+  if (relation === 'self') return 'Head of house';
+  const word = relation ? HEAD_RELATION_WORDS[relation] : undefined;
+  return word && headName ? `${word} of ${headName}` : '';
+}
+
+function seatConstraints(item: {
+  age_min: number | null;
+  age_max: number | null;
+  allowed_genders: string[];
+}): string {
+  const parts: string[] = [];
+  if (item.age_min !== null || item.age_max !== null) {
+    parts.push(`age ${item.age_min ?? '?'}-${item.age_max ?? '?'}`);
+  }
+  if (item.allowed_genders.length > 0) {
+    parts.push(item.allowed_genders.join('/'));
+  }
+  return parts.join(' · ');
+}
+
+const SEAT_CARD = 'rounded-md border p-3 text-left text-sm transition-colors';
+
+function seatCardClass(chosen: boolean): string {
+  return cn(SEAT_CARD, chosen ? 'border-primary bg-primary/10' : 'hover:bg-muted/50');
+}
+
+/**
+ * An established family is joined through a seat staff opened (#5130): a named
+ * seat or one of a counted pool of openings. There is no card for joining
+ * without one. A second press on the chosen card clears it.
+ */
+export function KinSlotPicker({ draft, familyId, heading }: KinSlotPickerProps) {
   const updateDraft = useUpdateDraft();
   const { data: openings, isLoading } = useFamilySlots(familyId);
 
@@ -396,6 +462,7 @@ export function KinSlotPicker({ draft, familyId }: KinSlotPickerProps) {
   if (slots.length === 0 && pools.length === 0) {
     return null;
   }
+  const headName = openings?.head_name ?? '';
 
   const selectedSlotId = draft.claimed_kin_slot ?? null;
   const selectedPoolId = draft.claimed_kin_pool ?? null;
@@ -410,81 +477,62 @@ export function KinSlotPicker({ draft, familyId }: KinSlotPickerProps) {
     });
   };
 
-  const constraintLine = (item: {
-    age_min: number | null;
-    age_max: number | null;
-    allowed_genders: string[];
-  }) => {
-    const parts: string[] = [];
-    if (item.age_min !== null || item.age_max !== null) {
-      parts.push(`age ${item.age_min ?? '?'}-${item.age_max ?? '?'}`);
-    }
-    if (item.allowed_genders.length > 0) {
-      parts.push(item.allowed_genders.join('/'));
-    }
-    return parts.join(' · ');
-  };
-
   return (
     <div className="space-y-2">
-      <Label className="text-sm font-medium text-muted-foreground">
-        Open Positions in This House
-      </Label>
+      <Label className="text-sm font-medium text-muted-foreground">{heading}</Label>
       <div className="grid gap-2 sm:grid-cols-2">
-        <Card
-          className={cn(
-            'cursor-pointer transition-all',
-            !selectedSlotId && !selectedPoolId && 'ring-2 ring-primary'
-          )}
-          onClick={() => pick(null, null)}
-        >
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">No specific position</CardTitle>
-          </CardHeader>
-        </Card>
-        {slots.map((slot) => (
-          <Card
-            key={`slot-${slot.id}`}
-            className={cn(
-              'cursor-pointer transition-all',
-              selectedSlotId === slot.id && 'ring-2 ring-primary'
-            )}
-            onClick={() => pick(slot, null)}
-          >
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">
-                {slot.name || 'Unnamed position'}
-                {slot.name_locked ? ' (name set)' : ''}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 text-xs text-muted-foreground">
-              {slot.description || 'A pre-authored place in the family tree.'}
-              {constraintLine(slot) && <div className="mt-1">{constraintLine(slot)}</div>}
-            </CardContent>
-          </Card>
-        ))}
-        {pools.map((pool) => (
-          <Card
-            key={`pool-${pool.id}`}
-            className={cn(
-              'cursor-pointer transition-all',
-              selectedPoolId === pool.id && 'ring-2 ring-primary'
-            )}
-            onClick={() => pick(null, pool)}
-          >
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">
-                {pool.description || 'Family opening'} ({pool.count_remaining} left)
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 text-xs text-muted-foreground">
-              {pool.parent_names.length > 0 && (
-                <span>Child of {pool.parent_names.join(' & ')}</span>
+        {slots.map((slot) => {
+          const chosen = selectedSlotId === slot.id;
+          const relation = headRelationLine(slot.head_relation, headName);
+          const constraints = seatConstraints(slot);
+          return (
+            <button
+              key={`slot-${slot.id}`}
+              type="button"
+              aria-pressed={chosen}
+              onClick={() => pick(chosen ? null : slot, null)}
+              className={seatCardClass(chosen)}
+            >
+              <span className="block font-medium">
+                {slot.name || 'An open seat'}
+                {/* A written name is the seat's; only one the player may change is marked. */}
+                {slot.name && !slot.name_locked && <span title="This name can be changed">*</span>}
+              </span>
+              {relation && <span className="block text-xs text-muted-foreground">{relation}</span>}
+              {slot.description && (
+                <span className="block text-xs text-muted-foreground">{slot.description}</span>
               )}
-              {constraintLine(pool) && <div className="mt-1">{constraintLine(pool)}</div>}
-            </CardContent>
-          </Card>
-        ))}
+              {constraints && (
+                <span className="mt-1 block text-xs text-muted-foreground">{constraints}</span>
+              )}
+            </button>
+          );
+        })}
+        {pools.map((pool) => {
+          const chosen = selectedPoolId === pool.id;
+          const constraints = seatConstraints(pool);
+          return (
+            <button
+              key={`pool-${pool.id}`}
+              type="button"
+              aria-pressed={chosen}
+              onClick={() => pick(null, chosen ? null : pool)}
+              className={seatCardClass(chosen)}
+            >
+              <span className="block font-medium">
+                {pool.description || 'An open seat'} ({pool.count_remaining} left)
+              </span>
+              {pool.parent_names.length > 0 && (
+                <span className="block text-xs text-muted-foreground">
+                  Child of {pool.parent_names.join(' & ')}
+                </span>
+              )}
+              {constraints && (
+                <span className="mt-1 block text-xs text-muted-foreground">{constraints}</span>
+              )}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

@@ -40,6 +40,12 @@ class FamilySerializer(serializers.ModelSerializer):
     inherited = serializers.SerializerMethodField(
         help_text="Facets/features/liege a house materialized on this family carries (#3648)."
     )
+    has_open_seat = serializers.SerializerMethodField(
+        help_text=(
+            "Whether a new character can still be seated here: an unclaimed open seat "
+            "or a pool with openings left (#5130)."
+        )
+    )
 
     class Meta:
         model = Family
@@ -55,6 +61,7 @@ class FamilySerializer(serializers.ModelSerializer):
             "taken_in_particle",
             "inherited",
             "standing",
+            "has_open_seat",
         ]
         read_only_fields = ["id"]
 
@@ -124,6 +131,15 @@ class FamilySerializer(serializers.ModelSerializer):
             ],
             "liege_name": liege.liege.name if liege is not None else "",
         }
+
+    def get_has_open_seat(self, obj: Family) -> bool:
+        """The list view's batched set (``open_seat_family_ids``), else one lookup."""
+        open_ids = self.context.get("open_seat_family_ids")
+        if open_ids is None:
+            from world.roster.services.kinship import open_seat_family_ids  # noqa: PLC0415
+
+            open_ids = open_seat_family_ids([obj.id])
+        return obj.id in open_ids
 
     def get_standing(self, obj) -> int | None:
         by_family = self.context.get("standing_by_family")
@@ -252,6 +268,26 @@ class KinSlotSerializer(serializers.ModelSerializer):
             "family",
         ]
         read_only_fields = fields
+
+
+class OpenSeatSerializer(KinSlotSerializer):
+    """An open seat as the seat browser lists it: the slot plus what it is to
+    the head of the house (#5130).
+
+    ``head_relation`` is read from the view's ``head_relations`` context (person
+    pk to ``RelationshipType`` value, public record only); null when the house
+    has no head on record or the seat is no known relation of theirs.
+    """
+
+    head_relation = serializers.SerializerMethodField()
+
+    class Meta(KinSlotSerializer.Meta):
+        fields = [*KinSlotSerializer.Meta.fields, "head_relation"]
+        read_only_fields = fields
+
+    @extend_schema_field(serializers.ChoiceField(choices=RelationshipType.choices, allow_null=True))
+    def get_head_relation(self, obj: Kinsperson) -> str | None:
+        return self.context.get("head_relations", {}).get(obj.pk)
 
 
 class KinSlotPoolSerializer(serializers.ModelSerializer):

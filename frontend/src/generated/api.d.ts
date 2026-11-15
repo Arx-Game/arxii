@@ -3932,7 +3932,14 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Open appable positions + pools for this family (CG slot browser). */
+    /**
+     * @description Open appable positions + pools for this family (CG slot browser).
+     *
+     *     Each seat carries what it is to the head of the house, and the response
+     *     names that head, so a seat card can say "Child of <head>" (#5130). Both
+     *     are read off the public record: this is open to anyone in character
+     *     creation, whoever they are.
+     */
     get: operations['character_creation_families_slots_retrieve'];
     put?: never;
     post?: never;
@@ -22132,7 +22139,14 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Open appable positions + pools for this family (CG slot browser). */
+    /**
+     * @description Open appable positions + pools for this family (CG slot browser).
+     *
+     *     Each seat carries what it is to the head of the house, and the response
+     *     names that head, so a seat card can say "Child of <head>" (#5130). Both
+     *     are read off the public record: this is open to anyone in character
+     *     creation, whoever they are.
+     */
     get: operations['roster_families_slots_retrieve'];
     put?: never;
     post?: never;
@@ -35067,6 +35081,8 @@ export interface components {
         [key: string]: unknown;
       };
       readonly standing: number | null;
+      /** @description Whether a new character can still be seated here: an unclaimed open seat or a pool with openings left (#5130). */
+      readonly has_open_seat: boolean;
     };
     /** @description Mirrors ``almanach_pages.FamilyDocument``. */
     FamilyDocument: {

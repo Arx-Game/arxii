@@ -186,7 +186,11 @@ person.
   through `OrganizationShopWindowSerializer`, the realm hub's gate shape, or
   null for a family with no org, plus `realm_name`, and each node's
   `full_name`/`short_name`),
-  `families/:id/slots/` (slot browser; `[]` for a non-playable family). The
+  `families/:id/slots/` (the open seats: `{head_name, slots, pools}`, empty for a
+  non-playable family; since #5130 each seat carries `head_relation`, what it is to
+  the holder of the house's top title on the public record, null when there is no
+  head or no relation on record, and each family row on the list carries
+  `has_open_seat`, which is what character creation offers a family by). The
   same `FamilyViewSet` is also
   mounted at `GET /api/character-creation/families/` (`character_creation/
   urls.py:38`) for the CG Lineage stage, producing two operation ids for one
@@ -203,7 +207,10 @@ person.
   services (CG finalization + staff admin) — deliberately no generic CRUD.
 - CG: draft fields `claimed_kin_slot(_id)` / `claimed_kin_pool(_id)` /
   `defer_parents`; `finalize_character` → `_bind_kinship_node` (claim →
-  mint → self-serve fallback). FE: `KinSlotPicker` in LineageStage.
+  mint → self-serve fallback). FE: `KinSlotPicker` in LineageStage. Since #5130
+  (ADR-5130) a claimed family needs one of the two (or a kin Vacancy): there is no
+  free entry, and the self-serve fallback is reached on the claim path only when a
+  picked seat was lost before finalize.
 - (#3003) FE: `frontend/src/kinship/components/KinshipPanel.tsx` — a Kinship
   tab on the character sheet, rendering the family tree via `KinTreeGraph`
   and the pairwise relationship label for the selected node. Each node dict

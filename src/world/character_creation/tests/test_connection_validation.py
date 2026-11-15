@@ -14,7 +14,7 @@ from world.character_creation.factories import (
     OriginTemplateSlotFactory,
 )
 from world.character_creation.validators import get_lineage_errors
-from world.roster.factories import FamilyFactory
+from world.roster.factories import FamilyFactory, KinSlotPoolFactory
 from world.societies.factories import OrganizationFactory
 
 
@@ -101,4 +101,6 @@ class OwnFamilyGroupLineageTest(TestCase):
         draft = _draft(template, origin_choices={str(slot.id): choice.id})
         draft.family = family
         draft.family_path = "claimed"
+        # An established family is joined through a seat (#5130).
+        draft.claimed_kin_pool = KinSlotPoolFactory(family=family)
         assert get_lineage_errors(draft) == []

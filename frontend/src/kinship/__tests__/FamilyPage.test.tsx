@@ -67,6 +67,7 @@ function katta(): FamilyTree {
       taken_in_particle: 'mal',
       standing: null,
       inherited: { facets: [], features: [], liege_name: '' },
+      has_open_seat: true,
     },
     house: {
       id: 3,
@@ -143,6 +144,7 @@ function tallow(): FamilyTree {
 
 function seats(): FamilySlots {
   return {
+    head_name: '',
     slots: [
       {
         id: 1,
@@ -344,7 +346,7 @@ describe('FamilyPage', () => {
     expect(within(open).getByText('2 seats')).toBeInTheDocument();
     unmount();
 
-    givenSeats({ slots: [], pools: [] });
+    givenSeats({ head_name: '', slots: [], pools: [] });
     renderPage();
     expect(screen.queryByRole('region', { name: 'Open seats' })).not.toBeInTheDocument();
   });

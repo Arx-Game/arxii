@@ -39,7 +39,7 @@ import {
 } from '../testUtils';
 import { characterCreationKeys } from '../../queries';
 import { Stage } from '../../types';
-import type { FamilyPath } from '../../types';
+import type { CharacterDraft, FamilyPath, KinSlot } from '../../types';
 
 // Mock the API module
 vi.mock('../../api', () => ({
@@ -78,7 +78,7 @@ describe('LineageStage', () => {
       flavor_text: '',
       codex_entry_id: null,
     });
-    vi.mocked(api.getFamilySlots).mockResolvedValue({ slots: [], pools: [] });
+    vi.mocked(api.getFamilySlots).mockResolvedValue({ head_name: '', slots: [], pools: [] });
     vi.mocked(api.getCGExplanations).mockResolvedValue({});
     vi.mocked(api.getVacancies).mockResolvedValue([]);
     vi.mocked(api.getCGPointBudget).mockResolvedValue({
@@ -200,6 +200,7 @@ describe('LineageStage', () => {
     it('claim path shows family cards filtered by kind and the kin-slot picker', async () => {
       vi.mocked(api.getFamilies).mockResolvedValue([mockNobleFamily, mockNobleFamily2]);
       vi.mocked(api.getFamilySlots).mockResolvedValue({
+        head_name: '',
         slots: [
           {
             id: 1,
@@ -210,6 +211,7 @@ describe('LineageStage', () => {
             age_max: null,
             allowed_genders: [],
             family: mockNobleFamily.id,
+            head_relation: null,
           },
         ],
         pools: [],
@@ -228,12 +230,149 @@ describe('LineageStage', () => {
       });
       expect(await screen.findByText('Valardin')).toBeInTheDocument();
       expect(screen.getByText('Velenosa')).toBeInTheDocument();
-      expect(await screen.findByText('Open Positions in This House')).toBeInTheDocument();
+      expect(await screen.findByText('Your place in the family')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Heir/ })).toBeInTheDocument();
+    });
+
+    describe('the open seats of an established family (#5130)', () => {
+      const seat = (over: Partial<KinSlot>): KinSlot => ({
+        id: 1,
+        name: 'Kathryn',
+        name_locked: true,
+        description: '',
+        age_min: null,
+        age_max: null,
+        allowed_genders: [],
+        family: mockNobleFamily.id,
+        head_relation: null,
+        ...over,
+      });
+
+      function renderSeats(slots: KinSlot[], draftOver: Partial<CharacterDraft> = {}) {
+        vi.mocked(api.getFamilies).mockResolvedValue([mockNobleFamily]);
+        vi.mocked(api.getFamilySlots).mockResolvedValue({
+          head_name: 'Alarysa',
+          slots,
+          pools: [
+            {
+              id: 9,
+              family: mockNobleFamily.id,
+              description: 'A cousin of the line',
+              count_remaining: 3,
+              age_min: null,
+              age_max: null,
+              allowed_genders: [],
+              parent_names: [],
+            },
+          ],
+        });
+        const draft = createMockDraft({
+          ...mockDraftWithUpbringing,
+          family: mockNobleFamily,
+          ...draftOver,
+        });
+        renderWithCharacterCreationProviders(
+          <LineageStage draft={draft} onStageSelect={vi.fn()} />,
+          { queryClient: createTestQueryClient() }
+        );
+        return draft;
+      }
+
+      it('offers only seats: no card for joining without one', async () => {
+        renderSeats([seat({})]);
+        expect(await screen.findByRole('button', { name: /Kathryn/ })).toBeInTheDocument();
+        expect(
+          screen.getByRole('button', { name: /A cousin of the line \(3 left\)/ })
+        ).toBeVisible();
+        expect(screen.queryByText(/no specific position/i)).not.toBeInTheDocument();
+        // A seat's parents are the ones staff wrote; none are asked for here.
+        expect(screen.queryByText(/your parents/i)).not.toBeInTheDocument();
+      });
+
+      it('says what the seat is to the head of the house', async () => {
+        renderSeats([
+          seat({ id: 1, name: 'Kathryn', head_relation: 'child' }),
+          seat({ id: 2, name: 'Alarysa', head_relation: 'self' }),
+          seat({ id: 3, name: 'Tobren', head_relation: 'niece/nephew' }),
+          seat({ id: 4, name: 'Marrow', head_relation: null }),
+        ]);
+        const kathryn = await screen.findByRole('button', { name: /Kathryn/ });
+        expect(kathryn).toHaveTextContent('Child of Alarysa');
+        expect(screen.getByRole('button', { name: /^Alarysa/ })).toHaveTextContent('Head of house');
+        expect(screen.getByRole('button', { name: /Tobren/ })).toHaveTextContent(
+          'Niece or nephew of Alarysa'
+        );
+        // No relation on record and no description: the card prints its name alone.
+        expect(screen.getByRole('button', { name: /Marrow/ })).toHaveTextContent(/^Marrow$/);
+        expect(screen.queryByText(/pre-authored/i)).not.toBeInTheDocument();
+      });
+
+      it('marks only a name the player may change', async () => {
+        renderSeats([
+          seat({ id: 1, name: 'Kathryn', name_locked: true }),
+          seat({ id: 2, name: 'Tobren', name_locked: false }),
+          seat({ id: 3, name: '', name_locked: false }),
+        ]);
+        expect(await screen.findByRole('button', { name: /Kathryn/ })).toHaveTextContent(
+          /^Kathryn$/
+        );
+        expect(screen.getByRole('button', { name: /Tobren/ })).toHaveTextContent(/^Tobren\*$/);
+        expect(screen.getByRole('button', { name: /An open seat$/ })).toBeInTheDocument();
+        expect(screen.queryByText(/name set/i)).not.toBeInTheDocument();
+      });
+
+      it('picks a seat', async () => {
+        const draft = renderSeats([seat({ id: 7 })]);
+        vi.mocked(api.updateDraft).mockClear();
+        await userEvent.click(await screen.findByRole('button', { name: /Kathryn/ }));
+        expect(api.updateDraft).toHaveBeenCalledWith(draft.id, {
+          claimed_kin_slot_id: 7,
+          claimed_kin_pool_id: null,
+        });
+      });
+
+      it('shows the held seat as pressed, and pressing it again lets it go', async () => {
+        const draft = renderSeats([seat({ id: 7 })], { claimed_kin_slot: 7 });
+        vi.mocked(api.updateDraft).mockClear();
+        const held = await screen.findByRole('button', { name: /Kathryn/ });
+        expect(held).toHaveAttribute('aria-pressed', 'true');
+        await userEvent.click(held);
+        expect(api.updateDraft).toHaveBeenCalledWith(draft.id, {
+          claimed_kin_slot_id: null,
+          claimed_kin_pool_id: null,
+        });
+      });
+    });
+
+    it('a family with no seat to take is not offered, unless the draft already holds it', async () => {
+      vi.mocked(api.getFamilies).mockResolvedValue([
+        mockNobleFamily,
+        { ...mockNobleFamily2, has_open_seat: false },
+      ]);
+      const draft = createMockDraft({ ...mockDraftWithUpbringing, family_path: 'claimed' });
+      const view = renderWithCharacterCreationProviders(
+        <LineageStage draft={draft} onStageSelect={vi.fn()} />,
+        { queryClient: createTestQueryClient() }
+      );
+      expect(await screen.findByText('Valardin')).toBeInTheDocument();
+      expect(screen.queryByText('Velenosa')).not.toBeInTheDocument();
+      view.unmount();
+
+      const holding = createMockDraft({
+        ...mockDraftWithUpbringing,
+        family_path: 'claimed',
+        family: { ...mockNobleFamily2, has_open_seat: false },
+      });
+      renderWithCharacterCreationProviders(
+        <LineageStage draft={holding} onStageSelect={vi.fn()} />,
+        { queryClient: createTestQueryClient() }
+      );
+      expect(await screen.findByText('Velenosa')).toBeInTheDocument();
     });
 
     it("a house's card carries its line of introduction and opens the house's page (#5106)", async () => {
       vi.mocked(api.getFamilies).mockResolvedValue([mockNobleFamily, mockNobleFamily2]);
-      vi.mocked(api.getFamilySlots).mockResolvedValue({ slots: [], pools: [] });
+      vi.mocked(api.getFamilySlots).mockResolvedValue({ head_name: '', slots: [], pools: [] });
       const onUpdate = vi.mocked(api.updateDraft);
       onUpdate.mockClear();
       const draft = createMockDraft({ ...mockDraftWithUpbringing, family_path: 'claimed' });
@@ -260,7 +399,6 @@ describe('LineageStage', () => {
       );
 
       expect(await screen.findByText(mockVacancyKin.name)).toBeInTheDocument();
-      expect(screen.queryByText('Open Positions in This House')).not.toBeInTheDocument();
 
       await userEvent.click(screen.getByRole('button', { name: new RegExp(mockVacancyKin.name) }));
 

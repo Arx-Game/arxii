@@ -536,7 +536,10 @@ section for the full #2428/#2440/#2441/#2442 build record.
   investigation/clues natively).
 - The app-in slot mountain: appable nodes with constraints + `KinSlotPool`
   fuzzy capacity; CG lineage stage claims a position (`KinSlotPicker`) and
-  finalization binds the sheet, inheriting a living tree. Deferred
+  finalization binds the sheet, inheriting a living tree. Since #5130 the seat is
+  the only way into an established family (no free entry, a family with no open
+  seat is not offered), and each seat card says what the seat is to the head of the
+  house (ADR-5130). Deferred
   definitions (leave parents blank, define later, review-gated).
 - Surfaces: viewer-aware tree + slots REST (families list filterable by
   `has_open_positions`/`area_id`), telnet `sheet/family`, staff admin,

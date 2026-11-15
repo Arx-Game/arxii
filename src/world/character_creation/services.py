@@ -1143,6 +1143,11 @@ def _bind_invented_parents(draft: CharacterDraft, child_node: Kinsperson) -> Non
         # No known parents (#4024): any names left in the draft from an earlier
         # Upbringing are not parents of this character.
         return
+    if draft.resolve_family_path() == FamilyPath.CLAIMED:
+        # An established family is joined through a seat (#5130), and a seat's
+        # parents are the ones staff wrote: names left in the draft from another
+        # path never add parents to a staff family's tree.
+        return
     line_name = str(draft.draft_data.get("line_parent_name", "")).strip()
     other_name = str(draft.draft_data.get("other_parent_name", "")).strip()
     if not line_name and not other_name:

@@ -1679,9 +1679,23 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         nested_context["beginning_id"] = obj.selected_beginnings_id
         return TraditionSerializer(obj.selected_tradition, context=nested_context).data
 
-    def get_stage_completion(self, obj: CharacterDraft) -> dict[int, bool]:
-        """Get completion status for each stage."""
-        return obj.get_stage_completion()
+    def to_representation(self, instance: CharacterDraft) -> dict:
+        """One validator pass per response (#5130).
+
+        ``stage_completion`` is ``stage_errors`` read the other way. When each key
+        ran its own pass the validators were 120 of the 171 queries a complete
+        draft's response made, so a click in character creation waited on the same
+        work twice. The pass is still made for every response and never kept on the
+        draft (``CharacterDraft.get_stage_validation_errors`` says why).
+        """
+        data = super().to_representation(instance)
+        data["stage_completion"] = instance.stage_completion_from(data["stage_errors"])
+        return data
+
+    def get_stage_completion(self, _obj: CharacterDraft) -> dict[int, bool]:
+        """Completion status for each stage: ``to_representation`` fills it from the
+        same validator pass as ``stage_errors``, so this getter makes none."""
+        return {}
 
     def get_stage_errors(self, obj: CharacterDraft) -> StageValidationErrors:
         """Get validation errors for each stage."""
@@ -2083,15 +2097,22 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def _reconcile_vacancy_claims(instance: CharacterDraft, validated_data: dict) -> None:
-        """A Vacancy supplies its own kin link; a changed family drops the Vacancy."""
+        """A Vacancy supplies its own kin link; a changed family drops the Vacancy
+        and the seat picked in the old one."""
         vacancy = validated_data.get("selected_vacancy", _UNSET)
         if vacancy is not _UNSET and vacancy is not None:
             # A Vacancy supplies its own kin link; a manual claim would double it.
             validated_data["claimed_kin_slot"] = None
             validated_data["claimed_kin_pool"] = None
         family = validated_data.get("family", _UNSET)
-        if family is not _UNSET and family != instance.family and instance.selected_vacancy_id:
+        if family is _UNSET or family == instance.family:
+            return
+        if instance.selected_vacancy_id:
             validated_data.setdefault("selected_vacancy", None)
+        # A seat belongs to one family (#5130): the old family's seat does not
+        # follow the draft to the new one.
+        validated_data.setdefault("claimed_kin_slot", None)
+        validated_data.setdefault("claimed_kin_pool", None)
 
     def _validate_stats(self, stats) -> None:
         """Each named stat is a real stat, an integer, and inside the allowed band."""

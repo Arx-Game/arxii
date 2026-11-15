@@ -31,7 +31,7 @@ from world.roster.serializers import (
     KinRelationshipQuerySerializer,
     KinRelationshipSerializer,
     KinSlotPoolSerializer,
-    KinSlotSerializer,
+    OpenSeatSerializer,
 )
 from world.roster.services.kinship import (
     OMNISCIENT,
@@ -39,7 +39,9 @@ from world.roster.services.kinship import (
     derive_relationship,
     family_tree_for,
     kin_tree_for_sheet,
+    open_seat_family_ids,
     open_slots_for,
+    relations_to,
 )
 from world.societies.houses.almanach_reads import facet_payload
 
@@ -179,6 +181,8 @@ class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
             "particles_by_family": particles_for_families(families),
             # #4060 slice 4: how each family is doing, two grouped queries for the list.
             "standing_by_family": standings_for_families(families),
+            # #5130: which families still have a seat to take, two flat queries.
+            "open_seat_family_ids": open_seat_family_ids(family.pk for family in families),
         }
         serializer = self.get_serializer_class()(families, many=True, context=context)
         return Response(serializer.data)
@@ -191,12 +195,29 @@ class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=[HTTPMethod.GET])
     def slots(self, request: Request, pk: int | None = None) -> Response:
-        """Open appable positions + pools for this family (CG slot browser)."""
+        """Open appable positions + pools for this family (CG slot browser).
+
+        Each seat carries what it is to the head of the house, and the response
+        names that head, so a seat card can say "Child of <head>" (#5130). Both
+        are read off the public record: this is open to anyone in character
+        creation, whoever they are.
+        """
+        from world.societies.houses.services import (  # noqa: PLC0415
+            head_of_family,
+            tree_names_for,
+        )
+
         family = self.get_object()
         nodes, pools = open_slots_for(family)
+        head = head_of_family(family)
+        head_name = tree_names_for([head], within=family)[head.pk].short if head else ""
+        seats = OpenSeatSerializer(
+            nodes, many=True, context={"head_relations": relations_to(head, nodes)}
+        )
         return Response(
             {
-                "slots": KinSlotSerializer(nodes, many=True).data,
+                "head_name": head_name,
+                "slots": seats.data,
                 "pools": KinSlotPoolSerializer(pools, many=True).data,
             }
         )

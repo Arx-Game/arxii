@@ -1240,3 +1240,35 @@ def open_slots_for(family: Family) -> tuple[list[Kinsperson], list[KinSlotPool]]
         )
     )
     return nodes, pools
+
+
+def open_seat_family_ids(family_ids: Iterable[int]) -> set[int]:
+    """Which of these families a new character can still be seated in (#5130).
+
+    A family is joined through a seat staff opened: an unclaimed appable node,
+    or a pool with openings left. Two flat queries for a whole family list;
+    the same two tests ``open_slots_for`` applies to one family.
+    """
+    ids = list(family_ids)
+    if not ids:
+        return set()
+    seated = Kinsperson.objects.filter(
+        family_id__in=ids, is_appable=True, sheet__isnull=True
+    ).values_list("family_id", flat=True)
+    pooled = KinSlotPool.objects.filter(family_id__in=ids, count_remaining__gt=0).values_list(
+        "family_id", flat=True
+    )
+    return set(seated) | set(pooled)
+
+
+def relations_to(head: Kinsperson | None, people: Iterable[Kinsperson]) -> dict[int, str | None]:
+    """What each person is to ``head`` on the public record, by person pk (#5130).
+
+    ``RelationshipType.SELF`` for ``head``'s own node, ``CHILD`` for a child of
+    ``head``, and so on; None where no relationship is on record or there is no
+    head. Read as an anonymous viewer, so a hidden parentage never shows: this
+    feeds the seat cards in character creation, which anyone may read.
+    """
+    if head is None:
+        return {person.pk: None for person in people}
+    return {person.pk: derive_relationship(head, person, None) for person in people}

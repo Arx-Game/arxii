@@ -261,6 +261,31 @@ export function useCreateDraft() {
 /** Shared mutation key so concurrent draft PATCHes can detect each other. */
 const DRAFT_UPDATE_MUTATION_KEY = ['character-creation', 'update-draft'] as const;
 
+/**
+ * The picks a PATCH writes under `<field>_id` and the draft reads back as the
+ * bare pk under `<field>` (#5130). The optimistic merge spreads the write keys,
+ * so without this a picked seat or opening showed only when the server answered.
+ */
+const PICKED_BY_ID = [
+  ['claimed_kin_slot_id', 'claimed_kin_slot'],
+  ['claimed_kin_pool_id', 'claimed_kin_pool'],
+  ['selected_vacancy_id', 'selected_vacancy'],
+  ['served_house_id', 'served_house'],
+] as const;
+
+function optimisticPicks(data: CharacterDraftUpdate): Partial<CharacterDraft> {
+  const picks: Partial<CharacterDraft> = {};
+  for (const [writeKey, readKey] of PICKED_BY_ID) {
+    if (data[writeKey] !== undefined) picks[readKey] = data[writeKey];
+  }
+  // The server drops a hand-picked seat when a Vacancy is taken; show that at once too.
+  if (data.selected_vacancy_id != null) {
+    picks.claimed_kin_slot = null;
+    picks.claimed_kin_pool = null;
+  }
+  return picks;
+}
+
 export function useUpdateDraft() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -278,6 +303,7 @@ export function useUpdateDraft() {
         queryClient.setQueryData<CharacterDraft>(characterCreationKeys.draft(), {
           ...previous,
           ...data,
+          ...optimisticPicks(data),
           draft_data: { ...previous.draft_data, ...(data.draft_data ?? {}) },
         } as CharacterDraft);
       }

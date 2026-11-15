@@ -585,6 +585,8 @@ shelf, not new player-made characters going through CG.
 
 **Query Parameters:** `has_open_kin_slots=true` (filter families with placeholder members; renamed from `has_open_positions`, #3648)
 
+Each family row carries `has_open_seat` (#5130): an unclaimed open seat or a pool with openings left. Character creation offers only families that have one. `GET /api/roster/families/{id}/slots/` lists those seats with each one's `head_relation` and the house head's `head_name`.
+
 ### Family Members (`/api/roster/family-members/`)
 - Full CRUD for family members (creator or staff only for write)
 
