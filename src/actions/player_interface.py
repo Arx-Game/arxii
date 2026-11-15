@@ -614,33 +614,36 @@ def _fury_tier_options(ladder: list[FuryTier]) -> tuple[FuryTierOption, ...]:
 def _eligible_fury_resonances(
     sheet: CharacterSheet, ladder: list[FuryTier]
 ) -> tuple[FuryResonanceOption, ...]:
-    """The resonances the character holds that her strength lets her give in to (#5124).
+    """The kindled resonances she can give in to now, with their strength word (#5124).
 
-    Each carries the most every tier can buy at its strength: the trade at the highest
-    authored degree share (#4738). Task 6 of #5124 narrows this to kindled resonances.
+    A resonance is offered only while it is kindled and its strength lets her give in at
+    least the shallowest tier. Each carries the deepest tier depth its strength reaches and,
+    per tier, the most that tier can buy at that strength: the trade at the highest authored
+    degree share (#4738), so the picker does no tuning math.
     """
     from world.magic.services.fury import (  # noqa: PLC0415
         full_trade_intensities,
+        provocation_bonus_percent,
+        provocation_cap,
         top_share_percent,
-        top_strength_tier,
     )
+    from world.magic.services.kindling import kindled_resonances_now  # noqa: PLC0415
 
-    # Until Task 6 reads each resonance's own strength, every resonance reads the same row,
-    # so it and the figures built from it are worked out once, outside the loop.
-    strength = top_strength_tier()
-    if strength is None or strength.give_in_max_depth < 1:
-        return ()
-    cap = strength.give_in_max_depth
-    full = full_trade_intensities(
-        ladder, strength.give_in_bonus_percent, top_percent=top_share_percent()
-    )
+    top_percent = top_share_percent()
     options: list[FuryResonanceOption] = []
-    for held in sheet.cached_resonances:
-        resonance = held.resonance
+    for entry in kindled_resonances_now(sheet):
+        strength = entry.tier
+        cap = provocation_cap(strength)
+        if strength is None or cap < 1:
+            continue
+        full = full_trade_intensities(
+            ladder, provocation_bonus_percent(strength), top_percent=top_percent
+        )
         options.append(
             FuryResonanceOption(
-                id=resonance.pk,
-                name=resonance.name,
+                id=entry.resonance.pk,
+                name=entry.resonance.name,
+                strength_name=strength.name,
                 provocation_cap=cap,
                 tier_full_intensities=tuple(
                     FuryResonanceTierIntensity(tier_id=tier.pk, full_intensity=full[tier.pk])

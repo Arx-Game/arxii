@@ -54,7 +54,7 @@ from world.scenes.constants import RoundStatus
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.magic.models import Technique
+    from world.magic.models import FuryTier, Resonance, Technique
     from world.magic.types.pull import CastPullDeclaration
 
 # Encounter statuses that represent an ongoing (non-completed) combat.
@@ -451,6 +451,26 @@ class CombatRoundContext(RoundContext):
                 character.combat_pulls.invalidate()
             raise
 
+    @staticmethod
+    def _refuse_unreachable_fury(
+        participant: CombatParticipant,
+        fury_commitment: FuryTier | None,
+        fury_resonance: Resonance | None,
+    ) -> None:
+        """Refuse giving in to an unkindled resonance, or deeper than its strength reaches."""
+        if fury_commitment is None:
+            return
+        from world.magic.services.fury import (  # noqa: PLC0415
+            give_in_strength,
+            provocation_cap,
+        )
+
+        strength = give_in_strength(participant.character_sheet, fury_resonance)
+        if strength is None:
+            raise ActionDispatchError(ActionDispatchError.FURY_NOT_KINDLED)
+        if provocation_cap(strength) < fury_commitment.depth:
+            raise ActionDispatchError(ActionDispatchError.FURY_OVER_CAP)
+
     @transaction.atomic
     def _record_combat_declaration_in_transaction(
         self,
@@ -499,11 +519,7 @@ class CombatRoundContext(RoundContext):
 
         # The web dispatch reaches here without the cast's round_declaration hook, so the
         # strength's depth cap is enforced again before anything is charged (#4738).
-        if fury_commitment is not None:
-            from world.magic.services.fury import provocation_cap  # noqa: PLC0415
-
-            if provocation_cap(participant.character_sheet, fury_resonance) < fury_commitment.depth:
-                raise ActionDispatchError(ActionDispatchError.FURY_OVER_CAP)
+        self._refuse_unreachable_fury(participant, fury_commitment, fury_resonance)
 
         slot = player_action.ref.action_slot or CombatActionSlot.FOCUSED
         if slot == CombatActionSlot.FOCUSED:

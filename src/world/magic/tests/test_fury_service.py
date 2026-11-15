@@ -1,7 +1,6 @@
 """Tests for the fury resolution service (strength cap, clamp, the bought share)."""
 
 from decimal import Decimal
-from unittest.mock import patch
 
 from django.test import TestCase
 
@@ -13,9 +12,12 @@ from world.magic.factories import (
     FuryTierFactory,
     KindledStrengthTierFactory,
     ResonanceFactory,
+    kindle_resonance,
 )
 from world.magic.services.fury import (
     clamp_tier,
+    give_in_refusal,
+    give_in_strength,
     provocation_cap,
     provocation_ease,
     resolve_fury,
@@ -49,9 +51,8 @@ class ResolveFuryNoResonanceTests(TestCase):
     def test_no_resonance_returns_unavailable(self):
         """resonance=None → cap=0 → clamp returns None → nothing surrendered or bought."""
         res = resolve_fury(
-            character=self.character.character,
             tier=self.t1,
-            resonance=None,
+            strength=give_in_strength(self.character, None),
             check_result=_FakeCheck(CheckOutcomeFactory(name="Success", success_level=1)),
         )
         self.assertIsNone(res.realized_tier)
@@ -70,7 +71,7 @@ class ResolveFuryStrengthTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         FuryConfigFactory()
-        KindledStrengthTierFactory(
+        cls.strength = KindledStrengthTierFactory(
             rank=3, give_in_max_depth=2, give_in_bonus_percent=20, give_in_ease=4
         )
         config = get_strain_config()
@@ -85,14 +86,11 @@ class ResolveFuryStrengthTests(TestCase):
         cls.t3 = FuryTierFactory(
             name="Infernal", depth=3, control_surrendered=20, berserk_severity=5
         )
-        cls.source_sheet = CharacterSheetFactory()
-        cls.resonance = ResonanceFactory()
 
-    def _resolve(self, tier, outcome):
+    def _resolve(self, tier, outcome, strength=None):
         return resolve_fury(
-            character=self.source_sheet.character,
             tier=tier,
-            resonance=self.resonance,
+            strength=strength or self.strength,
             check_result=_FakeCheck(outcome),
         )
 
@@ -116,47 +114,72 @@ class ResolveFuryStrengthTests(TestCase):
         self.assertEqual(res.control_surrendered, 10)
 
     def test_no_check_buys_nothing(self):
-        res = resolve_fury(
-            character=self.source_sheet.character,
-            tier=self.t1,
-            resonance=self.resonance,
-            check_result=None,
-        )
+        res = resolve_fury(tier=self.t1, strength=self.strength, check_result=None)
         self.assertEqual(res.intensity_gained, 0)
 
     def test_berserk_tier_is_chosen_not_rolled(self):
         """A Berserk tier carries its severity even on the best outcome."""
-        with patch("world.magic.services.fury.provocation_cap", return_value=3):
-            res = self._resolve(self.t3, self.success)
+        deep = KindledStrengthTierFactory(
+            rank=2, name="Blazing", give_in_max_depth=3, give_in_bonus_percent=20
+        )
+        res = self._resolve(self.t3, self.success, strength=deep)
         self.assertEqual(res.berserk_severity, 5)
 
     def test_non_berserk_tier_never_berserks_on_a_bad_roll(self):
         self.assertEqual(self._resolve(self.t1, self.unshared).berserk_severity, 0)
 
 
-class ProvocationEaseTests(TestCase):
-    """provocation_ease reads the strength row's give_in_ease."""
+class GivingInToAKindledResonanceTests(TestCase):
+    """Giving in reads the kindled strength of the named resonance, and refuses the rest."""
 
     @classmethod
     def setUpTestData(cls):
         FuryConfigFactory()
-        KindledStrengthTierFactory(rank=3, give_in_max_depth=2, give_in_ease=6)
-        cls.source_sheet = CharacterSheetFactory()
-        cls.resonance = ResonanceFactory()
+        cls.faint = KindledStrengthTierFactory(
+            rank=1, name="Faint", give_in_max_depth=1, give_in_bonus_percent=0, give_in_ease=2
+        )
+        cls.blazing = KindledStrengthTierFactory(
+            rank=3, name="Blazing", give_in_max_depth=3, give_in_bonus_percent=40, give_in_ease=6
+        )
+        cls.hold = FuryTierFactory(name="Let it in", depth=1, control_surrendered=2)
+        cls.lose = FuryTierFactory(
+            name="Lose yourself", depth=3, control_surrendered=9, berserk_severity=5
+        )
 
-    def test_provocation_ease_reads_the_strength_row(self):
-        self.assertEqual(provocation_ease(self.source_sheet.character, self.resonance), 6)
-        self.assertEqual(provocation_cap(self.source_sheet.character, self.resonance), 2)
+    def setUp(self):
+        self.sheet = CharacterSheetFactory()
+        self.resonance = ResonanceFactory(name="Wrath")
 
-    def test_provocation_ease_zero_for_no_resonance(self):
-        self.assertEqual(provocation_ease(self.source_sheet.character, None), 0)
+    def test_an_unkindled_resonance_is_refused_in_words(self):
+        self.assertIsNone(give_in_strength(self.sheet, self.resonance))
+        self.assertEqual(
+            give_in_refusal(self.sheet, self.resonance, self.hold),
+            "Your Wrath is not kindled right now, so you cannot give in to it.",
+        )
 
-    def test_no_strength_row_gives_nothing(self):
-        from world.magic.models import KindledStrengthTier
+    def test_a_resonance_she_does_not_hold_is_refused(self):
+        self.assertIsNotNone(give_in_refusal(self.sheet, ResonanceFactory(), self.hold))
 
-        KindledStrengthTier.objects.all().delete()
-        self.assertEqual(provocation_cap(self.source_sheet.character, self.resonance), 0)
-        self.assertEqual(provocation_ease(self.source_sheet.character, self.resonance), 0)
+    def test_a_kindled_resonance_gives_in_at_the_tier_row_numbers(self):
+        kindle_resonance(self.sheet, self.resonance, self.blazing)
+        strength = give_in_strength(self.sheet, self.resonance)
+        self.assertEqual(strength, self.blazing)
+        self.assertEqual(provocation_cap(strength), 3)
+        self.assertEqual(provocation_ease(strength), 6)
+        self.assertIsNone(give_in_refusal(self.sheet, self.resonance, self.lose))
+
+    def test_berserk_is_offered_only_where_the_strength_reaches_it(self):
+        kindle_resonance(self.sheet, self.resonance, self.faint)
+        self.assertEqual(provocation_cap(give_in_strength(self.sheet, self.resonance)), 1)
+        self.assertIsNone(give_in_refusal(self.sheet, self.resonance, self.hold))
+        self.assertEqual(
+            give_in_refusal(self.sheet, self.resonance, self.lose),
+            "Your Wrath is not kindled enough to give in as far as Lose yourself.",
+        )
+
+    def test_no_strength_gives_nothing(self):
+        self.assertEqual(provocation_cap(None), 0)
+        self.assertEqual(provocation_ease(None), 0)
 
 
 class _FakeCheck:

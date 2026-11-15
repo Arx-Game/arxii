@@ -572,6 +572,7 @@ class FuryResonanceOption:
     """One resonance the character can give in to, for the fury declaration picker (#5124).
 
     ``id`` is the Resonance PK sent as ``fury_resonance_id``.
+    ``strength_name`` is its kindled strength's name (the word the player reads).
     ``provocation_cap`` is the deepest tier depth its strength allows, pre-computed
     server-side so the client can gate tiers without a round-trip.
     ``tier_full_intensities`` carries, per tier, the full-share intensity scaled by this
@@ -581,4 +582,5 @@ class FuryResonanceOption:
     id: int
     name: str
     provocation_cap: int
+    strength_name: str = ""
     tier_full_intensities: tuple[FuryResonanceTierIntensity, ...] = ()

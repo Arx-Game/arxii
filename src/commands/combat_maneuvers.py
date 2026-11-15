@@ -698,7 +698,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
 
     @staticmethod
     def _fury_tier_lines() -> list[str]:
-        """The tiers ``cast ... fury=<tier>`` accepts, as the web picker lists them."""
+        """The tiers ``cast ... givein=<resonance>:<tier>`` accepts, as the web lists them."""
         from world.magic.models import FuryTier  # noqa: PLC0415
         from world.magic.services.fury import fury_tier_label  # noqa: PLC0415
 

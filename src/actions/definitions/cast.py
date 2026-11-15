@@ -272,7 +272,7 @@ class CastTechniqueAction(Action):
 
     @staticmethod
     def _combat_fury_cap_refusal(ctx: Any, kwargs: dict[str, Any]) -> ActionResult | None:
-        """Refuse a Fury tier deeper than the resonance's strength allows (#4738).
+        """Refuse giving in to an unkindled resonance or deeper than its strength allows (#5124).
 
         Mirrors the scene serializer's ``_cap_fury_by_provocation`` with the same message,
         so the player learns it at declaration instead of finding a shallower tier (and
@@ -282,10 +282,7 @@ class CastTechniqueAction(Action):
         if fury_commitment_id is None:
             return None
         from world.magic.models import FuryTier, Resonance  # noqa: PLC0415
-        from world.magic.services.fury import (  # noqa: PLC0415
-            fury_over_cap_message,
-            provocation_cap,
-        )
+        from world.magic.services.fury import give_in_refusal  # noqa: PLC0415
 
         tier = FuryTier.objects.filter(pk=fury_commitment_id).first()
         if tier is None:
@@ -296,9 +293,9 @@ class CastTechniqueAction(Action):
             if fury_resonance_id is not None
             else None
         )
-        cap = provocation_cap(ctx.participant.character_sheet, resonance)
-        if cap < tier.depth:
-            return ActionResult(success=False, message=fury_over_cap_message(tier, cap))
+        refusal = give_in_refusal(ctx.participant.character_sheet, resonance, tier)
+        if refusal is not None:
+            return ActionResult(success=False, message=refusal)
         return None
 
     @staticmethod

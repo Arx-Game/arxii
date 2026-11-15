@@ -90,11 +90,7 @@ def _cap_fury_by_provocation(attrs: dict) -> dict:
 
     character = persona.character_sheet.character
 
-    from world.magic.services.fury import (  # noqa: PLC0415
-        NO_ENGAGEMENT_MESSAGE,
-        fury_over_cap_message,
-        provocation_cap,
-    )
+    from world.magic.services.fury import NO_ENGAGEMENT_MESSAGE, give_in_refusal  # noqa: PLC0415
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
 
     # Fury's trade lands on the engagement (#4738): with nothing at stake there is
@@ -102,9 +98,9 @@ def _cap_fury_by_provocation(attrs: dict) -> dict:
     if not CharacterEngagement.objects.filter(character_id=persona.character_sheet_id).exists():
         raise serializers.ValidationError({"fury_commitment_id": NO_ENGAGEMENT_MESSAGE})
 
-    cap = provocation_cap(character, resonance)
-    if cap < tier.depth:
-        raise serializers.ValidationError({"fury_commitment_id": fury_over_cap_message(tier, cap)})
+    refusal = give_in_refusal(character, resonance, tier)
+    if refusal is not None:
+        raise serializers.ValidationError({"fury_commitment_id": refusal})
 
     return attrs
 

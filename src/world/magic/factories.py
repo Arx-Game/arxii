@@ -5045,6 +5045,33 @@ class KindledStrengthTierFactory(factory.django.DjangoModelFactory):
         return instance
 
 
+def kindle_resonance(sheet, resonance, tier) -> None:
+    """Make ``resonance`` kindled on ``sheet`` at the strength row ``tier``, wherever she is.
+
+    Goes through a real own-feeling situation: the sheet holds the resonance, the resonance
+    has a feeling, an authored ``own_feeling`` row kindles it from severity, and the
+    character carries a condition with that feeling at the severity ``tier`` is reached at
+    (the tier's ``min_severity``, set to its rank when it has none). No fight or scene is
+    needed, so a test of giving in does not have to stage one.
+    """
+    from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
+    from world.covenants.perks.constants import Situation
+    from world.mechanics.factories import PropertyFactory
+
+    if tier.min_severity == 0:
+        tier.min_severity = tier.rank
+        tier.save(update_fields=["min_severity"])
+    CharacterResonanceFactory(character_sheet=sheet, resonance=resonance)
+    sheet.__dict__.pop("cached_resonances", None)
+    if resonance.feeling is None:
+        resonance.feeling = PropertyFactory()
+        resonance.save(update_fields=["feeling"])
+    KindlingSituationFactory(resonance=resonance, situation=Situation.OWN_FEELING, strength=None)
+    template = ConditionTemplateFactory()
+    template.properties.add(resonance.feeling)
+    ConditionInstanceFactory(target=sheet.character, condition=template, severity=tier.min_severity)
+
+
 class KindlingConfigFactory(factory.django.DjangoModelFactory):
     """The kindling config singleton; passed fields (``harm_property=``) land on re-use."""
 

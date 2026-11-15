@@ -30,9 +30,6 @@ if TYPE_CHECKING:
     from world.conditions.models import ConditionTemplate
     from world.magic.models import Resonance
 
-#: The strength rank Fury temporarily reads until Task 6 of #5124 reads the declared one.
-_TOP_STRENGTH_RANK = 3
-
 NO_ENGAGEMENT_MESSAGE = "Fury needs something at stake: you are not engaged."
 
 
@@ -51,54 +48,73 @@ def _config() -> FuryConfig:
     return FuryConfig.objects.filter(pk=1).first() or FuryConfig()
 
 
-def top_strength_tier() -> KindledStrengthTier | None:
-    """The row of the strongest kindled strength (rank 3), or None when staff have not made it.
-
-    Task 6 of #5124 replaces this: Fury reads the strength row of the resonance the
-    character gives in to, once the kindling evaluation exists. Until then every declared
-    resonance reads the strongest row.
-    """
-    return KindledStrengthTier.objects.filter(rank=_TOP_STRENGTH_RANK).first()
+def _sheet_of(character: CharacterSheet | ObjectDB) -> CharacterSheet:
+    return character if isinstance(character, CharacterSheet) else character.sheet_data
 
 
-def provocation_cap(
+def give_in_strength(
     character: CharacterSheet | ObjectDB | None, resonance: Resonance | None
-) -> int:
+) -> KindledStrengthTier | None:
+    """The kindled strength row of the resonance she gives in to, or None.
+
+    None when there is no character or resonance, she does not hold the resonance, or it is
+    not kindled now. Read in her live fight and mission (``kindling_context_for``), the same
+    context a cast and the "Your resonances" panel read, so the three never disagree. The
+    row carries what the trade reads: ``give_in_max_depth``, ``give_in_bonus_percent`` and
+    ``give_in_ease``.
+    """
+    if character is None or resonance is None:
+        return None
+    from world.magic.services.kindling import (  # noqa: PLC0415
+        kindled_for,
+        kindling_context_for,
+    )
+
+    sheet = _sheet_of(character)
+    if not any(held.resonance_id == resonance.pk for held in sheet.cached_resonances):
+        return None
+    context = kindling_context_for(sheet)
+    return kindled_for(
+        sheet, resonance, resolution=context.resolution, mission=context.mission
+    ).tier
+
+
+def provocation_cap(strength: KindledStrengthTier | None) -> int:
     """Ceiling on fury depth: the deepest tier depth the strength row lets her give in.
 
-    Returns 0 when fury is unavailable (no character, no resonance, or no strength row).
-    Task 6 of #5124 replaces this with the named resonance's own kindled strength.
+    0 when she cannot give in (no kindled strength).
     """
-    if character is None or resonance is None:
-        return 0
-    tier = top_strength_tier()
-    return tier.give_in_max_depth if tier is not None else 0
+    return strength.give_in_max_depth if strength is not None else 0
 
 
-def provocation_bonus_percent(
-    character: CharacterSheet | ObjectDB | None, resonance: Resonance | None
-) -> int:
-    """Percent the intensity Fury buys grows at the resonance's strength (0 when unavailable).
+def provocation_bonus_percent(strength: KindledStrengthTier | None) -> int:
+    """Percent the intensity Fury buys grows at this strength (0 when none)."""
+    return strength.give_in_bonus_percent if strength is not None else 0
 
-    Task 6 of #5124 replaces this with the named resonance's own kindled strength.
+
+def provocation_ease(strength: KindledStrengthTier | None) -> int:
+    """Check-difficulty reduction at this strength (0 when none)."""
+    return strength.give_in_ease if strength is not None else 0
+
+
+def give_in_refusal(
+    character: CharacterSheet | ObjectDB, resonance: Resonance | None, tier: FuryTier
+) -> str | None:
+    """Why she cannot give in to ``resonance`` as deep as ``tier``, or None when she can.
+
+    The one check a declaration (scene, combat, telnet) and a cast make. An unkindled
+    resonance, or one she does not hold, is refused in words, never clamped to nothing; a
+    tier deeper than the strength allows is refused too, since a Berserk tier is offered only
+    where the strength reaches it.
     """
-    if character is None or resonance is None:
-        return 0
-    tier = top_strength_tier()
-    return tier.give_in_bonus_percent if tier is not None else 0
-
-
-def provocation_ease(
-    character: CharacterSheet | ObjectDB | None, resonance: Resonance | None
-) -> int:
-    """Check-difficulty reduction from the strength row (0 when unavailable).
-
-    Task 6 of #5124 replaces this with the named resonance's own kindled strength.
-    """
-    if character is None or resonance is None:
-        return 0
-    tier = top_strength_tier()
-    return tier.give_in_ease if tier is not None else 0
+    if resonance is None:
+        return "Name the resonance you give in to."
+    strength = give_in_strength(character, resonance)
+    if strength is None:
+        return fury_not_kindled_message(resonance)
+    if provocation_cap(strength) < tier.depth:
+        return fury_over_cap_message(tier, resonance)
+    return None
 
 
 def clamp_tier(declared_tier: FuryTier, cap: int) -> FuryTier | None:
@@ -238,9 +254,14 @@ def fury_intensity_for(tier: FuryTier, bonus_percent: int, outcome: CheckOutcome
     return _floor(full * Decimal(share.intensity_percent) / 100)
 
 
-def fury_over_cap_message(tier: FuryTier, cap: int) -> str:
+def fury_over_cap_message(tier: FuryTier, resonance: Resonance) -> str:
     """The refusal for a tier deeper than the resonance's strength allows (scene and combat)."""
-    return f"Fury tier depth ({tier.depth}) exceeds provocation cap ({cap})."
+    return f"Your {resonance.name} is not kindled enough to give in as far as {tier.name}."
+
+
+def fury_not_kindled_message(resonance: Resonance) -> str:
+    """The refusal for a resonance she does not hold or that is not kindled now."""
+    return f"Your {resonance.name} is not kindled right now, so you cannot give in to it."
 
 
 def fury_tier_label(tier: FuryTier) -> str:
@@ -257,31 +278,28 @@ def fury_trade_message(fury_res: FuryResolution) -> str:
     )
 
 
-def resolve_fury(*, character, tier, resonance, check_result) -> FuryResolution:
+def resolve_fury(*, tier, strength, check_result) -> FuryResolution:
     """Assemble a FuryResolution from the given parameters.
 
     Args:
-        character: The ObjectDB character invoking fury.
         tier: The FuryTier the player declared.
-        resonance: The Resonance she gives in to (nullable; None means unavailable).
+        strength: The kindled strength row of the resonance she gives in to (None means
+            unavailable).
         check_result: The control roll's CheckResult (its ``outcome`` picks the share);
             None buys nothing.
 
-    The declared tier is always clamped to the depth cap her strength allows; a cap of 0
-    (no resonance, no strength row) yields an empty resolution. Berserk is the realized tier's own
+    The declared tier is always clamped to the depth cap the strength allows; a cap of 0
+    (not kindled) yields an empty resolution. Berserk is the realized tier's own
     ``berserk_severity``: chosen, never rolled into.
     """
-    cap = provocation_cap(character, resonance)
-    realized = clamp_tier(tier, cap)
+    realized = clamp_tier(tier, provocation_cap(strength))
     if realized is None:
         return FuryResolution(None, 0, 0, 0)
     outcome = check_result.outcome if check_result is not None else None
     return FuryResolution(
         realized_tier=realized,
         control_surrendered=realized.control_surrendered,
-        intensity_gained=fury_intensity_for(
-            realized, provocation_bonus_percent(character, resonance), outcome
-        ),
+        intensity_gained=fury_intensity_for(realized, provocation_bonus_percent(strength), outcome),
         berserk_severity=realized.berserk_severity,
         outcome=outcome,
     )
@@ -365,7 +383,8 @@ class FuryCast:
         self._engagement = engagement_of(self.character)
         if self._engagement is None:
             return False
-        if clamp_tier(self.tier, provocation_cap(self.character, self.resonance)) is None:
+        strength = give_in_strength(self.character, self.resonance)
+        if clamp_tier(self.tier, provocation_cap(strength)) is None:
             self.resolution = FuryResolution(None, 0, 0, 0)
             return False
 
@@ -374,16 +393,14 @@ class FuryCast:
         from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
 
         check_type = _ensure_fury_check_type(_config().check_trait)
-        ease = provocation_ease(self.character, self.resonance)
+        ease = provocation_ease(strength)
         check = perform_check_with_modifiers(
             self.character,
             check_type,
             target_difficulty=max(self.tier.base_check_difficulty - ease, 0),
             extra_traits=activity_skill_terms(MagicActivity.FURY_CONTROL),
         )
-        self.resolution = resolve_fury(
-            character=self.character, tier=self.tier, resonance=self.resonance, check_result=check
-        )
+        self.resolution = resolve_fury(tier=self.tier, strength=strength, check_result=check)
         if self.resolution.realized_tier is None:
             return False
         shift_engagement(
