@@ -279,6 +279,9 @@ _NOT_A_ROLL = {
     # grades the difficulty of someone else's roll: the defender is not rolling, so a
     # once-only condition counts toward their resist and stays until they do (ADR-4720)
     "world/checks/services.py::compute_resist_increment",
+    # the same, for a player character who is the obstacle (concealment, a held condition, a
+    # resisted move): her full total is read for someone else's difficulty, nothing is rolled
+    "world/checks/services.py::compute_obstacle_rating",
 }
 # Calls that settle a breakdown's once-only terms (the second defers to the resume).
 _SPENDERS = {"spend_contributing_conditions", "spend_or_defer_condition_uses"}

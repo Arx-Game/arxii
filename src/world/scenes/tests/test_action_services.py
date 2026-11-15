@@ -11,6 +11,7 @@ from actions.factories import ActionTemplateFactory
 from actions.types import PendingActionResolution, StepResult
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.test_helpers import SeededLevelLadderMixin
 from world.consent.factories import SocialConsentCategoryFactory
 from world.consent.models import SocialConsentBlacklist
 from world.progression.factories import seed_kudos_difficulty_weights
@@ -1319,7 +1320,7 @@ class TestDefenderSetsPlausibilityBandAtConsent(TestCase):
         self.assertEqual(row.resist_effort_level, "low")
 
 
-class TestActiveResistanceRaisesDifficultyAndChargesFatigue(TestCase):
+class TestActiveResistanceRaisesDifficultyAndChargesFatigue(SeededLevelLadderMixin, TestCase):
     """Task 8 (C3): when a defender spends resist-effort, difficulty rises by the
     Composure increment AND the defender is charged social fatigue.
 
@@ -1329,6 +1330,7 @@ class TestActiveResistanceRaisesDifficultyAndChargesFatigue(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        super().setUpTestData()
         from world.checks.factories import create_resistance_check_types
         from world.traits.models import (
             CharacterTraitValue,
