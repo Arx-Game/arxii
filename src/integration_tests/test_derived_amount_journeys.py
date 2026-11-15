@@ -121,8 +121,9 @@ class ACheckRankDrivesAHaggle(JourneyCase):
     def test_a_rank_row_on_the_stat_its_check_reads_does_not_loop(self) -> None:
         # Written past clean() (a fixture or a script): "+1 strength per 2 Athletics
         # ranks", where Athletics reads strength. The inner read of strength, inside the
-        # Athletics rating, counts the row as 0, so the rating is 100 + 49 = 149, rank
-        # 17 (starts at 146), and the outer read adds 8: 108, not a RecursionError.
+        # Athletics rating, counts the row as 0, so the rating is 100 + 49 + the level-11 tier
+        # bonus of 48 = 197, rank 23 (starts at 194), and the outer read adds 11: 111, not a
+        # RecursionError.
         strength_target = ModifierTargetFactory(
             name="strength",
             category=ModifierCategoryFactory(name="stat"),
@@ -142,7 +143,7 @@ class ACheckRankDrivesAHaggle(JourneyCase):
         _at_level(corvin, 11)
         grant_distinction(corvin.sheet_data, looping, origin=DistinctionOrigin.GM_AWARD)
 
-        self.assertEqual(corvin.traits.get_trait_value(self.strength.name), 108)
+        self.assertEqual(corvin.traits.get_trait_value(self.strength.name), 111)
 
 
 class AThreadAndALevelDriveTheCharge(_WolfFangField):

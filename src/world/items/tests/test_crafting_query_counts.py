@@ -272,10 +272,12 @@ class CraftAttachFacetQueryCountTests(TestCase):
             # deduped) and the thread-ceiling probe. Band 79-81 → 81-83.
             # #4594: collect_check_modifiers reads the check lane's ModifierTaper rows once
             # (one constant query, never per row). Band 81-83 → 82-84.
+            # #5093: the LevelTier rows are read once per level strength (the difficulty and
+            # the level term), two constant queries. Band 82-84 → 84-86.
             self.assertTrue(
-                82 <= executed <= 84,
-                f"{executed} queries executed, expected 83 ±1 identity-map "
-                f"wobble (band 82-84). A jump of >=3 means a per-row N+1.",
+                84 <= executed <= 86,
+                f"{executed} queries executed, expected 85 ±1 identity-map "
+                f"wobble (band 84-86). A jump of >=3 means a per-row N+1.",
             )
 
         self.assertTrue(result.attached)
@@ -352,12 +354,13 @@ class BuildCraftingQuoteQueryCountTests(TestCase):
     def test_build_crafting_quote_query_count(self) -> None:
         """build_crafting_quote must not scale queries with consequence/cap/material row count.
 
-        Pinned at 11 queries (measured on SQLite, #1031 baseline):
+        Pinned at 12 queries (measured on SQLite, #1031 baseline):
           recipe GET (1) + ActionPointConfig × 2 + ActionPointPool GET (3)
           + CharacterAnima filter.first (1) + material_requirements select_related (1)
           + ItemInstance IN-list (1) + trait-value lookup (1)
           + CraftingSkillCap.for_skill (1) + consequence_rows select_related (1)
-          = 11 queries.
+          + LevelTier rows for the difficulty's level strength (1, #5093)
+          = 12 queries.
 
         material_requirements: single SELECT — NOT one per requirement.
         CraftingSkillCap.for_skill: single SELECT — NOT one per cap row.
@@ -368,7 +371,7 @@ class BuildCraftingQuoteQueryCountTests(TestCase):
         """
         from world.items.crafting.constants import CraftingRecipeKind
 
-        with self.assertNumQueries(11):
+        with self.assertNumQueries(12):
             quote = build_crafting_quote(
                 kind=CraftingRecipeKind.FACET_ATTACH,
                 crafter_character=self.character,

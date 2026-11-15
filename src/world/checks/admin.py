@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from django.forms.models import BaseInlineFormSet
 
 from world.admin_utils import OneRowPerFormSet
+from world.checks.constants import ModifierLane
 from world.checks.exceptions import ModifierConfigError
 from world.checks.models import (
     CheckCall,
@@ -29,6 +30,7 @@ from world.checks.modifier_values import (
     level_width,
     load_baselines,
     rank_band_share,
+    tier_bonus,
 )
 from world.checks.types import round_half_up
 from world.societies.admin_inlines import ConsequenceNamedOrganizationInline
@@ -282,6 +284,9 @@ class ModifierValueAdmin(admin.ModelAdmin):
             baseline = level_baseline(obj.level, obj.lane)
         except ModifierConfigError:
             return f"No level baseline row covers level {obj.level} yet."
+        if obj.lane == ModifierLane.CHECK:
+            # A check total also carries the level's tier jump (#5093).
+            baseline += tier_bonus(obj.level)
         share = rank_band_share(obj.value, baseline)
         band = f"; {share} of a rank band at that total" if share is not None else ""
         return (

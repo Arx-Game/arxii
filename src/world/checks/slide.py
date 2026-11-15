@@ -132,6 +132,8 @@ def _ladder_top_rank(baselines: BaselineTable, authored_top: int) -> int:
     if bonus <= 0:
         return authored_top
     width = baselines.width(top_level)
+    if width <= 0:
+        return authored_top
     return max(authored_top, top_level + -(-bonus // width))
 
 
