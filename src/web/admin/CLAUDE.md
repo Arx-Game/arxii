@@ -1877,6 +1877,11 @@ technique and vow picks, which the dashboard forwards from its own `?technique=`
 only — sliders/forms re-render fragments via `hx-get`; the simulation run itself writes
 nothing persistent (isolation contract in `world/combat/simulation.py`'s module docstring).
 
+**Scaling settings panel** (`_tuning/scaling/` → `admin_tuning_scaling`, #5093): read-only; every
+rank-means-level row (baselines, tiers, level share, size fractions, development cost, fatigue,
+pools and caps, buff sizes) with an edit link each. `web/admin/tuning/scaling_settings.py`;
+details in `docs/systems/tuning.md`.
+
 **Game Ops** (`_ops/` → `admin_ops`) — five HTMX-fragment panels (`tuning/ops_views.py`):
 progression, economy, story/GM, and reports-queue analytics (`tuning/metrics.py`), plus a
 refresh-on-demand Technical Health panel (`tuning/tech_health.py`: idmapper RAM via

@@ -11498,6 +11498,7 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   resolution) across #3017-#3020.
 - **Permissions:** every view superuser-only (`web.admin.tuning.views.superuser_required`,
   mirroring `game_setup_views.py`'s gate).
+- **Scaling settings panel (#5093):** `_tuning/scaling/` (`admin_tuning_scaling`), `web/admin/tuning/scaling_settings.py` `build_scaling_settings_panel()` returns frozen dataclasses (strength table at the path-change levels, worked example, settings, development cost, pools and caps, buff sizes); read-only, one load per table.
 - **Source:** `src/web/admin/tuning/`, `src/web/admin/content_load_views.py`,
   `src/core_management/grid_export.py`, `src/core_management/grid_import.py`,
   `src/core_management/content_repo.py`, `src/world/combat/simulation.py`.

@@ -10,7 +10,7 @@ admin-hosted with vanilla `django-htmx` instead of `django-unfold` or a React st
 Read+preview only — sliders/forms re-render fragments via `hx-get`; nothing here writes
 game config except the Monte Carlo run (which itself writes nothing persistent, see
 below). Edits to the underlying config models still go through the normal admin change
-forms. Five panels, each its own HTMX fragment endpoint loaded with `hx-trigger="load"`
+forms. Seven panels, each its own HTMX fragment endpoint loaded with `hx-trigger="load"`
 from `src/web/templates/admin/tuning/dashboard.html`:
 
 | Panel | Fragment view | URL name | Analytics module |
@@ -20,6 +20,8 @@ from `src/web/templates/admin/tuning/dashboard.html`:
 | Conditions | `tuning_conditions_fragment` | `admin_tuning_conditions` | `condition_analytics.py` |
 | Simulation | `tuning_simulation_fragment` | `admin_tuning_simulation` | `world.combat.simulation` |
 | Techniques | `tuning_techniques_fragment` | `admin_tuning_techniques` | `technique_analytics.py` + `world.magic.services.technique_power_eval` |
+| Capabilities | `tuning_capabilities_fragment` | `admin_tuning_capabilities` | `capability_power_analytics.py` |
+| Scaling settings | `tuning_scaling_fragment` | `admin_tuning_scaling` | `scaling_settings.py` |
 
 All views live in `src/web/admin/tuning/views.py` and are wrapped in `superuser_required`
 (defined there), which mirrors `game_setup_views.py`'s gate: `@staff_member_required` plus
@@ -446,6 +448,41 @@ has a `<details>` drill-down showing every check-bridge valuation line. Below th
 table: the zero/unpriced bucket (today, the whole catalog per Decision 5) and
 provenance summary.
 
+### Scaling settings panel — every number that sets how strong a level is (#5093)
+
+A read-only panel (`web/admin/tuning/scaling_settings.py`, template `_scaling_panel.html`, rules
+in `_panel_css.html` under `.scaling-*`) that shows the rank-means-level rows together, each with
+a link to the admin page that edits it. It writes nothing, and a missing row or config reads
+"not set" or "no rows yet" rather than raising or being created (it reads the singletons with
+`filter(pk=1).first()`, never `get_singleton()`, which creates the row). In the order it shows
+them:
+
+1. **How strong each level is on a roll**, at the path-change levels 1, 3, 6, 11, 16, 21 and 26
+   (`PATH_CHANGE_LEVELS`): the check baseline, the tier bonus jump on reaching each level, a
+   character's level term (`level_points`), an NPC's opposition (`difficulty_points`, baseline
+   plus tier bonus) and one level's width.
+2. **The worked example**, computed live: a level 5 character against a level 4 NPC, level 6
+   against 5, level 11 against 5. Each side is `difficulty_points` of its level (a character
+   with ordinary skills totals her level's strength), read through `load_ranks` and
+   `band_position`, the subtraction `resolve_standing` makes; "at the edge of the chart" is a
+   difference at or past the highest authored `ResultChart`.
+3. **Settings**: level share, the tier rows, buff sizes on rolls, the value override count,
+   development cost, fatigue and backfire difficulty, each with its value, what it changes in
+   play and an edit link.
+4. **Development cost per step** by value band 0 to 59, with the Gift thread row multiplied by
+   the gift `ThreadPullCost.imbue_cost_multiplier` (`get_imbue_cost_multiplier`).
+5. **Pools and caps**: every pool, cap and rung lane at the path levels, saying when a lane has no
+   rows.
+6. **Buff sizes in points**: rolls (one "at any level" row while every level reads the same),
+   then a small table each for stats, to-hit, damage and protection.
+
+Every table loads once whatever the number of levels, sizes or lanes: the baselines, size
+fractions and value overrides of all lanes come in one query each, and `level_points` and
+`load_ranks` take the loaded tables (`tables=`, `level_share=`, `baselines=`, `tiers=`). The
+query count is pinned in `test_tuning_scaling_panel.py`, which also holds the reader tests
+against the seeded rows, the superuser gate and the styling test (every class the panel emits has
+a rule reaching the dashboard page).
+
 ## Game Ops — `/admin/_ops/` (`admin_ops`)
 
 Parallel structure to Game Tuning: a page skeleton (`src/web/templates/admin/tuning/ops.html`)
@@ -668,6 +705,7 @@ mirrors the gate `game_setup_views.py` and the seed views already use (ADR-0022)
 
 - `src/web/admin/tests/test_tuning_views.py` — the dashboard skeleton (routing,
   superuser gate, panel scaffolding).
+- `src/web/admin/tests/test_tuning_scaling_panel.py` - the Scaling settings panel (#5093).
 - `src/web/admin/tests/test_checks_analytics.py`,
   `test_consequence_analytics.py`, `test_condition_analytics.py` —
   the checks/consequences/conditions panels.
