@@ -30,12 +30,17 @@ queue.
    The missives spec (#3289) uses its own `e2e_missives_account` and
    `seed_missive_spec`, which prepares a waiting letter, coin and an item and writes
    its identifiers to `/tmp/missive-seed.json`.
+   The family seats spec (#5130) uses its own `e2e_family_seats_account` and
+   `seed_family_seats_spec`: that account's creation draft at Lineage, a house with a
+   title holder and two open seats, and a house with none; its identifiers go to
+   `/tmp/family-seats-seed.json`.
 5. Runs the Playwright specs that need a live server, with one worker, using
    `frontend/e2e.backend.config.ts`: `e2e/account-settings.spec.ts`,
    `e2e/user-journey.spec.ts`, `e2e/motif-facets.spec.ts` (the Spellbook Facets
    panel and the creation facet field, #5021), `e2e/gift-substance.spec.ts` (#5018),
    `e2e/thrown-and-enchanted-strike.spec.ts` (#5026), `e2e/channels.spec.ts`
-   (#3299), `e2e/missives.spec.ts` (#3289), and `e2e/one-scale.spec.ts` (#5091).
+   (#3299), `e2e/missives.spec.ts` (#3289), `e2e/one-scale.spec.ts` (#5091), and `e2e/family-seats.spec.ts` (the seat picker
+   in character creation, #5130).
    Every other spec mocks the API and runs against `vite preview` under
    `frontend/playwright.config.ts`. A new spec that talks
    to :4001 must be added to the spec list in the workflow, and its rows to

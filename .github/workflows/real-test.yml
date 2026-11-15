@@ -232,6 +232,21 @@ jobs:
           open('/tmp/missive-seed.json', 'w').write(json.dumps(dataclasses.asdict(missive_seed)))
           print(missive_seed)
           "
+      - name: Seed the family seats spec's own account, draft and house
+        # #5130: the seats spec signs in as its own account, e2e_family_seats_account,
+        # because it needs that account's creation draft at Lineage, and the other
+        # specs read e2e_test_account's draft at other stages. Its ids go to the JSON
+        # file the spec reads (FAMILY_SEATS_SEED in frontend/e2e/family-seats.spec.ts).
+        run: |
+          uv run arx manage shell -c "
+          import dataclasses, json
+          from world.seeds.test_account import seed_test_account
+          print(seed_test_account(username='e2e_family_seats_account', email='e2e_family_seats@example.com', password='TestPass123!'))
+          from integration_tests.live_seeds import seed_family_seats_spec
+          seats_seed = seed_family_seats_spec(username='e2e_family_seats_account')
+          open('/tmp/family-seats-seed.json', 'w').write(json.dumps(dataclasses.asdict(seats_seed)))
+          print(seats_seed)
+          "
       - name: Run the live-server Playwright specs
         working-directory: frontend
         # The only specs that talk to :4001 are these (the rest mock the API
@@ -242,6 +257,7 @@ jobs:
           e2e/account-settings.spec.ts e2e/user-journey.spec.ts
           e2e/motif-facets.spec.ts e2e/gift-substance.spec.ts
           e2e/thrown-and-enchanted-strike.spec.ts e2e/missives.spec.ts e2e/channels.spec.ts e2e/one-scale.spec.ts
+          e2e/family-seats.spec.ts
       - name: Stop the server
         if: always()
         run: uv run arx stop || true
