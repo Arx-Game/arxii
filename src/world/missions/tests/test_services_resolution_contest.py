@@ -1,4 +1,4 @@
-"""CONTEST options (#3568): difficulty adds the opposition's level term; tiers route as CHECK."""
+"""CONTEST options (#3568): difficulty adds the opposition's full total; tiers route as CHECK."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
-from world.checks.services import level_opposition
 from world.checks.test_helpers import force_check_outcome
 from world.missions.constants import OptionKind, OptionSource
 from world.missions.factories import (
@@ -20,13 +19,14 @@ from world.missions.factories import (
     MissionTemplateFactory,
 )
 from world.missions.services.resolution import resolve_option
-from world.traits.factories import CheckOutcomeFactory
+from world.traits.factories import CheckOutcomeFactory, ensure_level_ladder
 
 _LEVEL = "world.missions.services.resolution.effective_combat_level"
 
 
 class ContestResolutionTests(TestCase):
     def setUp(self) -> None:
+        ensure_level_ladder()
         # Mirrors the fixture shape of ResolveCheckOptionTests in
         # test_services_resolution_resolve.py: a template with risk_tier, an
         # entry node, an actor participant with a character, success/failure
@@ -67,13 +67,12 @@ class ContestResolutionTests(TestCase):
             option=self.contest, outcome_tier=self.failure, target_node=self.node_b
         )
 
-    def test_difficulty_is_template_risk_plus_opposition_level_term(self) -> None:
+    def test_difficulty_is_template_risk_plus_the_opposition_sheets_total(self) -> None:
         with mock.patch(_LEVEL, return_value=4), force_check_outcome(self.success) as capture:
             resolve_option(self.instance, self.entry, self.contest, self.actor)
-        expected = self.template.risk_tier + level_opposition(
-            self.opp_check, level=4, character=self.opposition.character
-        )
-        self.assertEqual(capture.target_difficulty, expected)
+        # The opposition sheet counts as its full total on the opposition check: no trait
+        # points, so level 4's term, half of its 42-point baseline (#5093).
+        self.assertEqual(capture.target_difficulty, self.template.risk_tier + 21)
         self.assertEqual(capture.check_type, self.check_type)
 
     def test_tiers_route_like_check(self) -> None:

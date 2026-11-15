@@ -161,11 +161,9 @@ class RevealConditionAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.checks.services import (  # noqa: PLC0415
-            compute_obstacle_rating,
-            perform_check,
-        )
+        from world.checks.services import perform_check  # noqa: PLC0415
         from world.conditions.models import ConditionInstance  # noqa: PLC0415
+        from world.conditions.services import caster_opposition  # noqa: PLC0415
         from world.magic.constants import MagicActivity  # noqa: PLC0415
         from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
 
@@ -196,11 +194,7 @@ class RevealConditionAction(Action):
         if check_type is None:
             return ActionResult(success=False, message="Cannot determine how to detect this.")
 
-        difficulty = template.subtlety
-        caster = instance.source_character
-        if caster is not None:
-            # The caster is the obstacle: her full check total, not her level (#5093).
-            difficulty += compute_obstacle_rating(caster, check_type)
+        difficulty = template.subtlety + caster_opposition(instance, check_type)
 
         # Spotting a loss of self (corruption, atavism, possession) is sensing magic.
         sensing = (
@@ -248,12 +242,10 @@ class RallyAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.checks.services import (  # noqa: PLC0415
-            compute_obstacle_rating,
-            perform_check,
-        )
+        from world.checks.services import perform_check  # noqa: PLC0415
         from world.conditions.services import (  # noqa: PLC0415
             attempt_break_free,
+            caster_opposition,
             rally_target_instance,
             record_rally_landed,
         )
@@ -275,11 +267,9 @@ class RallyAction(Action):
         if check_type is None:
             return ActionResult(success=False, message="Cannot determine how to rally them.")
 
-        difficulty = instance.condition.break_free_difficulty
-        caster = instance.source_character
-        if caster is not None:
-            # The caster is the obstacle: her full check total, not her level (#5093).
-            difficulty += compute_obstacle_rating(caster, check_type)
+        difficulty = instance.condition.break_free_difficulty + caster_opposition(
+            instance, check_type
+        )
 
         result = perform_check(
             actor,

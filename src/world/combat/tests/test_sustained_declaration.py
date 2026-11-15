@@ -348,11 +348,11 @@ class SustainedAbsorptionConditionModifierTests(_SustainedTestBase):
     Every other trait/aspect/capability/perk contribution is 0 for a bare test
     character with no CharacterClassLevel/CharacterPathHistory/CheckTypeTrait/
     CheckTypeCapabilityModifier rows (verified against ``_compute_check_
-    breakdown``'s callees), so the participant's baseline ``total_points`` is
-    exactly ``LEVEL_POINTS_PER_LEVEL * level == 5 * 1 == 5`` — deterministic,
-    no forced outcome needed. ``CheckRank.min_points`` is a
-    ``PositiveIntegerField`` (no negative tiers), so the setup uses ONE rank
-    at ``min_points=5``: baseline total_points (5) qualifies for it
+    breakdown``'s callees), so the participant's baseline ``total_points`` is exactly the
+    level-1 term, half of the level-1 baseline (#5093) — deterministic,
+    no forced outcome needed. A rank's threshold is never negative (no negative tiers),
+    so the setup uses ONE rank whose level-1 baseline is 1: half of 1 rounds half up
+    to 1, so baseline total_points (1) qualifies for it
     (``rank_difference=1`` against ``target_difficulty=0``'s implicit rank 0),
     while a modifier that pushes the total below 0 makes NO rank qualify
     (``CheckRank.get_rank_for_points`` returns ``None``, which the breakdown
@@ -368,14 +368,14 @@ class SustainedAbsorptionConditionModifierTests(_SustainedTestBase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        cls.rank_baseline = CheckRankFactory(rank=1, min_points=5, name="SustainedBaseline")
+        cls.rank_baseline = CheckRankFactory(rank=1, min_points=1, name="SustainedBaseline")
         cls.outcome_success = CheckOutcomeFactory(
             name="Sustained Concentration Success", success_level=1
         )
         cls.outcome_failure = CheckOutcomeFactory(
             name="Sustained Concentration Failure", success_level=-3
         )
-        # rank_difference=1: baseline total_points (5) reaches rank_baseline
+        # rank_difference=1: baseline total_points (1) reaches rank_baseline
         # while target_difficulty=0 stays at the implicit rank 0.
         cls.chart_at_baseline = ResultChartFactory(rank_difference=1, name="SustainedAtBaseline")
         ResultChartOutcomeFactory(
@@ -413,7 +413,7 @@ class SustainedAbsorptionConditionModifierTests(_SustainedTestBase):
         )
 
         budget_with, _ = roll_sustained_absorption_budget(self.participant)
-        # total_points = 5 - 10 = -5: no CheckRank qualifies, rank_difference
+        # total_points = 1 - 10 = -9: no CheckRank qualifies, rank_difference
         # drops to 0 -> chart_below_baseline -> success_level=-3.
         # clamp(2 + -3, 0, 4) == 0.
         self.assertEqual(budget_with, 0)

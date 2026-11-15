@@ -61,6 +61,7 @@ from world.magic.factories import (
 from world.mechanics.factories import CharacterEngagementFactory
 from world.scenes.constants import RoundStatus
 from world.seeds.checks import seed_check_resolution_tables
+from world.traits.factories import ensure_level_ladder
 from world.vitals.models import CharacterVitals
 
 
@@ -172,8 +173,13 @@ class LevelOpposedOffenseJourneyTests(TestCase):
     def test_low_level_attacker_still_connects_against_high_level_target_on_a_good_roll(
         self,
     ) -> None:
-        """It degrades, it does not stonewall: a good roll still lands a non-failure."""
-        success_level = self._offense_success_level(pc_level=None, opp_level=15, roll=99)
+        """It degrades, it does not stonewall: a good roll still lands a non-failure.
+
+        A level-1 attacker (rank 0, a level term of 9) against a level-4 opponent (rank 4,
+        a baseline of 42) is four ranks down. Against a level-15 opponent, fourteen ranks
+        down, nothing lands.
+        """
+        success_level = self._offense_success_level(pc_level=None, opp_level=4, roll=99)
         self.assertGreaterEqual(success_level, 0)
 
     def test_high_level_attacker_lands_markedly_better_against_a_low_level_target(self) -> None:
@@ -198,13 +204,13 @@ class LevelOpposedOffenseJourneyTests(TestCase):
         """#3384: staggering the opponent measurably raises the PC's success_level
         against it, versus an otherwise-identical control with no condition applied.
 
-        The condition's penalty (-70) is sized to exactly reproduce the same
-        target_difficulty as the level-1-vs-level-15 comparison
+        The condition's penalty (-70) takes the level-15 opponent's 130-point baseline to
+        60, about where a level-15 attacker's own 65-point level term sits, a swing across
+        many ranks like the level-1-vs-level-15 comparison
         ``test_high_level_attacker_lands_markedly_better_against_a_low_level_target``
-        already pins above (``LEVEL_POINTS_PER_LEVEL * (15 - 1) == 70``, and neither
-        opponent has a CharacterPathHistory row, so the aspect bonus is 0 either
-        way) -- reusing the same rolls/assertions that test already proved move
-        the outcome tier.
+        already pins above (neither opponent has a CharacterPathHistory row, so the aspect
+        bonus is 0 either way) -- reusing the same rolls/assertions that test already proved
+        move the outcome tier.
         """
         staggered = ConditionTemplateFactory(name="JourneyOffenseStaggered")
         ConditionCheckModifierFactory(
@@ -239,6 +245,7 @@ class LevelOpposedPenetrationJourneyTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        ensure_level_ladder()
         wire_penetration_factors()
         wire_penetration_check_type()
 

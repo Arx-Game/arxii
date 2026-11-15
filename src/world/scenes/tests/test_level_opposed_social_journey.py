@@ -35,7 +35,7 @@ from world.scenes.action_constants import (
 )
 from world.scenes.action_services import respond_to_action_request
 from world.scenes.factories import PersonaFactory, SceneActionRequestFactory, SceneFactory
-from world.traits.factories import StatTraitFactory
+from world.traits.factories import StatTraitFactory, ensure_level_ladder
 from world.traits.models import CharacterTraitValue, PointConversionRange, Trait, TraitType
 
 
@@ -65,6 +65,7 @@ class LevelOpposedSocialJourneyTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         Trait.flush_instance_cache()
+        ensure_level_ladder()
         PointConversionRange.objects.get_or_create(
             trait_type=TraitType.STAT,
             min_value=1,

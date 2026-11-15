@@ -34,7 +34,11 @@ from world.achievements.constants import ConditionEventType
 from world.checks.constants import ModifierLane, ModifierSourceKind
 from world.checks.models import CheckType
 from world.checks.modifier_values import ValueTable, load_taper_rules, load_value_table
-from world.checks.services import perform_check_with_modifiers
+from world.checks.services import (
+    compute_obstacle_rating,
+    level_opposition,
+    perform_check_with_modifiers,
+)
 from world.checks.types import ModifierBreakdown, ModifierContribution
 from world.conditions.constants import (
     POISON_CATEGORY_NAME,
@@ -3139,6 +3143,30 @@ def get_check_modifier(
     return _check_modifier_for_target(character_sheet.character, check_type)
 
 
+def caster_opposition(instance: ConditionInstance, check_type: CheckType) -> int:
+    """What the caster adds to the difficulty of reading, rallying against or breaking a hold.
+
+    The caster is the obstacle, so a caster with a sheet counts as her full check total on
+    ``check_type`` (#5093, ``compute_obstacle_rating``) and a sheet-less NPC caster as its
+    level's baseline. 0 when the hold has no ``source_character`` (the caster is gone). A hold
+    a character put on herself (moon sensitivity, intoxication, loss of control) has nobody
+    else to oppose it, and her own rating would cancel against the roll she makes to break it,
+    so it counts her level's baseline only (``level_opposition``).
+    """
+    caster = instance.source_character
+    if caster is None:
+        return 0
+    from world.progression.services.skill_development import (  # noqa: PLC0415
+        get_character_path_level,
+    )
+
+    if caster.pk == instance.target_id:
+        return level_opposition(
+            check_type, level=get_character_path_level(caster), character=caster
+        )
+    return compute_obstacle_rating(caster, check_type)
+
+
 def opponent_condition_opposition(
     objectdb: "ObjectDB",  # noqa: OBJECTDB_PARAM
     check_type: CheckType,
@@ -4417,10 +4445,6 @@ def attempt_break_free(
         BreakFreeResult with outcome label and severity delta.
     """
     from world.checks.constants import ModifierSourceKind  # noqa: PLC0415
-    from world.checks.services import (  # noqa: PLC0415
-        compute_obstacle_rating,
-        perform_check_with_modifiers,
-    )
     from world.checks.types import ModifierContribution  # noqa: PLC0415
 
     template = instance.condition
@@ -4449,11 +4473,7 @@ def attempt_break_free(
             message="This effect has no break-free check defined.",
         )
 
-    difficulty = template.break_free_difficulty
-    caster = instance.source_character
-    if caster is not None:
-        # The caster is the obstacle: her full check total, not her level (#5093).
-        difficulty += compute_obstacle_rating(caster, check_type)
+    difficulty = template.break_free_difficulty + caster_opposition(instance, check_type)
 
     rally_bonus = instance.pending_rally_bonus
     if rally_bonus > 0:

@@ -37,12 +37,12 @@ def resolve_target_difficulty(
     Uses compute_check_rating to get the target's raw points if
     resistance_check_type is set. fallback_difficulty is authored as a floor,
     not just a substitute for a missing resistance_check_type: since #2707,
-    compute_check_rating always returns at least LEVEL_POINTS_PER_LEVEL (level
+    compute_check_rating always carries the level term (level
     floors at 1, and nothing on this path goes negative), so a statless
     synthetic NPC no longer reads as 0 -- the authored floor still has to win
     against that guaranteed level contribution, or content tuned before #2707
     (e.g. a ConditionOnCheckConfig authored with target_difficulty=60 for
-    statless NPCs) silently resists at 5 instead of 60.
+    statless NPCs) silently resists at its level term instead of 60.
 
     #2707: this used to call perform_check with target_difficulty=0 and read
     total_points, which rolls a die whose outcome is discarded and — worse —

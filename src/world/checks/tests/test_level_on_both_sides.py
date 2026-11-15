@@ -41,6 +41,7 @@ from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionTemplateFactory,
 )
+from world.conditions.services import caster_opposition
 from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
 from world.progression.factories import CharacterPathHistoryFactory
 from world.traits.factories import ensure_level_ladder
@@ -203,6 +204,29 @@ class PlayerCharacterAsObstacleTests(TestCase):
 
         self.assertEqual(compute_obstacle_rating(self.character, self.check_type), 49 + 10)
 
+    def test_an_obstacle_with_no_sheet_counts_as_its_levels_baseline(self) -> None:
+        npc = ObjectDBFactory(db_key="ObstacleSheetlessNpc")
+
+        # An NPC has a level and no points: level 11's whole baseline, never half of it.
+        self.assertEqual(compute_obstacle_rating(npc, self.check_type, level_override=11), 98)
+        # With no authored level it is level 1, like any character with no class level.
+        self.assertEqual(compute_obstacle_rating(npc, self.check_type), 18)
+
+    def test_a_sheetless_obstacles_debuff_lowers_it(self) -> None:
+        ModifierSizeFraction.objects.get_or_create(
+            lane=ModifierLane.CHECK, size=ModifierSize.LARGE, defaults={"fraction": Decimal("0.5")}
+        )
+        npc = ObjectDBFactory(db_key="ObstacleDebuffedNpc")
+        weakened = ConditionTemplateFactory(name="ObstacleWeakened")
+        ConditionCheckModifierFactory(
+            condition=weakened, check_type=self.check_type, modifier_value=-1
+        )
+        ConditionInstanceFactory(
+            target=npc, condition=weakened, modifier_level=11, modifier_size=ModifierSize.LARGE
+        )
+
+        self.assertEqual(compute_obstacle_rating(npc, self.check_type, level_override=11), 94)
+
     def test_an_authored_level_substitutes_for_her_own(self) -> None:
         # A bond-adjusted combat level of 3: the level term at level 3 is half of 34 = 17.
         self.assertEqual(
@@ -217,3 +241,46 @@ class PlayerCharacterAsObstacleTests(TestCase):
         ConditionInstanceFactory(target=self.character, condition=template)
 
         self.assertEqual(compute_obstacle_rating(self.character, self.check_type), 0)
+
+
+class CasterOppositionTests(TestCase):
+    """The caster's share of reading, rallying against or breaking a hold (#5093)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        ensure_level_ladder()
+        CheckScaleConfig.objects.update_or_create(pk=1, defaults={"level_share": Decimal("0.5")})
+        cls.check_type = CheckTypeFactory(name="CasterOppositionCheck")
+        cls.character_class = CharacterClassFactory()
+        cls.template = ConditionTemplateFactory(name="CasterOppositionHold")
+
+    def _caster(self, level: int):
+        sheet = CharacterSheetFactory()
+        CharacterClassLevelFactory(
+            character=sheet, character_class=self.character_class, level=level, is_primary=True
+        )
+        return sheet.character
+
+    def test_a_caster_is_her_full_check_total(self) -> None:
+        caster = self._caster(11)
+        hold = ConditionInstanceFactory(
+            condition=self.template, source_character=caster, target=self._caster(1)
+        )
+
+        # Her level-11 term is 49.
+        self.assertEqual(caster_opposition(hold, self.check_type), 49)
+
+    def test_a_hold_with_no_caster_adds_nothing(self) -> None:
+        hold = ConditionInstanceFactory(condition=self.template, target=self._caster(1))
+
+        self.assertEqual(caster_opposition(hold, self.check_type), 0)
+
+    def test_a_hold_put_on_herself_counts_her_levels_baseline_not_her_rating(self) -> None:
+        caster = self._caster(11)
+        hold = ConditionInstanceFactory(
+            condition=self.template, source_character=caster, target=caster
+        )
+
+        # Level 11's baseline is 98: nobody else opposes it, and her rating would cancel
+        # against the roll she makes to break it.
+        self.assertEqual(caster_opposition(hold, self.check_type), 98)

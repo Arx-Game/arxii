@@ -49,6 +49,7 @@ from world.traits.factories import (
     CheckOutcomeFactory,
     ResultChartFactory,
     ResultChartOutcomeFactory,
+    ensure_level_ladder,
 )
 from world.traits.models import ResultChart
 from world.vitals.models import CharacterVitals
@@ -215,6 +216,7 @@ class ResolveNpcAttackLevelOppositionTests(TestCase):
     """
 
     def setUp(self) -> None:
+        ensure_level_ladder()
         self.check_type = CheckTypeFactory(name="NPC Defense Level Opposition")
 
     def _resolve_and_capture_difficulty(

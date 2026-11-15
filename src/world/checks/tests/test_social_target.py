@@ -9,11 +9,13 @@ from world.checks.factories import CheckTypeFactory, create_resistance_check_typ
 from world.checks.social_target import DriveHit, social_target_difficulty
 from world.mechanics.factories import ModifierTargetFactory
 from world.scenes.action_constants import DIFFICULTY_BAND_STEP
+from world.traits.factories import ensure_level_ladder
 
 
 class SocialTargetDifficultyTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
+        ensure_level_ladder()
         create_resistance_check_types()
         cls.actor = CharacterSheetFactory()
         cls.target = CharacterSheetFactory()

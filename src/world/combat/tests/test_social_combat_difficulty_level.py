@@ -60,5 +60,6 @@ class SocialCombatDifficultyLevelTests(TestCase):
         ).difficulty
 
         self.assertGreater(high_difficulty, low_difficulty)
-        # The level term: half of level 20's baseline (170) less half of level 1's (18).
-        self.assertEqual(high_difficulty - low_difficulty, 85 - 9)
+        # An ephemeral opponent has no sheet, so it resists as its level's baseline: level
+        # 20's 170 less level 1's 18.
+        self.assertEqual(high_difficulty - low_difficulty, 170 - 18)
