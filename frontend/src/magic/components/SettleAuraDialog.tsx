@@ -60,7 +60,7 @@ function projectedOutput(amount: number, multiplier: string): number {
 /** "A", "A and B", "A, B and C". */
 function joinNames(names: string[]): string {
   if (names.length <= 1) return names.join('');
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }
 
 /** The system line: what the rite turns, and what it turns it into. */
@@ -171,9 +171,8 @@ function CapBlock({ offerId, cap, notReadyMessage, onResult }: CapBlockProps) {
 
       <div className="flex flex-wrap items-center gap-2">
         {cap.sources.length > 1 ? (
-          <div
-            className="flex flex-wrap gap-2"
-            role="group"
+          <fieldset
+            className="m-0 flex min-w-0 flex-wrap gap-2 border-0 p-0"
             aria-label={`Source for ${cap.target_resonance.name}`}
           >
             {cap.sources.map((s) => (
@@ -188,7 +187,7 @@ function CapBlock({ offerId, cap, notReadyMessage, onResult }: CapBlockProps) {
                 {sourceLabel(s)}
               </button>
             ))}
-          </div>
+          </fieldset>
         ) : null}
         {cap.sources.length === 1 && source ? (
           <span
@@ -221,9 +220,8 @@ function CapBlock({ offerId, cap, notReadyMessage, onResult }: CapBlockProps) {
           {notReadyMessage}
         </p>
       ) : (
-        <div
-          className="flex flex-wrap gap-2"
-          role="group"
+        <fieldset
+          className="m-0 flex min-w-0 flex-wrap gap-2 border-0 p-0"
           aria-label={`Components for ${cap.target_resonance.name}`}
         >
           {cap.qualifying_components.map((c) => (
@@ -238,7 +236,7 @@ function CapBlock({ offerId, cap, notReadyMessage, onResult }: CapBlockProps) {
               {c.name} · {c.mode}
             </button>
           ))}
-        </div>
+        </fieldset>
       )}
 
       {source && amountValid ? (
@@ -265,6 +263,98 @@ function CapBlock({ offerId, cap, notReadyMessage, onResult }: CapBlockProps) {
         >
           <Flame className="mr-1.5 h-4 w-4" />
           Begin the rite
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+interface AuraShareSeries {
+  name: string;
+  percent: number;
+}
+
+/** The aura's shares as halo input: the settled percents, or the current ones. */
+function shareSeries(
+  aura: CharacterAura | null,
+  field: 'settled_percent' | 'percent'
+): AuraShareSeries[] {
+  return (
+    aura?.shares.map((share) => ({ name: share.affinity_name, percent: Number(share[field]) })) ??
+    []
+  );
+}
+
+interface AtoneSectionProps {
+  offer: DriftConversionOffer;
+  caps: DriftConversionCap[];
+  shares: AuraShareSeries[];
+  onResult: (line: string) => void;
+}
+
+/** The first exit: the rite of atonement, one block per cap. */
+function AtoneSection({ offer, caps, shares, onResult }: AtoneSectionProps) {
+  return (
+    <section
+      className="space-y-2 rounded-lg border border-border p-3.5"
+      data-testid="settle-exit-atone"
+    >
+      <h3 className="font-semibold">Atone</h3>
+      <p className="text-sm" data-testid="settle-atone-line">
+        Perform the rite of atonement.
+        {caps.map((cap) => {
+          const line = driftSystemLine(cap);
+          return line ? (
+            <Fragment key={cap.target_resonance.id}>
+              {' '}
+              <span data-testid={`drift-system-line-${cap.target_resonance.id}`}>{line}</span>
+            </Fragment>
+          ) : null;
+        })}
+      </p>
+      {shares.some((share) => share.percent > 0) ? <AuraHalo shares={shares} size="mini" /> : null}
+      <div className="divide-y divide-border">
+        {caps.map((cap) => (
+          <CapBlock
+            key={`${offer.id}-${cap.target_resonance.id}`}
+            offerId={offer.id}
+            cap={cap}
+            notReadyMessage={offer.rite_ready ? null : offer.rite_not_ready_message}
+            onResult={onResult}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+interface AcceptSectionProps {
+  aura: CharacterAura;
+  shares: AuraShareSeries[];
+  accept: ReturnType<typeof useAcceptAura>;
+  onAccept: () => void;
+}
+
+/** The second exit: accept the aura as it now stands. */
+function AcceptSection({ aura, shares, accept, onAccept }: AcceptSectionProps) {
+  return (
+    <section
+      className="space-y-2 rounded-lg border border-border p-3.5"
+      data-testid="settle-exit-accept"
+    >
+      <h3 className="font-semibold">Accept the changes to your Aura</h3>
+      <p className="text-sm" data-testid="settle-accept-line">
+        {acceptLine(aura)}
+      </p>
+      <AuraHalo shares={shares} size="mini" />
+      {accept.isError ? (
+        <div role="alert" data-testid="aura-accept-error" className={ERROR_CLASS}>
+          {accept.error?.message || 'Could not accept the changes; please try again.'}
+        </div>
+      ) : null}
+      <div className="flex justify-start">
+        <Button onClick={onAccept} disabled={accept.isPending} data-testid="settle-accept-button">
+          Accept
         </Button>
       </div>
     </section>
@@ -322,14 +412,6 @@ export function SettleAuraDialog({
   const caps = offer?.caps ?? [];
   const showAtone = offer !== null && caps.length > 0;
   const showAccept = aura !== null && aura.unsettled;
-  const settledShares =
-    aura?.shares.map((share) => ({
-      name: share.affinity_name,
-      percent: Number(share.settled_percent),
-    })) ?? [];
-  const currentShares =
-    aura?.shares.map((share) => ({ name: share.affinity_name, percent: Number(share.percent) })) ??
-    [];
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -342,9 +424,9 @@ export function SettleAuraDialog({
         </DialogTitle>
 
         {resultLine ? (
-          <p className="text-sm" role="status" data-testid="drift-result">
+          <output className="block text-sm" data-testid="drift-result">
             {resultLine}
-          </p>
+          </output>
         ) : null}
 
         {showAtone || showAccept ? (
@@ -353,67 +435,21 @@ export function SettleAuraDialog({
             data-testid="settle-exits"
           >
             {showAtone && offer ? (
-              <section
-                className="space-y-2 rounded-lg border border-border p-3.5"
-                data-testid="settle-exit-atone"
-              >
-                <h3 className="font-semibold">Atone</h3>
-                <p className="text-sm" data-testid="settle-atone-line">
-                  Perform the rite of atonement.
-                  {caps.map((cap) => {
-                    const line = driftSystemLine(cap);
-                    return line ? (
-                      <Fragment key={cap.target_resonance.id}>
-                        {' '}
-                        <span data-testid={`drift-system-line-${cap.target_resonance.id}`}>
-                          {line}
-                        </span>
-                      </Fragment>
-                    ) : null;
-                  })}
-                </p>
-                {settledShares.some((share) => share.percent > 0) ? (
-                  <AuraHalo shares={settledShares} size="mini" />
-                ) : null}
-                <div className="divide-y divide-border">
-                  {caps.map((cap) => (
-                    <CapBlock
-                      key={`${offer.id}-${cap.target_resonance.id}`}
-                      offerId={offer.id}
-                      cap={cap}
-                      notReadyMessage={offer.rite_ready ? null : offer.rite_not_ready_message}
-                      onResult={onResult}
-                    />
-                  ))}
-                </div>
-              </section>
+              <AtoneSection
+                offer={offer}
+                caps={caps}
+                shares={shareSeries(aura, 'settled_percent')}
+                onResult={onResult}
+              />
             ) : null}
 
             {showAccept && aura ? (
-              <section
-                className="space-y-2 rounded-lg border border-border p-3.5"
-                data-testid="settle-exit-accept"
-              >
-                <h3 className="font-semibold">Accept the changes to your Aura</h3>
-                <p className="text-sm" data-testid="settle-accept-line">
-                  {acceptLine(aura)}
-                </p>
-                <AuraHalo shares={currentShares} size="mini" />
-                {accept.isError ? (
-                  <div role="alert" data-testid="aura-accept-error" className={ERROR_CLASS}>
-                    {accept.error?.message || 'Could not accept the changes; please try again.'}
-                  </div>
-                ) : null}
-                <div className="flex justify-start">
-                  <Button
-                    onClick={handleAccept}
-                    disabled={accept.isPending}
-                    data-testid="settle-accept-button"
-                  >
-                    Accept
-                  </Button>
-                </div>
-              </section>
+              <AcceptSection
+                aura={aura}
+                shares={shareSeries(aura, 'percent')}
+                accept={accept}
+                onAccept={handleAccept}
+              />
             ) : null}
           </div>
         ) : null}

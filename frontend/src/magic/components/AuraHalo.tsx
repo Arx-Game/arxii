@@ -19,7 +19,7 @@
  * The halo's `children` sit under the words (the sheet's Settle your aura button).
  */
 
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import '@/character_sheets/sheet.css';
 import {
   affinitySlug,
@@ -80,6 +80,90 @@ function splitMire(shares: AuraShareInput[], mire: AuraHaloMire | null | undefin
   return { own, mirePercent: mirePercent - remaining };
 }
 
+/** The own shares as halo segments, the Mire's stretch appended when it has one. */
+function haloSegments(own: AuraShareInput[], mirePercent: number): HaloSegment[] {
+  const segments: HaloSegment[] = own.map((share) => ({
+    slug: affinitySlug(share.name),
+    percent: share.percent,
+  }));
+  if (mirePercent > 0) segments.push({ slug: MIRE_SLUG, percent: mirePercent });
+  return segments;
+}
+
+/** The sentence's two parts: the aura's own words, and the Mire's line when it is shown. */
+function haloWords(args: {
+  own: AuraShareInput[];
+  mirePercent: number;
+  mire: AuraHaloMire | null | undefined;
+  sentence: string | undefined;
+  unsettledLine: string | null;
+}): { words: string; mireWords: string } {
+  const { own, mirePercent, mire, sentence, unsettledLine } = args;
+  if (unsettledLine !== null) return { words: unsettledLine, mireWords: '' };
+  // Each share is read against the whole the halo draws, the Mire's stretch included.
+  const ownTotal = own.reduce((sum, share) => sum + share.percent, 0);
+  const words = sentence ?? auraSentence(own, ownTotal + mirePercent);
+  if (sentence !== undefined || !mire || mirePercent <= 0 || mire.words === 'none') {
+    return { words, mireWords: '' };
+  }
+  return {
+    words,
+    mireWords: `${capitalise(mire.words)} of what you have gained came from the Mire.`,
+  };
+}
+
+/** The ring's border colour when the aura is unsettled toward a named affinity. */
+function ringStyle(unsettled: boolean, unsettledAffinity: string): CSSProperties | undefined {
+  if (!unsettled || !unsettledAffinity) return undefined;
+  return {
+    borderColor: `var(--aura-${affinitySlug(unsettledAffinity)}-glow, var(--aura-other))`,
+  };
+}
+
+/** The key naming the halo's two swatches, shown once the Mire has a stretch of it. */
+function MireKey() {
+  return (
+    <div className="aura-halo-key" data-testid="aura-halo-mire-key">
+      <span>
+        <i className="aura-halo-swatch-own" />
+        your own
+      </span>
+      <span>
+        <i className="aura-halo-swatch-mire" />
+        from the Mire
+      </span>
+    </div>
+  );
+}
+
+/** The halo's class list: the mini and unsettled modifiers join the base class. */
+function haloClassName(mini: boolean, unsettled: boolean): string {
+  return ['aura-halo', mini ? 'aura-halo-mini' : '', unsettled ? 'aura-halo-unsettled' : '']
+    .filter(Boolean)
+    .join(' ');
+}
+
+interface HaloSentenceProps {
+  words: string;
+  mireWords: string;
+}
+
+/** The sentence under the halo: the aura's words, then the Mire's line when there is one. */
+function HaloSentence({ words, mireWords }: HaloSentenceProps) {
+  if (!words && !mireWords) return null;
+  return (
+    <p className="aura-halo-sentence" data-testid="aura-halo-sentence">
+      {words}
+      {mireWords ? (
+        <>
+          {words ? ' ' : ''}
+          <span data-testid="aura-halo-mire-line">{mireWords}</span>
+        </>
+      ) : null}
+    </p>
+  );
+}
+
 export function AuraHalo({
   shares,
   settled,
@@ -95,22 +179,14 @@ export function AuraHalo({
   const { own, mirePercent } = splitMire(shares, mire);
   if (own.length === 0 && mirePercent <= 0) return null;
 
-  const segments: HaloSegment[] = own.map((share) => ({
-    slug: affinitySlug(share.name),
-    percent: share.percent,
-  }));
-  if (mirePercent > 0) segments.push({ slug: MIRE_SLUG, percent: mirePercent });
-
-  const mireLine =
-    mire && mirePercent > 0 && mire.words !== 'none'
-      ? `${capitalise(mire.words)} of what you have gained came from the Mire.`
-      : '';
-  // Each share is read against the whole the halo draws, the Mire's stretch included.
-  const ownTotal = own.reduce((sum, share) => sum + share.percent, 0);
-  const ownLine = sentence ?? auraSentence(own, ownTotal + mirePercent);
-  const showUnsettledLine = unsettled && unsettledLine !== '';
-  const words = showUnsettledLine ? unsettledLine : ownLine;
-  const mireWords = showUnsettledLine || sentence !== undefined ? '' : mireLine;
+  const segments = haloSegments(own, mirePercent);
+  const { words, mireWords } = haloWords({
+    own,
+    mirePercent,
+    mire,
+    sentence,
+    unsettledLine: unsettled && unsettledLine !== '' ? unsettledLine : null,
+  });
   const mini = size === 'mini';
 
   return (
@@ -119,61 +195,26 @@ export function AuraHalo({
       data-testid="aura-halo"
       data-affinities={segments.map((segment) => segment.slug).join(' ')}
     >
-      <div
-        className={[
-          'aura-halo',
-          mini ? 'aura-halo-mini' : '',
-          unsettled ? 'aura-halo-unsettled' : '',
-        ]
-          .filter(Boolean)
-          .join(' ')}
-      >
+      <div className={haloClassName(mini, unsettled)}>
         <div className="aura-halo-disc" style={{ background: haloGradient(segments) }} />
         {settled && !mini ? (
           <span
             className="aura-halo-ring"
             aria-hidden="true"
             data-testid="aura-halo-ring"
-            style={
-              unsettled && unsettledAffinity
-                ? {
-                    borderColor: `var(--aura-${affinitySlug(unsettledAffinity)}-glow, var(--aura-other))`,
-                  }
-                : undefined
-            }
+            style={ringStyle(unsettled, unsettledAffinity)}
           />
         ) : null}
       </div>
       <div className="aura-halo-words">
         {label}
-        {words || mireWords ? (
-          <p className="aura-halo-sentence" data-testid="aura-halo-sentence">
-            {words}
-            {mireWords ? (
-              <>
-                {words ? ' ' : ''}
-                <span data-testid="aura-halo-mire-line">{mireWords}</span>
-              </>
-            ) : null}
-          </p>
-        ) : null}
+        <HaloSentence words={words} mireWords={mireWords} />
         {unsettled && !mini ? (
           <span className="aura-halo-status" data-testid="aura-halo-status">
             Unsettled
           </span>
         ) : null}
-        {mirePercent > 0 && !mini ? (
-          <div className="aura-halo-key" data-testid="aura-halo-mire-key">
-            <span>
-              <i className="aura-halo-swatch-own" />
-              your own
-            </span>
-            <span>
-              <i className="aura-halo-swatch-mire" />
-              from the Mire
-            </span>
-          </div>
-        ) : null}
+        {mirePercent > 0 && !mini ? <MireKey /> : null}
         {children}
       </div>
     </div>
