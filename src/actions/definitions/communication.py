@@ -746,7 +746,7 @@ class PoseAction(Action):
         caller_state = sdm.initialize_state_for_object(actor)
         target_personas = _characters_to_active_personas(targets) if targets else None
 
-        told: list[str] = []
+        told: list[tuple[str, bool]] = []
 
         def _reflect(interaction: Interaction | None) -> None:
             if pending is not None:
@@ -779,7 +779,19 @@ class PoseAction(Action):
             _reflect(interaction)
         if targets:
             _flag_blocked_contact_for_targets(actor, targets, scene=_active_scene_for(actor))
-        return ActionResult(success=True, message=told[0] if told else None)
+        return _pose_result(told)
+
+
+def _pose_result(told: list[tuple[str, bool]]) -> ActionResult:
+    """The pose's result: bare when it carried no reflection, else the line the poser reads.
+
+    The pose posted either way; ``reflection_recorded`` tells a client whether to show the
+    line as a success or as the error it is.
+    """
+    if not told:
+        return ActionResult(success=True)
+    line, recorded = told[0]
+    return ActionResult(success=True, message=line, data={"reflection_recorded": recorded})
 
 
 def _pose_targets(actor: ObjectDB, kwargs: dict[str, Any]) -> list[ObjectDB]:
@@ -822,9 +834,9 @@ def _pending_pose_reflection(
 
 def _record_pose_reflection(
     actor: ObjectDB, pending: PendingReflection, interaction: Interaction | None
-) -> str:
+) -> tuple[str, bool]:
     """Record the reflection a pose carried, once the pose itself is down; returns the line
-    the poser reads."""
+    the poser reads and whether the reflection was recorded."""
     from world.magic.exceptions import ReflectionError  # noqa: PLC0415
     from world.magic.services.reflection import (  # noqa: PLC0415
         record_pending_reflection,
@@ -836,8 +848,9 @@ def _record_pose_reflection(
     except ReflectionError as exc:
         # The pose cannot be un-posted, so it stands and the poser is told why the
         # reflection was not recorded.
-        return f"Your pose was posted, but your reflection was not recorded: {exc.user_message}"
-    return recorded_line(reflection)
+        line = f"Your pose was posted, but your reflection was not recorded: {exc.user_message}"
+        return line, False
+    return recorded_line(reflection), True
 
 
 @dataclass

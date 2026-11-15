@@ -205,6 +205,28 @@ class ReflectingInAPose(_Reflecting):
 
         self.assertTrue(result.detail.success, result.detail)
         self.assertEqual(Reflection.objects.get().grant, self.deed)
+        # The recorded line is a success the client shows as one.
+        self.assertEqual(result.detail.data, {"reflection_recorded": True})
+
+    def test_a_reflection_that_fails_after_the_pose_posts_is_flagged_as_an_error(self) -> None:
+        with (
+            patch("world.magic.services.reflection.record_reflection", side_effect=LATE),
+            patch("world.magic.services.reflection.record_pending_reflection", side_effect=LATE),
+        ):
+            result = self.web(
+                self.mira,
+                "pose",
+                text=POSE,
+                reflect_choice="EMBRACE",
+                reflect_grant_id=self.deed.pk,
+            )
+
+        # The pose stands; the line says the reflection was not recorded, and the result
+        # carries the flag that lets the client show it as the error it is.
+        self.assertTrue(result.detail.success, result.detail)
+        self.assertIn("not recorded", result.detail.message)
+        self.assertEqual(result.detail.data, {"reflection_recorded": False})
+        self.assertFalse(Reflection.objects.exists())
 
 
 class ReflectingInAJournalEntry(_Reflecting):
