@@ -32,6 +32,8 @@ const resonances = [
       { tier_id: 1, full_intensity: 9 },
       { tier_id: 2, full_intensity: 19 },
     ],
+    weakest_strength_name: 'Faint',
+    weakest_depth_name: 'Seething',
   },
   {
     id: 8,
@@ -43,6 +45,8 @@ const resonances = [
       { tier_id: 1, full_intensity: 10 },
       { tier_id: 2, full_intensity: 21 },
     ],
+    weakest_strength_name: 'Faint',
+    weakest_depth_name: 'Seething',
   },
 ];
 
@@ -86,7 +90,7 @@ describe('FuryDeclaration', () => {
     expect(screen.getByTestId('fury-tier-1')).toHaveTextContent('Seething');
     expect(screen.getByTestId('fury-tier-2')).toHaveTextContent('Unbound');
     expect(screen.getByTestId('fury-depth-line')).toHaveTextContent(
-      'Your Wrath is blazing: you can go as far as Unbound.'
+      'Your Wrath is blazing: you can go as far as Unbound. A faint passion goes only as far as Seething.'
     );
   });
 

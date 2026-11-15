@@ -48,6 +48,27 @@ describe('FeedNoteBlock (#3856)', () => {
     expect(block.className).not.toContain('destructive');
   });
 
+  it('offers the rite of settling on a reflection confirmation, and asks the composer for it (#5124)', () => {
+    const asked = vi.fn();
+    window.addEventListener('arx:settle-aura', asked);
+    render(
+      <FeedNoteBlock
+        note={{ ...note('system', 'Your reflection on the door is recorded.'), settle: true }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settle your aura' }));
+
+    expect(asked).toHaveBeenCalledTimes(1);
+    window.removeEventListener('arx:settle-aura', asked);
+  });
+
+  it('shows no settle button on an ordinary system line', () => {
+    render(<FeedNoteBlock note={note('system', 'You take the lantern.')} />);
+
+    expect(screen.queryByTestId('feed-note-settle')).not.toBeInTheDocument();
+  });
+
   it('renders an ooc line in full ink with its own rule, never as a muted note (#4337)', () => {
     // Evennia's text2html escapes the brackets on the way out, so this is the wire form.
     render(<FeedNoteBlock note={note('ooc', '&lt;OOC&gt; Apostate says: We need a GM.')} />);

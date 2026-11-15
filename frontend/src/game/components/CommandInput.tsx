@@ -27,10 +27,12 @@ import {
   type EntranceTechniqueSelection,
 } from '@/scenes/components/EntranceTechniqueAttachment';
 import type { TargetCandidate } from '@/scenes/components/TargetPicker';
-import { useAppSelector } from '@/store/hooks';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { addFeedNote } from '@/store/gameSlice';
 import { ReflectingOnRow } from '@/magic/components/ReflectingOnRow';
 import { useRefreshReflectionOptions } from '@/magic/queries';
 import { SettleAuraDialog } from '@/magic/components/SettleAuraDialog';
+import { useSettleAuraRequests } from '@/magic/settleAuraRequest';
 import {
   isReflecting,
   isReflectionIncomplete,
@@ -306,17 +308,32 @@ export function CommandInput({
   const refreshReflectionOptions = useRefreshReflectionOptions(characterSheetId);
   // The `client_request_id` of a socket-sent pose that carries a reflection, until its ack.
   const reflectedSendRef = useRef<string | null>(null);
-  // The rite of settling, offered by the toast a recorded reflection raises.
+  // The rite of settling, opened by the button on the feed card a recorded reflection adds.
   const [settleOpen, setSettleOpen] = useState(false);
-  const showReflectionLine = useCallback((line: string, recorded: boolean) => {
-    if (!recorded) {
-      toast.error(line);
-      return;
-    }
-    toast.success(line, {
-      action: { label: 'Settle your aura', onClick: () => setSettleOpen(true) },
-    });
-  }, []);
+  const openSettle = useCallback(() => setSettleOpen(true), []);
+  useSettleAuraRequests(openSettle);
+  const dispatch = useAppDispatch();
+  const showReflectionLine = useCallback(
+    (line: string, recorded: boolean) => {
+      if (!recorded) {
+        toast.error(line);
+        return;
+      }
+      // A card in the writer's own feed, with the button; nobody else is told.
+      dispatch(
+        addFeedNote({
+          character,
+          note: {
+            kind: 'system',
+            content: line,
+            timestamp: new Date().toISOString(),
+            settle: true,
+          },
+        })
+      );
+    },
+    [dispatch, character]
+  );
   const submittingRef = useRef(false);
   const { send, sendConsole, executeAction } = useGameSocket();
   const isCommandsMode = composerMode?.command === COMMANDS_MODE;

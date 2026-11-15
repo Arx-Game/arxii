@@ -119,6 +119,10 @@ export interface FuryResonanceOption {
   provocation_cap: number;
   /** Per tier, the full-share intensity scaled by this resonance's strength. */
   tier_full_intensities: FuryResonanceTierIntensity[];
+  /** The weakest strength's name, for "A faint passion goes only as far as ...". */
+  weakest_strength_name: string;
+  /** The deepest step the weakest strength reaches; blank when it reaches none. */
+  weakest_depth_name: string;
 }
 
 export type ActionCategory = 'physical' | 'social' | 'mental';

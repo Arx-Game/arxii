@@ -35532,6 +35532,8 @@ export interface components {
       readonly control_check_name: string;
       readonly provocation_cap: number;
       readonly tier_full_intensities: components['schemas']['FuryResonanceTierIntensity'][];
+      readonly weakest_strength_name: string;
+      readonly weakest_depth_name: string;
     };
     /** @description Read-only full-share intensity of one Fury tier at one resonance's strength (#4738). */
     FuryResonanceTierIntensity: {

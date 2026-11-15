@@ -25,6 +25,17 @@ function strengthWord(resonance: FuryResonanceOption): string {
   return resonance.strength_name.toLowerCase();
 }
 
+/** "A faint passion goes only as far as Let it in.", said only when this strength is not the weakest. */
+function weakerLine(resonance: FuryResonanceOption): string {
+  if (
+    !resonance.weakest_depth_name ||
+    resonance.weakest_strength_name === resonance.strength_name
+  ) {
+    return '';
+  }
+  return ` A ${resonance.weakest_strength_name.toLowerCase()} passion goes only as far as ${resonance.weakest_depth_name}.`;
+}
+
 interface FuryDeclarationProps {
   tiers: FuryTierOption[];
   resonances: FuryResonanceOption[];
@@ -118,6 +129,7 @@ export function FuryDeclaration({
           <p className="text-[10px] text-muted-foreground" data-testid="fury-depth-line">
             Your {selectedResonance.name} is {strengthWord(selectedResonance)}
             {deepest !== null ? `: you can go as far as ${deepest.name}.` : '.'}
+            {weakerLine(selectedResonance)}
           </p>
         </>
       )}

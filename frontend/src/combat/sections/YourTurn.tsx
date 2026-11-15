@@ -1821,6 +1821,9 @@ function ManeuverDeclarationSection({
       {/* Rally control — ally picker + confirm button (#3381) */}
       <CompulsionMark compulsion={compulsion} actionKey="rally">
         <div className="space-y-1.5" data-testid="rally-control">
+          <p className="text-sm font-semibold" data-testid="rally-heading">
+            {rallyAlly ? `Rally ${rallyAlly.character_name}` : 'Rally an ally'}
+          </p>
           <Select
             value={rallyAllyId}
             onValueChange={(value) => {
@@ -1830,7 +1833,7 @@ function ManeuverDeclarationSection({
             disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
           >
             <SelectTrigger data-testid="rally-ally-select" className="h-8 text-xs">
-              <SelectValue placeholder="Rally an ally…" />
+              <SelectValue placeholder="Choose an ally" />
             </SelectTrigger>
             <SelectContent>
               {coverableAllies.map((ally) => (
@@ -1871,7 +1874,7 @@ function ManeuverDeclarationSection({
                 : 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
             )}
           >
-            {maneuverDispatchPending ? 'Declaring rally…' : 'Rally'}
+            {maneuverDispatchPending ? 'Declaring rally…' : 'Declare Rally'}
           </button>
         </div>
       </CompulsionMark>

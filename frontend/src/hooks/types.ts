@@ -127,6 +127,11 @@ export interface FeedNote {
   /** True on the sender's own echo of a page, which never counts as unread. */
   outgoing?: boolean;
   /**
+   * The note carries the "Settle your aura" button (#5124): the writer's own confirmation
+   * that a reflection is recorded. Local to this client; nobody else is told.
+   */
+  settle?: boolean;
+  /**
    * A line from a player channel (#3299), kind `channel`, built from the channel
    * message caches (never from the session): `content` is the plain message
    * text. `hiddenCount` above zero makes it the "N hidden" divider that stands

@@ -8,6 +8,8 @@ import { HiddenDivider } from '@/components/HiddenDivider';
 import { MessageModeration } from '@/channels/components/MessageModeration';
 import { useAccount } from '@/store/hooks';
 import { markMatches, useFeedFind } from '../feedFind';
+import { Button } from '@/components/ui/button';
+import { requestSettleAura } from '@/magic/settleAuraRequest';
 
 interface FeedNoteBlockProps {
   note: FeedNote;
@@ -184,6 +186,18 @@ function FeedNoteBody({ note, time }: { note: FeedNote; time: string }) {
           presentation="prose"
           className={cn(isLook && 'text-foreground')}
         />
+        {note.settle && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-1.5"
+            data-testid="feed-note-settle"
+            onClick={requestSettleAura}
+          >
+            Settle your aura
+          </Button>
+        )}
       </div>
       <span className="sr-only">{time}</span>
     </div>

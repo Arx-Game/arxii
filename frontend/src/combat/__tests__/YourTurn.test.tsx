@@ -1942,6 +1942,8 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
       control_check_name: 'Composure',
       provocation_cap: 2,
       tier_full_intensities: [],
+      weakest_strength_name: 'Faint',
+      weakest_depth_name: 'Seething',
     },
     {
       id: 21,
@@ -1950,6 +1952,8 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
       control_check_name: 'Composure',
       provocation_cap: 5,
       tier_full_intensities: [],
+      weakest_strength_name: 'Faint',
+      weakest_depth_name: 'Seething',
     },
   ];
 
@@ -2791,7 +2795,10 @@ describe('YourTurn — rally/succor maneuver pickers (#3381)', () => {
     await userEvent.click(screen.getByTestId('rally-ally-select'));
     await userEvent.click(await screen.findByText('Ally Four'));
 
+    // The control is headed by the ally it is aimed at, and its button declares the Rally.
+    expect(screen.getByTestId('rally-heading')).toHaveTextContent('Rally Ally Four');
     const confirmBtn = screen.getByTestId('rally-confirm-btn');
+    expect(confirmBtn).toHaveTextContent('Declare Rally');
     await waitFor(() => expect(confirmBtn).not.toBeDisabled());
     await userEvent.click(confirmBtn);
 

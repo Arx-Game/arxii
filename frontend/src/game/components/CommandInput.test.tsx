@@ -39,6 +39,7 @@ const executeActionMock = vi.fn();
 // (#2183 reads `id` off it) or undefined in older tests.
 const submitPoseMock = vi.fn((): Promise<unknown> => Promise.resolve());
 const fetchSceneMock = vi.fn();
+const dispatchMock = vi.fn();
 const toastErrorMock = vi.fn();
 const toastSuccessMock = vi.fn();
 // #3760 Task 11 — the Task 6 writer-only lookup endpoint the "Check status"
@@ -113,7 +114,7 @@ vi.mock('@/store/hooks', () => ({
         },
       },
     }),
-  useAppDispatch: () => vi.fn(),
+  useAppDispatch: () => dispatchMock,
 }));
 
 // Mock ColorPicker to avoid rendering issues
@@ -231,6 +232,7 @@ describe('CommandInput', () => {
     submitPoseMock.mockImplementation(() => Promise.resolve());
     fetchSceneMock.mockClear();
     toastErrorMock.mockClear();
+    dispatchMock.mockClear();
     fetchPoseSubmissionMock.mockClear();
     fetchPoseSubmissionMock.mockResolvedValue(null);
     createActionRequestMock.mockClear();
@@ -2315,6 +2317,7 @@ describe('the "Reflecting on" row on a pose (#5124)', () => {
     submitPoseMock.mockClear();
     toastErrorMock.mockClear();
     toastSuccessMock.mockClear();
+    dispatchMock.mockClear();
     submitPoseMock.mockImplementation(() => Promise.resolve());
     mockRoomCharacters = [{ name: 'Bob', thumbnail_url: null, dbref: '#501' }];
     queryClient.clear();
@@ -2430,7 +2433,7 @@ describe('the "Reflecting on" row on a pose (#5124)', () => {
     );
   });
 
-  it('offers the rite of settling on the toast a recorded scene reflection raises', async () => {
+  it('puts a card with the rite of settling in the feed when a scene reflection is recorded', async () => {
     submitPoseMock.mockImplementation(() =>
       Promise.resolve({
         id: 1,
@@ -2454,12 +2457,20 @@ describe('the "Reflecting on" row on a pose (#5124)', () => {
     fireEvent.keyDown(textarea, { key: 'Enter' });
 
     await poseLands();
-    expect(toastSuccessMock).toHaveBeenCalledWith(
-      'Your reflection on the door is recorded.',
+    expect(dispatchMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        action: expect.objectContaining({ label: 'Settle your aura' }),
+        type: 'game/addFeedNote',
+        payload: expect.objectContaining({
+          character: 'Alice',
+          note: expect.objectContaining({
+            kind: 'system',
+            content: 'Your reflection on the door is recorded.',
+            settle: true,
+          }),
+        }),
       })
     );
+    expect(toastSuccessMock).not.toHaveBeenCalled();
     expect(toastErrorMock).not.toHaveBeenCalled();
   });
 

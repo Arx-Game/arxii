@@ -40,9 +40,20 @@ function ResonanceRow({ row }: { row: KindledResonance }) {
           <span className="text-xs text-muted-foreground">{row.affinity_name}</span>
         </span>
         <span
-          className={cn('text-xs', row.kindled ? 'font-medium' : 'text-muted-foreground')}
+          className={cn(
+            'text-xs',
+            row.kindled
+              ? 'inline-flex items-center gap-1.5 rounded-full bg-orange-100 px-2 py-px font-semibold text-orange-700 dark:bg-orange-950 dark:text-orange-300'
+              : 'text-muted-foreground'
+          )}
           data-testid={`kindled-resonance-state-${row.id}`}
         >
+          {row.kindled && (
+            <span
+              aria-hidden="true"
+              className="size-[7px] rounded-full bg-orange-600 dark:bg-orange-400"
+            />
+          )}
           {stateLabel(row)}
         </span>
       </div>

@@ -108,6 +108,8 @@ describe('DigDeep', () => {
       />
     );
 
+    // The picks sit under the demo's own "Dig deep" label.
+    expect(screen.getByTestId('dig-deep-resonances')).toHaveTextContent('Dig deep');
     expect(screen.queryByTestId('dig-deep-kindled-note')).toBeNull();
     await userEvent.click(screen.getByTestId('dig-deep-resonance-7'));
     expect(screen.getByTestId('dig-deep-kindled-note')).toHaveTextContent(

@@ -48,6 +48,9 @@ describe('KindledResonancesPanel', () => {
     expect(screen.getByTestId('kindled-resonance-state-1')).toHaveTextContent('Kindled, blazing');
     expect(screen.getByText('The overseer who branded you is here.')).toBeInTheDocument();
     expect(screen.getByTestId('kindled-resonance-state-2')).toHaveTextContent('Not kindled');
+    // The kindled tag is a pill; the unkindled state is plain muted text.
+    expect(screen.getByTestId('kindled-resonance-state-1')).toHaveClass('rounded-full');
+    expect(screen.getByTestId('kindled-resonance-state-2')).not.toHaveClass('rounded-full');
     expect(api.getKindledResonances).toHaveBeenCalledWith(7);
   });
 

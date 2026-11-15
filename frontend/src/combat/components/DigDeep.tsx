@@ -56,7 +56,7 @@ export function DigDeep({
     <section className="space-y-1.5" data-testid="dig-deep">
       {resonances.length > 0 && (
         <div className="space-y-1" data-testid="dig-deep-resonances">
-          <p className="text-xs text-muted-foreground">Draw on</p>
+          <p className="text-xs text-muted-foreground">Dig deep</p>
           <div className="flex flex-wrap gap-1">
             {resonances.map((row) => {
               const on = row.id === chosen?.id;

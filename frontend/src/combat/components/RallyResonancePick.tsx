@@ -28,9 +28,7 @@ export function RallyResonancePick({
   const chosen = resonances.find((r) => String(r.id) === selectedId);
   return (
     <div className="space-y-1" data-testid="rally-resonance-pick">
-      <p className="text-xs text-muted-foreground">
-        {allyName ? `Remind ${allyName} of` : 'Remind them of'}
-      </p>
+      <p className="text-xs text-muted-foreground">Remind them of</p>
       <div className="flex flex-wrap gap-1">
         {resonances.map((resonance) => {
           const on = String(resonance.id) === selectedId;
