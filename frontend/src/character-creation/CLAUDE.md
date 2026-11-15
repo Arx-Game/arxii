@@ -272,6 +272,20 @@ with the definition from the response's `terms`; `interceptPick` runs before a c
 changes a pick and `coverOfferId` draws that card dashed (the cover flow);
 `secretOfferIds`/`wordSecret`/`wordCover` label the secret pick and the cover on the cards.
 
+## A card click shows at once (#5134)
+
+`useSyncDistinctions` (`@/hooks/useDistinctions`) saves the draft's whole pick list and
+returns the mutation plus `pendingEntries`: the picks a save in flight is writing for that
+draft, from this grid or any other on the page (every instance shares one mutation key;
+`usePendingSync` reads it), null when none is. While it is set, `ChapterOffers` reads a
+card's rank from it, so the clicked card is picked and an exclusive sibling let go before
+the server answers; a card held some other way than by choice (bundled, carried) is in no
+save and keeps its rank. Every grid's cards and the schooling stances are disabled until
+the save answers: a second save would be built from the list the first is replacing. The
+save's answer is put in the draft-distinctions cache as it stands, with no second request;
+the draft, the purse and the offers are still refetched. The ledger and the purse move
+when the server answers, not on the click.
+
 ## Key Features
 
 - **Free navigation**: All stages clickable, incomplete stages show warning badge

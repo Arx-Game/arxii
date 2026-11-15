@@ -549,7 +549,11 @@ a silent drop.
   distinction on the draft in one call; body `{"distinctions": [{"id", "rank", "offer_id"},
   ...]}`. The chapter mounts (`ChapterOffers`) use this rather than one POST per pick.
   `reconcile_offer_picks` runs after every one of these four calls, so a `bundled`/`carried`
-  entry the client never sent survives the write.
+  entry the client never sent survives the write. The sync reads the draft's
+  `visible_offers` once and the species' innate distinctions once and resolves every entry
+  against those (#5134): it used to read both once per entry, so a save cost more with
+  every card the draft held. It answers with the draft's whole list, and the client puts
+  that answer in its cache in place of a second request (`useSyncDistinctions`).
 
 ---
 

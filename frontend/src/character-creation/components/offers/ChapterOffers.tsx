@@ -29,7 +29,7 @@ import type { DraftDistinctionEntry } from '@/types/distinctions';
 import { useDraftOffers } from '../../queries';
 import type { CharacterDraft, OfferChapter, OfferTerm, VisibleOffer } from '../../types';
 import { RankControl } from './RankControl';
-import { choiceEntries, sameFeature } from './syncHelpers';
+import { choiceEntries, choiceOfferId, sameFeature } from './syncHelpers';
 
 interface ChapterOffersProps {
   draft: CharacterDraft;
@@ -424,6 +424,23 @@ export function ChapterOffers({
     return map;
   }, [draftDistinctions]);
 
+  // While a save is in flight the cards read what it is writing (#5134): the clicked
+  // card is picked, and an exclusive sibling let go, before the server answers. A card
+  // held some other way than by choice (bundled, carried) is not in a save and keeps
+  // its rank. When the save fails the cards fall back to the saved list.
+  const pendingSync = syncDistinctions.pendingEntries ?? null;
+  const saving = pendingSync !== null || syncDistinctions.isPending;
+  const rankOf = useCallback(
+    (offerId: number): number => {
+      const entry = entryByOfferId.get(offerId);
+      if (pendingSync === null) return entry?.rank ?? 0;
+      const writing = pendingSync.filter((e) => e.offer_id === offerId).map((e) => e.rank);
+      if (writing.length > 0) return Math.max(...writing);
+      return entry && choiceOfferId(entry) !== offerId ? entry.rank : 0;
+    },
+    [entryByOfferId, pendingSync]
+  );
+
   // The block's own offer ids (#4124): an exclusive block drops a sibling pick when
   // another is taken.
   const blockOfferIds = useMemo(
@@ -483,10 +500,9 @@ export function ChapterOffers({
   // The allowance (#4395): once this block holds as many picks as it allows, the rest
   // wait; an exclusive block swaps instead, so it never counts as full. A block that
   // spends career points (#4829) counts ranks: a rank-four card is four of them.
-  const rankOf = (o: VisibleOffer) => entryByOfferId.get(o.offer_id)?.rank ?? 0;
   const pickedHere = pointsPicks
-    ? offers.reduce((sum, o) => sum + rankOf(o), 0)
-    : offers.filter((o) => rankOf(o) > 0).length;
+    ? offers.reduce((sum, o) => sum + rankOf(o.offer_id), 0)
+    : offers.filter((o) => rankOf(o.offer_id) > 0).length;
   const full =
     !exclusive && maxPicks !== null && (pointsPicks || maxPicks > 1) && pickedHere >= maxPicks;
   // The points still free in this block, for the pips (#4829); null when nothing bounds it.
@@ -502,12 +518,11 @@ export function ChapterOffers({
   const groups = groupOffers(atRest, groupBy);
 
   const renderOffer = (offer: VisibleOffer) => {
-    const entry = entryByOfferId.get(offer.offer_id);
-    const rank = entry?.rank ?? 0;
+    const rank = rankOf(offer.offer_id);
     const selected = rank > 0;
     const ranked = offer.max_rank > 1;
     const waiting = full && !selected;
-    const busy = offer.is_locked || syncDistinctions.isPending || waiting;
+    const busy = offer.is_locked || saving || waiting;
     // Pips (#4829): on a career-point grid the rank is the pips in the card's top
     // right. A pip at or under the held rank is on; one past the points this card could
     // still take is off; a click sets that rank (the first pip of an unpicked card picks
@@ -581,7 +596,7 @@ export function ChapterOffers({
                   className={cn('pip', on && 'on', off && 'off')}
                   aria-pressed={on}
                   aria-label={`${offer.name}, rank ${pip}`}
-                  disabled={(offer.is_locked || syncDistinctions.isPending || off) && !on}
+                  disabled={(offer.is_locked || saving || off) && !on}
                   onClick={(e) => {
                     e.stopPropagation();
                     applyRank(offer, pip === rank ? 0 : pip);

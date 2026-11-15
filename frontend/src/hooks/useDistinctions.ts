@@ -5,7 +5,7 @@
  * and managing distinctions on character creation drafts.
  */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
 import { characterCreationKeys } from '@/character-creation/queries';
 import type {
@@ -35,6 +35,8 @@ export const distinctionKeys = {
   details: () => [...distinctionKeys.all, 'detail'] as const,
   detail: (slug: string) => [...distinctionKeys.details(), slug] as const,
   draftDistinctions: (draftId: number) => [...distinctionKeys.all, 'draft', draftId] as const,
+  /** The save of a draft's picks: one key, so every card grid sees a save in flight. */
+  sync: (draftId: number) => [...distinctionKeys.all, 'sync', draftId] as const,
 };
 
 // =============================================================================
@@ -288,15 +290,33 @@ export function useSwapDistinction(draftId: number) {
  * This replaces all distinctions with the provided list in a single API call.
  * Use this for bulk updates instead of individual add/remove calls.
  */
+/**
+ * The picks a save in flight is writing for this draft, or null when none is (#5134).
+ *
+ * Every card grid on a page reads this: the clicked card shows its pick at once, and
+ * no grid computes a new save from the list the one in flight is about to replace
+ * (two grids each hold their own mutation, so one grid's `isPending` says nothing to
+ * the other).
+ */
+export function usePendingSync(draftId: number): SyncDistinctionEntry[] | null {
+  const pending = useMutationState({
+    filters: { mutationKey: distinctionKeys.sync(draftId), status: 'pending' },
+    select: (mutation) => mutation.state.variables as SyncDistinctionEntry[],
+  });
+  return pending.length > 0 ? pending[pending.length - 1] : null;
+}
+
 export function useSyncDistinctions(draftId: number) {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  const mutation = useMutation({
+    mutationKey: distinctionKeys.sync(draftId),
     mutationFn: (entries: SyncDistinctionEntry[]) => syncDistinctionsOnDraft(draftId, entries),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: distinctionKeys.draftDistinctions(draftId),
-      });
+    onSuccess: (saved) => {
+      // The save answers with the draft's whole list (#5134): put it in the cache
+      // as it stands. Asking for the same list again made every card wait on a
+      // second request before it showed its pick.
+      queryClient.setQueryData(distinctionKeys.draftDistinctions(draftId), saved.distinctions);
       // Also invalidate the distinctions list to refresh lock status
       queryClient.invalidateQueries({
         queryKey: distinctionKeys.lists(),
@@ -319,4 +339,7 @@ export function useSyncDistinctions(draftId: number) {
       });
     },
   });
+  // The picks a save in flight is writing, from this grid or any other on the page.
+  const pendingEntries = usePendingSync(draftId);
+  return { ...mutation, pendingEntries };
 }
