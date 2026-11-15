@@ -21,14 +21,20 @@ from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
     from world.combat.models import SurgeTuning
+    from world.magic.models import KindledStrengthTier, Resonance
     from world.traits.models import CheckOutcome
 
 
 def declare_rally(
     participant: CombatParticipant,
     ally: CombatParticipant,
+    resonance: Resonance | None = None,
 ) -> CombatRoundAction:
     """Declare a rallying maneuver — inspire an ally, auto-ready (#2015).
+
+    The rallier may name one of the ALLY's resonances (#5124). It is recorded on the action;
+    when the Rally resolves a kindled one surges more and an unkindled one is kindled for the
+    fight. Naming a resonance the ally does not hold is refused.
 
     RALLY rolls the RALLIED surge tuning's check at round-tick; on success it applies
     the designated short-lived ``Inspired`` condition to the ally (a damage-multiplier buff) and,
@@ -60,6 +66,13 @@ def declare_rally(
         msg = "Rally target must be an active participant in this encounter."
         raise ValueError(msg)
 
+    if resonance is not None:
+        from world.magic.services.kindling import holds_resonance  # noqa: PLC0415
+
+        if not holds_resonance(ally.character_sheet, resonance):
+            msg = "That is not one of their resonances."
+            raise ValueError(msg)
+
     action, _ = CombatRoundAction.objects.update_or_create(
         participant=participant,
         round_number=encounter.round_number,
@@ -69,6 +82,7 @@ def declare_rally(
             "effort_level": EffortLevel.LOW,
             "focused_opponent_target": None,
             "focused_ally_target": ally,
+            "rally_resonance": resonance,
             "maneuver": CombatManeuver.RALLY,
             "physical_passive": None,
             "social_passive": None,
@@ -80,12 +94,14 @@ def declare_rally(
     return action
 
 
-def _surge_rallied_ally(
+def _surge_rallied_ally(  # noqa: PLR0913 - the surge's fixed inputs plus the kindled resonance
     rallier: CombatParticipant,
     ally: CombatParticipant,
     rally_outcome: CheckOutcome | None,
     tuning: SurgeTuning | None,
     difficulty: int,
+    kindled_tier: KindledStrengthTier | None = None,
+    resonance: Resonance | None = None,
 ) -> None:
     """The rallied ally's surge, banded by the Rally roll's outcome (#4737).
 
@@ -97,6 +113,10 @@ def _surge_rallied_ally(
     effect catalog, #4783: a percentage, base 100, plus the rallier's own modifiers such as
     a vow stat scaling row); the band's control change and condition are not scaled. When
     the scale is above 100% the roll line notes the extra intensity as ``surge +N``.
+
+    ``kindled_tier`` is the strength at which the ally's named ``resonance`` was already
+    kindled when the Rally was made (#5124): its ``dig_deep_scale_percent`` is added to the
+    scale, and the cause names the resonance.
     """
     from world.mechanics.constants import ManeuverEffectKey  # noqa: PLC0415
     from world.mechanics.effect_targets import effect_value  # noqa: PLC0415
@@ -108,6 +128,11 @@ def _surge_rallied_ally(
     intensity_scale = (
         effect_value(rallier.character_sheet, ManeuverEffectKey.RALLY_SURGE_INTENSITY) / 100
     )
+    vow_scaled = intensity_scale != 1
+    cause = f"{persona_name_of(rallier)} rallies {persona_name_of(ally)}."
+    if kindled_tier is not None and resonance is not None:
+        intensity_scale += kindled_tier.dig_deep_scale_percent / 100
+        cause = f"{persona_name_of(rallier)} rallies {persona_name_of(ally)}'s {resonance.name}."
     apply_rolled_surge(
         encounter=rallier.encounter,
         participant=ally,
@@ -118,8 +143,8 @@ def _surge_rallied_ally(
         intensity_scale=intensity_scale,
         source_character=rallier_character,
         tuning=tuning,
-        cause=f"{persona_name_of(rallier)} rallies {persona_name_of(ally)}.",
-        vow_scaled=intensity_scale != 1,
+        cause=cause,
+        vow_scaled=vow_scaled,
     )
 
 
@@ -207,6 +232,9 @@ def _resolve_tuned_rally(
     )
     success_level = rally_result.success_level or 0
     ally = action.focused_ally_target
+    # Read before this Rally writes anything: a resonance she kindles does not surge itself.
+    named = action.rally_resonance if ally is not None else None
+    kindled_tier = _kindled_tier_of(ally, named) if ally is not None and named else None
     if success_level >= 1 and ally is not None:
         # The rally reaches whatever grips her, as the out-of-combat rally does (#4887):
         # an Audere talked-down self it holds may change back once Audere ends.
@@ -246,5 +274,55 @@ def _resolve_tuned_rally(
 
     if ally is not None:
         _surge_rallied_ally(
-            participant, ally, rally_result.outcome, surge_tuning, RALLY_BASE_DIFFICULTY
+            participant,
+            ally,
+            rally_result.outcome,
+            surge_tuning,
+            RALLY_BASE_DIFFICULTY,
+            kindled_tier=kindled_tier,
+            resonance=named,
         )
+        _kindle_rallied_resonance(participant, ally, named, rally_result.outcome, kindled_tier)
+
+
+def _kindled_tier_of(ally: CombatParticipant, resonance: Resonance) -> KindledStrengthTier | None:
+    """The strength the ally's named resonance is kindled at now, in her round, or None."""
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+    from world.magic.services.kindling import active_mission_for, kindled_for  # noqa: PLC0415
+
+    sheet = ally.character_sheet
+    return kindled_for(
+        sheet,
+        resonance,
+        resolution=CombatRoundContext(ally),
+        mission=active_mission_for(sheet),
+    ).tier
+
+
+def _kindle_rallied_resonance(
+    rallier: CombatParticipant,
+    ally: CombatParticipant,
+    resonance: Resonance | None,
+    outcome: CheckOutcome | None,
+    kindled_tier: KindledStrengthTier | None,
+) -> None:
+    """Kindle the ally's named resonance for this fight at the strength the roll earned (#5124).
+
+    A quiet no-op with no named resonance, for an ally who left or died since the
+    declaration, or when the roll's outcome has no ``RallyKindlingStrength`` row.
+    """
+    from world.magic.services.kindling import record_rally_kindling  # noqa: PLC0415
+    from world.vitals.services import is_dead  # noqa: PLC0415
+
+    if resonance is None or ally.status != ParticipantStatus.ACTIVE:
+        return
+    if is_dead(ally.character_sheet):
+        return
+    record_rally_kindling(
+        ally=ally.character_sheet,
+        resonance=resonance,
+        rallier=rallier.character_sheet,
+        encounter=rallier.encounter,
+        outcome=outcome,
+        already_kindled=kindled_tier is not None,
+    )

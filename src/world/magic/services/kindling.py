@@ -37,6 +37,7 @@ from world.magic.models import (
     Kindling,
     KindlingConfig,
     KindlingSituation,
+    RallyKindlingStrength,
     Resonance,
     Thread,
 )
@@ -47,8 +48,11 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from world.character_sheets.models import CharacterSheet
+    from world.combat.models import CombatEncounter
     from world.conditions.models import ConditionInstance
     from world.missions.models import MissionInstance
+    from world.scenes.models import Scene
+    from world.traits.models import CheckOutcome
 
 #: The act kinds that feed a thread anchor: an act aimed at the person.
 _ANCHOR_FEEDING_ACTS = frozenset(
@@ -743,12 +747,118 @@ def _result(
     )
 
 
+# --- Writes: a Rally or a GM names a resonance ----------------------------------------
+
+
+def holds_resonance(sheet: CharacterSheet, resonance: Resonance) -> bool:
+    """Whether the sheet holds ``resonance`` (a ``CharacterResonance`` row)."""
+    return any(held.resonance_id == resonance.pk for held in sheet.cached_resonances)
+
+
+def held_resonance_names(sheet_ids: Iterable[int]) -> dict[int, list[tuple[int, str]]]:
+    """Sheet id -> ``(resonance id, name)`` for each resonance the sheet holds, in one query.
+
+    Names only, in the resonance model's own order (affinity, then name): what a Rally's
+    picker lists for an ally, never an amount or whether it is kindled.
+    """
+    held: dict[int, list[tuple[int, str]]] = {}
+    rows = (
+        Resonance.objects.filter(character_resonances__character_sheet_id__in=list(sheet_ids))
+        .values_list("character_resonances__character_sheet_id", "pk", "name")
+        .order_by("affinity__pk", "name")
+    )
+    for sheet_id, pk, name in rows:
+        held.setdefault(sheet_id, []).append((pk, name))
+    return held
+
+
+def record_rally_kindling(  # noqa: PLR0913 - keyword-only fields of one kindling write
+    *,
+    ally: CharacterSheet,
+    resonance: Resonance,
+    rallier: CharacterSheet,
+    encounter: CombatEncounter,
+    outcome: CheckOutcome | None,
+    already_kindled: bool,
+) -> Kindling | None:
+    """Write the kindling a Rally's roll earns the ally's resonance for this fight.
+
+    The strength is the ``RallyKindlingStrength`` row for the roll's outcome; an outcome with
+    no row (a failure, say) writes nothing. The ally keeps one Rally row per resonance per
+    fight: a second Rally raises its strength if the roll earned a stronger one and otherwise
+    leaves it. ``already_kindled`` says the resonance was kindled before this Rally (by a
+    situation, a GM or an earlier Rally); then no new row is made, only a stronger strength
+    lifts an existing Rally row.
+    """
+    if outcome is None:
+        return None
+    award = RallyKindlingStrength.objects.filter(outcome_tier=outcome).first()
+    if award is None:
+        return None
+    existing = Kindling.objects.filter(
+        character_sheet=ally,
+        resonance=resonance,
+        encounter=encounter,
+        source=KindlingSource.RALLY,
+    ).first()
+    if existing is not None:
+        if award.strength > existing.strength:
+            existing.strength = award.strength
+            existing.kindled_by = rallier
+            existing.save(update_fields=["strength", "kindled_by"])
+        return existing
+    if already_kindled:
+        return None
+    return Kindling.objects.create(
+        character_sheet=ally,
+        resonance=resonance,
+        strength=award.strength,
+        source=KindlingSource.RALLY,
+        encounter=encounter,
+        kindled_by=rallier,
+    )
+
+
+def kindle_by_gm(
+    *,
+    sheet: CharacterSheet,
+    resonance: Resonance,
+    tier: KindledStrengthTier,
+    scene: Scene,
+    gm: CharacterSheet | None,
+) -> Kindling:
+    """A GM kindles ``resonance`` on the character for this scene at the strength ``tier``.
+
+    One GM row per character, resonance and scene; kindling it again sets the new strength.
+    """
+    existing = Kindling.objects.filter(
+        character_sheet=sheet, resonance=resonance, scene=scene, source=KindlingSource.GM
+    ).first()
+    if existing is not None:
+        existing.strength = tier.rank
+        existing.kindled_by = gm
+        existing.save(update_fields=["strength", "kindled_by"])
+        return existing
+    return Kindling.objects.create(
+        character_sheet=sheet,
+        resonance=resonance,
+        strength=tier.rank,
+        source=KindlingSource.GM,
+        scene=scene,
+        kindled_by=gm,
+    )
+
+
 __all__ = [
     "KINDLING_EVIDENCE_FINDERS",
+    "held_resonance_names",
+    "holds_resonance",
+    "kindle_by_gm",
     "kindled_for",
     "kindled_resonances",
     "mission_theme_evidence",
     "own_feeling_evidence",
+    "record_rally_kindling",
     "shared_feeling_evidence",
     "someone_in_trouble_evidence",
     "target_in_state_evidence",

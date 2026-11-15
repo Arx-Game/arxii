@@ -149,9 +149,11 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
                                      the cost of Soulfray
         combat succor <ally>        - shelter an ally from environmental hazards
         combat use <item> [on <target>] - use a held on-use item this round
-        combat rally <ally>         - inspire an ally, bolstering their next action
-        combat digdeep              - roll resolve to raise your intensity (fatigue, or a
-                                     free dig deep from an ally's rally); once a round
+        combat rally <ally>[=<resonance>] - inspire an ally, bolstering their next action;
+                                     name one of their resonances to kindle it for the fight
+        combat digdeep [<resonance>] - roll resolve to raise your intensity (fatigue, or a
+                                     free dig deep from an ally's rally); once a round;
+                                     a kindled resonance you name makes the surge larger
         combat demoralize <opp>     - break an opponent's nerve (morale damage)
         combat taunt <opp|ally>      - draw an NPC's aggro, or goad an ally into a surge
         combat parley <opp>          - talk a wavering foe down mid-fight
@@ -223,14 +225,14 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
 
     def resolve_action_args(self) -> dict[str, Any]:
         """Resolve name arguments (ally / opponent / combo) into dispatch kwargs."""
-        if self._subverb == "cover":  # noqa: STRING_LITERAL
+        if self._subverb in ("cover", "succor"):  # noqa: STRING_LITERAL
             return {"ally_participant_id": self._resolve_ally_pk(self._require_rest(_ARG_AN_ALLY))}
         if self._subverb == "interpose":  # noqa: STRING_LITERAL
             return self._resolve_interpose_args(self._rest)
-        if self._subverb == "succor":  # noqa: STRING_LITERAL
-            return {"ally_participant_id": self._resolve_ally_pk(self._require_rest(_ARG_AN_ALLY))}
         if self._subverb == "rally":  # noqa: STRING_LITERAL
-            return {"ally_participant_id": self._resolve_ally_pk(self._require_rest(_ARG_AN_ALLY))}
+            return self._resolve_rally_args(self._require_rest(_ARG_AN_ALLY))
+        if self._subverb == "digdeep":  # noqa: STRING_LITERAL
+            return self._resolve_dig_deep_args(self._rest)
         if self._subverb == "taunt":  # noqa: STRING_LITERAL
             return self._resolve_use_item_target(self._require_rest("an opponent or ally"))
         if self._subverb in _OPPONENT_SUBVERBS:
@@ -242,6 +244,29 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         if self._subverb in _PLAN_SUBVERBS or self._subverb in _DODGE_SETTING_SUBVERBS:
             return self._resolve_plan_args()
         return self._resolve_technique_subverb_args()
+
+    def _resolve_rally_args(self, text: str) -> dict[str, Any]:
+        """``rally <ally>[=<resonance>]``: the ally, and the one of their resonances it names."""
+        ally_text, _, resonance_text = text.partition("=")
+        kwargs: dict[str, Any] = {"ally_participant_id": self._resolve_ally_pk(ally_text.strip())}
+        if resonance_text.strip():
+            kwargs["resonance_id"] = self._resonance_pk(resonance_text.strip())
+        return kwargs
+
+    def _resolve_dig_deep_args(self, text: str) -> dict[str, Any]:
+        """``digdeep [<resonance>]``: dig deep, drawing on one of her own resonances."""
+        return {"resonance_id": self._resonance_pk(text.strip())} if text.strip() else {}
+
+    @staticmethod
+    def _resonance_pk(name: str) -> int:
+        """The pk of the resonance called ``name`` (whether it is held is the rules' call)."""
+        from world.magic.models import Resonance  # noqa: PLC0415
+
+        resonance = Resonance.objects.filter(name__iexact=name).first()
+        if resonance is None:
+            msg = f"No resonance named '{name}' found."
+            raise CommandError(msg)
+        return resonance.pk
 
     def _resolve_plan_args(self) -> dict[str, Any]:
         """The reaction plans: ``dodge ...`` (#4676), ``steady [on|off]`` (#4802), and the

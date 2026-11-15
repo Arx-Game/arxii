@@ -300,7 +300,9 @@ from actions.definitions.gm_combat import (
 )
 from actions.definitions.gm_npcs import MintStoryNPCAction
 from actions.definitions.gm_props import (
+    GMListKindlingAction,
     GMListSubstancesAction,
+    KindleResonanceAction,
     MarkSubstancePresentAction,
     StagePropAction,
     StagePropertyAction,
@@ -983,6 +985,8 @@ _ALL_ACTIONS: list[Action] = [
     StagePropertyAction(),
     MarkSubstancePresentAction(),
     GMListSubstancesAction(),
+    KindleResonanceAction(),
+    GMListKindlingAction(),
     CallUpSubstanceAction(),
     CompleteStoryAction(),
     ResolveEpisodeAction(),

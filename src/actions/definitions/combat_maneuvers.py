@@ -36,7 +36,7 @@ if TYPE_CHECKING:
         CombatRoundAction,
     )
     from world.combat.types import DigDeepResult
-    from world.magic.models import Technique
+    from world.magic.models import Resonance, Technique
 
 # Repeated ActionResult failure messages, extracted to satisfy S1192.
 NOT_IN_ACTIVE_ROUND_MESSAGE = "You are not in an active combat round."
@@ -936,6 +936,18 @@ class DisengageAction(Action):
         return ActionResult(success=True, message="You disengage from the duel.")
 
 
+_NO_SUCH_RESONANCE_MSG = "There is no such resonance."
+
+
+def _resolve_resonance(resonance_id: int | None) -> Resonance | None:
+    """The resonance with this pk, or None (a Rally or Dig deep names it; the rules check it)."""
+    if resonance_id is None:
+        return None
+    from world.magic.models import Resonance  # noqa: PLC0415
+
+    return Resonance.objects.filter(pk=resonance_id).first()
+
+
 @dataclass
 class RallyAction(Action):
     """Rally an ally — inspire them for the round (wraps ``declare_rally``)."""
@@ -952,6 +964,7 @@ class RallyAction(Action):
         actor: ObjectDB,
         context: ActionContext | None = None,
         ally_participant_id: int | None = None,
+        resonance_id: int | None = None,
         **kwargs: Any,
     ) -> ActionResult:
         from world.combat.services import declare_rally  # noqa: PLC0415
@@ -965,8 +978,11 @@ class RallyAction(Action):
         ally = _resolve_ally(participant, ally_participant_id)
         if ally is None:
             return ActionResult(success=False, message=_NO_SUCH_ALLY_MSG)
+        resonance = _resolve_resonance(resonance_id)
+        if resonance_id is not None and resonance is None:
+            return ActionResult(success=False, message=_NO_SUCH_RESONANCE_MSG)
         try:
-            declare_rally(participant, ally)
+            declare_rally(participant, ally, resonance)
         except ValueError as err:
             return ActionResult(success=False, message=str(err))
         return ActionResult(success=True, message="You rally your ally.")
@@ -990,6 +1006,7 @@ class DigDeepAction(Action):
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
+        resonance_id: int | None = None,
         **kwargs: Any,
     ) -> ActionResult:
         from world.combat.dig_deep import DigDeepRefusedError, dig_deep  # noqa: PLC0415
@@ -998,8 +1015,11 @@ class DigDeepAction(Action):
         participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
         if participant is None:
             return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+        resonance = _resolve_resonance(resonance_id)
+        if resonance_id is not None and resonance is None:
+            return ActionResult(success=False, message=_NO_SUCH_RESONANCE_MSG)
         try:
-            result = dig_deep(participant)
+            result = dig_deep(participant, resonance)
         except DigDeepRefusedError as err:
             return ActionResult(success=False, message=err.user_message)
         return ActionResult(success=True, message=_dig_deep_message(result))
@@ -1015,7 +1035,12 @@ def _dig_deep_message(result: DigDeepResult) -> str:
         cost = "a free dig deep"
     else:
         cost = f"{result.fatigue_category} fatigue {result.fatigue_spent}"
-    return f"You dig deep. {outcome}{gain} Cost: {cost}."
+    drew = (
+        f" Your {result.kindled_resonance} is kindled, so the surge is larger."
+        if result.kindled_resonance
+        else ""
+    )
+    return f"You dig deep. {outcome}{gain}{drew} Cost: {cost}."
 
 
 @dataclass

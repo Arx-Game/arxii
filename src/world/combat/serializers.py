@@ -61,6 +61,7 @@ from world.fatigue.services import get_fatigue_capacity
 from world.magic.constants import AudereCeremony
 from world.magic.models import CharacterTechnique, Technique
 from world.magic.serializers_substance import CallUpOfferSerializer
+from world.magic.services.kindling import held_resonance_names
 from world.scenes.constants import RoundStatus
 from world.standoffs.serializers import (
     GMStandoffViewSerializer,
@@ -601,6 +602,13 @@ class DigDeepOfferSerializer(serializers.Serializer):
     )
 
 
+class RallyResonanceChoiceSerializer(serializers.Serializer):
+    """One of an ally's resonances a Rally may name: its name only, never an amount (#5124)."""
+
+    id = serializers.IntegerField(help_text="The resonance's id, sent back as resonance_id.")
+    name = serializers.CharField(help_text="The resonance's name.")
+
+
 class _ParticipantListSerializer(serializers.ListSerializer):
     """Reads the face every listed participant presents in one batch (#4802).
 
@@ -614,9 +622,9 @@ class _ParticipantListSerializer(serializers.ListSerializer):
         from world.scenes.services import personas_for_sheets  # noqa: PLC0415
 
         participants = list(data.all() if isinstance(data, BaseManager) else data)
-        self.context["participant_personas"] = personas_for_sheets(
-            [participant.character_sheet_id for participant in participants]
-        )
+        sheet_ids = [participant.character_sheet_id for participant in participants]
+        self.context["participant_personas"] = personas_for_sheets(sheet_ids)
+        self.context["participant_resonances"] = held_resonance_names(sheet_ids)
         return super().to_representation(participants)
 
 
@@ -661,6 +669,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
     compulsion = serializers.SerializerMethodField()
     steady_plan = serializers.SerializerMethodField()
     dig_deep = serializers.SerializerMethodField()
+    rally_resonances = serializers.SerializerMethodField()
     call_up = serializers.SerializerMethodField()
     strike_weapons = serializers.SerializerMethodField()
 
@@ -694,6 +703,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "compulsion",
             "steady_plan",
             "dig_deep",
+            "rally_resonances",
             "call_up",
             "strike_weapons",
         ]
@@ -778,6 +788,42 @@ class ParticipantSerializer(serializers.ModelSerializer):
             and engagement.last_dug_deep_round == obj.encounter.round_number,
             "given_by": self._dig_deep_giver_name(engagement),
         }
+
+    @extend_schema_field(RallyResonanceChoiceSerializer(many=True))
+    def get_rally_resonances(self, obj: CombatParticipant) -> list[dict[str, Any]]:
+        """The resonances of this ally a Rally may name: names only, no amounts (#5124).
+
+        Sent only for another active fighter, and only to a viewer who is herself an active
+        fighter in this encounter; otherwise empty.
+        """
+        if obj.status != ParticipantStatus.ACTIVE or self._is_viewers_own(obj):
+            return []
+        if obj.encounter_id not in self._viewer_active_encounter_ids():
+            return []
+        held = self.context.get("participant_resonances")
+        if held is None:
+            held = held_resonance_names([obj.character_sheet_id])
+        return [{"id": pk, "name": name} for pk, name in held.get(obj.character_sheet_id, [])]
+
+    def _viewer_active_encounter_ids(self) -> frozenset[int]:
+        """The encounters the requesting account is an active fighter in (read once)."""
+        cached = self.context.get("viewer_active_encounter_ids")
+        if cached is not None:
+            return cached
+        request = self.context.get("request")
+        ids: frozenset[int] = frozenset()
+        if request and request.user.is_authenticated:
+            try:
+                sheet_ids = request.user.played_character_sheet_ids
+            except AttributeError:
+                sheet_ids = frozenset()
+            ids = frozenset(
+                CombatParticipant.objects.filter(
+                    character_sheet_id__in=sheet_ids, status=ParticipantStatus.ACTIVE
+                ).values_list("encounter_id", flat=True)
+            )
+        self.context["viewer_active_encounter_ids"] = ids
+        return ids
 
     @extend_schema_field(CallUpFightOfferSerializer(allow_null=True))
     def get_call_up(self, obj: CombatParticipant) -> dict[str, Any] | None:
@@ -2584,6 +2630,22 @@ class CoverSerializer(serializers.Serializer):
     """
 
     ally_participant_id = serializers.IntegerField(min_value=1)
+
+
+class RallySerializer(CoverSerializer):
+    """Write serializer for declaring a rally: the ally, and optionally one of their resonances.
+
+    ``resonance_id`` names a resonance the ALLY holds (#5124); a Rally that names one kindles
+    it for the fight, or surges more when it is already kindled.
+    """
+
+    resonance_id = serializers.IntegerField(min_value=1, required=False)
+
+
+class DigDeepSerializer(serializers.Serializer):
+    """Write serializer for digging deep: optionally one of her own resonances (#5124)."""
+
+    resonance_id = serializers.IntegerField(min_value=1, required=False)
 
 
 class InterposeSerializer(serializers.Serializer):

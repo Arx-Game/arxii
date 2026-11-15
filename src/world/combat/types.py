@@ -503,6 +503,7 @@ class DigDeepResult:
     ``surge_amount`` the intensity the band gave (0 when it gave none), ``used_free_dig_deep``
     whether a free dig deep was spent in place of fatigue, and ``fatigue_spent`` the fatigue
     actually charged (0 when a free dig deep paid) from the pool ``fatigue_category``.
+    ``kindled_resonance`` is the name of the kindled resonance she drew on (#5124), else None.
     """
 
     outcome: CheckOutcome | None
@@ -510,6 +511,7 @@ class DigDeepResult:
     used_free_dig_deep: bool
     fatigue_spent: int
     fatigue_category: str
+    kindled_resonance: str | None = None
 
 
 @dataclass(frozen=True)

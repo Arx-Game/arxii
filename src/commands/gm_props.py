@@ -23,6 +23,7 @@ _SUBVERB_PROP = "prop"
 _SUBVERB_PROPERTY = "property"
 _SUBVERB_PRESENT = "present"
 _SUBVERB_ABSENT = "absent"
+_SUBVERB_KINDLE = "kindle"
 
 # subverb -> registry action key.
 _SUBVERBS: dict[str, str] = {
@@ -31,11 +32,14 @@ _SUBVERBS: dict[str, str] = {
     # #5018: "is there shadow here?" "Yes." Marks a gift's substance present for the scene.
     _SUBVERB_PRESENT: "stage_substance",
     _SUBVERB_ABSENT: "stage_substance",
+    # #5124: "is her Fury stirred?" "Yes." Kindles a character's resonance for the scene.
+    _SUBVERB_KINDLE: "stage_kindle",
 }
 
 _USAGE = (
     "Usage: stage prop <item template name> | stage property <property name> [=<target>] | "
-    "stage present <substance> | stage absent <substance>."
+    "stage present <substance> | stage absent <substance> | "
+    "stage kindle <character>=<resonance>[:<strength>]."
 )
 
 
@@ -47,6 +51,9 @@ class CmdStage(DispatchCommand):
         stage property <property name> [=<target name>]
         stage present <substance>   (mark it present here for this scene)
         stage absent <substance>    (remove that mark)
+        stage kindle <character>=<resonance>[:<strength>]
+                                    (kindle their resonance for this scene; the strength
+                                    is its name or rank, the weakest when left out)
     """
 
     key = "stage"
@@ -83,6 +90,8 @@ class CmdStage(DispatchCommand):
                 msg = f"Usage: stage {self._subverb} <substance>."
                 raise CommandError(msg)
             return {"substance": self._rest, "present": self._subverb == _SUBVERB_PRESENT}
+        if self._subverb == _SUBVERB_KINDLE:
+            return self._resolve_kindle_args()
         if self._subverb == _SUBVERB_PROP:
             if not self._rest:
                 msg = "Usage: stage prop <item template name>."
@@ -99,4 +108,19 @@ class CmdStage(DispatchCommand):
         target_name = target_part.strip()
         if target_name:
             kwargs["target"] = self.search_or_raise(target_name)
+        return kwargs
+
+    def _resolve_kindle_args(self) -> dict[str, Any]:
+        """``<character>=<resonance>[:<strength>]``."""
+        usage = "Usage: stage kindle <character>=<resonance>[:<strength>]."
+        who, _, what = self._rest.partition("=")
+        resonance, _, strength = what.partition(":")
+        if not who.strip() or not resonance.strip():
+            raise CommandError(usage)
+        kwargs: dict[str, Any] = {
+            "target": self.search_or_raise(who.strip()),
+            "resonance": resonance.strip(),
+        }
+        if strength.strip():
+            kwargs["strength"] = strength.strip()
         return kwargs
