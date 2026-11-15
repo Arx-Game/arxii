@@ -40,7 +40,9 @@ queue.
    panel and the creation facet field, #5021), `e2e/gift-substance.spec.ts` (#5018),
    `e2e/thrown-and-enchanted-strike.spec.ts` (#5026), `e2e/channels.spec.ts`
    (#3299), `e2e/missives.spec.ts` (#3289), `e2e/one-scale.spec.ts` (#5091), and `e2e/family-seats.spec.ts` (the seat picker
-   in character creation, #5130).
+   in character creation, #5130), and `e2e/home-while-connected.spec.ts` (the site name
+   opening the home page from inside the world, #5137; it reuses the channels spec's
+   account and runs after it).
    Every other spec mocks the API and runs against `vite preview` under
    `frontend/playwright.config.ts`. A new spec that talks
    to :4001 must be added to the spec list in the workflow, and its rows to

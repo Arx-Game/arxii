@@ -49,7 +49,7 @@ describe('RoomPanel location recovery', () => {
     expect(mockRequestRoomState).toHaveBeenCalledWith('Aria');
     fireEvent.click(screen.getByRole('button', { name: 'Re-enter as Aria' }));
     expect(mockSend).toHaveBeenCalledWith('Aria', '@ic Aria');
-    expect(screen.getByRole('link', { name: 'Return to Hall' })).toHaveAttribute('href', '/hall');
+    expect(screen.getByRole('link', { name: 'Return to Hall' })).toHaveAttribute('href', '/');
   });
 
   it('offers reconnect when the selected session is disconnected', () => {

@@ -256,7 +256,7 @@ function GameWindowStatus({
           >
             {retryLabel}
           </button>
-          <Link to="/hall" className="rounded border px-2 py-1 font-medium text-foreground">
+          <Link to="/" className="rounded border px-2 py-1 font-medium text-foreground">
             Return to Hall
           </Link>
         </div>

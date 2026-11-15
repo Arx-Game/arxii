@@ -45,7 +45,7 @@ kind}))`), whose dict becomes the frame's kwargs; a sibling keyword would leave 
   closes a `quit` with the reason Evennia's `CmdQuit` gave the disconnect (`quit`,
   or `quit/all`), and the close handler reads `event.reason` against
   `SERVER_QUIT_CLOSE_REASONS` in `types.ts`. A match does what "Leave the world"
-  (#3818) does: no reconnect, `endSession`, the account refetch, and `/hall`. Before
+  (#3818) does: no reconnect, `endSession`, the account refetch, and `/`. Before
   this the backoff reconnected a second later and re-puppeted, so `quit` printed its
   farewell and nothing else happened. **The server side pins this:**
   `src/web/tests/test_quit_close_reason_parity.py` runs the command and fails when
