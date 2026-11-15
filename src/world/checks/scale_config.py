@@ -22,7 +22,8 @@ SINGLETON_PK = 1
 class CheckScaleConfig(SharedMemoryModel):
     """Singleton: the share of a level's baseline a character's level adds to a roll (#5093).
 
-    Follows the ``AnimaConfig`` pattern: one row at pk 1, read through ``get_singleton``.
+    One row at pk 1, read through ``get_singleton``, which creates it from the field default
+    the first time a database without one is read. ``DevelopmentCostConfig`` reads the same way.
     """
 
     level_share = models.DecimalField(

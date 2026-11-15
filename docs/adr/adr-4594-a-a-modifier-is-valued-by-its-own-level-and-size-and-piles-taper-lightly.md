@@ -1,5 +1,13 @@
 # ADR-4594-A: A modifier is valued by its own level and size, and piles taper lightly
 
+> **Amended by [ADR-5093](adr-5093-rank-means-level.md) (2026-11-15).** A modifier's value is no
+> longer a stored row per level and size. It is derived: the size's `ModifierSizeFraction` times
+> one level's width (the gap between two `ModifierLevelBaseline` rows) at the level it applies at,
+> and a `ModifierValue` row at exactly that level and size is only an override. The baselines now
+> hold one row per level and are the rank ladder. The level and size pair, the size ladder, the
+> light taper and the untapered vow step below stand; the "read at the highest authored level at or
+> below" lookup and the value table as the source of every number do not.
+
 **Date:** 2026-10-23
 **Status:** Accepted (spec approved on #4551; this is its slice c1)
 **Issue:** #4594 (parent #4551). Relates ADR-0158 and ADR-0166. Does not yet supersede any part of

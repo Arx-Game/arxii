@@ -1,5 +1,10 @@
 # ADR-5091: Stats, skills and threads read on one scale, the stored value
 
+> **Followed up by [ADR-5093](adr-5093-rank-means-level.md) (2026-11-15).** The rethink this ADR
+> deferred has happened: checks, bonuses, perks, development cost and the per-level pools and caps
+> now scale through level, size and lane rows. `thread_rung` stays as the one step from a thread
+> level to a rung, and the per-rung formulas it fed became rung-lane baseline rows.
+
 Stats were stored at ten times the number a player saw (strength 2 stored as 20) and every
 stat surface divided by 10 (ADR-0193), threads did the same (#4585: crossings, unlocks and
 pull-effect minimums authored on a "shown" level of `level // 10`), while skills showed

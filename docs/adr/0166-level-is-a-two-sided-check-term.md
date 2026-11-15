@@ -1,5 +1,11 @@
 # Level is a guaranteed, additive term on both sides of every check
 
+> **Superseded by [ADR-5093](adr-5093-rank-means-level.md) (2026-11-15).** The five-points-a-level
+> constant is gone, and a check rank now means the level someone is acting at. The acting side's
+> level term is `CheckScaleConfig.level_share` times the level's baseline, plus its tier bonus,
+> and a passive NPC opposes with the level's baseline and tier bonus. The two-sided,
+> unconditional, additive shape below stands; the numbers it quotes are the old ones.
+
 #2707 (level both sides of check) closes two gaps found once ADR-0165's chart-direction
 fix landed and made rank comparisons trustworthy again: a level-30 veteran and a level-1
 recruit rolled identically on any check whose `CheckType` had no authored aspect
@@ -10,11 +16,6 @@ harder because the intruder outleveled the room. This ADR records the shape of t
 that closes both gaps at once.
 
 ## Decision
-
-> Amended by #5093: the five-points-a-level constant is gone. The acting side's level term is
-> `CheckScaleConfig.level_share` (0.5) times the CHECK baseline at the level, and a passive NPC
-> opposes with the level's baseline itself. The two-sided, unconditional, additive shape below
-> stands; the numbers it quotes are the pre-#5093 ones.
 
 **Level contributes `LEVEL_POINTS_PER_LEVEL` (5) points per level on the acting side of
 every check, unconditionally.** `_compute_check_breakdown` adds `level_points =
@@ -141,4 +142,4 @@ site.
 
 > Status: accepted · Source: issue #2707 (level both sides of check) · relates to
 > ADR-0165 (chart-direction convention; landed alongside this); extends ADR-0019; extends
-> ADR-0145; supersedes nothing.
+> ADR-0145; superseded by ADR-5093 (the numbers; the two-sided shape stands).
