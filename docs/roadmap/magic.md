@@ -660,7 +660,7 @@ cast time, not a boolean on the Technique or the Interaction.
   style defaults to 0, so nothing changes until content authors a non-zero value.
 - `resolve_cast_audience(*, caster, technique, cast_openly=False) -> CastAudience`
   (`world/magic/services/cast_observation.py`) — per co-located observer, rolls the
-  detection `CheckType` against `cast_concealment + level_opposition(caster)` (ADR-0166)
+  detection `CheckType` against `cast_concealment + compute_obstacle_rating(caster, check_type)` (the caster's full check total as the obstacle, ADR-5093)
   and sorts into full attribution / vague unattributed / effect-only. Fails CLOSED
   (ADR-0033) on attribution when the detection `CheckType` is unauthored.
 - `InteractionVisibility.PERCEIVED_ONLY` — the new privacy tier the resolved audience is

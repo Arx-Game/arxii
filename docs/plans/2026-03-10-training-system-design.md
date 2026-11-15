@@ -26,7 +26,7 @@ dev_points = base_gain + mentor_bonus
 
 - **Deterministic:** No check roll. Training is reliable, predictable progress.
 - **Overflow carries over:** Dev points accumulate continuously. Crossing a level threshold levels up the skill and remaining points carry into the next level.
-- **Cost per level:** `(level - 9) × 100` — so 10→11 = 100, 11→12 = 200, 15→16 = 600, 20→21 = 1,100.
+- **Cost per level:** `(level - 9) × 100` — so 10→11 = 100, 11→12 = 200, 15→16 = 600, 20→21 = 1,100. (Superseded by #5093: cost is now one geometric curve, `DevelopmentCostConfig`, a band of ten steps costing 100 at level 1 and 150 percent of the band before it from there; see `docs/systems/progression.md`.)
 - **X9 boundaries:** At skill 19, 29, 39, 49 the player must buy the next tier with XP. Dev points are wasted while stuck at a boundary, but training still prevents rust.
 - **No mentor (null):** Only `base_gain` applies — self-study at `5 × AP × path_level`.
 - **Mentor obsolescence:** As the student approaches the mentor's skill level, the ratio approaches 1.0 and mentor bonus shrinks naturally. The mentor eventually has nothing left to teach.

@@ -2194,14 +2194,15 @@
 - `compute_obstacle_rating(character: 'ObjectDB', check_type: 'CheckType', *, extra_modifiers: int = 0, level_override: int | None = None, stat_override: str | int | None = None) -> int - What a character who is the obstacle counts for on *check_type*, her full total (#5093).`
 - `compute_resist_increment(defender_character: 'ObjectDB', resist_effort_level: str, *, level_override: int | None = None, stat_override: str | int | None = None, award_development: bool = False) -> int - Compute how much a defender's active resistance raises difficulty.`
 - `difficulty_level_for_points(points: int) -> int - The level whose strength is nearest ``points``, ties to the lower level (#5093).`
-- `difficulty_points(level: int) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
-- `difficulty_step_points(tenths: int | decimal.Decimal, at_level: int) -> int - An authored difficulty increment in tenths of a level as points at ``at_level`` (#5093).`
+- `difficulty_points(level: int, tables: world.checks.services.DifficultyTables | None = None) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
+- `difficulty_step_points(tenths: int | decimal.Decimal, at_level: int, tables: world.checks.services.DifficultyTables | None = None) -> int - An authored difficulty increment in tenths of a level as points at ``at_level`` (#5093).`
 - `get_character_path_level(character: 'ObjectDB') -> 'int' - Return the character's primary class level (or highest, or 1).`
 - `get_rollmod(character: 'ObjectDB') -> int - Sum character.sheet_data.rollmod + character.account.player_data.rollmod.`
 - `is_botch_immune(character_sheet: 'CharacterSheet', check_type: 'CheckType') -> bool - Whether the character cannot botch at ``check_type`` (#4386).`
 - `level_opposition(check_type: 'CheckType', *, level: int, character: 'ObjectDB | None' = None) -> int - Difficulty an opposing NPC of *level* adds to *check_type* (#2707, #5093).`
-- `level_points(level: int) -> int - The level term of a roll at ``level``: ``level_share`` of its baseline plus its tier jump.`
+- `level_points(level: int, tables: world.checks.services.DifficultyTables | None = None, level_share: decimal.Decimal | None = None) -> int - The level term of a roll at ``level``: ``level_share`` of its baseline plus its tier jump.`
 - `load_baselines(lane: 'str' = ModifierLane.CHECK) -> 'BaselineTable' - Load ``lane``'s ``ModifierLevelBaseline`` rows in one query.`
+- `load_difficulty_tables() -> world.checks.services.DifficultyTables - Load the CHECK baselines and the level tiers, two queries.`
 - `load_taper_rules(lane: 'str' = ModifierLane.CHECK) -> 'dict[str, TaperRule]' - ``lane``'s taper rules by source kind, in one query. Empty means no taper.`
 - `load_tier_table() -> 'TierTable' - Load every ``LevelTier`` row in one query.`
 - `load_value_table(lane: 'str' = ModifierLane.CHECK) -> 'ValueTable' - Load ``lane``'s overrides, size fractions and level baselines in three queries.`
@@ -3486,8 +3487,8 @@
 - `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary - Scheduler entry point. Decays all opt-in conditions by one tick.`
 - `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult - Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
 - `derived_amount(sheet: 'CharacterSheet | None', row: 'DerivedAmountMixin', per_step: 'int', inputs: 'DerivedInputs | None' = None) -> 'int' - ``per_step`` times the input's whole steps for ``sheet``, held at the row's cap.`
-- `difficulty_points(level: int) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
-- `difficulty_step_points(tenths: int | decimal.Decimal, at_level: int) -> int - An authored difficulty increment in tenths of a level as points at ``at_level`` (#5093).`
+- `difficulty_points(level: int, tables: world.checks.services.DifficultyTables | None = None) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
+- `difficulty_step_points(tenths: int | decimal.Decimal, at_level: int, tables: world.checks.services.DifficultyTables | None = None) -> int - An authored difficulty increment in tenths of a level as points at ``at_level`` (#5093).`
 - `draws_aggro_target_ids(targets: collections.abc.Iterable['ObjectDB']) -> set[int] - ObjectDB pks among ``targets`` carrying an active draws_aggro condition (#4572).`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack - Dispatch ``event_name`` to every handler in ``location`` + contents.`
 - `ensure_conditions_content() -> None - Idempotently seed all core conditions content.`
@@ -7614,7 +7615,7 @@
 - `delete_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'int' - Delete all modifier records for a distinction.`
 - `derived_amount(sheet: 'CharacterSheet | None', row: 'DerivedAmountMixin', per_step: 'int', inputs: 'DerivedInputs | None' = None) -> 'int' - ``per_step`` times the input's whole steps for ``sheet``, held at the row's cap.`
 - `difficulty_indicator_for_rank_difference(rank_diff: 'int') -> 'DifficultyIndicator' - Classify a check's rank difference.`
-- `difficulty_points(level: int) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
+- `difficulty_points(level: int, tables: world.checks.services.DifficultyTables | None = None) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
 - `end_engagement(character: 'ObjectDB', engagement_type: 'str', *, source: 'object') -> 'None' - Delete the character's engagement iff it matches type AND source.`
 - `ensure_aspect_target(aspect: 'Aspect') -> 'ModifierTarget | None' - The aspect-category ``ModifierTarget`` an Aspect's bonuses land on, made if missing (#4827).`
 - `ensure_skill_target(trait: 'Trait') -> 'ModifierTarget | None' - The stat-category ``ModifierTarget`` a skill's bonuses land on, created if missing (#4820).`
@@ -7629,6 +7630,7 @@
 - `get_modifier_total(character, modifier_target: 'ModifierTarget', *, perceiving_society: 'object | None' = None, level_override: 'int | None' = None) -> 'int' - Get total modifier value for a target.`
 - `item_mundane_stat_for_target(item: 'ItemInstance', target: 'ModifierTarget') -> 'int' - Mundane combat stat an equipped item contributes to ``target`` (#985, §5.6).`
 - `load_baselines(lane: 'str' = ModifierLane.CHECK) -> 'BaselineTable' - Load ``lane``'s ``ModifierLevelBaseline`` rows in one query.`
+- `load_difficulty_tables() -> world.checks.services.DifficultyTables - Load the CHECK baselines and the level tiers, two queries.`
 - `load_value_table(lane: 'str' = ModifierLane.CHECK) -> 'ValueTable' - Load ``lane``'s overrides, size fractions and level baselines in three queries.`
 - `motif_coherence_bonus(sheet: 'object', resonance_id: 'int') -> 'int' - Per-resonance fashion-coherence bonus from worn styles bound to the character's Motif.`
 - `passive_facet_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum tier-0 FLAT_BONUS contributions from equipped item facets (Spec D §5.2).`
@@ -8305,7 +8307,7 @@
 - `adjust_npc_affection(pc_persona, npc_persona, *, delta: 'int') -> 'int' - Apply a disposition ``delta`` to the (pc_persona, npc_persona) standing.`
 - `available_offers(session: 'InteractionSession', *, pool_count: 'int | None' = None) -> 'list[NPCServiceOffer]' - Return offers the PC can currently see/select, in stable order.`
 - `complete_recorded_profile(profile: 'RecordedProfile', text: 'str') -> 'RecordedProfile' - Finalize a COMMISSIONED sitting: the write-up arrives (#2632).`
-- `difficulty_points(level: int) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
+- `difficulty_points(level: int, tables: world.checks.services.DifficultyTables | None = None) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' - Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' - Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' - Evaluate a predicate rule tree against an acting-character context.`
@@ -11747,7 +11749,7 @@
 - `aptitude_band(persona, category: 'str') -> 'int' - The agent's band for a job family, minted lazily on first read.`
 - `assign_agent(task: 'OrgTask', npc_asset: 'NPCAsset', handler: 'Persona') -> 'TaskFulfillment' - Dispatch an owned, active agent on an OPEN task.`
 - `create_task(template: 'TaskTemplate', org: 'Organization', issued_by: 'Persona', *, target_room=None, target_org=None, target_domain=None, target_persona=None, target_crisis=None) -> 'OrgTask' - Create an OPEN task instance. Caller (view/action) gates leadership.`
-- `difficulty_points(level: int) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
+- `difficulty_points(level: int, tables: world.checks.services.DifficultyTables | None = None) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
 - `resolve_due_tasks() -> 'int' - Game-clock sweep: resolve every ASSIGNED task whose deadline has passed.`
 - `resolve_task(task: 'OrgTask') -> 'TaskFulfillment' - Resolve an ASSIGNED task now: agent check -> route payouts + risk pool.`
 - `resolve_task_for_mission(instance, route=None) -> 'None' - Terminal-completion seam (#2820 phase 5) — mirrors the crisis seam.`
@@ -12010,8 +12012,8 @@
 - `defer_or_apply_certain_death(character_sheet: 'CharacterSheet') -> 'bool' - Soulfray made this death certain (#4098 decision 9). True when deferred.`
 - `derive_base_max_health(character_sheet: 'CharacterSheet') -> 'int' - Derive base_max_health = class stage-rate sum + stamina term + covenant-role armor.`
 - `derive_character_status(character_sheet: 'CharacterSheet | None') -> 'str' - Derive a coarse, read-only life-status string for the wire/API.`
-- `difficulty_points(level: int) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
-- `difficulty_step_points(tenths: int | decimal.Decimal, at_level: int) -> int - An authored difficulty increment in tenths of a level as points at ``at_level`` (#5093).`
+- `difficulty_points(level: int, tables: world.checks.services.DifficultyTables | None = None) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
+- `difficulty_step_points(tenths: int | decimal.Decimal, at_level: int, tables: world.checks.services.DifficultyTables | None = None) -> int - An authored difficulty increment in tenths of a level as points at ``at_level`` (#5093).`
 - `frailty_floor_reached(character_sheet: 'CharacterSheet') -> 'bool' - True when age-bled max health has crossed the dying floor (#2756).`
 - `get_dream_room() -> 'ObjectDB | None' - Return the liminal dream room (seeded by the survivability cluster).`
 - `get_vitals_consequence_config() -> 'VitalsConsequenceConfig' - Return the VitalsConsequenceConfig singleton (pk=1), creating it lazily on first call.`

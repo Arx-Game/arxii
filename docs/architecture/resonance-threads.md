@@ -377,6 +377,18 @@ The invariant from #566 is unaffected: encounter difficulty scales on party size
 level only. Thread-rich parties are simply stronger; they are not matched by tougher
 enemies.
 
+**Which threads a rule reads (#5093, ADR-5093).** Only thread survivability sums over every
+thread a character owns, because a broad investment should make her sturdier with diminishing
+returns. A vow perk, a covenant role's blend term and a specialty row read only the holder's vow
+thread (the COVENANT_ROLE thread on the role's anchor), as a share of one level's width at that
+thread's rung (`thread_rung`, `level // 10`), so a Gift-heavy character does not out-power a
+vow-focused one and a covenant mate's perk is sized by the mate who holds it. The per-rung pools
+and caps a thread feeds (the Sinner's Sineating cap and the Hollow's maximum, the outfit trickle,
+techniques per gift, the moon tuning, the rescue budget, the facet effect bonus and the vow
+added-effect scaling) are baseline rows on their own `ModifierLane`, read at the thread's rung
+through `level_baseline`; see `docs/systems/checks.md`. The cost to raise a thread is the shared
+development curve (see "Thread development cost formula").
+
 **Field-name note:** `target_kind` is used uniformly across `Thread`,
 `ThreadPullEffect`, and `ThreadWeavingUnlock`. Avoid the synonym `target_type` to
 keep query/serializer code consistent.

@@ -86,7 +86,7 @@ and looks up the same `ResultChartOutcome` row the engine would land in.
 The panel template (`_checks_panel.html`) hosts the `roll_modifier` / `roller_points` /
 `target_difficulty` / `modifier_points` / `target_modifier_points` slider form itself,
 since each slider re-renders this same fragment. The matchup shows the standing with
-modifiers ("Grandmaster (rank 5), 62% toward Peerless (rank 6) against Mythic (rank 8)")
+modifiers ("Master (rank 10), 62% toward Rank 11 (rank 11) against Legendary (rank 24)")
 and the chart and how far it slides; a big enough pile lifts it off an impossible chart
 (#4723). Below it, "The slide" table. A second form, for the modifier pile
 (`pile_character_level`, `pile_modifier_level`, `pile_size`, `pile_count`), sits under that and

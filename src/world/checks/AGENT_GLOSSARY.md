@@ -50,7 +50,7 @@ _Avoid_: luck, roll bonus, fudge
 
 **Level points** (#2707, ADR-0166):
 `CheckScaleConfig.level_share` (seed 0.5) times the CHECK baseline at the character's level
-(`level_points(level)`, #5093) — a guaranteed term summed
+(`level_points(level)`, #5093) plus the level's tier bonus — a guaranteed term summed
 into every `perform_check`'s `total_points`, sourced from
 `get_character_path_level`. Additive to the aspect bonus, never a replacement for it: a
 character whose Path matches the check's authored aspects still gets both. Unlike the
@@ -59,8 +59,8 @@ _Avoid_: level bonus, level modifier (both imply optional; level points are unco
 
 **Authored difficulty level** (#5093):
 How staff author a difficulty: a level, never points. A standalone difficulty is a `*_level`
-column read as that level's CHECK baseline through `difficulty_points(level)` (level N is where
-rank N starts, so a level-8 lock is rolled at rank 8; level 0 is no difficulty). An increment on
+column read as that level's CHECK baseline plus its tier bonus through `difficulty_points(level)`
+(a level-N lock is rolled at the strength a level-N NPC stands at; level 0 is no difficulty). An increment on
 top of another difficulty, or per step, is a `*_tenths` column read as tenths of one level's
 width through `difficulty_step_points(tenths, at_level)`.
 _Avoid_: difficulty points (authored), point difficulty
@@ -68,7 +68,7 @@ _Avoid_: difficulty points (authored), point difficulty
 **Level opposition** (#2707, ADR-0166):
 The PASSIVE half of an opposed check's difficulty, via `level_opposition(check_type, *,
 level, character=None)`: an NPC's difficulty is its level's CHECK baseline (the start of rank
-N, #5093), plus — when a `character` is given — the acting check's aspects scored against the
+N, #5093) plus the level's tier bonus, plus — when a `character` is given — the acting check's aspects scored against the
 *defender's* Path (each match a share of one level's width) and the defender's active condition
 modifiers at their derived value, so a debuff lowers the NPC. A player character who is the
 obstacle (`is_player_character`) does not come through here: she counts as her full check total

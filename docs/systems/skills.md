@@ -60,8 +60,8 @@ and 40 to 41 costs one growth step more. With the defaults a step costs 10 for 1
   raises `total_earned` to what the current rating cost, and every writer that sets a
   rating directly (character creation and staff edit through `set_skill_values`, the XP
   breakthrough, the NPC copy, a staff character's preset) aligns the ledger to it through
-  `progression.services.skill_development.align_development_floors`. A skill made at 30 needs
-  2,100 points to reach 31. A rating set lower brings the ledger down with it, so use does not
+  `progression.services.skill_development.align_development_floors`. A skill made at 30 starts
+  with a ledger of 250 points and needs 22 more to reach 31. A rating set lower brings the ledger down with it, so use does not
   walk it straight back up.
 - **Rust** is debt on the same row: incoming points pay it off before they count toward a
   level. It only affects parent skills; specializations are immune.

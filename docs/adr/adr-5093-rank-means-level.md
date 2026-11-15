@@ -14,9 +14,9 @@ tenths of a level for an increment. A vow perk and vow power read only the holde
 at its rung. Development cost is one geometric curve, `DevelopmentCostConfig`, held in a row:
 each band of ten steps costs a set percent more than the band before it, and every step in a band
 costs the same. A tier jump is a `LevelTier` row, a number of points added in full wherever a
-level's strength is read, so a level-6 character stands several ranks above a level-5 NPC, and the
-rank ladder runs past rank 30 as far as the top level's baseline plus its tier bonus. Every
-per-level pool and cap (anima, the soul tether and Hollow limits, the outfit trickle, techniques
+level's strength is read, so a rank is a level plus its tier bonus counted in ranks and a level-6
+character stands several ranks above a level-5 NPC, and the rank ladder runs past rank 30 as far
+as the top level's baseline plus its tier bonus. Every per-level pool and cap (anima, the soul tether and Hollow limits, the outfit trickle, techniques
 per gift, fatigue) became a per-level baseline row on its own lane. This supersedes ADR-0166's
 five-points-a-level constant, and it amends ADR-4594-A, whose per-level value rows are now
 overrides of a derived value.

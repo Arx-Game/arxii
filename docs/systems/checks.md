@@ -121,7 +121,7 @@ stat), read without saving a row when a database has none.
 | Model | Purpose | Key fields |
 |-------|---------|------------|
 | `ModifierSizeFraction` | How much of one level's width a modifier of `size` is worth in a lane (#5093). A size with no row has no derived value | `lane`, `size` (`ModifierSize`), `fraction` (decimal, 3 places); unique (`lane`, `size`) |
-| `CheckScaleConfig` | Singleton (pk 1, `world/checks/scale_config.py`, #5093): `level_share`, the share of a level's CHECK baseline that a character's level adds to every roll (seed 0.5). Read by `level_points(level)`; staff edit the row. |
+| `CheckScaleConfig` | Singleton (pk 1, `world/checks/scale_config.py`, #5093): `level_share`, the share of a level's CHECK baseline that a character's level adds to every roll (seed 0.5). Read by `level_points(level)`; staff edit the row | `level_share` |
 | `ModifierValue` | An override of the derived value: what a modifier of `size` is worth at exactly `level`, in the lane's units. It covers only its own level (the step lookup is gone). A magnitude; the authored modifier keeps its sign | `lane`, `level`, `size` (`ModifierSize`), `value`; unique (`lane`, `level`, `size`) |
 | `ModifierLevelBaseline` | The typical total at each level in a lane, one row per level (the seed writes levels 1-30). On the check lane these rows ARE the rank ladder (rank N starts at the level-N baseline) and the gap between two levels is one level's width (#5093) | `lane`, `level`, `baseline`; unique (`lane`, `level`) |
 | `LevelTier` | A tier jump (#5093): `bonus_points` added in full to every level from `start_level` up (a character's level term, an NPC's opposition, every staff-set difficulty level). Seeded at level 3 (0 points, no jump) and 6, 11, 16, 21 and 26 (24 points each) | `start_level` (unique), `bonus_points` |
@@ -521,6 +521,11 @@ turn the stored number into the points a roll meets:
 - `difficulty_level_for_points(points)`: the inverse, the level whose baseline is nearest
   `points` (ties to the lower), for a difficulty a rule computes at runtime in points (a smear's counter-clue)
   and has to store where staff author a level.
+
+`difficulty_points`, `difficulty_step_points` and `level_points` each take an optional `tables`
+(`load_difficulty_tables()`: the CHECK baselines and the level tiers, two queries), so a loop over
+many levels loads the rows once; `level_points` also takes a `level_share` read once by the
+caller.
 
 Columns named `*_level` are standalone (a lock's detect and disarm, a condition's cure and
 resist, a recipe, a task or offer, a mission support move, a ritual, the survivability checks).

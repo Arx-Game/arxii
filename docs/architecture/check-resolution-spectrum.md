@@ -19,8 +19,11 @@
 The check pipeline is identical in all contexts:
 1. Weighted trait points (via CheckTypeTrait)
 2. Aspect bonus (via PathAspect)
-3. Extra modifiers (from conditions, buffs, equipment, etc.)
-4. Total points → CheckRank → ResultChart → roll → CheckOutcome
+3. Level term: the acting level's share of that level's baseline, plus its tier bonus
+4. Extra modifiers (from conditions, buffs, equipment, etc.)
+5. Total points → rank on the baseline ladder → ResultChart → roll → CheckOutcome
+
+The next section says what a rank is, because every number in steps 1 to 5 is read against it.
 
 **`resolve_challenge` is one consumer of `perform_check`, not a replacement for it.**
 
@@ -38,6 +41,58 @@ The pipeline is two-step to support future reroll/negation mechanics:
 Social scenes that need only narrative results still call `perform_check` directly.
 Combat will call it through its own resolution layer. The check stays generic; the
 context determines what happens with the result.
+
+---
+
+## What a rank means (#5093, ADR-5093)
+
+A check rank is the level someone is acting at, plus any tier bonus counted in ranks. The ladder
+is one row per level of `ModifierLevelBaseline` on the CHECK lane: rank N starts at the level-N
+baseline, and the gap between two baselines is one level's width. Every other number is sized against that width, so
+the code keeps no per-level coefficient and staff retune any of it by editing rows.
+
+```
+total   rank on the ladder (seeded baselines: 18 at level 1, 8 more each level)
+ ...
+ 98 --- rank 11 starts (the level 11 baseline)
+ 90 --- rank 10 starts        one level's width (8 points) is one rank
+ 82 --- rank 9 starts
+ ...
+ 58 --- rank 6 starts
+ 50 --- rank 5 starts (a level-5 NPC opposes with 50)
+
+A level-6 character with ordinary skills: 29 from skills and stats, 29 from her level term
+and 24 from the level 6 tier = 82, rank 9, four ranks above the level-5 NPC at 50.
+A level-11 character and a level-11 NPC both stand at 98 + 48 (two tiers) = 146, rank 17.
+```
+
+Without tier rows a level-N character stands at rank N. Each tier row adds its bonus in ranks, so
+at the seeded rows a level-11 character stands at rank 17, and what stays even is the match of two
+characters at the same level.
+
+- **A character** adds `CheckScaleConfig.level_share` (seed 0.5) of her level's baseline to every
+  roll, plus her level's tier bonus. Her skills and stats supply the rest of the climb.
+- **An NPC has no points.** It opposes with its level's baseline plus the tier bonus, which is
+  where a character of that level with ordinary skills stands, so a level-N character with
+  ordinary skills meets a level-N NPC on the even chart. A debuff on the NPC lowers that number by the debuff's derived value.
+- **A player character who is the obstacle** (hiding something, resisting a social move) counts
+  as her full check total, not her level.
+- **A staff-authored difficulty is a level** (`*_level`), turned into points by
+  `difficulty_points`: the level's baseline plus its tier bonus. An increment on top of another
+  difficulty is tenths of one level's width (`*_tenths`).
+- **A modifier is a fraction of a level.** Its value is its size's `ModifierSizeFraction` times
+  one level's width at the level it applies at, so one Large buff is about half a rank at any
+  level. A `ModifierValue` row at that exact level and size overrides the derived number.
+- **A tier jump is a row.** `LevelTier(start_level, bonus_points)` adds points in full wherever a
+  level's strength is read, so crossing into a new tier is worth several ranks. It does not change
+  a level's width, so buff sizes stay the same inside a tier. The ladder runs past rank 30 as far
+  as the top level's baseline plus its tier bonus.
+- **Diminishing returns come from the curve and the taper.** The result charts stay one per rank
+  difference (-8 to +6); the light taper on a pile of ordinary modifiers is unchanged; there is no
+  cap on the total of all buffs.
+
+The tuning numbers and the code that reads them are in `docs/systems/checks.md` ("Modifier values,
+size fractions, level baselines and the taper", "Tier jumps", "Authored difficulty as a level").
 
 ---
 

@@ -4958,8 +4958,10 @@ you just cannot say who did it. The tiers are a ladder of attribution:
    attribution** (ADR-0033): nobody can name the caster, logged as a warning — but a
    perceptible working is still narrated to the room, since erasing every combat event
    from every participant's feed is a different failure, not a safe default.
-4. Difficulty = `cast_concealment + level_opposition(check_type, level=<caster's path
-   level>, character=caster)` (ADR-0166 — level is a two-sided check term).
+4. Difficulty = `cast_concealment + compute_obstacle_rating(caster, check_type)`: the caster is
+   a player character hiding something, so she counts as her full check total, not her level
+   (ADR-5093, which replaced the level-only `level_opposition` of ADR-0166 for a player
+   character who is the obstacle).
 5. Every character co-located with the caster (excluding the caster) rolls
    `perform_check(observer, check_type, target_difficulty=difficulty)`:
    `success_level >= CAST_DETECTION_ATTRIBUTION_LEVEL` (2) → `full` (sees who cast what);

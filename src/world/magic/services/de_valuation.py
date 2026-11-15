@@ -62,9 +62,9 @@ def matchup_bands(context: EvalContext) -> list[MatchupBand]:
     """Replicate ``checks_analytics.compute_matchup`` locally (#3279, extracted #3390).
 
     Derives the roller-minus-target rank difference exactly as
-    ``world.checks.services._compute_check_breakdown`` does (a missing rank —
-    below every ``CheckRank.min_points`` — contributes 0), selects the nearest
-    seeded ``ResultChart`` for that difference, then walks every possible roll
+    ``world.checks.services._compute_check_breakdown`` does (a missing rank,
+    a total below zero and so under rank 0 of the baseline ladder, contributes 0), selects the
+    nearest seeded ``ResultChart`` for that difference, then walks every possible roll
     1..100 applying the same clamp the check engine applies
     (``effective = max(1, min(100, roll + roll_modifier))``) and tallies which
     ``ResultChartOutcome`` row each lands in. Returns ``[]`` when no
