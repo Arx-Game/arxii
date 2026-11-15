@@ -142,7 +142,7 @@ class SceneSuccorCoverCachingSurvivesResolutionSweepTests(TestCase):
         # SceneActionDeclaration.succor_resolution field default (None) nor the
         # no-cover fallback (1.0), so caching it proves a real resolution happened.
         fake_result = MagicMock()
-        fake_result.check_result = MagicMock(success_level=0)
+        fake_result.check_result = MagicMock(success_level=0, outcome=None)
         fake_result.resolution_type = ResolutionType.PERSONAL
 
         def _fake_dispatch(*args, **kwargs):

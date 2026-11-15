@@ -140,27 +140,6 @@ vi.mock('@/combat/api', async (importOriginal) => ({
   postDispatchAction: (...args: unknown[]) => answerDispatch(...args),
 }));
 
-// #4733: the drift conversion inbox; empty unless a test sets an offer.
-const driftOffers = vi.hoisted(() => ({ current: [] as unknown[] }));
-const getDriftOffers = vi.hoisted(() => vi.fn());
-vi.mock('@/magic/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/magic/api')>()),
-  getPendingDriftConversionOffers: (...args: unknown[]) => getDriftOffers(...args),
-}));
-
-// #5123: the Settle your aura dialog reads the aura and can accept its changes; no aura
-// here, so the gate shows only the offer's own exit.
-vi.mock('@/magic/auraQueries', () => ({
-  useCharacterAuras: () => ({ data: [] }),
-  useAcceptAura: () => ({
-    mutate: vi.fn(),
-    reset: vi.fn(),
-    isPending: false,
-    isError: false,
-    error: null,
-  }),
-}));
-
 // #4418: the Guide's offers; empty unless a test sets one.
 const npcOffers = vi.hoisted(() => ({ current: [] as unknown[] }));
 vi.mock('@/gm/npcs/queries', async (importOriginal) => ({
@@ -315,6 +294,12 @@ vi.mock('@/combat/queries', () => ({
   },
 }));
 
+vi.mock('@/magic/components/KindledResonancesPanel', () => ({
+  KindledResonancesPanel: ({ characterSheetId }: { characterSheetId: number }) => (
+    <div data-testid="kindled-resonances-panel" data-sheet-id={characterSheetId} />
+  ),
+}));
+
 vi.mock('@/combat/components/CombatTacticalMap', () => ({
   CombatTacticalMap: ({ encounterId, sceneId }: { encounterId: number; sceneId: number }) => (
     <div
@@ -466,16 +451,6 @@ function blockOf(element: HTMLElement): HTMLElement {
 
 describe('GamePage', () => {
   beforeEach(() => {
-    driftOffers.current = [];
-    getDriftOffers.mockReset();
-    getDriftOffers.mockImplementation(() =>
-      Promise.resolve({
-        count: driftOffers.current.length,
-        next: null,
-        previous: null,
-        results: driftOffers.current,
-      })
-    );
     dispatch(setAccount(null));
     // #2165: the save effect now writes real localStorage during render, so
     // clear between tests to keep them isolated from each other.
@@ -1598,44 +1573,6 @@ describe('GamePage', () => {
       expect(screen.getByTestId('pending-action-attachments')).toBeInTheDocument();
     });
 
-    it('shows the drift conversion strip for the session scene, and only with a scene', async () => {
-      driftOffers.current = [{ id: 12, scene_id: 100, caps: [] }];
-      dispatch(setAccount(mockAccount));
-      seedActiveSceneWithRoom();
-
-      renderWithProviders(<GamePage />);
-
-      expect(await screen.findByTestId('drift-conversion-gate-strip')).toBeInTheDocument();
-    });
-
-    it('hides the drift conversion strip when the offer is for another scene', async () => {
-      driftOffers.current = [{ id: 12, scene_id: 999, caps: [] }];
-      dispatch(setAccount(mockAccount));
-      seedActiveSceneWithRoom();
-
-      renderWithProviders(<GamePage />);
-
-      expect(await screen.findByTestId('consent-prompt')).toBeInTheDocument();
-      // The inbox must have been asked AND answered before absence means anything.
-      await waitFor(() => {
-        expect(getDriftOffers).toHaveBeenCalled();
-      });
-      await act(async () => {
-        await getDriftOffers.mock.results[0].value;
-      });
-      expect(screen.queryByTestId('drift-conversion-gate-strip')).not.toBeInTheDocument();
-    });
-
-    it('does not render the drift conversion strip without a scene', () => {
-      driftOffers.current = [{ id: 12, scene_id: 100, caps: [] }];
-      dispatch(setAccount(mockAccount));
-      dispatch(startSession(ACTIVE_NAME));
-
-      renderWithProviders(<GamePage />);
-
-      expect(screen.queryByTestId('drift-conversion-gate-strip')).not.toBeInTheDocument();
-    });
-
     it('does not render the scene toolset when there is no active scene', () => {
       dispatch(setAccount(mockAccount));
       dispatch(startSession(ACTIVE_NAME));
@@ -1794,6 +1731,44 @@ describe('GamePage', () => {
       await waitFor(() => {
         expect(screen.getByTestId('rail-tab-gm')).toBeInTheDocument();
       });
+    });
+  });
+
+  describe('your resonances panel (#5124)', () => {
+    it('sits in the room sidebar while a scene is active and no fight is shown', async () => {
+      dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+      mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+
+      renderWithProviders(<GamePage />);
+
+      const panel = await screen.findByTestId('kindled-resonances-panel');
+      expect(panel).toHaveAttribute('data-sheet-id', String(rosterEntry.character_id));
+    });
+
+    it('is not mounted outside a scene', async () => {
+      dispatch(setAccount(mockAccount));
+      dispatch(startSession(ACTIVE_NAME));
+
+      renderWithProviders(<GamePage />);
+
+      await screen.findByLabelText('Conversations');
+      expect(screen.queryByTestId('kindled-resonances-panel')).not.toBeInTheDocument();
+    });
+
+    it('leaves the fight rail to carry it once a fight is shown', async () => {
+      dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+      mockUseEncounterForScene.mockReturnValue({
+        data: { id: 7 },
+        isLoading: false,
+        isError: false,
+      });
+
+      renderWithProviders(<GamePage />);
+
+      await screen.findByTestId('combat-tactical-map');
+      expect(screen.queryByTestId('kindled-resonances-panel')).not.toBeInTheDocument();
     });
   });
 

@@ -102,7 +102,9 @@ class CombatPriceCheckedAtResolutionTests(TestCase):
         return encounter, sheet, action
 
     def _resolve(self, encounter) -> None:
-        resolve_round(encounter, offense_check_fn=lambda *_a, **_k: MagicMock(success_level=2))
+        resolve_round(
+            encounter, offense_check_fn=lambda *_a, **_k: MagicMock(success_level=2, outcome=None)
+        )
 
     def _price_rows(self, action) -> list:
         action.refresh_from_db()

@@ -1816,22 +1816,25 @@
   - ghost_tutelages <- magic.GhostTutelage
   - gift_unlocks <- magic.CharacterGiftUnlock
   - resonance_grants <- magic.ResonanceGrant
-  - manifestations <- magic.CharacterManifestation
-  - motif <- magic.Motif
-  - prepared_crossing_texts <- magic.CharacterCrossingText
-  - prepared_surge_text <- magic.CharacterSurgeText
-  - reincarnations <- magic.Reincarnation
-  - ritual_anima_contributions <- magic.RitualAnimaContribution
-  - ritual_sacrifices_suffered <- magic.RitualAnimaContribution
-  - pending_ritual_effects <- magic.PendingRitualEffect
-  - founded_sanctums <- magic.SanctumDetails
-  - sanctum_pending_payouts <- magic.SanctumPendingPayout
   - led_courts <- covenants.Covenant
   - covenant_role_assignments <- covenants.CharacterCovenantRole
   - covenant_rite_instances <- covenants.CovenantRiteInstance
   - mentor_bonds_as_mentor <- covenants.MentorBond
   - mentor_bonds_as_sidekick <- covenants.MentorBond
   - court_pacts <- covenants.CourtPact
+  - kindlings <- magic.Kindling
+  - manifestations <- magic.CharacterManifestation
+  - motif <- magic.Motif
+  - prepared_crossing_texts <- magic.CharacterCrossingText
+  - prepared_surge_text <- magic.CharacterSurgeText
+  - settling_rites <- magic.SettlingRite
+  - reflections <- magic.Reflection
+  - reincarnations <- magic.Reincarnation
+  - ritual_anima_contributions <- magic.RitualAnimaContribution
+  - ritual_sacrifices_suffered <- magic.RitualAnimaContribution
+  - pending_ritual_effects <- magic.PendingRitualEffect
+  - founded_sanctums <- magic.SanctumDetails
+  - sanctum_pending_payouts <- magic.SanctumPendingPayout
   - ritualsession_set <- magic.RitualSession
   - ritualsessionparticipant_set <- magic.RitualSessionParticipant
   - sineating_offers_sent <- magic.SineatingPendingOffer
@@ -2546,7 +2549,7 @@
 ### ClashContributionDeclaration
 **Foreign Keys:**
   - fury_commitment -> magic.FuryTier [FK] (nullable)
-  - fury_anchor -> character_sheets.CharacterSheet [FK] (nullable)
+  - fury_resonance -> magic.Resonance [FK] (nullable)
   - encounter -> combat.CombatEncounter [FK]
   - participant -> combat.CombatParticipant [FK]
   - clash -> combat.Clash [FK]
@@ -2569,6 +2572,7 @@
 **Pointed to by:**
   - battle_places <- battles.BattlePlace
   - covenant_rite_instances <- covenants.CovenantRiteInstance
+  - kindlings <- magic.Kindling
   - opponents <- combat.CombatOpponent
   - participants <- combat.CombatParticipant
   - pending_opponent_attacks <- combat.PendingOpponentAttack
@@ -2696,11 +2700,12 @@
 ### CombatRoundAction
 **Foreign Keys:**
   - fury_commitment -> magic.FuryTier [FK] (nullable)
-  - fury_anchor -> character_sheets.CharacterSheet [FK] (nullable)
+  - fury_resonance -> magic.Resonance [FK] (nullable)
   - participant -> combat.CombatParticipant [FK]
   - focused_action -> magic.Technique [FK] (nullable)
   - focused_opponent_target -> combat.CombatOpponent [FK] (nullable)
   - focused_ally_target -> combat.CombatParticipant [FK] (nullable)
+  - rally_resonance -> magic.Resonance [FK] (nullable)
   - item_instance -> items.ItemInstance [FK] (nullable)
   - physical_passive -> magic.Technique [FK] (nullable)
   - social_passive -> magic.Technique [FK] (nullable)
@@ -2986,7 +2991,7 @@
 - `combatants_hostile_to(actor: 'CombatParticipant | CombatOpponent', *, allegiances: 'dict[int, Allegiance] | None' = None, opponents: 'list[CombatOpponent] | None' = None) -> 'dict[str, list]' - Return the combatants *actor* may attack, grouped by kind (#1584, #4091).`
 - `complete_encounter(encounter: 'CombatEncounter', *, outcome: 'EncounterOutcome') -> 'None' - Single completion seam for round resolution and the GM end endpoint (#876).`
 - `compute_intensity_for_clash(participant: 'CombatParticipant', action: 'CombatRoundAction') -> 'int' - Return technique.intensity + related INTENSITY_BUMP pull bonuses for the clash floor gate.`
-- `declare_action(participant: 'CombatParticipant', *, focused_action: 'Technique | None' = None, focused_category: 'str | None' = None, effort_level: 'str', focused_opponent_target: 'CombatOpponent | None' = None, focused_ally_target: 'CombatParticipant | None' = None, physical_passive: 'Technique | None' = None, social_passive: 'Technique | None' = None, mental_passive: 'Technique | None' = None, confirm_soulfray_risk: 'bool' = False, strain_commitment: 'int' = 0, fury_commitment: 'FuryTier | None' = None, fury_anchor: 'CharacterSheet | None' = None, cast_destination: 'Position | None' = None, cast_position_a: 'Position | None' = None, cast_position_b: 'Position | None' = None) -> 'CombatRoundAction' - Declare a PC's action for the current round.`
+- `declare_action(participant: 'CombatParticipant', *, focused_action: 'Technique | None' = None, focused_category: 'str | None' = None, effort_level: 'str', focused_opponent_target: 'CombatOpponent | None' = None, focused_ally_target: 'CombatParticipant | None' = None, physical_passive: 'Technique | None' = None, social_passive: 'Technique | None' = None, mental_passive: 'Technique | None' = None, confirm_soulfray_risk: 'bool' = False, strain_commitment: 'int' = 0, fury_commitment: 'FuryTier | None' = None, fury_resonance: 'Resonance | None' = None, cast_destination: 'Position | None' = None, cast_position_a: 'Position | None' = None, cast_position_b: 'Position | None' = None) -> 'CombatRoundAction' - Declare a PC's action for the current round.`
 - `declare_await_opening(participant: 'CombatParticipant', technique: 'Technique', *, confirm_soulfray_risk: 'bool' = False) -> 'CombatRoundAction' - Declare a waiting strike with ``technique`` for the current round.`
 - `declare_charge(participant: 'CombatParticipant', technique: 'Technique', opponent: 'CombatOpponent') -> 'CombatRoundAction' - Declare a mounted charge — closes distance to *opponent*, then attacks (#1843).`
 - `declare_clash_contribution(*, participant: 'CombatParticipant', clash: 'Clash', action_slot: 'str', technique: 'Technique', strain_commitment: 'int') -> 'ClashContributionDeclaration' - Write (or overwrite) a PC's clash contribution declaration for the current round.`
@@ -2997,7 +3002,7 @@
 - `declare_joust(participant: 'CombatParticipant', technique: 'Technique') -> 'CombatRoundAction' - Declare a joust — a mounted, lance-armed opposed pass (#1843).`
 - `declare_mark(participant: 'CombatParticipant', opponent: 'CombatOpponent', *, technique: 'Technique | None' = None) -> 'CombatMark' - Declare a mark — a directed, round-scoped combatant reference (#2664).`
 - `declare_parley(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' - Declare a parley maneuver — talk a foe down mid-fight, auto-ready (#2015).`
-- `declare_rally(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' - Declare a rallying maneuver — inspire an ally, auto-ready (#2015).`
+- `declare_rally(participant: 'CombatParticipant', ally: 'CombatParticipant', resonance: 'Resonance | None' = None) -> 'CombatRoundAction' - Declare a rallying maneuver — inspire an ally, auto-ready (#2015).`
 - `declare_strike(participant: 'CombatParticipant', opponent: 'CombatOpponent', item_instance: 'ItemInstance | None' = None, *, thrown: 'bool' = False, technique: 'Technique | None' = None, confirm_soulfray_risk: 'bool' = False) -> 'CombatRoundAction' - Declare a Strike at ``opponent`` with ``item_instance`` (None: bare hands).`
 - `declare_succor(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' - Declare a sheltering maneuver for a specific ally — passives-only, auto-ready.`
 - `declare_taunt(participant: 'CombatParticipant', target: 'CombatOpponent | CombatParticipant') -> 'CombatRoundAction' - Declare a taunting maneuver, auto-ready (#2015, #4737).`
@@ -3355,12 +3360,12 @@
   - auderemajorafaithvariantappliedcondition_applied <- magic.AudereMajoraFaithVariantAppliedCondition
   - magical_alteration <- magic.MagicalAlterationTemplate
   - crossing_options <- magic.CrossingOption
-  - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
   - techniquevariantappliedcondition_applied <- magic.TechniqueVariantAppliedCondition
   - vowaddedeffectappliedcondition_applied <- covenants.VowAddedEffectAppliedCondition
   - vowaddedeffectremovedcondition_applied <- covenants.VowAddedEffectRemovedCondition
   - insight_entries <- covenants.InsightTableEntry
   - weakness_pool_entries <- covenants.WeaknessPoolEntry
+  - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
   - signaturemotifbonusappliedcondition_applied <- magic.SignatureMotifBonusAppliedCondition
   - techniquedraftappliedcondition_applied <- magic.TechniqueDraftAppliedCondition
   - techniquedraftremovedcondition_applied <- magic.TechniqueDraftRemovedCondition
@@ -3814,6 +3819,7 @@
 **Foreign Keys:**
   - affinity -> magic.Affinity [FK] (nullable)
   - condition_property -> mechanics.Property [FK] (nullable)
+  - mission_theme -> missions.MissionTheme [FK] (nullable)
   - covenant_role -> covenants.CovenantRole [FK]
   - gift -> magic.Gift [FK] (nullable)
   - technique -> magic.Technique [FK] (nullable)
@@ -3886,12 +3892,14 @@
 **Foreign Keys:**
   - affinity -> magic.Affinity [FK] (nullable)
   - condition_property -> mechanics.Property [FK] (nullable)
+  - mission_theme -> missions.MissionTheme [FK] (nullable)
   - perk -> covenants.VowSituationalPerk [FK]
 
 ### VowSituationalPerkSituation
 **Foreign Keys:**
   - affinity -> magic.Affinity [FK] (nullable)
   - condition_property -> mechanics.Property [FK] (nullable)
+  - mission_theme -> missions.MissionTheme [FK] (nullable)
   - perk -> covenants.VowSituationalPerk [FK]
 
 ### VowStatScaling
@@ -5754,6 +5762,7 @@
   - related_threads -> magic.Thread [M2M]
 **Pointed to by:**
   - legend_honors <- societies.LegendHonor
+  - reflections <- magic.Reflection
   - responses <- journals.JournalEntry
   - tags <- journals.JournalTag
   - capstone <- relationships.RelationshipCapstone
@@ -6021,6 +6030,7 @@
   - pending_alteration_origins <- magic.PendingAlteration
   - aura_shares <- magic.CharacterAuraShare
   - glimpse_tags <- magic.GlimpseTag
+  - kindling_situations <- magic.KindlingSituation
   - interactions_as_source <- magic.AffinityInteraction
   - interactions_as_environment <- magic.AffinityInteraction
 
@@ -6280,7 +6290,7 @@
 ### DriftConversionOffer
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
-  - scene -> scenes.Scene [FK]
+  - scene -> scenes.Scene [FK] (nullable)
 **Pointed to by:**
   - caps <- magic.DriftConversionCap
 
@@ -6396,10 +6406,10 @@
   - gift_unlocks <- magic.GiftUnlock
   - path_grants <- magic.PathGiftGrant
   - tradition_grants <- magic.TraditionGiftGrant
-  - reincarnation <- magic.Reincarnation
   - granted_by_roles <- covenants.CovenantRole
   - role_grants <- covenants.CovenantRoleGiftGrant
   - vow_added_effects <- covenants.VowAddedEffect
+  - reincarnation <- magic.Reincarnation
   - technique_drafts <- magic.TechniqueDraft
   - thread_pull_effects <- magic.ThreadPullEffect
   - anchored_threads <- magic.Thread
@@ -6445,6 +6455,34 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - auderethreshold_set <- magic.AudereThreshold
+
+### KindledDeedAward
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
+
+### KindledStrengthTier
+
+### Kindling
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - resonance -> magic.Resonance [FK]
+  - encounter -> combat.CombatEncounter [FK] (nullable)
+  - scene -> scenes.Scene [FK] (nullable)
+  - kindled_by -> character_sheets.CharacterSheet [FK] (nullable)
+
+### KindlingConfig
+**Foreign Keys:**
+  - harm_property -> mechanics.Property [FK] (nullable)
+
+### KindlingSituation
+**Foreign Keys:**
+  - affinity -> magic.Affinity [FK] (nullable)
+  - condition_property -> mechanics.Property [FK] (nullable)
+  - mission_theme -> missions.MissionTheme [FK] (nullable)
+  - resonance -> magic.Resonance [FK] (nullable)
+  - for_affinity -> magic.Affinity [FK] (nullable)
+**Pointed to by:**
+  - resonance_grants <- magic.ResonanceGrant
 
 ### KnownUltimate
 **Foreign Keys:**
@@ -6607,6 +6645,21 @@
   - item_template -> items.ItemTemplate [FK]
   - min_quality_tier -> items.QualityTier [FK] (nullable)
 
+### RallyKindlingStrength
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
+
+### Reflection
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - grant -> magic.ResonanceGrant [FK] (nullable)
+  - resonance -> magic.Resonance [FK] (nullable)
+  - interaction -> scenes.Interaction [FK] (nullable)
+  - journal_entry -> journals.JournalEntry [FK] (nullable)
+  - rite -> magic.SettlingRite [FK] (nullable)
+**Pointed to by:**
+  - resonance_grants <- magic.ResonanceGrant
+
 ### Reincarnation
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [FK]
@@ -6621,6 +6674,7 @@
   - affinity -> magic.Affinity [FK]
   - opposite -> magic.Resonance [OneToOne] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)
+  - feeling -> mechanics.Property [FK] (nullable)
   - properties -> mechanics.Property [M2M]
 **Pointed to by:**
   - damage_type <- conditions.DamageType
@@ -6646,11 +6700,14 @@
   - resonancegrant_set <- magic.ResonanceGrant
   - distinction_grants <- magic.DistinctionResonanceGrant
   - distinction_rank_thresholds <- magic.DistinctionResonanceRankThreshold
-  - motif_resonances <- magic.MotifResonance
-  - imbuing_prose <- magic.ImbuingProseTemplate
-  - sanctums <- magic.SanctumDetails
   - techniquevariant_subrole <- magic.TechniqueVariant
   - covenantrole_subrole <- covenants.CovenantRole
+  - kindling_situations <- magic.KindlingSituation
+  - kindlings <- magic.Kindling
+  - motif_resonances <- magic.MotifResonance
+  - reflections <- magic.Reflection
+  - imbuing_prose <- magic.ImbuingProseTemplate
+  - sanctums <- magic.SanctumDetails
   - signature_bonuses <- magic.SignatureMotifBonus
   - sineating_pending_offers <- magic.SineatingPendingOffer
   - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
@@ -6707,8 +6764,13 @@
   - source_mission_deed_reward_line -> missions.MissionDeedRewardLine [FK] (nullable)
   - source_character_distinction -> distinctions.CharacterDistinction [FK] (nullable)
   - source_worship_rite_performance -> worship.WorshipRitePerformance [FK] (nullable)
+  - source_kindling_situation -> magic.KindlingSituation [FK] (nullable)
+  - deed_label: CharField (nullable; set only for KINDLED_DEED)
+  - source_settling_rite -> magic.SettlingRite [FK] (nullable)
+  - source_reflection -> magic.Reflection [FK] (nullable)
 **Pointed to by:**
   - drift_conversion_caps <- magic.DriftConversionCap
+  - reflections <- magic.Reflection
   - pledge_credit <- worship.PledgeCredit
 
 ### ResonanceTier
@@ -6735,13 +6797,13 @@
 **Pointed to by:**
   - class_level_advancements <- progression.ClassLevelAdvancement
   - performances <- magic.AnimaRitualPerformance
+  - covenant_rite <- covenants.CovenantRite
   - known_by_records <- magic.CharacterRitualKnowledge
   - liturgy <- magic.RitualLiturgy
   - check_config <- magic.RitualCheckConfig
   - anima_contributions <- magic.RitualAnimaContribution
   - requirements <- magic.RitualComponentRequirement
   - pending_effects <- magic.PendingRitualEffect
-  - covenant_rite <- covenants.CovenantRite
   - ritualsession_set <- magic.RitualSession
   - technique_grants <- magic.TechniqueGrant
   - installs_room_features <- room_features.RoomFeatureKindInstallRitual
@@ -6836,6 +6898,15 @@
   - resonance -> magic.Resonance [FK]
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
+
+### SettlingRite
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - scene -> scenes.Scene [FK] (nullable)
+  - outcome -> traits.CheckOutcome [FK]
+**Pointed to by:**
+  - resonance_grants <- magic.ResonanceGrant
+  - reflections <- magic.Reflection
 
 ### SignatureMotifBonus
 **Foreign Keys:**
@@ -6965,10 +7036,10 @@
   - granted_by_path_gifts <- magic.PathGiftGrant
   - ultimate_for_path_gifts <- magic.PathGiftGrant
   - granted_by_tradition_gifts <- magic.TraditionGiftGrant
-  - manifest_options <- magic.TechniqueManifestOption
-  - character_manifestations <- magic.CharacterManifestation
   - variants <- magic.TechniqueVariant
   - vow_added_effects <- covenants.VowAddedEffect
+  - manifest_options <- magic.TechniqueManifestOption
+  - character_manifestations <- magic.CharacterManifestation
   - grants <- magic.TechniqueGrant
   - progress_records <- magic.TechniqueProgress
   - progress_weekly <- magic.TechniqueProgressWeekly
@@ -7287,7 +7358,7 @@
 - `get_soulfray_warning(character: 'ObjectDB') -> 'SoulfrayWarning | None' - Return the current Soulfray stage warning for the safety checkpoint.`
 - `get_thread_survivability_tuning(vital_target: 'str') -> "'ThreadSurvivabilityTuning | None'" - Return the tuning row for a target, or None if unseeded (baseline 0).`
 - `gift_thread_resistance(character: 'ObjectDB', damage_type: 'DamageType') -> 'int' - Total damage-type-specific resistance from gift threads (#1580).`
-- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None, style_presentation_endorsement: 'StylePresentationEndorsement | None' = None, mission_deed_reward_line: 'MissionDeedRewardLine | None' = None, source_character_distinction: 'CharacterDistinction | None' = None, worship_rite_performance: 'WorshipRitePerformance | None' = None, from_mire: 'bool' = False) -> 'CharacterResonance' - Atomically grant resonance AND write the ResonanceGrant ledger row.`
+- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None, style_presentation_endorsement: 'StylePresentationEndorsement | None' = None, mission_deed_reward_line: 'MissionDeedRewardLine | None' = None, source_character_distinction: 'CharacterDistinction | None' = None, worship_rite_performance: 'WorshipRitePerformance | None' = None, kindling_situation: 'KindlingSituation | None' = None, settling_rite: 'SettlingRite | None' = None, reflection: 'Reflection | None' = None, from_mire: 'bool' = False, ledger_out: 'list[ResonanceGrant] | None' = None) -> 'CharacterResonance' - Atomically grant resonance AND write the ResonanceGrant ledger row.`
 - `has_pending_alterations(character: 'CharacterSheet') -> 'bool' - Check if this character has any unresolved Mage Scar that holds back advancement.`
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' - Return threads that any resonance the character holds can imbue (#5123).`
 - `involved_trait_ids(check_type: 'CheckType', extra_traits: 'Sequence[ExtraTraitTerm]') -> 'tuple[int, ...]' - Trait ids a roll involves: the check type's traits, then the terms', once each.`
@@ -7299,7 +7370,7 @@
 - `resolve_and_consume_ritual_components(*, ritual: 'Ritual', components: 'list[ItemInstance]', performer_sheet: 'CharacterSheet', resonance_context: 'Resonance | None' = None) -> 'None' - Validate and atomically consume ``ritual``'s components from ``components``.`
 - `resolve_cast_check(character: 'ObjectDB', technique: 'Technique') -> 'CastCheck | None' - The check type and skill terms a cast of ``technique`` rolls, or None.`
 - `resolve_pending_alteration(*, pending: 'PendingAlteration', name: 'str', player_description: 'str', observer_description: 'str', weakness_damage_type: 'DamageType | None' = None, weakness_magnitude: 'int' = 0, resonance_bonus_magnitude: 'int' = 0, social_reactivity_magnitude: 'int' = 0, is_visible_at_rest: 'bool', resolved_by: 'AccountDB | None', parent_template: 'MagicalAlterationTemplate | None' = None, is_library_entry: 'bool' = False, library_template: 'MagicalAlterationTemplate | None' = None) -> 'AlterationResolutionResult' - Resolve a PendingAlteration by creating or selecting a template.`
-- `resolve_pull_effects(threads: 'list[Thread]', tier: 'int', *, in_combat: 'bool', target: 'ObjectDB | None' = None, beseech_bonus_thread_id: 'int | None' = None, beseech_bonus: 'int' = 0, character_sheet: 'CharacterSheet | None' = None, payers: 'Mapping[int, ResonanceModel] | None' = None) -> 'list[ResolvedPullEffect]' - Resolve every (thread × effect_tier 0..tier) pair into ResolvedPullEffect rows.`
+- `resolve_pull_effects(threads: 'list[Thread]', tier: 'int', *, in_combat: 'bool', target: 'ObjectDB | None' = None, beseech_bonus_thread_id: 'int | None' = None, beseech_bonus: 'int' = 0, character_sheet: 'CharacterSheet | None' = None, payers: 'Mapping[int, ResonanceModel] | None' = None, kindled: 'Mapping[int, KindledStrengthTier] | None' = None) -> 'list[ResolvedPullEffect]' - Resolve every (thread × effect_tier 0..tier) pair into ResolvedPullEffect rows.`
 - `seed_thread_survivability_tuning() -> 'None' - Idempotently author the default ThreadSurvivabilityTuning rows (#1175).`
 - `select_mishap_pool(control_deficit: 'int') -> 'ConsequencePool | None' - Select a control mishap consequence pool based on deficit magnitude.`
 - `spend_resonance_for_imbuing(character_sheet: 'CharacterSheet', thread: 'Thread', resonance: 'ResonanceModel', amount: 'int', **_ritual_dispatch_kwargs: 'object') -> 'ThreadImbueResult' - Deduct ``resonance`` balance, add it to the thread's row, and advance the thread level.`
@@ -7477,10 +7548,10 @@
   - conditionmodifiereffect_set <- conditions.ConditionModifierEffect
   - character_modifiers <- mechanics.CharacterModifier
   - codex_entry <- codex.CodexEntry
-  - facet_effect_bonuses <- magic.FacetEffectBonus
   - covenant_level_bonuses <- covenants.CovenantLevelBonus
   - vow_stat_scalings <- covenants.VowStatScaling
   - covenant_role_bonuses <- covenants.CovenantRoleBonus
+  - facet_effect_bonuses <- magic.FacetEffectBonus
   - distinction_effects <- distinctions.DistinctionEffect
   - form_effects <- forms.FormCombatProfileEffect
   - character_goals <- goals.CharacterGoal
@@ -7535,6 +7606,7 @@
   - battle_technique_affinities <- battles.TechniquePropertyAffinity
   - battle_terrain_effects <- battles.TerrainPropertyEffect
   - battle_weather_effects <- battles.WeatherTypePropertyEffect
+  - feeling_of_resonances <- magic.Resonance
   - resonances <- magic.Resonance
   - gift_substances <- magic.GiftSubstance
   - techniques <- magic.Technique
@@ -7894,6 +7966,7 @@
   - opposition_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - opposition_check_type -> checks.CheckType [FK] (nullable)
   - locations -> evennia_extensions.RoomProfile [M2M]
+  - themes -> missions.MissionTheme [M2M]
 **Pointed to by:**
   - opponent_lines <- missions.MissionOptionOpponentLine
   - routes <- missions.MissionOptionRoute
@@ -7987,6 +8060,7 @@
   - created_in_era -> stories.Era [FK] (nullable)
   - report_to_role -> npc_services.NPCRole [FK] (nullable)
   - categories -> missions.MissionCategory [M2M]
+  - themes -> missions.MissionTheme [M2M]
 **Pointed to by:**
   - clues <- clues.Clue
   - crisis_options <- societies.DomainCrisisTypeOption
@@ -7997,6 +8071,14 @@
   - givers <- missions.MissionGiver
   - story_scenario <- stories.StoryScenario
   - task_templates <- tasking.TaskTemplate
+
+### MissionTheme
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+**Pointed to by:**
+  - templates <- missions.MissionTemplate
+  - options <- missions.MissionOption
 
 ### MissionTrackProgress
 **Foreign Keys:**
@@ -9496,6 +9578,7 @@
   - dramatic_moment_tags <- magic.DramaticMomentTag
   - endorsements <- magic.PoseEndorsement
   - sceneentryendorsement_set <- magic.SceneEntryEndorsement
+  - reflections <- magic.Reflection
   - combat_round_actions <- combat.CombatRoundAction
   - clash_contributions <- combat.ClashContribution
   - gm_prompts <- gm.GMPrompt
@@ -9803,6 +9886,7 @@
   - entry_flourish_records <- magic.EntryFlourishRecord
   - fall_redemption_records <- magic.FallRedemptionRecord
   - covenant_rite_instances <- covenants.CovenantRiteInstance
+  - kindlings <- magic.Kindling
   - ritual_sessions <- magic.RitualSession
   - sineating_pending_offers <- magic.SineatingPendingOffer
   - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
@@ -9856,7 +9940,7 @@
 ### SceneActionRequest
 **Foreign Keys:**
   - fury_commitment -> magic.FuryTier [FK] (nullable)
-  - fury_anchor -> character_sheets.CharacterSheet [FK] (nullable)
+  - fury_resonance -> magic.Resonance [FK] (nullable)
   - scene -> scenes.Scene [FK]
   - initiator_persona -> scenes.Persona [FK]
   - target_persona -> scenes.Persona [FK] (nullable)
@@ -10168,8 +10252,8 @@
   - xp_costs <- progression.TraitXPCost
   - rating_unlocks <- progression.TraitRatingUnlock
   - trait_requirements <- progression.TraitRequirement
-  - magic_activity_rows <- magic.MagicActivitySkill
   - combat_style <- covenants.CombatStyle
+  - magic_activity_rows <- magic.MagicActivitySkill
   - anchored_threads <- magic.Thread
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
   - language <- species.Language
@@ -11835,6 +11919,8 @@
   - anima_ritual_performances <- magic.AnimaRitualPerformance
   - arxii_driftcorrectionoutcomeshare <- magic.DriftCorrectionOutcomeShare
   - arxii_furydegreeshare <- magic.FuryDegreeShare
+  - arxii_kindleddeedaward <- magic.KindledDeedAward
+  - arxii_rallykindlingstrength <- magic.RallyKindlingStrength
   - arxii_sanctumhomecominggainaward <- magic.SanctumHomecomingGainAward
   - arxii_sanctumpurgingretentionaward <- magic.SanctumPurgingRetentionAward
   - arxii_sanctumdissolutionrecoveryaward <- magic.SanctumDissolutionRecoveryAward
@@ -11889,8 +11975,8 @@
   - xp_costs <- progression.TraitXPCost
   - rating_unlocks <- progression.TraitRatingUnlock
   - trait_requirements <- progression.TraitRequirement
-  - magic_activity_rows <- magic.MagicActivitySkill
   - combat_style <- covenants.CombatStyle
+  - magic_activity_rows <- magic.MagicActivitySkill
   - anchored_threads <- magic.Thread
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
   - language <- species.Language

@@ -944,25 +944,34 @@ class ResonanceBurnInvalid(MagicError):
 class DriftCorrectionError(MagicError):
     """Base for refusals of the drift correction rite (#4733, slice 4 of #4672)."""
 
-    user_message = "The rite of correction cannot be performed."
+    user_message = "The rite of settling cannot be performed."
 
 
 class DriftCorrectionNotConfiguredError(DriftCorrectionError):
     """The rite, its check type, or the outcome share for the rolled tier is unauthored."""
 
-    user_message = "The rite of correction is not set up yet; tell staff."
+    user_message = "The rite of settling is not set up yet; tell staff."
 
 
-class DriftOfferNotFoundError(DriftCorrectionError):
-    """The offer is gone, its scene has finished, or it holds no cap toward the target."""
+class NoWaitingReflectionError(DriftCorrectionError):
+    """The rite of settling needs at least one waiting reflection (#5124)."""
 
-    user_message = "You have no open chance to atone toward that resonance."
+    user_message = (
+        "You have no reflections waiting. Reflect on a deed, or on what is unsettling you, "
+        "in a pose or a journal entry first."
+    )
 
 
-class DriftConversionInvalidError(DriftCorrectionError):
-    """The requested conversion breaks a rule; the raise site names which one."""
+class NotUnsettledError(MagicError):
+    """Accepting the changes to the aura was asked of a character who is not unsettled (#5123)."""
 
-    user_message = "That conversion cannot be made."
+    user_message = "You are not unsettled, so there is nothing to accept."
+
+
+class ReflectionError(MagicError):
+    """A reflection cannot be recorded (#5124); the raise site names which rule it broke."""
+
+    user_message = "You cannot reflect on that."
 
     def __init__(self, user_message: str | None = None) -> None:
         super().__init__(user_message)
@@ -970,10 +979,16 @@ class DriftConversionInvalidError(DriftCorrectionError):
             self.user_message = user_message
 
 
-class NotUnsettledError(MagicError):
-    """Accepting the changes to the aura was asked of a character who is not unsettled (#5123)."""
+class DeedAlreadyReflectedError(ReflectionError):
+    """A deed can be reflected on only once (#5124)."""
 
-    user_message = "You are not unsettled, so there is nothing to accept."
+    user_message = "You have already reflected on that deed."
+
+
+class ResonanceNotUnsettlingError(ReflectionError):
+    """Only the resonance that is unsettling the character can be reflected on (#5124)."""
+
+    user_message = "That resonance is not what is unsettling you."
 
 
 class ThreadResonanceChangeError(MagicError):

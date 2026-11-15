@@ -162,6 +162,7 @@ export const mockNobleFamily: Family = {
   born_particle: 'du',
   taken_in_particle: 'dau',
   inherited: { facets: [], features: [], liege_name: '' },
+  has_open_seat: true,
 };
 
 export const mockNobleFamily2: Family = {
@@ -174,6 +175,7 @@ export const mockNobleFamily2: Family = {
   born_particle: 'za',
   taken_in_particle: 'zas',
   inherited: { facets: [], features: [], liege_name: '' },
+  has_open_seat: true,
 };
 
 export const mockCommonerFamily: Family = {
@@ -186,6 +188,7 @@ export const mockCommonerFamily: Family = {
   born_particle: '',
   taken_in_particle: '',
   inherited: { facets: [], features: [], liege_name: '' },
+  has_open_seat: true,
 };
 
 export const mockFamilies: Family[] = [mockNobleFamily, mockNobleFamily2, mockCommonerFamily];

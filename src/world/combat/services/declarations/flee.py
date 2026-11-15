@@ -23,9 +23,11 @@ from world.combat.models import (
 )
 from world.combat.services.declarations.social_check import _record_combat_consequence
 from world.combat.services.encounter.config import get_flee_config
+from world.combat.services.techniques.kindled_deed import award_rolled
 from world.combat.types import ActionOutcome
 from world.conditions.services import spend_contributing_conditions
 from world.fatigue.constants import EffortLevel
+from world.magic.constants import KindlingActKind
 from world.mechanics.constants import ManeuverEffectKey
 from world.mechanics.effect_targets import effect_values
 from world.scenes.constants import RoundStatus
@@ -187,6 +189,14 @@ def _resolve_flee(
     spend_contributing_conditions(breakdown)
 
     success_level = pending.check_result.success_level
+    # #5124: the flee roll earns what the act feeds (any act while a feeling holds).
+    award_rolled(
+        participant,
+        action,
+        kind=KindlingActKind.OTHER,
+        what="Fled",
+        outcome=pending.check_result.outcome,
+    )
     escaped = success_level >= FLEE_PARTIAL_SUCCESS_LEVEL
     consequence_applies = success_level <= FLEE_PARTIAL_SUCCESS_LEVEL
 

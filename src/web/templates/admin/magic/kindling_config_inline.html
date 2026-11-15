@@ -1,0 +1,16 @@
+{# A table over a whole config table (screen 8). The stock tabular inline prints each saved #}
+{# row's raw caption over its first cell, and its inputs keep a fixed width, so ten columns ran #}
+{# past the page: here the caption is hidden and the table is fitted to the module. #}
+<div class="kindling-config-inline">
+{% include "admin/edit_inline/tabular.html" %}
+</div>
+{% if inline_admin_formset.opts.note %}<p class="help" style="padding: 0 10px 10px">{{ inline_admin_formset.opts.note }}</p>{% endif %}
+<style>
+  .kindling-config-inline td.original p { display: none; }
+  .kindling-config-inline table { width: 100%; table-layout: fixed; }
+  .kindling-config-inline th { white-space: normal; overflow-wrap: anywhere; }
+  .kindling-config-inline td { overflow-wrap: anywhere; }
+  .kindling-config-inline td input[type="text"],
+  .kindling-config-inline td input[type="number"],
+  .kindling-config-inline td select { width: 100%; min-width: 0; box-sizing: border-box; }
+</style>

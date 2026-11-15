@@ -161,6 +161,12 @@ class AuraAffinityAtTheAcademy(_AcademyCourseCase):
                 "description": self.dawn.description,
                 "corruption_coefficient": self.dawn.corruption_coefficient,
                 "burn_value": self.dawn.burn_value,
+                # The page carries the affinity's kindling situations inline (#5124); a
+                # browser posts the inline's management form with an empty set of rows.
+                "kindling_situations-TOTAL_FORMS": "0",
+                "kindling_situations-INITIAL_FORMS": "0",
+                "kindling_situations-MIN_NUM_FORMS": "0",
+                "kindling_situations-MAX_NUM_FORMS": "1000",
             },
         )
         self.assertEqual(response.status_code, 302, response.content[:2000])

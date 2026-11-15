@@ -208,7 +208,7 @@ modules import combat/checks contexts at function level, never the reverse):
 
 - **`constants.py`** — `Situation`/`PerkEffectKind`/`PerkBeneficiary`/`SituationOriginSide`
   `TextChoices`, plus the `SituationParamSpec`/`SITUATION_PARAM_SPECS` contract (#2623,
-  ADR-0154). `Situation` ships 22 values as of #2664: slice 1's 9 plus
+  ADR-0154). `Situation` ships 32 values as of #5124 (22 as of #2664, 26 before #5124): slice 1's 9 plus
   `CHAMPION_DUEL` (Battle wiring, Task 3), `COMBAT_OPENED_FROM_PARLEY`/`AMBUSH_UNDERWAY`
   (origin-marker addition, Task 4), `ALLY_INTERCEPTED_FOR_ME` (declared-guard, Task 5), and
   `ATTACKER_AFFINITY` (defense-side seam, Task 6; originally Abyssal-only, renamed and
@@ -219,7 +219,14 @@ modules import combat/checks contexts at function level, never the reverse):
   (both require `condition_property`, allow `count_threshold`) and `TARGET_LOW_HEALTH` (allows
   `threshold_percent`); slice 3 wired their evaluators, see "Target-state situations" below
   [BUILT & WIRED]. The `situation`/`extra_situation` columns are 48 characters wide for them.
-  `SITUATION_PARAM_SPECS` (#2623) names, per situation, which of the five `SituationRequirementMixin`
+  #5124 added six kindling situations that also work as vow perk situations (they read the
+  optional `SituationContext.act`; shared reads live in `world.magic.services.kindling`):
+  `THREAD_ANCHOR_PRESENT` (allows `enemies_only`), `OWN_FEELING`, `SHARED_FEELING` and
+  `TARGET_IN_STATE_THEY_CAUSED` (each allows `condition_property` and `count_threshold`),
+  `SOMEONE_IN_TROUBLE` (no params) and `MISSION_THEME` (requires `mission_theme`). The
+  `SituationRequirementMixin` therefore has seven param columns (`mission_theme` and
+  `enemies_only` are the new ones).
+  `SITUATION_PARAM_SPECS` (#2623) names, per situation, which of the seven `SituationRequirementMixin`
   columns are ALLOWED and which are REQUIRED — `ATTACKER_AFFINITY` requires `affinity`;
   `ALLY_LOW_HEALTH`/`SURROUNDED`/`TARGET_FAVORABLY_DISPOSED` allow (but don't require) their
   threshold; `AMBUSH_UNDERWAY`/`COMBAT_OPENED_FROM_PARLEY` allow `origin_side`; every other
@@ -237,7 +244,7 @@ modules import combat/checks contexts at function level, never the reverse):
   for the full field contract and the missing-field-returns-False convention.
 - **`evaluators.py`** — `SITUATION_EVALUATORS` registry (`register(situation)` decorator,
   mirrors `magic.services.power_terms`'s `_PROVIDERS` registry pattern) + one evaluator per
-  `Situation` value (22 as of #2664). Every evaluator is a pure read (one query or a
+  `Situation` value (32 as of #5124). Every evaluator is a pure read (one query or a
   cached-handler read, never a write, never a query per situation-per-perk).
 - **`services.py`** — `applicable_perks(subject, *, effect_kind, resolution, target, attacker=None)
   -> list[FiredPerk]`, the beneficiary evaluation point every delivery seam calls (see the

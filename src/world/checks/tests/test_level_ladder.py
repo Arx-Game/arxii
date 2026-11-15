@@ -118,7 +118,7 @@ class LevelLadderTests(TestCase):
 class CheckLadderRowsMigrationTests(TestCase):
     """U-keep: a data migration, which no journey runs.
 
-    ``0411_check_ladder_rows`` gives a database with ranks the rows that replace thresholds."""
+    ``0418_check_ladder_rows`` gives a database with ranks the rows that replace thresholds."""
 
     @staticmethod
     def _run() -> None:

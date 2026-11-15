@@ -356,7 +356,7 @@ class ResolveSocialVerbTests(TestCase):
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_social_combat_content gates on #2698
 class ResolveSocialCheckSituationContextTests(TestCase):
-    """#2536 Task 5 review fix: `_resolve_social_check` (the shared Rally/
+    """#2536 Task 5 review fix: `roll_social_check` (the shared Rally/
     Demoralize/Taunt/Parley roll seam) must thread a SituationContext into
     perform_check so a future CHECK_BONUS perk scoped to one of these social
     CheckTypes can actually fire, mirroring CombatTechniqueResolver._roll_check.
@@ -370,15 +370,15 @@ class ResolveSocialCheckSituationContextTests(TestCase):
 
     def test_situation_ctx_threaded_with_live_round_context(self) -> None:
         from world.combat.round_context import CombatRoundContext
-        from world.combat.services import _resolve_social_check
+        from world.combat.services.declarations.social_check import roll_social_check
         from world.covenants.perks.context import SituationContext
 
-        # _resolve_social_check re-imports `perform_check` locally from
+        # roll_social_check re-imports `perform_check` locally from
         # world.checks.services (services.py:5600ish) rather than using the
         # module-level name — patch the source, not world.combat.services.
         with patch("world.checks.services.perform_check") as mock_perform:
             mock_perform.return_value = MagicMock(success_level=1)
-            _resolve_social_check(self.participant, CheckType.objects.get(name="Rally"), 0)
+            roll_social_check(self.participant, CheckType.objects.get(name="Rally"), 0)
 
         situation_ctx = mock_perform.call_args.kwargs["situation_ctx"]
         self.assertIsInstance(situation_ctx, SituationContext)
@@ -393,10 +393,10 @@ class ResolveSocialCheckSituationContextTests(TestCase):
 class TargetSituationalPerkFiresThroughSocialCombatTests(TestCase):
     """#2536 Task 6 review fix (Important finding — untested fold-in): proves
     a TARGET_* situational perk genuinely fires through the shared
-    ``_resolve_social_check`` CHECK_BONUS path for each verb that resolves
+    ``roll_social_check`` CHECK_BONUS path for each verb that resolves
     against an opposing target (Demoralize/Taunt/Parley — Rally targets an
     ally, so no TARGET_* situation applies to it, see
-    ``_resolve_social_check``'s docstring). ``ResolveSocialCheckSituationContextTests``
+    ``roll_social_check``'s docstring). ``ResolveSocialCheckSituationContextTests``
     above already proves a ``SituationContext`` object of the right SHAPE gets
     built; this proves a REAL perk actually fires through it end to end (via
     ``resolve_round``, the real production dispatch path — not a private

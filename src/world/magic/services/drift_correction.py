@@ -1,16 +1,27 @@
-"""The drift correction rite: preview, focus, check and conversion (#4733, slice 4 of #4672).
+"""The rite of settling: one offering, one roll, every waiting reflection (#5124).
 
-A character holding an open ``DriftConversionOffer`` may perform the configured rite to
-convert drift (resonance held off their aura) toward a resonance the offer has a cap for.
-The rite consumes a qualifying offering, rolls the configured check with a focus bonus, and
-converts the share of the requested amount that the outcome tier's
-``DriftCorrectionOutcomeShare`` names, at the authored pair rate. Everything runs in one
-transaction: a refusal or a raise consumes and moves nothing.
+A character who has written reflections (a pose or a journal entry that names a deed, or the
+resonance unsettling them, and Embrace or Disown) carries them all out with one rite. The rite
+takes one qualifying offering, rolls the configured check with a focus bonus, reads the share
+from the rolled tier's ``DriftCorrectionOutcomeShare`` and applies that share to each
+reflection:
+
+| Reflection                     | Effect at share s                                        |
+| Embrace a deed                 | grant ``deed amount x s`` of its resonance (EMBRACED_DEED) |
+| Disown a deed                  | convert ``amount x disown_deed_percent x s`` toward the  |
+|                                | main affinity; needs no open chance to atone             |
+| Embrace the unsettling         | ``accept_aura_change(fraction=s)``                       |
+| Disown the unsettling          | convert up to the open cap x s toward the main affinity  |
+
+Everything runs in one transaction. A refusal (no waiting reflection, an unset rite, no
+qualifying offering) writes nothing and leaves every reflection waiting. Once the roll
+happens the offering is spent whatever the result, and every waiting reflection takes the
+rite, even at a share of 0.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Mapping
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -20,12 +31,13 @@ from django.db.models import Max, QuerySet
 
 from world.checks.services import difficulty_points, perform_check_with_modifiers
 from world.items.services.materials import consume_materials
-from world.magic.constants import GainSource
+from world.magic.constants import GainSource, ReflectionChoice
 from world.magic.exceptions import (
     ConversionMappingError,
-    DriftConversionInvalidError,
     DriftCorrectionNotConfiguredError,
-    DriftOfferNotFoundError,
+    NotUnsettledError,
+    NoWaitingReflectionError,
+    RitualComponentError,
 )
 from world.magic.models.aura import CharacterResonance
 from world.magic.models.drift import (
@@ -34,27 +46,29 @@ from world.magic.models.drift import (
     DriftCorrectionConfig,
     DriftCorrectionOutcomeShare,
 )
+from world.magic.models.reflection import Reflection, SettlingRite
 from world.magic.models.resonance_environment import AffinityInteraction
 from world.magic.services.conversion import conversion_pair, convert_resonance_amount
 from world.magic.services.drift import (
+    accept_aura_change,
     close_spent_conversion_offers,
-    convertible_drift,
     drift_for,
     get_drift_correction_config,
-    qualifying_components,
+    own_affinity,
+    qualifying_components_by_target,
 )
+from world.magic.services.reflection import deed_what
+from world.magic.services.resonance import grant_resonance
 from world.magic.services.ritual_components import (
     resolve_ritual_components,
     target_resonance_meaning_bar,
 )
 from world.magic.services.touchstone import touchstone_cast_bonus
 from world.magic.types.drift import (
-    DriftConversionPreview,
-    DriftCorrectionResult,
-    DriftOfferCapOption,
-    DriftReading,
-    DriftSourceOption,
     QualifyingComponent,
+    ReflectionEffect,
+    RiteOffering,
+    SettlingRiteResult,
 )
 from world.mechanics.services import equipment_walk_total
 from world.traits.models import CheckOutcome
@@ -63,9 +77,12 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
     from world.magic.models.affinity import Resonance
+    from world.scenes.models import Scene
 
 
 RITE_NOT_READY_MESSAGE = DriftCorrectionNotConfiguredError.user_message
+
+_ONE_HUNDRED = Decimal(100)
 
 
 def outcome_tiers_without_a_share() -> QuerySet[CheckOutcome]:
@@ -84,7 +101,7 @@ def rite_is_ready(config: DriftCorrectionConfig | None = None) -> bool:
 
     Costs one query (the share check), and none when the rite or check type is unset.
     While this is false the rite refuses with ``RITE_NOT_READY_MESSAGE``, and every
-    surface that shows an offer says that instead of listing an offering. Pass the
+    surface that shows the rite says that instead of listing an offering. Pass the
     ``config`` the caller already holds to skip fetching it again.
     """
     if config is None:
@@ -108,96 +125,6 @@ def focus_bonus(sheet: CharacterSheet, target: Resonance) -> int:
     return walk + touchstone_cast_bonus(sheet, target)
 
 
-def _cap_for(offer: DriftConversionOffer, target: Resonance) -> DriftConversionCap | None:
-    return DriftConversionCap.objects.filter(offer=offer, target_resonance=target).first()
-
-
-def _projected(amount: int, multiplier: Decimal) -> int:
-    """The pair-rate output of converting ``amount``, floored at 1 like the conversion."""
-    if amount <= 0:
-        return 0
-    return max(1, int(Decimal(amount) * multiplier))
-
-
-def preview_conversion(offer: DriftConversionOffer, target: Resonance) -> DriftConversionPreview:
-    """What the character could convert toward ``target`` under ``offer``, at a full share.
-
-    Sources are the character's ``convertible_drift`` toward the target; each may convert up
-    to the cap, its lifetime, and what its affinity stands past who the character is.
-    ``cap_remaining`` is 0 when the offer holds no cap toward the target.
-    """
-    sheet = offer.character_sheet
-    cap = _cap_for(offer, target)
-    cap_remaining = cap.cap if cap is not None else 0
-    reading = drift_for(sheet)
-    sources = []
-    for row in convertible_drift(sheet, target):
-        pair = conversion_pair(row.resonance.affinity, target.affinity)
-        max_amount = min(
-            cap_remaining,
-            row.lifetime_earned,
-            reading.convertible_points(row.resonance.affinity_id, row.mire_lifetime),
-        )
-        sources.append(
-            DriftSourceOption(
-                resonance_id=row.resonance_id,
-                resonance_name=row.resonance.name,
-                balance=row.balance,
-                multiplier=pair.conversion_multiplier,
-                conversion_type=pair.conversion_type,
-                max_amount=max_amount,
-                projected_output=_projected(
-                    min(max_amount, row.balance), pair.conversion_multiplier
-                ),
-            )
-        )
-    return DriftConversionPreview(
-        target_resonance_id=target.pk,
-        cap_remaining=cap_remaining,
-        sources=tuple(sources),
-        focus_bonus=focus_bonus(sheet, target),
-    )
-
-
-def offered_components(
-    sheet: CharacterSheet, target: Resonance, items: Iterable[ItemInstance]
-) -> list[QualifyingComponent]:
-    """The ``items`` that count toward the rite's offering for ``target``, with their routes.
-
-    The keepsake route is open when any target-resonance requirement of the rite carries a
-    ``min_item_meaning`` (the lowest such bar applies). Empty while the rite is unset.
-    """
-    config = get_drift_correction_config()
-    if config.rite_id is None:
-        return []
-    return qualifying_components(
-        sheet, target, items, min_item_meaning=target_resonance_meaning_bar(config.rite)
-    )
-
-
-def offer_options(
-    offer: DriftConversionOffer, items: Iterable[ItemInstance]
-) -> list[DriftOfferCapOption]:
-    """Every cap of ``offer`` as a player sees it, given the items the character carries.
-
-    ``items`` is fetched once by the caller; qualifying items are worked out once per cap
-    (they depend on the target, not on the source).
-    """
-    carried = list(items)
-    sheet = offer.character_sheet
-    options = []
-    for cap in offer.caps.select_related("target_resonance__affinity"):
-        target = cap.target_resonance
-        options.append(
-            DriftOfferCapOption(
-                target_resonance=target,
-                preview=preview_conversion(offer, target),
-                qualifying=tuple(offered_components(sheet, target, carried)),
-            )
-        )
-    return options
-
-
 def max_yield_per_earned_point(config: DriftCorrectionConfig) -> Decimal:
     """The most target resonance one point of deed gain can ever yield through the rite.
 
@@ -215,112 +142,409 @@ def max_yield_per_earned_point(config: DriftCorrectionConfig) -> Decimal:
     return Decimal(config.cap_percent) / Decimal(100) * max_multiplier * max_share
 
 
-def _locked_offer(offer: DriftConversionOffer) -> DriftConversionOffer:
-    # A filter, not get(): the identity map would answer get() without the database or lock.
-    locked = list(DriftConversionOffer.objects.select_for_update().filter(pk=offer.pk))
-    if not locked:
-        raise DriftOfferNotFoundError
-    scene = locked[0].scene
-    if not scene.is_active or scene.is_finished:
-        raise DriftOfferNotFoundError
-    return locked[0]
+# ---------------------------------------------------------------------------
+# What a waiting reflection reflects on, and what the rite can offer toward
+# ---------------------------------------------------------------------------
 
 
-def _validated_source(
-    sheet: CharacterSheet, source: Resonance, target: Resonance, amount: int, cap_value: int
-) -> tuple[AffinityInteraction, DriftReading]:
-    """Check the requested amount and source; return the authored pair and the reading.
+def waiting_reflections(sheet: CharacterSheet) -> list[Reflection]:
+    """Every reflection of ``sheet`` that no rite has taken yet, oldest first."""
+    return list(
+        Reflection.objects.filter(character_sheet=sheet, rite__isnull=True).select_related(
+            "grant__resonance__affinity",
+            "grant__source_kindling_situation",
+            "resonance__affinity",
+            "interaction",
+            "journal_entry",
+        )
+    )
 
-    The amount is lifetime points: at most the cap, the source's lifetime and what its
-    affinity stands past who the character is. Locks the source ``CharacterResonance`` row
-    before reading its lifetime.
+
+def reflected_resonance(reflection: Reflection) -> Resonance:
+    """The resonance a reflection is about: the deed's, or the unsettling one."""
+    if reflection.grant is not None:
+        return reflection.grant.resonance
+    return reflection.resonance
+
+
+def main_affinity_rows(sheet: CharacterSheet) -> list[CharacterResonance]:
+    """The character's resonances of their main affinity, largest lifetime first."""
+    main = own_affinity(sheet)
+    if main is None:
+        return []
+    return list(
+        CharacterResonance.objects.filter(character_sheet=sheet, resonance__affinity=main)
+        .select_related("resonance__affinity")
+        .order_by("-lifetime_earned", "resonance_id")
+    )
+
+
+def rite_resonances(sheet: CharacterSheet, reflections: Iterable[Reflection]) -> list[Resonance]:
+    """The resonances the rite moves, which an offering may be tied to.
+
+    Each reflection's own resonance, then (when any reflection disowns, so something converts)
+    the character's main-affinity resonances, which conversions turn toward. In that order,
+    each once.
     """
-    if amount <= 0:
-        msg = "Convert at least 1."
-        raise DriftConversionInvalidError(msg)
-    if amount > cap_value:
-        msg = f"You may convert at most {cap_value} toward that resonance."
-        raise DriftConversionInvalidError(msg)
-    if source.pk not in {row.resonance_id for row in convertible_drift(sheet, target)}:
-        msg = "You have nothing in that resonance to atone for."
-        raise DriftConversionInvalidError(msg)
+    moved: dict[int, Resonance] = {}
+    disowns = False
+    for reflection in reflections:
+        resonance = reflected_resonance(reflection)
+        moved.setdefault(resonance.pk, resonance)
+        disowns = disowns or reflection.choice == ReflectionChoice.DISOWN
+    if disowns:
+        for row in main_affinity_rows(sheet):
+            moved.setdefault(row.resonance_id, row.resonance)
+    return list(moved.values())
+
+
+def offerings_for(
+    sheet: CharacterSheet, reflections: Iterable[Reflection], items: Iterable[ItemInstance]
+) -> list[RiteOffering]:
+    """The carried ``items`` that count as the rite's offering, each under its first resonance.
+
+    An item qualifies when it counts toward any resonance the rite moves
+    (``qualifying_components_by_target`` over them, in ``rite_resonances`` order); it is
+    listed once, under the first of those it counts toward, with the worn focus's bonus
+    toward that resonance. Empty while the rite is unset.
+    """
+    config = get_drift_correction_config()
+    if config.rite_id is None:
+        return []
+    resonances = rite_resonances(sheet, reflections)
+    by_target = qualifying_components_by_target(
+        sheet, resonances, items, min_item_meaning=target_resonance_meaning_bar(config.rite)
+    )
+    listed: dict[int, RiteOffering] = {}
+    for resonance in resonances:
+        # The bonus depends on the resonance alone, so it is worked out once per resonance and
+        # only when an item is listed under it.
+        bonus: int | None = None
+        component: QualifyingComponent
+        for component in by_target[resonance.pk]:
+            if component.item.pk in listed:
+                continue
+            if bonus is None:
+                bonus = focus_bonus(sheet, resonance)
+            listed[component.item.pk] = RiteOffering(
+                component=component, resonance=resonance, focus_bonus=bonus
+            )
+    return list(listed.values())
+
+
+def _resolve_offering(
+    config: DriftCorrectionConfig,
+    sheet: CharacterSheet,
+    components: list[ItemInstance],
+    resonances: list[Resonance],
+) -> tuple[Resonance, list[tuple[ItemInstance, int]]]:
+    """Pick the resonance the offering is tied to and the allocations that pay for it.
+
+    Tries each resonance the rite moves in order and takes the first the offering satisfies,
+    spending nothing.
+
+    Raises:
+        RitualComponentError: The offering satisfies the rite for none of them.
+    """
+    refusal: RitualComponentError | None = None
+    for resonance in resonances:
+        try:
+            allocations = resolve_ritual_components(
+                ritual=config.rite,
+                components=components,
+                performer_sheet=sheet,
+                resonance_context=resonance,
+            )
+        except RitualComponentError as exc:
+            refusal = exc
+            continue
+        return resonance, allocations
+    raise refusal if refusal is not None else RitualComponentError
+
+
+# ---------------------------------------------------------------------------
+# Applying one reflection at the rite's share
+# ---------------------------------------------------------------------------
+
+
+def open_caps(sheet: CharacterSheet) -> dict[int, int]:
+    """Resonance id -> what the character's open chance to atone still allows toward it."""
+    return {
+        cap.target_resonance_id: cap.cap
+        for cap in DriftConversionCap.objects.filter(offer__character_sheet=sheet, cap__gt=0)
+    }
+
+
+def disowns_unsettling(reflections: Iterable[Reflection]) -> bool:
+    """Whether any reflection disowns the unsettling resonance itself (not a deed)."""
+    return any(r.grant_id is None and r.choice == ReflectionChoice.DISOWN for r in reflections)
+
+
+def fallback_conversion_target(
+    main_rows: list[CharacterResonance], caps: Mapping[int, int] | None = None
+) -> Resonance | None:
+    """The resonance a conversion turns toward when the offering is not tied to a main-affinity
+    one: with open ``caps`` (given when the rite disowns the unsettling resonance), the
+    main-affinity resonance with the largest open cap toward it; with none, the character's
+    largest main-affinity resonance; or nowhere. The rite and its preview both read it, so what
+    the sheet says is where the rite sends it."""
+    if not main_rows:
+        return None
+    if caps:
+        best = max(main_rows, key=lambda row: caps.get(row.resonance_id, 0))
+        if caps.get(best.resonance_id, 0) > 0:
+            return best.resonance
+    return main_rows[0].resonance
+
+
+def _conversion_target(
+    sheet: CharacterSheet,
+    offered_for: Resonance,
+    main_rows: list[CharacterResonance],
+    caps: Mapping[int, int] | None = None,
+) -> Resonance | None:
+    """Where a conversion turns: the offering's own resonance when it is of the main affinity,
+    else ``fallback_conversion_target``."""
+    main = own_affinity(sheet)
+    if main is None:
+        return None
+    if offered_for.affinity_id == main.pk:
+        return offered_for
+    return fallback_conversion_target(main_rows, caps)
+
+
+def _convert(
+    sheet: CharacterSheet,
+    source: Resonance,
+    target: Resonance | None,
+    wanted: int,
+    *,
+    limit_to_excess: bool,
+) -> tuple[int, int]:
+    """Convert up to ``wanted`` lifetime of ``source`` toward ``target``; return (moved, granted).
+
+    Never raises for what it cannot do: no target, no authored pair or nothing held converts
+    nothing. The amount is at most the source's lifetime, and, with ``limit_to_excess``, what
+    its affinity stands past who the character is. The Mire's excess converts first.
+    """
+    if wanted <= 0 or target is None or source.pk == target.pk:
+        return 0, 0
     try:
         pair = conversion_pair(source.affinity, target.affinity)
-    except ConversionMappingError as exc:
-        msg = "That resonance cannot be converted toward that one."
-        raise DriftConversionInvalidError(msg) from exc
+    except ConversionMappingError:
+        return 0, 0
     rows = CharacterResonance.objects.filter(character_sheet=sheet, resonance=source)
     list(rows.select_for_update())
     lifetime, row_mire = rows.values_list("lifetime_earned", "mire_lifetime").first() or (0, 0)
-    if amount > lifetime:
-        msg = f"You have earned only {lifetime} of that resonance."
-        raise DriftConversionInvalidError(msg)
     reading = drift_for(sheet)
-    convertible = reading.convertible_points(source.affinity_id, row_mire)
-    if amount > convertible:
-        msg = f"Only {convertible} of that resonance is past who you are."
-        raise DriftConversionInvalidError(msg)
-    return pair, reading
+    amount = min(wanted, lifetime)
+    if limit_to_excess:
+        amount = min(amount, reading.convertible_points(source.affinity_id, row_mire))
+    if amount <= 0:
+        return 0, 0
+    mire_part = min(amount, reading.mire_excess_points.get(source.affinity_id, 0))
+    granted, _ = convert_resonance_amount(
+        sheet,
+        source_resonance=source,
+        target_resonance=target,
+        amount=amount,
+        multiplier=pair.conversion_multiplier,
+        gain_source=GainSource.DRIFT_CORRECTION,
+        mire_amount=mire_part,
+    )
+    return amount, granted
+
+
+def _turned_line(source: Resonance, target: Resonance, moved: int, granted: int) -> str:
+    if granted == 0:
+        return f"{moved} {source.name} turned to {target.name}."
+    return f"{moved} {source.name} became {granted} {target.name}."
+
+
+def _open_cap_toward(sheet: CharacterSheet, target: Resonance) -> int:
+    """What the character's open chance to atone still allows toward ``target`` (0 if none)."""
+    offers = list(DriftConversionOffer.objects.select_for_update().filter(character_sheet=sheet))
+    if not offers:
+        return 0
+    stored = DriftConversionCap.objects.filter(offer__in=offers, target_resonance=target)
+    return stored.values_list("cap", flat=True).first() or 0
+
+
+def _spend_cap(sheet: CharacterSheet, target: Resonance, spent: int) -> None:
+    """Shrink the open cap toward ``target`` by ``spent``; an exhausted cap is deleted."""
+    cap = DriftConversionCap.objects.filter(
+        offer__character_sheet=sheet, target_resonance=target
+    ).first()
+    if cap is None or spent <= 0:
+        return
+    remaining = (
+        DriftConversionCap.objects.filter(pk=cap.pk).values_list("cap", flat=True).get() - spent
+    )
+    if remaining > 0:
+        cap.cap = remaining
+        cap.save(update_fields=["cap"])
+    else:
+        cap.delete()
+
+
+def _disown_deed(
+    sheet: CharacterSheet,
+    reflection: Reflection,
+    share: Decimal,
+    target: Resonance | None,
+    percent: int,
+) -> str:
+    grant = reflection.grant
+    what = deed_what(grant) or f"your {grant.resonance.name}"
+    wanted = int(Decimal(grant.amount) * Decimal(percent) / _ONE_HUNDRED * share)
+    moved, granted = _convert(sheet, grant.resonance, target, wanted, limit_to_excess=False)
+    if moved == 0 or target is None:
+        return f"You disown {what}, but the rite turns nothing of it away."
+    return f"You disown {what}: {_turned_line(grant.resonance, target, moved, granted)}"
+
+
+def _disown_unsettling(
+    sheet: CharacterSheet, reflection: Reflection, share: Decimal, target: Resonance | None
+) -> str:
+    source = reflection.resonance
+    cap = _open_cap_toward(sheet, target) if target is not None else 0
+    moved, granted = _convert(
+        sheet, source, target, int(Decimal(cap) * share), limit_to_excess=True
+    )
+    if moved == 0 or target is None:
+        return f"You disown your {source.name}, but the rite turns nothing of it away."
+    _spend_cap(sheet, target, moved)
+    return f"You disown your {source.name}: {_turned_line(source, target, moved, granted)}"
+
+
+def _embrace_deed(
+    sheet: CharacterSheet, reflection: Reflection, rite: SettlingRite, share: Decimal
+) -> str:
+    grant = reflection.grant
+    what = deed_what(grant) or f"your {grant.resonance.name}"
+    amount = int(Decimal(grant.amount) * share)
+    if amount <= 0:
+        return f"You embrace {what}, but the rite carries none of it through."
+    grant_resonance(
+        sheet,
+        grant.resonance,
+        amount,
+        source=GainSource.EMBRACED_DEED,
+        settling_rite=rite,
+        reflection=reflection,
+    )
+    return f"You embrace {what}: your {grant.resonance.name} grows by {amount}."
+
+
+def _embrace_unsettling(sheet: CharacterSheet, share: Decimal) -> str:
+    if share <= 0:
+        return "You accept what you have become, but the rite carries none of it through."
+    try:
+        result = accept_aura_change(sheet, fraction=share)
+    except NotUnsettledError:
+        return "You are already settled; there is nothing left to accept."
+    grown = result.grown_affinity
+    more = f"more {grown.name.lower()}" if grown is not None else "who you have become"
+    if share >= 1:
+        return f"You become {more}." if grown is not None else "You settle into who you are."
+    return f"You move part of the way toward being {more}."
+
+
+def _active_scene(sheet: CharacterSheet) -> Scene | None:
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+    scene = get_active_scene(sheet.character.location)
+    if scene is None or not scene.is_active or scene.is_finished:
+        return None
+    return scene
+
+
+def _apply_reflections(  # noqa: PLR0913 - the rite's inputs, handed on as they are
+    sheet: CharacterSheet,
+    reflections: list[Reflection],
+    rite: SettlingRite,
+    share: Decimal,
+    target: Resonance | None,
+    disown_deed_percent: int,
+) -> list[ReflectionEffect]:
+    """Apply ``share`` to each reflection: disowned deeds, the disowned unsettling resonance,
+    embraced deeds, then accepting last so it settles on everything the rite has done."""
+    effects: list[ReflectionEffect] = []
+
+    def run(*, deed: bool, choice: str, apply: Callable[[Reflection], str]) -> None:
+        effects.extend(
+            ReflectionEffect(reflection.pk, apply(reflection))
+            for reflection in reflections
+            if (reflection.grant_id is not None) is deed and reflection.choice == choice
+        )
+
+    run(
+        deed=True,
+        choice=ReflectionChoice.DISOWN,
+        apply=lambda r: _disown_deed(sheet, r, share, target, disown_deed_percent),
+    )
+    run(
+        deed=False,
+        choice=ReflectionChoice.DISOWN,
+        apply=lambda r: _disown_unsettling(sheet, r, share, target),
+    )
+    run(
+        deed=True,
+        choice=ReflectionChoice.EMBRACE,
+        apply=lambda r: _embrace_deed(sheet, r, rite, share),
+    )
+    run(
+        deed=False,
+        choice=ReflectionChoice.EMBRACE,
+        apply=lambda _r: _embrace_unsettling(sheet, share),
+    )
+    return effects
 
 
 @transaction.atomic
-def perform_drift_correction_rite(
-    offer: DriftConversionOffer,
-    *,
-    source_resonance: Resonance,
-    target_resonance: Resonance,
-    amount: int,
-    components: list[ItemInstance],
-) -> DriftCorrectionResult:
-    """Perform the drift correction rite under ``offer``.
+def perform_settling_rite(
+    sheet: CharacterSheet, *, components: list[ItemInstance]
+) -> SettlingRiteResult:
+    """Perform the rite of settling: one offering, one roll, every waiting reflection.
 
-    Locks the offer, refuses a lapsed or unconfigured rite and an invalid request, picks
-    the offering without spending it, rolls the configured check with ``focus_bonus`` as
-    extra modifiers, converts ``floor(amount x share)`` lifetime points of the source, the
-    Mire's excess first, granting what balance there is at the pair rate as
-    ``DRIFT_CORRECTION``, and only then spends the offering. ``amount`` is lifetime points,
-    at most what the cap, the source and its affinity's excess allow, so atoning works even
-    when the excess was already spent. The cap shrinks
-    by what converted; an exhausted cap row is deleted, and the offer with it once no cap is
-    left. A tier whose share is 0.00 still spends the offering and moves nothing; a tier with
-    no share row at all is refused up front (``rite_is_ready``), before the offer's cap and
-    the request are checked.
+    Refuses before anything is written: with no waiting reflection, with the rite unset (or a
+    tier with no share), and with an offering that satisfies the rite for no resonance it
+    moves. Then it rolls the configured check with ``focus_bonus`` toward the resonance the
+    offering is tied to, writes a ``SettlingRite`` holding the outcome and the share, spends
+    the offering, and applies the share to each reflection: disowned deeds first, then the
+    disowned unsettling resonance (up to the open cap), then embraced deeds, then accepting
+    last so it settles on everything the rite has done. Every reflection then takes the rite,
+    even at a share of 0.
+
+    Conversions turn toward the main-affinity resonance the offering is tied to, or else (see
+    ``fallback_conversion_target``) the main-affinity resonance with the largest open cap when
+    the rite disowns the unsettling resonance, else the character's largest main-affinity
+    resonance. Nothing below the roll raises: what cannot be
+    done (no resonance to turn toward, nothing held to convert, already settled) is a line
+    saying so.
 
     Raises:
-        DriftOfferNotFoundError: The offer is gone, its scene finished, or no cap targets
-            ``target_resonance``.
-        DriftCorrectionNotConfiguredError: Rite, check type or the rolled tier's share is
-            unauthored.
-        DriftConversionInvalidError: Bad amount, source, or unauthored pair.
+        NoWaitingReflectionError: Nothing waits.
+        DriftCorrectionNotConfiguredError: Rite, check type or a tier's share is unauthored.
         RitualComponentError: The offering does not satisfy the rite.
 
     Component ownership is not checked here: the caller (the action or API layer) resolves
     ``components`` from the performer's own inventory before calling.
     """
-    offer = _locked_offer(offer)
-    sheet = offer.character_sheet
+    reflections = waiting_reflections(sheet)
+    if not reflections:
+        raise NoWaitingReflectionError
     config = get_drift_correction_config()
     if not rite_is_ready(config):
         raise DriftCorrectionNotConfiguredError
-    cap = _cap_for(offer, target_resonance)
-    if cap is None:
-        raise DriftOfferNotFoundError
-    # Read the cap from the database, not the shared instance: the lock above serializes
-    # writers, and the identity map would not refresh a cached row's value.
-    cap_value = DriftConversionCap.objects.filter(pk=cap.pk).values_list("cap", flat=True)[0]
-    pair, reading = _validated_source(sheet, source_resonance, target_resonance, amount, cap_value)
 
-    # Every step that can refuse runs before anything is written: the offering is only
-    # chosen here, and spent after the roll, the share and the conversion. A raise after a
-    # write would roll the tables back but leave the shared cached rows (the item's
-    # quantity and destroyed_at, the resonance balances) ahead of them.
-    allocations = resolve_ritual_components(
-        ritual=config.rite,
-        components=components,
-        performer_sheet=sheet,
-        resonance_context=target_resonance,
+    # Every step that can refuse runs before anything is written: the offering is only chosen
+    # here, and spent after the roll. A raise after a write would roll the tables back but
+    # leave the shared cached rows (the item's quantity, the resonance balances) ahead of them.
+    offered_for, allocations = _resolve_offering(
+        config, sheet, components, rite_resonances(sheet, reflections)
     )
-    bonus = focus_bonus(sheet, target_resonance)
+    bonus = focus_bonus(sheet, offered_for)
     check = perform_check_with_modifiers(
         sheet.character,
         config.check_type,
@@ -334,49 +558,32 @@ def perform_drift_correction_rite(
     share_row = DriftCorrectionOutcomeShare.objects.filter(outcome_tier=outcome).first()
     if share_row is None:
         raise DriftCorrectionNotConfiguredError
-    outcome_name = outcome.name
-    success_level = outcome.success_level
+    share = share_row.converted_share
 
-    converted = int(Decimal(amount) * share_row.converted_share)
-    # The Mire's excess converts first, then their own (#5123).
-    mire_part = min(converted, reading.mire_excess_points.get(source_resonance.affinity_id, 0))
-    granted = 0
-    if converted > 0:
-        try:
-            granted, _ = convert_resonance_amount(
-                sheet,
-                source_resonance=source_resonance,
-                target_resonance=target_resonance,
-                amount=converted,
-                multiplier=pair.conversion_multiplier,
-                gain_source=GainSource.DRIFT_CORRECTION,
-                mire_amount=mire_part,
-            )
-        except ValueError as exc:
-            msg = "You no longer hold enough of that resonance."
-            raise DriftConversionInvalidError(msg) from exc
+    rite = SettlingRite.objects.create(
+        character_sheet=sheet, scene=_active_scene(sheet), outcome=outcome, share=share
+    )
     consume_materials(allocations)
-    if converted > 0:
-        remaining = cap_value - converted
-        if remaining > 0:
-            cap.cap = remaining
-            cap.save(update_fields=["cap"])
-        else:
-            cap.delete()
-            if not DriftConversionCap.objects.filter(offer=offer).exists():
-                offer.delete()
-        # Atoning can leave her settled with cap still unspent: nothing is left to convert,
-        # so the offer closes (one writer for that, shared with accepting).
-        close_spent_conversion_offers(sheet)
 
-    return DriftCorrectionResult(
-        source_resonance_id=source_resonance.pk,
-        target_resonance_id=target_resonance.pk,
-        attempted_amount=amount,
-        converted_amount=converted,
-        granted_amount=granted,
-        outcome_name=outcome_name,
-        success_level=success_level,
-        conversion_type=pair.conversion_type,
+    target = _conversion_target(
+        sheet,
+        offered_for,
+        main_affinity_rows(sheet),
+        open_caps(sheet) if disowns_unsettling(reflections) else None,
+    )
+    effects = _apply_reflections(
+        sheet, reflections, rite, share, target, config.disown_deed_percent
+    )
+
+    for reflection in reflections:
+        reflection.rite = rite
+        reflection.save(update_fields=["rite"])
+    close_spent_conversion_offers(sheet)
+
+    return SettlingRiteResult(
+        outcome_name=outcome.name,
+        success_level=outcome.success_level,
+        share=share,
         focus_bonus=bonus,
+        effects=tuple(effects),
     )

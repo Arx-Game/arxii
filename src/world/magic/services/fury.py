@@ -21,14 +21,14 @@ from django.db import transaction
 from evennia.objects.models import ObjectDB
 
 from world.character_sheets.models import CharacterSheet
-from world.magic.models import FuryConfig, FuryDegreeShare, FuryTier
-from world.relationships.models import CharacterRelationship
+from world.magic.models import FuryConfig, FuryDegreeShare, FuryTier, KindledStrengthTier
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from world.checks.models import CheckOutcome, CheckType
     from world.conditions.models import ConditionTemplate
+    from world.magic.models import Resonance
 
 NO_ENGAGEMENT_MESSAGE = "Fury needs something at stake: you are not engaged."
 
@@ -48,44 +48,73 @@ def _config() -> FuryConfig:
     return FuryConfig.objects.filter(pk=1).first() or FuryConfig()
 
 
-def _bond_tier(character: CharacterSheet | ObjectDB, anchor: CharacterSheet) -> int:
-    """The claimed tier of ``character``'s OWN side toward ``anchor``, else 0 (#3957).
+def _sheet_of(character: CharacterSheet | ObjectDB) -> CharacterSheet:
+    return character if isinstance(character, CharacterSheet) else character.sheet_data
 
-    Deliberately NOT ``relationships.helpers.get_relationship_tier``: that helper is
-    training's mentor multiplier and answers a narrower question (the lower tier of a
-    MUTUAL Teaching-family tie). Fury's provocation cap has always read bond strength
-    one-sidedly and from any relationship -- a character can be provoked over someone
-    who never declared anything back -- so it reads the side row directly.
+
+def give_in_strength(
+    character: CharacterSheet | ObjectDB | None, resonance: Resonance | None
+) -> KindledStrengthTier | None:
+    """The kindled strength row of the resonance she gives in to, or None.
+
+    None when there is no character or resonance, she does not hold the resonance, or it is
+    not kindled now. Read in her live fight and mission (``kindling_context_for``), the same
+    context a cast and the "Your resonances" panel read, so the three never disagree. The
+    row carries what the trade reads: ``give_in_max_depth``, ``give_in_bonus_percent`` and
+    ``give_in_ease``.
     """
-    sheet = character if isinstance(character, CharacterSheet) else character.character_sheet
-    if sheet is None:
-        return 0
-    side = CharacterRelationship.objects.filter(source=sheet, target=anchor).first()
-    return side.tier if side is not None else 0
+    if character is None or resonance is None:
+        return None
+    from world.magic.services.kindling import (  # noqa: PLC0415
+        kindled_for,
+        kindling_context_for,
+    )
+
+    sheet = _sheet_of(character)
+    if not any(held.resonance_id == resonance.pk for held in sheet.cached_resonances):
+        return None
+    context = kindling_context_for(sheet)
+    return kindled_for(
+        sheet, resonance, resolution=context.resolution, mission=context.mission
+    ).tier
 
 
-def provocation_cap(
-    character: CharacterSheet | ObjectDB | None, anchor: CharacterSheet | None
-) -> int:
-    """Bond-derived ceiling on fury depth.
+def provocation_cap(strength: KindledStrengthTier | None) -> int:
+    """Ceiling on fury depth: the deepest tier depth the strength row lets her give in.
 
-    Returns 0 when fury is unavailable (missing character or anchor, or the
-    anchor sheet has no linked ObjectDB character).
+    0 when she cannot give in (no kindled strength).
     """
-    if character is None or anchor is None:
-        return 0
-    if anchor.character is None:
-        return 0
-    bond = _bond_tier(character, anchor)
-    per = max(_config().provocation_cap_per_tier, 1)
-    return bond // per if per else bond
+    return strength.give_in_max_depth if strength is not None else 0
 
 
-def provocation_ease(
-    character: CharacterSheet | ObjectDB | None, anchor: CharacterSheet | None
-) -> int:
-    """Check-difficulty reduction from the bond (cap * cap_ease_per_point)."""
-    return provocation_cap(character, anchor) * _config().cap_ease_per_point
+def provocation_bonus_percent(strength: KindledStrengthTier | None) -> int:
+    """Percent the intensity Fury buys grows at this strength (0 when none)."""
+    return strength.give_in_bonus_percent if strength is not None else 0
+
+
+def provocation_ease(strength: KindledStrengthTier | None) -> int:
+    """Check-difficulty reduction at this strength (0 when none)."""
+    return strength.give_in_ease if strength is not None else 0
+
+
+def give_in_refusal(
+    character: CharacterSheet | ObjectDB, resonance: Resonance | None, tier: FuryTier
+) -> str | None:
+    """Why she cannot give in to ``resonance`` as deep as ``tier``, or None when she can.
+
+    The one check a declaration (scene, combat, telnet) and a cast make. An unkindled
+    resonance, or one she does not hold, is refused in words, never clamped to nothing; a
+    tier deeper than the strength allows is refused too, since a Berserk tier is offered only
+    where the strength reaches it.
+    """
+    if resonance is None:
+        return "Name the resonance you give in to."
+    strength = give_in_strength(character, resonance)
+    if strength is None:
+        return fury_not_kindled_message(resonance)
+    if provocation_cap(strength) < tier.depth:
+        return fury_over_cap_message(tier, resonance)
+    return None
 
 
 def clamp_tier(declared_tier: FuryTier, cap: int) -> FuryTier | None:
@@ -169,9 +198,9 @@ def _trade_rate() -> Decimal:
     return get_strain_config().intensity_per_control_surrendered
 
 
-def _full_trade(tier: FuryTier, cap: int, *, rate: Decimal, bonus_scale: int) -> Decimal:
-    """The unfloored intensity ``tier`` buys at a 100% share: control x rate x cap scale."""
-    scale = Decimal(100 + bonus_scale * cap) / 100
+def _full_trade(tier: FuryTier, *, rate: Decimal, bonus_percent: int) -> Decimal:
+    """The unfloored intensity ``tier`` buys at a 100% share: control x rate x bonus scale."""
+    scale = Decimal(100 + bonus_percent) / 100
     return Decimal(tier.control_surrendered) * rate * scale
 
 
@@ -187,22 +216,21 @@ def top_share_percent() -> int:
 
 
 def full_trade_intensities(
-    tiers: Iterable[FuryTier], cap: int = 0, *, top_percent: int | None = None
+    tiers: Iterable[FuryTier], bonus_percent: int = 0, *, top_percent: int | None = None
 ) -> dict[int, int]:
-    """The most intensity each tier can buy at provocation ``cap``, by tier pk.
+    """The most intensity each tier can buy at strength bonus ``bonus_percent``, by tier pk.
 
     The declaration picker's "up to" figures: the trade at the highest authored
     ``FuryDegreeShare.intensity_percent`` (``top_share_percent``; 0 when no share row
-    exists, so nothing can be bought). With ``cap`` 0 the anchor adds no scaling. A caller
-    pricing several anchors passes ``top_percent`` once instead of re-reading it.
+    exists, so nothing can be bought). With ``bonus_percent`` 0 the strength adds no scaling. A
+    caller pricing several resonances passes ``top_percent`` once instead of re-reading it.
     """
     if top_percent is None:
         top_percent = top_share_percent()
     rate = _trade_rate()
-    bonus_scale = _config().bonus_scale_per_cap_point
     return {
         tier.pk: _floor(
-            _full_trade(tier, cap, rate=rate, bonus_scale=bonus_scale) * Decimal(top_percent) / 100
+            _full_trade(tier, rate=rate, bonus_percent=bonus_percent) * Decimal(top_percent) / 100
         )
         if tier.control_surrendered > 0 and top_percent > 0
         else 0
@@ -210,11 +238,11 @@ def full_trade_intensities(
     }
 
 
-def fury_intensity_for(tier: FuryTier, cap: int, outcome: CheckOutcome | None) -> int:
-    """Intensity the Fury trade buys for ``tier`` at provocation ``cap`` and roll ``outcome``.
+def fury_intensity_for(tier: FuryTier, bonus_percent: int, outcome: CheckOutcome | None) -> int:
+    """Intensity the Fury trade buys for ``tier`` at strength bonus ``bonus_percent`` and roll.
 
     ``floor(control_surrendered x StrainConfig.intensity_per_control_surrendered
-    x (100 + bonus_scale_per_cap_point x cap) / 100 x intensity_percent / 100)``, floored
+    x (100 + give_in_bonus_percent) / 100 x intensity_percent / 100)``, floored
     once at the end. An outcome with no ``FuryDegreeShare`` row (or no outcome) buys 0.
     """
     if outcome is None or tier.control_surrendered <= 0:
@@ -222,21 +250,29 @@ def fury_intensity_for(tier: FuryTier, cap: int, outcome: CheckOutcome | None) -
     share = FuryDegreeShare.objects.filter(outcome_tier=outcome).first()
     if share is None or share.intensity_percent <= 0:
         return 0
-    full = _full_trade(
-        tier, cap, rate=_trade_rate(), bonus_scale=_config().bonus_scale_per_cap_point
-    )
+    full = _full_trade(tier, rate=_trade_rate(), bonus_percent=bonus_percent)
     return _floor(full * Decimal(share.intensity_percent) / 100)
 
 
-def fury_over_cap_message(tier: FuryTier, cap: int) -> str:
-    """The refusal for a tier deeper than the anchor's provocation cap (scene and combat)."""
-    return f"Fury tier depth ({tier.depth}) exceeds provocation cap ({cap})."
+def fury_over_cap_message(tier: FuryTier, resonance: Resonance) -> str:
+    """The refusal for a tier deeper than the resonance's strength allows (scene and combat)."""
+    return f"Your {resonance.name} is not kindled enough to give in as far as {tier.name}."
+
+
+def fury_not_kindled_message(resonance: Resonance) -> str:
+    """The refusal for a resonance she does not hold or that is not kindled now."""
+    return f"Your {resonance.name} is not kindled right now, so you cannot give in to it."
 
 
 def fury_tier_label(tier: FuryTier) -> str:
     """How a tier reads to the player: ``Seething: surrender 6 control``, ``(Berserk)`` added."""
     label = f"{tier.name}: surrender {tier.control_surrendered} control"
     return f"{label} (Berserk)" if tier.berserk_severity > 0 else label
+
+
+def fury_lapsed_message(resonance: Resonance) -> str:
+    """The caster's own line when the resonance stopped being kindled before the cast went off."""
+    return f"Your {resonance.name} is no longer kindled, so you hold steady."
 
 
 def fury_trade_message(fury_res: FuryResolution) -> str:
@@ -247,29 +283,28 @@ def fury_trade_message(fury_res: FuryResolution) -> str:
     )
 
 
-def resolve_fury(*, character, tier, anchor, check_result) -> FuryResolution:
+def resolve_fury(*, tier, strength, check_result) -> FuryResolution:
     """Assemble a FuryResolution from the given parameters.
 
     Args:
-        character: The ObjectDB character invoking fury.
         tier: The FuryTier the player declared.
-        anchor: The CharacterSheet fury anchor (nullable; None means unavailable).
+        strength: The kindled strength row of the resonance she gives in to (None means
+            unavailable).
         check_result: The control roll's CheckResult (its ``outcome`` picks the share);
             None buys nothing.
 
-    The declared tier is always clamped to the bond-derived provocation cap; a cap of 0
-    (no anchor, no bond) yields an empty resolution. Berserk is the realized tier's own
+    The declared tier is always clamped to the depth cap the strength allows; a cap of 0
+    (not kindled) yields an empty resolution. Berserk is the realized tier's own
     ``berserk_severity``: chosen, never rolled into.
     """
-    cap = provocation_cap(character, anchor)
-    realized = clamp_tier(tier, cap)
+    realized = clamp_tier(tier, provocation_cap(strength))
     if realized is None:
         return FuryResolution(None, 0, 0, 0)
     outcome = check_result.outcome if check_result is not None else None
     return FuryResolution(
         realized_tier=realized,
         control_surrendered=realized.control_surrendered,
-        intensity_gained=fury_intensity_for(realized, cap, outcome),
+        intensity_gained=fury_intensity_for(realized, provocation_bonus_percent(strength), outcome),
         berserk_severity=realized.berserk_severity,
         outcome=outcome,
     )
@@ -318,7 +353,8 @@ class FuryCast:
     - ``withdraw()`` takes the trade back off the engagement when the cast is then
       cancelled before it resolves (a ``TECHNIQUE_PRE_CAST`` cancel). The roll stands.
     - ``settle()`` runs when the cast proceeds: it tells her (on commit) and applies
-      Berserk for a Berserk tier.
+      Berserk for a Berserk tier, or tells her she holds steady when the resonance is no
+      longer kindled.
 
     A cast stopped before ``surrender`` changes nothing and tells her nothing.
     ``resolution`` is None until ``surrender`` runs.
@@ -329,15 +365,16 @@ class FuryCast:
         *,
         character: ObjectDB,
         tier: FuryTier,
-        anchor: CharacterSheet | None,
+        resonance: Resonance | None,
         source_technique=None,
     ) -> None:
         self.character = character
         self.tier = tier
-        self.anchor = anchor
+        self.resonance = resonance
         self.source_technique = source_technique
         self.resolution: FuryResolution | None = None
         self._engagement = None
+        self._lapsed = False
 
     @property
     def realized_tier(self) -> FuryTier | None:
@@ -347,14 +384,17 @@ class FuryCast:
     def surrender(self) -> bool:
         """Roll the control check and land the trade. True when the engagement changed.
 
-        No engagement, or a tier the anchor's tie clamps to nothing: nothing is rolled
+        No engagement, or a tier her strength clamps to nothing: nothing is rolled
         and nothing changes.
         """
         self._engagement = engagement_of(self.character)
         if self._engagement is None:
             return False
-        if clamp_tier(self.tier, provocation_cap(self.character, self.anchor)) is None:
+        strength = give_in_strength(self.character, self.resonance)
+        if clamp_tier(self.tier, provocation_cap(strength)) is None:
             self.resolution = FuryResolution(None, 0, 0, 0)
+            # Kindled when she declared, not now: she holds steady, and is told.
+            self._lapsed = strength is None
             return False
 
         from world.checks.services import (  # noqa: PLC0415
@@ -365,7 +405,7 @@ class FuryCast:
         from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
 
         check_type = _ensure_fury_check_type(_config().check_trait)
-        ease = provocation_ease(self.character, self.anchor)
+        ease = provocation_ease(strength)
         check = perform_check_with_modifiers(
             self.character,
             check_type,
@@ -374,9 +414,7 @@ class FuryCast:
             ),
             extra_traits=activity_skill_terms(MagicActivity.FURY_CONTROL),
         )
-        self.resolution = resolve_fury(
-            character=self.character, tier=self.tier, anchor=self.anchor, check_result=check
-        )
+        self.resolution = resolve_fury(tier=self.tier, strength=strength, check_result=check)
         if self.resolution.realized_tier is None:
             return False
         shift_engagement(
@@ -403,6 +441,11 @@ class FuryCast:
     def settle(self) -> None:
         """The cast proceeds: tell her what she traded (on commit) and apply Berserk."""
         res = self.resolution
+        if self._lapsed and self.resonance is not None:
+            character = self.character
+            lapsed = fury_lapsed_message(self.resonance)
+            transaction.on_commit(lambda: character.msg(lapsed))
+            return
         if res is None or res.realized_tier is None:
             return
         character = self.character
@@ -427,7 +470,7 @@ def fury_cast_for(
     *,
     character: ObjectDB,
     fury_commitment: FuryTier | None,
-    fury_anchor: CharacterSheet | None,
+    fury_resonance: Resonance | None,
     source_technique=None,
 ) -> FuryCast | None:
     """The ``FuryCast`` for a declaration, or None when no Fury was declared.
@@ -440,6 +483,6 @@ def fury_cast_for(
     return FuryCast(
         character=character,
         tier=fury_commitment,
-        anchor=fury_anchor,
+        resonance=fury_resonance,
         source_technique=source_technique,
     )

@@ -90,7 +90,33 @@ class LineagePathValidationTest(TestCase):
         draft.family = FamilyFactory(kind=crime, origin_realm=other_realm)
         assert get_lineage_errors(draft) == ["That family is not from your starting area"]
         draft.family = FamilyFactory(kind=crime, origin_realm=realm)
+        draft.claimed_kin_slot = KinspersonFactory(family=draft.family, is_appable=True)
         assert get_lineage_errors(draft) == []
+
+    def test_claim_path_needs_a_seat_in_the_family(self):
+        """An established family is joined through a seat staff opened (#5130)."""
+        template = OriginTemplateFactory(allows_name_family=False, allows_claim_family=True)
+        realm = template.beginning.starting_area.realm
+        draft = _draft_for(template)
+        draft.family = FamilyFactory(origin_realm=realm)
+        # No seat picked: the family alone is not a place in it.
+        assert get_lineage_errors(draft) == ["Choose your place in the family"]
+        # A named seat of this family.
+        draft.claimed_kin_slot = KinspersonFactory(family=draft.family, is_appable=True)
+        assert get_lineage_errors(draft) == []
+        # One of a counted pool of openings of this family.
+        draft.claimed_kin_slot = None
+        draft.claimed_kin_pool = KinSlotPoolFactory(family=draft.family)
+        assert get_lineage_errors(draft) == []
+        # A seat of some other family is no seat here.
+        draft.claimed_kin_pool = None
+        draft.claimed_kin_slot = KinspersonFactory(
+            family=FamilyFactory(origin_realm=realm), is_appable=True
+        )
+        assert get_lineage_errors(draft) == ["That place belongs to a family you are not joining"]
+        draft.claimed_kin_slot = None
+        draft.claimed_kin_pool = KinSlotPoolFactory(family=FamilyFactory(origin_realm=realm))
+        assert get_lineage_errors(draft) == ["That place belongs to a family you are not joining"]
 
     def test_claim_path_rejects_a_non_playable_family(self):
         crime = FamilyKindFactory(name=CRIME_KIND_NAME)

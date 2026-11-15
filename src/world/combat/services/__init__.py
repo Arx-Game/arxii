@@ -236,7 +236,6 @@ from world.combat.services.declarations.redirect import (
 )
 from world.combat.services.declarations.social_check import (
     _record_combat_consequence,
-    _resolve_social_check,
     _social_combat_difficulty,
     _social_verb_success_level,
 )
@@ -728,7 +727,6 @@ __all__ = [
     "_resolve_primary_target_sheet",
     "_resolve_rally",
     "_resolve_sent_flying_markers",
-    "_resolve_social_check",
     "_resolve_taunt",
     "_resolve_technique_redirect",
     "_resolve_use_item",

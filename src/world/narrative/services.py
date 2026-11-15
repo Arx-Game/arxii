@@ -15,7 +15,7 @@ online sessions and persists a Gemit record for retroactive viewing.
 
 from __future__ import annotations
 
-from collections.abc import Generator, Iterable
+from collections.abc import Generator, Iterable, Mapping
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -50,8 +50,14 @@ def send_narrative_message(  # noqa: PLR0913
     related_story: Story | None = None,
     related_beat_completion: BeatCompletion | None = None,
     related_episode_resolution: EpisodeResolution | None = None,
+    frame_tags: Mapping[str, bool] | None = None,
 ) -> NarrativeMessage:
     """Create a NarrativeMessage and fan out deliveries to each recipient.
+
+    ``frame_tags`` ride the live ``text`` frame beside its type and category (never stored), so
+    the web client can react to a line without a frame type of its own: a kindled deed's
+    "You earned ..." carries ``earned_resonance`` and the client refreshes what a reflection
+    can name.
 
     Real-time push to puppeted recipients via character.msg(); deliveries
     to offline recipients stay unmarked (delivered_at=None) until the
@@ -111,7 +117,7 @@ def send_narrative_message(  # noqa: PLR0913
         account_id = delivery.recipient_character_sheet.character.db_account_id
         if account_id in muted_account_ids:
             continue  # muted: delivery row exists; skip real-time push
-        _push_to_online_recipient(delivery)
+        _push_to_online_recipient(delivery, frame_tags)
 
     return msg
 
@@ -328,7 +334,9 @@ def deliver_queued_messages(character_sheet: CharacterSheet) -> int:
     return count
 
 
-def _push_to_online_recipient(delivery: NarrativeMessageDelivery) -> None:
+def _push_to_online_recipient(
+    delivery: NarrativeMessageDelivery, frame_tags: Mapping[str, bool] | None = None
+) -> None:
     """Push the message to the recipient's puppeted session if online.
 
     Marks delivered_at=now when the push succeeds. If the character isn't
@@ -341,7 +349,12 @@ def _push_to_online_recipient(delivery: NarrativeMessageDelivery) -> None:
     formatted = _format_message_for_display(delivery.message)
     # The category rides the frame so the web client can give a vision its own
     # lane (#3779); every other category files as ambience as before.
-    character.msg((formatted, {"type": "narrative", "category": delivery.message.category}))
+    character.msg(
+        (
+            formatted,
+            {"type": "narrative", "category": delivery.message.category, **(frame_tags or {})},
+        )
+    )
     delivery.delivered_at = timezone.now()
     delivery.save(update_fields=["delivered_at"])
 

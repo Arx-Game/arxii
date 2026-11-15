@@ -869,6 +869,33 @@ describe('useGameSocket text frames become feed notes (#3856)', () => {
     expect(dispatchedTypes()).not.toContain('game/addAmbientNotice');
   });
 
+  it('refreshes what a reflection can name when a kindled deed is told (#5124)', async () => {
+    (queryClient.invalidateQueries as ReturnType<typeof vi.fn>).mockClear();
+
+    await deliver([
+      'text',
+      ['You earned 5 Domination.'],
+      { type: 'narrative', category: 'system', earned_resonance: true },
+    ]);
+
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['magic', 'reflection-options'],
+    });
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['magic', 'settling-rite'],
+    });
+    // The line is still an ordinary note in the feed.
+    expect(noteDispatches()[0]).toMatchObject({ note: { content: 'You earned 5 Domination.' } });
+  });
+
+  it('refreshes nothing for an ordinary narrative line', async () => {
+    (queryClient.invalidateQueries as ReturnType<typeof vi.fn>).mockClear();
+
+    await deliver(['text', ['Rain begins.'], { type: 'narrative' }]);
+
+    expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
+  });
+
   it('files an untyped text frame as a system note', async () => {
     await deliver(['text', ['You are now logged in.'], {}]);
 

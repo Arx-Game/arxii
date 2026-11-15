@@ -13,6 +13,7 @@ from world.combat.models import CombatOpponent, CombatParticipant, CombatRoundAc
 from world.combat.services.declarations.social_check import _social_verb_success_level
 from world.combat.services.encounter.config import get_social_maneuver_config
 from world.combat.services.encounter.threat import accumulate_threat
+from world.combat.services.techniques.kindled_deed import award_unrolled
 from world.combat.surge_rolls import (
     apply_rolled_surge,
     persona_name_of,
@@ -22,6 +23,7 @@ from world.combat.surge_rolls import (
 )
 from world.combat.types import ActionOutcome
 from world.fatigue.constants import EffortLevel
+from world.magic.constants import KindlingActKind
 from world.scenes.constants import RoundStatus
 
 
@@ -178,5 +180,7 @@ def _resolve_taunt(
             )
     elif action.focused_ally_target is not None:
         _resolve_taunt_on_participant(participant, action.focused_ally_target)
+        # #5124: the taunter rolls nothing against a player character (the target rolls).
+        award_unrolled(participant, action, kind=KindlingActKind.SOCIAL, what="Taunted")
 
     return outcome

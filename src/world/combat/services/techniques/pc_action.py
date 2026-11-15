@@ -24,6 +24,10 @@ from world.combat.services.rounds.maneuvers import _STANDALONE_MANEUVER_RESOLVER
 from world.combat.services.techniques.allegiance_break import _attempt_allegiance_breaks_for_action
 from world.combat.services.techniques.entrance_moment import _maybe_suggest_entrance_dramatic_moment
 from world.combat.services.techniques.insight import _maybe_produce_insight_for_cast
+from world.combat.services.techniques.kindled_deed import (
+    award_for_technique_cast,
+    award_unrolled,
+)
 from world.combat.services.techniques.npc_regard import _maybe_record_npc_regard_on_defeat
 from world.combat.services.techniques.pc_broadcast import _record_and_broadcast_pc_action
 from world.combat.services.techniques.spectacle import _maybe_apply_spectacle_for_action
@@ -33,6 +37,7 @@ from world.combat.services.techniques.weakness_selection import (
 )
 from world.combat.types import ActionOutcome, CombatTechniqueResult
 from world.fatigue.services import apply_fatigue
+from world.magic.constants import KindlingActKind
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -219,6 +224,10 @@ def _resolve_pc_action(
         yield_duel(participant)
         return ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
 
+    if action.maneuver == CombatManeuver.COVER and action.focused_ally_target is not None:
+        # Covering an ally rolls nothing of its own; the Cover bonus lands on their flee.
+        award_unrolled(participant, action, kind=KindlingActKind.AID, what="Covered", aids=True)
+
     return resolve_pc_technique(participant, action, offense_check_fn)
 
 
@@ -288,6 +297,7 @@ def resolve_pc_technique(
             return outcome
         outcome.damage_results.extend(combat_result.damage_results)
         _maybe_record_miss(participant, target, combat_result)
+        award_for_technique_cast(participant, action, combat_result)
         if action.from_entrance:
             _maybe_suggest_entrance_dramatic_moment(participant, combat_result)
         _maybe_produce_insight_for_cast(participant, combat_result, technique)

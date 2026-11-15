@@ -5,6 +5,7 @@
  * desk and the composer dialog own one of these in state and hand it to the
  * fields, so neither has to import a component to know what it is holding.
  */
+import { isReflectionIncomplete, NO_REFLECTION, type ReflectionDraft } from '@/magic/reflection';
 import type { PosthumousOverride } from './api';
 
 /** The subject of a relationship-journal entry, resolved to the sheet the API takes. */
@@ -28,6 +29,8 @@ export interface JournalEntryFieldsValue {
   about: AboutValue | null;
   tags: string[];
   posthumousOverride: PosthumousOverride;
+  /** What the entry reflects on (#5124); idle when it reflects on nothing. */
+  reflection: ReflectionDraft;
 }
 
 /**
@@ -42,6 +45,7 @@ export const EMPTY_ENTRY_FIELDS: JournalEntryFieldsValue = {
   about: null,
   tags: [],
   posthumousOverride: 'inherit',
+  reflection: NO_REFLECTION,
 };
 
 /**
@@ -51,4 +55,9 @@ export const EMPTY_ENTRY_FIELDS: JournalEntryFieldsValue = {
  */
 export function isAboutUnresolved(value: JournalEntryFieldsValue): boolean {
   return value.aboutTerm.trim() !== '' && value.about === null;
+}
+
+/** A target or a choice is set on the reflection row but not both (#5124). */
+export function isReflectionUnfinished(value: JournalEntryFieldsValue): boolean {
+  return isReflectionIncomplete(value.reflection);
 }

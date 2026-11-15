@@ -86,7 +86,7 @@ function authoredEntry() {
       position_target_shape: 'none',
       soulfray_warning: null,
       available_fury_tiers: [],
-      eligible_fury_anchors: [],
+      eligible_fury_resonances: [],
       is_ultimate: false,
     },
     risk: OUTCOME,

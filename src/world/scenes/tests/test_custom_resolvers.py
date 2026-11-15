@@ -40,7 +40,7 @@ class ResolveTreatmentRequestTests(TestCase):
     def test_resolve_treatment_records_result(self, mock_perform_treatment):
         mock_perform_treatment.return_value = TreatmentOutcome(
             attempt=MagicMock(),
-            outcome=MagicMock(),
+            outcome=None,
             effect_applied=False,
             severity_reduced=0,
             tiers_reduced=0,
@@ -75,7 +75,7 @@ class ResolveTreatmentRequestTests(TestCase):
         self.request.save()
         mock_perform_treatment.return_value = TreatmentOutcome(
             attempt=MagicMock(),
-            outcome=MagicMock(),
+            outcome=None,
             effect_applied=False,
             severity_reduced=0,
             tiers_reduced=0,
@@ -100,7 +100,7 @@ class ResolveTreatmentRequestTests(TestCase):
         """Only mundane first aid takes the first-aid fraction (#4600)."""
         mock_perform_treatment.return_value = TreatmentOutcome(
             attempt=MagicMock(),
-            outcome=MagicMock(),
+            outcome=None,
             effect_applied=False,
             severity_reduced=0,
             tiers_reduced=0,

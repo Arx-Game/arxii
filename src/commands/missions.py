@@ -66,6 +66,14 @@ _INVOKE_HINT = (
 _ERR_CHOOSE_NUMBER = "Choose an option by its number, e.g. 'mission resolve <id> 1'."
 
 
+def _feeds_lines(option: BeatOption) -> list[str]:
+    """The kindled resonances an option would feed, one line each (#5124), as the web shows."""
+    return [
+        f"     Your {feed.resonance_name} is kindled" + (f": {feed.reason}" if feed.reason else "")
+        for feed in option.feeds
+    ]
+
+
 class CmdMission(ArxCommand):
     """Play a mission: inspect your journal, resolve beats, or run a group decision.
 
@@ -528,6 +536,7 @@ class CmdMission(ArxCommand):
         for i, opt in enumerate(beat.options, 1):
             suffix = f" [{opt.check_type_name}]" if opt.check_type_name else ""
             lines.append(f"  {i}) {opt.label}{suffix}")
+            lines.extend(_feeds_lines(opt))
         if beat.options:
             lines.append(f"Use 'mission resolve {instance.pk} <n>' to choose.")
         if any(opt.rolls_check for opt in beat.options):
@@ -570,6 +579,7 @@ class CmdMission(ArxCommand):
             lines.append(view.flavor_text)
         for i, opt in enumerate(view.options, 1):
             lines.append(f"  {i}) {opt.label}")
+            lines.extend(_feeds_lines(opt))
         verb = "vote" if view.phase == PHASE_VOTE else "pick"  # noqa: STRING_LITERAL
         lines.append(f"Use 'mission {verb} {instance.pk} <n>'.")
         self.msg("\n".join(lines))

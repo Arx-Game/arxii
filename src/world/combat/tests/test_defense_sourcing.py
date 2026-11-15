@@ -66,6 +66,7 @@ class DefenseCheckSourcingTests(TestCase):
         mock_fn = MagicMock()
         mock_result = MagicMock()
         mock_result.success_level = 2  # full dodge
+        mock_result.outcome = None
         mock_fn.return_value = mock_result
 
         _resolve_npc_action(
@@ -95,6 +96,7 @@ class DefenseCheckSourcingTests(TestCase):
         mock_fn = MagicMock()
         mock_result = MagicMock()
         mock_result.success_level = 2
+        mock_result.outcome = None
         mock_fn.return_value = mock_result
 
         _resolve_npc_action(

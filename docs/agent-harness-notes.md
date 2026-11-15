@@ -75,6 +75,37 @@ absolute paths, or a tool's own directory flag. Inside the devcontainer no
 permission prompts fire at all, so this is host-only friction. Relax the rule if
 a future release stops flagging the shape.
 
+## A permission prompt stalls an overnight run, even in bypass mode (2026-11-15)
+
+Claude Code still asks a person to approve a Bash command that works out its own
+arguments while running (an array filled by `awk`, a `$(...)` substitution, a
+loop over files), because it cannot rule out `rm`. Sonnet subagents wrote commit
+commands like this to build the list of named files, and an unattended run sat at
+the prompt for hours. A PermissionRequest hook now answers a Bash prompt in a
+bypassPermissions or dontAsk session with "deny" and a rewrite hint, so the agent
+retries (`tools/hooks/deny_permission_prompts.py`). It never touches other tools
+(AskUserQuestion and ExitPlanMode go through the same dialog) or sessions in other
+modes, and `ARXII_ALLOW_PROMPTS=1` turns it off. `.devcontainer/post-create.sh`
+runs `tools/hooks/install.py`, which copies the script into the Claude config
+directory and registers the copy, so the hook never depends on what the main
+checkout has checked out. The copy only refreshes when the installer runs, so
+re-run `python3 tools/hooks/install.py` after changing the hook. Because the owner
+runs every session in bypass mode, a watched session is denied too unless
+`ARXII_ALLOW_PROMPTS=1` is set before `claude` starts.
+
+A first draft (PR #5132, before review) would have bricked the container in two
+ways. It registered the hook for every tool and in every container session, which
+denied AskUserQuestion, plan-mode exits and every prompt in a watched session. It
+also added a PreToolUse hook that ran a script from the main checkout, and a
+PreToolUse command that cannot open its script exits 2, which blocks the tool:
+with the main checkout on a branch without the script, every Bash call in every
+session would have failed. Keep any hook registered here on PermissionRequest (a
+failing PermissionRequest hook leaves the prompt as it was), and run it from a copy
+in the config directory.
+
+The older hooks in the gitignored `.claude/hooks/` were never registered in the
+devcontainer and do not run there.
+
 ## Batched mutating tool calls cascade-cancel
 
 When one call in a parallel batch errors or hits an approval prompt, the harness

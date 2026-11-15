@@ -300,4 +300,5 @@ class KitViewStylingTest(KitPageCase):
 # admin page, the same constant query the other settings singletons already cost.
 # #5093: three more, the same check for the three settings singletons it added (the
 # development cost, fatigue and check scale configs).
-PAGE_QUERIES = 81
+# #5124: one more, the Kindling config singleton's add check (a new settings singleton).
+PAGE_QUERIES = 82

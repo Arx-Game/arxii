@@ -99,6 +99,7 @@ class TreatCommandTests(TestCase):
         """
         outcome = MagicMock()
         outcome.target_resolved = False
+        outcome.outcome = None
         mock_perform_treatment.return_value = outcome
 
         self._run(
@@ -133,6 +134,7 @@ class TreatCommandTests(TestCase):
         """Target runs accept and the custom resolver calls perform_treatment."""
         outcome = MagicMock()
         outcome.target_resolved = False
+        outcome.outcome = None
         mock_perform_treatment.return_value = outcome
 
         self._run(

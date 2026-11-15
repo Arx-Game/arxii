@@ -686,7 +686,7 @@ class CombatRoundActionCommitmentTests(TestCase):
         action = CombatRoundActionFactory()
         self.assertFalse(action.confirm_soulfray_risk)
         self.assertIsNone(action.fury_commitment)
-        self.assertIsNone(action.fury_anchor)
+        self.assertIsNone(action.fury_resonance)
         self.assertEqual(action.strain_commitment, 0)
 
 

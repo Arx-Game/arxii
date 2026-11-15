@@ -84,6 +84,7 @@ from world.magic.models.crossing import CrossingOption
 from world.magic.models.drift import DriftConfig
 from world.magic.models.fury import FuryConfig
 from world.magic.models.gifts import GiftSubstance
+from world.magic.models.kindling import KindlingConfig, KindlingSituation
 from world.magic.models.resonance_environment import ResonanceAlignmentBoonTier
 from world.magic.models.rituals import Ritual
 from world.magic.models.signature import SignatureMotifBonusAppliedCondition
@@ -714,6 +715,31 @@ READER_SOURCES: tuple[ReaderSource, ...] = (
         Reads.STAGE,
         lambda row: f"offers the crossing from {row.minimum_warp_stage.name} on",
         related=("minimum_warp_stage",),
+    ),
+    ReaderSource(
+        "kindling situation",
+        KindlingSituation,
+        "condition_property",
+        Reads.PROPERTY,
+        lambda row: f"{row.get_situation_display()}, kindles the resonance",
+        label=lambda row: (row.resonance or row.for_affinity).name,
+        related=("resonance", "for_affinity"),
+    ),
+    ReaderSource(
+        "resonance feeling",
+        Resonance,
+        "feeling",
+        Reads.PROPERTY,
+        _fixed("the feeling a kindling situation reads when it names no property"),
+        label=_named(),
+    ),
+    ReaderSource(
+        _CONFIG,
+        KindlingConfig,
+        "harm_property",
+        Reads.PROPERTY,
+        _fixed("a condition laid on others that carries it does not feed a shared feeling"),
+        label=_fixed("Kindling config"),
     ),
 )
 

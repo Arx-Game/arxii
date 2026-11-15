@@ -118,14 +118,14 @@ class RecordingRoll:
     def __call__(self, *_args: object, **kwargs: Any) -> MagicMock:
         self.calls.append(kwargs)
         level = self.levels.pop(0) if self.levels else 0
-        return MagicMock(success_level=level)
+        return MagicMock(success_level=level, outcome=None)
 
     def extras(self) -> list[int]:
         return [call["extra_modifiers"] for call in self.calls]
 
 
 def _clean_hit(*args: object, **kwargs: object) -> MagicMock:
-    return MagicMock(success_level=2)
+    return MagicMock(success_level=2, outcome=None)
 
 
 class _TheCellar(JourneyCase):
@@ -182,7 +182,7 @@ class _TheCellar(JourneyCase):
             base_value=BLINK_VALUE,
             intensity_multiplier=0,
         )
-        self.technique_roll = MagicMock(success_level=1)
+        self.technique_roll = MagicMock(success_level=1, outcome=None)
         patcher = patch(
             "world.combat.services.movement_use.roll_technique",
             side_effect=lambda *_a, **_k: self.technique_roll,
@@ -348,7 +348,7 @@ class TheRollSetsHowFar(_TheCellar):
         self.ondrelle = self.fighter("Ondrelle", at=self.doorway)
 
     def test_a_failed_roll_leaves_her_in_place_paid(self) -> None:
-        self.technique_roll = MagicMock(success_level=0)
+        self.technique_roll = MagicMock(success_level=0, outcome=None)
 
         result = self.web(self.ondrelle, "move_to_position", position_id=self.stage.pk)
 

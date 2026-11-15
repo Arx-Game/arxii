@@ -18,7 +18,7 @@ from world.checks.services import (
 )
 from world.traits.factories import ensure_level_ladder
 
-CONVERT = "world.migrations.0417_difficulty_levels_batch1_convert"
+CONVERT = "world.migrations.0424_difficulty_levels_batch1_convert"
 
 
 class DifficultyHelperTests(TestCase):

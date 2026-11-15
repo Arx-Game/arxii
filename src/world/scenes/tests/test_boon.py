@@ -60,6 +60,7 @@ def _set_rank(sheet, rank: int) -> None:
 def _success_resolution(success: bool = True) -> PendingActionResolution:
     check_result = MagicMock()
     check_result.success_level = 1 if success else -1
+    check_result.outcome = None
     check_result.outcome_name = "Success" if success else "Failure"
     return PendingActionResolution(
         template_id=1,

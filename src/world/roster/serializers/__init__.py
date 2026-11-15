@@ -30,6 +30,7 @@ from world.roster.serializers.families import (
     KinRelationshipSerializer,
     KinSlotPoolSerializer,
     KinSlotSerializer,
+    OpenSeatSerializer,
 )
 from world.roster.serializers.invites import (
     GameInviteCreateSerializer,
@@ -87,6 +88,7 @@ __all__ = [
     "NPCPresetSkillLineSerializer",
     "NPCPresetTraitLineSerializer",
     "NPCStatlinePresetSerializer",
+    "OpenSeatSerializer",
     # Mail serializers
     "PlayerMailSerializer",
     "ReleasedEntryResultSerializer",

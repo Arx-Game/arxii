@@ -17,7 +17,9 @@ import { dispatchCanvasAction, type DispatchResult } from '@/map-canvas/dispatch
 import { getRituals } from '@/rituals/api';
 import type { components } from '@/generated/api';
 import type {
+  KindledResonance,
   ManifestChoice,
+  ReflectionOption,
   ThreadResonanceOptions,
   AcceptTeachingOfferRequest,
   AcceptTeachingOfferResponse,
@@ -37,10 +39,6 @@ import type {
   CrossXPLockRequest,
   CrossXPLockResponse,
   DissolveRequest,
-  DriftCorrectionConvertRequest,
-  DriftCorrectionDeclineRequest,
-  DriftCorrectionDeclined,
-  DriftCorrectionResult,
   EntryFlourishRespondRequest,
   EntryFlourishResult,
   GlimpseDistinctionLinkRequest,
@@ -49,6 +47,9 @@ import type {
   MotifFacetRequest,
   MotifStyleBindingsResponse,
   PaginatedDriftConversionOfferList,
+  SettlingRitePerformRequest,
+  SettlingRiteReading,
+  SettlingRiteResult,
   PaginatedPendingAlterationList,
   PaginatedPendingAudereOfferList,
   PaginatedPendingAudereMajoraOfferList,
@@ -929,7 +930,7 @@ export async function respondToEntryFlourish(
 /**
  * GET /api/magic/drift-correction/pending/
  *
- * Account-scoped inbox: open drift conversion offers for the caller's characters.
+ * Account-scoped inbox: the caller's characters' open chances to atone (one each, #5124).
  */
 export async function getPendingDriftConversionOffers(): Promise<PaginatedDriftConversionOfferList> {
   const res = await apiFetch(`${DRIFT_CORRECTION_URL}/pending/`);
@@ -937,16 +938,30 @@ export async function getPendingDriftConversionOffers(): Promise<PaginatedDriftC
   return res.json() as Promise<PaginatedDriftConversionOfferList>;
 }
 
+const SETTLING_RITE_URL = '/api/magic/settling-rite/';
+
 /**
- * POST /api/magic/drift-correction/convert/
+ * GET /api/magic/settling-rite/?character_sheet=<id>
  *
- * Perform the drift correction rite under an open offer. A refusal is a 400
- * `{detail}`, surfaced as the thrown error's message.
+ * What the rite of settling would take (the character's waiting reflections), the carried
+ * items that count as its offering, and whether it is set up. Owner only.
  */
-export async function convertDrift(
-  body: DriftCorrectionConvertRequest
-): Promise<DriftCorrectionResult> {
-  const res = await apiFetch(`${DRIFT_CORRECTION_URL}/convert/`, {
+export async function getSettlingRite(characterSheetId: number): Promise<SettlingRiteReading> {
+  const res = await apiFetch(`${SETTLING_RITE_URL}?character_sheet=${characterSheetId}`);
+  if (!res.ok) await readErrorDetail(res, 'Failed to load your reflections');
+  return res.json() as Promise<SettlingRiteReading>;
+}
+
+/**
+ * POST /api/magic/settling-rite/
+ *
+ * Perform the rite of settling: one offering, one roll, every waiting reflection. A refusal
+ * is a 400 `{detail}`, surfaced as the thrown error's message.
+ */
+export async function performSettlingRite(
+  body: SettlingRitePerformRequest
+): Promise<SettlingRiteResult> {
+  const res = await apiFetch(SETTLING_RITE_URL, {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify(body),
@@ -956,24 +971,7 @@ export async function convertDrift(
     await readErrorDetail(res, 'Failed to perform the rite');
   }
 
-  return res.json() as Promise<DriftCorrectionResult>;
-}
-
-/** POST /api/magic/drift-correction/decline/ - let an open offer go. */
-export async function declineDriftConversion(
-  body: DriftCorrectionDeclineRequest
-): Promise<DriftCorrectionDeclined> {
-  const res = await apiFetch(`${DRIFT_CORRECTION_URL}/decline/`, {
-    method: 'POST',
-    headers: jsonHeaders(),
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    await readErrorDetail(res, 'Failed to decline the offer');
-  }
-
-  return res.json() as Promise<DriftCorrectionDeclined>;
+  return res.json() as Promise<SettlingRiteResult>;
 }
 
 // ---------------------------------------------------------------------------
@@ -1432,4 +1430,40 @@ export function setManifestChoice(
     technique_id: techniqueId,
     option_id: optionId,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Your resonances (#5124)
+// ---------------------------------------------------------------------------
+
+const KINDLED_RESONANCES_URL = '/api/magic/kindled-resonances/';
+
+/**
+ * GET /api/magic/kindled-resonances/?character_sheet=<id> (#5124): each resonance the
+ * character holds, whether a situation kindles it now, the strength word and the reasons.
+ * Owner or staff only.
+ */
+export async function getKindledResonances(characterSheetId: number): Promise<KindledResonance[]> {
+  const res = await apiFetch(`${KINDLED_RESONANCES_URL}?character_sheet=${characterSheetId}`);
+  if (!res.ok) await readErrorDetail(res, 'Failed to load your resonances');
+  const page = (await res.json()) as { results: KindledResonance[] };
+  return page.results;
+}
+
+// ---------------------------------------------------------------------------
+// Reflections (#5124)
+// ---------------------------------------------------------------------------
+
+const REFLECTABLES_URL = '/api/magic/reflectables/';
+
+/**
+ * GET /api/magic/reflectables/?character_sheet=<id> (#5124): what the character can reflect
+ * on now, the resonance unsettling them first, then each kindled deed not yet reflected on.
+ * Owner only.
+ */
+export async function getReflectionOptions(characterSheetId: number): Promise<ReflectionOption[]> {
+  const res = await apiFetch(`${REFLECTABLES_URL}?character_sheet=${characterSheetId}`);
+  if (!res.ok) await readErrorDetail(res, 'Failed to load what you can reflect on');
+  const page = (await res.json()) as { results: ReflectionOption[] };
+  return page.results;
 }

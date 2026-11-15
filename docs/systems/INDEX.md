@@ -87,23 +87,58 @@
   `NON_DEED_GAIN_SOURCES` in `constants.py`, a total classification of `GainSource`) that grows
   a resonance of the character's main affinity, made in a live scene by a character who is unsettled
   (#5123) and holds convertible resonance past who they are ("drift", not the older `AuraDrift`), opens a
-  `DriftConversionOffer` (one per sheet and scene) with a `DriftConversionCap` per target
-  resonance (`open_or_extend_conversion_offer`, called from `grant_resonance`;
-  `lapse_conversion_offers` from `Scene.finish_scene`). The player performs a configured rite:
-  `DriftCorrectionConfig` (singleton: `rite`, `check_type`, `check_difficulty_level`, `cap_percent`)
-  and `DriftCorrectionOutcomeShare` (share of the requested amount converted per `CheckOutcome`) feed
-  `perform_drift_correction_rite` (`services/drift_correction.py`), which converts lifetime
-  points (Mire excess first) through `convert_resonance_amount` (`services/conversion.py`) as `GainSource.DRIFT_CORRECTION` at the
-  `AffinityInteraction` pair rate. `RitualComponentRequirement.matches_target_resonance` +
+  `DriftConversionOffer` (one per sheet, open until the rite spends it, #5124) with a
+  `DriftConversionCap` per target resonance (`open_or_extend_conversion_offer`, called from
+  `grant_resonance`). Nothing settles without a reflection (`Reflection`, #5124): the one rite of
+  settling, `perform_settling_rite` (`services/drift_correction.py`), takes every waiting reflection
+  with one offering and one roll. `DriftCorrectionConfig` (singleton: `rite`, `check_type`,
+  `check_difficulty_level`, `cap_percent`, `disown_deed_percent`) and `DriftCorrectionOutcomeShare` (share of
+  each reflection carried out per `CheckOutcome`) feed it; it grows embraced deeds (`GainSource.EMBRACED_DEED`),
+  converts disowned resonance (Mire excess first) through `convert_resonance_amount`
+  (`services/conversion.py`) as `GainSource.DRIFT_CORRECTION` at the `AffinityInteraction` pair rate,
+  and accepts the aura's change (`accept_aura_change(sheet, fraction=)`, #5123, now only the rite's step).
+  `RitualComponentRequirement.matches_target_resonance` +
   `min_item_meaning` add a third component mode (`ComponentMode`: material, facet, keepsake;
-  `qualifying_components`). Helpers: `drift_holdings`, `convertible_drift`, `focus_bonus`,
-  `preview_conversion`, `offer_options`, `max_yield_per_earned_point`. Exceptions:
-  `DriftCorrectionError` with `DriftCorrectionNotConfiguredError`, `DriftOfferNotFoundError`,
-  `DriftConversionInvalidError`, `NotUnsettledError`. Actions `perform_drift_correction`,
-  `decline_drift_correction` and `accept_aura_change` (`accept_aura_change` service, #5123); telnet `aura` / `aura atone` / `aura decline` / `aura accept`; REST `/api/magic/drift-correction/`
-  (`pending/`, `convert/`, `decline/`); React `DriftConversionOfferGate` and
-  `SettleAuraDialog` on the scene page and game page, and `AuraHalo` on the sheet. One Required content row,
-  `drift-correction-config`. Details: [magic.md](magic.md) "Drift correction".
+  `qualifying_components_by_target`). Helpers: `drift_holdings`, `convertible_drift`, `focus_bonus`,
+  `rite_resonances`, `offerings_for`, `settling_rite_reading` (`services/settling_preview.py`),
+  `max_yield_per_earned_point`. Exceptions:
+  `DriftCorrectionError` with `DriftCorrectionNotConfiguredError` and `NoWaitingReflectionError`,
+  `NotUnsettledError`. Action `perform_settling_rite`; telnet `aura` / `aura settle <offering>`; REST
+  `/api/magic/settling-rite/` (GET reading, POST perform) and `/api/magic/drift-correction/pending/`;
+  React `SettleAuraDialog` and the sheet's `AuraReflections`, and `AuraHalo` on the sheet. One Required
+  content row, `drift-correction-config`. Details: [magic.md](magic.md) "Drift correction".
+
+- **Kindled resonances (#5124) [BUILT & WIRED]:** a resonance is kindled when one of its staff-authored
+  `KindlingSituation` rows holds (`models/kindling.py`: set on a `resonance` or once on an `affinity`;
+  `strength` a rank; `reason_text`), or a Rally or a GM kindled it (`Kindling`, `source`
+  RALLY/GM, ends with its fight or scene). Staff author `KindledStrengthTier` (rank, name, `min_bond_tier`,
+  `min_severity`, `pull_levels`, `give_in_max_depth`, `give_in_bonus_percent`, `give_in_ease`,
+  `dig_deep_scale_percent`, `earn_percent`), the singleton `KindlingConfig` (`harm_property`),
+  `KindledDeedAward` and `RallyKindlingStrength` on one admin page; `Resonance.feeling` (Property FK)
+  and `missions.MissionTheme` (`themes` on `MissionTemplate` and `MissionOption`) feed the
+  situations. Six new covenants `Situation` members (`THREAD_ANCHOR_PRESENT`, `OWN_FEELING`,
+  `SHARED_FEELING`, `TARGET_IN_STATE_THEY_CAUSED`, `SOMEONE_IN_TROUBLE`, `MISSION_THEME`; `Situation`
+  now has 32 values) also serve vow perks, and `SituationRequirementMixin` gained `mission_theme`
+  and `enemies_only`. Reads (`services/kindling.py`): `kindled_resonances`, `kindled_for`,
+  `kindled_resonances_now`, `kindling_context_for`, `kindled_tiers`, `kindled_resonances_for_acts`;
+  types `KindledResonance`, `KindlingAct`, `KindlingEvidence`, `KindlingActKind`. Uses: drawing
+  strength (`resolve_pull_effects(kindled=)`, `pull_kindled_tiers`, `CombatPullThread.kindled_strength`),
+  giving in (`fury.give_in_strength`, `give_in_refusal`; `CommittingDeclaration.fury_resonance`
+  replaced `fury_anchor`), Dig deep and Rally by resonance (`dig_deep(participant, resonance=)`,
+  `declare_rally(..., resonance=)`, `CombatRoundAction.rally_resonance`, `record_rally_kindling`), GM
+  `kindle_by_gm` (action `stage_kindle`, `gm_list_kindling`; telnet `stage kindle`). Earning:
+  `award_kindled_deeds` writes `GainSource.KINDLED_DEED` grants (`ResonanceGrant.source_kindling_situation`, and `deed_label`, what the character did in her own words, from `KindlingAct.label`),
+  and a mission option's `feeds` shows what it would earn. Reflections: `Reflection` and
+  `SettlingRite` (`models/reflection.py`), `GainSource.EMBRACED_DEED`, `reflectable_for`,
+  `record_reflection`, `unsettling_resonance`; pose and journal actions take `reflect_*` kwargs.
+  Endpoints: `GET /api/magic/kindled-resonances/`, `GET /api/magic/reflectables/`,
+  `GET|POST /api/magic/settling-rite/`. Telnet: `resonances`, `reflect`, `pose/reflect`,
+  `journal/reflect`, `combat digdeep [<resonance>]`, `combat rally <ally>[=<resonance>]`,
+  `givein=<resonance>:<tier>`. React: `KindledResonancesPanel`, `ReflectingOnRow`. Journeys:
+  `test_your_resonances_journeys`, `test_kindled_dig_deep_and_rally_journeys`,
+  `test_surrendering_control_to_fury_journeys`, `test_earning_kindled_deeds_journeys`,
+  `test_reflection_journeys`, `test_drift_correction_journeys`. Details: [magic.md](magic.md)
+  "Kindled resonances"; why Fury's anchor became a resonance: `docs/adr/adr-5124-furys-anchor-person-became-a-kindled-resonance.md`.
 
 - **Thread retune (slice 6 of #4672, reshaped by #5123):** `services/thread_resonance.py` moves
   part of one `ThreadResonance` row of a thread to another resonance's row through the SERVICE
@@ -3569,7 +3604,10 @@ Secrets, souls with per-life-knowledge reincarnation chains, app-in slots/pools.
   tree, selected person, open seats; linked from the sheet's House row, the
   org house block's `family_id` and the realm hub's `family_id`); CG slot claim
   (draft `claimed_kin_slot/_pool`, `_bind_kinship_node` at finalize; FE
-  `KinSlotPicker`); CG invented parents (`second_parent_species` + draft_data
+  `KinSlotPicker`; required on the claim path since #5130, ADR-5130: the list's
+  `has_open_seat` via `open_seat_family_ids`, each seat's `head_relation` via
+  `relations_to` and `houses.services.head_of_family`); CG invented parents
+  (name and none paths only since #5130) (`second_parent_species` + draft_data
   names/genders → `_bind_invented_parents` + `_pin_heredity_back_inference` at
   finalize; FE `InventedParentsCard`); parent-aware
   `form-options/:species_id/?draft=` (inherited option groups + `is_required`);
@@ -5664,6 +5702,15 @@ makes decisions at branching points gated by skills/traits/predicates, and the c
 reshape the world around them. No engine arbitration: the player picks, pick+check routes;
 state is node position + snapshots + already-applied consequences, never a scratch blob.
 
+- **Mission themes (#5124):** `MissionTheme` (`name`, `description`, `player_text`, `display_order`;
+  natural key `name`) is what a mission or an option is about, attached through `themes` on
+  `MissionTemplate` and `MissionOption`. It is not a category (categories sort the board). A
+  `MISSION_THEME` kindling situation names a theme, and `resolve_option` calls
+  `award_kindled_deeds` after a CHECK or CONTEST roll (an auto-succeeding approach earns at the
+  lowest success tier, both inside one transaction with the routing). `BeatOption.feeds`
+  (`KindledFeed(resonance_name, strength_name, reason)`, no amounts) tells the owner which kindled
+  resonance an option would feed; telnet `mission beat` prints it. Admin: `MissionThemeAdmin`.
+  Details: [magic.md](magic.md) "Kindled resonances".
 - **Trials (#4501, spec #4343):** a trial is not a model; it is a `MissionTemplate` whose CHECK
   option's routes carry consequences with `GRANT_CODEX` (`grants_known`), `TECHNIQUE_TRAINING` and
   a cost effect. See Mechanics' "Added in #4501" and `docs/systems/checks.md`; the save rules are
@@ -8603,7 +8650,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   JOUST (#1843, see "Mounted combat" below) / STRIKE (#4858, see "The basic Strike" below;
   its weapon is `item_instance`, null for bare hands); plus the
   player-decision fields `confirm_soulfray_risk` + the `CommittingDeclaration` fury mixin
-  `fury_commitment` / `fury_anchor`, #1454; `cast_destination` / `cast_position_a` /
+  `fury_commitment` / `fury_resonance`, #1454, #5124; `cast_destination` / `cast_position_a` /
   `cast_position_b` — nullable FKs → `areas.Position` carrying a declared cast-position
   target/pair for position-consuming techniques, #2206, see "Cast-position targeting" below;
   `redirect_opponent_target` (FK `CombatOpponent`, SET_NULL) / `redirect_object_target`
@@ -8984,8 +9031,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `world/magic/services/fury.py` `FuryCast` (from `fury_cast_for`, driven by
   `use_technique(fury=)` after its Soulfray gate; `withdraw()` on a PRE_CAST cancel, `settle()`
   for the message and Berserk) rolls the control check, then
-  `resolve_fury` / `fury_intensity_for(tier, cap, outcome)` price the trade
-  (`FuryTier.control_surrendered` x the rate x the anchor-cap scale x the outcome's
+  `resolve_fury` / `fury_intensity_for(tier, bonus_percent, outcome)` price the trade
+  (`FuryTier.control_surrendered` x the rate x the kindled strength's `give_in_bonus_percent` scale x the outcome's
   `FuryDegreeShare.intensity_percent`) and it lands on the character's `CharacterEngagement`
   (`intensity_modifier` up, `control_modifier` down, `fury_control_surrendered` tallied) before
   `use_technique`, so the same cast channels it. `FuryResolution(realized_tier,
@@ -8995,7 +9042,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `fury-degree-shares`, `fury-intensity-per-control`. Surfaces: `full_trade_intensities`
   (picker "up to" preview, at the highest authored share, `top_share_percent`), `fury_tier_label`, `fury_trade_message` (the caster's line, sent on
   commit); `FuryTierOption(control_surrendered, is_berserk, full_intensity)`,
-  `AnchorOption.tier_full_intensities`, participant `fury_control_surrendered`, web
+  `FuryResonanceOption.tier_full_intensities` (#5124: she gives in to a kindled resonance, not an anchor person; `give_in_strength`, `give_in_refusal`), participant `fury_control_surrendered`, web
   `FuryDeclaration` + `combat/sections/Pressure.tsx`, telnet `combat` hub `Pressure:` line.
   The Pressure figures (participant `intensity_modifier` / `control_modifier` /
   `fury_control_surrendered`, telnet `Pressure:`) read her engagement whatever its type
@@ -10995,8 +11042,8 @@ history, one pooled depth, a tier claimed per side by capstone journal entry and
   `mutual_hostile(a, b)` + `mutual_hostile_expression(...)`, `known_label_q(...)`,
   `bond_combat_bonus` / `bond_bonus`, `companion_target_error`;
   `helpers.get_relationship_tier(a, b)` = the lower claimed tier of a mutual TEACHING-family
-  tie, read only by training's mentor multiplier (magic's fury cap reads the side's own
-  `tier` directly, `world/magic/services/fury.py:_bond_tier`)
+  tie, read only by training's mentor multiplier (kindled resonances read the side's own
+  `tier` directly, `thread_anchor_evidence` in `world/magic/services/kindling.py`, #5124)
 - **Reads (`reads.py`):** `build_tie_page(sides, *, viewer_sheet, is_staff,
   force_audience=None, include_allocation=True)` is the batched entry point the tie API and
   the sheet cast share (three extra queries regardless of page size — callers MUST pass the
@@ -11076,7 +11123,7 @@ history, one pooled depth, a tier claimed per side by capstone journal entry and
   (`can_retort`/`annotate_can_retort`, and the capstone IS a `JournalEntry`), combat (bond
   bonus off the claimed tier; the surge engine off `fuels_escalation_spikes` + side depth),
   magic (`Thread.target_relationship`, weaving gated on `thread_min_tier`, pull modulation
-  off `pair_depth()` and the gauges, fury's provocation cap off the side's own `tier`), scenes
+  off `pair_depth()` and the gauges, kindled thread-anchor strength off the side's own `tier`), scenes
   (`finish_scene` → `credit_scene_depth`; social difficulty), skills (mentor multiplier),
   progression (`RelationshipRequirement` — it counts qualifying SIDES, not labels, so two
   labels on one side count once; XP spend),

@@ -97,7 +97,7 @@ def _wire_vitals(sheet, *, health: int = 100, max_health: int = 100) -> Characte
 
 def _success_check_fn(_character, _check_type, **_kwargs):
     """Offense check override: always returns success_level=2 (full damage)."""
-    return MagicMock(success_level=2)
+    return MagicMock(success_level=2, outcome=None)
 
 
 def _seed_damage_multipliers():

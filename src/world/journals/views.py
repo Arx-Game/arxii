@@ -37,6 +37,7 @@ from world.journals.services import (
     visible_entries_q,
 )
 
+_REFLECTION_LINE = "reflection_line"
 _NO_CHARACTER_DETAIL = "No character found."
 _NOT_FOUND_DETAIL = "Not found."
 # Serializer/validated_data field names, extracted to satisfy the string-literal lint
@@ -335,6 +336,9 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
             tags=serializer.validated_data.get("tags"),
             posthumous_override=serializer.validated_data.get("posthumous_override"),
             about_id=serializer.validated_data.get("about"),
+            reflect_choice=serializer.validated_data.get("reflect_choice"),
+            reflect_grant_id=serializer.validated_data.get("reflect_grant_id"),
+            reflect_resonance_id=serializer.validated_data.get("reflect_resonance_id"),
         )
         if not result.success:
             return Response(
@@ -344,10 +348,11 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
 
         entry = self._get_entry_for_response(result.data["entry_id"])
         sheet = self.get_character_sheet(request)
-        return Response(
-            JournalEntryDetailSerializer(entry, context={"viewer_sheet": sheet}).data,
-            status=status.HTTP_201_CREATED,
-        )
+        body = dict(JournalEntryDetailSerializer(entry, context={"viewer_sheet": sheet}).data)
+        # Told to the writer alone when the entry carried a reflection that was recorded (#5124).
+        if _REFLECTION_LINE in result.data:
+            body[_REFLECTION_LINE] = result.data[_REFLECTION_LINE]
+        return Response(body, status=status.HTTP_201_CREATED)
 
     def partial_update(self, request: Request, pk: str | None = None) -> Response:
         """Edit an existing journal entry (owner only)."""

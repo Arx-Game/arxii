@@ -927,3 +927,120 @@ def seed_missive_spec(*, username: str) -> MissiveSpecSeed:
         worn_face_name=MISSIVE_SPEC_WORN_FACE,
         writer_face_name=MISSIVE_SPEC_WRITER_FACE,
     )
+
+
+@dataclass(frozen=True)
+class FamilySeatsSeed:
+    """What `frontend/e2e/family-seats.spec.ts` reads back."""
+
+    draft_id: int
+    family_id: int
+    family_name: str
+    closed_family_name: str
+    head_name: str
+    locked_seat_id: int
+    locked_seat_name: str
+    open_seat_id: int
+    open_seat_name: str
+
+
+#: The house the seats spec joins, the one it must not be offered, and the people in it.
+SEATS_SPEC_HOUSE = "Vellacourt"
+SEATS_SPEC_CLOSED_HOUSE = "Brackwater"
+SEATS_SPEC_HEAD = "Seraphine"
+SEATS_SPEC_LOCKED_SEAT = "Isaura"
+SEATS_SPEC_OPEN_SEAT = "Corwin"
+
+
+def seed_family_seats_spec(*, username: str) -> FamilySeatsSeed:
+    """A creation draft of *username*'s at Lineage, and a house with two open seats (#5130).
+
+    House Vellacourt's title is held by "Seraphine". Two seats of the house are open:
+    her daughter "Isaura", whose name is fixed, and her nephew "Corwin", whose name the
+    player may change. House Brackwater, of the same realm and kind, has a member and no
+    seat to take, so character creation must not offer it. The draft's beginning brings a
+    route whose only family path is an established family of that kind.
+    """
+    from django.db import transaction  # noqa: PLC0415
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+
+    from world.character_creation.constants import Parentage, Stage  # noqa: PLC0415
+    from world.character_creation.factories import (  # noqa: PLC0415
+        CharacterDraftFactory,
+        OriginTemplateFactory,
+    )
+    from world.character_creation.models import CharacterDraft  # noqa: PLC0415
+    from world.roster.constants import NOBLE_KIND_NAME  # noqa: PLC0415
+    from world.roster.factories import FamilyFactory, FamilyKindFactory  # noqa: PLC0415
+    from world.roster.models import Family, Kinsperson  # noqa: PLC0415
+    from world.roster.services import kinship  # noqa: PLC0415
+    from world.societies.factories import OrganizationFactory  # noqa: PLC0415
+    from world.societies.houses.constants import TitleTier  # noqa: PLC0415
+    from world.societies.houses.models import Title  # noqa: PLC0415
+
+    account = AccountDB.objects.get(username=username)
+    with transaction.atomic():
+        family = Family.objects.filter(name=SEATS_SPEC_HOUSE).first()
+        if family is None:
+            kind = FamilyKindFactory(name=NOBLE_KIND_NAME)
+            template = OriginTemplateFactory(
+                name="Born to a house",
+                allows_claim_family=True,
+                allows_name_family=False,
+                allows_no_family=False,
+                parentage=Parentage.KNOWN,
+            )
+            template.claimable_kinds.add(kind)
+            area = template.beginning.starting_area
+            family = FamilyFactory(name=SEATS_SPEC_HOUSE, kind=kind, origin_realm=area.realm)
+            house = OrganizationFactory(name=f"House {SEATS_SPEC_HOUSE}", family=family)
+            elder = kinship.create_person(name="Odalric", family=family)
+            head = kinship.create_person(name=SEATS_SPEC_HEAD, family=family)
+            brother = kinship.create_person(name="Aldous", family=family)
+            for child in (head, brother):
+                kinship.record_parentage(child=child, parent=elder)
+            Title.objects.create(
+                name=f"County of {SEATS_SPEC_HOUSE}",
+                tier=TitleTier.COUNTY,
+                realm=area.realm,
+                house=house,
+                holder=head,
+            )
+            for name, parent, locked in (
+                (SEATS_SPEC_LOCKED_SEAT, head, True),
+                (SEATS_SPEC_OPEN_SEAT, brother, False),
+            ):
+                seat = kinship.create_person(name=name, family=family)
+                seat.is_appable = True
+                seat.name_locked = locked
+                seat.save(update_fields=["is_appable", "name_locked"])
+                kinship.record_parentage(child=seat, parent=parent)
+            closed = FamilyFactory(name=SEATS_SPEC_CLOSED_HOUSE, kind=kind, origin_realm=area.realm)
+            kinship.create_person(name="Ysmae", family=closed)
+
+            draft = CharacterDraft.objects.filter(account=account).first()
+            if draft is None:
+                draft = CharacterDraftFactory(account=account)
+            draft.selected_area = area
+            draft.selected_beginnings = template.beginning
+            draft.selected_origin_template = template
+            draft.family = None
+            draft.claimed_kin_slot = None
+            draft.claimed_kin_pool = None
+            draft.current_stage = Stage.LINEAGE
+            draft.draft_data = {**draft.draft_data, "first_name": SEATS_SPEC_LOCKED_SEAT}
+            draft.save()
+
+    draft = CharacterDraft.objects.get(account=account)
+    seats = {seat.name: seat for seat in Kinsperson.objects.filter(family=family, is_appable=True)}
+    return FamilySeatsSeed(
+        draft_id=draft.pk,
+        family_id=family.pk,
+        family_name=SEATS_SPEC_HOUSE,
+        closed_family_name=SEATS_SPEC_CLOSED_HOUSE,
+        head_name=SEATS_SPEC_HEAD,
+        locked_seat_id=seats[SEATS_SPEC_LOCKED_SEAT].pk,
+        locked_seat_name=SEATS_SPEC_LOCKED_SEAT,
+        open_seat_id=seats[SEATS_SPEC_OPEN_SEAT].pk,
+        open_seat_name=SEATS_SPEC_OPEN_SEAT,
+    )

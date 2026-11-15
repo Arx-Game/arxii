@@ -14,6 +14,11 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// The "Reflecting on" row reads the active character and what they can reflect on; its own
+// tests cover it, so these tests stand it aside (#5124).
+vi.mock('@/gm-adjudication/useActiveCharacterId', () => ({ useActiveCharacterId: () => null }));
+vi.mock('@/magic/components/ReflectingOnRow', () => ({ ReflectingOnRow: () => null }));
+
 vi.mock('../queries', () => ({
   useCreateJournalEntry: vi.fn(),
 }));
@@ -140,7 +145,7 @@ describe('JournalComposerDialog', () => {
     const mutateMock = makeCreateMock();
     const onClose = vi.fn();
     mutateMock.mockImplementation((_vars, callbacks) => {
-      callbacks?.onSuccess?.();
+      callbacks?.onSuccess?.({});
     });
 
     render(<JournalComposerDialog open onClose={onClose} />);

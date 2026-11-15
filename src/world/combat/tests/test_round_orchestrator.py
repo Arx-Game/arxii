@@ -150,7 +150,7 @@ class ResolveRoundBasicTests(TestCase):
         encounter, _participant, opponent, _action, _npc_action = self._setup_encounter()
 
         def mock_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
-            return MagicMock(success_level=2)
+            return MagicMock(success_level=2, outcome=None)
 
         resolve_round(
             encounter,
@@ -187,7 +187,7 @@ class ResolveRoundBasicTests(TestCase):
         action.focused_action.save(update_fields=["action_template"])
 
         def mock_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
-            return MagicMock(success_level=2)
+            return MagicMock(success_level=2, outcome=None)
 
         # Called exactly as the production view calls it: NO offense_check_type.
         resolve_round(encounter, offense_check_fn=mock_check_fn)
@@ -248,7 +248,7 @@ class ResolveRoundBasicTests(TestCase):
         )
 
         def mock_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
-            return MagicMock(success_level=2)
+            return MagicMock(success_level=2, outcome=None)
 
         result = resolve_round(
             encounter,
@@ -410,12 +410,13 @@ class ResolveRoundDefenseCheckTests(TestCase):
         mock_check = MagicMock()
         mock_result = MagicMock()
         mock_result.success_level = 1
+        mock_result.outcome = None
         mock_check.return_value = mock_result
         # A real check type: the defense roll is recorded against it (#4884).
         mock_check_type = CheckTypeFactory()
 
         def mock_offense_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
-            return MagicMock(success_level=2)
+            return MagicMock(success_level=2, outcome=None)
 
         resolve_round(
             encounter,
@@ -502,7 +503,7 @@ class ResolveRoundBossPhaseTests(TestCase):
         )
 
         def mock_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
-            return MagicMock(success_level=2)
+            return MagicMock(success_level=2, outcome=None)
 
         result = resolve_round(
             encounter,
@@ -585,6 +586,7 @@ class ResolveRoundOffenseCheckTests(TestCase):
         mock_check = MagicMock()
         mock_result = MagicMock()
         mock_result.success_level = 0
+        mock_result.outcome = None
         mock_check.return_value = mock_result
 
         resolve_round(
@@ -1209,7 +1211,7 @@ class OffenseCheckSourceTests(TestCase):
         """Wrap this file's existing offense_check_fn fake so it also records."""
 
         def inner(*args, **kwargs):  # type: ignore[no-untyped-def]
-            return MagicMock(success_level=2)
+            return MagicMock(success_level=2, outcome=None)
 
         def check_fn(character, check_type, extra_modifiers=0, fatigue_penalty=0, **kwargs):
             captured.append(check_type)

@@ -32,11 +32,10 @@ from rest_framework import status
 from evennia_extensions.factories import AccountFactory
 from integration_tests.harness import JourneyCase
 from integration_tests.test_drift_correction_journeys import (
-    CONVERT,
     NOTICE,
     PENDING,
+    RITE,
     DriftJourneyCase,
-    post,
 )
 from integration_tests.test_resonance_conflict_journeys import CONFLICT, _Drifting
 from integration_tests.test_resonance_strain_journeys import _BurningResonance
@@ -48,17 +47,21 @@ from integration_tests.test_thread_resonance_journeys import (
 )
 from world.action_points.models import ActionPointConfig, ActionPointPool
 from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
+from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
 from world.classes.factories import CharacterClassFactory
 from world.classes.services import set_primary_class_level
-from world.magic.constants import EffectKind, GainSource, TargetKind
+from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+from world.magic.constants import EffectKind, GainSource, ReflectionChoice, TargetKind
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterAuraFactory,
     CharacterResonanceFactory,
+    DriftCorrectionRiteFactory,
     GiftFactory,
     ImbuingRitualFactory,
     ResonanceFactory,
+    ResonanceTierFactory,
     ThreadFactory,
     ThreadPullCostFactory,
     ThreadPullEffectFactory,
@@ -66,17 +69,27 @@ from world.magic.factories import (
     ensure_canonical_affinities,
     set_aura_split,
 )
-from world.magic.models import Affinity, CharacterResonance, Resonance, Thread, ThreadResonance
+from world.magic.models import (
+    Affinity,
+    CharacterResonance,
+    DriftCorrectionOutcomeShare,
+    Resonance,
+    Thread,
+    ThreadResonance,
+)
 from world.magic.models.aura import CharacterAuraShare
-from world.magic.services.drift import get_drift_config
+from world.magic.services.drift import get_drift_config, get_drift_correction_config
+from world.magic.services.reflection import record_reflection
 from world.magic.services.resonance import grant_resonance
 from world.magic.specialization.services import provision_latent_gift_thread
 from world.scenes.factories import SceneFactory
 from world.scenes.models import Scene
 from world.scenes.tests.cast_test_helpers import grant_technique, make_benign_castable_technique
 from world.seeds.modifier_values import seed_pool_and_cap_lanes
+from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 from world.traits.factories import CheckSystemSetupFactory, TraitFactory
 from world.traits.models import CheckOutcome
+from world.traits.services import ensure_canonical_check_outcome
 from world.vitals.models import CharacterVitals
 
 
@@ -84,6 +97,37 @@ def _hold(sheet, resonance, lifetime: int):
     return CharacterResonance.objects.create(
         character_sheet=sheet, resonance=resonance, balance=lifetime, lifetime_earned=lifetime
     )
+
+
+def embrace_through_the_rite(test, character, resonance):
+    """Settle ``character`` by embracing what unsettles them: write the reflection (the
+    pose a player would post), author the rite, offer an item tied to ``resonance`` and
+    perform the rite through the web seam on a full success. Returns the response."""
+    sheet = character.sheet_data
+    config = get_drift_correction_config()
+    config.rite = DriftCorrectionRiteFactory()
+    config.check_type = CheckTypeFactory()
+    config.check_difficulty_level = 0
+    config.save()
+    outcomes = {name: ensure_canonical_check_outcome(name) for name in CANONICAL_OUTCOME_LEVELS}
+    for outcome in outcomes.values():
+        DriftCorrectionOutcomeShare.objects.update_or_create(
+            outcome_tier=outcome, defaults={"converted_share": Decimal("1.00")}
+        )
+    record_reflection(sheet, writing=None, resonance=resonance, choice=ReflectionChoice.EMBRACE)
+    offering = ItemInstanceFactory(
+        template=ItemTemplateFactory(
+            tied_resonance=resonance, resonance_tier=ResonanceTierFactory()
+        ),
+        holder_character_sheet=sheet,
+    )
+    client = test.api(test.account_of(character))
+    with force_check_outcome(outcomes["Success"]):
+        return client.post(
+            RITE,
+            {"character_sheet_id": sheet.pk, "component_ids": [offering.pk]},
+            format="json",
+        )
 
 
 class _TheAura(JourneyCase):
@@ -129,26 +173,30 @@ class SeeingTheAura(_TheAura):
         self.assertNotIn("unsettled", told)
 
 
-class AcceptingTheChanges(_TheAura):
-    def test_aura_accept(self) -> None:
+class SettlingByEmbracing(_TheAura):
+    def test_embracing_what_unsettles_her_settles_her_at_the_rite(self) -> None:
         self.assertEqual(self.abyssal_settled(self.ysmay), 10)
 
-        told = strip_ansi(self.telnet(self.ysmay, "aura accept"))
+        done = embrace_through_the_rite(self, self.ysmay, self.ruin)
 
-        self.assertIn("You become more abyssal.", told)
-        self.assertNotIn("accepted", told.lower())
+        self.assertEqual(done.status_code, status.HTTP_200_OK, done.data)
+        self.assertEqual("\n".join(done.data["lines"]), "You become more abyssal.")
         self.assertEqual(self.abyssal_settled(self.ysmay), 30)
         self.assertNotIn("unsettled", strip_ansi(self.telnet(self.ysmay, "aura")))
-        # Nothing is left to accept.
-        again = self.telnet(self.ysmay, "aura accept")
-        self.assertNotIn("You become more", again)
-        self.assertEqual(self.abyssal_settled(self.ysmay), 30)
 
-    def test_a_settled_character_has_nothing_to_accept(self) -> None:
-        told = self.telnet(self.hobb, "aura accept")
+    def test_nothing_settles_without_a_reflection(self) -> None:
+        told = self.telnet(self.hobb, "aura settle anything")
 
-        self.assertNotIn("You become more", told)
+        self.assertIn("You have no reflections waiting.", told)
         self.assertEqual(self.abyssal_settled(self.hobb), 10)
+        self.assertEqual(self.abyssal_settled(self.ysmay), 10)
+
+    def test_the_old_accept_verb_and_endpoint_are_gone(self) -> None:
+        self.assertIn("Usage: aura", self.telnet(self.ysmay, "aura accept"))
+        aura = _aura_payload(self.api(self.account_of(self.ysmay)), self.ysmay)
+        response = self.api(self.account_of(self.ysmay)).post(f"{AURAS}{aura['id']}/accept/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(self.abyssal_settled(self.ysmay), 10)
 
     def test_an_unknown_subverb_prints_the_usage(self) -> None:
         self.assertIn("Usage: aura", self.telnet(self.ysmay, "aura frobnicate"))
@@ -812,21 +860,17 @@ class BecomingUnsettled(_Drifting):
         self.assertEqual(len(kept["technique_result"]["focus_lines"]), 1)
         self.assertIn("You must keep your focus.", kept["technique_result"]["focus_lines"][0])
 
-        client = self.api(self.account_of(self.ysmay))
-        accepted = client.post(f"{AURAS}{self.aura()['id']}/accept/")
+        accepted = embrace_through_the_rite(self, self.ysmay, self.abyssal_resonance)
         self.assertEqual(accepted.status_code, status.HTTP_200_OK, accepted.content)
 
         settled = self.web_cast_result(focus=None)
         self.assertEqual(settled["technique_result"]["focus_lines"], [])
 
     def test_accepting_ends_the_check(self) -> None:
-        client = self.api(self.account_of(self.ysmay))
-        payload = self.aura()
-
-        done = client.post(f"{AURAS}{payload['id']}/accept/")
+        done = embrace_through_the_rite(self, self.ysmay, self.abyssal_resonance)
 
         self.assertEqual(done.status_code, status.HTTP_200_OK, done.data)
-        self.assertEqual(done.data["detail"], "You become more abyssal.")
+        self.assertEqual(done.data["lines"], ["You become more abyssal."])
         after = self.aura()
         self.assertIs(after["unsettled"], False)
         self.assertEqual(after["unsettled_line"], "")
@@ -836,16 +880,16 @@ class BecomingUnsettled(_Drifting):
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
-class AtoningOrAccepting(DriftJourneyCase):
-    """Flow 4. Ysmay is Celestial (settled 100/0/0) with 500 Dawnlight and 30 Ruin lifetime,
-    and a tolerance of 5 points past her line.
+class DisowningOrEmbracing(DriftJourneyCase):
+    """Flow 4, the rite of settling (#5124). Ysmay is Celestial (settled 100/0/0) with 500
+    Dawnlight and 30 Ruin lifetime, and a tolerance of 5 points past her line.
 
     Hand-worked: 30 of 530 is 5.66 percent Abyssal, so she is unsettled. A Dawn Flourish deed
     of 20 makes it 30 of 550, 5.45 percent: 0.45 past the tolerance, which is 3 Ruin she
     may convert (rounded up, so a sliver past the line can still be atoned). The deed adds
     10 to her cap toward Dawnlight. Converting those 3 Ruin at the seeded Redemption rate 0.5
     gives int(1.5) = 1 Dawnlight, leaving 27 of 548, 4.93 percent: back under the line.
-    Hobb, with 40 Ruin of 540 (7.41 percent) and no deed in a scene, can only accept.
+    Hobb, with 40 Ruin of 540 (7.41 percent) and no deed in a scene, can only embrace.
     """
 
     def setUp(self) -> None:
@@ -865,7 +909,7 @@ class AtoningOrAccepting(DriftJourneyCase):
     def aura(self, character) -> dict:
         return _aura_payload(self.api(self.account_of(character)), character)
 
-    def test_a_deed_in_the_scene_offers_atone_and_atoning_settles_her(self) -> None:
+    def test_a_deed_in_the_scene_opens_the_chance_and_disowning_settles_her(self) -> None:
         self.connect_telnet(self.ysmay)
         self.watch(self.ysmay)
         self.assertIs(self.aura(self.ysmay)["unsettled"], True)
@@ -878,29 +922,26 @@ class AtoningOrAccepting(DriftJourneyCase):
         (cap,) = offer["caps"]
         self.assertEqual(cap["target_resonance"]["name"], "Dawnlight")
         self.assertEqual(cap["cap_remaining"], 10)
-        (source,) = cap["sources"]
-        self.assertEqual((source["resonance_name"], source["max_amount"]), ("Ruin", 3))
+        self.reflect(self.ysmay, "Ruin", "disown")
 
         with force_check_outcome(self.outcomes["Success"]):
-            done = post(
-                ysmay_api,
-                CONVERT,
+            done = ysmay_api.post(
+                RITE,
                 {
-                    "offer_id": offer["id"],
-                    "source_resonance_id": self.ruin.pk,
-                    "target_resonance_id": self.dawnlight.pk,
-                    "amount": 3,
+                    "character_sheet_id": self.ysmay.sheet_data.pk,
                     "component_ids": [offering],
                 },
+                format="json",
             )
         self.assertEqual(done.status_code, status.HTTP_200_OK, done.data)
-        self.assertEqual((done.data["converted_amount"], done.data["granted_amount"]), (3, 1))
+        # The cap allows 10; only 3 Ruin stand past her line, which is what the rite turns.
+        self.assertEqual(done.data["lines"], ["You disown your Ruin: 3 Ruin became 1 Dawnlight."])
         payload = self.aura(self.ysmay)
         self.assertIs(payload["unsettled"], False)
         self.assertEqual(payload["unsettled_line"], "")
         self.assertNotIn("unsettled", strip_ansi(self.telnet(self.ysmay, "aura")))
 
-    def test_outside_a_scene_there_is_only_accept_and_it_ends_the_unsettled_state(self) -> None:
+    def test_outside_a_scene_she_embraces_what_she_has_become_and_settles(self) -> None:
         hobb_api = self.api(self.account_of(self.hobb))
         before = self.aura(self.hobb)
         self.assertIs(before["unsettled"], True)
@@ -912,10 +953,10 @@ class AtoningOrAccepting(DriftJourneyCase):
         # Her Abyssal streak is no part of who she is: not even a share row for it yet.
         self.assertNotIn("Abyssal", _share_rows(before))
 
-        done = hobb_api.post(f"{AURAS}{before['id']}/accept/")
+        done = embrace_through_the_rite(self, self.hobb, self.ruin)
 
         self.assertEqual(done.status_code, status.HTTP_200_OK, done.data)
-        self.assertEqual(done.data["detail"], "You become more abyssal.")
+        self.assertEqual(done.data["lines"], ["You become more abyssal."])
         after = self.aura(self.hobb)
         self.assertIs(after["unsettled"], False)
         self.assertEqual(after["unsettled_line"], "")
@@ -975,7 +1016,7 @@ class ASineaterTakesTheMire(JourneyCase):
             past["unsettled_line"], "Your Ruin has grown strong enough to make you unsettled."
         )
 
-        done = self.client.post(f"{AURAS}{past['id']}/accept/")
+        done = embrace_through_the_rite(self, self.ysmay, self.ruin)
 
         self.assertEqual(done.status_code, status.HTTP_200_OK, done.data)
         after = self.aura()

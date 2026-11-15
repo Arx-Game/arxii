@@ -346,7 +346,7 @@ class PlayerAction:
     # None/empty for non-cast actions; populated by _combat_actions for casts.
     soulfray_warning: SoulfrayWarning | None = None
     available_fury_tiers: tuple[FuryTierOption, ...] = ()
-    eligible_fury_anchors: tuple[AnchorOption, ...] = ()
+    eligible_fury_resonances: tuple[FuryResonanceOption, ...] = ()
     # Runtime stats and cost the cast card shows (#4799); None for non-cast actions.
     cast_preview: CastPreview | None = None
 
@@ -547,7 +547,7 @@ class FuryTierOption:
 
     A tier is a preset amount of control surrendered for the rest of the engagement.
     ``id`` is the FuryTier PK sent as ``fury_commitment_id``. ``full_intensity`` is the most
-    the trade can buy (the highest authored degree share) with no anchor scaling, computed
+    the trade can buy (the highest authored degree share) with no strength scaling, computed
     server-side.
     """
 
@@ -560,25 +560,34 @@ class FuryTierOption:
 
 
 @dataclass(frozen=True)
-class AnchorTierIntensity:
-    """The most one Fury tier can buy under this anchor's scaling (#4738)."""
+class FuryResonanceTierIntensity:
+    """The most one Fury tier can buy at this resonance's strength (#4738, #5124)."""
 
     tier_id: int
     full_intensity: int
 
 
 @dataclass(frozen=True)
-class AnchorOption:
-    """One eligible bonded anchor for the fury declaration picker (#1543).
+class FuryResonanceOption:
+    """One resonance the character can give in to, for the fury declaration picker (#5124).
 
-    ``id`` is the anchor CharacterSheet PK sent as ``fury_anchor_id``.
-    ``provocation_cap`` is the bond-derived ceiling pre-computed server-side
-    so the client can gate tiers without a round-trip. ``tier_full_intensities``
-    carries, per tier, the full-share intensity scaled by this anchor's cap, so the
-    preview never does tuning math on the client.
+    ``id`` is the Resonance PK sent as ``fury_resonance_id``.
+    ``strength_name`` is its kindled strength's name (the word the player reads).
+    ``control_check_name`` is the player name of the control roll (the configured trait).
+    ``provocation_cap`` is the deepest tier depth its strength allows, pre-computed
+    server-side so the client can gate tiers without a round-trip.
+    ``tier_full_intensities`` carries, per tier, the full-share intensity scaled by this
+    resonance's strength, so the preview never does tuning math on the client.
+    ``weakest_strength_name`` and ``weakest_depth_name`` say how far the weakest strength goes
+    ("A faint passion goes only as far as Let it in"): its name and the deepest tier it reaches
+    (blank when it reaches none).
     """
 
     id: int
     name: str
     provocation_cap: int
-    tier_full_intensities: tuple[AnchorTierIntensity, ...] = ()
+    strength_name: str = ""
+    control_check_name: str = ""
+    tier_full_intensities: tuple[FuryResonanceTierIntensity, ...] = ()
+    weakest_strength_name: str = ""
+    weakest_depth_name: str = ""

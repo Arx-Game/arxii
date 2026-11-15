@@ -149,6 +149,16 @@ export function OptionLabel({ option }: { option: BeatOption }) {
           because {reason}
         </span>
       ))}
+      {option.feeds.map((feed) => (
+        <span
+          key={feed.resonance_name}
+          className="block text-xs text-muted-foreground"
+          data-testid="option-feeds"
+        >
+          Your {feed.resonance_name} is kindled
+          {feed.reason ? `: ${feed.reason}` : ''}
+        </span>
+      ))}
     </span>
   );
 }

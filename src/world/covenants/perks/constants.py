@@ -185,6 +185,27 @@ class Situation(models.TextChoices):
       enemies, default 1).
     - ``TARGET_LOW_HEALTH`` - the target's health is below a fraction (#4759; the
       target-side mirror of ``ALLY_LOW_HEALTH``). Optional ``threshold_percent``.
+
+    The next six are the kindling situations (#5124). They also work as vow perk
+    situations. Each reads ``SituationContext.act`` only when one is given: with no act
+    it answers "does this hold now", with an act it answers "does this act feed it".
+    The shared reads live in ``world.magic.services.kindling``.
+
+    - ``THREAD_ANCHOR_PRESENT`` - a person or organization one of the holder's threads is
+      tied to is in the scene; with ``enemies_only`` set, is an opponent in the fight. The
+      act that feeds it is aimed at that person (an attack, a defense, a technique).
+    - ``OWN_FEELING`` - the holder bears a condition carrying the feeling (the resonance's
+      ``feeling``, or the row's ``condition_property``). Any act feeds it.
+    - ``SHARED_FEELING`` - someone else present bears a condition with the feeling. A
+      condition the holder laid that carries ``KindlingConfig.harm_property`` does not
+      count. Any act feeds it.
+    - ``TARGET_IN_STATE_THEY_CAUSED`` - the target bears a condition with the feeling that
+      the holder laid (``ConditionInstance.source_character``). An act on that target
+      feeds it.
+    - ``SOMEONE_IN_TROUBLE`` - someone present is in peril, badly hurt or held. An act that
+      aids (cover, interpose, succor, a heal, freeing them) feeds it.
+    - ``MISSION_THEME`` - the current mission carries the row's ``mission_theme``. Taking a
+      mission option that carries the theme feeds it.
     """
 
     AT_RANGE = "at_range", "At Range"
@@ -219,6 +240,15 @@ class Situation(models.TextChoices):
         "Enemies With a Condition Property Nearby",
     )
     TARGET_LOW_HEALTH = "target_low_health", "Target Low Health"
+    THREAD_ANCHOR_PRESENT = "thread_anchor_present", "Someone a thread is tied to"
+    OWN_FEELING = "own_feeling", "Their own feeling"
+    SHARED_FEELING = "shared_feeling", "A feeling held in common"
+    TARGET_IN_STATE_THEY_CAUSED = (
+        "target_in_state_they_caused",
+        "Someone in a state they caused",
+    )
+    SOMEONE_IN_TROUBLE = "someone_in_trouble", "Someone in trouble they help"
+    MISSION_THEME = "mission_theme", "What the scene is about"
 
 
 class PerkEffectKind(models.TextChoices):
@@ -354,6 +384,19 @@ SITUATION_PARAM_SPECS: dict[str, SituationParamSpec] = {
         required=frozenset({"condition_property"}),
     ),
     Situation.TARGET_LOW_HEALTH: SituationParamSpec(allowed=frozenset({"threshold_percent"})),
+    Situation.THREAD_ANCHOR_PRESENT: SituationParamSpec(allowed=frozenset({"enemies_only"})),
+    Situation.OWN_FEELING: SituationParamSpec(
+        allowed=frozenset({"condition_property", "count_threshold"})
+    ),
+    Situation.SHARED_FEELING: SituationParamSpec(
+        allowed=frozenset({"condition_property", "count_threshold"})
+    ),
+    Situation.TARGET_IN_STATE_THEY_CAUSED: SituationParamSpec(
+        allowed=frozenset({"condition_property", "count_threshold"})
+    ),
+    Situation.MISSION_THEME: SituationParamSpec(
+        allowed=frozenset({"mission_theme"}), required=frozenset({"mission_theme"})
+    ),
 }
 
 

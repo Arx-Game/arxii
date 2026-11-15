@@ -47,7 +47,7 @@ FIZZLE_SUFFIX = "'s strike finds no one in reach."
 
 
 def _hit(*args, **kwargs):
-    return MagicMock(success_level=2)
+    return MagicMock(success_level=2, outcome=None)
 
 
 class PcLiveReachTests(TestCase):

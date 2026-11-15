@@ -27,6 +27,7 @@ import { isTargetReachable } from '../reach';
 
 vi.mock('@/combat/queries', () => ({
   useAvailableCombos: vi.fn(),
+  useRallyResonances: vi.fn(() => ({ data: undefined })),
   useUpgradeCombo: vi.fn(),
   useDispatchPlayerAction: vi.fn(),
   useFleeMutation: vi.fn(),

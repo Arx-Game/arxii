@@ -193,7 +193,12 @@ class BossPhaseAdmin(admin.ModelAdmin):
 
 @admin.register(CombatRoundAction)
 class CombatRoundActionAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["fury_anchor", "interaction", "item_instance", "redirect_object_target"]
+    autocomplete_fields = [
+        "fury_resonance",
+        "interaction",
+        "item_instance",
+        "redirect_object_target",
+    ]
     list_display = [
         "participant",
         "round_number",

@@ -159,6 +159,14 @@ class Resonance(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="resonances",
         help_text="Lore entry this resonance is bound to, if any.",
     )
+    feeling = models.ForeignKey(
+        "arxii.Property",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="feeling_of_resonances",
+        help_text=("Conditions carrying this property count as this resonance's feeling."),
+    )
     objects = ResonanceManager()
 
     @cached_property

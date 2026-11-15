@@ -9,7 +9,7 @@
 
 | Item | Result |
 |---|---|
-| 1. Migrations 0411 to 0436 against the newest production dump | **PASS after a fix.** The first run found that `0411_check_ladder_rows` crashed on the production copy. 0411 was fixed in `c5b3172cd`, and a re-run on the same dump applied 0404 to 0436 cleanly (see "Re-run after the 0411 fix" at the end). |
+| 1. Migrations 0411 to 0436 against the newest production dump | **PASS after a fix.** The first run found that `0418_check_ladder_rows` crashed on the production copy. 0411 was fixed in `c5b3172cd`, and a re-run on the same dump applied 0404 to 0436 cleanly (see "Re-run after the 0411 fix" at the end). |
 | 2a. Level-11 PC against a level-11 NPC | PASS through the web dispatch seam. Even chart, both sides at rank 17 (not rank 11, see the note under that item). Browser and WebSocket part: BLOCKED, not run. |
 | 2b. Level-6 PC against a level-5 NPC | PASS. Four ranks apart. |
 | 2c. Scaling settings panel, and editing a LevelTier row | PASS. |
@@ -17,10 +17,10 @@
 
 ## Bugs found (the 0411 crash was fixed afterwards in `c5b3172cd`)
 
-1. **`0411_check_ladder_rows` fails on a production database.** Input: the production dump `arxii-20261115T033001Z.sql.gz` (9 `CheckRank` rows, ranks 0 to 8, `min_points` 0, 10, 25, 50, 80, 115, 155, 200, 250). I expected 0411 to add ranks 9 to 30. I saw:
+1. **`0418_check_ladder_rows` fails on a production database.** Input: the production dump `arxii-20261115T033001Z.sql.gz` (9 `CheckRank` rows, ranks 0 to 8, `min_points` 0, 10, 25, 50, 80, 115, 155, 200, 250). I expected 0411 to add ranks 9 to 30. I saw:
    `IntegrityError: null value in column "min_points" of relation "arxii_checkrank" violates not-null constraint. DETAIL: Failing row contains (10, 9, null, Rank 9, ).`
    Cause: at migration 0411 the column `min_points` still exists, is NOT NULL and has no default, and the migration calls `CheckRank.objects.get_or_create(rank=rank, defaults={"name": f"Rank {rank}"})` without a `min_points`. CI never sees it because the migration returns early on a database with no `CheckRank` rows. A production deploy would stop at 0411 and `migrate --noinput` would fail. The migration is atomic, so nothing is half-applied; the database stays at 0410.
-2. **Two migrations cannot be reversed.** `0412_checkrank_drop_min_points` (re-adding the NOT NULL column to 31 rows) and `0421_difficulty_levels_batch2_remove` (re-adding `soulfrayconfig.base_check_difficulty`). Both die with `IntegrityError ... contains null values`. This is the expected RemoveField limit the task described, recorded here so the PR body names them. Everything else reverses, details under item 1.
+2. **Two migrations cannot be reversed.** `0419_checkrank_drop_min_points` (re-adding the NOT NULL column to 31 rows) and `0428_difficulty_levels_batch2_remove` (re-adding `soulfrayconfig.base_check_difficulty`). Both die with `IntegrityError ... contains null values`. This is the expected RemoveField limit the task described, recorded here so the PR body names them. Everything else reverses, details under item 1.
 
 Smaller observations, not defects:
 
@@ -51,7 +51,7 @@ Report of the tool, as printed:
 head: 8fca6284177b19af6e2825698abf0db4edb3465e (feature-5093-scaling-rules-read-aggregate-point-total)
 dump: arxii-20261115T033001Z.sql.gz
 scratch database: scratch_pmc_20261115T211844Z_19200 (django connected to: scratch_pmc_20261115T211844Z_19200)
-production tip: 0403_channels_carry_from_evennia | branch head: 0436_drop_rescue_thread_mult | main tip: 0410_alter_gift_resonances | step back to: 0410_alter_gift_resonances
+production tip: 0403_channels_carry_from_evennia | branch head: 0443_drop_rescue_thread_mult | main tip: 0410_alter_gift_resonances | step back to: 0410_alter_gift_resonances
 == forward to branch head
 ...
 django.db.utils.IntegrityError: null value in column "min_points" of relation "arxii_checkrank" violates not-null constraint
@@ -145,8 +145,8 @@ These agree with the docstring's rule (each of 10 to 24 points lands on level 1,
 
 - 0436 down to 0422 all reversed cleanly. That includes the drops in 0424, 0427 and 0431, which re-add the old columns at their defaults and do not write the old values back.
 - Going forward again from 0421 to 0436 applied cleanly; baselines (360), ranks (31), tiers (6), the three severity values and the condition levels matched the first run.
-- `0421_difficulty_levels_batch2_remove` does not reverse: `IntegrityError: column "base_check_difficulty" of relation "arxii_soulfrayconfig" contains null values` (the first of its columns, 1 row; the migration is not reversible once rows exist).
-- On two other scratch copies (one at 0418, one at 0420), 0420, 0419, 0418, 0417, 0416, 0415, 0414 and 0413 all reversed, and then 0419 to 0421 applied again. `0412_checkrank_drop_min_points` does not reverse: `IntegrityError: column "min_points" of relation "arxii_checkrank" contains null values` (31 rows).
+- `0428_difficulty_levels_batch2_remove` does not reverse: `IntegrityError: column "base_check_difficulty" of relation "arxii_soulfrayconfig" contains null values` (the first of its columns, 1 row; the migration is not reversible once rows exist).
+- On two other scratch copies (one at 0418, one at 0420), 0420, 0419, 0418, 0417, 0416, 0415, 0414 and 0413 all reversed, and then 0419 to 0421 applied again. `0419_checkrank_drop_min_points` does not reverse: `IntegrityError: column "min_points" of relation "arxii_checkrank" contains null values` (31 rows).
 - Not reversible, by the task's own description: RemoveField on 0412 and 0421. The other RemoveField migrations (0418, 0424, 0427, 0431, 0436) did reverse, because their re-added columns have defaults.
 
 Not run: a clean forward, back and forward with the tool itself, since the tool stops at the failing 0411. Rerun it once 0411 is fixed.

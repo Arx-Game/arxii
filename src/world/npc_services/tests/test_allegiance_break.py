@@ -322,7 +322,7 @@ class PcActionAllegianceBreakAggregationTests(TestCase):
             patch("world.combat.services.perform_check") as mock_perform,
             patch("world.npc_services.allegiance_outcomes.attempt_allegiance_break") as mock_break,
         ):
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             _resolve_pc_action(self.participant, action)
         mock_break.assert_called_once()
         kwargs = mock_break.call_args.kwargs
@@ -338,7 +338,7 @@ class PcActionAllegianceBreakAggregationTests(TestCase):
             patch("world.combat.services.perform_check") as mock_perform,
             patch("world.npc_services.allegiance_outcomes.attempt_allegiance_break") as mock_break,
         ):
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             _resolve_pc_action(self.participant, action)
         mock_break.assert_called_once()
         kwargs = mock_break.call_args.kwargs
@@ -397,7 +397,7 @@ class MissingBreakCheckTypeTests(TestCase):
             patch("world.combat.services.perform_check") as mock_perform,
             self.assertLogs("world.npc_services.allegiance_outcomes", level="WARNING") as logs,
         ):
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             resolve_round(self.encounter)
 
         self.assertEqual(len(logs.records), 1)

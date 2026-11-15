@@ -626,6 +626,7 @@ class AttackPreResolveCancellationTest(TestCase):
         # Stub perform_check to avoid needing full check infrastructure
         mock_check = MagicMock()
         mock_check.success_level = 0  # miss → 0 damage
+        mock_check.outcome = None
 
         def fake_check(char, ct, **kwargs):
             return mock_check
@@ -660,6 +661,7 @@ class AttackPreResolveCancellationTest(TestCase):
 
         mock_check = MagicMock()
         mock_check.success_level = -2  # critical hit → should be big damage if not cancelled
+        mock_check.outcome = None
 
         def fake_check(char, ct, **kwargs):
             return mock_check

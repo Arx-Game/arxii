@@ -60,7 +60,7 @@ PATH_LEVEL = "world.combat.spectacle.get_character_path_level"
 def _check(success_level: int) -> SimpleNamespace:
     return SimpleNamespace(
         success_level=success_level,
-        outcome=SimpleNamespace(success_level=success_level),
+        outcome=None,
     )
 
 

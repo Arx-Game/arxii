@@ -1589,7 +1589,7 @@ class DriftCorrectionRiteFactory(RitualFactory):
 
     name = "Rite of Drift Correction"
     execution_kind = RitualExecutionKind.SERVICE
-    service_function_path = "world.magic.services.drift_correction.perform_drift_correction_rite"
+    service_function_path = "world.magic.services.drift_correction.perform_settling_rite"
     flow = None
     client_hosted = True
 
@@ -5001,3 +5001,174 @@ class DriftConversionCapFactory(factory.django.DjangoModelFactory):
     offer = factory.SubFactory(DriftConversionOfferFactory)
     target_resonance = factory.SubFactory(ResonanceFactory)
     cap = 10
+
+
+# =============================================================================
+# Kindled resonances and the rite of settling (#5124)
+# =============================================================================
+
+
+class ResonanceGrantFactory(factory.django.DjangoModelFactory):
+    """A staff-granted ResonanceGrant ledger row (no balance change; use ``grant_resonance``
+    to move a balance)."""
+
+    class Meta:
+        model = "arxii.ResonanceGrant"
+
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
+    resonance = factory.SubFactory(ResonanceFactory)
+    amount = 10
+    source = "STAFF_GRANT"
+
+
+class KindledStrengthTierFactory(factory.django.DjangoModelFactory):
+    """One kindled strength row, keyed on its rank. Defaults give a modest, usable strength."""
+
+    class Meta:
+        model = "arxii.KindledStrengthTier"
+
+    rank = factory.Sequence(lambda n: n + 1)
+    name = factory.LazyAttribute(lambda o: f"Strength {o.rank}")
+    min_bond_tier = 0
+    min_severity = 0
+    pull_levels = 0
+    give_in_max_depth = 0
+    give_in_bonus_percent = 0
+    give_in_ease = 0
+    dig_deep_scale_percent = 0
+    earn_percent = 100
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        """Update-or-create on rank so passed fields land on a row that already exists.
+
+        Migration 0413 seeds ranks 1 to 3, so on the Postgres tier the row is already there;
+        a plain ``django_get_or_create`` would silently drop every non-lookup kwarg
+        (django_notes.md's get_or_create gotcha).
+        """
+        rank = kwargs.pop("rank")
+        instance, _ = model_class.objects.update_or_create(rank=rank, defaults=kwargs)
+        return instance
+
+
+def kindle_resonance(sheet, resonance, tier) -> None:
+    """Make ``resonance`` kindled on ``sheet`` at the strength row ``tier``, wherever she is.
+
+    Goes through a real own-feeling situation: the sheet holds the resonance, the resonance
+    has a feeling, an authored ``own_feeling`` row kindles it from severity, and the
+    character carries a condition with that feeling at the severity ``tier`` is reached at
+    (the tier's ``min_severity``, set to its rank when it has none). No fight or scene is
+    needed, so a test of giving in does not have to stage one.
+    """
+    from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
+    from world.covenants.perks.constants import Situation
+    from world.mechanics.factories import PropertyFactory
+
+    if tier.min_severity == 0:
+        tier.min_severity = tier.rank
+        tier.save(update_fields=["min_severity"])
+    CharacterResonanceFactory(character_sheet=sheet, resonance=resonance)
+    sheet.__dict__.pop("cached_resonances", None)
+    if resonance.feeling is None:
+        resonance.feeling = PropertyFactory()
+        resonance.save(update_fields=["feeling"])
+    KindlingSituationFactory(resonance=resonance, situation=Situation.OWN_FEELING, strength=None)
+    template = ConditionTemplateFactory()
+    template.properties.add(resonance.feeling)
+    ConditionInstanceFactory(target=sheet.character, condition=template, severity=tier.min_severity)
+
+
+class KindlingConfigFactory(factory.django.DjangoModelFactory):
+    """The kindling config singleton; passed fields (``harm_property=``) land on re-use."""
+
+    class Meta:
+        model = "arxii.KindlingConfig"
+
+    pk = 1
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        pk = kwargs.pop("pk")
+        instance, _ = model_class.objects.update_or_create(pk=pk, defaults=kwargs)
+        return instance
+
+
+class KindledDeedAwardFactory(factory.django.DjangoModelFactory):
+    """What a kindled deed earns at one roll result."""
+
+    class Meta:
+        model = "arxii.KindledDeedAward"
+
+    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    amount = 10
+
+
+class RallyKindlingStrengthFactory(factory.django.DjangoModelFactory):
+    """The strength a Rally kindles at one roll result."""
+
+    class Meta:
+        model = "arxii.RallyKindlingStrength"
+
+    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    strength = 1
+
+
+class KindlingSituationFactory(factory.django.DjangoModelFactory):
+    """A situation that kindles one resonance (pass ``resonance=None, for_affinity=...`` for
+    an affinity-wide row). Defaults to the parameterless ``Situation.IN_MELEE``."""
+
+    class Meta:
+        model = "arxii.KindlingSituation"
+
+    resonance = factory.SubFactory(ResonanceFactory)
+    for_affinity = None
+    situation = "in_melee"
+    strength = 1
+    is_active = True
+    display_order = 0
+
+
+class KindlingFactory(factory.django.DjangoModelFactory):
+    """A stored kindling for a fight (pass ``encounter=None, scene=...`` for a scene's)."""
+
+    class Meta:
+        model = "arxii.Kindling"
+
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
+    resonance = factory.SubFactory(ResonanceFactory)
+    strength = 1
+    source = "RALLY"
+    encounter = factory.SubFactory("world.combat.factories.CombatEncounterFactory")
+    scene = None
+
+
+class SettlingRiteFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "arxii.SettlingRite"
+
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
+    scene = None
+    outcome = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    share = Decimal("1.00")
+
+
+class ReflectionFactory(factory.django.DjangoModelFactory):
+    """A waiting reflection on an unsettling resonance, carried by a journal entry.
+
+    Pass ``grant=<ResonanceGrant>, resonance=None`` to reflect on a deed; pass
+    ``interaction=<Interaction>, journal_entry=None`` to be carried by a pose.
+    """
+
+    class Meta:
+        model = "arxii.Reflection"
+
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
+    choice = "DISOWN"
+    grant = None
+    resonance = factory.SubFactory(ResonanceFactory)
+    interaction = None
+    journal_entry = factory.SubFactory(
+        "world.journals.factories.JournalEntryFactory",
+        author=factory.SelfAttribute("..character_sheet"),
+    )
+    rite = None

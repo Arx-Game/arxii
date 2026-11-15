@@ -576,7 +576,7 @@ actions, backends, and service functions.
   - `CmdDeclareTechnique` (`cast`, alias `declare`) — unified scene-adaptive
     technique cast (#1351/#1330); thin `DispatchCommand` that parses
     `cast <technique> [at <name>] [effort=<level>] [secondary]
-    [pull=<thread>[,…] resonance=<name> [tier=<1-3>] [beseech=N]] [fury=<tier> anchor=<name>]`
+    [pull=<thread>[,…] resonance=<name> [tier=<1-3>] [beseech=N]] [givein=<resonance>:<tier>]`
     and emits a SCENE_ADAPTIVE `ActionRef` keyed to `"cast_technique"`. Outside combat:
     runs `CastTechniqueAction.execute()` immediately (non-combat cast via
     `request_technique_cast`). In a DECLARING round: calls
@@ -590,7 +590,7 @@ actions, backends, and service functions.
     thread names or ids, each optionally `<thread>:<resonance>` (`pull=Loom Strand:Ember`,
     #5123) to name the held resonance that pays for that thread: a bare thread is paid by its
     leading resonance, and an unknown resonance or one the character does not hold is refused
-    in words (`commands/utils/held_resonance.py`, the one lookup `aura atone` and `imbue
+    in words (`commands/utils/held_resonance.py`, the one lookup `imbue
     resonance=` share) with nothing charged. A standalone `combat pull <tier>=<thread>[:<resonance>][,...]`
     reads the same way. `resonance=` names the resonance a burn comes from (it must be one of
     the payers; formerly the resonance to spend from); `tier=` is 1, 2, or 3
@@ -619,10 +619,10 @@ actions, backends, and service functions.
     pull=<thread> resonance=<name> beseech=N` outside any encounter rolls the
     same petition check and gets the same bonus/debt treatment.
 
-    **Fury params** (`fury=<tier>` / `anchor=<name>`, #1454) — single-token values: `fury=`
-    names a `FuryTier` by name or depth; `anchor=` names the bonded character whose harm the
-    rage answers to (resolved to a `CharacterSheet` by character key). They inject
-    `fury_commitment_id` / `fury_anchor_id` into the dispatch kwargs, which `round_declaration`
+    **Giving in** (`givein=<resonance>:<tier>`, #1454, #5124) — one single-token value, `_` standing
+    for a space in either name (`givein=Wrath:lose_yourself`): the resonance is resolved by name,
+    the `FuryTier` by name or depth. It injects
+    `fury_commitment_id` / `fury_resonance_id` into the dispatch kwargs, which `round_declaration`
     forwards onto the `CombatRoundAction`; `resolve_combat_technique` consumes them: the tier
     is control she surrenders for the rest of the engagement, her control roll decides the
     intensity it buys, and a Berserk tier applies Berserk (#4738). The caster is told
@@ -900,6 +900,21 @@ actions, backends, and service functions.
   (`ShapingTheHouse`, `KeepingTheHousehold`, `KeepingTheHouseUp`); `tests/
   test_manageroom_command.py` keeps only the `room/aura` resonance parse checks (magic
   ground). A new `room` switch gets its lines in that journey module.
+- **`kindled_resonances.py`** (#5124): `CmdKindledResonances` (`resonances`, separate from the
+  bare `resonance` balances command) prints each held resonance with its affinity and "Kindled,
+  blazing" or "Not kindled", then the reasons, from `kindled_resonances_now`. Never a number.
+- **`reflection.py`** (#5124): `CmdReflect` (`reflect`) lists what a character can reflect on, the
+  unsettling resonance by name and each unreflected kindled deed by the number shown; `pose/reflect
+  <deed number or resonance>=<embrace|disown> <text>` and `journal/reflect <target>=<embrace|disown>
+  title=<text> body=<text> [public] [tags=] [about=]` take the reflection with the writing
+  (`CmdPose` and `CmdJournal` are `takes_switches`; an unknown switch prints usage).
+  `reflection_kwargs_and_rest` turns the target and choice into the action's `reflect_*` kwargs;
+  the service resolves the name and refuses. Thin. Typed in
+  `integration_tests/test_reflection_journeys.py`.
+- **Combat and the GM** (#5124): `combat digdeep [<resonance>]` and `combat rally <ally>[=<resonance>]`
+  (`combat_maneuvers.py`) name the resonance; `stage kindle <character>=<resonance>[:<strength>]`
+  (`gm_props.py`, action `stage_kindle`) kindles a resonance for the scene, gated like the other
+  `stage` verbs. Typed in `integration_tests/test_kindled_dig_deep_and_rally_journeys.py`.
 - **`gm_props.py`**: `CmdStage` (`stage`, #2503) — the GM's mid-scene improv, a
   `DispatchCommand` over `StagePropAction`/`StagePropertyAction`
   (`actions/definitions/gm_props.py`): `stage prop <item template name>` materializes a
@@ -1663,22 +1678,19 @@ actions, backends, and service functions.
   `src/actions/CLAUDE.md` and `world/magic/CLAUDE.md` "Technique Entrance") instead — the
   technique cast IS the entrance's check. `CmdFlourish` (`flourish <resonance>`) — thin
   wrapper resolving a pending entry-flourish offer via `ResolveFlourishOfferAction`.
-- **`drift_correction.py`** (#4733, #5123): `CmdAura` (`aura`), which replaced `drift` with no
+- **`drift_correction.py`** (#4733, #5123, #5124): `CmdAura` (`aura`), which replaced `drift` with no
   alias. Bare `aura` shows the aura in words (each affinity's share as "nearly all", "a tenth";
   never a number), the unsettled line ("Your Ruin has grown strong enough to make you
-  unsettled." from `drift_for` / `unsettled_line`), the Mire's share in words, then the open
-  chance to atone (per target resonance: cap, sources with rate and projected yield, focus
-  bonus, carried items that count as the offering, with the faceted and keepsake ones marked
-  as spent only when named), or "You have no open chance to atone.", or the rite-not-ready
-  sentence. `aura atone <from>=<into> [<amount>] [with <item>]` (it was `drift convert`)
-  dispatches `PerformDriftCorrectionAction` (no amount means the most allowed). By default it
-  offers every carried item except those that count only as a facet or a keepsake, so a plain
-  material is what gets spent; `with <item>` names one of the caller's own carried items
-  (exact name, else a unique part of one) to spend instead, and a name that matches nothing,
-  several things, or an item that does not count is the command's own error. `aura decline`
-  dispatches `DeclineDriftCorrectionAction`; `aura accept` dispatches `AcceptAuraChangeAction`
-  (refused unless unsettled). Thin: rules live in `world/magic/services/drift_correction.py`
-  and `world/magic/services/drift.py`.
+  unsettled." from `drift_for` / `unsettled_line`), the Mire's share in words, then the
+  waiting reflections (each as "<title> (<writing>). <what the rite will do>"), the offerings
+  carried that count, the deeds not yet reflected on (by number, as `reflect` lists them) and the
+  open chance to atone ("A chance to atone is open: up to 3 toward Fury."), or "You have no
+  reflections waiting.", or the rite-not-ready sentence. `aura settle <offering>` dispatches
+  `PerformSettlingRiteAction` with the one carried item named (exact name, else a unique part of
+  one); a name that matches nothing, several things, or an item that does not count for what is
+  waiting is the command's own error, and nothing waiting is refused first. Nothing else settles:
+  the older atone, decline and accept sub-verbs are gone. Thin: rules live in
+  `world/magic/services/drift_correction.py` and `world/magic/services/settling_preview.py`.
 
 ### Magic-Adjacent Commands (`commands/`)
 - **`dramatic_moments.py`** (#2183, #2227): `CmdMoment` (`moment`) — the GM-facing

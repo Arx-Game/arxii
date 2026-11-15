@@ -1824,6 +1824,14 @@ class CombatRoundAction(RelatedCacheClearingMixin, CommittingDeclaration, Shared
         blank=True,
         related_name="+",
     )
+    rally_resonance = models.ForeignKey(
+        "arxii.Resonance",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The ally's resonance a Rally names (#5124); null for any other action.",
+    )
     maneuver = models.CharField(
         max_length=20,
         choices=CombatManeuver.choices,
@@ -2512,6 +2520,10 @@ class CombatPullThread(SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="+",
         help_text="The resonance this pull charges for the thread, and whose perks apply.",
+    )
+    kindled_strength = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="The kindled strength rank the payer had when the pull was committed; 0 = none.",
     )
 
     class Meta:

@@ -37,11 +37,13 @@ from world.scenes.constants import RoundStatus
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatParticipant
+    from world.magic.models import KindledStrengthTier, Resonance
 
 NOT_IN_A_FIGHT_MESSAGE = "You are not in a fight you can dig deep in."
 ALREADY_DUG_DEEP_MESSAGE = "You have already dug deep this round."
 NO_DIG_DEEP_TUNING_MESSAGE = "There is nothing to dig deep with yet."
 NO_PRESSURE_MESSAGE = "Nothing in this fight is pressing you to dig deep."
+NOT_YOUR_RESONANCE_MESSAGE = "You do not hold that resonance."
 
 
 class DigDeepRefusedError(Exception):
@@ -105,8 +107,42 @@ def _lock_and_mark_round(engagement: CharacterEngagement, round_number: int) -> 
     engagement.save(update_fields=["last_dug_deep_round"])
 
 
-def dig_deep(participant: CombatParticipant) -> DigDeepResult:
+def kindled_dig_deep_tier(
+    participant: CombatParticipant, resonance: Resonance | None
+) -> KindledStrengthTier | None:
+    """The kindled strength of the resonance she names to dig deep, or None (#5124).
+
+    None when she names none or it is not kindled now. Read in this fight's round context and
+    her live mission, the same surroundings her resonances panel reads. Raises
+    ``DigDeepRefusedError`` when she does not hold the resonance.
+    """
+    if resonance is None:
+        return None
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+    from world.magic.services.kindling import (  # noqa: PLC0415
+        active_mission_for,
+        holds_resonance,
+        kindled_for,
+    )
+
+    sheet = participant.character_sheet
+    if not holds_resonance(sheet, resonance):
+        raise DigDeepRefusedError(NOT_YOUR_RESONANCE_MESSAGE)
+    return kindled_for(
+        sheet,
+        resonance,
+        resolution=CombatRoundContext(participant),
+        mission=active_mission_for(sheet),
+    ).tier
+
+
+def dig_deep(participant: CombatParticipant, resonance: Resonance | None = None) -> DigDeepResult:
     """Dig deep for ``participant``: pay, roll resolve, surge her intensity by the outcome's band.
+
+    She may name one of her own ``resonance``s (#5124). A kindled one raises the surge's
+    intensity scale by its strength's ``dig_deep_scale_percent`` and is named in the surge's
+    cause; an unkindled one, or none, works as it always did. Naming a resonance she does not
+    hold is refused.
 
     Refuses (``DigDeepRefusedError``) when she is not an active participant in a declaring
     round with a COMBAT engagement, when the fight has no escalation curve to surge on,
@@ -119,6 +155,8 @@ def dig_deep(participant: CombatParticipant) -> DigDeepResult:
     encounter = participant.encounter
     if participant.status != ParticipantStatus.ACTIVE or encounter.status != RoundStatus.DECLARING:
         raise DigDeepRefusedError(NOT_IN_A_FIGHT_MESSAGE)
+    kindled_tier = kindled_dig_deep_tier(participant, resonance)
+    intensity_scale = 1.0 + (kindled_tier.dig_deep_scale_percent / 100 if kindled_tier else 0)
     engagement = combat_engagement_of(participant)
     if engagement is None:
         raise DigDeepRefusedError(NOT_IN_A_FIGHT_MESSAGE)
@@ -165,7 +203,9 @@ def dig_deep(participant: CombatParticipant) -> DigDeepResult:
                 potency=tuning.potency_base,
                 source_character=participant.character_sheet.character,
                 tuning=tuning,
-                cause=f"{persona_name_of(participant)} digs deep.",
+                intensity_scale=intensity_scale,
+                vow_scaled=intensity_scale != 1,
+                cause=_cause(participant, resonance, kindled_tier),
             )
         committed = True
     finally:
@@ -187,4 +227,17 @@ def dig_deep(participant: CombatParticipant) -> DigDeepResult:
         used_free_dig_deep=used_free,
         fatigue_spent=fatigue_spent,
         fatigue_category=config.dig_deep_fatigue_category,
+        kindled_resonance=resonance.name if kindled_tier is not None and resonance else None,
     )
+
+
+def _cause(
+    participant: CombatParticipant,
+    resonance: Resonance | None,
+    kindled_tier: KindledStrengthTier | None,
+) -> str:
+    """The surge's cause line: who dug deep, and the kindled resonance she drew on."""
+    name = persona_name_of(participant)
+    if resonance is None or kindled_tier is None:
+        return f"{name} digs deep."
+    return f"{name} digs deep, drawing on {resonance.name}."

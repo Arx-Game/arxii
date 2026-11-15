@@ -41,7 +41,7 @@ from world.character_creation.factories import (
 from world.character_creation.validators import get_lineage_errors
 from world.distinctions.factories import DistinctionFactory
 from world.roster.constants import CRIME_KIND_NAME, NOBLE_KIND_NAME
-from world.roster.factories import FamilyFactory, FamilyKindFactory
+from world.roster.factories import FamilyFactory, FamilyKindFactory, KinSlotPoolFactory
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.models import (
     FealtyEdge,
@@ -185,7 +185,9 @@ class UpbringingRecipesTest(TestCase):
         family = FamilyFactory(
             kind=humble, influence=2, origin_realm=template.beginning.starting_area.realm
         )
-        draft = _draft(template, family=family)
+        # The family is joined through a seat staff opened on it (#5130).
+        seat = KinSlotPoolFactory(family=family)
+        draft = _draft(template, family=family, claimed_kin_pool=seat)
         assert get_lineage_errors(draft) == []
         assert draft.calculate_upbringing_cost() == 6
 
@@ -217,7 +219,6 @@ class UpbringingRecipesTest(TestCase):
 
     def test_recipe_11_kin_vacancy_backed_by_a_pool(self):
         """Recipe 11: a place in a staff family, priced by influence, backed by a slot pool."""
-        from world.roster.factories import KinSlotPoolFactory
         from world.societies.factories import OrganizationFactory, VacancyFactory
 
         noble = FamilyKindFactory(name=NOBLE_KIND_NAME)

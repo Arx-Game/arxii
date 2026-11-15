@@ -36,6 +36,7 @@ from world.combat.services.reactions import (
     reaction_penalty,
     record_reaction,
 )
+from world.combat.services.techniques.kindled_deed import award_defense_deed
 from world.combat.types import DefenseResult, ParticipantDamageResult
 from world.conditions.services import spend_contributing_conditions
 from world.covenants.constants import DefenseStyle
@@ -285,7 +286,7 @@ def resolve_npc_attack(
     # opponent row instead (the ATTACKER_AFFINITY evaluator's data source).
     # Mirrors the offense sites' sheet + CombatRoundContext construction
     # (services.py:435-448) with `holder`/`subject` both the defender's own
-    # sheet, matching `_resolve_social_check`'s pattern above.
+    # sheet, matching `roll_social_check`'s pattern.
     from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
     from world.covenants.perks.context import SituationContext  # noqa: PLC0415
 
@@ -333,6 +334,7 @@ def resolve_npc_attack(
         extra_traits=style_traits,
     )
     spend_contributing_conditions(breakdown)
+    award_defense_deed(participant, opponent_action.opponent, result.outcome)
     moved_out = dodge is not None and land_dodge(participant, dodge, result.success_level)
 
     multiplier = _damage_multiplier_for_success(result.success_level)

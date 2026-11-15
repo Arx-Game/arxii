@@ -8,7 +8,7 @@
  * in the rituals module — not here.
  */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import * as api from './api';
 import { performRitual } from '@/rituals/api';
 import type { PerformRitualRequest } from '@/rituals/types';
@@ -27,8 +27,7 @@ import type {
   ChooseUltimateRequest,
   CrossXPLockRequest,
   DissolveRequest,
-  DriftCorrectionConvertRequest,
-  DriftCorrectionDeclineRequest,
+  SettlingRitePerformRequest,
   EntryFlourishRespondRequest,
   GlimpseDistinctionLinkRequest,
   PatchThreadRequest,
@@ -109,6 +108,13 @@ export const magicKeys = {
   manifestChoices: (characterSheetId: number) =>
     [...magicKeys.all, 'manifest-choices', characterSheetId] as const,
 
+  kindledResonances: (characterSheetId: number) =>
+    [...magicKeys.all, 'kindled-resonances', characterSheetId] as const,
+
+  reflectionOptionsAll: () => [...magicKeys.all, 'reflection-options'] as const,
+  reflectionOptions: (characterSheetId: number) =>
+    [...magicKeys.all, 'reflection-options', characterSheetId] as const,
+
   audereUltimates: (characterSheetId: number) =>
     [...magicKeys.all, 'audere', 'ultimates', characterSheetId] as const,
 
@@ -117,6 +123,9 @@ export const magicKeys = {
   entryFlourishPending: () => [...magicKeys.all, 'entry-flourish', 'pending'] as const,
 
   driftConversionPending: () => [...magicKeys.all, 'drift-correction', 'pending'] as const,
+  settlingRite: (characterSheetId: number) =>
+    [...magicKeys.all, 'settling-rite', characterSheetId] as const,
+  settlingRiteAll: () => [...magicKeys.all, 'settling-rite'] as const,
 
   pathIntent: (characterId: number) => [...magicKeys.all, 'path-intent', characterId] as const,
 
@@ -878,53 +887,65 @@ export function useRespondToEntryFlourish(_characterSheetId: number) {
 }
 
 // ---------------------------------------------------------------------------
-// Drift conversion offers, #4733
+// The open chance to atone (#4733) and the rite of settling (#5124)
 // ---------------------------------------------------------------------------
 
 /**
- * Open drift conversion offers for the account. Offers exist only inside a live
- * scene, so the 5 s poll runs only where the gate is mounted (the scene page and
- * the game page). throwOnError deliberately NOT set: same rationale as
- * usePendingEntryFlourishOffers.
+ * The account's open chances to atone: one per character, open until the rite spends it, so
+ * it is read when the sheet is, not polled. throwOnError deliberately NOT set: same
+ * rationale as usePendingEntryFlourishOffers.
  */
 export function usePendingDriftConversionOffers(enabled: boolean = true) {
   return useQuery({
     queryKey: magicKeys.driftConversionPending(),
     queryFn: () => api.getPendingDriftConversionOffers(),
-    refetchInterval: 5_000,
     enabled,
   });
 }
 
 /**
- * Perform the drift correction rite under an open offer.
- *
- * On success invalidates the pending inbox (the cap shrinks or the offer closes),
- * magicKeys.characterResonanceList() (the source loses and the target gains balance;
- * prefix match covers every per-sheet entry), the auras and the character sheets (an
- * atonement can leave the character settled, so the dialog must not keep reading her
- * as unsettled).
+ * A deed was earned: what a reflection can name now includes it, and the rite's reading changes
+ * with it. The same two keys `usePerformSettlingRite` invalidates, from the live "You earned ..."
+ * line (the server tags that text frame `earned_resonance`) so the "Reflecting on" row lists the
+ * deed without a reload.
  */
-export function useConvertDrift() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: DriftCorrectionConvertRequest) => api.convertDrift(body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: magicKeys.driftConversionPending() }).catch(() => {});
-      qc.invalidateQueries({ queryKey: magicKeys.characterResonanceList() }).catch(() => {});
-      qc.invalidateQueries({ queryKey: auraKeys.all }).catch(() => {});
-      qc.invalidateQueries({ queryKey: ['character-sheets'] }).catch(() => {});
-    },
+export function refreshReflectableDeeds(queryClient: QueryClient): void {
+  queryClient.invalidateQueries({ queryKey: magicKeys.reflectionOptionsAll() }).catch(() => {});
+  queryClient.invalidateQueries({ queryKey: magicKeys.settlingRiteAll() }).catch(() => {});
+}
+
+/**
+ * What the rite of settling would take for one character: their waiting reflections, the
+ * carried items that count as the offering, and whether the rite is set up. Owner only, so
+ * a viewer of someone else's sheet passes `enabled` false.
+ */
+export function useSettlingRite(characterSheetId: number, enabled: boolean = true) {
+  return useQuery({
+    queryKey: magicKeys.settlingRite(characterSheetId),
+    queryFn: () => api.getSettlingRite(characterSheetId),
+    enabled,
   });
 }
 
-/** Let an open drift conversion offer go; clears it from the pending inbox. */
-export function useDeclineDriftConversion() {
+/**
+ * Perform the rite of settling.
+ *
+ * On success invalidates the reading (every reflection took the rite), the pending chance to
+ * atone (a cap shrinks or the chance closes), what can be reflected on, the resonances (a
+ * deed grew or a conversion moved them), the auras and the character sheets (the character
+ * may now be settled, so the sheet must not keep reading her as unsettled).
+ */
+export function usePerformSettlingRite() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: DriftCorrectionDeclineRequest) => api.declineDriftConversion(body),
+    mutationFn: (body: SettlingRitePerformRequest) => api.performSettlingRite(body),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: magicKeys.settlingRiteAll() }).catch(() => {});
       qc.invalidateQueries({ queryKey: magicKeys.driftConversionPending() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.reflectionOptionsAll() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.characterResonanceList() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: auraKeys.all }).catch(() => {});
+      qc.invalidateQueries({ queryKey: ['character-sheets'] }).catch(() => {});
     },
   });
 }
@@ -1187,5 +1208,46 @@ export function useSetManifestChoice(characterSheetId: number) {
       );
       qc.invalidateQueries({ queryKey: ['character-sheets', characterSheetId] }).catch(() => {});
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Your resonances (#5124)
+// ---------------------------------------------------------------------------
+
+/** How often the panel re-reads what is kindled; it changes as a scene or a fight moves. */
+const KINDLED_RESONANCES_REFETCH_MS = 30_000;
+
+/**
+ * What the character can reflect on now (#5124): the resonance unsettling them, then each
+ * kindled deed not yet reflected on. Empty when there is nothing, and until `characterSheetId`
+ * is known.
+ */
+export function useReflectionOptions(characterSheetId: number | null) {
+  return useQuery({
+    queryKey: magicKeys.reflectionOptions(characterSheetId ?? 0),
+    queryFn: () => api.getReflectionOptions(characterSheetId ?? 0),
+    enabled: characterSheetId != null && characterSheetId > 0,
+  });
+}
+
+/** Re-read what a character can reflect on, once a reflection is recorded. */
+export function useRefreshReflectionOptions(characterSheetId: number | null) {
+  const queryClient = useQueryClient();
+  return () => {
+    if (characterSheetId == null) return;
+    void queryClient.invalidateQueries({
+      queryKey: magicKeys.reflectionOptions(characterSheetId),
+    });
+  };
+}
+
+/** Each resonance the character holds, kindled or not, with the strength word and reasons. */
+export function useKindledResonances(characterSheetId: number) {
+  return useQuery({
+    queryKey: magicKeys.kindledResonances(characterSheetId),
+    queryFn: () => api.getKindledResonances(characterSheetId),
+    enabled: characterSheetId > 0,
+    refetchInterval: KINDLED_RESONANCES_REFETCH_MS,
   });
 }

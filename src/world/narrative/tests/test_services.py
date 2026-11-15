@@ -84,6 +84,24 @@ class OnlinePushTests(TestCase):
         self.assertTrue(body_arg.startswith("|G[VISION]|n "))
         self.assertEqual(options, {"type": "narrative", "category": "visions"})
 
+    def test_frame_tags_ride_the_live_frame_beside_the_type_and_category(self) -> None:
+        sheet = CharacterSheetFactory()
+        character = sheet.character
+        with (
+            mock.patch.object(character.sessions, "all", return_value=[mock.Mock()]),
+            mock.patch.object(character, "msg") as msg_mock,
+        ):
+            send_narrative_message(
+                recipients=[sheet],
+                body="You earned 5 Domination.",
+                category=NarrativeCategory.SYSTEM,
+                frame_tags={"earned_resonance": True},
+            )
+        _, options = msg_mock.call_args.args[0]
+        self.assertEqual(
+            options, {"type": "narrative", "category": "system", "earned_resonance": True}
+        )
+
     def test_every_other_category_keeps_the_narrative_tag(self) -> None:
         sheet = CharacterSheetFactory()
         character = sheet.character

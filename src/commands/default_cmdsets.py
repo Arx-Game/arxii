@@ -134,6 +134,7 @@ from commands.imbue import CmdImbue
 from commands.investigation import CmdSearch  # #1866
 from commands.journals import CmdJournal
 from commands.keepsakes import CmdKeepsake
+from commands.kindled_resonances import CmdKindledResonances  # #5124
 from commands.language import CmdSpeak, CmdTrainLanguage  # #2993
 from commands.locations import CmdRoom
 from commands.manifest import CmdManifest
@@ -156,6 +157,7 @@ from commands.progression import CmdProgressionUnlock, CmdTraining
 from commands.progression_rewards import CmdKudos, CmdNominate, CmdPathIntent, CmdRandomScene
 from commands.projects import CmdProject
 from commands.react import CmdReact
+from commands.reflection import CmdReflect  # #5124
 from commands.relationships import CmdRelationship
 from commands.resonance import CmdResonance
 from commands.retire import CmdRetire  # #2287
@@ -343,7 +345,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdMageScar,
             CmdEnter,
             CmdFlourish,
-            # #4733 - drift correction rite: show, convert, decline.
+            # #4733, #5124 - the aura, its waiting reflections and the rite of settling.
             CmdAura,
             CmdThreads,
             CmdEndorse,
@@ -612,6 +614,10 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdVault,
             # #2032 — spendable resonance balances + grant history (bare/history subverbs).
             CmdResonance,
+            # #5124 - which resonances are kindled, how strongly, and why.
+            CmdKindledResonances,
+            # #5124 - what you can reflect on, for pose/reflect and journal/reflect.
+            CmdReflect,
             # #2640 — the Sphinx of Black Quartz's vow-suitability verdict.
             CmdSphinx,
             # #4929 - a vow holder's focus picks: list them, choose one.

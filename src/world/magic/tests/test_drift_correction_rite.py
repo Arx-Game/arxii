@@ -1,14 +1,10 @@
-"""The drift correction rite: preview, focus, check, conversion (#4733, slice 4 of #4672)."""
+"""The rite of settling: its offering, roll, focus and share (#4733, #5124)."""
 
 from __future__ import annotations
 
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from django.utils import timezone
-
-from evennia_extensions.factories import ObjectDBFactory
-from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
 from world.items.factories import (
@@ -20,44 +16,42 @@ from world.items.factories import (
     meaningful_item_for,
 )
 from world.items.models import ItemInstance
-from world.magic.constants import EffectKind, GainSource, TargetKind
+from world.magic.constants import EffectKind, GainSource, ReflectionChoice, TargetKind
 from world.magic.exceptions import (
-    DriftConversionInvalidError,
     DriftCorrectionNotConfiguredError,
-    DriftOfferNotFoundError,
+    NoWaitingReflectionError,
     RitualComponentError,
 )
 from world.magic.factories import (
-    CharacterAuraFactory,
     DriftConversionCapFactory,
     DriftConversionOfferFactory,
     DriftCorrectionRiteFactory,
     FacetFactory,
+    ReflectionFactory,
     ResonanceTierFactory,
+    SettlingRiteFactory,
     ThreadFactory,
     ThreadPullEffectFactory,
-    set_aura_split,
 )
 from world.magic.models import (
     CharacterResonance,
     DriftConversionCap,
-    DriftConversionOffer,
     DriftCorrectionOutcomeShare,
+    Reflection,
     ResonanceGrant,
+    SettlingRite,
 )
-from world.magic.models.fall_redemption import ConversionType
 from world.magic.services.drift import get_drift_correction_config
 from world.magic.services.drift_correction import (
     focus_bonus,
     max_yield_per_earned_point,
-    perform_drift_correction_rite,
-    preview_conversion,
+    perform_settling_rite,
 )
-from world.magic.tests.test_drift_offer import DriftOfferTestBase, _author_pair, _hold
+from world.magic.services.resonance import grant_resonance
+from world.magic.services.settling_preview import settling_rite_reading
+from world.magic.tests.test_drift_offer import DriftOfferTestBase, _hold
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.mechanics.services import equipment_walk_total
-from world.scenes.factories import SceneFactory
-from world.scenes.interaction_services import invalidate_active_scene_cache
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 from world.traits.services import ensure_canonical_check_outcome
 
@@ -114,14 +108,16 @@ class DriftRiteTestBase(DriftOfferTestBase):
                 defaults={"converted_share": Decimal(share)},
             )
 
-    def perform(self, amount=12, tier="Success", source=None, components=None, offer=None):
+    def reflect_disown_dread(self) -> Reflection:
+        """A waiting reflection that disowns the Dread unsettling her."""
+        return ReflectionFactory(
+            character_sheet=self.sheet, resonance=self.dread, choice=ReflectionChoice.DISOWN
+        )
+
+    def perform(self, tier="Success", components=None):
         with force_check_outcome(self.outcomes[tier]):
-            return perform_drift_correction_rite(
-                offer or self.offer,
-                source_resonance=source or self.dread,
-                target_resonance=self.dawnlight,
-                amount=amount,
-                components=[self.component] if components is None else components,
+            return perform_settling_rite(
+                self.sheet, components=[self.component] if components is None else components
             )
 
     def cap_value(self) -> int | None:
@@ -131,233 +127,124 @@ class DriftRiteTestBase(DriftOfferTestBase):
 
 
 class PerformRiteTests(DriftRiteTestBase):
-    def test_full_share_converts_the_whole_amount_and_clears_the_offer(self) -> None:
-        result = self.perform(amount=12)
-        self.assertEqual(_balance(self.sheet, self.dread), 18)
-        self.assertEqual(_balance(self.sheet, self.dawnlight), 6)
-        grant = ResonanceGrant.objects.get(source=GainSource.DRIFT_CORRECTION)
-        self.assertEqual((grant.resonance, grant.amount), (self.dawnlight, 6))
-        self.assertIsNone(self.cap_value())
-        self.assertFalse(DriftConversionOffer.objects.filter(pk=self.offer.pk).exists())
-        self.assertTrue(_consumed(self.component_pk))
-        self.assertEqual((result.converted_amount, result.granted_amount), (12, 6))
-        self.assertEqual(result.attempted_amount, 12)
-        self.assertEqual(result.outcome_name, "Success")
-        self.assertEqual(result.success_level, 1)
-        self.assertEqual(result.conversion_type, ConversionType.REDEMPTION)
-        self.assertEqual(
-            (result.source_resonance_id, result.target_resonance_id),
-            (self.dread.pk, self.dawnlight.pk),
-        )
-
-    def test_a_keepsake_listed_first_is_kept_when_a_material_is_offered_too(self) -> None:
+    def test_a_keepsake_is_a_qualifying_offering_for_the_resonance_she_disowns(self) -> None:
+        reflection = self.reflect_disown_dread()
         requirement = self.config.rite.requirements.get(matches_target_resonance=True)
         requirement.min_item_meaning = 2
         requirement.save()
         keepsake = meaningful_item_for(self.sheet)
         keepsake_pk = keepsake.pk
-        self.perform(components=[keepsake, self.component])
-        self.assertTrue(_consumed(self.component_pk))
-        self.assertFalse(_consumed(keepsake_pk))
-
-    def test_half_share_converts_half_and_keeps_the_rest_of_the_cap(self) -> None:
-        self.set_shares(Success="0.50")
-        result = self.perform(amount=12)
-        self.assertEqual((result.converted_amount, result.granted_amount), (6, 3))
-        self.assertEqual(self.cap_value(), 6)
-        self.assertEqual(_balance(self.sheet, self.dread), 24)
-        self.assertTrue(DriftConversionOffer.objects.filter(pk=self.offer.pk).exists())
-
-    def test_failure_tier_consumes_the_offering_and_moves_nothing(self) -> None:
-        self.set_shares(Failure="0.00")
-        result = self.perform(amount=12, tier="Failure")
-        self.assertTrue(_consumed(self.component_pk))
-        self.assertEqual(_balance(self.sheet, self.dread), 30)
-        self.assertEqual(_balance(self.sheet, self.dawnlight), 0)
-        self.assertEqual(self.cap_value(), 12)
-        self.assertFalse(ResonanceGrant.objects.filter(source=GainSource.DRIFT_CORRECTION).exists())
-        self.assertEqual((result.converted_amount, result.granted_amount), (0, 0))
-        self.assertEqual(result.success_level, -1)
-
-    def test_one_unit_at_half_rate_still_grants_one(self) -> None:
-        result = self.perform(amount=1)
-        self.assertEqual((result.converted_amount, result.granted_amount), (1, 1))
-        self.assertEqual(self.cap_value(), 11)
-
-    def test_missing_share_row_for_the_rolled_tier_refuses_before_consuming(self) -> None:
-        DriftCorrectionOutcomeShare.objects.filter(outcome_tier=self.outcomes["Success"]).delete()
-        with self.assertRaises(DriftCorrectionNotConfiguredError):
-            self.perform()
+        self.perform(components=[keepsake])
+        self.assertTrue(_consumed(keepsake_pk))
         self.assertFalse(_consumed(self.component_pk))
-        self.assertEqual((self.component.pk, self.component.quantity), (self.component_pk, 1))
-        self.assertEqual(self.cap_value(), 12)
-        self.assertEqual(_balance(self.sheet, self.dread), 30)
+        self.assertIsNotNone(Reflection.objects.get(pk=reflection.pk).rite)
 
-    def test_missing_share_row_for_any_tier_refuses_before_consuming(self) -> None:
-        worst = self.outcomes["Critical Failure"]
-        DriftCorrectionOutcomeShare.objects.filter(outcome_tier=worst).delete()
+    def test_a_missing_share_row_for_any_tier_refuses_before_rolling_or_consuming(self) -> None:
+        reflection = self.reflect_disown_dread()
+        DriftCorrectionOutcomeShare.objects.filter(
+            outcome_tier=self.outcomes["Critical Failure"]
+        ).delete()
         roll = MagicMock()
         with patch(ROLL_PATH, roll), self.assertRaises(DriftCorrectionNotConfiguredError):
             self.perform()
         roll.assert_not_called()
         self.assertFalse(_consumed(self.component_pk))
-        self.assertEqual((self.component.pk, self.component.quantity), (self.component_pk, 1))
-
-
-class FallDirectionTests(DriftRiteTestBase):
-    def test_celestial_drift_into_an_abyssal_character_grants_more_than_converted(self) -> None:
-        room = ObjectDBFactory(db_key="DriftFallRoom", db_typeclass_path="typeclasses.rooms.Room")
-        sheet = CharacterSheetFactory()
-        sheet.character.location = room
-        sheet.character.save()
-        scene = SceneFactory(room=room)
-        invalidate_active_scene_cache(room)
-        set_aura_split(
-            CharacterAuraFactory(character=sheet), celestial="0", primal="0", abyssal="100"
-        )
-        # Wholly Abyssal, with 30 Celestial on 70 Abyssal: well past the tolerance.
-        _hold(sheet, self.dread, 0, lifetime=70)
-        _hold(sheet, self.dawnlight, 30)
-        offer = DriftConversionOfferFactory(character_sheet=sheet, scene=scene)
-        DriftConversionCapFactory(offer=offer, target_resonance=self.dread, cap=10)
-        with force_check_outcome(self.outcomes["Success"]):
-            result = perform_drift_correction_rite(
-                offer,
-                source_resonance=self.dawnlight,
-                target_resonance=self.dread,
-                amount=10,
-                components=[_tied_item(self.dread)],
-            )
-        self.assertEqual((result.converted_amount, result.granted_amount), (10, 15))
-        self.assertEqual(result.conversion_type, ConversionType.FALL)
-        self.assertEqual(_balance(sheet, self.dread), 15)
-        self.assertEqual(_balance(sheet, self.dawnlight), 20)
-
-
-class RefusalTests(DriftRiteTestBase):
-    def assert_nothing_moved(self) -> None:
-        self.assertFalse(_consumed(self.component_pk))
+        self.assertIsNone(Reflection.objects.get(pk=reflection.pk).rite)
         self.assertEqual(_balance(self.sheet, self.dread), 30)
-        self.assertEqual(_balance(self.sheet, self.dawnlight), 0)
-        self.assertFalse(ResonanceGrant.objects.filter(source=GainSource.DRIFT_CORRECTION).exists())
 
-    def test_amount_zero(self) -> None:
-        with self.assertRaises(DriftConversionInvalidError):
-            self.perform(amount=0)
-        self.assert_nothing_moved()
-
-    def test_amount_over_the_cap_remainder(self) -> None:
-        with self.assertRaises(DriftConversionInvalidError):
-            self.perform(amount=13)
-        self.assert_nothing_moved()
-        self.assertEqual(self.cap_value(), 12)
-
-    def test_amount_over_the_held_balance(self) -> None:
-        self.cap.cap = 40
-        self.cap.save(update_fields=["cap"])
-        with self.assertRaises(DriftConversionInvalidError):
-            self.perform(amount=31)
-        self.assert_nothing_moved()
-
-    def test_own_affinity_source_is_not_convertible(self) -> None:
-        _hold(self.sheet, self.sunrise, 20)
-        with self.assertRaises(DriftConversionInvalidError) as ctx:
-            self.perform(amount=5, source=self.sunrise)
-        self.assertEqual(
-            ctx.exception.user_message, "You have nothing in that resonance to atone for."
-        )
-        self.assert_nothing_moved()
-        self.assertEqual(_balance(self.sheet, self.sunrise), 20)
-
-    def test_non_qualifying_components(self) -> None:
-        with self.assertRaises(RitualComponentError):
-            self.perform(components=[ItemInstanceFactory()])
-        self.assert_nothing_moved()
-        self.assertEqual(self.cap_value(), 12)
-
-    def test_rite_not_configured(self) -> None:
-        self.config.rite = None
-        self.config.save(update_fields=["rite"])
-        with self.assertRaises(DriftCorrectionNotConfiguredError) as ctx:
-            self.perform()
-        self.assertEqual(
-            ctx.exception.user_message, "The rite of correction is not set up yet; tell staff."
-        )
-        self.assert_nothing_moved()
-
-    def test_check_type_not_configured(self) -> None:
-        self.config.check_type = None
-        self.config.save(update_fields=["check_type"])
-        with self.assertRaises(DriftCorrectionNotConfiguredError):
-            self.perform()
-        self.assert_nothing_moved()
-
-    def test_offer_lapsed_with_its_finished_scene(self) -> None:
-        self.scene.finish_scene()
-        with self.assertRaises(DriftOfferNotFoundError):
-            self.perform()
-        self.assert_nothing_moved()
-
-    def test_offer_row_left_on_a_finished_scene_is_refused(self) -> None:
-        self.scene.is_active = False
-        self.scene.date_finished = timezone.now()
-        self.scene.save(update_fields=["is_active", "date_finished"])
-        with self.assertRaises(DriftOfferNotFoundError):
-            self.perform()
-        self.assert_nothing_moved()
-
-    def test_no_cap_toward_the_target(self) -> None:
-        self.cap.delete()
-        with self.assertRaises(DriftOfferNotFoundError):
-            self.perform()
-        self.assert_nothing_moved()
-
-    def test_balance_lost_to_a_race_is_a_clean_refusal(self) -> None:
-        convert = MagicMock(side_effect=ValueError("Cannot convert 12 of a 0 balance."))
-        with (
-            patch("world.magic.services.drift_correction.convert_resonance_amount", convert),
-            self.assertRaises(DriftConversionInvalidError),
-        ):
-            self.perform()
-        convert.assert_called_once()
-
-    def assert_component_untouched(self) -> None:
-        """Neither the table nor the shared cached instance has spent the offering."""
-        self.assertFalse(_consumed(self.component_pk))
-        self.assertEqual(
-            (self.component.pk, self.component.quantity, self.component.destroyed_at),
-            (self.component_pk, 1, None),
-        )
-
-    def test_a_roll_with_no_outcome_spends_nothing(self) -> None:
+    def test_a_roll_with_no_outcome_spends_nothing_and_leaves_the_reflection_waiting(self) -> None:
+        reflection = self.reflect_disown_dread()
         roll = MagicMock(return_value=MagicMock(outcome=None))
         with patch(ROLL_PATH, roll), self.assertRaises(DriftCorrectionNotConfiguredError):
-            perform_drift_correction_rite(
-                self.offer,
-                source_resonance=self.dread,
-                target_resonance=self.dawnlight,
-                amount=12,
-                components=[self.component],
-            )
+            perform_settling_rite(self.sheet, components=[self.component])
         roll.assert_called_once()
-        self.assert_component_untouched()
-        self.assertEqual(self.cap_value(), 12)
+        self.assertFalse(_consumed(self.component_pk))
+        self.assertEqual((self.component.pk, self.component.quantity), (self.component_pk, 1))
+        self.assertIsNone(Reflection.objects.get(pk=reflection.pk).rite)
         self.assertEqual(_balance(self.sheet, self.dread), 30)
+        self.assertEqual(self.cap_value(), 12)
 
-    def test_a_conversion_that_raises_leaves_the_offering_in_memory_too(self) -> None:
-        convert = MagicMock(side_effect=ValueError("Cannot convert 12 of a 0 balance."))
-        with (
-            patch("world.magic.services.drift_correction.convert_resonance_amount", convert),
-            self.assertRaises(DriftConversionInvalidError),
-        ):
-            self.perform()
-        self.assert_component_untouched()
+    def test_an_embraced_deed_grant_needs_both_the_rite_and_the_reflection(self) -> None:
+        rite = SettlingRiteFactory(character_sheet=self.sheet)
+        with self.assertRaises(ValueError):
+            grant_resonance(
+                self.sheet, self.dawnlight, 4, source=GainSource.EMBRACED_DEED, settling_rite=rite
+            )
+        self.assertFalse(ResonanceGrant.objects.filter(source=GainSource.EMBRACED_DEED).exists())
 
-    def test_pair_with_no_authored_conversion(self) -> None:
-        _author_pair(self.abyssal, self.celestial, None, "")
-        with self.assertRaises(DriftConversionInvalidError):
+    def test_nothing_waiting_is_a_refusal_that_rolls_nothing(self) -> None:
+        roll = MagicMock()
+        with patch(ROLL_PATH, roll), self.assertRaises(NoWaitingReflectionError):
             self.perform()
-        self.assert_nothing_moved()
+        roll.assert_not_called()
+        self.assertFalse(_consumed(self.component_pk))
+
+    def test_an_offering_that_pays_for_nothing_the_rite_moves_writes_nothing(self) -> None:
+        reflection = self.reflect_disown_dread()
+        roll = MagicMock()
+        with patch(ROLL_PATH, roll), self.assertRaises(RitualComponentError):
+            self.perform(components=[_tied_item(self.sunrise)])
+        roll.assert_not_called()
+        self.assertIsNone(Reflection.objects.get(pk=reflection.pk).rite)
+        self.assertFalse(SettlingRite.objects.exists())
+
+    def test_a_disowned_unsettling_resonance_turns_the_cap_and_spends_it(self) -> None:
+        reflection = self.reflect_disown_dread()
+        result = self.perform()
+        # The cap of 12 at a full share: 12 Dread at 0.5 is 6 Dawnlight.
+        self.assertEqual(
+            result.lines, ("You disown your Drift Dread: 12 Drift Dread became 6 Drift Dawnlight.",)
+        )
+        self.assertEqual(_balance(self.sheet, self.dread), 18)
+        self.assertEqual(_balance(self.sheet, self.dawnlight), 6)
+        self.assertIsNone(self.cap_value())
+        self.assertIsNotNone(Reflection.objects.get(pk=reflection.pk).rite)
+
+
+class FallbackConversionTargetTests(DriftRiteTestBase):
+    """An offering tied to no main-affinity resonance sends the disown where she can atone."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        # Dawnlight holds the larger lifetime but no open cap; Sunrise (also Celestial) is
+        # smaller and holds the open cap.
+        _hold(self.sheet, self.sunrise, 0, lifetime=5)
+        self.cap.delete()
+        DriftConversionCapFactory(offer=self.offer, target_resonance=self.sunrise, cap=12)
+        self.component = _tied_item(self.dread)
+
+    def test_the_disown_and_the_preview_both_turn_toward_the_resonance_with_the_open_cap(
+        self,
+    ) -> None:
+        self.reflect_disown_dread()
+
+        reading = settling_rite_reading(self.sheet, [self.component])
+        self.assertEqual(
+            reading.reflections[0].effect_line,
+            "Drift Dread turns toward Drift Sunrise, up to 12.",
+        )
+
+        result = self.perform()
+
+        self.assertEqual(
+            result.lines,
+            ("You disown your Drift Dread: 12 Drift Dread became 6 Drift Sunrise.",),
+        )
+        self.assertEqual(_balance(self.sheet, self.sunrise), 6)
+        self.assertEqual(_balance(self.sheet, self.dawnlight), 0)
+
+    def test_with_no_open_cap_the_largest_main_affinity_resonance_is_still_the_fallback(
+        self,
+    ) -> None:
+        DriftConversionCap.objects.all().delete()
+        self.reflect_disown_dread()
+
+        reading = settling_rite_reading(self.sheet, [self.component])
+
+        self.assertEqual(
+            reading.reflections[0].effect_line,
+            "Nothing will turn, because no chance to atone is open.",
+        )
 
 
 class FocusTests(DriftRiteTestBase):
@@ -369,15 +256,10 @@ class FocusTests(DriftRiteTestBase):
         self.sheet.character.equipped_items.invalidate()
         bonus = focus_bonus(self.sheet, self.dawnlight)
         self.assertGreater(bonus, 0)
+        self.reflect_disown_dread()
         roll = MagicMock(return_value=MagicMock(outcome=self.outcomes["Success"]))
         with patch(ROLL_PATH, roll):
-            result = perform_drift_correction_rite(
-                self.offer,
-                source_resonance=self.dread,
-                target_resonance=self.dawnlight,
-                amount=12,
-                components=[self.component],
-            )
+            result = perform_settling_rite(self.sheet, components=[self.component])
         roll.assert_called_once()
         args, kwargs = roll.call_args
         self.assertEqual(kwargs["extra_modifiers"], bonus)
@@ -422,38 +304,12 @@ class FocusTests(DriftRiteTestBase):
         walk = equipment_walk_total(self.sheet, target)
         self.assertEqual(walk, 60)  # 5 flat x item 2 x attachment 3 x level 2
         self.assertEqual(focus_bonus(self.sheet, self.dawnlight), walk)
+        self.reflect_disown_dread()
         roll = MagicMock(return_value=MagicMock(outcome=self.outcomes["Success"]))
         with patch(ROLL_PATH, roll):
-            result = perform_drift_correction_rite(
-                self.offer,
-                source_resonance=self.dread,
-                target_resonance=self.dawnlight,
-                amount=12,
-                components=[self.component],
-            )
+            result = perform_settling_rite(self.sheet, components=[self.component])
         self.assertEqual(roll.call_args.kwargs["extra_modifiers"], walk)
         self.assertEqual(result.focus_bonus, walk)
-
-
-class PreviewTests(DriftRiteTestBase):
-    def test_preview_lists_convertible_drift_at_the_pair_rate(self) -> None:
-        preview = preview_conversion(self.offer, self.dawnlight)
-        self.assertEqual(preview.target_resonance_id, self.dawnlight.pk)
-        self.assertEqual(preview.cap_remaining, 12)
-        self.assertEqual(preview.focus_bonus, 0)
-        self.assertEqual(len(preview.sources), 1)
-        option = preview.sources[0]
-        self.assertEqual(
-            (option.resonance_id, option.balance, option.max_amount, option.projected_output),
-            (self.dread.pk, 30, 12, 6),
-        )
-        self.assertEqual(option.multiplier, Decimal("0.50"))
-        self.assertEqual(option.conversion_type, ConversionType.REDEMPTION)
-
-    def test_preview_toward_a_target_with_no_cap_offers_nothing_to_move(self) -> None:
-        preview = preview_conversion(self.offer, self.sunrise)
-        self.assertEqual(preview.cap_remaining, 0)
-        self.assertTrue(all(option.max_amount == 0 for option in preview.sources))
 
 
 class MaxYieldTests(DriftRiteTestBase):

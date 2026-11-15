@@ -24,6 +24,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from world.roster.constants import (
+    KIN_AT_A_REMOVE,
     DefinitionTier,
     MaritalStatus,
     MembershipBasis,
@@ -599,14 +600,124 @@ def _visible_edges(q: Q, viewer: object) -> list[ParentageEdge]:
     return [e for e in edges if fact_visible(e, viewer)]
 
 
+@dataclass
+class KinRecord:
+    """Parentage and marriages around some people, read once (#5130).
+
+    Labelling many people against one (every open seat against the head of its
+    house) asks the same questions of the same relatives again and again. A
+    walk handed a record reads it for anyone the record ``covers`` and asks the
+    database for anyone it does not, so a record changes how many queries a
+    walk makes and never what it answers. It holds what ``viewer`` may see and
+    lives for one call: it is never kept on a model or between requests.
+    """
+
+    viewer: object
+    covers: set[int] = field(default_factory=set)
+    people: dict[int, Kinsperson] = field(default_factory=dict)
+    parent_edges: dict[int, list[ParentageEdge]] = field(default_factory=dict)
+    child_edges: dict[int, list[ParentageEdge]] = field(default_factory=dict)
+    spouses: dict[int, list[Kinsperson]] = field(default_factory=dict)
+    incarnation_chains: dict[int, list[SoulIncarnation]] = field(default_factory=dict)
+
+    def holds(self, ids: Iterable[int], viewer: object) -> bool:
+        """Whether every one of ``ids`` can be read here as ``viewer`` sees them."""
+        return viewer is self.viewer and self.covers.issuperset(ids)
+
+
+# How far out from its people a record reads. Three steps reaches everyone a
+# label is drawn from: a cousin is a parent's sibling's child, and an in-law
+# a sibling's spouse or a spouse's sibling.
+_RECORD_HOPS = 3
+
+
+def load_kin_record(people: Iterable[Kinsperson], viewer: object) -> KinRecord:
+    """Read the parentage and marriages within ``_RECORD_HOPS`` of ``people``.
+
+    A fixed handful of queries a step, however many people are asked about.
+    """
+    record = KinRecord(viewer=viewer)
+    record.people.update({person.pk: person for person in people})
+    frontier = set(record.people)
+    for _ in range(_RECORD_HOPS):
+        if not frontier:
+            break
+        met: set[int] = set()
+        for pk in frontier:
+            record.parent_edges[pk] = []
+            record.child_edges[pk] = []
+        # Each person is in one frontier only, so an edge is filed once per end.
+        for edge in _visible_edges(Q(child_id__in=frontier) | Q(parent_id__in=frontier), viewer):
+            if edge.child_id in frontier:
+                record.parent_edges[edge.child_id].append(edge)
+            if edge.parent_id in frontier:
+                record.child_edges[edge.parent_id].append(edge)
+            record.people[edge.child_id] = edge.child
+            record.people[edge.parent_id] = edge.parent
+            met.update((edge.child_id, edge.parent_id))
+        met |= _record_spouses(record, frontier)
+        record.covers |= frontier
+        frontier = met - record.covers
+    return record
+
+
+def _record_spouses(record: KinRecord, frontier: set[int]) -> set[int]:
+    """File the visible partners of ``frontier``'s open unions; the partners met."""
+    membership = Union.members.through.objects
+    union_ids = set(
+        membership.filter(kinsperson_id__in=frontier).values_list("union_id", flat=True)
+    )
+    open_unions = Union.objects.filter(pk__in=union_ids, ended_at__isnull=True).select_related(
+        "kind", "secret"
+    )
+    visible = {union.pk for union in open_unions if fact_visible(union, record.viewer)}
+    members: dict[int, list[int]] = defaultdict(list)
+    for union_id, kinsperson_id in membership.filter(union_id__in=visible).values_list(
+        "union_id", "kinsperson_id"
+    ):
+        members[union_id].append(kinsperson_id)
+    partner_ids = {pk for ids in members.values() for pk in ids}
+    record.people.update(_people_by_id(partner_ids - set(record.people)))
+    for pk in frontier:
+        record.spouses[pk] = [
+            record.people[partner]
+            for ids in members.values()
+            if pk in ids
+            for partner in ids
+            if partner != pk
+        ]
+    return partner_ids
+
+
+def _parent_edges(
+    child_ids: Iterable[int], viewer: object, record: KinRecord | None
+) -> list[ParentageEdge]:
+    """Visible edges to the parents of ``child_ids``, foster ones included."""
+    child_ids = set(child_ids)
+    if record is not None and record.holds(child_ids, viewer):
+        return [edge for pk in child_ids for edge in record.parent_edges[pk]]
+    return _visible_edges(Q(child_id__in=child_ids), viewer)
+
+
+def _child_edges(
+    parent_ids: Iterable[int], viewer: object, record: KinRecord | None
+) -> list[ParentageEdge]:
+    """Visible edges to the children of ``parent_ids``, foster ones included."""
+    parent_ids = set(parent_ids)
+    if record is not None and record.holds(parent_ids, viewer):
+        return [edge for pk in parent_ids for edge in record.child_edges[pk]]
+    return _visible_edges(Q(parent_id__in=parent_ids), viewer)
+
+
 def parents_of(
     person: Kinsperson,
     viewer: object,
     *,
     include_foster: bool = False,
+    record: KinRecord | None = None,
 ) -> list[ParentageEdge]:
     """Visible parent edges of ``person`` (foster excluded from lineage by default)."""
-    edges = _visible_edges(Q(child=person), viewer)
+    edges = _parent_edges([person.pk], viewer, record)
     if not include_foster:
         edges = [e for e in edges if e.kind != ParentageKind.FOSTER]
     return edges
@@ -617,9 +728,10 @@ def children_of(
     viewer: object,
     *,
     include_foster: bool = False,
+    record: KinRecord | None = None,
 ) -> list[ParentageEdge]:
     """Visible child edges of ``person``."""
-    edges = _visible_edges(Q(parent=person), viewer)
+    edges = _child_edges([person.pk], viewer, record)
     if not include_foster:
         edges = [e for e in edges if e.kind != ParentageKind.FOSTER]
     return edges
@@ -644,8 +756,12 @@ def unions_of(person: Kinsperson, viewer: object) -> list[Union]:
     return [u for u in unions if fact_visible(u, viewer)]
 
 
-def spouses_of(person: Kinsperson, viewer: object) -> list[Kinsperson]:
+def spouses_of(
+    person: Kinsperson, viewer: object, *, record: KinRecord | None = None
+) -> list[Kinsperson]:
     """Visible union partners (active unions only)."""
+    if record is not None and record.holds([person.pk], viewer):
+        return record.spouses[person.pk]
     partners: list[Kinsperson] = []
     for union in unions_of(person, viewer):
         if union.ended_at is None:
@@ -688,13 +804,15 @@ _MARITAL_PRECEDENCE: tuple[MaritalStatus, ...] = (
 )
 
 
-def siblings_of(person: Kinsperson, viewer: object) -> dict[int, str]:
+def siblings_of(
+    person: Kinsperson, viewer: object, *, record: KinRecord | None = None
+) -> dict[int, str]:
     """Visible siblings: pk → full/half label, from shared visible parents."""
-    my_parents = {e.parent_id for e in parents_of(person, viewer)}
+    my_parents = {e.parent_id for e in parents_of(person, viewer, record=record)}
     if not my_parents:
         return {}
     sibling_parents: dict[int, set[int]] = {}
-    edges = _visible_edges(Q(parent_id__in=my_parents), viewer)
+    edges = _child_edges(my_parents, viewer, record)
     for edge in edges:
         if edge.child_id == person.pk or edge.kind == ParentageKind.FOSTER:
             continue
@@ -703,7 +821,7 @@ def siblings_of(person: Kinsperson, viewer: object) -> dict[int, str]:
         return {}
     # One batched fetch of every candidate's full visible parent set (no
     # per-sibling queries — see feedback_review_query_discipline).
-    all_their_edges = _visible_edges(Q(child_id__in=sibling_parents.keys()), viewer)
+    all_their_edges = _parent_edges(sibling_parents.keys(), viewer, record)
     their_parent_sets: dict[int, set[int]] = {}
     for edge in all_their_edges:
         if edge.kind != ParentageKind.FOSTER:
@@ -716,19 +834,24 @@ def siblings_of(person: Kinsperson, viewer: object) -> dict[int, str]:
     return labels
 
 
-def _people_by_id(ids: set[int]) -> dict[int, Kinsperson]:
+def _people_by_id(ids: set[int], record: KinRecord | None = None) -> dict[int, Kinsperson]:
     """Batch-fetch nodes (identity-map served for already-loaded rows)."""
+    if record is not None and record.people.keys() >= ids:
+        return {pk: record.people[pk] for pk in ids}
     return {p.pk: p for p in Kinsperson.objects.filter(pk__in=ids)}
 
 
-def step_parents_of(person: Kinsperson, viewer: object) -> list[Kinsperson]:
+def step_parents_of(
+    person: Kinsperson, viewer: object, *, record: KinRecord | None = None
+) -> list[Kinsperson]:
     """Derived step-parents: a parent's union partner with no parentage edge to person."""
-    parent_ids = {e.parent_id for e in parents_of(person, viewer, include_foster=True)}
+    parent_edges = parents_of(person, viewer, include_foster=True, record=record)
+    parent_ids = {e.parent_id for e in parent_edges}
     steps: list[Kinsperson] = []
-    for parent_edge in parents_of(person, viewer, include_foster=True):
+    for parent_edge in parent_edges:
         steps.extend(
             partner
-            for partner in spouses_of(parent_edge.parent, viewer)
+            for partner in spouses_of(parent_edge.parent, viewer, record=record)
             if partner.pk not in parent_ids and partner.pk != person.pk
         )
     return steps
@@ -752,16 +875,18 @@ def incarnation_chain_of(person: Kinsperson, viewer: object) -> list[SoulIncarna
     return chain
 
 
-def _direct_parent_child_label(a: Kinsperson, b: Kinsperson, viewer: object) -> str | None:
+def _direct_parent_child_label(
+    a: Kinsperson, b: Kinsperson, viewer: object, record: KinRecord | None
+) -> str | None:
     """PARENT/CHILD (foster labeled distinctly) if ``b`` is a's direct parent or child."""
-    for edge in parents_of(a, viewer, include_foster=True):
+    for edge in parents_of(a, viewer, include_foster=True, record=record):
         if edge.parent_id == b.pk:
             return (
                 RelationshipType.FOSTER_PARENT
                 if edge.kind == ParentageKind.FOSTER
                 else RelationshipType.PARENT
             )
-    for edge in children_of(a, viewer, include_foster=True):
+    for edge in children_of(a, viewer, include_foster=True, record=record):
         if edge.child_id == b.pk:
             return (
                 RelationshipType.FOSTER_CHILD
@@ -771,88 +896,112 @@ def _direct_parent_child_label(a: Kinsperson, b: Kinsperson, viewer: object) -> 
     return None
 
 
-def _spousal_label(a: Kinsperson, b: Kinsperson, viewer: object) -> str | None:
+def _spousal_label(
+    a: Kinsperson, b: Kinsperson, viewer: object, record: KinRecord | None
+) -> str | None:
     """SPOUSE / STEP_PARENT / STEP_CHILD via active unions and step-parent derivation."""
-    if any(s.pk == b.pk for s in spouses_of(a, viewer)):
+    if any(s.pk == b.pk for s in spouses_of(a, viewer, record=record)):
         return RelationshipType.SPOUSE
-    if any(s.pk == b.pk for s in step_parents_of(a, viewer)):
+    if any(s.pk == b.pk for s in step_parents_of(a, viewer, record=record)):
         return RelationshipType.STEP_PARENT
-    if any(s.pk == b.pk for s in step_parents_of(b, viewer)):
+    if any(s.pk == a.pk for s in step_parents_of(b, viewer, record=record)):
         return RelationshipType.STEP_CHILD
     return None
 
 
-def _shares_foster_parent(a: Kinsperson, b: Kinsperson, viewer: object) -> bool:
+def _foster_parent_ids(person: Kinsperson, viewer: object, record: KinRecord | None) -> set[int]:
+    edges = parents_of(person, viewer, include_foster=True, record=record)
+    return {e.parent_id for e in edges if e.kind == ParentageKind.FOSTER}
+
+
+def _shares_foster_parent(
+    a: Kinsperson, b: Kinsperson, viewer: object, record: KinRecord | None
+) -> bool:
     """Whether ``a`` and ``b`` share a foster parent (foster-sibling test)."""
-    a_foster = {e.parent_id for e in _visible_edges(Q(child=a, kind=ParentageKind.FOSTER), viewer)}
-    b_foster = {e.parent_id for e in _visible_edges(Q(child=b, kind=ParentageKind.FOSTER), viewer)}
-    return bool(a_foster & b_foster)
+    return bool(_foster_parent_ids(a, viewer, record) & _foster_parent_ids(b, viewer, record))
 
 
 def _grandparent_label(
-    b: Kinsperson, viewer: object, lineage_parents: list[Kinsperson]
+    b: Kinsperson, viewer: object, lineage_parents: list[Kinsperson], record: KinRecord | None
 ) -> str | None:
     """GRANDPARENT if ``b`` is a parent of one of ``a``'s parents."""
     for parent in lineage_parents:
-        if any(e.parent_id == b.pk for e in parents_of(parent, viewer)):
+        if any(e.parent_id == b.pk for e in parents_of(parent, viewer, record=record)):
             return RelationshipType.GRANDPARENT
     return None
 
 
-def _grandchild_label(a: Kinsperson, b: Kinsperson, viewer: object) -> str | None:
+def _grandchild_label(
+    a: Kinsperson, b: Kinsperson, viewer: object, record: KinRecord | None
+) -> str | None:
     """GRANDCHILD if ``b`` is a child of one of ``a``'s children."""
-    for edge in children_of(a, viewer):
-        if any(e.child_id == b.pk for e in children_of(edge.child, viewer)):
+    for edge in children_of(a, viewer, record=record):
+        if any(e.child_id == b.pk for e in children_of(edge.child, viewer, record=record)):
             return RelationshipType.GRANDCHILD
     return None
 
 
 def _aunt_uncle_label(
-    b: Kinsperson, viewer: object, lineage_parents: list[Kinsperson]
+    b: Kinsperson, viewer: object, lineage_parents: list[Kinsperson], record: KinRecord | None
 ) -> str | None:
     """AUNT_UNCLE if ``b`` is a sibling of one of ``a``'s parents."""
     for parent in lineage_parents:
-        if b.pk in siblings_of(parent, viewer):
+        if b.pk in siblings_of(parent, viewer, record=record):
             return RelationshipType.AUNT_UNCLE
     return None
 
 
 def _niece_nephew_label(
-    b: Kinsperson, viewer: object, my_siblings: dict[int, Kinsperson]
+    b: Kinsperson, viewer: object, my_siblings: dict[int, Kinsperson], record: KinRecord | None
 ) -> str | None:
     """NIECE_NEPHEW if ``b`` is a child of one of ``a``'s siblings."""
     for sibling in my_siblings.values():
-        if any(e.child_id == b.pk for e in children_of(sibling, viewer)):
+        if any(e.child_id == b.pk for e in children_of(sibling, viewer, record=record)):
             return RelationshipType.NIECE_NEPHEW
     return None
 
 
-def _cousin_label(b: Kinsperson, viewer: object, lineage_parents: list[Kinsperson]) -> str | None:
+def _cousin_label(
+    b: Kinsperson, viewer: object, lineage_parents: list[Kinsperson], record: KinRecord | None
+) -> str | None:
     """COUSIN if ``b`` is a child of a sibling of one of ``a``'s parents."""
     for parent in lineage_parents:
-        aunts = _people_by_id(set(siblings_of(parent, viewer)))
+        aunts = _people_by_id(set(siblings_of(parent, viewer, record=record)), record)
         for aunt in aunts.values():
-            if any(e.child_id == b.pk for e in children_of(aunt, viewer)):
+            if any(e.child_id == b.pk for e in children_of(aunt, viewer, record=record)):
                 return RelationshipType.COUSIN
     return None
 
 
 def _in_law_label(
-    a: Kinsperson, b: Kinsperson, viewer: object, my_siblings: dict[int, Kinsperson]
+    a: Kinsperson,
+    b: Kinsperson,
+    viewer: object,
+    my_siblings: dict[int, Kinsperson],
+    record: KinRecord | None,
 ) -> str | None:
     """IN_LAW: a spouse's blood relative, or a blood relative's spouse."""
-    for spouse in spouses_of(a, viewer):
-        if derive_blood_only(spouse, b, viewer):
+    for spouse in spouses_of(a, viewer, record=record):
+        if derive_blood_only(spouse, b, viewer, record=record):
             return RelationshipType.IN_LAW
     for sibling in my_siblings.values():
-        if any(s.pk == b.pk for s in spouses_of(sibling, viewer)):
+        if any(s.pk == b.pk for s in spouses_of(sibling, viewer, record=record)):
             return RelationshipType.IN_LAW
     return None
 
 
-def _incarnation_label(a: Kinsperson, b: Kinsperson, viewer: object) -> str | None:
+def _incarnation_label(
+    a: Kinsperson, b: Kinsperson, viewer: object, record: KinRecord | None
+) -> str | None:
     """PAST_INCARNATION / LATER_INCARNATION via the shared soul chain, else None."""
-    for inc in incarnation_chain_of(a, viewer):
+    if record is not None and viewer is record.viewer:
+        # One read of ``a``'s chain serves every person labelled against ``a``.
+        if a.pk not in record.incarnation_chains:
+            record.incarnation_chains[a.pk] = incarnation_chain_of(a, viewer)
+        chain = record.incarnation_chains[a.pk]
+    else:
+        chain = incarnation_chain_of(a, viewer)
+    for inc in chain:
         if inc.kinsperson_id == b.pk:
             own_seqs = [i.sequence for i in a.incarnations.all() if fact_visible(i, viewer)]
             if own_seqs and inc.sequence < max(own_seqs):
@@ -862,7 +1011,7 @@ def _incarnation_label(a: Kinsperson, b: Kinsperson, viewer: object) -> str | No
 
 
 def derive_relationship(  # noqa: C901
-    a: Kinsperson, b: Kinsperson, viewer: object
+    a: Kinsperson, b: Kinsperson, viewer: object, *, record: KinRecord | None = None
 ) -> str | None:
     """Label the visible relationship from ``a`` to ``b`` (or None).
 
@@ -870,59 +1019,65 @@ def derive_relationship(  # noqa: C901
     sibling/half → spouse → step → grandparent/grandchild → aunt/uncle →
     niece/nephew → cousin → in-law → soul chain. Blood vs marriage vs foster
     is never ambiguous: the label carries it.
+
+    ``record`` (``load_kin_record``) is for labelling many people against one:
+    the walk reads it in place of the database for whoever it covers, and
+    answers the same with or without it.
     """
     if a.pk == b.pk:
         return RelationshipType.SELF
 
-    direct = _direct_parent_child_label(a, b, viewer)
+    direct = _direct_parent_child_label(a, b, viewer, record)
     if direct is not None:
         return direct
 
-    sibling_label = siblings_of(a, viewer).get(b.pk)
+    sibling_label = siblings_of(a, viewer, record=record).get(b.pk)
     if sibling_label is not None:
         return sibling_label
 
-    spousal = _spousal_label(a, b, viewer)
+    spousal = _spousal_label(a, b, viewer, record)
     if spousal is not None:
         return spousal
 
     # Foster-sibling: share a foster parent.
-    if _shares_foster_parent(a, b, viewer):
+    if _shares_foster_parent(a, b, viewer, record):
         return RelationshipType.FOSTER_SIBLING
 
-    lineage_parents = [e.parent for e in parents_of(a, viewer)]
-    grandparent = _grandparent_label(b, viewer, lineage_parents)
+    lineage_parents = [e.parent for e in parents_of(a, viewer, record=record)]
+    grandparent = _grandparent_label(b, viewer, lineage_parents, record)
     if grandparent is not None:
         return grandparent
-    grandchild = _grandchild_label(a, b, viewer)
+    grandchild = _grandchild_label(a, b, viewer, record)
     if grandchild is not None:
         return grandchild
-    aunt_uncle = _aunt_uncle_label(b, viewer, lineage_parents)
+    aunt_uncle = _aunt_uncle_label(b, viewer, lineage_parents, record)
     if aunt_uncle is not None:
         return aunt_uncle
-    my_siblings = _people_by_id(set(siblings_of(a, viewer)))
-    niece_nephew = _niece_nephew_label(b, viewer, my_siblings)
+    my_siblings = _people_by_id(set(siblings_of(a, viewer, record=record)), record)
+    niece_nephew = _niece_nephew_label(b, viewer, my_siblings, record)
     if niece_nephew is not None:
         return niece_nephew
-    cousin = _cousin_label(b, viewer, lineage_parents)
+    cousin = _cousin_label(b, viewer, lineage_parents, record)
     if cousin is not None:
         return cousin
 
     # In-law: spouse's blood relative, or blood relative's spouse.
-    in_law = _in_law_label(a, b, viewer, my_siblings)
+    in_law = _in_law_label(a, b, viewer, my_siblings, record)
     if in_law is not None:
         return in_law
 
-    return _incarnation_label(a, b, viewer)
+    return _incarnation_label(a, b, viewer, record)
 
 
-def derive_blood_only(a: Kinsperson, b: Kinsperson, viewer: object) -> bool:
+def derive_blood_only(
+    a: Kinsperson, b: Kinsperson, viewer: object, *, record: KinRecord | None = None
+) -> bool:
     """Whether ``b`` is a visible blood/lineage relative of ``a`` (no unions)."""
-    if any(e.parent_id == b.pk for e in parents_of(a, viewer)):
+    if any(e.parent_id == b.pk for e in parents_of(a, viewer, record=record)):
         return True
-    if any(e.child_id == b.pk for e in children_of(a, viewer)):
+    if any(e.child_id == b.pk for e in children_of(a, viewer, record=record)):
         return True
-    return b.pk in siblings_of(a, viewer)
+    return b.pk in siblings_of(a, viewer, record=record)
 
 
 # ---------------------------------------------------------------------------
@@ -1240,3 +1395,99 @@ def open_slots_for(family: Family) -> tuple[list[Kinsperson], list[KinSlotPool]]
         )
     )
     return nodes, pools
+
+
+def open_seat_family_ids(family_ids: Iterable[int]) -> set[int]:
+    """Which of these families a new character can still be seated in (#5130).
+
+    A family is joined through a seat staff opened: an unclaimed appable node,
+    or a pool with openings left. Two flat queries for a whole family list;
+    the same two tests ``open_slots_for`` applies to one family.
+    """
+    ids = list(family_ids)
+    if not ids:
+        return set()
+    seated = Kinsperson.objects.filter(
+        family_id__in=ids, is_appable=True, sheet__isnull=True
+    ).values_list("family_id", flat=True)
+    pooled = KinSlotPool.objects.filter(family_id__in=ids, count_remaining__gt=0).values_list(
+        "family_id", flat=True
+    )
+    return set(seated) | set(pooled)
+
+
+def relations_to(head: Kinsperson | None, people: Iterable[Kinsperson]) -> dict[int, str | None]:
+    """What each person is to ``head`` on the public record, by person pk (#5130).
+
+    ``RelationshipType.SELF`` for ``head``'s own node, ``CHILD`` for a child of
+    ``head``, and so on. Where the walk has no word and the two are kin all the
+    same, ``KIN_AT_A_REMOVE`` (owner ruling 2026-11-15: no "second cousin once
+    removed" on a card). None where no relationship is on record or there is no
+    head. Read as an anonymous viewer, so a hidden parentage never shows: this
+    feeds the seat cards in character creation, which anyone may read.
+    """
+    people = list(people)
+    if head is None:
+        return {person.pk: None for person in people}
+    # One read of the kin around the head and the seats, then every label from it:
+    # the walk alone asks the same questions of the head's relatives per seat.
+    record = load_kin_record([head, *people], None)
+    relations = {
+        person.pk: derive_relationship(head, person, None, record=record) for person in people
+    }
+    unnamed = [person for person in people if relations[person.pk] is None]
+    for pk in _kin_at_a_remove(head, unnamed):
+        relations[pk] = KIN_AT_A_REMOVE
+    return relations
+
+
+# How far up the public record the kin walk climbs: one query a generation for
+# every seat together, so the bound is a cost ceiling, not a rule of kinship.
+_KIN_WALK_GENERATIONS = 8
+
+_BORN_TO_THE_NAME = (MembershipBasis.BORN, MembershipBasis.FOUNDING)
+
+
+def _kin_at_a_remove(head: Kinsperson, people: list[Kinsperson]) -> set[int]:
+    """Which of ``people`` are kin of ``head`` though the walk named no relation.
+
+    Two stored facts make kin: a shared ancestor on the public record (one of
+    the two may be that ancestor), or both born to the same family's name, which
+    is how a cousin written into a house with no parents on record is kin of its
+    head.
+    """
+    if not people:
+        return set()
+    lines = _public_ancestor_lines([head, *people])
+    kin = {person.pk for person in people if lines[head.pk] & lines[person.pk]}
+    born = FamilyMembership.objects.filter(
+        kinsperson__in=[head, *people], ended_at__isnull=True, basis__in=_BORN_TO_THE_NAME
+    ).values_list("kinsperson_id", "family_id")
+    families: dict[int, set[int]] = defaultdict(set)
+    for kinsperson_id, family_id in born:
+        families[kinsperson_id].add(family_id)
+    kin |= {person.pk for person in people if families[head.pk] & families[person.pk]}
+    return kin
+
+
+def _public_ancestor_lines(people: list[Kinsperson]) -> dict[int, set[int]]:
+    """Each person's ancestors on the public record, themselves included.
+
+    Foster parents are not lineage, as in ``parents_of``. Climbs every line at
+    once, one query a generation, up to ``_KIN_WALK_GENERATIONS``.
+    """
+    lines = {person.pk: {person.pk} for person in people}
+    frontiers = {person.pk: {person.pk} for person in people}
+    for _ in range(_KIN_WALK_GENERATIONS):
+        wanted = set().union(*frontiers.values())
+        if not wanted:
+            break
+        parents: dict[int, set[int]] = defaultdict(set)
+        for edge in _visible_edges(Q(child_id__in=wanted), None):
+            if edge.kind != ParentageKind.FOSTER:
+                parents[edge.child_id].add(edge.parent_id)
+        for pk, frontier in frontiers.items():
+            climbed = set().union(*(parents[child] for child in frontier)) - lines[pk]
+            lines[pk] |= climbed
+            frontiers[pk] = climbed
+    return lines

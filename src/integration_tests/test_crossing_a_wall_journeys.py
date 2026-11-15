@@ -103,12 +103,12 @@ GATED = f"Crossing that requires getting past {CONJURED_BARRIER_CHALLENGE_NAME}.
 
 def _full_swing(*args: object, **kwargs: object) -> MagicMock:
     """A defence roll at success level 0, which takes the swing at full strength."""
-    return MagicMock(success_level=0)
+    return MagicMock(success_level=0, outcome=None)
 
 
 def _clean_cast(*args: object, **kwargs: object) -> MagicMock:
     """An offence roll at success level 2, which lands the Barricade."""
-    return MagicMock(success_level=2)
+    return MagicMock(success_level=2, outcome=None)
 
 
 class _TheYard(JourneyCase):

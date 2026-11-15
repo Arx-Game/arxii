@@ -96,7 +96,7 @@ class NoncombatCastTelnetE2ETests(TestCase):
             "actions.services.perform_check",
             return_value=MagicMock(
                 success_level=2,
-                outcome=MagicMock(name="Success"),
+                outcome=None,
                 outcome_name="Success",
             ),
         )

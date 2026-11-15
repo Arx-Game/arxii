@@ -116,7 +116,7 @@ def resolve_combat_technique(
     fury = fury_cast_for(
         character=participant.character_sheet.character,
         fury_commitment=action.fury_commitment,
-        fury_anchor=action.fury_anchor,
+        fury_resonance=action.fury_resonance,
         source_technique=action.focused_action,
     )
 

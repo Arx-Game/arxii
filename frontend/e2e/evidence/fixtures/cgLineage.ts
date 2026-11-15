@@ -18,6 +18,34 @@ export interface Family {
   born_particle: string;
   taken_in_particle: string;
   inherited: { facets: unknown[]; features: unknown[]; liege_name: string };
+  /** A family with no seat to take is not offered on the claim path (#5130). */
+  has_open_seat: boolean;
+}
+
+/** `GET /api/roster/families/<id>/slots/`: the head's name and the open seats. */
+export interface Seats {
+  head_name: string;
+  slots: {
+    id: number;
+    name: string;
+    name_locked: boolean;
+    description: string;
+    age_min: number | null;
+    age_max: number | null;
+    allowed_genders: string[];
+    family: number;
+    head_relation: string | null;
+  }[];
+  pools: {
+    id: number;
+    family: number;
+    description: string;
+    count_remaining: number;
+    age_min: number | null;
+    age_max: number | null;
+    allowed_genders: string[];
+    parent_names: string[];
+  }[];
 }
 
 export const DRAFT_ID = 9;
@@ -192,11 +220,17 @@ export interface MockCgOptions {
   families?: Family[];
   /** The family the draft has already picked. */
   family?: Family | null;
+  /** What each family's seats endpoint answers, by family id; no seats unless given. */
+  seats?: Record<number, Seats>;
+  /** How long a draft PATCH takes to answer, to show what the page does meanwhile. */
+  patchDelayMs?: number;
 }
 
 export async function mockCg(page: Page, upbringing: Upbringing, options: MockCgOptions = {}) {
   const draft = buildDraft(upbringing) as ReturnType<typeof buildDraft> & {
     family: Family | null;
+    claimed_kin_slot: number | null;
+    claimed_kin_pool: number | null;
   };
   if (options.family) {
     draft.family = options.family;
@@ -239,6 +273,20 @@ export async function mockCg(page: Page, upbringing: Upbringing, options: MockCg
         draft.family_path = '';
       }
       if ('family_path' in body) draft.family_path = String(body.family_path);
+      if ('family_id' in body) {
+        draft.family = families.find((f) => f.id === body.family_id) ?? null;
+        draft.claimed_kin_slot = null;
+        draft.claimed_kin_pool = null;
+      }
+      if ('claimed_kin_slot_id' in body) {
+        draft.claimed_kin_slot = body.claimed_kin_slot_id as number | null;
+      }
+      if ('claimed_kin_pool_id' in body) {
+        draft.claimed_kin_pool = body.claimed_kin_pool_id as number | null;
+      }
+      if (options.patchDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.patchDelayMs));
+      }
       await route.fulfill({ json: draft });
     } else if (p === '/api/character-creation/origin-templates/') {
       await route.fulfill({ json: [CRADLE, TAKEN_IN] });
@@ -266,7 +314,14 @@ export async function mockCg(page: Page, upbringing: Upbringing, options: MockCg
     } else if (p === '/api/roster/families/' || p === '/api/character-creation/families/') {
       await route.fulfill({ json: families });
     } else if (/^\/api\/roster\/families\/\d+\/slots\/$/.test(p)) {
-      await route.fulfill({ json: { slots: [], pools: [] } });
+      const familyId = Number(p.split('/')[4]);
+      await route.fulfill({
+        json: options.seats?.[familyId] ?? { head_name: '', slots: [], pools: [] },
+      });
+    } else if (p === `/api/character-creation/drafts/${DRAFT_ID}/house-claim/`) {
+      // No house claim on this draft: the real endpoint answers 404, which the
+      // founder panel reads as "none" (a bare `[]` reads as a claim with no name).
+      await route.fulfill({ status: 404, json: { detail: 'Not found.' } });
     } else if (p === '/api/almanach/houses/' || p === '/api/worship/beings/') {
       await route.fulfill({ json: { count: 0, next: null, previous: null, results: [] } });
     } else if (p === `/api/character-creation/drafts/${DRAFT_ID}/offers/`) {

@@ -177,7 +177,7 @@ class DataMigrationTests(TestCase):
     0414 deletes rows equal to the old seed, keeps edited ones, and writes the fractions."""
 
     def setUp(self) -> None:
-        self.migration = import_module("world.migrations.0414_modifier_values_become_overrides")
+        self.migration = import_module("world.migrations.0421_modifier_values_become_overrides")
 
     def _row(self, lane: str, level: int, size: int, value: int) -> None:
         ModifierValue.objects.create(lane=lane, level=level, size=size, value=value)

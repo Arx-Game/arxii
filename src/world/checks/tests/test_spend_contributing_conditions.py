@@ -135,7 +135,7 @@ class SpendContributingConditionsTests(TestCase):
         swing = CombatOpponentAction.objects.create(
             opponent=opponent, round_number=1, threat_entry=entry
         )
-        roll = MagicMock(return_value=MagicMock(success_level=2))
+        roll = MagicMock(return_value=MagicMock(success_level=2, outcome=None))
 
         resolve_npc_attack(swing, participant, self.ct, perform_check_fn=roll)
         resolve_npc_attack(swing, participant, self.ct, perform_check_fn=roll)

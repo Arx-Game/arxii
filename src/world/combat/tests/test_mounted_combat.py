@@ -247,7 +247,7 @@ class ChargeBonusInjectionTests(TestCase):
 
         def _spy(character, check_type, **kwargs):
             captured["extra_modifiers"] = kwargs.get("extra_modifiers", 0)
-            return MagicMock(success_level=2)
+            return MagicMock(success_level=2, outcome=None)
 
         with patch("world.combat.services.perform_check", side_effect=_spy):
             resolver._roll_check()
@@ -276,7 +276,7 @@ class ChargeBonusInjectionTests(TestCase):
 
     def test_charge_damage_bonus_applied(self):
         resolver = self._resolver(maneuver=CombatManeuver.CHARGE)
-        check = MagicMock(success_level=2)
+        check = MagicMock(success_level=2, outcome=None)
         results = resolver._apply_damage(check, eff_intensity=0)
         self.assertEqual(len(results), 1)
         self.assertEqual(
@@ -286,7 +286,7 @@ class ChargeBonusInjectionTests(TestCase):
     def test_charge_damage_bonus_doubled_for_lance(self):
         resolver = self._resolver(maneuver=CombatManeuver.CHARGE)
         _equip_weapon(resolver.participant.character_sheet.character, archetype=GearArchetype.LANCE)
-        check = MagicMock(success_level=2)
+        check = MagicMock(success_level=2, outcome=None)
         results = resolver._apply_damage(check, eff_intensity=0)
         self.assertEqual(
             results[0].damage_dealt, MANEUVER_EFFECT_DEFAULTS[ManeuverEffectKey.CHARGE_DAMAGE] * 2
@@ -308,7 +308,7 @@ class LanceUnmountedPenaltyTests(TestCase):
 
         def _spy(character, check_type, **kwargs):
             captured["extra_modifiers"] = kwargs.get("extra_modifiers", 0)
-            return MagicMock(success_level=2)
+            return MagicMock(success_level=2, outcome=None)
 
         with patch("world.combat.services.perform_check", side_effect=_spy):
             resolver._roll_check()
@@ -318,7 +318,7 @@ class LanceUnmountedPenaltyTests(TestCase):
 
         def _spy_baseline(character, check_type, **kwargs):
             baseline_captured["extra_modifiers"] = kwargs.get("extra_modifiers", 0)
-            return MagicMock(success_level=2)
+            return MagicMock(success_level=2, outcome=None)
 
         with patch("world.combat.services.perform_check", side_effect=_spy_baseline):
             baseline_resolver._roll_check()
@@ -340,7 +340,7 @@ class LanceUnmountedPenaltyTests(TestCase):
 
         def _spy(char, check_type, **kwargs):
             captured["extra_modifiers"] = kwargs.get("extra_modifiers", 0)
-            return MagicMock(success_level=2)
+            return MagicMock(success_level=2, outcome=None)
 
         with patch("world.combat.services.perform_check", side_effect=_spy):
             resolver._roll_check()
@@ -350,7 +350,7 @@ class LanceUnmountedPenaltyTests(TestCase):
 
         def _spy_baseline(char, check_type, **kwargs):
             baseline_captured["extra_modifiers"] = kwargs.get("extra_modifiers", 0)
-            return MagicMock(success_level=2)
+            return MagicMock(success_level=2, outcome=None)
 
         with patch("world.combat.services.perform_check", side_effect=_spy_baseline):
             baseline_resolver._roll_check()
@@ -468,8 +468,8 @@ class JoustResolutionTests(TestCase):
         with patch(
             "world.combat.services.perform_check",
             side_effect=[
-                MagicMock(success_level=4),  # a
-                MagicMock(success_level=0),  # b — gap 4, well past decisive
+                MagicMock(success_level=4, outcome=None),  # a
+                MagicMock(success_level=0, outcome=None),  # b — gap 4, well past decisive
             ],
         ):
             _resolve_joust_pass(a, action_a, b, action_b)
@@ -497,7 +497,10 @@ class JoustResolutionTests(TestCase):
         technique.save(update_fields=["skill"])
         with patch(
             "world.combat.services.perform_check",
-            side_effect=[MagicMock(success_level=2), MagicMock(success_level=2)],
+            side_effect=[
+                MagicMock(success_level=2, outcome=None),
+                MagicMock(success_level=2, outcome=None),
+            ],
         ) as roll:
             _resolve_joust_pass(a, action_a, b, action_b)
 
@@ -512,8 +515,8 @@ class JoustResolutionTests(TestCase):
         with patch(
             "world.combat.services.perform_check",
             side_effect=[
-                MagicMock(success_level=gap),
-                MagicMock(success_level=0),
+                MagicMock(success_level=gap, outcome=None),
+                MagicMock(success_level=0, outcome=None),
             ],
         ):
             _resolve_joust_pass(a, action_a, b, action_b)
@@ -536,8 +539,8 @@ class JoustResolutionTests(TestCase):
         with patch(
             "world.combat.services.perform_check",
             side_effect=[
-                MagicMock(success_level=2),
-                MagicMock(success_level=2),
+                MagicMock(success_level=2, outcome=None),
+                MagicMock(success_level=2, outcome=None),
             ],
         ):
             _resolve_joust_pass(a, action_a, b, action_b)

@@ -2539,6 +2539,21 @@ class SituationRequirementMixin(models.Model):
             "the Indulgence property."
         ),
     )
+    mission_theme = models.ForeignKey(
+        "arxii.MissionTheme",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The theme the current mission must carry. Read only by MISSION_THEME.",
+    )
+    enemies_only = models.BooleanField(
+        default=False,
+        help_text=(
+            "Whether a thread anchor must be an opponent in the fight. Read only by "
+            "THREAD_ANCHOR_PRESENT."
+        ),
+    )
 
     class Meta:
         abstract = True
@@ -2551,6 +2566,8 @@ class SituationRequirementMixin(models.Model):
             affinity=self.affinity,
             origin_side=self.origin_side,
             condition_property=self.condition_property,
+            mission_theme=self.mission_theme,
+            enemies_only=self.enemies_only,
         )
 
     def clean(self) -> None:
@@ -2565,6 +2582,9 @@ class SituationRequirementMixin(models.Model):
             "affinity": self.affinity,
             "origin_side": self.origin_side or None,
             "condition_property": self.condition_property,
+            "mission_theme": self.mission_theme,
+            # False is the unset value of a boolean, so it never counts as authored.
+            "enemies_only": self.enemies_only or None,
         }
         for field, value in values.items():
             if value is not None and field not in allowed:

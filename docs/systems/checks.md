@@ -488,7 +488,7 @@ more than 4 to 5, and 10 to 11 more than 9 to 10 (owner ruling 2026-11-15; spec 
   tiers" with the bonus shown in ranks): one row per tier, `start_level` unique. The seed
   (`seed_level_tiers`, only into an empty table) writes level 3 at 0 points (no jump, one edit away) and levels 6, 11, 16, 21 and 26 at 24 points each
   (three ranks at the seeded 8-point width). Staff set every row separately. Migration
-  `0433_level_tier_rows` writes the same rows on a database that already has CHECK baselines and
+  `0440_level_tier_rows` writes the same rows on a database that already has CHECK baselines and
   no tier rows, so production gets them.
 - **`tier_bonus(level, table=None)`** (`modifier_values.py`): the sum of `bonus_points` over every
   tier whose start level is at or below `level`; 0 with no rows. `load_tier_table()` loads the

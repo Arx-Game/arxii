@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 
 
 def _cap_fury_by_provocation(attrs: dict) -> dict:
-    """Reject a fury_commitment that exceeds the initiator's provocation cap, or that
+    """Reject a fury_commitment that exceeds the initiator's strength cap, or that
     a character with no engagement declares (Fury needs something at stake, #4738).
 
     Declaring Fury again while already Berserk is allowed: each declaration surrenders
@@ -60,10 +60,10 @@ def _cap_fury_by_provocation(attrs: dict) -> dict:
             {"fury_commitment_id": "Fury can only be declared on technique-enhanced actions."}
         )
 
-    fury_anchor_id = attrs.get("fury_anchor_id")
-    if not fury_anchor_id:
+    fury_resonance_id = attrs.get("fury_resonance_id")
+    if not fury_resonance_id:
         raise serializers.ValidationError(
-            {"fury_anchor_id": "fury_anchor is required when fury_commitment is declared."}
+            {"fury_resonance_id": "fury_resonance is required when fury_commitment is declared."}
         )
 
     try:
@@ -81,22 +81,16 @@ def _cap_fury_by_provocation(attrs: dict) -> dict:
             {"fury_commitment_id": "Initiator persona not found."}
         ) from None
 
-    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.magic.models import Resonance  # noqa: PLC0415
 
     try:
-        anchor_sheet = CharacterSheet.objects.get(pk=fury_anchor_id)
-    except CharacterSheet.DoesNotExist:
-        raise serializers.ValidationError(
-            {"fury_anchor_id": "Anchor character sheet not found."}
-        ) from None
+        resonance = Resonance.objects.get(pk=fury_resonance_id)
+    except Resonance.DoesNotExist:
+        raise serializers.ValidationError({"fury_resonance_id": "Resonance not found."}) from None
 
     character = persona.character_sheet.character
 
-    from world.magic.services.fury import (  # noqa: PLC0415
-        NO_ENGAGEMENT_MESSAGE,
-        fury_over_cap_message,
-        provocation_cap,
-    )
+    from world.magic.services.fury import NO_ENGAGEMENT_MESSAGE, give_in_refusal  # noqa: PLC0415
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
 
     # Fury's trade lands on the engagement (#4738): with nothing at stake there is
@@ -104,9 +98,9 @@ def _cap_fury_by_provocation(attrs: dict) -> dict:
     if not CharacterEngagement.objects.filter(character_id=persona.character_sheet_id).exists():
         raise serializers.ValidationError({"fury_commitment_id": NO_ENGAGEMENT_MESSAGE})
 
-    cap = provocation_cap(character, anchor_sheet)
-    if cap < tier.depth:
-        raise serializers.ValidationError({"fury_commitment_id": fury_over_cap_message(tier, cap)})
+    refusal = give_in_refusal(character, resonance, tier)
+    if refusal is not None:
+        raise serializers.ValidationError({"fury_commitment_id": refusal})
 
     return attrs
 
@@ -280,7 +274,7 @@ class TechniqueCastCreateSerializer(serializers.Serializer):
     )
     strain_commitment = serializers.IntegerField(min_value=0, required=False, default=0)
     fury_commitment_id = serializers.IntegerField(required=False, allow_null=True, default=None)
-    fury_anchor_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    fury_resonance_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     pull = CastPullWithBurnRequestSerializer(required=False, allow_null=True)
     use_base_form = serializers.BooleanField(required=False, default=False)
     # #2901: telnet has offered `variant=<resonance>` since #1619, but the web
@@ -715,7 +709,7 @@ class SceneActionRequestCreateSerializer(serializers.Serializer):
     entry_interaction_id = serializers.IntegerField(required=False, allow_null=True)
     strain_commitment = serializers.IntegerField(min_value=0, required=False, default=0)
     fury_commitment_id = serializers.IntegerField(required=False, allow_null=True, default=None)
-    fury_anchor_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    fury_resonance_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     delivery = serializers.ChoiceField(
         choices=ActionDelivery.choices, required=False, allow_blank=True, default=""
     )

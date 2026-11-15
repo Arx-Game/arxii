@@ -31,7 +31,7 @@ vi.mock('../../api', () => ({
   getTarotCards: vi.fn(),
   getNamingRitualConfig: vi.fn(),
   getCGExplanations: vi.fn(),
-  getFamilySlots: vi.fn().mockResolvedValue({ slots: [], pools: [] }),
+  getFamilySlots: vi.fn().mockResolvedValue({ head_name: '', slots: [], pools: [] }),
   // The suggested life (#4867): the grids' load and Start blank hooks read these.
   loadDefaultLife: vi.fn(),
   clearLife: vi.fn(),

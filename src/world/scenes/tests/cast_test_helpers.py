@@ -54,6 +54,7 @@ def make_enhanced_result(action_key: str = "persuade") -> EnhancedSceneActionRes
     check_result = MagicMock()
     check_result.outcome_name = "Success"
     check_result.success_level = 1
+    check_result.outcome = None
     # No roll chart: the resolution wheel has nothing to spin for a mocked check.
     check_result.chart = None
     main_result = StepResult(

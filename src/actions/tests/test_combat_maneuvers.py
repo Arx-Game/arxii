@@ -203,7 +203,7 @@ class InterposeRedirectDispatchSeamTest(CombatManeuverActionTestBase):
 
         with patch(
             "world.combat.services.perform_check",
-            return_value=SimpleNamespace(success_level=2),
+            return_value=SimpleNamespace(success_level=2, outcome=None),
         ):
             apply_damage_to_participant(ally, 40)
 

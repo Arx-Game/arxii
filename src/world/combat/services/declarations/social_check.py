@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from world.checks.social_target import SocialDifficulty, social_target_difficulty
 from world.checks.types import ModifierContribution
+from world.combat.constants import CombatManeuver
 from world.combat.models import CombatOpponent, CombatParticipant, CombatRoundAction
 from world.combat.services.techniques.technique_targets import _resolve_primary_target_sheet
 from world.fatigue.constants import EffortLevel
@@ -96,6 +97,14 @@ def _social_combat_difficulty(
     )
 
 
+# What a social verb's deed reads as, by the maneuver that made it.
+_VERB_DEED_WORDS = {
+    CombatManeuver.DEMORALIZE: "Demoralized",
+    CombatManeuver.PARLEY: "Parleyed with",
+    CombatManeuver.TAUNT: "Taunted",
+}
+
+
 def _social_verb_success_level(
     participant: CombatParticipant,
     check_type: CheckType | None,
@@ -113,7 +122,7 @@ def _social_verb_success_level(
     graded = _social_combat_difficulty(
         target, actor_sheet=participant.character_sheet, check_type=check_type
     )
-    return _resolve_social_check(
+    result = roll_social_check(
         participant,
         check_type,
         graded.difficulty,
@@ -122,27 +131,16 @@ def _social_verb_success_level(
         # A strained compulsion resist (#4802) lands its penalty on the verb's roll.
         extra_modifiers=-action.compulsion_penalty,
     )
+    from world.combat.services.techniques.kindled_deed import award_rolled  # noqa: PLC0415
+    from world.magic.constants import KindlingActKind  # noqa: PLC0415
 
-
-def _resolve_social_check(  # noqa: PLR0913 - mirrors roll_social_check's terms
-    participant: CombatParticipant,
-    check_type: CheckType,
-    target_difficulty: int,
-    target: CharacterSheet | None = None,
-    extra_contributions: list[ModifierContribution] | None = None,
-    extra_modifiers: int = 0,
-) -> int:
-    """Roll a social-combat check and return the success_level (#2015).
-
-    A thin wrapper over ``roll_social_check``; see it for the modifier handling.
-    """
-    result = roll_social_check(
+    # #5124: the verb's own roll earns what the act feeds (demoralize, taunt, parley).
+    award_rolled(
         participant,
-        check_type,
-        target_difficulty,
-        target=target,
-        extra_contributions=extra_contributions,
-        extra_modifiers=extra_modifiers,
+        action,
+        kind=KindlingActKind.SOCIAL,
+        what=_VERB_DEED_WORDS.get(action.maneuver, "Spoke to"),
+        outcome=result.outcome,
     )
     return result.success_level or 0
 
@@ -161,8 +159,8 @@ def roll_social_check(  # noqa: PLR0913 - each term feeds the one roll
     folding in ``extra_contributions`` (the actor-side terms from
     ``social_target_difficulty``), then ``perform_check``. ``extra_modifiers`` is a flat
     term added on top (a strained compulsion's penalty, #4802). Returns
-    the ``CheckResult`` (``_resolve_social_check`` keeps only its success_level; the
-    surge roll (#4737) also needs the outcome).
+    the ``CheckResult`` (the verbs read its success level and outcome; the surge roll (#4737)
+    reads the outcome).
 
     ``target`` (#2536 Task 6 fold-in fix, extended to Parley on review): the
     acting participant's declared opponent, when this social action has one

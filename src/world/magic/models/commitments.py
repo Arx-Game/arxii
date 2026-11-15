@@ -24,13 +24,13 @@ class CommittingDeclaration(models.Model):
         related_name="+",
         help_text="Declared Fury tier for this action (null = no fury).",
     )
-    fury_anchor = models.ForeignKey(
-        "arxii.CharacterSheet",
+    fury_resonance = models.ForeignKey(
+        "arxii.Resonance",
         null=True,
         blank=True,
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         related_name="+",
-        help_text="Harmed entity the rage answers to; bond strength caps the tier.",
+        help_text="The kindled resonance the character gives in to; its strength caps the tier.",
     )
 
     class Meta:

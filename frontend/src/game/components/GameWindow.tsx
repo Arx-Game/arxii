@@ -935,6 +935,7 @@ export function GameWindow({
           ) : (
             <CommandInput
               character={active}
+              characterSheetId={characters.find((c) => c.name === active)?.character_id ?? null}
               sceneId={sceneFeed?.sceneId}
               personaId={personaId}
               composerMode={composerMode}

@@ -509,6 +509,40 @@ test('Stage tab in Property mode dispatches stage_property with target_id (#3431
   });
 });
 
+test('Stage tab in Kindle mode lists their resonances and dispatches stage_kindle (#5124)', async () => {
+  const user = userEvent.setup();
+  mutateAsync.mockResolvedValueOnce({
+    backend: 'registry',
+    deferred: false,
+    success: true,
+    message: 'listed',
+    data: {
+      strengths: [
+        { rank: 1, name: 'Faint' },
+        { rank: 2, name: 'Blazing' },
+      ],
+      resonances: [{ id: 9, name: 'Fury' }],
+      kindled: [{ resonance_id: 9, strength: 1, by_viewer: false }],
+    },
+  });
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+
+  await user.selectOptions(screen.getByTestId('gm-adjudication-target-select'), '55');
+  await user.click(screen.getByTestId('gm-tab-stage'));
+  await user.selectOptions(screen.getByTestId('gm-stage-mode-select'), 'kindle');
+  expect(await screen.findByText('Fury (kindled by a GM)')).toBeInTheDocument();
+  await user.selectOptions(screen.getByTestId('gm-stage-kindle-resonance'), '9');
+  await user.selectOptions(screen.getByTestId('gm-stage-kindle-strength'), '2');
+  await user.click(screen.getByTestId('gm-stage-kindle-submit'));
+
+  await waitFor(() =>
+    expect(mutateAsync).toHaveBeenCalledWith({
+      ref: { backend: 'registry', registry_key: 'stage_kindle' },
+      kwargs: { target_id: 55, resonance: '9', strength: '2' },
+    })
+  );
+});
+
 test('Traps tab lists traps on open, and Arm dispatches + refreshes the list (#3431)', async () => {
   mutateAsync
     .mockResolvedValueOnce({

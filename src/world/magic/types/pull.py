@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from world.combat.models import CombatEncounter, CombatParticipant
     from world.conditions.models import CapabilityType, DamageType
     from world.forms.models import CharacterForm
-    from world.magic.models import Resonance, Thread
+    from world.magic.models import KindledStrengthTier, Resonance, Thread
     from world.magic.types.burn import BurnPreview
 
 
@@ -198,6 +198,8 @@ class PayerOption:
 
     ``effects`` are the perks the thread would resolve with this payer and ``level_read``
     the thread level those perks are read at; both are filled by the perk lookup by payer.
+    ``kindled_strength`` (#5124) is the strength tier this resonance is kindled at when the
+    pull is read, or None; the effects are already read at the higher level it gives.
     """
 
     resonance: Resonance
@@ -206,6 +208,7 @@ class PayerOption:
     affordable: bool
     effects: list[ResolvedPullEffect] = field(default_factory=list)
     level_read: int = 0
+    kindled_strength: KindledStrengthTier | None = None
 
 
 @dataclass(frozen=True)

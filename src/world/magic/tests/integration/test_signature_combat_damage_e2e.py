@@ -91,7 +91,7 @@ class SignatureCombatDamageE2ETests(TestCase):
             set_signature_bonus(thread, bonus)
 
         with patch("world.combat.services.perform_check") as mock_perform:
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             result = resolve_combat_technique(
                 participant=participant,
                 action=action,
@@ -168,7 +168,7 @@ class SignatureCombatNarrationE2ETests(TestCase):
         set_signature_bonus(thread, bonus)
 
         with patch("world.combat.services.perform_check") as mock_perform:
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             _resolve_pc_action(participant=participant, action=action, offense_check_fn=None)
 
         opponent.refresh_from_db()

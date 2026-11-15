@@ -1035,9 +1035,34 @@ staff authoring bug and surfaces as a soft "tell staff" error, never an uncaught
 fenced by `houses.creator._validate_facet_picks`), and optionally declare a served
 house from `family_template.served_house_choices`.
 
-**Claim path:** claiming a staff family with an open kin Vacancy requires taking one
-(`_get_vacancy_errors`); the Service panel (a retainer Vacancy) is available on any
-resolved path except when a kin Vacancy is already chosen. **Define a house** (#3983
+**Claim path:** an established family is joined only through a seat staff opened
+(#5130, ADR-5130): a named open seat (an appable `Kinsperson`), one of a counted pool of
+openings (`KinSlotPool`), or the kin Vacancy that supplies either. Claiming a staff family
+with an open kin Vacancy requires taking one (`_get_vacancy_errors`); otherwise the draft
+needs `claimed_kin_slot` or `claimed_kin_pool` of that family (`_get_seat_errors`: "Choose
+your place in the family", or "That place belongs to a family you are not joining" for
+another family's seat), and a changed family drops the old one's seat. There is no card
+for joining without a seat. A family with no open seat and no opening is not offered:
+`FamilySerializer.has_open_seat` (batched for the list by
+`roster.services.kinship.open_seat_family_ids`) and `FamilyPathSection` lists only
+families that have one, plus the family the draft already holds so its error has
+something to stand beside. The seat cards (`KinSlotPicker`, headed like the Vacancy
+picker with copy `vacancy_heading`) read `GET /api/roster/families/<id>/slots/`, whose
+seats each carry `head_relation`, what the seat is to whoever holds the house's top title
+(`houses.services.head_of_family`, `kinship.relations_to`, public record only), beside
+the response's `head_name`: a card reads "Head of house" or "Child of <head>" and so on;
+where the two are kin and the walk has no closer word than that (a shared ancestor on the
+public record past cousin, or both born to the family's name with no parents on record)
+it reads "Kin of <head>" (`KIN_AT_A_REMOVE`, `kinship._kin_at_a_remove`); every seat is
+labelled from one read of the house's kin (`kinship.load_kin_record`), never one walk a seat,
+then the seat's description when staff wrote one. "(name set)" is gone; a named seat whose
+name the player may change shows it with an asterisk. No parents are asked for on the
+claim path, and `_bind_invented_parents` skips it: a seat's parents are the ones staff
+wrote, and a player who wants their own picks "Your own family". Whether a picked seat is
+still open is finalize's question, as for a Vacancy. The Service panel (a retainer
+Vacancy) is available on any resolved path except when a kin Vacancy is already chosen.
+A click on a seat or a Vacancy shows at once: `useUpdateDraft`'s optimistic merge carries
+the `<field>_id` a PATCH writes across to the `<field>` the draft reads. **Define a house** (#3983
 Plan B) is folded into this same path rather than a fourth one: when the Upbringing's
 family template has no `claimable_kind_ids` at all, or at least one open house family
 exists to claim, and the draft has no `family` yet, `FamilyPathSection.tsx` mounts

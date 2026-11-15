@@ -16,8 +16,8 @@ from rest_framework.test import APIClient, APITestCase
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
-from world.roster.constants import DefinitionTier, RelationshipType
-from world.roster.factories import FamilyFactory, RosterTenureFactory
+from world.roster.constants import KIN_AT_A_REMOVE, DefinitionTier, RelationshipType
+from world.roster.factories import FamilyFactory, KinspersonFactory, RosterTenureFactory
 from world.roster.services import kinship
 
 
@@ -669,7 +669,7 @@ class FamilyTreeViewTests(APITestCase):
         self.assertEqual([n["name"] for n in data["nodes"]], ["Last Closed"])
         slots = self.client.get(f"/api/roster/families/{self.closed.pk}/slots/")
         self.assertEqual(slots.status_code, status.HTTP_200_OK)
-        self.assertEqual(slots.data, {"slots": [], "pools": []})
+        self.assertEqual(slots.data, {"head_name": "", "slots": [], "pools": []})
         listed = self.client.get("/api/roster/families/")
         self.assertNotIn(self.closed.pk, {row["id"] for row in listed.json()})
 
@@ -722,3 +722,257 @@ class FamilyTreeViewTests(APITestCase):
         self.assertEqual(len(res_one.data["nodes"]), 2)
         self.assertEqual(len(res_three.data["nodes"]), 4)
         self.assertEqual(len(ctx_one.captured_queries), len(ctx_three.captured_queries))
+
+
+class OpenSeatsViewTests(APITestCase):
+    """The seats a family still offers, and what each is to the head (#5130).
+
+    ``GET /api/roster/families/<id>/slots/`` is what the seat cards in
+    character creation read, so every relation on it comes off the public
+    record; ``has_open_seat`` on the families list is what decides whether a
+    family is offered there at all.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_creation.factories import RealmFactory
+        from world.roster.constants import NOBLE_KIND_NAME
+        from world.roster.factories import FamilyKindFactory
+        from world.societies.factories import OrganizationFactory, SocietyFactory
+        from world.societies.houses.constants import TitleTier
+        from world.societies.houses.models import Title
+
+        noble = FamilyKindFactory(name=NOBLE_KIND_NAME)
+        realm = RealmFactory(name="Umbros")
+        society = SocietyFactory(name="The Umbral Court", realm=realm)
+        cls.account = AccountFactory()
+
+        # A titled house. Alarysa holds the county, so she is its head; a
+        # barony held by her brother must not outrank it.
+        cls.katta = FamilyFactory(name="Katta", kind=noble)
+        house = OrganizationFactory(name="House Katta", family=cls.katta, society=society)
+        cls.alarysa = kinship.create_person(name="Alarysa", family=cls.katta)
+        cls.brother = kinship.create_person(name="Corvin", family=cls.katta)
+        elder = kinship.create_person(name="Old Katta", family=cls.katta)
+        for child in (cls.alarysa, cls.brother):
+            kinship.record_parentage(child=child, parent=elder)
+        Title.objects.create(
+            name="County of Katta",
+            tier=TitleTier.COUNTY,
+            realm=realm,
+            house=house,
+            holder=cls.alarysa,
+        )
+        Title.objects.create(
+            name="Barony of Low Katta",
+            tier=TitleTier.BARONY,
+            realm=realm,
+            house=house,
+            holder=cls.brother,
+        )
+
+        def seat(name: str, **fields) -> object:
+            node = kinship.create_person(name=name, family=cls.katta)
+            node.is_appable = True
+            for field, value in fields.items():
+                setattr(node, field, value)
+            node.save()
+            return node
+
+        # Her daughter, with a fixed name; her nephew; a cousin written into the
+        # house with no parents on record.
+        cls.daughter = seat("Kathryn", name_locked=True)
+        kinship.record_parentage(child=cls.daughter, parent=cls.alarysa)
+        cls.nephew = seat("Tobren")
+        kinship.record_parentage(child=cls.nephew, parent=cls.brother)
+        cls.stray = seat("Marrow")
+        # Her great-grandchild, not of the name: past what the walk has a word for.
+        grandchild = kinship.create_person(name="Edda")
+        kinship.record_parentage(child=grandchild, parent=cls.daughter)
+        cls.great_grandchild = KinspersonFactory(name="Isolde", family=cls.katta, is_appable=True)
+        kinship.record_parentage(child=cls.great_grandchild, parent=grandchild)
+        # On the house's books with no membership and no kin on record at all.
+        cls.unplaced = KinspersonFactory(name="Brannoch", family=cls.katta, is_appable=True)
+        # A child nobody acknowledges: the hidden edge must not name her mother.
+        cls.unacknowledged = seat("Wren")
+        kinship.record_parentage(
+            child=cls.unacknowledged, parent=cls.alarysa, is_public_record=False
+        )
+
+        # A house whose head's own seat is open, and one with no title at all.
+        cls.vacant = FamilyFactory(name="Valeweep", kind=noble)
+        vacant_house = OrganizationFactory(
+            name="House Valeweep", family=cls.vacant, society=society
+        )
+        cls.vacant_head = kinship.create_person(name="Ysmae", family=cls.vacant)
+        cls.vacant_head.is_appable = True
+        cls.vacant_head.save(update_fields=["is_appable"])
+        Title.objects.create(
+            name="Barony of Valeweep",
+            tier=TitleTier.BARONY,
+            realm=realm,
+            house=vacant_house,
+            holder=cls.vacant_head,
+        )
+        cls.untitled = FamilyFactory(name="Tallow")
+        cls.untitled_seat = kinship.create_person(name="Tam", family=cls.untitled)
+        cls.untitled_seat.is_appable = True
+        cls.untitled_seat.save(update_fields=["is_appable"])
+
+        cls._seat_the_list_families()
+
+    @classmethod
+    def _seat_the_list_families(cls) -> None:
+        from world.roster.factories import KinSlotPoolFactory
+
+        # Families for the list: one offering only a counted opening, one whose
+        # only seat is taken, one with nobody to seat.
+        cls.pooled = FamilyFactory(name="Pooled")
+        KinSlotPoolFactory(family=cls.pooled, count_remaining=2)
+        cls.spent = FamilyFactory(name="Spent")
+        KinSlotPoolFactory(family=cls.spent, count_remaining=0)
+        taken_sheet = CharacterSheetFactory(character=CharacterFactory(db_key="Taken"))
+        taken = kinship.create_person(tier=DefinitionTier.PC, sheet=taken_sheet, family=cls.spent)
+        taken.is_appable = True
+        taken.save(update_fields=["is_appable"])
+        cls.empty = FamilyFactory(name="Empty")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        super().tearDownClass()
+        # Idmapper rollback staleness (django_notes.md): see FamilyTreeViewTests.
+        CharacterSheet.flush_instance_cache()
+
+    def _seats(self, family):
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(f"/api/roster/families/{family.pk}/slots/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return response.data
+
+    def test_each_seat_says_what_it_is_to_the_title_holder(self) -> None:
+        data = self._seats(self.katta)
+        self.assertEqual(data["head_name"], "Alarysa")
+        relation = {row["name"]: row["head_relation"] for row in data["slots"]}
+        self.assertEqual(relation["Kathryn"], RelationshipType.CHILD)
+        self.assertEqual(relation["Tobren"], RelationshipType.NIECE_NEPHEW)
+
+    def test_kin_the_walk_has_no_word_for_read_as_kin(self) -> None:
+        """Past sibling, cousin, niece or nephew the card says kin (owner ruling
+        2026-11-15), never "great-grandchild" or "second cousin once removed"."""
+        relation = {row["name"]: row["head_relation"] for row in self._seats(self.katta)["slots"]}
+        # A shared line on the public record, three generations down.
+        self.assertEqual(relation["Isolde"], KIN_AT_A_REMOVE)
+        # Born to the same name as the head, with no parents on record.
+        self.assertEqual(relation["Marrow"], KIN_AT_A_REMOVE)
+        # Neither a line nor the name: nothing to say.
+        self.assertIsNone(relation["Brannoch"])
+
+    def test_a_hidden_parentage_is_not_on_the_card(self) -> None:
+        """Wren is born to the name, so she is kin; that she is the head's own
+        child is a hidden fact and reads to nobody here, staff included."""
+        relation = {row["name"]: row["head_relation"] for row in self._seats(self.katta)["slots"]}
+        self.assertEqual(relation["Wren"], KIN_AT_A_REMOVE)
+        self.client.force_authenticate(user=AccountFactory(is_staff=True))
+        response = self.client.get(f"/api/roster/families/{self.katta.pk}/slots/")
+        staff = {row["name"]: row["head_relation"] for row in response.data["slots"]}
+        self.assertEqual(staff["Wren"], KIN_AT_A_REMOVE)
+
+    def test_the_kin_walk_costs_the_same_for_one_seat_or_five(self) -> None:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        # The walk is one query a generation of the deepest line, whoever else rides it.
+        one = [self.great_grandchild]
+        five = [self.great_grandchild, self.stray, self.unplaced, self.unacknowledged, self.nephew]
+        with CaptureQueriesContext(connection) as ctx_one:
+            kinship._kin_at_a_remove(self.alarysa, one)
+        with CaptureQueriesContext(connection) as ctx_five:
+            kinship._kin_at_a_remove(self.alarysa, five)
+        self.assertEqual(len(ctx_one.captured_queries), len(ctx_five.captured_queries))
+
+    def test_the_heads_own_seat_is_the_head(self) -> None:
+        data = self._seats(self.vacant)
+        self.assertEqual(data["head_name"], "Ysmae")
+        self.assertEqual([row["head_relation"] for row in data["slots"]], [RelationshipType.SELF])
+
+    def test_a_family_with_no_title_names_no_head(self) -> None:
+        data = self._seats(self.untitled)
+        self.assertEqual(data["head_name"], "")
+        self.assertEqual([row["head_relation"] for row in data["slots"]], [None])
+
+    def test_the_seats_endpoint_costs_the_same_for_one_seat_or_six(self) -> None:
+        """The relations are read once for the house, not walked per seat (#5130)."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.societies.factories import OrganizationFactory
+        from world.societies.houses.constants import TitleTier
+        from world.societies.houses.models import Title
+
+        def house(name: str, seats: int) -> Family:
+            family = FamilyFactory(name=name)
+            org = OrganizationFactory(name=f"House {name}", family=family)
+            head = kinship.create_person(name=f"{name} Head", family=family)
+            Title.objects.create(
+                name=f"Barony of {name}",
+                tier=TitleTier.BARONY,
+                realm=org.society.realm,
+                house=org,
+                holder=head,
+            )
+            for index in range(seats):
+                child = kinship.create_person(name=f"{name} Child {index}", family=family)
+                child.is_appable = True
+                child.save(update_fields=["is_appable"])
+                kinship.record_parentage(child=child, parent=head)
+            return family
+
+        one, six = house("Onefold", 1), house("Sixfold", 6)
+        self.client.force_authenticate(user=self.account)
+        # Warm the request-level caches so the pair differs only by seat count.
+        self.client.get(f"/api/roster/families/{one.pk}/slots/")
+        self.client.get(f"/api/roster/families/{six.pk}/slots/")
+        with CaptureQueriesContext(connection) as ctx_one:
+            res_one = self.client.get(f"/api/roster/families/{one.pk}/slots/")
+        with CaptureQueriesContext(connection) as ctx_six:
+            res_six = self.client.get(f"/api/roster/families/{six.pk}/slots/")
+        self.assertEqual(len(res_one.data["slots"]), 1)
+        self.assertEqual(len(res_six.data["slots"]), 6)
+        self.assertEqual(
+            {row["head_relation"] for row in res_six.data["slots"]}, {RelationshipType.CHILD}
+        )
+        self.assertEqual(len(ctx_one.captured_queries), len(ctx_six.captured_queries))
+
+    def test_the_seat_keeps_its_name_lock(self) -> None:
+        locked = {row["name"]: row["name_locked"] for row in self._seats(self.katta)["slots"]}
+        self.assertTrue(locked["Kathryn"])
+        self.assertFalse(locked["Tobren"])
+
+    def test_the_list_says_which_families_still_have_a_seat(self) -> None:
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get("/api/roster/families/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        open_by_name = {row["name"]: row["has_open_seat"] for row in response.json()}
+        self.assertTrue(open_by_name["Katta"])
+        self.assertTrue(open_by_name["Pooled"])
+        # A pool with nothing left and a seat somebody holds are not open.
+        self.assertFalse(open_by_name["Spent"])
+        self.assertFalse(open_by_name["Empty"])
+
+    def test_one_family_alone_answers_the_same(self) -> None:
+        from world.roster.serializers.families import FamilySerializer
+
+        self.assertTrue(FamilySerializer(self.pooled).data["has_open_seat"])
+        self.assertFalse(FamilySerializer(self.spent).data["has_open_seat"])
+
+    def test_the_open_seat_lookup_is_two_queries_for_any_number_of_families(self) -> None:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        families = [self.katta, self.vacant, self.untitled, self.pooled, self.spent, self.empty]
+        with CaptureQueriesContext(connection) as ctx:
+            open_ids = kinship.open_seat_family_ids(family.pk for family in families)
+        self.assertEqual(len(ctx.captured_queries), 2)
+        self.assertEqual(
+            open_ids, {self.katta.pk, self.vacant.pk, self.untitled.pk, self.pooled.pk}
+        )

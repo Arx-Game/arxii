@@ -61,6 +61,7 @@ const LIVE_BEAT: BeatView = {
       base_risk: 0,
       reasons: [],
       rolls_check: false,
+      feeds: [],
     },
   ],
   is_paused: false,

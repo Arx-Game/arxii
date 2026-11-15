@@ -13,7 +13,7 @@ from world.character_creation.models import Beginnings, CharacterDraft, Starting
 from world.character_creation.validators import get_lineage_errors
 from world.character_sheets.models import Gender
 from world.realms.models import Realm
-from world.roster.factories import FamilyKindFactory
+from world.roster.factories import FamilyKindFactory, KinSlotPoolFactory
 from world.roster.models import Family
 from world.species.models import Species
 from world.tarot.constants import ArcanaType
@@ -77,8 +77,9 @@ class LineageCompletionTests(TestCase):
             latin_name="Stultus",
         )
 
-    def test_family_selected_completes_lineage(self):
-        """Lineage is complete when a claimed family is selected (unchanged behavior)."""
+    def test_a_seat_in_a_claimed_family_completes_lineage(self):
+        """A claimed family with a seat picked needs no tarot card. The family alone
+        is not enough since #5130: an established family is joined through a seat."""
         kind = FamilyKindFactory()
         family = Family.objects.create(
             name="Lineage Test Family", kind=kind, origin_realm=self.realm
@@ -94,6 +95,8 @@ class LineageCompletionTests(TestCase):
             family=family,
             draft_data={},
         )
+        assert get_lineage_errors(draft) == ["Choose your place in the family"]
+        draft.claimed_kin_pool = KinSlotPoolFactory(family=family)
         assert get_lineage_errors(draft) == []
 
     def test_none_path_without_tarot_card_incomplete(self):

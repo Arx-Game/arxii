@@ -70,7 +70,10 @@ export function SchoolingStances({ draft, tradition, copy }: SchoolingStancesPro
           const pressed = selectedRank === row.rank;
           const disabled =
             (row.rank > 0 && (row.grants_distinction_id == null || row.offer_id == null)) ||
-            syncDistinctions.isPending;
+            syncDistinctions.isPending ||
+            // Another grid's save in flight (#5134): this one would be computed from
+            // the list that save is about to replace.
+            (syncDistinctions.pendingEntries ?? null) !== null;
           return (
             <li key={row.schooling_line_id}>
               <button

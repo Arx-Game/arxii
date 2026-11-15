@@ -184,7 +184,44 @@ def dispatch_capability_reaction(  # noqa: PLR0913
         extra_modifiers=extra_modifiers,
     )
     outcome_fn(result)
+    _award_reaction_deed(actor, target_object, result, challenge_name)
     return result
+
+
+def _award_reaction_deed(
+    actor: ObjectDB,  # noqa: OBJECTDB_PARAM - the reacting character, any typeclass
+    target_object: ObjectDB,  # noqa: OBJECTDB_PARAM - whoever or whatever she answered for
+    result: ChallengeResolutionResult,
+    challenge_name: str,
+) -> None:
+    """Earn what a PC's reaction feeds (#5124): catching, interposing, succoring and covering
+    aid the one answered for, scaled by the reaction's own roll. The deed is labelled by the
+    challenge she answered."""
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.magic.constants import KindlingActKind  # noqa: PLC0415
+    from world.magic.services.kindling import (  # noqa: PLC0415
+        act_label,
+        award_kindled_deeds,
+        sheet_name,
+    )
+    from world.magic.types.kindling import KindlingAct  # noqa: PLC0415
+
+    # A character sheet shares its character's primary key.
+    helper = CharacterSheet.objects.filter(pk=actor.pk).first()
+    if helper is None:
+        return
+    aided = CharacterSheet.objects.filter(pk=target_object.pk).first()
+    award_kindled_deeds(
+        helper,
+        # A reaction aimed at something that is not a character aids nobody.
+        act=KindlingAct(
+            kind=KindlingActKind.AID,
+            target=aided,
+            aids=aided is not None,
+            label=act_label(challenge_name, sheet_name(helper, aided)),
+        ),
+        outcome=result.check_result.outcome,
+    )
 
 
 def _fresh_reaction_instance(

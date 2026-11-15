@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from http import HTTPMethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from django.db.models import Prefetch, QuerySet
@@ -17,7 +17,13 @@ from rest_framework.serializers import BaseSerializer
 
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location
+from world.magic.exceptions import ReflectionError
 from world.magic.models import CharacterResonance, PoseEndorsement
+from world.magic.services.reflection import (
+    pending_reflection_from,
+    record_pending_reflection,
+    recorded_line,
+)
 from world.relationships.reads import resolve_viewer_sheet
 from world.scenes.block_services import flag_blocked_contact_attempt, hidden_persona_ids_for_viewer
 from world.scenes.constants import (
@@ -50,6 +56,7 @@ from world.scenes.interaction_services import (
     idempotent_record_interaction,
     mark_very_private,
     personas_for_characters,
+    pose_already_submitted,
     resolve_characters_by_name,
     scene_entry_endorsements_for,
 )
@@ -72,6 +79,9 @@ from world.scenes.reaction_toggle_services import (
 )
 from world.scenes.services import active_persona_for_sheet
 from world.scenes.thread_services import InteractionThreadError, ReplyTarget
+
+if TYPE_CHECKING:
+    from world.magic.types.reflection import PendingReflection
 
 
 def _refusal_response(*, code: str, field: str, detail: str, hint: str | None) -> Response:
@@ -214,8 +224,13 @@ def _record_submitted_pose(  # noqa: PLR0913
     reply_target: ReplyTarget | None,
     on_created: Callable[[Interaction], None] | None,
     serializer_context: dict[str, object],
+    reflection: PendingReflection | None = None,
 ) -> Response:
-    """Record, broadcast, and serialize a submitted pose."""
+    """Record, broadcast, and serialize a submitted pose.
+
+    ``reflection`` (#5124) is recorded against the new row on first acceptance only. It is
+    never broadcast: the room gets the pose text and the writer's response carries the line.
+    """
     target_pks = frozenset(p.pk for p in target_personas) if target_personas else frozenset()
     try:
         result = idempotent_record_interaction(
@@ -258,14 +273,37 @@ def _record_submitted_pose(  # noqa: PLR0913
         # client drops it because the Interaction pushed above is the render.
         # Untagged, every web viewer in the room got the pose twice.
         message_location(caller_state, content, echo_of=InteractionMode.POSE)
+    reflection_line = None
+    reflection_recorded = True
+    if reflection is not None and not result.replayed:
+        try:
+            reflection_line = recorded_line(
+                record_pending_reflection(
+                    persona.character_sheet, reflection, writing=result.interaction
+                )
+            )
+        except ReflectionError as exc:
+            # The pose cannot be un-posted, so it stands and the writer is told why the
+            # reflection was not recorded.
+            reflection_recorded = False
+            reflection_line = (
+                f"Your pose was posted, but your reflection was not recorded: {exc.user_message}"
+            )
 
     response_status = status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
     interaction = result.interaction
+    extra = (
+        {"reflection_line": reflection_line, "reflection_recorded": reflection_recorded}
+        if reflection_line
+        else {}
+    )
     if interaction is None:
-        return Response({"ephemeral": True, "replayed": result.replayed}, status=response_status)
+        return Response(
+            {"ephemeral": True, "replayed": result.replayed, **extra}, status=response_status
+        )
     _seed_fresh_pose_caches(interaction, target_personas=target_personas, replayed=result.replayed)
     output = InteractionListSerializer(interaction, context=serializer_context)
-    return Response({**output.data, "replayed": result.replayed}, status=response_status)
+    return Response({**output.data, "replayed": result.replayed, **extra}, status=response_status)
 
 
 class InteractionViewSet(
@@ -562,6 +600,17 @@ class InteractionViewSet(
         pose_kind = data.get("pose_kind", PoseKind.STANDARD)
         content = data["content"]
 
+        # A reflection (#5124) is checked before anything is posted, so a refused one costs
+        # the writer nothing.
+        # A retry of a pose that already landed is the replay it is, and its reflection was
+        # recorded the first time: it is not checked again (the deed it names is now taken).
+        reflection = None
+        if not pose_already_submitted(persona, data["client_request_id"]):
+            try:
+                reflection = pending_reflection_from(persona.character_sheet, data)
+            except ReflectionError as exc:
+                return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+
         target_names: list[str] = data.get("target_names") or []
         target_characters = (
             resolve_characters_by_name(target_names, character.location)
@@ -619,6 +668,7 @@ class InteractionViewSet(
             reply_target=reply_target,
             on_created=_on_created,
             serializer_context=self.get_serializer_context(),
+            reflection=reflection,
         )
 
 

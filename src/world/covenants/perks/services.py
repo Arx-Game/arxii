@@ -111,6 +111,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.covenants.models import CharacterCovenantRole, VowSituationalPerk
     from world.magic.models import Technique
+    from world.magic.types.kindling import KindlingAct
     from world.missions.models import MissionInstance
 
 #: Beneficiaries that fire on the perk-owning holder's OWN action.
@@ -775,18 +776,22 @@ class SituationCheck:
     situation authored" and holds without evaluating anything.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - one keyword per field of the shared evaluation tuple
         self,
         *,
         subject: CharacterSheet,
         target: CharacterSheet | None,
         resolution: object | None,
         attacker: object | None = None,
+        mission: MissionInstance | None = None,
+        act: KindlingAct | None = None,
     ) -> None:
         self.subject = subject
         self.target = target
         self.resolution = resolution
         self.attacker = attacker
+        self.mission = mission
+        self.act = act
         self._eval_cache: dict[tuple[str, SituationParams, int], bool] = {}
 
     def holds(self, situation: str, params: SituationParams, holder: CharacterSheet) -> bool:
@@ -801,6 +806,8 @@ class SituationCheck:
                 target=self.target,
                 resolution=self.resolution,
                 attacker=self.attacker,
+                mission=self.mission,
+                act=self.act,
             )
             self._eval_cache[key] = SITUATION_EVALUATORS[situation](ctx, params)
         return self._eval_cache[key]
