@@ -83,6 +83,7 @@ def test_commit_with_a_computed_file_list_is_rejected(command):
         "git commit -m \"$(cat <<'EOF'\nTitle\n\nBody for the commit\nEOF\n)\" -- src/a.py",
         "git -C /workspaces/arxii commit -m msg -- tools/x.py",
         "FILES=($(ls)); echo ${FILES[@]}",
+        "gh pr create --body \"$(cat <<'EOF'\nA `git add` built by $(...) or xargs\nEOF\n)\"",
     ],
 )
 def test_plain_commit_and_non_git_scripting_pass(command):
