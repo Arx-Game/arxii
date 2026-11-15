@@ -22,7 +22,6 @@ from evennia.objects.models import ObjectDB
 
 from world.character_sheets.models import CharacterSheet
 from world.magic.models import FuryConfig, FuryDegreeShare, FuryTier, KindledStrengthTier
-from world.relationships.models import CharacterRelationship
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -50,22 +49,6 @@ class FuryResolution:
 
 def _config() -> FuryConfig:
     return FuryConfig.objects.filter(pk=1).first() or FuryConfig()
-
-
-def _bond_tier(character: CharacterSheet | ObjectDB, anchor: CharacterSheet) -> int:
-    """The claimed tier of ``character``'s OWN side toward ``anchor``, else 0 (#3957).
-
-    Deliberately NOT ``relationships.helpers.get_relationship_tier``: that helper is
-    training's mentor multiplier and answers a narrower question (the lower tier of a
-    MUTUAL Teaching-family tie). Fury's provocation cap has always read bond strength
-    one-sidedly and from any relationship -- a character can be provoked over someone
-    who never declared anything back -- so it reads the side row directly.
-    """
-    sheet = character if isinstance(character, CharacterSheet) else character.character_sheet
-    if sheet is None:
-        return 0
-    side = CharacterRelationship.objects.filter(source=sheet, target=anchor).first()
-    return side.tier if side is not None else 0
 
 
 def top_strength_tier() -> KindledStrengthTier | None:

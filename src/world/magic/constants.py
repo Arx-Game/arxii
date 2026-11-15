@@ -639,6 +639,18 @@ class KindlingSource(models.TextChoices):
     GM = "GM", "GM"
 
 
+class KindlingActKind(models.TextChoices):
+    """What kind of act a ``KindlingAct`` describes (#5124), for the situations that feed on it."""
+
+    ATTACK = "attack", "Attack"
+    DEFEND = "defend", "Defend"
+    TECHNIQUE = "technique", "Technique"
+    AID = "aid", "Aid"
+    MISSION_OPTION = "mission_option", "Mission option"
+    SOCIAL = "social", "Social"
+    OTHER = "other", "Other"
+
+
 # PLACEHOLDER anima band labels (#1446 bundle 2) — Apostate rewrite pending.
 # Qualitative anima vocabulary for status surfaces (player-facing anima is narrative,
 # not numerical). Mirrors vitals.constants.WOUND_DESCRIPTIONS: (min_ratio, label),

@@ -9,6 +9,7 @@ Submodules:
 - ``threads``     — thread axis enum and Imbuing / XP-lock result types
 - ``techniques``  — runtime stats, anima cost, soulfray, mishap, use-technique results
 - ``alterations`` — Mage Scar exception classes and pending/resolution results
+- ``kindling``    — KindlingAct, KindlingEvidence, KindledResonance (#5124)
 - ``drift``       — QualifyingComponent: an item counting toward a drift-correction offering (#4733)
 - ``magic_skills`` — CastCheck: a cast's check type plus its skill terms (#4450)
 - ``pull``        — resonance-pull action context and resolved / preview results
@@ -29,6 +30,7 @@ from world.magic.types.gain import (
     ResonanceWeeklySettlementSummary,
     SettlementResult,
 )
+from world.magic.types.kindling import KindledResonance, KindlingAct, KindlingEvidence
 from world.magic.types.magic_skills import CastCheck
 from world.magic.types.pull import (
     PayerOption,
@@ -80,6 +82,9 @@ __all__ = [
     "AuraDrift",
     "AuraPercentages",
     "CastCheck",
+    "KindledResonance",
+    "KindlingAct",
+    "KindlingEvidence",
     "MishapResult",
     "PayerOption",
     "PendingAlterationResult",
