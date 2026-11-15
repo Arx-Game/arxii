@@ -62,6 +62,7 @@ from world.relationships.factories import (
     RelationshipTypeFactory,
 )
 from world.relationships.models import CharacterRelationship
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 
 # ---------------------------------------------------------------------------
 # Test helpers
@@ -933,6 +934,11 @@ class PerSceneCapTests(TestCase):
     scene as long as cumulative accepted units remain under the cap" — we
     let the cap represent the session limit.
     """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
 
     def setUp(self) -> None:
         wire_soul_tether_content()

@@ -34,6 +34,7 @@ from world.magic.specialization.services import (
     gift_resonances_for,
     resolve_specialized_variant,
 )
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 
 
 def create_gift_thread(**kwargs) -> Thread:
@@ -94,6 +95,11 @@ class GiftLineageModelTests(TestCase):
 
 class InheritedTechniqueAcquisitionTests(TestCase):
     """``learn_technique`` — the non-teaching acquisition path."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
@@ -197,6 +203,11 @@ class InheritedTechniqueTeachingPathTests(TestCase):
     reintroduce the double AP+XP cost the design exists to remove.
     """
 
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
+
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
         self.resonance = ResonanceFactory()
@@ -283,6 +294,11 @@ class InheritedTechniqueCastTests(TestCase):
 
 class ParentlessGiftUnchangedTests(TestCase):
     """A gift with no parent behaves exactly as it did before #2891."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()

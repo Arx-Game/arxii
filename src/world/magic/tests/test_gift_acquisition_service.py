@@ -18,6 +18,7 @@ from world.magic.services.gift_acquisition import (
     spend_xp_on_gift_unlock,
 )
 from world.roster.factories import grant_test_tenure
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 
 
 class ComputeGiftUnlockXpCostTest(TestCase):
@@ -95,6 +96,11 @@ class SpendXpOnGiftUnlockTest(TestCase):
 
 
 class TechniqueCapTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
+
     def setUp(self):
         self.gift = GiftFactory(kind=GiftKind.MINOR)
         self.sheet = CharacterSheetFactory()
@@ -154,6 +160,44 @@ class TechniqueCapTest(TestCase):
         # depth = max(1, 25 // 10) = 2, cap = 3 * 2 = 6
         self.assertEqual(get_technique_cap_for_gift(self.sheet, self.gift), 6)
 
+    def test_cap_at_the_high_rungs_matches_three_a_depth(self):
+        """Pinned from the old rule (3 x depth): thread levels 110 and 260 give 33 and 78."""
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import Thread
+
+        thread = Thread.objects.create(
+            owner=self.sheet,
+            resonance=ResonanceFactory(),
+            target_kind=TargetKind.GIFT,
+            target_gift=self.gift,
+            level=110,
+        )
+        self.assertEqual(get_technique_cap_for_gift(self.sheet, self.gift), 33)
+        thread.level = 260
+        thread.save()
+        self.assertEqual(get_technique_cap_for_gift(self.sheet, self.gift), 78)
+
+    def test_cap_reads_the_lane_row(self):
+        """Staff retune a depth's cap in the TECHNIQUES_PER_GIFT lane's row."""
+        from world.checks.constants import ModifierLane
+        from world.checks.modifier_models import ModifierLevelBaseline
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import Thread
+
+        row = ModifierLevelBaseline.objects.get(lane=ModifierLane.TECHNIQUES_PER_GIFT, level=2)
+        row.baseline = 9
+        row.save()
+        Thread.objects.create(
+            owner=self.sheet,
+            resonance=ResonanceFactory(),
+            target_kind=TargetKind.GIFT,
+            target_gift=self.gift,
+            level=25,
+        )
+        self.assertEqual(get_technique_cap_for_gift(self.sheet, self.gift), 9)
+
     def test_cap_never_drops_to_zero_for_levels_1_through_9(self):
         """Regression (#1718 final-review Finding 1).
 
@@ -209,6 +253,11 @@ class TechniqueCapTest(TestCase):
 
 
 class AcceptTechniqueOfferTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
+
     def setUp(self):
         from evennia_extensions.factories import AccountFactory
         from world.action_points.models import ActionPointPool
@@ -502,6 +551,11 @@ class ChargeAndLearnGoldCostTest(TestCase):
     rather than only indirectly through the npc_services TRAIN offer tests.
     """
 
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
+
     def setUp(self):
         from evennia_extensions.factories import AccountFactory
         from world.action_points.models import ActionPointPool
@@ -581,6 +635,11 @@ class UnboundMagicLearningApSurchargeTest(TestCase):
     the surcharge's target only invents under SEED_SAMPLE_CONTENT — this test
     asserts on the real surcharge amount, so it opts in.
     """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
 
     def setUp(self):
         from evennia_extensions.factories import AccountFactory

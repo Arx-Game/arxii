@@ -29,11 +29,17 @@ from world.magic.services.gain import outfit_daily_trickle_for_character
 from world.magic.tests.integration.test_outfit_resonance_trickle_pipeline import (
     _build_sheet_with_equipped_facet_item,
 )
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.worship.factories import WorshippedBeingFactory
 
 
 @tag("postgres")
 class OutfitGrantHistorySurvivesTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
+
     def setUp(self) -> None:
         self.sheet, self.resonance, self.facet, self.item_facet, _thread = (
             _build_sheet_with_equipped_facet_item()

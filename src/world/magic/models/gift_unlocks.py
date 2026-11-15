@@ -206,12 +206,8 @@ class GiftAcquisitionConfig(SharedMemoryModel):
 
     objects = ArxSharedMemoryManager()
 
-    techniques_per_thread_level = models.PositiveIntegerField(
-        default=3,
-        help_text=(
-            "Max techniques a character can learn per gift per 10 thread levels. Variants excluded."
-        ),
-    )
+    # The max techniques a character can learn per gift (variants excluded) is the
+    # TECHNIQUES_PER_GIFT lane's baseline at the gift thread's depth (#5093).
     first_technique_ap_multiplier = models.PositiveIntegerField(
         default=3,
         help_text="AP cost multiplier for the first technique from a not-yet-acquired gift.",

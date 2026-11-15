@@ -13,8 +13,6 @@ from world.combat.factories import (
 )
 from world.combat.serializers import ParticipantSerializer
 from world.fatigue.constants import (
-    CAPACITY_STAT_MULTIPLIER,
-    CAPACITY_WILLPOWER_MULTIPLIER,
     ActionCategory,
 )
 from world.fatigue.models import FatiguePool
@@ -43,15 +41,9 @@ class ParticipantSerializerFatigueTests(TestCase):
         _setup_stat(char, "willpower", 20, TraitCategory.META)  # display 2
 
         self.expected_capacity = {
-            ActionCategory.PHYSICAL.value: (
-                3 * CAPACITY_STAT_MULTIPLIER + 2 * CAPACITY_WILLPOWER_MULTIPLIER
-            ),
-            ActionCategory.SOCIAL.value: (
-                4 * CAPACITY_STAT_MULTIPLIER + 2 * CAPACITY_WILLPOWER_MULTIPLIER
-            ),
-            ActionCategory.MENTAL.value: (
-                5 * CAPACITY_STAT_MULTIPLIER + 2 * CAPACITY_WILLPOWER_MULTIPLIER
-            ),
+            ActionCategory.PHYSICAL.value: (3 * 10 + 2 * 3),
+            ActionCategory.SOCIAL.value: (4 * 10 + 2 * 3),
+            ActionCategory.MENTAL.value: (5 * 10 + 2 * 3),
         }
 
     def _staff_request(self):

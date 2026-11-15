@@ -21,6 +21,12 @@ seeds the level widths that make a Large modifier land on its example ladder
 16, 21 and 26: the width at a level is twice that ladder's Large value there, filled in a
 straight line between the listed levels. The other sizes land within 1 of their old values.
 The taper is the check lane's ratio and floor, for the kinds a read of that lane gathers.
+
+The six pool and cap lanes (#5093) seed only dense baseline rows, in their own units, so
+that each moved rule reproduces the number it had as a coefficient times a level: the anima
+pool 100 a level, the soul tether scene cap 2 and the Hollow 10 a thread rung, the outfit
+trickle factor the rung and techniques per gift 3 a depth. The fatigue level bonus lane has
+no rows, which adds nothing until staff author them.
 """
 
 from __future__ import annotations
@@ -34,6 +40,7 @@ from world.checks.modifier_models import (
     ModifierTaper,
 )
 from world.checks.scale_config import SINGLETON_PK, CheckScaleConfig
+from world.fatigue.models import SINGLETON_PK as FATIGUE_SINGLETON_PK, FatigueConfig
 from world.magic.models.modifier_level import CastOutcomeLevelShift, CastPowerLevel
 
 _LEVELS = range(1, 31)
@@ -48,6 +55,18 @@ _LEVEL_BASELINE_START = 18
 _LEVEL_BASELINE_STEP = 8
 _LEVEL_BASELINES: tuple[tuple[int, int], ...] = tuple(
     (level, _LEVEL_BASELINE_START + _LEVEL_BASELINE_STEP * (level - 1)) for level in _LEVELS
+)
+
+# The pool and cap lanes (#5093): the baseline each seeds per unit of its level (a character
+# level, a thread rung or a gift depth), the number its old coefficient had. The fatigue level
+# bonus lane is not seeded: fatigue capacity had no level term before, and a lane with no rows
+# adds nothing until staff author it.
+_POOL_LANE_PER_LEVEL: tuple[tuple[str, int], ...] = (
+    (ModifierLane.ANIMA_POOL, 100),
+    (ModifierLane.SOUL_TETHER_SCENE_CAP, 2),
+    (ModifierLane.HOLLOW_MAX, 10),
+    (ModifierLane.OUTFIT_TRICKLE, 1),
+    (ModifierLane.TECHNIQUES_PER_GIFT, 3),
 )
 
 # Each size's share of one level's width, on every lane: Large is half a level and the
@@ -214,14 +233,35 @@ def seed_check_level_baselines() -> None:
         )
 
 
+def seed_pool_and_cap_lanes() -> None:
+    """Create the pool and cap lanes' dense baseline rows (levels 1-30) and the fatigue row.
+
+    Each row is the lane's per-level number times the level, so a moved rule reads the value
+    it had as a coefficient. Create-if-missing, so a staff retune survives a re-seed. The
+    ``FatigueConfig`` singleton is written from its shipped stat terms: 10 per 10 points of
+    the endurance stat, 3 per 10 of willpower, well rested at 150 percent.
+    """
+    for lane, per_level in _POOL_LANE_PER_LEVEL:
+        for level in _LEVELS:
+            ModifierLevelBaseline.objects.get_or_create(
+                lane=lane, level=level, defaults={"baseline": per_level * level}
+            )
+    FatigueConfig.objects.get_or_create(
+        pk=FATIGUE_SINGLETON_PK,
+        defaults={"stat_multiplier": 10, "willpower_multiplier": 3, "well_rested_percent": 150},
+    )
+
+
 def seed_modifier_value_tables() -> None:
     """Create the example baseline, size fraction and taper rows for the check, stat and
-    maneuver effect lanes, and the cast-level rows, if missing.
+    maneuver effect lanes, the pool and cap lanes' baselines, and the cast-level rows, if
+    missing.
 
     No ``ModifierValue`` row is seeded: values are derived from the fractions and the
     baselines, and an override row is staff's to add.
     """
     seed_check_level_baselines()
+    seed_pool_and_cap_lanes()
     _seed_fractions(ModifierLane.CHECK)
     _seed_taper(ModifierLane.CHECK, _TAPERED_KINDS)
     for lane, start, large_values in _LANE_SCALES:

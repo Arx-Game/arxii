@@ -30,6 +30,7 @@ from world.magic.constants import GainSource, TargetKind
 from world.magic.factories import CharacterResonanceFactory, FacetFactory, ResonanceFactory
 from world.magic.models import CharacterResonance, ResonanceGrant, Thread
 from world.magic.services.gain import outfit_daily_trickle_for_character
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.traits.factories import CharacterTraitValueFactory, CheckOutcomeFactory
 from world.traits.models import Trait
 from world.worship.constants import BeingResonanceTier
@@ -44,6 +45,7 @@ from world.worship.factories import (
 class AScarfThatHasFedItsWearer(JourneyCase):
     def setUp(self) -> None:
         super().setUp()
+        seed_pool_and_cap_lanes()
         self.room = self.make_room("The Shrine of Ombrin")
         profile = RoomProfileFactory(objectdb=self.room)
         self.ysmay = self.make_player("Ysmay", room=self.room)

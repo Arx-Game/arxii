@@ -42,6 +42,7 @@ from world.magic.models import Thread
 from world.magic.services.gain import outfit_daily_trickle_for_character
 from world.relationships.factories import CharacterRelationshipFactory, RelationshipTierFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.traits.factories import CharacterTraitValueFactory, CheckOutcomeFactory
 from world.traits.models import Trait
 from world.worship.constants import BeingResonanceTier, FavorAwardKind
@@ -70,6 +71,7 @@ def _carry(item: ItemInstance, holder) -> None:
 class WearingWhatTheWindFavors(JourneyCase):
     def setUp(self) -> None:
         super().setUp()
+        seed_pool_and_cap_lanes()
         self.shop = self.make_room("Corwen's Shop")
         self.profile = RoomProfileFactory(objectdb=self.shop)
         install_full_lab_station(self.profile)

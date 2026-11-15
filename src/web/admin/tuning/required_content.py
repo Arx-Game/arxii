@@ -367,6 +367,45 @@ def _probe_check_level_baselines() -> ProbeResult:
     return ProbeResult(present=not missing, missing=missing, detail=detail)
 
 
+def _probe_pool_lane_baselines() -> ProbeResult:
+    """Each pool and cap lane has a baseline row for every level up to its highest (#5093).
+
+    The anima pool, the soul tether scene cap, the Hollow maximum, the outfit trickle and
+    techniques per gift read one ``ModifierLevelBaseline`` row per level of their own lane
+    (``level_baseline``), and a lane with no row at or below a level raises. A lane with no
+    row at all, or a gap below its highest row, is reported. The fatigue level bonus is not
+    checked: with no rows it adds nothing.
+    """
+    from world.checks.constants import ModifierLane  # noqa: PLC0415
+    from world.checks.modifier_models import ModifierLevelBaseline  # noqa: PLC0415
+
+    lanes = (
+        ModifierLane.ANIMA_POOL,
+        ModifierLane.SOUL_TETHER_SCENE_CAP,
+        ModifierLane.HOLLOW_MAX,
+        ModifierLane.OUTFIT_TRICKLE,
+        ModifierLane.TECHNIQUES_PER_GIFT,
+    )
+    levels_by_lane: dict[str, set[int]] = {lane: set() for lane in lanes}
+    for lane, level in ModifierLevelBaseline.objects.filter(lane__in=lanes).values_list(
+        "lane", "level"
+    ):
+        levels_by_lane[lane].add(level)
+    missing: list[str] = []
+    for lane in lanes:
+        present = levels_by_lane[lane]
+        if not present:
+            missing.append(f"{ModifierLane(lane).label}: no rows")
+            continue
+        gaps = [str(level) for level in range(1, max(present) + 1) if level not in present]
+        if gaps:
+            missing.append(f"{ModifierLane(lane).label}: level {', '.join(gaps)}")
+    detail = f"Pool and cap lane ModifierLevelBaseline rows missing: {'; '.join(missing)}."
+    return ProbeResult(
+        present=not missing, missing=tuple(missing), detail=detail if missing else ""
+    )
+
+
 def _technique_gap_link(gap: str) -> str | None:
     """The Technique changelist filtered to one authoring gap (#4545).
 
@@ -4312,6 +4351,24 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "error instead of rolling; a gap in the levels repeats a rank threshold."
             ),
             probe=CustomProbe(fn=_probe_check_level_baselines),
+            admin_model="ModifierLevelBaseline",
+        ),
+        ContentDependency(
+            key="pool-lane-baselines",
+            label="Modifier level baselines (pool and cap lanes)",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/magic/services/anima.py recompute_max_anima(), soul_tether.py "
+                "_compute_per_scene_sineating_cap() and _compute_hollow_max(), gain.py "
+                "outfit_daily_trickle_for_character(), gift_acquisition.py "
+                "get_technique_cap_for_gift()"
+            ),
+            consequence=(
+                "A level advance, a Sineating offer, the daily outfit trickle or a technique "
+                "learned from a gift raises a configuration error where a lane has no row at "
+                "or below the level."
+            ),
+            probe=CustomProbe(fn=_probe_pool_lane_baselines),
             admin_model="ModifierLevelBaseline",
         ),
         ContentDependency(

@@ -6,18 +6,17 @@ from django.test import TestCase
 
 from world.action_points.models import ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.constants import ModifierLane
+from world.checks.modifier_models import ModifierLevelBaseline
 from world.combat.factories import StrainConfigFactory
 from world.fatigue.constants import (
-    CAPACITY_STAT_MULTIPLIER,
-    CAPACITY_WILLPOWER_MULTIPLIER,
     MIN_FATIGUE_COST,
     REST_AP_COST,
-    WELL_RESTED_MULTIPLIER,
     ActionCategory,
     EffortLevel,
     FatigueZone,
 )
-from world.fatigue.models import FatiguePool
+from world.fatigue.models import FatigueConfig, FatiguePool
 from world.fatigue.services import (
     apply_fatigue,
     apply_technique_fatigue,
@@ -34,6 +33,7 @@ from world.fatigue.services import (
     should_check_collapse,
 )
 from world.fatigue.tests import setup_stat as _setup_stat
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.traits.models import TraitCategory
 
 
@@ -81,7 +81,7 @@ class GetFatigueCapacityTests(TestCase):
         _setup_stat(char, "willpower", 20, TraitCategory.META)
 
         capacity = get_fatigue_capacity(self.sheet, ActionCategory.PHYSICAL)
-        expected = 3 * CAPACITY_STAT_MULTIPLIER + 2 * CAPACITY_WILLPOWER_MULTIPLIER
+        expected = 3 * 10 + 2 * 3
         assert capacity == expected
 
     def test_capacity_social_uses_composure(self):
@@ -91,7 +91,7 @@ class GetFatigueCapacityTests(TestCase):
         _setup_stat(char, "willpower", 10, TraitCategory.META)
 
         capacity = get_fatigue_capacity(self.sheet, ActionCategory.SOCIAL)
-        expected = 4 * CAPACITY_STAT_MULTIPLIER + 1 * CAPACITY_WILLPOWER_MULTIPLIER
+        expected = 4 * 10 + 1 * 3
         assert capacity == expected
 
     def test_capacity_mental_uses_stability(self):
@@ -101,7 +101,7 @@ class GetFatigueCapacityTests(TestCase):
         _setup_stat(char, "willpower", 30, TraitCategory.META)
 
         capacity = get_fatigue_capacity(self.sheet, ActionCategory.MENTAL)
-        expected = 5 * CAPACITY_STAT_MULTIPLIER + 3 * CAPACITY_WILLPOWER_MULTIPLIER
+        expected = 5 * 10 + 3 * 3
         assert capacity == expected
 
     def test_well_rested_multiplier(self):
@@ -115,14 +115,60 @@ class GetFatigueCapacityTests(TestCase):
         pool.save()
 
         capacity = get_fatigue_capacity(self.sheet, ActionCategory.PHYSICAL)
-        base = 3 * CAPACITY_STAT_MULTIPLIER + 2 * CAPACITY_WILLPOWER_MULTIPLIER
-        expected = int(base * WELL_RESTED_MULTIPLIER)
+        base = 3 * 10 + 2 * 3
+        expected = int(base * 1.5)
         assert capacity == expected
 
     def test_zero_stats_gives_zero_capacity(self):
         """Characters with no stats have 0 capacity."""
         capacity = get_fatigue_capacity(self.sheet, ActionCategory.PHYSICAL)
         assert capacity == 0
+
+
+class FatigueCapacityConfigTests(TestCase):
+    """The capacity terms come from the FatigueConfig row and the level bonus lane (#5093)."""
+
+    def setUp(self):
+        FatiguePool.flush_instance_cache()
+        FatigueConfig.flush_instance_cache()
+        self.addCleanup(FatigueConfig.flush_instance_cache)
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.sheet = CharacterSheetFactory()
+        char = cls.sheet.character
+        # stamina 3 and willpower 2 in stat points: 3 * 10 + 2 * 3 = 36 at the shipped terms.
+        _setup_stat(char, "stamina", 30, TraitCategory.PHYSICAL)
+        _setup_stat(char, "willpower", 20, TraitCategory.META)
+
+    def test_shipped_row_matches_the_old_constants(self):
+        """The singleton's defaults are the old 10 and 3 per stat point and 1.5x well rested."""
+        config = FatigueConfig.get_singleton()
+        assert (config.stat_multiplier, config.willpower_multiplier) == (10, 3)
+        assert config.well_rested_percent == 150
+
+    def test_row_multipliers_tune_capacity(self):
+        """Staff retune the stat terms and the well-rested percent in the one row."""
+        config = FatigueConfig.get_singleton()
+        config.stat_multiplier = 20
+        config.willpower_multiplier = 5
+        config.well_rested_percent = 200
+        config.save()
+        assert get_fatigue_capacity(self.sheet, ActionCategory.PHYSICAL, well_rested=False) == 70
+        assert get_fatigue_capacity(self.sheet, ActionCategory.PHYSICAL, well_rested=True) == 140
+
+    def test_level_bonus_row_adds_to_capacity(self):
+        """The level's FATIGUE_LEVEL_BONUS baseline adds to the stat terms, like health."""
+        ModifierLevelBaseline.objects.create(
+            lane=ModifierLane.FATIGUE_LEVEL_BONUS, level=1, baseline=7
+        )
+        assert get_fatigue_capacity(self.sheet, ActionCategory.PHYSICAL, well_rested=False) == 43
+        assert get_fatigue_capacity(self.sheet, ActionCategory.PHYSICAL, well_rested=True) == 64
+
+    def test_seeded_lanes_leave_capacity_unchanged(self):
+        """The fatigue lane is not seeded: capacity is what it was before a level term."""
+        seed_pool_and_cap_lanes()
+        assert get_fatigue_capacity(self.sheet, ActionCategory.PHYSICAL, well_rested=False) == 36
 
 
 class GetFatigueZoneTests(TestCase):
@@ -743,7 +789,7 @@ class ApplyTechniqueFatigueTests(TestCase):
         _setup_stat(char, "willpower", 10, TraitCategory.META)
 
         pool = get_or_create_fatigue_pool(self.sheet)
-        capacity = 1 * CAPACITY_STAT_MULTIPLIER + 1 * CAPACITY_WILLPOWER_MULTIPLIER
+        capacity = 1 * 10 + 1 * 3
         # Set to 85% of capacity → OVEREXERTED zone
         pool.set_current(ActionCategory.PHYSICAL, int(capacity * 0.85))
         pool.save()

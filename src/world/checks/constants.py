@@ -132,6 +132,14 @@ class ModifierLane(models.TextChoices):
     The three maneuver effect lanes (#4876) value a modifier on a damage, to-hit or partial
     protection target, in damage points, check points and percentage points; the effect
     readers pick one by the target's kind (``EFFECT_KIND_LANE``).
+    The six pool and cap lanes (#5093) hold only ``ModifierLevelBaseline`` rows, in their own
+    units: each is a rule that used to multiply a coefficient by a level, now one row per
+    level read through ``level_baseline``. They have no size fractions and no taper.
+    ``ANIMA_POOL`` is the anima maximum at a character level; ``FATIGUE_LEVEL_BONUS`` is the
+    fatigue capacity a level adds on top of the stat terms; ``SOUL_TETHER_SCENE_CAP`` and
+    ``HOLLOW_MAX`` are keyed by the Sinner's thread rung; ``OUTFIT_TRICKLE`` is the factor
+    a facet thread's rung gives the daily outfit trickle; ``TECHNIQUES_PER_GIFT`` is the
+    techniques a gift allows at a gift thread's depth.
     """
 
     CHECK = "check", "Check points"
@@ -139,6 +147,12 @@ class ModifierLane(models.TextChoices):
     DAMAGE = "damage", "Damage"
     TO_HIT = "to_hit", "To hit"
     PARTIAL_PROTECTION = "partial_protection", "Partial protection"
+    ANIMA_POOL = "anima_pool", "Anima pool"
+    FATIGUE_LEVEL_BONUS = "fatigue_level_bonus", "Fatigue level bonus"
+    SOUL_TETHER_SCENE_CAP = "soul_tether_cap", "Soul tether scene cap"
+    HOLLOW_MAX = "hollow_max", "Hollow maximum"
+    OUTFIT_TRICKLE = "outfit_trickle", "Outfit trickle"
+    TECHNIQUES_PER_GIFT = "techniques_per_gift", "Techniques per gift"
 
 
 class ModifierSize(models.IntegerChoices):

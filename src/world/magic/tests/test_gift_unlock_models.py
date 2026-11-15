@@ -48,7 +48,6 @@ class CharacterGiftUnlockModelTest(TestCase):
 class GiftAcquisitionConfigModelTest(TestCase):
     def test_defaults(self):
         config = GiftAcquisitionConfig.objects.create()
-        self.assertEqual(config.techniques_per_thread_level, 3)
         self.assertEqual(config.first_technique_ap_multiplier, 3)
 
 
@@ -78,7 +77,6 @@ class GiftAcquisitionConfigGetterTest(TestCase):
         GiftAcquisitionConfig.objects.all().delete()
         config = get_gift_acquisition_config()
         self.assertEqual(config.pk, 1)
-        self.assertEqual(config.techniques_per_thread_level, 3)
         # Idempotent
         config2 = get_gift_acquisition_config()
         self.assertEqual(config2.pk, 1)

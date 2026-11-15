@@ -60,6 +60,7 @@ from world.scenes.action_constants import MIN_DIFFICULTY_POINTS
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.models import Interaction
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.traits.factories import CheckOutcomeFactory
 from world.worship.constants import (
     BeingResonanceTier,
@@ -121,6 +122,7 @@ class PledgeTestBase(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        seed_pool_and_cap_lanes()
         cls.outcomes = {
             name: CheckOutcomeFactory(name=name, success_level=level) for name, level in _OUTCOMES
         }

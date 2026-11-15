@@ -2302,7 +2302,6 @@ class TechniqueTeachingOfferAdmin(admin.ModelAdmin):
 @admin.register(GiftAcquisitionConfig)
 class GiftAcquisitionConfigAdmin(admin.ModelAdmin):
     list_display = [
-        "techniques_per_thread_level",
         "first_technique_ap_multiplier",
         "major_gift_ap_multiplier",
         "imbue_ap_cost",
@@ -2828,7 +2827,6 @@ class AnimaConfigAdmin(admin.ModelAdmin):
     list_display = [
         "daily_regen_amount",
         "level_zero_maximum",
-        "maximum_per_level",
         "death_harvest_multiplier",
     ]
 

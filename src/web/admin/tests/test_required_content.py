@@ -22,6 +22,7 @@ from world.game_clock.factories import GameClockFactory
 from world.magic.constants import GiftKind
 from world.magic.factories import ensure_soulfray_config
 from world.magic.services.drift import get_drift_config
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 
 
 def _dep(key: str, probe: rc.ContentProbe, tier: rc.DependencyTier) -> rc.ContentDependency:
@@ -2309,3 +2310,26 @@ class TestNaturalWeaponTemplatesProbe(TestCase):
         GiftFactory(name="Probe Fanged", kind=GiftKind.MINOR, natural_weapon_template=template)
         result = _probe_for(self.KEY).resolve(None)
         self.assertEqual(result.missing, ("Probe Bite: it has no slots, so it is never equipped",))
+
+
+class TestPoolLaneBaselinesProbe(TestCase):
+    """The pool and cap lanes need a baseline row per level or their readers raise (#5093)."""
+
+    def test_a_database_with_no_rows_reports_every_lane(self) -> None:
+        result = rc._probe_pool_lane_baselines()
+        self.assertFalse(result.present)
+        self.assertEqual(len(result.missing), 5)
+
+    def test_the_seeded_rows_are_complete(self) -> None:
+        seed_pool_and_cap_lanes()
+        self.assertTrue(rc._probe_pool_lane_baselines().present)
+
+    def test_a_deleted_level_is_reported(self) -> None:
+        from world.checks.constants import ModifierLane
+        from world.checks.modifier_models import ModifierLevelBaseline
+
+        seed_pool_and_cap_lanes()
+        ModifierLevelBaseline.objects.get(lane=ModifierLane.HOLLOW_MAX, level=7).delete()
+        result = rc._probe_pool_lane_baselines()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("Hollow maximum: level 7",))

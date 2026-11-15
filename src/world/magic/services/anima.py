@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 from django.db import IntegrityError, transaction
 
+from world.checks.constants import ModifierLane
+from world.checks.modifier_values import level_baseline
 from world.magic.models import CharacterAnima
 from world.magic.types.ritual import AnimaRegenTickSummary, RitualOutcome
 
@@ -59,8 +61,8 @@ def deduct_anima(character: ObjectDB, effective_cost: int, *, lethal: bool = Tru
 def recompute_max_anima(character_sheet: CharacterSheet) -> int:
     """Recompute maximum anima from character level (#3001).
 
-    maximum = ``AnimaConfig.level_zero_maximum`` at level < 1, else
-    ``AnimaConfig.maximum_per_level * level``. Raising the maximum never fills
+    maximum = ``AnimaConfig.level_zero_maximum`` at level < 1, else the ANIMA_POOL lane's
+    ``ModifierLevelBaseline`` at that level (#5093). Raising the maximum never fills
     it — ``current`` is untouched on growth (a fresh level is a big empty pool
     begging for ritual, feeding, or blood) and clamped on shrink
     (clamp-not-injure, mirroring ``recompute_max_health``).
@@ -81,7 +83,9 @@ def recompute_max_anima(character_sheet: CharacterSheet) -> int:
     # a Gifted-sized pool, so detect rowlessness explicitly.
     class_level = primary_class_level(character_sheet.character)
     level = class_level.level if class_level is not None else 0
-    new_max = config.level_zero_maximum if level < 1 else config.maximum_per_level * level
+    new_max = (
+        config.level_zero_maximum if level < 1 else level_baseline(level, ModifierLane.ANIMA_POOL)
+    )
 
     update_fields: list[str] = []
     if anima.maximum != new_max:
