@@ -31006,8 +31006,8 @@ export interface components {
       /** @description Template string with {variables} for instance-specific text. */
       description_template?: string;
       goal?: string;
-      /** @description Authored difficulty in DIFFICULTY_VALUES points (15 Trivial .. 90 Harrowing), passed straight to perform_check's target_difficulty. NOT a 1-5 rating: the old default of 1 resolved every authored challenge at the bottom rank (#2865). */
-      severity?: number;
+      /** @description Authored difficulty as a level (0 = no difficulty): the roll meets that level's baseline, passed to perform_check as its target_difficulty. NOT a 1-5 rating. */
+      severity_level?: number;
       challenge_type?: components['schemas']['ChallengeTypeEnum'];
       discovery_type?: components['schemas']['DiscoveryTypeEnum'];
       readonly template_properties: components['schemas']['ChallengeTemplateProperty'][];
@@ -31020,8 +31020,8 @@ export interface components {
       name: string;
       category: number;
       readonly category_name: string;
-      /** @description Authored difficulty in DIFFICULTY_VALUES points (15 Trivial .. 90 Harrowing), passed straight to perform_check's target_difficulty. NOT a 1-5 rating: the old default of 1 resolved every authored challenge at the bottom rank (#2865). */
-      severity?: number;
+      /** @description Authored difficulty as a level (0 = no difficulty): the roll meets that level's baseline, passed to perform_check as its target_difficulty. NOT a 1-5 rating. */
+      severity_level?: number;
       challenge_type?: components['schemas']['ChallengeTypeEnum'];
       discovery_type?: components['schemas']['DiscoveryTypeEnum'];
     };
@@ -32224,7 +32224,7 @@ export interface components {
       readonly domain: components['schemas']['DomainEnum'];
       readonly name: string;
       readonly description: string;
-      /** @description Feeds perform_check's target_difficulty for the bind attempt. */
+      /** @description Feeds perform_check's target_difficulty for the bind attempt. Authored as a level (0 = no difficulty): the roll meets that level's baseline. */
       readonly bind_difficulty_level: number;
       /** @description Companion Capacity consumed while this archetype is bonded. */
       readonly capacity_cost: number;
@@ -33443,8 +33443,8 @@ export interface components {
       name: string;
       category: number;
       readonly category_name: string;
-      /** @description Authored difficulty in DIFFICULTY_VALUES points (15 Trivial .. 90 Harrowing), passed straight to perform_check's target_difficulty. NOT a 1-5 rating: the old default of 1 resolved every authored challenge at the bottom rank (#2865). */
-      severity?: number;
+      /** @description Authored difficulty as a level (0 = no difficulty): the roll meets that level's baseline, passed to perform_check as its target_difficulty. NOT a 1-5 rating. */
+      severity_level?: number;
       challenge_type?: components['schemas']['ChallengeTypeEnum'];
       discovery_type?: components['schemas']['DiscoveryTypeEnum'];
       /** @description Template string with {variables} for instance-specific text. */
@@ -40468,9 +40468,9 @@ export interface components {
       rapport_delta_failure?: number;
       /** @description Per-(offer, persona) throttle applied after a final-action grant. When set, `OfferCooldown.available_at = now + cooldown` blocks re-selection until it elapses. Null = no cooldown. */
       cooldown?: string | null;
-      /** @description Optional: if set, non-final actions roll `perform_check` against this check type and `check_difficulty`. Success → `rapport_delta_success`; failure → `rapport_delta_failure`. Final actions ignore this — the effect IS the payoff. */
+      /** @description Optional: if set, non-final actions roll `perform_check` against this check type and `check_difficulty_level`. Success → `rapport_delta_success`; failure → `rapport_delta_failure`. Final actions ignore this — the effect IS the payoff. */
       check_type?: number | null;
-      /** @description Target difficulty passed to `perform_check` when `check_type` is set. Meaningless when `check_type` is null. */
+      /** @description Target difficulty passed to `perform_check` when `check_type` is set. Meaningless when `check_type` is null. Authored as a level (0 = no difficulty): the roll meets that level's baseline. */
       check_difficulty_level?: number;
     };
     /**
@@ -40565,9 +40565,9 @@ export interface components {
       rapport_delta_failure?: number;
       /** @description Per-(offer, persona) throttle applied after a final-action grant. When set, `OfferCooldown.available_at = now + cooldown` blocks re-selection until it elapses. Null = no cooldown. */
       cooldown?: string | null;
-      /** @description Optional: if set, non-final actions roll `perform_check` against this check type and `check_difficulty`. Success → `rapport_delta_success`; failure → `rapport_delta_failure`. Final actions ignore this — the effect IS the payoff. */
+      /** @description Optional: if set, non-final actions roll `perform_check` against this check type and `check_difficulty_level`. Success → `rapport_delta_success`; failure → `rapport_delta_failure`. Final actions ignore this — the effect IS the payoff. */
       check_type?: number | null;
-      /** @description Target difficulty passed to `perform_check` when `check_type` is set. Meaningless when `check_type` is null. */
+      /** @description Target difficulty passed to `perform_check` when `check_type` is set. Meaningless when `check_type` is null. Authored as a level (0 = no difficulty): the roll meets that level's baseline. */
       check_difficulty_level?: number;
     };
     /**
@@ -46688,9 +46688,9 @@ export interface components {
       rapport_delta_failure?: number;
       /** @description Per-(offer, persona) throttle applied after a final-action grant. When set, `OfferCooldown.available_at = now + cooldown` blocks re-selection until it elapses. Null = no cooldown. */
       cooldown?: string | null;
-      /** @description Optional: if set, non-final actions roll `perform_check` against this check type and `check_difficulty`. Success → `rapport_delta_success`; failure → `rapport_delta_failure`. Final actions ignore this — the effect IS the payoff. */
+      /** @description Optional: if set, non-final actions roll `perform_check` against this check type and `check_difficulty_level`. Success → `rapport_delta_success`; failure → `rapport_delta_failure`. Final actions ignore this — the effect IS the payoff. */
       check_type?: number | null;
-      /** @description Target difficulty passed to `perform_check` when `check_type` is set. Meaningless when `check_type` is null. */
+      /** @description Target difficulty passed to `perform_check` when `check_type` is set. Meaningless when `check_type` is null. Authored as a level (0 = no difficulty): the roll meets that level's baseline. */
       check_difficulty_level?: number;
     };
     /**
@@ -47401,7 +47401,7 @@ export interface components {
       category?: components['schemas']['Category59dEnum'];
       /** @description Check both the handler (dispatch) and the agent (resolution) roll. */
       check_type?: number;
-      /** @description Target difficulty for both dispatch and resolution rolls. */
+      /** @description Target difficulty for both dispatch and resolution rolls. Authored as a level (0 = no difficulty): the roll meets that level's baseline. */
       check_difficulty_level?: number;
       /** @description Real time from assignment to resolution by the game clock. */
       duration?: string;
@@ -54007,7 +54007,7 @@ export interface components {
       category?: components['schemas']['Category59dEnum'];
       /** @description Check both the handler (dispatch) and the agent (resolution) roll. */
       check_type: number;
-      /** @description Target difficulty for both dispatch and resolution rolls. */
+      /** @description Target difficulty for both dispatch and resolution rolls. Authored as a level (0 = no difficulty): the roll meets that level's baseline. */
       check_difficulty_level?: number;
       /** @description Real time from assignment to resolution by the game clock. */
       duration: string;
@@ -54038,7 +54038,7 @@ export interface components {
       category?: components['schemas']['Category59dEnum'];
       /** @description Check both the handler (dispatch) and the agent (resolution) roll. */
       check_type: number;
-      /** @description Target difficulty for both dispatch and resolution rolls. */
+      /** @description Target difficulty for both dispatch and resolution rolls. Authored as a level (0 = no difficulty): the roll meets that level's baseline. */
       check_difficulty_level?: number;
       /** @description Real time from assignment to resolution by the game clock. */
       duration: string;
@@ -61910,8 +61910,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this title. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -78598,7 +78597,7 @@ export interface operations {
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
-        severity?: number;
+        severity_level?: number;
       };
       header?: never;
       path?: never;

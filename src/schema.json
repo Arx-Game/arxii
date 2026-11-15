@@ -26166,7 +26166,7 @@ paths:
         schema:
           type: integer
       - in: query
-        name: severity
+        name: severity_level
         schema:
           type: integer
       tags:
@@ -51545,14 +51545,13 @@ components:
           description: Template string with {variables} for instance-specific text.
         goal:
           type: string
-        severity:
+        severity_level:
           type: integer
-          maximum: 2147483647
+          maximum: 32767
           minimum: 0
-          description: 'Authored difficulty in DIFFICULTY_VALUES points (15 Trivial
-            .. 90 Harrowing), passed straight to perform_check''s target_difficulty.
-            NOT a 1-5 rating: the old default of 1 resolved every authored challenge
-            at the bottom rank (#2865).'
+          description: 'Authored difficulty as a level (0 = no difficulty): the roll
+            meets that level''s baseline, passed to perform_check as its target_difficulty.
+            NOT a 1-5 rating.'
         challenge_type:
           $ref: '#/components/schemas/ChallengeTypeEnum'
         discovery_type:
@@ -51595,14 +51594,13 @@ components:
         category_name:
           type: string
           readOnly: true
-        severity:
+        severity_level:
           type: integer
-          maximum: 2147483647
+          maximum: 32767
           minimum: 0
-          description: 'Authored difficulty in DIFFICULTY_VALUES points (15 Trivial
-            .. 90 Harrowing), passed straight to perform_check''s target_difficulty.
-            NOT a 1-5 rating: the old default of 1 resolved every authored challenge
-            at the bottom rank (#2865).'
+          description: 'Authored difficulty as a level (0 = no difficulty): the roll
+            meets that level''s baseline, passed to perform_check as its target_difficulty.
+            NOT a 1-5 rating.'
         challenge_type:
           $ref: '#/components/schemas/ChallengeTypeEnum'
         discovery_type:
@@ -56877,14 +56875,13 @@ components:
         category_name:
           type: string
           readOnly: true
-        severity:
+        severity_level:
           type: integer
-          maximum: 2147483647
+          maximum: 32767
           minimum: 0
-          description: 'Authored difficulty in DIFFICULTY_VALUES points (15 Trivial
-            .. 90 Harrowing), passed straight to perform_check''s target_difficulty.
-            NOT a 1-5 rating: the old default of 1 resolved every authored challenge
-            at the bottom rank (#2865).'
+          description: 'Authored difficulty as a level (0 = no difficulty): the roll
+            meets that level''s baseline, passed to perform_check as its target_difficulty.
+            NOT a 1-5 rating.'
         challenge_type:
           $ref: '#/components/schemas/ChallengeTypeEnum'
         discovery_type:
@@ -71700,7 +71697,7 @@ components:
           type: integer
           nullable: true
           description: 'Optional: if set, non-final actions roll `perform_check` against
-            this check type and `check_difficulty`. Success → `rapport_delta_success`;
+            this check type and `check_difficulty_level`. Success → `rapport_delta_success`;
             failure → `rapport_delta_failure`. Final actions ignore this — the effect
             IS the payoff.'
         check_difficulty_level:
@@ -71837,7 +71834,7 @@ components:
           type: integer
           nullable: true
           description: 'Optional: if set, non-final actions roll `perform_check` against
-            this check type and `check_difficulty`. Success → `rapport_delta_success`;
+            this check type and `check_difficulty_level`. Success → `rapport_delta_success`;
             failure → `rapport_delta_failure`. Final actions ignore this — the effect
             IS the payoff.'
         check_difficulty_level:
@@ -82277,7 +82274,7 @@ components:
           type: integer
           nullable: true
           description: 'Optional: if set, non-final actions roll `perform_check` against
-            this check type and `check_difficulty`. Success → `rapport_delta_success`;
+            this check type and `check_difficulty_level`. Success → `rapport_delta_success`;
             failure → `rapport_delta_failure`. Final actions ignore this — the effect
             IS the payoff.'
         check_difficulty_level:
