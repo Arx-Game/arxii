@@ -12,6 +12,8 @@ modifiers add up:
 * ``ModifierLevelBaseline`` - the typical total a character of each level reaches in
   the lane (a check total on a check in their field). One level's width is the step
   between two rows, and on the check lane the rows are the rank ladder.
+* ``LevelTier`` - a bonus in check points a character gains on reaching a tier's start
+  level, so crossing into a new tier is a jump (#5093).
 * ``ModifierTaper`` - which source kinds taper in a lane, and how lightly: each
   further modifier of the kind counts ``ratio`` of the one before, never below
   ``floor`` of its own value.
@@ -162,6 +164,36 @@ class ModifierLevelBaseline(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.get_lane_display()}: level {self.level} baseline {self.baseline}"
+
+
+class LevelTier(SharedMemoryModel):
+    """A tier of levels that starts with a jump in power (#5093).
+
+    A level's strength is its CHECK baseline plus the ``bonus_points`` of every tier that
+    starts at or below it, so going from the last level of one tier to the first of the next
+    is worth far more than any step inside a tier. The bonus counts in full: it is added to a
+    character's level term, an NPC's opposition and a staff-set difficulty level, never
+    multiplied by the level share. It does not change a level's width, so buff sizes and the
+    vow step stay the same inside a tier. A database with no rows has no tiers and no jump.
+    """
+
+    start_level = models.PositiveSmallIntegerField(
+        unique=True,
+        validators=[MinValueValidator(1)],
+        help_text="The first level of this tier.",
+    )
+    bonus_points = models.PositiveIntegerField(
+        help_text="Check points added to every level from the tier's start level up, in full. "
+        "At the seeded 8-point level width, 24 points is three ranks.",
+    )
+
+    class Meta:
+        ordering = ["start_level"]
+        verbose_name = "Level tier"
+        verbose_name_plural = "Level tiers"
+
+    def __str__(self) -> str:
+        return f"Tier from level {self.start_level}: +{self.bonus_points} points"
 
 
 class ModifierTaper(SharedMemoryModel):

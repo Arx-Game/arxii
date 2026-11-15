@@ -74,7 +74,8 @@ class CheckResult:
     total_points: int
     specialization_points: int = 0  # #1688 — points from owned specializations (stat+skill+spec)
     capability_points: int = 0  # #2505 — weighted authored CheckTypeCapabilityModifier points
-    level_points: int = 0  # #2707, #5093 — level_share x the level's baseline, on every check
+    # #2707, #5093 — level_share x the level's baseline plus its tier bonus, on every check
+    level_points: int = 0
     effective_roll: int = 0  # #2886 — the clamped d100; 0 = no roll (forced/duck-typed)
     standing: CheckStanding | None = None  # #4601: band positions and the slide
 

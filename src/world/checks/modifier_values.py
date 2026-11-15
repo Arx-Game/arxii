@@ -11,6 +11,10 @@ derived number.
 The baselines are the check ladder and the unit of every bonus (#5093): rank N starts at
 the level-N baseline total, and ``level_width`` is one level's worth of points. The
 baseline rows are dense (one per level); a level above the top row reuses the top row.
+
+A ``LevelTier`` row adds a jump of ``bonus_points`` to every level from its start level up
+(``tier_bonus``). It is added in full wherever a level's strength is read, and it does not
+change ``level_width``.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ from decimal import Decimal
 from world.checks.constants import ModifierLane
 from world.checks.exceptions import ModifierConfigError
 from world.checks.modifier_models import (
+    LevelTier,
     ModifierLevelBaseline,
     ModifierSizeFraction,
     ModifierTaper,
@@ -68,6 +73,26 @@ class BaselineTable:
             msg = f"The {self.lane} lane needs two level baseline rows to have a level width."
             raise ModifierConfigError(msg)
         return self.baselines[index] - self.baselines[index - 1]
+
+
+@dataclass(frozen=True)
+class TierTable:
+    """The level tiers, loaded once: ``bonus(level)`` reads it in memory (#5093).
+
+    ``starts`` holds each tier's start level, lowest first, and ``totals`` the running sum
+    of ``bonus_points`` up to and including that tier.
+    """
+
+    starts: tuple[int, ...] = ()
+    totals: tuple[int, ...] = ()
+
+    def bonus(self, level: int) -> int:
+        """The sum of ``bonus_points`` over every tier starting at or below ``level``.
+
+        0 when no tier starts at or below ``level`` (and so on a database with no tiers).
+        """
+        index = bisect_right(self.starts, level)
+        return self.totals[index - 1] if index else 0
 
 
 @dataclass(frozen=True)
@@ -167,6 +192,29 @@ def load_baselines(lane: str = ModifierLane.CHECK) -> BaselineTable:
         levels=tuple(level for level, _ in rows),
         baselines=tuple(baseline for _, baseline in rows),
     )
+
+
+def load_tier_table() -> TierTable:
+    """Load every ``LevelTier`` row in one query."""
+    starts: list[int] = []
+    totals: list[int] = []
+    running = 0
+    for start_level, bonus_points in LevelTier.objects.order_by("start_level").values_list(
+        "start_level", "bonus_points"
+    ):
+        running += bonus_points
+        starts.append(start_level)
+        totals.append(running)
+    return TierTable(starts=tuple(starts), totals=tuple(totals))
+
+
+def tier_bonus(level: int, table: TierTable | None = None) -> int:
+    """The tier jump a level carries: the sum of ``bonus_points`` of the tiers it has reached.
+
+    A caller valuing many levels passes one loaded ``table`` (``load_tier_table``), as it
+    would for ``load_baselines``. 0 with no tier rows.
+    """
+    return (load_tier_table() if table is None else table).bonus(level)
 
 
 def level_baseline(level: int, lane: str = ModifierLane.CHECK) -> int:

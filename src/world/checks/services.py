@@ -18,6 +18,7 @@ from world.checks.constants import (
 from world.checks.modifier_values import (
     load_baselines,
     load_taper_rules,
+    load_tier_table,
     load_value_table,
 )
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
@@ -482,16 +483,31 @@ def _level_baseline_or_zero(level: int) -> int:
     return table.baseline(level)
 
 
+def _level_strength_or_zero(level: int) -> int:
+    """A level's strength in points: its CHECK baseline plus its tier jump (#5093).
+
+    What an NPC of ``level`` opposes with and what a staff-set difficulty level asks of the
+    roller: ``_level_baseline_or_zero`` plus ``tier_bonus``, the bonus of every ``LevelTier``
+    the level has reached, added in full. 0 wherever the baseline is 0 (a level below 1, or no
+    baseline rows), so a "no difficulty" level never picks up a tier.
+    """
+    baseline = _level_baseline_or_zero(level)
+    if baseline == 0:
+        return 0
+    return baseline + load_tier_table().bonus(level)
+
+
 def difficulty_points(level: int) -> int:
     """An authored standalone difficulty level as the points a check rolls against (#5093).
 
     Every authored base difficulty (a lock, a cure, a recipe, a mission move) is a level, and
-    a level is where rank N starts: its CHECK baseline. Level 0 means "no difficulty" and
-    reads 0 points, so a row authored at 0 still asks nothing of the roller. A level above
-    the top baseline reads the top baseline; a database with no baseline rows reads 0 (see
-    ``_level_baseline_or_zero``). Callers pass the result as ``target_difficulty``.
+    a level is where its rank starts: its CHECK baseline plus its tier jump (``tier_bonus``).
+    Level 0 means "no difficulty" and reads 0 points, so a row authored at 0 still asks nothing
+    of the roller. A level above the top baseline reads the top baseline; a database with no
+    baseline rows reads 0 (see ``_level_baseline_or_zero``). Callers pass the result as
+    ``target_difficulty``.
     """
-    return _level_baseline_or_zero(level)
+    return _level_strength_or_zero(level)
 
 
 def difficulty_step_points(tenths: int | Decimal, at_level: int) -> int:
@@ -513,34 +529,44 @@ def difficulty_step_points(tenths: int | Decimal, at_level: int) -> int:
 
 
 def difficulty_level_for_points(points: int) -> int:
-    """The level whose baseline is nearest ``points``, ties to the lower level (#5093).
+    """The level whose strength is nearest ``points``, ties to the lower level (#5093).
 
     The inverse of :func:`difficulty_points` for a difficulty computed at runtime in points
-    (a code constant, an accuser's roll) that has to be stored where staff author a level. The
-    candidates are level 0 (0 points) and every authored level, so 10 points reads level 1 (18)
-    and a trivial 5 reads level 0. A database with no baseline rows reads 0.
+    (a code constant, an accuser's roll) that has to be stored where staff author a level. A
+    level's strength is its baseline plus its tier jump, so a level just across a tier start
+    sits a whole tier bonus above the one before it. The candidates are level 0 (0 points) and
+    every authored level, so 10 points reads level 1 (18) and a trivial 5 reads level 0. A
+    database with no baseline rows reads 0.
     """
     table = load_baselines()
-    index = bisect_right(table.baselines, points) - 1
-    lower_level, lower = (table.levels[index], table.baselines[index]) if index >= 0 else (0, 0)
+    tiers = load_tier_table()
+    strengths = [
+        baseline + tiers.bonus(level)
+        for level, baseline in zip(table.levels, table.baselines, strict=True)
+    ]
+    index = bisect_right(strengths, points) - 1
+    lower_level, lower = (table.levels[index], strengths[index]) if index >= 0 else (0, 0)
     if index + 1 >= len(table.levels):
         return lower_level
-    upper_level, upper = table.levels[index + 1], table.baselines[index + 1]
+    upper_level, upper = table.levels[index + 1], strengths[index + 1]
     return upper_level if upper - points < points - lower else lower_level
 
 
 def level_points(level: int) -> int:
-    """The level term of a roll at ``level``: ``level_share`` of that level's baseline (#5093).
+    """The level term of a roll at ``level``: ``level_share`` of its baseline plus its tier jump.
 
     The one place the character's level becomes points, replacing the old per-level
     coefficient. ``CheckScaleConfig.level_share`` and the CHECK baselines are rows; with
-    share 0.5 and a level-11 baseline of 98 the term is 49. Rounded half up. 0 at level 0
-    and on a database with no baseline rows (see ``_level_baseline_or_zero``).
+    share 0.5 and a level-11 baseline of 98 the share term is 49. Rounded half up. The tier
+    jump (``tier_bonus``, #5093) is added in full and is not multiplied by the share, so
+    crossing into a new tier is worth the row's whole bonus. 0 at level 0 and on a database
+    with no baseline rows (see ``_level_baseline_or_zero``).
     """
     baseline = _level_baseline_or_zero(level)
     if baseline == 0:
         return 0
-    return round_half_up(CheckScaleConfig.get_singleton().level_share * baseline)
+    share_term = round_half_up(CheckScaleConfig.get_singleton().level_share * baseline)
+    return share_term + load_tier_table().bonus(level)
 
 
 def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirror perform_check
@@ -1570,9 +1596,10 @@ def level_opposition(
     rank N starts: a level-N character with ordinary skills meets a level-N NPC on the even
     chart. Three terms:
 
-    * ``level_baseline(level)`` — always. This is what makes a level 1 attacker's swing at a
-      level 5 defender land as it should, on checks with no authored defensive content at
-      all. 0 at level 0 and on a database with no baseline rows.
+    * ``level_baseline(level)`` plus the level's tier jump (``tier_bonus``, #5093) — always.
+      This is what makes a level 1 attacker's swing at a level 5 defender land as it should,
+      on checks with no authored defensive content at all. 0 at level 0 and on a database
+      with no baseline rows.
     * ``_opposing_aspect_term(character, check_type, level)`` — the acting check's aspects
       scored against the DEFENDER's Path, so what you are trying to do to them is harder when
       it is their wheelhouse, sized as a modifier at *level*. Skipped entirely when
@@ -1595,7 +1622,7 @@ def level_opposition(
     authored difficulty (a lock's rating, a ward's barrier strength) rather than
     replacing it.
     """
-    total = _level_baseline_or_zero(level)
+    total = _level_strength_or_zero(level)
     if character is not None:
         total += _opposing_aspect_term(character, check_type, level)
         from world.conditions.services import opponent_condition_opposition  # noqa: PLC0415

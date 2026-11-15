@@ -49,10 +49,18 @@ class BandPositionTests(SlideTestBase):
         self.assertEqual(band_position(34).text, "Competent (rank 3)")
 
     def test_the_top_rank_has_no_next_rank(self):
+        # The seeded tiers add 120 points to level 30's 250, so the ladder runs to rank 45
+        # (starting at 370), named by its number because no row names it (#5093).
         position = band_position(400)
-        self.assertEqual(position.rank.rank, 30)
+        self.assertEqual(position.rank.rank, 45)
         self.assertEqual(position.share, 0.0)
+        self.assertEqual(position.text, "Rank 45 (rank 45)")
+
+    def test_the_old_top_rank_now_has_a_next_rank(self):
+        position = band_position(250)
+        self.assertEqual(position.rank.rank, 30)
         self.assertEqual(position.text, "Mythic (rank 30)")
+        self.assertEqual(position.next_rank.rank, 31)
 
 
 class SlideTests(SlideTestBase):

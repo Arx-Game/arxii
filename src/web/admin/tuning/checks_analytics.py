@@ -33,6 +33,7 @@ from world.checks.modifier_values import (
     load_taper_rules,
     load_value_table,
     rank_band_share,
+    tier_bonus,
 )
 from world.checks.services import botch_floor_level
 from world.checks.slide import load_ranks, resolve_standing, slide_chart
@@ -408,7 +409,7 @@ def compute_modifier_pile(
     panel says which rows to author.
     """
     try:
-        baseline = level_baseline(character_level)
+        baseline = level_baseline(character_level) + tier_bonus(character_level)
         value = load_value_table().value(modifier_level, size)
     except ModifierConfigError:
         return None

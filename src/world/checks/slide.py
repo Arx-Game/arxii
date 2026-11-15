@@ -32,7 +32,7 @@ from dataclasses import dataclass
 import math
 from typing import TYPE_CHECKING
 
-from world.checks.modifier_values import load_baselines
+from world.checks.modifier_values import BaselineTable, load_baselines, load_tier_table
 from world.traits.models import CheckRank, ResultChart, ResultChartOutcome
 
 if TYPE_CHECKING:
@@ -49,7 +49,8 @@ class RankStep:
     """One rung of the ladder: a ``CheckRank``'s name at its baseline threshold (#5093).
 
     ``min_points`` is derived, not stored: rank N starts at the CHECK lane's level-N
-    baseline, and rank 0 starts at 0.
+    baseline, and rank 0 starts at 0. Above the top baseline level the ladder keeps going,
+    one level's width a rank (see ``load_ranks``).
     """
 
     rank: int
@@ -98,21 +99,67 @@ class BandPosition:
         return f"{here}, {self.percent}% toward {self.next_rank.name} (rank {self.next_rank.rank})"
 
 
+# A level's width is the step between two baseline rows, so extending past the top needs two.
+_MIN_ROWS_FOR_WIDTH = 2
+
+
+def _rank_threshold(baselines: BaselineTable, rank: int) -> int:
+    """Where ``rank`` starts: its level baseline, then evenly spaced past the top level.
+
+    Rank 0 starts at 0. A rank up to the top baseline level starts at that level's baseline.
+    A higher rank starts one level's width (the top level's) further on for each rank above
+    the top level, so the ladder stays evenly spaced all the way up (#5093).
+    """
+    if rank <= 0:
+        return 0
+    top_level = baselines.levels[-1] if baselines.levels else 0
+    if rank <= top_level or len(baselines.levels) < _MIN_ROWS_FOR_WIDTH:
+        return baselines.baseline(rank)
+    return baselines.baseline(top_level) + (rank - top_level) * baselines.width(top_level)
+
+
+def _ladder_top_rank(baselines: BaselineTable, authored_top: int) -> int:
+    """The highest rank the ladder must reach: past the top level far enough to hold its tier.
+
+    The top level's strength is its baseline plus its tier bonus (``LevelTier``), which sits
+    ``ceil(bonus / width)`` ranks above the top level's own rank. With no tier bonus, or no
+    width to measure it in, the ladder ends at its highest authored rank.
+    """
+    if len(baselines.levels) < _MIN_ROWS_FOR_WIDTH:
+        return authored_top
+    top_level = baselines.levels[-1]
+    bonus = load_tier_table().bonus(top_level)
+    if bonus <= 0:
+        return authored_top
+    width = baselines.width(top_level)
+    return max(authored_top, top_level + -(-bonus // width))
+
+
 def load_ranks() -> list[RankStep]:
     """The ladder, lowest first, shared by both sides of a check.
 
     Each ``CheckRank`` row joined to the CHECK lane's baselines: rank N's threshold is
-    ``baseline(N)``, and rank 0's is 0. Two queries; none when no ranks are authored.
-    Raises ``ModifierConfigError`` when ranks exist but no baseline row sits at or below one.
+    ``baseline(N)``, and rank 0's is 0. Tier jumps (``LevelTier``) put a character several
+    ranks above where her level alone would, so the ladder runs past the top baseline level,
+    evenly spaced at that level's width, until it holds the top level's baseline plus its tier
+    bonus (#5093). A rank above the highest ``CheckRank`` row has no authored name and reads
+    "Rank N". Two queries without tiers, three with; none when no ranks are authored. Raises
+    ``ModifierConfigError`` when ranks exist but no baseline row sits at or below one.
     """
     rows = list(CheckRank.objects.order_by("rank").values_list("rank", "name"))
     if not rows:
         return []
     baselines = load_baselines()
-    return [
-        RankStep(rank=rank, name=name, min_points=baselines.baseline(rank) if rank > 0 else 0)
+    steps = [
+        RankStep(rank=rank, name=name, min_points=_rank_threshold(baselines, rank))
         for rank, name in rows
     ]
+    authored_top = rows[-1][0]
+    steps.extend(
+        RankStep(rank=rank, name=f"Rank {rank}", min_points=_rank_threshold(baselines, rank))
+        for rank in range(authored_top + 1, _ladder_top_rank(baselines, authored_top) + 1)
+    )
+    return steps
 
 
 def band_position(points: int, ranks: Sequence[RankStep] | None = None) -> BandPosition:

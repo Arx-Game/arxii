@@ -35,6 +35,7 @@ from decimal import Decimal
 
 from world.checks.constants import ModifierLane, ModifierSize, ModifierSourceKind
 from world.checks.modifier_models import (
+    LevelTier,
     ModifierLevelBaseline,
     ModifierSizeFraction,
     ModifierTaper,
@@ -55,6 +56,18 @@ _LEVEL_BASELINE_START = 18
 _LEVEL_BASELINE_STEP = 8
 _LEVEL_BASELINES: tuple[tuple[int, int], ...] = tuple(
     (level, _LEVEL_BASELINE_START + _LEVEL_BASELINE_STEP * (level - 1)) for level in _LEVELS
+)
+
+# The tier jumps (#5093): a tier starts at each of these levels and adds this many points to
+# every level from there up, in full. 24 points is three ranks at the 8-point level width, so
+# going from level 5 to 6 is worth four ranks and going from 4 to 5 one. Each row is its own
+# number so staff set the tiers separately.
+_LEVEL_TIERS: tuple[tuple[int, int], ...] = (
+    (6, 24),
+    (11, 24),
+    (16, 24),
+    (21, 24),
+    (26, 24),
 )
 
 # The pool and cap lanes (#5093): the baseline each seeds per unit of its level (a character
@@ -221,16 +234,31 @@ def seed_check_scale_config() -> None:
     CheckScaleConfig.objects.get_or_create(pk=SINGLETON_PK, defaults={"level_share": _LEVEL_SHARE})
 
 
-def seed_check_level_baselines() -> None:
-    """Create the CHECK lane's dense level baseline rows (levels 1-30), if missing.
+def seed_level_tiers() -> None:
+    """Create the tier jump rows (levels 6, 11, 16, 21 and 26, 24 points each) on an empty table.
 
-    The rank ladder and every level width read these rows, so ``seed_check_resolution_tables``
-    seeds them with the ranks.
+    Written from explicit values, never a factory. Only an empty table is seeded: a tier's
+    start level is its identity, so a row staff moved to another level, or deleted, would
+    otherwise come back as a second jump on the next re-seed. Any row at all means staff own
+    the tiers.
+    """
+    if LevelTier.objects.exists():
+        return
+    for start_level, bonus_points in _LEVEL_TIERS:
+        LevelTier.objects.create(start_level=start_level, bonus_points=bonus_points)
+
+
+def seed_check_level_baselines() -> None:
+    """Create the CHECK lane's dense level baseline rows (levels 1-30) and the tier jumps.
+
+    The rank ladder and every level width read the baseline rows, and a level's strength adds
+    its tier jump, so ``seed_check_resolution_tables`` seeds both with the ranks.
     """
     for level, baseline in _LEVEL_BASELINES:
         ModifierLevelBaseline.objects.get_or_create(
             lane=ModifierLane.CHECK, level=level, defaults={"baseline": baseline}
         )
+    seed_level_tiers()
 
 
 def seed_pool_and_cap_lanes() -> None:

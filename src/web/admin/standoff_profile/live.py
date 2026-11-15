@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from world.checks.exceptions import ModifierConfigError
-from world.checks.modifier_values import level_baseline
+from world.checks.modifier_values import level_baseline, tier_bonus
 from world.checks.services import level_opposition
 from world.checks.social_target import DriveHit, social_target_difficulty
 from world.combat.constants import CauseKind
@@ -109,7 +109,9 @@ def _grade(check_type: CheckType | None, level: int, hits: list[DriveHit], bands
         extra_bands=bands,
     ).difficulty
     try:
-        example_total = level_baseline(level)
+        # A same-level character with ordinary skills: the level's baseline plus its tier jump,
+        # the strength level_opposition gives an opponent of that level (#5093).
+        example_total = level_baseline(level) + tier_bonus(level)
     except ModifierConfigError:
         return ""
     rank_difference = CheckRank.get_rank_difference(example_total, difficulty)

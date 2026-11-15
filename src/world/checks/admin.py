@@ -18,12 +18,18 @@ from world.checks.models import (
     CheckTypeTrait,
     Consequence,
     ConsequenceEffect,
+    LevelTier,
     ModifierLevelBaseline,
     ModifierSizeFraction,
     ModifierTaper,
     ModifierValue,
 )
-from world.checks.modifier_values import level_baseline, load_baselines, rank_band_share
+from world.checks.modifier_values import (
+    level_baseline,
+    level_width,
+    load_baselines,
+    rank_band_share,
+)
 from world.checks.types import round_half_up
 from world.societies.admin_inlines import ConsequenceNamedOrganizationInline
 
@@ -292,6 +298,29 @@ class ModifierLevelBaselineAdmin(admin.ModelAdmin):
     list_editable = ["baseline"]
     list_filter = ["lane"]
     ordering = ["lane", "level"]
+
+
+@admin.register(LevelTier)
+class LevelTierAdmin(admin.ModelAdmin):
+    """The jump in power at the start of each tier of levels (#5093).
+
+    A level's strength is its baseline plus the bonus of every tier that starts at or below
+    it, so each row sets how far a character jumps on crossing into its tier. Divide the bonus
+    by the check lane's level width to read it in ranks.
+    """
+
+    list_display = ["start_level", "bonus_points", "bonus_in_ranks"]
+    list_editable = ["bonus_points"]
+    ordering = ["start_level"]
+
+    @admin.display(description="Ranks at the level's width")
+    def bonus_in_ranks(self, obj: LevelTier) -> str:
+        """The bonus as a number of ranks at the width of the tier's start level."""
+        try:
+            width = level_width(obj.start_level)
+        except ModifierConfigError:
+            return "-"
+        return str(round(obj.bonus_points / width, 2)) if width > 0 else "-"
 
 
 @admin.register(CheckScaleConfig)
