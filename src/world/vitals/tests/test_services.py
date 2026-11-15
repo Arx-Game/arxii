@@ -221,7 +221,7 @@ def _build_death_pool_for_bleed_out(*, failure_outcome):
 
 @tag("postgres")
 @override_settings(SEED_SAMPLE_CONTENT=True)  # Mortal Resolve CheckType gates on #2698
-class ProcessDamageConsequencesSourceCharacterTest(TestCase):
+class ProcessDamageConsequencesSourceCharacterTest(SeededLadderTestCase):
     """Thread source_character through process_damage_consequences → Bleeding-Out.
 
     @tag("postgres"): apply_condition for progressive Bleeding-Out uses the
