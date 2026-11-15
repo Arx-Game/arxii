@@ -6392,8 +6392,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this title.
+          type: string
         required: true
       tags:
       - character-creation
@@ -9809,7 +9808,7 @@ paths:
         Names and a kindled flag, never how strongly. Read for the ally the rallier has
         picked, so the polled encounter payload carries no kindling evaluation. Only an active
         fighter may ask, only about another active fighter, and never in a PvP duel, where
-        the other fighter is the opponent.
+        the other fighter is the opponent. A finished fight returns nothing, as a duel does.
       parameters:
       - in: query
         name: ally

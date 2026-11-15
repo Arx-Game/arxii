@@ -6694,7 +6694,7 @@ export interface paths {
      *     Names and a kindled flag, never how strongly. Read for the ally the rallier has
      *     picked, so the polled encounter payload carries no kindling evaluation. Only an active
      *     fighter may ask, only about another active fighter, and never in a PvP duel, where
-     *     the other fighter is the opponent.
+     *     the other fighter is the opponent. A finished fight returns nothing, as a duel does.
      */
     get: operations['combat_rally_resonances_list'];
     put?: never;
@@ -62011,8 +62011,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this title. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
