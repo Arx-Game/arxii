@@ -56,9 +56,9 @@ def hook_command(script: Path) -> str:
 
 
 def is_ours(handler: object, command: str) -> bool:
-    if not isinstance(handler, dict):
+    if not isinstance(handler, dict) or not isinstance(handler.get("command"), str):
         return False
-    return handler.get("command") in LEGACY_COMMANDS | {command}
+    return handler["command"] in LEGACY_COMMANDS | {command}
 
 
 def install(settings: dict, command: str) -> dict:
@@ -90,7 +90,8 @@ def read_settings(path: Path) -> dict | None:
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         print(f"[hooks] {path} could not be read ({error}); left unchanged.", file=sys.stderr)
         return None
-    if not isinstance(settings, dict) or not isinstance(settings.get("hooks", {}), dict):
+    hooks = settings.get("hooks", {}) if isinstance(settings, dict) else None
+    if not isinstance(hooks, dict) or not isinstance(hooks.get(EVENT, []), list):
         print(f"[hooks] {path} is not a settings object; left unchanged.", file=sys.stderr)
         return None
     return settings
@@ -110,7 +111,9 @@ def write_atomically(path: Path, text: str) -> None:
 
 
 def run(config_dir: Path) -> bool:
-    settings_path = config_dir / "settings.json"
+    # resolve() follows a symlinked settings.json, so the rename replaces its target
+    # instead of swapping the link for a regular file.
+    settings_path = (config_dir / "settings.json").resolve()
     settings = read_settings(settings_path)
     if settings is None:
         return False
@@ -129,8 +132,8 @@ def main() -> int:
     args = parser.parse_args()
     try:
         run(args.config_dir)
-    except OSError as error:
-        print(f"[hooks] install failed ({error}); settings left as they were.", file=sys.stderr)
+    except Exception as error:  # noqa: BLE001 - an install failure must never fail setup
+        print(f"[hooks] install failed ({error!r}); settings left as they were.", file=sys.stderr)
     return 0
 
 

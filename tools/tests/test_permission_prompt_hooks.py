@@ -119,6 +119,24 @@ def test_install_keeps_every_other_setting_and_hook(tmp_path):
     assert len(groups) == 2
 
 
+def test_install_writes_through_a_symlinked_settings_file(tmp_path):
+    target = tmp_path / "dotfiles" / "settings.json"
+    target.parent.mkdir()
+    target.write_text('{"theme": "dark"}')
+    config_dir = tmp_path / "cfg"
+    config_dir.mkdir()
+    (config_dir / "settings.json").symlink_to(target)
+    assert run(config_dir) is True
+    assert (config_dir / "settings.json").is_symlink()
+    assert json.loads(target.read_text())["hooks"]["PermissionRequest"][0]["matcher"] == "Bash"
+
+
+def test_a_handler_with_an_odd_command_is_kept():
+    odd = {"matcher": "Bash", "hooks": [{"command": ["python3", "x.py"]}]}
+    result = install({"hooks": {"PreToolUse": [odd]}}, "new-command")
+    assert result["hooks"]["PreToolUse"] == [odd]
+
+
 def test_install_removes_the_first_drafts_registrations():
     legacy = sorted(LEGACY_COMMANDS)
     settings = {
@@ -136,7 +154,18 @@ def test_install_removes_the_first_drafts_registrations():
     ]
 
 
-@pytest.mark.parametrize("contents", ["{not json", "", "null", "[]", '{"hooks": null}'])
+@pytest.mark.parametrize(
+    "contents",
+    [
+        "{not json",
+        "",
+        "null",
+        "[]",
+        '{"hooks": null}',
+        '{"hooks": {"PermissionRequest": null}}',
+        '{"hooks": {"PermissionRequest": {"matcher": "Bash"}}}',
+    ],
+)
 def test_install_leaves_an_unreadable_settings_file_untouched(tmp_path, contents):
     path = tmp_path / "settings.json"
     path.write_text(contents)

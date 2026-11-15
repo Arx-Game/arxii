@@ -88,7 +88,10 @@ retries (`tools/hooks/deny_permission_prompts.py`). It never touches other tools
 modes, and `ARXII_ALLOW_PROMPTS=1` turns it off. `.devcontainer/post-create.sh`
 runs `tools/hooks/install.py`, which copies the script into the Claude config
 directory and registers the copy, so the hook never depends on what the main
-checkout has checked out.
+checkout has checked out. The copy only refreshes when the installer runs, so
+re-run `python3 tools/hooks/install.py` after changing the hook. Because the owner
+runs every session in bypass mode, a watched session is denied too unless
+`ARXII_ALLOW_PROMPTS=1` is set before `claude` starts.
 
 A first draft (PR #5132, before review) would have bricked the container in two
 ways. It registered the hook for every tool and in every container session, which
