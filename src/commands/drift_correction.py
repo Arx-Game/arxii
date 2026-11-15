@@ -11,7 +11,7 @@ goes without being chosen.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from actions.definitions.drift_correction import PerformSettlingRiteAction
 from commands.command import ArxCommand
@@ -95,12 +95,12 @@ class CmdAura(ArxCommand):
         if not args:
             self.msg(self._describe_aura(sheet))
         elif word.lower() == _SETTLE and rest.strip():
-            result = self.action.run(actor=self.caller, **self.resolve_action_args(sheet, rest))
+            result = self.action.run(actor=self.caller, **self._settle_args(sheet, rest))
             self.send_result(result.message or "", failed=not result.success)
         else:
             raise CommandError(_USAGE)
 
-    def resolve_action_args(self, sheet: CharacterSheet, offering: str) -> dict:
+    def _settle_args(self, sheet: CharacterSheet, offering: str) -> dict[str, Any]:
         """The action's kwargs for ``settle <offering>``: the named carried item, which must
         count as the rite's offering for what is waiting."""
         from world.magic.exceptions import NoWaitingReflectionError  # noqa: PLC0415
