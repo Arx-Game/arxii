@@ -294,6 +294,12 @@ vi.mock('@/combat/queries', () => ({
   },
 }));
 
+vi.mock('@/magic/components/KindledResonancesPanel', () => ({
+  KindledResonancesPanel: ({ characterSheetId }: { characterSheetId: number }) => (
+    <div data-testid="kindled-resonances-panel" data-sheet-id={characterSheetId} />
+  ),
+}));
+
 vi.mock('@/combat/components/CombatTacticalMap', () => ({
   CombatTacticalMap: ({ encounterId, sceneId }: { encounterId: number; sceneId: number }) => (
     <div
@@ -1725,6 +1731,44 @@ describe('GamePage', () => {
       await waitFor(() => {
         expect(screen.getByTestId('rail-tab-gm')).toBeInTheDocument();
       });
+    });
+  });
+
+  describe('your resonances panel (#5124)', () => {
+    it('sits in the room sidebar while a scene is active and no fight is shown', async () => {
+      dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+      mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+
+      renderWithProviders(<GamePage />);
+
+      const panel = await screen.findByTestId('kindled-resonances-panel');
+      expect(panel).toHaveAttribute('data-sheet-id', String(rosterEntry.character_id));
+    });
+
+    it('is not mounted outside a scene', async () => {
+      dispatch(setAccount(mockAccount));
+      dispatch(startSession(ACTIVE_NAME));
+
+      renderWithProviders(<GamePage />);
+
+      await screen.findByLabelText('Conversations');
+      expect(screen.queryByTestId('kindled-resonances-panel')).not.toBeInTheDocument();
+    });
+
+    it('leaves the fight rail to carry it once a fight is shown', async () => {
+      dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+      mockUseEncounterForScene.mockReturnValue({
+        data: { id: 7 },
+        isLoading: false,
+        isError: false,
+      });
+
+      renderWithProviders(<GamePage />);
+
+      await screen.findByTestId('combat-tactical-map');
+      expect(screen.queryByTestId('kindled-resonances-panel')).not.toBeInTheDocument();
     });
   });
 

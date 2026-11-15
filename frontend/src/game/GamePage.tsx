@@ -28,6 +28,7 @@ import { CeremonyRoomCard } from '@/ceremonies/CeremonyRoomCard';
 import { EventsSidebarPanel } from '@/events/components/EventsSidebarPanel';
 import { useEncounterForScene, combatKeys } from '@/combat/queries';
 import { CombatRail } from '@/combat/components/CombatRail';
+import { KindledResonancesPanel } from '@/magic/components/KindledResonancesPanel';
 import { CombatMainMap } from '@/combat/components/CombatMainMap';
 import { CombatPickProvider } from '@/combat/CombatPickContext';
 import { useBattleForSceneQuery } from '@/battles/queries';
@@ -244,6 +245,12 @@ function GameRightSidebar({
               hasActiveEncounter={hasActiveEncounter}
               hasActiveBattle={hasActiveBattle}
             />
+            {/* #5124 Your resonances: in a scene with no fight rail (the rail carries its own). */}
+            {sceneData && !showCombatRail && activeCharacterId && (
+              <div className="mt-2">
+                <KindledResonancesPanel characterSheetId={activeCharacterId} />
+              </div>
+            )}
             {sceneData && showCombatRail && (
               <CombatRail
                 sceneId={sceneData.id}
