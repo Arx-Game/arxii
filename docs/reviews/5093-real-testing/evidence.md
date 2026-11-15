@@ -9,13 +9,13 @@
 
 | Item | Result |
 |---|---|
-| 1. Migrations 0411 to 0436 against the newest production dump | **FAIL.** `0411_check_ladder_rows` crashes on the production copy. With 0411 patched in the scratch copy only, 0412 to 0436 all run and keep the data. |
+| 1. Migrations 0411 to 0436 against the newest production dump | **PASS after a fix.** The first run found that `0411_check_ladder_rows` crashed on the production copy. 0411 was fixed in `c5b3172cd`, and a re-run on the same dump applied 0404 to 0436 cleanly (see "Re-run after the 0411 fix" at the end). |
 | 2a. Level-11 PC against a level-11 NPC | PASS through the web dispatch seam. Even chart, both sides at rank 17 (not rank 11, see the note under that item). Browser and WebSocket part: BLOCKED, not run. |
 | 2b. Level-6 PC against a level-5 NPC | PASS. Four ranks apart. |
 | 2c. Scaling settings panel, and editing a LevelTier row | PASS. |
 | 2d. Skill steps 30 to 31, 39 to 40, 40 to 41 | PASS. 22, 22 and 33 development points. A skill cannot be bought across 39 by development points at all (it parks), so 39 to 40 is shown on a stat. |
 
-## Bugs found (not fixed, as asked)
+## Bugs found (the 0411 crash was fixed afterwards in `c5b3172cd`)
 
 1. **`0411_check_ladder_rows` fails on a production database.** Input: the production dump `arxii-20261115T033001Z.sql.gz` (9 `CheckRank` rows, ranks 0 to 8, `min_points` 0, 10, 25, 50, 80, 115, 155, 200, 250). I expected 0411 to add ranks 9 to 30. I saw:
    `IntegrityError: null value in column "min_points" of relation "arxii_checkrank" violates not-null constraint. DETAIL: Failing row contains (10, 9, null, Rank 9, ).`
@@ -27,7 +27,7 @@ Smaller observations, not defects:
 - After the migrations the ranks the production copy already had keep their old names at the same rank numbers, so "Mythic" now sits at rank 8 (level 8) while the seeds reuse it nearest its old threshold. The 0411 docstring says existing ranks keep their names, so this is as written, but staff will want to rename them.
 - Spec Verification item 1 says a failure looks like "a rank other than 11 plus or minus 1". Spec section 9 (tier jumps) amends decision 1, and at the seeded values a level-11 character stands at rank 17 (see 2a). The two sections disagree; section 9 is the newer owner ruling, so I used it. The verification line should be reworded in the PR.
 - The seeded chart for a rank difference of 0 is named "Difficulty +0 (rank diff +0)", not "Even" as the spec says.
-- The check text for the new ranks reads "Rank 17 (rank 17)" because the placeholder name repeats the number.
+- The check text for the new ranks read "Rank 17 (rank 17)" because the placeholder name repeats the number. Fixed afterwards in `6b60cbc61`: an unnamed rank now reads "Rank 17".
 - Difficulties between 1 and 9 points convert to level 0, which is no difficulty (baseline 0). In the production copy that is `conditionstage.resist_difficulty` (one row, 8) and `challengetemplate.severity` (three rows, all 3: Interpose, Succor, Catch the Faller). Whether level 0 is what staff want for those four rows is a question for the maintainer.
 
 ---
