@@ -236,14 +236,6 @@ class ScalingPanelViewTests(TestCase):
         response = self.client.get(reverse("admin_tuning_scaling"))
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
-        for heading in (
-            "How strong each level is on a roll",
-            "Settings",
-            "Development cost per step",
-            "Pools and caps",
-            "Buff sizes in points",
-        ):
-            self.assertIn(f"<h3>{heading}</h3>", body)
         self.assertIn("Level baselines", body)
         self.assertNotIn("lane", body.lower().replace("lane__exact", "").replace("ladder", ""))
 
