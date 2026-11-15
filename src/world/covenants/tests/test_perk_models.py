@@ -481,7 +481,7 @@ class SituationParamSpecCompletenessTests(TestCase):
     """Pins the ``SITUATION_PARAM_SPECS`` param contract shape (#2623 review fix).
 
     Mirrors the repo's registry-completeness test pattern: every entry's
-    ``allowed``/``required`` fields must draw only from the five columns
+    ``allowed``/``required`` fields must draw only from the seven columns
     ``SituationRequirementMixin`` actually defines, every dict key must be a
     real ``Situation`` value, and ``required`` must never claim a field the
     situation doesn't also ``allow`` — guards against a typo silently
@@ -489,7 +489,15 @@ class SituationParamSpecCompletenessTests(TestCase):
     """
 
     _KNOWN_PARAM_FIELDS = frozenset(
-        {"threshold_percent", "count_threshold", "affinity", "origin_side", "condition_property"}
+        {
+            "threshold_percent",
+            "count_threshold",
+            "affinity",
+            "origin_side",
+            "condition_property",
+            "mission_theme",
+            "enemies_only",
+        }
     )
 
     def test_spec_keys_are_valid_situations(self):
