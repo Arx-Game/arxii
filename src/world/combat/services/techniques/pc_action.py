@@ -24,6 +24,7 @@ from world.combat.services.rounds.maneuvers import _STANDALONE_MANEUVER_RESOLVER
 from world.combat.services.techniques.allegiance_break import _attempt_allegiance_breaks_for_action
 from world.combat.services.techniques.entrance_moment import _maybe_suggest_entrance_dramatic_moment
 from world.combat.services.techniques.insight import _maybe_produce_insight_for_cast
+from world.combat.services.techniques.kindled_deed import award_for_technique_cast
 from world.combat.services.techniques.npc_regard import _maybe_record_npc_regard_on_defeat
 from world.combat.services.techniques.pc_broadcast import _record_and_broadcast_pc_action
 from world.combat.services.techniques.spectacle import _maybe_apply_spectacle_for_action
@@ -288,6 +289,7 @@ def resolve_pc_technique(
             return outcome
         outcome.damage_results.extend(combat_result.damage_results)
         _maybe_record_miss(participant, target, combat_result)
+        award_for_technique_cast(participant, action, combat_result)
         if action.from_entrance:
             _maybe_suggest_entrance_dramatic_moment(participant, combat_result)
         _maybe_produce_insight_for_cast(participant, combat_result, technique)

@@ -29653,6 +29653,7 @@ export interface components {
       base_risk: number;
       readonly reasons: string[];
       rolls_check: boolean;
+      readonly feeds: components['schemas']['KindledFeed'][];
     };
     /**
      * @description * `success` - Success
@@ -38211,6 +38212,12 @@ export interface components {
      * @enum {string}
      */
     KindF82Enum: 'profile_text' | 'distinction_change';
+    /** @description Read-only mirror of :class:`world.missions.types.KindledFeed` (#5124). */
+    KindledFeed: {
+      resonance_name: string;
+      strength_name: string;
+      reason: string;
+    };
     /** @description A ``KindledResonance`` as the panel reads it. */
     KindledResonance: {
       id: number;

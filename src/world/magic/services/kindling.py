@@ -31,14 +31,16 @@ from django.db.models.expressions import ExpressionWrapper
 from world.covenants.perks.constants import Situation
 from world.covenants.perks.context import SituationContext, SituationParams
 from world.covenants.perks.services import SituationCheck
-from world.magic.constants import KindlingActKind, KindlingSource, TargetKind
+from world.magic.constants import GainSource, KindlingActKind, KindlingSource, TargetKind
 from world.magic.models import (
+    KindledDeedAward,
     KindledStrengthTier,
     Kindling,
     KindlingConfig,
     KindlingSituation,
     RallyKindlingStrength,
     Resonance,
+    ResonanceGrant,
     Thread,
 )
 from world.magic.services.threads import relationship_side_from_row
@@ -849,8 +851,75 @@ def kindle_by_gm(
     )
 
 
+# --- Earning: a deed on a kindling situation --------------------------------------------
+
+
+def award_kindled_deeds(
+    sheet: CharacterSheet,
+    *,
+    act: KindlingAct,
+    outcome: CheckOutcome | None,
+    resolution: object | None = None,
+    mission: MissionInstance | None = None,
+) -> list[ResonanceGrant]:
+    """Earn each resonance ``act`` feeds, scaled by the roll's ``outcome`` (#5124).
+
+    Called once after a player character's roll resolves, with the roll's result tier. A
+    resonance the act feeds (a row of its own, or of its affinity, held with this act in
+    context) earns ``KindledDeedAward(outcome).amount x earn_percent / 100`` of its strength,
+    rounded down, as one ``KINDLED_DEED`` grant naming the strongest row the act fed. A
+    resonance with no such amount (no award row for the tier, no strength tier, or a share of
+    0) earns nothing, and so does one kindled only by a Rally or a GM, which names no row.
+    Non-player characters earn nothing, and an outcome with no act never reaches here.
+
+    Each grant is told to the actor alone ("You earned ..."), through a private narrative
+    message. Returns the grants written.
+    """
+    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+    from world.roster.services.activity import is_player_character  # noqa: PLC0415
+
+    if outcome is None or not is_player_character(sheet):
+        return []
+    award = KindledDeedAward.objects.filter(outcome_tier=outcome).first()
+    if award is None:
+        return []
+    grants: list[ResonanceGrant] = []
+    for entry in kindled_resonances(sheet, resolution=resolution, mission=mission, act=act):
+        situation = entry.strongest_situation
+        if entry.tier is None or situation is None:
+            continue
+        amount = award.amount * entry.tier.earn_percent // 100
+        if amount <= 0:
+            continue
+        grant_resonance(
+            sheet,
+            entry.resonance,
+            amount,
+            source=GainSource.KINDLED_DEED,
+            kindling_situation=situation,
+        )
+        grant = (
+            ResonanceGrant.objects.filter(
+                character_sheet=sheet, resonance=entry.resonance, source=GainSource.KINDLED_DEED
+            )
+            .order_by("-pk")
+            .first()
+        )
+        grants.append(grant)
+        send_narrative_message(
+            recipients=[sheet],
+            body=f"You earned {amount} {entry.resonance.name}.",
+            category=NarrativeCategory.SYSTEM,
+            ooc_note="Kindled deed",
+        )
+    return grants
+
+
 __all__ = [
     "KINDLING_EVIDENCE_FINDERS",
+    "award_kindled_deeds",
     "held_resonance_names",
     "holds_resonance",
     "kindle_by_gm",

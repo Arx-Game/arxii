@@ -68,6 +68,7 @@ if TYPE_CHECKING:
         DramaticMomentTag,
         EntryFlourishRecord,
         KindledStrengthTier,
+        KindlingSituation,
         PoseEndorsement,
         Resonance as ResonanceModel,
         SanctumDetails,
@@ -112,6 +113,7 @@ def grant_resonance(  # noqa: PLR0913
     mission_deed_reward_line: MissionDeedRewardLine | None = None,
     source_character_distinction: CharacterDistinction | None = None,
     worship_rite_performance: WorshipRitePerformance | None = None,
+    kindling_situation: KindlingSituation | None = None,
     from_mire: bool = False,
 ) -> CharacterResonance:
     """Atomically grant resonance AND write the ResonanceGrant ledger row.
@@ -141,6 +143,8 @@ def grant_resonance(  # noqa: PLR0913
         mission_deed_reward_line: Required for MISSION_REWARD source (#1737).
         source_character_distinction: Required for DISTINCTION source (#1834).
         worship_rite_performance: Required for WORSHIP_RITE source (#3777).
+        kindling_situation: Required for KINDLED_DEED source (#5124); the authored situation
+            that held.
         from_mire: True when a Sineater takes the resonance from the Mire (#5123); the
             grant also counts toward the row's ``mire_lifetime``.
 
@@ -173,6 +177,7 @@ def grant_resonance(  # noqa: PLR0913
         mission_deed_reward_line=mission_deed_reward_line,
         source_character_distinction=source_character_distinction,
         worship_rite_performance=worship_rite_performance,
+        kindling_situation=kindling_situation,
     )
 
     if source in ACCELERATED_GAIN_SOURCES:
@@ -231,6 +236,7 @@ def grant_resonance(  # noqa: PLR0913
         source_mission_deed_reward_line=mission_deed_reward_line,
         source_character_distinction=source_character_distinction,
         source_worship_rite_performance=worship_rite_performance,
+        source_kindling_situation=kindling_situation,
     )
     # #4333 slice 2: a grant of a resonance the character's pledged being values
     # is a deed, and earns favor toward the open pledge.
@@ -340,6 +346,7 @@ def _validate_grant_source_shape(  # noqa: PLR0913
     mission_deed_reward_line: MissionDeedRewardLine | None = None,
     source_character_distinction: CharacterDistinction | None = None,
     worship_rite_performance: WorshipRitePerformance | None = None,
+    kindling_situation: KindlingSituation | None = None,
 ) -> None:
     """Raise ValueError if the source discriminator doesn't match the supplied kwargs.
 
@@ -362,6 +369,7 @@ def _validate_grant_source_shape(  # noqa: PLR0913
             mission_deed_reward_line=mission_deed_reward_line,
             source_character_distinction=source_character_distinction,
             worship_rite_performance=worship_rite_performance,
+            kindling_situation=kindling_situation,
         )
         if value is None:
             msg = f"{source} source requires {name}= kwarg."
@@ -416,6 +424,7 @@ _SOURCE_REQUIRED_KWARG: dict[str, Callable[..., tuple[object | None, str]]] = {
         kw["worship_rite_performance"],
         "worship_rite_performance",
     ),
+    GainSource.KINDLED_DEED: lambda **kw: (kw["kindling_situation"], "kindling_situation"),
 }
 
 

@@ -48700,10 +48700,16 @@ components:
           readOnly: true
         rolls_check:
           type: boolean
+        feeds:
+          type: array
+          items:
+            $ref: '#/components/schemas/KindledFeed'
+          readOnly: true
       required:
       - approach_id
       - base_risk
       - check_type_name
+      - feeds
       - kind
       - label
       - option_id
@@ -67161,6 +67167,20 @@ components:
       description: |-
         * `profile_text` - Profile Text
         * `distinction_change` - Distinction Change
+    KindledFeed:
+      type: object
+      description: Read-only mirror of :class:`world.missions.types.KindledFeed` (#5124).
+      properties:
+        resonance_name:
+          type: string
+        strength_name:
+          type: string
+        reason:
+          type: string
+      required:
+      - reason
+      - resonance_name
+      - strength_name
     KindledResonance:
       type: object
       description: A ``KindledResonance`` as the panel reads it.

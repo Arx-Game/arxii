@@ -25,6 +25,7 @@ const BEAT: BeatView = {
       base_risk: 0,
       reasons: [],
       rolls_check: true,
+      feeds: [],
     },
     {
       option_id: 32,
@@ -35,6 +36,7 @@ const BEAT: BeatView = {
       base_risk: 0,
       reasons: [],
       rolls_check: false,
+      feeds: [],
     },
   ],
   is_paused: false,

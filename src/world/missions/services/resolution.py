@@ -73,6 +73,7 @@ from world.checks.services import level_opposition, perform_check
 from world.checks.theater import maybe_emit_resolution_theater
 from world.checks.types import CheckResult, ResolutionContext
 from world.covenants.mentorship import effective_combat_level
+from world.magic.constants import KindlingActKind
 from world.mechanics.effect_handlers import apply_all_effects
 from world.missions.constants import MissionStatus, NodeLocationMode, OptionKind, OptionSource
 from world.missions.models import (
@@ -770,6 +771,17 @@ def resolve_option(  # noqa: PLR0913
     if roll_report is not None:
         roll_report.invocation = invoked
         roll_report.check_result = result
+
+    # #5124: acting on a kindling situation earns that resonance, scaled by the roll.
+    from world.magic.services.kindling import award_kindled_deeds  # noqa: PLC0415
+    from world.magic.types.kindling import KindlingAct  # noqa: PLC0415
+
+    award_kindled_deeds(
+        actor.character,
+        act=KindlingAct(kind=KindlingActKind.MISSION_OPTION, mission_option=option),
+        outcome=result.outcome,
+        mission=instance,
+    )
 
     return _route_graded_outcome(
         instance,

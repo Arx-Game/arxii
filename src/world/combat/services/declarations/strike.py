@@ -851,12 +851,14 @@ def finish_strike(  # noqa: PLR0913 - the resolved Strike's parts
     from world.combat.services.techniques.allegiance_break import (  # noqa: PLC0415
         _attempt_allegiance_breaks_for_action,
     )
+    from world.combat.services.techniques.kindled_deed import award_for_strike  # noqa: PLC0415
     from world.combat.services.techniques.npc_regard import (  # noqa: PLC0415
         _maybe_record_npc_regard_on_defeat,
     )
     from world.fatigue.services import apply_fatigue  # noqa: PLC0415
 
     outcome.damage_results.extend(landing.damage_results)
+    award_for_strike(participant, action, landing.hit)
     _attempt_allegiance_breaks_for_action(participant, outcome)
     apply_fatigue(participant.character_sheet, ActionCategory.PHYSICAL, 0, action.effort_level)
     _broadcast_strike(participant, action, weapon, target, landing, enchantment)

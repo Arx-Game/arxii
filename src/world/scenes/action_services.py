@@ -1519,6 +1519,11 @@ def _resolve_action_against_persona(
     # #1748: fire any pending decisive-check marker after a social check resolves.
     _maybe_fire_decisive(action_request, result)
 
+    # #5124: acting on a kindling situation earns that resonance, scaled by the roll. The
+    # initiator is the one who rolled (a PC resisting an NPC's action did not act).
+    if not pc_resists:
+        _award_kindled_deeds_for_action(action_request, target_persona, result)
+
     # Charge social fatigue once per target resolved. Multi-target casts charge
     # the initiator per-target — this is the intended per-target-independent model.
     apply_fatigue(
@@ -1555,6 +1560,31 @@ def _resolve_action_against_persona(
         fury_committed=result.fury_committed,
     )
     return result, result_interaction, difficulty
+
+
+def _award_kindled_deeds_for_action(
+    action_request: SceneActionRequest,
+    target_persona: Persona,
+    result: EnhancedSceneActionResult,
+) -> None:
+    """Earn the initiator the resonances this act feeds (#5124), once the roll is final.
+
+    A technique-enhanced action is a TECHNIQUE act and any other is a SOCIAL act; the target
+    is the persona the action was aimed at. A paused or unrolled resolution earns nothing.
+    """
+    from world.magic.constants import KindlingActKind  # noqa: PLC0415
+    from world.magic.services.kindling import award_kindled_deeds  # noqa: PLC0415
+    from world.magic.types.kindling import KindlingAct  # noqa: PLC0415
+
+    main = result.action_resolution.main_result
+    if main is None:
+        return
+    kind = KindlingActKind.TECHNIQUE if action_request.technique else KindlingActKind.SOCIAL
+    award_kindled_deeds(
+        action_request.initiator_persona.character_sheet,
+        act=KindlingAct(kind=kind, target=target_persona.character_sheet),
+        outcome=main.check_result.outcome,
+    )
 
 
 def _resolve_standard_action(

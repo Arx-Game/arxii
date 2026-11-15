@@ -96,9 +96,9 @@ class BuildOptionListTests(TestCase):
             for o in build_option_list(self.instance, self.node, self.participant)
             if o.option == self.gated_option
         )
-        mine = _beat_option(gated, viewer=self.character)
-        other = _beat_option(gated, viewer=CharacterSheetFactory().character)
-        union_view = _beat_option(gated, viewer=None)
+        mine = _beat_option(gated, self.instance, viewer=self.character)
+        other = _beat_option(gated, self.instance, viewer=CharacterSheetFactory().character)
+        union_view = _beat_option(gated, self.instance, viewer=None)
         self.assertEqual(mine.reasons, gated.reasons)
         self.assertEqual(other.reasons, ())
         self.assertEqual(union_view.reasons, ())
