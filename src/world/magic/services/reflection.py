@@ -69,6 +69,57 @@ def deed_what(grant: ResonanceGrant) -> str:
     return situation_reason(situation) if situation is not None else ""
 
 
+# Words a reason sentence opens with when the opener is not a name ("This mission is about ...").
+_COMMON_OPENERS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "this",
+        "that",
+        "these",
+        "those",
+        "your",
+        "you",
+        "he",
+        "she",
+        "they",
+        "it",
+        "we",
+        "there",
+        "someone",
+        "somebody",
+        "something",
+        "people",
+        "everyone",
+        "anyone",
+        "no",
+        "some",
+        "any",
+        "every",
+        "each",
+        "all",
+    }
+)
+
+
+def deed_in_sentence(grant: ResonanceGrant) -> str:
+    """The deed, worded to sit inside another sentence ("Your X from <this> grows").
+
+    A recorded label is the act as authored and stays as it is. The fallback reason is a
+    sentence of its own, so its closing full stop goes and its first letter is lowered, unless
+    it opens on a name ("Tomas Reeve is here") rather than a common word ("This mission is about
+    ..."). Blank when the grant names nothing.
+    """
+    if grant.deed_label:
+        return grant.deed_label
+    text = deed_what(grant).strip().rstrip(".").rstrip()
+    if not text:
+        return ""
+    first = text.split(maxsplit=1)[0]
+    return text[0].lower() + text[1:] if first.lower() in _COMMON_OPENERS else text
+
+
 def deed_label(grant: ResonanceGrant) -> str:
     """The line a player reads for a deed: what held, then what it earned."""
     earned = f"{grant.amount} {grant.resonance.name}"
@@ -79,7 +130,7 @@ def deed_label(grant: ResonanceGrant) -> str:
 def recorded_line(reflection: Reflection) -> str:
     """The line the writer reads once a reflection is recorded (no one else is told)."""
     if reflection.grant is not None:
-        on = deed_what(reflection.grant) or f"your {reflection.grant.resonance.name}"
+        on = deed_in_sentence(reflection.grant) or f"your {reflection.grant.resonance.name}"
     else:
         on = f"your {reflection.resonance.name}"
     return (
@@ -281,6 +332,7 @@ def record_pending_reflection(
 
 
 __all__ = [
+    "deed_in_sentence",
     "deed_label",
     "deed_what",
     "parse_reflection_choice",

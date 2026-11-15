@@ -26,7 +26,7 @@ from world.magic.services.drift_correction import (
     rite_is_ready,
     waiting_reflections,
 )
-from world.magic.services.reflection import deed_what
+from world.magic.services.reflection import deed_in_sentence, deed_what
 from world.magic.types.drift import ReflectionReading, SettlingRiteReading
 
 if TYPE_CHECKING:
@@ -86,7 +86,7 @@ def _effect_line(
     if reflection.grant is not None:
         grant = reflection.grant
         if embrace:
-            what = deed_what(grant) or f"your {resonance.name}"
+            what = deed_in_sentence(grant) or f"your {resonance.name}"
             return f"Your {resonance.name} from {what} grows, up to {grant.amount}."
         most = int(Decimal(grant.amount) * Decimal(disown_percent) / _ONE_HUNDRED)
         if most <= 0:

@@ -639,6 +639,33 @@ class DeedNamingTests(_Case):
         self.row.reason_text = "Barred the overseers' door"
         self.assertEqual(deed_what(self._deed()), "Barred the overseers' door")
 
+    def test_an_old_deed_reads_inside_a_sentence_in_the_rites_effect_line(self) -> None:
+        from world.magic.factories import ReflectionFactory
+        from world.magic.services.reflection import deed_in_sentence
+        from world.magic.services.settling_preview import _effect_line
+
+        grant = self._deed()
+        self.assertEqual(deed_in_sentence(grant), "this mission is about people held captive")
+        reflection = ReflectionFactory(
+            character_sheet=self.sheet, grant=grant, resonance=None, choice="EMBRACE"
+        )
+        line = _effect_line(reflection, None, {}, 50)
+        self.assertEqual(
+            line,
+            f"Your {self.resonance.name} from this mission is about people held captive "
+            "grows, up to 5.",
+        )
+
+    def test_a_name_keeps_its_capital_and_a_recorded_label_is_left_as_authored(self) -> None:
+        from world.magic.services.reflection import deed_in_sentence
+
+        self.row.reason_text = "Tomas Reeve is here."
+        self.assertEqual(deed_in_sentence(self._deed()), "Tomas Reeve is here")
+        self.assertEqual(
+            deed_in_sentence(self._deed(deed_label="Barred the overseers' door")),
+            "Barred the overseers' door",
+        )
+
 
 class PanelOrderTests(_Case):
     def test_kindled_rows_come_first_strongest_first_then_the_rest(self) -> None:
