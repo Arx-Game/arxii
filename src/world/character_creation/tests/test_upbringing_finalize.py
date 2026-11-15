@@ -13,7 +13,7 @@ from world.character_creation.models import CharacterOriginSlot
 from world.character_creation.services import finalize_character, set_family_path
 from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
 from world.roster.constants import COMMONER_KIND_NAME, CRIME_KIND_NAME
-from world.roster.factories import FamilyFactory, FamilyKindFactory
+from world.roster.factories import FamilyFactory, FamilyKindFactory, KinSlotPoolFactory
 from world.roster.models import Family
 
 
@@ -98,6 +98,8 @@ class ClaimedFamilyFinalizeTest(FinalizationTestMixin, TestCase):
         draft = self._create_base_draft()
         draft.selected_origin_template = template
         draft.family = family
+        # An established family is joined through a seat (#5130).
+        draft.claimed_kin_pool = KinSlotPoolFactory(family=family)
         draft.draft_data["origin_choices"] = {str(slot.id): head.id}
         draft.draft_data.pop("tarot_card_name", None)
         draft.save()

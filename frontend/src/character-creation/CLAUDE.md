@@ -52,7 +52,13 @@ character-creation/
     │                        #   twin: those come after creation, ADR-5102-A); keeps
     │                        #   InventedParentsCard, FamilyNamePreview, KinSlotPicker,
     │                        #   TarotNamingRitual, TarotCardItem, FamilyCard (exported
-    │                        #   for lineage/). HouseFoundingPanel retired (#3983 Plan B
+    │                        #   for lineage/). KinSlotPicker (#5130) is the open seats
+    │                        #   of the claimed family and the only way into it: no free
+    │                        #   card; a seat reads its relation to the head of the house
+    │                        #   (`head_relation` + the response's `head_name`), then its
+    │                        #   description; a changeable name carries an asterisk, a
+    │                        #   fixed one nothing; a second press clears the pick.
+    │                        #   HouseFoundingPanel retired (#3983 Plan B
     │                        #   Task 6) — claim-path house founding is
     │                        #   `almanach/founder/FounderAlmanach.tsx`, mounted from
     │                        #   `FamilyPathSection.tsx`.
@@ -234,7 +240,11 @@ character-creation/
         │                         #   titles the parents card "Your adoptive parents".
         │                         #   Path labels are "An established family" / "Your
         │                         #   own family" / "No family"; with the first two
-        │                         #   offered and none chosen, your own is open by default
+        │                         #   offered and none chosen, your own is open by default.
+        │                         #   Since #5130 the claim path lists only families with
+        │                         #   `has_open_seat` (plus the one the draft holds), shows
+        │                         #   the seat picker under the Vacancy heading, and never
+        │                         #   the parents card (a seat's parents are staff's)
         ├── FamilyTemplateForm.tsx # Aspect-pick + features form for a Family Template,
         │                         #   used by the name path (#3648); the claim path's
         │                         #   own charter form is
@@ -288,6 +298,8 @@ changes a pick and `coverOfferId` draws that card dashed (the cover flow);
 - `GET /api/character-creation/families/?area_id=&kind=` - List families, optionally
   filtered by area and one or more `FamilyKind` ids (the claimed-path Upbringing's
   `claimable_kind_ids`, #3617)
+- `GET /api/roster/families/{id}/slots/` - The claimed family's open seats and counted
+  openings, each seat with its `head_relation`, plus the house head's `head_name` (#5130)
 - `GET /api/character-creation/can-create/` - Check eligibility
 - `GET /api/character-creation/drafts/` - List user's drafts (returns array with 0-1 items)
 - `POST /api/character-creation/drafts/` - Create new draft

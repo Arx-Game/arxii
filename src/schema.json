@@ -6128,7 +6128,13 @@ paths:
   /api/character-creation/families/{id}/slots/:
     get:
       operationId: character_creation_families_slots_retrieve
-      description: Open appable positions + pools for this family (CG slot browser).
+      description: |-
+        Open appable positions + pools for this family (CG slot browser).
+
+        Each seat carries what it is to the head of the house, and the response
+        names that head, so a seat card can say "Child of <head>" (#5130). Both
+        are read off the public record: this is open to anyone in character
+        creation, whoever they are.
       parameters:
       - in: path
         name: id
@@ -35370,7 +35376,13 @@ paths:
   /api/roster/families/{id}/slots/:
     get:
       operationId: roster_families_slots_retrieve
-      description: Open appable positions + pools for this family (CG slot browser).
+      description: |-
+        Open appable positions + pools for this family (CG slot browser).
+
+        Each seat carries what it is to the head of the house, and the response
+        names that head, so a seat card can say "Child of <head>" (#5130). Both
+        are read off the public record: this is open to anyone in character
+        creation, whoever they are.
       parameters:
       - in: path
         name: id
@@ -60456,8 +60468,14 @@ components:
           type: integer
           nullable: true
           readOnly: true
+        has_open_seat:
+          type: boolean
+          description: 'Whether a new character can still be seated here: an unclaimed
+            open seat or a pool with openings left (#5130).'
+          readOnly: true
       required:
       - born_particle
+      - has_open_seat
       - id
       - inherited
       - kind

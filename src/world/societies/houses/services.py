@@ -88,6 +88,22 @@ def house_for_family(family: Family | None) -> Organization | None:
     return family.organizations.first()
 
 
+def head_of_family(family: Family | None) -> Kinsperson | None:
+    """Whoever holds the top title of the house rooted in ``family``, or None.
+
+    The head of a house is a stored fact, the holder of its highest title
+    (#5114), never the first person entered. None for a family with no house,
+    a house with no title, and a vacant top title.
+    """
+    house = house_for_family(family)
+    if house is None:
+        return None
+    titles = list(house.titles.select_related("holder"))
+    if not titles:
+        return None
+    return max(titles, key=lambda title: TITLE_TIER_RANK.get(title.tier, 0)).holder
+
+
 def realm_for_house(house: Organization | None) -> Realm | None:
     """The realm a house sits in, via its society."""
     if house is None or house.society is None:

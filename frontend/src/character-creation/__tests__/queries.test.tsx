@@ -14,8 +14,10 @@ import {
   useFamilies,
   useDraft,
   useCanCreateCharacter,
+  useUpdateDraft,
   characterCreationKeys,
 } from '../queries';
+import type { CharacterDraft } from '../types';
 import { mockStartingAreas, mockSpeciesList, mockFamilies, mockDraftWithArea } from './fixtures';
 import { mockCanCreateYes, mockCanCreateNo } from './mocks';
 
@@ -192,6 +194,59 @@ describe('Character Creation Query Hooks', () => {
       expect(result.current.data?.reason).toBe(
         'You have reached the maximum number of characters.'
       );
+    });
+  });
+
+  describe('useUpdateDraft', () => {
+    it('shows a picked seat before the server answers (#5130)', async () => {
+      // The PATCH writes claimed_kin_slot_id and the draft reads claimed_kin_slot:
+      // the optimistic merge has to carry the pick across, or the card waits for
+      // the whole round trip.
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+      });
+      const held = { ...mockDraftWithArea, claimed_kin_slot: null, claimed_kin_pool: 4 };
+      queryClient.setQueryData(characterCreationKeys.draft(), held);
+      // A server that never answers: whatever the cache shows is the optimistic value.
+      vi.mocked(api.updateDraft).mockReturnValue(new Promise(() => {}));
+      const { result } = renderHook(() => useUpdateDraft(), {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        ),
+      });
+
+      result.current.mutate({
+        draftId: held.id,
+        data: { claimed_kin_slot_id: 7, claimed_kin_pool_id: null },
+      });
+
+      await waitFor(() => {
+        const cached = queryClient.getQueryData<CharacterDraft>(characterCreationKeys.draft());
+        expect(cached?.claimed_kin_slot).toBe(7);
+        expect(cached?.claimed_kin_pool).toBeNull();
+      });
+    });
+
+    it('a picked Vacancy shows at once and lets go of a hand-picked seat', async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+      });
+      const held = { ...mockDraftWithArea, claimed_kin_slot: 7, selected_vacancy: null };
+      queryClient.setQueryData(characterCreationKeys.draft(), held);
+      vi.mocked(api.updateDraft).mockReturnValue(new Promise(() => {}));
+      const { result } = renderHook(() => useUpdateDraft(), {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        ),
+      });
+
+      result.current.mutate({ draftId: held.id, data: { selected_vacancy_id: 12 } });
+
+      await waitFor(() => {
+        const cached = queryClient.getQueryData<CharacterDraft>(characterCreationKeys.draft());
+        expect(cached?.selected_vacancy).toBe(12);
+        expect(cached?.claimed_kin_slot).toBeNull();
+      });
     });
   });
 

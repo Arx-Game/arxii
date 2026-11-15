@@ -201,10 +201,42 @@ def get_lineage_errors(draft: CharacterDraft) -> list[str]:
     if not path:
         errors.append("Choose how your family fits your upbringing")
         return errors
-    errors.extend(_get_family_path_errors(draft, path))
+    path_errors = _get_family_path_errors(draft, path)
+    errors.extend(path_errors)
     errors.extend(_get_vacancy_errors(draft, path))
+    if not path_errors:
+        # A family the draft may not join has no seat worth asking for.
+        errors.extend(error for error in _get_seat_errors(draft, path) if error not in errors)
     errors.extend(_get_prompt_errors(draft, template))
     return errors
+
+
+def _get_seat_errors(draft: CharacterDraft, path: str) -> list[str]:
+    """An established family is joined through a seat staff opened (#5130).
+
+    Owner ruling 2026-11-15: a named seat or one of a counted pool of openings,
+    with no free entry. The seat is the claimed kin slot, the claimed pool, or
+    the kin Vacancy that supplies one (ADR-0273); each has to be of the family
+    being joined. Whether the seat is still open is finalize's question, as it
+    is for a Vacancy.
+    """
+    from world.societies.constants import VACANCY_BASIS_KIN  # noqa: PLC0415
+
+    if path != FamilyPath.CLAIMED or draft.family_id is None:
+        return []
+    seats = [seat for seat in (draft.claimed_kin_slot, draft.claimed_kin_pool) if seat is not None]
+    if any(seat.family_id != draft.family_id for seat in seats):
+        return ["That place belongs to a family you are not joining"]
+    if seats:
+        return []
+    vacancy = draft.selected_vacancy
+    if (
+        vacancy is not None
+        and vacancy.basis == VACANCY_BASIS_KIN
+        and vacancy.organization.family_id == draft.family_id
+    ):
+        return []
+    return ["Choose your place in the family"]
 
 
 def _get_family_path_errors(draft: CharacterDraft, path: str) -> list[str]:

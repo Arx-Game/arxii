@@ -3565,7 +3565,10 @@ Secrets, souls with per-life-knowledge reincarnation chains, app-in slots/pools.
   tree, selected person, open seats; linked from the sheet's House row, the
   org house block's `family_id` and the realm hub's `family_id`); CG slot claim
   (draft `claimed_kin_slot/_pool`, `_bind_kinship_node` at finalize; FE
-  `KinSlotPicker`); CG invented parents (`second_parent_species` + draft_data
+  `KinSlotPicker`; required on the claim path since #5130, ADR-5130: the list's
+  `has_open_seat` via `open_seat_family_ids`, each seat's `head_relation` via
+  `relations_to` and `houses.services.head_of_family`); CG invented parents
+  (name and none paths only since #5130) (`second_parent_species` + draft_data
   names/genders → `_bind_invented_parents` + `_pin_heredity_back_inference` at
   finalize; FE `InventedParentsCard`); parent-aware
   `form-options/:species_id/?draft=` (inherited option groups + `is_required`);

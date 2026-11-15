@@ -13,6 +13,7 @@ from world.character_sheets.models import Gender
 from world.roster.constants import MembershipBasis, ParentageKind
 from world.roster.factories import FamilyFactory
 from world.roster.models import FamilyMembership, Kinsperson, ParentageEdge
+from world.roster.services.kinship import create_person, record_parentage
 from world.species.factories import SpeciesFactory
 
 
@@ -113,7 +114,7 @@ class ParentageFinalizeTests(FinalizationTestMixin, TestCase):
         )
         self.male, _ = Gender.objects.get_or_create(key="male", defaults={"display_name": "Male"})
 
-    def _finalize(self, upbringing, *, family=None, path=""):
+    def _finalize(self, upbringing, *, family=None, path="", seat=None):
         draft = self._create_base_draft(
             line_parent_name="Martha",
             other_parent_name="Bob",
@@ -123,11 +124,25 @@ class ParentageFinalizeTests(FinalizationTestMixin, TestCase):
         draft.selected_origin_template = upbringing
         draft.family = family
         draft.family_path = path
-        draft.save(update_fields=["selected_origin_template", "family", "family_path"])
+        draft.claimed_kin_slot = seat
+        draft.save(
+            update_fields=["selected_origin_template", "family", "family_path", "claimed_kin_slot"]
+        )
         character = finalize_character(draft, add_to_roster=True)
         return Kinsperson.objects.get(sheet=character.sheet_data)
 
+    def _seat_with_parents(self, family):
+        """An open seat staff wrote into ``family``, with the two parents staff gave it."""
+        seat = create_person(name="Open seat", family=family)
+        seat.is_appable = True
+        seat.save(update_fields=["is_appable"])
+        for name in ("Ysolde", "Garrick"):
+            record_parentage(child=seat, parent=create_person(name=name, family=family))
+        return seat
+
     def test_adoptive_records_adoptive_parents_and_an_adopted_membership(self):
+        """Adoption into an established family takes a seat (#5130): the parents are
+        the seat's own, adoptive, and the names left in the draft add none."""
         family = FamilyFactory(name="Whisper")
         upbringing = OriginTemplateFactory(
             beginning=self.beginnings,
@@ -136,14 +151,43 @@ class ParentageFinalizeTests(FinalizationTestMixin, TestCase):
             allows_name_family=False,
             allows_no_family=False,
         )
-        node = self._finalize(upbringing, family=family, path=FamilyPath.CLAIMED)
+        seat = self._seat_with_parents(family)
+        node = self._finalize(upbringing, family=family, path=FamilyPath.CLAIMED, seat=seat)
 
+        self.assertEqual(node.pk, seat.pk)
         edges = ParentageEdge.objects.filter(child=node)
-        self.assertEqual(edges.count(), 2)
+        self.assertEqual({edge.parent.name for edge in edges}, {"Ysolde", "Garrick"})
         self.assertEqual({edge.kind for edge in edges}, {ParentageKind.ADOPTIVE})
         self.assertFalse(any(edge.is_ritual_invoker for edge in edges))
         membership = FamilyMembership.objects.get(kinsperson=node, family=family)
         self.assertEqual(membership.basis, MembershipBasis.ADOPTED)
+        self.assertFalse(Kinsperson.objects.filter(name__in=["Martha", "Bob"]).exists())
+
+    def test_adoptive_parents_are_named_in_a_family_of_your_own(self):
+        """On the name path the adoptive parents are the player's to name."""
+        upbringing = OriginTemplateFactory(
+            beginning=self.beginnings,
+            parentage=Parentage.ADOPTIVE,
+            allows_claim_family=False,
+            allows_name_family=True,
+            allows_no_family=False,
+        )
+        draft = self._create_base_draft(
+            new_family_name="Cisternwrights",
+            line_parent_name="Martha",
+            other_parent_name="Bob",
+            line_parent_gender_id=self.female.pk,
+            other_parent_gender_id=self.male.pk,
+        )
+        draft.selected_origin_template = upbringing
+        draft.draft_data.pop("tarot_card_name", None)
+        draft.save()
+        character = finalize_character(draft, add_to_roster=True)
+        node = Kinsperson.objects.get(sheet=character.sheet_data)
+
+        edges = ParentageEdge.objects.filter(child=node)
+        self.assertEqual({edge.parent.name for edge in edges}, {"Martha", "Bob"})
+        self.assertEqual({edge.kind for edge in edges}, {ParentageKind.ADOPTIVE})
 
     def test_no_known_parents_records_no_parents(self):
         upbringing = OriginTemplateFactory(
@@ -155,18 +199,22 @@ class ParentageFinalizeTests(FinalizationTestMixin, TestCase):
         node = self._finalize(upbringing, path=FamilyPath.NONE)
         self.assertFalse(ParentageEdge.objects.filter(child=node).exists())
 
-    def test_known_parents_are_unchanged(self):
+    def test_known_parents_are_the_seats_own(self):
+        """A seat in an established family carries the parents staff wrote (#5130)."""
         family = FamilyFactory(name="Redcloud")
         upbringing = OriginTemplateFactory(
             beginning=self.beginnings,
             allows_claim_family=True,
             allows_name_family=False,
         )
-        node = self._finalize(upbringing, family=family, path=FamilyPath.CLAIMED)
+        seat = self._seat_with_parents(family)
+        node = self._finalize(upbringing, family=family, path=FamilyPath.CLAIMED, seat=seat)
         edges = ParentageEdge.objects.filter(child=node)
+        self.assertEqual({edge.parent.name for edge in edges}, {"Ysolde", "Garrick"})
         self.assertEqual({edge.kind for edge in edges}, {ParentageKind.BIOLOGICAL})
         membership = FamilyMembership.objects.get(kinsperson=node, family=family)
         self.assertEqual(membership.basis, MembershipBasis.BORN)
+        self.assertFalse(Kinsperson.objects.filter(name__in=["Martha", "Bob"]).exists())
 
 
 class AdoptiveHeredityTests(TestCase):

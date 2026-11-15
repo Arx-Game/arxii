@@ -161,6 +161,152 @@ class DerivationMatrixTests(TestCase):
         )
 
 
+class KinRecordTests(TestCase):
+    """A record read once answers exactly what the walk answers alone (#5130).
+
+    ``load_kin_record`` exists so that labelling every open seat of a house
+    against its head is a fixed number of queries; the labels must not move.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        marriage = UnionKindFactory()
+        names = [
+            "Grandmother",
+            "Grandfather",
+            "Mother",
+            "Father",
+            "Aunt",
+            "Uncle",
+            "Cousin",
+            "Ego",
+            "Sister",
+            "Half",
+            "Spouse",
+            "SpouseMother",
+            "SpouseSister",
+            "Niece",
+            "Son",
+            "Grandson",
+            "Stepmother",
+            "Stepson",
+            "Foster",
+            "FosterKid",
+            "Secret",
+            "Former",
+            "Stranger",
+        ]
+        cls.p = {name: _person(name) for name in names}
+        p = cls.p
+
+        def child_of(child: str, *parents: str, **kwargs) -> None:
+            for parent in parents:
+                kinship.record_parentage(child=p[child], parent=p[parent], **kwargs)
+
+        child_of("Mother", "Grandmother", "Grandfather")
+        child_of("Aunt", "Grandmother", "Grandfather")
+        child_of("Cousin", "Aunt", "Uncle")
+        child_of("Ego", "Mother", "Father")
+        child_of("Sister", "Mother", "Father")
+        child_of("Half", "Father")
+        child_of("Niece", "Sister")
+        child_of("Son", "Ego", "Spouse")
+        child_of("Grandson", "Son")
+        child_of("SpouseSister", "SpouseMother")
+        child_of("Spouse", "SpouseMother")
+        child_of("Stepson", "Stepmother")
+        child_of("Ego", "Foster", kind=ParentageKind.FOSTER)
+        child_of("FosterKid", "Foster", kind=ParentageKind.FOSTER)
+        # A child Ego has never acknowledged: off the public record.
+        child_of("Secret", "Ego", is_public_record=False)
+        kinship.record_union(kind=marriage, members=[p["Aunt"], p["Uncle"]])
+        kinship.record_union(kind=marriage, members=[p["Ego"], p["Spouse"]])
+        kinship.record_union(kind=marriage, members=[p["Father"], p["Stepmother"]])
+        ended = kinship.record_union(kind=marriage, members=[p["Sister"], p["Former"]])
+        kinship.end_union(ended)
+
+    def test_every_pair_reads_the_same_with_a_record(self) -> None:
+        people = list(self.p.values())
+        # From people at each depth of the tree, to everyone.
+        froms = [self.p[n] for n in ("Ego", "Mother", "Son", "Spouse", "Sister", "Stepson", "Aunt")]
+        for viewer in (None, OMNISCIENT):
+            record = kinship.load_kin_record(people, viewer)
+            for a in froms:
+                for b in people:
+                    alone = kinship.derive_relationship(a, b, viewer)
+                    read = kinship.derive_relationship(a, b, viewer, record=record)
+                    assert read == alone, (a.name, b.name, viewer, alone, read)
+
+    def test_a_record_around_one_person_reaches_every_label(self) -> None:
+        """Read around Ego alone, the record still answers for cousins and in-laws:
+        whoever it does not cover is asked of the database, never guessed."""
+        ego = self.p["Ego"]
+        record = kinship.load_kin_record([ego], OMNISCIENT)
+        expected = {
+            "Mother": RelationshipType.PARENT,
+            "Son": RelationshipType.CHILD,
+            "Secret": RelationshipType.CHILD,
+            "Sister": RelationshipType.SIBLING,
+            "Half": RelationshipType.HALF_SIBLING,
+            "Spouse": RelationshipType.SPOUSE,
+            "Stepmother": RelationshipType.STEP_PARENT,
+            "Foster": RelationshipType.FOSTER_PARENT,
+            "FosterKid": RelationshipType.FOSTER_SIBLING,
+            "Grandmother": RelationshipType.GRANDPARENT,
+            "Grandson": RelationshipType.GRANDCHILD,
+            "Aunt": RelationshipType.AUNT_UNCLE,
+            "Niece": RelationshipType.NIECE_NEPHEW,
+            "Cousin": RelationshipType.COUSIN,
+            "SpouseMother": RelationshipType.IN_LAW,
+            "SpouseSister": RelationshipType.IN_LAW,
+            "Stranger": None,
+            # An ended union makes nobody an in-law.
+            "Former": None,
+        }
+        for name, label in expected.items():
+            assert (
+                kinship.derive_relationship(ego, self.p[name], OMNISCIENT, record=record) == label
+            ), name
+
+    def test_a_hidden_child_is_not_in_a_public_record(self) -> None:
+        ego = self.p["Ego"]
+        record = kinship.load_kin_record([ego, self.p["Secret"]], None)
+        assert kinship.derive_relationship(ego, self.p["Secret"], None, record=record) is None
+        # A record read for one viewer is never read for another.
+        assert (
+            kinship.derive_relationship(ego, self.p["Secret"], OMNISCIENT, record=record)
+            == RelationshipType.CHILD
+        )
+
+    def test_a_spouses_child_is_a_stepchild(self) -> None:
+        """The step relation reads from both sides. Until #5130 the walk asked
+        whether the stepchild was their own step-parent, so this never matched."""
+        father, stepson = self.p["Father"], self.p["Stepson"]
+        assert (
+            kinship.derive_relationship(stepson, father, OMNISCIENT) == RelationshipType.STEP_PARENT
+        )
+        assert (
+            kinship.derive_relationship(father, stepson, OMNISCIENT) == RelationshipType.STEP_CHILD
+        )
+
+    def test_labelling_many_against_one_costs_no_more_than_labelling_a_few(self) -> None:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        ego = self.p["Ego"]
+        few = [self.p[name] for name in ("Son", "Cousin", "Stranger")]
+        many = [person for person in self.p.values() if person is not ego]
+
+        def cost(people) -> int:
+            with CaptureQueriesContext(connection) as ctx:
+                record = kinship.load_kin_record(list(self.p.values()), None)
+                for person in people:
+                    kinship.derive_relationship(ego, person, None, record=record)
+            return len(ctx.captured_queries)
+
+        assert cost(many) == cost(few)
+
+
 class VisibilityTests(TestCase):
     """Truth vs public record, per-viewer knowledge, staff-only facts."""
 

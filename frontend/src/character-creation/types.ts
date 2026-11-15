@@ -134,6 +134,9 @@ export interface Family {
   taken_in_particle: string;
   /** Aspects/features/liege inherited from the family's Family Template (#3648). */
   inherited: InheritedFacts;
+  /** A new character can still be seated here: an open seat or a counted opening
+   * (#5130). A family without one is not offered in character creation. */
+  has_open_seat: boolean;
 }
 
 /**
@@ -159,6 +162,32 @@ export interface CrewSlot {
   rooms: string[];
 }
 
+/**
+ * What a seat is to the head of the house (#5130): the kinship walk's label, or
+ * 'kin' where the two are related and the walk has no closer word.
+ */
+export type HeadRelation =
+  | 'kin'
+  | 'self'
+  | 'parent'
+  | 'child'
+  | 'sibling'
+  | 'half-sibling'
+  | 'step-parent'
+  | 'step-child'
+  | 'foster-parent'
+  | 'foster-child'
+  | 'foster-sibling'
+  | 'spouse'
+  | 'in-law'
+  | 'grandparent'
+  | 'grandchild'
+  | 'aunt/uncle'
+  | 'niece/nephew'
+  | 'cousin'
+  | 'past-incarnation'
+  | 'later-incarnation';
+
 export interface KinSlot {
   id: number;
   name: string;
@@ -168,6 +197,9 @@ export interface KinSlot {
   age_max: number | null;
   allowed_genders: string[];
   family: number;
+  /** Null when the house has no head on record, or the seat is no known relation
+   * of theirs. Only the seats endpoint sends it; a Vacancy's seat has none. */
+  head_relation?: HeadRelation | null;
 }
 
 export interface KinSlotPool {
@@ -182,6 +214,8 @@ export interface KinSlotPool {
 }
 
 export interface FamilySlots {
+  /** The head of the house as the family's own page names them; '' when none. */
+  head_name: string;
   slots: KinSlot[];
   pools: KinSlotPool[];
 }

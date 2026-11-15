@@ -234,6 +234,7 @@ const KATTA_FAMILY: Family = {
   born_particle: 'mar',
   taken_in_particle: 'mal',
   inherited: { facets: [], features: [], liege_name: '' },
+  has_open_seat: true,
 };
 const VALEWEEP_FAMILY: Family = {
   ...KATTA_FAMILY,
