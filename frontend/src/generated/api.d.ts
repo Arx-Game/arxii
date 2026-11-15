@@ -45668,7 +45668,7 @@ export interface components {
        *     Each pool is ``{"current": N, "capacity": M}``. ``current`` reads the
        *     persisted ``FatiguePool`` row (0 when no row exists yet); ``capacity``
        *     is derived from the character's endurance stats via
-       *     ``get_fatigue_capacity``. Gated by the same vitals-visibility rules as
+       *     ``get_fatigue_capacities``. Gated by the same vitals-visibility rules as
        *     health/strain — outsiders get ``None``.
        *
        *     The frontend's VitalPools component reads this to render fatigue bars
@@ -62027,7 +62027,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this title. */
+        id: number;
       };
       cookie?: never;
     };
