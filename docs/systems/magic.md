@@ -4673,7 +4673,7 @@ roll, applies the share, then sets `rite` on every reflection, even at a share o
 
 Order: disowned deeds, the disowned unsettling resonance, embraced deeds, then accepting last so it
 settles on everything the rite did. Conversions go to the main-affinity resonance the offering is tied
-to, else the largest main-affinity resonance held, through `convert_resonance_amount`: lifetime moves by
+to, else (`fallback_conversion_target`, shared with the preview) the main-affinity resonance with the largest open cap when the rite disowns the unsettling resonance, else the largest main-affinity resonance held, through `convert_resonance_amount`: lifetime moves by
 the points (the Mire's excess first, so the Sineater's `mire_lifetime` shrinks first and is clamped to
 the lifetime left) and the aura follows; balance moves only as far as it exists, and only that part
 is granted as `GainSource.DRIFT_CORRECTION` at `max(1, floor(moved x pair multiplier))`. Disowning the

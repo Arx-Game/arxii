@@ -21,7 +21,7 @@ rite, even at a share of 0.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -267,15 +267,41 @@ def _resolve_offering(
 # ---------------------------------------------------------------------------
 
 
-def fallback_conversion_target(main_rows: list[CharacterResonance]) -> Resonance | None:
+def open_caps(sheet: CharacterSheet) -> dict[int, int]:
+    """Resonance id -> what the character's open chance to atone still allows toward it."""
+    return {
+        cap.target_resonance_id: cap.cap
+        for cap in DriftConversionCap.objects.filter(offer__character_sheet=sheet, cap__gt=0)
+    }
+
+
+def disowns_unsettling(reflections: Iterable[Reflection]) -> bool:
+    """Whether any reflection disowns the unsettling resonance itself (not a deed)."""
+    return any(r.grant_id is None and r.choice == ReflectionChoice.DISOWN for r in reflections)
+
+
+def fallback_conversion_target(
+    main_rows: list[CharacterResonance], caps: Mapping[int, int] | None = None
+) -> Resonance | None:
     """The resonance a conversion turns toward when the offering is not tied to a main-affinity
-    one: the character's largest main-affinity resonance, or nowhere. The rite and its preview
-    both read it, so what the sheet says is where the rite sends it."""
-    return main_rows[0].resonance if main_rows else None
+    one: with open ``caps`` (given when the rite disowns the unsettling resonance), the
+    main-affinity resonance with the largest open cap toward it; with none, the character's
+    largest main-affinity resonance; or nowhere. The rite and its preview both read it, so what
+    the sheet says is where the rite sends it."""
+    if not main_rows:
+        return None
+    if caps:
+        best = max(main_rows, key=lambda row: caps.get(row.resonance_id, 0))
+        if caps.get(best.resonance_id, 0) > 0:
+            return best.resonance
+    return main_rows[0].resonance
 
 
 def _conversion_target(
-    sheet: CharacterSheet, offered_for: Resonance, main_rows: list[CharacterResonance]
+    sheet: CharacterSheet,
+    offered_for: Resonance,
+    main_rows: list[CharacterResonance],
+    caps: Mapping[int, int] | None = None,
 ) -> Resonance | None:
     """Where a conversion turns: the offering's own resonance when it is of the main affinity,
     else ``fallback_conversion_target``."""
@@ -284,7 +310,7 @@ def _conversion_target(
         return None
     if offered_for.affinity_id == main.pk:
         return offered_for
-    return fallback_conversion_target(main_rows)
+    return fallback_conversion_target(main_rows, caps)
 
 
 def _convert(
@@ -490,8 +516,10 @@ def perform_settling_rite(
     last so it settles on everything the rite has done. Every reflection then takes the rite,
     even at a share of 0.
 
-    Conversions turn toward the main-affinity resonance the offering is tied to, or else the
-    character's largest main-affinity resonance. Nothing below the roll raises: what cannot be
+    Conversions turn toward the main-affinity resonance the offering is tied to, or else (see
+    ``fallback_conversion_target``) the main-affinity resonance with the largest open cap when
+    the rite disowns the unsettling resonance, else the character's largest main-affinity
+    resonance. Nothing below the roll raises: what cannot be
     done (no resonance to turn toward, nothing held to convert, already settled) is a line
     saying so.
 
@@ -537,7 +565,12 @@ def perform_settling_rite(
     )
     consume_materials(allocations)
 
-    target = _conversion_target(sheet, offered_for, main_affinity_rows(sheet))
+    target = _conversion_target(
+        sheet,
+        offered_for,
+        main_affinity_rows(sheet),
+        open_caps(sheet) if disowns_unsettling(reflections) else None,
+    )
     effects = _apply_reflections(
         sheet, reflections, rite, share, target, config.disown_deed_percent
     )

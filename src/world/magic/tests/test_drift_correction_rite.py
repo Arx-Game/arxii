@@ -48,7 +48,8 @@ from world.magic.services.drift_correction import (
     perform_settling_rite,
 )
 from world.magic.services.resonance import grant_resonance
-from world.magic.tests.test_drift_offer import DriftOfferTestBase
+from world.magic.services.settling_preview import settling_rite_reading
+from world.magic.tests.test_drift_offer import DriftOfferTestBase, _hold
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.mechanics.services import equipment_walk_total
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
@@ -198,6 +199,52 @@ class PerformRiteTests(DriftRiteTestBase):
         self.assertEqual(_balance(self.sheet, self.dawnlight), 6)
         self.assertIsNone(self.cap_value())
         self.assertIsNotNone(Reflection.objects.get(pk=reflection.pk).rite)
+
+
+class FallbackConversionTargetTests(DriftRiteTestBase):
+    """An offering tied to no main-affinity resonance sends the disown where she can atone."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        # Dawnlight holds the larger lifetime but no open cap; Sunrise (also Celestial) is
+        # smaller and holds the open cap.
+        _hold(self.sheet, self.sunrise, 0, lifetime=5)
+        self.cap.delete()
+        DriftConversionCapFactory(offer=self.offer, target_resonance=self.sunrise, cap=12)
+        self.component = _tied_item(self.dread)
+
+    def test_the_disown_and_the_preview_both_turn_toward_the_resonance_with_the_open_cap(
+        self,
+    ) -> None:
+        self.reflect_disown_dread()
+
+        reading = settling_rite_reading(self.sheet, [self.component])
+        self.assertEqual(
+            reading.reflections[0].effect_line,
+            "Drift Dread turns toward Drift Sunrise, up to 12.",
+        )
+
+        result = self.perform()
+
+        self.assertEqual(
+            result.lines,
+            ("You disown your Drift Dread: 12 Drift Dread became 6 Drift Sunrise.",),
+        )
+        self.assertEqual(_balance(self.sheet, self.sunrise), 6)
+        self.assertEqual(_balance(self.sheet, self.dawnlight), 0)
+
+    def test_with_no_open_cap_the_largest_main_affinity_resonance_is_still_the_fallback(
+        self,
+    ) -> None:
+        DriftConversionCap.objects.all().delete()
+        self.reflect_disown_dread()
+
+        reading = settling_rite_reading(self.sheet, [self.component])
+
+        self.assertEqual(
+            reading.reflections[0].effect_line,
+            "Drift Dread turns toward Drift Dawnlight, up to 0.",
+        )
 
 
 class FocusTests(DriftRiteTestBase):

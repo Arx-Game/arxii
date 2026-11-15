@@ -17,9 +17,11 @@ from world.magic.models.reflection import Reflection
 from world.magic.services.drift import get_drift_correction_config
 from world.magic.services.drift_correction import (
     RITE_NOT_READY_MESSAGE,
+    disowns_unsettling,
     fallback_conversion_target,
     main_affinity_rows,
     offerings_for,
+    open_caps,
     reflected_resonance,
     rite_is_ready,
     waiting_reflections,
@@ -115,11 +117,10 @@ def settling_rite_reading(
     main_rows = main_affinity_rows(sheet)
     # The rite turns toward the resonance its offering is tied to; before one is chosen the
     # sheet names the one the rite falls back to (the same function the rite uses).
-    target = fallback_conversion_target(main_rows)
-    caps = {
-        cap.target_resonance_id: cap.cap
-        for cap in DriftConversionCap.objects.filter(offer__character_sheet=sheet)
-    }
+    caps = open_caps(sheet)
+    target = fallback_conversion_target(
+        main_rows, caps if disowns_unsettling(reflections) else None
+    )
     readings = []
     for reflection in reflections:
         where, from_line, excerpt = _writing(reflection)

@@ -2216,7 +2216,9 @@ before accepting; it is what "You become more abyssal." names.
   deed's resonance lifetime); embrace the unsettling resonance calls `accept_aura_change(fraction=s)`;
   disown it converts up to the open cap toward the conversion target x s, bounded by what stands past
   who she is (the Mire's excess first), and the cap falls by what converted. Conversions turn toward
-  the main-affinity resonance the offering is tied to, else the largest main-affinity resonance held,
+  the main-affinity resonance the offering is tied to, else (`fallback_conversion_target`, which the
+  preview's effect line also reads) the one with the largest open cap when the rite disowns the unsettling
+  resonance, else the largest main-affinity resonance held,
   through `convert_resonance_amount` as `DRIFT_CORRECTION`; nothing after the roll raises (an effect
   that cannot happen is a line saying so). The check type is NOT a `RitualCheckConfig` sidecar.
   Never match the rite, check or affinities by name. `rite_is_ready(config=None)` (one query,
