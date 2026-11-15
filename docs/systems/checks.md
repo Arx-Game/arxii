@@ -113,6 +113,7 @@ stat), read without saving a row when a database has none.
 | `CheckScaleConfig` | Singleton (pk 1, `world/checks/scale_config.py`, #5093): `level_share`, the share of a level's CHECK baseline that a character's level adds to every roll (seed 0.5). Read by `level_points(level)`; staff edit the row. |
 | `ModifierValue` | An override of the derived value: what a modifier of `size` is worth at exactly `level`, in the lane's units. It covers only its own level (the step lookup is gone). A magnitude; the authored modifier keeps its sign | `lane`, `level`, `size` (`ModifierSize`), `value`; unique (`lane`, `level`, `size`) |
 | `ModifierLevelBaseline` | The typical total at each level in a lane, one row per level (the seed writes levels 1-30). On the check lane these rows ARE the rank ladder (rank N starts at the level-N baseline) and the gap between two levels is one level's width (#5093) | `lane`, `level`, `baseline`; unique (`lane`, `level`) |
+| `LevelTier` | A tier jump (#5093): `bonus_points` added in full to every level from `start_level` up (a character's level term, an NPC's opposition, every staff-set difficulty level). Seeded at 6, 11, 16, 21 and 26, 24 points each | `start_level` (unique), `bonus_points` |
 | `ModifierTaper` | Which source kinds taper in a lane: each further modifier of the kind counts `ratio` of the one before, never below `floor` | `lane`, `source_kind` (`ModifierSourceKind`), `ratio`, `floor`; unique (`lane`, `source_kind`) |
 
 Readers (`modifier_values.py`): `load_value_table(lane) -> ValueTable` (three queries: overrides,
@@ -321,7 +322,7 @@ result.outcome_name    # "Success", "Catastrophic Failure", etc.
 result.success_level   # -10 to +10
 result.trait_points    # Points from character's traits
 result.aspect_bonus    # Bonus from path aspects
-result.level_points    # CheckScaleConfig.level_share x the level's baseline, on every check (#2707, #5093)
+result.level_points    # level_share x the level's baseline plus its tier bonus, on every check (#2707, #5093)
 result.total_points    # Final total
 ```
 
@@ -467,13 +468,40 @@ term would double-count it. See ADR-0166.
 
 ---
 
+## Tier jumps (#5093)
+
+Power jumps sharply on crossing into a new tier of levels: going from level 5 to 6 is worth far
+more than 4 to 5, and 10 to 11 more than 9 to 10 (owner ruling 2026-11-15; spec decision 16).
+
+- **`LevelTier(start_level, bonus_points)`** (`world/checks/modifier_models.py`, admin "Level
+  tiers" with the bonus shown in ranks): one row per tier, `start_level` unique. The seed
+  (`seed_level_tiers`, only into an empty table) writes levels 6, 11, 16, 21 and 26, 24 points each
+  (three ranks at the seeded 8-point width). Staff set every row separately. Migration
+  `0433_level_tier_rows` writes the same rows on a database that already has CHECK baselines and
+  no tier rows, so production gets them.
+- **`tier_bonus(level, table=None)`** (`modifier_values.py`): the sum of `bonus_points` over every
+  tier whose start level is at or below `level`; 0 with no rows. `load_tier_table()` loads the
+  rows in one query and the resulting `TierTable.bonus(level)` reads them in memory.
+- **Counted in full, once, wherever a level's strength is read:** `level_points` (a character's
+  level term: share x baseline, plus the bonus), `level_opposition` (an NPC), `difficulty_points`
+  (every staff-set difficulty level), and the tuning panels' example totals (the standoff profile's
+  same-level roller, the modifier pile's baseline) and the unmet-surroundings penalty's "typical
+  roll". A player character who is the obstacle gets it through her level term only, so it is
+  never added twice. `difficulty_level_for_points` inverts the strengths, so a level just across a
+  tier start sits the whole bonus above the one before it.
+- **Not changed:** `level_width`, `difficulty_step_points`, modifier sizes and the vow step, so
+  buff sizes stay the same inside a tier.
+- **Result with the seeded rows:** a level-6 character with ordinary skills (skills supply the
+  half of her baseline the level term leaves) is 4 ranks above a level-5 NPC, a level-5 character
+  1 rank above a level-4 NPC. The result charts still clamp outside -8 to +6; that is intended.
+
 ## Authored difficulty as a level (#5093)
 
 Staff author a difficulty as a level, never as points. Three helpers in `world/checks/services.py`
 turn the stored number into the points a roll meets:
 
-- `difficulty_points(level)`: a standalone difficulty. The level's CHECK baseline, so a level-N
-  lock is rolled at rank N. Level 0 is no difficulty (0 points); a level above the top baseline
+- `difficulty_points(level)`: a standalone difficulty. The level's CHECK baseline plus its tier
+  bonus (see "Tier jumps"), so a level-N lock is rolled at the rank a level-N NPC stands at. Level 0 is no difficulty (0 points); a level above the top baseline
   reads the top baseline; a database with no baseline rows reads 0.
 - `difficulty_step_points(tenths, at_level)`: a difficulty added on top of another one, or a
   per-step increment, in tenths of one level's width at `at_level` (the base difficulty's level,
@@ -514,13 +542,15 @@ value), the recorded results `difficulty_points`, `resolved_difficulty` and
      bonus += int(check_aspect_weight * path_aspect_weight * character_level)
 
 2.4. Level points (#2707, #5093): CheckScaleConfig.level_share x the CHECK baseline at
-   character_level (``level_points(level)``, rounded half up), on EVERY check.
+   character_level (``level_points(level)``, rounded half up) plus the level's tier bonus
+   (``tier_bonus(level)``, added in full, never multiplied by the share), on EVERY check.
    Level was previously only reachable through the aspect bonus above, which is zero
    unless the CheckType has an authored CheckTypeAspect matching the character's Path
    -- so on most checks level did nothing. This is a guaranteed term, additive with
    (not a replacement for) the aspect bonus. With share 0.5 and a level-11 baseline of 98
    the term is 49; skills and stats supply the other half of the climb. 0 at level 0 and
-   where no CHECK baseline rows exist; above the top row it reuses the top baseline.
+   where no CHECK baseline rows exist; above the top row it reuses the top baseline. At level 6
+   with the seeded tier the term is 29 + 24 = 53.
    ``CheckScaleConfig`` is a pk-1 singleton (``get_check_scale_config``); the seed writes 0.5.
 
 2.5. Capability points from authored CheckTypeCapabilityModifier rows (#2505)
@@ -668,6 +698,12 @@ anything below -8 resolves to chart -8 (there is no clamp).
   (18 + 8 x (level - 1)), 40 points is "Competent (rank 3), 75% toward Rank 4 (rank 4)". The top
   rank has no next rank (share 0); 5 points is rank 0 with rank 1 next; a total below rank 0
   (negative) has no rank and counts as rank number 0.
+  Tier jumps (#5093, below) put a character several ranks above where her level alone would, so
+  the ladder runs past the top baseline level: rank N above that level starts one level's width
+  (the top level's) further on per rank, until the ladder holds the top level's baseline plus
+  its tier bonus (rank 45, at 370 points, with the seeded rows). A rank above the highest
+  `CheckRank` row has no name row and is named by its number ("Rank 31 (rank 31)"); staff may
+  author name rows for it. With no `LevelTier` rows the ladder ends at the highest authored rank.
 - **Fractional difference.** Roller position minus target position. The whole part picks
   the chart; the remainder is how far it slides toward the next.
 - **The slide** (`slide_chart`): each "at least X" chance of the chart's own outcomes moves

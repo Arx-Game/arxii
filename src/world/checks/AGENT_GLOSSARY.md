@@ -5,7 +5,7 @@ A named, database-defined check (Stealth, Diplomacy, Composure, Penetration) com
 _Avoid_: skill check, roll type, test
 
 **CheckRank**:
-The level someone is acting at (#5093). A `CheckRank` row holds only the rank number and its name; rank N starts at the CHECK lane's level-N baseline total (`ModifierLevelBaseline`), and rank 0 starts at 0. Both the roller's points and the target difficulty are converted to ranks with band positions, and the fractional rank difference selects the chart and how far it slides. Shown with its number: Expert (rank 6).
+The level someone is acting at (#5093). A `CheckRank` row holds only the rank number and its name; rank N starts at the CHECK lane's level-N baseline total (`ModifierLevelBaseline`), and rank 0 starts at 0. Both the roller's points and the target difficulty are converted to ranks with band positions, and the fractional rank difference selects the chart and how far it slides. Shown with its number: Expert (rank 6). The ladder runs past the top baseline level, evenly spaced at one level's width, far enough to hold the top level's tier bonus; a rank with no `CheckRank` row is named "Rank N".
 _Avoid_: tier, grade, rank band
 
 **Band position** (#4601):
@@ -224,6 +224,14 @@ _Avoid_: size share, size multiplier
 **Level width** (#5093):
 The gap between one level's baseline and the next: `level_width(level, lane)` in `world.checks.modifier_values`. At or above the top authored level it reuses the top row's width. It is the unit a bonus is sized in (a share of one level), and the width of a rank band on the check lane.
 _Avoid_: level step, rank size
+
+**Level tier** (#5093):
+A tier of levels that starts with a jump in power: a `LevelTier` row (start level, bonus in points). Seeded at levels 6, 11, 16, 21 and 26, 24 points each. Staff set each row separately. Not the same as a rank or an outcome tier.
+_Avoid_: level band, power tier
+
+**Tier bonus** (#5093):
+The sum of the bonus points of every level tier a level has reached (`tier_bonus(level)`). Added in full, never multiplied by the level share, to a character's level term, an NPC's opposition and every staff-set difficulty level; it does not change a level's width. Level 6 against level 5 is therefore four ranks apart, and level 5 against level 4 one.
+_Avoid_: tier jump points, level bonus
 
 **Level baseline** (#4594):
 The `ModifierLevelBaseline` rows: the typical total a character of each level reaches in a lane.

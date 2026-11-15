@@ -2174,6 +2174,8 @@
 **Foreign Keys:**
   - outcome -> checks.ConsequenceOutcome [FK]
 
+### LevelTier
+
 ### ModifierLevelBaseline
 
 ### ModifierSizeFraction
@@ -2191,16 +2193,17 @@
 - `compute_check_rating(character: 'ObjectDB', check_type: 'CheckType', extra_modifiers: int = 0, *, level_override: int | None = None, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> int - Return *character*'s pre-roll rating (total points) for *check_type* — no dice roll.`
 - `compute_obstacle_rating(character: 'ObjectDB', check_type: 'CheckType', *, extra_modifiers: int = 0, level_override: int | None = None, stat_override: str | int | None = None) -> int - What a character who is the obstacle counts for on *check_type*, her full total (#5093).`
 - `compute_resist_increment(defender_character: 'ObjectDB', resist_effort_level: str, *, level_override: int | None = None, stat_override: str | int | None = None, award_development: bool = False) -> int - Compute how much a defender's active resistance raises difficulty.`
-- `difficulty_level_for_points(points: int) -> int - The level whose baseline is nearest ``points``, ties to the lower level (#5093).`
+- `difficulty_level_for_points(points: int) -> int - The level whose strength is nearest ``points``, ties to the lower level (#5093).`
 - `difficulty_points(level: int) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
 - `difficulty_step_points(tenths: int | decimal.Decimal, at_level: int) -> int - An authored difficulty increment in tenths of a level as points at ``at_level`` (#5093).`
 - `get_character_path_level(character: 'ObjectDB') -> 'int' - Return the character's primary class level (or highest, or 1).`
 - `get_rollmod(character: 'ObjectDB') -> int - Sum character.sheet_data.rollmod + character.account.player_data.rollmod.`
 - `is_botch_immune(character_sheet: 'CharacterSheet', check_type: 'CheckType') -> bool - Whether the character cannot botch at ``check_type`` (#4386).`
 - `level_opposition(check_type: 'CheckType', *, level: int, character: 'ObjectDB | None' = None) -> int - Difficulty an opposing NPC of *level* adds to *check_type* (#2707, #5093).`
-- `level_points(level: int) -> int - The level term of a roll at ``level``: ``level_share`` of that level's baseline (#5093).`
+- `level_points(level: int) -> int - The level term of a roll at ``level``: ``level_share`` of its baseline plus its tier jump.`
 - `load_baselines(lane: 'str' = ModifierLane.CHECK) -> 'BaselineTable' - Load ``lane``'s ``ModifierLevelBaseline`` rows in one query.`
 - `load_taper_rules(lane: 'str' = ModifierLane.CHECK) -> 'dict[str, TaperRule]' - ``lane``'s taper rules by source kind, in one query. Empty means no taper.`
+- `load_tier_table() -> 'TierTable' - Load every ``LevelTier`` row in one query.`
 - `load_value_table(lane: 'str' = ModifierLane.CHECK) -> 'ValueTable' - Load ``lane``'s overrides, size fractions and level baselines in three queries.`
 - `mirrored_outcome(outcome: 'CheckOutcome') -> 'CheckOutcome | None' - The outcome on the other side of a resisted roll (#4418).`
 - `modifier_target_contributions(character_sheet: 'CharacterSheet', target: 'ModifierTarget', *, lane: str, inputs: 'DerivedInputs | None' = None) -> list[world.checks.types.ModifierContribution] - A ModifierTarget's CHARACTER and EQUIPMENT contributions, priced from ``lane``.`
@@ -4412,6 +4415,7 @@
 - `attempt_endurance_check(character_sheet: 'CharacterSheet', category: 'str') -> 'bool' - Endurance check against fatigue via the unified check system.`
 - `attempt_power_through(character_sheet: 'CharacterSheet', category: 'str') -> 'tuple[bool, int]' - Willpower check to power through collapse via the unified check system.`
 - `ensure_stat_trait(name: 'str') -> 'Trait' - Ensure the named STAT Trait exists, creating it from STAT_TRAIT_DEFAULTS if not.`
+- `get_fatigue_capacities(character_sheet: 'CharacterSheet', categories: 'Iterable[str]' = (ActionCategory.PHYSICAL, ActionCategory.SOCIAL, ActionCategory.MENTAL), *, well_rested: 'bool | None' = None) -> 'dict[str, int]' - Max fatigue capacity for each of ``categories``, reading the shared terms once.`
 - `get_fatigue_capacity(character_sheet: 'CharacterSheet', category: 'str', *, well_rested: 'bool | None' = None) -> 'int' - Calculate max fatigue capacity for a category.`
 - `get_fatigue_penalty(character_sheet: 'CharacterSheet', category: 'str') -> 'int' - Return the check penalty for the current fatigue zone.`
 - `get_fatigue_percentage(character_sheet: 'CharacterSheet', category: 'str') -> 'float' - Return current fatigue as a percentage of capacity.`
