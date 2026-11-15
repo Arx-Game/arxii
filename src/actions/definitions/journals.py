@@ -99,28 +99,34 @@ class CreateJournalEntryAction(_BaseJournalAction):
         except ReflectionError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
-        with transaction.atomic():
-            entry = create_journal_entry(
-                author=sheet,
-                title=kwargs.get("title", ""),
-                body=kwargs.get("body", ""),
-                is_public=bool(kwargs.get("is_public", False)),
-                tags=kwargs.get("tags"),
-                posthumous_override=posthumous_override,
-                about=about,
-            )
-            reflection = (
-                record_pending_reflection(sheet, pending, writing=entry)
-                if pending is not None
-                else None
-            )
+        # Entry and reflection are one transaction: a reflection that fails late (a race on
+        # the same deed) takes the entry back with it, and the writer is told why.
+        try:
+            with transaction.atomic():
+                entry = create_journal_entry(
+                    author=sheet,
+                    title=kwargs.get("title", ""),
+                    body=kwargs.get("body", ""),
+                    is_public=bool(kwargs.get("is_public", False)),
+                    tags=kwargs.get("tags"),
+                    posthumous_override=posthumous_override,
+                    about=about,
+                )
+                reflection = (
+                    record_pending_reflection(sheet, pending, writing=entry)
+                    if pending is not None
+                    else None
+                )
+        except ReflectionError as exc:
+            return ActionResult(success=False, message=exc.user_message)
         return ActionResult(
             success=True,
             message=(
                 f"You write a new journal entry: {entry.title}."
                 + (f" {recorded_line(reflection)}" if reflection is not None else "")
             ),
-            data={"entry_id": entry.pk},
+            data={"entry_id": entry.pk}
+            | ({"reflection_line": recorded_line(reflection)} if reflection is not None else {}),
         )
 
 

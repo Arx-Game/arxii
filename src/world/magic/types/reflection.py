@@ -48,8 +48,12 @@ class Reflectable:
 
     @property
     def options(self) -> tuple[ReflectionOption, ...]:
-        """The "Reflecting on" row's entries: the unsettling resonance first, then the deeds."""
-        rows: list[ReflectionOption] = []
+        """The "Reflecting on" row's entries: the deeds (newest first), then the unsettling
+        resonance, the order Screen 5 draws them in."""
+        rows = [
+            ReflectionOption(kind=ReflectionTargetKind.DEED, id=deed.grant.pk, label=deed.label)
+            for deed in self.deeds
+        ]
         if self.unsettling is not None:
             rows.append(
                 ReflectionOption(
@@ -59,10 +63,6 @@ class Reflectable:
                     replaces_waiting=self.unsettling_has_waiting,
                 )
             )
-        rows.extend(
-            ReflectionOption(kind=ReflectionTargetKind.DEED, id=deed.grant.pk, label=deed.label)
-            for deed in self.deeds
-        )
         return tuple(rows)
 
 

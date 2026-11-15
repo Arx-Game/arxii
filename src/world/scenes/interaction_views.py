@@ -56,6 +56,7 @@ from world.scenes.interaction_services import (
     idempotent_record_interaction,
     mark_very_private,
     personas_for_characters,
+    pose_already_submitted,
     resolve_characters_by_name,
     scene_entry_endorsements_for,
 )
@@ -273,16 +274,29 @@ def _record_submitted_pose(  # noqa: PLR0913
         # Untagged, every web viewer in the room got the pose twice.
         message_location(caller_state, content, echo_of=InteractionMode.POSE)
     reflection_line = None
+    reflection_recorded = True
     if reflection is not None and not result.replayed:
-        reflection_line = recorded_line(
-            record_pending_reflection(
-                persona.character_sheet, reflection, writing=result.interaction
+        try:
+            reflection_line = recorded_line(
+                record_pending_reflection(
+                    persona.character_sheet, reflection, writing=result.interaction
+                )
             )
-        )
+        except ReflectionError as exc:
+            # The pose cannot be un-posted, so it stands and the writer is told why the
+            # reflection was not recorded.
+            reflection_recorded = False
+            reflection_line = (
+                f"Your pose was posted, but your reflection was not recorded: {exc.user_message}"
+            )
 
     response_status = status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
     interaction = result.interaction
-    extra = {"reflection_line": reflection_line} if reflection_line else {}
+    extra = (
+        {"reflection_line": reflection_line, "reflection_recorded": reflection_recorded}
+        if reflection_line
+        else {}
+    )
     if interaction is None:
         return Response(
             {"ephemeral": True, "replayed": result.replayed, **extra}, status=response_status
@@ -588,10 +602,14 @@ class InteractionViewSet(
 
         # A reflection (#5124) is checked before anything is posted, so a refused one costs
         # the writer nothing.
-        try:
-            reflection = pending_reflection_from(persona.character_sheet, data)
-        except ReflectionError as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        # A retry of a pose that already landed is the replay it is, and its reflection was
+        # recorded the first time: it is not checked again (the deed it names is now taken).
+        reflection = None
+        if not pose_already_submitted(persona, data["client_request_id"]):
+            try:
+                reflection = pending_reflection_from(persona.character_sheet, data)
+            except ReflectionError as exc:
+                return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
 
         target_names: list[str] = data.get("target_names") or []
         target_characters = (

@@ -733,7 +733,7 @@ class PoseAction(Action):
         reply_to, reply_error = _parse_reply_target(kwargs)
         if reply_error is not None:
             return reply_error
-        targets: list[ObjectDB] = kwargs.get("targets", [])
+        targets = _pose_targets(actor, kwargs)
         place, place_error = _resolve_pose_place(actor, kwargs.get("place"))
         if place_error is not None:
             return place_error
@@ -782,13 +782,38 @@ class PoseAction(Action):
         return ActionResult(success=True, message=told[0] if told else None)
 
 
+def _pose_targets(actor: ObjectDB, kwargs: dict[str, Any]) -> list[ObjectDB]:
+    """The characters a pose is directed at: ``targets``, plus any ``target_names`` a
+    structured sender typed (the web composer's "@Name" targets), resolved the way the telnet
+    "@Name" parser and the REST pose resolve them (#5124)."""
+    from world.scenes.interaction_services import resolve_characters_by_name  # noqa: PLC0415
+
+    targets: list[ObjectDB] = list(kwargs.get("targets", []))
+    target_names = kwargs.get("target_names")
+    if target_names and actor.location is not None:
+        targets.extend(resolve_characters_by_name(target_names, actor.location))
+    return targets
+
+
 def _pending_pose_reflection(
     actor: ObjectDB, kwargs: dict[str, Any]
 ) -> tuple[PendingReflection | None, ActionResult | None]:
-    """The checked reflection a pose asked for, or the refusal that stops the pose."""
+    """The checked reflection a pose asked for, or the refusal that stops the pose.
+
+    A retry of a pose that already landed (its ``client_request_id`` is on the ledger) asks
+    for no check: it is answered as the replay it is, and the reflection recorded the first
+    time is not recorded again.
+    """
     from world.magic.exceptions import ReflectionError  # noqa: PLC0415
     from world.magic.services.reflection import pending_reflection_from  # noqa: PLC0415
+    from world.scenes.interaction_services import pose_already_submitted  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
+    request_id = kwargs.get("client_request_id")
+    if request_id is not None and actor.character_sheet is not None:
+        persona = active_persona_for_sheet(actor.character_sheet)
+        if persona is not None and pose_already_submitted(persona, request_id):
+            return None, None
     try:
         return pending_reflection_from(actor.character_sheet, kwargs), None
     except ReflectionError as exc:
@@ -800,12 +825,18 @@ def _record_pose_reflection(
 ) -> str:
     """Record the reflection a pose carried, once the pose itself is down; returns the line
     the poser reads."""
+    from world.magic.exceptions import ReflectionError  # noqa: PLC0415
     from world.magic.services.reflection import (  # noqa: PLC0415
         record_pending_reflection,
         recorded_line,
     )
 
-    reflection = record_pending_reflection(actor.character_sheet, pending, writing=interaction)
+    try:
+        reflection = record_pending_reflection(actor.character_sheet, pending, writing=interaction)
+    except ReflectionError as exc:
+        # The pose cannot be un-posted, so it stands and the poser is told why the
+        # reflection was not recorded.
+        return f"Your pose was posted, but your reflection was not recorded: {exc.user_message}"
     return recorded_line(reflection)
 
 

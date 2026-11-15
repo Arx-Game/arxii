@@ -44,8 +44,13 @@ _CHOICES = {choice.lower(): choice for choice in ReflectionChoice.values}
 _BAD_CHOICE = "Say whether you embrace or disown it."
 
 
-def unsettling_resonance(sheet: CharacterSheet) -> Resonance | None:
-    """The resonance that is unsettling ``sheet``, or None when they are settled (#5123)."""
+def unsettling_resonance(sheet: CharacterSheet | None) -> Resonance | None:
+    """The resonance that is unsettling ``sheet``, or None when they are settled (#5123).
+
+    None too for no sheet at all: a character without one is not unsettled by anything.
+    """
+    if sheet is None:
+        return None
     reading = drift_for(sheet)
     return reading.leading_excess_resonance if reading.steps_past > 0 else None
 
@@ -96,9 +101,11 @@ def _waiting_on(sheet: CharacterSheet, resonance: Resonance) -> bool:
     ).exists()
 
 
-def reflectable_for(sheet: CharacterSheet) -> Reflectable:
+def reflectable_for(sheet: CharacterSheet | None) -> Reflectable:
     """What ``sheet`` can reflect on now: their unreflected kindled deeds and the unsettling
     resonance (None when settled)."""
+    if sheet is None:
+        return Reflectable(deeds=(), unsettling=None)
     unsettling = unsettling_resonance(sheet)
     return Reflectable(
         deeds=tuple(

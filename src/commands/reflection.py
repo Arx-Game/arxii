@@ -78,7 +78,7 @@ class CmdReflect(ArxCommand):
             self.msg(NO_SHEET)
             return
         reflectable = reflectable_for(sheet)
-        lines: list[str] = []
+        lines = [f"|w#{deed.grant.pk}|n {deed.label}" for deed in reflectable.deeds]
         if reflectable.unsettling is not None:
             warning = (
                 " (a reflection already waits; a new one replaces it)"
@@ -86,7 +86,6 @@ class CmdReflect(ArxCommand):
                 else ""
             )
             lines.append(f"|w{reflectable.unsettling.name}|n - unsettling you{warning}")
-        lines.extend(f"|w#{deed.grant.pk}|n {deed.label}" for deed in reflectable.deeds)
         if not lines:
             self.msg(NOTHING_TO_REFLECT_ON)
             return

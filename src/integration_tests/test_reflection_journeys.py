@@ -10,6 +10,7 @@ room sees only the pose.
 
 from __future__ import annotations
 
+from unittest.mock import patch
 import uuid
 
 from rest_framework import status
@@ -17,6 +18,7 @@ from rest_framework import status
 from integration_tests.harness import JourneyCase
 from world.journals.models import JournalEntry
 from world.magic.constants import GainSource, ReflectionChoice
+from world.magic.exceptions import ReflectionError
 from world.magic.factories import (
     CharacterAuraFactory,
     CharacterResonanceFactory,
@@ -26,6 +28,7 @@ from world.magic.factories import (
     set_aura_split,
 )
 from world.magic.models import Affinity, AffinityInteraction, Reflection, ResonanceGrant
+from world.magic.services.reflection import reflectable_for
 from world.magic.services.resonance import grant_resonance
 from world.scenes.models import Interaction
 
@@ -33,6 +36,7 @@ SUBMIT_POSE = "/api/interactions/submit-pose/"
 JOURNAL_ENTRIES = "/api/journals/entries/"
 REFLECTABLES = "/api/magic/reflectables/"
 POSE = "kneels at the altar and says nothing."
+LATE = ReflectionError("That deed was taken a moment ago.")
 
 
 class _Reflecting(JourneyCase):
@@ -85,7 +89,7 @@ class WhatMiraCanReflectOn(_Reflecting):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
         self.assertEqual(
             [(r["kind"], r["id"], r["replaces_waiting"]) for r in response.json()["results"]],
-            [("resonance", self.domination.pk, False), ("deed", self.deed.pk, False)],
+            [("deed", self.deed.pk, False), ("resonance", self.domination.pk, False)],
         )
         stranger = self.api(self.account_of(self.tomas)).get(
             REFLECTABLES, {"character_sheet": self.sheet.pk}
@@ -255,3 +259,129 @@ class ReflectingInAJournalEntry(_Reflecting):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
         self.assertIn("not what is unsettling you", response.json()["detail"])
         self.assertFalse(JournalEntry.objects.filter(title="Nothing").exists())
+
+
+class ARetryOfAReflectingPose(_Reflecting):
+    def _body(self, **extra) -> dict:
+        return {
+            "persona_id": self.sheet.primary_persona.pk,
+            "content": POSE,
+            "client_request_id": str(uuid.uuid4()),
+            "reflect_choice": "EMBRACE",
+            "reflect_grant_id": self.deed.pk,
+            **extra,
+        }
+
+    def test_a_web_retry_with_the_same_request_id_is_the_replay_not_a_refusal(self) -> None:
+        body = self._body()
+        with self.captureOnCommitCallbacks(execute=True):
+            first = self.mira_web.post(SUBMIT_POSE, body, format="json")
+        self.assertEqual(first.status_code, status.HTTP_201_CREATED, first.content)
+
+        retry = self.mira_web.post(SUBMIT_POSE, body, format="json")
+
+        self.assertEqual(retry.status_code, status.HTTP_200_OK, retry.content)
+        self.assertEqual(retry.json()["id"], first.json()["id"])
+        self.assertEqual(Reflection.objects.get().grant, self.deed)
+        self.assertEqual(Interaction.objects.filter(content=POSE).count(), 1)
+
+    def test_a_retry_through_the_pose_action_is_answered_as_a_replay(self) -> None:
+        request_id = str(uuid.uuid4())
+        kwargs = {
+            "text": POSE,
+            "client_request_id": request_id,
+            "reflect_choice": "EMBRACE",
+            "reflect_grant_id": self.deed.pk,
+        }
+        first = self.web(self.mira, "pose", **kwargs)
+        self.assertTrue(first.detail.success, first.detail.message)
+
+        retry = self.web(self.mira, "pose", **kwargs)
+
+        self.assertTrue(retry.detail.success, retry.detail.message)
+        self.assertEqual(Reflection.objects.count(), 1)
+        self.assertEqual(Interaction.objects.filter(content=POSE).count(), 1)
+
+
+class AReflectionThatFailsAfterThePoseIsDown(_Reflecting):
+    def test_the_web_pose_stands_and_the_writer_is_told_why_it_was_not_recorded(self) -> None:
+        with patch("world.scenes.interaction_views.record_pending_reflection", side_effect=LATE):
+            response = self.mira_web.post(
+                SUBMIT_POSE,
+                {
+                    "persona_id": self.sheet.primary_persona.pk,
+                    "content": POSE,
+                    "client_request_id": str(uuid.uuid4()),
+                    "reflect_choice": "EMBRACE",
+                    "reflect_grant_id": self.deed.pk,
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        self.assertFalse(response.json()["reflection_recorded"])
+        self.assertIn(
+            "posted, but your reflection was not recorded", response.json()["reflection_line"]
+        )
+        self.assertIn("That deed was taken a moment ago.", response.json()["reflection_line"])
+        self.assertEqual(Interaction.objects.filter(content=POSE).count(), 1)
+        self.assertFalse(Reflection.objects.exists())
+
+    def test_the_pose_action_stands_and_tells_the_poser_why(self) -> None:
+        with patch("world.magic.services.reflection.record_pending_reflection", side_effect=LATE):
+            told = self.telnet(self.mira, f"pose/reflect {self.deed.pk}=embrace {POSE}")
+
+        self.assertIn("posted, but your reflection was not recorded", told)
+        self.assertIn("That deed was taken a moment ago.", told)
+        self.assertTold(self.tomas, POSE)
+        self.assertFalse(Reflection.objects.exists())
+
+    def test_the_journal_is_rolled_back_whole_and_refused_plainly(self) -> None:
+        with patch("world.magic.services.reflection.record_pending_reflection", side_effect=LATE):
+            response = self.mira_web.post(
+                JOURNAL_ENTRIES,
+                {
+                    "title": "Rolled back",
+                    "body": "Never kept.",
+                    "is_public": False,
+                    "reflect_choice": "EMBRACE",
+                    "reflect_grant_id": self.deed.pk,
+                },
+                format="json",
+                HTTP_X_CHARACTER_ID=str(self.mira.pk),
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+        self.assertEqual(response.json()["detail"], "That deed was taken a moment ago.")
+        self.assertFalse(JournalEntry.objects.filter(title="Rolled back").exists())
+
+
+class AnotherCharactersDeed(_Reflecting):
+    def test_telnet_refuses_it_and_posts_nothing(self) -> None:
+        told = self.telnet(self.tomas, f"pose/reflect {self.deed.pk}=embrace Mine now.")
+
+        self.assertIn("not a deed you can reflect on", told)
+        self.assertNotTold(self.mira, "Mine now.")
+        self.assertFalse(Reflection.objects.exists())
+
+    def test_the_web_pose_refuses_it(self) -> None:
+        refused = self.api(self.account_of(self.tomas)).post(
+            SUBMIT_POSE,
+            {
+                "persona_id": self.tomas.sheet_data.primary_persona.pk,
+                "content": "Mine now.",
+                "client_request_id": str(uuid.uuid4()),
+                "reflect_choice": "EMBRACE",
+                "reflect_grant_id": self.deed.pk,
+            },
+            format="json",
+        )
+
+        self.assertEqual(refused.status_code, status.HTTP_400_BAD_REQUEST, refused.content)
+        self.assertFalse(Interaction.objects.filter(content="Mine now.").exists())
+
+    def test_a_sheetless_actor_has_nothing_to_reflect_on(self) -> None:
+        reflectable = reflectable_for(None)
+
+        self.assertEqual((reflectable.deeds, reflectable.unsettling), ((), None))
+        self.assertEqual(reflectable.options, ())
