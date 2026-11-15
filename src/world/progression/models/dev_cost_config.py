@@ -19,7 +19,7 @@ SINGLETON_PK = 1
 class DevelopmentCostConfig(SharedMemoryModel):
     """Singleton: the geometric development point cost curve (#5093).
 
-    Follows the ``AnimaConfig`` pattern: one row at pk 1, read through ``get_singleton``, which
+    Follows the ``CheckScaleConfig`` pattern: one row at pk 1, read through ``get_singleton``, which
     creates it from the field defaults the first time a database without one is read. The
     defaults are the shipped starting values: a band costs 100 at level 1 and 150 percent of
     the band before it from there.

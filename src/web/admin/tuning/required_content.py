@@ -370,8 +370,9 @@ def _probe_check_level_baselines() -> ProbeResult:
 def _probe_pool_lane_baselines() -> ProbeResult:
     """Each pool and cap lane has a baseline row for every level up to its highest (#5093).
 
-    The anima pool, the soul tether scene cap, the Hollow maximum, the outfit trickle and
-    techniques per gift read one ``ModifierLevelBaseline`` row per level of their own lane
+    The anima pool, the soul tether scene cap, the Hollow maximum, the outfit trickle, techniques
+    per gift and the six rung lanes (rescue budget, moon tuning, facet effect bonus and the three
+    vow effect lanes) read one ``ModifierLevelBaseline`` row per level of their own lane
     (``level_baseline``), and a lane with no row at or below a level raises. A lane with no
     row at all, or a gap below its highest row, is reported. The fatigue level bonus is not
     checked: with no rows it adds nothing.
@@ -385,6 +386,12 @@ def _probe_pool_lane_baselines() -> ProbeResult:
         ModifierLane.HOLLOW_MAX,
         ModifierLane.OUTFIT_TRICKLE,
         ModifierLane.TECHNIQUES_PER_GIFT,
+        ModifierLane.RESCUE_BUDGET_THREAD,
+        ModifierLane.MOON_TUNING,
+        ModifierLane.FACET_EFFECT_BONUS,
+        ModifierLane.VOW_EFFECT_SEVERITY,
+        ModifierLane.VOW_EFFECT_DURATION,
+        ModifierLane.VOW_EFFECT_DAMAGE,
     )
     levels_by_lane: dict[str, set[int]] = {lane: set() for lane in lanes}
     for lane, level in ModifierLevelBaseline.objects.filter(lane__in=lanes).values_list(
@@ -4361,15 +4368,65 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "world/magic/services/anima.py recompute_max_anima(), soul_tether.py "
                 "_compute_per_scene_sineating_cap() and _compute_hollow_max(), gain.py "
                 "outfit_daily_trickle_for_character(), gift_acquisition.py "
-                "get_technique_cap_for_gift()"
+                "get_technique_cap_for_gift(), _compute_rescue_budget(), "
+                "world/species/moon_provisioning.py _thread_tuning(), "
+                "world/mechanics/services.py _facet_effect_bonus_total() and "
+                "world/covenants/added_effects.py vow_effect_bonuses()"
             ),
             consequence=(
-                "A level advance, a Sineating offer, the daily outfit trickle or a technique "
-                "learned from a gift raises a configuration error where a lane has no row at "
-                "or below the level."
+                "A level advance, a Sineating offer or rescue, the daily outfit trickle, a "
+                "technique learned from a gift, a moon-bound character's battle form, a "
+                "worn facet's effect bonus or a vow's added effect on a cast raises a "
+                "configuration error where a lane has no row at or below the level."
             ),
             probe=CustomProbe(fn=_probe_pool_lane_baselines),
             admin_model="ModifierLevelBaseline",
+        ),
+        ContentDependency(
+            key="development-cost-config",
+            label="Development cost config singleton",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/progression/models/dev_cost_config.py DevelopmentCostConfig."
+                "get_singleton(), read by dp_cost_for_level() for every skill, "
+                "specialization and thread development step (#5093)"
+            ),
+            consequence=(
+                "Development costs run on the shipped curve (100 points at level 1, growing "
+                "150 percent a level) until staff tune the row; the row is created from its "
+                "defaults on first read."
+            ),
+            probe=AnyRowProbe(label="DevelopmentCostConfig"),
+        ),
+        ContentDependency(
+            key="check-scale-config",
+            label="Check scale config singleton",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/checks/scale_config.py CheckScaleConfig.get_singleton(), read by "
+                "world/checks/services.py level_points() (#5093)"
+            ),
+            consequence=(
+                "A character's level adds the shipped share of its level's baseline to every "
+                "roll until staff tune the row; the row is created from its default on first "
+                "read."
+            ),
+            probe=AnyRowProbe(label="CheckScaleConfig"),
+        ),
+        ContentDependency(
+            key="level-tier",
+            label="Level tiers",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/checks/modifier_values.py load_tier_table() and tier_bonus(), added "
+                "in full to a character's level term, an NPC's opposition and every authored "
+                "difficulty level, and to the rank ladder past rank 30 (#5093)"
+            ),
+            consequence=(
+                "No level has a tier jump: a level-6 character is one rank above a level-5 "
+                "one, not four, and the rank ladder stops at level 30's baseline."
+            ),
+            probe=AnyRowProbe(label="LevelTier"),
         ),
         ContentDependency(
             key="modifier-taper",
