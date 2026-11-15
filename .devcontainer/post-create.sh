@@ -270,8 +270,9 @@ for agent in /workspaces/arxii/tools/agents/*.md; do
 done
 shopt -u nullglob
 
-# Register the hooks in tools/hooks/ in the container's user-level Claude settings
-# (a named volume the host never reads). They answer any permission prompt with
-# "deny" plus a rewrite hint, so an unattended agent retries instead of waiting
-# hours for a person. See tools/hooks/deny_permission_prompts.py.
-python3 /workspaces/arxii/tools/hooks/install.py
+# Install the permission-prompt hook into the container's user-level Claude config
+# (a named volume the host never reads). In a bypass or dontAsk session it answers a
+# Bash permission prompt with "deny" plus a rewrite hint, so an unattended agent
+# retries instead of waiting hours for a person. See tools/hooks/install.py. The
+# installer always exits 0; the guard below is a second line so setup never fails here.
+python3 /workspaces/arxii/tools/hooks/install.py || echo "[post-create] hook install failed" >&2
