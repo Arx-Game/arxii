@@ -33,7 +33,7 @@ from world.traits.models import CheckOutcome
 
 SUCCORABLE_PROPERTY_NAME: str = "succorable"
 
-_SUCCOR_SEVERITY: int = 3
+_SUCCOR_SEVERITY_LEVEL: int = 0
 
 _SUCCOR_CAPABILITIES: tuple[tuple[str, str, str, str], ...] = (
     (
@@ -155,7 +155,7 @@ def ensure_succor_content() -> None:
                 "{succorer} moves to shelter {ally} — someone with the means may attempt "
                 "to turn the hazard aside."
             ),
-            "severity": _SUCCOR_SEVERITY,
+            "severity_level": _SUCCOR_SEVERITY_LEVEL,
             "goal": "Shelter the protected ally from the hazard this round.",
             "category": challenge_category,
             "challenge_type": ChallengeType.THREAT,
