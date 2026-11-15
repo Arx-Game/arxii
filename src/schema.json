@@ -61308,6 +61308,12 @@ components:
           items:
             $ref: '#/components/schemas/FuryResonanceTierIntensity'
           readOnly: true
+        weakest_strength_name:
+          type: string
+          readOnly: true
+        weakest_depth_name:
+          type: string
+          readOnly: true
       required:
       - control_check_name
       - id
@@ -61315,6 +61321,8 @@ components:
       - provocation_cap
       - strength_name
       - tier_full_intensities
+      - weakest_depth_name
+      - weakest_strength_name
     FuryResonanceTierIntensity:
       type: object
       description: Read-only full-share intensity of one Fury tier at one resonance's

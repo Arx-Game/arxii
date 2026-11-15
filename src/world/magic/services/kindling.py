@@ -657,10 +657,12 @@ def kindled_resonances_now(sheet: CharacterSheet) -> list[KindledResonance]:
     """``kindled_resonances`` read in the character's live fight and mission (no act).
 
     What the "Your resonances" panel and telnet ``resonances`` show; the same context a
-    surge or a cast reads, so the panel never disagrees with what happens.
+    surge or a cast reads, so the panel never disagrees with what happens. Kindled rows come
+    first, strongest first; the rest follow in the resonance model's own order.
     """
     context = kindling_context_for(sheet)
-    return kindled_resonances(sheet, resolution=context.resolution, mission=context.mission)
+    rows = kindled_resonances(sheet, resolution=context.resolution, mission=context.mission)
+    return sorted(rows, key=lambda row: -row.tier.rank if row.tier is not None else 1)
 
 
 def kindled_tiers(

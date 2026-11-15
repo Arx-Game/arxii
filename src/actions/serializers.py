@@ -113,6 +113,8 @@ class FuryResonanceOptionSerializer(serializers.Serializer):
     control_check_name = serializers.CharField(read_only=True)
     provocation_cap = serializers.IntegerField(read_only=True)
     tier_full_intensities = FuryResonanceTierIntensitySerializer(many=True, read_only=True)
+    weakest_strength_name = serializers.CharField(read_only=True)
+    weakest_depth_name = serializers.CharField(read_only=True)
 
 
 class AvailableEnhancementSerializer(serializers.Serializer):

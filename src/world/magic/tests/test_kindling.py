@@ -638,3 +638,19 @@ class DeedNamingTests(_Case):
         self.assertEqual(deed_what(self._deed()), "This mission is about people held captive.")
         self.row.reason_text = "Barred the overseers' door"
         self.assertEqual(deed_what(self._deed()), "Barred the overseers' door")
+
+
+class PanelOrderTests(_Case):
+    def test_kindled_rows_come_first_strongest_first_then_the_rest(self) -> None:
+        from world.magic.factories import kindle_resonance
+        from world.magic.services.kindling import kindled_resonances_now
+
+        affinity = self.resonance.affinity
+        faint = ResonanceFactory(affinity=affinity, name="B faint")
+        strong = ResonanceFactory(affinity=affinity, name="C strong")
+        kindle_resonance(self.sheet, faint, KindledStrengthTier.objects.get(rank=1))
+        kindle_resonance(self.sheet, strong, KindledStrengthTier.objects.get(rank=3))
+
+        names = [row.resonance.name for row in kindled_resonances_now(self.sheet)]
+
+        self.assertEqual(names, [strong.name, faint.name, self.resonance.name])

@@ -208,3 +208,14 @@ class TestCombatActionsDescriptorEnrichment(TestCase):
         self.assertEqual([r.id for r in cast.eligible_fury_resonances], [self.resonance.pk])
         self.assertTrue(all(r.provocation_cap >= 1 for r in cast.eligible_fury_resonances))
         self.assertEqual([r.strength_name for r in cast.eligible_fury_resonances], ["Blazing"])
+
+    def test_the_weakest_strength_and_how_far_it_goes_ride_each_option(self) -> None:
+        from world.magic.factories import KindledStrengthTierFactory
+
+        KindledStrengthTierFactory(rank=1, name="Faint", give_in_max_depth=1)
+        actions = _combat_actions(self.character)
+        cast = next(a for a in actions if a.ref.technique_id == self.technique.pk)
+        (option,) = cast.eligible_fury_resonances
+        self.assertEqual(
+            (option.weakest_strength_name, option.weakest_depth_name), ("Faint", "Smouldering")
+        )

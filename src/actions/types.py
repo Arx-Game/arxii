@@ -578,6 +578,9 @@ class FuryResonanceOption:
     server-side so the client can gate tiers without a round-trip.
     ``tier_full_intensities`` carries, per tier, the full-share intensity scaled by this
     resonance's strength, so the preview never does tuning math on the client.
+    ``weakest_strength_name`` and ``weakest_depth_name`` say how far the weakest strength goes
+    ("A faint passion goes only as far as Let it in"): its name and the deepest tier it reaches
+    (blank when it reaches none).
     """
 
     id: int
@@ -586,3 +589,5 @@ class FuryResonanceOption:
     strength_name: str = ""
     control_check_name: str = ""
     tier_full_intensities: tuple[FuryResonanceTierIntensity, ...] = ()
+    weakest_strength_name: str = ""
+    weakest_depth_name: str = ""

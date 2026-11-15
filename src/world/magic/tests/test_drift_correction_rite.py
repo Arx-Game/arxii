@@ -243,7 +243,7 @@ class FallbackConversionTargetTests(DriftRiteTestBase):
 
         self.assertEqual(
             reading.reflections[0].effect_line,
-            "Drift Dread turns toward Drift Dawnlight, up to 0.",
+            "Nothing will turn, because no chance to atone is open.",
         )
 
 

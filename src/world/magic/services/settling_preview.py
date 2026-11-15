@@ -89,10 +89,14 @@ def _effect_line(
             what = deed_what(grant) or f"your {resonance.name}"
             return f"Your {resonance.name} from {what} grows, up to {grant.amount}."
         most = int(Decimal(grant.amount) * Decimal(disown_percent) / _ONE_HUNDRED)
+        if most <= 0:
+            return "Nothing will turn, because the deed earned too little."
         return f"{resonance.name} turns toward {_target_name(target)}, up to {most}."
     if embrace:
         return "Who you are moves toward who you have become."
     most = caps.get(target.pk, 0) if target is not None else 0
+    if most <= 0:
+        return "Nothing will turn, because no chance to atone is open."
     return f"{resonance.name} turns toward {_target_name(target)}, up to {most}."
 
 

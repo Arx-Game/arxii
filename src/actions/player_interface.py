@@ -621,6 +621,7 @@ def _eligible_fury_resonances(
     per tier, the most that tier can buy at that strength: the trade at the highest authored
     degree share (#4738), so the picker does no tuning math.
     """
+    from world.magic.models import KindledStrengthTier  # noqa: PLC0415
     from world.magic.services.fury import (  # noqa: PLC0415
         full_trade_intensities,
         get_fury_config,
@@ -632,6 +633,12 @@ def _eligible_fury_resonances(
 
     top_percent = top_share_percent()
     check_name = get_fury_config().get_check_trait_display()
+    weakest = KindledStrengthTier.objects.order_by("rank").first()
+    weakest_depth = max(
+        (tier for tier in ladder if tier.depth <= provocation_cap(weakest)),
+        key=lambda tier: tier.depth,
+        default=None,
+    )
     options: list[FuryResonanceOption] = []
     for entry in kindled_resonances_now(sheet):
         strength = entry.tier
@@ -652,6 +659,8 @@ def _eligible_fury_resonances(
                     FuryResonanceTierIntensity(tier_id=tier.pk, full_intensity=full[tier.pk])
                     for tier in ladder
                 ),
+                weakest_strength_name=weakest.name if weakest is not None else "",
+                weakest_depth_name=weakest_depth.name if weakest_depth is not None else "",
             )
         )
     return tuple(options)
