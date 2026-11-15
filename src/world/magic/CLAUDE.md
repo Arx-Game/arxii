@@ -2275,7 +2275,7 @@ bond is one situation among many. Full tour: `docs/systems/magic.md` "Kindled re
   rank, blank reads it from the bond tier or condition severity and `clean` refuses blank where there
   is no source), `KindledStrengthTier` (natural key `rank`; the staff-named strength and every number
   that follows from it: `min_bond_tier`, `min_severity`, `pull_levels`, `give_in_max_depth`,
-  `give_in_bonus_percent`, `give_in_ease`, `dig_deep_scale_percent`, `earn_percent`),
+  `give_in_bonus_percent`, `give_in_ease_tenths`, `dig_deep_scale_percent`, `earn_percent`),
   `KindlingConfig` (singleton, `harm_property`), `KindledDeedAward` and `RallyKindlingStrength`
   (`OutcomeTierAward` tables), `Kindling` (Rally or GM only, `encounter` XOR `scene`).
   `Resonance.feeling` (Property FK) is what the feeling situations match; `missions.MissionTheme`

@@ -2159,7 +2159,7 @@ push the cast harder. The burn rides the pull: no pull, no burn (`ResonanceBurnN
   `StrainConfig.burn_per_intensity`, default 0.50). A request is capped by the ceiling and by
   the balance left once the pull's own cost is paid.
 - **Strain check and reach.** If anything is left to burn, `resolve_resonance_burn` rolls
-  `StrainConfig.strain_check_type` (target difficulty `StrainConfig.strain_check_difficulty`,
+  `StrainConfig.strain_check_type` (target difficulty `StrainConfig.strain_check_difficulty_level`,
   default 0) with the `MagicActivity.PUSHING_HARD` skill terms. The outcome tier selects a
   `StrainBurnReach` row (`world/combat/models.py`, an `OutcomeTierAward`): `reach_percent` of the
   capped request is what she **reaches** and the only amount debited. `clean()` enforces that a
@@ -2287,7 +2287,7 @@ one situation among many: `docs/adr/adr-5124-furys-anchor-person-became-a-kindle
   source: the bond tier or the condition severity; `clean` refuses blank on a situation with no
   such source), `is_active`, `display_order`, `reason_text`. `KindledStrengthTier` (natural key
   `rank`; `name`, `min_bond_tier`, `min_severity`, `pull_levels`, `give_in_max_depth`,
-  `give_in_bonus_percent`, `give_in_ease`, `dig_deep_scale_percent`, `earn_percent`; 0 on a reach
+  `give_in_bonus_percent`, `give_in_ease_tenths`, `dig_deep_scale_percent`, `earn_percent`; 0 on a reach
   column means "not reached that way"). Code compares `rank` (1, 2, 3) and never a name.
   `KindlingConfig` (singleton: `harm_property`, the condition property that marks harm a holder
   laid, so a feeling that comes from their own harm does not count as shared),
@@ -2353,7 +2353,7 @@ she gives in to (#5124 replaced the anchor person) with a technique cast; the ti
 she surrenders for the rest of her engagement, and her control roll's outcome picks how much
 intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magic/models/fury.py`.
 
-- **Models.** `FuryTier`: `name`, `depth`, `control_surrendered`, `base_check_difficulty`,
+- **Models.** `FuryTier`: `name`, `depth`, `control_surrendered`, `base_check_difficulty_level`,
   `berserk_severity`. `FuryConfig` (singleton): `check_trait`, `default_berserk_duration_rounds`,
   `berserk_condition`. `FuryDegreeShare` (an `OutcomeTierAward`): `intensity_percent` per
   outcome tier; `clean()` enforces that a better outcome never buys a smaller percent.
@@ -2363,11 +2363,12 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
   `lucid_grade_floor` removed, empty in production).
 - **Cap.** The resonance's strength caps the depth (#5124). The depth cap, the bonus and the
   ease come from a `KindledStrengthTier` row (`give_in_max_depth`, `give_in_bonus_percent`,
-  `give_in_ease`); `clamp_tier` drops a deeper declaration to the deepest tier within the cap.
+  `give_in_ease_tenths`); `clamp_tier` drops a deeper declaration to the deepest tier within the cap.
   `give_in_strength(character, resonance)` reads the named resonance's own kindled strength in
   her live fight and mission (`kindled_for` with `kindling_context_for`); `provocation_cap`,
   `provocation_bonus_percent` and `provocation_ease` read that row, and 0 when the resonance is
-  not kindled or she does not hold it. `give_in_refusal(character, resonance, tier)` is the one
+  not kindled or she does not hold it. `give_in_ease_tenths` is tenths of one level's width,
+  read through `difficulty_step_points` at the Fury tier's `base_check_difficulty_level`. `give_in_refusal(character, resonance, tier)` is the one
   declaration check: an unkindled resonance is refused in words ("Your Wrath is not kindled
   right now, so you cannot give in to it."), never clamped, and a tier deeper than the strength
   reaches is refused too, so a Berserk tier is offered only where the strength reaches it.
@@ -2384,7 +2385,7 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
 - **Where it lands.** Each path builds a `FuryCast` (`fury_cast_for`) and hands it to
   `use_technique(fury=...)`, which drives it. Once the Soulfray gate has passed,
   `FuryCast.surrender()` rolls the control check (`FuryConfig.check_trait` plus the
-  `FURY_CONTROL` magic-skill terms, difficulty `base_check_difficulty` minus the ease) and writes
+  `FURY_CONTROL` magic-skill terms, difficulty of `base_check_difficulty_level` minus the ease) and writes
   her `CharacterEngagement` (any engagement type) under a row lock:
   `intensity_modifier += intensity_gained`, `control_modifier -= control_surrendered`,
   `fury_control_surrendered += control_surrendered`. `use_technique` then re-reads her runtime

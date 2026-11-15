@@ -61,7 +61,7 @@ def give_in_strength(
     not kindled now. Read in her live fight and mission (``kindling_context_for``), the same
     context a cast and the "Your resonances" panel read, so the three never disagree. The
     row carries what the trade reads: ``give_in_max_depth``, ``give_in_bonus_percent`` and
-    ``give_in_ease``.
+    ``give_in_ease_tenths``.
     """
     if character is None or resonance is None:
         return None
@@ -92,9 +92,18 @@ def provocation_bonus_percent(strength: KindledStrengthTier | None) -> int:
     return strength.give_in_bonus_percent if strength is not None else 0
 
 
-def provocation_ease(strength: KindledStrengthTier | None) -> int:
-    """Check-difficulty reduction at this strength (0 when none)."""
-    return strength.give_in_ease if strength is not None else 0
+def provocation_ease(strength: KindledStrengthTier | None, at_level: int) -> int:
+    """Check-difficulty reduction in points at this strength (0 when none).
+
+    The strength row holds tenths of one level's width; ``at_level`` is the level the base
+    check difficulty is read at (the Fury tier's ``base_check_difficulty_level``), so the ease
+    is a share of the width of the very level it eases.
+    """
+    if strength is None:
+        return 0
+    from world.checks.services import difficulty_step_points  # noqa: PLC0415
+
+    return difficulty_step_points(strength.give_in_ease_tenths, at_level)
 
 
 def give_in_refusal(
@@ -405,7 +414,7 @@ class FuryCast:
         from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
 
         check_type = _ensure_fury_check_type(_config().check_trait)
-        ease = provocation_ease(strength)
+        ease = provocation_ease(strength, self.tier.base_check_difficulty_level)
         check = perform_check_with_modifiers(
             self.character,
             check_type,

@@ -5034,7 +5034,7 @@ class KindledStrengthTierFactory(factory.django.DjangoModelFactory):
     pull_levels = 0
     give_in_max_depth = 0
     give_in_bonus_percent = 0
-    give_in_ease = 0
+    give_in_ease_tenths = 0
     dig_deep_scale_percent = 0
     earn_percent = 100
 

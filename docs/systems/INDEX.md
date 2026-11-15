@@ -112,7 +112,7 @@
   `KindlingSituation` rows holds (`models/kindling.py`: set on a `resonance` or once on an `affinity`;
   `strength` a rank; `reason_text`), or a Rally or a GM kindled it (`Kindling`, `source`
   RALLY/GM, ends with its fight or scene). Staff author `KindledStrengthTier` (rank, name, `min_bond_tier`,
-  `min_severity`, `pull_levels`, `give_in_max_depth`, `give_in_bonus_percent`, `give_in_ease`,
+  `min_severity`, `pull_levels`, `give_in_max_depth`, `give_in_bonus_percent`, `give_in_ease_tenths`,
   `dig_deep_scale_percent`, `earn_percent`), the singleton `KindlingConfig` (`harm_property`),
   `KindledDeedAward` and `RallyKindlingStrength` on one admin page; `Resonance.feeling` (Property FK)
   and `missions.MissionTheme` (`themes` on `MissionTemplate` and `MissionOption`) feed the

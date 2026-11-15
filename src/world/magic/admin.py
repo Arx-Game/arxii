@@ -3318,7 +3318,7 @@ class KindledStrengthTierForm(forms.ModelForm):
             "pull_levels": "Pull reads higher by",
             "give_in_max_depth": "Deepest give-in step",
             "give_in_bonus_percent": "Give-in bonus",
-            "give_in_ease": "Control roll eased by",
+            "give_in_ease_tenths": "Control roll eased by",
             "dig_deep_scale_percent": "Dig deep and Rally surge",
             "earn_percent": "Earned",
         }
@@ -3424,7 +3424,7 @@ class KindledStrengthTierInline(ConfigRowsInline):
         "pull_levels",
         "give_in_max_depth",
         "give_in_bonus_percent",
-        "give_in_ease",
+        "give_in_ease_tenths",
         "dig_deep_scale_percent",
         "earn_percent",
     ]

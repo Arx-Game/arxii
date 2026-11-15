@@ -16,7 +16,7 @@ Rule for a standalone difficulty (`*_level`): old points -> old nine-rank ladder
 
 Rule for an increment (`*_tenths`): tenths = old points x 2 (the old ladder spent 5 points a level, so one point is two tenths of a level; a Decimal or signed column keeps its type and sign). Null stays null. 0 stays 0.
 
-ADR-0237 disposition for every row: RESTRUCTURE. A RunPython in its own migration (0417, 0420, 0423, 0426) carries every row across before the old column is dropped (0418, 0421, 0424, 0427). The add migrations are 0416, 0419, 0422, 0425.
+ADR-0237 disposition for every row: RESTRUCTURE. A RunPython in its own migration (0424, 0427, 0430, 0433, and 0445 for batch 5) carries every row across before the old column is dropped (0425, 0428, 0431, 0434, and 0446). The add migrations are 0423, 0426, 0429, 0432 and 0444.
 
 | Batch | Model | Old column | New column | Kind | New default (old default converted) | Nullable |
 |---|---|---|---|---|---|---|
@@ -85,6 +85,7 @@ ADR-0237 disposition for every row: RESTRUCTURE. A RunPython in its own migratio
 | 3 | missions.MissionNodeSupportOption | difficulty | difficulty_level | level | 0 | no |
 | 4 | mechanics.ChallengeTemplate | severity | severity_level | level | 2 (45 points converted) | no |
 | 4 | mechanics.ChallengeInstance | severity_adjustment | severity_adjustment_tenths | tenths | 0 | no |
+| 5 | magic.KindledStrengthTier | give_in_ease | give_in_ease_tenths | tenths | 0 | no |
 
 The GM's one-band shift on a placed challenge was +-15 points (one `DifficultyChoice` band) and is now +-30 tenths of a level's width at the template's level, enforced by the instance's one-band CHECK constraint. A shift is refused when the shifted difficulty would leave the ladder (below 0 points or above level 30's baseline), where it used to be refused past the Trivial and Harrowing bands. Seeded and sample challenge severities were converted by the same rule (the Catch the Faller sample 60 points -> level 5, the Interpose challenge 3 -> level 0, the six starter challenges 1-4 -> level 0).
 

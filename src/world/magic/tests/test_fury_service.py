@@ -22,7 +22,7 @@ from world.magic.services.fury import (
     provocation_ease,
     resolve_fury,
 )
-from world.traits.factories import CheckOutcomeFactory
+from world.traits.factories import CheckOutcomeFactory, ensure_level_ladder
 
 
 class ClampTierTests(TestCase):
@@ -72,7 +72,7 @@ class ResolveFuryStrengthTests(TestCase):
     def setUpTestData(cls):
         FuryConfigFactory()
         cls.strength = KindledStrengthTierFactory(
-            rank=3, give_in_max_depth=2, give_in_bonus_percent=20, give_in_ease=4
+            rank=3, give_in_max_depth=2, give_in_bonus_percent=20, give_in_ease_tenths=8
         )
         config = get_strain_config()
         config.intensity_per_control_surrendered = Decimal("1.50")
@@ -134,12 +134,21 @@ class GivingInToAKindledResonanceTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        ensure_level_ladder()
         FuryConfigFactory()
         cls.faint = KindledStrengthTierFactory(
-            rank=1, name="Faint", give_in_max_depth=1, give_in_bonus_percent=0, give_in_ease=2
+            rank=1,
+            name="Faint",
+            give_in_max_depth=1,
+            give_in_bonus_percent=0,
+            give_in_ease_tenths=4,
         )
         cls.blazing = KindledStrengthTierFactory(
-            rank=3, name="Blazing", give_in_max_depth=3, give_in_bonus_percent=40, give_in_ease=6
+            rank=3,
+            name="Blazing",
+            give_in_max_depth=3,
+            give_in_bonus_percent=40,
+            give_in_ease_tenths=12,
         )
         cls.hold = FuryTierFactory(name="Let it in", depth=1, control_surrendered=2)
         cls.lose = FuryTierFactory(
@@ -165,7 +174,8 @@ class GivingInToAKindledResonanceTests(TestCase):
         strength = give_in_strength(self.sheet, self.resonance)
         self.assertEqual(strength, self.blazing)
         self.assertEqual(provocation_cap(strength), 3)
-        self.assertEqual(provocation_ease(strength), 6)
+        # 12 tenths of a level's width, read at level 2 (width 8): 12 x 8 / 10 = 9.6 -> 10 points.
+        self.assertEqual(provocation_ease(strength, at_level=2), 10)
         self.assertIsNone(give_in_refusal(self.sheet, self.resonance, self.lose))
 
     def test_berserk_is_offered_only_where_the_strength_reaches_it(self):
@@ -179,7 +189,7 @@ class GivingInToAKindledResonanceTests(TestCase):
 
     def test_no_strength_gives_nothing(self):
         self.assertEqual(provocation_cap(None), 0)
-        self.assertEqual(provocation_ease(None), 0)
+        self.assertEqual(provocation_ease(None, at_level=2), 0)
 
 
 class _FakeCheck:
