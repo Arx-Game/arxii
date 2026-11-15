@@ -94,3 +94,20 @@ def force_check_outcome(outcome: CheckOutcome) -> Iterator[CheckCapture]:
     finally:
         _local.forced_outcome = None
         _local.capture = None
+
+
+class SeededLevelLadderMixin:
+    """Mixin for a ``TestCase`` whose rolls read an authored difficulty level (#5093).
+
+    An authored difficulty is a level, and a level's points are its CHECK baseline row. A test
+    database has no rows until something seeds them, and a database with none reads every
+    difficulty as 0. Put this ahead of ``TestCase`` to get the seeded ladder (level 1 is 18
+    points, each level 8 wider) before the class's own ``setUpTestData``.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.traits.factories import ensure_level_ladder
+
+        super().setUpTestData()  # ty: ignore[unresolved-attribute] - mixed in ahead of TestCase
+        ensure_level_ladder()

@@ -128,7 +128,7 @@ class AScarfThatHasFedItsWearer(JourneyCase):
 
     def test_the_facet_can_be_crafted_on_again_once_removed(self) -> None:
         """The slot a removed facet held is free: `craft facet` attaches it anew."""
-        wire_enchanting_crafting(base_difficulty=0)
+        wire_enchanting_crafting(base_difficulty_level=0)
         workshop = self.make_room("The Workshop")
         install_full_lab_station(RoomProfileFactory(objectdb=workshop))
         self.ysmay.location = workshop

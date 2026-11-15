@@ -27,7 +27,7 @@ class AttemptBreakFreeTest(TestCase):
         self.template = ConditionTemplateFactory(
             break_free_mode=BreakFreeMode.SELF_INITIATED,
             break_free_check_type=self.check_type,
-            break_free_difficulty=10,
+            break_free_difficulty_tenths=20,
         )
         self.instance = ConditionInstanceFactory(
             condition=self.template,
@@ -137,16 +137,18 @@ class AttemptBreakFreeTest(TestCase):
         mock_check.return_value = _mock_check_result(success_level=0)
         attempt_break_free(self.instance)
         _, kwargs = mock_check.call_args
-        # difficulty should be > base (10): the caster's level term at level 1 is 9
-        self.assertGreater(kwargs.get("target_difficulty"), 10)
+        # difficulty should be > base (16): the caster's level term at level 1 is 9
+        self.assertGreater(kwargs.get("target_difficulty"), 16)
 
     @patch("world.checks.services.perform_check")
     def test_no_caster_uses_base_difficulty(self, mock_check):
         """When source_character is None, difficulty = base only."""
+        ensure_level_ladder()
         mock_check.return_value = _mock_check_result(success_level=0)
         attempt_break_free(self.instance)
         _, kwargs = mock_check.call_args
-        self.assertEqual(kwargs.get("target_difficulty"), 10)
+        # 20 tenths of a level's width (8)
+        self.assertEqual(kwargs.get("target_difficulty"), 16)
 
     @patch("world.checks.services.perform_check")
     def test_level_override_forwarded(self, mock_check):

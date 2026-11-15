@@ -29,7 +29,7 @@ from world.checks.factories import (
     ConsequenceEffectFactory,
     ConsequenceFactory,
 )
-from world.checks.test_helpers import force_check_outcome
+from world.checks.test_helpers import SeededLevelLadderMixin, force_check_outcome
 from world.checks.types import CheckResult
 from world.conditions.constants import (
     BLEED_OUT_SEED_TEMPLATE_NAME,
@@ -109,7 +109,7 @@ def _build_death_pool(*, failure_outcome):
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # Endurance/Mortal Resolve CheckType gates on #2698
-class PoisonTickKnockoutTests(TestCase):
+class PoisonTickKnockoutTests(SeededLevelLadderMixin, TestCase):
     """Poison DoT tick crossing the knockout threshold (0–20%) applies Unconscious.
 
     SQLite-safe: Unconscious is non-progressive; ConditionInstance is created
@@ -154,7 +154,7 @@ class PoisonTickKnockoutTests(TestCase):
 
 @tag("postgres")
 @override_settings(SEED_SAMPLE_CONTENT=True)  # Mortal Resolve CheckType gates on #2698
-class PoisonTickBleedOutTests(TestCase):
+class PoisonTickBleedOutTests(SeededLevelLadderMixin, TestCase):
     """Poison DoT tick crossing the death threshold (health ≤ 0) applies Bleeding-Out.
 
     @tag("postgres"): apply_condition for progressive Poisoned and Bleeding-Out
@@ -201,7 +201,7 @@ class PoisonTickBleedOutTests(TestCase):
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # Endurance/Mortal Resolve CheckType gates on #2698
-class TrapHitKnockoutTests(TestCase):
+class TrapHitKnockoutTests(SeededLevelLadderMixin, TestCase):
     """Trap hit crossing the knockout threshold (0–20%) applies Unconscious.
 
     SQLite-safe: Unconscious is non-progressive.  Both the trap detection check
@@ -272,7 +272,7 @@ class TrapHitKnockoutTests(TestCase):
 
 @tag("postgres")
 @override_settings(SEED_SAMPLE_CONTENT=True)  # Mortal Resolve CheckType gates on #2698
-class TrapHitBleedOutTests(TestCase):
+class TrapHitBleedOutTests(SeededLevelLadderMixin, TestCase):
     """Trap hit crossing the death threshold (health ≤ 0) applies Bleeding-Out.
 
     @tag("postgres"): applying the progressive Bleeding-Out condition uses DISTINCT ON.
@@ -349,7 +349,7 @@ class TrapHitBleedOutTests(TestCase):
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # Endurance/Mortal Resolve CheckType gates on #2698
-class ExhaustionStrainKnockoutTests(TestCase):
+class ExhaustionStrainKnockoutTests(SeededLevelLadderMixin, TestCase):
     """Exhaustion strain crossing the knockout threshold (0–20%) applies Unconscious.
 
     SQLite-safe: Unconscious is non-progressive.  apply_exhaustion_damage calls
@@ -383,7 +383,7 @@ class ExhaustionStrainKnockoutTests(TestCase):
 
 @tag("postgres")
 @override_settings(SEED_SAMPLE_CONTENT=True)  # Mortal Resolve CheckType gates on #2698
-class ExhaustionStrainBleedOutTests(TestCase):
+class ExhaustionStrainBleedOutTests(SeededLevelLadderMixin, TestCase):
     """Exhaustion strain crossing the death threshold (health ≤ 0) applies Bleeding-Out.
 
     @tag("postgres"): applying the progressive Bleeding-Out condition uses DISTINCT ON.
@@ -427,7 +427,7 @@ class ExhaustionStrainBleedOutTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
-class BleedOutViaActiveRoundOnlyTests(TestCase):
+class BleedOutViaActiveRoundOnlyTests(SeededLevelLadderMixin, TestCase):
     """Bleed-out never advances via the long-term chronic tier.
 
     The long-term tier (batch_chronic_effect_tick) uses apply_clamped_chronic_damage,
@@ -470,7 +470,7 @@ class BleedOutViaActiveRoundOnlyTests(TestCase):
             stage_order=1,
             name="Bleeding",
             resist_check_type=check_type,
-            resist_difficulty=20,
+            resist_difficulty_level=1,
             rounds_to_next=None,
         )
         ConditionStageFactory(
@@ -478,7 +478,7 @@ class BleedOutViaActiveRoundOnlyTests(TestCase):
             stage_order=2,
             name="Dying",
             resist_check_type=check_type,
-            resist_difficulty=40,
+            resist_difficulty_level=2,
             rounds_to_next=None,
         )
         instance = ConditionInstanceFactory(

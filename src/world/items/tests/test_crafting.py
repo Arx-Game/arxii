@@ -93,10 +93,10 @@ class WireEnchantingTests(TestCase):
         from world.items.crafting.models import CraftingRecipe
         from world.items.factories import wire_enchanting_crafting
 
-        recipe = wire_enchanting_crafting(base_difficulty=10)
+        recipe = wire_enchanting_crafting(base_difficulty_level=1)
         self.assertEqual(recipe.kind, CraftingRecipeKind.FACET_ATTACH)
         self.assertIsNotNone(recipe.check_type)
-        self.assertEqual(recipe.base_difficulty, 10)
+        self.assertEqual(recipe.base_difficulty_level, 1)
         # Both recipe kinds are wired and share the Enchanting check.
         style_recipe = CraftingRecipe.objects.get(kind=CraftingRecipeKind.STYLE_ATTACH)
         self.assertEqual(style_recipe.check_type, recipe.check_type)
@@ -113,7 +113,7 @@ class CraftAttachFacetTests(TestCase):
         from world.traits.models import Trait
 
         # wire_enchanting_crafting seeds the Common/Fine/Masterwork tier ladder.
-        self.recipe = wire_enchanting_crafting(base_difficulty=0)
+        self.recipe = wire_enchanting_crafting(base_difficulty_level=0)
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
         CharacterTraitValueFactory(

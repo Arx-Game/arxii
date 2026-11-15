@@ -78,7 +78,7 @@ class ShakingOffACharm(JourneyCase):
             category=ConditionCategoryFactory(name="Charm", alters_behavior=True),
             break_free_mode=BreakFreeMode.SELF_INITIATED,
             break_free_check_type=CheckTypeFactory(name="Resolve"),
-            break_free_difficulty=10,
+            break_free_difficulty_tenths=20,
         )
         self.charm = ConditionInstanceFactory(target=self.ysmay, condition=charm, severity=3)
 
@@ -137,7 +137,7 @@ class ShakingOffAResonanceConflict(JourneyCase):
             ),
             break_free_mode=BreakFreeMode.SELF_INITIATED,
             break_free_check_type=CheckTypeFactory(name="Focus"),
-            break_free_difficulty=10,
+            break_free_difficulty_tenths=20,
         )
         self.held = ConditionInstanceFactory(target=self.ysmay, condition=self.conflict, severity=3)
 
@@ -192,7 +192,7 @@ class StirringUpAResonanceConflict(JourneyCase):
             ),
             break_free_mode=BreakFreeMode.SELF_INITIATED,
             break_free_check_type=CheckTypeFactory(name="Focus"),
-            break_free_difficulty=10,
+            break_free_difficulty_tenths=20,
         )
         # Staff point the Intimidate pool's condition effects at the conflict, at severity 2.
         pool = content.templates["intimidate"].consequence_pool

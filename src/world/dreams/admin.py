@@ -17,7 +17,7 @@ class DreamReflectionAdmin(admin.ModelAdmin):
 class DreamPerilConfigAdmin(admin.ModelAdmin):
     """#3831 - the singleton Dream Peril collapse resolution config (#2290)."""
 
-    list_display = ("pk", "resist_check_type", "resist_difficulty")
+    list_display = ("pk", "resist_check_type", "resist_difficulty_level")
     autocomplete_fields = ["resist_check_type"]
 
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002

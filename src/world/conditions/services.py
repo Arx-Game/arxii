@@ -36,6 +36,8 @@ from world.checks.models import CheckType
 from world.checks.modifier_values import ValueTable, load_taper_rules, load_value_table
 from world.checks.services import (
     compute_obstacle_rating,
+    difficulty_points,
+    difficulty_step_points,
     level_opposition,
     perform_check_with_modifiers,
 )
@@ -232,7 +234,7 @@ def breath_hold_rounds(target: "ObjectDB") -> int | None:  # noqa: OBJECTDB_PARA
     result = perform_check_with_modifiers(
         character=target,
         check_type=config.check_type,
-        target_difficulty=config.target_difficulty,
+        target_difficulty=difficulty_points(config.target_difficulty_level),
     )
     if result.outcome is None:
         return None
@@ -781,7 +783,7 @@ def _check_application_resist(
 ) -> bool:
     """Return True if *target* resists having *template* applied.
 
-    Rolls the target's own resist_check_type against resist_difficulty.
+    Rolls the target's own resist_check_type against resist_difficulty_level.
     success_level > 0 means the target's roll beat the difficulty — resisted.
     resist_check_type=None (the default) means unconditional application;
     this always returns False in that case, matching every existing
@@ -792,7 +794,7 @@ def _check_application_resist(
     result = perform_check_with_modifiers(
         character=target,
         check_type=template.resist_check_type,
-        target_difficulty=template.resist_difficulty,
+        target_difficulty=difficulty_points(template.resist_difficulty_level),
         extra_traits=loss_of_self_terms(template),
     )
     return int(result.success_level) > 0
@@ -3143,6 +3145,21 @@ def get_check_modifier(
     return _check_modifier_for_target(character_sheet.character, check_type)
 
 
+def held_step_points(instance: ConditionInstance, tenths: int) -> int:
+    """A condition's authored difficulty in tenths of a level, as points, on top of the caster.
+
+    ``break_free_difficulty_tenths`` and ``subtlety_tenths`` ride on top of ``caster_opposition``
+    (#5093), so they are shares of one level's width: the width is read at the caster's level,
+    or the bearer's when nobody cast it.
+    """
+    from world.progression.services.skill_development import (  # noqa: PLC0415
+        get_character_path_level,
+    )
+
+    holder = instance.source_character or instance.target
+    return difficulty_step_points(tenths, get_character_path_level(holder))
+
+
 def caster_opposition(instance: ConditionInstance, check_type: CheckType) -> int:
     """What the caster adds to the difficulty of reading, rallying against or breaking a hold.
 
@@ -4103,7 +4120,7 @@ def _perform_advancement_resist_check(
     payload = ConditionStageAdvanceCheckPayload(
         instance=instance,
         target_stage=next_stage,
-        base_difficulty=next_stage.resist_difficulty,
+        base_difficulty=difficulty_points(next_stage.resist_difficulty_level),
     )
     location = instance.target.location
     if location is not None:
@@ -4473,7 +4490,9 @@ def attempt_break_free(
             message="This effect has no break-free check defined.",
         )
 
-    difficulty = template.break_free_difficulty + caster_opposition(instance, check_type)
+    difficulty = held_step_points(
+        instance, template.break_free_difficulty_tenths
+    ) + caster_opposition(instance, check_type)
 
     rally_bonus = instance.pending_rally_bonus
     if rally_bonus > 0:
@@ -4546,7 +4565,7 @@ def rally_target_instance(
     )
     return max(
         instances,
-        key=lambda inst: (inst.severity, inst.condition.break_free_difficulty),
+        key=lambda inst: (inst.severity, inst.condition.break_free_difficulty_tenths),
         default=None,
     )
 
@@ -5432,7 +5451,7 @@ def perform_treatment(  # noqa: PLR0913
     check_result = perform_check_with_modifiers(
         helper,
         check_type=treatment.check_type,
-        target_difficulty=treatment.target_difficulty,
+        target_difficulty=difficulty_points(treatment.target_difficulty_level),
         extra_traits=_treatment_skill_terms(treatment, technique_driven=technique_driven),
     )
 

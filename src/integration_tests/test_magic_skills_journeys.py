@@ -432,7 +432,7 @@ class ResistingLossOfSelf(JourneyCase):
             category=category,
             break_free_mode=BreakFreeMode.SELF_INITIATED,
             break_free_check_type=CheckTypeFactory(),
-            break_free_difficulty=10,
+            break_free_difficulty_tenths=20,
         )
         return ConditionInstanceFactory(target=self.ysmay, condition=template, is_aware=True)
 
@@ -474,7 +474,7 @@ class ResistingLossOfSelf(JourneyCase):
         """The roll made when a corrupting condition is applied carries the skill."""
         category = ConditionCategoryFactory(name="Atavism", adds_loss_of_self_skills=True)
         template = ConditionTemplateFactory(
-            category=category, resist_check_type=CheckTypeFactory(), resist_difficulty=10
+            category=category, resist_check_type=CheckTypeFactory(), resist_difficulty_level=1
         )
         success = CheckOutcome.objects.get(name="Success")
 

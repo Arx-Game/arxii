@@ -526,7 +526,7 @@ class SceneRoundAbandonmentTests(TestCase):
             stage_order=1,
             name="Dying",
             resist_check_type=self.check_type,
-            resist_difficulty=40,
+            resist_difficulty_level=2,
             rounds_to_next=None,
         )
         create_abandonment_pools()

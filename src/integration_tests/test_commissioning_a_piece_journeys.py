@@ -65,7 +65,7 @@ class CommissioningACoat(JourneyCase):
         self.shop = self.make_room("Corwen's Shop")
         self.profile = RoomProfileFactory(objectdb=self.shop)
         install_full_lab_station(self.profile)
-        wire_enchanting_crafting(base_difficulty=0)
+        wire_enchanting_crafting(base_difficulty_level=0)
         coat_template = ItemTemplate.objects.get(name="Craftable Dagger")
         coat_template.facet_capacity = 2
         coat_template.save(update_fields=["facet_capacity"])
@@ -234,7 +234,7 @@ class WorkingAnHeirloomIn(JourneyCase):
         self.workshop = self.make_room("The Cobbler's Bench")
         self.profile = RoomProfileFactory(objectdb=self.workshop)
         install_full_lab_station(self.profile)
-        wire_enchanting_crafting(base_difficulty=0)
+        wire_enchanting_crafting(base_difficulty_level=0)
         self.bracken = self.make_player("Bracken", room=self.workshop)
         self.abel = self.make_player("Abel", room=self.workshop)
         self.watch(self.bracken, self.abel)

@@ -1295,7 +1295,7 @@ class TwoCompulsionsAtOnce(_CompelledMira):
             condition=fever,
             check_type=self.berserk.compulsion.check_type,
             base_difficulty=10,
-            difficulty_per_severity=0,
+            difficulty_per_severity_tenths=0,
         )
         apply_condition(self.mira, fever, severity=5, duration_rounds=3)
         self.telnet(self.mira, "combat flee")
@@ -1867,20 +1867,21 @@ class TheDeclarePanelPayload(_SteadyingAllies):
         self.assertEqual(own["wants_label"], "Attack an opponent")
         self.assertEqual(own["check_name"], "Resist compulsion")
         against = {row["action_key"]: row for row in own["against"]}
-        # 25 base + 2 per severity x 3; flee also carries Berserk's +5 for being forbidden.
+        # Level 2's baseline (26) + 0.4 of a level's width (8) per severity x 3, 10 points; flee
+        # also carries Berserk's 1.0 of a level's width (8) for being forbidden.
         self.assertEqual(
             against["flee"],
             {
                 "action_key": "flee",
                 "label": "Flee",
-                "difficulty": 36,
+                "difficulty": 44,
                 "forbidden": True,
-                "extra_difficulty": 5,
+                "extra_difficulty": 8,
             },
         )
         # Leaving and changing back roll too, though neither is declared in the round.
         self.assertIn("leave", against)
-        self.assertEqual(against["revert_form"]["difficulty"], 41)
+        self.assertEqual(against["revert_form"]["difficulty"], 52)
         self.assertTrue(against["revert_form"]["forbidden"])
         self.assertNotIn("engage", against)
         self.assertNotIn("yield", against)

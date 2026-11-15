@@ -764,13 +764,17 @@ def _resist_rise(
     rise: int,
 ) -> tuple[int, CheckResult, list[str]]:
     """Roll ``worse``'s resist check and return (rise to apply, result, message lines)."""
-    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+    from world.checks.services import (  # noqa: PLC0415
+        difficulty_points,
+        perform_check_with_modifiers,
+    )
     from world.worship.invocation_services import favor_ease_for  # noqa: PLC0415
     from world.worship.sacrifice_services import lift_botch  # noqa: PLC0415
 
     ease = favor_ease_for(sheet, being)
     ease_points = ease.points if ease is not None else 0
-    difficulty = max(worse.resist_difficulty - ease_points, 0)
+    base_points = difficulty_points(worse.resist_difficulty_level)
+    difficulty = max(base_points - ease_points, 0)
     raw = perform_check_with_modifiers(
         sheet.character, worse.resist_check_type, target_difficulty=difficulty
     )
@@ -796,7 +800,7 @@ def _resist_rise(
     outcome_name = result.outcome.name if result.outcome is not None else "no result"
     lines = [
         f"That would raise severity by {rise} (to {severity + rise}) and reach {worse.name}. "
-        f"Resist check: {worse.resist_difficulty}{eased}. Result: {outcome_name}, so {verdict}."
+        f"Resist check: {base_points}{eased}. Result: {outcome_name}, so {verdict}."
     ]
     return applied, result, lines
 

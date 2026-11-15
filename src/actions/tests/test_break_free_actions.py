@@ -70,7 +70,7 @@ class RevealConditionActionTest(TestCase):
             category=self.category,
             break_free_mode=BreakFreeMode.SELF_INITIATED,
             break_free_check_type=self.check_type,
-            subtlety=10,
+            subtlety_tenths=20,
         )
         self.instance = ConditionInstanceFactory(
             target=self.target,

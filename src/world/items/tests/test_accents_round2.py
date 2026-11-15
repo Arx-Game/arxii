@@ -196,7 +196,7 @@ class ThreadCheckEdgeTests(TestCase):
         from world.items.factories import wire_enchanting_crafting
         from world.magic.factories import ThreadFactory, ThreadResonanceFactory
 
-        recipe = wire_enchanting_crafting(base_difficulty=0)
+        recipe = wire_enchanting_crafting(base_difficulty_level=0)
         sheet = CharacterSheetFactory()
         self.assertEqual(_thread_check_contributions(sheet.character, recipe), [])
         # One thread per anchor (#5123): a second resonance is a row on this thread, so

@@ -2573,7 +2573,7 @@ class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
 
         thresholds = [50, 200, 500, 1000, 1500]
         is_abyssal = self.corruption_resonance.affinity_id == ensure_canonical_affinities()[2].pk
-        difficulties = [12, 18, 25, 30, 35] if is_abyssal else [8, 12, 18, 22, 28]
+        difficulties = [1, 1, 2, 2, 2] if is_abyssal else [0, 1, 1, 1, 2]
         check_type = _make_resist_corruption_check_type()
 
         for i, (threshold, dc) in enumerate(zip(thresholds, difficulties, strict=True), start=1):
@@ -2582,7 +2582,7 @@ class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
                 stage_order=i,
                 severity_threshold=threshold,
                 resist_check_type=check_type,
-                resist_difficulty=dc,
+                resist_difficulty_level=dc,
                 advancement_resist_failure_kind=AdvancementResistFailureKind.HOLD_OVERFLOW,
             )
 

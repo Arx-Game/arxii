@@ -329,7 +329,7 @@ class ApplyTechniqueConditionsResistCheckTest(TestCase):
         cond = ConditionTemplateFactory(
             name="ResistibleCastCondition",
             resist_check_type=resist_check,
-            resist_difficulty=15,
+            resist_difficulty_level=1,
         )
         TechniqueAppliedConditionFactory(
             technique=self.technique,
@@ -362,7 +362,7 @@ class ApplyTechniqueConditionsResistCheckTest(TestCase):
         cond = ConditionTemplateFactory(
             name="ResistibleCastConditionFails",
             resist_check_type=resist_check,
-            resist_difficulty=15,
+            resist_difficulty_level=1,
         )
         TechniqueAppliedConditionFactory(
             technique=self.technique,
@@ -511,7 +511,7 @@ class RemoveTechniqueConditionsTest(TestCase):
             name="ResistedDispel",
             can_be_dispelled=True,
             cure_check_type=cure_check,
-            cure_difficulty=15,
+            cure_difficulty_level=1,
         )
         TechniqueRemovedConditionFactory(
             technique=self.technique,
@@ -552,7 +552,7 @@ class RemoveTechniqueConditionsTest(TestCase):
             name="CuredDispel",
             can_be_dispelled=True,
             cure_check_type=cure_check,
-            cure_difficulty=15,
+            cure_difficulty_level=1,
         )
         TechniqueRemovedConditionFactory(
             technique=self.technique,
@@ -628,7 +628,7 @@ class RemoveTechniqueConditionsTest(TestCase):
             name="PowerInvariantDispel",
             can_be_dispelled=True,
             cure_check_type=cure_check,
-            cure_difficulty=15,
+            cure_difficulty_level=1,
         )
         TechniqueRemovedConditionFactory(
             technique=self.technique,
@@ -670,7 +670,7 @@ class RemoveTechniqueConditionsTest(TestCase):
             name="PowerScaledDispel",
             can_be_dispelled=True,
             cure_check_type=cure_check,
-            cure_difficulty=15,
+            cure_difficulty_level=1,
         )
         TechniqueRemovedConditionFactory(
             technique=self.technique,

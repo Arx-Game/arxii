@@ -188,7 +188,7 @@ class UseItemTests(TestCase):
             max_charges=1,
             on_use_pool=self._pool_with_condition_effect(),
             on_use_check_type=CheckTypeFactory(),
-            on_use_difficulty=1,
+            on_use_difficulty_level=0,
         )
         inst = self._instance(template=template, charges=1)
 

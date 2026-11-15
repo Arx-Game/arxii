@@ -223,7 +223,7 @@ def _crafting_rows() -> None:
                 "kind": kind,
                 "check_type": check_type,
                 "output_item_template": None,
-                "base_difficulty": 0,
+                "base_difficulty_level": 0,
                 "success_level_step": 10,
                 "min_success_level": 1,
             },

@@ -265,7 +265,7 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
         (
             "Removal",
             {
-                "fields": ["can_be_dispelled", "cure_check_type", "cure_difficulty"],
+                "fields": ["can_be_dispelled", "cure_check_type", "cure_difficulty_level"],
             },
         ),
         (
@@ -614,7 +614,7 @@ class ConditionStageOnEntryAdmin(admin.ModelAdmin):
 class BreathHoldConfigAdmin(admin.ModelAdmin):
     """Singleton (pk=1): the check a character rolls to hold her breath (#4741)."""
 
-    list_display = ["pk", "check_type", "target_difficulty"]
+    list_display = ["pk", "check_type", "target_difficulty_level"]
     autocomplete_fields = ["check_type"]
 
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
@@ -717,7 +717,7 @@ class CompulsionResistBandInline(admin.TabularInline):
 
 @admin.register(Compulsion)
 class CompulsionAdmin(admin.ModelAdmin):
-    list_display = ["condition", "wants", "check_type", "base_difficulty"]
+    list_display = ["condition", "wants", "check_type", "base_difficulty_level"]
     autocomplete_fields = ["condition", "check_type"]
     inlines = [CompulsionForbiddenActionInline, CompulsionResistBandInline]
 
@@ -732,7 +732,7 @@ class ControlLossBandInline(admin.TabularInline):
 
 @admin.register(ControlLossTrigger)
 class ControlLossTriggerAdmin(admin.ModelAdmin):
-    list_display = ["vulnerability", "fires_on", "check_type", "base_difficulty"]
+    list_display = ["vulnerability", "fires_on", "check_type", "base_difficulty_level"]
     list_filter = ["fires_on"]
     autocomplete_fields = ["vulnerability", "check_type", "relief_gift"]
     inlines = [ControlLossBandInline]

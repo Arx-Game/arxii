@@ -218,7 +218,7 @@ def _make_corruption_condition_with_resist(resonance: object) -> tuple:
         severity_threshold=10,
         advancement_resist_failure_kind=AdvancementResistFailureKind.HOLD_OVERFLOW,
         resist_check_type=check_type,
-        resist_difficulty=15,
+        resist_difficulty_level=1,
     )
     return template, stage2, check_type
 

@@ -362,7 +362,7 @@ class TrendsetterFactory(factory.django.DjangoModelFactory):
     fashion_style = factory.SubFactory(FashionStyleFactory)
 
 
-def wire_enchanting_crafting(*, base_difficulty: int = 0):
+def wire_enchanting_crafting(*, base_difficulty_level: int = 0):
     """Author the Enchanting skill + crafting CheckType + both crafting recipes.
 
     FactoryBoy chain doubling as integration-test setUp and seed data. Creates:
@@ -374,7 +374,7 @@ def wire_enchanting_crafting(*, base_difficulty: int = 0):
     * a couple of ``CraftingRecipeConsequence`` rows across outcome bands.
 
     Idempotent: keyed on ``CraftingRecipe.kind`` via ``update_or_create`` so re-runs
-    refresh ``base_difficulty``/``check_type`` rather than silently keeping the
+    refresh ``base_difficulty_level``/``check_type`` rather than silently keeping the
     original row.
 
     Returns:
@@ -410,7 +410,7 @@ def wire_enchanting_crafting(*, base_difficulty: int = 0):
             "name": "Attach Facet (Enchanting)",
             "check_type": check_type,
             "skill_trait": enchanting,
-            "base_difficulty": base_difficulty,
+            "base_difficulty_level": base_difficulty_level,
             "success_level_step": 10,
             "min_success_level": 1,
         },
@@ -421,7 +421,7 @@ def wire_enchanting_crafting(*, base_difficulty: int = 0):
             "name": "Attach Style (Enchanting)",
             "check_type": check_type,
             "skill_trait": enchanting,
-            "base_difficulty": base_difficulty,
+            "base_difficulty_level": base_difficulty_level,
             "success_level_step": 10,
             "min_success_level": 1,
         },
@@ -445,7 +445,7 @@ def wire_enchanting_crafting(*, base_difficulty: int = 0):
             "name": "Create Item (Enchanting)",
             "check_type": check_type,
             "skill_trait": enchanting,
-            "base_difficulty": base_difficulty,
+            "base_difficulty_level": base_difficulty_level,
             "success_level_step": 10,
             "min_success_level": 1,
         },
@@ -538,7 +538,7 @@ class CraftingRecipeFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Crafting Recipe {n}")
     kind = CraftingRecipeKind.FACET_ATTACH
     output_item_template = None
-    base_difficulty = 0
+    base_difficulty_level = 0
     success_level_step = 10
     min_success_level = 1
     action_point_cost = 0

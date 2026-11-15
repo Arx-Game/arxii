@@ -67,7 +67,7 @@ class AdvanceBleedOutTests(TestCase):
             stage_order=1,
             name="Bleeding",
             resist_check_type=cls.check_type,
-            resist_difficulty=20,
+            resist_difficulty_level=1,
             rounds_to_next=None,
         )
         # Stage 2 (terminal stage, stage_order=2, higher difficulty)
@@ -76,7 +76,7 @@ class AdvanceBleedOutTests(TestCase):
             stage_order=2,
             name="Dying",
             resist_check_type=cls.check_type,
-            resist_difficulty=40,
+            resist_difficulty_level=2,
             rounds_to_next=None,
         )
 
@@ -201,7 +201,7 @@ class AdvanceBleedOutTerminalPoolTests(TestCase):
             stage_order=1,
             name="Dying",
             resist_check_type=cls.check_type,
-            resist_difficulty=40,
+            resist_difficulty_level=2,
             rounds_to_next=None,
         )
         # Seed the bleed_out_terminal pool (recover / stay_incapacitated / die).

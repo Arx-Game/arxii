@@ -75,7 +75,7 @@ class PactTestBase(TestCase):
         cls.offer = PactOfferFactory(
             being=cls.being,
             name="Hesk pact",
-            condition=make_pact_condition(resist_difficulty=40),
+            condition=make_pact_condition(resist_difficulty_level=2),
             onlooker_line="[onlooker line]",
         )
         cls.commitment = PactOfferCommitmentFactory(offer=cls.offer, amount=8)
@@ -138,8 +138,8 @@ class SigningTests(PactTestBase):
         journey can resist the condition at the close (#4341 review, idmapper-cache)."""
         condition = make_pact_condition(name="Resistible pact")
         condition.resist_check_type = CheckTypeFactory(name="Pact resist")
-        condition.resist_difficulty = 10
-        condition.save(update_fields=["resist_check_type", "resist_difficulty"])
+        condition.resist_difficulty_level = 1
+        condition.save(update_fields=["resist_check_type", "resist_difficulty_level"])
         offer = PactOfferFactory(being=self.being, name="Resistible", condition=condition)
         PactOfferCommitmentFactory(offer=offer, amount=8)
         standing = DevotionStanding.objects.create(character_sheet=self.sheet, being=self.being)

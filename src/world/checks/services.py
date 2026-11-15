@@ -481,6 +481,36 @@ def _level_baseline_or_zero(level: int) -> int:
     return table.baseline(level)
 
 
+def difficulty_points(level: int) -> int:
+    """An authored standalone difficulty level as the points a check rolls against (#5093).
+
+    Every authored base difficulty (a lock, a cure, a recipe, a mission move) is a level, and
+    a level is where rank N starts: its CHECK baseline. Level 0 means "no difficulty" and
+    reads 0 points, so a row authored at 0 still asks nothing of the roller. A level above
+    the top baseline reads the top baseline; a database with no baseline rows reads 0 (see
+    ``_level_baseline_or_zero``). Callers pass the result as ``target_difficulty``.
+    """
+    return _level_baseline_or_zero(level)
+
+
+def difficulty_step_points(tenths: int, at_level: int) -> int:
+    """An authored difficulty increment in tenths of a level as points at ``at_level`` (#5093).
+
+    A per-step increment, or a difficulty added on top of another one, is a share of one
+    level's width: ``tenths`` of ten make a whole level's width at ``at_level``. The caller
+    names the level the increment sits on (the base difficulty's level, the opposing level,
+    the character's own level). A level below 1 uses level 1's width, so an increment on a
+    "no difficulty" base still means something; a database with no baseline rows reads 0.
+    Rounded half up, so 0 tenths is 0 points and any positive increment keeps its sign.
+    """
+    if tenths == 0:
+        return 0
+    table = load_baselines()
+    if len(table.levels) < _MIN_BASELINE_ROWS_FOR_WIDTH:
+        return 0
+    return round_half_up(Decimal(tenths) * table.width(max(at_level, 1)) / 10)
+
+
 def level_points(level: int) -> int:
     """The level term of a roll at ``level``: ``level_share`` of that level's baseline (#5093).
 

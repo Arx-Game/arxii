@@ -14,6 +14,7 @@ from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.services import difficulty_points
 from world.items.factories import (
     ItemInstanceFactory,
     ItemTemplateFactory,
@@ -29,7 +30,7 @@ class CraftingApiTestCase(TestCase):
 
     def setUp(self) -> None:
         # Wire both crafting recipes with skill caps + consequence pool.
-        self.facet_recipe = wire_enchanting_crafting(base_difficulty=0)
+        self.facet_recipe = wire_enchanting_crafting(base_difficulty_level=0)
         # Fetch the style recipe for later assertions.
         from world.items.crafting.constants import CraftingRecipeKind
         from world.items.crafting.models import CraftingRecipe
@@ -318,7 +319,10 @@ class GemCutApiTests(CraftingApiTestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["ap_cost"], 5)
-        self.assertEqual(response.data["base_difficulty"], self.gem_recipe.base_difficulty)
+        self.assertEqual(
+            response.data["base_difficulty"],
+            difficulty_points(self.gem_recipe.base_difficulty_level),
+        )
         self.assertEqual(response.data["min_success_level"], 1)
         self.assertTrue(response.data["affordable"])
         self.assertIn("shatter", response.data["shatter_risk_message"].lower())

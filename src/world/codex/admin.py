@@ -308,7 +308,7 @@ class CodexEntryAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
         (
             "Costs and learning",
             {
-                "fields": ("share_cost", "learn_cost", "learn_difficulty", "learn_threshold"),
+                "fields": ("share_cost", "learn_cost", "learn_difficulty_level", "learn_threshold"),
                 "description": "AP to teach and accept; difficulty and progress for research.",
                 "classes": ["collapse"],
             },

@@ -22,7 +22,7 @@ class DreamPerilConfigTests(TestCase):
     def test_config_exists(self):
         config = get_dream_peril_config()
         assert config is not None
-        assert config.resist_difficulty > 0
+        assert config.resist_difficulty_level > 0
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)

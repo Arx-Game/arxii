@@ -18,7 +18,7 @@ from flows.models.flows import FlowDefinition, FlowStepDefinition
 from flows.models.triggers import TriggerDefinition
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
-from world.checks.test_helpers import force_check_outcome
+from world.checks.test_helpers import SeededLevelLadderMixin, force_check_outcome
 from world.conditions.constants import DurationType
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import BreathHoldDurationAward
@@ -46,7 +46,7 @@ def _active_names(character) -> set[str]:
     return {i.condition.name for i in get_active_conditions(character)}
 
 
-class BreathCheckSetsTheRoundsTests(TestCase):
+class BreathCheckSetsTheRoundsTests(SeededLevelLadderMixin, TestCase):
     def setUp(self):
         self.character = CharacterSheetFactory().character
         self.success = CheckOutcomeFactory(name="Success", success_level=1)
@@ -55,7 +55,7 @@ class BreathCheckSetsTheRoundsTests(TestCase):
         BreathHoldDurationAward.objects.create(outcome_tier=self.failure, rounds=1)
         config = get_breath_hold_config()
         config.check_type = CheckTypeFactory()
-        config.target_difficulty = 30
+        config.target_difficulty_level = 2
         config.save()
         self.smoke = _held_breath_template(name="Smoke Form")
 
@@ -65,7 +65,7 @@ class BreathCheckSetsTheRoundsTests(TestCase):
                 with force_check_outcome(outcome) as capture:
                     result = apply_condition(self.character, self.smoke)
                 self.assertEqual(result.instance.rounds_remaining, expected)
-                self.assertEqual(capture.target_difficulty, 30)
+                self.assertEqual(capture.target_difficulty, 26)  # level 2's baseline
                 take_breath(self.character)
 
     def test_the_breath_roll_overrides_a_techniques_duration(self):
@@ -130,7 +130,7 @@ class TakingABreathTests(TestCase):
             template.full_clean()
 
 
-class CoughingBreaksTheHeldBreathTests(TestCase):
+class CoughingBreaksTheHeldBreathTests(SeededLevelLadderMixin, TestCase):
     """A coughing fit, applied by her own lungs after each cast, unless she resists."""
 
     def setUp(self):
@@ -146,7 +146,7 @@ class CoughingBreaksTheHeldBreathTests(TestCase):
             name="Coughing",
             breaks_held_breath=True,
             resist_check_type=CheckTypeFactory(),
-            resist_difficulty=40,
+            resist_difficulty_level=2,
         )
         flow = FlowDefinition.objects.create(name="cough after casting")
         FlowStepDefinition.objects.create(
@@ -195,7 +195,7 @@ class CoughingBreaksTheHeldBreathTests(TestCase):
         with force_check_outcome(self.resisted) as capture:
             self._cast()
 
-        self.assertEqual(capture.target_difficulty, 40)
+        self.assertEqual(capture.target_difficulty, 26)  # level 2's baseline
         names = _active_names(self.character)
         self.assertNotIn("Coughing", names)
         self.assertIn("Smoke Form", names)

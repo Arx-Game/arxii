@@ -35,7 +35,7 @@ class RunCraftingRecipeTests(TestCase):
     def setUp(self) -> None:
         from world.items.models import QualityTier
 
-        self.recipe = wire_enchanting_crafting(base_difficulty=0)
+        self.recipe = wire_enchanting_crafting(base_difficulty_level=0)
         # wire_enchanting_crafting seeds a Common(0-29)/Fine(30-69)/Masterwork
         # (70-9999) ladder; reuse those rows so for_score has a single ladder.
         self.common = QualityTier.objects.get(name="Common")
@@ -245,7 +245,7 @@ class CraftingStationGateTests(TestCase):
         from world.room_features.constants import RoomFeatureServiceStrategy
         from world.room_features.factories import RoomFeatureInstanceFactory, RoomFeatureKindFactory
 
-        self.recipe = wire_enchanting_crafting(base_difficulty=0)
+        self.recipe = wire_enchanting_crafting(base_difficulty_level=0)
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
         self.character = self.sheet.character

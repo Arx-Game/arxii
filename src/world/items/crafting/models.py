@@ -58,9 +58,12 @@ class CraftingRecipe(NaturalKeyMixin, SharedMemoryModel):
         related_name="+",
         help_text="Check rolled when attempting this recipe. Unset = recipe disabled.",
     )
-    base_difficulty = models.PositiveIntegerField(
+    base_difficulty_level = models.PositiveSmallIntegerField(
         default=0,
-        help_text="Base target difficulty passed to perform_check.",
+        help_text=(
+            "Base target difficulty passed to perform_check. Authored as a level (0 = "
+            "no difficulty): the roll meets that level's baseline."
+        ),
     )
     success_level_step = models.PositiveIntegerField(
         default=10,

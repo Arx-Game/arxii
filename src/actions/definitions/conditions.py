@@ -94,7 +94,7 @@ class BreakFreeAction(Action):
 
         instance = max(
             instances,
-            key=lambda i: (i.severity, i.condition.break_free_difficulty),
+            key=lambda i: (i.severity, i.condition.break_free_difficulty_tenths),
         )
 
         result = attempt_break_free(instance, in_combat_tick=False)
@@ -163,7 +163,10 @@ class RevealConditionAction(Action):
     ) -> ActionResult:
         from world.checks.services import perform_check  # noqa: PLC0415
         from world.conditions.models import ConditionInstance  # noqa: PLC0415
-        from world.conditions.services import caster_opposition  # noqa: PLC0415
+        from world.conditions.services import (  # noqa: PLC0415
+            caster_opposition,
+            held_step_points,
+        )
         from world.magic.constants import MagicActivity  # noqa: PLC0415
         from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
 
@@ -194,7 +197,9 @@ class RevealConditionAction(Action):
         if check_type is None:
             return ActionResult(success=False, message="Cannot determine how to detect this.")
 
-        difficulty = template.subtlety + caster_opposition(instance, check_type)
+        difficulty = held_step_points(instance, template.subtlety_tenths) + caster_opposition(
+            instance, check_type
+        )
 
         # Spotting a loss of self (corruption, atavism, possession) is sensing magic.
         sensing = (
@@ -246,6 +251,7 @@ class RallyAction(Action):
         from world.conditions.services import (  # noqa: PLC0415
             attempt_break_free,
             caster_opposition,
+            held_step_points,
             rally_target_instance,
             record_rally_landed,
         )
@@ -267,9 +273,9 @@ class RallyAction(Action):
         if check_type is None:
             return ActionResult(success=False, message="Cannot determine how to rally them.")
 
-        difficulty = instance.condition.break_free_difficulty + caster_opposition(
-            instance, check_type
-        )
+        difficulty = held_step_points(
+            instance, instance.condition.break_free_difficulty_tenths
+        ) + caster_opposition(instance, check_type)
 
         result = perform_check(
             actor,

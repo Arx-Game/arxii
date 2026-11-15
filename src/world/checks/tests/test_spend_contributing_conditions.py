@@ -21,7 +21,7 @@ from world.checks.services import (
     perform_check_with_modifiers,
     preview_check_difficulty,
 )
-from world.checks.test_helpers import force_check_outcome
+from world.checks.test_helpers import SeededLevelLadderMixin, force_check_outcome
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -148,10 +148,10 @@ class SpendContributingConditionsTests(TestCase):
         # Review Focus 5: the first item's resist roll spends the once-only ward;
         # the second item still resolves against a batch context that held it.
         first = ConditionTemplateFactory(
-            name="Clinging Ash 4584", resist_check_type=self.ct, resist_difficulty=100
+            name="Clinging Ash 4584", resist_check_type=self.ct, resist_difficulty_level=9
         )
         second = ConditionTemplateFactory(
-            name="Choking Smoke 4584", resist_check_type=self.ct, resist_difficulty=100
+            name="Choking Smoke 4584", resist_check_type=self.ct, resist_difficulty_level=9
         )
 
         with patch(_ROLL, return_value=1):  # the lowest roll fails on every chart
@@ -175,7 +175,7 @@ class SpendContributingConditionsTests(TestCase):
         # The batch context is fetched before any resist roll; a ward the roll spent
         # must not go on preventing the condition, exactly as a single apply would.
         incoming = ConditionTemplateFactory(
-            name="Creeping Frost 4584", resist_check_type=self.ct, resist_difficulty=100
+            name="Creeping Frost 4584", resist_check_type=self.ct, resist_difficulty_level=9
         )
         ConditionConditionInteractionFactory(
             condition=self.blessing,
@@ -194,7 +194,7 @@ class SpendContributingConditionsTests(TestCase):
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # Endurance CheckType gates on #2698
-class KnockoutRollSpendsTests(TestCase):
+class KnockoutRollSpendsTests(SeededLevelLadderMixin, TestCase):
     def test_a_knockout_roll_spends_a_blessing_on_endurance(self) -> None:
         vitals = CharacterVitalsFactory(health=10, max_health=100)
         character = vitals.character_sheet.character

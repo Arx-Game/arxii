@@ -73,7 +73,7 @@ class WearingWhatTheWindFavors(JourneyCase):
         self.shop = self.make_room("Corwen's Shop")
         self.profile = RoomProfileFactory(objectdb=self.shop)
         install_full_lab_station(self.profile)
-        wire_enchanting_crafting(base_difficulty=0)
+        wire_enchanting_crafting(base_difficulty_level=0)
         coat_template = ItemTemplate.objects.get(name="Craftable Dagger")
         coat_template.facet_capacity = 2
         coat_template.save(update_fields=["facet_capacity"])

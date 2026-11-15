@@ -19,17 +19,10 @@ from world.conditions.factories import (
 )
 from world.conditions.models import ConditionInstance
 from world.fatigue.tests import setup_stat
+from world.seeds.modifier_values import seed_check_level_baselines
 from world.traits.constants import PrimaryStat
 from world.traits.factories import CheckOutcomeFactory
-from world.vitals.constants import (
-    DEATH_BASE_DIFFICULTY,
-    DEATH_SCALING_PER_PERCENT,
-    KNOCKOUT_BASE_DIFFICULTY,
-    KNOCKOUT_SCALING_PER_PERCENT,
-    WOUND_BASE_DIFFICULTY,
-    WOUND_SCALING_PER_PERCENT,
-    CharacterLifeState,
-)
+from world.vitals.constants import CharacterLifeState
 from world.vitals.factories import CharacterVitalsFactory
 from world.vitals.services import (
     calculate_death_difficulty,
@@ -41,44 +34,55 @@ from world.vitals.services import (
 )
 
 
-class CalculateKnockoutDifficultyTest(TestCase):
+class SeededLadderTestCase(TestCase):
+    """The ladder the difficulty levels read: level 1 is 18 points and a level is 8 wide."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_check_level_baselines()
+
+
+class CalculateKnockoutDifficultyTest(SeededLadderTestCase):
     def test_at_twenty_percent_returns_base(self) -> None:
-        assert calculate_knockout_difficulty(health_pct=0.2) == KNOCKOUT_BASE_DIFFICULTY
+        assert calculate_knockout_difficulty(health_pct=0.2) == 18  # level 1's baseline
 
     def test_at_ten_percent_harder(self) -> None:
         result = calculate_knockout_difficulty(health_pct=0.1)
-        assert result == KNOCKOUT_BASE_DIFFICULTY + (10 * KNOCKOUT_SCALING_PER_PERCENT)
+        # 10 points below x 0.6 of a level's width (8) per point = 48 more
+        assert result == 18 + 48
 
     def test_at_zero_percent_hardest(self) -> None:
         result = calculate_knockout_difficulty(health_pct=0.0)
-        assert result == KNOCKOUT_BASE_DIFFICULTY + (20 * KNOCKOUT_SCALING_PER_PERCENT)
+        assert result == 18 + 96
 
     def test_above_threshold_returns_zero(self) -> None:
         assert calculate_knockout_difficulty(health_pct=0.5) == 0
 
     def test_at_threshold_boundary_returns_base(self) -> None:
-        assert calculate_knockout_difficulty(health_pct=0.2) == KNOCKOUT_BASE_DIFFICULTY
+        assert calculate_knockout_difficulty(health_pct=0.2) == 18  # level 1's baseline
 
 
-class CalculateDeathDifficultyTest(TestCase):
+class CalculateDeathDifficultyTest(SeededLadderTestCase):
     def test_at_zero_returns_base(self) -> None:
-        assert calculate_death_difficulty(health_pct=0.0) == DEATH_BASE_DIFFICULTY
+        assert calculate_death_difficulty(health_pct=0.0) == 26  # level 2's baseline
 
     def test_negative_health_harder(self) -> None:
         result = calculate_death_difficulty(health_pct=-0.2)
-        assert result == DEATH_BASE_DIFFICULTY + (20 * DEATH_SCALING_PER_PERCENT)
+        # 20 points below x a whole level's width (8) per point = 160 more
+        assert result == 26 + 160
 
     def test_above_zero_returns_zero(self) -> None:
         assert calculate_death_difficulty(health_pct=0.1) == 0
 
 
-class CalculateWoundDifficultyTest(TestCase):
+class CalculateWoundDifficultyTest(SeededLadderTestCase):
     def test_at_fifty_percent_returns_base(self) -> None:
-        assert calculate_wound_difficulty(damage=50, max_health=100) == WOUND_BASE_DIFFICULTY
+        assert calculate_wound_difficulty(damage=50, max_health=100) == 18  # level 1's baseline
 
     def test_higher_damage_harder(self) -> None:
         result = calculate_wound_difficulty(damage=80, max_health=100)
-        assert result == WOUND_BASE_DIFFICULTY + (30 * WOUND_SCALING_PER_PERCENT)
+        # 30 points over x 0.4 of a level's width (8) per point = 96 more
+        assert result == 18 + 96
 
     def test_below_threshold_returns_zero(self) -> None:
         assert calculate_wound_difficulty(damage=30, max_health=100) == 0

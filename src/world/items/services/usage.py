@@ -21,6 +21,7 @@ from world.checks.consequence_resolution import (
     resolve_pool_consequences,
     select_consequence,
 )
+from world.checks.services import difficulty_points
 from world.checks.types import ResolutionContext
 from world.consent.constants import ConsentOutcome
 from world.items.constants import MAKEOVER_CONSENT_CATEGORY_KEY, OwnershipEventType
@@ -351,7 +352,7 @@ def _apply_on_use_pool(template: ItemTemplate, user: ObjectDB, context: Resoluti
     pending = select_consequence(
         user,
         template.on_use_check_type,
-        template.on_use_difficulty,
+        difficulty_points(template.on_use_difficulty_level or 0),
         resolve_pool_consequences(template.on_use_pool),
     )
     applied = apply_resolution(pending, context)

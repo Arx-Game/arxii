@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Any
 
-from world.checks.services import perform_check_with_modifiers
+from world.checks.services import difficulty_points, perform_check_with_modifiers
 from world.conditions.services import (
     bulk_apply_conditions,
     get_condition_instance,
@@ -339,7 +339,7 @@ def remove_technique_conditions(  # noqa: PLR0913 - cohesive condition-removal p
          ``can_be_dispelled=False`` is a no-op (skipped, never an error).
       3. Opposed cure check: when ``row.condition.cure_check_type`` is set, rolls
          ``perform_check_with_modifiers(source_character, cure_check_type,
-         cure_difficulty)``. Removal
+         cure_difficulty_level)``. Removal
          succeeds iff ``check_result.success_level > 0``; otherwise it is resisted (no-op
          for that target, cast continues). When ``cure_check_type`` is null, removal
          proceeds unconditionally (uncontested dispel).
@@ -441,7 +441,7 @@ def _attempt_removal(  # noqa: PLR0913 - cohesive removal-attempt params
         check_result = perform_check_with_modifiers(
             source_character,
             cure_check_type,
-            condition.cure_difficulty,
+            difficulty_points(condition.cure_difficulty_level),
             extra_modifiers=power_bonus,
             extra_traits=dispel_terms,
         )

@@ -109,7 +109,7 @@ class CraftAttachFacetQueryCountTests(TestCase):
         from world.items.models import QualityTier
         from world.magic.models import CharacterAnima
 
-        self.recipe = wire_enchanting_crafting(base_difficulty=0)
+        self.recipe = wire_enchanting_crafting(base_difficulty_level=0)
         # wire_enchanting_crafting seeds 3 CraftingSkillCap rows + 2 consequence rows.
         # Add a 3rd consequence so the pool has ≥3 rows; per-row N+1 would be visible.
         extra_outcome = CheckOutcomeFactory(name="CQC_ExtraOutcome", success_level=1)
@@ -295,7 +295,7 @@ class BuildCraftingQuoteQueryCountTests(TestCase):
         from world.items.models import QualityTier
         from world.magic.models import CharacterAnima
 
-        self.recipe = wire_enchanting_crafting(base_difficulty=0)
+        self.recipe = wire_enchanting_crafting(base_difficulty_level=0)
         # Add a 3rd consequence to verify the consequence fetch is a single bulk query.
         extra_outcome = CheckOutcomeFactory(name="BCQ_ExtraOutcome", success_level=1)
         extra_cons = ConsequenceFactory(outcome_tier=extra_outcome, label="BCQ extra consequence")
