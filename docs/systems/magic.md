@@ -1150,8 +1150,8 @@ damage whenever that's wired.
 ### Sized technique buffs: a buff's level and size (#4594, ADR-4594-A) [BUILT & WIRED]
 
 A technique's buff or debuff carries a **level** (from its cast) and a **size** (authored), and its
-check modifiers read the check lane's value table (`docs/systems/checks.md`, "Modifier value
-table"). Only the check lane is wired; cast power, damage and the other lanes in #4551's
+check modifiers read the check lane's value table (`docs/systems/checks.md`, "Modifier values, size
+fractions, level baselines and the taper"). Only the check lane is wired; cast power, damage and the other lanes in #4551's
 inventory join later.
 
 - **Size** — `TechniqueAppliedCondition.modifier_size` (nullable `ModifierSize`; blank keeps the

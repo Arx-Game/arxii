@@ -624,8 +624,9 @@ caps = get_all_capability_values(character)  # {"movement": 5, "flight": 0}
 `ConditionCheckModifier` row on an instance carrying both `modifier_level` and `modifier_size`
 from the check lane's value table (`world.checks.modifier_values.load_value_table`, loaded once
 per call and only when some active instance is sized): the table's magnitude at that level and
-size, with the authored row's sign, and no severity or stage scaling. An unsized instance, a zero
-authored value, or a level below every value row keeps the flat authored path. Nothing about the
+size (the size's fraction times one level's width, or a `ModifierValue` override at exactly that
+level, #5093), with the authored row's sign, and no severity or stage scaling. An unsized instance,
+a zero authored value, or a size with no fraction and no override keeps the flat authored path. Nothing about the
 bearer is read. `condition_contributions` puts the level and size on each CONDITION
 `ModifierContribution`. `bulk_apply_conditions` stamps them through `_stamp_modifier_sizing`
 (after apply, before `CONDITION_APPLIED`); a re-application keeps the higher level and takes the

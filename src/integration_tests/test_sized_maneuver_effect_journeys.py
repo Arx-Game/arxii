@@ -5,7 +5,9 @@ Mara, a level 11 shelterer, covers Hobb with Succor against a 40-a-round hazard,
 Succor journeys. Each holds a distinction granted through the game's grant service, and staff
 author the effect on the distinction effect admin page.
 
-Expected values come from the seeded example ladders (``world/seeds/modifier_values.py``) and
+Expected values come from the seeded example baselines and size fractions
+(``world/seeds/modifier_values.py``: a Large modifier is half a level's width, and the widths
+are set so Large lands on the old example ladder at level 11) and
 the owner's ruling on #4824: damage, to-hit and partial protection take a size, valued at the
 holder's level; every other kind takes flat amounts only.
 
@@ -15,7 +17,7 @@ holder's level; every other kind takes flat amounts only.
   distinction makes it 11 damage and a Large Charge to-hit distinction makes it +26.
 * Succor's partial stops 50% of 40; a Large protection distinction makes it 60%, so 16 lands.
   With the base raised to 95, the same distinction stops everything: 100% is the cap.
-* With the damage lane's table emptied the same distinction counts its flat +1: 6 damage.
+* With the damage lane's size fractions emptied the same distinction counts its flat +1: 6 damage.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ from django.urls import reverse
 from integration_tests.test_charge_effect_journeys import DAMAGE, TO_HIT, _ChargeField
 from integration_tests.test_succor_effect_journeys import HAZARD, _FightRound
 from world.checks.constants import ModifierLane, ModifierSize
-from world.checks.modifier_models import ModifierValue
+from world.checks.modifier_models import ModifierSizeFraction
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.distinctions.models import MANEUVER_EFFECT_SIZE_REFUSAL, DistinctionEffect
@@ -101,7 +103,7 @@ class SizedChargeModifiers(_ChargeField):
         self.assertEqual(damage, DAMAGE + 1)
 
     def test_with_the_damage_lane_emptied_a_size_counts_flat(self) -> None:
-        ModifierValue.objects.filter(lane=ModifierLane.DAMAGE).delete()
+        ModifierSizeFraction.objects.filter(lane=ModifierLane.DAMAGE).delete()
         _grant_sized(self.hobb, self.damage_target, size=ModifierSize.LARGE, name="Trampler")
 
         _to_hit, damage = self.charge_and_resolve()

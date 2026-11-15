@@ -6,11 +6,13 @@ distinction through ``grant_distinction`` (the one acquisition seam every grant 
 his next check, through ``perform_check_with_modifiers``, reads each sized distinction
 from the modifier value table at HIS level and the effect's size, and the market's
 surroundings at their authored level and size. The CHARACTER pile tapers lightly (each
-extra at 7/8 of the one before, never below 2/3). The value table and the taper rows are
-the example seed, so these journeys also prove the seed is coherent.
+extra at 7/8 of the one before, never below 2/3). The size fractions, level baselines and
+taper rows are the example seed, so these journeys also prove the seed is coherent. On the
+check lane a size is a fraction of one level's width of 8 points: Minor 1, Moderate 2, Large 4,
+Exceptional 6, Paramount 8, at every level unless staff override a level's row.
 
-- One distinction adds the value table's number for its holder's level and its size; a
-  higher-level holder of the same distinction adds more.
+- One distinction adds the table's number for its holder's level and its size; a staff
+  override at a higher holder's level shows in what that holder adds.
 - Rank steps a sized effect up the size ladder through its authored rank sizes, and a
   rank with no size of its own keeps the nearest lower one (#4660); a sized effect with
   no rank sizes adds the same table number at every rank. An unsized effect still adds
@@ -19,7 +21,7 @@ the example seed, so these journeys also prove the seed is coherent.
 - An unsized distinction, and an achievement reward on the same path, keep their flat
   values and still taper with the others.
 - A sized penalty stays a penalty, in its own pile.
-- Without a level (no class) or a value row, a sized distinction keeps its flat value.
+- Without a level (no class) or a size fraction, a sized distinction keeps its flat value.
 - The market's surroundings add their table value at their own level, whoever rolls;
   unsized surroundings keep their flat value.
 - Staff set an effect's size and a scene's level and size on the admin pages; Paramount
@@ -41,7 +43,7 @@ from evennia.objects.models import ObjectDB
 from integration_tests.harness import JourneyCase
 from world.checks.constants import ModifierLane, ModifierSize, ModifierSourceKind
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
-from world.checks.modifier_models import ModifierValue
+from world.checks.modifier_models import ModifierSizeFraction, ModifierValue
 from world.checks.modifier_values import load_value_table
 from world.checks.services import collect_check_modifiers, perform_check_with_modifiers
 from world.checks.types import CheckResult, ModifierContribution
@@ -131,26 +133,30 @@ class DistinctionsOnChecks(JourneyCase):
 
     # -- journeys -----------------------------------------------------------------
 
-    def test_one_distinction_adds_its_table_number_and_a_higher_holder_adds_more(self) -> None:
+    def test_one_distinction_adds_its_table_number_at_its_holders_level(self) -> None:
         silver_tongue = self.distinction("Silver Tongue")
         before = self.haggle(self.corvin)
 
         self.grant(self.corvin, silver_tongue)
 
-        # The seed's Large modifier is worth 10 at level 6, not the flat 5.
-        self.assertEqual(self.table.value(6, ModifierSize.LARGE), 10)
-        self.assertEqual(self.gain(self.corvin, before), 10)
+        # The seed's Large modifier is half of an 8-point level, 4 at level 6, not the flat 5.
+        self.assertEqual(self.table.value(6, ModifierSize.LARGE), 4)
+        self.assertEqual(self.gain(self.corvin, before), 4)
         (row,) = self.contributions(self.corvin)
         self.assertEqual(
             (row.source_kind, row.source_label, row.value, row.level, row.size),
-            (ModifierSourceKind.CHARACTER, "Silver Tongue", 10, 6, ModifierSize.LARGE),
+            (ModifierSourceKind.CHARACTER, "Silver Tongue", 4, 6, ModifierSize.LARGE),
         )
 
-        # A level-11 factor with the same distinction: Large is worth 16 there.
+        # A level-11 factor with the same distinction reads level 11's row: staff's override
+        # makes Large worth 6 there.
+        ModifierValue.objects.create(
+            lane=ModifierLane.CHECK, level=11, size=ModifierSize.LARGE, value=6
+        )
         maren = self.factor("Maren", level=11)
         maren_before = self.haggle(maren)
         self.grant(maren, silver_tongue)
-        self.assertEqual(self.gain(maren, maren_before), 16)
+        self.assertEqual(self.gain(maren, maren_before), 6)
 
     def step(self, distinction: Distinction, *sizes: tuple[int, int]) -> None:
         """Author the distinction's haggling effect's size at each ``(rank, size)``."""
@@ -170,30 +176,28 @@ class DistinctionsOnChecks(JourneyCase):
         return gains
 
     def test_rank_steps_the_size_up_the_ladder(self) -> None:
-        # The seed at level 6: Minor 2, Moderate 5, Large 10.
-        self.assertEqual(
-            [self.table.value(6, size) for size in ModifierSize.values[:3]], [2, 5, 10]
-        )
+        # The seed at level 6: Minor 1, Moderate 2, Large 4.
+        self.assertEqual([self.table.value(6, size) for size in ModifierSize.values[:3]], [1, 2, 4])
         fluent = self.distinction("Market Fluency", size=ModifierSize.MINOR, max_rank=3)
         self.step(fluent, (2, ModifierSize.MODERATE), (3, ModifierSize.LARGE))
 
         # Rank 1 is the effect's own Minor; ranks 2 and 3 take their authored sizes.
-        self.assertEqual(self.gains_by_rank(fluent), [2, 5, 10])
+        self.assertEqual(self.gains_by_rank(fluent), [1, 2, 4])
         (row,) = self.contributions(self.corvin)
-        self.assertEqual((row.value, row.level, row.size), (10, 6, ModifierSize.LARGE))
+        self.assertEqual((row.value, row.level, row.size), (4, 6, ModifierSize.LARGE))
 
     def test_a_rank_with_no_size_keeps_the_nearest_lower_one(self) -> None:
         # Minor, Minor, Large, Large: staff only authored rank 3.
         fluent = self.distinction("Market Fluency", size=ModifierSize.MINOR, max_rank=4)
         self.step(fluent, (3, ModifierSize.LARGE))
 
-        self.assertEqual(self.gains_by_rank(fluent), [2, 2, 10, 10])
+        self.assertEqual(self.gains_by_rank(fluent), [1, 1, 4, 4])
 
     def test_a_sized_effect_with_no_rank_sizes_is_the_same_at_every_rank(self) -> None:
         fluent = self.distinction("Market Fluency", max_rank=3)
 
-        # Large at level 6 is 10, and rank never multiplies it (#4660).
-        self.assertEqual(self.gains_by_rank(fluent), [10, 10, 10])
+        # Large at level 6 is 4, and rank never multiplies it (#4660).
+        self.assertEqual(self.gains_by_rank(fluent), [4, 4, 4])
 
     def test_an_unsized_effect_still_follows_its_per_rank_value(self) -> None:
         old_habits = self.distinction("Old Habits", size=None, max_rank=3)
@@ -224,13 +228,13 @@ class DistinctionsOnChecks(JourneyCase):
             return after.total_points - appraise_before.total_points
 
         self.grant(self.corvin, trader)
-        self.assertEqual((self.gain(self.corvin, haggle_before), appraise_gain()), (2, 5))
+        self.assertEqual((self.gain(self.corvin, haggle_before), appraise_gain()), (1, 2))
 
         # Rank 2: haggling steps from Minor to Large; appraisal stays Moderate.
         self.grant(self.corvin, trader)
-        self.assertEqual((self.gain(self.corvin, haggle_before), appraise_gain()), (10, 5))
+        self.assertEqual((self.gain(self.corvin, haggle_before), appraise_gain()), (4, 2))
         (appraise_row,) = collect_check_modifiers(self.corvin.sheet_data, appraisal).contributions
-        self.assertEqual((appraise_row.value, appraise_row.size), (5, ModifierSize.MODERATE))
+        self.assertEqual((appraise_row.value, appraise_row.size), (2, ModifierSize.MODERATE))
 
     def test_three_distinctions_taper(self) -> None:
         before = self.haggle(self.corvin)
@@ -238,9 +242,9 @@ class DistinctionsOnChecks(JourneyCase):
         for name in ("Silver Tongue", "Ledger Mind", "Patient Eye"):
             self.grant(self.corvin, self.distinction(name))
 
-        # 10 + 10 x 7/8 + 10 x (7/8)^2 = 26.4, rounded once.
-        self.assertEqual(self.gain(self.corvin, before), 26)
-        self.assertEqual(sorted(c.value for c in self.contributions(self.corvin)), [10, 10, 10])
+        # 4 + 4 x 7/8 + 4 x (7/8)^2 = 10.56, rounded once.
+        self.assertEqual(self.gain(self.corvin, before), 11)
+        self.assertEqual(sorted(c.value for c in self.contributions(self.corvin)), [4, 4, 4])
 
     def test_unsized_rows_keep_their_flat_values_and_taper(self) -> None:
         before = self.haggle(self.corvin)
@@ -249,22 +253,24 @@ class DistinctionsOnChecks(JourneyCase):
 
         for name in ("Silver Tongue", "Ledger Mind", "Patient Eye"):
             self.grant(self.corvin, self.distinction(name))
-        # The unsized one is fourth in the pile: 26.4 + 5 x (7/8)^3 = 29.8, not 26 + 5.
-        self.assertEqual(self.gain(self.corvin, before), 30)
+        # The unsized 5 outweighs each 4, so it leads the pile: 5 + 4 x (7/8 + (7/8)^2 +
+        # (7/8)^3) = 14.24, not the plain 11 + 5.
+        self.assertEqual(self.gain(self.corvin, before), 14)
         old_habits = next(
             c for c in self.contributions(self.corvin) if c.source_label == "Old Habits"
         )
         self.assertEqual((old_habits.value, old_habits.level, old_habits.size), (5, None, None))
 
         # An achievement reward reaches checks on the same CharacterModifier path: flat,
-        # and fifth in the same CHARACTER pile, at the 2/3 floor: 29.76 + 3.33 = 33.1.
+        # and second in the same CHARACTER pile (5, 5, 4, 4, 4 at 1, 7/8, (7/8)^2, (7/8)^3 and
+        # the 2/3 floor): 5 + 4.375 + 3.06 + 2.68 + 2.67 = 17.78.
         CharacterModifier.objects.create(
             character=self.corvin.sheet_data,
             source=ModifierSource.objects.create(achievement_reward=True),
             target=self.target,
             value=FLAT_AUTHORED,
         )
-        self.assertEqual(self.gain(self.corvin, before), 33)
+        self.assertEqual(self.gain(self.corvin, before), 18)
         reward = next(
             c for c in self.contributions(self.corvin) if c.source_label == "Achievement reward"
         )
@@ -279,11 +285,11 @@ class DistinctionsOnChecks(JourneyCase):
         self.grant(self.corvin, self.distinction("Silver Tongue"))
         self.grant(self.corvin, self.distinction("Known Cheat", per_rank=-3))
 
-        # +10 and -10 sit in separate piles, so neither tapers the other.
+        # +4 and -4 sit in separate piles, so neither tapers the other.
         self.assertEqual(self.gain(self.corvin, before), 0)
-        self.assertEqual(sorted(c.value for c in self.contributions(self.corvin)), [-10, 10])
+        self.assertEqual(sorted(c.value for c in self.contributions(self.corvin)), [-4, 4])
 
-    def test_without_a_level_or_a_value_row_the_flat_value_stays(self) -> None:
+    def test_without_a_level_or_a_size_fraction_the_flat_value_stays(self) -> None:
         silver_tongue = self.distinction("Silver Tongue")
         drifter = self.factor("Drifter", level=None)
         drifter_before = self.haggle(drifter)
@@ -291,8 +297,7 @@ class DistinctionsOnChecks(JourneyCase):
         # No class level: no level to read the table at.
         self.assertEqual(self.gain(drifter, drifter_before), FLAT_AUTHORED)
 
-        for row in ModifierValue.objects.filter(lane=ModifierLane.CHECK):
-            row.delete()
+        ModifierSizeFraction.objects.filter(lane=ModifierLane.CHECK).delete()
         before = self.haggle(self.corvin)
         self.grant(self.corvin, silver_tongue)
         self.assertEqual(self.gain(self.corvin, before), FLAT_AUTHORED)
@@ -349,8 +354,8 @@ class SurroundingsOnChecks(JourneyCase):
             modifier_size=ModifierSize.LARGE,
         )
 
-        # Large at level 11 is 16; Corvin's own level (6) is never read.
-        self.assertEqual(self.haggle(self.market).total_points - self.haggle(None).total_points, 16)
+        # Large at level 11 is 4; Corvin's own level (6) is never read.
+        self.assertEqual(self.haggle(self.market).total_points - self.haggle(None).total_points, 4)
         (row,) = collect_check_modifiers(
             self.corvin.sheet_data, self.haggling, scene=self.market
         ).contributions
@@ -359,7 +364,7 @@ class SurroundingsOnChecks(JourneyCase):
             (
                 ModifierSourceKind.SCENE,
                 "Scene surroundings: Market Day",
-                16,
+                4,
                 11,
                 ModifierSize.LARGE,
             ),

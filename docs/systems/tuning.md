@@ -53,27 +53,30 @@ and looks up the same `ResultChartOutcome` row the engine would land in.
 
 - `compute_modifier_pile(*, character_level, modifier_level, size, count) -> ModifierPileReport | None`
   (#4594) — the check lane's piece of the simulator: `count` equal buffs valued by the
-  `ModifierValue` table, tapered as CONDITION contributions by the `ModifierTaper` rows, laid on a
+  derived modifier value (size fraction x level width, or a `ModifierValue` override), tapered as CONDITION contributions by the `ModifierTaper` rows, laid on a
   character whose own total is the `ModifierLevelBaseline` for `character_level`, against a target
   at that same baseline. Reports the one-buff value (and its share of the rank band at that
   total), the plain and tapered pile, the rank before and after, and the whole-rank Success odds
   unbuffed and buffed (the slide, #4551 slice b, replaces whole ranks later). `None` when no value
   or baseline row covers the inputs.
-- The stat lane (#4726, ADR-4726-A) has its own `ModifierValue` and `ModifierTaper` rows
-  (`lane=stat`), edited on the same admin pages as the check lane's. Its values are in stored
+- The stat lane (#4726, ADR-4726-A) has its own `ModifierSizeFraction`, `ModifierLevelBaseline`,
+  `ModifierValue` and `ModifierTaper` rows (`lane=stat`), edited on the same admin pages as the
+  check lane's. Its values are in stored
   stat units (the number the sheet shows) and apply wherever a stat is read
   (`TraitHandler._get_stat_modifier`). The rule staff tune it by is #4551 section 5.5's
   universality: a stat buff of a size and level should move a check, through the stat's
-  `PointConversionRange`, by about the check lane's value for that size and level. The seed
-  meets it exactly (1 check point per stored stat unit, so equal values), and
+  `PointConversionRange`, by about the to-hit lane's value for that size and level (#5093: the
+  check lane's own Large is half a level, no longer the stat ladder). The seed
+  meets it exactly (1 check point per stored stat unit, and the stat and to-hit lanes share a
+  ladder), and
   `world/seeds/tests/test_stat_lane_universality.py` holds the relation until the simulator's
   universality guard is built. The modifier pile above reads the check lane only.
 - A vowed caster's size step (#4747, ADR-4747-A) reads the same rows: a stepped buff adds
-  (value(L, size + 1) minus value(L, size)) x tenths / 10 at L, the rung of her vow thread
-  (`thread_rung`, whole steps of 10 thread levels),
-  rounded half up, untapered. Two knobs tune it, both data: the gap between adjacent sizes at
-  each level in the value table (the Paramount rows exist only for the step above
-  Exceptional), and each vow's `CovenantRoleTechniqueSpecialty.multiplier_tenths` on the
+  (fraction(size + 1) minus fraction(size)) x one level's width at L x tenths / 10, L the rung of
+  her vow thread (`thread_rung`, whole steps of 10 thread levels),
+  rounded half up, untapered (`ValueTable.vow_step`, #5093; an override row does not change it).
+  Two knobs tune it, both data: the gap between adjacent sizes' fractions
+  (the Paramount fraction exists only for the step above Exceptional), and each vow's `CovenantRoleTechniqueSpecialty.multiplier_tenths` on the
   covenant role admin (10 = one whole step; the same dial scales that specialty's cast power).
   A secondary vow's tenths are also scaled by `SecondaryVowConfig.potency_tenths`. Only the
   one-size-up shape is fixed in code. The modifier pile does not simulate the step.

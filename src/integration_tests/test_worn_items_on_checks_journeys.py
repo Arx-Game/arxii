@@ -5,14 +5,15 @@ gave each check modifier a size. She puts them on with the real ``wear`` command
 next check, through ``perform_check_with_modifiers``, reads each worn item's value from
 the modifier value table at the level its quality tier counts at, and the pile tapers
 lightly (each extra at 7/8 of the one before, never below 2/3). The quality ladder, its
-example levels, the value table and the taper rows are the example seed, so these
-journeys also prove the seed is coherent.
+example levels, the size fractions, level baselines and taper rows are the example seed, so
+these journeys also prove the seed is coherent. On the check lane a Large modifier is half a
+level's width of 8 points: 4 at every level, unless staff override a level's row.
 
 - One Fine item adds the value table's Large number at Fine's level, not its flat value.
 - Three Fine items add the tapered total.
 - An item with no size keeps its flat value and still tapers with the others.
-- A Superb item of the same size adds more than a Fine one; a Superb spare she only
-  carries does not raise her worn Fine boots.
+- A Superb item of the same size reads its own level, so a staff override of that level
+  shows; a Superb spare she only carries does not raise her worn Fine boots.
 - A sized penalty (a plate cuirass) stays a penalty, in its own pile.
 - Her covenant's level bonus rides the equipment walk and is never tapered.
 - An item at a tier with no level keeps its flat value.
@@ -35,7 +36,7 @@ from integration_tests.harness import JourneyCase
 from web.admin.tuning.required_content import collect_required_content
 from world.checks.constants import ModifierLane, ModifierSize, ModifierSourceKind
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
-from world.checks.modifier_models import ModifierValue
+from world.checks.modifier_models import ModifierSizeFraction, ModifierValue
 from world.checks.modifier_values import load_value_table
 from world.checks.services import collect_check_modifiers, perform_check_with_modifiers
 from world.checks.types import CheckResult
@@ -133,14 +134,14 @@ class WornItemsOnChecks(JourneyCase):
 
         self.dress(boots)
 
-        # The seed puts Fine at level 11, where a Large modifier is worth 16.
+        # The seed puts Fine at level 11, where a Large modifier is half of an 8-point level.
         self.assertEqual(self.fine.modifier_level, 11)
-        self.assertEqual(self.table.value(11, ModifierSize.LARGE), 16)
-        self.assertEqual(self.gain(before), 16)
+        self.assertEqual(self.table.value(11, ModifierSize.LARGE), 4)
+        self.assertEqual(self.gain(before), 4)
         (worn,) = collect_check_modifiers(self.ysmay.sheet_data, self.shadowing).contributions
         self.assertEqual(
             (worn.source_kind, worn.source_label, worn.value, worn.level, worn.size),
-            (ModifierSourceKind.EQUIPMENT, "Equipped: Padded Boots", 16, 11, ModifierSize.LARGE),
+            (ModifierSourceKind.EQUIPMENT, "Equipped: Padded Boots", 4, 11, ModifierSize.LARGE),
         )
 
     def test_three_fine_items_taper(self) -> None:
@@ -148,8 +149,8 @@ class WornItemsOnChecks(JourneyCase):
 
         self.dress(*self.boots_cloak_gloves())
 
-        # 16 + 16 x 7/8 + 16 x (7/8)^2 = 42.25, rounded once.
-        self.assertEqual(self.gain(before), 42)
+        # 4 + 4 x 7/8 + 4 x (7/8)^2 = 10.56, rounded once.
+        self.assertEqual(self.gain(before), 11)
 
     def test_an_unsized_item_keeps_its_flat_value_and_tapers(self) -> None:
         hood = self.template("Old Hood", BodyRegion.HEAD)
@@ -159,27 +160,32 @@ class WornItemsOnChecks(JourneyCase):
         self.assertEqual(self.gain(before), FLAT_AUTHORED)
 
         self.dress(*self.boots_cloak_gloves())
-        # The hood is fourth in the pile: 42.25 + 5 x (7/8)^3 = 45.6, not 42 + 5.
-        self.assertEqual(self.gain(before), 46)
+        # The hood's flat 5 outweighs each 4, so it leads the pile: 5 + 4 x (7/8 + (7/8)^2 +
+        # (7/8)^3) = 14.24, not the plain 11 + 5.
+        self.assertEqual(self.gain(before), 14)
         breakdown = collect_check_modifiers(self.ysmay.sheet_data, self.shadowing)
         hood_row = next(c for c in breakdown.contributions if c.source_label.endswith("Hood"))
         self.assertEqual((hood_row.value, hood_row.level, hood_row.size), (5, None, None))
 
-    def test_a_better_item_of_the_same_size_adds_more(self) -> None:
+    def test_a_better_item_reads_its_own_levels_override(self) -> None:
         boots, _cloak, _gloves = self.boots_cloak_gloves()
+        ModifierValue.objects.create(
+            lane=ModifierLane.CHECK, level=16, size=ModifierSize.LARGE, value=6
+        )
         before = self.shadowing_check()
         self.carried(boots, self.fine, key="Fine Boots")
         self.carried(boots, self.superb, key="Superb Boots")
 
         self.wear("Fine Boots")
         # Superb boots she carries but does not wear leave the Fine pair's level alone.
-        self.assertEqual(self.gain(before), 16)
+        self.assertEqual(self.gain(before), 4)
 
         self.assertIn("You remove Fine Boots.", self.telnet(self.ysmay, "remove Fine Boots"))
         self.wear("Superb Boots")
-        # Superb counts at level 16, where Large is worth 23.
+        # Superb counts at level 16, where staff's override makes Large worth 6, not the
+        # derived 4.
         self.assertEqual(self.superb.modifier_level, 16)
-        self.assertEqual(self.gain(before), 23)
+        self.assertEqual(self.gain(before), 6)
 
     def test_a_tier_with_no_level_keeps_the_flat_value(self) -> None:
         boots, _cloak, _gloves = self.boots_cloak_gloves()
@@ -194,10 +200,9 @@ class WornItemsOnChecks(JourneyCase):
         (worn,) = collect_check_modifiers(self.ysmay.sheet_data, self.shadowing).contributions
         self.assertEqual((worn.value, worn.level, worn.size), (FLAT_AUTHORED, None, None))
 
-    def test_without_a_value_row_the_item_keeps_its_flat_value(self) -> None:
+    def test_without_a_size_fraction_the_item_keeps_its_flat_value(self) -> None:
         boots, _cloak, _gloves = self.boots_cloak_gloves()
-        for row in ModifierValue.objects.filter(lane=ModifierLane.CHECK):
-            row.delete()
+        ModifierSizeFraction.objects.filter(lane=ModifierLane.CHECK).delete()
         before = self.shadowing_check()
 
         self.dress(boots)
@@ -215,13 +220,13 @@ class WornItemsOnChecks(JourneyCase):
 
         self.dress(boots, cuirass)
 
-        # +16 and -16 sit in separate piles, so neither tapers the other.
+        # +4 and -4 sit in separate piles, so neither tapers the other.
         self.assertEqual(self.gain(before), 0)
         values = sorted(
             c.value
             for c in collect_check_modifiers(self.ysmay.sheet_data, self.shadowing).contributions
         )
-        self.assertEqual(values, [-16, 16])
+        self.assertEqual(values, [-4, 4])
 
     def test_the_covenant_bonus_on_the_walk_is_never_tapered(self) -> None:
         # A check-scoped stat target makes the equipment walk reach Shadowing; her
@@ -247,10 +252,11 @@ class WornItemsOnChecks(JourneyCase):
             if c.source_label == "Equipment & attunement"
         )
         self.assertEqual((walk.value, walk.vow_part), (20, 20))
-        # The three items taper among themselves (42.25); the covenant's 20 counts whole.
-        # Tapered as a fourth item it would have led the pile: 20 + 14 + 12.25 + 10.7 = 57.
-        self.assertEqual(self.gain(before_items), 42)
-        self.assertEqual(collect_check_modifiers(self.ysmay.sheet_data, self.shadowing).total, 62)
+        # The three items taper among themselves (10.56); the covenant's 20 counts whole.
+        # Tapered as a fourth item it would have led the pile: 20 + 4 x (7/8 + (7/8)^2 +
+        # (7/8)^3) = 29.2.
+        self.assertEqual(self.gain(before_items), 11)
+        self.assertEqual(collect_check_modifiers(self.ysmay.sheet_data, self.shadowing).total, 31)
 
 
 class StaffTuneWornItems(JourneyCase):

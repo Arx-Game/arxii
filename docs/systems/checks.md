@@ -67,23 +67,41 @@ category makes those lookups raise `MultipleObjectsReturned` (or silently return
 wrong row for `get_or_create`) — treat every `CheckType.name` as globally unique in
 practice, even though the schema doesn't enforce it (#2501 content-pipeline audit).
 
-### Modifier value table, level baselines and the taper (#4594, ADR-4594-A)
+### Modifier values, size fractions, level baselines and the taper (#4594, ADR-4594-A, #5093)
 
 Staff-tuned rows, all keyed by a `ModifierLane` column (`check`, `stat` since #4726, and the
 maneuver effect lanes `damage`, `to_hit` and `partial_protection` since #4876, read by the effect
 readers in `world/mechanics/effect_targets.py`) so later lanes add rows, not models. The seed's
-to-hit rows copy the check lane's (a to-hit bonus is check points on the attack check). Models live in `modifier_models.py`, readers in `modifier_values.py`, admin
-pages in `admin.py`. Example values are in `world/seeds/modifier_values.py` (cluster
-`modifier_values`); an empty table leaves behavior unchanged.
+to-hit lane is seeded with the same example Large ladder the stat lane uses, not the check lane's (see below). Models live in `modifier_models.py`, readers in `modifier_values.py`, admin
+pages in `admin.py`. Example rows are in `world/seeds/modifier_values.py` (cluster
+`modifier_values`); with no fraction rows a sized modifier keeps its flat authored value.
+
+A modifier's value is derived (#5093): its size's `ModifierSizeFraction` times one level's width
+(`ModifierLevelBaseline` step) at the level it applies at, rounded half up, never below 1 while the
+fraction is nonzero. A `ModifierValue` row at exactly that level and size overrides the derived
+number. A Large check buff at fraction 0.5 is half a rank at any level (4 points on the seeded
+8-point ladder). The seed writes dense baselines (levels 1-30) and five fractions for each of the
+check, stat, to-hit, damage and partial protection lanes, and no `ModifierValue` rows. The check
+lane's fractions are Minor 0.125, Moderate 0.25, Large 0.5, Exceptional 0.75, Paramount 1.0; each
+other lane's baselines are set so its Large value lands within 1 of its old example ladder at levels
+1, 6, 11, 16, 21 and 26 (stat and to-hit 3/10/16/23/30/36, damage 2/4/6/8/10/12, partial
+protection 5/8/10/13/16/20), so on those lanes a level's width varies. The check lane's Large no
+longer follows the stat lane's: the universality test now compares the stat lane to the to-hit lane.
 
 | Model | Purpose | Key fields |
 |-------|---------|------------|
-| `ModifierValue` | The value table: what a modifier of `size` is worth at `level`, in the lane's units. Sparse rows read as steps (highest authored level at or below the modifier's). A magnitude; the authored modifier keeps its sign | `lane`, `level`, `size` (`ModifierSize`), `value`; unique (`lane`, `level`, `size`) |
+| `ModifierSizeFraction` | How much of one level's width a modifier of `size` is worth in a lane (#5093). A size with no row has no derived value | `lane`, `size` (`ModifierSize`), `fraction` (decimal, 3 places); unique (`lane`, `size`) |
+| `ModifierValue` | An override of the derived value: what a modifier of `size` is worth at exactly `level`, in the lane's units. It covers only its own level (the step lookup is gone). A magnitude; the authored modifier keeps its sign | `lane`, `level`, `size` (`ModifierSize`), `value`; unique (`lane`, `level`, `size`) |
 | `ModifierLevelBaseline` | The typical total at each level in a lane, one row per level (the seed writes levels 1-30). On the check lane these rows ARE the rank ladder (rank N starts at the level-N baseline) and the gap between two levels is one level's width (#5093) | `lane`, `level`, `baseline`; unique (`lane`, `level`) |
 | `ModifierTaper` | Which source kinds taper in a lane: each further modifier of the kind counts `ratio` of the one before, never below `floor` | `lane`, `source_kind` (`ModifierSourceKind`), `ratio`, `floor`; unique (`lane`, `source_kind`) |
 
-Readers (`modifier_values.py`): `load_value_table(lane) -> ValueTable` (one query;
-`ValueTable.value(level, size) -> int | None`), `load_taper_rules(lane) -> dict[str, TaperRule]`
+Readers (`modifier_values.py`): `load_value_table(lane) -> ValueTable` (three queries: overrides,
+fractions and baselines; `ValueTable.value(level, size) -> int | None` is the override at exactly
+that level and size, else fraction x width, `None` with no fraction and no override, and raises
+`ModifierConfigError` when a fraction needs a width the baseline rows cannot give;
+`ValueTable.signed_value(authored, level, size)` signs it like the authored row;
+`ValueTable.vow_step(authored, level, size, tenths)` is a vow's size step, see below),
+`load_taper_rules(lane) -> dict[str, TaperRule]`
 (one query), `load_baselines(lane) -> BaselineTable` (one query; `.baseline(level)` is the level's
 row or the highest row below it, `.width(level)` is `baseline(level + 1) - baseline(level)`, and at or
 above the top row the top row's width; both raise `ModifierConfigError`, `world/checks/exceptions.py`,

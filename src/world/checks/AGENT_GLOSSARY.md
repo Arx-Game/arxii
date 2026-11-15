@@ -193,12 +193,20 @@ Also authored on `ItemCheckModifier.modifier_size` for a worn item's check bonus
 size its `DistinctionEffectRankSize` row names, never a multiple, #4660) and `SceneCheckModifier.modifier_size` for scene surroundings (#4638).
 _Avoid_: magnitude, strength, small/big buff
 
-**Value table** (#4594, ADR-4594-A):
-The `ModifierValue` rows: what a modifier of each size is worth at each level, in its lane's units
-(check points for the check lane, stored stat units for the stat lane; damage points, check points
-and percentage points for the damage, to-hit and partial protection lanes, #4876). Sparse rows read as steps: a level reads the row at the highest
-authored level at or below it. The value is a magnitude; the authored modifier keeps its sign.
+**Value table** (#4594, ADR-4594-A, #5093):
+What a modifier of each size is worth at each level, in its lane's units (check points for the
+check lane, stored stat units for the stat lane; damage points, check points and percentage points
+for the damage, to-hit and partial protection lanes, #4876). It is derived: the size's **size
+fraction** times one level's width, with a `ModifierValue` row at exactly that level and size as
+an override. The value is a magnitude; the authored modifier keeps its sign.
 _Avoid_: buff table, modifier curve
+
+**Size fraction** (#5093):
+A `ModifierSizeFraction` row: how much of one level's width a modifier of a size is worth in a
+lane (Large 0.5 is half a level). A modifier's value is its size fraction times the level width,
+rounded half up and never below 1; a vow's size step is the gap between two sizes' fractions times
+the width. A size with no fraction has no derived value.
+_Avoid_: size share, size multiplier
 
 **Level width** (#5093):
 The gap between one level's baseline and the next: `level_width(level, lane)` in `world.checks.modifier_values`. At or above the top authored level it reuses the top row's width. It is the unit a bonus is sized in (a share of one level), and the width of a rank band on the check lane.
@@ -206,8 +214,8 @@ _Avoid_: level step, rank size
 
 **Level baseline** (#4594):
 The `ModifierLevelBaseline` rows: the typical total a character of each level reaches in a lane.
-Staff read a value-table row against it, as a share and, on the check lane, as the share of the
-rank band that total sits in.
+Staff read a modifier value against it, as a share and, on the check lane, as the share of the
+rank band that total sits in. One level's width is the step between two rows.
 _Avoid_: expected total, par
 
 **Taper** (#4594, ADR-4594-A, #4551 decision 1):
