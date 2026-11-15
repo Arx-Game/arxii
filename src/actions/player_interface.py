@@ -612,7 +612,7 @@ def _fury_tier_options(ladder: list[FuryTier]) -> tuple[FuryTierOption, ...]:
 
 
 def _eligible_fury_resonances(
-    character: ObjectDB, sheet: CharacterSheet, ladder: list[FuryTier]
+    sheet: CharacterSheet, ladder: list[FuryTier]
 ) -> tuple[FuryResonanceOption, ...]:
     """The resonances the character holds that her strength lets her give in to (#5124).
 
@@ -621,20 +621,22 @@ def _eligible_fury_resonances(
     """
     from world.magic.services.fury import (  # noqa: PLC0415
         full_trade_intensities,
-        provocation_bonus_percent,
-        provocation_cap,
         top_share_percent,
+        top_strength_tier,
     )
 
-    top_percent = top_share_percent()
+    # Until Task 6 reads each resonance's own strength, every resonance reads the same row,
+    # so it and the figures built from it are worked out once, outside the loop.
+    strength = top_strength_tier()
+    if strength is None or strength.give_in_max_depth < 1:
+        return ()
+    cap = strength.give_in_max_depth
+    full = full_trade_intensities(
+        ladder, strength.give_in_bonus_percent, top_percent=top_share_percent()
+    )
     options: list[FuryResonanceOption] = []
     for held in sheet.cached_resonances:
         resonance = held.resonance
-        cap = provocation_cap(character, resonance)
-        if cap < 1:
-            continue
-        bonus = provocation_bonus_percent(character, resonance)
-        full = full_trade_intensities(ladder, bonus, top_percent=top_percent)
         options.append(
             FuryResonanceOption(
                 id=resonance.pk,
@@ -729,7 +731,7 @@ def _combat_actions(
     fury_ladder = _fury_ladder()
     fury_tiers = _fury_tier_options(fury_ladder)
     soulfray_warning = get_soulfray_warning(character)
-    eligible_fury_resonances = _eligible_fury_resonances(character, sheet, fury_ladder)
+    eligible_fury_resonances = _eligible_fury_resonances(sheet, fury_ladder)
 
     # The caster's personal magic check is the same for every technique: read it once.
     personal_check = get_character_cast_check(character)

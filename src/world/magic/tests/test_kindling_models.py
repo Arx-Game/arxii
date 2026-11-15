@@ -65,6 +65,13 @@ class KindledStrengthTierTests(TestCase):
                 with transaction.atomic():
                     KindledStrengthTier.objects.create(rank=rank, name=name)
 
+    def test_the_factory_lands_its_fields_on_a_row_that_already_exists(self) -> None:
+        # Migration 0413 seeds ranks 1 to 3, so on the Postgres tier the row is already there.
+        KindledStrengthTier.objects.create(rank=3, name="Seeded")
+        row = KindledStrengthTierFactory(rank=3, give_in_max_depth=2)
+        self.assertEqual(row.give_in_max_depth, 2)
+        self.assertEqual(KindledStrengthTier.objects.filter(rank=3).count(), 1)
+
 
 class KindlingTests(TestCase):
     def test_a_kindling_ends_with_its_fight(self) -> None:

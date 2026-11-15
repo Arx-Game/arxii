@@ -68,7 +68,7 @@ def _bond_tier(character: CharacterSheet | ObjectDB, anchor: CharacterSheet) -> 
     return side.tier if side is not None else 0
 
 
-def _top_strength_tier() -> KindledStrengthTier | None:
+def top_strength_tier() -> KindledStrengthTier | None:
     """The row of the strongest kindled strength (rank 3), or None when staff have not made it.
 
     Task 6 of #5124 replaces this: Fury reads the strength row of the resonance the
@@ -88,7 +88,7 @@ def provocation_cap(
     """
     if character is None or resonance is None:
         return 0
-    tier = _top_strength_tier()
+    tier = top_strength_tier()
     return tier.give_in_max_depth if tier is not None else 0
 
 
@@ -101,7 +101,7 @@ def provocation_bonus_percent(
     """
     if character is None or resonance is None:
         return 0
-    tier = _top_strength_tier()
+    tier = top_strength_tier()
     return tier.give_in_bonus_percent if tier is not None else 0
 
 
@@ -114,7 +114,7 @@ def provocation_ease(
     """
     if character is None or resonance is None:
         return 0
-    tier = _top_strength_tier()
+    tier = top_strength_tier()
     return tier.give_in_ease if tier is not None else 0
 
 

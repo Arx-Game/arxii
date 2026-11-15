@@ -1,14 +1,14 @@
 """Seed the three kindled strengths from FuryConfig and collapse drift offers (#5124).
 
-Data only (the schema comes from 0411 and 0412; the FuryConfig fields it reads are dropped by 0414).
+Data only (the schema comes from 0411 and 0412; the FuryConfig fields it reads go in 0414).
 
 Fury's depth cap, bonus and ease used to come from a bond tier through three FuryConfig
 numbers. They now come from the strength a kindled resonance reaches, so this copies them
 into the three KindledStrengthTier rows. Strength ``r`` reaches Fury depth ``r``: its
 ``min_bond_tier`` is ``r x provocation_cap_per_tier``, its ``give_in_max_depth`` is ``r``, its
 bonus is ``r x bonus_scale_per_cap_point`` percent and its ease is
-``r x cap_ease_per_point``. With no FuryConfig row the three rows are made with zeros, for staff
-to fill in. Every other column is left 0 for staff to tune (a reach column of 0 means the
+``r x cap_ease_per_point``. With no FuryConfig row the field defaults (1, 10, 1) stand in for its
+numbers, as they did at runtime, so Fury stays reachable. Every other column is left 0 for staff to tune (a reach column of 0 means the
 strength is not reached that way). A tier that already exists is left as it is.
 
 It also keeps one open DriftConversionOffer per character, the newest, because 0414 makes the
@@ -30,15 +30,19 @@ def seed_tiers(apps, schema_editor):
     FuryConfig = apps.get_model("arxii", "FuryConfig")
     KindledStrengthTier = apps.get_model("arxii", "KindledStrengthTier")
     config = FuryConfig.objects.filter(pk=1).first() or FuryConfig.objects.first()
+    # With no FuryConfig row Fury ran on the field defaults (1, 10, 1), so the tiers are made
+    # from those and Fury stays reachable.
+    per_tier = config.provocation_cap_per_tier if config is not None else 1
+    bonus_scale = config.bonus_scale_per_cap_point if config is not None else 10
+    ease = config.cap_ease_per_point if config is not None else 1
     for rank, name in TIER_NAMES.items():
-        values = {"name": name}
-        if config is not None:
-            values.update(
-                min_bond_tier=rank * config.provocation_cap_per_tier,
-                give_in_max_depth=rank,
-                give_in_bonus_percent=rank * config.bonus_scale_per_cap_point,
-                give_in_ease=rank * config.cap_ease_per_point,
-            )
+        values = {
+            "name": name,
+            "min_bond_tier": rank * per_tier,
+            "give_in_max_depth": rank,
+            "give_in_bonus_percent": rank * bonus_scale,
+            "give_in_ease": rank * ease,
+        }
         KindledStrengthTier.objects.get_or_create(rank=rank, defaults=values)
 
 

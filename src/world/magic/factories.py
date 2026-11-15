@@ -5020,7 +5020,6 @@ class KindledStrengthTierFactory(factory.django.DjangoModelFactory):
 
     class Meta:
         model = "arxii.KindledStrengthTier"
-        django_get_or_create = ("rank",)
 
     rank = factory.Sequence(lambda n: n + 1)
     name = factory.LazyAttribute(lambda o: f"Strength {o.rank}")
@@ -5032,6 +5031,18 @@ class KindledStrengthTierFactory(factory.django.DjangoModelFactory):
     give_in_ease = 0
     dig_deep_scale_percent = 0
     earn_percent = 100
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        """Update-or-create on rank so passed fields land on a row that already exists.
+
+        Migration 0413 seeds ranks 1 to 3, so on the Postgres tier the row is already there;
+        a plain ``django_get_or_create`` would silently drop every non-lookup kwarg
+        (django_notes.md's get_or_create gotcha).
+        """
+        rank = kwargs.pop("rank")
+        instance, _ = model_class.objects.update_or_create(rank=rank, defaults=kwargs)
+        return instance
 
 
 class KindlingConfigFactory(factory.django.DjangoModelFactory):

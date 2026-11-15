@@ -220,8 +220,10 @@ def _locked_offer(offer: DriftConversionOffer) -> DriftConversionOffer:
     locked = list(DriftConversionOffer.objects.select_for_update().filter(pk=offer.pk))
     if not locked:
         raise DriftOfferNotFoundError
+    # An offer outlives the scene it first opened in (#5124): its scene is null once that
+    # scene is deleted, and a null scene holds nothing against it.
     scene = locked[0].scene
-    if not scene.is_active or scene.is_finished:
+    if scene is not None and (not scene.is_active or scene.is_finished):
         raise DriftOfferNotFoundError
     return locked[0]
 

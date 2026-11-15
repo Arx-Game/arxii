@@ -306,6 +306,14 @@ class RefusalTests(DriftRiteTestBase):
             self.perform()
         self.assert_nothing_moved()
 
+    def test_an_offer_whose_scene_was_deleted_still_performs(self) -> None:
+        # The offer outlives the scene it first opened in (#5124): its scene is null, not gone.
+        self.scene.delete()
+        self.offer.refresh_from_db()
+        self.assertIsNone(self.offer.scene)
+        result = self.perform(amount=12)
+        self.assertEqual(result.converted_amount, 12)
+
     def test_no_cap_toward_the_target(self) -> None:
         self.cap.delete()
         with self.assertRaises(DriftOfferNotFoundError):

@@ -2537,7 +2537,7 @@ class SituationRequirementMixin(models.Model):
     )
     mission_theme = models.ForeignKey(
         "arxii.MissionTheme",
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="+",
