@@ -931,6 +931,7 @@ class EffectiveSeverityTests(TestCase):
 
     def test_resolution_rolls_against_the_adjusted_difficulty(self) -> None:
         """resolve_challenge reads effective_severity, not the template's severity level."""
+        from world.checks.test_helpers import force_check_outcome
         from world.mechanics.challenge_resolution import resolve_challenge
 
         instance = self._instance(
@@ -938,13 +939,14 @@ class EffectiveSeverityTests(TestCase):
             adjustment_reason="braced from the far side",
         )
 
-        with patch(
-            "world.mechanics.challenge_resolution.perform_check",
-            return_value=MagicMock(outcome=CheckOutcomeFactory(name="AdjOutcome")),
-        ) as spy:
-            resolve_challenge(self.character, instance, self.approach, self.source)
+        # The real roll with its outcome forced: the capture records the difficulty it was
+        # rolled against, and the result carries the outcome back.
+        outcome = CheckOutcomeFactory(name="AdjOutcome")
+        with force_check_outcome(outcome) as roll:
+            resolution = resolve_challenge(self.character, instance, self.approach, self.source)
 
-        assert spy.call_args.kwargs["target_difficulty"] == 50
+        assert roll.target_difficulty == 50
+        assert resolution.check_result.outcome == outcome
 
     def test_adjustment_without_a_reason_is_rejected_by_the_database(self) -> None:
         with self.assertRaises(IntegrityError):

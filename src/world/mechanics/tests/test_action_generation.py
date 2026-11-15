@@ -108,24 +108,26 @@ class ActionGenerationTests(TestCase):
         risk-transparency lie, and risk transparency is a stated design principle
         of the challenge system.
         """
-        self.challenge_instance.severity_adjustment_tenths = DIFFICULTY_BAND_SHIFT_TENTHS
-        self.challenge_instance.adjustment_reason = "braced from the far side"
-        self.challenge_instance.save()
-        self.addCleanup(self._clear_adjustment)
-
+        seed_check_resolution_tables()
+        character = CharacterFactory(db_key="ShiftChar")
         source = _make_source(
             capability_name="fire_control_ag",
             capability_id=self.capability.id,
             value=10,
+            source_type=CapabilitySourceType.TRAIT,
         )
-        with patch(
-            "world.mechanics.services._get_difficulty_indicator_for_check",
-            return_value=DifficultyIndicator.MODERATE,
-        ) as spy:
-            get_available_actions(self.character, self.location, capability_sources=[source])
+        (plain,) = get_available_actions(character, self.location, capability_sources=[source])
 
-        # the template is level 0 (no difficulty); the shift is three levels' width (24 points)
-        assert spy.call_args.args[2] == 24
+        self.challenge_instance.severity_adjustment_tenths = DIFFICULTY_BAND_SHIFT_TENTHS
+        self.challenge_instance.adjustment_reason = "braced from the far side"
+        self.challenge_instance.save()
+        self.addCleanup(self._clear_adjustment)
+        (shifted,) = get_available_actions(character, self.location, capability_sources=[source])
+
+        # The template is level 0; the shift is three levels' width, so the indicator the
+        # player reads before committing is harder than the unshifted one.
+        order = list(DifficultyIndicator)
+        assert order.index(shifted.difficulty_indicator) > order.index(plain.difficulty_indicator)
 
     def _clear_adjustment(self) -> None:
         self.challenge_instance.severity_adjustment_tenths = 0
