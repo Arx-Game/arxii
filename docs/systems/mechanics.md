@@ -343,11 +343,13 @@ the target, and an effect target has none; the facet effect bonus is how a facet
   engaged role and on its anchor role both count, so a holder graduated to a sub-role keeps
   their scaling (`docs/systems/covenants.md`).
 - **Facets (#4815, slice 4 of #4783).** `FacetEffectBonus` (`world/magic/models/motifs.py`:
-  `facet`, `target` limited to the "maneuver_effect" category, non-zero `amount`; unique per
+  `facet`, `target` limited to the "maneuver_effect" category, non-zero `amount_tenths`; unique per
   facet and target) is the facet naming the effect it boosts, whatever its thread's resonance
   (owner ruling 2026-11-01). `passive_facet_bonuses` adds, for each FACET thread whose facet is
-  on a worn item, `amount x item quality multiplier x attachment quality multiplier x max(1,
-  thread_rung(level))` (per 10 thread levels) per worn item facet, in one query for all the threads' facets. Staff
+  on a worn item, `amount_tenths / 10 x the FACET_EFFECT_BONUS lane's baseline at max(1, thread_rung(level)) x item
+  quality multiplier x attachment quality multiplier` (the seeded baseline is 10 a rung, so
+  `amount_tenths` 2 is +2 per 10 thread levels, #5093) per worn item facet, in one query for all the
+  threads' facets and one for the lane's rows. Staff
   author rows in the Facet admin's "Facet effect bonuses" inline; `merge_facets` moves them,
   keeping the winner's row where both facets boost one target.
 

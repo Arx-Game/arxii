@@ -17,10 +17,12 @@ from django.db import transaction
 from django.db.models import Prefetch, Q, Sum
 
 from typeclasses.characters import Character
-from world.checks.modifier_values import ValueTable, load_value_table
+from world.checks.constants import ModifierLane
+from world.checks.modifier_values import ValueTable, load_baselines, load_value_table
 from world.checks.services import (
     chart_has_success_outcomes,
     difficulty_points,
+    load_difficulty_tables,
     preview_check_difficulty,
 )
 from world.conditions.services import (
@@ -83,6 +85,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
+    from world.checks.services import DifficultyTables
     from world.classes.models import Aspect
     from world.conditions.models import DamageType
     from world.covenants.models import CovenantRole
@@ -626,12 +629,15 @@ def _facet_effect_bonus_total(
 ) -> int:
     """The ``FacetEffectBonus`` rows of worn, threaded facets naming ``target`` (#4815).
 
-    The facet names the maneuver effect, whatever its thread's resonance; each (worn item
-    facet, row) pair scales like a resonance passive, except per 10 thread levels
-    (``thread_rung``): maneuver numbers are plain (a charge's 5 damage), so "+1 per 10
-    levels" at thread level 30 is +3, as a vow's stat scaling on a maneuver effect reads
-    it. One query for every thread's facet, and none for a target outside the
-    maneuver-effect category, which no row can name.
+    The facet names the maneuver effect, whatever its thread's resonance. Each (worn item
+    facet, row) pair scales by the item's and the attachment's quality, and by the
+    ``FACET_EFFECT_BONUS`` lane's baseline at the facet thread's rung (``thread_rung``, steps
+    of 10 thread levels; rung 0 reads as rung 1, the floor a resonance passive has):
+    ``amount_tenths`` is a share of that baseline in tenths, so the seeded 10 a rung reads
+    "+1 per 10 levels" as +1 at rung 1 and +3 at thread level 30 (#5093), as a vow's stat
+    scaling on a maneuver effect reads it. One query for every thread's facet, one for the
+    lane's rows, and none for a target outside the maneuver-effect category, which no row can
+    name.
     """
     from world.magic.services.threads import thread_rung  # noqa: PLC0415
 
@@ -640,17 +646,21 @@ def _facet_effect_bonus_total(
     amounts = dict(
         FacetEffectBonus.objects.filter(
             facet_id__in={thread.target_facet_id for thread, _ in worn}, target=target
-        ).values_list("facet_id", "amount")
+        ).values_list("facet_id", "amount_tenths")
     )
+    if not amounts:
+        return 0
+    rung_values = load_baselines(ModifierLane.FACET_EFFECT_BONUS)
     total = 0
     for thread, matching in worn:
-        amount = amounts.get(thread.target_facet_id)
-        if amount is None:
+        amount_tenths = amounts.get(thread.target_facet_id)
+        if amount_tenths is None:
             continue
+        rung_value = rung_values.baseline(max(1, thread_rung(thread.level)))
         for item_facet in matching:
             total += _facet_effect_contribution(
-                base=amount,
-                level=thread_rung(thread.level),
+                base=Decimal(amount_tenths) * rung_value / 10,
+                level=1,
                 item=item_facet.item_instance,
                 item_facet=item_facet,
             )
@@ -978,15 +988,15 @@ def fashion_outfit_bonus(sheet: object, target: ModifierTarget, society: object)
 
 def _facet_effect_contribution(
     *,
-    base: int,
+    base: int | Decimal,
     level: int,
     item: object,
     item_facet: object,
 ) -> int:
     """Compute one (item, facet) contribution of a facet bonus worth ``base``.
 
-    ``base`` is a tier-0 FLAT_BONUS pull effect's amount or a ``FacetEffectBonus``
-    amount (#4815); both scale the same way.
+    ``base`` is a tier-0 FLAT_BONUS pull effect's amount, or a ``FacetEffectBonus``'s amount
+    already sized at the facet thread's rung (#4815, #5093, the caller passes level 1).
 
     Formula: base × item_quality_multiplier × attachment_quality_multiplier × max(1, level).
 
@@ -996,8 +1006,8 @@ def _facet_effect_contribution(
 
     Args:
         base: The authored amount before scaling.
-        level: The thread level the bonus scales by (the level for a pull effect, its
-            ``thread_rung`` for a ``FacetEffectBonus``).
+        level: The thread level the bonus scales by (the level for a pull effect; 1 for a
+            ``FacetEffectBonus``, whose rung is already in ``base``).
         item: The ItemInstance (supplies ``quality_tier.stat_multiplier``).
         item_facet: The ItemFacet (supplies ``attachment_quality_tier.stat_multiplier``).
 
@@ -1815,11 +1825,14 @@ def get_available_actions(
 
     actions: list[AvailableAction] = []
 
-    for ci in challenge_instances:
+    instances = list(challenge_instances)
+    # One read of the baseline and tier rows for every instance's difficulty indicator.
+    tables = load_difficulty_tables() if instances else None
+    for ci in instances:
         template = ci.template
         challenge_property_ids = {p.id for p in template.cached_properties}
         _match_approaches(
-            character, ci, template, challenge_property_ids, cap_id_to_sources, actions
+            character, ci, template, challenge_property_ids, cap_id_to_sources, actions, tables
         )
 
     actions.extend(_bare_object_actions(character, location, cap_id_to_sources))
@@ -1863,6 +1876,7 @@ def _build_action_for_source(  # noqa: PLR0913
     app: Application,
     source: CapabilitySource,
     cap_prereq_cache: dict[int, PrerequisiteEvaluation | None],
+    tables: DifficultyTables | None = None,
 ) -> AvailableAction | None:
     """Build the AvailableAction for one (approach, source) pair, or None if it is skipped."""
     if not _source_meets_effect_requirements(app, approach, source):
@@ -1888,7 +1902,7 @@ def _build_action_for_source(  # noqa: PLR0913
         difficulty = _get_difficulty_indicator_for_check(
             character,
             approach.check_type,
-            ci.effective_severity,
+            ci.severity_points(tables),
             source,
         )
         # An IMPOSSIBLE grade stays in the list, labelled, rather than being dropped
@@ -1934,8 +1948,13 @@ def _match_approaches(  # noqa: PLR0913
     challenge_property_ids: set[int],
     cap_id_to_sources: dict[int, list[CapabilitySource]],
     actions: list[AvailableAction],
+    tables: DifficultyTables | None = None,
 ) -> None:
-    """Match approaches on a challenge to capability sources and append actions."""
+    """Match approaches on a challenge to capability sources and append actions.
+
+    ``tables`` is the one loaded read of the baseline and tier rows every approach's
+    difficulty indicator shares (#5093).
+    """
     cap_prereq_cache: dict[int, PrerequisiteEvaluation | None] = {}
 
     for approach in template.cached_approaches:
@@ -1947,7 +1966,7 @@ def _match_approaches(  # noqa: PLR0913
 
         for source in matching_sources:
             action = _build_action_for_source(
-                character, ci, template, approach, app, source, cap_prereq_cache
+                character, ci, template, approach, app, source, cap_prereq_cache, tables
             )
             if action is not None:
                 actions.append(action)
@@ -1993,6 +2012,7 @@ def _bare_object_actions(
     )
 
     actions: list[AvailableAction] = []
+    tables = load_difficulty_tables()
     for obj_id, prop_ids in property_ids_by_object.items():
         actions.extend(
             _bare_object_actions_for_object(
@@ -2003,6 +2023,7 @@ def _bare_object_actions(
                 applications,
                 active_pairs,
                 cap_id_to_sources,
+                tables,
             )
         )
 
@@ -2071,6 +2092,7 @@ def _bare_object_actions_for_object(  # noqa: PLR0913
     applications: list[Application],
     active_pairs: set[tuple[int, int]],
     cap_id_to_sources: dict[int, list[CapabilitySource]],
+    tables: DifficultyTables | None = None,
 ) -> list[AvailableAction]:
     """Match one candidate object's properties against candidate Applications."""
     # Fresh per-object cache: capability-level prerequisites evaluate against the
@@ -2095,7 +2117,15 @@ def _bare_object_actions_for_object(  # noqa: PLR0913
 
         for source in cap_id_to_sources.get(app.capability_id, []):
             action = _build_bare_object_action(
-                character, location, obj, template, matching_approach, app, source, cap_prereq_cache
+                character,
+                location,
+                obj,
+                template,
+                matching_approach,
+                app,
+                source,
+                cap_prereq_cache,
+                tables,
             )
             if action is not None:
                 actions.append(action)
@@ -2112,6 +2142,7 @@ def _build_bare_object_action(  # noqa: PLR0913
     app: Application,
     source: CapabilitySource,
     cap_prereq_cache: dict[int, PrerequisiteEvaluation | None],
+    tables: DifficultyTables | None = None,
 ) -> AvailableAction | None:
     """Build the synthesized AvailableAction for one (object, approach, source), or None.
 
@@ -2138,7 +2169,7 @@ def _build_bare_object_action(  # noqa: PLR0913
         difficulty = _get_difficulty_indicator_for_check(
             character,
             approach.check_type,
-            difficulty_points(template.severity_level),
+            difficulty_points(template.severity_level, tables),
             source,
         )
         # An IMPOSSIBLE grade stays in the list, labelled, rather than being dropped

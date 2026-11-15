@@ -389,6 +389,21 @@ class PerformCheckTests(TestCase):
         assert result.check_type == self.check_type
         assert result.trait_points > 0
 
+    def test_a_matching_path_aspect_adds_its_share_of_one_levels_width(self):
+        """The acting side sizes the aspect match like the opposing side (#5093)."""
+        path = PathFactory(name="PerformCheckAspectPath", stage=PathStage.PROSPECT)
+        aspect = Aspect.objects.create(name="perform_check_aspect")
+        PathAspect.objects.create(character_path=path, aspect=aspect, weight=2)
+        CharacterPathHistory.objects.create(character=self.character.sheet_data, path=path)
+        CheckTypeAspectFactory(check_type=self.check_type, aspect=aspect, weight=Decimal("0.5"))
+
+        result = perform_check(self.character, self.check_type, target_difficulty=0)
+
+        # 0.5 x 2 = one whole width of level 1 (a character with no class level row acts at
+        # level 1). This class's ladder starts its ranks at 10, 25 and 50 points, so level 1's
+        # baseline is 10 and its width the 15 to level 2's.
+        assert result.aspect_bonus == 15
+
     @patch("world.checks.services.random.randint", return_value=50)
     def test_perform_check_with_fixed_roll(self, mock_randint):
         CharacterTraitValue.objects.create(

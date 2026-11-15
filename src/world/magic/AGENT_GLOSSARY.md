@@ -240,7 +240,8 @@ _Avoid_: synonym (an alias is a spelling of the same facet, not a related one); 
 **Facet effect bonus**:
 A facet's always-on bonus to one maneuver effect (`FacetEffectBonus`, #4815): "Wolf: +2 Charge:
 damage". The facet names the effect, whatever its thread's resonance, and it counts while the
-character wears an item carrying the facet and has a facet thread on it.
+character wears an item carrying the facet and has a facet thread on it. Its `amount_tenths` is
+tenths of the Facet effect bonus lane's baseline at the facet thread's rung (#5093).
 _Avoid_: facet passive (that is the resonance-keyed tier-0 `ThreadPullEffect` bonus, a different
 row); facet buff.
 

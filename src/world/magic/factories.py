@@ -1146,7 +1146,7 @@ class FacetEffectBonusFactory(factory.django.DjangoModelFactory):
         category=factory.SubFactory(ModifierCategoryFactory, name=MANEUVER_EFFECT_CATEGORY_NAME),
         scope_effect_kind=ManeuverKind.DAMAGE,
     )
-    amount = 1
+    amount_tenths = 1
 
 
 class MotifResonanceAssociationFactory(factory.django.DjangoModelFactory):

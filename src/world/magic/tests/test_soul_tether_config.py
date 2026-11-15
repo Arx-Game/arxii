@@ -106,6 +106,51 @@ class SoulTetherConfigKnobsTest(TestCase):
         self.assertEqual(_compute_rescue_budget(1, 3, 0), 120)
 
 
+class RescueBudgetThreadLaneTest(TestCase):
+    """The thread term of the rescue budget reads the RESCUE_BUDGET_THREAD lane at the rung."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.seeds.modifier_values import seed_pool_and_cap_lanes
+
+        seed_pool_and_cap_lanes()
+
+    def test_seeded_rows_give_what_a_twentieth_per_thread_level_gave_at_each_rung(self):
+        from world.magic.services.soul_tether import _compute_rescue_budget
+
+        # (success, stage, thread level, budget). Each budget is the old rule's output,
+        # max(1, int(base * (1.0 + success * 0.5 + thread_level * 0.05))) with bases 60/120/250:
+        # 60 * 3.0, 60 * 2.5, 120 * 7.0 and 250 * 13.5.
+        for success, stage, thread_level, expected in (
+            (1, 3, 30, 180),
+            (1, 3, 20, 150),
+            (2, 4, 100, 840),
+            (0, 5, 250, 3375),
+        ):
+            self.assertEqual(
+                _compute_rescue_budget(success, stage, thread_level),
+                expected,
+                (success, stage, thread_level),
+            )
+
+    def test_a_thread_between_rungs_reads_its_whole_rung_and_under_rung_one_adds_nothing(self):
+        from world.magic.services.soul_tether import _compute_rescue_budget
+
+        # Level 29 is rung 2 (+1.0 to the multiplier), level 9 is under rung 1 (+0).
+        self.assertEqual(_compute_rescue_budget(0, 3, 29), 120)
+        self.assertEqual(_compute_rescue_budget(0, 3, 9), 60)
+
+    def test_staff_retune_a_rung_in_the_lane_row(self):
+        from world.checks.constants import ModifierLane
+        from world.checks.modifier_models import ModifierLevelBaseline
+        from world.magic.services.soul_tether import _compute_rescue_budget
+
+        row = ModifierLevelBaseline.objects.get(lane=ModifierLane.RESCUE_BUDGET_THREAD, level=2)
+        row.baseline = 200  # 2.0 at rung 2, where the seed is 1.0
+        row.save()
+        self.assertEqual(_compute_rescue_budget(0, 3, 20), 180)
+
+
 class SoulTetherConfigGetterTest(TestCase):
     def test_get_soul_tether_config_lazy_creates_with_defaults(self):
         from world.magic.services.soul_tether import get_soul_tether_config
@@ -132,7 +177,6 @@ class SoulTetherConfigGetterTest(TestCase):
         # Rescue budget multipliers (integer-encoded)
         self.assertEqual(cfg.rescue_budget_base_mult_tenths, 10)  # 1.0
         self.assertEqual(cfg.rescue_budget_success_mult_tenths, 5)  # 0.5
-        self.assertEqual(cfg.rescue_budget_thread_mult_hundredths, 5)  # 0.05
 
     def test_get_soul_tether_config_idempotent(self):
         from world.magic.services.soul_tether import get_soul_tether_config

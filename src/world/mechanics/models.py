@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.checks.models import CheckType
+    from world.checks.services import DifficultyTables
     from world.mechanics.types import PrerequisiteEvaluation
     from world.traits.models import Trait
 from world.areas.positioning.constants import CreatureTraversal
@@ -2084,15 +2085,21 @@ class ChallengeInstance(SharedMemoryModel):
         The single reader of ``severity_adjustment_tenths`` — every resolution path takes its
         ``target_difficulty`` from here so a placed challenge and a situation-minted one
         cannot drift apart. The shift is tenths of one level's width at the template's level.
+        A caller reading many instances uses :meth:`severity_points` with one loaded
+        ``DifficultyTables`` instead.
         """
+        return self.severity_points()
+
+    def severity_points(self, tables: "DifficultyTables | None" = None) -> int:
+        """``effective_severity`` reading the baseline and tier rows from ``tables`` (#5093)."""
         from world.checks.services import (  # noqa: PLC0415
             difficulty_points,
             difficulty_step_points,
         )
 
         level = self.template.severity_level
-        return difficulty_points(level) + difficulty_step_points(
-            self.severity_adjustment_tenths, level
+        return difficulty_points(level, tables) + difficulty_step_points(
+            self.severity_adjustment_tenths, level, tables
         )
 
 

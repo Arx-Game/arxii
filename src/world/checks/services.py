@@ -16,6 +16,8 @@ from world.checks.constants import (
     ModifierSourceKind,
 )
 from world.checks.modifier_values import (
+    BaselineTable,
+    TierTable,
     load_baselines,
     load_taper_rules,
     load_tier_table,
@@ -466,7 +468,25 @@ class _CheckBreakdown(NamedTuple):
 _MIN_BASELINE_ROWS_FOR_WIDTH = 2
 
 
-def _level_baseline_or_zero(level: int) -> int:
+class DifficultyTables(NamedTuple):
+    """The CHECK baselines and the level tiers, loaded once for a loop of difficulties (#5093).
+
+    ``difficulty_points`` and ``difficulty_step_points`` each read the baseline rows (and the
+    tier rows), a query per call. A loop over many authored levels (a mission node's support
+    moves, a challenge's approaches, a room's challenge instances) loads these once with
+    :func:`load_difficulty_tables` and passes them as ``tables``.
+    """
+
+    baselines: BaselineTable
+    tiers: TierTable
+
+
+def load_difficulty_tables() -> DifficultyTables:
+    """Load the CHECK baselines and the level tiers, two queries."""
+    return DifficultyTables(baselines=load_baselines(), tiers=load_tier_table())
+
+
+def _level_baseline_or_zero(level: int, table: BaselineTable | None = None) -> int:
     """The CHECK lane's baseline at ``level``, or 0 where the ladder has nothing to give.
 
     A level below 1 (a level-0 or brand-new character) is below the first baseline row and
@@ -477,13 +497,14 @@ def _level_baseline_or_zero(level: int) -> int:
     """
     if level < 1:
         return 0
-    table = load_baselines()
+    if table is None:
+        table = load_baselines()
     if not table.levels:
         return 0
     return table.baseline(level)
 
 
-def _level_strength_or_zero(level: int) -> int:
+def _level_strength_or_zero(level: int, tables: DifficultyTables | None = None) -> int:
     """A level's strength in points: its CHECK baseline plus its tier jump (#5093).
 
     What an NPC of ``level`` opposes with and what a staff-set difficulty level asks of the
@@ -491,13 +512,17 @@ def _level_strength_or_zero(level: int) -> int:
     the level has reached, added in full. 0 wherever the baseline is 0 (a level below 1, or no
     baseline rows), so a "no difficulty" level never picks up a tier.
     """
-    baseline = _level_baseline_or_zero(level)
+    if level < 1:
+        return 0
+    if tables is None:
+        tables = load_difficulty_tables()
+    baseline = _level_baseline_or_zero(level, tables.baselines)
     if baseline == 0:
         return 0
-    return baseline + load_tier_table().bonus(level)
+    return baseline + tables.tiers.bonus(level)
 
 
-def difficulty_points(level: int) -> int:
+def difficulty_points(level: int, tables: DifficultyTables | None = None) -> int:
     """An authored standalone difficulty level as the points a check rolls against (#5093).
 
     Every authored base difficulty (a lock, a cure, a recipe, a mission move) is a level, and
@@ -505,12 +530,15 @@ def difficulty_points(level: int) -> int:
     Level 0 means "no difficulty" and reads 0 points, so a row authored at 0 still asks nothing
     of the roller. A level above the top baseline reads the top baseline; a database with no
     baseline rows reads 0 (see ``_level_baseline_or_zero``). Callers pass the result as
-    ``target_difficulty``.
+    ``target_difficulty``. A loop over many levels passes one ``tables``
+    (``load_difficulty_tables``) so the rows load once; a level below 1 reads no table at all.
     """
-    return _level_strength_or_zero(level)
+    return _level_strength_or_zero(level, tables)
 
 
-def difficulty_step_points(tenths: int | Decimal, at_level: int) -> int:
+def difficulty_step_points(
+    tenths: int | Decimal, at_level: int, tables: DifficultyTables | None = None
+) -> int:
     """An authored difficulty increment in tenths of a level as points at ``at_level`` (#5093).
 
     A per-step increment, or a difficulty added on top of another one, is a share of one
@@ -518,11 +546,12 @@ def difficulty_step_points(tenths: int | Decimal, at_level: int) -> int:
     names the level the increment sits on (the base difficulty's level, the opposing level,
     the character's own level). A level below 1 uses level 1's width, so an increment on a
     "no difficulty" base still means something; a database with no baseline rows reads 0.
-    Rounded half up, so 0 tenths is 0 points and any positive increment keeps its sign.
+    Rounded half up, so 0 tenths is 0 points and any positive increment keeps its sign. A loop
+    passes one ``tables`` (``load_difficulty_tables``) so the baseline rows load once.
     """
     if tenths == 0:
         return 0
-    table = load_baselines()
+    table = load_baselines() if tables is None else tables.baselines
     if len(table.levels) < _MIN_BASELINE_ROWS_FOR_WIDTH:
         return 0
     return round_half_up(Decimal(tenths) * table.width(max(at_level, 1)) / 10)
@@ -2399,8 +2428,8 @@ def _aspect_contributions(
     kind (CHARACTER for a distinction row, EQUIPMENT for a worn piece or the walk), so the
     check lane's taper treats a card's Aspect bonus as the same pile as its other bonuses;
     only the label names the Aspect. The path term (``_calculate_aspect_bonus``, check
-    weight x path weight x level) is a different thing and is untouched: this needs no path
-    and does not scale with level, the shape the rate card prices an Aspect at.
+    weight x path weight x one level's width) is a different thing and is untouched: this
+    needs no path and does not scale with level, the shape the rate card prices an Aspect at.
     """
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
 

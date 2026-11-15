@@ -232,14 +232,14 @@ class MergeFacetsTests(TestCase):
     def test_effect_bonuses_follow_the_winner_and_its_own_amount_stays(self) -> None:
         # Both facets boost one target: the winner keeps its +2 and the loser's +5 goes.
         # The loser's bonus to a second target moves across (#4815).
-        shared = FacetEffectBonusFactory(facet=self.winner, amount=2)
-        FacetEffectBonusFactory(facet=self.loser, target=shared.target, amount=5)
-        moved = FacetEffectBonusFactory(facet=self.loser, amount=3)
+        shared = FacetEffectBonusFactory(facet=self.winner, amount_tenths=2)
+        FacetEffectBonusFactory(facet=self.loser, target=shared.target, amount_tenths=5)
+        moved = FacetEffectBonusFactory(facet=self.loser, amount_tenths=3)
 
         svc.merge_facets(self.winner, [self.loser])
 
         self.assertEqual(
-            sorted(self.winner.effect_bonuses.values_list("target_id", "amount")),
+            sorted(self.winner.effect_bonuses.values_list("target_id", "amount_tenths")),
             sorted([(shared.target_id, 2), (moved.target_id, 3)]),
         )
 

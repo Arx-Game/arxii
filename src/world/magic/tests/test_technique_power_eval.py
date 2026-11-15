@@ -47,6 +47,7 @@ from world.magic.types.technique_power import (
     ReferenceFrame,
     ValuationProvenance,
 )
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.traits.factories import (
     CheckOutcomeFactory,
     CheckRankFactory,
@@ -243,6 +244,7 @@ class VowEffectTermTests(TestCase):
     def setUpTestData(cls) -> None:
         # The same even two-band chart as TechniquePowerEvalDamageTests: SL 1 and SL 3,
         # P=0.5 each, one x1.00 multiplier row.
+        seed_pool_and_cap_lanes()
         CheckRankFactory(rank=0, min_points=0)
         sl1 = CheckOutcomeFactory(name="Partial", success_level=1)
         sl3 = CheckOutcomeFactory(name="Full", success_level=3)
@@ -269,7 +271,7 @@ class VowEffectTermTests(TestCase):
         effect = VowAddedEffectFactory(
             covenant_role=self.role,
             unlock_thread_level=unlock,
-            damage_per_thread_level=per_level,
+            damage_tenths=per_level,
         )
         VowAddedEffectDamageProfileFactory(
             effect=effect,
@@ -342,8 +344,8 @@ class VowEffectTermTests(TestCase):
         effect = VowAddedEffectFactory(
             covenant_role=self.role,
             unlock_thread_level=0,
-            severity_per_thread_level=2,
-            duration_per_thread_level=1,
+            severity_tenths=2,
+            duration_tenths=1,
         )
         VowAddedEffectAppliedConditionFactory(
             effect=effect,

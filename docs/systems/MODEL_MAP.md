@@ -7628,6 +7628,7 @@
 - `get_modifier_breakdown(character, modifier_target: 'ModifierTarget', *, value_lane: 'str | None' = None, inputs: 'DerivedInputs | None' = None) -> 'ModifierBreakdown' - Get detailed breakdown of all modifiers for a target.`
 - `get_modifier_total(character, modifier_target: 'ModifierTarget', *, perceiving_society: 'object | None' = None, level_override: 'int | None' = None) -> 'int' - Get total modifier value for a target.`
 - `item_mundane_stat_for_target(item: 'ItemInstance', target: 'ModifierTarget') -> 'int' - Mundane combat stat an equipped item contributes to ``target`` (#985, §5.6).`
+- `load_baselines(lane: 'str' = ModifierLane.CHECK) -> 'BaselineTable' - Load ``lane``'s ``ModifierLevelBaseline`` rows in one query.`
 - `load_value_table(lane: 'str' = ModifierLane.CHECK) -> 'ValueTable' - Load ``lane``'s overrides, size fractions and level baselines in three queries.`
 - `motif_coherence_bonus(sheet: 'object', resonance_id: 'int') -> 'int' - Per-resonance fashion-coherence bonus from worn styles bound to the character's Motif.`
 - `passive_facet_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum tier-0 FLAT_BONUS contributions from equipped item facets (Spec D §5.2).`

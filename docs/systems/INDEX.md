@@ -7298,8 +7298,7 @@ Unified modifier system — categories, types, sources, and per-character modifi
   - `delete_distinction_modifiers(char_distinction) -> int`
   - `passive_facet_bonuses(sheet, target) -> int` (Spec D §5.2) — sums tier-0 FACET
     `ThreadPullEffect` contributions per worn item, plus the worn facets' own
-    `FacetEffectBonus` rows on a maneuver-effect target (#4815, scaled per 10 thread levels,
-    `thread_rung`); called by `get_modifier_total`
+    `FacetEffectBonus` rows on a maneuver-effect target (#4815, `amount_tenths` of the FACET_EFFECT_BONUS lane at the facet thread's rung, #5093); called by `get_modifier_total`
   - `covenant_role_bonus(sheet, target) -> int` (Spec D §5.6, #985) — loops
     `currently_engaged_roles()` × equipped items; compatible slot adds `role_bonus`
     (stacks on combat's gear read); incompatible slot adds `max(0, role_bonus -
@@ -8363,7 +8362,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
 - **Vow added effects (#4581, ADR-4581-A) [BUILT & WIRED]:** staff-authored payload a
   covenant vow adds to a technique cast. Models: `VowAddedEffect` (header: `covenant_role`,
   `function`, optional `gift` / `technique`, `cast_context`, `situation`, `beneficiary`,
-  `frequency`, `unlock_thread_level`, the three `*_per_thread_level` scalers, `upgrades`
+  `frequency`, `unlock_thread_level`, the three `*_tenths` scalers (severity, duration, damage, each on its own lane), `upgrades`
   self-FK `RESTRICT`) and its four children `VowAddedEffectAppliedCondition`,
   `VowAddedEffectRemovedCondition`, `VowAddedEffectTreatment`,
   `VowAddedEffectDamageProfile`; the play-state ledger `VowAddedEffectFiring` lives in

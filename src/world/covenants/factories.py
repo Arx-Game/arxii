@@ -193,9 +193,9 @@ class VowAddedEffectFactory(factory_django.DjangoModelFactory):
     beneficiary = PerkBeneficiary.SELF
     frequency = VowEffectFrequency.EVERY_CAST
     unlock_thread_level = 0
-    severity_per_thread_level = 0
-    duration_per_thread_level = 0
-    damage_per_thread_level = 0
+    severity_tenths = 0
+    duration_tenths = 0
+    damage_tenths = 0
     upgrades = None
 
 

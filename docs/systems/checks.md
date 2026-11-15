@@ -97,7 +97,18 @@ before its base and to the Hollow's maximum (seeded 2 and 10 a rung, replacing t
 `SoulTetherConfig` `*_level_mult` columns); `outfit_trickle` is the factor a facet thread's rung
 gives the daily outfit trickle (seeded as the rung, read at least at rung 1); `techniques_per_gift`
 is the techniques a gift allows at the gift thread's depth (seeded 3 a depth, replacing
-`GiftAcquisitionConfig.techniques_per_thread_level`); `fatigue_level_bonus` is the fatigue
+`GiftAcquisitionConfig.techniques_per_thread_level`); six rung lanes are read at a thread's rung
+(`thread_rung`, 10 thread levels): `rescue_budget_thread` (hundredths of the rescue budget's
+multiplier, seeded 50 a rung, replacing `SoulTetherConfig.rescue_budget_thread_mult_hundredths`),
+`moon_tuning` (a moon-bound character's gift thread's tuning, seeded 10 a rung, replacing the
+`TUNING_PER_THREAD_LEVEL` constant), `facet_effect_bonus` (`FacetEffectBonus.amount_tenths` is
+tenths of this baseline at a facet thread's rung, seeded 10 a rung) and `vow_effect_severity`,
+`vow_effect_duration` and `vow_effect_damage` (a `VowAddedEffect`'s `severity_tenths`,
+`duration_tenths` and `damage_tenths` are tenths of what the lane's baseline gains between the
+effect's unlock rung and the holder's vow thread's rung, seeded 10 a rung). The seeded rows give
+the old per-rung numbers at every whole rung; a thread between rungs reads its whole rung, so
+the rescue budget and the moon tuning, which counted every thread level, now step at each
+rung. `fatigue_level_bonus` is the fatigue
 capacity a character level adds on top of the stat terms and is not seeded, so it adds nothing
 until staff author rows. Each strict lane raises `ModifierConfigError` with no row at or below
 the level, and the "Modifier level baselines (pool and cap lanes)" content sentinel reports a

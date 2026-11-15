@@ -46,8 +46,8 @@ stays in place for that holder.
 The holder's COVENANT_ROLE thread level on the vow's anchor role gates the row
 (``unlock_thread_level``, both thread levels as players see them, #5091) and scales
 it: each 10 thread levels above the unlock (``thread_rung``) add the
-row's ``severity_per_thread_level``, ``duration_per_thread_level`` and
-``damage_per_thread_level``. A row from a secondary vow has each bonus
+row's ``severity_tenths``, ``duration_tenths`` and ``damage_tenths``, each a share of its own
+lane's baseline gained over those rungs (#5093). A row from a secondary vow has each bonus
 multiplied by ``SecondaryVowConfig.potency_tenths`` and floor-divided by 10.
 
 ## Upgrades
@@ -91,11 +91,15 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 import logging
 from typing import TYPE_CHECKING
 
 from django.db.models import Prefetch, QuerySet
 
+from world.checks.constants import ModifierLane
+from world.checks.modifier_values import BaselineTable, load_baselines
+from world.checks.types import round_half_up
 from world.combat.models import CombatParticipant, VowAddedEffectFiring
 from world.covenants.constants import VowEffectContext, VowEffectFrequency
 from world.covenants.focus_picks import chosen_pick_ids_by_holder, holder_has_pick
@@ -114,7 +118,7 @@ from world.covenants.perks.services import (
     vow_holder_candidates,
     vow_holder_thread_levels,
 )
-from world.covenants.types import FiredVowEffect, VowEffectBonuses
+from world.covenants.types import FiredVowEffect, VowEffectBonuses, VowEffectLanes
 from world.magic.models.techniques import ConditionTargetKind, Technique, TechniqueFunctionTag
 
 if TYPE_CHECKING:
@@ -648,6 +652,8 @@ def _scaled_firings(live: list[_LiveRow]) -> list[FiredVowEffect]:
             chosen[key] = row
 
     potency_tenths: int | None = None
+    scaling = vow_effects_scale(r.effect for r in chosen.values())
+    lanes = load_vow_effect_lanes() if scaling else None
     fired: list[FiredVowEffect] = []
     for row in chosen.values():
         if row.candidate.is_secondary and potency_tenths is None:
@@ -658,6 +664,7 @@ def _scaled_firings(live: list[_LiveRow]) -> list[FiredVowEffect]:
             row.effect,
             row.thread_level,
             potency_tenths=potency_tenths if row.candidate.is_secondary else None,
+            lanes=lanes,
         )
         fired.append(
             FiredVowEffect(
@@ -672,26 +679,66 @@ def _scaled_firings(live: list[_LiveRow]) -> list[FiredVowEffect]:
     return fired
 
 
-def vow_effect_bonuses(
-    effect: VowAddedEffect, thread_level: int, *, potency_tenths: int | None = None
-) -> VowEffectBonuses:
-    """The bonuses ``effect`` adds at ``thread_level``: the one per-level rule (#4930).
+def vow_effects_scale(effects: Iterable[VowAddedEffect]) -> bool:
+    """Whether any of ``effects`` has a nonzero per-rung column, so needs the lanes (#5093)."""
+    return any(e.severity_tenths or e.duration_tenths or e.damage_tenths for e in effects)
 
-    Each 10 thread levels above ``unlock_thread_level`` (``thread_rung``, an internal
-    step, #5091) add the row's
-    ``severity_per_thread_level``, ``duration_per_thread_level`` and
-    ``damage_per_thread_level``; a level at or below the unlock adds nothing.
-    ``potency_tenths`` is ``SecondaryVowConfig.potency_tenths`` for a row from a
-    secondary vow (each bonus times it, floor-divided by 10), or ``None`` for a
-    primary vow. The cast (``_scaled_firings``) and the technique power evaluator
-    both call this, so a preview prices what a cast adds. Issues no query.
+
+def load_vow_effect_lanes() -> VowEffectLanes:
+    """The three vow effect lanes' baselines, three queries, for a loop to load once (#5093)."""
+    return VowEffectLanes(
+        severity=load_baselines(ModifierLane.VOW_EFFECT_SEVERITY),
+        duration=load_baselines(ModifierLane.VOW_EFFECT_DURATION),
+        damage=load_baselines(ModifierLane.VOW_EFFECT_DAMAGE),
+    )
+
+
+def _lane_gain(table: BaselineTable, tenths: int, from_rung: int, to_rung: int) -> int:
+    """``tenths`` of what ``table``'s baseline gains from ``from_rung`` up to ``to_rung``.
+
+    A rung under 1 has no baseline row and reads 0, so a row that unlocks at a thread level
+    under rung 1 gains from nothing. Rounded half up; never negative.
+    """
+    if tenths == 0:
+        return 0
+    top = table.baseline(to_rung) if to_rung >= 1 else 0
+    bottom = table.baseline(from_rung) if from_rung >= 1 else 0
+    return max(0, round_half_up(Decimal(tenths) * (top - bottom) / 10))
+
+
+def vow_effect_bonuses(
+    effect: VowAddedEffect,
+    thread_level: int,
+    *,
+    potency_tenths: int | None = None,
+    lanes: VowEffectLanes | None = None,
+) -> VowEffectBonuses:
+    """The bonuses ``effect`` adds at ``thread_level``: the one per-level rule (#4930, #5093).
+
+    The holder's vow thread rung (``thread_rung``, steps of 10 thread levels, #5091) against
+    the rung of ``unlock_thread_level``: each of ``severity_tenths``, ``duration_tenths`` and
+    ``damage_tenths`` is that many tenths of what its own lane's baseline
+    (``VOW_EFFECT_SEVERITY``, ``VOW_EFFECT_DURATION``, ``VOW_EFFECT_DAMAGE``) gains between
+    the two rungs. The seeded lanes gain 10 a rung, so a column of 2 adds 2 a rung above the
+    unlock, what the old per-rung columns did. A thread at or below the unlock's rung adds
+    nothing and reads no lane row. ``potency_tenths`` is ``SecondaryVowConfig.potency_tenths``
+    for a row from a secondary vow (each bonus times it, floor-divided by 10), or ``None`` for
+    a primary vow. The cast (``_scaled_firings``) and the technique power evaluator both call
+    this, so a preview prices what a cast adds. A caller pricing many effects passes one
+    ``lanes`` (``load_vow_effect_lanes``) so the baseline rows load once; with none passed
+    they load here, and only when a bonus is nonzero.
     """
     from world.magic.services.threads import thread_rung  # noqa: PLC0415
 
-    above = max(0, thread_rung(thread_level) - thread_rung(effect.unlock_thread_level))
-    severity = above * effect.severity_per_thread_level
-    duration = above * effect.duration_per_thread_level
-    damage = above * effect.damage_per_thread_level
+    unlock_rung = thread_rung(effect.unlock_thread_level)
+    rung = thread_rung(thread_level)
+    if rung <= unlock_rung or not vow_effects_scale((effect,)):
+        return VowEffectBonuses(severity=0, duration=0, damage=0)
+    if lanes is None:
+        lanes = load_vow_effect_lanes()
+    severity = _lane_gain(lanes.severity, effect.severity_tenths, unlock_rung, rung)
+    duration = _lane_gain(lanes.duration, effect.duration_tenths, unlock_rung, rung)
+    damage = _lane_gain(lanes.damage, effect.damage_tenths, unlock_rung, rung)
     if potency_tenths is not None:
         severity = severity * potency_tenths // 10
         duration = duration * potency_tenths // 10

@@ -799,7 +799,7 @@ Fields:
 | `rescue_budget_base_stage3/4/5` | 60/120/250 | Base severity-reduction budget per stage |
 | `rescue_budget_base_mult_tenths` | 10 (→ 1.0) | Base multiplier in tenths |
 | `rescue_budget_success_mult_tenths` | 5 (→ 0.5) | Success-level multiplier in tenths |
-| `rescue_budget_thread_mult_hundredths` | 5 (→ 0.05) | Thread-level multiplier in hundredths |
+| `RESCUE_BUDGET_THREAD` lane (`ModifierLevelBaseline`) | 50 a rung (→ 0.5) | Thread term in hundredths at the Sineater's thread rung (#5093; replaced `rescue_budget_thread_mult_hundredths`) |
 
 ### 15.2 Modifications to existing models
 

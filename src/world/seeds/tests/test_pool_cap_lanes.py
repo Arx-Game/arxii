@@ -30,6 +30,19 @@ _OLD_RULE_VALUES = {
 }
 
 
+# lane -> (rung 1, rung 11, rung 26): each rung lane gains a fixed amount a rung. The rescue lane
+# is 0.05 of the budget's multiplier a thread level (50 hundredths a rung of 10 levels), the
+# moon lane 1 tuning a thread level, and the facet and vow effect lanes 10 tenths a rung.
+_RUNG_LANE_VALUES = {
+    ModifierLane.RESCUE_BUDGET_THREAD: (50, 550, 1300),
+    ModifierLane.MOON_TUNING: (10, 110, 260),
+    ModifierLane.FACET_EFFECT_BONUS: (10, 110, 260),
+    ModifierLane.VOW_EFFECT_SEVERITY: (10, 110, 260),
+    ModifierLane.VOW_EFFECT_DURATION: (10, 110, 260),
+    ModifierLane.VOW_EFFECT_DAMAGE: (10, 110, 260),
+}
+
+
 class PoolCapLaneSeedTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
@@ -39,6 +52,20 @@ class PoolCapLaneSeedTests(TestCase):
         for lane, expected in _OLD_RULE_VALUES.items():
             actual = tuple(level_baseline(level, lane) for level in (1, 11, 26))
             self.assertEqual(actual, expected, lane)
+
+    def test_each_rung_lane_gains_what_its_old_per_thread_level_number_gave_a_rung(self) -> None:
+        for lane, expected in _RUNG_LANE_VALUES.items():
+            actual = tuple(level_baseline(rung, lane) for rung in (1, 11, 26))
+            self.assertEqual(actual, expected, lane)
+            self.assertEqual(
+                list(
+                    ModifierLevelBaseline.objects.filter(lane=lane)
+                    .order_by("level")
+                    .values_list("level", flat=True)
+                ),
+                list(range(1, 31)),
+                lane,
+            )
 
     def test_the_fatigue_level_bonus_lane_has_no_rows(self) -> None:
         self.assertFalse(
@@ -136,3 +163,35 @@ class PoolCapLaneMigrationTests(TestCase):
         self._run({})
         self.assertEqual(level_baseline(2, ModifierLane.ANIMA_POOL), 9)
         self.assertEqual(level_baseline(3, ModifierLane.ANIMA_POOL), 300)
+
+
+class RungLaneMigrationTests(TestCase):
+    """The rung lanes' data migration carries the rescue coefficient and seeds the rest."""
+
+    def _run(self, configs: dict[str, object]) -> None:
+        import world.migrations as migrations_package
+
+        name = next(
+            info.name
+            for info in iter_modules(migrations_package.__path__)
+            if info.name.endswith("_vow_and_facet_lane_rows")
+        )
+        import_module(f"world.migrations.{name}").write_lane_rows(_Apps(configs), None)
+
+    def test_defaults_when_no_config_row_exists(self) -> None:
+        self._run({})
+        for lane, expected in _RUNG_LANE_VALUES.items():
+            actual = tuple(level_baseline(rung, lane) for rung in (1, 11, 26))
+            self.assertEqual(actual, expected, lane)
+
+    def test_an_edited_rescue_coefficient_is_carried_into_the_rows(self) -> None:
+        self._run({"SoulTetherConfig": SimpleNamespace(rescue_budget_thread_mult_hundredths=8)})
+        # 0.08 a thread level is 80 hundredths a rung of 10 levels.
+        self.assertEqual(level_baseline(11, ModifierLane.RESCUE_BUDGET_THREAD), 880)
+        self.assertEqual(level_baseline(11, ModifierLane.MOON_TUNING), 110)
+
+    def test_a_staff_authored_row_is_kept(self) -> None:
+        ModifierLevelBaseline.objects.create(lane=ModifierLane.MOON_TUNING, level=2, baseline=9)
+        self._run({})
+        self.assertEqual(level_baseline(2, ModifierLane.MOON_TUNING), 9)
+        self.assertEqual(level_baseline(3, ModifierLane.MOON_TUNING), 30)

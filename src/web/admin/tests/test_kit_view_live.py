@@ -42,6 +42,7 @@ from world.magic.factories import (
     TechniqueFunctionTagFactory,
 )
 from world.progression.factories import CharacterPathHistoryFactory
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.skills.factories import SkillFactory
 
 
@@ -60,6 +61,7 @@ def _know(sheet, *techniques) -> None:
 class KitLiveCase(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
+        seed_pool_and_cap_lanes()
         VowFocusPickConfigFactory(budget_per_level=4)
         cls.covenant = CovenantFactory(covenant_type=CovenantType.DURANCE)
         cls.vow = CovenantRoleFactory(name="Tempest", covenant_type=CovenantType.DURANCE)
@@ -187,7 +189,7 @@ class PreviewTest(KitLiveCase):
             function=TechniqueFunction.STRIKE,
             beneficiary=PerkBeneficiary.WHOLE_GROUP,
             unlock_thread_level=0,
-            damage_per_thread_level=3,
+            damage_tenths=3,
             frequency=VowEffectFrequency.ONCE_PER_ROUND,
         )
         VowAddedEffectDamageProfileFactory(effect=scaled, base_damage=5)

@@ -70,6 +70,7 @@ from world.magic.factories import (
 from world.magic.models import Technique
 from world.magic.models.techniques import ConditionTargetKind
 from world.scenes.constants import RoundStatus
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
 from world.traits.models import CheckOutcome
 from world.vitals.models import CharacterVitals
@@ -103,6 +104,7 @@ class VowAddedEffectsInAFight(JourneyCase):
     def setUp(self) -> None:
         super().setUp()
         CheckSystemSetupFactory.create()
+        seed_pool_and_cap_lanes()
         DamageSuccessLevelMultiplierFactory(min_success_level=1, multiplier=1)
         self.yard = self.make_room("The Yard")
         self.check_type = CheckTypeFactory()
@@ -225,7 +227,7 @@ class VowAddedEffectsInAFight(JourneyCase):
             beneficiary=PerkBeneficiary.SELF,
             cast_context=VowEffectContext.IN_COMBAT,
             unlock_thread_level=10,
-            severity_per_thread_level=2,
+            severity_tenths=2,
         )
         self.slows_the_enemy(effect)
 
@@ -275,7 +277,7 @@ class VowAddedEffectsInAFight(JourneyCase):
             cast_context=VowEffectContext.IN_COMBAT,
             situation=Situation.TARGET_IS_BOSS,
             frequency=VowEffectFrequency.ONCE_PER_FIGHT,
-            damage_per_thread_level=5,
+            damage_tenths=5,
         )
         VowAddedEffectDamageProfileFactory(effect=effect, base_damage=0)
         self.swear(self.hobb)

@@ -7,8 +7,9 @@ own damage, 5 with no modifier anywhere.
 The owner ruled on 2026-11-01 that the facet itself names the effect it boosts, whatever the
 thread's resonance. Staff give the Wolf facet "+2 Charge: damage" on the Facet admin page. It
 counts while Hobb wears an item carrying Wolf and has a facet thread on Wolf, scaled like a
-facet passive: amount x item quality x attachment quality x each whole 10 levels of the
-thread. So at thread level 30 on plain quality the charge deals 5 + 2 x 3 = 11; on an item
+facet passive: amount (tenths of the lane's 10 a rung) x item quality x attachment quality x each
+whole 10 levels of the thread. So at thread level 30 on plain quality the charge deals
+5 + 2 x 3 = 11; on an item
 of quality 2.00 with an attachment of 1.50 at thread level 10 it deals
 5 + 2 x 2 x 1.5 x 1 = 11. Taking the item off, a thread on another facet, or no thread
 at all leaves it at 5.
@@ -37,6 +38,7 @@ from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME, ManeuverEff
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.mechanics.maneuver_effects import get_maneuver_effect
 from world.mechanics.models import ModifierCategory
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 
 BONUS = 2
 
@@ -46,6 +48,7 @@ class _WolfFangField(_ChargeField):
 
     def setUp(self) -> None:
         super().setUp()
+        seed_pool_and_cap_lanes()
         self.wolf = FacetFactory(name="Wolf")
         self.silk = FacetFactory(name="Silk")
         self.charge_damage = ModifierTargetFactory(
@@ -97,7 +100,9 @@ class _WolfFangField(_ChargeField):
 class AFacetBoostsTheChargeItNames(_WolfFangField):
     def setUp(self) -> None:
         super().setUp()
-        FacetEffectBonus.objects.create(facet=self.wolf, target=self.charge_damage, amount=BONUS)
+        FacetEffectBonus.objects.create(
+            facet=self.wolf, target=self.charge_damage, amount_tenths=BONUS
+        )
 
     def test_a_worn_threaded_wolf_fang_adds_its_bonus_per_10_levels(self) -> None:
         self.wear(self.wolf)
@@ -162,7 +167,7 @@ class StaffAuthorTheBonusOnTheFacetPage(_WolfFangField):
                 "effect_bonuses-TOTAL_FORMS": "1",
                 "effect_bonuses-INITIAL_FORMS": "0",
                 "effect_bonuses-0-target": str(target_pk),
-                "effect_bonuses-0-amount": amount,
+                "effect_bonuses-0-amount_tenths": amount,
             },
         )
 
@@ -170,7 +175,7 @@ class StaffAuthorTheBonusOnTheFacetPage(_WolfFangField):
         response = self.post_wolf(self.charge_damage.pk, str(BONUS))
         self.assertEqual(response.status_code, 302, response.content)
         saved = FacetEffectBonus.objects.get(facet=self.wolf)
-        self.assertEqual((saved.target_id, saved.amount), (self.charge_damage.pk, BONUS))
+        self.assertEqual((saved.target_id, saved.amount_tenths), (self.charge_damage.pk, BONUS))
 
         self.wear(self.wolf)
         self.thread_on(self.wolf, level=20)
@@ -200,9 +205,9 @@ class StaffAuthorTheBonusOnTheFacetPage(_WolfFangField):
                 "effect_bonuses-TOTAL_FORMS": "2",
                 "effect_bonuses-INITIAL_FORMS": "0",
                 "effect_bonuses-0-target": str(self.charge_damage.pk),
-                "effect_bonuses-0-amount": "2",
+                "effect_bonuses-0-amount_tenths": "2",
                 "effect_bonuses-1-target": str(self.charge_damage.pk),
-                "effect_bonuses-1-amount": "3",
+                "effect_bonuses-1-amount_tenths": "3",
             },
         )
 

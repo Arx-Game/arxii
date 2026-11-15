@@ -1332,12 +1332,16 @@ def _compute_rescue_budget(
     All tuning knobs are read from the ``SoulTetherConfig`` singleton (pk=1).
     Default formula (reproduces original behaviour):
         base = {3: 60, 4: 120, 5: 250}[stage]
-        multiplier = 1.0 + success_level * 0.5 + thread_level * 0.05
+        multiplier = 1.0 + success_level * 0.5 + (RESCUE_BUDGET_THREAD baseline at rung) / 100
         budget = max(1, int(base * multiplier))
+
+    The thread term is the ``RESCUE_BUDGET_THREAD`` lane's baseline at the Sineater's thread
+    rung (``thread_rung(thread_level)``, #5093), in hundredths, and 0 below rung 1. The seeded
+    rows give 50 a rung, the 0.05 a thread level the old coefficient gave at each whole rung.
 
     The formula ensures:
     - Critical success significantly boosts budget.
-    - Higher thread level gives a small but meaningful bonus.
+    - A higher thread rung gives a small but meaningful bonus.
     - Failure still provides some minimum recovery (budget >= 1).
 
     Args:
@@ -1356,10 +1360,12 @@ def _compute_rescue_budget(
         base = cfg.rescue_budget_base_stage4
     else:
         base = cfg.rescue_budget_base_stage5
+    rung = thread_rung(thread_level)
+    thread_hundredths = level_baseline(rung, ModifierLane.RESCUE_BUDGET_THREAD) if rung >= 1 else 0
     multiplier = (
         cfg.rescue_budget_base_mult_tenths / 10
         + success_level * cfg.rescue_budget_success_mult_tenths / 10
-        + thread_level * cfg.rescue_budget_thread_mult_hundredths / 100
+        + thread_hundredths / 100
     )
     return max(1, int(base * multiplier))
 

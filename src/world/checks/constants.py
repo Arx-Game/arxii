@@ -132,14 +132,20 @@ class ModifierLane(models.TextChoices):
     The three maneuver effect lanes (#4876) value a modifier on a damage, to-hit or partial
     protection target, in damage points, check points and percentage points; the effect
     readers pick one by the target's kind (``EFFECT_KIND_LANE``).
-    The six pool and cap lanes (#5093) hold only ``ModifierLevelBaseline`` rows, in their own
+    The pool, cap and rung lanes (#5093) hold only ``ModifierLevelBaseline`` rows, in their own
     units: each is a rule that used to multiply a coefficient by a level, now one row per
     level read through ``level_baseline``. They have no size fractions and no taper.
     ``ANIMA_POOL`` is the anima maximum at a character level; ``FATIGUE_LEVEL_BONUS`` is the
     fatigue capacity a level adds on top of the stat terms; ``SOUL_TETHER_SCENE_CAP`` and
     ``HOLLOW_MAX`` are keyed by the Sinner's thread rung; ``OUTFIT_TRICKLE`` is the factor
     a facet thread's rung gives the daily outfit trickle; ``TECHNIQUES_PER_GIFT`` is the
-    techniques a gift allows at a gift thread's depth.
+    techniques a gift allows at a gift thread's depth. The rung lanes are read at a thread's
+    rung: ``RESCUE_BUDGET_THREAD`` is the hundredths a Sineater's thread adds to the rescue
+    budget's multiplier, ``MOON_TUNING`` the tuning a moon-bound character's gift thread adds,
+    ``FACET_EFFECT_BONUS`` the amount a facet effect bonus authored as 10 tenths gives at a
+    facet thread's rung, and ``VOW_EFFECT_SEVERITY``, ``VOW_EFFECT_DURATION`` and
+    ``VOW_EFFECT_DAMAGE`` the same for a vow added effect's severity, duration and damage at
+    the holder's vow thread's rung (the difference from the effect's unlock rung).
     """
 
     CHECK = "check", "Check points"
@@ -153,6 +159,12 @@ class ModifierLane(models.TextChoices):
     HOLLOW_MAX = "hollow_max", "Hollow maximum"
     OUTFIT_TRICKLE = "outfit_trickle", "Outfit trickle"
     TECHNIQUES_PER_GIFT = "techniques_per_gift", "Techniques per gift"
+    RESCUE_BUDGET_THREAD = "rescue_budget_thread", "Rescue budget thread"
+    MOON_TUNING = "moon_tuning", "Moon tuning"
+    FACET_EFFECT_BONUS = "facet_effect_bonus", "Facet effect bonus"
+    VOW_EFFECT_SEVERITY = "vow_effect_severity", "Vow effect severity"
+    VOW_EFFECT_DURATION = "vow_effect_duration", "Vow effect duration"
+    VOW_EFFECT_DAMAGE = "vow_effect_damage", "Vow effect damage"
 
 
 class ModifierSize(models.IntegerChoices):

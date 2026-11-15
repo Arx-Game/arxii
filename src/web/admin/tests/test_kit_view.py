@@ -298,4 +298,6 @@ class KitViewStylingTest(KitPageCase):
 #: ``KitPageTest.test_query_count_stays_flat_as_the_kit_grows``.
 # #5069: one more, the Dominion settings singleton's add check the sidebar asks on every
 # admin page, the same constant query the other settings singletons already cost.
-PAGE_QUERIES = 78
+# #5093: three more, the same check for the three settings singletons it added (the
+# development cost, fatigue and check scale configs).
+PAGE_QUERIES = 81

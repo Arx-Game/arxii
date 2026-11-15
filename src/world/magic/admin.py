@@ -1380,7 +1380,7 @@ class FacetEffectBonusInline(admin.TabularInline):
     model = FacetEffectBonus
     formset = OneRowPerFormSet
     extra = 0
-    fields = ["target", "amount"]
+    fields = ["target", "amount_tenths"]
     autocomplete_fields = ["target"]
 
 

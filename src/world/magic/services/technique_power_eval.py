@@ -805,14 +805,19 @@ def _vow_effect_valuations(  # noqa: PLR0913 - cohesive per-technique valuation 
     Reads only the effects' cached payload lists, so prefetched rows cost no query for
     damage; a condition row costs the same per-row lookups a technique row does.
     """
-    from world.covenants.added_effects import vow_effect_bonuses  # noqa: PLC0415
+    from world.covenants.added_effects import (  # noqa: PLC0415
+        load_vow_effect_lanes,
+        vow_effect_bonuses,
+        vow_effects_scale,
+    )
 
     upgraded = {effect.upgrades_id for effect in vow_effects if effect.upgrades_id is not None}
+    lanes = load_vow_effect_lanes() if vow_effects_scale(vow_effects) else None
     valuations: list[PayloadValuation] = []
     for effect in vow_effects:
         if effect.pk in upgraded:
             continue
-        bonuses = vow_effect_bonuses(effect, thread_level)
+        bonuses = vow_effect_bonuses(effect, thread_level, lanes=lanes)
         valuations.extend(
             replace(
                 _damage_row_valuation(

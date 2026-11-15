@@ -2701,9 +2701,10 @@ class VowAddedEffect(SituationRequirementMixin, NaturalKeyMixin, SharedMemoryMod
     one holder fires it, through the ``VowAddedEffectFiring`` ledger.
 
     ``unlock_thread_level`` is the holder's COVENANT_ROLE thread level the row
-    needs; each level above it adds ``severity_per_thread_level`` to applied
-    condition severity, ``duration_per_thread_level`` to their duration and
-    ``damage_per_thread_level`` to each damage profile.
+    needs; each rung (10 thread levels) above its rung adds ``severity_tenths`` to applied
+    condition severity, ``duration_tenths`` to their duration and ``damage_tenths`` to each
+    damage profile, each a share in tenths of the Vow effect severity, duration or damage
+    lane's baseline step (#5093; the seeded step is 10, so 1 adds one point a rung).
 
     ``upgrades`` names the row this one replaces for a holder who qualifies
     for both (a sub-role's row naming its parent role's row, or a later-unlock
@@ -2770,19 +2771,30 @@ class VowAddedEffect(SituationRequirementMixin, NaturalKeyMixin, SharedMemoryMod
             "The holder's vow thread level this effect needs."
         ),
     )
-    severity_per_thread_level = models.PositiveIntegerField(
-        default=0,
-        help_text="Added to applied condition severity per 10 thread levels above the unlock.",
-    )
-    duration_per_thread_level = models.PositiveIntegerField(
+    severity_tenths = models.PositiveIntegerField(
         default=0,
         help_text=(
-            "Added to applied condition duration (rounds) per 10 thread levels above the unlock."
+            "Added to applied condition severity: this many tenths of the Vow effect severity "
+            "lane's baseline gained between the unlock's rung and the holder's vow thread's "
+            "rung. The seeded lane gains 10 a rung, so 1 adds one point a rung (10 thread "
+            "levels) above the unlock."
         ),
     )
-    damage_per_thread_level = models.PositiveIntegerField(
+    duration_tenths = models.PositiveIntegerField(
         default=0,
-        help_text="Added to each damage profile per 10 thread levels above the unlock.",
+        help_text=(
+            "Added to applied condition duration (rounds): this many tenths of the Vow effect "
+            "duration lane's baseline gained between the unlock's rung and the holder's vow "
+            "thread's rung. The seeded lane gains 10 a rung, so 1 adds one round a rung."
+        ),
+    )
+    damage_tenths = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Added to each damage profile: this many tenths of the Vow effect damage lane's "
+            "baseline gained between the unlock's rung and the holder's vow thread's rung. "
+            "The seeded lane gains 10 a rung, so 1 adds one damage a rung."
+        ),
     )
     upgrades = models.ForeignKey(
         "self",

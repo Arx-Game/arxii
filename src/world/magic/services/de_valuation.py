@@ -79,10 +79,13 @@ def matchup_bands(context: EvalContext) -> list[MatchupBand]:
     least-bad non-botch level (``world.checks.services.botch_floor_level``), as the roll
     resolves for a character who cannot botch.
     """
-    from world.traits.models import CheckRank, ResultChart, ResultChartOutcome  # noqa: PLC0415
+    from world.checks.slide import band_position, load_ranks  # noqa: PLC0415
+    from world.traits.models import ResultChart, ResultChartOutcome  # noqa: PLC0415
 
-    roller_rank = CheckRank.get_rank_for_points(context.roller_points)
-    target_rank = CheckRank.get_rank_for_points(context.target_difficulty)
+    # One ladder load for both sides: each ``load_ranks`` reads the rank rows and the baselines.
+    ranks = load_ranks()
+    roller_rank = band_position(context.roller_points, ranks).rank
+    target_rank = band_position(context.target_difficulty, ranks).rank
     rank_difference = (roller_rank.rank if roller_rank else 0) - (
         target_rank.rank if target_rank else 0
     )

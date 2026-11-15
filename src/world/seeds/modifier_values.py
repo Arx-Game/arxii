@@ -70,16 +70,25 @@ _LEVEL_TIERS: tuple[tuple[int, int], ...] = (
     (26, 24),
 )
 
-# The pool and cap lanes (#5093): the baseline each seeds per unit of its level (a character
-# level, a thread rung or a gift depth), the number its old coefficient had. The fatigue level
-# bonus lane is not seeded: fatigue capacity had no level term before, and a lane with no rows
-# adds nothing until staff author it.
+# The pool, cap and rung lanes (#5093): the baseline each seeds per unit of its level (a
+# character level, a thread rung or a gift depth), the number its old coefficient had. The
+# rescue budget lane is in hundredths of a multiplier (0.05 a thread level, so 50 a rung), the
+# moon tuning lane 1 tuning a thread level (10 a rung), and the facet and vow effect lanes 10 a
+# rung, so an authored 1 tenth is one point a rung as the old per-rung columns were. The fatigue
+# level bonus lane is not seeded: fatigue capacity had no level term before, and a lane with no
+# rows adds nothing until staff author it.
 _POOL_LANE_PER_LEVEL: tuple[tuple[str, int], ...] = (
     (ModifierLane.ANIMA_POOL, 100),
     (ModifierLane.SOUL_TETHER_SCENE_CAP, 2),
     (ModifierLane.HOLLOW_MAX, 10),
     (ModifierLane.OUTFIT_TRICKLE, 1),
     (ModifierLane.TECHNIQUES_PER_GIFT, 3),
+    (ModifierLane.RESCUE_BUDGET_THREAD, 50),
+    (ModifierLane.MOON_TUNING, 10),
+    (ModifierLane.FACET_EFFECT_BONUS, 10),
+    (ModifierLane.VOW_EFFECT_SEVERITY, 10),
+    (ModifierLane.VOW_EFFECT_DURATION, 10),
+    (ModifierLane.VOW_EFFECT_DAMAGE, 10),
 )
 
 # Each size's share of one level's width, on every lane: Large is half a level and the
