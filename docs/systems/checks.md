@@ -475,8 +475,7 @@ level whose new baseline is nearest that rank's old threshold (levels 0, 1, 2, 5
 30), and an increment to tenths at two tenths a point (the old ladder spent five points a level).
 Not converted: `MovementConfig.reaction_difficulty_step` (its integer also scales fatigue and
 anima cost per reaction), the agriculture pool-size ramp (it adds to a `DifficultyChoice` band
-value), `ChallengeTemplate.severity` and `ChallengeInstance.severity_adjustment` (see "Quick-Placing
-an Authored Challenge"), and the recorded results `difficulty_points`, `resolved_difficulty` and
+value), the recorded results `difficulty_points`, `resolved_difficulty` and
 `snapshot_target_difficulty`.
 
 ---
@@ -967,13 +966,13 @@ the consequences, and the discovery type are the template's own.
   prop comes from `create_challenge_target_object`, shared with
   `instantiate_situation` so the two paths cannot drift.
 - **Adaptation** is one band, with a required reason: `edge_reason` / `setback_reason`
-  (mutually exclusive) persist as `ChallengeInstance.severity_adjustment`
+  (mutually exclusive) persist as `ChallengeInstance.severity_adjustment_tenths`
   (±`DIFFICULTY_BAND_STEP`) and `adjustment_reason`. Two DB `CheckConstraint`s
   enforce the pair — an arbitrary offset or an unreasoned shift cannot be stored.
   Out of bounds refuses rather than clamping. `adjustment_reason` is GM-facing only
   and never reaches `ChallengeInstanceSerializer`.
 - **Difficulty** is read through `ChallengeInstance.effective_severity`
-  (`template.severity + severity_adjustment`) by every resolution path in
+  (`difficulty_points(template.severity_level) + the shift in tenths`) by every resolution path in
   `challenge_resolution.py`.
 - **Discovery** rides one service, `find_situations` (`world/gm/services.py`),
   behind two faces: telnet `setsituation find <term>` (`FindSituationAction`,
@@ -997,15 +996,15 @@ the consequences, and the discovery type are the template's own.
   — it mints the same class of live row (ADR-0091). Telnet:
   `setsituation challenge <template>=<target name> [edge=<why>|setback=<why>]`.
 
-### `ChallengeTemplate.severity` is in difficulty points
+### `ChallengeTemplate.severity_level` is a level (#2865, #5093)
 
-`resolve_challenge` passes `severity` straight into `perform_check`'s
-`target_difficulty`, which every other caller feeds from `DIFFICULTY_VALUES` (15
-Trivial … 90 Harrowing). The field's default was `1`, so authored challenges
-resolved at the bottom rank and a ±15 band shift had no coherent unit against
-them. Since #2865 the default is `DIFFICULTY_VALUES[NORMAL]` and the field is
-documented as points, not a 1–5 rating. Authored rows in the lore repo are
-re-expressed on that scale as content work.
+`resolve_challenge` rolls against `ChallengeInstance.effective_severity`: the baseline of the
+template's `severity_level` (`difficulty_points`) plus the GM's shift. The shift is
+`severity_adjustment_tenths`, exactly one band either way (+-30 tenths of one level's width at the
+template's level, `DIFFICULTY_BAND_SHIFT_TENTHS`), and a shift that would leave the ladder is
+refused. The old `severity` points and the old +-15 point shift were converted by migrations 0425 to
+0427; the default level is 2. Authored rows in the lore repo are re-expressed on levels as content
+work.
 
 ---
 

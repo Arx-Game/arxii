@@ -4002,7 +4002,7 @@ GM at a given level may author (#2000, ADR-0097).
   `mechanics.ChallengeTemplate` against a GM-named target object, minting a
   standalone `ChallengeInstance` (`situation_instance=None`) through the pre-existing
   `instantiate_challenge`. The one adaptation permitted is a one-band shift with a
-  required reason, persisted as `ChallengeInstance.severity_adjustment` /
+  required reason, persisted as `ChallengeInstance.severity_adjustment_tenths` /
   `adjustment_reason` (two DB `CheckConstraint`s; GM-facing only, never in
   `ChallengeInstanceSerializer`) and read back through the new
   `ChallengeInstance.effective_severity`. Band-shift helpers are shared with
@@ -4019,9 +4019,8 @@ GM at a given level may author (#2000, ADR-0097).
   choosing a template or challenge card there dispatches the same
   `set_situation`/`place_challenge` one-click, with an empty challenge target
   refused server-side rather than client-validated. Two fold-ins:
-  `ChallengeTemplate.severity` is re-expressed in `DIFFICULTY_VALUES` points (default
-  `1` → `45`; it feeds `perform_check`'s `target_difficulty` directly, so the old
-  scale resolved every authored challenge at the bottom rank), and
+  `ChallengeTemplate.severity_level` is a level (default 2; its baseline feeds
+  `perform_check`'s `target_difficulty` directly, #5093), and
   `instantiate_challenge` now honours `discovery_type` instead of hardcoding
   `is_revealed=True`, which silently defeated `DiscoveryType.DISCOVERABLE`.
 - **Story areas & story rooms (#2450, epic #2436 slice 3, ADR-0141):** a GM's own

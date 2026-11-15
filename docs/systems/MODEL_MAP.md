@@ -2191,7 +2191,7 @@
 - `compute_check_rating(character: 'ObjectDB', check_type: 'CheckType', extra_modifiers: int = 0, *, level_override: int | None = None, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> int - Return *character*'s pre-roll rating (total points) for *check_type* — no dice roll.`
 - `compute_obstacle_rating(character: 'ObjectDB', check_type: 'CheckType', *, extra_modifiers: int = 0, level_override: int | None = None, stat_override: str | int | None = None) -> int - What a character who is the obstacle counts for on *check_type*, her full total (#5093).`
 - `compute_resist_increment(defender_character: 'ObjectDB', resist_effort_level: str, *, level_override: int | None = None, stat_override: str | int | None = None, award_development: bool = False) -> int - Compute how much a defender's active resistance raises difficulty.`
-- `difficulty_level_for_points(points: int) -> int - The highest level whose baseline is at or below ``points``, 0 below level 1 (#5093).`
+- `difficulty_level_for_points(points: int) -> int - The level whose baseline is nearest ``points``, ties to the lower level (#5093).`
 - `difficulty_points(level: int) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
 - `difficulty_step_points(tenths: int | decimal.Decimal, at_level: int) -> int - An authored difficulty increment in tenths of a level as points at ``at_level`` (#5093).`
 - `get_character_path_level(character: 'ObjectDB') -> 'int' - Return the character's primary class level (or highest, or 1).`
@@ -7607,6 +7607,7 @@
 - `delete_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'int' - Delete all modifier records for a distinction.`
 - `derived_amount(sheet: 'CharacterSheet | None', row: 'DerivedAmountMixin', per_step: 'int', inputs: 'DerivedInputs | None' = None) -> 'int' - ``per_step`` times the input's whole steps for ``sheet``, held at the row's cap.`
 - `difficulty_indicator_for_rank_difference(rank_diff: 'int') -> 'DifficultyIndicator' - Classify a check's rank difference.`
+- `difficulty_points(level: int) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
 - `end_engagement(character: 'ObjectDB', engagement_type: 'str', *, source: 'object') -> 'None' - Delete the character's engagement iff it matches type AND source.`
 - `ensure_aspect_target(aspect: 'Aspect') -> 'ModifierTarget | None' - The aspect-category ``ModifierTarget`` an Aspect's bonuses land on, made if missing (#4827).`
 - `ensure_skill_target(trait: 'Trait') -> 'ModifierTarget | None' - The stat-category ``ModifierTarget`` a skill's bonuses land on, created if missing (#4820).`
