@@ -2280,9 +2280,14 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
 - **Cap.** The resonance's strength caps the depth (#5124). The depth cap, the bonus and the
   ease come from a `KindledStrengthTier` row (`give_in_max_depth`, `give_in_bonus_percent`,
   `give_in_ease`); `clamp_tier` drops a deeper declaration to the deepest tier within the cap.
-  Until the kindling evaluation (Task 3 and Task 6 of #5124) reads the declared resonance's own
-  strength, `provocation_cap`, `provocation_bonus_percent` and `provocation_ease` read the rank 3
-  row for every declared resonance. Migration 0412 seeded the three rows from the old
+  `give_in_strength(character, resonance)` reads the named resonance's own kindled strength in
+  her live fight and mission (`kindled_for` with `kindling_context_for`); `provocation_cap`,
+  `provocation_bonus_percent` and `provocation_ease` read that row, and 0 when the resonance is
+  not kindled or she does not hold it. `give_in_refusal(character, resonance, tier)` is the one
+  declaration check: an unkindled resonance is refused in words ("Your Wrath is not kindled
+  right now, so you cannot give in to it."), never clamped, and a tier deeper than the strength
+  reaches is refused too, so a Berserk tier is offered only where the strength reaches it.
+  Migration 0412 seeded the three rows from the old
   `FuryConfig` numbers and 0413 dropped them and `fury_anchor`.
 - **The trade.** `fury_intensity_for(tier, bonus_percent, outcome)` = floor(`control_surrendered` x
   `intensity_per_control_surrendered` x (100 + `give_in_bonus_percent`) / 100 x
@@ -2300,7 +2305,7 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
   back off (the roll stands). A cast that proceeds calls `settle()`: the caster alone is told
   "You surrender N control: intensity +M." on commit, and Berserk is applied for a Berserk tier.
   A cast stopped at the Soulfray gate surrenders nothing and tells her nothing. With no
-  engagement, or when the anchor's tie clamps the tier to nothing, nothing is rolled and nothing
+  engagement, or when the resonance is no longer kindled, nothing is rolled and nothing
   changes. Fury may be declared again each round, and each declaration surrenders and buys again.
   `get_runtime_technique_stats` floors runtime control at 0, so repeated surrenders cannot push
   the anima cost up without limit (the stored `control_modifier` is not floored).
@@ -2314,17 +2319,22 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
 - **Validation.** `_cap_fury_by_provocation` (scene action and cast serializers) refuses Fury
   without a technique, without a resonance, above the cap, and with no engagement ("Fury needs
   something at stake: you are not engaged."). A combat cast declaration (web or telnet) refuses a
-  tier deeper than the anchor's cap with the same message (`fury_over_cap_message`, from
-  `CastTechniqueAction._combat_fury_cap_refusal` in `round_declaration`); nothing is recorded or
-  charged. Resolution still clamps, for a tie that lapsed after declaring.
+  tier deeper than the resonance's strength reaches, or an unkindled resonance, with
+  `give_in_refusal`'s message (from `CastTechniqueAction._combat_fury_cap_refusal` in
+  `round_declaration`; the web combat dispatch raises `FURY_OVER_CAP` / `FURY_NOT_KINDLED`);
+  nothing is recorded or charged. Resolution still clamps, for a kindling that lapsed after
+  declaring.
 - **Required content.** `fury-degree-shares` lists every `CheckOutcome` (matched by FK) with no
   `FuryDegreeShare`; `fury-intensity-per-control` is absent while the rate is 0.
 - **Surfaces.** The cast picker (`FuryTierOption`) carries `control_surrendered`, `is_berserk`
   and `full_intensity` (`full_trade_intensities`: the trade at the highest authored
-  `FuryDegreeShare.intensity_percent`, 0 when none exists, with no anchor scaling); each
-  `AnchorOption` carries `tier_full_intensities`, the same figure under that anchor's cap. The web `FuryDeclaration` ("Surrender control") lists tiers as "Seething:
-  surrender 6 control" (`(Berserk)` on a Berserk tier) and previews "6 control -> up to +10
-  intensity, by your roll" from those server figures. The participant payload carries
+  `FuryDegreeShare.intensity_percent`, 0 when none exists, with no strength scaling); each
+  `FuryResonanceOption` (only a resonance kindled now whose strength reaches a tier) carries its
+  `strength_name`, `provocation_cap` and `tier_full_intensities`, the same figure under that
+  resonance's strength. The web `FuryDeclaration` ("Give in to your <resonance>") picks a
+  kindled resonance, then Hold steady or a tier it reaches by its FuryTier name, and previews
+  "Give up 6 control · Gain up to 10 intensity, by your roll" from those server figures.
+  Telnet is `givein=<resonance>:<tier>`. The participant payload carries
   `fury_control_surrendered` beside `intensity_modifier` / `control_modifier`; the
   `Pressure` rail section (`frontend/src/combat/sections/Pressure.tsx`) shows them, with a
   "Fury: surrendered N control" chip once N > 0, read from her engagement whatever its type.
