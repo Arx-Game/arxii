@@ -1,0 +1,9 @@
+# ADR-5137: The site name goes home, even from inside the world
+
+`/` is the Hall (Your Attention, Mail, Occasions, The Crier, the character list) for every signed-in account, whether or not a character of theirs is connected to the world, and "ARX II" in the game's top bar links there like the site title on every other page. ADR-0247 had `/` redirect a connected player straight to `/game`, on the reasoning that the Hall is a menu for picking a character and a connected player has already picked. Play on production showed the opposite: the Hall is where mail, attention and upcoming events live, and a player in the world expects the site's name to take them there (owner ruling 2026-11-15). Going there costs nothing, because navigation keeps a character connected (ADR-0295 decision 3) and the header chip on the Hall carries "Return to the world" and "Disconnect Character".
+
+With the redirect gone, `/hall` (ADR-0295 decision 4, a second address that existed only because `/` redirected) is removed, and the world menu, the waiting-for-location and unpuppeted "Return to Hall" links, and the navigation after a disconnect or a typed `quit` all go to `/`. A hard load of `/` never had a connected socket, so the redirect only ever fired on in-app navigation; nothing depended on it to resume play, and a reload of `/game` still lands in `/game`.
+
+*Rejected:* keeping the redirect on `/` and pointing only the top-bar name at `/hall`. That leaves two addresses for one page, and the site title in the full header, which links to `/`, would still do nothing for a connected player on the roster or a sheet.
+
+> Status: accepted · Source: issue #5137 · supersedes ADR-0247's live-connection redirect and ADR-0295 decision 4 (the rest of both stands) · verify against `frontend/src/home/GatefoldPage.tsx`, `frontend/src/App.tsx` and `frontend/src/game/components/GameTopBar.tsx`

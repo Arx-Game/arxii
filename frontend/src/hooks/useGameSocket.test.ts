@@ -637,7 +637,7 @@ describe('useGameSocket typed quit', () => {
         payload: { character: 'Aria', lifecycleState: 'reconnecting' },
       });
       expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['account'] });
-      expect(mockNavigate).toHaveBeenCalledWith('/hall');
+      expect(mockNavigate).toHaveBeenCalledWith('/');
 
       act(() => {
         vi.advanceTimersByTime(60_000);

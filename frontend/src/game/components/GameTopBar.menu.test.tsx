@@ -1,8 +1,6 @@
 /**
- * The world menu is a menu (#3818). It used to be a `<Link to="/">`, and `/`
- * redirects an in-world player straight back to `/game`, so it flickered and
- * did nothing — and there was no way to reach character select while staying
- * connected. Sessions and sockets live in Redux/module scope, so navigating
+ * The world menu is a menu (#3818), and the site name beside it goes home
+ * (#5137). Sessions and sockets live in Redux/module scope, so navigating
  * away keeps every character tab open.
  */
 import { screen, act, waitFor } from '@testing-library/react';
@@ -83,16 +81,19 @@ describe('GameTopBar world menu (#3818)', () => {
     vi.clearAllMocks();
   });
 
+  it('links the site name to the home page (#5137)', () => {
+    renderWithProviders(<GameTopBar characters={[]} />);
+
+    expect(screen.getByRole('link', { name: 'ARX II' })).toHaveAttribute('href', '/');
+  });
+
   it('opens a menu with character select, roster, settings and Log Out Account', async () => {
     const user = userEvent.setup();
     renderWithProviders(<GameTopBar characters={[]} />);
 
     await user.click(screen.getByRole('button', { name: 'Open world menu' }));
 
-    expect(screen.getByRole('menuitem', { name: 'Your characters' })).toHaveAttribute(
-      'href',
-      '/hall'
-    );
+    expect(screen.getByRole('menuitem', { name: 'Your characters' })).toHaveAttribute('href', '/');
     expect(screen.getByRole('menuitem', { name: 'Roster' })).toHaveAttribute('href', '/roster');
     expect(screen.getByRole('menuitem', { name: 'Settings' })).toHaveAttribute(
       'href',

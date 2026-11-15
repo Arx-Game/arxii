@@ -241,10 +241,9 @@ describe('GatefoldPage', () => {
     expect(mockSetForcedRealm).not.toHaveBeenCalled();
   });
 
-  // #3412 S4 — connected-redirect matrix. Wraps GatefoldPage in a small Routes
-  // table so `<Navigate to="/game" replace/>` has somewhere real to land;
-  // `renderWithProviders`' own MemoryRouter supplies the outer Router context.
-  it('redirects to /game when the active character has a live connection (#3412 S4)', () => {
+  // #5137 — `/` never leaves for `/game`. The Routes table gives a redirect
+  // somewhere real to land, so a regression shows as the game stub rendering.
+  it('renders the Hall when the active character has a live connection (#5137)', () => {
     setDefaultMocks();
     mockUseAuthStatus.mockReturnValue({ isLoading: false, account: mockAccount });
     store.dispatch(setAccount({ ...mockAccount }));
@@ -259,8 +258,8 @@ describe('GatefoldPage', () => {
       { initialEntries: ['/'] }
     );
 
-    expect(screen.getByTestId('game-page-stub')).toBeInTheDocument();
-    expect(screen.queryByTestId('hall-page-stub')).not.toBeInTheDocument();
+    expect(screen.getByTestId('hall-page-stub')).toBeInTheDocument();
+    expect(screen.queryByTestId('game-page-stub')).not.toBeInTheDocument();
   });
 
   it('renders the Hall (no redirect) for a selected-but-unconnected active character (#3412 S4)', () => {

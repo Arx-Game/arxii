@@ -189,7 +189,7 @@ export function GameTopBar({
     if (!active) return;
     disconnectCharacter.disconnectThis();
     void queryClient.invalidateQueries({ queryKey: ['account'] });
-    navigate('/hall');
+    navigate('/');
   };
 
   const activeSession = active ? sessions[active] : null;
@@ -252,11 +252,8 @@ export function GameTopBar({
   return (
     <>
       <div className="flex min-w-0 flex-wrap items-center gap-2 border-b bg-card px-3 py-2 sm:gap-4 sm:px-4">
-        {/* #3818 — a real menu. This was `<Link to="/">`, and `/` sends an
-            in-world player straight back to `/game` (GatefoldPage), so it
-            flickered and did nothing, and nothing led back to character select.
-            Sessions and sockets live in Redux/module scope, so every item here
-            keeps the open character tabs alive. */}
+        {/* #3818 — a real menu. Sessions and sockets live in Redux/module
+            scope, so every item here keeps the open character tabs alive. */}
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label="Open world menu"
@@ -267,7 +264,7 @@ export function GameTopBar({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
             <DropdownMenuItem asChild>
-              <Link to="/hall">Your characters</Link>
+              <Link to="/">Your characters</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link to="/roster">Roster</Link>
@@ -297,7 +294,12 @@ export function GameTopBar({
             <DropdownMenuItem onClick={() => logout.mutate()}>Log Out Account</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <span className="text-sm font-bold tracking-wide text-foreground">ARX II</span>
+        {/* #5137 — the site name goes home, as it does on every other page.
+            The character stays connected; the header chip there carries
+            "Return to the world" and "Disconnect Character". */}
+        <Link to="/" className="text-sm font-bold tracking-wide text-foreground hover:underline">
+          ARX II
+        </Link>
 
         <div className="mx-2 h-6 w-px bg-border" />
 

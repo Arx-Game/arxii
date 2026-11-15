@@ -231,7 +231,7 @@ describe('SelectedCharacterChip (#3412, #3859)', () => {
     state.personas = [persona(7, 'Aria', 'primary')];
 
     render(
-      <Wrapper store={storeWithAriaLive()} path="/hall">
+      <Wrapper store={storeWithAriaLive()} path="/">
         <SelectedCharacterChip entry={aria} />
       </Wrapper>
     );
@@ -250,7 +250,7 @@ describe('SelectedCharacterChip (#3412, #3859)', () => {
     state.personas = [persona(7, 'Aria', 'primary')];
 
     render(
-      <Wrapper store={storeWithAriaLive(null)} path="/hall">
+      <Wrapper store={storeWithAriaLive(null)} path="/">
         <SelectedCharacterChip entry={aria} />
       </Wrapper>
     );
@@ -263,7 +263,7 @@ describe('SelectedCharacterChip (#3412, #3859)', () => {
     const user = userEvent.setup();
 
     render(
-      <Wrapper store={storeWithAriaLive()} path="/hall">
+      <Wrapper store={storeWithAriaLive()} path="/">
         <SelectedCharacterChip entry={aria} />
       </Wrapper>
     );
@@ -288,7 +288,7 @@ describe('SelectedCharacterChip (#3412, #3859)', () => {
     const elsewhere: MyRosterEntry = { ...aria, session_count: 1, room_name: 'Quiet courtyard' };
 
     render(
-      <Wrapper path="/hall">
+      <Wrapper path="/">
         <SelectedCharacterChip entry={elsewhere} />
       </Wrapper>
     );
@@ -313,7 +313,7 @@ describe('SelectedCharacterChip (#3412, #3859)', () => {
     const user = userEvent.setup();
 
     render(
-      <Wrapper store={storeWithAriaLive()} path="/hall">
+      <Wrapper store={storeWithAriaLive()} path="/">
         <SelectedCharacterChip entry={{ ...aria, session_count: 2 }} />
       </Wrapper>
     );

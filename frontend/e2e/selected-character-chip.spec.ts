@@ -11,8 +11,8 @@ import path from 'node:path';
  * production: enter the world, then open the Hall from the world menu. That
  * navigation is client-side on purpose: sockets live at module scope and
  * `GamePage` has no teardown (ADR-0295), so the character stays in the world
- * and the header, hidden on `/game`, appears on `/hall` over that live
- * session. A `page.goto('/hall')` would reload the bundle and drop the socket,
+ * and the header, hidden on `/game`, appears on `/` over that live
+ * session. A `page.goto('/')` would reload the bundle and drop the socket,
  * which is not the case under test.
  */
 
@@ -146,7 +146,7 @@ async function reachReadySession(page: Page): Promise<Socket> {
 async function openHallFromWorldMenu(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Open world menu' }).click();
   await page.getByRole('menuitem', { name: /your characters/i }).click();
-  await expect(page).toHaveURL(/\/hall$/);
+  await expect(page).toHaveURL(/\/$/);
 }
 
 test.describe('selected character chip (#3859) — fixture-backed presence journeys', () => {
@@ -190,14 +190,48 @@ test.describe('selected character chip (#3859) — fixture-backed presence journ
     await page.screenshot({ path: path.join(SHOTS, 'hall-after-leave-1280.png'), fullPage: false });
   });
 
+  test('the site name opens the home page from inside the world, and the chip leads back (#5137)', async ({
+    page,
+  }) => {
+    await mockRestRoutes(page);
+    const socket = await reachReadySession(page);
+
+    await page.getByRole('link', { name: 'ARX II', exact: true }).click();
+    // `/` used to send a connected player straight back to `/game`.
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole('heading', { name: 'Your Attention' })).toBeVisible();
+
+    const header = page.getByRole('banner');
+    await expect(header.getByText(/In the world, Quiet courtyard/)).toBeVisible();
+    await expect(header.getByRole('button', { name: /disconnect character/i })).toBeVisible();
+    await page.screenshot({
+      path: path.join('..', 'docs', 'reviews', '5137', 'home-while-connected-1280.png'),
+      fullPage: false,
+    });
+
+    // The site title on the full header is the same link, and stays put.
+    await header.getByRole('link', { name: /arx/i }).first().click();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole('heading', { name: 'Your Attention' })).toBeVisible();
+
+    await header.getByRole('link', { name: /return to the world/i }).click();
+    await expect(page).toHaveURL(/\/game$/);
+    await expect(page.getByText('In world', { exact: true })).toBeVisible();
+    expect(socket.closedByPage).toBe(false);
+    await page.screenshot({
+      path: path.join('..', 'docs', 'reviews', '5137', 'back-in-the-world-1280.png'),
+      fullPage: false,
+    });
+  });
+
   test('a fresh Hall with no session offers Enter the world and says Not in the world', async ({
     page,
   }) => {
     await mockRestRoutes(page);
     await page.routeWebSocket('**', () => {
-      /* No socket is expected to open on a cold /hall load. */
+      /* No socket is expected to open on a cold `/` load. */
     });
-    await page.goto('/hall');
+    await page.goto('/');
 
     const header = page.getByRole('banner');
     await expect(header.getByRole('link', { name: /enter the world/i })).toHaveAttribute(
@@ -212,7 +246,7 @@ test.describe('selected character chip (#3859) — fixture-backed presence journ
   // #4321: presence is a server fact. This is the journey ApostateCD hit: the
   // sheet opened from the top bar lands in a NEW tab, which holds no socket and
   // used to say "Not in the world" about a character standing in a room in the
-  // tab next to it. A cold /hall load with `mine` reporting one session is
+  // tab next to it. A cold `/` load with `mine` reporting one session is
   // that tab.
   test('a fresh tab says In the world from the server and disconnects everywhere', async ({
     page,
@@ -226,9 +260,9 @@ test.describe('selected character chip (#3859) — fixture-backed presence journ
       }
     );
     await page.routeWebSocket('**', () => {
-      /* No socket is expected to open on a cold /hall load. */
+      /* No socket is expected to open on a cold `/` load. */
     });
-    await page.goto('/hall');
+    await page.goto('/');
 
     const header = page.getByRole('banner');
     await expect(header.getByText(/In the world, Quiet courtyard/)).toBeVisible();

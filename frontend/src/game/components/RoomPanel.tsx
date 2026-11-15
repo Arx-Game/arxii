@@ -152,7 +152,7 @@ function RoomLocationRecovery({
             </Button>
           )}
           <Link
-            to="/hall"
+            to="/"
             className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium"
           >
             Return to Hall

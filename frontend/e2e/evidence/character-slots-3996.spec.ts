@@ -4,7 +4,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 /**
  * Review evidence for character slots (#3996): the real Hall (`HallPage` at
- * `/hall` inside the real app shell, production build) with every `/api/**`
+ * `/` inside the real app shell, production build) with every `/api/**`
  * call answered by fixtures shaped like the serializers. Captures the
  * new-character tile with a free slot, the full state with its holders, the
  * card menu, the give-up confirm, the exempt staff Hall and the phone width.
@@ -93,7 +93,7 @@ async function mountHall(
       await route.fulfill({ status: 404, json: { detail: 'Not provided by this fixture.' } });
     }
   });
-  await page.goto('/hall');
+  await page.goto('/');
   await expect(page.getByText('Your Characters')).toBeVisible();
   await expect(page.getByTestId('new-character-tile')).toBeVisible();
   return errors;

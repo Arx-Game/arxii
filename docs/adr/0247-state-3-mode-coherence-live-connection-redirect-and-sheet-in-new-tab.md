@@ -8,7 +8,7 @@ number clear of both origin/main's tip and this branch's own tip as of
 2026-08-28; re-verify at enqueue in case another PR claimed it meanwhile.
 -->
 
-**Status:** Accepted (2026-08-28, #3412 slice 4)
+**Status:** Accepted (2026-08-28, #3412 slice 4). The live-connection redirect on `/` is superseded by ADR-5137 (#5137, 2026-11-15): `/` is the Hall for every signed-in account. The sheet-in-new-tab, composer and clock decisions stand.
 
 **Decision.** Two small routing/UI decisions complete #3412's mode-coherence work.
 First, `GatefoldPage` (`frontend/src/home/GatefoldPage.tsx`) redirects an

@@ -897,7 +897,7 @@ export function useGameSocket() {
           }
           if (wasServerQuit) {
             queryClient.invalidateQueries({ queryKey: ['account'] }).catch(() => {});
-            navigate('/hall');
+            navigate('/');
           }
           return;
         }

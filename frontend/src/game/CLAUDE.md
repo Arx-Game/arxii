@@ -247,12 +247,12 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   to the sheet, the Hall, the roster or settings in the same tab, socket kept.
 - **`GameTopBar.tsx`**: Character avatars, connection status, character
   switching, and the world menu (#3818): the leading button opens a
-  `DropdownMenu` (Your characters → `/hall`, Roster, Settings, "Disconnect
+  `DropdownMenu` (Your characters → `/`, Roster, Settings, "Disconnect
   Character", "Log Out Account"; the two names ruled 2026-10-13, #4321, so
-  logging out never reads as leaving the world). It was a `<Link to="/">`, and
-  `/` (`GatefoldPage`) redirects an in-world player straight back to `/game`, so
-  it flickered and did nothing; `/hall` is the Hall on a route that never
-  redirects. Navigating away keeps every character tab connected (sessions and
+  logging out never reads as leaving the world). Beside it, "ARX II" is a link
+  to `/` (#5137, ADR-5137): `/` is the Hall for every signed-in account,
+  connected or not, and never redirects to `/game`; there is no `/hall`
+  route. Navigating away keeps every character tab connected (sessions and
   sockets live in Redux/module scope, and `GamePage` has no teardown);
   "Disconnect Character" is `useGameSocket().disconnect(name)`, which closes
   that one socket so the server unpuppets the character (nobody stands

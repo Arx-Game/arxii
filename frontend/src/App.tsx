@@ -9,7 +9,6 @@ import { RequireCharacter } from './components/RequireCharacter';
 import { StaffRoute } from './components/StaffRoute';
 import { Skeleton } from './components/ui/skeleton';
 import { GatefoldPage } from './home/GatefoldPage';
-import { HallPage } from './home/HallPage';
 import { GamePage } from './game/GamePage';
 import { LoginPage } from './evennia_replacements/LoginPage';
 import { RegisterPage } from './evennia_replacements/RegisterPage';
@@ -405,19 +404,10 @@ function App() {
           the root boundary remains the last resort. */}
       <ErrorBoundary>
         <Routes>
+          {/* #5137 — `/` is the Hall for every signed-in account, connected to
+              the world or not (GatefoldPage), so there is no second Hall
+              address: the logo, the world menu and a disconnect all land here. */}
           <Route path="/" element={<GatefoldPage />} />
-          {/* #3818 — the Hall on its own address. `/` keeps redirecting an
-              in-world player to `/game` (a reload lands back in play), so
-              the game's world menu needs a route that always renders
-              character select, with every open session left running. */}
-          <Route
-            path="/hall"
-            element={
-              <ProtectedRoute>
-                <HallPage />
-              </ProtectedRoute>
-            }
-          />
           <Route
             path="/channels"
             element={

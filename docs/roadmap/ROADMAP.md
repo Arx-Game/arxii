@@ -347,7 +347,9 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
   world" (state 3, `/game`). `GatefoldPage` now redirects an authed account straight
   to `/game` when its active character has a **live connection**
   (`active && sessions[active].isConnected`) — the same selection-is-not-presence
-  distinction ADR-0241 drew; a selected-but-unconnected account still gets the Hall,
+  distinction ADR-0241 drew; **superseded by #5137 (ADR-5137): `/` is the Hall for
+  every signed-in account, connected or not, and "ARX II" in the game's top bar
+  links there**; a selected-but-unconnected account still gets the Hall,
   since there's nothing live to jump back into. `GameTopBar` gained an own-sheet link
   (new tab, `RosterEntry.id`-keyed, mode-preserving — leaving the live session
   untouched in the background) and a compact IC clock readout reusing the Hall's
@@ -390,7 +392,8 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
   `RoomProfile.fixture_key` through `resolve_fallback_starting_room`. (2) The top-bar
   hamburger was a `<Link to="/">`, and `/` redirects an in-world player straight back
   to `/game`, so it flickered and did nothing. It is now a real menu: Your
-  characters (`/hall`, a new always-reachable Hall route; `/` keeps its redirect),
+  characters (`/hall`, a new always-reachable Hall route; `/` keeps its redirect;
+  since #5137 the redirect and `/hall` are both gone and this goes to `/`),
   Roster, Settings, "Leave the world as <name>" (closes that character's socket so
   the server unpuppets them, keeps the account signed in and the selection intact,
   goes to the Hall), Log out. Sessions live in Redux/module scope, so navigating

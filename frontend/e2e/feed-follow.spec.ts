@@ -188,7 +188,7 @@ test.describe('a typed quit leaves the world', () => {
     connections[0].route.send(text('Quitting. Hope to see you again, soon.'));
     await connections[0].route.close({ code: 1000, reason: 'quit' });
 
-    await expect(page).toHaveURL(/\/hall$/);
+    await expect(page).toHaveURL(/\/$/);
     // The first reconnect used to fire a second later and re-puppet.
     await page.waitForTimeout(2500);
     expect(connections).toHaveLength(1);
