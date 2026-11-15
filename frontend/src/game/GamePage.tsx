@@ -85,7 +85,6 @@ import { pendingNpcResponse, poseCarryingAction } from '@/gm/npcs/pendingNpcResp
 import { useNpcOffersQuery } from '@/gm/npcs/queries';
 import { useLoanEndFallback } from '@/gm/npcs/useLoanEndFallback';
 import { ConsentPrompt } from '@/scenes/components/ConsentPrompt';
-import { DriftConversionOfferGate } from '@/magic/components/DriftConversionOfferGate';
 import { PlaceBar } from '@/scenes/components/PlaceBar';
 import { TavernGameWidget } from '@/scenes/components/TavernGameWidget';
 import { SpeakerQueueBar } from '@/scenes/components/SpeakerQueueBar';
@@ -424,7 +423,6 @@ function GameCenter({ sceneId, accountId, gameWindow, mapEncounterId }: GameCent
   return (
     <>
       {sceneId && <ConsentPrompt sceneId={sceneId} />}
-      {sceneId && <DriftConversionOfferGate sceneId={Number(sceneId)} />}
       {sceneId && mapEncounterId ? (
         <CombatMainMap sceneId={Number(sceneId)} encounterId={mapEncounterId} />
       ) : null}

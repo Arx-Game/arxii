@@ -27,8 +27,7 @@ import type {
   ChooseUltimateRequest,
   CrossXPLockRequest,
   DissolveRequest,
-  DriftCorrectionConvertRequest,
-  DriftCorrectionDeclineRequest,
+  SettlingRitePerformRequest,
   EntryFlourishRespondRequest,
   GlimpseDistinctionLinkRequest,
   PatchThreadRequest,
@@ -124,6 +123,9 @@ export const magicKeys = {
   entryFlourishPending: () => [...magicKeys.all, 'entry-flourish', 'pending'] as const,
 
   driftConversionPending: () => [...magicKeys.all, 'drift-correction', 'pending'] as const,
+  settlingRite: (characterSheetId: number) =>
+    [...magicKeys.all, 'settling-rite', characterSheetId] as const,
+  settlingRiteAll: () => [...magicKeys.all, 'settling-rite'] as const,
 
   pathIntent: (characterId: number) => [...magicKeys.all, 'path-intent', characterId] as const,
 
@@ -885,53 +887,54 @@ export function useRespondToEntryFlourish(_characterSheetId: number) {
 }
 
 // ---------------------------------------------------------------------------
-// Drift conversion offers, #4733
+// The open chance to atone (#4733) and the rite of settling (#5124)
 // ---------------------------------------------------------------------------
 
 /**
- * Open drift conversion offers for the account. Offers exist only inside a live
- * scene, so the 5 s poll runs only where the gate is mounted (the scene page and
- * the game page). throwOnError deliberately NOT set: same rationale as
- * usePendingEntryFlourishOffers.
+ * The account's open chances to atone: one per character, open until the rite spends it, so
+ * it is read when the sheet is, not polled. throwOnError deliberately NOT set: same
+ * rationale as usePendingEntryFlourishOffers.
  */
 export function usePendingDriftConversionOffers(enabled: boolean = true) {
   return useQuery({
     queryKey: magicKeys.driftConversionPending(),
     queryFn: () => api.getPendingDriftConversionOffers(),
-    refetchInterval: 5_000,
     enabled,
   });
 }
 
 /**
- * Perform the drift correction rite under an open offer.
- *
- * On success invalidates the pending inbox (the cap shrinks or the offer closes),
- * magicKeys.characterResonanceList() (the source loses and the target gains balance;
- * prefix match covers every per-sheet entry), the auras and the character sheets (an
- * atonement can leave the character settled, so the dialog must not keep reading her
- * as unsettled).
+ * What the rite of settling would take for one character: their waiting reflections, the
+ * carried items that count as the offering, and whether the rite is set up. Owner only, so
+ * a viewer of someone else's sheet passes `enabled` false.
  */
-export function useConvertDrift() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: DriftCorrectionConvertRequest) => api.convertDrift(body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: magicKeys.driftConversionPending() }).catch(() => {});
-      qc.invalidateQueries({ queryKey: magicKeys.characterResonanceList() }).catch(() => {});
-      qc.invalidateQueries({ queryKey: auraKeys.all }).catch(() => {});
-      qc.invalidateQueries({ queryKey: ['character-sheets'] }).catch(() => {});
-    },
+export function useSettlingRite(characterSheetId: number, enabled: boolean = true) {
+  return useQuery({
+    queryKey: magicKeys.settlingRite(characterSheetId),
+    queryFn: () => api.getSettlingRite(characterSheetId),
+    enabled,
   });
 }
 
-/** Let an open drift conversion offer go; clears it from the pending inbox. */
-export function useDeclineDriftConversion() {
+/**
+ * Perform the rite of settling.
+ *
+ * On success invalidates the reading (every reflection took the rite), the pending chance to
+ * atone (a cap shrinks or the chance closes), what can be reflected on, the resonances (a
+ * deed grew or a conversion moved them), the auras and the character sheets (the character
+ * may now be settled, so the sheet must not keep reading her as unsettled).
+ */
+export function usePerformSettlingRite() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: DriftCorrectionDeclineRequest) => api.declineDriftConversion(body),
+    mutationFn: (body: SettlingRitePerformRequest) => api.performSettlingRite(body),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: magicKeys.settlingRiteAll() }).catch(() => {});
       qc.invalidateQueries({ queryKey: magicKeys.driftConversionPending() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.reflectionOptionsAll() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.characterResonanceList() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: auraKeys.all }).catch(() => {});
+      qc.invalidateQueries({ queryKey: ['character-sheets'] }).catch(() => {});
     },
   });
 }

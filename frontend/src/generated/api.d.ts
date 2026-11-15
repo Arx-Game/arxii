@@ -14415,31 +14415,6 @@ export interface paths {
     patch: operations['magic_character_auras_partial_update'];
     trace?: never;
   };
-  '/api/magic/character-auras/{id}/accept/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * @description Accept the changes to the aura: settle who the character has become (#5123).
-     *
-     *     Dispatches ``AcceptAuraChangeAction`` (the same action telnet ``aura accept`` runs)
-     *     for the character the aura belongs to. ``get_object`` finds the auras of characters
-     *     the requester plays and, for staff, every aura, so staff may accept for any
-     *     character. Refused with the action's own sentence while the character is not
-     *     unsettled.
-     */
-    post: operations['magic_character_auras_accept_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/magic/character-auras/{id}/link-glimpse-distinction/': {
     parameters: {
       query?: never;
@@ -14862,40 +14837,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/magic/drift-correction/convert/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** @description Dispatch the rite through its action (telnet + web converge). */
-    post: operations['magic_drift_correction_convert_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/magic/drift-correction/decline/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** @description Dispatch the decline through its action. */
-    post: operations['magic_drift_correction_decline_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/magic/drift-correction/pending/': {
     parameters: {
       query?: never;
@@ -14904,14 +14845,13 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description Read-only inbox of open drift conversion offers (#4733).
+     * @description Read-only inbox of the caller's open chances to atone (#4733, one per character, #5124).
      *
      *     GET /api/magic/drift-correction/pending/
      *     GET /api/magic/drift-correction/pending/{id}/
      *
-     *     Scoped to the authenticated user's character sheets (active tenures), and to offers
-     *     whose scene has not finished, the same rule telnet's ``aura`` uses. A finish route
-     *     that skips ``Scene.finish_scene`` can leave an offer row behind; it is never listed.
+     *     Scoped to the authenticated user's character sheets (active tenures). A chance stays open
+     *     until the rite of settling spends it, so a finished scene hides nothing.
      */
     get: operations['magic_drift_correction_pending_list'];
     put?: never;
@@ -14930,14 +14870,13 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description Read-only inbox of open drift conversion offers (#4733).
+     * @description Read-only inbox of the caller's open chances to atone (#4733, one per character, #5124).
      *
      *     GET /api/magic/drift-correction/pending/
      *     GET /api/magic/drift-correction/pending/{id}/
      *
-     *     Scoped to the authenticated user's character sheets (active tenures), and to offers
-     *     whose scene has not finished, the same rule telnet's ``aura`` uses. A finish route
-     *     that skips ``Scene.finish_scene`` can leave an offer row behind; it is never listed.
+     *     Scoped to the authenticated user's character sheets (active tenures). A chance stays open
+     *     until the rite of settling spends it, so a finished scene hides nothing.
      */
     get: operations['magic_drift_correction_pending_retrieve'];
     put?: never;
@@ -16337,6 +16276,33 @@ export interface paths {
     get: operations['magic_scene_entry_endorsements_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/settling-rite/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The rite of settling (#5124): read what it would take, and perform it.
+     *
+     *     GET  /api/magic/settling-rite/?character_sheet=<id>
+     *         The character's waiting reflections, the carried items that count as the offering,
+     *         and whether the rite is set up. Only the character's own player may read it.
+     *     POST /api/magic/settling-rite/  {character_sheet_id, component_ids}
+     *         Dispatches ``PerformSettlingRiteAction`` for that character: one offering, one roll,
+     *         every waiting reflection. A refusal is a 400 ``{detail}``.
+     */
+    get: operations['magic_settling_rite_retrieve'];
+    put?: never;
+    /** @description Dispatch the rite through its action (telnet + web converge). */
+    post: operations['magic_settling_rite_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -28261,11 +28227,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
-    /** @description What accepting the changes to the aura answers: the line told, and the aura as it now is. */
-    AcceptAuraResponse: {
-      detail: string;
-      aura: components['schemas']['CharacterAura'];
-    };
     /**
      * @description Write serializer for forming a Soul Tether (Spec B §12).
      *
@@ -31313,10 +31274,9 @@ export interface components {
       /** @description The sentence naming the resonance that made them unsettled; blank when settled. */
       readonly unsettled_line: string;
       /**
-       * @description The affinity "You become more ..." names on accepting; blank when settled.
+       * @description The affinity of the resonance that grew most past who they are; blank when settled.
        *
-       *     The same one the accept action names (``accept_aura_change``): the affinity of the
-       *     resonance that grew most past who they are.
+       *     The one embracing it ("You become more ...", ``accept_aura_change``) names.
        */
       readonly unsettled_affinity_name: string;
       /** @description The Mire's share of everything they have gained, in words. */
@@ -33967,83 +33927,24 @@ export interface components {
       can_ascend: boolean;
       wake_blocked: boolean;
     };
-    /** @description One cap of an offer as a player sees it (read-only). */
+    /** @description One cap of an open chance to atone: what may still be turned toward a resonance. */
     DriftConversionCap: {
       target_resonance: components['schemas']['DriftTargetResonance'];
       cap_remaining: number;
-      focus_bonus: number;
-      sources: components['schemas']['DriftSourceOption'][];
-      qualifying_components: components['schemas']['DriftQualifyingComponent'][];
     };
-    /**
-     * @description Player-facing view of an open drift conversion offer. Read-only.
-     *
-     *     ``rite_ready`` is false while the rite, its check type or any outcome tier's share is
-     *     missing; the rite then refuses with ``rite_not_ready_message``, which the dialog shows
-     *     in place of the offering picker. The message is empty while the rite is ready.
-     *
-     *     Readiness is the same for every offer, so the caller works it out once per request
-     *     (``rite_is_ready()``) and passes it as ``context["rite_ready"]``; this serializer never
-     *     queries it per offer.
-     */
+    /** @description The character's open chance to atone (read-only): where it opened and its caps. */
     DriftConversionOffer: {
       readonly id: number;
       /** @description The scene the offer first opened in. */
       readonly scene_id: number | null;
       readonly character_id: number;
       readonly caps: components['schemas']['DriftConversionCap'][];
-      readonly rite_ready: boolean;
-      readonly rite_not_ready_message: string;
     };
-    /**
-     * @description Request shape for POST /api/magic/drift-correction/convert/.
-     *
-     *     ``validate`` resolves everything the action needs: the caller's own offer (anyone
-     *     else's is a 404), both resonances, and the offered items, each of which must be held
-     *     by the offer's character (a foreign or stray pk is a 400, never passed on).
-     */
-    DriftCorrectionConvertRequest: {
-      offer_id: number;
-      source_resonance_id: number;
-      target_resonance_id: number;
-      amount: number;
-      component_ids?: number[];
-    };
-    /** @description Request shape for POST /api/magic/drift-correction/decline/. */
-    DriftCorrectionDeclineRequest: {
-      offer_id: number;
-    };
-    DriftCorrectionDeclined: {
-      detail: string;
-    };
-    /** @description Read serializer for DriftCorrectionResult (types/drift.py dataclass). */
-    DriftCorrectionResult: {
-      source_resonance_id: number;
-      target_resonance_id: number;
-      attempted_amount: number;
-      converted_amount: number;
-      granted_amount: number;
-      outcome_name: string;
-      success_level: number;
-      conversion_type: string;
-      focus_bonus: number;
-    };
-    /** @description A carried item that counts toward the rite's offering, and its route (read-only). */
+    /** @description A carried item that counts toward a target-resonance offering, and its route (read-only). */
     DriftQualifyingComponent: {
       item_id: number;
       name: string;
       mode: string;
-    };
-    /** @description One drift holding the rite could convert toward a cap's target (read-only). */
-    DriftSourceOption: {
-      resonance_id: number;
-      resonance_name: string;
-      balance: number;
-      /** Format: decimal */
-      multiplier: string;
-      conversion_type: string;
-      max_amount: number;
-      projected_output: number;
     };
     DriftTargetResonance: {
       id: number;
@@ -50361,6 +50262,25 @@ export interface components {
      * @enum {string}
      */
     RiskLevelEnum: 'low' | 'moderate' | 'high' | 'extreme' | 'lethal';
+    /** @description A carried item that can be the rite's offering (read-only). */
+    RiteOffering: {
+      item_id: number;
+      name: string;
+      mode: string;
+      resonance_name: string;
+      focus_bonus: number;
+    };
+    /** @description One waiting reflection as the rite shows it (read-only). */
+    RiteReflection: {
+      id: number;
+      choice: string;
+      kind: string;
+      title: string;
+      where: string;
+      from_line: string;
+      excerpt: string;
+      effect_line: string;
+    };
     /**
      * @description Serializer for Ritual (read-only list/detail).
      *
@@ -51450,6 +51370,31 @@ export interface components {
      * @enum {string}
      */
     SettledViaEnum: 'funeral' | 'reading' | 'auto';
+    /**
+     * @description Request shape for POST /api/magic/settling-rite/.
+     *
+     *     ``validate`` resolves the caller's own character and the offered items, each of which must
+     *     be held by that character (a foreign or stray pk is a 400, never passed on).
+     */
+    SettlingRitePerformRequest: {
+      character_sheet_id: number;
+      component_ids?: number[];
+    };
+    /** @description What the rite of settling would take and ask for (read-only). */
+    SettlingRiteReading: {
+      reflections: components['schemas']['RiteReflection'][];
+      offerings: components['schemas']['RiteOffering'][];
+      rite_ready: boolean;
+      not_ready_message: string;
+      check_name: string;
+    };
+    /** @description What the rite did, for the one who performed it (read serializer for the result type). */
+    SettlingRiteResult: {
+      outcome_name: string;
+      success_level: number;
+      focus_bonus: number;
+      lines: string[];
+    };
     /**
      * @description * `1` - Setback
      *     * `2` - Costly
@@ -75486,27 +75431,6 @@ export interface operations {
       };
     };
   };
-  magic_character_auras_accept_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['AcceptAuraResponse'];
-        };
-      };
-    };
-  };
   magic_character_auras_link_glimpse_distinction_create: {
     parameters: {
       query?: never;
@@ -76053,52 +75977,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['DramaticMomentType'][];
-        };
-      };
-    };
-  };
-  magic_drift_correction_convert_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['DriftCorrectionConvertRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DriftCorrectionResult'];
-        };
-      };
-    };
-  };
-  magic_drift_correction_decline_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['DriftCorrectionDeclineRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DriftCorrectionDeclined'];
         };
       };
     };
@@ -77727,6 +77605,50 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SceneEntryEndorsement'];
+        };
+      };
+    };
+  };
+  magic_settling_rite_retrieve: {
+    parameters: {
+      query: {
+        character_sheet: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SettlingRiteReading'];
+        };
+      };
+    };
+  };
+  magic_settling_rite_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SettlingRitePerformRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SettlingRiteResult'];
         };
       };
     };

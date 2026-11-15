@@ -4384,6 +4384,7 @@ class RiteReflectionSerializer(serializers.Serializer):
     kind = serializers.CharField()
     title = serializers.CharField()
     where = serializers.CharField(allow_blank=True)
+    from_line = serializers.CharField(allow_blank=True)
     excerpt = serializers.CharField(allow_blank=True)
     effect_line = serializers.CharField()
 

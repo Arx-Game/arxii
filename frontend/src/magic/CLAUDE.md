@@ -400,8 +400,8 @@ thresholds in `world/magic/services/drift.py`, so every surface reads alike), `a
 sizing a segment where the API sends only a word), `affinitySlug` and `haloGradient(segments)` (the
 conic gradient over the `--aura-*` tokens in `character_sheets/sheet.css`). `auraQueries.ts` holds
 `useCharacterAuras(characterId | null, enabled)` (GET `/api/magic/character-auras/[?character=]`,
-the owner's own auras with `settled_percent`, `unsettled`, `unsettled_line`, `mire_share_words`) and
-`useAcceptAura()` (POST `.../{id}/accept/`; invalidates the aura keys and `['character-sheets', id]`).
+the owner's own auras with `settled_percent`, `unsettled`, `unsettled_line`, `mire_share_words`).
+The accept endpoint and `useAcceptAura` are gone (#5124): nothing settles without a reflection.
 They live apart from `api.ts` and `queries.ts`, so a test that mocks `@/magic/queries` wholesale
 must also mock `@/magic/auraQueries`. `AuraHalo` replaces the old `AuraStrip`: props `shares`,
 optional `settled` (a dashed ring of who they are), `mire {words, part}` (a Sineater's Mire share
@@ -411,7 +411,7 @@ the Unsettled status and the ruled line in place of the split sentence), `size '
 and renders nothing without shares. The sheet payload carries no settled or unsettled data: the
 settled ring, the Mire key and the Unsettled status show to the owner only (`isMyCharacter`,
 read from `useCharacterAuras`); everyone else sees the halo and the words. Mounted by
-`SpellbookTab` (with a "Settle your aura" button while unsettled) and by the Gift stage's resonance
+`SpellbookTab` (its reflections card carries the "Settle your aura" button, #5124) and by the Gift stage's resonance
 step in character creation (`character-creation/components/gift/ResonanceWeights.tsx`, with
 `auraSentence` of the weighted picks).
 
@@ -767,68 +767,49 @@ non-integer AP input (e.g. `2.5`) is treated as unset rather than sent fractiona
 success-outcome line after a train call resolves; the 400 `detail` message renders under
 the row that failed.
 
-### Settle your aura: conversion offers and accepting (#4733, #5123)
+### The rite of settling and the open chance to atone (#4733, #5123, #5124)
 
-A deed in the main affinity in a live scene opens a conversion offer; the player answers it with
-the drift correction rite (Atone). Accepting the changes to the aura needs no offer. Mirrors the
-entry-flourish front end (gate, dialog, 5 s poll).
+A deed in the main affinity in a live scene opens the character's one chance to atone, which stays open
+until the rite spends it. The character writes reflections (the "Reflecting on" row) and one rite of
+settling carries them all out. Nothing settles with a click: the Accept and Atone sections, the in-scene
+gate and its strip are gone.
 
-**Wire contract** (`/api/magic/drift-correction/`, generated types, re-exported in `types.ts`):
+**Wire contract** (generated types, re-exported in `types.ts`):
 
-- `getPendingDriftConversionOffers()` - GET `pending/` -> `PaginatedDriftConversionOfferList`.
-  Account-scoped (`character_id` names the character the offer was made for). Each `DriftConversionOffer` is
-  `{ id, scene_id, character_id, caps[], rite_ready, rite_not_ready_message }` (`rite_ready` is false while
-  the rite, its check type or a tier's share is missing; the message is the rite's own refusal, empty
-  while ready); each cap is `{ target_resonance {id, name, affinity},
-cap_remaining, focus_bonus, sources[], qualifying_components[] }`. A source is
-  `{ resonance_id, resonance_name, balance, multiplier (decimal string), conversion_type
-('FALL' | 'REDEMPTION'), max_amount, projected_output }` (`projected_output` is for
-  `max_amount`); a component is `{ item_id, name, mode ('material' | 'facet' | 'keepsake') }`.
-- `convertDrift(body)` - POST `convert/`, body `{ offer_id, source_resonance_id,
-target_resonance_id, amount, component_ids }` -> `DriftCorrectionResult`
-  (`attempted_amount`, `converted_amount`, `granted_amount`, `outcome_name`,
-  `success_level`, `conversion_type`, `focus_bonus`). A refusal is 400 `{detail}` (the view returns its request-validation failures in the same
-  shape, field names dropped, so the player only ever reads the sentence), thrown by
+- `getSettlingRite(characterSheetId)` - GET `/api/magic/settling-rite/?character_sheet=<id>` ->
+  `SettlingRiteReading` `{ reflections[], offerings[], rite_ready, not_ready_message, check_name }`.
+  A reflection is `{ id, choice ('EMBRACE' | 'DISOWN'), kind ('deed' | 'resonance'), title ("Disown your
+Domination"), where ('"The collar" · journal' / 'Pose in The Quarry'), from_line ('from your journal,
+"The collar"'), excerpt, effect_line }`; an offering is `{ item_id, name, mode ('material' | 'facet' |
+'keepsake'), resonance_name, focus_bonus }`. Owner only (404 for anyone else's character).
+- `performSettlingRite({ character_sheet_id, component_ids })` - POST the same URL ->
+  `SettlingRiteResult` `{ outcome_name, success_level, focus_bonus, lines[] }`. A refusal is 400 `{detail}`
+  (no reflection waiting, no qualifying offering, an item not carried, the rite not set up), thrown by
   `readErrorDetail` so the dialog shows `error.message`.
-- `declineDriftConversion({ offer_id })` - POST `decline/` -> `{ detail }`.
+- `getPendingDriftConversionOffers()` - GET `/api/magic/drift-correction/pending/` ->
+  `PaginatedDriftConversionOfferList`; one offer per character `{ id, scene_id, character_id, caps[] }`, a
+  cap `{ target_resonance {id, name, affinity}, cap_remaining }`.
 
-**Hooks:** `usePendingDriftConversionOffers(enabled?)` (`magicKeys.driftConversionPending()`,
-polls every 5 s, no `throwOnError`), `useConvertDrift()` (invalidates the pending key and
-`characterResonanceList()`), `useDeclineDriftConversion()` (invalidates the pending key).
+**Hooks:** `useSettlingRite(characterSheetId, enabled?)`, `usePerformSettlingRite()` (invalidates the
+reading, the pending chance, `reflectionOptionsAll`, `characterResonanceList`, the auras and
+`['character-sheets']`), `usePendingDriftConversionOffers(enabled?)` (read, not polled).
 
-**Components:** `DriftConversionOfferGate` (strip headed "Settle your aura" + auto-open once per
-offer id via `useAutoOpenOncePerOffer`; takes `sceneId` and shows the offer whose `scene_id` matches
-it, polling only once the scene is known; keeps the result line after an exhausted offer leaves the
-inbox; only an `aria-hidden` glow behind the strip pulses, so its words keep full contrast; it reads
-the aura of the offer's own `character_id` through `useCharacterAuras` and only while an offer is
-open, so Accept never writes to another character's aura) and `SettleAuraDialog` (Screen 4, one
-framed box titled with the unsettled line, falling back to "Settle your aura", with up to two exits
-side by side, each with a small `AuraHalo` of the aura after it).
-
-- **Atone** shows only with an open offer (in a scene). Per cap, a system line "The <sources with a
-  balance, joined with commas and 'and'> you gained turns to <target>." beside the cap remaining; a
-  quiet row with the source picker (a plain chip when there is one source) and an amount bounded by
-  the chosen source's `max_amount`, defaulting to it; single-select component pills `<name> ·
-<mode>`, the chosen one filled `bg-primary text-primary-foreground`, the rest outlined; a rate line
-  built from the source's `multiplier` ("Redemption: 12 Ruin becomes about 6 Dawnlight", plus "; a
-  focus adds N" only when `focus_bonus > 0`); the result and error lines; and "Begin the rite"
-  (primary), disabled until a component is chosen and the amount is valid. While `rite_ready` is
-  false each block shows `rite_not_ready_message` in place of the component pills and the button
-  stays disabled. The yield for a typed amount is `max(1, floor(amount * multiplier))`, the
-  server's own rounding.
-- **Accept the changes to your Aura** shows whenever the character is unsettled, with or without an
-  offer; opened from the sheet outside a scene it is the only exit. A line "You become more
-  <affinity>." (the aura's `unsettled_affinity_name`, the affinity the accept action itself names;
-  the server's own line replaces it after) and an Accept button that calls `useAcceptAura`.
-- The footer "Not now" declines an open offer, else just closes; the character stays unsettled.
-  The word "accepted" is never shown to the player.
-
-**Mounts (once per surface):** `SceneDetailPage` (`isActive` guard, beside
-`EntryFlourishOfferGate`, `sceneId` from the scene) and `GamePage`'s `GameCenter` (when the
-session has a scene, `sceneId` from the session's scene); the sheet's `SpellbookTab` opens
-`SettleAuraDialog` itself with no offer. Tests that mock `@/magic/queries` wholesale
-(`SceneDetailPage.test.tsx`) must add the three drift hooks and mock `@/magic/auraQueries`
-(`GamePage.test.tsx` and `SceneDetailPage.test.tsx` do, so the gate never fetches).
+**Components:** `AuraReflections` (the sheet's aura card, owner only: "Your reflections" as
+`<where> · <title>`, one "Settle your aura" button shown only while a reflection waits, "Not yet reflected
+on" with the unreflected deeds and `atoneChanceLine`'s "A chance to atone is open: up to 3 toward Fury.";
+renders nothing with nothing to list) and `SettleAuraDialog` (Screen 6: "Settling your aura", each
+reflection's title, quoted excerpt with its `from_line` and effect line, an "Offering" pill per carried
+item that counts (`offeringLabel`: "Iron collar · a keepsake of Fury"; a lone one is the choice), the roll
+line ("Roll: Composure, +2 from your worn focus. ..." with the bonus only when above 0), the server's
+refusal in an alert, "Not now" and "Perform the rite"; after it runs, the outcome and one line per
+reflection with a Close button; `not_ready_message` replaces the offering when staff have not set the
+rite up). Props `{ characterSheetId, open, onOpenChange }`: it reads and performs for that one
+character. The feed offers the same dialog: `CommandInput`'s toast for a recorded reflection carries a
+"Settle your aura" action, and a reflection that posts but is not recorded shows an error toast
+(`reflection_recorded` false, on the REST pose and on the pose action's result `data`). Words live in
+`riteText.ts`. Tests that mock `@/magic/queries` wholesale must add `useSettlingRite`,
+`useReflectionOptions`, `usePendingDriftConversionOffers` and `usePerformSettlingRite`
+(`SpellbookTab.test.tsx` does).
 
 ## Data Flow
 

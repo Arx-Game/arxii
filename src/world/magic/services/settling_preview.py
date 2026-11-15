@@ -41,17 +41,23 @@ def _excerpt(text: str) -> str:
     return text[: _EXCERPT_LENGTH - 1].rstrip() + "…"
 
 
-def _writing(reflection: Reflection) -> tuple[str, str]:
-    """(where, excerpt) for the writing that carries ``reflection``; blanks when it is gone."""
+def _writing(reflection: Reflection) -> tuple[str, str, str]:
+    """(where, from_line, excerpt) for the writing that carries ``reflection``; blanks when
+    it is gone."""
     entry = reflection.journal_entry
     if entry is not None:
-        return f'"{entry.title}" · journal', _excerpt(entry.body)
+        return (
+            f'"{entry.title}" · journal',
+            f'from your journal, "{entry.title}"',
+            _excerpt(entry.body),
+        )
     pose = reflection.interaction
     if pose is not None:
         scene = pose.scene
         where = f"Pose in {scene.name}" if scene is not None else "Pose"
-        return where, _excerpt(pose.content)
-    return "", ""
+        from_line = f"from your pose in {scene.name}" if scene is not None else "from your pose"
+        return where, from_line, _excerpt(pose.content)
+    return "", "", ""
 
 
 def open_cap_line(sheet: CharacterSheet) -> str:
@@ -105,7 +111,7 @@ def settling_rite_reading(
     }
     readings = []
     for reflection in reflections:
-        where, excerpt = _writing(reflection)
+        where, from_line, excerpt = _writing(reflection)
         readings.append(
             ReflectionReading(
                 id=reflection.pk,
@@ -113,6 +119,7 @@ def settling_rite_reading(
                 kind="deed" if reflection.grant is not None else "resonance",
                 title=_title(reflection),
                 where=where,
+                from_line=from_line,
                 excerpt=excerpt,
                 effect_line=_effect_line(reflection, target_name, caps, config.disown_deed_percent),
             )

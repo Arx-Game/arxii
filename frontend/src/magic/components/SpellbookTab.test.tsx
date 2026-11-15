@@ -95,15 +95,11 @@ vi.mock('@/magic/queries', () => ({
   // The technique picker (#4341): no manifesting technique, so it renders nothing.
   useManifestChoices: () => ({ data: [] }),
   useSetManifestChoice: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
-  // The Settle your aura dialog (#5123) mounts these when the owner opens it.
-  useDeclineDriftConversion: () => ({
-    mutate: vi.fn(),
-    reset: vi.fn(),
-    isPending: false,
-    isError: false,
-    error: null,
-  }),
-  useConvertDrift: () => ({
+  // The aura card's reflections and the rite dialog it opens (#5124).
+  useSettlingRite: vi.fn(),
+  useReflectionOptions: vi.fn(),
+  usePendingDriftConversionOffers: vi.fn(),
+  usePerformSettlingRite: () => ({
     mutate: vi.fn(),
     reset: vi.fn(),
     isPending: false,
@@ -116,13 +112,6 @@ vi.mock('@/magic/queries', () => ({
 // the sheet payload carries the shares only.
 vi.mock('@/magic/auraQueries', () => ({
   useCharacterAuras: vi.fn(),
-  useAcceptAura: () => ({
-    mutate: vi.fn(),
-    reset: vi.fn(),
-    isPending: false,
-    isError: false,
-    error: null,
-  }),
 }));
 
 // GlimpseEditorDialog reads the catalog via the character-creation module's
@@ -312,6 +301,32 @@ function makeOwnAura(overrides: Partial<CharacterAura> = {}): CharacterAura {
   };
 }
 
+function mockRiteReadings({
+  reflections = [],
+  deeds = [],
+  offers = [],
+}: {
+  reflections?: unknown[];
+  deeds?: unknown[];
+  offers?: unknown[];
+} = {}) {
+  vi.mocked(magicQueries.useSettlingRite).mockReturnValue({
+    data: {
+      reflections,
+      offerings: [],
+      rite_ready: true,
+      not_ready_message: '',
+      check_name: 'Composure',
+    },
+  } as unknown as ReturnType<typeof magicQueries.useSettlingRite>);
+  vi.mocked(magicQueries.useReflectionOptions).mockReturnValue({
+    data: deeds,
+  } as unknown as ReturnType<typeof magicQueries.useReflectionOptions>);
+  vi.mocked(magicQueries.usePendingDriftConversionOffers).mockReturnValue({
+    data: { results: offers },
+  } as unknown as ReturnType<typeof magicQueries.usePendingDriftConversionOffers>);
+}
+
 function mockOwnAuras(auras: CharacterAura[]) {
   vi.mocked(auraQueries.useCharacterAuras).mockReturnValue({
     data: auras,
@@ -322,6 +337,7 @@ describe('SpellbookTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockOwnAuras([]);
+    mockRiteReadings();
     mockMotifStyleQueries();
     mockGlimpseQueries();
   });
@@ -394,8 +410,7 @@ describe('SpellbookTab', () => {
     expect(screen.queryByTestId('settle-aura-button')).not.toBeInTheDocument();
   });
 
-  it('shows Unsettled, the ruled line and Settle your aura when the owner is unsettled', async () => {
-    const user = userEvent.setup();
+  it('shows Unsettled and the ruled line, with no Settle button while nothing is reflected', () => {
     const line = 'Your Domination has grown strong enough to make you unsettled.';
     mockPayload(makeMagic());
     mockOwnAuras([
@@ -409,12 +424,84 @@ describe('SpellbookTab', () => {
     expect(screen.getByTestId('aura-halo-ring').getAttribute('style')).toContain(
       '--aura-abyssal-glow'
     );
+    // Nothing settles without a reflection behind it: no button, no card.
+    expect(screen.queryByTestId('settle-aura-button')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('aura-reflections')).not.toBeInTheDocument();
+  });
+
+  it('lists waiting reflections, the unreflected deeds and the open chance, and opens the rite', async () => {
+    const user = userEvent.setup();
+    mockPayload(makeMagic());
+    mockOwnAuras([makeOwnAura({ unsettled: true, unsettled_line: 'Unsettled line.' })]);
+    mockRiteReadings({
+      reflections: [
+        {
+          id: 1,
+          choice: 'DISOWN',
+          kind: 'resonance',
+          title: 'Disown your Domination',
+          where: '"The collar" · journal',
+          from_line: 'from your journal, "The collar"',
+          excerpt: 'I set the iron collar on the altar.',
+          effect_line: 'Domination turns toward Fury, up to 3.',
+        },
+        {
+          id: 2,
+          choice: 'EMBRACE',
+          kind: 'deed',
+          title: "Embrace Barred the overseers' door",
+          where: 'Pose in The Quarry',
+          from_line: 'from your pose in The Quarry',
+          excerpt: 'They had it coming.',
+          effect_line: 'Your Domination from the door grows, up to 5.',
+        },
+      ],
+      deeds: [
+        { kind: 'deed', id: 9, label: 'Strike the chains loose · 3 Fury', replaces_waiting: false },
+        {
+          kind: 'resonance',
+          id: 4,
+          label: 'Your Domination · unsettling you',
+          replaces_waiting: true,
+        },
+      ],
+      offers: [
+        {
+          id: 3,
+          scene_id: null,
+          character_id: 1,
+          caps: [
+            { target_resonance: { id: 7, name: 'Fury', affinity: 'Primal' }, cap_remaining: 3 },
+          ],
+        },
+      ],
+    });
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter />);
+
+    const waiting = screen.getByTestId('aura-reflections-waiting');
+    expect(waiting).toHaveTextContent('"The collar" · journal · Disown your Domination');
+    expect(waiting).toHaveTextContent("Pose in The Quarry · Embrace Barred the overseers' door");
+    // Only deeds are "not yet reflected on"; the unsettling resonance is a reflection target.
+    const deeds = screen.getByTestId('aura-reflections-deeds');
+    expect(deeds).toHaveTextContent('Strike the chains loose · 3 Fury');
+    expect(deeds).not.toHaveTextContent('unsettling you');
+    expect(screen.getByTestId('aura-atone-chance')).toHaveTextContent(
+      'A chance to atone is open: up to 3 toward Fury.'
+    );
+
     await user.click(screen.getByTestId('settle-aura-button'));
 
-    // Outside a scene there is no offer: Accept and Not now only.
-    expect(await screen.findByTestId('settle-exit-accept')).toBeInTheDocument();
-    expect(screen.queryByTestId('settle-exit-atone')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Not now' })).toBeInTheDocument();
+    expect(await screen.findByText('Settling your aura')).toBeInTheDocument();
+  });
+
+  it('shows the card to the owner only', () => {
+    mockPayload(makeMagic());
+    mockRiteReadings({
+      deeds: [{ kind: 'deed', id: 9, label: 'A deed', replaces_waiting: false }],
+    });
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
+
+    expect(screen.queryByTestId('aura-reflections')).not.toBeInTheDocument();
   });
 
   it('draws the Mire apart from the Sineater own Abyssal (#5123)', () => {

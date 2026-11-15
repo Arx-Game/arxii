@@ -16,7 +16,7 @@
  *   settled ring stays neutral.
  * - `label` is a small caps line above the sentence ("Your aura").
  *
- * The halo's `children` sit under the words (the sheet's Settle your aura button).
+ * The halo's `children` sit under the words.
  */
 
 import type { CSSProperties, ReactNode } from 'react';

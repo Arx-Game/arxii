@@ -30,6 +30,7 @@ import type { TargetCandidate } from '@/scenes/components/TargetPicker';
 import { useAppSelector } from '@/store/hooks';
 import { ReflectingOnRow } from '@/magic/components/ReflectingOnRow';
 import { useRefreshReflectionOptions } from '@/magic/queries';
+import { SettleAuraDialog } from '@/magic/components/SettleAuraDialog';
 import {
   isReflecting,
   isReflectionIncomplete,
@@ -305,6 +306,17 @@ export function CommandInput({
   const refreshReflectionOptions = useRefreshReflectionOptions(characterSheetId);
   // The `client_request_id` of a socket-sent pose that carries a reflection, until its ack.
   const reflectedSendRef = useRef<string | null>(null);
+  // The rite of settling, offered by the toast a recorded reflection raises.
+  const [settleOpen, setSettleOpen] = useState(false);
+  const showReflectionLine = useCallback((line: string, recorded: boolean) => {
+    if (!recorded) {
+      toast.error(line);
+      return;
+    }
+    toast.success(line, {
+      action: { label: 'Settle your aura', onClick: () => setSettleOpen(true) },
+    });
+  }, []);
   const submittingRef = useRef(false);
   const { send, sendConsole, executeAction } = useGameSocket();
   const isCommandsMode = composerMode?.command === COMMANDS_MODE;
@@ -492,7 +504,9 @@ export function CommandInput({
           reflectedSendRef.current = null;
           setReflection(NO_REFLECTION);
           refreshReflectionOptions();
-          if (payload.message) toast.success(payload.message);
+          if (payload.message) {
+            showReflectionLine(payload.message, payload.data?.reflection_recorded !== false);
+          }
         }
         acknowledge(pending.clientRequestId);
         // Recorded unconditionally: this text demonstrably went out, so
@@ -507,7 +521,7 @@ export function CommandInput({
         toast.error(payload.message ?? 'Failed to send.');
       }
     },
-    [acknowledge, rejectDraft, refreshReflectionOptions]
+    [acknowledge, rejectDraft, refreshReflectionOptions, showReflectionLine]
   );
   useActionResult(handleActionResult);
 
@@ -954,8 +968,7 @@ export function CommandInput({
         .then((response) => {
           if (isReflecting(reflection)) {
             if (response?.reflection_line) {
-              if (response.reflection_recorded === false) toast.error(response.reflection_line);
-              else toast.success(response.reflection_line);
+              showReflectionLine(response.reflection_line, response.reflection_recorded !== false);
             }
             setReflection(NO_REFLECTION);
             refreshReflectionOptions();
@@ -1094,6 +1107,7 @@ export function CommandInput({
     composerLine,
     reflection,
     refreshReflectionOptions,
+    showReflectionLine,
   ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1432,6 +1446,13 @@ export function CommandInput({
         >
           {draft.content.length.toLocaleString()} / {MAX_POSE_LENGTH.toLocaleString()} characters
         </p>
+      )}
+      {characterSheetId != null && (
+        <SettleAuraDialog
+          characterSheetId={characterSheetId}
+          open={settleOpen}
+          onOpenChange={setSettleOpen}
+        />
       )}
     </div>
   );

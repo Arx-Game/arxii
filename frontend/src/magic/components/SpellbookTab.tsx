@@ -44,9 +44,8 @@ import { TechniqueProgressPanel } from './TechniqueProgressPanel';
 import { StaffEditable } from '@/character_sheets/components/sheet/StaffEdit';
 import { useStaffEditing } from '@/character_sheets/components/sheet/staffEditContext';
 import { GlimpseEditorDialog } from './glimpse/GlimpseEditorDialog';
-import { Button } from '@/components/ui/button';
 import { AuraHalo } from './AuraHalo';
-import { SettleAuraDialog } from './SettleAuraDialog';
+import { AuraReflections } from './AuraReflections';
 import { useCharacterAuras } from '@/magic/auraQueries';
 import { wordsToPart } from '@/magic/aura';
 
@@ -190,8 +189,6 @@ function glimpseStateLine(state: CharacterSheetAura['glimpse_state']): string {
 export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props) {
   const { data: payload, isLoading } = useCharacterSheetQuery(characterId);
   const [glimpseDialogOpen, setGlimpseDialogOpen] = useState(false);
-  const [settleOpen, setSettleOpen] = useState(false);
-  const [settleResult, setSettleResult] = useState<string | null>(null);
   // Who the character is, whether they are unsettled and the Mire's share are the
   // owner's to see; the sheet payload carries the shares only.
   const { data: ownAuras } = useCharacterAuras(characterId, isMyCharacter);
@@ -377,22 +374,13 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
               unsettled={ownAura?.unsettled ?? false}
               unsettledLine={ownAura?.unsettled_line ?? ''}
               unsettledAffinity={ownAura?.unsettled_affinity_name ?? ''}
-            >
-              {ownAura?.unsettled ? (
-                <Button
-                  size="sm"
-                  onClick={() => setSettleOpen(true)}
-                  data-testid="settle-aura-button"
-                >
-                  Settle your aura
-                </Button>
-              ) : null}
-            </AuraHalo>
+            />
           ) : (
             magic.aura.dominant_affinity && (
               <Ledger>{`It reads as ${magic.aura.dominant_affinity.toLowerCase()}.`}</Ledger>
             )
           )}
+          {isMyCharacter && <AuraReflections characterSheetId={characterId} />}
           {isMyCharacter && <Ledger>{glimpseStateLine(magic.aura.glimpse_state)}</Ledger>}
           {magic.aura.glimpse_tags.length > 0 && (
             <div className="refsheet-tags" data-testid="spellbook-glimpse-tags">
@@ -432,24 +420,6 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
             </Stack>
           )}
         </div>
-      )}
-
-      {drawsRail && isMyCharacter && ownAura && (ownAura.unsettled || settleOpen) && (
-        <SettleAuraDialog
-          aura={ownAura}
-          offer={null}
-          resultLine={settleResult}
-          onResult={setSettleResult}
-          open={settleOpen}
-          onOpenChange={(next) => {
-            setSettleOpen(next);
-            if (!next) setSettleResult(null);
-          }}
-          onClose={() => {
-            setSettleOpen(false);
-            setSettleResult(null);
-          }}
-        />
       )}
 
       {drawsRail && isMyCharacter && magic?.aura && (

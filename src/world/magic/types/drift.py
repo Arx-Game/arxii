@@ -141,8 +141,10 @@ class ReflectionReading:
     """One waiting reflection as the sheet's aura card and the rite dialog show it.
 
     ``title`` is "Embrace <what>" or "Disown <what>"; ``where`` names the writing that carries
-    it (a journal entry's title, or the scene a pose was in); ``excerpt`` is the start of that
-    writing, blank when it is gone. ``effect_line`` says what the rite will do at a full share.
+    it for the sheet's list (a journal entry's title, or the scene a pose was in) and
+    ``from_line`` says the same as the rite dialog's "from ..." clause; ``excerpt`` is the start
+    of that writing. All three are blank when the writing is gone. ``effect_line`` says what
+    the rite will do at a full share.
     """
 
     id: int
@@ -150,6 +152,7 @@ class ReflectionReading:
     kind: str
     title: str
     where: str
+    from_line: str
     excerpt: str
     effect_line: str
 
