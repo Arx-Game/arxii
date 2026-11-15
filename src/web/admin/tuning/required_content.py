@@ -3900,10 +3900,10 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "world/magic/services/drift_correction.py rite_is_ready(), perform_settling_rite()"
             ),
             consequence=(
-                "A deed still opens a conversion offer and tells the player, but telnet "
-                "drift, the web dialog and the rite say 'not set up yet' while the rite, "
-                "the check type or any outcome tier's share is missing; nothing is consumed "
-                "or converted until staff author them."
+                "A deed still opens a chance to atone and tells the player, but telnet "
+                "aura, the web dialog and the rite of settling say 'not set up yet' while "
+                "the rite, the check type or any outcome tier's share is missing; nothing is "
+                "consumed or settled until staff author them."
             ),
             probe=CustomProbe(fn=_probe_drift_correction_config),
             admin_model="DriftCorrectionConfig",

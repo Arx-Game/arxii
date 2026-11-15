@@ -18,9 +18,7 @@ NEW_PATH = "world.magic.services.drift_correction.perform_settling_rite"
 
 def _rewrite(apps, old, new):
     Ritual = apps.get_model("arxii", "Ritual")
-    for ritual in Ritual.objects.filter(service_function_path=old):
-        ritual.service_function_path = new
-        ritual.save(update_fields=["service_function_path"])
+    Ritual.objects.filter(service_function_path=old).update(service_function_path=new)
 
 
 def to_settling_rite(apps, schema_editor):

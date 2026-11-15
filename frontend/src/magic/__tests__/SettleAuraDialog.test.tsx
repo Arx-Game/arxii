@@ -173,14 +173,14 @@ describe('SettleAuraDialog', () => {
     vi.mocked(api.getSettlingRite).mockResolvedValue(
       reading({
         rite_ready: false,
-        not_ready_message: 'The rite of correction is not set up yet; tell staff.',
+        not_ready_message: 'The rite of settling is not set up yet; tell staff.',
         offerings: [],
       })
     );
     renderDialog();
 
     expect(await screen.findByTestId('rite-not-ready')).toHaveTextContent(
-      'The rite of correction is not set up yet; tell staff.'
+      'The rite of settling is not set up yet; tell staff.'
     );
     expect(screen.queryByTestId('rite-roll')).not.toBeInTheDocument();
     expect(screen.getByTestId('rite-perform')).toBeDisabled();

@@ -105,8 +105,9 @@ export function SettleAuraDialog({ characterSheetId, open, onOpenChange }: Settl
           <div className="space-y-3">
             <output className="block space-y-1 text-sm" data-testid="rite-result">
               <span className="block font-semibold">{result.outcome_name}.</span>
-              {result.lines.map((line) => (
-                <span key={line} className="block">
+              {result.lines.map((line, index) => (
+                // Lines are the server's sentences in rite order; two may read alike.
+                <span key={index} className="block">
                   {line}
                 </span>
               ))}

@@ -944,13 +944,13 @@ class ResonanceBurnInvalid(MagicError):
 class DriftCorrectionError(MagicError):
     """Base for refusals of the drift correction rite (#4733, slice 4 of #4672)."""
 
-    user_message = "The rite of correction cannot be performed."
+    user_message = "The rite of settling cannot be performed."
 
 
 class DriftCorrectionNotConfiguredError(DriftCorrectionError):
     """The rite, its check type, or the outcome share for the rolled tier is unauthored."""
 
-    user_message = "The rite of correction is not set up yet; tell staff."
+    user_message = "The rite of settling is not set up yet; tell staff."
 
 
 class NoWaitingReflectionError(DriftCorrectionError):

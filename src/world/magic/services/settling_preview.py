@@ -17,6 +17,7 @@ from world.magic.models.reflection import Reflection
 from world.magic.services.drift import get_drift_correction_config
 from world.magic.services.drift_correction import (
     RITE_NOT_READY_MESSAGE,
+    fallback_conversion_target,
     main_affinity_rows,
     offerings_for,
     reflected_resonance,
@@ -29,6 +30,7 @@ from world.magic.types.drift import ReflectionReading, SettlingRiteReading
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
+    from world.magic.models.affinity import Resonance
 
 _EXCERPT_LENGTH = 160
 _ONE_HUNDRED = Decimal(100)
@@ -72,7 +74,10 @@ def open_cap_line(sheet: CharacterSheet) -> str:
 
 
 def _effect_line(
-    reflection: Reflection, target_name: str, caps: dict[int, int], disown_percent: int
+    reflection: Reflection,
+    target: Resonance | None,
+    caps: dict[int, int],
+    disown_percent: int,
 ) -> str:
     resonance = reflected_resonance(reflection)
     embrace = reflection.choice == ReflectionChoice.EMBRACE
@@ -82,11 +87,15 @@ def _effect_line(
             what = deed_what(grant) or f"your {resonance.name}"
             return f"Your {resonance.name} from {what} grows, up to {grant.amount}."
         most = int(Decimal(grant.amount) * Decimal(disown_percent) / _ONE_HUNDRED)
-        return f"{resonance.name} turns toward {target_name}, up to {most}."
+        return f"{resonance.name} turns toward {_target_name(target)}, up to {most}."
     if embrace:
         return "Who you are moves toward who you have become."
-    most = max(caps.values(), default=0)
-    return f"{resonance.name} turns toward {target_name}, up to {most}."
+    most = caps.get(target.pk, 0) if target is not None else 0
+    return f"{resonance.name} turns toward {_target_name(target)}, up to {most}."
+
+
+def _target_name(target: Resonance | None) -> str:
+    return target.name if target is not None else "your own affinity"
 
 
 def _title(reflection: Reflection) -> str:
@@ -104,7 +113,9 @@ def settling_rite_reading(
     config = get_drift_correction_config()
     reflections = waiting_reflections(sheet)
     main_rows = main_affinity_rows(sheet)
-    target_name = main_rows[0].resonance.name if main_rows else "your own affinity"
+    # The rite turns toward the resonance its offering is tied to; before one is chosen the
+    # sheet names the one the rite falls back to (the same function the rite uses).
+    target = fallback_conversion_target(main_rows)
     caps = {
         cap.target_resonance_id: cap.cap
         for cap in DriftConversionCap.objects.filter(offer__character_sheet=sheet)
@@ -121,7 +132,7 @@ def settling_rite_reading(
                 where=where,
                 from_line=from_line,
                 excerpt=excerpt,
-                effect_line=_effect_line(reflection, target_name, caps, config.disown_deed_percent),
+                effect_line=_effect_line(reflection, target, caps, config.disown_deed_percent),
             )
         )
     ready = rite_is_ready(config)

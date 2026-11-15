@@ -217,15 +217,17 @@ def offerings_for(
     )
     listed: dict[int, RiteOffering] = {}
     for resonance in resonances:
+        # The bonus depends on the resonance alone, so it is worked out once per resonance and
+        # only when an item is listed under it.
+        bonus: int | None = None
         component: QualifyingComponent
         for component in by_target[resonance.pk]:
-            listed.setdefault(
-                component.item.pk,
-                RiteOffering(
-                    component=component,
-                    resonance=resonance,
-                    focus_bonus=focus_bonus(sheet, resonance),
-                ),
+            if component.item.pk in listed:
+                continue
+            if bonus is None:
+                bonus = focus_bonus(sheet, resonance)
+            listed[component.item.pk] = RiteOffering(
+                component=component, resonance=resonance, focus_bonus=bonus
             )
     return list(listed.values())
 
@@ -265,17 +267,24 @@ def _resolve_offering(
 # ---------------------------------------------------------------------------
 
 
+def fallback_conversion_target(main_rows: list[CharacterResonance]) -> Resonance | None:
+    """The resonance a conversion turns toward when the offering is not tied to a main-affinity
+    one: the character's largest main-affinity resonance, or nowhere. The rite and its preview
+    both read it, so what the sheet says is where the rite sends it."""
+    return main_rows[0].resonance if main_rows else None
+
+
 def _conversion_target(
     sheet: CharacterSheet, offered_for: Resonance, main_rows: list[CharacterResonance]
 ) -> Resonance | None:
     """Where a conversion turns: the offering's own resonance when it is of the main affinity,
-    else the character's largest main-affinity resonance, else nowhere."""
+    else ``fallback_conversion_target``."""
     main = own_affinity(sheet)
     if main is None:
         return None
     if offered_for.affinity_id == main.pk:
         return offered_for
-    return main_rows[0].resonance if main_rows else None
+    return fallback_conversion_target(main_rows)
 
 
 def _convert(

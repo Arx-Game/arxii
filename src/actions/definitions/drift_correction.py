@@ -51,6 +51,7 @@ class PerformSettlingRiteAction(Action):
         components_provided: list[Any] | None = None,
         **kwargs: Any,
     ) -> ActionResult:
+        from world.items.models import ItemInstance  # noqa: PLC0415
         from world.magic.exceptions import (  # noqa: PLC0415
             DriftCorrectionError,
             RitualComponentError,
@@ -62,9 +63,14 @@ class PerformSettlingRiteAction(Action):
         sheet = actor.character_sheet
         if sheet is None:
             return ActionResult(success=False, message=_NO_SHEET)
-        components = list(components_provided or [])
-        if any(item.holder_character_sheet_id != sheet.pk for item in components):
+        components = components_provided if components_provided is not None else []
+        # A generic dispatch can hand over raw ids or a non-list; only the actor's own items count.
+        if not isinstance(components, list | tuple) or not all(
+            isinstance(item, ItemInstance) and item.holder_character_sheet_id == sheet.pk
+            for item in components
+        ):
             return ActionResult(success=False, message=_NOT_CARRIED)
+        components = list(components)
         try:
             result = perform_settling_rite(sheet, components=components)
         except (DriftCorrectionError, RitualComponentError) as exc:

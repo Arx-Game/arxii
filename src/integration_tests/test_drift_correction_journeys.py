@@ -82,7 +82,7 @@ from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 from world.traits.services import ensure_canonical_check_outcome
 
 NOTICE = "You have grown unsettled. Use aura to see how you can atone."
-NOT_READY = "The rite of correction is not set up yet; tell staff."
+NOT_READY = "The rite of settling is not set up yet; tell staff."
 NOTHING_WAITING = "You have no reflections waiting."
 PENDING = "/api/magic/drift-correction/pending/"
 RITE = "/api/magic/settling-rite/"
@@ -350,6 +350,22 @@ class WhenTheRiteRefuses(DriftJourneyCase):
         self.assertFalse(consumed(thread))
         self.assertEqual(SettlingRite.objects.count(), 0)
         self.assertEqual(balance(self.ysmay, self.ruin), 30)
+
+    def test_a_generic_dispatch_with_raw_ids_is_refused_in_a_sentence_and_writes_nothing(
+        self,
+    ) -> None:
+        thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
+        self.deed(self.ysmay)
+        self.reflect(self.ysmay, "Ruin", "disown")
+
+        with force_check_outcome(self.outcomes["Success"]):
+            result = self.web(self.ysmay, "perform_settling_rite", components_provided=[thread])
+
+        self.assertFalse(result.detail.success)
+        self.assertEqual(result.detail.message, "You are not carrying everything you offered.")
+        self.assertFalse(consumed(thread))
+        self.assertEqual(self.waiting(self.ysmay), 1)
+        self.assertEqual(SettlingRite.objects.count(), 0)
 
     def test_an_offering_that_counts_for_nothing_the_rite_moves_is_refused(self) -> None:
         other = ResonanceFactory(name="Sunrise", affinity=self.celestial)
