@@ -253,38 +253,26 @@ def aura_power_term(ctx: PowerTermContext) -> int:
 def thread_power_term(ctx: PowerTermContext) -> int:
     """Out-of-combat per-thread INTENSITY_BUMP contribution (#768).
 
-    Mirrors the combat CombatPull INTENSITY_BUMP path: for each applicable
-    thread, resolve its pull effects across tiers 0..pull_tier (the existing
-    charge-free ``resolve_pull_effects`` scaler) and sum INTENSITY_BUMP
-    scaled values. Tier-0 passive contributions are included because the
-    resolver always covers tier 0.
+    For each applicable thread that is passive (not pulled), resolve its tier-0
+    effects (the existing charge-free ``resolve_pull_effects`` scaler) and sum
+    INTENSITY_BUMP scaled values. A pulled thread contributes nothing here: the pull is
+    charged by ``_charge_cast_pull``, whose resolved effects (tier 0 through the pull's
+    tier) the cast adds to its power and its ledger once.
     """
     from world.magic.constants import EffectKind  # noqa: PLC0415
-    from world.magic.services.resonance import (  # noqa: PLC0415
-        pull_kindled_tiers,
-        resolve_pull_effects,
-    )
+    from world.magic.services.resonance import resolve_pull_effects  # noqa: PLC0415
 
-    # A pulled thread paid by a kindled resonance reads higher (#5124), so the cast's
-    # intensity agrees with the pull preview. One read per cast, and only when a pull pays.
-    kindled = (
-        pull_kindled_tiers(ctx.sheet)
-        if any(applicable.pull_tier > 0 for applicable in ctx.applicable_threads)
-        else None
-    )
     total = 0
     for applicable in ctx.applicable_threads:
-        payers = {applicable.thread.pk: applicable.payer} if applicable.payer else None
-        resolved = resolve_pull_effects(
-            [applicable.thread],
-            applicable.pull_tier,
-            in_combat=False,
-            payers=payers,
-            kindled=kindled if applicable.pull_tier > 0 else None,
-        )
+        if applicable.pull_tier > 0:
+            # A pulled thread's effects (tier 0 through the pull's tier, read at the payer's
+            # level, with any beseech or kindled boost) are resolved once, when the pull is
+            # charged, and added to the ledger there (``_prepare_technique_cast``); counting
+            # them here too would count the same bump twice.
+            continue
         total += sum(
             r.scaled_value
-            for r in resolved
+            for r in resolve_pull_effects([applicable.thread], 0, in_combat=False)
             if r.kind == EffectKind.INTENSITY_BUMP and r.scaled_value
         )
     return total

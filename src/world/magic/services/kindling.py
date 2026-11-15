@@ -596,6 +596,19 @@ class KindlingContext:
     mission: MissionInstance | None = None
 
 
+def active_mission_for(sheet: CharacterSheet) -> MissionInstance | None:
+    """The newest ACTIVE ``MissionInstance`` the sheet takes part in, or None."""
+    from world.missions.constants import MissionStatus  # noqa: PLC0415
+    from world.missions.models import MissionInstance  # noqa: PLC0415
+
+    return (
+        MissionInstance.objects.filter(status=MissionStatus.ACTIVE, participants__character=sheet)
+        .select_related("template")
+        .order_by("-pk")
+        .first()
+    )
+
+
 def kindling_context_for(sheet: CharacterSheet) -> KindlingContext:
     """Build the live fight and mission context for ``sheet``, for any read outside a roll.
 
@@ -606,16 +619,10 @@ def kindling_context_for(sheet: CharacterSheet) -> KindlingContext:
     ``kindled_resonances`` instead.
     """
     from world.combat.round_context import resolve_combat_round_context  # noqa: PLC0415
-    from world.missions.constants import MissionStatus  # noqa: PLC0415
-    from world.missions.models import MissionInstance  # noqa: PLC0415
 
-    mission = (
-        MissionInstance.objects.filter(status=MissionStatus.ACTIVE, participants__character=sheet)
-        .select_related("template")
-        .order_by("-pk")
-        .first()
+    return KindlingContext(
+        resolution=resolve_combat_round_context(sheet), mission=active_mission_for(sheet)
     )
-    return KindlingContext(resolution=resolve_combat_round_context(sheet), mission=mission)
 
 
 def kindled_resonances_now(sheet: CharacterSheet) -> list[KindledResonance]:

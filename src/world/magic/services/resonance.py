@@ -1053,9 +1053,18 @@ def _beseeched_level(
 def _kindled_level(
     level: int, payer: ResonanceModel, kindled: Mapping[int, KindledStrengthTier] | None
 ) -> int:
-    """Return ``level``, plus the pull levels of the payer's kindled strength (#5124)."""
+    """Return ``level``, plus the pull levels of the payer's kindled strength (#5124).
+
+    ``pull_levels`` is in thread levels as a player reads them (a thread's displayed level,
+    like a skill's), so ten of them are one step of ``thread_level_multiplier``. That curve
+    dips below level 10, so a boost that would read lower than ``level`` is not applied: a
+    kindled payer never reads lower than an unkindled one (the guard ``payer_level_read`` has).
+    """
     tier = kindled.get(payer.pk) if kindled else None
-    return level + tier.pull_levels if tier is not None else level
+    if tier is None:
+        return level
+    boosted = level + tier.pull_levels
+    return boosted if thread_level_multiplier(boosted) >= thread_level_multiplier(level) else level
 
 
 def pull_kindled_tiers(
@@ -1069,13 +1078,19 @@ def pull_kindled_tiers(
     """
     from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
     from world.magic.services.kindling import (  # noqa: PLC0415
+        active_mission_for,
         kindled_tiers,
         kindling_context_for,
     )
 
+    if participant is not None:
+        return kindled_tiers(
+            character_sheet,
+            resolution=CombatRoundContext(participant),
+            mission=active_mission_for(character_sheet),
+        )
     context = kindling_context_for(character_sheet)
-    resolution = CombatRoundContext(participant) if participant else context.resolution
-    return kindled_tiers(character_sheet, resolution=resolution, mission=context.mission)
+    return kindled_tiers(character_sheet, resolution=context.resolution, mission=context.mission)
 
 
 def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; both target (#1831) and beseech (#1718) params are required

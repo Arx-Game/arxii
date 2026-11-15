@@ -18,6 +18,7 @@ from world.magic.factories import (
     ThreadPullCostFactory,
     ThreadPullEffectFactory,
 )
+from world.magic.models import KindledStrengthTier
 from world.magic.serializers import PayerOptionSerializer
 from world.magic.services import preview_resonance_pull, spend_resonance_for_pull
 from world.magic.types import PullActionContext
@@ -43,6 +44,20 @@ class DrawingStrengthTests(TestCase):
             ThreadPullEffectFactory(
                 target_kind=thread.target_kind, resonance=resonance, tier=1, flat_bonus_amount=3
             )
+        # A faint strength whose few levels would read the thread LOWER (a level-5 read is
+        # worth less than level 0's floor), so it must change nothing.
+        cls.faint = KindledStrengthTierFactory(rank=1, name="Faint", pull_levels=5)
+        cls.mirth = ResonanceFactory(name="Mirth")
+        CharacterResonanceFactory(
+            character_sheet=cls.sheet, resonance=cls.mirth, balance=10, lifetime_earned=10
+        )
+        cls.mirth_thread = ThreadFactory(owner=cls.sheet, resonance=cls.mirth, level=0)
+        ThreadPullEffectFactory(
+            target_kind=cls.mirth_thread.target_kind,
+            resonance=cls.mirth,
+            tier=1,
+            flat_bonus_amount=3,
+        )
         cls.encounter = CombatEncounterFactory(round_number=1)
         cls.participant = CombatParticipantFactory(
             encounter=cls.encounter, character_sheet=cls.sheet
@@ -55,12 +70,21 @@ class DrawingStrengthTests(TestCase):
             source=KindlingSource.GM,
             encounter=cls.encounter,
         )
+        KindlingFactory(
+            character_sheet=cls.sheet,
+            resonance=cls.mirth,
+            strength=1,
+            source=KindlingSource.GM,
+            encounter=cls.encounter,
+        )
 
     def _combat_context(self) -> PullActionContext:
         return PullActionContext(
             combat_encounter=self.encounter,
             participant=self.participant,
-            involved_traits=(self.fury_thread.target_trait_id, self.guile_thread.target_trait_id),
+            involved_traits=tuple(
+                t.target_trait_id for t in (self.fury_thread, self.guile_thread, self.mirth_thread)
+            ),
         )
 
     def test_a_kindled_payer_reads_the_thread_higher_and_an_unkindled_one_does_not(self) -> None:
@@ -100,3 +124,33 @@ class DrawingStrengthTests(TestCase):
         self.assertEqual(data["kindled_strength"], "Blazing")
         self.assertEqual(data["level_read"], 0)
         self.assertIsNone(PayerOptionSerializer(guile).data["kindled_strength"])
+
+    def test_a_strength_that_would_read_the_thread_lower_changes_nothing(self) -> None:
+        preview = preview_resonance_pull(self.sheet, 1, [self.mirth_thread])
+
+        option = next(o for o in preview.per_thread[0].options if o.resonance.pk == self.mirth.pk)
+        # Kindled (it is named), yet a level-0 thread's +5 would drop the multiplier to 0.5.
+        self.assertEqual(PayerOptionSerializer(option).data["kindled_strength"], "Faint")
+        self.assertEqual([e.scaled_value for e in option.effects], [3])
+
+    def test_a_kindling_whose_strength_has_no_row_gives_no_boost(self) -> None:
+        KindledStrengthTier.objects.filter(rank=2).delete()
+
+        preview = preview_resonance_pull(self.sheet, 1, [self.fury_thread])
+
+        option = next(o for o in preview.per_thread[0].options if o.resonance.pk == self.fury.pk)
+        self.assertIsNone(PayerOptionSerializer(option).data["kindled_strength"])
+        self.assertEqual([e.scaled_value for e in option.effects], [3])
+
+    def test_the_boost_stacks_with_the_beseech_boost(self) -> None:
+        result = spend_resonance_for_pull(
+            self.sheet,
+            1,
+            [self.fury_thread],
+            self._combat_context(),
+            beseech_bonus_thread_id=self.fury_thread.pk,
+            beseech_bonus=10,
+        )
+
+        # Level 0 + 10 (beseech) + 20 (kindled) reads as 30: a multiplier of 3.
+        self.assertEqual([e.scaled_value for e in result.resolved_effects], [9])

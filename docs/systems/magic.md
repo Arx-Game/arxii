@@ -2053,7 +2053,7 @@ takes `{resonance id: KindledStrengthTier}` (built once per pull by `pull_kindle
 `kindling.kindled_tiers`) and adds the payer's tier `pull_levels` to the level the multiplier reads, beside the beseech
 boost (`_kindled_level`). The boost is read for that resolution only: it never touches the thread, the `min_thread_level` gate,
 `source_thread_level` or the preview's `level_read`. Because INTENSITY_BUMP scales with the multiplier, intensity rises with it, and
-`thread_power_term` passes the same map for pulled threads so the cast's power agrees with the preview. A payer that is not kindled, or a
+A non-combat cast counts a pull's intensity once: `thread_power_term` covers passive threads only and skips pulled ones, and `_prepare_technique_cast` adds the charged pull's intensity to the power and itemises it in the ledger as "thread power", so the cast agrees with the preview. `pull_levels` is in thread levels as players read them (ten per multiplier step); a boost that would read lower than the unkindled level (the curve dips below level 10) is not applied. A payer that is not kindled, or a
 tier with no row, reads as before. `CombatPullThread.kindled_strength` stores the tier's rank (0 = none) at commit. `PayerOption.kindled_strength` carries
 the tier and `PayerOptionSerializer.kindled_strength` its name only (never the rank or levels); the Pay with list shows "Kindled, <name>"
 beside the payer. No control changes.

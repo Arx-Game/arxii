@@ -3321,6 +3321,11 @@ class KindledStrengthTierForm(forms.ModelForm):
                 "A feeling condition at or above this severity reaches the strength. "
                 "0 means the strength is not reached this way."
             ),
+            "pull_levels": (
+                "Thread levels as players read them, like a skill's: a thread pulled with "
+                "this resonance reads this many levels higher. Perks scale one step for every "
+                "ten levels, so a boost that would not raise a thread's step does nothing."
+            ),
         }
 
 
