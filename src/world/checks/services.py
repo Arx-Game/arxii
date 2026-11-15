@@ -581,7 +581,9 @@ def difficulty_level_for_points(points: int) -> int:
     return upper_level if upper - points < points - lower else lower_level
 
 
-def level_points(level: int) -> int:
+def level_points(
+    level: int, tables: DifficultyTables | None = None, level_share: Decimal | None = None
+) -> int:
     """The level term of a roll at ``level``: ``level_share`` of its baseline plus its tier jump.
 
     The one place the character's level becomes points, replacing the old per-level
@@ -589,13 +591,18 @@ def level_points(level: int) -> int:
     share 0.5 and a level-11 baseline of 98 the share term is 49. Rounded half up. The tier
     jump (``tier_bonus``, #5093) is added in full and is not multiplied by the share, so
     crossing into a new tier is worth the row's whole bonus. 0 at level 0 and on a database
-    with no baseline rows (see ``_level_baseline_or_zero``).
+    with no baseline rows (see ``_level_baseline_or_zero``). A caller valuing many levels (the
+    tuning dashboard's Scaling settings panel) passes one ``tables`` (``load_difficulty_tables``)
+    and the ``level_share`` it read, so nothing loads per level; by default both are read here.
     """
-    baseline = _level_baseline_or_zero(level)
+    baseline = _level_baseline_or_zero(level, None if tables is None else tables.baselines)
     if baseline == 0:
         return 0
-    share_term = round_half_up(CheckScaleConfig.get_singleton().level_share * baseline)
-    return share_term + load_tier_table().bonus(level)
+    if level_share is None:
+        level_share = CheckScaleConfig.get_singleton().level_share
+    share_term = round_half_up(level_share * baseline)
+    tiers = load_tier_table() if tables is None else tables.tiers
+    return share_term + tiers.bonus(level)
 
 
 def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirror perform_check

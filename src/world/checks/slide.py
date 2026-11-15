@@ -32,7 +32,12 @@ from dataclasses import dataclass
 import math
 from typing import TYPE_CHECKING
 
-from world.checks.modifier_values import BaselineTable, load_baselines, load_tier_table
+from world.checks.modifier_values import (
+    BaselineTable,
+    TierTable,
+    load_baselines,
+    load_tier_table,
+)
 from world.traits.models import CheckRank, ResultChart, ResultChartOutcome
 
 if TYPE_CHECKING:
@@ -118,7 +123,7 @@ def _rank_threshold(baselines: BaselineTable, rank: int) -> int:
     return baselines.baseline(top_level) + (rank - top_level) * baselines.width(top_level)
 
 
-def _ladder_top_rank(baselines: BaselineTable, authored_top: int) -> int:
+def _ladder_top_rank(baselines: BaselineTable, tiers: TierTable | None, authored_top: int) -> int:
     """The highest rank the ladder must reach: past the top level far enough to hold its tier.
 
     The top level's strength is its baseline plus its tier bonus (``LevelTier``), which sits
@@ -128,7 +133,7 @@ def _ladder_top_rank(baselines: BaselineTable, authored_top: int) -> int:
     if len(baselines.levels) < _MIN_ROWS_FOR_WIDTH:
         return authored_top
     top_level = baselines.levels[-1]
-    bonus = load_tier_table().bonus(top_level)
+    bonus = (load_tier_table() if tiers is None else tiers).bonus(top_level)
     if bonus <= 0:
         return authored_top
     width = baselines.width(top_level)
@@ -137,7 +142,9 @@ def _ladder_top_rank(baselines: BaselineTable, authored_top: int) -> int:
     return max(authored_top, top_level + -(-bonus // width))
 
 
-def load_ranks() -> list[RankStep]:
+def load_ranks(
+    baselines: BaselineTable | None = None, tiers: TierTable | None = None
+) -> list[RankStep]:
     """The ladder, lowest first, shared by both sides of a check.
 
     Each ``CheckRank`` row joined to the CHECK lane's baselines: rank N's threshold is
@@ -145,13 +152,15 @@ def load_ranks() -> list[RankStep]:
     ranks above where her level alone would, so the ladder runs past the top baseline level,
     evenly spaced at that level's width, until it holds the top level's baseline plus its tier
     bonus (#5093). A rank above the highest ``CheckRank`` row has no authored name and reads
-    "Rank N". Two queries without tiers, three with; none when no ranks are authored. Raises
-    ``ModifierConfigError`` when ranks exist but no baseline row sits at or below one.
+    "Rank N". Three queries; one when no ranks are authored. A caller that already loaded the
+    baseline and tier rows (the tuning dashboard's Scaling settings panel) passes them so they
+    load once. Raises ``ModifierConfigError`` when ranks exist but no baseline row sits at or
+    below one.
     """
     rows = list(CheckRank.objects.order_by("rank").values_list("rank", "name"))
     if not rows:
         return []
-    baselines = load_baselines()
+    baselines = load_baselines() if baselines is None else baselines
     steps = [
         RankStep(rank=rank, name=name, min_points=_rank_threshold(baselines, rank))
         for rank, name in rows
@@ -159,7 +168,7 @@ def load_ranks() -> list[RankStep]:
     authored_top = rows[-1][0]
     steps.extend(
         RankStep(rank=rank, name=f"Rank {rank}", min_points=_rank_threshold(baselines, rank))
-        for rank in range(authored_top + 1, _ladder_top_rank(baselines, authored_top) + 1)
+        for rank in range(authored_top + 1, _ladder_top_rank(baselines, tiers, authored_top) + 1)
     )
     return steps
 

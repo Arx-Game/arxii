@@ -100,6 +100,7 @@ from web.admin.tuning.views import (
     tuning_conditions_fragment,
     tuning_consequences_fragment,
     tuning_dashboard,
+    tuning_scaling_fragment,
     tuning_simulation_fragment,
     tuning_techniques_fragment,
 )
@@ -198,6 +199,7 @@ urlpatterns = [
     path("_tuning/simulation/", tuning_simulation_fragment, name="admin_tuning_simulation"),
     path("_tuning/techniques/", tuning_techniques_fragment, name="admin_tuning_techniques"),
     path("_tuning/capabilities/", tuning_capabilities_fragment, name="admin_tuning_capabilities"),
+    path("_tuning/scaling/", tuning_scaling_fragment, name="admin_tuning_scaling"),
     path("_ops/", ops_dashboard, name="admin_ops"),
     path(
         "_ops/required-content/",

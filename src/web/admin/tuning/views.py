@@ -43,6 +43,7 @@ from web.admin.tuning.checks_analytics import (
 )
 from web.admin.tuning.condition_analytics import compute_condition_danger
 from web.admin.tuning.consequence_analytics import inspect_pool, list_pools
+from web.admin.tuning.scaling_settings import build_scaling_settings_panel
 from world.character_creation.constants import (
     REQUIRED_STATS,
     STAT_DEFAULT_VALUE,
@@ -853,3 +854,17 @@ def tuning_capabilities_fragment(request: HttpRequest) -> HttpResponse:
 
     context = {"form": form, "panel": panel}
     return render(request, "admin/tuning/_capabilities_panel.html", context)
+
+
+@superuser_required
+def tuning_scaling_fragment(request: HttpRequest) -> HttpResponse:
+    """Scaling settings panel: every number that sets how strong a level is (#5093).
+
+    Read-only: it shows the baseline, tier, share, size, development cost, fatigue and pool
+    rows together, each with a link to the admin page that edits it, and writes nothing.
+    """
+    return render(
+        request,
+        "admin/tuning/_scaling_panel.html",
+        {"panel": build_scaling_settings_panel()},
+    )
