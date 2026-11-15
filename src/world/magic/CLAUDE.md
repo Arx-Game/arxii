@@ -82,8 +82,8 @@ The magic system for Arx II. Power flows from identity and connection.
 ## Models
 
 ### Domain Models
-- `Affinity` - Three magical affinities (Celestial, Primal, Abyssal) with optional OneToOne to ModifierTarget
-- `Resonance` - Magical identity tags with FK to Affinity, optional opposite (self OneToOne), optional OneToOne to ModifierTarget
+- `Affinity` - Three magical affinities (Celestial, Primal, Abyssal); `mechanics.ModifierTarget.target_affinity` is the OneToOne that points at it (reverse accessor `modifier_target`)
+- `Resonance` - Magical identity tags with FK to Affinity, optional opposite (self OneToOne); `mechanics.ModifierTarget.target_resonance` is the OneToOne that points at it (reverse accessor `modifier_target`)
 
 ### Character State
 - `CharacterAura` - A character's aura; the affinity percentages are `CharacterAuraShare` rows (one per affinity, read through `cached_shares` / `percent_for(affinity)` / `dominant_affinity`). Each share carries `percent` (the aura now, from lifetime resonance via `recompute_aura`) and `settled_percent` (who the character IS, 0-100, summing to 100 once set; #5123): written at creation (`set_settled_shares`, weights plus the Glimpse nudge) and by `accept_aura_change`. The main affinity is the largest `settled_percent` (a tie to the lowest affinity id). `set_aura_shares` keeps a share row whose `settled_percent` is above zero even at `percent` 0, so a faded streak's line survives
@@ -2233,9 +2233,9 @@ before accepting; it is what "You become more abyssal." names.
 - Surfaces: `PerformSettlingRiteAction` (`actions/definitions/drift_correction.py`), telnet `aura` /
   `aura settle <offering>` (`commands/drift_correction.py`), REST `/api/magic/settling-rite/` (GET
   reading, POST perform) and `/api/magic/drift-correction/pending/` (the open chance), React
-  `SettleAuraDialog` and the sheet's `AuraReflections` (`frontend/src/magic/CLAUDE.md`). Removed with
-  #5124: `AcceptAuraChangeAction`, `PerformDriftCorrectionAction`, `DeclineDriftCorrectionAction`,
-  their endpoints and verbs, `DriftConversionOfferGate` and `lapse_conversion_offers`. Required
+  `SettleAuraDialog` and the sheet's `AuraReflections` (`frontend/src/magic/CLAUDE.md`). #5124 removed
+  the separate accept, atone and decline actions with their endpoints and verbs, the scene-page gate
+  and the scene-end lapse of the chance. Required
   content row `drift-correction-config`. Details: `docs/systems/magic.md` "Drift correction".
 
 **Thread retune (#4735, slice 6 of #4672; reshaped by #5123).** `services/thread_resonance.py` moves
@@ -2261,6 +2261,51 @@ Required content rows `thread-resonance-ritual`, `thread-resonance-ritual-single
 called by `seed_magic_dev()`. Seeds the "Ritual of Falling" Ritual row
 (SERVICE dispatch), the `FallRedemptionConfig` singleton, example
 `CompromiseActType` rows, and example `ResonanceConversion` mappings.
+
+## Kindled resonances (#5124, ADR-5124)
+
+Player word: **kindled** ("stirred" appears nowhere). A resonance is kindled when one of its
+`KindlingSituation` rows holds; Fury's anchor person is gone (`fury_resonance`), the thread-anchor
+bond is one situation among many. Full tour: `docs/systems/magic.md` "Kindled resonances".
+
+- **Rows** (`models/kindling.py`): `KindlingSituation` (a `SituationRequirementMixin` subclass; set
+  on a `resonance` or once on an `affinity`, a check constraint demands exactly one; `strength` is a
+  rank, blank reads it from the bond tier or condition severity and `clean` refuses blank where there
+  is no source), `KindledStrengthTier` (natural key `rank`; the staff-named strength and every number
+  that follows from it: `min_bond_tier`, `min_severity`, `pull_levels`, `give_in_max_depth`,
+  `give_in_bonus_percent`, `give_in_ease`, `dig_deep_scale_percent`, `earn_percent`),
+  `KindlingConfig` (singleton, `harm_property`), `KindledDeedAward` and `RallyKindlingStrength`
+  (`OutcomeTierAward` tables), `Kindling` (Rally or GM only, `encounter` XOR `scene`).
+  `Resonance.feeling` (Property FK) is what the feeling situations match; `missions.MissionTheme`
+  is what `MISSION_THEME` matches. Never match a feeling or theme by name.
+- **Code compares `KindledStrengthTier.rank`, never a name.** Faint, Strong and Blazing are seed and
+  test data that staff can rename; players read the name and never a number.
+- **One read path.** `services/kindling.py`: `kindled_resonances` / `kindled_for` (pass the
+  `resolution` and `mission` you hold, and an `act` to ask "does this act feed it"),
+  `kindling_context_for(sheet)` and `kindled_resonances_now(sheet)` when you hold neither,
+  `kindled_tiers` (the map a pull reads), `kindled_resonances_for_acts` (many acts, one pass). Do
+  not call `kindled_resonances` per row: it costs several queries, and the evaluation already
+  dedupes reads per distinct (situation, params). The six new `Situation` members live in
+  `world/covenants/perks/constants.py` with evaluators that call the same finders
+  (`KINDLING_EVIDENCE_FINDERS`), so a vow perk and a kindling read one logic.
+- **Uses.** Drawing strength: `resolve_pull_effects(..., kindled=)` adds the payer's tier
+  `pull_levels` to the level the multiplier reads (resolution only, never the thread; never lowers
+  a read). Giving in: `fury.give_in_strength`, `give_in_refusal` (an unkindled resonance is refused
+  in words, a tier deeper than the strength reaches is refused; Fury reads kindling with no act).
+  Dig deep and Rally name a resonance (`dig_deep(participant, resonance=)`,
+  `declare_rally(participant, ally, resonance=)`; a rallier sees whether the ally's resonance is
+  kindled, never a strength; a Rally writes one `Kindling` at `RallyKindlingStrength(outcome)`).
+  GM: `kindle_by_gm`, action `stage_kindle`, telnet `stage kindle`. Earning:
+  `award_kindled_deeds` writes one `GainSource.KINDLED_DEED` grant per resonance an authored
+  situation fed, `KindledDeedAward(outcome).amount x earn_percent // 100`, with
+  `grant_resonance(kindling_situation=)`; seams are named in `docs/systems/magic.md`. A rollless act
+  earns at `lowest_success_outcome()`.
+- **Surfaces.** `GET /api/magic/kindled-resonances/` (`views_kindling.py`), telnet `resonances`,
+  `GET /api/magic/reflectables/` (`views_reflection.py`) and telnet `reflect`, `pose/reflect`,
+  `journal/reflect`. Reflections and the rite are in "Drift correction and the rite of settling"
+  above. The model map and `docs/systems/INDEX.md` list the signatures.
+- **Admin.** Situations are authored inline on the Resonance and Affinity pages; the strength tiers,
+  Rally strengths, deed amounts and harm property are one page, "Kindling config".
 
 ## Removed Models (deprecated)
 

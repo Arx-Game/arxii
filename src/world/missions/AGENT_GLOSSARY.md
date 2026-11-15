@@ -141,3 +141,7 @@ catalog - it never appears on boards or in `opportunities_for_character`).
 **Graph Problem**:
 Something the Mission Studio's graph check (#4558, `GET /api/missions/templates/<id>/graph-check/`) finds wrong with a mission's node graph, one `GraphProblemKind` each: no entry node, unreachable node, missing tiers, a branch on a joint node, joint check with no chart tier and no success or failure route, encounter without a risk level, random route without candidates. It warns and never blocks a save; a BRANCH or EXTERNAL_ACT option with no route is an ending, not a problem.
 _Avoid_: validation error, lint (a problem is advice shown beside the graph, not a refusal).
+
+**MissionTheme** (#5124):
+What a mission or one of its options is about, a `MissionTheme` row attached to a `MissionTemplate` or a `MissionOption` (`themes`). It is not a category: categories sort the board, a theme kindles a resonance. A kindling situation names a theme, and taking an option that carries it feeds the kindled resonance. Its `player_text` is the reason line a player reads.
+_Avoid_: tag, mission category, topic.

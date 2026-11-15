@@ -15,6 +15,21 @@ The state of a character whose aura has grown past who they are: an affinity oth
 **Reflection** (#5124):
 What a pose or a journal entry (White or Black) says it reflects on: one kindled deed the character has not reflected on, or the resonance that is unsettling them, and whether they **Embrace** or **Disown** it. Recorded with the writing (`record_reflection`), it changes nothing until a rite of settling carries it out; a deed is reflected on once, and a newer waiting reflection on the unsettling resonance replaces the older. The room sees only the pose. _Avoid_: remorse, confession.
 
+**Kindled** (#5124):
+The state of a resonance a character holds when something it cares about is present: one of its **Kindling situations** holds, or a Rally or a GM kindled it by hand. Players see which of their resonances are kindled, how strongly in words, and what kindled each one; the numbers stay hidden. A kindled resonance gives more when a pull is paid with it, can be given in to, surges more on a Dig deep or a Rally, and is earned by acting on what kindled it. Read live by `kindled_resonances`; never stored for a situation. _Avoid_: stirred, activated, triggered, charged.
+
+**Kindling situation** (#5124):
+A staff-authored `KindlingSituation` row: one situation (from the covenants `Situation` list, six of them new) that kindles a resonance, set on the resonance itself or once on an affinity so it counts for every resonance of that affinity, with the strength it kindles at and an optional reason line the player reads. The strongest situation present sets how strongly the resonance is kindled. A thread-anchor situation takes the bond's own tier. _Avoid_: trigger, kindle condition, stir.
+
+**Kindled strength** (#5124):
+A staff-named step of how strongly a resonance is kindled (Faint, Strong and Blazing to start), one `KindledStrengthTier` row each, compared only by its `rank`. It sets the pull uplift, the deepest Fury tier, the Dig deep and Rally surge and the share of a deed earned. Players see only the name. _Avoid_: kindle level, intensity (a cast's power), strength of feeling.
+
+**Embrace** (#5124):
+One of the two things a **Reflection** says. Embracing a deed grows the resonance it earned; embracing the unsettling resonance is accepting the aura's change. Carried out by the **Rite of settling**, never when the reflection is written. _Avoid_: accept (accepting is only what embracing the unsettling resonance does), keep, endorse.
+
+**Disown** (#5124):
+The other thing a **Reflection** says. Disowning a deed turns most of what it earned toward the main affinity; disowning the unsettling resonance is atoning, up to the open chance to atone. Carried out by the **Rite of settling**. _Avoid_: remorse, repent, renounce, reject.
+
 **Settled share** (#5123):
 Who the character is, per affinity: `CharacterAuraShare.settled_percent`, 0-100, summing to 100 once set. Written at character creation (the weighted picks, nudged by the Glimpse) and by accepting; read by `drift_for` and by the aura alignment power term. The **main affinity** is the affinity with the largest settled share (a tie to the lowest affinity id), not whatever is largest right now. The settled share never shrinks as a streak fades, so a faded streak can return up to it without unsettling the character. A share row survives with `percent` 0 while its `settled_percent` is above 0. _Avoid_: dominant affinity (the largest CURRENT share, `CharacterAura.dominant_affinity`), baseline aura, true self.
 
@@ -565,7 +580,7 @@ archetype) holds. Chosen by the player with the technique picker (#4341), or set
 _Avoid_: manifest choice, summon binding, bonded summon.
 
 **Fury** (#567, reworked #4738):
-A chosen trade of control for intensity, declared with a technique cast and an anchor (someone she has a tie toward). The chosen **Fury tier** is a preset amount of control she surrenders for the rest of her engagement; her control roll's outcome picks the **Fury degree share** of the trade she buys, and the anchor's tie caps how deep she may go. Both land on her `CharacterEngagement`. **Berserk** is the far end: a tier with `berserk_severity` above 0, chosen, never rolled into.
+A chosen trade of control for intensity, declared with a technique cast and the **kindled** resonance she gives in to (#5124; it was an anchor person, ADR-5124). The chosen **Fury tier** is a preset amount of control she surrenders for the rest of her engagement; her control roll's outcome picks the **Fury degree share** of the trade she buys, and how strongly the resonance is kindled sets the deepest tier offered and eases the roll. Both land on her `CharacterEngagement`. Both land on her `CharacterEngagement`. **Berserk** is the far end: a tier with `berserk_severity` above 0, chosen, never rolled into.
 _Avoid_: fury bonus, lucid check, losing control to Fury.
 
 **Magic Activity** (#4450, ADR-4450):

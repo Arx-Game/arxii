@@ -180,6 +180,22 @@ class RallyingANamedResonance(_KindledField):
         self.assertEqual(mercy["strength_name"], "Faint")
         self.assertEqual(mercy["reasons"], ["Tomas rallied you"])
 
+    def test_the_web_rally_names_the_resonance_by_id_and_kindles_it_the_same_way(self) -> None:
+        result = self.web(
+            self.tomas,
+            "combat_rally",
+            ally_participant_id=self.mira_seat.pk,
+            resonance_id=self.mercy.pk,
+        )
+        self.assertTrue(result.detail.success, result.detail.message)
+
+        self.resolve(self.success)
+
+        row = self.rows().get()
+        self.assertEqual(
+            (row.resonance, row.source, row.strength), (self.mercy, KindlingSource.RALLY, 1)
+        )
+
     def test_the_strength_follows_how_well_the_rally_rolled(self) -> None:
         self.rally(self.great)
 

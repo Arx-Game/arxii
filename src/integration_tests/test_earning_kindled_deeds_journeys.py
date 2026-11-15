@@ -167,6 +167,25 @@ class EarningFromAMissionOption(_Gate):
         self.assertEqual(self.balance(), 5)
         self.assertTold(self.mira, "You earned 5 Domination.")
 
+    def test_a_better_roll_earns_more_of_the_same_resonance(self) -> None:
+        great = CheckOutcomeFactory(name="Great Success", success_level=2)
+        KindledDeedAwardFactory(outcome_tier=great, amount=25)
+        self.theme_row(self.captives, strength=2)
+        option = self.check_option(self.captives)
+        MissionOptionRouteFactory(
+            option=option,
+            outcome_tier=great,
+            target_node=self.done,
+            consequence=ConsequenceFactory(outcome_tier=great),
+        )
+        self.start()
+
+        self.take(1, great)
+
+        # 25 at a Strong strength (all of the award), against the Success's 10.
+        self.assertEqual(self.deeds().get().amount, 25)
+        self.assertTold(self.mira, "You earned 25 Domination.")
+
     def test_only_the_actor_is_told(self) -> None:
         self.theme_row(self.captives, strength=2)
         self.check_option(self.captives)

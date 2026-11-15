@@ -351,6 +351,25 @@ class WhenTheRiteRefuses(DriftJourneyCase):
         self.assertEqual(SettlingRite.objects.count(), 0)
         self.assertEqual(balance(self.ysmay, self.ruin), 30)
 
+    def test_with_no_offering_carried_the_rite_refuses_and_every_reflection_keeps_waiting(
+        self,
+    ) -> None:
+        deed = self.kindled_deed(self.ysmay, self.ruin, 10)
+        self.reflect(self.ysmay, str(deed.pk), "disown")
+        self.deed(self.ysmay)
+        self.reflect(self.ysmay, "Ruin", "disown")
+        self.assertEqual(self.waiting(self.ysmay), 2)
+
+        told = self.settle(self.ysmay, "Thread")
+        with force_check_outcome(self.outcomes["Success"]):
+            on_the_web = self.web(self.ysmay, "perform_settling_rite", components_provided=[])
+
+        self.assertIn("You carry nothing called 'Thread'", told)
+        self.assertFalse(on_the_web.detail.success)
+        self.assertEqual(self.waiting(self.ysmay), 2)
+        self.assertEqual(SettlingRite.objects.count(), 0)
+        self.assertEqual(balance(self.ysmay, self.ruin), 40)
+
     def test_a_generic_dispatch_with_raw_ids_is_refused_in_a_sentence_and_writes_nothing(
         self,
     ) -> None:
@@ -478,6 +497,33 @@ class ReflectingOnDeeds(DriftJourneyCase):
         self.assertEqual(balance(self.ysmay, self.dawnlight), 3)
         self.assertTrue(consumed(thread))
 
+    def test_a_pose_disowning_a_deed_then_the_rite_turns_it_and_the_room_saw_only_the_pose(
+        self,
+    ) -> None:
+        self.watch(self.hobb)
+        self.connect_telnet(self.hobb)
+        thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
+        deed = self.kindled_deed(self.ysmay, self.ruin, 10)
+
+        told = self.reflect(self.ysmay, str(deed.pk), "disown")
+
+        # She alone is told it is recorded; the room read the pose and nothing of the reflection.
+        self.assertIn("is recorded", told)
+        self.assertTold(self.hobb, POSE)
+        for word in ("reflect", "disown", "recorded", "Held the line"):
+            self.assertNotTold(self.hobb, word)
+        self.assertEqual(self.waiting(self.ysmay), 1)
+        self.assertEqual(balance(self.ysmay, self.ruin), 40)
+
+        settled = self.settle(self.ysmay, "Dawn-gold")
+
+        # Most of the deed (75%, 7 of 10) turned toward the main affinity, at the 0.5 rate.
+        self.assertIn("7 Ruin became 3 Dawnlight", settled)
+        self.assertEqual(balance(self.ysmay, self.ruin), 40 - 7)
+        self.assertEqual(balance(self.ysmay, self.dawnlight), 3)
+        self.assertEqual(self.waiting(self.ysmay), 0)
+        self.assertTrue(consumed(thread))
+
     def test_a_deed_is_reflected_on_once_and_the_deeds_show_on_the_aura_until_then(self) -> None:
         self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
         deed = self.kindled_deed(self.ysmay, self.dawnlight, 8)
@@ -522,6 +568,61 @@ class AcceptingWhatSheHasBecome(DriftJourneyCase):
         self.assertTrue(0 < share.settled_percent < share.percent)
         self.assertGreater(drift_for(sheet).steps_past, 0)
         self.assertEqual(self.waiting(self.ysmay), 0)
+
+
+class AJournalEntryEmbracingWhatUnsettlesHer(DriftJourneyCase):
+    def test_a_journal_entry_then_a_partial_rite_moves_her_settled_share_part_of_the_way(
+        self,
+    ) -> None:
+        sheet = self.ysmay.sheet_data
+        self.set_shares(**{"Partial Success": "0.50"})
+        self.carry(self.ysmay, self.ruin, "Ruin-iron Ring")
+        self.assertGreater(drift_for(sheet).steps_past, 0)
+
+        told = self.telnet(
+            self.ysmay,
+            "journal/reflect Ruin=embrace title=What I have become body=It is mine now.",
+        )
+
+        self.assertIn("Your reflection on your Ruin is recorded", told)
+        self.assertEqual(self.waiting(self.ysmay), 1)
+        # Writing it settles nothing.
+        self.assertGreater(drift_for(sheet).steps_past, 0)
+        self.assertFalse(
+            CharacterAuraShare.objects.filter(
+                aura__character=sheet, affinity=self.abyssal, settled_percent__gt=0
+            ).exists()
+        )
+
+        settled = self.settle(self.ysmay, "Ring", "Partial Success")
+
+        self.assertIn("You move part of the way toward being more abyssal.", settled)
+        after = CharacterAuraShare.objects.get(aura__character=sheet, affinity=self.abyssal)
+        self.assertTrue(0 < after.settled_percent < after.percent)
+        self.assertGreater(drift_for(sheet).steps_past, 0)
+        self.assertEqual(self.waiting(self.ysmay), 0)
+
+    def test_the_web_journal_editor_records_the_same_reflection_for_the_rite(self) -> None:
+        response = self.api(self.account_of(self.ysmay)).post(
+            "/api/journals/entries/",
+            {
+                "title": "What I have become",
+                "body": "It is mine now.",
+                "is_public": False,
+                "reflect_choice": "EMBRACE",
+                "reflect_resonance_id": self.ruin.pk,
+            },
+            format="json",
+            HTTP_X_CHARACTER_ID=str(self.ysmay.pk),
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        reflection = Reflection.objects.get()
+        self.assertEqual(
+            (reflection.resonance, reflection.journal_entry_id),
+            (self.ruin, response.json()["id"]),
+        )
+        self.assertEqual(self.waiting(self.ysmay), 1)
 
 
 class TheSameRiteOnTheWeb(DriftJourneyCase):

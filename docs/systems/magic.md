@@ -81,8 +81,8 @@ and the 5-axis Thread model no longer exist.
 | `FacetAlias` | Another spelling that routes to a facet (#4197): the names a merge retired, and any spelling staff add by hand. Resolved by the pickers' search and the create endpoint; never shown to a player. Content (`CONTENT_MODELS`, natural key `name`); cascades with its facet. | `name` (unique), `facet` FK |
 | `FacetEffectBonus` | A facet's always-on bonus to one maneuver effect (#4815, slice 4 of #4783): the facet names the effect, whatever its thread's resonance ("Wolf: +2 Charge: damage"). Counted by `passive_facet_bonuses` while the character wears an item carrying the facet and has a FACET thread on it: `amount x item quality x attachment quality x max(1, thread_rung(level))` (per 10 thread levels) per worn item facet. Authored in the Facet admin's inline; `merge_facets` moves the rows. Content (`CONTENT_MODELS`, natural key `(facet, target)`). | `facet` FK (CASCADE), `target` FK `ModifierTarget` ("maneuver_effect" category only), `amount` (non-zero); unique per `(facet, target)` |
 | `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance`; limits no Gift thread, only the default a grant naming no resonance reaches for (#5123), and not the cast-time value; the cast reads the character's GIFT-thread resonances, leading first, via `gift_resonances_for`, ADR-0052, ADR-5123-A), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050), `parent` (self-FK, PROTECT, `related_name="children"`: the umbrella gift this one hangs beneath; see "Gift lineage" below, #2891, ADR-0192), `natural_weapon_template` (nullable FK to an Unarmed `ItemTemplate`, PROTECT: claws or a bite the gift gives its holder, made and equipped by `grant_gift_to_character`, marked `ItemInstance.natural_weapon_gift`, and removed only when the gift is lost; #4898, see docs/systems/items.md "Natural weapons") |
-| `Affinity` | Celestial / Primal / Abyssal rows; `Affinity.objects.get_celestial_affinity()` / `get_primal_affinity()` / `get_abyssal_affinity()` are the canonical getters | `name`, `corruption_coefficient` (integer tenths of corruption per cast tick), optional OneToOne `modifier_target`. Listed read-only at `GET /api/magic/affinities/` (`AffinityViewSet`) |
-| `Resonance` | Identity resonance tags | `name`, `affinity` FK, `opposite` self-OneToOne, optional `modifier_target` OneToOne. Listed read-only, unpaginated, at `GET /api/magic/resonances/` (`ResonanceViewSet`, `ResonanceSerializer` with `affinity_name`; `?affinity=<pk>` filters): the CG Gift stage's Resonance picker reads it (#4665) |
+| `Affinity` | Celestial / Primal / Abyssal rows; `Affinity.objects.get_celestial_affinity()` / `get_primal_affinity()` / `get_abyssal_affinity()` are the canonical getters | `name`, `corruption_coefficient` (integer tenths of corruption per cast tick). `mechanics.ModifierTarget.target_affinity` is the OneToOne that points here (reverse accessor `modifier_target`). Listed read-only at `GET /api/magic/affinities/` (`AffinityViewSet`) |
+| `Resonance` | Identity resonance tags | `name`, `affinity` FK, `opposite` self-OneToOne. `mechanics.ModifierTarget.target_resonance` is the OneToOne that points here (reverse accessor `modifier_target`). Listed read-only, unpaginated, at `GET /api/magic/resonances/` (`ResonanceViewSet`, `ResonanceSerializer` with `affinity_name`; `?affinity=<pk>` filters): the CG Gift stage's Resonance picker reads it (#4665) |
 
 **Note:** `Affinity` and `Resonance` are proper first-class domain models in
 this app (each with an optional OneToOne link back to `mechanics.ModifierTarget`
@@ -2261,6 +2261,83 @@ push the cast harder. The burn rides the pull: no pull, no burn (`ResonanceBurnN
   focused slot's pull, with its burn, through `_commit_focused_pull`.
 
 Journeys: `src/integration_tests/test_resonance_strain_journeys.py`.
+
+### Kindled resonances (#5124) [BUILT & WIRED]
+
+A resonance is **kindled** when something it cares about is present. Players read which of
+their resonances are kindled, how strongly in a staff-named word (Faint, Strong and Blazing to
+start) and what kindled each one; the numbers never leave the server. Kindling works wherever a
+pull, a Dig deep, a Rally, a give-in or an earning can happen: combat, missions and ordinary
+scenes. It is decided by rule, built first for missions with no GM; a GM can also kindle by hand.
+The word "stirred" appears nowhere. Why Fury's anchor person became a resonance and the bond is now
+one situation among many: `docs/adr/adr-5124-furys-anchor-person-became-a-kindled-resonance.md`.
+
+- **Authored rows** (`models/kindling.py`, all admin-authored on the Resonance and Affinity pages,
+  and the singleton Kindling config page). `KindlingSituation` inherits `SituationRequirementMixin`
+  (so it reads the same param columns a vow perk situation does) and names a `Situation` from the
+  covenants library, set on a `resonance` or, once, on an `affinity` for every resonance of that
+  affinity (a check constraint demands exactly one); `strength` is a rank (blank reads it from the
+  source: the bond tier or the condition severity; `clean` refuses blank on a situation with no
+  such source), `is_active`, `display_order`, `reason_text`. `KindledStrengthTier` (natural key
+  `rank`; `name`, `min_bond_tier`, `min_severity`, `pull_levels`, `give_in_max_depth`,
+  `give_in_bonus_percent`, `give_in_ease`, `dig_deep_scale_percent`, `earn_percent`; 0 on a reach
+  column means "not reached that way"). Code compares `rank` (1, 2, 3) and never a name.
+  `KindlingConfig` (singleton: `harm_property`, the condition property that marks harm a holder
+  laid, so a feeling that comes from their own harm does not count as shared),
+  `KindledDeedAward` (an `OutcomeTierAward`: `amount` earned per outcome) and
+  `RallyKindlingStrength` (an `OutcomeTierAward`: the strength a Rally kindles at per outcome; a
+  failed Rally has no row and kindles nothing). `Resonance.feeling` is a Property FK: the feeling
+  that `OWN_FEELING`, `SHARED_FEELING` and `TARGET_IN_STATE_THEY_CAUSED` look for on a condition.
+  `missions.MissionTheme` (`themes` M2M on `MissionTemplate` and `MissionOption`) is what
+  `MISSION_THEME` reads; a theme is not a mission category.
+- **Stored kindling** (`Kindling`): only a Rally or a GM is stored (`source` RALLY or GM,
+  `strength` rank, `encounter` XOR `scene`, `kindled_by`). A Rally row ends with the encounter
+  (`_live_kindlings` ignores a completed one) and a GM row with the scene. Every other kindling is
+  read live from the situations, so it can never go stale.
+- **The six new situations** (`world/covenants/perks/constants.py`; they also work as vow perk
+  situations, see `docs/systems/covenants.md`): `THREAD_ANCHOR_PRESENT` (a person or organization one
+  of her live relationship, capstone or organization threads is tied to is present; with
+  `enemies_only`, an opponent in the fight; the bond's tier is the thread side's own `tier`, an
+  organization has none so its row sets the strength), `OWN_FEELING`, `SHARED_FEELING` (opponents
+  count; harm she laid does not), `TARGET_IN_STATE_THEY_CAUSED`, `SOMEONE_IN_TROUBLE` (a
+  non-opponent in peril, badly hurt or held; opponents are excluded) and `MISSION_THEME`. With no
+  `SituationContext.act` a situation answers "does this hold now"; with an act it answers "does
+  this act feed it" (a thread anchor wants an attack, defense or technique aimed at the anchor;
+  trouble wants an aiding act; a mission theme wants the option taken to carry it; a feeling is fed
+  by any act).
+- **Reading it** (`services/kindling.py`, `types/kindling.py`).
+  `kindled_resonances(sheet, *, resolution=None, mission=None, act=None) -> list[KindledResonance]`
+  and `kindled_for(sheet, resonance, ...)` evaluate every held resonance (or the one named, whether
+  or not she holds it). One `_Evaluation` reads who is present once and each distinct
+  (situation, params) pair once, so cost follows the authored rows, not the resonances held. The
+  strongest situation sets the tier; each `KindledResonance` carries `tier`, `reasons` (player
+  words, no numbers), `situations` and, for an act, `fed_tier` and `fed_reasons` (authored rows
+  only: a Rally or GM raises the panel's strength, never what an act earns). Callers with no round in
+  hand use `kindling_context_for(sheet)` (her live fight and her newest active mission) or
+  `kindled_resonances_now(sheet)`; `kindled_tiers` is the `{resonance id: tier}` map a pull reads;
+  `kindled_resonances_for_acts` evaluates many acts in one pass (the mission beat's promised feeds).
+  Names in reasons go through the persona display map, so an undiscovered mask stays a mask.
+- **Panel.** `GET /api/magic/kindled-resonances/?character_sheet=<id>` (owner or staff) lists each
+  held resonance as `{id, name, affinity_name, kindled, strength_name, reasons}`;
+  telnet `resonances`. See the "Your resonances" row in the table below.
+- **Two ways to use it.** Drawing strength: a kindled payer reads the thread higher (below under the
+  pull section); the character gives up no control. Giving in: Fury for any kindled resonance (the
+  Fury section above). Dig deep and Rally name a resonance (table below). Emotion and control are
+  separate: she can be in the grip of rage and composed.
+- **Earning.** Acting on a kindling situation earns that resonance (`award_kindled_deeds`, table
+  below). The amount follows the roll; nothing is earned for an outcome alone, so an accidental
+  death (an outcome with no act aimed at it) earns nothing. Taking the action never asks how the
+  character feels; the option shows which kindled resonance it would feed, and only the actor reads
+  the grant line.
+- **Reflecting and settling.** A `KINDLED_DEED` grant is a deed a character can reflect on once,
+  Embrace or Disown, in a pose or journal entry; the rite of settling carries every waiting
+  reflection out. See "Drift correction" below.
+- **Rulings the rules carry.** Fury reads kindling with no act (it is declared before the act), so an
+  act-scoped situation never enables a give-in. A rollless act (Cover) and an auto-succeeding mission
+  approach earn at the lowest successful outcome tier (`lowest_success_outcome`). A Rally or GM
+  kindling does not by itself make an act earn. A Rally kindles at a strength set by its roll
+  (`RallyKindlingStrength`). Deployment notes: migrations 0411 to 0416 (0413 seeds the three
+  strength tiers from the old FuryConfig numbers, or its field defaults when there was no row).
 
 ### Fury: surrendering control for intensity (#4738 part B, #4727 decision 5) [BUILT & WIRED]
 
@@ -4656,9 +4733,8 @@ the carried offerings that count, the deeds not yet reflected on and the open ch
 readiness (`settling_rite_reading`, `services/settling_preview.py`), `POST /api/magic/settling-rite/
 {character_sheet_id, component_ids}` performs it, and `GET /api/magic/drift-correction/pending/` (+
 `{id}/`) lists the open chance; all are scoped to the caller's own characters. The click-to-settle,
-atone and decline paths (`AcceptAuraChangeAction`, `PerformDriftCorrectionAction`,
-`DeclineDriftCorrectionAction`, their endpoints and verbs, `DriftConversionOfferGate`, the scene-end
-lapse) are removed. React: the sheet's aura card (`AuraReflections`) lists the waiting reflections, the
+atone and decline paths (their actions, endpoints and verbs, the scene-page gate and the scene-end
+lapse of the chance) are removed. React: the sheet's aura card (`AuraReflections`) lists the waiting reflections, the
 deeds not yet reflected on and the open chance, with "Settle your aura" only while a reflection waits;
 `SettleAuraDialog` is the rite; the feed's reflection toast offers the same button; `AuraHalo` shows the
 aura in words with the settled line and the Mire share apart. See `frontend/src/magic/CLAUDE.md`.

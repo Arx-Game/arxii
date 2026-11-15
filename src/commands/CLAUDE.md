@@ -900,6 +900,21 @@ actions, backends, and service functions.
   (`ShapingTheHouse`, `KeepingTheHousehold`, `KeepingTheHouseUp`); `tests/
   test_manageroom_command.py` keeps only the `room/aura` resonance parse checks (magic
   ground). A new `room` switch gets its lines in that journey module.
+- **`kindled_resonances.py`** (#5124): `CmdKindledResonances` (`resonances`, separate from the
+  bare `resonance` balances command) prints each held resonance with its affinity and "Kindled,
+  blazing" or "Not kindled", then the reasons, from `kindled_resonances_now`. Never a number.
+- **`reflection.py`** (#5124): `CmdReflect` (`reflect`) lists what a character can reflect on, the
+  unsettling resonance by name and each unreflected kindled deed by the number shown; `pose/reflect
+  <deed number or resonance>=<embrace|disown> <text>` and `journal/reflect <target>=<embrace|disown>
+  title=<text> body=<text> [public] [tags=] [about=]` take the reflection with the writing
+  (`CmdPose` and `CmdJournal` are `takes_switches`; an unknown switch prints usage).
+  `reflection_kwargs_and_rest` turns the target and choice into the action's `reflect_*` kwargs;
+  the service resolves the name and refuses. Thin. Typed in
+  `integration_tests/test_reflection_journeys.py`.
+- **Combat and the GM** (#5124): `combat digdeep [<resonance>]` and `combat rally <ally>[=<resonance>]`
+  (`combat_maneuvers.py`) name the resonance; `stage kindle <character>=<resonance>[:<strength>]`
+  (`gm_props.py`, action `stage_kindle`) kindles a resonance for the scene, gated like the other
+  `stage` verbs. Typed in `integration_tests/test_kindled_dig_deep_and_rally_journeys.py`.
 - **`gm_props.py`**: `CmdStage` (`stage`, #2503) — the GM's mid-scene improv, a
   `DispatchCommand` over `StagePropAction`/`StagePropertyAction`
   (`actions/definitions/gm_props.py`): `stage prop <item template name>` materializes a
@@ -1674,7 +1689,7 @@ actions, backends, and service functions.
   `PerformSettlingRiteAction` with the one carried item named (exact name, else a unique part of
   one); a name that matches nothing, several things, or an item that does not count for what is
   waiting is the command's own error, and nothing waiting is refused first. Nothing else settles:
-  `aura atone`, `aura decline` and `aura accept` are gone. Thin: rules live in
+  the older atone, decline and accept sub-verbs are gone. Thin: rules live in
   `world/magic/services/drift_correction.py` and `world/magic/services/settling_preview.py`.
 
 ### Magic-Adjacent Commands (`commands/`)

@@ -1151,11 +1151,12 @@ ritual, the dashboard row lists it.
 
 ---
 
-## Drift correction: the conversion offer and rite (#4733, slice 4 of #4672, BUILT 2026-10-27; reread by #5123)
+## Drift correction: the conversion offer and rite (#4733, slice 4 of #4672, BUILT 2026-10-27; reread by #5123 and #5124)
 
 A character who earns resonance from a deed in their main affinity while unsettled (#5123) can
 atone: turn resonance of an affinity grown past who they are into the resonance the deed grew,
-once per scene, with a rite. It is read on lifetime, so it works after the excess was spent.
+with a rite. Since #5124 the chance stays open until used (not once per scene) and the rite is
+the rite of settling over what the character reflected on. It is read on lifetime, so it works after the excess was spent.
 
 **Built:**
 - Deed classification: `DEED_GAIN_SOURCES` / `NON_DEED_GAIN_SOURCES` beside the accelerated sets,
@@ -1279,6 +1280,34 @@ A mixed character is the normal case. Built, as one PR:
 
 Not built here: what causes a resonance gain (#5124) and substances and Primum (#5125). Staff
 still author the per-resonance pull perks and the `DriftConfig` numbers in admin.
+
+## Kindled resonances, reflections and the rite of settling (#5124, ADR-5124, BUILT 2026-11-15)
+
+Built as one PR (spec in the issue body; #5129's settling rite folded in):
+
+- **Kindled.** A resonance is kindled when one of its staff-authored `KindlingSituation` rows holds
+  (on the resonance, or once on an affinity for all of its resonances), or a Rally or a GM kindled
+  it. Strength is a staff-named `KindledStrengthTier` (Faint, Strong, Blazing to start); players
+  see the word and the reason, never a number. Six new `Situation` members (thread anchor present,
+  own feeling, shared feeling, target in a state they caused, someone in trouble, mission theme)
+  are shared with vow perks. `Resonance.feeling` and `MissionTheme` feed them.
+- **Uses.** Drawing strength (a kindled payer reads the thread higher; no control given up), giving
+  in (Fury for any kindled resonance, replacing the anchor person; Lose yourself only at a blazing
+  strength), Dig deep and Rally naming a resonance (a Rally kindles an unkindled one until the
+  fight ends), and a GM kindling by hand (`stage kindle`).
+- **Earning.** Acting on a kindling situation earns the resonance as `KINDLED_DEED`, scaled by the
+  roll; an outcome with no act aimed at it earns nothing; a mission option shows which kindled
+  resonance it feeds. Taking an action never asks how the character feels.
+- **Reflecting and settling.** A pose or journal entry carries an optional "Reflecting on" row
+  (a deed or the unsettling resonance, then Embrace or Disown). One rite of settling carries every
+  waiting reflection out with one offering and one roll; the chance to atone no longer lapses with
+  the scene; the click-to-accept, atone and decline paths are gone.
+- **Surfaces.** Admin (situations on the Resonance and Affinity pages, one Kindling config page),
+  the "Your resonances" panel, the Reflecting on row, the sheet's reflections card and the rite
+  dialog, telnet `resonances`, `reflect`, `pose/reflect`, `journal/reflect`, `aura settle`.
+- **Not built (by design).** No GM is needed for kindling; a Rally or GM kindling never earns by
+  itself; nothing is earned for an outcome alone. Staff must author the situations: until they do,
+  nothing is kindled.
 
 ## Audere earlier with control; Soulfray's anima-0 stage (#4740, slice 4 of #4727, BUILT 2026-10-27)
 

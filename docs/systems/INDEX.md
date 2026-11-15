@@ -108,6 +108,38 @@
   React `SettleAuraDialog` and the sheet's `AuraReflections`, and `AuraHalo` on the sheet. One Required
   content row, `drift-correction-config`. Details: [magic.md](magic.md) "Drift correction".
 
+- **Kindled resonances (#5124) [BUILT & WIRED]:** a resonance is kindled when one of its staff-authored
+  `KindlingSituation` rows holds (`models/kindling.py`: set on a `resonance` or once on an `affinity`;
+  `strength` a rank; `reason_text`), or a Rally or a GM kindled it (`Kindling`, `source`
+  RALLY/GM, ends with its fight or scene). Staff author `KindledStrengthTier` (rank, name, `min_bond_tier`,
+  `min_severity`, `pull_levels`, `give_in_max_depth`, `give_in_bonus_percent`, `give_in_ease`,
+  `dig_deep_scale_percent`, `earn_percent`), the singleton `KindlingConfig` (`harm_property`),
+  `KindledDeedAward` and `RallyKindlingStrength` on one admin page; `Resonance.feeling` (Property FK)
+  and `missions.MissionTheme` (`themes` on `MissionTemplate` and `MissionOption`) feed the
+  situations. Six new covenants `Situation` members (`THREAD_ANCHOR_PRESENT`, `OWN_FEELING`,
+  `SHARED_FEELING`, `TARGET_IN_STATE_THEY_CAUSED`, `SOMEONE_IN_TROUBLE`, `MISSION_THEME`; `Situation`
+  now has 32 values) also serve vow perks, and `SituationRequirementMixin` gained `mission_theme`
+  and `enemies_only`. Reads (`services/kindling.py`): `kindled_resonances`, `kindled_for`,
+  `kindled_resonances_now`, `kindling_context_for`, `kindled_tiers`, `kindled_resonances_for_acts`;
+  types `KindledResonance`, `KindlingAct`, `KindlingEvidence`, `KindlingActKind`. Uses: drawing
+  strength (`resolve_pull_effects(kindled=)`, `pull_kindled_tiers`, `CombatPullThread.kindled_strength`),
+  giving in (`fury.give_in_strength`, `give_in_refusal`; `CommittingDeclaration.fury_resonance`
+  replaced `fury_anchor`), Dig deep and Rally by resonance (`dig_deep(participant, resonance=)`,
+  `declare_rally(..., resonance=)`, `CombatRoundAction.rally_resonance`, `record_rally_kindling`), GM
+  `kindle_by_gm` (action `stage_kindle`, `gm_list_kindling`; telnet `stage kindle`). Earning:
+  `award_kindled_deeds` writes `GainSource.KINDLED_DEED` grants (`ResonanceGrant.source_kindling_situation`),
+  and a mission option's `feeds` shows what it would earn. Reflections: `Reflection` and
+  `SettlingRite` (`models/reflection.py`), `GainSource.EMBRACED_DEED`, `reflectable_for`,
+  `record_reflection`, `unsettling_resonance`; pose and journal actions take `reflect_*` kwargs.
+  Endpoints: `GET /api/magic/kindled-resonances/`, `GET /api/magic/reflectables/`,
+  `GET|POST /api/magic/settling-rite/`. Telnet: `resonances`, `reflect`, `pose/reflect`,
+  `journal/reflect`, `combat digdeep [<resonance>]`, `combat rally <ally>[=<resonance>]`,
+  `givein=<resonance>:<tier>`. React: `KindledResonancesPanel`, `ReflectingOnRow`. Journeys:
+  `test_your_resonances_journeys`, `test_kindled_dig_deep_and_rally_journeys`,
+  `test_surrendering_control_to_fury_journeys`, `test_earning_kindled_deeds_journeys`,
+  `test_reflection_journeys`, `test_drift_correction_journeys`. Details: [magic.md](magic.md)
+  "Kindled resonances"; why Fury's anchor became a resonance: `docs/adr/adr-5124-furys-anchor-person-became-a-kindled-resonance.md`.
+
 - **Thread retune (slice 6 of #4672, reshaped by #5123):** `services/thread_resonance.py` moves
   part of one `ThreadResonance` row of a thread to another resonance's row through the SERVICE
   ritual at `THREAD_RESONANCE_SERVICE_PATH` (`thread_resonance_ritual`, `thread_resonance_options`
@@ -5664,6 +5696,15 @@ makes decisions at branching points gated by skills/traits/predicates, and the c
 reshape the world around them. No engine arbitration: the player picks, pick+check routes;
 state is node position + snapshots + already-applied consequences, never a scratch blob.
 
+- **Mission themes (#5124):** `MissionTheme` (`name`, `description`, `player_text`, `display_order`;
+  natural key `name`) is what a mission or an option is about, attached through `themes` on
+  `MissionTemplate` and `MissionOption`. It is not a category (categories sort the board). A
+  `MISSION_THEME` kindling situation names a theme, and `resolve_option` calls
+  `award_kindled_deeds` after a CHECK or CONTEST roll (an auto-succeeding approach earns at the
+  lowest success tier, both inside one transaction with the routing). `BeatOption.feeds`
+  (`KindledFeed(resonance_name, strength_name, reason)`, no amounts) tells the owner which kindled
+  resonance an option would feed; telnet `mission beat` prints it. Admin: `MissionThemeAdmin`.
+  Details: [magic.md](magic.md) "Kindled resonances".
 - **Trials (#4501, spec #4343):** a trial is not a model; it is a `MissionTemplate` whose CHECK
   option's routes carry consequences with `GRANT_CODEX` (`grants_known`), `TECHNIQUE_TRAINING` and
   a cost effect. See Mechanics' "Added in #4501" and `docs/systems/checks.md`; the save rules are
@@ -8985,8 +9026,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `world/magic/services/fury.py` `FuryCast` (from `fury_cast_for`, driven by
   `use_technique(fury=)` after its Soulfray gate; `withdraw()` on a PRE_CAST cancel, `settle()`
   for the message and Berserk) rolls the control check, then
-  `resolve_fury` / `fury_intensity_for(tier, cap, outcome)` price the trade
-  (`FuryTier.control_surrendered` x the rate x the anchor-cap scale x the outcome's
+  `resolve_fury` / `fury_intensity_for(tier, bonus_percent, outcome)` price the trade
+  (`FuryTier.control_surrendered` x the rate x the kindled strength's `give_in_bonus_percent` scale x the outcome's
   `FuryDegreeShare.intensity_percent`) and it lands on the character's `CharacterEngagement`
   (`intensity_modifier` up, `control_modifier` down, `fury_control_surrendered` tallied) before
   `use_technique`, so the same cast channels it. `FuryResolution(realized_tier,
@@ -8996,7 +9037,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `fury-degree-shares`, `fury-intensity-per-control`. Surfaces: `full_trade_intensities`
   (picker "up to" preview, at the highest authored share, `top_share_percent`), `fury_tier_label`, `fury_trade_message` (the caster's line, sent on
   commit); `FuryTierOption(control_surrendered, is_berserk, full_intensity)`,
-  `AnchorOption.tier_full_intensities`, participant `fury_control_surrendered`, web
+  `FuryResonanceOption.tier_full_intensities` (#5124: she gives in to a kindled resonance, not an anchor person; `give_in_strength`, `give_in_refusal`), participant `fury_control_surrendered`, web
   `FuryDeclaration` + `combat/sections/Pressure.tsx`, telnet `combat` hub `Pressure:` line.
   The Pressure figures (participant `intensity_modifier` / `control_modifier` /
   `fury_control_surrendered`, telnet `Pressure:`) read her engagement whatever its type

@@ -55,6 +55,13 @@ They do not use the command system, dispatchers, or handlers.
   no waiting reflection or no qualifying offering. Shared by telnet `aura settle <offering>` and the
   web `SettlingRiteView`. The older atone, decline and accept actions are gone (nothing settles
   without a reflection);
+  `gm_props.py` (#5124) adds `KindleResonanceAction` (`"stage_kindle"`, the room GM's gate, writes
+  `kindle_by_gm`) and `GMListKindlingAction` (`"gm_list_kindling"`, scoped to a character in the
+  GM's room); `PoseAction` and `CreateJournalEntryAction` take optional `reflect_choice` with
+  `reflect_grant_id` or `reflect_resonance_id` and record a `Reflection` with the writing (checked
+  before the pose posts; the room sees only the pose; the result `data` carries
+  `reflection_recorded`); `CastTechniqueAction` carries `fury_resonance_id` into the combat
+  declaration kwargs;
   `cast.py` — `CastTechniqueAction`, key `"cast_technique"`, the SCENE_ADAPTIVE
   seam for standalone technique casts — see "SCENE_ADAPTIVE Backend" below;
   `combat_maneuvers.py` (#1453/#1452, Succor #1744, USE_ITEM/READY-pace #2120) — the
