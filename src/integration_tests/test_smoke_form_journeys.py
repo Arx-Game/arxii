@@ -106,7 +106,7 @@ class _SmokeInTheCellar(_TheCellar):
         before = self.health(self.ysolde)
         with patch(
             "world.combat.services.movement_use.roll_technique",
-            side_effect=lambda *_a, **_k: MagicMock(success_level=self.form_level),
+            side_effect=lambda *_a, **_k: MagicMock(success_level=self.form_level, outcome=None),
         ):
             resolve_round(
                 self.encounter,

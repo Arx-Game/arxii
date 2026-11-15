@@ -57,7 +57,7 @@ def _declare_action(participant, technique, target):
 
 def _resolution_with_result(*, opponent_id, defeated):
     return CombatTechniqueResolution(
-        check_result=MagicMock(success_level=2),
+        check_result=MagicMock(success_level=2, outcome=None),
         damage_results=[
             OpponentDamageResult(
                 damage_dealt=20,

@@ -402,13 +402,13 @@ class _DefenseYard(_TheYard):
         def defence(character, *_args: object, **kwargs: object) -> MagicMock:
             if character.pk == fighter.pk:
                 rolled.append(dict(kwargs))
-            return MagicMock(success_level=0)
+            return MagicMock(success_level=0, outcome=None)
 
         self.blade()
         resolve_round(
             self.encounter,
             defense_check_fn=defence,
-            offense_check_fn=lambda *_a, **_k: MagicMock(success_level=2),
+            offense_check_fn=lambda *_a, **_k: MagicMock(success_level=2, outcome=None),
         )
         self.assertEqual(len(rolled), 1)
         return rolled[0]
@@ -481,7 +481,7 @@ class ReadingTheDefenseRoll(_DefenseYard):
         resolve_round(
             self.encounter,
             defense_check_fn=defence,
-            offense_check_fn=lambda *_a, **_k: MagicMock(success_level=2),
+            offense_check_fn=lambda *_a, **_k: MagicMock(success_level=2, outcome=None),
         )
         return {}
 

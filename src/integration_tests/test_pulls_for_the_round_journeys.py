@@ -60,7 +60,7 @@ class TechniqueRolls:
 
     def __call__(self, _character: Any, _cast_check: Any, *, extra_modifiers: int = 0) -> Any:
         self.extras.append(extra_modifiers)
-        return MagicMock(success_level=1)
+        return MagicMock(success_level=1, outcome=None)
 
 
 class _PullsInTheCellar(_TheCellar):

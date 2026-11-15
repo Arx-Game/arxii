@@ -182,6 +182,7 @@ class RealCastFuryBerserkIntegrationTests(TestCase):
         # Build a minimal PendingActionResolution so the action pipeline can complete.
         check_result = MagicMock()
         check_result.success_level = -1
+        check_result.outcome = None
         check_result.outcome_name = "Failure"
         step = StepResult(step_label="main", check_result=check_result, consequence_id=None)
         pending = PendingActionResolution(

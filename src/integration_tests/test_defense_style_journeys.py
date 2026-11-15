@@ -95,11 +95,11 @@ class RollsInTurn:
         name = character.db_key
         self.calls[name] = self.calls.get(name, 0) + 1
         queue = self.levels.get(name, [])
-        return MagicMock(success_level=queue.pop(0) if queue else 0)
+        return MagicMock(success_level=queue.pop(0) if queue else 0, outcome=None)
 
 
 def _clean_hit(*_args: object, **_kwargs: object) -> MagicMock:
-    return MagicMock(success_level=2)
+    return MagicMock(success_level=2, outcome=None)
 
 
 class _TheYard(JourneyCase):

@@ -134,12 +134,12 @@ from world.vitals.models import CharacterVitals
 
 def _offense_check_fn(*args: object, **kwargs: object) -> MagicMock:
     """Fixed success_level=1 -> DamageSuccessLevelMultiplier's 1.00 row."""
-    return MagicMock(success_level=1)
+    return MagicMock(success_level=1, outcome=None)
 
 
 def _defense_check_fn(*args: object, **kwargs: object) -> MagicMock:
     """Fixed success_level=0 -> DEFENSE_FULL_MULTIPLIER (1.0), isolating enrage."""
-    return MagicMock(success_level=0)
+    return MagicMock(success_level=0, outcome=None)
 
 
 class BossFightJourneyTest(TestCase):

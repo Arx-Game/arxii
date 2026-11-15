@@ -105,7 +105,7 @@ class BarricadeCastPositionJourneyTests(TestCase):
         )
 
         def mock_check_fn(*args, **kwargs):
-            return MagicMock(success_level=2)
+            return MagicMock(success_level=2, outcome=None)
 
         resolve_round(self.encounter, offense_check_fn=mock_check_fn)
 

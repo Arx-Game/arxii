@@ -212,7 +212,7 @@ class SocialVictoryTelnetE2ETests(TestCase):
         )
 
         with patch("world.combat.services.perform_check") as mock_offense:
-            mock_offense.return_value = MagicMock(success_level=2)
+            mock_offense.return_value = MagicMock(success_level=2, outcome=None)
             resolve_round(self.encounter)
 
         # Bandit A's stored status/allegiance are untouched by the charm (D4) —
@@ -244,7 +244,9 @@ class SocialVictoryTelnetE2ETests(TestCase):
             _patch_sessions({self.character.pk: [telnet_session]}),
             self.captureOnCommitCallbacks(execute=True),
         ):
-            mock_social.return_value = MagicMock(success_level=PARLEY_DECISIVE_SUCCESS_LEVEL)
+            mock_social.return_value = MagicMock(
+                success_level=PARLEY_DECISIVE_SUCCESS_LEVEL, outcome=None
+            )
             resolve_round(self.encounter)
 
         # --- Headline DoD: social victory, both bandits won over, no violence ---

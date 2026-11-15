@@ -214,7 +214,7 @@ class SummonSpiritTelnetE2ETests(TestCase):
 
         # --- Step 2: resolve round 1 (cast → Summoning condition → summon_ally) ---
         with patch("world.combat.services.perform_check") as mock_check:
-            mock_check.return_value = MagicMock(success_level=2)
+            mock_check.return_value = MagicMock(success_level=2, outcome=None)
             resolve_round(self.encounter)
 
         # --- Step 3: assert the ALLY CombatOpponent was created ---
@@ -255,7 +255,7 @@ class SummonSpiritTelnetE2ETests(TestCase):
 
         # --- Step 6: resolve round 2 (summon attacks ENEMY) ---
         with patch("world.combat.services.perform_check") as mock_check:
-            mock_check.return_value = MagicMock(success_level=2)
+            mock_check.return_value = MagicMock(success_level=2, outcome=None)
             resolve_round(self.encounter)
 
         # --- Headline DoD: the summoned ally damaged the enemy NPC ---

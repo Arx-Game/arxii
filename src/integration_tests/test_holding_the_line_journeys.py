@@ -139,7 +139,7 @@ CHALLENGE_PERFORM_CHECK = "world.mechanics.challenge_resolution.perform_check"
 
 def _full_swing(*args: object, **kwargs: object) -> MagicMock:
     """A defence roll fixed at success level 0, which takes the swing at full strength."""
-    return MagicMock(success_level=0)
+    return MagicMock(success_level=0, outcome=None)
 
 
 class _TheYard(JourneyCase):
@@ -254,7 +254,7 @@ class _TheYard(JourneyCase):
     ) -> MagicMock:
         """Brenna's offence roll: success level 2, and a note of what it was asked."""
         self.offense_calls.append((character, check_type, kwargs.get("extra_modifiers", 0)))
-        return MagicMock(success_level=OFFENSE_SUCCESS)
+        return MagicMock(success_level=OFFENSE_SUCCESS, outcome=None)
 
     def _round(self) -> None:
         resolve_round(self.encounter, defense_check_fn=_full_swing, offense_check_fn=self._offense)

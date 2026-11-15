@@ -207,7 +207,7 @@ class CombatCastTelnetE2ETests(TestCase):
 
         # Step 3: resolve the round (patching perform_check to return SL=2).
         with patch("world.combat.services.perform_check") as mock_perform:
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             resolve_round(self.encounter)
 
         # Step 4a: anima was spent (current < before).
@@ -424,7 +424,7 @@ class CombatCastTelnetE2ETests(TestCase):
         )
 
         with patch("world.combat.services.perform_check") as mock_perform:
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             resolve_round(self.encounter)
 
         self.anima.refresh_from_db()
@@ -469,7 +469,7 @@ class CombatCastTelnetE2ETests(TestCase):
             patch("world.combat.services.perform_check") as mock_offense,
             patch("world.checks.services.perform_check") as mock_control,
         ):
-            mock_offense.return_value = MagicMock(success_level=2)
+            mock_offense.return_value = MagicMock(success_level=2, outcome=None)
             mock_control.return_value = MagicMock(success_level=2, outcome=None)
             resolve_round(self.encounter)
 
@@ -525,7 +525,7 @@ class CombatCastTelnetE2ETests(TestCase):
             patch("world.combat.services.perform_check") as mock_offense,
             patch("world.checks.services.perform_check") as mock_control,
         ):
-            mock_offense.return_value = MagicMock(success_level=2)
+            mock_offense.return_value = MagicMock(success_level=2, outcome=None)
             # A strong control roll: Berserk is chosen, not rolled into.
             mock_control.return_value = MagicMock(success_level=3, outcome=None)
             resolve_round(self.encounter)
@@ -636,7 +636,7 @@ class CombatCastTelnetE2ETests(TestCase):
             patch("world.combat.services.perform_check") as mock_offense,
             patch("world.checks.services.perform_check") as mock_control,
         ):
-            mock_offense.return_value = MagicMock(success_level=2)
+            mock_offense.return_value = MagicMock(success_level=2, outcome=None)
             mock_control.return_value = MagicMock(success_level=1, outcome=None)
             resolve_round(self.encounter)
 

@@ -303,7 +303,7 @@ class EntranceDeclarationSuggestsOnResolutionTests(TestCase):
         encounter, sheet = self._setup_encounter(from_entrance=True)
 
         def mock_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
-            return MagicMock(success_level=3)
+            return MagicMock(success_level=3, outcome=None)
 
         resolve_round(encounter, offense_check_fn=mock_check_fn)
 
@@ -313,7 +313,7 @@ class EntranceDeclarationSuggestsOnResolutionTests(TestCase):
         encounter, sheet = self._setup_encounter(from_entrance=False)
 
         def mock_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
-            return MagicMock(success_level=3)
+            return MagicMock(success_level=3, outcome=None)
 
         resolve_round(encounter, offense_check_fn=mock_check_fn)
 
