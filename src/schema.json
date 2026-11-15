@@ -84313,6 +84313,9 @@ components:
             $ref: '#/components/schemas/ResolvedPullEffect'
         level_read:
           type: integer
+        kindled_strength:
+          type: string
+          nullable: true
       required:
       - affordable
       - balance

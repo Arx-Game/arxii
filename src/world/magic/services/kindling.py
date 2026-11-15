@@ -628,6 +628,23 @@ def kindled_resonances_now(sheet: CharacterSheet) -> list[KindledResonance]:
     return kindled_resonances(sheet, resolution=context.resolution, mission=context.mission)
 
 
+def kindled_tiers(
+    sheet: CharacterSheet,
+    *,
+    resolution: object | None = None,
+    mission: MissionInstance | None = None,
+) -> dict[int, KindledStrengthTier]:
+    """Resonance id -> its strength tier, for each held resonance that is kindled now.
+
+    One ``kindled_resonances`` pass; a pull reads it once and looks every payer up in it.
+    """
+    return {
+        entry.resonance.pk: entry.tier
+        for entry in kindled_resonances(sheet, resolution=resolution, mission=mission)
+        if entry.tier is not None
+    }
+
+
 def kindled_for(
     sheet: CharacterSheet,
     resonance: Resonance,

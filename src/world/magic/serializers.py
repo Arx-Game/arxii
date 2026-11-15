@@ -1889,6 +1889,10 @@ class PayerOptionSerializer(serializers.Serializer):
     affordable = serializers.BooleanField()
     effects = ResolvedPullEffectSerializer(many=True)
     level_read = serializers.IntegerField()
+    # The strength word staff wrote for the tier; players never see the rank or its levels.
+    kindled_strength = serializers.CharField(
+        source="kindled_strength.name", allow_null=True, default=None
+    )
 
 
 class ThreadPayerPreviewSerializer(serializers.Serializer):

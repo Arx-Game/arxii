@@ -47899,6 +47899,7 @@ export interface components {
       affordable: boolean;
       effects: components['schemas']['ResolvedPullEffect'][];
       level_read: number;
+      kindled_strength?: string | null;
     };
     /** @description Read-only serializer for pending alterations shown on character sheet. */
     PendingAlteration: {

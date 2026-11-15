@@ -260,13 +260,27 @@ def thread_power_term(ctx: PowerTermContext) -> int:
     resolver always covers tier 0.
     """
     from world.magic.constants import EffectKind  # noqa: PLC0415
-    from world.magic.services.resonance import resolve_pull_effects  # noqa: PLC0415
+    from world.magic.services.resonance import (  # noqa: PLC0415
+        pull_kindled_tiers,
+        resolve_pull_effects,
+    )
 
+    # A pulled thread paid by a kindled resonance reads higher (#5124), so the cast's
+    # intensity agrees with the pull preview. One read per cast, and only when a pull pays.
+    kindled = (
+        pull_kindled_tiers(ctx.sheet)
+        if any(applicable.pull_tier > 0 for applicable in ctx.applicable_threads)
+        else None
+    )
     total = 0
     for applicable in ctx.applicable_threads:
         payers = {applicable.thread.pk: applicable.payer} if applicable.payer else None
         resolved = resolve_pull_effects(
-            [applicable.thread], applicable.pull_tier, in_combat=False, payers=payers
+            [applicable.thread],
+            applicable.pull_tier,
+            in_combat=False,
+            payers=payers,
+            kindled=kindled if applicable.pull_tier > 0 else None,
         )
         total += sum(
             r.scaled_value

@@ -2048,6 +2048,16 @@ that thread (ruling 13: paying with such a resonance is an ordinary pull; the ch
 across the pull's threads, not per payer), and applicability (`pull_applicability`) counts a thread when any resonance with a row would have
 an effect, since it runs before the payer is picked.
 
+**Drawing strength (#5124) [BUILT & WIRED].** A payer that is kindled reads the thread higher: `resolve_pull_effects(..., kindled=)`
+takes `{resonance id: KindledStrengthTier}` (built once per pull by `pull_kindled_tiers(sheet, participant)`, which wraps
+`kindling.kindled_tiers`) and adds the payer's tier `pull_levels` to the level the multiplier reads, beside the beseech
+boost (`_kindled_level`). The boost is read for that resolution only: it never touches the thread, the `min_thread_level` gate,
+`source_thread_level` or the preview's `level_read`. Because INTENSITY_BUMP scales with the multiplier, intensity rises with it, and
+`thread_power_term` passes the same map for pulled threads so the cast's power agrees with the preview. A payer that is not kindled, or a
+tier with no row, reads as before. `CombatPullThread.kindled_strength` stores the tier's rank (0 = none) at commit. `PayerOption.kindled_strength` carries
+the tier and `PayerOptionSerializer.kindled_strength` its name only (never the rank or levels); the Pay with list shows "Kindled, <name>"
+beside the payer. No control changes.
+
 **Preview:** `preview_resonance_pull` (`POST /api/magic/thread-pull-preview/`) is the read-only
 preview endpoint and remains the way to preview cost + effects before committing. It takes
 `payers` and returns, beside the pull totals, `per_thread`: for every pulled thread, every
