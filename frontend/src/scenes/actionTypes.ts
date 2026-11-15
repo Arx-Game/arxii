@@ -111,6 +111,8 @@ export interface FuryResonanceTierIntensity {
 export interface FuryResonanceOption {
   id: number;
   name: string;
+  /** The kindled strength's name, the word the player reads. */
+  strength_name: string;
   /** Pre-computed depth cap its strength allows, used for client-side tier gating. */
   provocation_cap: number;
   /** Per tier, the full-share intensity scaled by this resonance's strength. */

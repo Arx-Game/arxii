@@ -61383,6 +61383,9 @@ components:
         name:
           type: string
           readOnly: true
+        strength_name:
+          type: string
+          readOnly: true
         provocation_cap:
           type: integer
           readOnly: true
@@ -61395,6 +61398,7 @@ components:
       - id
       - name
       - provocation_cap
+      - strength_name
       - tier_full_intensities
     FuryResonanceTierIntensity:
       type: object

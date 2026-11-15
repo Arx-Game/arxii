@@ -446,8 +446,11 @@ function buildFocusedJob(
   const pullKwargs = pullKwargsFor(pull);
 
   const furyKwargs: Record<string, number> = {};
-  if (furyTierId !== null) furyKwargs.fury_commitment_id = furyTierId;
-  if (furyResonanceId !== null) furyKwargs.fury_resonance_id = furyResonanceId;
+  // Hold steady (no step chosen) gives in to nothing, so no resonance goes with it.
+  if (furyTierId !== null && furyResonanceId !== null) {
+    furyKwargs.fury_commitment_id = furyTierId;
+    furyKwargs.fury_resonance_id = furyResonanceId;
+  }
   const soulfrayKwarg =
     soulfrayAccepted && (soulfrayWarning !== null || isWardBearing)
       ? { confirm_soulfray_risk: true }
@@ -821,7 +824,7 @@ function submitBlockReason(args: {
     return 'Accept the Soulfray risk to proceed.';
   }
   if (args.furyOverCap) {
-    return 'Chosen fury tier is deeper than that resonance lets you go.';
+    return 'That resonance is not kindled enough to give in that far.';
   }
   if (!args.positionRequirementMet) {
     return 'Select a position target for this technique.';

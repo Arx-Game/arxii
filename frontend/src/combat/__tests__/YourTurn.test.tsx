@@ -1928,8 +1928,20 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
   ];
 
   const furyResonances = [
-    { id: 20, name: 'Wrath', provocation_cap: 2, tier_full_intensities: [] },
-    { id: 21, name: 'Grief', provocation_cap: 5, tier_full_intensities: [] },
+    {
+      id: 20,
+      name: 'Wrath',
+      strength_name: 'Strong',
+      provocation_cap: 2,
+      tier_full_intensities: [],
+    },
+    {
+      id: 21,
+      name: 'Grief',
+      strength_name: 'Blazing',
+      provocation_cap: 5,
+      tier_full_intensities: [],
+    },
   ];
 
   it('shows the Soulfray gate the anima the cast will really cost (#4799)', async () => {
@@ -2117,16 +2129,12 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
 
     await userEvent.click(screen.getByTestId('card-select-technique-focused'));
 
-    // Pick tier Spark (depth 1) and resonance Wrath (cap 2) — within cap.
-    const tierTrigger = screen.getByTestId('fury-tier-select');
-    await userEvent.click(tierTrigger);
-    const tierOption = await screen.findByText('Spark: surrender 3 control');
-    await userEvent.click(tierOption);
-
-    const resonanceTrigger = screen.getByTestId('fury-resonance-select');
-    await userEvent.click(resonanceTrigger);
-    const resonanceOption = await screen.findByText('Wrath (cap 2)');
-    await userEvent.click(resonanceOption);
+    // Give in to Wrath (cap 2) as far as Spark (depth 1) — within what it reaches.
+    await userEvent.click(screen.getByTestId('fury-resonance-select'));
+    await userEvent.click(await screen.findByText('Wrath (kindled, strong)'));
+    // Blaze (depth 3) is a step Wrath does not reach, so it is not offered.
+    expect(screen.queryByTestId('fury-tier-11')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('fury-tier-10'));
 
     await userEvent.click(screen.getByTestId('submit-declarations-btn'));
 
