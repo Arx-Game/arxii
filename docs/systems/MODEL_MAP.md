@@ -8551,6 +8551,8 @@
   - persona -> scenes.Persona [FK]
   - enrollment_scene -> scenes.Scene [FK] (nullable)
 
+### DevelopmentCostConfig
+
 ### DevelopmentPoints
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
@@ -10190,7 +10192,8 @@
 - `boundary_message(name: 'str', next_rating: 'int') -> 'str' - The XP-boundary plateau message for a skill named ``name`` (#2115, #5010).`
 - `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object>, _path_levels: 'dict[int, int] | None' = None) -> 'int' - Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' - Create a new training allocation for a character.`
-- `cumulative_dp_for_level(level: int) -> int - Total dp needed to reach *level* from the base level of 10.`
+- `cumulative_dp_for_level(value: 'int') -> 'int' - Total development points needed to reach ``value`` from the base level of 10.`
+- `dp_cost_for_step(value: 'int') -> 'int' - Development points the step from ``value`` to ``value + 1`` costs (minimum 1).`
 - `get_relationship_tier(character_a: 'CharacterSheet | ObjectDB', character_b: 'CharacterSheet | ObjectDB') -> 'int' - The lower claimed tier of a mutual Mentor/Student tie, else 0 (#3957).`
 - `get_specialization_value(character: 'ObjectDB', specialization: 'Specialization') -> 'int' - A character's raw value for a specialization, 0 if unowned (#1688).`
 - `has_specialization(character: 'ObjectDB', specialization: 'Specialization', *, minimum_value: 'int' = 10) -> 'bool' - Whether a character owns a specialization at ``minimum_value`` or better (#1688).`

@@ -104,7 +104,9 @@ dev_points = base_gain + mentor_bonus
 ```
 
 ### Development Costs
-- Level N to N+1 costs `(N - 9) × 100` dev points
+- A step from value N to N+1 costs `dp_cost_for_step(N)` dev points: one geometric curve held
+  in the `DevelopmentCostConfig` row (`world/progression/services/dev_cost.py`, #5093), a tenth of
+  the band N // 10, the same for skills, specializations and threads
 - Overflow carries across levels
 - XP boundaries at 19, 29, 39, 49 are a **plateau, not banking** (#2115) for every source,
   use and GM awards as well as training (#5010): a boundary-parked skill still pays off rust

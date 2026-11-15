@@ -235,8 +235,11 @@ permitted to cross a specific XP-locked level. Without this row, accumulating
 
 #### Thread development cost formula
 
-Identical structure to skills: between XP-locked boundaries, the resonance cost
-to advance from level N → N+1 is `(N - 9) × 100` developed_points. The
+Identical structure to skills (#5093): between XP-locked boundaries, the resonance cost
+to advance from level N → N+1 is `dp_cost_for_step(N)` developed_points, the shared
+geometric curve held in the `DevelopmentCostConfig` row (a step costs a tenth of its
+character-level band, `N // 10`: 10 for 0-19, 15 for 20-29, 22 for 30-39 with the defaults),
+times the thread kind's `ThreadPullCost.imbue_cost_multiplier` (2 for Gift threads). The
 `developed_points` bucket on `Thread` is filled by spending resonance via the
 Imbuing ritual (Imbuing converts pool resonance into developed_points at a
 1:1 ratio at launch — staff-tunable). When the bucket reaches the cost of
@@ -799,7 +802,7 @@ def spend_resonance_for_imbuing(
       - amount > 0
 
     Within the greedy advancement loop, for each candidate next level N+1:
-      cost = (N - 9) * 100        (skill-system formula; same shape)
+      cost = dp_cost_for_step(N) * imbue_cost_multiplier   (shared curve, #5093)
       if developed_points < cost:
           stop — bucket holds remainder
       if (N + 1) % 10 == 0:       # crossing an XP-locked boundary

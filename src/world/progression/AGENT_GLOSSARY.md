@@ -15,6 +15,17 @@
 > they relate to `InteractionReaction`, the sibling axis defined in
 > `scenes/AGENT_GLOSSARY.md`).
 
+**Development cost curve** (#5093):
+The one geometric scale every levelling trait pays on: skills, specializations and
+threads. A trait value `v` sits in the band `v // 10` (one character level); a band costs
+`base_cost x (growth_percent / 100)^(band - start_level)` development points from the
+`DevelopmentCostConfig` row, and each of its ten steps costs a tenth, so every step in a
+band costs the same and the first step of the next band costs one growth step more. A
+thread multiplies a step by its kind's `imbue_cost_multiplier`. `dp_cost_for_step`,
+`dp_cost_for_band` and `cumulative_dp_for_level` (`services/dev_cost.py`) are the only
+readers; no cost number lives in code.
+_Avoid_: level cost formula, per-level multiplier, dp table.
+
 **Unlock**:
 An authored advancement target a character can spend XP to acquire — e.g. `ClassLevelUnlock` (a class level) or `TraitRatingUnlock` (a major trait threshold) — whose availability is governed by Requirements.
 _Avoid_: perk, purchase, upgrade.
