@@ -35,6 +35,7 @@ from world.magic.services.technique_progress import (
 )
 from world.progression.factories import CharacterPathHistoryFactory
 from world.roster.factories import RosterTenureFactory
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.traits.models import CheckOutcome
 
 # Canonical outcome tiers (name -> success_level), matching seeds/checks.py.
@@ -56,6 +57,7 @@ def _ensure_outcome(name: str, success_level: int) -> CheckOutcome:
 
 class TechniqueProgressE2ETest(TestCase):
     def setUp(self):
+        seed_pool_and_cap_lanes()
         # Learner setup
         self.learner = CharacterSheetFactory()
         self.learner_pool = ActionPointPool.get_or_create_for_character(self.learner.character)
@@ -206,6 +208,7 @@ class TrainTechniqueActionJourneyE2ETest(TestCase):
     """
 
     def setUp(self):
+        seed_pool_and_cap_lanes()
         self.learner = CharacterSheetFactory()
         self.learner_pool = ActionPointPool.get_or_create_for_character(self.learner.character)
         self.learner_pool.current = 500
