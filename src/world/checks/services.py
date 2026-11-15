@@ -513,15 +513,20 @@ def difficulty_step_points(tenths: int | Decimal, at_level: int) -> int:
 
 
 def difficulty_level_for_points(points: int) -> int:
-    """The highest level whose baseline is at or below ``points``, 0 below level 1 (#5093).
+    """The level whose baseline is nearest ``points``, ties to the lower level (#5093).
 
     The inverse of :func:`difficulty_points` for a difficulty computed at runtime in points
-    (a code constant, an accuser's roll) that has to be stored where staff author a level.
-    A database with no baseline rows reads 0.
+    (a code constant, an accuser's roll) that has to be stored where staff author a level. The
+    candidates are level 0 (0 points) and every authored level, so 10 points reads level 1 (18)
+    and a trivial 5 reads level 0. A database with no baseline rows reads 0.
     """
     table = load_baselines()
-    index = bisect_right(table.baselines, points)
-    return table.levels[index - 1] if index else 0
+    index = bisect_right(table.baselines, points) - 1
+    lower_level, lower = (table.levels[index], table.baselines[index]) if index >= 0 else (0, 0)
+    if index + 1 >= len(table.levels):
+        return lower_level
+    upper_level, upper = table.levels[index + 1], table.baselines[index + 1]
+    return upper_level if upper - points < points - lower else lower_level
 
 
 def level_points(level: int) -> int:

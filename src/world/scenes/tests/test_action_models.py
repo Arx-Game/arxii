@@ -141,7 +141,7 @@ class TestSceneActionRequest(TestCase):
             snapshot_specialization=config.specialization,
             snapshot_resonance=config.resonance,
             snapshot_check_type=config.check_type,
-            snapshot_target_difficulty=config.target_difficulty,
+            snapshot_target_difficulty=26,
         )
         self.assertEqual(request.snapshot_ritual, ritual)
         self.assertEqual(request.snapshot_stat, config.stat)
@@ -149,7 +149,7 @@ class TestSceneActionRequest(TestCase):
         self.assertEqual(request.snapshot_specialization, config.specialization)
         self.assertEqual(request.snapshot_resonance, config.resonance)
         self.assertEqual(request.snapshot_check_type, config.check_type)
-        self.assertEqual(request.snapshot_target_difficulty, config.target_difficulty)
+        self.assertEqual(request.snapshot_target_difficulty, 26)
 
 
 class SceneActionRequestStrainFieldTests(TestCase):

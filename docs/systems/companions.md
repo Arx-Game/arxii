@@ -45,7 +45,7 @@ stock look over Evennia's `desc` Attribute, and a companion has no window to rea
 
 `actions.definitions.companions.BindCompanionAction` (`bind_companion` key) —
 gated by `HasCompanionCapacityPrerequisite`, executes via the existing
-`perform_check` primitive against `CompanionArchetype.bind_difficulty`.
+`perform_check` primitive against `CompanionArchetype.bind_difficulty_level`.
 
 `actions.definitions.companions.ReleaseCompanionAction` (`release_companion`
 key, #1918) — releases a bonded companion: destroys its live object, sets

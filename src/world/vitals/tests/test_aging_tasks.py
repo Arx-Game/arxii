@@ -16,7 +16,7 @@ from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionInstance, ConditionModifierEffect
 from world.mechanics.factories import max_health_modifier_target
 from world.species.factories import SpeciesFactory
-from world.traits.factories import CheckOutcomeFactory
+from world.traits.factories import CheckOutcomeFactory, ensure_level_ladder
 from world.vitals.aging import (
     run_birthday_tick,
     run_death_sweep,
@@ -120,13 +120,14 @@ class DeclineCheckTests(TestCase):
         return instance.severity if instance else 0
 
     def test_failure_deepens_frailty_and_difficulty_scales_with_age(self):
+        ensure_level_ladder()
         sheet = self._elder(biological=70)
         with force_check_outcome(self.fail_outcome) as capture:
             checked = run_decline_checks(ic_now=_aware(1020, 1, 1))
         self.assertEqual(checked, 1)
         self.assertEqual(self._frailty_severity(sheet), 2)
-        # PLACEHOLDER K=7: (70 - 60) years past threshold x 7 points.
-        self.assertEqual(capture.target_difficulty, 70)
+        # PLACEHOLDER: (70 - 60) years past threshold x 1.4 of a level's width (8 points).
+        self.assertEqual(capture.target_difficulty, 112)
         sheet.vitals.refresh_from_db()
         self.assertEqual(sheet.vitals.max_health, 98)
 

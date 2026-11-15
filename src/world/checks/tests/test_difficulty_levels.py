@@ -55,12 +55,14 @@ class DifficultyHelperTests(TestCase):
     def test_a_step_above_the_top_level_reuses_the_top_width(self) -> None:
         self.assertEqual(difficulty_step_points(10, 45), 8)
 
-    def test_points_below_level_one_are_level_zero(self) -> None:
-        self.assertEqual(difficulty_level_for_points(17), 0)
-        self.assertEqual(difficulty_level_for_points(18), 1)
-
-    def test_points_land_on_the_highest_level_at_or_below(self) -> None:
+    def test_points_land_on_the_nearest_level_ties_to_the_lower(self) -> None:
+        self.assertEqual(difficulty_level_for_points(5), 0)
+        self.assertEqual(difficulty_level_for_points(9), 0)  # 9 from level 0 and from level 1
+        self.assertEqual(difficulty_level_for_points(10), 1)
+        self.assertEqual(difficulty_level_for_points(15), 1)
         self.assertEqual(difficulty_level_for_points(45), 4)  # level 4 is 42, level 5 is 50
+        self.assertEqual(difficulty_level_for_points(46), 4)  # 4 from each: the lower level
+        self.assertEqual(difficulty_level_for_points(47), 5)
         self.assertEqual(difficulty_level_for_points(50), 5)
         self.assertEqual(difficulty_level_for_points(10_000), 30)
 

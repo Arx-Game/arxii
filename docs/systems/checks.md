@@ -460,8 +460,8 @@ turn the stored number into the points a roll meets:
   per-step increment, in tenths of one level's width at `at_level` (the base difficulty's level,
   the opposing caster's level, or the character's own). Rounded half up; negative tenths keep
   their sign; a level below 1 uses level 1's width.
-- `difficulty_level_for_points(points)`: the inverse, the highest level whose baseline is at or
-  below `points`, for a difficulty a rule computes at runtime in points (a smear's counter-clue)
+- `difficulty_level_for_points(points)`: the inverse, the level whose baseline is nearest
+  `points` (ties to the lower), for a difficulty a rule computes at runtime in points (a smear's counter-clue)
   and has to store where staff author a level.
 
 Columns named `*_level` are standalone (a lock's detect and disarm, a condition's cure and

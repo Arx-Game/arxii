@@ -2185,7 +2185,7 @@ writes no corruption. `AcceptAuraResult.grown_affinity` is the affinity of the r
 made them unsettled, read before accepting; it is what the action's "You become more
 abyssal." names (the main affinity is unchanged by an accept, so it cannot say what grew).
 - Models (`models/drift.py`): `DriftCorrectionConfig` (singleton; `rite`, `check_type` null until
-  staff author them; `check_difficulty`; `cap_percent`), `DriftCorrectionOutcomeShare` (an
+  staff author them; `check_difficulty_level`; `cap_percent`), `DriftCorrectionOutcomeShare` (an
   `OutcomeTierAward`; `converted_share` is the fraction of the requested amount that converts,
   not of the cap; `clean` keeps it monotonic by success level),
   `DriftConversionOffer` (one per sheet and scene), `DriftConversionCap` (per offer and target

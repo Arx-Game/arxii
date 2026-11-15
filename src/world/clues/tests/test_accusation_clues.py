@@ -39,7 +39,7 @@ class AccusationCounterClueTests(TestCase):
         placements = RoomClue.objects.filter(clue=clue)
         placed_profiles = {placement.room_profile for placement in placements}
         assert placed_profiles == {self.hub_one, self.hub_two}
-        # 45 points sits between level 4's baseline (42) and level 5's (50)
+        # 45 points is nearer level 4's baseline (42) than level 5's (50)
         assert all(placement.detect_difficulty_level == 4 for placement in placements)
 
     def test_ignores_non_hubs_and_other_regions(self):

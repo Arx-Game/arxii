@@ -866,7 +866,7 @@ gates TRAIN uses, and is not a TRAIN offer: TRAIN teaches a technique through th
 
 | Model / function | Location | Purpose |
 |------------------|----------|---------|
-| `SkillCourseOfferDetails` | `world/npc_services/models.py` | 1:1 with the offer: `skill`, `total_development`, `session_development` (check constraints `course_session_within_total`, `course_total_development_positive`, `course_session_development_positive`), `session_ap_cost`, `coin_cost` (coppers, 0 is a free course), `check_type`, `check_difficulty`. No field has a default. `clean()` requires `NPCServiceOffer.ap_cost == 0` |
+| `SkillCourseOfferDetails` | `world/npc_services/models.py` | 1:1 with the offer: `skill`, `total_development`, `session_development` (check constraints `course_session_within_total`, `course_total_development_positive`, `course_session_development_positive`), `session_ap_cost`, `coin_cost` (coppers, 0 is a free course), `check_type`, `check_difficulty_level`. No field has a default. `clean()` requires `NPCServiceOffer.ap_cost == 0` |
 | `SkillCourseEnrollment` | `world/npc_services/models.py` | A sheet's place in one course: `development_remaining`, `last_session_week` (FK `GameWeek`), `enrolled_at`, `completed_at`. At most one open enrollment per sheet and course (`one_open_enrollment_per_course`); a finished course may be taken again |
 | `run_skill_course_offer(offer, persona)` | `world/npc_services/effects.py` | The handler. Registered in `OFFER_EFFECT_HANDLERS` |
 | `_academy_for(offer, sheet, kind)` | `world/npc_services/effects.py` | Shared by TRAIN, the course and settle-obligation: the role's `faction_affiliation` (an authoring error message when none), and the owed-entrance-obligation refusal (skipped for settle-obligation, whose job is paying it) |
@@ -875,7 +875,7 @@ gates TRAIN uses, and is not a TRAIN offer: TRAIN teaches a technique through th
 *How acceptance works.* The first acceptance enrolls: it pays the coin (skipped when 0) to the
 Academy's treasury and redeems one Golden Hare, once for the course, then runs the first session.
 Each later acceptance of the same offer is a session costing `session_ap_cost` AP, rolled with
-`perform_check_with_modifiers` against the course's `check_type` and `check_difficulty`. The
+`perform_check_with_modifiers` against the course's `check_type` and `check_difficulty_level`. The
 development is `floor(session_development x multiplier)`, where the multiplier is the
 `TrainingOutcomeAward` row for the roll's outcome (the table technique training reads; no row or no
 outcome teaches nothing), capped at `development_remaining`. It is applied through
@@ -887,7 +887,7 @@ including a botch that teaches nothing.
 
 *Teaching fit (slice 2 of #4659).* When the offer's role has `teaches_tradition`, `_course_ease`
 (`effects.py`) resolves `student_fit(tradition, student_traits(sheet))` (the sheet's Major Gift and
-the affinity of the resonance on its active GIFT thread for that Gift, then `teaching_fit`) and subtracts `course_ease(config)` from `check_difficulty` before the roll, with no floor. The fit
+the affinity of the resonance on its active GIFT thread for that Gift, then `teaching_fit`) and subtracts `course_ease(config)` from `check_difficulty_level` before the roll, with no floor. The fit
 changes the check only: the roll's outcome still decides the development gained. A role with no
 Tradition is neutral. The menu price (`OfferPrice`) carries two lines for such a course:
 `teaching_line` ("Taught in the manner of <Tradition>") and, when the learner fits,
@@ -4537,7 +4537,7 @@ offers and sends the lapse line; `Scene.finish_scene` calls it, so every finish 
 them, and the rite refuses an offer whose scene has finished.
 
 **The rite.** `DriftCorrectionConfig` (singleton, pk 1, created lazily) designates the rite
-(`rite` FK to `Ritual`) and the roll (`check_type` FK to `CheckType`, `check_difficulty`), plus
+(`rite` FK to `Ritual`) and the roll (`check_type` FK to `CheckType`, `check_difficulty_level`), plus
 `cap_percent`. The check type is deliberately not a `RitualCheckConfig` sidecar, which needs a
 stat and a skill and looks up by ritual name. `DriftCorrectionOutcomeShare` (an
 `OutcomeTierAward`) maps each `CheckOutcome` to `converted_share`, the fraction of the

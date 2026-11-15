@@ -90,7 +90,7 @@
   `DriftConversionOffer` (one per sheet and scene) with a `DriftConversionCap` per target
   resonance (`open_or_extend_conversion_offer`, called from `grant_resonance`;
   `lapse_conversion_offers` from `Scene.finish_scene`). The player performs a configured rite:
-  `DriftCorrectionConfig` (singleton: `rite`, `check_type`, `check_difficulty`, `cap_percent`)
+  `DriftCorrectionConfig` (singleton: `rite`, `check_type`, `check_difficulty_level`, `cap_percent`)
   and `DriftCorrectionOutcomeShare` (share of the requested amount converted per `CheckOutcome`) feed
   `perform_drift_correction_rite` (`services/drift_correction.py`), which converts lifetime
   points (Mire excess first) through `convert_resonance_amount` (`services/conversion.py`) as `GainSource.DRIFT_CORRECTION` at the
@@ -2561,7 +2561,7 @@ resolve them automatically or through a collaborative **research project**.
   `NaturalKeyMixin` `slug`
   (#2451) and is a `CONTENT_MODELS` citizen — a `Clue` now exports/imports as
   lore-repo content, natural-keyed by slug), `CharacterClue` (held-clue, roster-scoped),
-  `RoomClue` (search-anchored placement + `detect_difficulty` + `eligibility_rule` +
+  `RoomClue` (search-anchored placement + `detect_difficulty_level` + `eligibility_rule` +
   `fixture_key`), `ClueTrigger` (passive on-entry placement + `eligibility_rule` +
   `fixture_key`), `ResearchProjectDetails`
   (the clue a `ProjectKind.RESEARCH` project researches toward)
@@ -5201,7 +5201,7 @@ register as additional kinds.
   character's roster entry already holds the clue
   (`services._clue_reveal_not_yet_held`). Final offers skip the engine's own check
   application, so the handler (`run_clue_reveal_offer`) rolls `offer.check_type` /
-  `check_difficulty` itself when set (mirrors `raise_court_grant`); on success (or a null
+  `check_difficulty_level` itself when set (mirrors `raise_court_grant`); on success (or a null
   check_type — auto-success) it calls `acquire_clue` + `grant_clue_target` — the same
   chokepoint Search/Research use — voiced as reaction-line flavor + the clue's description.
   Fails closed with a plain message when the finder has no roster tenure. See
@@ -5256,7 +5256,7 @@ register as additional kinds.
   course in one skill (staff pick the skill on each offer; any skill, with one per Magic skill kept
   by a Required content row). `SkillCourseOfferDetails` (1:1 per offer: `skill`,
   `total_development`, `session_development`, `session_ap_cost`, `coin_cost`, `check_type`,
-  `check_difficulty`; `clean()` requires `NPCServiceOffer.ap_cost` 0) and `SkillCourseEnrollment`
+  `check_difficulty_level`; `clean()` requires `NPCServiceOffer.ap_cost` 0) and `SkillCourseEnrollment`
   (`character_sheet`, `course`, `development_remaining`, `last_session_week`, `completed_at`; one
   open enrollment per sheet and course). Handler `run_skill_course_offer`: `_academy_for` (the
   role's `faction_affiliation`, and the owed-obligation refusal; shared with TRAIN and
@@ -5264,7 +5264,7 @@ register as additional kinds.
   (already trained this course this game week, the skill at an XP boundary, short of AP, and when
   enrolling short of coin or of a Golden Hare). Enrolling pays the coin (skipped when 0) and one
   Hare once and runs the first session; each later acceptance is a session costing
-  `session_ap_cost`, rolled against `check_type` and `check_difficulty`, development =
+  `session_ap_cost`, rolled against `check_type` and `check_difficulty_level`, development =
   floor(`session_development` x the `TrainingOutcomeAward` multiplier) capped at what is left, applied
   by `skills.services.train_skill(..., stop_at_boundary=True)` so development past an XP boundary
   stays in the course. One session per course per game week across enrollments, recorded on the
@@ -6556,7 +6556,7 @@ companion. Full detail: [companions.md](companions.md).
 - **Actions** (`actions/definitions/companions.py`, REGISTRY,
   `category="companions"`): `BindCompanionAction` (`bind_companion`) — gated
   by `HasCompanionCapacityPrerequisite`, executes via `perform_check` against
-  `CompanionArchetype.bind_difficulty`. `CompanionEmoteAction`
+  `CompanionArchetype.bind_difficulty_level`. `CompanionEmoteAction`
   (`companion_emote`, #3294) — pose *as* a bonded, present companion, gated
   by `CompanionPresentPrerequisite` (owned + active + co-located).
 - **Companion emote (#3294):** `world.scenes.models.Interaction
@@ -6749,7 +6749,7 @@ registering a service strategy + per-kind details model.
     identity map serving a stale `is_armed`.
   - **Player half** (#3011): detect in `search`, see what you detected, disarm it.
     `search_room_traps` (`trap_services.py`) is a sibling of `world.clues.services
-    .search_room` — traps carry their own per-trap `detect_check_type`/`detect_difficulty`
+    .search_room` — traps carry their own per-trap `detect_check_type`/`detect_difficulty_level`
     (clues share one Search `CheckType`), so it does not slot into the clue roll for free;
     `SearchAction` (`actions/definitions/investigation.py`) calls both and folds detected
     traps into the same result message. `Trap.is_hidden` gets its first readers here:

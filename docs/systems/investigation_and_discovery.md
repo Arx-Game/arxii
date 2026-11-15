@@ -44,7 +44,7 @@ A `Clue` is a pointer defined by three orthogonal things:
 
 ## Acquisition surfaces
 
-- **Search (active):** `RoomClue` anchors a clue to a room with a `detect_difficulty`.
+- **Search (active):** `RoomClue` anchors a clue to a room with a `detect_difficulty_level`.
   `SearchAction` (`actions/definitions/investigation.py`) charges AP + mental fatigue (via
   the declarative cost on the `Action` base) and calls `search_room`, which rolls the
   seeded **Search** CheckType (Perception+Investigation) against each hidden clue's
@@ -67,7 +67,7 @@ A `Clue` is a pointer defined by three orthogonal things:
   Fires GM-less through the existing interaction loop: `available_offers()` excludes the offer
   once the character's roster entry already holds the clue (the "you already know this" rule
   stays the journal's job, not a re-offered NPC line); the `run_clue_reveal_offer` effect
-  handler rolls the offer's own `check_type`/`check_difficulty` (final offers skip the engine's
+  handler rolls the offer's own `check_type`/`check_difficulty_level` (final offers skip the engine's
   check application — see `run_clue_reveal_offer`'s docstring) and, on success or a null
   check_type (auto-success), calls `acquire_clue` + `grant_clue_target` — the same chokepoint
   Search and Research use. Reveal voice is reaction-line flavor + the clue's authored
@@ -111,7 +111,7 @@ A `Clue` is a pointer defined by three orthogonal things:
 Every placement gates on two independent things (via `world.predicates`; the epic's "gating
 is layered"):
 
-- **Capability / skill** — the detect (Search) check, against `detect_difficulty`.
+- **Capability / skill** — the detect (Search) check, against `detect_difficulty_level`.
 - **Access** — an `eligibility_rule` predicate (`JSONField`, same shape as
   `MissionTemplate.visibility_rule`) on `RoomClue` / `ClueTrigger` / `ItemClueTrigger`. Empty
   `{}` = open to anyone (the clue default, unlike missions' default-locked); a rule restricts

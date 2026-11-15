@@ -322,9 +322,9 @@ class SmearGossipTests(TestCase):
         # The trail lands in the hubs of the reach: A1's, and not B1's across the barony.
         placement = RoomClue.objects.get(clue__target_secret=secret)
         assert placement.room_profile == self.hub
-        # 15 points is below level 1's baseline (18): the trail is level 0 on the seeded ladder
+        # 15 points is nearest level 1's baseline (18) on the seeded ladder
         assert SMEAR_CLUE_BASE_DIFFICULTY + 1 * SMEAR_CLUE_DIFFICULTY_PER_LEVEL == 15
-        assert placement.detect_difficulty_level == 0
+        assert placement.detect_difficulty_level == 1
 
     def test_failed_check_mints_nothing(self):
         from world.secrets.gossip import plant_smear
