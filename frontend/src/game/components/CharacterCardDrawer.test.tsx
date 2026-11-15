@@ -18,6 +18,8 @@ import type { RosterEntryData } from '@/roster/types';
 vi.mock('@/roster/queries', () => ({
   useRosterEntryByNameQuery: vi.fn(),
   useRosterEntryQuery: vi.fn(),
+  // The journal composer the drawer mounts asks who is acting (#5124).
+  useMyRosterEntriesQuery: () => ({ data: [] }),
 }));
 vi.mock('@/friends/queries', () => ({
   useAddFriendMutation: vi.fn(),

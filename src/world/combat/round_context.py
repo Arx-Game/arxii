@@ -54,7 +54,7 @@ from world.scenes.constants import RoundStatus
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.magic.models import Technique
+    from world.magic.models import FuryTier, Resonance, Technique
     from world.magic.types.pull import CastPullDeclaration
 
 # Encounter statuses that represent an ongoing (non-completed) combat.
@@ -451,6 +451,26 @@ class CombatRoundContext(RoundContext):
                 character.combat_pulls.invalidate()
             raise
 
+    @staticmethod
+    def _refuse_unreachable_fury(
+        participant: CombatParticipant,
+        fury_commitment: FuryTier | None,
+        fury_resonance: Resonance | None,
+    ) -> None:
+        """Refuse giving in to an unkindled resonance, or deeper than its strength reaches."""
+        if fury_commitment is None:
+            return
+        from world.magic.services.fury import (  # noqa: PLC0415
+            give_in_strength,
+            provocation_cap,
+        )
+
+        strength = give_in_strength(participant.character_sheet, fury_resonance)
+        if strength is None:
+            raise ActionDispatchError(ActionDispatchError.FURY_NOT_KINDLED)
+        if provocation_cap(strength) < fury_commitment.depth:
+            raise ActionDispatchError(ActionDispatchError.FURY_OVER_CAP)
+
     @transaction.atomic
     def _record_combat_declaration_in_transaction(
         self,
@@ -490,20 +510,16 @@ class CombatRoundContext(RoundContext):
 
             fury_commitment = FuryTier.objects.filter(pk=fury_commitment_id).first()
 
-        fury_anchor = None
-        fury_anchor_id = kwargs.get("fury_anchor_id")
-        if fury_anchor_id is not None:
-            from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+        fury_resonance = None
+        fury_resonance_id = kwargs.get("fury_resonance_id")
+        if fury_resonance_id is not None:
+            from world.magic.models import Resonance  # noqa: PLC0415
 
-            fury_anchor = CharacterSheet.objects.filter(pk=fury_anchor_id).first()
+            fury_resonance = Resonance.objects.filter(pk=fury_resonance_id).first()
 
         # The web dispatch reaches here without the cast's round_declaration hook, so the
-        # provocation cap is enforced again before anything is charged (#4738).
-        if fury_commitment is not None:
-            from world.magic.services.fury import provocation_cap  # noqa: PLC0415
-
-            if provocation_cap(participant.character_sheet, fury_anchor) < fury_commitment.depth:
-                raise ActionDispatchError(ActionDispatchError.FURY_OVER_CAP)
+        # strength's depth cap is enforced again before anything is charged (#4738).
+        self._refuse_unreachable_fury(participant, fury_commitment, fury_resonance)
 
         slot = player_action.ref.action_slot or CombatActionSlot.FOCUSED
         if slot == CombatActionSlot.FOCUSED:
@@ -554,7 +570,7 @@ class CombatRoundContext(RoundContext):
                 confirm_soulfray_risk=confirm_soulfray_risk,
                 strain_commitment=strain_commitment,
                 fury_commitment=fury_commitment,
-                fury_anchor=fury_anchor,
+                fury_resonance=fury_resonance,
                 cast_destination=cast_positions["cast_destination"],
                 cast_position_a=cast_positions["cast_position_a"],
                 cast_position_b=cast_positions["cast_position_b"],

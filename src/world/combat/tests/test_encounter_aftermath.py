@@ -581,7 +581,7 @@ class ResolveRoundCompletionTests(TestCase):
         )
 
         def mock_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
-            return MagicMock(success_level=2)
+            return MagicMock(success_level=2, outcome=None)
 
         result = resolve_round(encounter, offense_check_fn=mock_check_fn)
 

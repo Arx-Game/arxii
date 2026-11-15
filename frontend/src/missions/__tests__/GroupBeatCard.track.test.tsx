@@ -29,6 +29,7 @@ const TRACK_BEAT: GroupBeatResult = {
         base_risk: 0,
         reasons: [],
         rolls_check: false,
+        feeds: [],
       },
     ],
     ballots: [],

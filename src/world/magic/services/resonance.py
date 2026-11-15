@@ -61,16 +61,20 @@ if TYPE_CHECKING:
     from evennia_extensions.models import RoomProfile
     from world.action_points.models import ActionPointPool
     from world.character_sheets.models import CharacterSheet
-    from world.combat.models import CombatEncounter
+    from world.combat.models import CombatEncounter, CombatParticipant
     from world.distinctions.models import CharacterDistinction
     from world.items.models import ItemFacet, Mantle
     from world.magic.models import (
         DramaticMomentTag,
         EntryFlourishRecord,
+        KindledStrengthTier,
+        KindlingSituation,
         PoseEndorsement,
+        Reflection,
         Resonance as ResonanceModel,
         SanctumDetails,
         SceneEntryEndorsement,
+        SettlingRite,
         StylePresentationEndorsement,
         Technique,
     )
@@ -111,7 +115,12 @@ def grant_resonance(  # noqa: PLR0913
     mission_deed_reward_line: MissionDeedRewardLine | None = None,
     source_character_distinction: CharacterDistinction | None = None,
     worship_rite_performance: WorshipRitePerformance | None = None,
+    kindling_situation: KindlingSituation | None = None,
+    settling_rite: SettlingRite | None = None,
+    reflection: Reflection | None = None,
     from_mire: bool = False,
+    deed_label: str | None = None,
+    ledger_out: list[ResonanceGrant] | None = None,
 ) -> CharacterResonance:
     """Atomically grant resonance AND write the ResonanceGrant ledger row.
 
@@ -140,8 +149,16 @@ def grant_resonance(  # noqa: PLR0913
         mission_deed_reward_line: Required for MISSION_REWARD source (#1737).
         source_character_distinction: Required for DISTINCTION source (#1834).
         worship_rite_performance: Required for WORSHIP_RITE source (#3777).
+        kindling_situation: Required for KINDLED_DEED source (#5124); the authored situation
+            that held.
+        settling_rite: Required for EMBRACED_DEED source (#5124); the rite that grew the deed.
+        reflection: Required for EMBRACED_DEED source (#5124); the reflection the rite applied.
         from_mire: True when a Sineater takes the resonance from the Mire (#5123); the
             grant also counts toward the row's ``mire_lifetime``.
+        deed_label: What the character did, in her own words, recorded on a KINDLED_DEED
+            grant (#5124); None for every other source.
+        ledger_out: When given, the ``ResonanceGrant`` row this call writes is appended to it,
+            for a caller that needs the ledger row as well as the updated resonance.
 
     Returns:
         The updated CharacterResonance instance.
@@ -172,6 +189,9 @@ def grant_resonance(  # noqa: PLR0913
         mission_deed_reward_line=mission_deed_reward_line,
         source_character_distinction=source_character_distinction,
         worship_rite_performance=worship_rite_performance,
+        kindling_situation=kindling_situation,
+        settling_rite=settling_rite,
+        reflection=reflection,
     )
 
     if source in ACCELERATED_GAIN_SOURCES:
@@ -230,7 +250,13 @@ def grant_resonance(  # noqa: PLR0913
         source_mission_deed_reward_line=mission_deed_reward_line,
         source_character_distinction=source_character_distinction,
         source_worship_rite_performance=worship_rite_performance,
+        source_kindling_situation=kindling_situation,
+        deed_label=deed_label,
+        source_settling_rite=settling_rite,
+        source_reflection=reflection,
     )
+    ledger = [] if ledger_out is None else ledger_out
+    ledger.append(grant)
     # #4333 slice 2: a grant of a resonance the character's pledged being values
     # is a deed, and earns favor toward the open pledge.
     from world.worship.pledge_services import credit_pledge_deed  # noqa: PLC0415
@@ -339,6 +365,9 @@ def _validate_grant_source_shape(  # noqa: PLR0913
     mission_deed_reward_line: MissionDeedRewardLine | None = None,
     source_character_distinction: CharacterDistinction | None = None,
     worship_rite_performance: WorshipRitePerformance | None = None,
+    kindling_situation: KindlingSituation | None = None,
+    settling_rite: SettlingRite | None = None,
+    reflection: Reflection | None = None,
 ) -> None:
     """Raise ValueError if the source discriminator doesn't match the supplied kwargs.
 
@@ -361,6 +390,9 @@ def _validate_grant_source_shape(  # noqa: PLR0913
             mission_deed_reward_line=mission_deed_reward_line,
             source_character_distinction=source_character_distinction,
             worship_rite_performance=worship_rite_performance,
+            kindling_situation=kindling_situation,
+            settling_rite=settling_rite,
+            reflection=reflection,
         )
         if value is None:
             msg = f"{source} source requires {name}= kwarg."
@@ -414,6 +446,13 @@ _SOURCE_REQUIRED_KWARG: dict[str, Callable[..., tuple[object | None, str]]] = {
     GainSource.WORSHIP_RITE: lambda **kw: (
         kw["worship_rite_performance"],
         "worship_rite_performance",
+    ),
+    GainSource.KINDLED_DEED: lambda **kw: (kw["kindling_situation"], "kindling_situation"),
+    # Both the rite and the reflection are required; naming the rite when either is missing
+    # keeps the one-value shape of this table (the constraint refuses a row with only one).
+    GainSource.EMBRACED_DEED: lambda **kw: (
+        kw["settling_rite"] if kw["reflection"] is not None else None,
+        "settling_rite and reflection",
     ),
 }
 
@@ -1049,6 +1088,49 @@ def _beseeched_level(
     return level_read
 
 
+def _kindled_level(
+    level: int, payer: ResonanceModel, kindled: Mapping[int, KindledStrengthTier] | None
+) -> int:
+    """Return ``level``, plus the pull levels of the payer's kindled strength (#5124).
+
+    ``pull_levels`` is in thread levels as a player reads them (a thread's displayed level,
+    like a skill's), so ten of them are one step of ``thread_level_multiplier``. That curve
+    dips below level 10, so a boost that would read lower than ``level`` is not applied: a
+    kindled payer never reads lower than an unkindled one (the guard ``payer_level_read`` has).
+    """
+    tier = kindled.get(payer.pk) if kindled else None
+    if tier is None:
+        return level
+    boosted = level + tier.pull_levels
+    return boosted if thread_level_multiplier(boosted) >= thread_level_multiplier(level) else level
+
+
+def pull_kindled_tiers(
+    character_sheet: CharacterSheet, participant: CombatParticipant | None = None
+) -> dict[int, KindledStrengthTier]:
+    """Resonance id -> its kindled strength tier, read in the surroundings a pull pays in (#5124).
+
+    A pull inside a round reads the round it is declared in; any other pull (a preview, a
+    scene cast) reads the character's live fight and mission, the same surroundings her
+    resonances panel reads. One read per pull, never per thread.
+    """
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+    from world.magic.services.kindling import (  # noqa: PLC0415
+        active_mission_for,
+        kindled_tiers,
+        kindling_context_for,
+    )
+
+    if participant is not None:
+        return kindled_tiers(
+            character_sheet,
+            resolution=CombatRoundContext(participant),
+            mission=active_mission_for(character_sheet),
+        )
+    context = kindling_context_for(character_sheet)
+    return kindled_tiers(character_sheet, resolution=context.resolution, mission=context.mission)
+
+
 def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; both target (#1831) and beseech (#1718) params are required
     threads: list[Thread],
     tier: int,
@@ -1059,6 +1141,7 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
     beseech_bonus: int = 0,
     character_sheet: CharacterSheet | None = None,
     payers: Mapping[int, ResonanceModel] | None = None,
+    kindled: Mapping[int, KindledStrengthTier] | None = None,
 ) -> list[ResolvedPullEffect]:
     """Resolve every (thread × effect_tier 0..tier) pair into ResolvedPullEffect rows.
 
@@ -1084,6 +1167,12 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
     ``payer_level_read``'s level (which feeds the ``min_thread_level`` gate and the
     multiplier), tier 0 only when the payer is the leading resonance, and nothing at all
     for a payer the thread holds no row for.
+
+    ``kindled`` (#5124) maps a resonance id to its kindled strength tier. A payer in it
+    reads the thread ``tier.pull_levels`` higher, beside the beseech boost: for this
+    resolution's multiplier only (so INTENSITY_BUMP and every scaled perk grow with it),
+    never written to the thread, never moving the ``min_thread_level`` gate or
+    ``source_thread_level``. A payer not in the map reads exactly as before.
     """
 
     # #2730: CAPABILITY_GRANT rows are curved at resolve time using the same
@@ -1103,7 +1192,11 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
         if level_read is None:
             continue
         multiplier = thread_level_multiplier(
-            _beseeched_level(t, level_read, beseech_bonus_thread_id, beseech_bonus)
+            _kindled_level(
+                _beseeched_level(t, level_read, beseech_bonus_thread_id, beseech_bonus),
+                payer,
+                kindled,
+            )
         )
         first_tier = 0 if payer.pk == t.resonance_id else 1
         for effect_tier in range(first_tier, tier + 1):
@@ -1345,6 +1438,7 @@ def preview_resonance_pull(  # noqa: PLR0913
     )
 
     in_combat = combat_encounter is not None
+    kindled = pull_kindled_tiers(character_sheet)
     resolved = resolve_pull_effects(
         threads,
         tier,
@@ -1352,6 +1446,7 @@ def preview_resonance_pull(  # noqa: PLR0913
         target=target,
         character_sheet=character_sheet,
         payers=payers,
+        kindled=kindled,
     )
     resolved = _fold_distinction_pull_bonus(
         resolved, character_sheet=character_sheet, threads=threads, payers=payers
@@ -1386,7 +1481,7 @@ def preview_resonance_pull(  # noqa: PLR0913
         burn=burn,
         per_thread=(
             _payer_options_per_thread(
-                character_sheet, tier, threads, in_combat=in_combat, target=target
+                character_sheet, tier, threads, in_combat=in_combat, target=target, kindled=kindled
             )
             if with_options
             else []
@@ -1394,13 +1489,14 @@ def preview_resonance_pull(  # noqa: PLR0913
     )
 
 
-def _payer_options_per_thread(
+def _payer_options_per_thread(  # noqa: PLR0913 - one preview's whole resolution context
     character_sheet: CharacterSheet,
     tier: int,
     threads: list[Thread],
     *,
     in_combat: bool,
     target: ObjectDB | None,
+    kindled: Mapping[int, KindledStrengthTier],
 ) -> list[ThreadPayerPreview]:
     """Every held resonance as a payer option for each pulled thread (#5123).
 
@@ -1409,7 +1505,9 @@ def _payer_options_per_thread(
     One thread's option is what paying with that resonance alone would cost and whether
     its balance covers it, the perks it would resolve (the payer's, at its level read) and
     the level they are read at. A resonance the thread holds no row for lists no perks and
-    reads the thread's own level.
+    reads the thread's own level. A kindled resonance's option carries its strength (#5124) and
+    its perks at the higher level that strength reads; ``level_read`` stays the thread's real
+    read, since players never see the pull levels.
     """
     each = get_pull_cost(tier, None).resonance_cost
     held = list(
@@ -1427,9 +1525,10 @@ def _payer_options_per_thread(
                     balance=cr.balance,
                     affordable=cr.balance >= each,
                     effects=_effects_if_paid_by(
-                        character_sheet, tier, thread, cr.resonance, in_combat, target
+                        character_sheet, tier, thread, cr.resonance, in_combat, target, kindled
                     ),
                     level_read=_option_level_read(thread, cr.resonance),
+                    kindled_strength=kindled.get(cr.resonance_id),
                 )
                 for cr in held
             ],
@@ -1445,6 +1544,7 @@ def _effects_if_paid_by(  # noqa: PLR0913 - one preview row's whole resolution c
     payer: ResonanceModel,
     in_combat: bool,
     target: ObjectDB | None,
+    kindled: Mapping[int, KindledStrengthTier],
 ) -> list[ResolvedPullEffect]:
     """What pulling ``thread`` paid by ``payer`` alone would deliver: its perks plus the
     distinction bonus on that payer, exactly as ``spend_resonance_for_pull`` resolves them."""
@@ -1456,6 +1556,7 @@ def _effects_if_paid_by(  # noqa: PLR0913 - one preview row's whole resolution c
         target=target,
         character_sheet=character_sheet,
         payers=payers,
+        kindled=kindled,
     )
     return _fold_distinction_pull_bonus(
         resolved, character_sheet=character_sheet, threads=[thread], payers=payers
@@ -1475,6 +1576,12 @@ _SNIPPET_KINDS_ON_COMBAT_ROW = frozenset(
 )
 
 
+def _kindled_rank(payer: ResonanceModel, kindled: Mapping[int, KindledStrengthTier] | None) -> int:
+    """The strength rank the payer drew with (#5124), 0 when it was not kindled."""
+    tier = kindled.get(payer.pk) if kindled else None
+    return tier.rank if tier is not None else 0
+
+
 def _persist_combat_pull(  # noqa: PLR0913
     *,
     ctx: PullActionContext,
@@ -1488,6 +1595,7 @@ def _persist_combat_pull(  # noqa: PLR0913
     burn_valuation: BurnValuation | None = None,
     burned_for: str = "",
     payers: Mapping[int, ResonanceModel] | None = None,
+    kindled: Mapping[int, KindledStrengthTier] | None = None,
 ) -> None:
     """Write the CombatPull + CombatPullResolvedEffect rows for a combat pull.
 
@@ -1520,7 +1628,10 @@ def _persist_combat_pull(  # noqa: PLR0913
     )
     CombatPullThread.objects.bulk_create(
         CombatPullThread(
-            pull=pull, thread=thread, paying_resonance_id=pull_payer(thread, payers).pk
+            pull=pull,
+            thread=thread,
+            paying_resonance_id=pull_payer(thread, payers).pk,
+            kindled_strength=_kindled_rank(pull_payer(thread, payers), kindled),
         )
         for thread in threads
     )
@@ -1734,6 +1845,7 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         anima = None
 
     in_combat = action_context.combat_encounter is not None
+    kindled = pull_kindled_tiers(character_sheet, action_context.participant)
     resolved = resolve_pull_effects(
         threads,
         tier,
@@ -1743,6 +1855,7 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         beseech_bonus=beseech_bonus,
         character_sheet=character_sheet,
         payers=payers,
+        kindled=kindled,
     )
     resolved = _fold_distinction_pull_bonus(
         resolved, character_sheet=character_sheet, threads=threads, payers=payers
@@ -1774,6 +1887,7 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
             burn_valuation=burn_valuation,
             burned_for=burned_for,
             payers=payers,
+            kindled=kindled,
         )
     # Debit only after persistence succeeded (mutates SharedMemoryModel-cached
     # instances in place).

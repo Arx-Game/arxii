@@ -145,6 +145,14 @@ class DriftCorrectionConfig(SharedMemoryModel):
         validators=[MaxValueValidator(100)],
         help_text="Percent of a deed's resonance grant that may be converted; 0 opens no offer.",
     )
+    disown_deed_percent = models.PositiveSmallIntegerField(
+        default=75,
+        validators=[MaxValueValidator(100)],
+        help_text=(
+            "Percent of a deed's resonance a rite converts at a full share when a player "
+            "Disowns that deed (#5124). A starting value for tuning."
+        ),
+    )
 
     class Meta:
         verbose_name = "Drift correction config"
@@ -201,7 +209,11 @@ class DriftCorrectionOutcomeShare(OutcomeTierAward):
 
 
 class DriftConversionOffer(SharedMemoryModel):
-    """A character's open chance to correct drift after a scene's deeds (one per scene)."""
+    """A character's one open chance to correct drift (#4733, one per character since #5124).
+
+    Opened by a main-affinity deed in a live scene, extended by later deeds (caps merge per
+    resonance), and open until the rite spends it. ``scene`` is where it first opened.
+    """
 
     character_sheet = models.ForeignKey(
         "arxii.CharacterSheet",
@@ -210,8 +222,11 @@ class DriftConversionOffer(SharedMemoryModel):
     )
     scene = models.ForeignKey(
         "arxii.Scene",
-        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="drift_conversion_offers",
+        help_text="The scene the offer first opened in.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -219,8 +234,8 @@ class DriftConversionOffer(SharedMemoryModel):
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
-                fields=["character_sheet", "scene"],
-                name="one_drift_conversion_offer_per_sheet_scene",
+                fields=["character_sheet"],
+                name="one_drift_conversion_offer_per_sheet",
             ),
         ]
 

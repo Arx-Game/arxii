@@ -94,27 +94,35 @@ export interface FuryTierOption {
   depth: number;
   control_surrendered: number;
   is_berserk: boolean;
-  /** The most intensity the tier can buy (best authored share), no anchor scaling. Server-side. */
+  /** The most intensity the tier can buy (best authored share), no strength scaling. Server-side. */
   full_intensity: number;
 }
 
-/** The most one Fury tier can buy under one anchor's scaling (#4738). */
-export interface FuryAnchorTierIntensity {
+/** The most one Fury tier can buy at one resonance's strength (#4738, #5124). */
+export interface FuryResonanceTierIntensity {
   tier_id: number;
   full_intensity: number;
 }
 
 /**
- * A bond/anchor eligible to cap fury commitment for a combat-cast technique (#1543).
- * Mirrors the backend AnchorOption serializer shape.
+ * A resonance the character can give in to for a combat-cast technique (#5124).
+ * Mirrors the backend FuryResonanceOption serializer shape.
  */
-export interface FuryAnchorOption {
+export interface FuryResonanceOption {
   id: number;
   name: string;
-  /** Pre-computed bond cap used for client-side tier gating. */
+  /** The kindled strength's name, the word the player reads. */
+  strength_name: string;
+  /** The control roll's name for the player, e.g. "Composure". */
+  control_check_name: string;
+  /** Pre-computed depth cap its strength allows, used for client-side tier gating. */
   provocation_cap: number;
-  /** Per tier, the full-share intensity scaled by this anchor's cap. */
-  tier_full_intensities: FuryAnchorTierIntensity[];
+  /** Per tier, the full-share intensity scaled by this resonance's strength. */
+  tier_full_intensities: FuryResonanceTierIntensity[];
+  /** The weakest strength's name, for "A faint passion goes only as far as ...". */
+  weakest_strength_name: string;
+  /** The deepest step the weakest strength reaches; blank when it reaches none. */
+  weakest_depth_name: string;
 }
 
 export type ActionCategory = 'physical' | 'social' | 'mental';
@@ -168,8 +176,8 @@ export interface PlayerAction {
   soulfray_warning?: SoulfrayWarningData | null;
   /** Available fury commitment tiers for combat-cast techniques (#1543). */
   available_fury_tiers?: FuryTierOption[];
-  /** Eligible fury anchors (bonds) that can cap fury commitment (#1543). */
-  eligible_fury_anchors?: FuryAnchorOption[];
+  /** Resonances the character can give in to, whose strength caps the fury tier (#5124). */
+  eligible_fury_resonances?: FuryResonanceOption[];
   /**
    * Whether this technique is a readied ultimate for the current Audere/Audere
    * Majora combat declaration (#4098). Only ever true inside a COMBAT

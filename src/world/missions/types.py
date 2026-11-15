@@ -183,6 +183,19 @@ class TrackView:
 
 
 @dataclass(frozen=True)
+class KindledFeed:
+    """One kindled resonance an option would feed (#5124): names only, never an amount.
+
+    ``strength_name`` is the staff-authored word for the kindled strength; ``reason`` is the
+    line the player reads for why it is kindled here.
+    """
+
+    resonance_name: str
+    strength_name: str
+    reason: str
+
+
+@dataclass(frozen=True)
 class BeatOption:
     """One actionable option on the current beat, as the player sees it (#885).
 
@@ -201,6 +214,8 @@ class BeatOption:
     # #4333: the option rolls a check, so a being's favor may be invoked on it
     # (False for branches, encounters, external acts and auto-succeeding approaches).
     rolls_check: bool = False
+    # #5124: the viewer's kindled resonances this option would feed; viewer-owned options only.
+    feeds: tuple[KindledFeed, ...] = ()
 
 
 @dataclass(frozen=True)

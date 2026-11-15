@@ -30,7 +30,9 @@ from world.areas.positioning.models import Position
 from world.character_sheets.models import CharacterSheet
 from world.combat.constants import (
     DuelChallengeStatus,
+    EncounterType,
     OpponentTier,
+    ParticipantStatus,
 )
 from world.combat.filters import (
     CombatEncounterFilter,
@@ -69,6 +71,7 @@ from world.combat.serializers import (
     ConsiderReadingSerializer,
     CoverSerializer,
     CreatureTemplateSerializer,
+    DigDeepSerializer,
     DuelChallengeSerializer,
     EncounterDetailSerializer,
     EncounterListSerializer,
@@ -80,6 +83,9 @@ from world.combat.serializers import (
     OpponentStatBlockSerializer,
     OpponentTargetSerializer,
     ProposeLethalDuelSerializer,
+    RallyResonanceChoiceSerializer,
+    RallyResonancesQuerySerializer,
+    RallySerializer,
     RemoveOpponentSerializer,
     RemoveParticipantSerializer,
     RoundActionSerializer,
@@ -99,6 +105,7 @@ from world.combat.services import (
     scan_round_combos,
     update_encounter_settings,
 )
+from world.combat.services.declarations.rally import rally_resonance_choices
 from world.conditions.models import ConditionInstance
 from world.covenants.models import CovenantRole
 from world.gm.permissions import IsGMOrStaff
@@ -132,6 +139,12 @@ _ERR_INVALID_STATUS = "Encounter is not in a valid status for this action."
 _ERR_ALREADY_COMPLETED = "Encounter is already completed."
 _ERR_COMBO_UPGRADE = "Cannot upgrade to the requested combo."
 _ERR_REMOVE_OPPONENT = "Opponent is not active in this encounter."
+
+
+def _resonance_kwargs(serializer: Serializer) -> dict[str, int]:
+    """The ``resonance_id`` a Rally or Dig deep request names (#5124), as dispatch kwargs."""
+    resonance_id = serializer.validated_data.get("resonance_id")
+    return {"resonance_id": resonance_id} if resonance_id is not None else {}
 
 
 class DuelChallengeViewSet(ReadOnlyModelViewSet):
@@ -493,6 +506,7 @@ class CombatEncounterViewSet(ModelViewSet):
             "use_item",
             "leave",
             "rally",
+            "rally_resonances",
             "dig_deep",
             "demoralize",
             "taunt",
@@ -1232,6 +1246,7 @@ class CombatEncounterViewSet(ModelViewSet):
             )
         return self._serialize_encounter(request, encounter)
 
+    @extend_schema(request=RallySerializer, responses=EncounterDetailSerializer)
     @action(detail=True, methods=[HTTPMethod.POST])
     def rally(self, request: Request, pk: int | None = None) -> Response:
         """Declare a rallying maneuver to inspire an ally (#2015).
@@ -1245,14 +1260,14 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_NOT_PARTICIPANT},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        serializer = CoverSerializer(data=request.data)
+        serializer = RallySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         ally_id = serializer.validated_data.get("ally_participant_id")
         ally = get_object_or_404(CombatParticipant, pk=ally_id, encounter=encounter)
         result = self._dispatch_combat_action(
             participant.character_sheet.character,
             "combat_rally",
-            {"ally_participant_id": ally.pk},
+            {"ally_participant_id": ally.pk, **_resonance_kwargs(serializer)},
         )
         if not self._action_succeeded(result):
             return Response(
@@ -1261,6 +1276,49 @@ class CombatEncounterViewSet(ModelViewSet):
             )
         return self._serialize_encounter(request, encounter)
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter("ally", int, required=True, description="The ally's participant id.")
+        ],
+        responses=RallyResonanceChoiceSerializer(many=True),
+    )
+    @action(
+        detail=True,
+        methods=[HTTPMethod.GET],
+        url_path="rally-resonances",
+        # One ally's resonances: a short list bounded by what one character holds.
+        pagination_class=None,
+        filter_backends=[],
+    )
+    def rally_resonances(self, request: Request, pk: int | None = None) -> Response:
+        """The resonances of one ally a Rally may name, and whether each is kindled (#5124).
+
+        Names and a kindled flag, never how strongly. Read for the ally the rallier has
+        picked, so the polled encounter payload carries no kindling evaluation. Only an active
+        fighter may ask, only about another active fighter, and never in a PvP duel, where
+        the other fighter is the opponent. A finished fight returns nothing, as a duel does.
+        """
+        encounter = self.get_object()
+        participant = self._get_participant(request, encounter)
+        if participant is None or participant.status != ParticipantStatus.ACTIVE:
+            return Response({"detail": _ERR_NOT_PARTICIPANT}, status=status.HTTP_403_FORBIDDEN)
+        # A lookup argument of one detail action, not a list filter.
+        query = RallyResonancesQuerySerializer(data=request.query_params)  # noqa: USE_FILTERSET
+        query.is_valid(raise_exception=True)
+        ally = get_object_or_404(
+            CombatParticipant,
+            pk=query.validated_data["ally"],
+            encounter=encounter,
+            status=ParticipantStatus.ACTIVE,
+        )
+        finished = encounter.status == RoundStatus.COMPLETED
+        if ally.pk == participant.pk or finished or encounter.encounter_type == EncounterType.DUEL:
+            return Response([])
+        return Response(
+            RallyResonanceChoiceSerializer(rally_resonance_choices(ally), many=True).data
+        )
+
+    @extend_schema(request=DigDeepSerializer, responses=EncounterDetailSerializer)
     @action(detail=True, methods=[HTTPMethod.POST], url_path="dig-deep")
     def dig_deep(self, request: Request, pk: int | None = None) -> Response:
         """Dig deep: roll resolve to raise your own intensity (#4738).
@@ -1274,9 +1332,12 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_NOT_PARTICIPANT},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        serializer = DigDeepSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         result = self._dispatch_combat_action(
             participant.character_sheet.character,
             "combat_dig_deep",
+            _resonance_kwargs(serializer),
         )
         if not self._action_succeeded(result):
             detail = result.detail.message if isinstance(result.detail, ActionResult) else ""

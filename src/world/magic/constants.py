@@ -345,6 +345,11 @@ class GainSource(models.TextChoices):
     # #5123: the resonance seeded from a new character's creation points. No typed
     # source FK (like STAFF_GRANT); the creation seed writes its own lifetime-only path.
     CHARACTER_CREATION = "CHARACTER_CREATION", "Character creation"
+    # #5124: a deed a kindled resonance fed (typed source: the KindlingSituation that held),
+    # and an embraced deed that a settling rite grew (typed sources: the rite and the
+    # reflection). Embraced deeds are not deeds: they re-count one already done.
+    KINDLED_DEED = "KINDLED_DEED", "Kindled deed"
+    EMBRACED_DEED = "EMBRACED_DEED", "Embraced deed"
 
 
 # ADR-0041 total classification of GainSource: which sources are eligible for the
@@ -392,6 +397,10 @@ NON_ACCELERATED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.CORRUPTION_CLEANSING,
         # #5123: seeded from the character's own creation picks, never witnessed.
         GainSource.CHARACTER_CREATION,
+        # #5124: a kindled deed earns through the strength tier's earn_percent, and an
+        # embraced deed re-counts a deed already counted; neither takes the distinction rate.
+        GainSource.KINDLED_DEED,
+        GainSource.EMBRACED_DEED,
     }
 )
 
@@ -413,6 +422,7 @@ DEED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.PROJECT_CONTRIBUTION,
         GainSource.COMBO_DISCOVERY,
         GainSource.WORSHIP_RITE,
+        GainSource.KINDLED_DEED,
     }
 )
 
@@ -432,6 +442,7 @@ NON_DEED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.SINEATING,
         GainSource.CORRUPTION_CLEANSING,
         GainSource.CHARACTER_CREATION,
+        GainSource.EMBRACED_DEED,
     }
 )
 
@@ -612,6 +623,39 @@ class TechniqueReach(models.TextChoices):
 class FuryCheckTrait(models.TextChoices):
     COMPOSURE = "composure", "Composure"
     WILLPOWER = "willpower", "Willpower"
+
+
+class ReflectionChoice(models.TextChoices):
+    """What a player's writing does with a deed or an unsettling resonance (#5124)."""
+
+    EMBRACE = "EMBRACE", "Embrace"
+    DISOWN = "DISOWN", "Disown"
+
+
+class ReflectionTargetKind(models.TextChoices):
+    """What a "Reflecting on" row can name (#5124): one deed, or the unsettling resonance."""
+
+    DEED = "deed", "Deed"
+    RESONANCE = "resonance", "Resonance"
+
+
+class KindlingSource(models.TextChoices):
+    """How a stored ``Kindling`` row came to be (#5124): a Rally or a GM."""
+
+    RALLY = "RALLY", "Rally"
+    GM = "GM", "GM"
+
+
+class KindlingActKind(models.TextChoices):
+    """What kind of act a ``KindlingAct`` describes (#5124), for the situations that feed on it."""
+
+    ATTACK = "attack", "Attack"
+    DEFEND = "defend", "Defend"
+    TECHNIQUE = "technique", "Technique"
+    AID = "aid", "Aid"
+    MISSION_OPTION = "mission_option", "Mission option"
+    SOCIAL = "social", "Social"
+    OTHER = "other", "Other"
 
 
 # PLACEHOLDER anima band labels (#1446 bundle 2) — Apostate rewrite pending.

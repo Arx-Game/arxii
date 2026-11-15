@@ -238,9 +238,10 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     A caller that already read the ``SurgeTuning`` passes it as ``tuning`` so it is not
     looked up again for each participant; omitted, it is looked up by ``trigger_kind``.
 
-    ``vow_scaled`` says ``intensity_scale`` is the giver's Rally surge intensity (#4783, was
-    #4739): the extra over the band's unscaled intensity (0 at or below 100%) is stored on
-    the record as ``vow_scaling`` and the roll line says ``surge +N``.
+    ``vow_scaled`` says ``intensity_scale`` carries scaling to show: the giver's Rally surge
+    intensity (#4783, was #4739) or a kindled resonance (#5124). The extra over the band's
+    unscaled intensity (0 at or below 100%) is stored on the record as ``vow_scaling`` and the
+    roll line says ``surge +N``.
 
     ``cause`` is the line the surged player, GMs and staff read for this surge (who taunted
     or rallied, or the wound); it is stored on the record and never shown to others.

@@ -21,6 +21,8 @@ interface RichTextInputProps {
   className?: string;
   leftSlot?: React.ReactNode;
   rightSlot?: React.ReactNode;
+  /** Rendered inside the box under the text, e.g. the pose composer's "Reflecting on" row. */
+  footer?: React.ReactNode;
   ghostText?: string;
   autocompleteItems?: Array<{ name: string; thumbnail_url?: string | null }>;
   /** Defaults true for legacy command surfaces; narrative composer opts into Cmd/Ctrl+Enter. */
@@ -98,6 +100,7 @@ export function RichTextInput({
   className,
   leftSlot,
   rightSlot,
+  footer,
   ghostText,
   autocompleteItems,
   submitOnEnter = true,
@@ -433,6 +436,7 @@ export function RichTextInput({
           />
         )}
       </div>
+      {footer}
     </div>
   );
 }

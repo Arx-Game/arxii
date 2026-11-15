@@ -38,6 +38,7 @@ from world.missions.models import (
     MissionRewardQueue,
     MissionSupportDeclaration,
     MissionTemplate,
+    MissionTheme,
     MissionTrackProgress,
 )
 
@@ -55,6 +56,18 @@ class MissionCategoryFactory(DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"mission-category-{n}")
     description = factory.Faker("sentence")
+
+
+class MissionThemeFactory(DjangoModelFactory):
+    """Factory for the MissionTheme lookup model (#5124)."""
+
+    class Meta:
+        model = MissionTheme
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"mission-theme-{n}")
+    description = factory.Faker("sentence")
+    player_text = factory.LazyAttribute(lambda o: f"This mission is about {o.name}.")
 
 
 # ---------------------------------------------------------------------------

@@ -167,6 +167,51 @@ def _contribution_pull_bonuses(
     return bonus(EffectKind.INTENSITY_BUMP), [line] if flat else []
 
 
+def _award_clash_contribution(
+    clash: Clash,
+    character_sheet: CharacterSheet,
+    participant: CombatParticipant | None,
+    outcome: CheckOutcome,
+    technique: Technique,
+) -> None:
+    """Earn what a clash contribution feeds (#5124), scaled by its roll.
+
+    Contributing to a lock clash the NPC holds someone in is freeing them: an aid aimed at
+    the held PC. Any other contribution is a technique act.
+    """
+    from world.combat.constants import ClashFlavor, LockPcRole  # noqa: PLC0415
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+    from world.magic.constants import KindlingActKind  # noqa: PLC0415
+    from world.magic.services.kindling import (  # noqa: PLC0415
+        act_label,
+        award_kindled_deeds,
+        sheet_name,
+    )
+    from world.magic.types.kindling import KindlingAct  # noqa: PLC0415
+
+    freeing = (
+        clash.flavor == ClashFlavor.LOCK
+        and clash.lock_pc_role == LockPcRole.ESCAPING
+        and clash.initiator is not None
+        and clash.initiator.pk != character_sheet.pk
+    )
+    award_kindled_deeds(
+        character_sheet,
+        act=KindlingAct(
+            kind=KindlingActKind.TECHNIQUE,
+            target=clash.initiator if freeing else None,
+            aids=freeing,
+            label=(
+                act_label("Freed", sheet_name(character_sheet, clash.initiator))
+                if freeing
+                else act_label(technique.name)
+            ),
+        ),
+        outcome=outcome,
+        resolution=CombatRoundContext(participant) if participant is not None else None,
+    )
+
+
 def commit_to_clash(  # noqa: PLR0913, PLR0915
     *,
     character_sheet: CharacterSheet,
@@ -400,6 +445,7 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
         msg = "commit_to_clash: CheckResult has no outcome — check pipeline returned empty result."
         raise ValueError(msg)
     check_outcome: CheckOutcome = check_result.outcome
+    _award_clash_contribution(clash, character_sheet, participant, check_outcome, technique)
 
     # 7. Convert outcome to progress delta (power-scaled formula).
     progress_delta = outcome_to_delta(

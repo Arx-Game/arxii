@@ -167,7 +167,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     character_sheet: CharacterSheet | None = None,
     strain_commitment: int = 0,
     fury_commitment: FuryTier | None = None,
-    fury_anchor: CharacterSheet | None = None,
+    fury_resonance: Resonance | None = None,
     cast_pull: CastPullDeclaration | None = None,
     confirm_soulfray_risk: bool = True,
     apply_variant: bool = True,
@@ -188,7 +188,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
         strain_commitment: Extra anima committed beyond the technique baseline,
             forwarded to ``use_technique`` so anima costs are tallied correctly.
         fury_commitment: Optional FuryTier the player declared.
-        fury_anchor: CharacterSheet of the anchor character (bond caps the tier).
+        fury_resonance: the kindled Resonance she gives in to (its strength caps the tier).
 
     Returns the ``EnhancedSceneActionResult`` (``None`` when ``use_technique``
     returns ``confirmed=False`` — soulfray gate not confirmed), the cast-level
@@ -231,7 +231,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     fury = fury_cast_for(
         character=character,
         fury_commitment=fury_commitment,
-        fury_anchor=fury_anchor,
+        fury_resonance=fury_resonance,
         source_technique=technique,
     )
 
@@ -537,7 +537,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
     technique: Technique,
     strain_commitment: int,
     fury_commitment: FuryTier | None = None,
-    fury_anchor: CharacterSheet | None = None,
+    fury_resonance: Resonance | None = None,
     cast_pull: CastPullDeclaration | None = None,
     fizzle_note: str | None = None,
     supplied_personas: list[Persona] | None = None,
@@ -588,7 +588,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
         character_sheet=caster_persona.character_sheet,
         strain_commitment=strain_commitment,
         fury_commitment=fury_commitment,
-        fury_anchor=fury_anchor,
+        fury_resonance=fury_resonance,
         cast_pull=cast_pull,
         confirm_soulfray_risk=confirm_soulfray_risk,
         apply_variant=not use_base_form,
@@ -598,6 +598,18 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
     # Soulfray gate: use_technique returned unconfirmed — propagate without resolving.
     if result is None:
         return None, None, None
+
+    # #5124: a cast on a person earns what it feeds, scaled by the cast's own roll. This one
+    # seam covers the immediate cast and the consent-accepted one.
+    if result.action_resolution.main_result is not None:
+        from world.magic.services.kindling import award_scene_act  # noqa: PLC0415
+
+        award_scene_act(
+            caster_persona.character_sheet,
+            target_persona.character_sheet if target_persona is not None else None,
+            technique,
+            result.action_resolution.main_result.check_result.outcome,
+        )
 
     # Apply technique-authored conditions to resolved targets.
     success_level = (
@@ -898,7 +910,7 @@ def resolve_accepted_cast(
                 technique=action_request.technique,
                 strain_commitment=action_request.strain_commitment,
                 fury_commitment=action_request.fury_commitment,
-                fury_anchor=action_request.fury_anchor,
+                fury_resonance=action_request.fury_resonance,
                 cast_pull=pull,
                 fizzle_note=note,
                 confirm_soulfray_risk=True,  # consent-accept always confirms soulfray
@@ -1062,7 +1074,7 @@ def _route_filtered_group_cast(  # noqa: PLR0913
     technique: Technique,
     strain_commitment: int,
     fury_commitment: FuryTier | None,
-    fury_anchor: CharacterSheet | None,
+    fury_resonance: Resonance | None,
     cast_pull: CastPullDeclaration | None,
     supplied_personas: list[Persona],
     confirm_soulfray_risk: bool = True,
@@ -1099,7 +1111,7 @@ def _route_filtered_group_cast(  # noqa: PLR0913
         technique=technique,
         strain_commitment=strain_commitment,
         fury_commitment=fury_commitment,
-        fury_anchor=fury_anchor,
+        fury_resonance=fury_resonance,
         cast_pull=cast_pull,
         supplied_personas=supplied_personas,
         confirm_soulfray_risk=confirm_soulfray_risk,
@@ -1119,7 +1131,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
     technique: Technique,
     strain_commitment: int,
     fury_commitment: FuryTier | None,
-    fury_anchor: CharacterSheet | None,
+    fury_resonance: Resonance | None,
     cast_pull: CastPullDeclaration | None,
     confirm_soulfray_risk: bool = True,
     soulfray_consented: bool | None = None,
@@ -1143,7 +1155,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
             technique=technique,
             strain_commitment=strain_commitment,
             fury_commitment=fury_commitment,
-            fury_anchor=fury_anchor,
+            fury_resonance=fury_resonance,
             cast_pull=cast_pull,
             confirm_soulfray_risk=confirm_soulfray_risk,
             soulfray_consented=soulfray_consented,
@@ -1172,7 +1184,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
             technique=technique,
             strain_commitment=strain_commitment,
             fury_commitment=fury_commitment,
-            fury_anchor=fury_anchor,
+            fury_resonance=fury_resonance,
             cast_pull=cast_pull,
             confirm_soulfray_risk=confirm_soulfray_risk,
             originated_as_entrance=originated_as_entrance,
@@ -1185,7 +1197,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
         technique=technique,
         strain_commitment=strain_commitment,
         fury_commitment=fury_commitment,
-        fury_anchor=fury_anchor,
+        fury_resonance=fury_resonance,
         cast_pull=cast_pull,
         confirm_soulfray_risk=confirm_soulfray_risk,
         soulfray_consented=soulfray_consented,
@@ -1204,7 +1216,7 @@ def request_technique_cast(  # noqa: PLR0913
     technique: Technique,
     strain_commitment: int = 0,
     fury_commitment: FuryTier | None = None,
-    fury_anchor: CharacterSheet | None = None,
+    fury_resonance: Resonance | None = None,
     cast_pull: CastPullDeclaration | None = None,
     supplied_personas: list[Persona] | None = None,
     confirm_soulfray_risk: bool = True,
@@ -1224,7 +1236,7 @@ def request_technique_cast(  # noqa: PLR0913
         technique: The technique being cast (must be castable standalone).
         strain_commitment: Extra anima committed beyond the technique baseline.
         fury_commitment: Optional FuryTier the player declared.
-        fury_anchor: CharacterSheet of the anchor character (bond caps the tier).
+        fury_resonance: the kindled Resonance she gives in to (its strength caps the tier).
         cast_pull: Optional declared thread pull. Charged in-line on the
             immediate path; persisted as a ``SceneActionPullDeclaration`` on the
             benign consent path; rejected on hostile casts (combat pulls go
@@ -1321,7 +1333,7 @@ def request_technique_cast(  # noqa: PLR0913
             technique=technique,
             strain_commitment=strain_commitment,
             fury_commitment=fury_commitment,
-            fury_anchor=fury_anchor,
+            fury_resonance=fury_resonance,
             cast_pull=cast_pull,
             supplied_personas=supplied_personas,
             confirm_soulfray_risk=confirm_soulfray_risk,
@@ -1345,7 +1357,7 @@ def request_technique_cast(  # noqa: PLR0913
             technique=technique,
             strain_commitment=strain_commitment,
             fury_commitment=fury_commitment,
-            fury_anchor=fury_anchor,
+            fury_resonance=fury_resonance,
             cast_pull=cast_pull,
             confirm_soulfray_risk=confirm_soulfray_risk,
             soulfray_consented=soulfray_consented,
@@ -1363,7 +1375,7 @@ def request_technique_cast(  # noqa: PLR0913
         technique=technique,
         strain_commitment=strain_commitment,
         fury_commitment=fury_commitment,
-        fury_anchor=fury_anchor,
+        fury_resonance=fury_resonance,
         cast_pull=cast_pull,
         confirm_soulfray_risk=confirm_soulfray_risk,
         soulfray_consented=soulfray_consented,
@@ -1383,7 +1395,7 @@ def _create_cast_request(  # noqa: PLR0913
     status: str,
     strain_commitment: int = 0,
     fury_commitment: FuryTier | None = None,
-    fury_anchor: CharacterSheet | None = None,
+    fury_resonance: Resonance | None = None,
     resolved_at: datetime | None = None,
     originated_as_entrance: bool = False,
     cast_openly: bool = False,
@@ -1403,7 +1415,7 @@ def _create_cast_request(  # noqa: PLR0913
         status=status,
         strain_commitment=strain_commitment,
         fury_commitment=fury_commitment,
-        fury_anchor=fury_anchor,
+        fury_resonance=fury_resonance,
         resolved_at=resolved_at,
         originated_as_entrance=originated_as_entrance,
         cast_openly=cast_openly,
@@ -1470,7 +1482,7 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
     technique: Technique,
     strain_commitment: int,
     fury_commitment: FuryTier | None = None,
-    fury_anchor: CharacterSheet | None = None,
+    fury_resonance: Resonance | None = None,
     cast_pull: CastPullDeclaration | None = None,
     confirm_soulfray_risk: bool = True,  # noqa: ARG001 — resolution deferred to accept; kept for signature symmetry
     originated_as_entrance: bool = False,
@@ -1490,7 +1502,7 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
             status=ActionRequestStatus.PENDING,
             strain_commitment=strain_commitment,
             fury_commitment=fury_commitment,
-            fury_anchor=fury_anchor,
+            fury_resonance=fury_resonance,
             originated_as_entrance=originated_as_entrance,
             cast_openly=cast_openly,
         )
@@ -1580,7 +1592,7 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
     technique: Technique,
     strain_commitment: int = 0,
     fury_commitment: FuryTier | None = None,
-    fury_anchor: CharacterSheet | None = None,
+    fury_resonance: Resonance | None = None,
     cast_pull: CastPullDeclaration | None = None,
     supplied_personas: list[Persona] | None = None,
     confirm_soulfray_risk: bool = True,
@@ -1622,7 +1634,7 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
             status=ActionRequestStatus.PENDING,
             strain_commitment=strain_commitment,
             fury_commitment=fury_commitment,
-            fury_anchor=fury_anchor,
+            fury_resonance=fury_resonance,
             cast_openly=cast_openly,
         )
         result, power_ledger, pose = _resolve_and_pose_cast(
@@ -1633,7 +1645,7 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
             technique=technique,
             strain_commitment=strain_commitment,
             fury_commitment=fury_commitment,
-            fury_anchor=fury_anchor,
+            fury_resonance=fury_resonance,
             cast_pull=cast_pull,
             supplied_personas=supplied_personas,
             confirm_soulfray_risk=confirm_soulfray_risk,

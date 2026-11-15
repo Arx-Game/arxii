@@ -315,12 +315,11 @@ export type EntryFlourishRespondRequest = components['schemas']['EntryFlourishRe
 export type EntryFlourishResult = components['schemas']['EntryFlourishResult'];
 
 // ---------------------------------------------------------------------------
-// Drift conversion offers, #4733
+// The open chance to atone (#4733) and the rite of settling (#5124)
 // ---------------------------------------------------------------------------
 
 export type DriftConversionOffer = components['schemas']['DriftConversionOffer'];
 export type DriftConversionCap = components['schemas']['DriftConversionCap'];
-export type DriftSourceOption = components['schemas']['DriftSourceOption'];
 export type ThreadResonanceOptions = components['schemas']['ThreadResonanceOptions'];
 export type ThreadResonanceOption = components['schemas']['ThreadResonanceOption'];
 export type ConversionType = components['schemas']['ConversionTypeEnum'];
@@ -328,11 +327,12 @@ export type DriftQualifyingComponent = components['schemas']['DriftQualifyingCom
 export type PaginatedDriftConversionOfferList =
   components['schemas']['PaginatedDriftConversionOfferList'];
 
-// Bodies for POST /api/magic/drift-correction/convert/ and /decline/ + results.
-export type DriftCorrectionConvertRequest = components['schemas']['DriftCorrectionConvertRequest'];
-export type DriftCorrectionDeclineRequest = components['schemas']['DriftCorrectionDeclineRequest'];
-export type DriftCorrectionResult = components['schemas']['DriftCorrectionResult'];
-export type DriftCorrectionDeclined = components['schemas']['DriftCorrectionDeclined'];
+// GET and POST /api/magic/settling-rite/: what the rite would take, and its result.
+export type SettlingRiteReading = components['schemas']['SettlingRiteReading'];
+export type RiteReflection = components['schemas']['RiteReflection'];
+export type RiteOffering = components['schemas']['RiteOffering'];
+export type SettlingRitePerformRequest = components['schemas']['SettlingRitePerformRequest'];
+export type SettlingRiteResult = components['schemas']['SettlingRiteResult'];
 
 // ---------------------------------------------------------------------------
 // Audere offers, #873
@@ -746,3 +746,17 @@ export interface TrainTechniqueResult {
 export type ManifestChoice = components['schemas']['ManifestChoice'];
 /** One option: label, whether its bond holds, and why not when it does not. */
 export type ManifestOptionChoice = components['schemas']['ManifestOptionChoice'];
+
+// ---------------------------------------------------------------------------
+// Your resonances (#5124): what is kindled, how strongly and why.
+// ---------------------------------------------------------------------------
+
+/** One resonance the character holds: kindled or not, the strength word, the reasons. */
+export type KindledResonance = components['schemas']['KindledResonance'];
+
+// ---------------------------------------------------------------------------
+// Reflections (#5124): the "Reflecting on" row on a pose or a journal entry.
+// ---------------------------------------------------------------------------
+
+/** One thing a pose or entry can reflect on: a kindled deed, or the unsettling resonance. */
+export type ReflectionOption = components['schemas']['ReflectionOption'];

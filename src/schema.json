@@ -9455,8 +9455,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EncounterDetailRequest'
-        required: true
+              $ref: '#/components/schemas/DigDeepRequest'
       security:
       - cookieAuth: []
       responses:
@@ -9796,7 +9795,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EncounterDetailRequest'
+              $ref: '#/components/schemas/RallyRequest'
         required: true
       security:
       - cookieAuth: []
@@ -9806,6 +9805,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EncounterDetail'
+          description: ''
+  /api/combat/{id}/rally-resonances/:
+    get:
+      operationId: combat_rally_resonances_list
+      description: |-
+        The resonances of one ally a Rally may name, and whether each is kindled (#5124).
+
+        Names and a kindled flag, never how strongly. Read for the ally the rallier has
+        picked, so the polled encounter payload carries no kindling evaluation. Only an active
+        fighter may ask, only about another active fighter, and never in a PvP duel, where
+        the other fighter is the opponent. A finished fight returns nothing, as a duel does.
+      parameters:
+      - in: query
+        name: ally
+        schema:
+          type: integer
+        description: The ally's participant id.
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RallyResonanceChoice'
           description: ''
   /api/combat/{id}/ready/:
     post:
@@ -22161,34 +22196,6 @@ paths:
       responses:
         '204':
           description: No response body
-  /api/magic/character-auras/{id}/accept/:
-    post:
-      operationId: magic_character_auras_accept_create
-      description: |-
-        Accept the changes to the aura: settle who the character has become (#5123).
-
-        Dispatches ``AcceptAuraChangeAction`` (the same action telnet ``aura accept`` runs)
-        for the character the aura belongs to. ``get_object`` finds the auras of characters
-        the requester plays and, for staff, every aura, so staff may accept for any
-        character. Refused with the action's own sentence while the character is not
-        unsettled.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-        required: true
-      tags:
-      - magic
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AcceptAuraResponse'
-          description: ''
   /api/magic/character-auras/{id}/link-glimpse-distinction/:
     post:
       operationId: magic_character_auras_link_glimpse_distinction_create
@@ -22885,60 +22892,17 @@ paths:
                 items:
                   $ref: '#/components/schemas/DramaticMomentType'
           description: ''
-  /api/magic/drift-correction/convert/:
-    post:
-      operationId: magic_drift_correction_convert_create
-      description: Dispatch the rite through its action (telnet + web converge).
-      tags:
-      - magic
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DriftCorrectionConvertRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DriftCorrectionResult'
-          description: ''
-  /api/magic/drift-correction/decline/:
-    post:
-      operationId: magic_drift_correction_decline_create
-      description: Dispatch the decline through its action.
-      tags:
-      - magic
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DriftCorrectionDeclineRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DriftCorrectionDeclined'
-          description: ''
   /api/magic/drift-correction/pending/:
     get:
       operationId: magic_drift_correction_pending_list
       description: |-
-        Read-only inbox of open drift conversion offers (#4733).
+        Read-only inbox of the caller's open chances to atone (#4733, one per character, #5124).
 
         GET /api/magic/drift-correction/pending/
         GET /api/magic/drift-correction/pending/{id}/
 
-        Scoped to the authenticated user's character sheets (active tenures), and to offers
-        whose scene has not finished, the same rule telnet's ``aura`` uses. A finish route
-        that skips ``Scene.finish_scene`` can leave an offer row behind; it is never listed.
+        Scoped to the authenticated user's character sheets (active tenures). A chance stays open
+        until the rite of settling spends it, so a finished scene hides nothing.
       parameters:
       - name: page
         required: false
@@ -22967,14 +22931,13 @@ paths:
     get:
       operationId: magic_drift_correction_pending_retrieve
       description: |-
-        Read-only inbox of open drift conversion offers (#4733).
+        Read-only inbox of the caller's open chances to atone (#4733, one per character, #5124).
 
         GET /api/magic/drift-correction/pending/
         GET /api/magic/drift-correction/pending/{id}/
 
-        Scoped to the authenticated user's character sheets (active tenures), and to offers
-        whose scene has not finished, the same rule telnet's ``aura`` uses. A finish route
-        that skips ``Scene.finish_scene`` can leave an offer row behind; it is never listed.
+        Scoped to the authenticated user's character sheets (active tenures). A chance stays open
+        until the rite of settling spends it, so a finished scene hides nothing.
       parameters:
       - in: path
         name: id
@@ -23431,6 +23394,35 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/magic/kindled-resonances/:
+    get:
+      operationId: magic_kindled_resonances_list
+      description: Each resonance a character holds, kindled or not, with the strength
+        word and reasons.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedKindledResonanceList'
+          description: ''
   /api/magic/manifest-choices/:
     get:
       operationId: magic_manifest_choices_list
@@ -24013,6 +24005,35 @@ paths:
                 items:
                   $ref: '#/components/schemas/ProgressionStage'
           description: ''
+  /api/magic/reflectables/:
+    get:
+      operationId: magic_reflectables_list
+      description: What the requester's character can reflect on, as the "Reflecting
+        on" row's options.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedReflectionOptionList'
+          description: ''
   /api/magic/resonance-grants/:
     get:
       operationId: magic_resonance_grants_list
@@ -24065,8 +24086,10 @@ paths:
           - DISTINCTION
           - DRAMATIC_MOMENT
           - DRIFT_CORRECTION
+          - EMBRACED_DEED
           - ENTRY_FLOURISH
           - FALL_CONVERSION
+          - KINDLED_DEED
           - MISSION_REPORT
           - MISSION_REWARD
           - OUTFIT_TRICKLE
@@ -24111,6 +24134,8 @@ paths:
           * `CORRUPTION_CLEANSING` - Corruption cleansing payout
           * `SINEATING` - Sineating payout
           * `CHARACTER_CREATION` - Character creation
+          * `KINDLED_DEED` - Kindled deed
+          * `EMBRACED_DEED` - Embraced deed
       tags:
       - magic
       security:
@@ -24897,6 +24922,55 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SceneEntryEndorsement'
+          description: ''
+  /api/magic/settling-rite/:
+    get:
+      operationId: magic_settling_rite_retrieve
+      description: |-
+        The rite of settling (#5124): read what it would take, and perform it.
+
+        GET  /api/magic/settling-rite/?character_sheet=<id>
+            The character's waiting reflections, the carried items that count as the offering,
+            and whether the rite is set up. Only the character's own player may read it.
+        POST /api/magic/settling-rite/  {character_sheet_id, component_ids}
+            Dispatches ``PerformSettlingRiteAction`` for that character: one offering, one roll,
+            every waiting reflection. A refusal is a 400 ``{detail}``.
+      parameters:
+      - in: query
+        name: character_sheet
+        schema:
+          type: integer
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlingRiteReading'
+          description: ''
+    post:
+      operationId: magic_settling_rite_create
+      description: Dispatch the rite through its action (telnet + web converge).
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettlingRitePerformRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlingRiteResult'
           description: ''
   /api/magic/signatures/:
     get:
@@ -45682,18 +45756,6 @@ paths:
           description: ''
 components:
   schemas:
-    AcceptAuraResponse:
-      type: object
-      description: 'What accepting the changes to the aura answers: the line told,
-        and the aura as it now is.'
-      properties:
-        detail:
-          type: string
-        aura:
-          $ref: '#/components/schemas/CharacterAura'
-      required:
-      - aura
-      - detail
     AcceptSoulTetherRequest:
       type: object
       description: |-
@@ -47082,29 +47144,6 @@ components:
         display_name:
           type: string
           maxLength: 100
-    AnchorOption:
-      type: object
-      description: Read-only representation of one eligible bonded fury anchor (#1543).
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        name:
-          type: string
-          readOnly: true
-        provocation_cap:
-          type: integer
-          readOnly: true
-        tier_full_intensities:
-          type: array
-          items:
-            $ref: '#/components/schemas/AnchorTierIntensity'
-          readOnly: true
-      required:
-      - id
-      - name
-      - provocation_cap
-      - tier_full_intensities
     AnchorSourceEnum:
       enum:
       - pool
@@ -47119,20 +47158,6 @@ components:
         * `same_as` - The same group as an earlier question
         * `served_house` - The house the character's family served
         * `own_family` - The character's own family
-    AnchorTierIntensity:
-      type: object
-      description: Read-only full-share intensity of one Fury tier under one anchor
-        (#4738).
-      properties:
-        tier_id:
-          type: integer
-          readOnly: true
-        full_intensity:
-          type: integer
-          readOnly: true
-      required:
-      - full_intensity
-      - tier_id
     AngleView:
       type: object
       properties:
@@ -48717,10 +48742,16 @@ components:
           readOnly: true
         rolls_check:
           type: boolean
+        feeds:
+          type: array
+          items:
+            $ref: '#/components/schemas/KindledFeed'
+          readOnly: true
       required:
       - approach_id
       - base_risk
       - check_type_name
+      - feeds
       - kind
       - label
       - option_id
@@ -52218,10 +52249,9 @@ components:
         unsettled_affinity_name:
           type: string
           description: |-
-            The affinity "You become more ..." names on accepting; blank when settled.
+            The affinity of the resonance that grew most past who they are; blank when settled.
 
-            The same one the accept action names (``accept_aura_change``): the affinity of the
-            resonance that grew most past who they are.
+            The one embracing it ("You become more ...", ``accept_aura_change``) names.
           readOnly: true
         mire_share_words:
           type: string
@@ -56811,6 +56841,14 @@ components:
       - fatigue_cost
       - free_dig_deeps
       - given_by
+    DigDeepRequest:
+      type: object
+      description: 'Write serializer for digging deep: optionally one of her own resonances
+        (#5124).'
+      properties:
+        resonance_id:
+          type: integer
+          minimum: 1
     DireStraitsEnum:
       enum:
       - soulfray
@@ -58077,46 +58115,28 @@ components:
       - wake_blocked
     DriftConversionCap:
       type: object
-      description: One cap of an offer as a player sees it (read-only).
+      description: 'One cap of an open chance to atone: what may still be turned toward
+        a resonance.'
       properties:
         target_resonance:
           $ref: '#/components/schemas/DriftTargetResonance'
         cap_remaining:
           type: integer
-        focus_bonus:
-          type: integer
-        sources:
-          type: array
-          items:
-            $ref: '#/components/schemas/DriftSourceOption'
-        qualifying_components:
-          type: array
-          items:
-            $ref: '#/components/schemas/DriftQualifyingComponent'
       required:
       - cap_remaining
-      - focus_bonus
-      - qualifying_components
-      - sources
       - target_resonance
     DriftConversionOffer:
       type: object
-      description: |-
-        Player-facing view of an open drift conversion offer. Read-only.
-
-        ``rite_ready`` is false while the rite, its check type or any outcome tier's share is
-        missing; the rite then refuses with ``rite_not_ready_message``, which the dialog shows
-        in place of the offering picker. The message is empty while the rite is ready.
-
-        Readiness is the same for every offer, so the caller works it out once per request
-        (``rite_is_ready()``) and passes it as ``context["rite_ready"]``; this serializer never
-        queries it per offer.
+      description: 'The character''s open chance to atone (read-only): where it opened
+        and its caps.'
       properties:
         id:
           type: integer
           readOnly: true
         scene_id:
           type: integer
+          nullable: true
+          description: The scene the offer first opened in.
           readOnly: true
         character_id:
           type: integer
@@ -58126,97 +58146,15 @@ components:
           items:
             $ref: '#/components/schemas/DriftConversionCap'
           readOnly: true
-        rite_ready:
-          type: boolean
-          readOnly: true
-        rite_not_ready_message:
-          type: string
-          readOnly: true
       required:
       - caps
       - character_id
       - id
-      - rite_not_ready_message
-      - rite_ready
       - scene_id
-    DriftCorrectionConvertRequest:
-      type: object
-      description: |-
-        Request shape for POST /api/magic/drift-correction/convert/.
-
-        ``validate`` resolves everything the action needs: the caller's own offer (anyone
-        else's is a 404), both resonances, and the offered items, each of which must be held
-        by the offer's character (a foreign or stray pk is a 400, never passed on).
-      properties:
-        offer_id:
-          type: integer
-        source_resonance_id:
-          type: integer
-        target_resonance_id:
-          type: integer
-        amount:
-          type: integer
-          minimum: 1
-        component_ids:
-          type: array
-          items:
-            type: integer
-      required:
-      - amount
-      - offer_id
-      - source_resonance_id
-      - target_resonance_id
-    DriftCorrectionDeclineRequest:
-      type: object
-      description: Request shape for POST /api/magic/drift-correction/decline/.
-      properties:
-        offer_id:
-          type: integer
-      required:
-      - offer_id
-    DriftCorrectionDeclined:
-      type: object
-      properties:
-        detail:
-          type: string
-      required:
-      - detail
-    DriftCorrectionResult:
-      type: object
-      description: Read serializer for DriftCorrectionResult (types/drift.py dataclass).
-      properties:
-        source_resonance_id:
-          type: integer
-        target_resonance_id:
-          type: integer
-        attempted_amount:
-          type: integer
-        converted_amount:
-          type: integer
-        granted_amount:
-          type: integer
-        outcome_name:
-          type: string
-        success_level:
-          type: integer
-        conversion_type:
-          type: string
-        focus_bonus:
-          type: integer
-      required:
-      - attempted_amount
-      - conversion_type
-      - converted_amount
-      - focus_bonus
-      - granted_amount
-      - outcome_name
-      - source_resonance_id
-      - success_level
-      - target_resonance_id
     DriftQualifyingComponent:
       type: object
-      description: A carried item that counts toward the rite's offering, and its
-        route (read-only).
+      description: A carried item that counts toward a target-resonance offering,
+        and its route (read-only).
       properties:
         item_id:
           type: integer
@@ -58228,35 +58166,6 @@ components:
       - item_id
       - mode
       - name
-    DriftSourceOption:
-      type: object
-      description: One drift holding the rite could convert toward a cap's target
-        (read-only).
-      properties:
-        resonance_id:
-          type: integer
-        resonance_name:
-          type: string
-        balance:
-          type: integer
-        multiplier:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,4}(?:\.\d{0,2})?$
-        conversion_type:
-          type: string
-        max_amount:
-          type: integer
-        projected_output:
-          type: integer
-      required:
-      - balance
-      - conversion_type
-      - max_amount
-      - multiplier
-      - projected_output
-      - resonance_id
-      - resonance_name
     DriftTargetResonance:
       type: object
       properties:
@@ -61392,6 +61301,60 @@ components:
           type: integer
       required:
       - resonance_reserve
+    FuryResonanceOption:
+      type: object
+      description: Read-only representation of one resonance a character can give
+        in to (#5124).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        strength_name:
+          type: string
+          readOnly: true
+        control_check_name:
+          type: string
+          readOnly: true
+        provocation_cap:
+          type: integer
+          readOnly: true
+        tier_full_intensities:
+          type: array
+          items:
+            $ref: '#/components/schemas/FuryResonanceTierIntensity'
+          readOnly: true
+        weakest_strength_name:
+          type: string
+          readOnly: true
+        weakest_depth_name:
+          type: string
+          readOnly: true
+      required:
+      - control_check_name
+      - id
+      - name
+      - provocation_cap
+      - strength_name
+      - tier_full_intensities
+      - weakest_depth_name
+      - weakest_strength_name
+    FuryResonanceTierIntensity:
+      type: object
+      description: Read-only full-share intensity of one Fury tier at one resonance's
+        strength (#4738).
+      properties:
+        tier_id:
+          type: integer
+          readOnly: true
+        full_intensity:
+          type: integer
+          readOnly: true
+      required:
+      - full_intensity
+      - tier_id
     FuryTierOption:
       type: object
       description: Read-only representation of one selectable FuryTier (#1543).
@@ -67128,6 +67091,47 @@ components:
       description: |-
         * `profile_text` - Profile Text
         * `distinction_change` - Distinction Change
+    KindledFeed:
+      type: object
+      description: Read-only mirror of :class:`world.missions.types.KindledFeed` (#5124).
+      properties:
+        resonance_name:
+          type: string
+        strength_name:
+          type: string
+        reason:
+          type: string
+      required:
+      - reason
+      - resonance_name
+      - strength_name
+    KindledResonance:
+      type: object
+      description: A ``KindledResonance`` as the panel reads it.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        affinity_name:
+          type: string
+        kindled:
+          type: boolean
+        strength_name:
+          type: string
+          nullable: true
+          readOnly: true
+        reasons:
+          type: array
+          items:
+            type: string
+      required:
+      - affinity_name
+      - id
+      - kindled
+      - name
+      - reasons
+      - strength_name
     KinspersonNode:
       type: object
       description: One visible node in a family tree payload.
@@ -76803,6 +76807,29 @@ components:
       - next
       - previous
       - results
+    PaginatedKindledResonanceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/KindledResonance'
     PaginatedKnownSecretList:
       type: object
       required:
@@ -78548,6 +78575,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RecordedProfile'
+    PaginatedReflectionOptionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReflectionOption'
     PaginatedRelationshipCapstoneList:
       type: object
       required:
@@ -84245,6 +84295,9 @@ components:
             $ref: '#/components/schemas/ResolvedPullEffect'
         level_read:
           type: integer
+        kindled_strength:
+          type: string
+          nullable: true
       required:
       - affordable
       - balance
@@ -85659,10 +85712,10 @@ components:
           items:
             $ref: '#/components/schemas/FuryTierOption'
           readOnly: true
-        eligible_fury_anchors:
+        eligible_fury_resonances:
           type: array
           items:
-            $ref: '#/components/schemas/AnchorOption'
+            $ref: '#/components/schemas/FuryResonanceOption'
           readOnly: true
         cast_preview:
           allOf:
@@ -85690,7 +85743,7 @@ components:
       - description
       - difficulty
       - display_name
-      - eligible_fury_anchors
+      - eligible_fury_resonances
       - enchant_damage_types
       - enchants_strike
       - enhancements
@@ -87731,6 +87784,43 @@ components:
       - numeric_min
       - sort_order
       - stat_multiplier
+    RallyRequest:
+      type: object
+      description: |-
+        Write serializer for declaring a rally: the ally, and optionally one of their resonances.
+
+        ``resonance_id`` names a resonance the ALLY holds (#5124); a Rally that names one kindles
+        it for the fight, or surges more when it is already kindled.
+      properties:
+        ally_participant_id:
+          type: integer
+          minimum: 1
+        resonance_id:
+          type: integer
+          minimum: 1
+      required:
+      - ally_participant_id
+    RallyResonanceChoice:
+      type: object
+      description: |-
+        One of an ally's resonances a Rally may name (#5124), read from a ``KindledResonance``.
+
+        The name, and whether it is kindled for the ally now: never how strongly.
+      properties:
+        id:
+          type: integer
+          description: The resonance's id, sent back as resonance_id.
+        name:
+          type: string
+          description: The resonance's name.
+        kindled:
+          type: boolean
+          description: Whether it is kindled for the ally now (a Rally then surges
+            more).
+      required:
+      - id
+      - kindled
+      - name
     RandomSceneTarget:
       type: object
       description: Read serializer for RandomSceneTarget instances.
@@ -88215,6 +88305,31 @@ components:
         * `story_resolved` - Story resolved
         * `chapter_reached` - Chapter reached or passed
         * `episode_reached` - Episode reached or passed
+    ReflectionOption:
+      type: object
+      description: One entry of the "Reflecting on" row.
+      properties:
+        kind:
+          $ref: '#/components/schemas/ReflectionOptionKindEnum'
+        id:
+          type: integer
+        label:
+          type: string
+        replaces_waiting:
+          type: boolean
+      required:
+      - id
+      - kind
+      - label
+      - replaces_waiting
+    ReflectionOptionKindEnum:
+      enum:
+      - deed
+      - resonance
+      type: string
+      description: |-
+        * `deed` - Deed
+        * `resonance` - Resonance
     RegardRequest:
       type: object
       description: '``{target_type, target_id, value, reason}``: the NPC''s opinion
@@ -89105,6 +89220,8 @@ components:
             * `CORRUPTION_CLEANSING` - Corruption cleansing payout
             * `SINEATING` - Sineating payout
             * `CHARACTER_CREATION` - Character creation
+            * `KINDLED_DEED` - Kindled deed
+            * `EMBRACED_DEED` - Embraced deed
         granted_at:
           type: string
           format: date-time
@@ -89163,6 +89280,8 @@ components:
       - CORRUPTION_CLEANSING
       - SINEATING
       - CHARACTER_CREATION
+      - KINDLED_DEED
+      - EMBRACED_DEED
       type: string
       description: |-
         * `POSE_ENDORSEMENT` - Pose endorsement
@@ -89190,6 +89309,8 @@ components:
         * `CORRUPTION_CLEANSING` - Corruption cleansing payout
         * `SINEATING` - Sineating payout
         * `CHARACTER_CREATION` - Character creation
+        * `KINDLED_DEED` - Kindled deed
+        * `EMBRACED_DEED` - Embraced deed
     ResonanceLine:
       type: object
       properties:
@@ -89414,6 +89535,55 @@ components:
         * `high` - High
         * `extreme` - Extreme
         * `lethal` - Lethal
+    RiteOffering:
+      type: object
+      description: A carried item that can be the rite's offering (read-only).
+      properties:
+        item_id:
+          type: integer
+        name:
+          type: string
+        mode:
+          type: string
+        resonance_name:
+          type: string
+        focus_bonus:
+          type: integer
+      required:
+      - focus_bonus
+      - item_id
+      - mode
+      - name
+      - resonance_name
+    RiteReflection:
+      type: object
+      description: One waiting reflection as the rite shows it (read-only).
+      properties:
+        id:
+          type: integer
+        choice:
+          type: string
+        kind:
+          type: string
+        title:
+          type: string
+        where:
+          type: string
+        from_line:
+          type: string
+        excerpt:
+          type: string
+        effect_line:
+          type: string
+      required:
+      - choice
+      - effect_line
+      - excerpt
+      - from_line
+      - id
+      - kind
+      - title
+      - where
     Ritual:
       type: object
       description: |-
@@ -90648,7 +90818,7 @@ components:
         fury_commitment_id:
           type: integer
           nullable: true
-        fury_anchor_id:
+        fury_resonance_id:
           type: integer
           nullable: true
         delivery:
@@ -91706,6 +91876,66 @@ components:
         * `funeral` - Funeral
         * `reading` - Will Reading
         * `auto` - Deadline Sweeper
+    SettlingRitePerformRequest:
+      type: object
+      description: |-
+        Request shape for POST /api/magic/settling-rite/.
+
+        ``validate`` resolves the caller's own character and the offered items, each of which must
+        be held by that character (a foreign or stray pk is a 400, never passed on).
+      properties:
+        character_sheet_id:
+          type: integer
+        component_ids:
+          type: array
+          items:
+            type: integer
+      required:
+      - character_sheet_id
+    SettlingRiteReading:
+      type: object
+      description: What the rite of settling would take and ask for (read-only).
+      properties:
+        reflections:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiteReflection'
+        offerings:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiteOffering'
+        rite_ready:
+          type: boolean
+        not_ready_message:
+          type: string
+        check_name:
+          type: string
+      required:
+      - check_name
+      - not_ready_message
+      - offerings
+      - reflections
+      - rite_ready
+    SettlingRiteResult:
+      type: object
+      description: What the rite did, for the one who performed it (read serializer
+        for the result type).
+      properties:
+        outcome_name:
+          type: string
+        success_level:
+          type: integer
+        focus_bonus:
+          type: integer
+        lines:
+          type: array
+          items:
+            type: string
+      required:
+      - focus_bonus
+      - lines
+      - outcome_name
+      - success_level
     SeverityCeilingEnum:
       enum:
       - 1
@@ -97973,7 +98203,7 @@ components:
         fury_commitment_id:
           type: integer
           nullable: true
-        fury_anchor_id:
+        fury_resonance_id:
           type: integer
           nullable: true
         pull:

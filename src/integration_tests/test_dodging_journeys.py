@@ -126,7 +126,7 @@ class RecordingRoll:
     def __call__(self, *_args: object, **kwargs: Any) -> MagicMock:
         self.calls.append(kwargs)
         level = self.levels.pop(0) if self.levels else 0
-        return MagicMock(success_level=level)
+        return MagicMock(success_level=level, outcome=None)
 
     def extras(self) -> list[int]:
         return [call["extra_modifiers"] for call in self.calls]
@@ -142,11 +142,13 @@ class RollByCharacter(RecordingRoll):
 
     def __call__(self, character: Any, *_args: object, **kwargs: Any) -> MagicMock:
         self.calls.append(kwargs)
-        return MagicMock(success_level=self.by_name.get(character.db_key, self.default))
+        return MagicMock(
+            success_level=self.by_name.get(character.db_key, self.default), outcome=None
+        )
 
 
 def _clean_hit(*args: object, **kwargs: object) -> MagicMock:
-    return MagicMock(success_level=2)
+    return MagicMock(success_level=2, outcome=None)
 
 
 class _TheCellar(JourneyCase):
@@ -246,7 +248,7 @@ class _TheCellar(JourneyCase):
         return spawn_from_creature_template(self.encounter, template, position=at)
 
     def resolve(self, roll: RecordingRoll) -> None:
-        technique_roll = MagicMock(success_level=self.technique_level)
+        technique_roll = MagicMock(success_level=self.technique_level, outcome=None)
         with patch(
             "world.combat.services.movement_use.roll_technique", return_value=technique_roll
         ):

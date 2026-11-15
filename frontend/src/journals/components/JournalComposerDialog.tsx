@@ -28,11 +28,14 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 
+import { reflectionFields } from '@/magic/reflection';
+
 import type { CreateJournalEntryRequest } from '../api';
 import { useCreateJournalEntry } from '../queries';
 import {
   EMPTY_ENTRY_FIELDS,
   isAboutUnresolved,
+  isReflectionUnfinished,
   type JournalEntryFieldsValue,
 } from '../entryFields';
 import { JournalEntryFields } from './JournalEntryFields';
@@ -71,14 +74,16 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
       is_public: value.isPublic,
       tags: value.tags,
       about: value.about?.id ?? null,
+      ...reflectionFields(value.reflection),
     };
     // Omit the field entirely at the INHERIT default — never send a no-op override.
     if (value.posthumousOverride !== 'inherit') {
       payload.posthumous_override = value.posthumousOverride;
     }
     createEntry.mutate(payload, {
-      onSuccess: () => {
+      onSuccess: (entry) => {
         toast.success('Journal entry recorded.');
+        if (entry.reflection_line) toast.success(entry.reflection_line);
         onClose();
       },
       onError: (err: Error) => toast.error(err.message),
@@ -91,6 +96,7 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
     value.title.trim().length > 0 &&
     value.body.trim().length > 0 &&
     !isAboutUnresolved(value) &&
+    !isReflectionUnfinished(value) &&
     !createEntry.isPending;
   // Inline refusal rendering (#3412 T4) — a gate refusal (4xx `{detail}`, parsed into
   // `ApiError.message` by `readErrorDetail`/`createJournalEntry`) needs to stay readable

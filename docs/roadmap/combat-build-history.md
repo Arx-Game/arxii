@@ -1053,7 +1053,7 @@ integration test suite.
   which contributions are shown to which players) depends on the positioning/zones model
   that is not yet settled. See `docs/plans/2026-05-21-positioning-zones-design-notes.md`.
 - **Fury lever** — **DONE** (#567): the control-lowering / rage escalation lever, Strain's
-  sibling. A player declares a `FuryTier` + a `fury_anchor` (a bonded harmed entity); bond
+  sibling. (History as built then; since #5124 the declaration names a kindled resonance, not an anchor person, ADR-5124.) A player declares a `FuryTier` + a `fury_anchor` (a bonded harmed entity); bond
   strength caps the tier and scales an intensity bonus — since #3957 read as the
   claimed `tier` on the character's OWN `CharacterRelationship` side toward the anchor
   (`fury._bond_tier`), any label, no reciprocity required; it no longer goes through

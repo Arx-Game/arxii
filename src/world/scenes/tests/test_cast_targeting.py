@@ -379,3 +379,68 @@ class TestFilteredGroupDeferredCases(CastScenarioMixin):
                 technique=technique,
                 supplied_personas=[self.target],
             )
+
+
+@tag("postgres")
+class TestCastOnAnAllyInTroubleEarns(CastScenarioMixin):
+    """A beneficial cast on a badly hurt ally earns the resonance that notices them (#5124)."""
+
+    def test_the_cast_roll_earns_a_someone_in_trouble_resonance(self) -> None:
+        from evennia_extensions.factories import AccountFactory
+        from world.covenants.perks.constants import Situation
+        from world.magic.constants import GainSource
+        from world.magic.factories import (
+            CharacterResonanceFactory,
+            KindledDeedAwardFactory,
+            KindledStrengthTierFactory,
+            KindlingSituationFactory,
+            ResonanceFactory,
+        )
+        from world.magic.models import ResonanceGrant
+
+        technique = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            action_template=ActionTemplateFactory(),
+        )
+        TechniqueAppliedConditionFactory(
+            technique=technique,
+            condition=ConditionTemplateFactory(),
+            target_kind=ConditionTargetKind.ALLY,
+            minimum_success_level=0,
+        )
+        grant_technique(self.caster, technique)
+        caster_sheet = self.caster.character_sheet
+        caster_char = caster_sheet.character
+        caster_char.location = self.scene.room
+        caster_char.db_account = AccountFactory()  # a played character
+        caster_char.save()
+        target_char = self.target.character_sheet.character
+        target_char.location = self.scene.room
+        target_char.save()
+        hurt = CharacterVitals.objects.get(character_sheet=self.target.character_sheet)
+        hurt.health = 5
+        hurt.save(update_fields=["health"])
+
+        success = CheckOutcome.objects.get(name="Success")
+        KindledDeedAwardFactory(outcome_tier=success, amount=10)
+        KindledStrengthTierFactory(rank=1, earn_percent=100)
+        mercy = ResonanceFactory(name="Mercy")
+        CharacterResonanceFactory(character_sheet=caster_sheet, resonance=mercy)
+        caster_sheet.__dict__.pop("cached_resonances", None)
+        KindlingSituationFactory(
+            resonance=mercy, situation=Situation.SOMEONE_IN_TROUBLE, strength=1
+        )
+
+        with force_check_outcome(success):
+            request_technique_cast(
+                scene=self.scene,
+                initiator_persona=self.caster,
+                target_persona=self.target,
+                technique=technique,
+            )
+
+        grant = ResonanceGrant.objects.get(source=GainSource.KINDLED_DEED)
+        self.assertEqual(
+            (grant.character_sheet, grant.resonance, grant.amount), (caster_sheet, mercy, 10)
+        )

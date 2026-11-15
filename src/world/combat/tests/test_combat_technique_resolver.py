@@ -129,7 +129,7 @@ class CombatTechniqueResolverRollCheckTests(TestCase):
         resolver = _build_resolver(pull_flat_bonus=3)
 
         with patch("world.combat.services.perform_check") as mock_perform:
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             resolver._roll_check()
 
         kwargs = mock_perform.call_args.kwargs
@@ -162,7 +162,7 @@ class CombatTechniqueResolverRollCheckTests(TestCase):
                 side_effect=_spy_collect,
             ),
         ):
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             resolver._roll_check()
 
         # No EFFORT-kind contribution is folded into collect_check_modifiers anymore.
@@ -187,7 +187,7 @@ class CombatTechniqueResolverRollCheckTests(TestCase):
         resolver = _build_resolver()
 
         with patch("world.combat.services.perform_check") as mock_perform:
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             resolver._roll_check()
 
         situation_ctx = mock_perform.call_args.kwargs["situation_ctx"]
@@ -222,7 +222,7 @@ class CombatTechniqueResolverRollCheckTests(TestCase):
                 side_effect=_spy_collect,
             ),
         ):
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             resolver._roll_check()
 
         extras = captured["extra_contributions"]
@@ -260,7 +260,7 @@ class CombatTechniqueResolverRollCheckTests(TestCase):
                 side_effect=_spy_collect,
             ),
         ):
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             resolver._roll_check()
 
         self.assertEqual(captured["scene"], scene)
@@ -280,7 +280,7 @@ class CombatTechniqueResolverApplyDamageTests(TestCase):
 
     def test_apply_damage_returns_damage_results_when_target_alive(self) -> None:
         resolver = _build_resolver()
-        check = MagicMock(success_level=2)
+        check = MagicMock(success_level=2, outcome=None)
         results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(len(results), 1)
         self.assertGreater(results[0].damage_dealt, 0)
@@ -290,13 +290,13 @@ class CombatTechniqueResolverApplyDamageTests(TestCase):
         target = resolver.action.focused_opponent_target
         target.status = OpponentStatus.DEFEATED
         target.save(update_fields=["status"])
-        check = MagicMock(success_level=2)
+        check = MagicMock(success_level=2, outcome=None)
         results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(results, [])
 
     def test_apply_damage_returns_empty_on_miss(self) -> None:
         resolver = _build_resolver()
-        check = MagicMock(success_level=0)
+        check = MagicMock(success_level=0, outcome=None)
         results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(results, [])
 
@@ -304,13 +304,13 @@ class CombatTechniqueResolverApplyDamageTests(TestCase):
         resolver = _build_resolver()
         # Remove the opponent target from the action
         resolver.action.focused_opponent_target = None
-        check = MagicMock(success_level=2)
+        check = MagicMock(success_level=2, outcome=None)
         results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(results, [])
 
     def test_apply_damage_half_on_partial_success(self) -> None:
         resolver = _build_resolver(base_power=20)
-        check = MagicMock(success_level=1)
+        check = MagicMock(success_level=1, outcome=None)
         results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(len(results), 1)
         # half of 20 = 10, but actual damage_dealt may differ due to soak
@@ -320,7 +320,7 @@ class CombatTechniqueResolverApplyDamageTests(TestCase):
 class CombatTechniqueResolverApplyConditionsTests(TestCase):
     def test_apply_conditions_stub_returns_empty_list(self) -> None:
         resolver = _build_resolver()
-        check = MagicMock(success_level=2)
+        check = MagicMock(success_level=2, outcome=None)
         results, _removed = resolver._apply_conditions(check, eff_intensity=0)
         self.assertEqual(results, [])
 
@@ -357,7 +357,7 @@ class ApplyConditionsTests(TestCase):
 
     def test_returns_empty_when_no_rows(self) -> None:
         """Technique with no condition_applications rows returns []."""
-        check = MagicMock(success_level=2)
+        check = MagicMock(success_level=2, outcome=None)
         results, _removed = self.resolver._apply_conditions(check, eff_intensity=0)
         self.assertEqual(results, [])
 
@@ -379,7 +379,7 @@ class ApplyConditionsTests(TestCase):
             from world.conditions.types import ApplyConditionResult
 
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
-            check = MagicMock(success_level=1)
+            check = MagicMock(success_level=1, outcome=None)
             results, _removed = self.resolver._apply_conditions(check, eff_intensity=0)
 
         # Only one row passed the SL gate → bulk called with one application
@@ -401,7 +401,7 @@ class ApplyConditionsTests(TestCase):
 
         with patch("world.magic.services.condition_application.bulk_apply_conditions") as mock_bulk:
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
-            check = MagicMock(success_level=2)
+            check = MagicMock(success_level=2, outcome=None)
             results, _removed = self.resolver._apply_conditions(check, eff_intensity=0)
 
         self.assertEqual(len(results), 1)
@@ -424,7 +424,7 @@ class ApplyConditionsTests(TestCase):
             from world.conditions.types import ApplyConditionResult
 
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
-            check = MagicMock(success_level=1)
+            check = MagicMock(success_level=1, outcome=None)
             results, _removed = self.resolver._apply_conditions(check, eff_intensity=0)
 
         self.assertEqual(len(results), 1)
@@ -457,7 +457,7 @@ class ApplyConditionsTests(TestCase):
             from world.conditions.types import ApplyConditionResult
 
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
-            check = MagicMock(success_level=2)
+            check = MagicMock(success_level=2, outcome=None)
             results, _removed = self.resolver._apply_conditions(check, eff_intensity=0)
 
         self.assertEqual(len(results), 1)
@@ -476,7 +476,7 @@ class ApplyConditionsTests(TestCase):
         opponent.save(update_fields=["status"])
 
         with patch("world.magic.services.condition_application.bulk_apply_conditions") as mock_bulk:
-            check = MagicMock(success_level=2)
+            check = MagicMock(success_level=2, outcome=None)
             results, _removed = self.resolver._apply_conditions(check, eff_intensity=0)
 
         mock_bulk.assert_not_called()
@@ -499,7 +499,7 @@ class ApplyConditionsTests(TestCase):
             from world.conditions.types import ApplyConditionResult
 
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
-            check = MagicMock(success_level=1)
+            check = MagicMock(success_level=1, outcome=None)
             results, _removed = self.resolver._apply_conditions(check, eff_intensity=5)
 
         # base_severity=2, effective_power=5 * multiplier=1.0 = 5, total = 7
@@ -522,7 +522,7 @@ class ApplyConditionsTests(TestCase):
             from world.conditions.types import ApplyConditionResult
 
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
-            check = MagicMock(success_level=1)
+            check = MagicMock(success_level=1, outcome=None)
             results, _removed = self.resolver._apply_conditions(check, eff_intensity=0)
 
         call_args = mock_bulk.call_args[0][0]
@@ -542,7 +542,7 @@ class ApplyConditionsTests(TestCase):
             from world.conditions.types import ApplyConditionResult
 
             mock_bulk.return_value = [ApplyConditionResult(success=False)]
-            check = MagicMock(success_level=2)
+            check = MagicMock(success_level=2, outcome=None)
             results, _removed = self.resolver._apply_conditions(check, eff_intensity=0)
 
         self.assertEqual(len(results), 1)
@@ -559,7 +559,7 @@ class ApplyConditionsTests(TestCase):
         self.resolver.action.save(update_fields=["focused_opponent_target"])
 
         with patch("world.magic.services.condition_application.bulk_apply_conditions") as mock_bulk:
-            check = MagicMock(success_level=2)
+            check = MagicMock(success_level=2, outcome=None)
             results, _removed = self.resolver._apply_conditions(check, eff_intensity=0)
 
         mock_bulk.assert_not_called()
@@ -570,7 +570,7 @@ class ApplyConditionsTests(TestCase):
         apply_technique_treatments and remove_technique_conditions — the combat
         path's power leg for dispel/treatment, mirroring the standalone-cast seam.
         """
-        check = MagicMock(success_level=2)
+        check = MagicMock(success_level=2, outcome=None)
         with (
             patch(
                 "world.magic.services.condition_application.apply_technique_treatments"
@@ -601,7 +601,7 @@ class CombatTechniqueResolverCallTests(TestCase):
         resolver = _build_resolver(pull_flat_bonus=2, base_power=20)
 
         with patch("world.combat.services.perform_check") as mock_perform:
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             result = resolver(power=5, ledger=_ledger(5))
 
         self.assertGreater(result.scaled_damage, 0)
@@ -620,7 +620,7 @@ class ApplyMoraleTests(TestCase):
         TechniqueMoraleEffectFactory(
             technique=resolver.action.focused_action, base_morale=30, minimum_success_level=1
         )
-        check = MagicMock(success_level=1)
+        check = MagicMock(success_level=1, outcome=None)
 
         shifts = resolver._apply_morale(check, eff_intensity=0)
 
@@ -636,7 +636,7 @@ class ApplyMoraleTests(TestCase):
         )
 
         with patch("world.combat.services.perform_check") as mock_perform:
-            mock_perform.return_value = MagicMock(success_level=1)
+            mock_perform.return_value = MagicMock(success_level=1, outcome=None)
             result = resolver(power=0, ledger=_ledger(0))
 
         self.assertEqual(result.morale_shifts, [SpectacleShift(opponent.pk, "steady", "falter")])
@@ -668,7 +668,7 @@ class ApplyMoraleTests(TestCase):
             CombatRoundActionTarget.objects.create(action=resolver.action, opponent=opponent)
         TechniqueMoraleEffectFactory(technique=technique, base_morale=30, minimum_success_level=1)
 
-        shifts = resolver._apply_morale(MagicMock(success_level=1), eff_intensity=0)
+        shifts = resolver._apply_morale(MagicMock(success_level=1, outcome=None), eff_intensity=0)
 
         self.assertEqual(shifts, [])
         summon.refresh_from_db()
@@ -684,7 +684,7 @@ class ApplyMoraleTests(TestCase):
             technique=resolver.action.focused_action, base_morale=30, minimum_success_level=1
         )
 
-        shifts = resolver._apply_morale(MagicMock(success_level=1), eff_intensity=0)
+        shifts = resolver._apply_morale(MagicMock(success_level=1, outcome=None), eff_intensity=0)
 
         self.assertEqual(shifts, [])
 
@@ -852,14 +852,14 @@ class ResolverConsumesPowerTests(TestCase):
         resolver = self._build_resolver_with_intensity_profile()
 
         with patch("world.combat.services.perform_check") as mock_perform:
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             low_result = resolver(power=0, ledger=_ledger(0))
 
         # Rebuild to get a fresh opponent with full health.
         resolver_hi = self._build_resolver_with_intensity_profile()
 
         with patch("world.combat.services.perform_check") as mock_perform:
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             high_result = resolver_hi(power=20, ledger=_ledger(20))
 
         self.assertGreater(
@@ -873,7 +873,7 @@ class ResolverConsumesPowerTests(TestCase):
         resolver = self._build_resolver_with_intensity_profile()
 
         with patch("world.combat.services.perform_check") as mock_perform:
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             result = resolver(power=0, ledger=_ledger(0))
 
         # base_damage=10, intensity part=0×1.0=0 → budget=10 → damage > 0 after soak.
@@ -920,7 +920,7 @@ class BuildCombatResultTests(TestCase):
         )
         damage_results = [MagicMock(damage_dealt=5)]
         resolution = CombatTechniqueResolution(
-            check_result=MagicMock(success_level=2),
+            check_result=MagicMock(success_level=2, outcome=None),
             damage_results=damage_results,
             applied_conditions=[],
             pull_flat_bonus=0,
@@ -977,7 +977,7 @@ class NonAttackPCActionRoutingTests(TestCase):
         )
 
         fake_resolution = CombatTechniqueResolution(
-            check_result=MagicMock(success_level=2),
+            check_result=MagicMock(success_level=2, outcome=None),
             damage_results=[],
             applied_conditions=[],
             pull_flat_bonus=0,
@@ -1039,7 +1039,7 @@ class NonAttackPCActionRoutingTests(TestCase):
         )
 
         fake_resolution = CombatTechniqueResolution(
-            check_result=MagicMock(success_level=2),
+            check_result=MagicMock(success_level=2, outcome=None),
             damage_results=[],
             applied_conditions=[],
             pull_flat_bonus=0,
@@ -1075,7 +1075,7 @@ class ApplyDamageWithProfilesTests(EvenniaTestCase):
         resolver.action.focused_action.damage_profiles.all().delete()
         # Sanity: no profiles remain.
         self.assertEqual(resolver.action.focused_action.damage_profiles.count(), 0)
-        check = MagicMock(success_level=2)
+        check = MagicMock(success_level=2, outcome=None)
         results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(results, [])
 
@@ -1085,7 +1085,7 @@ class ApplyDamageWithProfilesTests(EvenniaTestCase):
         resolver = _build_resolver(base_power=10)
         # The auto-seeded profile has base_damage=10, damage_intensity_multiplier=0.
         # SL=2 → multiplier=1.0 → budget=10 → scaled=10 → apply_damage_to_opponent.
-        check = MagicMock(success_level=2)
+        check = MagicMock(success_level=2, outcome=None)
         results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(len(results), 1)
         self.assertGreater(results[0].damage_dealt, 0)
@@ -1093,7 +1093,7 @@ class ApplyDamageWithProfilesTests(EvenniaTestCase):
     def test_single_component_partial_success(self) -> None:
         """1 profile base_damage=20; SL=1 → multiplier=0.5 → 10 budget → >0 damage after soak."""
         resolver = _build_resolver(base_power=20)
-        check = MagicMock(success_level=1)
+        check = MagicMock(success_level=1, outcome=None)
         results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(len(results), 1)
         self.assertGreater(results[0].damage_dealt, 0)
@@ -1110,7 +1110,7 @@ class ApplyDamageWithProfilesTests(EvenniaTestCase):
             base_damage=20,
             minimum_success_level=2,
         )
-        check = MagicMock(success_level=1)
+        check = MagicMock(success_level=1, outcome=None)
         results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(results, [])
 
@@ -1133,7 +1133,7 @@ class ApplyDamageWithProfilesTests(EvenniaTestCase):
         )
 
         # Pass eff_intensity=5 directly (simulating power=0 + pull_bump=5).
-        check = MagicMock(success_level=2)
+        check = MagicMock(success_level=2, outcome=None)
         results = resolver._apply_damage(check, eff_intensity=5)
         # budget = 5 × 1.0 = 5 → damage > 0.
         self.assertEqual(len(results), 1)
@@ -1153,7 +1153,7 @@ class ApplyDamageWithProfilesTests(EvenniaTestCase):
             damage_type=fire_damage_type,
             minimum_success_level=1,
         )
-        check = MagicMock(success_level=2)
+        check = MagicMock(success_level=2, outcome=None)
         results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(len(results), 2)
         self.assertGreater(results[0].damage_dealt, 0)
@@ -1178,7 +1178,7 @@ class ApplyDamageWithProfilesTests(EvenniaTestCase):
             damage_type=fire_damage_type,
             minimum_success_level=1,
         )
-        check = MagicMock(success_level=2)
+        check = MagicMock(success_level=2, outcome=None)
         results = resolver._apply_damage(check, eff_intensity=5)
         # Only 1 result: the second profile was skipped because target was defeated.
         self.assertEqual(len(results), 1)
@@ -1189,7 +1189,7 @@ class ApplyDamageWithProfilesTests(EvenniaTestCase):
         target = resolver.action.focused_opponent_target
         target.status = OpponentStatus.DEFEATED
         target.save(update_fields=["status"])
-        check = MagicMock(success_level=2)
+        check = MagicMock(success_level=2, outcome=None)
         results = resolver._apply_damage(check, eff_intensity=5)
         self.assertEqual(results, [])
 
@@ -1219,7 +1219,7 @@ class CombatPullLedgerTests(TestCase):
     def _call_resolver(self, resolver: CombatTechniqueResolver, power: int):
         ledger = _ledger(power)
         with patch("world.combat.services.perform_check") as mock_check:
-            mock_check.return_value = MagicMock(success_level=2)
+            mock_check.return_value = MagicMock(success_level=2, outcome=None)
             return resolver(power=power, ledger=ledger)
 
     def test_result_carries_power_ledger_field(self) -> None:

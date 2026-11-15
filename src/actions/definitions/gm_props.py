@@ -31,6 +31,8 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
+    from world.magic.models import KindledStrengthTier
+
 _MSG_GM_ONLY = "Only the scene's GM, owner, or staff may stage a prop."
 _MSG_NO_TEMPLATE = "Which item template? Provide its name."
 _MSG_NO_PROPERTY = "Which property? Provide its name."
@@ -65,7 +67,11 @@ def _resolve_target_obj(actor: ObjectDB, kwargs: dict[str, Any]) -> ObjectDB | N
     if target_id is not None:
         from evennia.objects.models import ObjectDB as _ObjectDB  # noqa: PLC0415
 
-        return _ObjectDB.objects.filter(pk=target_id, db_location=actor.location).first()
+        try:
+            pk = int(target_id)
+        except (TypeError, ValueError):
+            return None
+        return _ObjectDB.objects.filter(pk=pk, db_location=actor.location).first()
     return actor.location
 
 
@@ -263,4 +269,144 @@ class GMListSubstancesAction(Action):
             success=True,
             message="Substances: " + ", ".join(lines),
             data={"substances": substances, "marked": marked},
+        )
+
+
+_MSG_GM_ONLY_KINDLE = "Only the scene's GM, owner, or staff may kindle a resonance."
+_MSG_NO_KINDLE_TARGET = "Whose resonance? Name a character here."
+_MSG_NO_RESONANCE = "Which resonance? Name one they hold."
+_MSG_NOT_HELD = "They do not hold that resonance."
+
+
+def _resolve_kindle_tier(value: object) -> KindledStrengthTier | None:
+    """A ``KindledStrengthTier`` by rank or by name (case-insensitive); the weakest when blank.
+
+    Returns None when a value is given and no strength matches.
+    """
+    from world.magic.models import KindledStrengthTier  # noqa: PLC0415
+
+    tiers = KindledStrengthTier.objects.order_by("rank")
+    text = str(value).strip() if value not in (None, "") else ""
+    if not text:
+        return tiers.first()
+    if text.isdigit():
+        return tiers.filter(rank=int(text)).first()
+    return tiers.filter(name__iexact=text).first()
+
+
+@dataclass
+class KindleResonanceAction(Action):
+    """GM improv (#5124): "is her Fury kindled?" "Yes." Kindles it for the rest of the scene.
+
+    Writes a GM ``Kindling`` for the character, resonance and the room's active scene at a
+    strength the GM picks (a strength's name or its rank; the weakest when none is named).
+    Kindling it again sets the new strength. It ends with the scene.
+    """
+
+    key: str = "stage_kindle"
+    name: str = "Kindle Resonance"
+    icon: str = "flame"
+    category: str = "items"
+    target_type: TargetType = TargetType.SINGLE
+    objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
+
+    def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+        from world.magic.models import Resonance  # noqa: PLC0415
+        from world.magic.services.kindling import (  # noqa: PLC0415
+            holds_resonance,
+            kindle_by_gm,
+            shown_names,
+        )
+        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+        account = resolve_account_or_none(actor)
+        if not _account_can_gm_room(actor, account):
+            return ActionResult(success=False, message=_MSG_GM_ONLY_KINDLE)
+        scene = get_active_scene(actor.location) if actor.location is not None else None
+        if scene is None:
+            return ActionResult(success=False, message=_MSG_NO_SCENE)
+        target = _resolve_target_obj(actor, kwargs)
+        sheet = CharacterSheet.objects.filter(pk=target.pk).first() if target else None
+        if sheet is None or target is actor.location:
+            return ActionResult(success=False, message=_MSG_NO_KINDLE_TARGET)
+        name = kwargs.get("resonance")
+        if not name:
+            return ActionResult(success=False, message=_MSG_NO_RESONANCE)
+        try:
+            resonance = resolve_model_by_pk_or_name(
+                Resonance, str(name), not_found_msg=f"No resonance named {name!r}."
+            )
+        except CommandError as exc:
+            return ActionResult(success=False, message=str(exc))
+        if not holds_resonance(sheet, resonance):
+            return ActionResult(success=False, message=_MSG_NOT_HELD)
+        tier = _resolve_kindle_tier(kwargs.get("strength"))
+        if tier is None:
+            return ActionResult(success=False, message="No such strength.")
+        gm_sheet = CharacterSheet.objects.filter(pk=actor.pk).first()
+        kindle_by_gm(sheet=sheet, resonance=resonance, tier=tier, scene=scene, gm=gm_sheet)
+        shown = (
+            shown_names(gm_sheet, [sheet.pk]).get(sheet.pk) if gm_sheet is not None else None
+        ) or target.db_key
+        return ActionResult(
+            success=True,
+            message=f"{shown}'s {resonance.name} is kindled, {tier.name.lower()}, for this scene.",
+            data={"resonance_id": resonance.pk, "strength": tier.rank},
+        )
+
+
+@dataclass
+class GMListKindlingAction(Action):
+    """The GM Stage tab's Kindle list (#5124): the strengths staff named, the resonances the
+    chosen character holds, and what the GM has kindled for this scene."""
+
+    key: str = "gm_list_kindling"
+    name: str = "List Kindling"
+    icon: str = "list"
+    category: str = "items"
+    target_type: TargetType = TargetType.SINGLE
+    objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
+
+    def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from world.magic.constants import KindlingSource  # noqa: PLC0415
+        from world.magic.models import KindledStrengthTier, Kindling  # noqa: PLC0415
+        from world.magic.services.kindling import held_resonance_names  # noqa: PLC0415
+        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+        account = resolve_account_or_none(actor)
+        if not _account_can_gm_room(actor, account):
+            return ActionResult(success=False, message=_MSG_GM_ONLY_KINDLE)
+        scene = get_active_scene(actor.location) if actor.location is not None else None
+        target = _resolve_target_obj(actor, kwargs)
+        if target is None or target is actor.location:
+            return ActionResult(success=False, message=_MSG_NO_KINDLE_TARGET)
+        sheet_id = target.pk
+        strengths = [
+            {"rank": tier.rank, "name": tier.name}
+            for tier in KindledStrengthTier.objects.order_by("rank")
+        ]
+        held = held_resonance_names([sheet_id]).get(sheet_id, [])
+        kindled = (
+            [
+                {
+                    "resonance_id": row.resonance_id,
+                    "strength": row.strength,
+                    "by_viewer": row.kindled_by_id == actor.pk,
+                }
+                for row in Kindling.objects.filter(
+                    scene=scene, source=KindlingSource.GM, character_sheet_id=sheet_id
+                )
+            ]
+            if scene is not None
+            else []
+        )
+        return ActionResult(
+            success=True,
+            message="Strengths: " + ", ".join(row["name"] for row in strengths),
+            data={
+                "strengths": strengths,
+                "resonances": [{"id": pk, "name": name} for pk, name in held],
+                "kindled": kindled,
+            },
         )

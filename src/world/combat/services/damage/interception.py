@@ -858,6 +858,26 @@ def _try_technique_interpose(
         extra_traits=cast_check.extra_traits,
     )
 
+    # #5124: the guardian's own cast roll earns what shielding the ward feeds.
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.combat.services.techniques.kindled_deed import award_rolled  # noqa: PLC0415
+    from world.magic.constants import KindlingActKind  # noqa: PLC0415
+    from world.magic.services.kindling import sheet_name  # noqa: PLC0415
+
+    # A character sheet shares its character's primary key.
+    protected_name = sheet_name(
+        action.participant.character_sheet, CharacterSheet.objects.filter(pk=protected.pk).first()
+    )
+    award_rolled(
+        action.participant,
+        action,
+        kind=KindlingActKind.AID,
+        what="Shielded",
+        target_name=protected_name,
+        outcome=check_result.outcome,
+        aids=True,
+    )
+
     # Debit on fire (any non-fizzle resolution) - anima, not fatigue. A consented
     # guardian may run into deficit and accrues Soulfray on every fire (#3573).
     if cost > 0:

@@ -35,15 +35,23 @@ class DriftConversionOfferTests(TestCase):
         cls.sheet = CharacterSheetFactory()
         cls.scene = SceneFactory()
 
-    def test_one_offer_per_sheet_and_scene(self):
+    def test_one_offer_per_sheet_whatever_the_scene(self):
         DriftConversionOfferFactory(character_sheet=self.sheet, scene=self.scene)
         with self.assertRaises(IntegrityError), transaction.atomic():
-            DriftConversionOfferFactory(character_sheet=self.sheet, scene=self.scene)
+            DriftConversionOfferFactory(character_sheet=self.sheet, scene=SceneFactory())
 
-    def test_same_sheet_other_scene_is_allowed(self):
+    def test_another_sheet_may_hold_its_own_offer(self):
         DriftConversionOfferFactory(character_sheet=self.sheet, scene=self.scene)
-        offer = DriftConversionOfferFactory(character_sheet=self.sheet, scene=SceneFactory())
-        self.assertEqual(offer.character_sheet, self.sheet)
+        offer = DriftConversionOfferFactory(
+            character_sheet=CharacterSheetFactory(), scene=self.scene
+        )
+        self.assertNotEqual(offer.character_sheet, self.sheet)
+
+    def test_an_offer_outlives_the_scene_it_opened_in(self):
+        offer = DriftConversionOfferFactory(character_sheet=self.sheet, scene=self.scene)
+        self.scene.delete()
+        offer.refresh_from_db()
+        self.assertIsNone(offer.scene)
 
     def test_one_cap_per_offer_and_target(self):
         offer = DriftConversionOfferFactory(character_sheet=self.sheet, scene=self.scene)
@@ -91,7 +99,7 @@ class DriftCorrectionConfigTests(TestCase):
         self.assertTrue(rite.client_hosted)
         self.assertEqual(
             rite.service_function_path,
-            "world.magic.services.drift_correction.perform_drift_correction_rite",
+            "world.magic.services.drift_correction.perform_settling_rite",
         )
         requirement = rite.requirements.get()
         self.assertTrue(requirement.matches_target_resonance)

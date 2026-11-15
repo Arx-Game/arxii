@@ -24,6 +24,8 @@
  */
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
+import { useActiveCharacterId } from '@/gm-adjudication/useActiveCharacterId';
+import { ReflectingOnRow } from '@/magic/components/ReflectingOnRow';
 import { usePersonaSearch } from '@/roster/usePersonaSearch';
 import { cn } from '@/lib/utils';
 
@@ -43,6 +45,7 @@ export function JournalEntryFields({ value, onChange, showAfterDeath }: JournalE
   const ids = useId();
   const [tagDraft, setTagDraft] = useState('');
   const { results } = usePersonaSearch(value.aboutTerm);
+  const characterSheetId = useActiveCharacterId();
 
   // A typed name is somebody only on an exact match against what the search has
   // answered with so far; both sides move, so this is derived, never latched.
@@ -127,6 +130,12 @@ export function JournalEntryFields({ value, onChange, showAfterDeath }: JournalE
           onChange={(event) => onChange({ ...value, body: event.target.value })}
         />
       </div>
+
+      <ReflectingOnRow
+        characterSheetId={characterSheetId}
+        value={value.reflection}
+        onChange={(reflection) => onChange({ ...value, reflection })}
+      />
 
       <div className="grid gap-5 sm:grid-cols-2 sm:gap-x-10">
         <div className="grid gap-[.3rem]">

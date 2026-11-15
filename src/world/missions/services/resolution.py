@@ -63,6 +63,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import transaction
 from django.utils import timezone
 
 from evennia_extensions.models import RoomProfile
@@ -73,6 +74,7 @@ from world.checks.services import level_opposition, perform_check
 from world.checks.theater import maybe_emit_resolution_theater
 from world.checks.types import CheckResult, ResolutionContext
 from world.covenants.mentorship import effective_combat_level
+from world.magic.constants import KindlingActKind
 from world.mechanics.effect_handlers import apply_all_effects
 from world.missions.constants import MissionStatus, NodeLocationMode, OptionKind, OptionSource
 from world.missions.models import (
@@ -771,15 +773,44 @@ def resolve_option(  # noqa: PLR0913
         roll_report.invocation = invoked
         roll_report.check_result = result
 
-    return _route_graded_outcome(
-        instance,
-        node,
-        option,
-        character,
-        result.outcome,
-        chosen_approach=chosen_approach,
-        advance=advance,
+    # #5124: acting on a kindling situation earns that resonance, scaled by the roll. An
+    # auto-succeeding approach rolls nothing and earns at the plainest success. The grant and
+    # the routing are one unit: a routing failure leaves nothing earned to earn again.
+    from world.magic.services.kindling import (  # noqa: PLC0415
+        award_kindled_deeds,
+        lowest_success_outcome,
     )
+    from world.magic.types.kindling import KindlingAct  # noqa: PLC0415
+
+    auto = (
+        option.source_kind == OptionSource.CHALLENGE
+        and chosen_approach is not None
+        and chosen_approach.auto_succeeds
+    )
+    with transaction.atomic():
+        award_kindled_deeds(
+            actor.character,
+            act=KindlingAct(
+                kind=KindlingActKind.MISSION_OPTION,
+                mission_option=option,
+                label=(
+                    chosen_approach.display_name
+                    if chosen_approach is not None
+                    else option.authored_ic_framing
+                ),
+            ),
+            outcome=lowest_success_outcome() if auto else result.outcome,
+            mission=instance,
+        )
+        return _route_graded_outcome(
+            instance,
+            node,
+            option,
+            character,
+            result.outcome,
+            chosen_approach=chosen_approach,
+            advance=advance,
+        )
 
 
 def _roll_option_invocation(

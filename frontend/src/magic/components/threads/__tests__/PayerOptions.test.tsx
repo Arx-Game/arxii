@@ -88,6 +88,25 @@ describe('PayerOptions', () => {
     expect(screen.getByTestId('payer-no-perks-1')).toHaveTextContent('No perks on this thread');
   });
 
+  it('names the strength beside a kindled payer and nothing beside one that is not', () => {
+    const options = [
+      { ...OPTIONS[0], kindled_strength: 'Blazing' },
+      { ...OPTIONS[1], kindled_strength: null },
+      OPTIONS[2],
+    ];
+    render(
+      <PayerOptions
+        thread={makeThread()}
+        options={options}
+        selectedResonanceId={1}
+        onSelect={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId('payer-kindled-1-1')).toHaveTextContent('Kindled, blazing');
+    expect(screen.queryByTestId('payer-kindled-1-2')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('payer-kindled-1-3')).not.toBeInTheDocument();
+  });
+
   it('draws each perk as a shaded bar with the value in its own right-hand cell', () => {
     render(
       <PayerOptions

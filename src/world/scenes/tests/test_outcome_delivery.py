@@ -72,6 +72,7 @@ def _pending_resolution_partial_success() -> PendingActionResolution:
     success_level 0, so the old wording rendered it as "Failure (Partial Success)"."""
     check_result = MagicMock()
     check_result.success_level = 0
+    check_result.outcome = None
     check_result.outcome_name = "Partial Success"
     check_result.chart = None
     main_result = StepResult(step_label="main", check_result=check_result, consequence_id=None)
@@ -299,7 +300,7 @@ class TreatmentOutcomeDeliveryTests(_ScenePipelineTestCase):
 
         mock_perform_treatment.return_value = TreatmentOutcome(
             attempt=MagicMock(),
-            outcome=MagicMock(),
+            outcome=None,
             effect_applied=False,
             severity_reduced=0,
             tiers_reduced=0,

@@ -19,6 +19,8 @@ from world.combat.services import _resolve_use_item, declare_use_item
 from world.combat.types import ActionOutcome
 from world.scenes.constants import RoundStatus
 
+_AWARD = "world.combat.services.declarations.use_item.award_unrolled"
+
 
 class UseItemManeuverConstantsTests(TestCase):
     def test_use_item_maneuver_exists(self):
@@ -79,12 +81,17 @@ class ResolveUseItemTests(TestCase):
             maneuver=CombatManeuver.USE_ITEM,
             item_instance=item,
         )
-        with patch("actions.definitions.items.UseItemAction") as mock_action_cls:
+        with (
+            patch("actions.definitions.items.UseItemAction") as mock_action_cls,
+            patch(_AWARD) as award,
+        ):
             mock_action = MagicMock()
             mock_action.run.return_value = MagicMock(success=True)
             mock_action_cls.return_value = mock_action
             _resolve_use_item(self.participant, action)
             assert mock_action.run.called
+            # #5124: a use that went through earns what it feeds, once.
+            award.assert_called_once()
             # The #2120 fix: the ObjectDB (not the ItemInstance row) is passed as
             # ``item``, and the (absent) target forwards as None, not dropped.
             assert mock_action.run.call_args.kwargs["item"] == item_obj
@@ -103,12 +110,17 @@ class ResolveUseItemTests(TestCase):
             maneuver=CombatManeuver.USE_ITEM,
             item_instance=item,
         )
-        with patch("actions.definitions.items.UseItemAction") as mock_action_cls:
+        with (
+            patch("actions.definitions.items.UseItemAction") as mock_action_cls,
+            patch(_AWARD) as award,
+        ):
             mock_action = MagicMock()
             mock_action.run.return_value = MagicMock(success=False)
             mock_action_cls.return_value = mock_action
             outcome = _resolve_use_item(self.participant, action)
             assert isinstance(outcome, ActionOutcome)
+            # #5124: a refused use did not happen, so it earns nothing.
+            award.assert_not_called()
 
     def test_item_instance_without_game_object_is_a_noop(self):
         """A factory-bare ItemInstance (no game_object) resolves to a no-op, not a crash.

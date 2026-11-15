@@ -601,6 +601,28 @@ class DigDeepOfferSerializer(serializers.Serializer):
     )
 
 
+class RallyResonanceChoiceSerializer(serializers.Serializer):
+    """One of an ally's resonances a Rally may name (#5124), read from a ``KindledResonance``.
+
+    The name, and whether it is kindled for the ally now: never how strongly.
+    """
+
+    id = serializers.IntegerField(
+        source="resonance.pk", help_text="The resonance's id, sent back as resonance_id."
+    )
+    name = serializers.CharField(source="resonance.name", help_text="The resonance's name.")
+    kindled = serializers.BooleanField(
+        source="is_kindled",
+        help_text="Whether it is kindled for the ally now (a Rally then surges more).",
+    )
+
+
+class RallyResonancesQuerySerializer(serializers.Serializer):
+    """Query for the Rally picker's resonance read: the ally's participant id."""
+
+    ally = serializers.IntegerField(min_value=1, help_text="The ally's participant id.")
+
+
 class _ParticipantListSerializer(serializers.ListSerializer):
     """Reads the face every listed participant presents in one batch (#4802).
 
@@ -2584,6 +2606,22 @@ class CoverSerializer(serializers.Serializer):
     """
 
     ally_participant_id = serializers.IntegerField(min_value=1)
+
+
+class RallySerializer(CoverSerializer):
+    """Write serializer for declaring a rally: the ally, and optionally one of their resonances.
+
+    ``resonance_id`` names a resonance the ALLY holds (#5124); a Rally that names one kindles
+    it for the fight, or surges more when it is already kindled.
+    """
+
+    resonance_id = serializers.IntegerField(min_value=1, required=False)
+
+
+class DigDeepSerializer(serializers.Serializer):
+    """Write serializer for digging deep: optionally one of her own resonances (#5124)."""
+
+    resonance_id = serializers.IntegerField(min_value=1, required=False)
 
 
 class InterposeSerializer(serializers.Serializer):

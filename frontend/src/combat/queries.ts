@@ -33,6 +33,9 @@ export const combatKeys = {
 
   combos: (encounterId: number) => [...combatKeys.all, 'combos', encounterId] as const,
 
+  rallyResonances: (encounterId: number, allyParticipantId: number | null) =>
+    [...combatKeys.all, 'rally-resonances', encounterId, allyParticipantId] as const,
+
   outcomeDetails: (ids: number[]) => [...combatKeys.all, 'outcome-details', ids] as const,
 
   consequenceOutcomes: (params: api.ConsequenceOutcomesParams) =>
@@ -227,6 +230,24 @@ export function useAvailableCombos(encounterId: number) {
     queryKey: combatKeys.combos(encounterId),
     queryFn: () => api.fetchAvailableCombos(encounterId),
     enabled: encounterId > 0,
+    staleTime: 5_000,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Rally resonance picker (#5124)
+// ---------------------------------------------------------------------------
+
+/**
+ * The resonances of the ally a Rally is aimed at, each with whether it is kindled now.
+ * Read only once an ally is picked, so the polled encounter payload carries no kindling.
+ * Disabled while no ally is picked.
+ */
+export function useRallyResonances(encounterId: number, allyParticipantId: number | null) {
+  return useQuery({
+    queryKey: combatKeys.rallyResonances(encounterId, allyParticipantId),
+    queryFn: () => api.fetchRallyResonances(encounterId, allyParticipantId as number),
+    enabled: encounterId > 0 && allyParticipantId !== null,
     staleTime: 5_000,
   });
 }

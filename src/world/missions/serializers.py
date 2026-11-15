@@ -975,6 +975,14 @@ class JournalEntrySerializer(serializers.Serializer):
         return PendingMissionInviteSerializer(invites, many=True).data if invites else []
 
 
+class KindledFeedSerializer(serializers.Serializer):
+    """Read-only mirror of :class:`world.missions.types.KindledFeed` (#5124)."""
+
+    resonance_name = serializers.CharField()
+    strength_name = serializers.CharField()
+    reason = serializers.CharField()
+
+
 class BeatOptionSerializer(serializers.Serializer):
     """Read-only mirror of :class:`world.missions.types.BeatOption`."""
 
@@ -987,6 +995,8 @@ class BeatOptionSerializer(serializers.Serializer):
     reasons = serializers.ListField(child=serializers.CharField(), read_only=True)
     # #4333: the option rolls a check, so a being's favor may be invoked on it.
     rolls_check = serializers.BooleanField()
+    # #5124: the kindled resonances taking this option would feed (the viewer's own options).
+    feeds = KindledFeedSerializer(many=True, read_only=True)
 
 
 class TrackViewSerializer(serializers.Serializer):

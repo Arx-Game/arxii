@@ -1705,3 +1705,60 @@ def target_low_health(ctx: SituationContext, params: SituationParams) -> bool:
     except CharacterVitals.DoesNotExist:
         return False
     return vitals.health_percentage < fraction
+
+
+# --- Kindling situations (#5124) ----------------------------------------------------------
+# Each is ``bool(finder(...))``: the finder in ``world.magic.services.kindling`` returns what
+# made the situation hold, and kindling reads the same finder for strength and reasons, so a
+# vow perk and a kindled resonance can never disagree about whether it holds. With
+# ``ctx.act`` set the finder answers "does this act feed it" (see ``SituationContext``).
+
+
+def _kindling_holds(situation: str, ctx: SituationContext, params: SituationParams) -> bool:
+    from world.magic.services.kindling import KINDLING_EVIDENCE_FINDERS  # noqa: PLC0415
+
+    return bool(KINDLING_EVIDENCE_FINDERS[situation](ctx, params))
+
+
+@register(Situation.THREAD_ANCHOR_PRESENT)
+def thread_anchor_present(ctx: SituationContext, params: SituationParams) -> bool:
+    """A person or organization one of the holder's threads is tied to is in the scene (an
+    opponent in the fight with ``enemies_only``). With an act: aimed at that anchor.
+    Optional param ``enemies_only``."""
+    return _kindling_holds(Situation.THREAD_ANCHOR_PRESENT, ctx, params)
+
+
+@register(Situation.OWN_FEELING)
+def own_feeling(ctx: SituationContext, params: SituationParams) -> bool:
+    """The holder bears an active condition carrying ``condition_property`` (for a kindling
+    row, the resonance's ``feeling`` when the row sets none). Optional ``count_threshold``
+    is the minimum severity. Any act while bearing it feeds it."""
+    return _kindling_holds(Situation.OWN_FEELING, ctx, params)
+
+
+@register(Situation.SHARED_FEELING)
+def shared_feeling(ctx: SituationContext, params: SituationParams) -> bool:
+    """Someone else here (not an opponent) bears a condition carrying ``condition_property``,
+    other than one the holder laid that carries ``KindlingConfig.harm_property``."""
+    return _kindling_holds(Situation.SHARED_FEELING, ctx, params)
+
+
+@register(Situation.TARGET_IN_STATE_THEY_CAUSED)
+def target_in_state_they_caused(ctx: SituationContext, params: SituationParams) -> bool:
+    """The target (as ``target_has_condition_property`` reads it) bears a condition carrying
+    ``condition_property`` whose ``source_character`` is the holder."""
+    return _kindling_holds(Situation.TARGET_IN_STATE_THEY_CAUSED, ctx, params)
+
+
+@register(Situation.SOMEONE_IN_TROUBLE)
+def someone_in_trouble(ctx: SituationContext, params: SituationParams) -> bool:
+    """Someone present (not an opponent) is in peril, badly hurt or held. With an act: the
+    act aids. Reads no params."""
+    return _kindling_holds(Situation.SOMEONE_IN_TROUBLE, ctx, params)
+
+
+@register(Situation.MISSION_THEME)
+def mission_theme(ctx: SituationContext, params: SituationParams) -> bool:
+    """The current mission carries ``mission_theme`` (with an act: the option taken does).
+    Required param ``mission_theme``; False outside a mission."""
+    return _kindling_holds(Situation.MISSION_THEME, ctx, params)

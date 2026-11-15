@@ -1151,31 +1151,33 @@ ritual, the dashboard row lists it.
 
 ---
 
-## Drift correction: the conversion offer and rite (#4733, slice 4 of #4672, BUILT 2026-10-27; reread by #5123)
+## Drift correction: the conversion offer and rite (#4733, slice 4 of #4672, BUILT 2026-10-27; reread by #5123 and #5124)
 
 A character who earns resonance from a deed in their main affinity while unsettled (#5123) can
 atone: turn resonance of an affinity grown past who they are into the resonance the deed grew,
-once per scene, with a rite. It is read on lifetime, so it works after the excess was spent.
+with a rite. Since #5124 the chance stays open until used (not once per scene) and the rite is
+the rite of settling over what the character reflected on. It is read on lifetime, so it works after the excess was spent.
 
 **Built:**
 - Deed classification: `DEED_GAIN_SOURCES` / `NON_DEED_GAIN_SOURCES` beside the accelerated sets,
   with a total-classification test; `GainSource.DRIFT_CORRECTION` for the conversion itself.
-- Offers: `DriftConversionOffer` (one per character and scene) with a `DriftConversionCap` per
-  target resonance, opened or extended from `grant_resonance` and lapsed in `Scene.finish_scene`.
-  An offer needs the grantee standing in a live scene at grant time, so a deed settled away from a
-  scene (the weekly pose-endorsement settlement) opens none; accepted as the cost of a one-scene
-  window. Telnet players get a line on open and on lapse; web players poll.
+- Offers: `DriftConversionOffer` (one per character since #5124) with a `DriftConversionCap` per
+  target resonance, opened or extended from `grant_resonance` and open until the rite spends it (the
+  scene-end lapse is gone). An offer needs the grantee standing in a live scene at grant time, so a deed
+  settled away from a scene (the weekly pose-endorsement settlement) opens none. Telnet players get a
+  line on open; the sheet's aura card shows the open chance.
 - The rite: `DriftCorrectionConfig` (rite, check type, difficulty, cap percent) and
   `DriftCorrectionOutcomeShare` (share of the request converted per outcome tier, never lower at
-  a better tier), run by `perform_drift_correction_rite` at the authored Fall and Redemption pair
-  rates through the new `convert_resonance_amount`. A failed roll spends the offering and keeps the
-  cap. Worn focus adds to the check. `max_yield_per_earned_point` estimates farm risk for tuning.
+  a better tier), run since #5124 by the rite of settling (`perform_settling_rite`) over every waiting
+  reflection, at the authored Fall and Redemption pair rates through `convert_resonance_amount`. A
+  failed roll spends the offering and keeps the cap. Worn focus adds to the check. `max_yield_per_earned_point` estimates farm risk for tuning.
 - Offering: a third `RitualComponentRequirement` mode (`matches_target_resonance`,
   `min_item_meaning`) accepting an item tied to the target resonance, carrying a motif facet of it,
   or meaning enough to the performer.
-- Surfaces: two actions (plus `accept_aura_change`, #5123), telnet `aura` (`aura atone`, `aura
-  decline`, `aura accept`), REST `/api/magic/drift-correction/`, and the React gate
-  and `SettleAuraDialog` on the scene page and game page; admin pages for the tuning rows; Required content row
+- Surfaces (reshaped by #5124): `PerformSettlingRiteAction`, telnet `aura` / `aura settle <offering>`,
+  REST `/api/magic/settling-rite/` and `/api/magic/drift-correction/pending/`, and the sheet's aura card
+  with `SettleAuraDialog` (the scene-page and game-page gate, the atone, decline and accept actions and
+  verbs are removed); admin pages for the tuning rows; Required content row
   `drift-correction-config`. Journey: `integration_tests/test_drift_correction_journeys.py`.
 
 Drift thresholds (slice 3, #4732) were built after this slice and replaced by the unsettled reading
@@ -1259,16 +1261,16 @@ A mixed character is the normal case. Built, as one PR:
   (set at creation from the weighted picks, nudged by the Glimpse, moved by accepting);
   `CharacterResonance.mire_lifetime` is a Sineater's Mire share with its own allowance. A
   non-main affinity grown past its settled share plus the tolerance makes the character
-  unsettled; a pull outside the main affinity calls for no check of its own. Exits: Atone (in a
-  live scene, lifetime-based, Mire first) and Accept the changes to your Aura. A mixed character
+  unsettled; a pull outside the main affinity calls for no check of its own. Exit (since #5124): the
+  rite of settling over what the character reflected on, which atones (lifetime-based, Mire first) or
+  accepts the aura's change by the roll's share. A mixed character
   casts at the full alignment bonus in every affinity they are settled in.
 - **Creation.** The Gift stage's resonance step spreads `DriftConfig.creation_points` across
   several resonances with a live halo in words; `provision_magic` seeds lifetime (a
   `CHARACTER_CREATION` ledger row) so a new character reads exactly settled. The 80/20
   `starting_aura_shares` is gone.
-- **Surfaces.** The sheet's `AuraHalo` (settled line, Mire share apart, Unsettled status and a
-  Settle your aura button), `SettleAuraDialog`, telnet `aura` / `aura atone` / `aura accept`,
-  `POST /api/magic/character-auras/{id}/accept/`.
+- **Surfaces.** The sheet's `AuraHalo` (settled line, Mire share apart, Unsettled status) and its
+  reflections card with `SettleAuraDialog` (#5124), telnet `aura` / `aura settle <offering>`.
 - **Removed:** `DriftConfig.threshold_percent`, `threshold_floor`, `severity_step`,
   `off_aura_pull_steps`, `AffinityInteraction.conflict_weight`, `provision_additional_gift_thread`,
   the telnet `drift` command, the merge-two-threads paths (ADR-0237: deliberate discards of tuning
@@ -1278,6 +1280,34 @@ A mixed character is the normal case. Built, as one PR:
 
 Not built here: what causes a resonance gain (#5124) and substances and Primum (#5125). Staff
 still author the per-resonance pull perks and the `DriftConfig` numbers in admin.
+
+## Kindled resonances, reflections and the rite of settling (#5124, ADR-5124, BUILT 2026-11-15)
+
+Built as one PR (spec in the issue body; #5129's settling rite folded in):
+
+- **Kindled.** A resonance is kindled when one of its staff-authored `KindlingSituation` rows holds
+  (on the resonance, or once on an affinity for all of its resonances), or a Rally or a GM kindled
+  it. Strength is a staff-named `KindledStrengthTier` (Faint, Strong, Blazing to start); players
+  see the word and the reason, never a number. Six new `Situation` members (thread anchor present,
+  own feeling, shared feeling, target in a state they caused, someone in trouble, mission theme)
+  are shared with vow perks. `Resonance.feeling` and `MissionTheme` feed them.
+- **Uses.** Drawing strength (a kindled payer reads the thread higher; no control given up), giving
+  in (Fury for any kindled resonance, replacing the anchor person; Lose yourself only at a blazing
+  strength), Dig deep and Rally naming a resonance (a Rally kindles an unkindled one until the
+  fight ends), and a GM kindling by hand (`stage kindle`).
+- **Earning.** Acting on a kindling situation earns the resonance as `KINDLED_DEED`, scaled by the
+  roll; an outcome with no act aimed at it earns nothing; a mission option shows which kindled
+  resonance it feeds. Taking an action never asks how the character feels.
+- **Reflecting and settling.** A pose or journal entry carries an optional "Reflecting on" row
+  (a deed or the unsettling resonance, then Embrace or Disown). One rite of settling carries every
+  waiting reflection out with one offering and one roll; the chance to atone no longer lapses with
+  the scene; the click-to-accept, atone and decline paths are gone.
+- **Surfaces.** Admin (situations on the Resonance and Affinity pages, one Kindling config page),
+  the "Your resonances" panel, the Reflecting on row, the sheet's reflections card and the rite
+  dialog, telnet `resonances`, `reflect`, `pose/reflect`, `journal/reflect`, `aura settle`.
+- **Not built (by design).** No GM is needed for kindling; a Rally or GM kindling never earns by
+  itself; nothing is earned for an outcome alone. Staff must author the situations: until they do,
+  nothing is kindled.
 
 ## Audere earlier with control; Soulfray's anima-0 stage (#4740, slice 4 of #4727, BUILT 2026-10-27)
 

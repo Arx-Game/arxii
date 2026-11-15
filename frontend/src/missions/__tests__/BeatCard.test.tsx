@@ -6,7 +6,7 @@ import { vi } from 'vitest';
 
 import type { BeatView } from '../types';
 
-function beatWith(reasons: string[]): BeatView {
+function beatWith(reasons: string[], feeds: BeatView['options'][number]['feeds'] = []): BeatView {
   return {
     instance_id: 7,
     template_name: 'PLACEHOLDER mission',
@@ -22,6 +22,7 @@ function beatWith(reasons: string[]): BeatView {
         base_risk: 0,
         reasons,
         rolls_check: false,
+        feeds,
       },
     ],
     is_paused: false,
@@ -67,5 +68,26 @@ describe('BeatCard because reasons', () => {
     render(withProviders(<BeatCard instanceId={7} roomKey="Gate" />));
 
     expect(screen.queryByTestId('option-reason')).not.toBeInTheDocument();
+  });
+
+  it('shows the kindled resonance an option would feed, by name and reason', () => {
+    useBeatMock.mockReturnValue({
+      data: beatWith(
+        [],
+        [
+          {
+            resonance_name: 'Domination',
+            strength_name: 'Strong',
+            reason: 'the overseers are Cowed',
+          },
+        ]
+      ),
+      isLoading: false,
+    });
+    render(withProviders(<BeatCard instanceId={7} roomKey="Gate" />));
+
+    expect(screen.getByTestId('option-feeds').textContent).toBe(
+      'Your Domination is kindled: the overseers are Cowed'
+    );
   });
 });

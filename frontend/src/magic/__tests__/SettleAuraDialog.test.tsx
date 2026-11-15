@@ -1,959 +1,214 @@
 /**
- * Coverage for the Settle your aura dialog (#5123, Screen 4 of the approved demo) and
- * the drift conversion offer ceremony (#4733) that is its Atone exit:
- * DriftConversionOfferGate + dialog with real hooks
- * (usePendingDriftConversionOffers / useConvertDrift / useDeclineDriftConversion)
- * and a mocked api transport - same pattern as EntryFlourishOfferDialog.test.tsx.
+ * Coverage for the rite of settling dialog (#5124, Screen 6 of the approved demo): real
+ * hooks (useSettlingRite / usePerformSettlingRite) over a mocked api transport, the same
+ * pattern as EntryFlourishOfferDialog.test.tsx.
  */
 
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
 import type { ReactNode } from 'react';
-import { DriftConversionOfferGate } from '../components/DriftConversionOfferGate';
 import { SettleAuraDialog } from '../components/SettleAuraDialog';
-import type {
-  DriftConversionOffer,
-  DriftCorrectionResult,
-  PaginatedDriftConversionOfferList,
-} from '../types';
+import { offeringLabel } from '../riteText';
+import type { RiteOffering, RiteReflection, SettlingRiteReading } from '../types';
 
 vi.mock('../api', () => ({
-  getPendingDriftConversionOffers: vi.fn(),
-  convertDrift: vi.fn(),
-  declineDriftConversion: vi.fn(),
+  getSettlingRite: vi.fn(),
+  performSettlingRite: vi.fn(),
 }));
 
 import * as api from '../api';
-import type { CharacterAura } from '../auraQueries';
-import { throwApiError } from '@/lib/errors';
 
-// The aura endpoints go through apiFetch; the gate reads the account's auras and the
-// dialog's Accept posts to the aura's accept action.
-const apiFetchMock = vi.hoisted(() => vi.fn());
-vi.mock('@/evennia_replacements/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/evennia_replacements/api')>()),
-  apiFetch: (...args: unknown[]) => apiFetchMock(...args),
-}));
-
-/** A primal character whose abyssal has grown past who they are. */
-const UNSETTLED_AURA: CharacterAura = {
-  id: 7,
-  character: 55,
-  shares: [
-    { affinity_id: 1, affinity_name: 'Primal', percent: '58.00', settled_percent: '66.00' },
-    { affinity_id: 2, affinity_name: 'Abyssal', percent: '42.00', settled_percent: '34.00' },
-  ],
-  dominant_affinity: 'Primal',
-  dominant_affinity_display: 'Primal',
-  unsettled: true,
-  unsettled_line: 'Your Domination has grown strong enough to make you unsettled.',
-  unsettled_affinity_name: 'Abyssal',
-  mire_share_words: 'none',
-  glimpse_state: 'NOT_STARTED',
-  updated_at: '2026-11-14T00:00:00Z',
+const JOURNAL_REFLECTION: RiteReflection = {
+  id: 1,
+  choice: 'DISOWN',
+  kind: 'resonance',
+  title: 'Disown your Domination',
+  where: '"The collar" · journal',
+  from_line: 'from your journal, "The collar"',
+  excerpt: 'I set the iron collar on the altar and made myself look at it.',
+  effect_line: 'Domination turns toward Fury, up to 3.',
 };
-const SETTLED_AURA: CharacterAura = {
-  ...UNSETTLED_AURA,
-  unsettled: false,
-  unsettled_line: '',
-  unsettled_affinity_name: '',
+const POSE_REFLECTION: RiteReflection = {
+  id: 2,
+  choice: 'EMBRACE',
+  kind: 'deed',
+  title: "Embrace Barred the overseers' door",
+  where: 'Pose in The Quarry',
+  from_line: 'from your pose in The Quarry',
+  excerpt: 'They had it coming. All of them.',
+  effect_line: 'Your Domination from the door grows, up to 5.',
 };
-
-const OFFER: DriftConversionOffer = {
-  id: 12,
-  scene_id: 101,
-  character_id: 55,
-  caps: [
-    {
-      target_resonance: { id: 20, name: 'Dawnlight', affinity: 'Celestial' },
-      cap_remaining: 12,
-      focus_bonus: 0,
-      sources: [
-        {
-          resonance_id: 30,
-          resonance_name: 'Ruin',
-          balance: 14,
-          multiplier: '0.50',
-          conversion_type: 'REDEMPTION',
-          max_amount: 12,
-          projected_output: 6,
-        },
-        {
-          resonance_id: 31,
-          resonance_name: 'Spite',
-          balance: 5,
-          multiplier: '1.50',
-          conversion_type: 'FALL',
-          max_amount: 5,
-          projected_output: 7,
-        },
-      ],
-      qualifying_components: [
-        { item_id: 501, name: 'Ash-grey candle', mode: 'material' },
-        { item_id: 502, name: 'Cracked mirror', mode: 'facet' },
-        { item_id: 503, name: "Mother's ring", mode: 'keepsake' },
-      ],
-    },
-  ],
-  rite_ready: true,
-  rite_not_ready_message: '',
+const COLLAR: RiteOffering = {
+  item_id: 501,
+  name: 'Iron collar',
+  mode: 'keepsake',
+  resonance_name: 'Fury',
+  focus_bonus: 2,
 };
-
-const NOT_READY = 'The rite of correction is not set up yet; tell staff.';
-
-const OFFER_NOT_READY: DriftConversionOffer = {
-  ...OFFER,
-  rite_ready: false,
-  rite_not_ready_message: NOT_READY,
-};
-
-const OFFER_WITH_FOCUS: DriftConversionOffer = {
-  ...OFFER,
-  caps: [{ ...OFFER.caps[0], focus_bonus: 2 }],
-};
-
-const RESULT: DriftCorrectionResult = {
-  source_resonance_id: 30,
-  target_resonance_id: 20,
-  attempted_amount: 12,
-  converted_amount: 8,
-  granted_amount: 4,
-  outcome_name: 'Partial Success',
-  success_level: 1,
-  conversion_type: 'REDEMPTION',
+const THREAD: RiteOffering = {
+  item_id: 502,
+  name: 'Dawn-gold Thread',
+  mode: 'material',
+  resonance_name: 'Dawnlight',
   focus_bonus: 0,
 };
 
-function paginated(results: DriftConversionOffer[]): PaginatedDriftConversionOfferList {
-  return { count: results.length, next: null, previous: null, results };
+function reading(overrides: Partial<SettlingRiteReading> = {}): SettlingRiteReading {
+  return {
+    reflections: [JOURNAL_REFLECTION, POSE_REFLECTION],
+    offerings: [COLLAR],
+    rite_ready: true,
+    not_ready_message: '',
+    check_name: 'Composure',
+    ...overrides,
+  };
 }
 
-function renderGate(
-  offers: DriftConversionOffer[],
-  sceneId: number | null = 101,
-  auras: CharacterAura[] = []
-) {
-  vi.mocked(api.getPendingDriftConversionOffers).mockResolvedValue(paginated(offers));
-  apiFetchMock.mockImplementation(async (_url: string, init?: RequestInit) =>
-    init?.method === 'POST'
-      ? new Response(JSON.stringify({ detail: 'You become more abyssal.', aura: SETTLED_AURA }), {
-          status: 200,
-        })
-      : new Response(JSON.stringify(auras), { status: 200 })
+function renderDialog(onOpenChange = vi.fn()) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  }
-  const view = render(<DriftConversionOfferGate sceneId={sceneId} />, { wrapper: Wrapper });
-  return { ...view, client };
+  render(<SettleAuraDialog characterSheetId={55} open onOpenChange={onOpenChange} />, { wrapper });
+  return onOpenChange;
 }
 
-describe('SettleAuraDialog Atone exit (via DriftConversionOfferGate)', () => {
+describe('SettleAuraDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('auto-opens as Settle your aura with the cap remaining and mode-labelled pills', async () => {
-    renderGate([OFFER]);
+  it('lists every waiting reflection with its writing and what the rite will do', async () => {
+    vi.mocked(api.getSettlingRite).mockResolvedValue(reading());
+    renderDialog();
 
-    const dialog = await screen.findByRole('dialog');
-    expect(dialog).toHaveTextContent('Settle your aura');
-    expect(screen.getByTestId('settle-exit-atone')).toHaveTextContent('Atone');
-    expect(screen.getByTestId('drift-cap-20')).toHaveTextContent('Dawnlight');
-    expect(screen.getByTestId('drift-cap-remaining-20')).toHaveTextContent('12');
-    expect(screen.getByTestId('drift-component-501')).toHaveTextContent(
-      'Ash-grey candle · material'
+    expect(await screen.findByText('Settling your aura')).toBeInTheDocument();
+    expect(api.getSettlingRite).toHaveBeenCalledWith(55);
+    const journal = await screen.findByTestId('rite-reflection-1');
+    expect(journal).toHaveTextContent('Disown your Domination');
+    expect(journal).toHaveTextContent(
+      '“I set the iron collar on the altar and made myself look at it.” from your journal, "The collar"'
     );
-    expect(screen.getByTestId('drift-component-502')).toHaveTextContent('Cracked mirror · facet');
-    expect(screen.getByTestId('drift-component-503')).toHaveTextContent("Mother's ring · keepsake");
+    expect(journal).toHaveTextContent('Domination turns toward Fury, up to 3.');
+    expect(screen.getByTestId('rite-reflection-2')).toHaveTextContent(
+      'from your pose in The Quarry'
+    );
   });
 
-  it('source pills show balance, pair rate type and projected yield', async () => {
-    renderGate([OFFER]);
+  it('takes a lone offering as the choice and says what is rolled, with the focus bonus', async () => {
+    vi.mocked(api.getSettlingRite).mockResolvedValue(reading());
+    renderDialog();
 
-    await screen.findByRole('dialog');
-    const ruin = screen.getByTestId('drift-source-20-30');
-    expect(ruin).toHaveTextContent('Ruin');
-    expect(ruin).toHaveTextContent('14');
-    expect(ruin).toHaveTextContent('Redemption');
-    expect(ruin).toHaveTextContent('6');
-    expect(screen.getByTestId('drift-source-20-31')).toHaveTextContent('Fall');
+    const offering = await screen.findByTestId('rite-offering-501');
+    expect(offering).toHaveTextContent('Iron collar · a keepsake of Fury');
+    expect(offering).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('rite-roll')).toHaveTextContent(
+      'Roll: Composure, +2 from your worn focus. A full success carries out every reflection in full'
+    );
+    expect(screen.getByTestId('rite-roll')).toHaveTextContent(
+      'The offering is spent whatever the roll.'
+    );
+    expect(screen.getByTestId('rite-perform')).toBeEnabled();
   });
 
-  it('defaults the amount to the source max and builds the rate line from the preview', async () => {
+  it('asks the player to pick among several offerings and sends exactly that item', async () => {
     const user = userEvent.setup();
-    renderGate([OFFER]);
+    vi.mocked(api.getSettlingRite).mockResolvedValue(reading({ offerings: [COLLAR, THREAD] }));
+    vi.mocked(api.performSettlingRite).mockResolvedValue({
+      outcome_name: 'Success',
+      success_level: 1,
+      focus_bonus: 0,
+      lines: ['You disown your Domination: 3 Domination became 1 Fury.'],
+    });
+    renderDialog();
 
-    await screen.findByRole('dialog');
-    expect(screen.getByTestId('drift-amount-20')).toHaveValue(12);
-    expect(screen.getByTestId('drift-rate-20')).toHaveTextContent(
-      'Redemption: 12 Ruin becomes about 6 Dawnlight'
-    );
-    expect(screen.getByTestId('drift-rate-20')).not.toHaveTextContent('focus');
+    await screen.findByTestId('rite-offering-502');
+    expect(screen.getByTestId('rite-perform')).toBeDisabled();
+    await user.click(screen.getByTestId('rite-offering-502'));
+    // No focus line for an offering with no bonus.
+    expect(screen.getByTestId('rite-roll')).not.toHaveTextContent('worn focus');
+    await user.click(screen.getByTestId('rite-perform'));
 
-    // Switching source resets the amount to that source's max and rewrites the line.
-    await user.click(screen.getByTestId('drift-source-20-31'));
-    expect(screen.getByTestId('drift-amount-20')).toHaveValue(5);
-    expect(screen.getByTestId('drift-rate-20')).toHaveTextContent(
-      'Fall: 5 Spite becomes about 7 Dawnlight'
-    );
-  });
-
-  it('scales the projected yield with a smaller amount', async () => {
-    const user = userEvent.setup();
-    renderGate([OFFER]);
-
-    await screen.findByRole('dialog');
-    const amount = screen.getByTestId('drift-amount-20');
-    await user.clear(amount);
-    await user.type(amount, '4');
-    expect(screen.getByTestId('drift-rate-20')).toHaveTextContent(
-      'Redemption: 4 Ruin becomes about 2 Dawnlight'
-    );
-  });
-
-  it('appends the focus clause only when focus_bonus is above zero', async () => {
-    renderGate([OFFER_WITH_FOCUS]);
-
-    await screen.findByRole('dialog');
-    expect(screen.getByTestId('drift-rate-20')).toHaveTextContent(
-      'Redemption: 12 Ruin becomes about 6 Dawnlight; a focus adds 2'
-    );
-  });
-
-  it('Begin the rite is disabled until a component is chosen and the amount is valid', async () => {
-    const user = userEvent.setup();
-    renderGate([OFFER]);
-
-    await screen.findByRole('dialog');
-    const perform = screen.getByTestId('drift-perform-20');
-    expect(perform).toHaveTextContent('Begin the rite');
-    expect(perform).toBeDisabled();
-
-    await user.click(screen.getByTestId('drift-component-502'));
-    expect(perform).not.toBeDisabled();
-
-    // Above the source's max_amount is not valid.
-    const amount = screen.getByTestId('drift-amount-20');
-    await user.clear(amount);
-    await user.type(amount, '13');
-    expect(perform).toBeDisabled();
-    await user.clear(amount);
-    await user.type(amount, '0');
-    expect(perform).toBeDisabled();
-    await user.clear(amount);
-    await user.type(amount, '9');
-    expect(perform).not.toBeDisabled();
-  });
-
-  it('says the rite is not set up in place of the pills while it is not ready', async () => {
-    renderGate([OFFER_NOT_READY]);
-
-    await screen.findByRole('dialog');
-    expect(screen.getByTestId('drift-not-ready-20')).toHaveTextContent(
-      new RegExp(`^${NOT_READY}$`)
-    );
-    expect(
-      screen.queryByRole('group', { name: 'Components for Dawnlight' })
-    ).not.toBeInTheDocument();
-    expect(screen.queryByTestId('drift-component-501')).not.toBeInTheDocument();
-    expect(screen.getByTestId('drift-perform-20')).toBeDisabled();
-    // What the offer holds is still shown.
-    expect(screen.getByTestId('drift-cap-remaining-20')).toHaveTextContent('12');
-    expect(screen.getByTestId('drift-source-20-30')).toBeInTheDocument();
-  });
-
-  it('shows the pills and no not-ready line while the rite is ready', async () => {
-    renderGate([OFFER]);
-
-    await screen.findByRole('dialog');
-    expect(screen.queryByTestId('drift-not-ready-20')).not.toBeInTheDocument();
-    expect(screen.getByTestId('drift-component-501')).toBeInTheDocument();
-  });
-
-  it('components are single-select', async () => {
-    const user = userEvent.setup();
-    renderGate([OFFER]);
-
-    await screen.findByRole('dialog');
-    await user.click(screen.getByTestId('drift-component-501'));
-    await user.click(screen.getByTestId('drift-component-503'));
-    expect(screen.getByTestId('drift-component-501')).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByTestId('drift-component-503')).toHaveAttribute('aria-pressed', 'true');
-  });
-
-  it('Begin the rite posts the exact body and shows the result line', async () => {
-    const user = userEvent.setup();
-    vi.mocked(api.convertDrift).mockResolvedValue(RESULT);
-    renderGate([OFFER]);
-
-    await screen.findByRole('dialog');
-    await user.click(screen.getByTestId('drift-component-502'));
-    await user.click(screen.getByTestId('drift-perform-20'));
-
-    await waitFor(() => {
-      expect(api.convertDrift).toHaveBeenCalledWith({
-        offer_id: 12,
-        source_resonance_id: 30,
-        target_resonance_id: 20,
-        amount: 12,
+    await waitFor(() =>
+      expect(api.performSettlingRite).toHaveBeenCalledWith({
+        character_sheet_id: 55,
         component_ids: [502],
-      });
-    });
-    // The same words the telnet verb and the action send: the tier leads the line.
-    expect(await screen.findByTestId('drift-result')).toHaveTextContent(
-      /^Partial Success: 8 Ruin became 4 Dawnlight\.$/
-    );
-  });
-
-  it('says the rite fails, in the telnet words, when nothing converted', async () => {
-    const user = userEvent.setup();
-    vi.mocked(api.convertDrift).mockResolvedValue({
-      ...RESULT,
-      converted_amount: 0,
-      granted_amount: 0,
-      outcome_name: 'Failure',
-      success_level: -1,
-    });
-    renderGate([OFFER]);
-
-    await screen.findByRole('dialog');
-    await user.click(screen.getByTestId('drift-component-502'));
-    await user.click(screen.getByTestId('drift-perform-20'));
-
-    expect(await screen.findByTestId('drift-result')).toHaveTextContent(
-      /^The rite fails; nothing is converted\.$/
-    );
-  });
-
-  it('keeps the result line after the exhausted offer leaves the inbox', async () => {
-    const user = userEvent.setup();
-    vi.mocked(api.convertDrift).mockResolvedValue(RESULT);
-    const { client } = renderGate([OFFER]);
-
-    await screen.findByRole('dialog');
-    await user.click(screen.getByTestId('drift-component-502'));
-    await user.click(screen.getByTestId('drift-perform-20'));
-    await screen.findByTestId('drift-result');
-    // Let the post-convert invalidation refetch settle before the inbox empties.
-    await waitFor(() => {
-      expect(api.getPendingDriftConversionOffers).toHaveBeenCalledTimes(2);
-    });
-
-    vi.mocked(api.getPendingDriftConversionOffers).mockResolvedValue(paginated([]));
-    await act(async () => {
-      await client.refetchQueries();
-    });
-    expect(screen.getByTestId('drift-result')).toHaveTextContent('Partial Success');
-    await waitFor(() => {
-      expect(screen.queryByTestId('drift-perform-20')).not.toBeInTheDocument();
-    });
-    expect(screen.getByTestId('drift-result')).toHaveTextContent('Partial Success');
-  });
-
-  it('shows a refused offering as the plain sentence, never a field name', async () => {
-    const user = userEvent.setup();
-    const SENTENCE = 'You are not carrying everything you offered.';
-    // The convert view's refusal body, run through the same error reader the api uses.
-    vi.mocked(api.convertDrift).mockImplementation(() =>
-      throwApiError(
-        new Response(JSON.stringify({ detail: SENTENCE }), { status: 400 }),
-        'Failed to perform the rite'
-      )
-    );
-    renderGate([OFFER]);
-
-    await screen.findByRole('dialog');
-    await user.click(screen.getByTestId('drift-component-501'));
-    await user.click(screen.getByTestId('drift-perform-20'));
-
-    const error = await screen.findByTestId('drift-error');
-    expect(error).toHaveTextContent(new RegExp(`^${SENTENCE}$`));
-    expect(error).not.toHaveTextContent('component_ids');
-  });
-
-  it('a refusal keeps the dialog open and shows the backend detail', async () => {
-    const user = userEvent.setup();
-    const DETAIL = 'You are not carrying everything you offered.';
-    vi.mocked(api.convertDrift).mockRejectedValue(new Error(DETAIL));
-    renderGate([OFFER]);
-
-    await screen.findByRole('dialog');
-    await user.click(screen.getByTestId('drift-component-501'));
-    await user.click(screen.getByTestId('drift-perform-20'));
-
-    const error = await screen.findByTestId('drift-error');
-    expect(error).toHaveAttribute('role', 'alert');
-    expect(error).toHaveTextContent(DETAIL);
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-  });
-
-  it('Not now posts { offer_id } and closes', async () => {
-    const user = userEvent.setup();
-    vi.mocked(api.declineDriftConversion).mockResolvedValue({ detail: 'ok' });
-    renderGate([OFFER]);
-
-    await screen.findByRole('dialog');
-    await user.click(screen.getByRole('button', { name: 'Not now' }));
-
-    await waitFor(() => {
-      expect(api.declineDriftConversion).toHaveBeenCalledWith({ offer_id: 12 });
-    });
-    await waitFor(() => {
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    });
-  });
-
-  it('shows the offer for its own scene when the account holds offers in two scenes', async () => {
-    const other: DriftConversionOffer = {
-      ...OFFER,
-      id: 99,
-      scene_id: 202,
-      caps: [
-        {
-          ...OFFER.caps[0],
-          target_resonance: { id: 77, name: 'Hearthfire', affinity: 'Primal' },
-        },
-      ],
-    };
-    renderGate([other, OFFER], 101);
-
-    await screen.findByRole('dialog');
-    expect(screen.getByTestId('drift-cap-20')).toBeInTheDocument();
-    expect(screen.queryByTestId('drift-cap-77')).not.toBeInTheDocument();
-  });
-
-  it('renders nothing when no offer belongs to the scene', async () => {
-    renderGate([OFFER], 303);
-
-    // The poll must have been asked AND answered before absence means anything.
-    await waitFor(() => {
-      expect(api.getPendingDriftConversionOffers).toHaveBeenCalled();
-    });
-    await act(async () => {
-      await vi.mocked(api.getPendingDriftConversionOffers).mock.results[0].value;
-    });
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('drift-conversion-gate-strip')).not.toBeInTheDocument();
-  });
-
-  it('does not poll until the scene is known', () => {
-    renderGate([OFFER], null);
-
-    expect(api.getPendingDriftConversionOffers).not.toHaveBeenCalled();
-    expect(screen.queryByTestId('drift-conversion-gate-strip')).not.toBeInTheDocument();
-  });
-
-  it('names the target in the pill groups and flags an invalid amount', async () => {
-    const user = userEvent.setup();
-    renderGate([OFFER]);
-
-    await screen.findByRole('dialog');
-    expect(screen.getByRole('group', { name: 'Source for Dawnlight' })).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'Components for Dawnlight' })).toBeInTheDocument();
-    const amount = screen.getByTestId('drift-amount-20');
-    expect(amount).toHaveAttribute('aria-invalid', 'false');
-    await user.clear(amount);
-    await user.type(amount, '99');
-    expect(amount).toHaveAttribute('aria-invalid', 'true');
-  });
-
-  it('clears a refusal when the selection changes', async () => {
-    const user = userEvent.setup();
-    vi.mocked(api.convertDrift).mockRejectedValue(new Error('Nope.'));
-    renderGate([OFFER]);
-
-    await screen.findByRole('dialog');
-    await user.click(screen.getByTestId('drift-component-501'));
-    await user.click(screen.getByTestId('drift-perform-20'));
-    await screen.findByTestId('drift-error');
-
-    await user.click(screen.getByTestId('drift-component-502'));
-    await waitFor(() => {
-      expect(screen.queryByTestId('drift-error')).not.toBeInTheDocument();
-    });
-  });
-
-  it("resets a block's picks when the offer changes", async () => {
-    const user = userEvent.setup();
-    const { client } = renderGate([OFFER]);
-
-    await screen.findByRole('dialog');
-    await user.click(screen.getByTestId('drift-component-501'));
-    expect(screen.getByTestId('drift-perform-20')).not.toBeDisabled();
-
-    vi.mocked(api.getPendingDriftConversionOffers).mockResolvedValue(
-      paginated([{ ...OFFER, id: 13 }])
-    );
-    await act(async () => {
-      await client.refetchQueries();
-    });
-    await waitFor(() => {
-      expect(screen.getByTestId('drift-perform-20')).toBeDisabled();
-    });
-  });
-
-  it('renders nothing when there is no open offer', async () => {
-    renderGate([]);
-
-    // The poll must have been asked AND answered before absence means anything.
-    await waitFor(() => {
-      expect(api.getPendingDriftConversionOffers).toHaveBeenCalled();
-    });
-    await act(async () => {
-      await vi.mocked(api.getPendingDriftConversionOffers).mock.results[0].value;
-    });
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('drift-conversion-gate-strip')).not.toBeInTheDocument();
-  });
-});
-
-/**
- * The light theme is the default; a pale amber text or a near-black amber tint is only
- * readable on the dark one. Each themed element keeps those under `dark:` and carries a
- * dark amber text and a pale surface for light (the repo's `text-amber-700/800
- * dark:text-amber-300|400`, `bg-amber-50 dark:bg-amber-950/..` pairs). jsdom has no
- * stylesheet, so this pins the class pairs; contrast on a real page needs the live run.
- */
-const DARK_ONLY =
-  /^(text-amber-(100|200|300|400)|bg-amber-950(\/\d+)?|text-red-200|bg-red-950(\/\d+)?)$/;
-
-function lightThemeClasses(element: HTMLElement): string[] {
-  return Array.from(element.classList).filter((c) => !c.includes(':'));
-}
-
-describe('SettleAuraDialog - readable in the light theme', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('pulses only the glow behind the strip, never its words', async () => {
-    renderGate([OFFER]);
-
-    const strip = await screen.findByTestId('drift-conversion-gate-strip');
-    const label = screen.getByTestId('drift-conversion-gate-label');
-    const glow = screen.getByTestId('drift-conversion-gate-glow');
-    expect(strip).not.toHaveClass('animate-pulse');
-    expect(label).not.toHaveClass('animate-pulse');
-    expect(label).toHaveTextContent('Settle your aura');
-    expect(glow).toHaveClass('animate-pulse', 'motion-reduce:animate-none');
-    expect(glow).toHaveAttribute('aria-hidden', 'true');
-  });
-
-  it('keeps pale amber text and dark tints under dark: on the strip and the error', async () => {
-    const user = userEvent.setup();
-    vi.mocked(api.convertDrift).mockRejectedValue(new Error('Nope.'));
-    renderGate([OFFER]);
-
-    await screen.findByRole('dialog');
-    await user.click(screen.getByTestId('drift-component-501'));
-    await user.click(screen.getByTestId('drift-perform-20'));
-    const themed = [
-      screen.getByTestId('drift-conversion-gate-strip'),
-      screen.getByTestId('drift-cap-20'),
-      screen.getByTestId('drift-source-20-30'),
-      screen.getByTestId('drift-component-501'),
-      await screen.findByTestId('drift-error'),
-    ];
-    for (const element of themed) {
-      const light = lightThemeClasses(element);
-      expect(light.filter((c) => DARK_ONLY.test(c))).toEqual([]);
-    }
-    expect(screen.getByTestId('drift-conversion-gate-strip')).toHaveClass(
-      'bg-amber-50',
-      'text-amber-800',
-      'dark:bg-amber-950/40',
-      'dark:text-amber-300'
-    );
-  });
-
-  it('fills the selected pill in the primary pair and outlines the rest', async () => {
-    const user = userEvent.setup();
-    renderGate([OFFER]);
-
-    await screen.findByRole('dialog');
-    await user.click(screen.getByTestId('drift-component-502'));
-    const chosen = screen.getByTestId('drift-component-502');
-    const other = screen.getByTestId('drift-component-501');
-    expect(chosen).toHaveAttribute('aria-pressed', 'true');
-    expect(chosen).toHaveClass('bg-primary', 'text-primary-foreground');
-    expect(other).toHaveAttribute('aria-pressed', 'false');
-    expect(other).not.toHaveClass('bg-primary');
-    expect(other).toHaveClass('border-input', 'bg-transparent');
-  });
-});
-
-describe('SettleAuraDialog - the approved Screen 4 box', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('is headed by the unsettled sentence once the aura is known', async () => {
-    renderGate([OFFER], 101, [UNSETTLED_AURA]);
-
-    const dialog = await screen.findByRole('dialog');
-    expect(dialog).toBeInTheDocument();
-    expect(
-      await screen.findByRole('dialog', {
-        name: 'Your Domination has grown strong enough to make you unsettled.',
       })
-    ).toBeInTheDocument();
-  });
-
-  it('names one held source in the system line', async () => {
-    const one: DriftConversionOffer = {
-      ...OFFER,
-      caps: [{ ...OFFER.caps[0], sources: [OFFER.caps[0].sources[0]] }],
-    };
-    renderGate([one]);
-
-    await screen.findByRole('dialog');
-    expect(screen.getByTestId('drift-system-line-20')).toHaveTextContent(
-      /^The Ruin you gained turns to Dawnlight\.$/
     );
-    // One source is a plain chip, not a picker.
-    expect(screen.getByTestId('drift-source-20-30').tagName).toBe('SPAN');
-    expect(screen.queryByRole('group', { name: 'Source for Dawnlight' })).not.toBeInTheDocument();
+    const result = await screen.findByTestId('rite-result');
+    expect(result).toHaveTextContent('Success.');
+    expect(result).toHaveTextContent('You disown your Domination: 3 Domination became 1 Fury.');
+    expect(screen.queryByTestId('rite-perform')).not.toBeInTheDocument();
   });
 
-  it('names two held sources in the system line', async () => {
-    renderGate([OFFER]);
-
-    await screen.findByRole('dialog');
-    expect(screen.getByTestId('drift-system-line-20')).toHaveTextContent(
-      /^The Ruin and Spite you gained turns to Dawnlight\.$/
-    );
-  });
-
-  it('opens the Atone exit with the rite and what it turns, as one line', async () => {
-    renderGate([OFFER]);
-
-    await screen.findByRole('dialog');
-    const opening = screen.getByTestId('settle-atone-line');
-    expect(opening).toHaveTextContent(
-      /^Perform the rite of atonement\. The Ruin and Spite you gained turns to Dawnlight\.$/
-    );
-    expect(opening).toContainElement(screen.getByTestId('drift-system-line-20'));
-    // The line leads the card; it is not squeezed into the cap block beside the cap.
-    expect(screen.getByTestId('drift-cap-20')).not.toContainElement(
-      screen.getByTestId('drift-system-line-20')
-    );
-  });
-
-  it('holds Begin the rite in a left-aligned outline row inside the Atone exit, and Not now below', async () => {
-    renderGate([OFFER]);
-
-    const dialog = await screen.findByRole('dialog');
-    const row = screen.getByTestId('drift-actions-20');
-    expect(row).toHaveClass('justify-start');
-    expect(row).not.toHaveClass('justify-end');
-    // An outline button in the sheet's rust, as in the demo, not a solid one.
-    expect(screen.getByTestId('drift-perform-20')).toHaveClass('border-primary', 'text-primary');
-    expect(screen.getByTestId('drift-perform-20')).not.toHaveClass('bg-primary');
-    expect(screen.getByTestId('settle-exit-atone')).toContainElement(row);
-    const buttons = Array.from(row.querySelectorAll('button')).map((b) => b.textContent);
-    expect(buttons).toEqual(['Begin the rite']);
-    // Not now appears once, in the dialog's own footer.
-    expect(screen.getAllByRole('button', { name: 'Not now' })).toHaveLength(1);
-    expect(dialog).toContainElement(screen.getByTestId('settle-not-now'));
-  });
-});
-
-describe('SettleAuraDialog - Atone and Accept exits (#5123)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('shows the unsettled sentence and both exits while an offer is open', async () => {
-    renderGate([OFFER], 101, [UNSETTLED_AURA]);
-
-    await screen.findByTestId('settle-exit-accept');
-    expect(screen.getByTestId('settle-exit-atone')).toBeInTheDocument();
-    expect(screen.getByRole('dialog')).toHaveTextContent(
-      'Your Domination has grown strong enough to make you unsettled.'
-    );
-    expect(screen.getByText('Accept the changes to your Aura')).toBeInTheDocument();
-    expect(screen.getByTestId('settle-accept-line')).toHaveTextContent(
-      /^You become more abyssal\.$/
-    );
-    // The word the player never reads, and no figures.
-    expect(screen.getByRole('dialog')).not.toHaveTextContent(/accepted/i);
-    expect(screen.getByRole('dialog')).not.toHaveTextContent('42');
-  });
-
-  it('names the affinity the server names, not the one whose share grew most', async () => {
-    // Primal grew most in raw terms (+10), but only the Abyssal passed its settled share
-    // plus the tolerance, and that is the one accepting will name.
-    const aura: CharacterAura = {
-      ...UNSETTLED_AURA,
-      shares: [
-        { affinity_id: 1, affinity_name: 'Primal', percent: '70.00', settled_percent: '60.00' },
-        { affinity_id: 3, affinity_name: 'Celestial', percent: '10.00', settled_percent: '30.00' },
-        { affinity_id: 2, affinity_name: 'Abyssal', percent: '20.00', settled_percent: '10.00' },
-      ],
-    };
-    renderGate([OFFER], 101, [aura]);
-
-    expect(await screen.findByTestId('settle-accept-line')).toHaveTextContent(
-      /^You become more abyssal\.$/
-    );
-  });
-
-  it('hides Atone when no offer is open and still offers Accept', async () => {
-    // No offer means no gate; this is the dialog the sheet mounts.
-    const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
-    render(
-      <SettleAuraDialog
-        aura={UNSETTLED_AURA}
-        offer={null}
-        resultLine={null}
-        onResult={vi.fn()}
-        open
-        onOpenChange={vi.fn()}
-        onClose={vi.fn()}
-      />,
-      {
-        wrapper: ({ children }: { children: ReactNode }) => (
-          <QueryClientProvider client={client}>{children}</QueryClientProvider>
-        ),
-      }
-    );
-
-    expect(await screen.findByTestId('settle-exit-accept')).toBeInTheDocument();
-    expect(screen.queryByTestId('settle-exit-atone')).not.toBeInTheDocument();
-    expect(screen.queryByText('Atone')).not.toBeInTheDocument();
-  });
-
-  it('gives a lone Accept exit the dialog width, not half a two-column grid', async () => {
-    const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
-    render(
-      <SettleAuraDialog
-        aura={UNSETTLED_AURA}
-        offer={null}
-        resultLine={null}
-        onResult={vi.fn()}
-        open
-        onOpenChange={vi.fn()}
-        onClose={vi.fn()}
-      />,
-      {
-        wrapper: ({ children }: { children: ReactNode }) => (
-          <QueryClientProvider client={client}>{children}</QueryClientProvider>
-        ),
-      }
-    );
-
-    const exits = await screen.findByTestId('settle-exits');
-    expect(exits).not.toHaveClass('sm:grid-cols-2');
-    expect(exits).toContainElement(screen.getByTestId('settle-exit-accept'));
-  });
-
-  it('puts the two exits side by side only when both show', async () => {
-    renderGate([OFFER], 101, [UNSETTLED_AURA]);
-
-    await screen.findByTestId('settle-exit-accept');
-    expect(screen.getByTestId('settle-exits')).toHaveClass('sm:grid-cols-2');
-  });
-
-  it('draws Accept solid and Not now outlined, both in the sheet rust', async () => {
-    renderGate([OFFER], 101, [UNSETTLED_AURA]);
-
-    const accept = await screen.findByTestId('settle-accept-button');
-    expect(accept).toHaveClass('bg-primary');
-    expect(screen.getByTestId('settle-not-now')).toHaveClass('border-primary', 'text-primary');
-    // `.aura-settle-dialog` carries the rust fallback the portal would otherwise miss.
-    expect(screen.getByRole('dialog')).toHaveClass('aura-settle-dialog');
-  });
-
-  it('Accept posts to the aura accept endpoint and shows the server line', async () => {
+  it('shows the server sentence when the rite refuses, and keeps the reflections', async () => {
     const user = userEvent.setup();
-    renderGate([OFFER], 101, [UNSETTLED_AURA]);
-
-    await user.click(await screen.findByTestId('settle-accept-button'));
-
-    await waitFor(() => {
-      expect(apiFetchMock).toHaveBeenCalledWith('/api/magic/character-auras/7/accept/', {
-        method: 'POST',
-      });
-    });
-    expect(await screen.findByTestId('drift-result')).toHaveTextContent(
-      /^You become more abyssal\.$/
+    vi.mocked(api.getSettlingRite).mockResolvedValue(reading());
+    vi.mocked(api.performSettlingRite).mockRejectedValue(
+      new Error('You are not carrying everything you offered.')
     );
+    renderDialog();
+
+    await user.click(await screen.findByTestId('rite-perform'));
+
+    expect(await screen.findByTestId('rite-error')).toHaveTextContent(
+      'You are not carrying everything you offered.'
+    );
+    expect(screen.getByTestId('rite-reflection-1')).toBeInTheDocument();
   });
 
-  it('reads only the offer character aura and accepts for it, never another unsettled alt', async () => {
+  it('says so when nothing carried counts as the offering', async () => {
+    vi.mocked(api.getSettlingRite).mockResolvedValue(reading({ offerings: [] }));
+    renderDialog();
+
+    expect(await screen.findByTestId('rite-no-offering')).toHaveTextContent(
+      'You carry nothing that counts as the offering.'
+    );
+    expect(screen.getByTestId('rite-perform')).toBeDisabled();
+  });
+
+  it('shows the not-ready sentence in place of the offering and never enables the rite', async () => {
+    vi.mocked(api.getSettlingRite).mockResolvedValue(
+      reading({
+        rite_ready: false,
+        not_ready_message: 'The rite of settling is not set up yet; tell staff.',
+        offerings: [],
+      })
+    );
+    renderDialog();
+
+    expect(await screen.findByTestId('rite-not-ready')).toHaveTextContent(
+      'The rite of settling is not set up yet; tell staff.'
+    );
+    expect(screen.queryByTestId('rite-roll')).not.toBeInTheDocument();
+    expect(screen.getByTestId('rite-perform')).toBeDisabled();
+  });
+
+  it('Not now closes without performing anything', async () => {
     const user = userEvent.setup();
-    const alt: CharacterAura = {
-      ...UNSETTLED_AURA,
-      id: 8,
-      character: 99,
-      unsettled_line: 'Your Spite has grown strong enough to make you unsettled.',
-    };
-    // The mocked endpoint hands back both alts, as it would for staff; the gate must pick.
-    renderGate([OFFER], 101, [alt, UNSETTLED_AURA]);
+    vi.mocked(api.getSettlingRite).mockResolvedValue(reading());
+    const onOpenChange = renderDialog();
 
-    await user.click(await screen.findByTestId('settle-accept-button'));
+    await user.click(await screen.findByTestId('settle-not-now'));
 
-    await waitFor(() => {
-      expect(apiFetchMock).toHaveBeenCalledWith('/api/magic/character-auras/7/accept/', {
-        method: 'POST',
-      });
-    });
-    expect(apiFetchMock).not.toHaveBeenCalledWith(
-      '/api/magic/character-auras/8/accept/',
-      expect.anything()
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(api.performSettlingRite).not.toHaveBeenCalled();
+  });
+
+  it('carries the sheet rust class the portal would otherwise miss', async () => {
+    vi.mocked(api.getSettlingRite).mockResolvedValue(reading());
+    renderDialog();
+
+    expect(await screen.findByRole('dialog')).toHaveClass('aura-settle-dialog');
+  });
+
+  it('names how an offering counts: tied, a facet, or a keepsake', () => {
+    expect(offeringLabel(THREAD)).toBe('Dawn-gold Thread · tied to Dawnlight');
+    expect(offeringLabel({ ...THREAD, mode: 'facet' })).toBe(
+      'Dawn-gold Thread · bears a facet of Dawnlight'
     );
-    // The read was for the offer's character only.
-    expect(apiFetchMock).toHaveBeenCalledWith('/api/magic/character-auras/?character=55');
-    expect(screen.getByRole('dialog')).not.toHaveTextContent('Your Spite');
-  });
-
-  it('does not read any aura while no offer is open', async () => {
-    renderGate([], 101, [UNSETTLED_AURA]);
-
-    await waitFor(() => {
-      expect(api.getPendingDriftConversionOffers).toHaveBeenCalled();
-    });
-    await act(async () => {
-      await vi.mocked(api.getPendingDriftConversionOffers).mock.results[0].value;
-    });
-    expect(apiFetchMock).not.toHaveBeenCalled();
-  });
-
-  it('offers no Accept once the character is settled', async () => {
-    renderGate([OFFER], 101, [SETTLED_AURA]);
-
-    await screen.findByTestId('settle-exit-atone');
-    // The aura read must have been asked AND answered before absence means anything.
-    await waitFor(() => {
-      expect(apiFetchMock).toHaveBeenCalled();
-    });
-    await act(async () => {
-      await apiFetchMock.mock.results[0].value;
-    });
-    expect(screen.queryByTestId('settle-exit-accept')).not.toBeInTheDocument();
-  });
-});
-
-describe('SettleAuraDialog - reads the new state after it settles the character (#5123)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  /** Reads of the aura answer with `current()`; the accept POST answers a settled aura. */
-  function serveAuras(current: () => CharacterAura[]) {
-    apiFetchMock.mockImplementation(async (_url: string, init?: RequestInit) =>
-      init?.method === 'POST'
-        ? new Response(JSON.stringify({ detail: 'You become more abyssal.', aura: SETTLED_AURA }), {
-            status: 200,
-          })
-        : new Response(JSON.stringify(current()), { status: 200 })
-    );
-  }
-
-  const auraReads = () =>
-    apiFetchMock.mock.calls.filter(
-      ([url, init]) => String(url).includes('character-auras/?character=') && !init?.method
-    );
-
-  it('an atonement that settles her drops the unsettled header and the Accept card', async () => {
-    const user = userEvent.setup();
-    let settled = false;
-    vi.mocked(api.convertDrift).mockResolvedValue(RESULT);
-    renderGate([OFFER], 101, [UNSETTLED_AURA]);
-    serveAuras(() => [settled ? SETTLED_AURA : UNSETTLED_AURA]);
-    await screen.findByTestId('settle-exit-accept');
-    expect(screen.getByRole('dialog')).toHaveTextContent('has grown strong enough');
-    const readsBefore = auraReads().length;
-
-    // The server closes the offer and reads her settled once the rite has run.
-    settled = true;
-    vi.mocked(api.getPendingDriftConversionOffers).mockResolvedValue(paginated([]));
-    await user.click(screen.getByTestId('drift-component-502'));
-    await user.click(screen.getByTestId('drift-perform-20'));
-
-    expect(await screen.findByTestId('drift-result')).toHaveTextContent('Partial Success');
-    await waitFor(() => {
-      expect(screen.queryByTestId('settle-exit-accept')).not.toBeInTheDocument();
-    });
-    expect(screen.queryByTestId('settle-exit-atone')).not.toBeInTheDocument();
-    expect(screen.getByRole('dialog')).not.toHaveTextContent('has grown strong enough');
-    // The aura was asked for again, not just left as it was read at open.
-    expect(auraReads().length).toBeGreaterThan(readsBefore);
-  });
-
-  it('accepting refetches the offers, so the leftover Atone card goes with the offer', async () => {
-    const user = userEvent.setup();
-    let settled = false;
-    renderGate([OFFER], 101, [UNSETTLED_AURA]);
-    serveAuras(() => [settled ? SETTLED_AURA : UNSETTLED_AURA]);
-    const acceptButton = await screen.findByTestId('settle-accept-button');
-    // Accepting settles her; from then on the offer endpoint answers empty.
-    settled = true;
-    vi.mocked(api.getPendingDriftConversionOffers).mockResolvedValue(paginated([]));
-    await user.click(acceptButton);
-
-    await waitFor(() => {
-      expect(vi.mocked(api.getPendingDriftConversionOffers).mock.calls.length).toBeGreaterThan(1);
-    });
-    expect(await screen.findByTestId('drift-result')).toHaveTextContent(
-      /^You become more abyssal\.$/
-    );
-    await waitFor(() => {
-      expect(screen.queryByTestId('settle-exit-atone')).not.toBeInTheDocument();
-    });
-    expect(screen.queryByTestId('settle-exit-accept')).not.toBeInTheDocument();
-  });
-});
-
-describe('DriftConversionOfferGate - auto-open once per offer id', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('auto-opens; dismissal leaves the strip; same id does not reopen; a new id does', async () => {
-    const user = userEvent.setup();
-    const { client } = renderGate([OFFER]);
-
-    await screen.findByRole('dialog');
-    await user.keyboard('{Escape}');
-    await waitFor(() => {
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    });
-    expect(screen.getByTestId('drift-conversion-gate-strip')).toBeInTheDocument();
-    expect(api.declineDriftConversion).not.toHaveBeenCalled();
-
-    vi.mocked(api.getPendingDriftConversionOffers).mockResolvedValue(paginated([{ ...OFFER }]));
-    await act(async () => {
-      await client.refetchQueries();
-    });
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-
-    vi.mocked(api.getPendingDriftConversionOffers).mockResolvedValue(
-      paginated([{ ...OFFER, id: 13 }])
-    );
-    await act(async () => {
-      await client.refetchQueries();
-    });
-    await screen.findByRole('dialog');
-  });
-
-  it('re-opens the dialog when the strip is clicked', async () => {
-    const user = userEvent.setup();
-    renderGate([OFFER]);
-
-    await screen.findByRole('dialog');
-    await user.keyboard('{Escape}');
-    await waitFor(() => {
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    });
-
-    await user.click(screen.getByTestId('drift-conversion-gate-strip'));
-    await screen.findByRole('dialog');
+    expect(offeringLabel(COLLAR)).toBe('Iron collar · a keepsake of Fury');
   });
 });

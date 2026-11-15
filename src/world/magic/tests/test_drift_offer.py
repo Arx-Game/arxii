@@ -27,7 +27,6 @@ from world.magic.services.drift import (
     convertible_drift,
     drift_holdings,
     get_drift_correction_config,
-    lapse_conversion_offers,
     open_or_extend_conversion_offer,
     own_affinity,
 )
@@ -312,41 +311,33 @@ class LapseTests(DriftOfferTestBase):
         # The identity-mapped instance holds a plain int, not a pending expression.
         self.assertIsInstance(cap.cap, int)
 
-    def test_lapse_conversion_offers_deletes_scene_offers(self) -> None:
+    def test_finishing_the_scene_leaves_the_offer_and_its_cap_open(self) -> None:
+        # The chance stays open until the rite spends it (#5124).
         self.deed()
-        other = DriftConversionOffer.objects.create(
-            character_sheet=self.sheet, scene=SceneFactory()
-        )
-        self.assertEqual(lapse_conversion_offers(self.scene), 1)
-        self.assertEqual(list(DriftConversionOffer.objects.all()), [other])
-        self.assertFalse(DriftConversionCap.objects.exists())
-
-    def test_finish_scene_directly_lapses_only_that_scenes_offers(self) -> None:
-        # The event-completion route calls scene.finish_scene() without finish_scene_full.
-        self.deed()
-        other = DriftConversionOffer.objects.create(
-            character_sheet=self.sheet, scene=SceneFactory()
-        )
+        offer = DriftConversionOffer.objects.get()
         self.scene.finish_scene()
-        self.assertEqual(list(DriftConversionOffer.objects.all()), [other])
+        self.assertEqual(list(DriftConversionOffer.objects.all()), [offer])
+        self.assertEqual(DriftConversionCap.objects.get().cap, 10)
 
-    def test_finish_scene_full_lapses_only_that_scenes_offers(self) -> None:
-        from world.scenes.scene_admin_services import finish_scene_full
-
+    def test_a_deed_in_a_later_scene_extends_the_one_offer(self) -> None:
         self.deed()
-        other = DriftConversionOffer.objects.create(
-            character_sheet=self.sheet, scene=SceneFactory()
-        )
-        finish_scene_full(self.scene)
-        self.assertEqual(list(DriftConversionOffer.objects.all()), [other])
+        self.scene.finish_scene()
+        invalidate_active_scene_cache(self.room)
+        later = SceneFactory(room=self.room)
+        invalidate_active_scene_cache(self.room)
+        self.deed()
+        offer = DriftConversionOffer.objects.get()
+        # The offer remembers the scene it first opened in; the caps merged per resonance.
+        self.assertEqual(offer.scene, self.scene)
+        self.assertNotEqual(offer.scene, later)
+        self.assertEqual(DriftConversionCap.objects.get().cap, 20)
 
 
 OPENED = "You have grown unsettled. Use |waura|n to see how you can atone."
-LAPSED = "The chance to atone passes with the scene."
 
 
 class OfferNoticeTests(DriftOfferTestBase):
-    """A telnet player is told when an offer opens or lapses; a web player reads the inbox."""
+    """A telnet player is told when an offer opens; a web player reads the inbox."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -394,14 +385,9 @@ class OfferNoticeTests(DriftOfferTestBase):
             self.deed_committed()
         self.msg.assert_not_called()
 
-    def test_finishing_the_scene_tells_the_character_once(self) -> None:
+    def test_finishing_the_scene_says_nothing(self) -> None:
         self.deed_committed()
         self.msg.reset_mock()
-        with self.captureOnCommitCallbacks(execute=True):
-            self.scene.finish_scene()
-        self.msg.assert_called_once_with(LAPSED, session=["telnet"])
-
-    def test_a_scene_with_no_offers_lapses_silently(self) -> None:
         with self.captureOnCommitCallbacks(execute=True):
             self.scene.finish_scene()
         self.msg.assert_not_called()

@@ -13,8 +13,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.magic.models.affinity import Affinity
+    from world.magic.types.kindling import KindlingAct
     from world.mechanics.models import Property
-    from world.missions.models import MissionInstance
+    from world.missions.models import MissionInstance, MissionTheme
 
 
 @dataclass(frozen=True)
@@ -62,6 +63,10 @@ class SituationContext:
       set by the caller from what it already knows: ``ATTACK`` for the roll of an
       attack on an opponent (once per attack), blank otherwise. Read by
       ``perks.services.perk_scope_matches`` against a perk's "Applies to" scope.
+    - ``act`` - the act being asked about, for the kindling situations (#5124): what the
+      character did (kind, target, mission option, whether it aids). ``None`` asks "does
+      the situation hold now"; an act asks "does this act feed it". Vow perk callers leave
+      it ``None``.
     - ``roll_kind_perks_only`` - only perks scoped to this ``roll_kind`` reach the
       roll (#5092): an enchanted Strike's technique roll, whose every other check
       term, outcome guarantees included, belongs to the Strike's hit roll and is
@@ -89,6 +94,7 @@ class SituationContext:
     attacker: object | None = None
     roll_kind: str = ""
     roll_kind_perks_only: bool = False
+    act: KindlingAct | None = None
 
 
 @dataclass(frozen=True)
@@ -105,6 +111,8 @@ class SituationParams:
     affinity: Affinity | None = None
     origin_side: str = ""
     condition_property: Property | None = None
+    mission_theme: MissionTheme | None = None
+    enemies_only: bool = False
 
 
 #: Shared no-parameter instance (the default for every pre-#2623 row shape).

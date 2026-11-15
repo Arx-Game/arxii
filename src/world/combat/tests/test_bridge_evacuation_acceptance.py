@@ -654,7 +654,7 @@ class BridgeEvacuationAcceptanceTests(TestCase):
 
         with patch(
             "world.combat.services.perform_check",
-            return_value=SimpleNamespace(success_level=2),
+            return_value=SimpleNamespace(success_level=2, outcome=None),
         ):
             resolve_round(encounter)
 

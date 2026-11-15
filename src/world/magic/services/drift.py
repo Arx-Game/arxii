@@ -12,10 +12,11 @@ Atoning (#4733, #5123) is read on lifetime, so it works even when the excess was
 spent: ``drift_holdings`` is resonance held in a non-main affinity that has grown past who
 the character is. A deed (a grant from a ``DEED_GAIN_SOURCES`` source) that grows a
 resonance of the character's main affinity, made in a live scene by a character who is
-unsettled and has convertible drift, opens a ``DriftConversionOffer`` for that scene and adds
-to the cap of converting drift toward the resonance the deed grew. The offer lapses when the
-scene finishes. The other exit, ``accept_aura_change``, moves who the character is to where
-they have got to.
+unsettled and has convertible drift, opens the character's one ``DriftConversionOffer`` (or
+extends it) and adds to the cap of converting drift toward the resonance the deed grew. The
+offer stays open until the rite of settling spends it (#5124). ``accept_aura_change`` is the
+rite's step for a reflection that embraces the unsettling resonance: it moves who the
+character is toward where they have got to, all the way or by the rite's share.
 """
 
 from __future__ import annotations
@@ -55,7 +56,6 @@ if TYPE_CHECKING:
     from world.magic.models.affinity import Affinity, Resonance
     from world.magic.models.aura import CharacterAura
     from world.magic.models.gain import ResonanceGrant
-    from world.scenes.models import Scene
 
 _ONE_HUNDRED = Decimal(100)
 # (exclusive upper bound as a fraction of the whole, words); the first bound a share is
@@ -326,8 +326,11 @@ def drift_holdings(sheet: CharacterSheet) -> list[CharacterResonance]:
 
 
 @transaction.atomic
-def settle_shares(sheet: CharacterSheet) -> dict[int, Decimal]:
+def settle_shares(sheet: CharacterSheet, fraction: Decimal = Decimal(1)) -> dict[int, Decimal]:
     """Set each ``settled_percent`` to the aura's own share now: who she is becomes who she is.
+
+    With a ``fraction`` under 1 each settled share moves only that part of the way toward the
+    aura's own share (the rite of settling's partial accept, #5124).
 
     Recomputes the aura first, so a row exists for every affinity held and the percents sum
     to exactly 100.00 to be settled as they stand, then writes each share's ``settled_percent``
@@ -338,6 +341,8 @@ def settle_shares(sheet: CharacterSheet) -> dict[int, Decimal]:
 
     recompute_aura(sheet)
     aura = sheet.aura_or_none
+    if aura is not None and fraction < 1:
+        return _settle_part_way(aura, fraction)
     settled: dict[int, Decimal] = {}
     for share in aura.cached_shares if aura is not None else []:
         settled[share.affinity_id] = share.percent
@@ -347,14 +352,33 @@ def settle_shares(sheet: CharacterSheet) -> dict[int, Decimal]:
     return settled
 
 
-def accept_aura_change(sheet: CharacterSheet) -> AcceptAuraResult:
-    """Accept the changes to the aura: who the character is becomes who they have become.
+def _settle_part_way(aura: CharacterAura, fraction: Decimal) -> dict[int, Decimal]:
+    """Move each settled share ``fraction`` of the way to its current share; return the result."""
+    from world.magic.services.aura import set_settled_shares  # noqa: PLC0415
+    from world.magic.types.aura import AffinityShare  # noqa: PLC0415
 
-    Refused unless ``sheet`` is unsettled. A Sineater's Mire lifetime becomes their own
-    (``mire_lifetime`` is set to 0 on every row), then each ``settled_percent`` is set to
-    the resulting own share, so ``steps_past`` is 0 afterwards and the main affinity is the
-    largest share. Writes no corruption: Abyssal resonance brings corruption the usual way
-    (#5123, rulings 8 and 28).
+    blended = []
+    for share in aura.cached_shares:
+        target = share.settled_percent + (share.percent - share.settled_percent) * fraction
+        if target > 0:
+            blended.append(AffinityShare(affinity=share.affinity, percent=target))
+    set_settled_shares(aura, blended)
+    aura.__dict__.pop("cached_shares", None)
+    return {share.affinity_id: share.settled_percent for share in aura.cached_shares}
+
+
+def accept_aura_change(sheet: CharacterSheet, fraction: Decimal = Decimal(1)) -> AcceptAuraResult:
+    """Accept the changes to the aura: who the character is moves toward who they have become.
+
+    The rite of settling's step for a reflection that embraces the unsettling resonance
+    (#5124); nothing else calls it. ``fraction`` is the rite's share: 1 settles in full,
+    a smaller share moves each settled share, and the Sineater's Mire part, that share of
+    the way toward where it is going, and 0 moves nothing.
+
+    In full, a Sineater's Mire lifetime becomes their own (``mire_lifetime`` is set to 0 on
+    every row), then each ``settled_percent`` is set to the resulting own share, so
+    ``steps_past`` is 0 afterwards and the main affinity is the largest share. Writes no
+    corruption: Abyssal resonance brings corruption the usual way (#5123, rulings 8 and 28).
 
     Raises:
         NotUnsettledError: The character is not unsettled.
@@ -364,14 +388,28 @@ def accept_aura_change(sheet: CharacterSheet) -> AcceptAuraResult:
         raise NotUnsettledError
     leading = reading.leading_excess_resonance
     grown = leading.affinity if leading is not None else None
+    if fraction <= 0:
+        settled = {
+            share.affinity_id: share.settled_percent
+            for share in (sheet.aura_or_none.cached_shares if sheet.aura_or_none else [])
+        }
+        return AcceptAuraResult(
+            mire_moved=0,
+            main_affinity=_main_affinity(sheet.aura_or_none),
+            grown_affinity=grown,
+            settled_shares=settled,
+        )
     mire_moved = 0
     for row in CharacterResonance.objects.select_for_update().filter(
         character_sheet=sheet, mire_lifetime__gt=0
     ):
-        mire_moved += row.mire_lifetime
-        row.mire_lifetime = 0
+        moved = row.mire_lifetime if fraction >= 1 else int(row.mire_lifetime * fraction)
+        if moved <= 0:
+            continue
+        mire_moved += moved
+        row.mire_lifetime -= moved
         row.save(update_fields=["mire_lifetime"])
-    settled = settle_shares(sheet)
+    settled = settle_shares(sheet, fraction=fraction)
     aura = sheet.aura_or_none
     close_spent_conversion_offers(sheet)
     return AcceptAuraResult(
@@ -400,7 +438,6 @@ def convertible_drift(sheet: CharacterSheet, target: Resonance) -> list[Characte
 
 
 _OFFER_OPENED_TEXT = "You have grown unsettled. Use |waura|n to see how you can atone."
-_OFFER_LAPSED_TEXT = "The chance to atone passes with the scene."
 
 
 def _tell_non_web(character: ObjectDB, text: str) -> None:
@@ -415,7 +452,10 @@ def _tell_non_web(character: ObjectDB, text: str) -> None:
 
 
 def open_or_extend_conversion_offer(grant: ResonanceGrant) -> DriftConversionOffer | None:
-    """Open (or extend) the character's conversion offer for the scene a deed grant happened in.
+    """Open (or extend) the character's one conversion offer from a deed grant made in a scene.
+
+    A character holds one offer (#5124); a later deed, in any scene, extends it, and its caps
+    merge per resonance. ``DriftConversionOffer.scene`` records the scene it first opened in.
 
     Returns None, changing nothing, unless all of these hold: the grant is a deed; it grew a
     resonance of the character's own affinity; the configured ``cap_percent`` is above 0;
@@ -451,12 +491,13 @@ def open_or_extend_conversion_offer(grant: ResonanceGrant) -> DriftConversionOff
         return None
     if not convertible_drift(sheet, grant.resonance):
         return None
-    # A decline or a lapse can delete the offer between get_or_create and the lock; one
-    # retry then opens a fresh offer instead of writing a cap onto a vanished row.
+    # A rite of settling can delete the offer (``close_spent_conversion_offers``) between
+    # get_or_create and the lock; one retry then opens a fresh offer instead of writing a cap
+    # onto a vanished row.
     for _attempt in range(2):
         with transaction.atomic():
             offer, offer_created = DriftConversionOffer.objects.get_or_create(
-                character_sheet=sheet, scene=scene
+                character_sheet=sheet, defaults={"scene": scene}
             )
             # Lock the offer row so concurrent grants for it serialize. A filter, not
             # get(): the identity map would answer get() without the database or the lock.
@@ -488,25 +529,6 @@ def _extend_cap(
     if announce or cap_created:
         character = offer.character_sheet.character
         transaction.on_commit(lambda: _tell_non_web(character, _OFFER_OPENED_TEXT))
-
-
-def lapse_conversion_offers(scene: Scene) -> int:
-    """Delete every conversion offer the scene opened (their caps go with them).
-
-    Returns how many offers lapsed.
-    """
-    offers = DriftConversionOffer.objects.filter(scene=scene)
-    characters = [
-        offer.character_sheet.character
-        for offer in offers.select_related("character_sheet__character")
-    ]
-    lapsed = offers.count()
-    offers.delete()
-    for character in characters:
-        transaction.on_commit(
-            lambda character=character: _tell_non_web(character, _OFFER_LAPSED_TEXT)
-        )
-    return lapsed
 
 
 def close_spent_conversion_offers(sheet: CharacterSheet) -> int:

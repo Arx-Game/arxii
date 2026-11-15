@@ -11,12 +11,15 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+import { reflectionFields } from '@/magic/reflection';
+
 import type { CreateJournalEntryRequest } from '../api';
 import { PRIMARY_BUTTON_CLASS, QUIET_BUTTON_CLASS } from '../fieldClasses';
 import { useCreateJournalEntry, useJournalSettings } from '../queries';
 import {
   EMPTY_ENTRY_FIELDS,
   isAboutUnresolved,
+  isReflectionUnfinished,
   type JournalEntryFieldsValue,
 } from '../entryFields';
 import { JournalEntryFields } from './JournalEntryFields';
@@ -37,6 +40,7 @@ export function JournalDesk({ onPosted, onDiscard }: JournalDeskProps) {
     value.title.trim().length > 0 &&
     value.body.trim().length > 0 &&
     !isAboutUnresolved(value) &&
+    !isReflectionUnfinished(value) &&
     !createEntry.isPending;
   const errorMessage =
     createEntry.isError && createEntry.error instanceof Error ? createEntry.error.message : null;
@@ -52,14 +56,16 @@ export function JournalDesk({ onPosted, onDiscard }: JournalDeskProps) {
       is_public: value.isPublic,
       tags: value.tags,
       about: value.about?.id ?? null,
+      ...reflectionFields(value.reflection),
     };
     // Never send a no-op override: INHERIT is what the backend already does.
     if (value.posthumousOverride !== 'inherit') {
       payload.posthumous_override = value.posthumousOverride;
     }
     createEntry.mutate(payload, {
-      onSuccess: () => {
+      onSuccess: (entry) => {
         toast.success('Journal entry recorded.');
+        if (entry.reflection_line) toast.success(entry.reflection_line);
         setValue(EMPTY_ENTRY_FIELDS);
         onPosted();
       },

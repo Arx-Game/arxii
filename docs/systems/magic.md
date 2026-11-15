@@ -81,8 +81,8 @@ and the 5-axis Thread model no longer exist.
 | `FacetAlias` | Another spelling that routes to a facet (#4197): the names a merge retired, and any spelling staff add by hand. Resolved by the pickers' search and the create endpoint; never shown to a player. Content (`CONTENT_MODELS`, natural key `name`); cascades with its facet. | `name` (unique), `facet` FK |
 | `FacetEffectBonus` | A facet's always-on bonus to one maneuver effect (#4815, slice 4 of #4783): the facet names the effect, whatever its thread's resonance ("Wolf: +2 Charge: damage"). Counted by `passive_facet_bonuses` while the character wears an item carrying the facet and has a FACET thread on it: `amount x item quality x attachment quality x max(1, thread_rung(level))` (per 10 thread levels) per worn item facet. Authored in the Facet admin's inline; `merge_facets` moves the rows. Content (`CONTENT_MODELS`, natural key `(facet, target)`). | `facet` FK (CASCADE), `target` FK `ModifierTarget` ("maneuver_effect" category only), `amount` (non-zero); unique per `(facet, target)` |
 | `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance`; limits no Gift thread, only the default a grant naming no resonance reaches for (#5123), and not the cast-time value; the cast reads the character's GIFT-thread resonances, leading first, via `gift_resonances_for`, ADR-0052, ADR-5123-A), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050), `parent` (self-FK, PROTECT, `related_name="children"`: the umbrella gift this one hangs beneath; see "Gift lineage" below, #2891, ADR-0192), `natural_weapon_template` (nullable FK to an Unarmed `ItemTemplate`, PROTECT: claws or a bite the gift gives its holder, made and equipped by `grant_gift_to_character`, marked `ItemInstance.natural_weapon_gift`, and removed only when the gift is lost; #4898, see docs/systems/items.md "Natural weapons") |
-| `Affinity` | Celestial / Primal / Abyssal rows; `Affinity.objects.get_celestial_affinity()` / `get_primal_affinity()` / `get_abyssal_affinity()` are the canonical getters | `name`, `corruption_coefficient` (integer tenths of corruption per cast tick), optional OneToOne `modifier_target`. Listed read-only at `GET /api/magic/affinities/` (`AffinityViewSet`) |
-| `Resonance` | Identity resonance tags | `name`, `affinity` FK, `opposite` self-OneToOne, optional `modifier_target` OneToOne. Listed read-only, unpaginated, at `GET /api/magic/resonances/` (`ResonanceViewSet`, `ResonanceSerializer` with `affinity_name`; `?affinity=<pk>` filters): the CG Gift stage's Resonance picker reads it (#4665) |
+| `Affinity` | Celestial / Primal / Abyssal rows; `Affinity.objects.get_celestial_affinity()` / `get_primal_affinity()` / `get_abyssal_affinity()` are the canonical getters | `name`, `corruption_coefficient` (integer tenths of corruption per cast tick). `mechanics.ModifierTarget.target_affinity` is the OneToOne that points here (reverse accessor `modifier_target`). Listed read-only at `GET /api/magic/affinities/` (`AffinityViewSet`) |
+| `Resonance` | Identity resonance tags | `name`, `affinity` FK, `opposite` self-OneToOne. `mechanics.ModifierTarget.target_resonance` is the OneToOne that points here (reverse accessor `modifier_target`). Listed read-only, unpaginated, at `GET /api/magic/resonances/` (`ResonanceViewSet`, `ResonanceSerializer` with `affinity_name`; `?affinity=<pk>` filters): the CG Gift stage's Resonance picker reads it (#4665) |
 
 **Note:** `Affinity` and `Resonance` are proper first-class domain models in
 this app (each with an optional OneToOne link back to `mechanics.ModifierTarget`
@@ -2048,6 +2048,16 @@ that thread (ruling 13: paying with such a resonance is an ordinary pull; the ch
 across the pull's threads, not per payer), and applicability (`pull_applicability`) counts a thread when any resonance with a row would have
 an effect, since it runs before the payer is picked.
 
+**Drawing strength (#5124) [BUILT & WIRED].** A payer that is kindled reads the thread higher: `resolve_pull_effects(..., kindled=)`
+takes `{resonance id: KindledStrengthTier}` (built once per pull by `pull_kindled_tiers(sheet, participant)`, which wraps
+`kindling.kindled_tiers`) and adds the payer's tier `pull_levels` to the level the multiplier reads, beside the beseech
+boost (`_kindled_level`). The boost is read for that resolution only: it never touches the thread, the `min_thread_level` gate,
+`source_thread_level` or the preview's `level_read`. Because INTENSITY_BUMP scales with the multiplier, intensity rises with it, and
+A non-combat cast counts a pull's intensity once: `thread_power_term` covers passive threads only and skips pulled ones, and `_prepare_technique_cast` adds the charged pull's intensity to the power and itemises it in the ledger as "thread power", so the cast agrees with the preview. `pull_levels` is in thread levels as players read them (ten per multiplier step); a boost that would read lower than the unkindled level (the curve dips below level 10) is not applied. A payer that is not kindled, or a
+tier with no row, reads as before. `CombatPullThread.kindled_strength` stores the tier's rank (0 = none) at commit. `PayerOption.kindled_strength` carries
+the tier and `PayerOptionSerializer.kindled_strength` its name only (never the rank or levels); the Pay with list shows "Kindled, <name>"
+beside the payer. No control changes.
+
 **Preview:** `preview_resonance_pull` (`POST /api/magic/thread-pull-preview/`) is the read-only
 preview endpoint and remains the way to preview cost + effects before committing. It takes
 `payers` and returns, beside the pull totals, `per_thread`: for every pulled thread, every
@@ -2252,28 +2262,116 @@ push the cast harder. The burn rides the pull: no pull, no burn (`ResonanceBurnN
 
 Journeys: `src/integration_tests/test_resonance_strain_journeys.py`.
 
+### Kindled resonances (#5124) [BUILT & WIRED]
+
+A resonance is **kindled** when something it cares about is present. Players read which of
+their resonances are kindled, how strongly in a staff-named word (Faint, Strong and Blazing to
+start) and what kindled each one; the numbers never leave the server. Kindling works wherever a
+pull, a Dig deep, a Rally, a give-in or an earning can happen: combat, missions and ordinary
+scenes. It is decided by rule, built first for missions with no GM; a GM can also kindle by hand.
+The word "stirred" appears nowhere. Why Fury's anchor person became a resonance and the bond is now
+one situation among many: `docs/adr/adr-5124-furys-anchor-person-became-a-kindled-resonance.md`.
+
+- **Authored rows** (`models/kindling.py`, all admin-authored on the Resonance and Affinity pages,
+  and the singleton Kindling config page). `KindlingSituation` inherits `SituationRequirementMixin`
+  (so it reads the same param columns a vow perk situation does) and names a `Situation` from the
+  covenants library, set on a `resonance` or, once, on an `affinity` for every resonance of that
+  affinity (a check constraint demands exactly one); `strength` is a rank (blank reads it from the
+  source: the bond tier or the condition severity; `clean` refuses blank on a situation with no
+  such source), `is_active`, `display_order`, `reason_text`. `KindledStrengthTier` (natural key
+  `rank`; `name`, `min_bond_tier`, `min_severity`, `pull_levels`, `give_in_max_depth`,
+  `give_in_bonus_percent`, `give_in_ease`, `dig_deep_scale_percent`, `earn_percent`; 0 on a reach
+  column means "not reached that way"). Code compares `rank` (1, 2, 3) and never a name.
+  `KindlingConfig` (singleton: `harm_property`, the condition property that marks harm a holder
+  laid, so a feeling that comes from their own harm does not count as shared),
+  `KindledDeedAward` (an `OutcomeTierAward`: `amount` earned per outcome) and
+  `RallyKindlingStrength` (an `OutcomeTierAward`: the strength a Rally kindles at per outcome; a
+  failed Rally has no row and kindles nothing). `Resonance.feeling` is a Property FK: the feeling
+  that `OWN_FEELING`, `SHARED_FEELING` and `TARGET_IN_STATE_THEY_CAUSED` look for on a condition.
+  `missions.MissionTheme` (`themes` M2M on `MissionTemplate` and `MissionOption`) is what
+  `MISSION_THEME` reads; a theme is not a mission category.
+- **Stored kindling** (`Kindling`): only a Rally or a GM is stored (`source` RALLY or GM,
+  `strength` rank, `encounter` XOR `scene`, `kindled_by`). A Rally row ends with the encounter
+  (`_live_kindlings` ignores a completed one) and a GM row with the scene. Every other kindling is
+  read live from the situations, so it can never go stale.
+- **The six new situations** (`world/covenants/perks/constants.py`; they also work as vow perk
+  situations, see `docs/systems/covenants.md`): `THREAD_ANCHOR_PRESENT` (a person or organization one
+  of her live relationship, capstone or organization threads is tied to is present; with
+  `enemies_only`, an opponent in the fight; the bond's tier is the thread side's own `tier`, an
+  organization has none so its row sets the strength), `OWN_FEELING`, `SHARED_FEELING` (opponents
+  count; harm she laid does not), `TARGET_IN_STATE_THEY_CAUSED`, `SOMEONE_IN_TROUBLE` (a
+  non-opponent in peril, badly hurt or held; opponents are excluded) and `MISSION_THEME`. With no
+  `SituationContext.act` a situation answers "does this hold now"; with an act it answers "does
+  this act feed it" (a thread anchor wants an attack, defense or technique aimed at the anchor;
+  trouble wants an aiding act; a mission theme wants the option taken to carry it; a feeling is fed
+  by any act).
+- **Reading it** (`services/kindling.py`, `types/kindling.py`).
+  `kindled_resonances(sheet, *, resolution=None, mission=None, act=None) -> list[KindledResonance]`
+  and `kindled_for(sheet, resonance, ...)` evaluate every held resonance (or the one named, whether
+  or not she holds it). One `_Evaluation` reads who is present once and each distinct
+  (situation, params) pair once, so cost follows the authored rows, not the resonances held. The
+  strongest situation sets the tier; each `KindledResonance` carries `tier`, `reasons` (player
+  words, no numbers), `situations` and, for an act, `fed_tier` and `fed_reasons` (authored rows
+  only: a Rally or GM raises the panel's strength, never what an act earns). Callers with no round in
+  hand use `kindling_context_for(sheet)` (her live fight and her newest active mission) or
+  `kindled_resonances_now(sheet)`; `kindled_tiers` is the `{resonance id: tier}` map a pull reads;
+  `kindled_resonances_for_acts` evaluates many acts in one pass (the mission beat's promised feeds).
+  Names in reasons go through the persona display map, so an undiscovered mask stays a mask.
+- **Panel.** `GET /api/magic/kindled-resonances/?character_sheet=<id>` (owner or staff) lists each
+  held resonance as `{id, name, affinity_name, kindled, strength_name, reasons}`;
+  telnet `resonances`. See the "Your resonances" row in the table below.
+- **Two ways to use it.** Drawing strength: a kindled payer reads the thread higher (below under the
+  pull section); the character gives up no control. Giving in: Fury for any kindled resonance (the
+  Fury section above). Dig deep and Rally name a resonance (table below). Emotion and control are
+  separate: she can be in the grip of rage and composed.
+- **Earning.** Acting on a kindling situation earns that resonance (`award_kindled_deeds`, table
+  below). The amount follows the roll; nothing is earned for an outcome alone, so an accidental
+  death (an outcome with no act aimed at it) earns nothing. Taking the action never asks how the
+  character feels; the option shows which kindled resonance it would feed, and only the actor reads
+  the grant line.
+- **Reflecting and settling.** A `KINDLED_DEED` grant is a deed a character can reflect on once,
+  Embrace or Disown, in a pose or journal entry; the rite of settling carries every waiting
+  reflection out. See "Drift correction" below.
+- **Rulings the rules carry.** Fury reads kindling with no act (it is declared before the act), so an
+  act-scoped situation never enables a give-in. A rollless act (Cover) and an auto-succeeding mission
+  approach earn at the lowest successful outcome tier (`lowest_success_outcome`). A Rally or GM
+  kindling does not by itself make an act earn. A Rally kindles at a strength set by its roll
+  (`RallyKindlingStrength`). Deployment notes: migrations 0411 to 0416 (0413 seeds the three
+  strength tiers from the old FuryConfig numbers, or its field defaults when there was no row).
+
 ### Fury: surrendering control for intensity (#4738 part B, #4727 decision 5) [BUILT & WIRED]
 
-Fury is a chosen trade, not a per-cast bonus. A character declares a `FuryTier` and an anchor
-(a character she has a tie toward) with a technique cast; the tier is a preset amount of control
+Fury is a chosen trade, not a per-cast bonus. A character declares a `FuryTier` and the resonance
+she gives in to (#5124 replaced the anchor person) with a technique cast; the tier is a preset amount of control
 she surrenders for the rest of her engagement, and her control roll's outcome picks how much
 intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magic/models/fury.py`.
 
 - **Models.** `FuryTier`: `name`, `depth`, `control_surrendered`, `base_check_difficulty`,
-  `berserk_severity`. `FuryConfig` (singleton): `check_trait`, `provocation_cap_per_tier`,
-  `bonus_scale_per_cap_point`, `cap_ease_per_point`, `default_berserk_duration_rounds`,
+  `berserk_severity`. `FuryConfig` (singleton): `check_trait`, `default_berserk_duration_rounds`,
   `berserk_condition`. `FuryDegreeShare` (an `OutcomeTierAward`): `intensity_percent` per
   outcome tier; `clean()` enforces that a better outcome never buys a smaller percent.
   `StrainConfig.intensity_per_control_surrendered` (Decimal, default 0) is the rate.
   `CharacterEngagement.fury_control_surrendered` tallies what was surrendered, for display.
   Migration 0327 (`control_penalty` renamed to `control_surrendered`; `intensity_bonus` and
   `lucid_grade_floor` removed, empty in production).
-- **Cap.** The anchor caps the depth: `provocation_cap` = her own side's relationship tier
-  toward the anchor // `provocation_cap_per_tier`; `clamp_tier` drops a deeper declaration to
-  the deepest tier within the cap. Each cap point also eases the control roll by
-  `cap_ease_per_point` and scales the trade up by `bonus_scale_per_cap_point` percent.
-- **The trade.** `fury_intensity_for(tier, cap, outcome)` = floor(`control_surrendered` x
-  `intensity_per_control_surrendered` x (100 + `bonus_scale_per_cap_point` x cap) / 100 x
+- **Cap.** The resonance's strength caps the depth (#5124). The depth cap, the bonus and the
+  ease come from a `KindledStrengthTier` row (`give_in_max_depth`, `give_in_bonus_percent`,
+  `give_in_ease`); `clamp_tier` drops a deeper declaration to the deepest tier within the cap.
+  `give_in_strength(character, resonance)` reads the named resonance's own kindled strength in
+  her live fight and mission (`kindled_for` with `kindling_context_for`); `provocation_cap`,
+  `provocation_bonus_percent` and `provocation_ease` read that row, and 0 when the resonance is
+  not kindled or she does not hold it. `give_in_refusal(character, resonance, tier)` is the one
+  declaration check: an unkindled resonance is refused in words ("Your Wrath is not kindled
+  right now, so you cannot give in to it."), never clamped, and a tier deeper than the strength
+  reaches is refused too, so a Berserk tier is offered only where the strength reaches it.
+  Giving in reads kindling with no act (it is declared before the act), so an act-scoped
+  situation never kindles a give-in; the panel and the picker agree. If the resonance stops being
+  kindled between declaring and the cast, the caster is told "Your Wrath is no longer kindled, so
+  you hold steady." and nothing is rolled or traded.
+  Migration 0413 seeded the three rows from the old
+  `FuryConfig` numbers and 0414 dropped those fields and `fury_anchor`.
+- **The trade.** `fury_intensity_for(tier, bonus_percent, outcome)` = floor(`control_surrendered` x
+  `intensity_per_control_surrendered` x (100 + `give_in_bonus_percent`) / 100 x
   `intensity_percent` / 100), Decimal math floored once. An outcome with no `FuryDegreeShare`
   row buys nothing; the control is still surrendered.
 - **Where it lands.** Each path builds a `FuryCast` (`fury_cast_for`) and hands it to
@@ -2288,7 +2386,7 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
   back off (the roll stands). A cast that proceeds calls `settle()`: the caster alone is told
   "You surrender N control: intensity +M." on commit, and Berserk is applied for a Berserk tier.
   A cast stopped at the Soulfray gate surrenders nothing and tells her nothing. With no
-  engagement, or when the anchor's tie clamps the tier to nothing, nothing is rolled and nothing
+  engagement, or when the resonance is no longer kindled, nothing is rolled and nothing
   changes. Fury may be declared again each round, and each declaration surrenders and buys again.
   `get_runtime_technique_stats` floors runtime control at 0, so repeated surrenders cannot push
   the anima cost up without limit (the stored `control_modifier` is not floored).
@@ -2300,19 +2398,24 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
   `use_technique` and read `FuryCast.realized_tier` back for the audit. None passes a Fury power
   term; `use_technique`'s `control_penalty` parameter is gone.
 - **Validation.** `_cap_fury_by_provocation` (scene action and cast serializers) refuses Fury
-  without a technique, without an anchor, above the cap, and with no engagement ("Fury needs
+  without a technique, without a resonance, above the cap, and with no engagement ("Fury needs
   something at stake: you are not engaged."). A combat cast declaration (web or telnet) refuses a
-  tier deeper than the anchor's cap with the same message (`fury_over_cap_message`, from
-  `CastTechniqueAction._combat_fury_cap_refusal` in `round_declaration`); nothing is recorded or
-  charged. Resolution still clamps, for a tie that lapsed after declaring.
+  tier deeper than the resonance's strength reaches, or an unkindled resonance, with
+  `give_in_refusal`'s message (from `CastTechniqueAction._combat_fury_cap_refusal` in
+  `round_declaration`; the web combat dispatch raises `FURY_OVER_CAP` / `FURY_NOT_KINDLED`);
+  nothing is recorded or charged. Resolution still clamps, for a kindling that lapsed after
+  declaring.
 - **Required content.** `fury-degree-shares` lists every `CheckOutcome` (matched by FK) with no
   `FuryDegreeShare`; `fury-intensity-per-control` is absent while the rate is 0.
 - **Surfaces.** The cast picker (`FuryTierOption`) carries `control_surrendered`, `is_berserk`
   and `full_intensity` (`full_trade_intensities`: the trade at the highest authored
-  `FuryDegreeShare.intensity_percent`, 0 when none exists, with no anchor scaling); each
-  `AnchorOption` carries `tier_full_intensities`, the same figure under that anchor's cap. The web `FuryDeclaration` ("Surrender control") lists tiers as "Seething:
-  surrender 6 control" (`(Berserk)` on a Berserk tier) and previews "6 control -> up to +10
-  intensity, by your roll" from those server figures. The participant payload carries
+  `FuryDegreeShare.intensity_percent`, 0 when none exists, with no strength scaling); each
+  `FuryResonanceOption` (only a resonance kindled now whose strength reaches a tier) carries its
+  `strength_name`, `provocation_cap` and `tier_full_intensities`, the same figure under that
+  resonance's strength. The web `FuryDeclaration` ("Give in to your <resonance>") picks a
+  kindled resonance, then Hold steady or a tier it reaches by its FuryTier name, and previews
+  "Give up 6 control · Gain up to 10 intensity, by your roll" from those server figures.
+  Telnet is `givein=<resonance>:<tier>`. The participant payload carries
   `fury_control_surrendered` beside `intensity_modifier` / `control_modifier`; the
   `Pressure` rail section (`frontend/src/combat/sections/Pressure.tsx`) shows them, with a
   "Fury: surrendered N control" chip once N > 0, read from her engagement whatever its type.
@@ -3679,6 +3782,10 @@ technique is a limited form, a high-tier option on an ultimate is the full arriv
 | `TechniqueManifestOption` (`models/manifestation.py`) | [BUILT & WIRED] | Authored per-technique row: `technique`, then exactly one of `being` (`WorshippedBeing`) or `archetype` (`CompanionArchetype`) (check constraint `manifest_option_exactly_one_entity`; unique constraints `unique_manifest_option_being` and `unique_manifest_option_archetype`), plus `tier` (`OpponentTier`, default MOOK; a being's arrival size, ignored for an archetype) and `threat_pool` (nullable `ThreatPool`, #4076: what a being does each round on the caster's side; without one it arrives and never acts; ignored for an archetype). A technique with at least one option is a manifesting technique. Authored in the Technique admin through `TechniqueManifestOptionInline`. |
 | `CharacterManifestation` (`models/manifestation.py`) | [BUILT & WIRED] | Per-character choice: `character` (`CharacterSheet`), `technique`, `option`, nullable `companion` (for an archetype option, the character's own `Companion`). Unique per (character, technique). Keyed by (character, technique) rather than hung on `CharacterTechnique` because an ultimate has no `CharacterTechnique` row. Set by the player with the technique picker (#4341, below), or by staff in the admin (`CharacterManifestationAdmin`). |
 | The technique picker (`services/manifestation.py`, #4341) | [BUILT & WIRED] | `manifest_choices_for(sheet)` lists each manifesting technique she knows with every option and her current pick; an option whose bond does not hold is listed unavailable, with the reason. `set_character_manifestation(sheet, technique, option, companion=None)` writes the row (one per character and technique) or raises `ManifestChoiceError`; for an archetype option with no companion named, her first unreleased companion of that archetype goes. Action `manifest_set`; telnet `manifest` (list) and `manifest <technique>=<option>`; `GET /api/magic/manifest-choices/?character_sheet=<id>` (owner or staff); the Spellbook's `ManifestPickerPanel`. A being option holds for any active patronage, so a being pact's patron can be chosen. |
+| The "Your resonances" panel (`views_kindling.py`, `serializers_kindling.py`, #5124) | [BUILT & WIRED] | `GET /api/magic/kindled-resonances/?character_sheet=<id>` (owner or staff) runs `kindled_resonances(sheet)` once and lists each held resonance as `{id, name, affinity_name, kindled, strength_name, reasons}`: the strength is the tier's own word, the reasons are player words, no numbers. Read by the frontend `KindledResonancesPanel` (scene tools in the scene sidebar; combat rail beside Dig deep) and by telnet `resonances` (`commands/kindled_resonances.py`, the same list as lines). |
+| Dig deep, Rally and the GM name a resonance (`combat/dig_deep.py`, `combat/services/declarations/rally.py`, `services/kindling.py`, `actions/definitions/gm_props.py`, #5124) | [BUILT & WIRED] | `dig_deep(participant, resonance=None)` refuses a resonance she does not hold; a kindled one adds its tier's `dig_deep_scale_percent` to the surge's `intensity_scale` and is named in the surge cause, an unkindled one or none works as before. `declare_rally(participant, ally, resonance=None)` stores `CombatRoundAction.rally_resonance` (the ALLY must hold it; the rallier's picker reads `GET /api/combat/<id>/rally-resonances/?ally=<participant id>`, which runs `rally_resonance_choices` for the one picked ally and returns each `{id, name, kindled}`, never a strength; an active fighter may ask about another active fighter, and a PvP duel returns none; the polled encounter payload carries no kindling evaluation). `_resolve_tuned_rally` reads the ally's kindled tier before writing anything: a kindled resonance adds the same percent to the Rally surge's scale; `record_rally_kindling` then writes one `Kindling(source=RALLY, encounter=, kindled_by=rallier)` at the `RallyKindlingStrength` for the roll outcome (no row for that outcome writes nothing; a repeat Rally on the same ally, resonance and fight raises the one row's strength and never lowers it; an already-kindled resonance gets no new row). The row cascades with its encounter and stops counting when `completed_at` is set. A GM kindles by hand with the `stage_kindle` action (`KindleResonanceAction`, GM/owner/staff of the room's active scene; web Stage tab "Kindle" mode lists via `gm_list_kindling`, which reads only a character in the GM's room; telnet `stage kindle <character>=<resonance>[:<strength name or rank>]`), which writes `kindle_by_gm`'s one `Kindling(source=GM, scene=)` per character, resonance and scene. Web: `combat_dig_deep` / `combat_rally` take `resonance_id` (also on the REST `dig-deep` and `rally` posts); telnet `combat digdeep [<resonance>]`, `combat rally <ally>[=<resonance>]`. |
+| Acting on a kindling situation earns the resonance (`services/kindling.py` `award_kindled_deeds`, `combat/services/techniques/kindled_deed.py`, #5124) | [BUILT & WIRED] | `award_kindled_deeds(sheet, *, act, outcome, resolution=None, mission=None)` (every act builder fills `KindlingAct.label` with the act in player words: the mission option's title, the technique's name "on <target>", "Struck <opponent>", the challenge a reaction answered; the grant stores it as `ResonanceGrant.deed_label` and `reflection.deed_what` reads it, falling back to `situation_reason(row)`, the row's `reason_text` or its theme's player text, never the situation's type name) runs `kindled_resonances` with the act in context (the sheet's own live fight and mission when neither is given) and, for each resonance an authored situation fed, writes one `GainSource.KINDLED_DEED` grant through `grant_resonance(kindling_situation=<strongest fed row>, ledger_out=)` for `KindledDeedAward(outcome).amount x earn_percent // 100` of the strongest FED row's strength (`KindledResonance.fed_tier`; a Rally or GM raises the panel strength but never what an act earns, and a resonance kindled only by one earns nothing). A missing award row, tier or a 0 share earns nothing; only player characters earn. The actor alone is told "You earned N <resonance>." after commit (a private `SYSTEM` narrative message). An act with no roll of its own (Cover, a taunt of a player character, using an item, an auto-succeeding mission approach) passes `lowest_success_outcome()`: the `CheckOutcome` with the lowest positive `success_level` (lowest pk on a tie). Wired after a PC's roll in: the scene action-request seam (`_resolve_standard_action` in `world/scenes/action_services.py` calls `_award_kindled_deeds_for_action` after `_resolve_action_against_persona` rolls the primary target, so a multi-target action earns once; `resolve_scene_action` in `actions/services.py` has no production caller), a treatment request (`_resolve_treatment_request`), and a standalone scene technique cast (`_resolve_and_pose_cast` in `world/scenes/cast_services.py`, covering the immediate and the consent-accepted cast); the scene acts share `kindling.award_scene_act` (TECHNIQUE with a technique, else SOCIAL, and a beneficial technique on someone else aids); combat through `award_rolled` / `award_unrolled` (cast, Strike, Cover, Rally, Taunt, Demoralize, Parley, Joust, flee, use item (only when the item use succeeded), the PC's defense roll, technique Interpose, a lock-clash contribution that frees someone) and the shared reaction spine `mechanics/reactions.dispatch_capability_reaction` (Succor, mundane Interpose, scene Cover, catching a faller, all AID acts on the one answered for, with `aids` false when it is not a character); and a mission option that rolls a check (`missions/services/resolution.resolve_option`, grant and routing in one transaction, group and joint picks earn per roller). A pure outcome (a death, a condition tick) and a no-roll branch option earn nothing. `KINDLED_DEED` is in `DEED_GAIN_SOURCES`, so a main-affinity kindled deed in a live scene opens the chance to atone. A mission option shows what it would feed: `BeatOption.feeds` (`KindledFeed{resonance_name, strength_name, reason}`, the viewer's own check options only, authored situations only, read once per beat by `kindled_resonances_for_acts`) renders "Your Domination is kindled: <reason>" in the web `OptionLabel` and the telnet `mission beat` list. |
+| Reflections: the "Reflecting on" row (`services/reflection.py`, `views_reflection.py`, `serializers_reflection.py`, `types/reflection.py`, `commands/reflection.py`, #5124) | [BUILT & WIRED] | A pose or a journal entry (White or Black) can name one thing it reflects on and Embrace or Disown. `reflectable_for(sheet)` returns a `Reflectable` (the unreflected `KINDLED_DEED` grants with their lines, newest first, and `unsettling_resonance(sheet)`, which is `drift_for(sheet).leading_excess_resonance` while `steps_past > 0`, plus whether a reflection on it already waits); its `options` are the "Reflecting on" row, the deeds (newest first) then the unsettling resonance. `validate_reflection` refuses a deed that is not a kindled deed of this sheet (`ReflectionError`), a deed already reflected on (`DeedAlreadyReflectedError`) and a resonance that is not the unsettling one (`ResonanceNotUnsettlingError`); `record_reflection(sheet, *, writing, grant=None, resonance=None, choice)` re-checks, deletes any older WAITING reflection on the same resonance (a newer one replaces it) and writes the `Reflection`; `writing` is None only for a pose in an ephemeral scene, which keeps no row. A reflection is checked BEFORE the writing is posted (`pending_reflection_from(sheet, params)` reads `reflect_choice` plus one of `reflect_grant_id` or `reflect_resonance_id`) and recorded after it, so a refused one costs the writer nothing. A retry of a pose that already landed (its `client_request_id` is on the `PoseSubmission` ledger, `pose_already_submitted`) skips the check and is answered as the replay it is, in both `submit_pose` and `PoseAction`. A reflection that fails AFTER the pose posted (a race) leaves the pose standing and tells the writer "Your pose was posted, but your reflection was not recorded: <reason>" (`reflection_recorded: false` on the submit-pose response); a journal entry and its reflection are one transaction, so a late failure rolls the entry back and refuses it plainly. `PoseAction` also takes `target_names`, resolved like the REST pose. `PoseAction` and `CreateJournalEntryAction` take the three kwargs; so do the REST `POST /api/interactions/submit-pose/` (`PoseSubmitSerializer`, answers `reflection_line`) and `POST /api/journals/entries/` (`JournalEntryCreateSerializer`) through `ReflectionFieldsMixin`. The room is sent only the pose text; the writer alone is told "Your reflection on <deed or your resonance> is recorded. It waits with your other reflections for the rite of settling." `GET /api/magic/reflectables/?character_sheet=<id>` (owner only, no staff widening, paginated) lists `{kind, id, label, replaces_waiting}`; the web `ReflectingOnRow` (pose composer `CommandInput`, journal `JournalEntryFields`) reads it and warns before a reflection replaces a waiting one. Telnet: `reflect` lists the unsettling resonance (by name) and each deed (by its `#number`); `pose/reflect <deed number or resonance>=<embrace|disown> <text>`; `journal/reflect <deed number or resonance>=<embrace|disown> title=<text> body=<text> [public] [tags=] [about=]`. The rite that carries waiting reflections out is task 10 of the same PR. |
 | `CharacterManifestation.bond_is_active()` | [BUILT & WIRED] | A being option holds while `active_patronage_for(character)` includes that being. An archetype option holds while the companion is the character's own, matches the archetype, and has no `released_at`. |
 | `CharacterManifestation.clean()` | [BUILT & WIRED] | The option must belong to the technique; a being option takes no companion; an archetype option needs one; the bond must be active. |
 | `manifest_bound_entity(participant, technique)` (`services/effect_handlers.py`) | [BUILT & WIRED] | Called from `CombatTechniqueResolver` (`world/combat/services/`) after conditions apply, on a successful, unbounced cast only (check `success_level >= 1`; a failed roll or a ward bounce manifests nothing). Returns the new ally `CombatOpponent` or None. |
@@ -4520,52 +4627,68 @@ scene), not the scene the deed came from. A deed settled away
 from a scene, such as the weekly pose-endorsement settlement, therefore opens no offer. This is
 an accepted consequence, not an error. A finished scene cached on a room counts as no scene.
 
-One `DriftConversionOffer` exists per character and scene (unique constraint); it holds one
+One `DriftConversionOffer` exists per character (unique constraint, #5124); it holds one
 `DriftConversionCap` per target resonance. Each qualifying grant adds `amount x cap_percent
 // 100` to that cap and is linked in `cap.grants`, which stops a grant counting twice. Only the
 grant that creates the cap row is floored at 1, so a first small deed opens a usable cap while
 later small deeds can add 0; a cap never exceeds `cap_percent / 100` of its linked deed points
 plus that one point. A `cap_percent` of 0 opens no offer at all. `cap` is a snapshot: a later
 change to `cap_percent` does not rewrite it. The offer row is locked with `select_for_update`
-while a cap changes, and the cap is re-read from the table under that lock; if a decline or a
-lapse deleted the offer before the lock, the grant retries once and opens a fresh offer.
+while a cap changes, and the cap is re-read from the table under that lock; if the rite
+closed the offer before the lock, the grant retries once and opens a fresh offer.
 
 **Notices.** A new offer or a new cap row sends a telnet-only line on commit
-(`send_text_to_non_web`, after `transaction.on_commit`); web players learn from the polled
-pending endpoint. A cap bump says nothing. `lapse_conversion_offers(scene)` deletes the scene's
-offers and sends the lapse line; `Scene.finish_scene` calls it, so every finish route lapses
-them, and the rite refuses an offer whose scene has finished.
+(`send_text_to_non_web`, after `transaction.on_commit`); web players read the open chance on the
+sheet's aura card. A cap bump says nothing. A character holds one offer (#5124), open until the rite
+spends it: it does not lapse when the scene ends, and a later deed in any scene extends it, so caps
+merge per resonance (`DriftConversionOffer.scene` is where it first opened).
 
-**The rite.** `DriftCorrectionConfig` (singleton, pk 1, created lazily) designates the rite
-(`rite` FK to `Ritual`) and the roll (`check_type` FK to `CheckType`, `check_difficulty`), plus
-`cap_percent`. The check type is deliberately not a `RitualCheckConfig` sidecar, which needs a
-stat and a skill and looks up by ritual name. `DriftCorrectionOutcomeShare` (an
-`OutcomeTierAward`) maps each `CheckOutcome` to `converted_share`, the fraction of the
-requested amount that converts (not a fraction of the cap); `clean` keeps a better tier
-from converting less than a worse one. `perform_drift_correction_rite` (`drift_correction.py`),
-in one transaction: locks the offer; refuses unless `rite_is_ready(config)` (an unset rite or
-check type, or any `CheckOutcome` with no share row: `DriftCorrectionNotConfiguredError`,
-before anything is consumed); validates
-the amount (lifetime points) against the cap, the source's lifetime and its affinity's excess,
-and the source against `convertible_drift`;
-picks the offering with `resolve_ritual_components` (no writes) with the target as
-`resonance_context`; rolls the check with `focus_bonus` as extra modifiers; converts
-`floor(amount x share)` of the source through `convert_resonance_amount`: lifetime moves by the
-points (the Mire's excess first, so the Sineater's `mire_lifetime` shrinks first and is clamped to
+**The rite of settling (#5124).** `DriftCorrectionConfig` (singleton, pk 1, created lazily)
+designates the rite (`rite` FK to `Ritual`) and the roll (`check_type` FK to `CheckType`,
+`check_difficulty`), plus `cap_percent` and `disown_deed_percent` (75 to start; the share of a
+disowned deed a full roll converts). The check type is deliberately not a `RitualCheckConfig`
+sidecar, which needs a stat and a skill and looks up by ritual name. `DriftCorrectionOutcomeShare`
+(an `OutcomeTierAward`) maps each `CheckOutcome` to `converted_share`, the fraction of each
+reflection the rite carries out; `clean` keeps a better tier from carrying out less than a worse one.
+
+A character writes **reflections** (`record_reflection`: a pose or a journal entry that names a kindled
+deed, or the resonance unsettling them, and Embrace or Disown). Nothing settles without one:
+`perform_settling_rite(sheet, components=)` (`drift_correction.py`) takes every reflection no rite has
+taken, in one transaction. It refuses, before anything is rolled, consumed or written, with no waiting
+reflection (`NoWaitingReflectionError`), with the rite unready (`rite_is_ready(config)`: an unset rite
+or check type, or any `CheckOutcome` with no share row: `DriftCorrectionNotConfiguredError`) and with
+an offering that satisfies the rite for no resonance it moves (`rite_resonances`: each reflection's
+resonance, then the character's main-affinity resonances when anything is disowned). It picks the
+offering with `resolve_ritual_components` (no writes) against each of those resonances in order, rolls
+the check with `focus_bonus` toward the resonance the offering is tied to, writes a `SettlingRite`
+(outcome, share, the live scene if any), spends the offering with `consume_materials` whatever the
+roll, applies the share, then sets `rite` on every reflection, even at a share of 0:
+
+| Reflection | Effect at share s |
+|---|---|
+| Embrace a deed | `grant_resonance(deed resonance, amount x s, source=EMBRACED_DEED, settling_rite=, reflection=)` |
+| Disown a deed | convert `amount x disown_deed_percent x s` toward the main affinity; needs no open chance |
+| Embrace the unsettling resonance | `accept_aura_change(sheet, fraction=s)` |
+| Disown the unsettling resonance | convert up to the open cap x s, as atoning always did; the cap falls by what converted |
+
+Order: disowned deeds, the disowned unsettling resonance, embraced deeds, then accepting last so it
+settles on everything the rite did. Conversions go to the main-affinity resonance the offering is tied
+to, else (`fallback_conversion_target`, shared with the preview) the main-affinity resonance with the largest open cap when the rite disowns the unsettling resonance, else the largest main-affinity resonance held, through `convert_resonance_amount`: lifetime moves by
+the points (the Mire's excess first, so the Sineater's `mire_lifetime` shrinks first and is clamped to
 the lifetime left) and the aura follows; balance moves only as far as it exists, and only that part
-is granted as `GainSource.DRIFT_CORRECTION` at `max(1, floor(moved x pair multiplier))` (an uphill
-pair never rounds to zero); and only then spends the offering with `consume_materials`. Every step
-that can raise runs before the first item write, so a refusal never leaves a cached item or
-balance ahead of the rolled-back table. The cap shrinks by what converted; an empty cap row is
-deleted, and the offer with it when no cap is left. A tier with no share row is refused up
-front by `rite_is_ready`; a tier whose share is 0.00 converts nothing, spends the
-offering and leaves the cap intact. The other exit, `accept_aura_change` (`services/drift.py`;
-`AcceptAuraChangeAction`), is refused unless unsettled, moves the Sineater's Mire lifetime into
-their own, sets every `settled_percent` to the resulting share through `settle_shares` (so `steps_past` is 0) and writes
-no corruption. Its line, "You become more abyssal.", names `AcceptAuraResult.grown_affinity`, the
-affinity of the resonance that made them unsettled (read before accepting), for web and telnet alike. The web reaches it at `POST /api/magic/character-auras/<id>/accept/`
-(`CharacterAuraViewSet.accept`, which dispatches `AcceptAuraChangeAction` for an aura of a
-character the requester plays; a refusal is a 400 `{detail}`). The aura payload
+is granted as `GainSource.DRIFT_CORRECTION` at `max(1, floor(moved x pair multiplier))`. Disowning the
+unsettling resonance is bounded by what stands past who she is; disowning a deed by the deed
+resonance's lifetime. After the roll nothing raises: an effect that cannot happen (no resonance to
+turn toward, nothing held, already settled) is a line saying so. Every step that can raise runs before
+the first item write, so a refusal never leaves a cached item or balance ahead of the rolled-back
+table. A tier whose share is 0.00 spends the offering, takes every reflection and moves nothing.
+`accept_aura_change` (`services/drift.py`) is the rite's internal step, no longer an action or an
+endpoint: refused unless unsettled, at a full fraction it moves the Sineater's Mire lifetime into
+their own and sets every `settled_percent` to the resulting share through `settle_shares` (so
+`steps_past` is 0), at a part fraction each settled share and the Mire part move that part of the way,
+and it writes no corruption. Its line, "You become more abyssal.", names
+`AcceptAuraResult.grown_affinity`, the affinity of the resonance that made them unsettled (read before
+accepting). The rite's result lines (`SettlingRiteResult.lines`) go to the performer alone. The aura payload
 (`CharacterAuraSerializer`) carries `unsettled`, `unsettled_line` (the same sentence as above,
 blank when settled), `unsettled_affinity_name` (the affinity accepting names, blank when settled), `mire_share_words` (`share_in_words`, `services/drift.py`, the scale the
 sheet's `shareInWords` uses) and a `settled_percent` on each share. A thread's payload lists
@@ -4597,36 +4720,36 @@ not offered again.
 modifier target + `touchstone_cast_bonus`. It adds to the check, not to the output.
 
 **Exceptions** (`exceptions.py`): `DriftCorrectionError` (base) with
-`DriftCorrectionNotConfiguredError`, `DriftOfferNotFoundError`, `DriftConversionInvalidError`;
-`ConversionMappingError` for an unauthored pair; `RitualComponentError` for the offering.
+`DriftCorrectionNotConfiguredError` and `NoWaitingReflectionError`; `NotUnsettledError` from
+`accept_aura_change`; `ConversionMappingError` for an unauthored pair; `RitualComponentError` for the
+offering.
 
-**Surfaces.** Actions `perform_drift_correction` and `decline_drift_correction`
-(`actions/definitions/drift_correction.py`); the rite's result line leads with the outcome tier
-("Partial Success: 4 Ruin became 2 Dawnlight.", or "The rite fails; nothing is converted." when
-nothing converts), and the web dialog composes the same words from the result; telnet `aura`, `aura atone <from>=<into>
-[<amount>] [with <item>]` (by default offers every carried item except those that count only
-as a facet or a keepsake, so a plain material is spent; `with <item>` names a faceted item or
-keepsake to spend instead), `aura decline`, `aura accept`; REST `GET /api/magic/drift-correction/pending/` (+ `{id}/`), `POST .../convert/`,
-`POST .../decline/`, all scoped to the caller's own characters. React:
-`DriftConversionOfferGate` polls the inbox and `SettleAuraDialog` ("Settle your aura": Atone with an open
-offer, Accept the changes to your Aura whenever unsettled) answers it; the character sheet's `AuraHalo`
-shows the aura in words with the settled line and the Mire share apart; the gate
-is mounted on `SceneDetailPage` and `GamePage`, keyed by scene id so each shows the offer of the
-scene it displays. See `frontend/src/magic/CLAUDE.md`.
+**Surfaces.** Action `perform_settling_rite` (`actions/definitions/drift_correction.py`); its result
+leads with the outcome tier ("Partial Success.") and then one line per reflection ("You disown your
+Ruin: 5 Ruin became 2 Dawnlight."). Telnet `aura` shows the aura in words, the waiting reflections,
+the carried offerings that count, the deeds not yet reflected on and the open chance to atone;
+`aura settle <offering>` names the one carried item to spend. REST: `GET
+/api/magic/settling-rite/?character_sheet=<id>` reads the waiting reflections, the offerings and
+readiness (`settling_rite_reading`, `services/settling_preview.py`), `POST /api/magic/settling-rite/
+{character_sheet_id, component_ids}` performs it, and `GET /api/magic/drift-correction/pending/` (+
+`{id}/`) lists the open chance; all are scoped to the caller's own characters. The click-to-settle,
+atone and decline paths (their actions, endpoints and verbs, the scene-page gate and the scene-end
+lapse of the chance) are removed. React: the sheet's aura card (`AuraReflections`) lists the waiting reflections, the
+deeds not yet reflected on and the open chance, with "Settle your aura" only while a reflection waits;
+`SettleAuraDialog` is the rite; the feed's reflection toast offers the same button; `AuraHalo` shows the
+aura in words with the settled line and the Mire share apart. See `frontend/src/magic/CLAUDE.md`.
 
-**Authoring and tuning.** Staff author `DriftCorrectionConfig`, one
+**Authoring and tuning.** Staff author `DriftCorrectionConfig` (including `disown_deed_percent`), one
 `DriftCorrectionOutcomeShare` per outcome tier, the rite's `RitualComponentRequirement` rows and
 the Fall and Redemption pair multipliers in admin; offers and caps are read-only there. Until
 the rite and check type are set and every tier has a share, the rite refuses ("not set up yet")
 though offers still open; the `drift-correction-config` Required content probe reports it.
 While the rite, the check type or a tier's share is missing (`rite_is_ready()` false;
 the tiers come from `outcome_tiers_without_a_share()`, which the probe reads too), telnet
-`aura` and `aura atone` say the same sentence (`RITE_NOT_READY_MESSAGE`, the
-exception's `user_message`) instead of listing an offering, the rite refuses with it before
-checking the cap or the request, and the pending serializer carries `rite_ready: false` and
-`rite_not_ready_message`, which the dialog shows in place of the offering pills, with
-"Perform the rite" disabled. The pending view works readiness out once per request and
-hands it to the serializer as `context["rite_ready"]`.
+`aura` and `aura settle` say the same sentence (`RITE_NOT_READY_MESSAGE`, the
+exception's `user_message`) instead of listing an offering, the rite refuses with it, and the rite
+reading carries `rite_ready: false` and `not_ready_message`, which the dialog shows in place of the
+offering pills, with "Perform the rite" disabled.
 `max_yield_per_earned_point(config)` is the anti-farm estimator: `cap_percent / 100 x largest
 pair multiplier x largest share`, kept below 1 so correcting never out-earns the deed. It is
 the per-point rate; the one floored point a new cap row opens with sits on top of it, once per
@@ -4634,8 +4757,9 @@ offer and target resonance.
 
 **Tests.** `test_deed_classification.py`, `test_drift_models.py`, `test_drift_offer.py`,
 `test_drift_correction_rite.py`, `test_conversion_amount.py`,
-`test_ritual_components_target_mode.py`, `test_drift_correction_views.py`; journey
-`integration_tests/test_drift_correction_journeys.py` (telnet, web, lapse, negatives).
+`test_ritual_components_target_mode.py`, `test_drift_correction_views.py`, `test_atone_accept.py`;
+journey `integration_tests/test_drift_correction_journeys.py` (telnet, web, the chance staying open
+past the scene, refusals).
 
 ### Thread retune: moving part of a thread's investment to another resonance (#5123, ruling 31) [BUILT & WIRED]
 
@@ -5494,7 +5618,6 @@ client flow writes them directly.
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/character-auras/` | GET (POST/PATCH/DELETE staff only) | Character aura data: each share's `percent` and `settled_percent`, and the unsettled reading (`unsettled`, `unsettled_line`, `unsettled_affinity_name`, `mire_share_words`; #5123) |
-| `/character-auras/{id}/accept/` | POST | Accept the changes to your Aura (`AcceptAuraChangeAction`); 400 `{detail}` unless the character is unsettled (#5123) |
 | `/character-auras/{id}/set-glimpse-tags/`, `set-glimpse-prose/`, `link-glimpse-distinction/`, `unlink-glimpse-distinction/` | POST | The player's own Glimpse edits (the web client's aura writers) |
 | `/character-resonances/` | GET (POST/PATCH/DELETE staff only) | Character resonances (balance + lifetime_earned per Spec A §2.2; players change them through service functions, not REST mutations) |
 | `/character-gifts/` | GET (POST/PATCH/DELETE staff only) | Character's acquired gifts. Players gain gifts through `grant_gift_to_character`; a staff DELETE also takes the gift's natural weapon (#4898) |

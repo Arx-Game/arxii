@@ -96,59 +96,73 @@ class QualifyingComponent:
 
 
 @dataclass(frozen=True)
-class DriftSourceOption:
-    """One drift holding the rite could convert toward a target, and what it would yield.
+class ReflectionEffect:
+    """What the rite of settling did for one reflection, as the line its writer is told."""
 
-    ``max_amount`` is the most of it the offer's cap and the balance allow;
-    ``projected_output`` is what converting all of that yields at a full share.
-    """
-
-    resonance_id: int
-    resonance_name: str
-    balance: int
-    multiplier: Decimal
-    conversion_type: str
-    max_amount: int
-    projected_output: int
+    reflection_id: int
+    line: str
 
 
 @dataclass(frozen=True)
-class DriftConversionPreview:
-    """What a character may convert toward ``target_resonance_id`` under an offer."""
+class SettlingRiteResult:
+    """The outcome of one rite of settling (#5124).
 
-    target_resonance_id: int
-    cap_remaining: int
-    sources: tuple[DriftSourceOption, ...]
-    focus_bonus: int
-
-
-@dataclass(frozen=True)
-class DriftCorrectionResult:
-    """The outcome of one performance of the drift correction rite.
-
-    ``converted_amount`` is the source units moved (0 on a tier with no share);
-    ``granted_amount`` is what the target gained.
+    ``share`` is the fraction of each reflection the rite carried out, from the rolled
+    tier's ``DriftCorrectionOutcomeShare``. ``effects`` holds one entry per reflection the
+    rite took, in the order it applied them.
     """
 
-    source_resonance_id: int
-    target_resonance_id: int
-    attempted_amount: int
-    converted_amount: int
-    granted_amount: int
     outcome_name: str
     success_level: int
-    conversion_type: str
+    share: Decimal
+    focus_bonus: int
+    effects: tuple[ReflectionEffect, ...]
+
+    @property
+    def lines(self) -> tuple[str, ...]:
+        """The sentences the performer is told: the roll, then one per reflection."""
+        return tuple(effect.line for effect in self.effects)
+
+
+@dataclass(frozen=True)
+class RiteOffering:
+    """A carried item that can be the rite's offering, and the resonance it is offered for.
+
+    ``focus_bonus`` is what the performer's worn focus adds to the roll toward that resonance.
+    """
+
+    component: QualifyingComponent
+    resonance: Resonance
     focus_bonus: int
 
 
 @dataclass(frozen=True)
-class DriftOfferCapOption:
-    """One cap of an offer, as a player sees it: what may be converted and what to offer up.
+class ReflectionReading:
+    """One waiting reflection as the sheet's aura card and the rite dialog show it.
 
-    ``qualifying`` is the carried items that count toward the rite's offering for this
-    target, each with the route it took.
+    ``title`` is "Embrace <what>" or "Disown <what>"; ``where`` names the writing that carries
+    it for the sheet's list (a journal entry's title, or the scene a pose was in) and
+    ``from_line`` says the same as the rite dialog's "from ..." clause; ``excerpt`` is the start
+    of that writing. All three are blank when the writing is gone. ``effect_line`` says what
+    the rite will do at a full share.
     """
 
-    target_resonance: Resonance
-    preview: DriftConversionPreview
-    qualifying: tuple[QualifyingComponent, ...]
+    id: int
+    choice: str
+    kind: str
+    title: str
+    where: str
+    from_line: str
+    excerpt: str
+    effect_line: str
+
+
+@dataclass(frozen=True)
+class SettlingRiteReading:
+    """What the rite of settling would take and what it asks for, read for one character."""
+
+    reflections: tuple[ReflectionReading, ...]
+    offerings: tuple[RiteOffering, ...]
+    rite_ready: bool
+    not_ready_message: str
+    check_name: str

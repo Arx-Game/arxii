@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from actions.base import Action
-from actions.definitions.accept_aura import AcceptAuraChangeAction
 from actions.definitions.accusations import (
     DenounceFramerAction,
     RefuteAccusationAction,
@@ -222,10 +221,7 @@ from actions.definitions.dreams import (
     DreamwalkAction,
     SleepAction,
 )
-from actions.definitions.drift_correction import (
-    DeclineDriftCorrectionAction,
-    PerformDriftCorrectionAction,
-)
+from actions.definitions.drift_correction import PerformSettlingRiteAction
 from actions.definitions.duels import (
     AcceptChallengeAction,
     AcknowledgeRiskAction,
@@ -300,7 +296,9 @@ from actions.definitions.gm_combat import (
 )
 from actions.definitions.gm_npcs import MintStoryNPCAction
 from actions.definitions.gm_props import (
+    GMListKindlingAction,
     GMListSubstancesAction,
+    KindleResonanceAction,
     MarkSubstancePresentAction,
     StagePropAction,
     StagePropertyAction,
@@ -885,9 +883,7 @@ _ALL_ACTIONS: list[Action] = [
     SetSituationAction(),
     PlaceChallengeAction(),
     PerformRitualAction(),
-    PerformDriftCorrectionAction(),
-    DeclineDriftCorrectionAction(),
-    AcceptAuraChangeAction(),
+    PerformSettlingRiteAction(),
     # #3292 - tavern games: coin-stakes dice gambling open/join/roll/leave.
     OpenGameAction(),
     JoinGameAction(),
@@ -983,6 +979,8 @@ _ALL_ACTIONS: list[Action] = [
     StagePropertyAction(),
     MarkSubstancePresentAction(),
     GMListSubstancesAction(),
+    KindleResonanceAction(),
+    GMListKindlingAction(),
     CallUpSubstanceAction(),
     CompleteStoryAction(),
     ResolveEpisodeAction(),

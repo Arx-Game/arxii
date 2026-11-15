@@ -30,6 +30,7 @@ def _make_resolution_result(
     """Build a minimal ChallengeResolutionResult stub for assertion purposes."""
     check_result = MagicMock()
     check_result.success_level = success_level
+    check_result.outcome = None
 
     consequence = MagicMock()
 
@@ -193,9 +194,11 @@ class DispatchCapabilityReactionSelectionTest(TestCase):
 
     def test_selects_matching_capability_and_calls_outcome_fn(self) -> None:
         actor = MagicMock()
+        actor.pk = 98  # the kindled-deed award looks the actor up by pk
         actor.location = MagicMock()
         target = MagicMock()
         target.id = 99
+        target.pk = 99
 
         resolution = _make_resolution_result()
         outcome_fn = MagicMock()
@@ -244,9 +247,11 @@ class DispatchCapabilityReactionSelectionTest(TestCase):
     def test_matches_approach_when_the_surviving_source_is_a_condition(self) -> None:
         """A condition source carries an empty name; the approach's capability decides (#4663)."""
         actor = MagicMock()
+        actor.pk = 98  # the kindled-deed award looks the actor up by pk
         actor.location = MagicMock()
         target = MagicMock()
         target.id = 99
+        target.pk = 99
 
         resolution = _make_resolution_result()
         shield_action = _make_available_action(capability_name="shield", source_name="")
@@ -276,9 +281,11 @@ class DispatchCapabilityReactionSelectionTest(TestCase):
     def test_falls_back_to_first_action_when_approach_not_found(self) -> None:
         """When the named approach has no matching capability_source, fall back to first action."""
         actor = MagicMock()
+        actor.pk = 98  # the kindled-deed award looks the actor up by pk
         actor.location = MagicMock()
         target = MagicMock()
         target.id = 99
+        target.pk = 99
 
         resolution = _make_resolution_result()
         outcome_fn = MagicMock()
@@ -327,9 +334,11 @@ class DispatchCapabilityReactionSelectionTest(TestCase):
     def test_approach_none_falls_back_to_first_action(self) -> None:
         """When approach=None, fall back to the first available action."""
         actor = MagicMock()
+        actor.pk = 98  # the kindled-deed award looks the actor up by pk
         actor.location = MagicMock()
         target = MagicMock()
         target.id = 99
+        target.pk = 99
 
         resolution = _make_resolution_result()
         outcome_fn = MagicMock()

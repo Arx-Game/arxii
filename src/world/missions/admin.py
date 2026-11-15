@@ -27,6 +27,7 @@ from world.missions.models import (
     MissionOptionRouteReward,
     MissionRenownAward,
     MissionTemplate,
+    MissionTheme,
 )
 from world.societies.admin_inlines import MissionAwardNamedOrganizationInline
 
@@ -38,6 +39,18 @@ class MissionCategoryAdmin(admin.ModelAdmin):
     list_display = ["name", "display_order"]
     search_fields = ["name", "description"]
     list_editable = ["display_order"]
+
+
+@admin.register(MissionTheme)
+class MissionThemeAdmin(admin.ModelAdmin):
+    """#5124 - what a mission or option is about; a kindling situation names a theme.
+
+    Not a category: categories sort the board, themes kindle resonances.
+    """
+
+    list_display = ["name", "player_text", "display_order"]
+    list_editable = ["display_order"]
+    search_fields = ["name", "description", "player_text"]
 
 
 @admin.register(MissionTemplate)
@@ -59,7 +72,7 @@ class MissionTemplateAdmin(admin.ModelAdmin):
     ordering = ["name"]
     list_select_related = ["created_in_era", "report_to_role"]
     autocomplete_fields = ["created_in_era", "report_to_role"]
-    filter_horizontal = ["categories"]
+    filter_horizontal = ["categories", "themes"]
 
 
 @admin.register(MissionNode)
@@ -94,6 +107,7 @@ class MissionOptionAdmin(admin.ModelAdmin):
         "opposition_sheet",
         "opposition_check_type",
     ]
+    filter_horizontal = ["themes"]
 
 
 @admin.register(MissionOptionOpponentLine)

@@ -1,9 +1,7 @@
-"""REST surface for the drift correction rite (#4733): pending offers, convert, decline."""
+"""REST surface for the open chance to atone and the rite of settling (#4733, #5124)."""
 
 from __future__ import annotations
 
-from django.db import connection
-from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -14,10 +12,11 @@ from world.magic.factories import (
     CharacterAuraFactory,
     DriftConversionCapFactory,
     DriftConversionOfferFactory,
+    ReflectionFactory,
     set_aura_split,
 )
-from world.magic.models import DriftConversionOffer, DriftCorrectionOutcomeShare
-from world.magic.services.drift_correction import RITE_NOT_READY_MESSAGE
+from world.magic.models import DriftConversionOffer, Reflection
+from world.magic.serializers import SettlingRitePerformSerializer
 from world.magic.tests.test_drift_correction_rite import (
     DriftRiteTestBase,
     _balance,
@@ -29,8 +28,7 @@ from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import SceneFactory
 
 _PENDING_URL = "/api/magic/drift-correction/pending/"
-_CONVERT_URL = "/api/magic/drift-correction/convert/"
-_DECLINE_URL = "/api/magic/drift-correction/decline/"
+_RITE_URL = "/api/magic/settling-rite/"
 
 
 class DriftCorrectionViewTestBase(DriftRiteTestBase):
@@ -59,17 +57,14 @@ class DriftCorrectionViewTestBase(DriftRiteTestBase):
         self.other_item.holder_character_sheet = self.other_sheet
         self.other_item.save(update_fields=["holder_character_sheet"])
 
-    def convert(self, **overrides):
+    def settle(self, sheet=None, **overrides):
         body = {
-            "offer_id": self.offer.pk,
-            "source_resonance_id": self.dread.pk,
-            "target_resonance_id": self.dawnlight.pk,
-            "amount": 12,
+            "character_sheet_id": (sheet or self.sheet).pk,
             "component_ids": [self.component_pk],
         }
         body.update(overrides)
         with force_check_outcome(self.outcomes["Success"]):
-            return self.client.post(_CONVERT_URL, body, format="json")
+            return self.client.post(_RITE_URL, body, format="json")
 
 
 class PendingOfferTests(DriftCorrectionViewTestBase):
@@ -79,72 +74,26 @@ class PendingOfferTests(DriftCorrectionViewTestBase):
         ids = {row["id"] for row in response.data["results"]}
         self.assertEqual(ids, {self.offer.pk})
 
-    def test_offer_payload_carries_caps_sources_and_qualifying_items(self) -> None:
-        response = self.client.get(_PENDING_URL)
-        row = response.data["results"][0]
+    def test_offer_payload_carries_the_character_and_its_caps(self) -> None:
+        row = self.client.get(_PENDING_URL).data["results"][0]
         self.assertEqual(row["scene_id"], self.scene.pk)
-        # The Settle your aura dialog reads and accepts this character's aura (#5123).
         self.assertEqual(row["character_id"], self.sheet.pk)
         (cap,) = row["caps"]
         self.assertEqual(cap["target_resonance"]["id"], self.dawnlight.pk)
         self.assertEqual(cap["target_resonance"]["name"], "Drift Dawnlight")
+        self.assertEqual(cap["target_resonance"]["affinity"], "Celestial")
         self.assertEqual(cap["cap_remaining"], 12)
-        self.assertEqual(cap["focus_bonus"], 0)
-        (source,) = cap["sources"]
-        self.assertEqual(source["resonance_id"], self.dread.pk)
-        self.assertEqual(source["balance"], 30)
-        self.assertEqual(source["max_amount"], 12)
-        self.assertEqual(source["projected_output"], 6)
-        (item,) = cap["qualifying_components"]
-        self.assertEqual(item["item_id"], self.component_pk)
-        self.assertEqual(item["mode"], "material")
 
-    def test_items_held_by_others_never_qualify(self) -> None:
-        response = self.client.get(_PENDING_URL)
-        ids = {
-            i["item_id"]
-            for c in response.data["results"][0]["caps"]
-            for i in c["qualifying_components"]
-        }
-        self.assertNotIn(self.other_item.pk, ids)
-
-    def test_an_offer_left_on_a_finished_scene_is_not_listed(self) -> None:
-        # A finish route that bypasses Scene.finish_scene leaves the offer row in place.
+    def test_an_offer_whose_scene_finished_is_still_listed(self) -> None:
+        # The chance stays open until the rite spends it (#5124).
         self.scene.is_active = False
         self.scene.date_finished = timezone.now()
         self.scene.save(update_fields=["is_active", "date_finished"])
-        self.assertTrue(DriftConversionOffer.objects.filter(pk=self.offer.pk).exists())
 
         response = self.client.get(_PENDING_URL)
 
-        self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(response.data["results"], [])
-        detail = self.client.get(f"{_PENDING_URL}{self.offer.pk}/")
-        self.assertEqual(detail.status_code, 404)
-
-    def test_a_tier_with_no_share_makes_every_offer_not_ready(self) -> None:
-        DriftCorrectionOutcomeShare.objects.filter(
-            outcome_tier=self.outcomes["Partial Success"]
-        ).delete()
-        (row,) = self.client.get(_PENDING_URL).data["results"]
-        self.assertEqual(
-            (row["rite_ready"], row["rite_not_ready_message"]), (False, RITE_NOT_READY_MESSAGE)
-        )
-
-    def test_readiness_is_asked_once_however_many_offers_are_listed(self) -> None:
-        for _ in range(2):
-            extra = DriftConversionOfferFactory(
-                character_sheet=self.sheet, scene=SceneFactory(is_active=True)
-            )
-            DriftConversionCapFactory(offer=extra, target_resonance=self.dawnlight, cap=3)
-        share_table = DriftCorrectionOutcomeShare._meta.db_table
-        with CaptureQueriesContext(connection) as queries:
-            response = self.client.get(_PENDING_URL)
-        rows = response.data["results"]
-        self.assertEqual(len(rows), 3)
-        self.assertTrue(all(row["rite_ready"] for row in rows))
-        share_queries = [q for q in queries.captured_queries if share_table in q["sql"]]
-        self.assertEqual(len(share_queries), 1, share_queries)
+        self.assertEqual([row["id"] for row in response.data["results"]], [self.offer.pk])
+        self.assertEqual(self.client.get(f"{_PENDING_URL}{self.offer.pk}/").status_code, 200)
 
     def test_detail_of_another_accounts_offer_is_404(self) -> None:
         response = self.client.get(f"{_PENDING_URL}{self.other_offer.pk}/")
@@ -156,7 +105,7 @@ class PendingOfferTests(DriftCorrectionViewTestBase):
 
 
 class TwoCharacterAccountTests(DriftCorrectionViewTestBase):
-    """One account playing two characters, each with an offer of their own."""
+    """One account playing two characters, each with its own reflection and offering."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -178,47 +127,32 @@ class TwoCharacterAccountTests(DriftCorrectionViewTestBase):
         self.second_item = _tied_item(self.dawnlight)
         self.second_item.holder_character_sheet = self.second
         self.second_item.save(update_fields=["holder_character_sheet"])
+        ReflectionFactory(character_sheet=self.second, resonance=self.dread)
 
     def test_the_list_shows_both_characters_offers_and_no_one_elses(self) -> None:
-        response = self.client.get(_PENDING_URL)
-        ids = {row["id"] for row in response.data["results"]}
+        ids = {row["id"] for row in self.client.get(_PENDING_URL).data["results"]}
         self.assertEqual(ids, {self.offer.pk, self.second_offer.pk})
 
-    def test_convert_acts_as_the_offers_own_character(self) -> None:
-        with force_check_outcome(self.outcomes["Success"]):
-            response = self.client.post(
-                _CONVERT_URL,
-                {
-                    "offer_id": self.second_offer.pk,
-                    "source_resonance_id": self.dread.pk,
-                    "target_resonance_id": self.dawnlight.pk,
-                    "amount": 8,
-                    "component_ids": [self.second_item.pk],
-                },
-                format="json",
-            )
+    def test_the_rite_acts_as_the_character_named(self) -> None:
+        response = self.settle(self.second, component_ids=[self.second_item.pk])
         self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(response.data["converted_amount"], 8)
+        self.assertEqual(response.data["outcome_name"], "Success")
         self.assertEqual(_balance(self.second, self.dread), 22)
         self.assertEqual(_balance(self.sheet, self.dread), 30)
         self.assertTrue(_consumed(self.second_item.pk))
 
-    def test_the_other_characters_item_is_refused_on_this_offer(self) -> None:
-        response = self.convert(offer_id=self.second_offer.pk, component_ids=[self.component_pk])
+    def test_the_other_characters_item_is_refused(self) -> None:
+        response = self.settle(self.second, component_ids=[self.component_pk])
         self.assertEqual(response.status_code, 400, response.content)
         self.assertFalse(_consumed(self.component_pk))
+        self.assertEqual(Reflection.objects.filter(rite__isnull=True).count(), 1)
 
     def test_component_order_is_preserved_in_the_resolved_list(self) -> None:
-        from world.magic.serializers import DriftCorrectionConvertSerializer
-
         extra = ItemInstanceFactory(holder_character_sheet=self.sheet)
         request = type("R", (), {"user": self.account})()
-        serializer = DriftCorrectionConvertSerializer(
+        serializer = SettlingRitePerformSerializer(
             data={
-                "offer_id": self.offer.pk,
-                "source_resonance_id": self.dread.pk,
-                "target_resonance_id": self.dawnlight.pk,
-                "amount": 1,
+                "character_sheet_id": self.sheet.pk,
                 "component_ids": [extra.pk, self.component_pk],
             },
             context={"request": request},
@@ -230,72 +164,43 @@ class TwoCharacterAccountTests(DriftCorrectionViewTestBase):
         )
 
 
-class ConvertTests(DriftCorrectionViewTestBase):
-    def test_convert_returns_the_result_and_consumes_the_offering(self) -> None:
-        response = self.convert()
-        self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(response.data["converted_amount"], 12)
-        self.assertEqual(response.data["granted_amount"], 6)
-        self.assertEqual(response.data["outcome_name"], "Success")
-        self.assertEqual(response.data["source_resonance_id"], self.dread.pk)
-        self.assertEqual(response.data["target_resonance_id"], self.dawnlight.pk)
-        self.assertTrue(_consumed(self.component_pk))
-
-    def test_another_accounts_component_is_a_400_and_untouched(self) -> None:
-        response = self.convert(component_ids=[self.other_item.pk])
-        self.assertEqual(response.status_code, 400, response.content)
-        self.assertFalse(_consumed(self.other_item.pk))
-        self.assertEqual(self.cap_value(), 12)
-
-    def test_an_unheld_component_is_refused_with_the_plain_sentence(self) -> None:
-        # The player reads the sentence; the request field it came from is never shown.
-        stray = ItemInstanceFactory()
-        response = self.convert(component_ids=[stray.pk])
-        self.assertEqual(response.status_code, 400, response.content)
-        self.assertEqual(response.data, {"detail": "You are not carrying everything you offered."})
+class SettlingRiteTests(DriftCorrectionViewTestBase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.reflect_disown_dread()
 
     def test_a_malformed_request_is_one_plain_detail_with_no_field_names(self) -> None:
-        response = self.convert(amount=0, component_ids=["x"])
-        self.assertEqual(response.status_code, 400, response.content)
-        self.assertEqual(set(response.data), {"detail"})
-        for field in ("amount", "component_ids"):
-            self.assertNotIn(field, response.data["detail"])
+        response = self.client.post(_RITE_URL, {"component_ids": "no"}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(list(response.data), ["detail"])
 
-    def test_unheld_item_among_good_ones_is_a_400_and_nothing_is_consumed(self) -> None:
-        stray = ItemInstanceFactory()
-        response = self.convert(component_ids=[self.component_pk, stray.pk])
-        self.assertEqual(response.status_code, 400, response.content)
+    def test_another_accounts_character_is_a_404_and_nothing_moves(self) -> None:
+        response = self.settle(self.other_sheet, component_ids=[self.other_item.pk])
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(_consumed(self.other_item.pk))
+
+    def test_a_refusal_is_a_400_with_the_message_and_changes_nothing(self) -> None:
+        response = self.settle(component_ids=[])
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("detail", response.data)
         self.assertFalse(_consumed(self.component_pk))
+        self.assertEqual(Reflection.objects.filter(rite__isnull=True).count(), 1)
 
-    def test_another_accounts_offer_is_not_actionable(self) -> None:
-        response = self.convert(offer_id=self.other_offer.pk, component_ids=[])
-        self.assertEqual(response.status_code, 404, response.content)
-        self.assertTrue(DriftConversionOffer.objects.filter(pk=self.other_offer.pk).exists())
+    def test_the_reading_is_the_owners_alone(self) -> None:
+        mine = self.client.get(_RITE_URL, {"character_sheet": self.sheet.pk})
+        self.assertEqual(mine.status_code, 200, mine.content)
+        self.assertEqual(len(mine.data["reflections"]), 1)
+        self.assertEqual([o["item_id"] for o in mine.data["offerings"]], [self.component_pk])
+        theirs = self.client.get(_RITE_URL, {"character_sheet": self.other_sheet.pk})
+        self.assertEqual(theirs.status_code, 404)
 
-    def test_rite_refusal_is_a_400_with_the_message(self) -> None:
-        response = self.convert(amount=99)
-        self.assertEqual(response.status_code, 400, response.content)
-        self.assertEqual(
-            response.data["detail"], "You may convert at most 12 toward that resonance."
-        )
-
-    def test_missing_offering_is_a_400_with_the_message(self) -> None:
-        response = self.convert(component_ids=[])
-        self.assertEqual(response.status_code, 400, response.content)
-        self.assertIn("offering for Drift Dawnlight", response.data["detail"])
-
-    def test_unknown_resonance_is_a_404(self) -> None:
-        response = self.convert(source_resonance_id=999999)
-        self.assertEqual(response.status_code, 404, response.content)
-
-
-class DeclineTests(DriftCorrectionViewTestBase):
-    def test_decline_removes_the_offer(self) -> None:
-        response = self.client.post(_DECLINE_URL, {"offer_id": self.offer.pk}, format="json")
+    def test_the_rite_spends_the_open_chance_the_pending_inbox_lists(self) -> None:
+        response = self.settle()
         self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(
+            response.data["lines"],
+            ["You disown your Drift Dread: 12 Drift Dread became 6 Drift Dawnlight."],
+        )
         self.assertFalse(DriftConversionOffer.objects.filter(pk=self.offer.pk).exists())
-
-    def test_decline_of_another_accounts_offer_is_404_and_leaves_it(self) -> None:
-        response = self.client.post(_DECLINE_URL, {"offer_id": self.other_offer.pk}, format="json")
-        self.assertEqual(response.status_code, 404, response.content)
-        self.assertTrue(DriftConversionOffer.objects.filter(pk=self.other_offer.pk).exists())
+        ids = {row["id"] for row in self.client.get(_PENDING_URL).data["results"]}
+        self.assertEqual(ids, set())

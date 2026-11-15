@@ -20,8 +20,8 @@ import { PrecapturePanel } from '../components/PrecapturePanel';
 import { SceneLinesAndVeilsCard } from '@/boundaries/components/SceneLinesAndVeilsCard';
 import { SineatingInbox } from '@/magic/components/SineatingInbox';
 import { SoulTetherRescuePrompt } from '@/magic/components/SoulTetherRescuePrompt';
+import { KindledResonancesPanel } from '@/magic/components/KindledResonancesPanel';
 import { EntryFlourishOfferGate } from '@/magic/components/EntryFlourishOfferGate';
-import { DriftConversionOfferGate } from '@/magic/components/DriftConversionOfferGate';
 import { WitnessReactionOfferGate } from '@/justice/components/WitnessReactionOfferGate';
 import { CommandInput } from '@/game/components/CommandInput';
 import type { ComposerMode } from '@/game/components/CommandInput';
@@ -408,6 +408,12 @@ export function SceneDetailPage() {
           <SelfCheckPanel />
         </div>
       )}
+      {/* #5124 Your resonances: what is kindled here, how strongly and why. */}
+      {isActive && characterSheetId > 0 && (
+        <div className="mt-2">
+          <KindledResonancesPanel characterSheetId={characterSheetId} />
+        </div>
+      )}
       {scene?.viewer_can_gm && (
         <div className="mt-2">
           <GMAdjudicationPanel
@@ -449,7 +455,6 @@ export function SceneDetailPage() {
             {isActive && <SineatingInbox />}
             {isActive && <SoulTetherRescuePrompt />}
             {isActive && <EntryFlourishOfferGate characterSheetId={characterSheetId} />}
-            {isActive && <DriftConversionOfferGate sceneId={scene ? Number(scene.id) : null} />}
             {isActive && <WitnessReactionOfferGate personaId={personaId} />}
             {/* #3557 combat layout. Everything above this line either needs an
             answer (consent, sineating, soul-tether, flourish, witness) or is the scene's
@@ -514,6 +519,7 @@ export function SceneDetailPage() {
                       />
                       <CommandInput
                         character={activeCharacter}
+                        characterSheetId={characterSheetId > 0 ? characterSheetId : null}
                         composerMode={composerMode}
                         onModeChange={handleComposerModeChange}
                         targetToAppend={targetToAppend}

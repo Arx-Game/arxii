@@ -15,8 +15,8 @@ one resonance to another) or an accept. After every step:
 - an accept leaves her with ``steps_past == 0`` and no Mire, whoever she was (a Sineater past
   the Mire allowance included), and refuses when she was not unsettled.
 
-The atone rite itself (``perform_drift_correction_rite``, the service a deed's offer and the
-web dialog and ``aura atone`` all reach) is fuzzed on a Sineater: whatever she converts, the
+The rite of settling disowning her Ruin (``perform_settling_rite``, the service the web dialog
+and ``aura settle`` reach) is fuzzed on a Sineater: whatever the cap lets her convert, the
 Mire excess goes first (her Mire shrinks by the amount up to the excess, her own lifetime is
 untouched while the Mire excess covers it), the Mire never exceeds the lifetime left, and
 total lifetime is conserved. The random atone in the history above is the conversion
@@ -57,13 +57,14 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
-from world.magic.constants import GainSource
-from world.magic.exceptions import DriftConversionInvalidError, NotUnsettledError
+from world.magic.constants import GainSource, ReflectionChoice
+from world.magic.exceptions import NotUnsettledError
 from world.magic.factories import (
     CharacterAuraFactory,
     DriftConversionCapFactory,
     DriftConversionOfferFactory,
     DriftCorrectionRiteFactory,
+    ReflectionFactory,
     ResonanceFactory,
     ResonanceTierFactory,
     ThreadFactory,
@@ -90,7 +91,7 @@ from world.magic.services.drift import (
     get_drift_config,
     get_drift_correction_config,
 )
-from world.magic.services.drift_correction import perform_drift_correction_rite
+from world.magic.services.drift_correction import perform_settling_rite
 from world.magic.services.resonance import grant_resonance, spend_resonance_for_imbuing
 from world.magic.services.thread_resonance import (
     ThreadResonanceChangeError,
@@ -307,11 +308,18 @@ class AtoningTakesTheMireFirst(HypothesisTestCase):
         recompute_aura(sheet)
         return sheet
 
-    def atone(self, dawn: int, ruin: int, mire: int, amount: int) -> bool:
-        """Atone ``amount``; True when the rite ran, False when it refused (nothing changed)."""
+    def atone(self, dawn: int, ruin: int, mire: int, amount: int) -> int:
+        """Settle with an open cap of ``amount``, disowning her Ruin; return what converted.
+
+        The rite converts the cap at a full share, no more than she holds of Ruin and no more
+        than stands past who she is; a cap past that clamps, and moves nothing it should not.
+        """
         sheet = self.sineater(dawn, ruin, mire)
         offer = DriftConversionOfferFactory(character_sheet=sheet, scene=self.scene)
-        DriftConversionCapFactory(offer=offer, target_resonance=self.dawnlight, cap=1000)
+        DriftConversionCapFactory(offer=offer, target_resonance=self.dawnlight, cap=amount)
+        ReflectionFactory(
+            character_sheet=sheet, resonance=self.ruin, choice=ReflectionChoice.DISOWN
+        )
         offering = ItemInstanceFactory(
             template=ItemTemplateFactory(
                 tied_resonance=self.dawnlight, resonance_tier=ResonanceTierFactory()
@@ -321,27 +329,18 @@ class AtoningTakesTheMireFirst(HypothesisTestCase):
         allowance = get_drift_config().mire_allowance_percent
         past = Decimal(mire) * ONE_HUNDRED / total - allowance
         mire_excess = ceil(past * total / ONE_HUNDRED) if past > 0 else 0
+        convertible = drift_for(sheet).convertible_points(self.abyssal.pk, mire)
+        moved = min(amount, ruin, convertible)
 
-        try:
-            with force_check_outcome(self.outcomes["Success"]):
-                perform_drift_correction_rite(
-                    offer,
-                    source_resonance=self.ruin,
-                    target_resonance=self.dawnlight,
-                    amount=amount,
-                    components=[offering],
-                )
-        except DriftConversionInvalidError:
-            row = CharacterResonance.objects.get(character_sheet=sheet, resonance=self.ruin)
-            self.assertEqual((row.lifetime_earned, row.mire_lifetime), (ruin, mire))
-            return False
+        with force_check_outcome(self.outcomes["Success"]):
+            perform_settling_rite(sheet, components=[offering])
 
         row = CharacterResonance.objects.get(character_sheet=sheet, resonance=self.ruin)
-        self.assertEqual(row.lifetime_earned, ruin - amount)
+        self.assertEqual(row.lifetime_earned, ruin - moved)
         # The Mire's excess is taken first: up to the excess, the amount comes off the Mire.
-        taken = min(amount, mire_excess, mire)
-        self.assertEqual(row.mire_lifetime, min(mire - taken, ruin - amount))
-        if amount <= min(mire_excess, mire):
+        taken = min(moved, mire_excess, mire)
+        self.assertEqual(row.mire_lifetime, min(mire - taken, ruin - moved))
+        if moved <= min(mire_excess, mire):
             own_before = ruin - mire
             self.assertEqual(row.lifetime_earned - row.mire_lifetime, own_before)
         self.assertLessEqual(row.mire_lifetime, row.lifetime_earned)
@@ -353,7 +352,7 @@ class AtoningTakesTheMireFirst(HypothesisTestCase):
             ),
             total,
         )
-        return True
+        return moved
 
     @given(
         dawn=st.integers(100, 700),
@@ -370,16 +369,16 @@ class AtoningTakesTheMireFirst(HypothesisTestCase):
     def test_a_sineater_past_the_allowance_is_able_to_atone(self) -> None:
         # 300 Mire of 900 is 33.3 percent against 30: 30 points of Mire excess, and no
         # share of her own Ruin: the rite converts exactly the excess, all of it Mire.
-        self.assertTrue(self.atone(600, 300, 300, 30))
-        # Past the excess there is nothing of her own to convert: refused, nothing moves.
-        self.assertFalse(self.atone(600, 300, 300, 31))
+        self.assertEqual(self.atone(600, 300, 300, 30), 30)
+        # A cap past the excess clamps to it: there is nothing of her own to convert.
+        self.assertEqual(self.atone(600, 300, 300, 31), 30)
 
     def test_her_own_ruin_goes_after_the_mires_excess(self) -> None:
         # 200 Mire of 300 Ruin, 300 Dawnlight: the Mire is 33.3 percent of 600, 20 points past
         # the allowance, and her own 100 Ruin is past her line too. Converting 50 takes the
         # Mire's 20 first and 30 of her own (the atone asserts the Mire falls to 180 and
         # her own lifetime from 100 to 70).
-        self.assertTrue(self.atone(300, 300, 200, 50))
+        self.assertEqual(self.atone(300, 300, 200, 50), 50)
 
 
 # --- a thread's resonance rows -----------------------------------------------------------

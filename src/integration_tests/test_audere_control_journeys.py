@@ -80,7 +80,7 @@ CONTROL_LINE_START = "Your control lets you break through"
 
 def _clean_cast(*args: object, **kwargs: object) -> MagicMock:
     """An offence roll at success level 2, which lands the cast."""
-    return MagicMock(success_level=2)
+    return MagicMock(success_level=2, outcome=None)
 
 
 class _AFightWithAFrayedSoul(JourneyCase):

@@ -20,6 +20,7 @@ import type { ReactNode } from 'react';
 
 vi.mock('@/combat/queries', () => ({
   useAvailableCombos: vi.fn(),
+  useRallyResonances: vi.fn(),
   useUpgradeCombo: vi.fn(),
   useDispatchPlayerAction: vi.fn(),
   useFleeMutation: vi.fn(),
@@ -222,6 +223,7 @@ function createWrapper() {
 }
 
 const mockedUseAvailableCombos = combatQueries.useAvailableCombos as ReturnType<typeof vi.fn>;
+const mockedUseRallyResonances = combatQueries.useRallyResonances as ReturnType<typeof vi.fn>;
 const mockedUseUpgradeCombo = combatQueries.useUpgradeCombo as ReturnType<typeof vi.fn>;
 const mockedUseDispatchPlayerAction = combatQueries.useDispatchPlayerAction as ReturnType<
   typeof vi.fn
@@ -245,8 +247,13 @@ function setupMocks(
     combos?: RoundCombo[];
     combosLoading?: boolean;
     inventory?: Array<{ id: number; display_name: string; is_usable: boolean }>;
+    /** What the Rally picker reads for the ally with participant id 4. */
+    rallyResonances?: Array<{ id: number; name: string; kindled: boolean }>;
   } = {}
 ) {
+  mockedUseRallyResonances.mockImplementation((_encounterId: number, allyId: number | null) => ({
+    data: allyId === 4 ? options.rallyResonances : undefined,
+  }));
   mockedUseAvailableCombos.mockReturnValue({
     data: options.combos ?? [],
     isLoading: options.combosLoading ?? false,
@@ -446,7 +453,7 @@ function makeCastPlayerAction(
     ref: { ...base.ref, technique_id: techniqueId },
     soulfray_warning: null,
     available_fury_tiers: [],
-    eligible_fury_anchors: [],
+    eligible_fury_resonances: [],
     ...overrides,
   };
 }
@@ -1927,9 +1934,27 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
     },
   ];
 
-  const furyAnchors = [
-    { id: 20, name: 'Keth', provocation_cap: 2, tier_full_intensities: [] },
-    { id: 21, name: 'Lira', provocation_cap: 5, tier_full_intensities: [] },
+  const furyResonances = [
+    {
+      id: 20,
+      name: 'Wrath',
+      strength_name: 'Strong',
+      control_check_name: 'Composure',
+      provocation_cap: 2,
+      tier_full_intensities: [],
+      weakest_strength_name: 'Faint',
+      weakest_depth_name: 'Seething',
+    },
+    {
+      id: 21,
+      name: 'Grief',
+      strength_name: 'Blazing',
+      control_check_name: 'Composure',
+      provocation_cap: 5,
+      tier_full_intensities: [],
+      weakest_strength_name: 'Faint',
+      weakest_depth_name: 'Seething',
+    },
   ];
 
   it('shows the Soulfray gate the anima the cast will really cost (#4799)', async () => {
@@ -2045,7 +2070,7 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
     const cast = makeCastPlayerAction(8, 'Fury Cast', {
       soulfray_warning: null,
       available_fury_tiers: furyTiers,
-      eligible_fury_anchors: furyAnchors,
+      eligible_fury_resonances: furyResonances,
     });
 
     mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
@@ -2081,17 +2106,17 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
     const calls = mockMutateAsync.mock.calls as Array<[{ kwargs: Record<string, unknown> }]>;
     expect(calls[0][0].kwargs).toMatchObject({ effort_level: 'medium' });
     expect(calls[0][0].kwargs).not.toHaveProperty('fury_commitment_id');
-    expect(calls[0][0].kwargs).not.toHaveProperty('fury_anchor_id');
+    expect(calls[0][0].kwargs).not.toHaveProperty('fury_resonance_id');
 
     mockActionDeclarationCard.mockImplementation(defaultCardImpl);
   });
 
-  it('sends fury_commitment_id + fury_anchor_id when fury is chosen within cap', async () => {
+  it('sends fury_commitment_id + fury_resonance_id when fury is chosen within cap', async () => {
     setupMocks();
     const cast = makeCastPlayerAction(9, 'Fury Cast', {
       soulfray_warning: null,
       available_fury_tiers: furyTiers,
-      eligible_fury_anchors: furyAnchors,
+      eligible_fury_resonances: furyResonances,
     });
 
     mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
@@ -2117,16 +2142,12 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
 
     await userEvent.click(screen.getByTestId('card-select-technique-focused'));
 
-    // Pick tier Spark (depth 1) and anchor Keth (cap 2) — within cap.
-    const tierTrigger = screen.getByTestId('fury-tier-select');
-    await userEvent.click(tierTrigger);
-    const tierOption = await screen.findByText('Spark: surrender 3 control');
-    await userEvent.click(tierOption);
-
-    const anchorTrigger = screen.getByTestId('fury-anchor-select');
-    await userEvent.click(anchorTrigger);
-    const anchorOption = await screen.findByText('Keth (cap 2)');
-    await userEvent.click(anchorOption);
+    // Give in to Wrath (cap 2) as far as Spark (depth 1) — within what it reaches.
+    await userEvent.click(screen.getByTestId('fury-resonance-select'));
+    await userEvent.click(await screen.findByText('Wrath (kindled, strong)'));
+    // Blaze (depth 3) is a step Wrath does not reach, so it is not offered.
+    expect(screen.queryByTestId('fury-tier-11')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('fury-tier-10'));
 
     await userEvent.click(screen.getByTestId('submit-declarations-btn'));
 
@@ -2138,8 +2159,64 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
     expect(calls[0][0].kwargs).toMatchObject({
       effort_level: 'medium',
       fury_commitment_id: 10,
-      fury_anchor_id: 20,
+      fury_resonance_id: 20,
     });
+
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
+  });
+
+  it('drops a give-in back to holding steady when the resonance stops being kindled', async () => {
+    setupMocks();
+    const kindledCast = makeCastPlayerAction(9, 'Fury Cast', {
+      soulfray_warning: null,
+      available_fury_tiers: furyTiers,
+      eligible_fury_resonances: furyResonances,
+    });
+    const lapsedCast = makeCastPlayerAction(9, 'Fury Cast', {
+      soulfray_warning: null,
+      available_fury_tiers: furyTiers,
+      eligible_fury_resonances: [],
+    });
+
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange }) => {
+      const slot = actionContext.slot as string;
+      return (
+        <button
+          type="button"
+          data-testid={`card-select-technique-${slot}`}
+          onClick={() =>
+            onContextChange({ slot, effort: 'MEDIUM', strainCommitment: 0, techniqueId: 9 })
+          }
+        >
+          select technique
+        </button>
+      );
+    });
+
+    const { rerender } = render(
+      <YourTurn {...defaultProps({ availableActions: [kindledCast] })} />,
+      {
+        wrapper: createWrapper(),
+      }
+    );
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    await userEvent.click(screen.getByTestId('fury-resonance-select'));
+    await userEvent.click(await screen.findByText('Wrath (kindled, strong)'));
+    await userEvent.click(screen.getByTestId('fury-tier-10'));
+
+    rerender(<YourTurn {...defaultProps({ availableActions: [lapsedCast] })} />);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('fury-declaration')).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId('submit-declarations-btn')).toBeEnabled();
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+    const calls = mockMutateAsync.mock.calls as Array<[{ kwargs: Record<string, unknown> }]>;
+    expect(calls[0][0].kwargs).not.toHaveProperty('fury_commitment_id');
+    expect(calls[0][0].kwargs).not.toHaveProperty('fury_resonance_id');
 
     mockActionDeclarationCard.mockImplementation(defaultCardImpl);
   });
@@ -2718,13 +2795,52 @@ describe('YourTurn — rally/succor maneuver pickers (#3381)', () => {
     await userEvent.click(screen.getByTestId('rally-ally-select'));
     await userEvent.click(await screen.findByText('Ally Four'));
 
+    // The control is headed by the ally it is aimed at, and its button declares the Rally.
+    expect(screen.getByTestId('rally-heading')).toHaveTextContent('Rally Ally Four');
     const confirmBtn = screen.getByTestId('rally-confirm-btn');
+    expect(confirmBtn).toHaveTextContent('Declare Rally');
     await waitFor(() => expect(confirmBtn).not.toBeDisabled());
     await userEvent.click(confirmBtn);
 
     expect(mockManeuverMutateAsync).toHaveBeenCalledWith({
       registryKey: 'combat_rally',
       kwargs: { ally_participant_id: 4 },
+    });
+  });
+
+  it('rally names one of the ally resonances, names only, and sends its id (#5124)', async () => {
+    setupMocks({
+      rallyResonances: [
+        { id: 31, name: 'Fury', kindled: true },
+        { id: 32, name: 'Mercy', kindled: false },
+      ],
+    });
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeParticipant(4, 'Ally Four')],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('rally-resonance-pick')).toBeNull();
+    await userEvent.click(screen.getByTestId('rally-ally-select'));
+    await userEvent.click(await screen.findByText('Ally Four'));
+    expect(mockedUseRallyResonances).toHaveBeenLastCalledWith(expect.anything(), 4);
+    await userEvent.click(screen.getByTestId('rally-resonance-32'));
+
+    expect(screen.getByTestId('rally-resonance-note')).toHaveTextContent(
+      'Mercy is not kindled for Ally Four yet. Your Rally kindles it until the end of the fight.'
+    );
+    await userEvent.click(screen.getByTestId('rally-resonance-31'));
+    expect(screen.getByTestId('rally-resonance-note')).toHaveTextContent(
+      'Fury is already kindled for Ally Four, so your Rally surges them more.'
+    );
+    await userEvent.click(screen.getByTestId('rally-resonance-32'));
+    await userEvent.click(screen.getByTestId('rally-confirm-btn'));
+
+    expect(mockManeuverMutateAsync).toHaveBeenCalledWith({
+      registryKey: 'combat_rally',
+      kwargs: { ally_participant_id: 4, resonance_id: 32 },
     });
   });
 

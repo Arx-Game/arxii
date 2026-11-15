@@ -127,7 +127,7 @@ class OutcomeBroadcastTest(TestCase):
         encounter = self._setup_encounter(mook_health=15)
 
         def mock_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
-            return MagicMock(success_level=2)
+            return MagicMock(success_level=2, outcome=None)
 
         # No captureOnCommitCallbacks: the encounter-outcome push is synchronous.
         with mock.patch("world.scenes.interaction_services._broadcast_to_location") as broadcast:
@@ -155,7 +155,7 @@ class OutcomeBroadcastTest(TestCase):
         encounter = self._setup_encounter(pc_hit_text="{actor} hurls a spear of rime at {target}")
 
         def mock_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
-            return MagicMock(success_level=2)
+            return MagicMock(success_level=2, outcome=None)
 
         with mock.patch("world.scenes.interaction_services._broadcast_to_location"):
             resolve_round(encounter, offense_check_fn=mock_check_fn)
@@ -175,7 +175,7 @@ class OutcomeBroadcastTest(TestCase):
         encounter = self._setup_encounter(npc_hit_text="{actor} rakes {target} with its claws")
 
         def mock_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
-            return MagicMock(success_level=2)
+            return MagicMock(success_level=2, outcome=None)
 
         with mock.patch("world.scenes.interaction_services._broadcast_to_location"):
             resolve_round(encounter, offense_check_fn=mock_check_fn)

@@ -164,7 +164,7 @@ def knock_out(character) -> None:
 
 def _full_swing(*_args: object, **_kwargs: object) -> MagicMock:
     """A defence roll fixed at success level 0, which takes the swing at full strength."""
-    return MagicMock(success_level=0)
+    return MagicMock(success_level=0, outcome=None)
 
 
 @contextmanager
@@ -935,7 +935,7 @@ class MoonTrigger(_ControlLossCase):
 
 def _land_the_swing(*_args: object, **_kwargs: object):
     """The offence roll a declared or compelled attack makes, pinned to land."""
-    return MagicMock(success_level=2)
+    return MagicMock(success_level=2, outcome=None)
 
 
 class _CompelledMira(_ControlLossCase):

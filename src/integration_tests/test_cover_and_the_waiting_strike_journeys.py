@@ -114,12 +114,12 @@ FALL_FROM_THE_AIR = 2 * settings.FALL_IMPACT_PER_LEVEL
 
 def _full_strength(*args: object, **kwargs: object) -> MagicMock:
     """A defence roll at success level 0, which takes the blow at full strength."""
-    return MagicMock(success_level=0)
+    return MagicMock(success_level=0, outcome=None)
 
 
 def _clean_hit(*args: object, **kwargs: object) -> MagicMock:
     """An offence roll at success level 2, which lands a PC's strike."""
-    return MagicMock(success_level=2)
+    return MagicMock(success_level=2, outcome=None)
 
 
 class _TheSteading(JourneyCase):

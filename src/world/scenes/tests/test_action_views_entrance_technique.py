@@ -45,7 +45,7 @@ def _actor_user(character):
 def _make_check_mock(success_level: int) -> MagicMock:
     return MagicMock(
         success_level=success_level,
-        outcome=MagicMock(name="Outcome"),
+        outcome=None,
         outcome_name="Success" if success_level > 0 else "Failure",
     )
 

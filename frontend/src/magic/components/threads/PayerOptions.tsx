@@ -75,6 +75,22 @@ function PerkRows({ thread, option }: { thread: Thread; option: PayerOption }) {
   );
 }
 
+/**
+ * The kindled word beside a payer (#5124, Screen 2): "Kindled, blazing", the strength word
+ * staff wrote and never a number. Nothing for a resonance that is not kindled.
+ */
+function KindledTag({ option, threadId }: { option: PayerOption; threadId: number }) {
+  if (!option.kindled_strength) return null;
+  return (
+    <span
+      className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary"
+      data-testid={`payer-kindled-${threadId}-${option.resonance_id}`}
+    >
+      Kindled, {option.kindled_strength.toLowerCase()}
+    </span>
+  );
+}
+
 function costLine(option: PayerOption): string {
   return `${option.cost} ${option.resonance_name} · you have ${option.balance}`;
 }
@@ -126,7 +142,10 @@ export function PayerOptions({
     return (
       <div className="space-y-1" data-testid={`payer-fixed-${thread.id}`}>
         <div className="flex flex-wrap justify-between gap-2 text-xs">
-          <span>Pays with {payer.resonance_name}</span>
+          <span className="flex items-center gap-2">
+            Pays with {payer.resonance_name}
+            <KindledTag option={payer} threadId={thread.id} />
+          </span>
           <span className="tabular-nums">{costLine(payer)}</span>
         </div>
         <PerkRows thread={thread} option={payer} />
@@ -172,6 +191,7 @@ export function PayerOptions({
                     )}
                   />
                   <b>{option.resonance_name}</b>
+                  <KindledTag option={option} threadId={thread.id} />
                 </span>
                 <span className="text-xs tabular-nums">{costLine(option)}</span>
               </button>

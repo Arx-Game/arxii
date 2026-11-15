@@ -49,10 +49,9 @@ from actions.constants import ActionCategory, CombatActionSlot
 from commands.command import DispatchCommand
 from commands.exceptions import CommandError
 from commands.pull_parsing import (
-    _ANCHOR_PREFIX,
     _BASE_KEYWORD,
     _EFFORT_PREFIX,
-    _FURY_PREFIX,
+    _GIVE_IN_PREFIX,
     _OPENLY_KEYWORD,
     _SECONDARY_KEYWORD,
     PullParsingMixin,
@@ -204,7 +203,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     Usage:
         cast
         cast <technique> [at <target>] [effort=<level>] [secondary] [base] [openly] [soulfray]
-        cast <technique> [at <target>] fury=<tier> anchor=<name>
+        cast <technique> [at <target>] givein=<resonance>:<tier>
         declare <technique> [at <target>] [effort=<level>] [secondary] [base] [openly] [soulfray]
 
     Bare ``cast`` lists everything you can cast, with what each one does.
@@ -229,11 +228,12 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     ``strain=<n>`` to push harder; on a pull of several resonances ``resonance=<name>``
     says which one burns.
 
-    Use ``fury=<tier> anchor=<name>`` to surrender control for intensity: the tier
-    (by name or depth) is how much control you surrender for the rest of the fight,
-    the one you answer to (``anchor=``) caps how deep you can go, and your control
-    roll decides how much intensity it buys. The deepest tiers are Berserk. Bare
-    ``combat`` lists the tiers.
+    Use ``givein=<resonance>:<tier>`` to give in to a kindled resonance, surrendering
+    control for intensity: the tier (by name or depth; write spaces as ``_``, as in
+    ``givein=Wrath:lose_yourself``) is how much control you surrender for the rest of the
+    fight, how strongly the resonance is kindled sets the deepest tier you may take, and
+    your control roll decides how much intensity it buys. The deepest tier is Berserk.
+    Bare ``combat`` lists the tiers, and ``resonances`` shows what is kindled.
 
     Use ``soulfray`` to consent up front to holding this cast's protective
     ward alive past zero anima by drawing on Soulfray, skipping the separate
@@ -262,7 +262,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     _burn: int = 0
     # Fury-related parsed state (None means no fury declared).
     _fury_str: str | None = None
-    _anchor_str: str | None = None
+    _give_in_str: str | None = None
     # Strain (#3446): extra anima committed beyond the technique's base cost.
     _strain: int = 0
     # Base-form opt-out (#1581 Task 8).
@@ -314,10 +314,10 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         # Strip burn=<n> (#4736): resonance burned with the pull when straining.
         raw, burn = self._extract_burn_keyword(raw, has_pull=pull_thread_str is not None)
 
-        # Strip fury=<tier> and anchor=<name> if present (single-token values).
+        # Strip givein=<resonance>:<tier> if present (a single token).
         # Done before effort=/secondary/at parsing so the keywords are fully
         # order-independent and never swallowed into the technique/target name.
-        raw, fury_str, anchor_str = self._extract_fury_keywords(raw)
+        raw, give_in_str, fury_str = self._extract_fury_keywords(raw)
 
         # Strip strain=<n> if present (#3446) - the push-yourself anima
         # overcommit, same keyword the clash grammar uses.
@@ -383,7 +383,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         self._beseech_bonus = beseech_bonus
         self._burn = burn
         self._fury_str = fury_str
-        self._anchor_str = anchor_str
+        self._give_in_str = give_in_str
         self._strain = strain
         self._position_str = position_str
         self._variant_resonance_str = variant_str
@@ -462,25 +462,32 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
 
     @staticmethod
     def _extract_fury_keywords(raw: str) -> tuple[str, str | None, str | None]:
-        """Strip ``fury=<tier>`` and ``anchor=<name>`` tokens from *raw*.
+        """Strip the ``givein=<resonance>:<tier>`` token from *raw*.
 
-        Both values are single tokens (no spaces): ``fury=`` names a FuryTier by
-        name or depth; ``anchor=`` names the bonded character whose harm the rage
-        answers to. Returns ``(remainder, fury_val, anchor_val)`` with both
-        keywords removed; either value is ``None`` when its keyword is absent.
+        The value is one token (no spaces; ``_`` stands for a space in either name).
+        Returns ``(remainder, resonance_val, tier_val)``; both are ``None`` when the keyword
+        is absent.
+
+        Raises:
+            CommandError: If ``givein=`` does not name both a resonance and a tier.
         """
-        fury_val: str | None = None
-        anchor_val: str | None = None
+        resonance_val: str | None = None
+        tier_val: str | None = None
         kept: list[str] = []
         for token in raw.split():
-            lower = token.lower()
-            if lower.startswith(_FURY_PREFIX):
-                fury_val = token[len(_FURY_PREFIX) :] or None
-            elif lower.startswith(_ANCHOR_PREFIX):
-                anchor_val = token[len(_ANCHOR_PREFIX) :] or None
-            else:
+            if not token.lower().startswith(_GIVE_IN_PREFIX):
                 kept.append(token)
-        return " ".join(kept), fury_val, anchor_val
+                continue
+            resonance_val, _sep, tier_val = token[len(_GIVE_IN_PREFIX) :].partition(":")
+            if not resonance_val or not tier_val:
+                msg = "Usage: givein=<resonance>:<tier>, for example givein=Wrath:give_in."
+                raise CommandError(msg)
+        return " ".join(kept), resonance_val, tier_val
+
+    @staticmethod
+    def _spaced(value: str) -> str:
+        """A typed name token with each ``_`` read as the space it stands for."""
+        return value.replace("_", " ")
 
     def _extract_position_keywords(self, raw: str) -> tuple[str, str | None]:
         """Strip ``position=<name>`` or ``position_a=<name>,position_b=<name>`` tokens (#2019).
@@ -606,9 +613,9 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         return {"destination_position_id": pos.pk}
 
     def _resolve_fury_commitment_id(self) -> int | None:
-        """Return the pk of the FuryTier named by ``fury=`` (by name or depth).
+        """Return the pk of the FuryTier named after the colon in ``givein=`` (name or depth).
 
-        Returns ``None`` when no ``fury=`` was declared.
+        Returns ``None`` when no ``givein=`` was declared.
 
         Raises:
             CommandError: If a fury tier was named but no matching tier exists.
@@ -618,9 +625,8 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
 
         from world.magic.models import FuryTier  # noqa: PLC0415
 
-        value = self._fury_str
-        qs = FuryTier.objects.filter(name__iexact=value)
-        tier = qs.first()
+        value = self._spaced(self._fury_str)
+        tier = FuryTier.objects.filter(name__iexact=value).first()
         if tier is None and value.isdigit():
             tier = FuryTier.objects.filter(depth=int(value)).first()
         if tier is None:
@@ -629,13 +635,13 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         return tier.pk
 
     def _inject_fury_kwargs(self, kwargs: dict[str, Any]) -> None:
-        """Add ``fury_commitment_id`` / ``fury_anchor_id`` to *kwargs* when declared."""
+        """Add ``fury_commitment_id`` / ``fury_resonance_id`` to *kwargs* for ``givein=``."""
         fury_commitment_id = self._resolve_fury_commitment_id()
         if fury_commitment_id is not None:
             kwargs["fury_commitment_id"] = fury_commitment_id
-        fury_anchor_id = self._resolve_fury_anchor_id()
-        if fury_anchor_id is not None:
-            kwargs["fury_anchor_id"] = fury_anchor_id
+        fury_resonance_id = self._resolve_fury_resonance_id()
+        if fury_resonance_id is not None:
+            kwargs["fury_resonance_id"] = fury_resonance_id
 
     def _inject_cast_mode_kwargs(self, kwargs: dict[str, Any]) -> None:
         """Add ``use_base_form`` / ``cast_openly`` / ``confirm_soulfray_risk`` when declared.
@@ -656,26 +662,25 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         if self._confirm_soulfray:
             kwargs["confirm_soulfray_risk"] = True
 
-    def _resolve_fury_anchor_id(self) -> int | None:
-        """Return the CharacterSheet pk named by ``anchor=`` (bonded character key).
+    def _resolve_fury_resonance_id(self) -> int | None:
+        """Return the Resonance pk named by ``givein=``.
 
-        Returns ``None`` when no ``anchor=`` was declared.
+        Returns ``None`` when no ``givein=`` was declared.
 
         Raises:
-            CommandError: If an anchor name was given but no matching character
-                sheet exists.
+            CommandError: If a resonance was named but no resonance has that name.
         """
-        if not self._anchor_str:
+        if not self._give_in_str:
             return None
 
-        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+        from world.magic.models import Resonance  # noqa: PLC0415
 
-        name = self._anchor_str
-        sheet = CharacterSheet.objects.filter(character__db_key__iexact=name).first()
-        if sheet is None:
-            msg = f"No character named '{name}' to anchor your fury to."
+        name = self._spaced(self._give_in_str)
+        resonance = Resonance.objects.filter(name__iexact=name).first()
+        if resonance is None:
+            msg = f"No resonance called '{name}' to give in to."
             raise CommandError(msg)
-        return sheet.pk
+        return resonance.pk
 
     # -- Resolution helpers ----------------------------------------------------
 

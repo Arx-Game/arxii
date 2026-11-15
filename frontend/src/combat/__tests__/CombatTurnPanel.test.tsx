@@ -27,6 +27,7 @@ import { Provider } from 'react-redux';
 vi.mock('@/combat/queries', () => ({
   useCombatEncounter: vi.fn(),
   useAvailableCombos: vi.fn(),
+  useRallyResonances: vi.fn(() => ({ data: undefined })),
   useUpgradeCombo: vi.fn(),
   useDispatchPlayerAction: vi.fn(),
   useAvailableActions: vi.fn().mockReturnValue({

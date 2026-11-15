@@ -22,19 +22,22 @@ from evennia_extensions.factories import ObjectDBFactory
 from flows.constants import EventName
 from flows.consts import FlowActionChoices
 from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
+from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.conditions.factories import ReactiveConditionFactory
-from world.magic.constants import TargetKind
+from world.magic.constants import EffectKind, KindlingSource, TargetKind
 from world.magic.exceptions import ResonanceInsufficient
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterResonanceFactory,
+    KindledStrengthTierFactory,
+    KindlingFactory,
     ResonanceFactory,
     TechniqueFactory,
     ThreadFactory,
     ThreadPullCostFactory,
     ThreadPullEffectFactory,
 )
-from world.magic.services import use_technique
+from world.magic.services import preview_resonance_pull, use_technique
 from world.magic.services.cast_threads import build_cast_applicable_threads
 from world.magic.types.pull import CastPullDeclaration
 from world.mechanics.factories import CharacterEngagementFactory
@@ -370,3 +373,62 @@ class UseTechniqueCancelledPreCastPullTests(_CastPullChargeTestBase):
             10,
             "resonance balance must be unchanged when cast is cancelled",
         )
+
+
+class UseTechniqueScenePullCountsOnceTests(_CastPullIntensityTestBase):
+    """The scene cast hands ``use_technique`` both the applicable threads and the pull (as
+    ``cast_services`` does); a pulled INTENSITY_BUMP must reach the cast's power once."""
+
+    def _cast_power(self, character, sheet, thread, *, pull: bool) -> int:
+        decl = CastPullDeclaration(tier=1, threads=(thread,)) if pull else None
+        captured, resolve_fn = _capture_power()
+        use_technique(
+            character=character,
+            technique=self.technique,
+            resolve_fn=resolve_fn,
+            applicable_threads=build_cast_applicable_threads(sheet, self.technique, cast_pull=decl),
+            cast_pull=decl,
+        )
+        return captured["power"]
+
+    def test_a_pulled_intensity_bump_counts_once(self) -> None:
+        baseline = self._cast_power(self.character, self.sheet, self.thread, pull=False)
+        char2, sheet2 = _make_caster()
+        thread2 = _make_technique_thread(sheet2, self.resonance, self.technique)
+        CharacterResonanceFactory(
+            character_sheet=sheet2, resonance=self.resonance, balance=10, lifetime_earned=10
+        )
+
+        pulled = self._cast_power(char2, sheet2, thread2, pull=True)
+
+        # The tier-1 bump is 3 on a level-0 thread (a multiplier of 1).
+        self.assertEqual(pulled - baseline, 3)
+
+    def test_a_kindled_pull_reaches_the_cast_as_the_preview_shows_it(self) -> None:
+        KindledStrengthTierFactory(rank=2, name="Blazing", pull_levels=20)
+        baseline = self._cast_power(self.character, self.sheet, self.thread, pull=False)
+        char2, sheet2 = _make_caster()
+        thread2 = _make_technique_thread(sheet2, self.resonance, self.technique)
+        CharacterResonanceFactory(
+            character_sheet=sheet2, resonance=self.resonance, balance=10, lifetime_earned=10
+        )
+        encounter = CombatEncounterFactory(round_number=1)
+        CombatParticipantFactory(encounter=encounter, character_sheet=sheet2)
+        KindlingFactory(
+            character_sheet=sheet2,
+            resonance=self.resonance,
+            strength=2,
+            source=KindlingSource.GM,
+            encounter=encounter,
+        )
+        previewed = sum(
+            e.scaled_value
+            for e in preview_resonance_pull(sheet2, 1, [thread2]).resolved_effects
+            if e.kind == EffectKind.INTENSITY_BUMP
+        )
+
+        pulled = self._cast_power(char2, sheet2, thread2, pull=True)
+
+        # The bump of 3 reads 20 levels higher (a multiplier of 2), once.
+        self.assertEqual(previewed, 6)
+        self.assertEqual(pulled - baseline, previewed)

@@ -27,8 +27,7 @@ from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
     from world.areas.positioning.models import Position
-    from world.character_sheets.models import CharacterSheet
-    from world.magic.models import FuryTier, Technique
+    from world.magic.models import FuryTier, Resonance, Technique
 
 
 def declare_action(  # noqa: PLR0913 - action declaration requires all slot fields
@@ -45,7 +44,7 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
     confirm_soulfray_risk: bool = False,
     strain_commitment: int = 0,
     fury_commitment: FuryTier | None = None,
-    fury_anchor: CharacterSheet | None = None,
+    fury_resonance: Resonance | None = None,
     cast_destination: Position | None = None,
     cast_position_a: Position | None = None,
     cast_position_b: Position | None = None,
@@ -166,7 +165,7 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
             "confirm_soulfray_risk": confirm_soulfray_risk,
             "strain_commitment": strain_commitment,
             "fury_commitment": fury_commitment,
-            "fury_anchor": fury_anchor,
+            "fury_resonance": fury_resonance,
             "cast_destination": cast_destination,
             "cast_position_a": cast_position_a,
             "cast_position_b": cast_position_b,

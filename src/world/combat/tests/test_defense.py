@@ -122,6 +122,7 @@ class ResolveNpcAttackTests(TestCase):
         mock_fn = MagicMock()
         mock_result = MagicMock()
         mock_result.success_level = success_level
+        mock_result.outcome = None
         mock_fn.return_value = mock_result
         return mock_fn
 
@@ -253,6 +254,7 @@ class ResolveNpcAttackLevelOppositionTests(TestCase):
             captured.append(kwargs.get("target_difficulty"))
             result = MagicMock()
             result.success_level = 0
+            result.outcome = None
             return result
 
         resolve_npc_attack(npc_action, participant, self.check_type, perform_check_fn=spy)
@@ -392,6 +394,7 @@ class DefensiveFashionWiringTests(TestCase):
             captured["extra_modifiers"] = kwargs.get("extra_modifiers", 0)
             result = MagicMock()
             result.success_level = 0
+            result.outcome = None
             return result
 
         return spy, captured

@@ -32,6 +32,7 @@ class ActionDispatchError(Exception):
     BURN_NAMES_NO_RESONANCE = "burn_names_no_resonance"
     PULL_NEEDS_SOULFRAY_CONSENT = "pull_needs_soulfray_consent"
     FURY_OVER_CAP = "fury_over_cap"
+    FURY_NOT_KINDLED = "fury_not_kindled"
     TARGET_REQUIRED = "target_required"
     TARGET_KIND_MISMATCH = "target_kind_mismatch"
     TARGET_DEFEATED = "target_defeated"
@@ -60,7 +61,8 @@ class ActionDispatchError(Exception):
         PULL_NEEDS_SOULFRAY_CONSENT: (
             "Accept the Soulfray risk before pulling a thread on this cast."
         ),
-        FURY_OVER_CAP: "That Fury tier exceeds your provocation cap with that anchor.",
+        FURY_OVER_CAP: "That resonance is not kindled enough to give in that far.",
+        FURY_NOT_KINDLED: "That resonance is not kindled right now, so you cannot give in to it.",
         TARGET_REQUIRED: "That technique needs an opponent to target.",
         TARGET_KIND_MISMATCH: "That technique cannot target them.",
         TARGET_DEFEATED: "That opponent is already defeated.",

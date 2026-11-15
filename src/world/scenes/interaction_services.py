@@ -1785,6 +1785,19 @@ def _comparison_fields_match(
     return True
 
 
+def pose_already_submitted(persona: Persona, client_request_id: uuid.UUID | str) -> bool:
+    """Whether ``persona`` already has a pose accepted under ``client_request_id`` (#3760).
+
+    A caller that checks something about a request before posting (a reflection's target, for
+    example) asks this first, so a retry of a pose that already landed is answered by
+    ``idempotent_record_interaction`` as the replay it is instead of being refused by a check
+    the first attempt already changed the answer to.
+    """
+    return PoseSubmission.objects.filter(
+        persona=persona, client_request_id=client_request_id
+    ).exists()
+
+
 def idempotent_record_interaction(
     *,
     persona: Persona,

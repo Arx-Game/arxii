@@ -97,20 +97,24 @@ class FuryTierOptionSerializer(serializers.Serializer):
     full_intensity = serializers.IntegerField(read_only=True)
 
 
-class AnchorTierIntensitySerializer(serializers.Serializer):
-    """Read-only full-share intensity of one Fury tier under one anchor (#4738)."""
+class FuryResonanceTierIntensitySerializer(serializers.Serializer):
+    """Read-only full-share intensity of one Fury tier at one resonance's strength (#4738)."""
 
     tier_id = serializers.IntegerField(read_only=True)
     full_intensity = serializers.IntegerField(read_only=True)
 
 
-class AnchorOptionSerializer(serializers.Serializer):
-    """Read-only representation of one eligible bonded fury anchor (#1543)."""
+class FuryResonanceOptionSerializer(serializers.Serializer):
+    """Read-only representation of one resonance a character can give in to (#5124)."""
 
     id = serializers.IntegerField(read_only=True)
     name = serializers.CharField(read_only=True)
+    strength_name = serializers.CharField(read_only=True)
+    control_check_name = serializers.CharField(read_only=True)
     provocation_cap = serializers.IntegerField(read_only=True)
-    tier_full_intensities = AnchorTierIntensitySerializer(many=True, read_only=True)
+    tier_full_intensities = FuryResonanceTierIntensitySerializer(many=True, read_only=True)
+    weakest_strength_name = serializers.CharField(read_only=True)
+    weakest_depth_name = serializers.CharField(read_only=True)
 
 
 class AvailableEnhancementSerializer(serializers.Serializer):
@@ -188,7 +192,7 @@ class PlayerActionSerializer(serializers.Serializer):
     is_movement = serializers.BooleanField(read_only=True)
     soulfray_warning = SoulfrayWarningSerializer(read_only=True, allow_null=True)
     available_fury_tiers = FuryTierOptionSerializer(many=True, read_only=True)
-    eligible_fury_anchors = AnchorOptionSerializer(many=True, read_only=True)
+    eligible_fury_resonances = FuryResonanceOptionSerializer(many=True, read_only=True)
     cast_preview = CastPreviewSerializer(read_only=True, allow_null=True)
     is_ultimate = serializers.BooleanField(read_only=True)
     enchants_strike = serializers.BooleanField(read_only=True)

@@ -163,6 +163,28 @@ def _resolve_treatment_request(
         mend_cap_fraction=None if is_magical_treatment(treatment) else FIRST_AID_MEND_FRACTION,
     )
 
+    # #5124: treating someone is an aid, scaled by the treatment's own roll.
+    from world.magic.constants import KindlingActKind  # noqa: PLC0415
+    from world.magic.services.kindling import (  # noqa: PLC0415
+        act_label,
+        award_kindled_deeds,
+        sheet_name,
+    )
+    from world.magic.types.kindling import KindlingAct  # noqa: PLC0415
+
+    healer = action_request.initiator_persona.character_sheet
+    patient = action_request.target_persona.character_sheet
+    award_kindled_deeds(
+        healer,
+        act=KindlingAct(
+            kind=KindlingActKind.AID,
+            target=patient,
+            aids=True,
+            label=act_label("Treated", sheet_name(healer, patient)),
+        ),
+        outcome=outcome.outcome,
+    )
+
     content = _describe_treatment_outcome(
         action_request.initiator_persona,
         action_request.target_persona,
@@ -225,7 +247,7 @@ if TYPE_CHECKING:
     )
     from world.conditions.models import ConditionInstance, TreatmentTemplate
     from world.conditions.types import TreatmentOutcome
-    from world.magic.models import FuryTier, PendingAlteration, Technique, Thread
+    from world.magic.models import FuryTier, PendingAlteration, Resonance, Technique, Thread
     from world.magic.types import SoulfrayReveal
     from world.magic.types.pull import CastPullDeclaration
     from world.roster.models import RosterTenure
@@ -531,7 +553,7 @@ def create_action_request(  # noqa: PLR0913 - the one dispatch orchestrator
     ritual_id: int | None = None,
     strain_commitment: int = 0,
     fury_commitment: FuryTier | None = None,
-    fury_anchor: CharacterSheet | None = None,
+    fury_resonance: Resonance | None = None,
     delivery: str = "",
     delivery_receivers: list[Persona] | None = None,
     additional_target_personas: list[Persona] | None = None,
@@ -572,7 +594,7 @@ def create_action_request(  # noqa: PLR0913 - the one dispatch orchestrator
             CommittingDeclaration mixin and consumed downstream when the
             interaction is recorded.
         fury_commitment: Optional FuryTier the initiator declares for this action.
-        fury_anchor: CharacterSheet of the anchor character whose bond caps the tier.
+        fury_resonance: the kindled Resonance she gives in to; its strength caps the tier.
         delivery: Explicit audience-routing override (#903). Blank defers to
             the template's default_delivery at resolution time.
         delivery_receivers: Explicit WHISPER audience. Empty/None = the
@@ -658,7 +680,7 @@ def create_action_request(  # noqa: PLR0913 - the one dispatch orchestrator
         technique=technique,
         strain_commitment=strain_commitment,
         fury_commitment=fury_commitment,
-        fury_anchor=fury_anchor,
+        fury_resonance=fury_resonance,
         delivery=delivery,
         treatment=treatment,
         target_condition_instance=target_condition_instance,
@@ -1459,7 +1481,7 @@ def _resolve_action_against_persona(
             effort_level=effort_level,
             strain_commitment=action_request.strain_commitment,
             fury_commitment=action_request.fury_commitment,
-            fury_anchor=action_request.fury_anchor,
+            fury_resonance=action_request.fury_resonance,
             extra_traits=technique_terms,
         )
         # Spend when the main check rolled; a resolution that paused before it carries
@@ -1557,6 +1579,32 @@ def _resolve_action_against_persona(
     return result, result_interaction, difficulty
 
 
+def _award_kindled_deeds_for_action(
+    action_request: SceneActionRequest, result: EnhancedSceneActionResult
+) -> None:
+    """Earn the initiator the resonances this act feeds (#5124), once, after its roll is final.
+
+    Called for the request's primary target only, so a multi-target action earns once per act,
+    not once per target. A technique-enhanced action is a TECHNIQUE act and any other is a
+    SOCIAL act; a beneficial technique on someone else aids them. A PC resisting an NPC's action
+    did not act, and a paused or unrolled resolution earns nothing.
+    """
+    from actions.registry import get_action  # noqa: PLC0415
+    from world.magic.services.kindling import award_scene_act  # noqa: PLC0415
+
+    main = result.action_resolution.main_result
+    if main is None or _pc_resists(action_request, action_request.target_persona):
+        return
+    action_obj = get_action(action_request.action_key)
+    award_scene_act(
+        action_request.initiator_persona.character_sheet,
+        action_request.target_persona.character_sheet,
+        action_request.technique,
+        main.check_result.outcome,
+        action_name=action_obj.name if action_obj is not None else action_request.action_key,
+    )
+
+
 def _resolve_standard_action(
     action_request: SceneActionRequest,
     *,
@@ -1573,6 +1621,7 @@ def _resolve_standard_action(
             pull_flat_bonus=pull_flat_bonus,
             resist_effort=action_request.resist_effort_level,
         )
+        _award_kindled_deeds_for_action(action_request, result)
         action_request.status = ActionRequestStatus.RESOLVED
         action_request.resolved_at = timezone.now()
         action_request.resolved_difficulty = difficulty
@@ -1862,7 +1911,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
     effort_level: str | None = None,
     strain_commitment: int = 0,
     fury_commitment: FuryTier | None = None,
-    fury_anchor: CharacterSheet | None = None,
+    fury_resonance: Resonance | None = None,
     cast_pull: CastPullDeclaration | None = None,
     extra_traits: Sequence[ExtraTraitTerm] = (),
 ) -> EnhancedSceneActionResult:
@@ -1892,7 +1941,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
             technique's baseline cost. Forwarded to use_technique so the cost
             calculation accounts for the strain.
         fury_commitment: Optional FuryTier the player declared.
-        fury_anchor: CharacterSheet of the anchor character (bond caps the tier).
+        fury_resonance: the kindled Resonance she gives in to (its strength caps the tier).
         extra_traits: Skill terms the action's main check adds (#4450), passed to
             start_action_resolution. The caller collects the matching modifiers.
 
@@ -1917,7 +1966,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
     fury = fury_cast_for(
         character=character,
         fury_commitment=fury_commitment,
-        fury_anchor=fury_anchor,
+        fury_resonance=fury_resonance,
         source_technique=technique,
     )
 

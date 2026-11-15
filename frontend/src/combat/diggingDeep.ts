@@ -7,9 +7,12 @@ type DigDeepOffer = components['schemas']['DigDeepOffer'];
 
 export const DIG_DEEP_REGISTRY_KEY = 'combat_dig_deep';
 
-/** A `combat_dig_deep` registry dispatch. */
-export function digDeepRequest(): DispatchActionRequest {
-  return { ref: { backend: 'registry', registry_key: DIG_DEEP_REGISTRY_KEY }, kwargs: {} };
+/** A `combat_dig_deep` registry dispatch, naming one of her own resonances when one is chosen. */
+export function digDeepRequest(resonanceId?: number | null): DispatchActionRequest {
+  return {
+    ref: { backend: 'registry', registry_key: DIG_DEEP_REGISTRY_KEY },
+    kwargs: resonanceId != null ? { resonance_id: resonanceId } : {},
+  };
 }
 
 /** "Free" while a free dig deep is held, else "Costs mental fatigue 3". */

@@ -28,6 +28,7 @@ import { CeremonyRoomCard } from '@/ceremonies/CeremonyRoomCard';
 import { EventsSidebarPanel } from '@/events/components/EventsSidebarPanel';
 import { useEncounterForScene, combatKeys } from '@/combat/queries';
 import { CombatRail } from '@/combat/components/CombatRail';
+import { KindledResonancesPanel } from '@/magic/components/KindledResonancesPanel';
 import { CombatMainMap } from '@/combat/components/CombatMainMap';
 import { CombatPickProvider } from '@/combat/CombatPickContext';
 import { useBattleForSceneQuery } from '@/battles/queries';
@@ -85,7 +86,6 @@ import { pendingNpcResponse, poseCarryingAction } from '@/gm/npcs/pendingNpcResp
 import { useNpcOffersQuery } from '@/gm/npcs/queries';
 import { useLoanEndFallback } from '@/gm/npcs/useLoanEndFallback';
 import { ConsentPrompt } from '@/scenes/components/ConsentPrompt';
-import { DriftConversionOfferGate } from '@/magic/components/DriftConversionOfferGate';
 import { PlaceBar } from '@/scenes/components/PlaceBar';
 import { TavernGameWidget } from '@/scenes/components/TavernGameWidget';
 import { SpeakerQueueBar } from '@/scenes/components/SpeakerQueueBar';
@@ -245,6 +245,12 @@ function GameRightSidebar({
               hasActiveEncounter={hasActiveEncounter}
               hasActiveBattle={hasActiveBattle}
             />
+            {/* #5124 Your resonances: in a scene with no fight rail (the rail carries its own). */}
+            {sceneData && !showCombatRail && activeCharacterId && (
+              <div className="mt-2">
+                <KindledResonancesPanel characterSheetId={activeCharacterId} />
+              </div>
+            )}
             {sceneData && showCombatRail && (
               <CombatRail
                 sceneId={sceneData.id}
@@ -424,7 +430,6 @@ function GameCenter({ sceneId, accountId, gameWindow, mapEncounterId }: GameCent
   return (
     <>
       {sceneId && <ConsentPrompt sceneId={sceneId} />}
-      {sceneId && <DriftConversionOfferGate sceneId={Number(sceneId)} />}
       {sceneId && mapEncounterId ? (
         <CombatMainMap sceneId={Number(sceneId)} encounterId={mapEncounterId} />
       ) : null}

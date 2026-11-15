@@ -1511,6 +1511,9 @@ def _prepare_technique_cast(  # noqa: PLR0913
     pull_resolved_effects: list[ResolvedPullEffect] = []
     pull_spent = 0
     if cast_pull is not None:
+        from world.magic.services.power_terms import thread_power_term  # noqa: PLC0415
+
+        power_before_pull = effective_power
         pull_flat_bonus, effective_power, pull_resolved_effects, pull_spent = _charge_cast_pull(
             character=character,
             technique=technique,
@@ -1519,6 +1522,17 @@ def _prepare_technique_cast(  # noqa: PLR0913
             target=pull_target or (targets[0] if targets else None),
             cast_check=cast_check,
             burn_result=burn_result,
+        )
+        # The pull's intensity is counted here and only here (``thread_power_term`` skips
+        # pulled threads); itemise it so the ledger's total is the cast's power.
+        effective_ledger = (
+            PowerLedgerBuilder.from_ledger(effective_ledger)
+            .add(
+                PowerStage.TERM,
+                _power_term_label(thread_power_term),
+                effective_power - power_before_pull,
+            )
+            .build()
         )
     return _CastPreparation(
         effective_targets,

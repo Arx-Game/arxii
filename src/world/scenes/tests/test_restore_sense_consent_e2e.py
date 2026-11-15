@@ -40,6 +40,7 @@ def _make_pending_resolution(*, success: bool = True) -> PendingActionResolution
     """Minimal PendingActionResolution so the mocked check chain has a main_result."""
     check_result = MagicMock()
     check_result.success_level = 1 if success else -1
+    check_result.outcome = None
     check_result.outcome_name = "Success" if success else "Failure"
     check_result.outcome = None
     main_result = StepResult(step_label="main", check_result=check_result, consequence_id=None)
@@ -165,7 +166,7 @@ class RestoreSenseConsentE2ETests(TestCase):
         # The talk-down check (consent template) and the remove-condition check both
         # succeed so the effect fires.
         mock_resolve.return_value = _make_pending_resolution(success=True)
-        mock_check.return_value = MagicMock(success_level=1)
+        mock_check.return_value = MagicMock(success_level=1, outcome=None)
 
         apply_condition(self.target_character, self.berserk)
         self.assertTrue(

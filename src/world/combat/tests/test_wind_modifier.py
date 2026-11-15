@@ -125,7 +125,7 @@ class WindOffenseModifierTests(TestCase):
             patch("world.combat.services.collect_check_modifiers", side_effect=spy),
             patch(_FELT_EXPOSURE_PATH, return_value=10),
         ):
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             resolver._roll_check()
 
         self.assertEqual(self._wind_contributions(captured), [])
@@ -141,7 +141,7 @@ class WindOffenseModifierTests(TestCase):
             patch("world.combat.services.collect_check_modifiers", side_effect=spy),
             patch(_FELT_EXPOSURE_PATH, return_value=70),
         ):
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             resolver._roll_check()
 
         wind_contribs = self._wind_contributions(captured)
@@ -160,7 +160,7 @@ class WindOffenseModifierTests(TestCase):
             patch("world.combat.services.collect_check_modifiers", side_effect=spy),
             patch(_FELT_EXPOSURE_PATH, return_value=70),
         ):
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             resolver._roll_check()
 
         wind_contribs = self._wind_contributions(captured)
@@ -180,7 +180,7 @@ class WindOffenseModifierTests(TestCase):
             patch(_FELT_EXPOSURE_PATH) as mock_felt,
         ):
             mock_felt.return_value = 70
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             resolver._roll_check()
 
         mock_felt.assert_not_called()
@@ -198,7 +198,7 @@ class WindOffenseModifierTests(TestCase):
             patch("world.combat.services.collect_check_modifiers", side_effect=spy),
             patch(_FELT_EXPOSURE_PATH, return_value=0),
         ):
-            mock_perform.return_value = MagicMock(success_level=2)
+            mock_perform.return_value = MagicMock(success_level=2, outcome=None)
             resolver._roll_check()
 
         self.assertEqual(self._wind_contributions(captured), [])
@@ -245,6 +245,7 @@ class WindDefenseModifierTests(TestCase):
             captured["extra_modifiers"] = kwargs.get("extra_modifiers", 0)
             result = MagicMock()
             result.success_level = 2
+            result.outcome = None
             return result
 
         return spy, captured

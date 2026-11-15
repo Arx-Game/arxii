@@ -27,7 +27,20 @@ import {
   type EntranceTechniqueSelection,
 } from '@/scenes/components/EntranceTechniqueAttachment';
 import type { TargetCandidate } from '@/scenes/components/TargetPicker';
-import { useAppSelector } from '@/store/hooks';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { addFeedNote } from '@/store/gameSlice';
+import { ReflectingOnRow } from '@/magic/components/ReflectingOnRow';
+import { useRefreshReflectionOptions } from '@/magic/queries';
+import { SettleAuraDialog } from '@/magic/components/SettleAuraDialog';
+import { useSettleAuraRequests } from '@/magic/settleAuraRequest';
+import {
+  isReflecting,
+  isReflectionIncomplete,
+  NO_REFLECTION,
+  REFLECTION_INCOMPLETE_LINE,
+  reflectionFields,
+  type ReflectionDraft,
+} from '@/magic/reflection';
 import type { MyRosterEntry } from '@/roster/types';
 import type { Interaction } from '@/scenes/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
@@ -151,6 +164,11 @@ function buildFullCommand(
 
 interface CommandInputProps {
   character: MyRosterEntry['name'];
+  /**
+   * The active character's sheet id (the character's own id) — reads what a pose can reflect
+   * on (#5124). Omitted, the "Reflecting on" row is not offered.
+   */
+  characterSheetId?: number | null;
   composerMode?: ComposerMode;
   onModeChange?: (mode: ComposerMode) => void;
   targetToAppend?: string | null;
@@ -245,6 +263,7 @@ function getComposerBanner(draft: Draft, isStrandedDraft: boolean): ComposerBann
 
 export function CommandInput({
   character,
+  characterSheetId = null,
   composerMode,
   onModeChange,
   targetToAppend,
@@ -282,6 +301,38 @@ export function CommandInput({
   // #2183 — optional technique+target attached to the next entrance pose.
   const [entranceTechnique, setEntranceTechnique] = useState<EntranceTechniqueSelection | null>(
     null
+  );
+  // #5124 — what this pose reflects on, if anything. Cleared once the pose lands, so a
+  // refused or failed send keeps the writer's pick along with their text.
+  const [reflection, setReflection] = useState<ReflectionDraft>(NO_REFLECTION);
+  const refreshReflectionOptions = useRefreshReflectionOptions(characterSheetId);
+  // The `client_request_id` of a socket-sent pose that carries a reflection, until its ack.
+  const reflectedSendRef = useRef<string | null>(null);
+  // The rite of settling, opened by the button on the feed card a recorded reflection adds.
+  const [settleOpen, setSettleOpen] = useState(false);
+  const openSettle = useCallback(() => setSettleOpen(true), []);
+  useSettleAuraRequests(openSettle);
+  const dispatch = useAppDispatch();
+  const showReflectionLine = useCallback(
+    (line: string, recorded: boolean) => {
+      if (!recorded) {
+        toast.error(line);
+        return;
+      }
+      // A card in the writer's own feed, with the button; nobody else is told.
+      dispatch(
+        addFeedNote({
+          character,
+          note: {
+            kind: 'system',
+            content: line,
+            timestamp: new Date().toISOString(),
+            settle: true,
+          },
+        })
+      );
+    },
+    [dispatch, character]
   );
   const submittingRef = useRef(false);
   const { send, sendConsole, executeAction } = useGameSocket();
@@ -466,6 +517,14 @@ export function CommandInput({
       if (payload.client_request_id !== pending.clientRequestId) return;
       pendingSpeechRef.current = null;
       if (payload.success) {
+        if (reflectedSendRef.current === pending.clientRequestId) {
+          reflectedSendRef.current = null;
+          setReflection(NO_REFLECTION);
+          refreshReflectionOptions();
+          if (payload.message) {
+            showReflectionLine(payload.message, payload.data?.reflection_recorded !== false);
+          }
+        }
         acknowledge(pending.clientRequestId);
         // Recorded unconditionally: this text demonstrably went out, so
         // ArrowUp should recall it whether or not the player has since
@@ -479,7 +538,7 @@ export function CommandInput({
         toast.error(payload.message ?? 'Failed to send.');
       }
     },
-    [acknowledge, rejectDraft]
+    [acknowledge, rejectDraft, refreshReflectionOptions, showReflectionLine]
   );
   useActionResult(handleActionResult);
 
@@ -622,6 +681,11 @@ export function CommandInput({
       if (replyRefusal && !replyRefusal.reachable) return false;
       if (tagRefusal && !tagRefusal.reachable) return false;
       if (!trimmed) return false;
+      // A reflection with a target but no choice, or the reverse, never posts half-chosen.
+      if (isReflectionIncomplete(reflection)) {
+        toast.error(REFLECTION_INCOMPLETE_LINE);
+        return false;
+      }
       if (draft.content.length > MAX_POSE_LENGTH) {
         toast.error(
           `Your pose is too long. Maximum ${MAX_POSE_LENGTH.toLocaleString()} characters.`
@@ -916,8 +980,16 @@ export function CommandInput({
         ...(replyTarget
           ? { reply_to: { id: replyTarget.id, timestamp: replyTarget.timestamp } }
           : {}),
+        ...reflectionFields(reflection),
       })
         .then((response) => {
+          if (isReflecting(reflection)) {
+            if (response?.reflection_line) {
+              showReflectionLine(response.reflection_line, response.reflection_recorded !== false);
+            }
+            setReflection(NO_REFLECTION);
+            refreshReflectionOptions();
+          }
           if (attachedAction && onSubmitAction) {
             onSubmitAction(attachedAction, clientRequestId);
           }
@@ -969,6 +1041,25 @@ export function CommandInput({
     }
     if (usesRestSubmit) {
       submitScenePose(sceneId, personaId);
+      return;
+    }
+
+    // A pose that reflects on something outside a scene (#5124) is a structured send like
+    // `tt`: the registry `pose` action takes the reflection, and the draft and the pick clear
+    // together on the matching ack (`handleActionResult`).
+    if (isPose && isReflecting(reflection)) {
+      const clientRequestId = beginSend(liveSpeechMode);
+      pendingSpeechRef.current = { clientRequestId, text: trimmed };
+      reflectedSendRef.current = clientRequestId;
+      // The typed "@Name" targets travel by name, as on the scene pose, and stay in the text.
+      const composerTargets = uniqueNames([...(composerMode?.targets ?? []), ...typedTargets]);
+      executeAction(character, 'pose', {
+        text: spoken,
+        client_request_id: clientRequestId,
+        ...(composerTargets.length > 0 ? { target_names: composerTargets } : {}),
+        ...reflectionFields(reflection),
+      });
+      submittingRef.current = false;
       return;
     }
 
@@ -1031,6 +1122,9 @@ export function CommandInput({
     replyRefusal,
     tagRefusal,
     composerLine,
+    reflection,
+    refreshReflectionOptions,
+    showReflectionLine,
   ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1308,6 +1402,7 @@ export function CommandInput({
           !ready ||
           Boolean(replyRefusal && !replyRefusal.reachable) ||
           Boolean(tagRefusal && !tagRefusal.reachable) ||
+          isReflectionIncomplete(reflection) ||
           heldNote !== null
         }
         disabled={draft.status === 'pending'}
@@ -1346,6 +1441,18 @@ export function CommandInput({
             sceneRightSlot
           )
         }
+        footer={
+          !isCommandsMode &&
+          !asCompanion &&
+          (!composerMode || composerMode.command === 'pose') && (
+            <ReflectingOnRow
+              characterSheetId={characterSheetId}
+              value={reflection}
+              onChange={setReflection}
+              className="m-2"
+            />
+          )
+        }
         ghostText={ghostText}
         autocompleteItems={autocompleteItems}
       />
@@ -1356,6 +1463,13 @@ export function CommandInput({
         >
           {draft.content.length.toLocaleString()} / {MAX_POSE_LENGTH.toLocaleString()} characters
         </p>
+      )}
+      {characterSheetId != null && (
+        <SettleAuraDialog
+          characterSheetId={characterSheetId}
+          open={settleOpen}
+          onOpenChange={setSettleOpen}
+        />
       )}
     </div>
   );

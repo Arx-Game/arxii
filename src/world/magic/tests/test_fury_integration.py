@@ -16,13 +16,13 @@ Coverage map
 
 5.  Berserk decays over rounds_remaining (process_round_end loop).
 
-6.  Edge cases: cap 0 (no bond) → fury unavailable; Restore-to-Sense on non-Berserk
+6.  Edge cases: cap 0 (no strength row) → fury unavailable; Restore-to-Sense on non-Berserk
     target is a graceful no-op (already covered by test_restore_sense_action.py —
     noted below).
 
 Gaps that are ALREADY COVERED by earlier tasks and NOT duplicated here
 ======================================================================
-- Serializer cap/anchor/berserk rejections: test_fury_threading.py
+- Serializer cap/resonance/berserk rejections: test_fury_threading.py
 - Interaction.fury_committed audit (non-clash): test_fury_threading.py
 - BerserkAppliedOnLostControl mock-level wiring: test_fury_threading.py
 - resolve_fury / provocation_cap / clamp_tier units: test_fury_service.py
@@ -56,14 +56,13 @@ from world.magic.factories import (
     CharacterAnimaFactory,
     FuryConfigFactory,
     FuryTierFactory,
+    KindledStrengthTierFactory,
+    ResonanceFactory,
     TechniqueFactory,
+    kindle_resonance,
 )
 from world.magic.services import use_technique
 from world.mechanics.factories import CharacterEngagementFactory
-from world.relationships.constants import LabelAwareness, TypeFamily
-from world.relationships.factories import CharacterRelationshipFactory, RelationshipTypeFactory
-from world.relationships.services import declare_label
-from world.roster.factories import grant_test_tenure
 from world.scenes.action_constants import ConsentDecision
 from world.scenes.action_services import respond_to_action_request
 from world.scenes.factories import PersonaFactory, SceneActionRequestFactory, SceneFactory
@@ -91,10 +90,10 @@ def _next_room_key() -> str:
     return f"FuryIntRoom{_ROOM_COUNTER[0]}"
 
 
-def _setup_bonded_pair(*, tier_depth: int = 2, bond_tier_number: int = 2):
-    """Two personas, fury tier, config, and a bond giving cap >= tier_depth.
+def _setup_fury_pair(*, tier_depth: int = 2):
+    """Two personas, a fury tier, the config, and a strength row letting her reach the tier.
 
-    Returns (scene, initiator_persona, anchor_persona, fury_tier, fury_config).
+    Returns (scene, initiator_persona, target_persona, fury_tier, fury_config, resonance).
     """
     CheckSystemSetupFactory.create()
     room = create_object("typeclasses.rooms.Room", key=_next_room_key(), nohome=True)
@@ -111,7 +110,7 @@ def _setup_bonded_pair(*, tier_depth: int = 2, bond_tier_number: int = 2):
 
     cfg = FuryConfigFactory()
     tier = FuryTierFactory(
-        name=f"IntTier_{tier_depth}_{bond_tier_number}",
+        name=f"IntTier_{tier_depth}",
         depth=tier_depth,
         control_surrendered=4,
         base_check_difficulty=10,
@@ -120,29 +119,15 @@ def _setup_bonded_pair(*, tier_depth: int = 2, bond_tier_number: int = 2):
     # Fury needs something at stake (#4738): the initiator is engaged.
     CharacterEngagementFactory(character=initiator.character_sheet)
 
-    # Mutual Mentor/Student bond at bond_tier_number. Fury itself reads only the SOURCE
-    # side's tier (``fury._bond_tier``, any label), so this fixture builds more than the cap
-    # strictly needs: it stays mutual-TEACHING so the integration path keeps proving the cap
-    # is unchanged for the shape training's ``get_relationship_tier`` also recognises
-    # (#3957 final review — the old rationale named get_relationship_tier as fury's read).
-    mentor = RelationshipTypeFactory(family=TypeFamily.TEACHING)
-    student = RelationshipTypeFactory(family=TypeFamily.TEACHING, counterpart=mentor)
-    mentor.counterpart = student
-    mentor.save(update_fields=["counterpart"])
-    forward = CharacterRelationshipFactory(
-        source=initiator.character_sheet, target=anchor.character_sheet, tier=bond_tier_number
-    )
-    backward = CharacterRelationshipFactory(
-        source=anchor.character_sheet, target=initiator.character_sheet, tier=bond_tier_number
-    )
-    forward_tenure = grant_test_tenure(initiator.character_sheet)
-    backward_tenure = grant_test_tenure(anchor.character_sheet)
-    declare_label(side=forward, type=mentor, awareness=LabelAwareness.PUBLIC, tenure=forward_tenure)
-    declare_label(
-        side=backward, type=student, awareness=LabelAwareness.PUBLIC, tenure=backward_tenure
+    # The resonance she gives in to is kindled at a strength that reaches the tier.
+    resonance = ResonanceFactory()
+    kindle_resonance(
+        initiator.character_sheet,
+        resonance,
+        KindledStrengthTierFactory(rank=3, give_in_max_depth=tier_depth),
     )
 
-    return scene, initiator, anchor, tier, cfg
+    return scene, initiator, anchor, tier, cfg, resonance
 
 
 # ---------------------------------------------------------------------------
@@ -165,7 +150,7 @@ class RealCastFuryBerserkIntegrationTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.scene, cls.initiator, cls.anchor, cls.tier, cls.cfg = _setup_bonded_pair()
+        cls.scene, cls.initiator, cls.anchor, cls.tier, cls.cfg, cls.resonance = _setup_fury_pair()
         cls.berserk_template = BerserkConditionTemplateFactory()
 
         from actions.factories import ActionTemplateFactory
@@ -197,6 +182,7 @@ class RealCastFuryBerserkIntegrationTests(TestCase):
         # Build a minimal PendingActionResolution so the action pipeline can complete.
         check_result = MagicMock()
         check_result.success_level = -1
+        check_result.outcome = None
         check_result.outcome_name = "Failure"
         step = StepResult(step_label="main", check_result=check_result, consequence_id=None)
         pending = PendingActionResolution(
@@ -219,7 +205,7 @@ class RealCastFuryBerserkIntegrationTests(TestCase):
             action_key="intimidate",
             technique=self.technique,
             fury_commitment=self.tier,
-            fury_anchor=self.anchor.character_sheet,
+            fury_resonance=self.resonance,
         )
         request.action_template = self.action_template
         request.save(update_fields=["action_template"])
@@ -264,8 +250,8 @@ class FullBerserkerLoopTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.berserk_template = BerserkConditionTemplateFactory()
-        cls.scene, cls.initiator, cls.anchor, cls.tier, cls.cfg = _setup_bonded_pair(
-            tier_depth=2, bond_tier_number=2
+        cls.scene, cls.initiator, cls.anchor, cls.tier, cls.cfg, cls.resonance = _setup_fury_pair(
+            tier_depth=2
         )
 
     def test_berserk_removed_by_restore(self) -> None:
@@ -375,7 +361,7 @@ class StrainAndFuryStackedTests(TestCase):
 
 
 class ClashDeclarationFuryAuditTests(TestCase):
-    """fury_commitment and fury_anchor persist on a ClashContributionDeclaration.
+    """fury_commitment and fury_resonance persist on a ClashContributionDeclaration.
 
     This exercises the CommittingDeclaration mixin's fields on the clash path
     (separate model from SceneActionRequest). The non-clash Interaction audit
@@ -384,14 +370,12 @@ class ClashDeclarationFuryAuditTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from world.character_sheets.factories import CharacterSheetFactory
-
         FuryConfigFactory()
         cls.tier = FuryTierFactory(name="ClashAuditTier", depth=1, control_surrendered=2)
-        cls.anchor_sheet = CharacterSheetFactory()
+        cls.resonance = ResonanceFactory()
 
     def test_fury_fields_stored_on_clash_declaration(self) -> None:
-        """ClashContributionDeclaration carries fury_commitment + fury_anchor FK."""
+        """ClashContributionDeclaration carries fury_commitment + fury_resonance FK."""
         # We write the declaration directly (bypassing the service/serializer)
         # to prove the model fields accept the values without constraint errors.
         technique = TechniqueFactory(damage_profile=False)
@@ -416,12 +400,12 @@ class ClashDeclarationFuryAuditTests(TestCase):
             technique=technique,
             strain_commitment=0,
             fury_commitment=self.tier,
-            fury_anchor=self.anchor_sheet,
+            fury_resonance=self.resonance,
         )
 
         decl.refresh_from_db()
         self.assertEqual(decl.fury_commitment, self.tier)
-        self.assertEqual(decl.fury_anchor, self.anchor_sheet)
+        self.assertEqual(decl.fury_resonance, self.resonance)
 
 
 # ---------------------------------------------------------------------------
@@ -478,14 +462,14 @@ class BerserkDecayTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Test 6a: Cap 0 (no bond) → fury unavailable (resolve_fury returns None)
+# Test 6a: Cap 0 (no strength row) → fury unavailable (resolve_fury returns None)
 # ---------------------------------------------------------------------------
 
 
 class FuryCapZeroTests(TestCase):
-    """Cap 0 (no bond between caster and anchor) → fury unavailable.
+    """Cap 0 (staff have authored no strength row) → fury unavailable.
 
-    This exercises the null-anchor path through resolve_fury:
+    This exercises the no-resonance path through resolve_fury:
     provocation_cap returns 0 → clamp_tier returns None → FuryResolution(None,…)
     → berserk_severity=0 → apply_condition NOT called.
     """
@@ -501,37 +485,35 @@ class FuryCapZeroTests(TestCase):
             control_surrendered=2,
             berserk_severity=5,  # non-zero — should not fire
         )
-        # Two sheets with NO relationship → cap = 0.
+        # A resonance that is not kindled → cap = 0.
         cls.caster_sheet = CharacterSheetFactory()
-        cls.anchor_sheet = CharacterSheetFactory()
+        cls.resonance = ResonanceFactory()
 
-    def test_no_bond_fury_unavailable(self) -> None:
-        """No relationship → provocation_cap=0 → resolve_fury returns None tier."""
-        from world.magic.services.fury import resolve_fury
+    def test_no_strength_row_fury_unavailable(self) -> None:
+        """Not kindled → provocation_cap=0 → resolve_fury returns None tier."""
+        from world.magic.services.fury import give_in_strength, resolve_fury
 
-        # No relationship rows → cap = 0 → realized_tier = None.
+        # No strength row → cap = 0 → realized_tier = None.
         res = resolve_fury(
-            character=self.caster_sheet.character,
             tier=self.tier,
-            anchor=self.anchor_sheet,
+            strength=give_in_strength(self.caster_sheet, self.resonance),
             check_result=_FakeCheck(success_level=5),
         )
         self.assertIsNone(
             res.realized_tier,
-            "No bond → provocation_cap=0 → realized_tier must be None.",
+            "Not kindled → provocation_cap=0 → realized_tier must be None.",
         )
         self.assertEqual(res.berserk_severity, 0)
         self.assertEqual(res.control_surrendered, 0)
         self.assertEqual(res.intensity_gained, 0)
 
-    def test_null_anchor_fury_unavailable(self) -> None:
-        """anchor=None → provocation_cap=0 → FuryResolution with None tier."""
-        from world.magic.services.fury import resolve_fury
+    def test_no_resonance_fury_unavailable(self) -> None:
+        """resonance=None → provocation_cap=0 → FuryResolution with None tier."""
+        from world.magic.services.fury import give_in_strength, resolve_fury
 
         res = resolve_fury(
-            character=self.caster_sheet.character,
             tier=self.tier,
-            anchor=None,
+            strength=give_in_strength(self.caster_sheet, None),
             check_result=_FakeCheck(success_level=5),
         )
         self.assertIsNone(res.realized_tier)
