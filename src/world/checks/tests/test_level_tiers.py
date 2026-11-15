@@ -61,6 +61,8 @@ def _ordinary_total(level: int) -> int:
 
 
 class TierBonusTests(TestCase):
+    """U-keep: pure tier-sum math and loaded-table query counts, with no player seam of its own."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         ensure_level_ladder()
@@ -123,18 +125,6 @@ class TierBonusTests(TestCase):
         self.assertEqual(difficulty_level_for_points(66), 5)
         self.assertEqual(difficulty_level_for_points(67), 6)
 
-    def test_a_level_six_character_is_four_ranks_above_a_level_five_npc(self) -> None:
-        check_type = CheckTypeFactory(name="TierJumpCheck")
-        six = _ordinary_total(6)
-        five_npc = level_opposition(check_type, level=5)
-        self.assertEqual(CheckRank.get_rank_difference(six, five_npc), 4)
-
-    def test_a_level_five_character_is_one_rank_above_a_level_four_npc(self) -> None:
-        check_type = CheckTypeFactory(name="TierNoJumpCheck")
-        five = _ordinary_total(5)
-        four_npc = level_opposition(check_type, level=4)
-        self.assertEqual(CheckRank.get_rank_difference(five, four_npc), 1)
-
     def test_a_same_level_character_with_ordinary_skills_is_even_with_the_npc(self) -> None:
         check_type = CheckTypeFactory(name="TierEvenCheck")
         for level in (5, 6, 11, 26, 30):
@@ -144,7 +134,9 @@ class TierBonusTests(TestCase):
 
 
 class PlayerObstacleTierTests(TestCase):
-    """A player character who is the obstacle gets the tier once, through her level term."""
+    """U-keep: obstacle and resist ratings no journey drives.
+
+    A player character who is the obstacle gets the tier once, through her level term."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -184,6 +176,8 @@ class PlayerObstacleTierTests(TestCase):
 
 
 class TierLadderTests(TestCase):
+    """U-keep: ladder extension past rank 30 and rank naming, which a journey cannot reach."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         ensure_level_ladder()
@@ -241,7 +235,9 @@ class TierLadderTests(TestCase):
 
 
 class NoTiersTests(TestCase):
-    """With no ``LevelTier`` rows nothing changes: no jump and the ladder ends at 30."""
+    """U-keep: the empty-tier edge, which journeys never build since they seed tiers.
+
+    With no ``LevelTier`` rows nothing changes: no jump and the ladder ends at 30."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -272,6 +268,8 @@ class NoTiersTests(TestCase):
 
 
 class LevelTierSeedAndMigrationTests(TestCase):
+    """U-keep: a seed and a data migration, which no journey runs."""
+
     def test_the_seed_writes_a_level_three_row_at_zero_and_five_tiers_of_twenty_four(self) -> None:
         seed_level_tiers()
         self.assertEqual(

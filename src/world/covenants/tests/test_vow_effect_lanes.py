@@ -29,6 +29,8 @@ def _effect(unlock: int, severity: int = 0, duration: int = 0, damage: int = 0) 
 
 
 class VowEffectLaneTests(TestCase):
+    """U-keep: per-rung lane arithmetic with no player seam of its own."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         seed_pool_and_cap_lanes()

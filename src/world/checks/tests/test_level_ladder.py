@@ -19,6 +19,8 @@ from world.traits.models import CheckRank
 
 
 class LevelLadderTests(TestCase):
+    """U-keep: pure ladder construction math, with no player seam of its own."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         for level in range(1, 31):
@@ -114,7 +116,9 @@ class LevelLadderTests(TestCase):
 
 
 class CheckLadderRowsMigrationTests(TestCase):
-    """``0411_check_ladder_rows`` gives a database with ranks the rows that replace thresholds."""
+    """U-keep: a data migration, which no journey runs.
+
+    ``0411_check_ladder_rows`` gives a database with ranks the rows that replace thresholds."""
 
     @staticmethod
     def _run() -> None:

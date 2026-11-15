@@ -30,6 +30,8 @@ _FRACTIONS = {
 
 
 class DerivedValueTests(SimpleTestCase):
+    """U-keep: pure fraction-times-width arithmetic on an in-memory table."""
+
     TABLE = ValueTable(overrides={}, fractions=_FRACTIONS, baselines=_CHECK_BASELINES)
 
     def test_a_value_is_the_fraction_times_the_levels_width(self) -> None:
@@ -93,6 +95,8 @@ class DerivedValueTests(SimpleTestCase):
 
 
 class VowStepTests(SimpleTestCase):
+    """U-keep: pure vow size-step arithmetic on an in-memory table, no seam a journey reaches."""
+
     TABLE = ValueTable(fractions=_FRACTIONS, baselines=_CHECK_BASELINES)
 
     def test_the_step_is_the_fraction_gap_times_the_width_and_tenths(self) -> None:
@@ -123,7 +127,9 @@ class VowStepTests(SimpleTestCase):
 
 
 class SeededValuesTests(TestCase):
-    """The example seed writes no value rows, and each lane's Large lands on its old ladder."""
+    """U-keep: the seed output is read by every journey but only compared lane by lane here.
+
+    The example seed writes no value rows, and each lane's Large lands on its old ladder."""
 
     # Lane -> Large values the example ladders had at levels 1, 6, 11, 16, 21 and 26.
     OLD_LARGE = {
@@ -166,7 +172,9 @@ class SeededValuesTests(TestCase):
 
 
 class DataMigrationTests(TestCase):
-    """0414 deletes rows equal to the old seed, keeps edited ones, and writes the fractions."""
+    """U-keep: a data migration, which no journey runs.
+
+    0414 deletes rows equal to the old seed, keeps edited ones, and writes the fractions."""
 
     def setUp(self) -> None:
         self.migration = import_module("world.migrations.0414_modifier_values_become_overrides")

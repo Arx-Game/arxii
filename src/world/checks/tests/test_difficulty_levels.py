@@ -22,6 +22,8 @@ CONVERT = "world.migrations.0417_difficulty_levels_batch1_convert"
 
 
 class DifficultyHelperTests(TestCase):
+    """U-keep: pure level-to-points conversion helpers."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         ensure_level_ladder()
@@ -68,6 +70,8 @@ class DifficultyHelperTests(TestCase):
 
 
 class NoLadderTests(TestCase):
+    """U-keep: an empty-ladder edge no journey builds, since journeys seed the ladder."""
+
     def test_a_database_with_no_baselines_reads_zero(self) -> None:
         self.assertEqual(difficulty_points(5), 0)
         self.assertEqual(difficulty_step_points(10, 5), 0)
@@ -75,7 +79,9 @@ class NoLadderTests(TestCase):
 
 
 class PointConversionTests(TestCase):
-    """The migration's rule, from the spec: the old rank's threshold, the nearest new baseline."""
+    """U-keep: a data migration rule, which no journey runs.
+
+    The migration's rule, from the spec: the old rank's threshold, the nearest new baseline."""
 
     @classmethod
     def setUpTestData(cls) -> None:

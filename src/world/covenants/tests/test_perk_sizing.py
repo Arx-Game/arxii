@@ -30,6 +30,8 @@ from world.traits.factories import ensure_level_ladder
 
 
 class PerkSizingTests(TestCase):
+    """U-keep: perk sizing by the holder's vow thread rung, which no journey fires."""
+
     def setUp(self) -> None:
         ensure_level_ladder()  # CHECK baselines 18 + 8 x (level - 1): one level is 8 wide
         self.holder = CharacterSheetFactory(character=CharacterFactory())

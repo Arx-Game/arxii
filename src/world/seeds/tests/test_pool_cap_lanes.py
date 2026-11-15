@@ -44,6 +44,8 @@ _RUNG_LANE_VALUES = {
 
 
 class PoolCapLaneSeedTests(TestCase):
+    """U-keep: seeded lane rows compared with the old rules, which no journey reads in isolation."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         seed_pool_and_cap_lanes()
@@ -123,7 +125,9 @@ class _Apps:
 
 
 class PoolCapLaneMigrationTests(TestCase):
-    """The lane-rows data migration carries each coefficient into its lane's rows."""
+    """U-keep: a data migration, which no journey runs.
+
+    The lane-rows data migration carries each coefficient into its lane's rows."""
 
     def _run(self, configs: dict[str, object]) -> None:
         # Found by its name's tail, so a renumbered chain does not break the test.
@@ -166,7 +170,9 @@ class PoolCapLaneMigrationTests(TestCase):
 
 
 class RungLaneMigrationTests(TestCase):
-    """The rung lanes' data migration carries the rescue coefficient and seeds the rest."""
+    """U-keep: a data migration, which no journey runs.
+
+    The rung lanes' data migration carries the rescue coefficient and seeds the rest."""
 
     def _run(self, configs: dict[str, object]) -> None:
         import world.migrations as migrations_package

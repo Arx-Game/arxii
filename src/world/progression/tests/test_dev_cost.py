@@ -21,6 +21,8 @@ from world.progression.services.dev_cost import (
 
 
 class DevCostDefaultsTests(TestCase):
+    """U-keep: the cost curve pinned to hand-computed numbers, pure math."""
+
     def setUp(self) -> None:
         DevelopmentCostConfig.flush_instance_cache()
 
@@ -75,7 +77,9 @@ class DevCostDefaultsTests(TestCase):
 
 
 class DevCostTunedTests(TestCase):
-    """Staff retune the row; the curve follows it."""
+    """U-keep: the cost curve following a retuned row, pure math a journey cannot isolate.
+
+    Staff retune the row; the curve follows it."""
 
     def setUp(self) -> None:
         DevelopmentCostConfig.flush_instance_cache()

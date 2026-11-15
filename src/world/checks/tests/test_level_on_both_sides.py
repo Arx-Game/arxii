@@ -19,14 +19,11 @@ from world.checks.factories import (
     CheckTypeFactory,
 )
 from world.checks.modifier_models import ModifierSizeFraction
-from world.checks.modifier_values import load_value_table
 from world.checks.scale_config import CheckScaleConfig
 from world.checks.services import (
-    compute_check_rating,
     compute_obstacle_rating,
     level_opposition,
     level_points,
-    preview_check_difficulty,
 )
 from world.checks.test_helpers import make_player_character
 from world.classes.factories import (
@@ -46,10 +43,11 @@ from world.conditions.services import caster_opposition
 from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
 from world.progression.factories import CharacterPathHistoryFactory
 from world.traits.factories import ensure_level_ladder
-from world.traits.models import CheckRank
 
 
 class LevelTermTests(TestCase):
+    """U-keep: level-share arithmetic at edge levels a fight does not reach."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         ensure_level_ladder()
@@ -77,6 +75,8 @@ class LevelTermTests(TestCase):
 
 
 class LevelOnBothSidesTests(TestCase):
+    """U-keep: aspect-match opposition sizing, which the fight journey does not drive."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         ensure_level_ladder()
@@ -85,70 +85,6 @@ class LevelOnBothSidesTests(TestCase):
             lane=ModifierLane.CHECK, size=ModifierSize.LARGE, fraction=Decimal("0.5")
         )
         cls.check_type = CheckTypeFactory(name="LevelBothSidesCheck")
-        character_class = CharacterClassFactory()
-
-        cls.level_eleven_sheet = CharacterSheetFactory()
-        CharacterClassLevelFactory(
-            character=cls.level_eleven_sheet,
-            character_class=character_class,
-            level=11,
-            is_primary=True,
-        )
-        cls.level_eleven = cls.level_eleven_sheet.character
-
-        cls.level_three_sheet = CharacterSheetFactory()
-        CharacterClassLevelFactory(
-            character=cls.level_three_sheet,
-            character_class=character_class,
-            level=3,
-            is_primary=True,
-        )
-        cls.level_three = cls.level_three_sheet.character
-
-    def test_a_level_eleven_roller_meets_a_level_eleven_npc_evenly(self) -> None:
-        # Her level term is 49. With skills and stats adding the other 49 she totals 98,
-        # exactly level 11's baseline: rank 11 against a rank-11 opponent.
-        rating = compute_check_rating(self.level_eleven, self.check_type, extra_modifiers=49)
-        opposition = level_opposition(self.check_type, level=11)
-
-        self.assertEqual(rating, 98)
-        self.assertEqual(opposition, 98)
-        self.assertEqual(CheckRank.get_rank_difference(rating, opposition), 0)
-        self.assertEqual(
-            preview_check_difficulty(
-                self.level_eleven, self.check_type, target_difficulty=opposition, extra_modifiers=49
-            ),
-            0,
-        )
-
-    def test_a_large_buff_moves_her_half_a_rank(self) -> None:
-        # One Large buff is half of level 11's 8-point width: 4 points of the 8-point band.
-        buff = load_value_table(ModifierLane.CHECK).value(11, ModifierSize.LARGE)
-        self.assertEqual(buff, 4)
-        opposition = level_opposition(self.check_type, level=11)
-        plain = compute_check_rating(self.level_eleven, self.check_type, extra_modifiers=49)
-        buffed = compute_check_rating(self.level_eleven, self.check_type, extra_modifiers=49 + buff)
-        self.assertEqual(buffed - plain, 4)
-        self.assertEqual(CheckRank.get_rank_difference(buffed, opposition), 0)
-
-    def test_a_large_debuff_lowers_the_npc_by_the_same_share(self) -> None:
-        opponent = ObjectDBFactory(db_key="LevelBothSidesOpponent")
-        weakened = ConditionTemplateFactory(name="LevelBothSidesWeakened")
-        ConditionCheckModifierFactory(
-            condition=weakened, check_type=self.check_type, modifier_value=-1
-        )
-        undebuffed = level_opposition(self.check_type, level=11, character=opponent)
-
-        ConditionInstanceFactory(
-            target=opponent,
-            condition=weakened,
-            modifier_level=11,
-            modifier_size=ModifierSize.LARGE,
-        )
-        debuffed = level_opposition(self.check_type, level=11, character=opponent)
-
-        self.assertEqual(undebuffed, 98)
-        self.assertEqual(undebuffed - debuffed, 4)
 
     def test_an_opposing_aspect_match_is_sized_as_a_modifier_at_the_level(self) -> None:
         path = PathFactory(name="LevelBothSidesPath")
@@ -168,6 +104,8 @@ class LevelOnBothSidesTests(TestCase):
 
 
 class PlayerCharacterAsObstacleTests(TestCase):
+    """U-keep: obstacle ratings (sheetless NPC, penalty floor) no journey drives."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         ensure_level_ladder()
@@ -214,9 +152,6 @@ class PlayerCharacterAsObstacleTests(TestCase):
         # Level 11 with a sheet but no tenure: 98, the whole baseline, never her 49.
         self.assertEqual(compute_obstacle_rating(self.npc_sheet.character, self.check_type), 98)
 
-    def test_a_rostered_player_character_counts_her_full_total(self) -> None:
-        self.assertEqual(compute_obstacle_rating(self.character, self.check_type), 49)
-
     def test_an_obstacle_with_no_sheet_counts_as_its_levels_baseline(self) -> None:
         npc = ObjectDBFactory(db_key="ObstacleSheetlessNpc")
 
@@ -257,7 +192,9 @@ class PlayerCharacterAsObstacleTests(TestCase):
 
 
 class CasterOppositionTests(TestCase):
-    """The caster's share of reading, rallying against or breaking a hold (#5093)."""
+    """U-keep: hold-breaking caster opposition, which no journey drives.
+
+    The caster's share of reading, rallying against or breaking a hold (#5093)."""
 
     @classmethod
     def setUpTestData(cls) -> None:
