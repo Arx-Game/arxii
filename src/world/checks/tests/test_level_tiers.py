@@ -272,11 +272,11 @@ class NoTiersTests(TestCase):
 
 
 class LevelTierSeedAndMigrationTests(TestCase):
-    def test_the_seed_writes_five_tiers_of_twenty_four_points(self) -> None:
+    def test_the_seed_writes_a_level_three_row_at_zero_and_five_tiers_of_twenty_four(self) -> None:
         seed_level_tiers()
         self.assertEqual(
             list(LevelTier.objects.values_list("start_level", "bonus_points")),
-            [(6, 24), (11, 24), (16, 24), (21, 24), (26, 24)],
+            [(3, 0), (6, 24), (11, 24), (16, 24), (21, 24), (26, 24)],
         )
 
     def test_the_seed_leaves_tiers_staff_already_own(self) -> None:
@@ -304,7 +304,7 @@ class LevelTierSeedAndMigrationTests(TestCase):
 
         self.assertEqual(
             list(LevelTier.objects.values_list("start_level", "bonus_points")),
-            [(6, 24), (11, 24), (16, 24), (21, 24), (26, 24)],
+            [(3, 0), (6, 24), (11, 24), (16, 24), (21, 24), (26, 24)],
         )
 
     def test_a_database_that_already_has_tiers_is_left_alone(self) -> None:

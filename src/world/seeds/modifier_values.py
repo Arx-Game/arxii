@@ -60,9 +60,11 @@ _LEVEL_BASELINES: tuple[tuple[int, int], ...] = tuple(
 
 # The tier jumps (#5093): a tier starts at each of these levels and adds this many points to
 # every level from there up, in full. 24 points is three ranks at the 8-point level width, so
-# going from level 5 to 6 is worth four ranks and going from 4 to 5 one. Each row is its own
-# number so staff set the tiers separately.
+# going from level 5 to 6 is worth four ranks and going from 4 to 5 one. Level 3, the first path
+# change, has a row at 0 points: it changes no number, and a jump there is one edit away. Each
+# row is its own number so staff set the tiers separately.
 _LEVEL_TIERS: tuple[tuple[int, int], ...] = (
+    (3, 0),
     (6, 24),
     (11, 24),
     (16, 24),
@@ -244,7 +246,7 @@ def seed_check_scale_config() -> None:
 
 
 def seed_level_tiers() -> None:
-    """Create the tier jump rows (levels 6, 11, 16, 21 and 26, 24 points each) on an empty table.
+    """Create the tier rows (level 3 at 0 points, levels 6 to 26 at 24) on an empty table.
 
     Written from explicit values, never a factory. Only an empty table is seeded: a tier's
     start level is its identity, so a row staff moved to another level, or deleted, would

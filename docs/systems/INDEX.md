@@ -1258,7 +1258,7 @@ Check resolution engine — converts trait values to ranks and rolls against res
   and adds the trait ids to the roll's `involved_traits` for capability and thread matching.
   Magic is the first user. See "extra_traits" in [checks.md](checks.md).
 - **Check scale config (#5093):** `CheckScaleConfig` (`world/checks/scale_config.py`), a pk-1 singleton with `level_share` (seed 0.5); `get_singleton()`; `world.checks.services.level_points(level)` = `level_share` x the CHECK baseline at the level, plus `tier_bonus(level)`. Admin: Check scale config.
-- **Tier jumps (#5093):** `LevelTier(start_level, bonus_points)` (`world/checks/modifier_models.py`, seeded 6/11/16/21/26 at 24 points), `modifier_values.tier_bonus(level)` / `load_tier_table()`; the bonus is added in full to `level_points`, `level_opposition` and `difficulty_points`, and `slide.load_ranks()` runs the rank ladder past 30 (derived "Rank N" names). Admin: Level tiers.
+- **Tier jumps (#5093):** `LevelTier(start_level, bonus_points)` (`world/checks/modifier_models.py`, seeded 3 at 0 points and 6/11/16/21/26 at 24 points), `modifier_values.tier_bonus(level)` / `load_tier_table()`; the bonus is added in full to `level_points`, `level_opposition` and `difficulty_points`, and `slide.load_ranks()` runs the rank ladder past 30 (derived "Rank N" names). Admin: Level tiers.
 - **Modifier level, size and taper (#4594, ADR-4594-A, #5093):** `ModifierSizeFraction`
   (`lane`, `size`, `fraction`: a modifier's value is fraction x one level's width), `ModifierValue`
   (an override at one exact `level`, `size`), `ModifierLevelBaseline`, `ModifierTaper`

@@ -226,7 +226,7 @@ The gap between one level's baseline and the next: `level_width(level, lane)` in
 _Avoid_: level step, rank size
 
 **Level tier** (#5093):
-A tier of levels that starts with a jump in power: a `LevelTier` row (start level, bonus in points). Seeded at levels 6, 11, 16, 21 and 26, 24 points each. Staff set each row separately. Not the same as a rank or an outcome tier.
+A tier of levels that starts with a jump in power: a `LevelTier` row (start level, bonus in points). Seeded at level 3 (0 points, so no jump) and levels 6, 11, 16, 21 and 26 (24 points each). Staff set each row separately. Not the same as a rank or an outcome tier.
 _Avoid_: level band, power tier
 
 **Tier bonus** (#5093):

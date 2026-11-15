@@ -2,7 +2,9 @@
 
 Data-only, after ``0432_level_tier`` (the table). The tier jump is new behaviour: power jumps
 sharply on crossing into a new tier, at levels 6, 11, 16, 21 and 26, each worth 24 points (three
-ranks at the 8-point level width the check baselines are seeded at). Production already holds
+ranks at the 8-point level width the check baselines are seeded at). Level 3, the first path
+change, gets a row too, at 0 points: it changes no number, and staff who want a jump there edit a
+row instead of adding one. Production already holds
 the check baselines, so without these rows it would never get the jump. A database with no check
 baselines (a fresh one, which the seeds fill) is left alone, and so is one that already holds
 any tier row: staff own the tiers then, and a start level moved or deleted must not come back.
@@ -16,7 +18,7 @@ from django.db import migrations
 # seed-data-ok: additive backfill of the tier jump's starting rows for a database that already
 # holds the check baselines; staff tune each row afterwards.
 
-_TIERS = ((6, 24), (11, 24), (16, 24), (21, 24), (26, 24))
+_TIERS = ((3, 0), (6, 24), (11, 24), (16, 24), (21, 24), (26, 24))
 
 
 def write_tier_rows(apps, schema_editor):

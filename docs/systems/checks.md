@@ -124,7 +124,7 @@ stat), read without saving a row when a database has none.
 | `CheckScaleConfig` | Singleton (pk 1, `world/checks/scale_config.py`, #5093): `level_share`, the share of a level's CHECK baseline that a character's level adds to every roll (seed 0.5). Read by `level_points(level)`; staff edit the row. |
 | `ModifierValue` | An override of the derived value: what a modifier of `size` is worth at exactly `level`, in the lane's units. It covers only its own level (the step lookup is gone). A magnitude; the authored modifier keeps its sign | `lane`, `level`, `size` (`ModifierSize`), `value`; unique (`lane`, `level`, `size`) |
 | `ModifierLevelBaseline` | The typical total at each level in a lane, one row per level (the seed writes levels 1-30). On the check lane these rows ARE the rank ladder (rank N starts at the level-N baseline) and the gap between two levels is one level's width (#5093) | `lane`, `level`, `baseline`; unique (`lane`, `level`) |
-| `LevelTier` | A tier jump (#5093): `bonus_points` added in full to every level from `start_level` up (a character's level term, an NPC's opposition, every staff-set difficulty level). Seeded at 6, 11, 16, 21 and 26, 24 points each | `start_level` (unique), `bonus_points` |
+| `LevelTier` | A tier jump (#5093): `bonus_points` added in full to every level from `start_level` up (a character's level term, an NPC's opposition, every staff-set difficulty level). Seeded at level 3 (0 points, no jump) and 6, 11, 16, 21 and 26 (24 points each) | `start_level` (unique), `bonus_points` |
 | `ModifierTaper` | Which source kinds taper in a lane: each further modifier of the kind counts `ratio` of the one before, never below `floor` | `lane`, `source_kind` (`ModifierSourceKind`), `ratio`, `floor`; unique (`lane`, `source_kind`) |
 
 Readers (`modifier_values.py`): `load_value_table(lane) -> ValueTable` (three queries: overrides,
@@ -486,7 +486,7 @@ more than 4 to 5, and 10 to 11 more than 9 to 10 (owner ruling 2026-11-15; spec 
 
 - **`LevelTier(start_level, bonus_points)`** (`world/checks/modifier_models.py`, admin "Level
   tiers" with the bonus shown in ranks): one row per tier, `start_level` unique. The seed
-  (`seed_level_tiers`, only into an empty table) writes levels 6, 11, 16, 21 and 26, 24 points each
+  (`seed_level_tiers`, only into an empty table) writes level 3 at 0 points (no jump, one edit away) and levels 6, 11, 16, 21 and 26 at 24 points each
   (three ranks at the seeded 8-point width). Staff set every row separately. Migration
   `0433_level_tier_rows` writes the same rows on a database that already has CHECK baselines and
   no tier rows, so production gets them.
