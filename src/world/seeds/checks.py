@@ -21,6 +21,7 @@ make them non-idempotent, so the spine is seeded through ``get_or_create``.
 
 from __future__ import annotations
 
+from world.seeds.modifier_values import seed_check_level_baselines
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 from world.traits.models import (
     CheckOutcome,
@@ -41,22 +42,24 @@ _CONVERSION_RANGES: tuple[tuple[str, int, int, int], ...] = (
     (TraitType.SKILL, 1, 100, 1),
 )
 
-# --- Rank ladder (point thresholds -> rank) ---
-# Ranks 0-3 are the original defaults (aligned with PerformCheckTests). Ranks 4-8
-# were added with #2707: level contributes LEVEL_POINTS_PER_LEVEL points per level,
-# so a level-30 character carries 150 points from level alone and would otherwise
-# sit pinned at the old top rung from level 10 onward, making level stop mattering
-# exactly where the power fantasy needs it most.
-_CHECK_RANKS: tuple[tuple[int, int, str], ...] = (
-    (0, 0, "Incompetent"),
-    (1, 10, "Novice"),
-    (2, 25, "Competent"),
-    (3, 50, "Expert"),
-    (4, 80, "Master"),
-    (5, 115, "Grandmaster"),
-    (6, 155, "Peerless"),
-    (7, 200, "Legendary"),
-    (8, 250, "Mythic"),
+# --- Rank ladder (#5093: a rank means the level someone acts at) ---
+# Rank N starts at the CHECK lane's level-N baseline total (``world.seeds.modifier_values``),
+# so the ranks carry only a name here. The nine original names sit on the ranks nearest
+# their old thresholds; the rest are placeholders for staff to author.
+_CHECK_RANK_COUNT = 30
+_CHECK_RANK_NAMES: dict[int, str] = {
+    0: "Incompetent",
+    1: "Novice",
+    3: "Competent",
+    6: "Expert",
+    10: "Master",
+    14: "Grandmaster",
+    19: "Peerless",
+    24: "Legendary",
+    30: "Mythic",
+}
+_CHECK_RANKS: tuple[tuple[int, str], ...] = tuple(
+    (rank, _CHECK_RANK_NAMES.get(rank, f"Rank {rank}")) for rank in range(_CHECK_RANK_COUNT + 1)
 )
 
 # CheckOutcome tier name constants — referenced in both _OUTCOMES and the band tuples.
@@ -223,11 +226,9 @@ def seed_check_resolution_tables() -> None:
             defaults={"max_value": max_value, "points_per_level": points_per_level},
         )
 
-    for rank, min_points, name in _CHECK_RANKS:
-        CheckRank.objects.get_or_create(
-            rank=rank,
-            defaults={"min_points": min_points, "name": name},
-        )
+    seed_check_level_baselines()
+    for rank, name in _CHECK_RANKS:
+        CheckRank.objects.get_or_create(rank=rank, defaults={"name": name})
 
     outcomes: dict[str, CheckOutcome] = {}
     for name, success_level in _OUTCOMES:

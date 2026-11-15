@@ -24,10 +24,9 @@ from world.conditions.factories import (
 from world.conditions.services import apply_condition
 from world.mechanics.factories import ModifierTargetFactory
 from world.mechanics.models import ModifierTarget
-from world.traits.factories import CheckSystemSetupFactory
+from world.traits.factories import CheckSystemSetupFactory, ensure_check_rank
 from world.traits.models import (
     CharacterTraitValue,
-    CheckRank,
     PointConversionRange,
     Trait,
     TraitCategory,
@@ -90,10 +89,7 @@ class ConditionModifierInCheckTest(TestCase):
             (2, 25, "A2Competent"),
             (3, 50, "A2Expert"),
         ]:
-            CheckRank.objects.get_or_create(
-                rank=rank_val,
-                defaults={"min_points": min_pts, "name": name},
-            )
+            ensure_check_rank(rank_val, min_pts, name)
         # The character must have a CharacterSheet: _get_stat_modifier reads
         # self.character.sheet_data and returns 0 when it is absent, so a bare
         # CharacterFactory() (no sheet) would never see the condition fold-in.

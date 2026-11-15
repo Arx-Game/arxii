@@ -59,11 +59,10 @@ from world.societies.factories import OrganizationFactory
 from world.species.factories import make_language_with_target, make_understanding_condition
 from world.species.language_services import comprehension_value
 from world.traits.constants import STAT_POINT_VALUE
-from world.traits.factories import CheckSystemSetupFactory, TraitFactory
+from world.traits.factories import CheckSystemSetupFactory, TraitFactory, ensure_check_rank
 from world.traits.models import (
     CharacterTraitChange,
     CharacterTraitValue,
-    CheckRank,
     PointConversionRange,
     TraitCategory,
     TraitChangeSource,
@@ -91,9 +90,7 @@ def check_system_with_ranks() -> None:
         defaults={"max_value": 100, "points_per_level": 1},
     )
     for rank, min_points, name in ((0, 0, "Untried"), (1, 10, "Novice"), (2, 25, "Competent")):
-        CheckRank.objects.get_or_create(
-            rank=rank, defaults={"min_points": min_points, "name": name}
-        )
+        ensure_check_rank(rank, min_points, name)
 
 
 def outcome_lines(scene: Scene) -> list[str]:

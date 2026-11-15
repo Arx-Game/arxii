@@ -15,7 +15,7 @@ from world.checks.constants import LEVEL_POINTS_PER_LEVEL
 from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
 from world.checks.services import compute_check_rating, perform_check, preview_check_difficulty
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
-from world.traits.factories import CheckSystemSetupFactory
+from world.traits.factories import CheckSystemSetupFactory, ensure_check_rank
 from world.traits.models import CheckRank, PointConversionRange, ResultChart, Trait, TraitType
 
 
@@ -40,10 +40,7 @@ class LevelPointsTests(TestCase):
             (2, 25, "LevelTestCompetent"),
             (3, 50, "LevelTestExpert"),
         ]:
-            CheckRank.objects.get_or_create(
-                rank=rank_val,
-                defaults={"min_points": min_pts, "name": name},
-            )
+            ensure_check_rank(rank_val, min_pts, name)
 
         character_class = CharacterClassFactory()
 

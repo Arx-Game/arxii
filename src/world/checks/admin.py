@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from django.forms.models import BaseInlineFormSet
 
 from world.admin_utils import OneRowPerFormSet
+from world.checks.exceptions import ModifierConfigError
 from world.checks.models import (
     CheckCall,
     CheckCallTarget,
@@ -235,8 +236,9 @@ class ModifierValueAdmin(admin.ModelAdmin):
     def read_against_baseline(self, obj: ModifierValue) -> str:
         if obj.pk is None:
             return "Save the row to read it against the level baseline."
-        baseline = level_baseline(obj.level, obj.lane)
-        if baseline is None:
+        try:
+            baseline = level_baseline(obj.level, obj.lane)
+        except ModifierConfigError:
             return f"No level baseline row covers level {obj.level} yet."
         share = rank_band_share(obj.value, baseline)
         band = f"; {share} of a rank band at that total" if share is not None else ""

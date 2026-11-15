@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 from django.db.models import Prefetch
 
 from world.checks.constants import BOTCH_SUCCESS_LEVEL_MAX, ModifierSourceKind
+from world.checks.exceptions import ModifierConfigError
 from world.checks.modifier_values import (
     level_baseline,
     load_taper_rules,
@@ -406,9 +407,12 @@ def compute_modifier_pile(
     None when the value table or level baseline has no row covering the inputs; the
     panel says which rows to author.
     """
-    baseline = level_baseline(character_level)
+    try:
+        baseline = level_baseline(character_level)
+    except ModifierConfigError:
+        return None
     value = load_value_table().value(modifier_level, size)
-    if baseline is None or value is None:
+    if value is None:
         return None
     tapers = load_taper_rules()
     breakdown = ModifierBreakdown(

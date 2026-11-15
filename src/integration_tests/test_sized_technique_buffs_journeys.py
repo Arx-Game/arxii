@@ -9,8 +9,9 @@ example seed, so these journeys also prove the seed is coherent.
 
 - One Large buff adds the value table's number for its level, not its flat authored value.
 - Ten Large buffs add the tapered total, less than ten times one buff.
-- The same buff is the same number on a lower- and a higher-level character, which is a
-  bigger share of the lower one's rank band. Nothing reads the bearer's level.
+- The same buff is the same number on a lower- and a higher-level character, and the same
+  share of a level's width at either (the seeded ladder is 8 points a level). Nothing reads
+  the bearer's level.
 - Staff saving a two-effect technique whose buff is sized Large see the size warning.
 """
 
@@ -186,7 +187,7 @@ class SizedBuffsOnChecks(JourneyCase):
         self.assertEqual(after.total_points - before.total_points, breakdown.total)
         self.assertGreater(after.roller_rank.rank, before.roller_rank.rank)
 
-    def test_the_same_buff_matters_more_to_a_lower_level_character(self) -> None:
+    def test_the_same_buff_is_the_same_share_of_a_level_for_any_bearer(self) -> None:
         pell_before = self.ward_check(self.pell)
         hale_before = self.ward_check(self.hale)
 
@@ -200,10 +201,10 @@ class SizedBuffsOnChecks(JourneyCase):
         pell_gain = self.ward_check(self.pell).total_points - pell_before.total_points
         hale_gain = self.ward_check(self.hale).total_points - hale_before.total_points
         self.assertEqual(pell_gain, hale_gain)
-        self.assertGreater(
-            rank_band_share(pell_gain, pell_before.total_points),
-            rank_band_share(hale_gain, hale_before.total_points),
-        )
+        # The seeded ladder is 8 points a level everywhere, so 10 points is 1.25 ranks on
+        # Pell (25, rank 1) and on Hale (100, rank 11).
+        self.assertEqual(rank_band_share(pell_gain, pell_before.total_points), Decimal("1.25"))
+        self.assertEqual(rank_band_share(hale_gain, hale_before.total_points), Decimal("1.25"))
 
     def test_without_a_value_row_the_buff_keeps_its_flat_value(self) -> None:
         ModifierValue.objects.filter(lane=ModifierLane.CHECK).delete()
@@ -214,9 +215,13 @@ class SizedBuffsOnChecks(JourneyCase):
         self.assertEqual(self.ward_check(self.corin).total_points - before.total_points, 5)
 
     def test_totals_ranks_and_charts_through_the_check(self) -> None:
-        """Own totals are the stat's 20 points plus LEVEL_POINTS_PER_LEVEL (5) per level."""
+        """Own totals are the stat's 20 points plus LEVEL_POINTS_PER_LEVEL (5) per level.
+
+        Rank N starts at 18 + 8 x (N - 1): 50 is the start of rank 5, 60 is rank 6 (starts at
+        58) a quarter through, and 123 is rank 14 (starts at 122) an eighth through.
+        """
         corin = self.ward_check(self.corin)
-        self.assertEqual((corin.total_points, corin.roller_rank.name), (50, "Expert"))
+        self.assertEqual((corin.total_points, corin.roller_rank.name), (50, "Rank 5"))
         self.assertEqual(corin.rank_difference, 0)
 
         self.cast(self.maren, self.corin, self.buffs[0])
@@ -225,18 +230,20 @@ class SizedBuffsOnChecks(JourneyCase):
         self.assertEqual(instance.modifier_level, 6)
         one = self.ward_check(self.corin)
         self.assertEqual((one.total_points, one.roller_rank.name), (60, "Expert"))
-        self.assertEqual(one.chart.rank_difference, 0)
+        # 6.25 against the target's 5.0: chart +1 slid a quarter toward +2.
+        self.assertEqual(one.chart.rank_difference, 1)
 
         for technique in self.buffs[1:]:
             self.cast(self.maren, self.corin, technique)
         ten = self.ward_check(self.corin)
         self.assertEqual((ten.total_points, ten.roller_rank.name), (123, "Grandmaster"))
-        self.assertEqual(ten.chart.rank_difference, 2)
+        # 14.125 against 5.0 is past the top authored chart, +6.
+        self.assertEqual(ten.chart.rank_difference, 6)
 
         odds = {d.rank_difference: d for d in compute_chart_distributions()}
-        # Success or better on the seeded charts: 40% at difference 0, 75% at +2.
-        self.assertEqual(round(odds[one.chart.rank_difference].success_probability, 2), 0.40)
-        self.assertEqual(round(odds[ten.chart.rank_difference].success_probability, 2), 0.75)
+        # Success or better on the seeded charts: 65% at difference +1, every roll at +6.
+        self.assertEqual(round(odds[one.chart.rank_difference].success_probability, 2), 0.65)
+        self.assertEqual(round(odds[ten.chart.rank_difference].success_probability, 2), 1.0)
 
         breakdown = collect_check_modifiers(self.corin.sheet_data, self.ward_reading)
         # The recorded provenance rows, read back, add up to the tapered total.
@@ -408,18 +415,18 @@ class StaffTuneTheValueTable(JourneyCase):
 
         page = self.client.get(reverse("admin:arxii_modifiervalue_change", args=[row.pk]))
 
-        # Level 7 reads the level-6 baseline of 58 (Expert, a 30-point band): 15 is 26% of
-        # the total and half a rank.
+        # Level 7's baseline is 66 (rank 7, a level 8 points wide): 15 is 23% of the total
+        # and 1.88 ranks (15 / 8 = 1.875, rounded half to even).
         self.assertContains(
             page,
-            "A level-7 character&#x27;s typical total is 58: this value is 26% of it; "
-            "0.50 of a rank band at that total.",
+            "A level-7 character&#x27;s typical total is 66: this value is 23% of it; "
+            "1.88 of a rank band at that total.",
         )
 
     def test_staff_add_a_baseline_and_a_taper_row(self) -> None:
         self.client.post(
             reverse("admin:arxii_modifierlevelbaseline_add"),
-            {"lane": ModifierLane.CHECK, "level": "3", "baseline": "34"},
+            {"lane": ModifierLane.CHECK, "level": "31", "baseline": "258"},
         )
         self.client.post(
             reverse("admin:arxii_modifiertaper_add"),
@@ -431,8 +438,8 @@ class StaffTuneTheValueTable(JourneyCase):
             },
         )
 
-        self.assertEqual(level_baseline(3), 34)
-        self.assertEqual(level_baseline(5), 34)
+        self.assertEqual(level_baseline(31), 258)
+        self.assertEqual(level_baseline(5), 50)
         rule = load_taper_rules()[ModifierSourceKind.STRAIN]
         self.assertEqual((rule.ratio, rule.floor), (Decimal("0.5000"), Decimal("0.2500")))
         page = self.client.get(reverse("admin:arxii_modifiertaper_changelist"))
@@ -455,9 +462,10 @@ class StaffTuneTheValueTable(JourneyCase):
             (pile.baseline, pile.modifier_value, pile.plain_total, pile.tapered_total),
             (58, 10, 100, 73),
         )
-        self.assertEqual(pile.rank_before, "Expert (rank 3)")
-        self.assertEqual(pile.rank_after, "Grandmaster (rank 5)")
-        self.assertContains(response, "+73: Grandmaster (rank 5)")
+        # 58 starts rank 6; 58 + 73 = 131 is rank 15 (starts at 130).
+        self.assertEqual(pile.rank_before, "Expert (rank 6)")
+        self.assertEqual(pile.rank_after, "Rank 15 (rank 15)")
+        self.assertContains(response, "+73: Rank 15 (rank 15)")
 
 
 def _set_rows(technique: Technique, **fields: object) -> None:

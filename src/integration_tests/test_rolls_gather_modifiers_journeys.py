@@ -2,9 +2,9 @@
 
 Ysmay climbs at the Old Quarry. She wears Chalked Gloves (+5 to Climbing, an item check
 modifier) and Maren casts Sure Grip on her (+5 to Climbing, a technique buff that lands
-as a condition). Her own Climbing total is 5 points: Incompetent (rank 0), 50% toward
-Novice (rank 1), on the seeded rank ladder. With the gloves and the buff it is 15:
-Novice (rank 1), 33% toward Competent (rank 2).
+as a condition). Her own Climbing total is 5 points: Incompetent (rank 0), 28% toward
+Novice (rank 1), on the seeded rank ladder (rank N starts at 18 + 8 x (N - 1)). With the
+gloves and the buff it is 15: Incompetent (rank 0), 83% toward Novice (rank 1).
 
 Every way she rolls Climbing counts both: her own ``check`` by telnet and from the web,
 answering a GM's call, a Senior GM's ``gm check`` on her, and a challenge she takes on
@@ -70,10 +70,10 @@ from world.vitals.models import CharacterVitals
 # Her own total, and her total with the gloves and the buff (5 each).
 OWN = 5
 GEARED = 15
-OWN_STANDING = "Incompetent (rank 0), 50% toward Novice (rank 1)"
-GEARED_STANDING = "Novice (rank 1), 33% toward Competent (rank 2)"
-# Trivial is 15 points: Novice (rank 1), a third of its band.
-AGAINST_TRIVIAL = "against Novice (rank 1), 33% toward Competent (rank 2)"
+OWN_STANDING = "Incompetent (rank 0), 28% toward Novice (rank 1)"
+GEARED_STANDING = "Incompetent (rank 0), 83% toward Novice (rank 1)"
+# Trivial is 15 points: 15 of rank 0's 18 points.
+AGAINST_TRIVIAL = "against Incompetent (rank 0), 83% toward Novice (rank 1)"
 # Her capability from the approach's technique, and the gloves and the buff.
 CAPABILITY = 5
 GLOVES = ("equipment", "Equipped: Chalked Gloves", 5)
@@ -313,10 +313,10 @@ class AChallengeCountsHerGear(_TheOldQuarry):
 
         # Her own 5, the gloves' 5, the buff's 5 and her capability's 5, each once.
         self.assertEqual(roll.total_points, GEARED + CAPABILITY)
-        # 20 points: Novice (rank 1), two thirds of its band.
+        # 20 points: Novice (rank 1, starts at 18), 2 of its 8 points.
         self.assertEqual(
             roll.standing_text,
-            "Novice (rank 1), 67% toward Competent (rank 2) " + AGAINST_TRIVIAL,
+            "Novice (rank 1), 25% toward Rank 2 (rank 2) " + AGAINST_TRIVIAL,
         )
         outcome = self.stored()
         self.assertEqual(

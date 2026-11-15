@@ -1,9 +1,13 @@
-"""Read the modifier value table, level baselines and tapers (#4551, #4594).
+"""Read the modifier value table, level baselines and tapers (#4551, #4594, #5093).
 
 Pure readers over ``ModifierValue``, ``ModifierLevelBaseline`` and ``ModifierTaper``.
 Each loads a lane's rows in one query, so a caller valuing many modifiers loads once
-and looks up in memory. Sparse rows read as steps: a level takes the row at the
-highest authored level at or below it.
+and looks up in memory. Value rows read as steps: a level takes the row at the highest
+authored level at or below it.
+
+The baselines are the check ladder and the unit of every bonus (#5093): rank N starts at
+the level-N baseline total, and ``level_width`` is one level's worth of points. The
+baseline rows are dense (one per level); a level above the top row reuses the top row.
 """
 
 from __future__ import annotations
@@ -13,6 +17,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 
 from world.checks.constants import ModifierLane
+from world.checks.exceptions import ModifierConfigError
 from world.checks.modifier_models import ModifierLevelBaseline, ModifierTaper, ModifierValue
 from world.checks.types import TaperRule
 from world.traits.models import CheckRank
@@ -79,31 +84,84 @@ def load_taper_rules(lane: str = ModifierLane.CHECK) -> dict[str, TaperRule]:
     }
 
 
-def level_baseline(level: int, lane: str = ModifierLane.CHECK) -> int | None:
-    """The typical total at ``level`` in ``lane``, or None when no row covers it."""
+@dataclass(frozen=True)
+class BaselineTable:
+    """One lane's level baselines, loaded once: ``baseline`` and ``width`` read it in memory."""
+
+    lane: str = ModifierLane.CHECK
+    levels: tuple[int, ...] = ()
+    baselines: tuple[int, ...] = ()
+
+    def _index(self, level: int) -> int:
+        """The position of the row at ``level``, or of the highest row below it."""
+        index = bisect_right(self.levels, level) - 1
+        if index < 0:
+            msg = f"No {self.lane} level baseline at or below level {level}."
+            raise ModifierConfigError(msg)
+        return index
+
+    def baseline(self, level: int) -> int:
+        """The typical total at ``level``: its row, else the highest row below it.
+
+        Raises ``ModifierConfigError`` when no row sits at or below ``level``.
+        """
+        return self.baselines[self._index(level)]
+
+    def width(self, level: int) -> int:
+        """One level's width at ``level``: the next level's baseline minus this one's.
+
+        At or above the top authored level, the top row's width: its baseline minus the
+        row below it. Raises ``ModifierConfigError`` when no row sits at or below
+        ``level``, or when the lane has a single row and so no width to read.
+        """
+        index = self._index(level)
+        if index + 1 < len(self.levels):
+            return self.baseline(level + 1) - self.baselines[index]
+        if index == 0:
+            msg = f"The {self.lane} lane needs two level baseline rows to have a level width."
+            raise ModifierConfigError(msg)
+        return self.baselines[index] - self.baselines[index - 1]
+
+
+def load_baselines(lane: str = ModifierLane.CHECK) -> BaselineTable:
+    """Load ``lane``'s ``ModifierLevelBaseline`` rows in one query."""
     rows = list(
         ModifierLevelBaseline.objects.filter(lane=lane)
         .order_by("level")
         .values_list("level", "baseline")
     )
-    return _step_lookup(rows, level)
+    return BaselineTable(
+        lane=lane,
+        levels=tuple(level for level, _ in rows),
+        baselines=tuple(baseline for _, baseline in rows),
+    )
+
+
+def level_baseline(level: int, lane: str = ModifierLane.CHECK) -> int:
+    """The typical total at ``level`` in ``lane`` (see ``BaselineTable.baseline``)."""
+    return load_baselines(lane).baseline(level)
+
+
+def level_width(level: int, lane: str = ModifierLane.CHECK) -> int:
+    """One level's width at ``level`` in ``lane`` (see ``BaselineTable.width``)."""
+    return load_baselines(lane).width(level)
 
 
 def rank_band_share(points: int, at_total: int) -> Decimal | None:
-    """How much of the rank band ``at_total`` sits in that ``points`` spans.
+    """How much of one level's width ``points`` spans, for a character at ``at_total``.
 
-    The check lane's step is one rank band at the character's total (#4551 section
-    5.5), so staff read a check modifier as a share of that band: 0.5 is half a rank
-    for a character at ``at_total``. None when the ladder has no band above
-    ``at_total`` to measure against.
+    The check lane's step is one level's width at the character's rank (#5093), so staff
+    read a check modifier as a share of that width: 0.5 is half a rank for a character at
+    ``at_total``. None when ``at_total`` has no rank on the ladder or the lane has no
+    width to measure against.
     """
     current = CheckRank.get_rank_for_points(at_total)
     if current is None:
         return None
-    upper = CheckRank.objects.filter(rank__gt=current.rank).order_by("rank").first()
-    if upper is None:
+    try:
+        width = level_width(current.rank)
+    except ModifierConfigError:
         return None
-    width = upper.min_points - current.min_points
     if width <= 0:
         return None
     return (Decimal(points) / Decimal(width)).quantize(Decimal("0.01"))

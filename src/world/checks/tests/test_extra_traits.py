@@ -29,10 +29,9 @@ from world.conditions.factories import CapabilityTypeFactory
 from world.conditions.services import get_effective_capability_value
 from world.fatigue.constants import EffortLevel
 from world.progression.models import WeeklySkillUsage
-from world.traits.factories import CheckOutcomeFactory, CheckSystemSetupFactory
+from world.traits.factories import CheckOutcomeFactory, CheckSystemSetupFactory, ensure_check_rank
 from world.traits.models import (
     CharacterTraitValue,
-    CheckRank,
     PointConversionRange,
     ResultChart,
     Trait,
@@ -60,9 +59,7 @@ class ExtraTraitTermTests(TestCase):
             (2, 25, "ET2"),
             (3, 50, "ET3"),
         ]:
-            CheckRank.objects.get_or_create(
-                rank=rank_val, defaults={"min_points": min_pts, "name": name}
-            )
+            ensure_check_rank(rank_val, min_pts, name)
         cls.sheet = CharacterSheetFactory()
         cls.character = cls.sheet.character
         cls.stat, _ = Trait.objects.get_or_create(

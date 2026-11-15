@@ -18,7 +18,8 @@ lifts a check off an impossible chart (one with no Success outcome) like any oth
 
 A difference below the lowest authored chart sits at 0% of that chart's band; one at or
 above the highest authored chart uses that chart as it is. Nothing here is a tuning
-number: every value comes from the ``CheckRank`` and ``ResultChart`` rows.
+number: every value comes from the ``CheckRank`` names, the CHECK lane's level baselines
+(rank N starts at ``baseline(N)``, #5093) and the ``ResultChart`` rows.
 
 The roll itself is one d100 plus a fraction inside the face (``CheckRoll``), so the
 continuous chance of each outcome equals exactly its share of the slid chart, and the
@@ -31,6 +32,7 @@ from dataclasses import dataclass
 import math
 from typing import TYPE_CHECKING
 
+from world.checks.modifier_values import load_baselines
 from world.traits.models import CheckRank, ResultChart, ResultChartOutcome
 
 if TYPE_CHECKING:
@@ -43,18 +45,32 @@ _PERCENT = 100
 
 
 @dataclass(frozen=True)
+class RankStep:
+    """One rung of the ladder: a ``CheckRank``'s name at its baseline threshold (#5093).
+
+    ``min_points`` is derived, not stored: rank N starts at the CHECK lane's level-N
+    baseline, and rank 0 starts at 0.
+    """
+
+    rank: int
+    name: str
+    min_points: int
+
+
+@dataclass(frozen=True)
 class BandPosition:
     """Where a total sits: its check rank and how far it is through that rank's band.
 
     ``share`` is 0 at the rank's own threshold and approaches 1 just below the next
     rank's. At the top rank there is no next rank and the share is 0. A total below every
     rank's threshold has no rank (``rank`` None, counted as rank number 0, as the whole-rank
-    pipeline always did) and ``next_rank`` names the lowest rank.
+    pipeline always did) and ``next_rank`` names the lowest rank. A total between rank 0's
+    threshold and rank 1's is rank 0, with rank 1 next.
     """
 
     points: int
-    rank: CheckRank | None
-    next_rank: CheckRank | None
+    rank: RankStep | None
+    next_rank: RankStep | None
     share: float
 
     @property
@@ -82,13 +98,25 @@ class BandPosition:
         return f"{here}, {self.percent}% toward {self.next_rank.name} (rank {self.next_rank.rank})"
 
 
-def load_ranks() -> list[CheckRank]:
-    """Every ``CheckRank`` row, lowest first: one query, shared by both sides of a check."""
-    return list(CheckRank.objects.order_by("min_points"))
+def load_ranks() -> list[RankStep]:
+    """The ladder, lowest first, shared by both sides of a check.
+
+    Each ``CheckRank`` row joined to the CHECK lane's baselines: rank N's threshold is
+    ``baseline(N)``, and rank 0's is 0. Two queries; none when no ranks are authored.
+    Raises ``ModifierConfigError`` when ranks exist but no baseline row sits at or below one.
+    """
+    rows = list(CheckRank.objects.order_by("rank").values_list("rank", "name"))
+    if not rows:
+        return []
+    baselines = load_baselines()
+    return [
+        RankStep(rank=rank, name=name, min_points=baselines.baseline(rank) if rank > 0 else 0)
+        for rank, name in rows
+    ]
 
 
-def band_position(points: int, ranks: Sequence[CheckRank] | None = None) -> BandPosition:
-    """The band position of ``points`` against the ``CheckRank`` rows."""
+def band_position(points: int, ranks: Sequence[RankStep] | None = None) -> BandPosition:
+    """The band position of ``points`` against the ladder."""
     ranks = load_ranks() if ranks is None else ranks
     if not ranks:
         return BandPosition(points=points, rank=None, next_rank=None, share=0.0)
@@ -272,7 +300,7 @@ def resolve_standing(
     roller_points: int,
     target_points: int,
     *,
-    ranks: Sequence[CheckRank] | None = None,
+    ranks: Sequence[RankStep] | None = None,
 ) -> CheckStanding:
     """Band positions, the slide and the chart for one check, without rolling.
 

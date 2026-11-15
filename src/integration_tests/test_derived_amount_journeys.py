@@ -6,9 +6,10 @@ an input, a "per N" step and a cap; its own amount is the amount per step.
 * Check rank. Corvin haggles at the River Market and holds "+1 Haggling per 2 ranks of
   Athletics, at most +3". Athletics is one stat at weight 1, so with the seeded 1:1 stat
   conversion its rating is his stored stat plus 5 per level, read against the seeded rank
-  ladder (Peerless, rank 6, from 155; Mythic, rank 8, from 250; Novice, rank 1, from 10).
-  Stat 100 at level 11 is 155, rank 6: +3. Stat 100 at level 30 is 250, rank 8: 4 steps,
-  held at +3. Stat 10 at level 1 is 15, rank 1: no whole step, +0.
+  ladder (rank N starts at 18 + 8 x (N - 1): rank 18 from 154, rank 30 from 250, rank 1
+  from 18). Stat 100 at level 11 is 155, rank 18: 9 steps, held at +3. Stat 100 at level 30
+  is 250, rank 30: 15 steps, held at +3. Stat 10 at level 1 is 15, below rank 1 (rank 0):
+  no whole step, +0.
 * Thread level. Hobb charges a bandit (5 damage with no modifier) and holds "+1 Charge
   damage per level of his Wolf thread", which counts each whole 10 thread levels. At
   thread level 30 the charge does 8; with no Wolf thread, 5.
@@ -108,20 +109,20 @@ class ACheckRankDrivesAHaggle(JourneyCase):
         after = perform_check_with_modifiers(corvin, self.haggling, target_difficulty=50)
         return after.total_points - before.total_points
 
-    def test_rank_six_gives_three(self) -> None:
+    def test_rank_eighteen_is_held_at_the_cap(self) -> None:
         self.assertEqual(self.gain(strength=100, level=11), 3)
 
-    def test_rank_eight_is_held_at_the_cap(self) -> None:
+    def test_rank_thirty_is_held_at_the_cap(self) -> None:
         self.assertEqual(self.gain(strength=100, level=30), ATHLETICS_CAP)
 
-    def test_rank_one_is_no_whole_step(self) -> None:
+    def test_rank_zero_is_no_whole_step(self) -> None:
         self.assertEqual(self.gain(strength=10, level=1), 0)
 
     def test_a_rank_row_on_the_stat_its_check_reads_does_not_loop(self) -> None:
         # Written past clean() (a fixture or a script): "+1 strength per 2 Athletics
         # ranks", where Athletics reads strength. The inner read of strength, inside the
         # Athletics rating, counts the row as 0, so the rating is 100 + 5 x 11 = 155, rank
-        # 6, and the outer read adds 3: 103, not a RecursionError.
+        # 18 (starts at 154), and the outer read adds 9: 109, not a RecursionError.
         strength_target = ModifierTargetFactory(
             name="strength",
             category=ModifierCategoryFactory(name="stat"),
@@ -141,7 +142,7 @@ class ACheckRankDrivesAHaggle(JourneyCase):
         _at_level(corvin, 11)
         grant_distinction(corvin.sheet_data, looping, origin=DistinctionOrigin.GM_AWARD)
 
-        self.assertEqual(corvin.traits.get_trait_value(self.strength.name), 103)
+        self.assertEqual(corvin.traits.get_trait_value(self.strength.name), 109)
 
 
 class AThreadAndALevelDriveTheCharge(_WolfFangField):

@@ -14,12 +14,12 @@ if TYPE_CHECKING:
     from actions.types import ActionContext
     from world.assets.models import NPCAsset
     from world.checks.models import CheckType, Consequence
-    from world.checks.slide import CheckStanding
+    from world.checks.slide import CheckStanding, RankStep
     from world.mechanics.models import ChallengeApproach, ChallengeInstance
     from world.missions.models import MissionInstance
     from world.scenes.models import Interaction, Persona, Scene
     from world.stories.models import Beat, Story
-    from world.traits.models import CheckOutcome, CheckRank, ResultChart, Trait
+    from world.traits.models import CheckOutcome, ResultChart, Trait
 
 
 @dataclass(frozen=True)
@@ -66,8 +66,8 @@ class CheckResult:
     check_type: CheckType
     outcome: CheckOutcome | None
     chart: ResultChart | None
-    roller_rank: CheckRank | None
-    target_rank: CheckRank | None
+    roller_rank: RankStep | None
+    target_rank: RankStep | None
     rank_difference: int
     trait_points: int
     aspect_bonus: int

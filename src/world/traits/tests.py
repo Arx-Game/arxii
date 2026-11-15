@@ -22,7 +22,7 @@ from world.distinctions.factories import DistinctionCategoryFactory, Distinction
 from world.distinctions.models import CharacterDistinction, DistinctionEffect
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.mechanics.services import create_distinction_modifiers
-from world.traits.factories import CharacterTraitValueFactory, TraitFactory
+from world.traits.factories import CharacterTraitValueFactory, TraitFactory, ensure_check_rank
 from world.traits.handlers import DefaultTraitValue, TraitHandler
 from world.traits.models import (
     CharacterTraitValue,
@@ -176,10 +176,10 @@ class CheckRankTests(TestCase):
 
     def setUp(self):
         """Set up check ranks."""
-        CheckRank.objects.create(rank=0, min_points=0, name="Incompetent")
-        CheckRank.objects.create(rank=1, min_points=10, name="Novice")
-        CheckRank.objects.create(rank=2, min_points=25, name="Competent")
-        CheckRank.objects.create(rank=3, min_points=50, name="Expert")
+        ensure_check_rank(0, 0, "Incompetent")
+        ensure_check_rank(1, 10, "Novice")
+        ensure_check_rank(2, 25, "Competent")
+        ensure_check_rank(3, 50, "Expert")
 
     def test_get_rank_for_points(self):
         """Test getting rank for point values."""

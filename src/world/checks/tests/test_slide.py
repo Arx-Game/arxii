@@ -1,6 +1,7 @@
 """Band positions and the slide (#4601, slice b of #4551; the pin removed in #4723).
 
-Against the seeded rank ladder (0/10/25/50/80/115/155/200/250) and result charts.
+Against the seeded rank ladder (rank N starts at 18 + 8 x (N - 1) for N from 1 to 30, so
+one level is 8 points wide, #5093) and result charts.
 """
 
 from django.test import TestCase
@@ -40,18 +41,18 @@ class SlideTestBase(TestCase):
 class BandPositionTests(SlideTestBase):
     def test_a_total_sits_part_way_through_its_band(self):
         position = band_position(40)
-        self.assertEqual(position.rank.rank, 2)
-        self.assertAlmostEqual(position.share, 0.6)
-        self.assertEqual(position.text, "Competent (rank 2), 60% toward Expert (rank 3)")
+        self.assertEqual(position.rank.rank, 3)
+        self.assertAlmostEqual(position.share, 0.75)
+        self.assertEqual(position.text, "Competent (rank 3), 75% toward Rank 4 (rank 4)")
 
     def test_a_threshold_total_shows_the_bare_rank(self):
-        self.assertEqual(band_position(50).text, "Expert (rank 3)")
+        self.assertEqual(band_position(34).text, "Competent (rank 3)")
 
     def test_the_top_rank_has_no_next_rank(self):
         position = band_position(400)
-        self.assertEqual(position.rank.rank, 8)
+        self.assertEqual(position.rank.rank, 30)
         self.assertEqual(position.share, 0.0)
-        self.assertEqual(position.text, "Mythic (rank 8)")
+        self.assertEqual(position.text, "Mythic (rank 30)")
 
 
 class SlideTests(SlideTestBase):
@@ -100,38 +101,38 @@ class SlideTests(SlideTestBase):
 
 class StandingTests(SlideTestBase):
     def test_a_check_halfway_through_a_band_slides_halfway(self):
-        # Roller 37.5 points: Competent (rank 2), 50% toward Expert; target Expert (50).
-        standing = resolve_standing(37, 50)
+        # Roller 30 points: rank 2 (starts at 26), 50% toward rank 3; target 34 is rank 3.
+        standing = resolve_standing(30, 34)
         self.assertEqual(standing.chart_difference, -1)
-        self.assertAlmostEqual(standing.share, 12 / 25)
+        self.assertAlmostEqual(standing.share, 0.5)
 
     def test_one_buff_moves_the_odds_inside_a_band(self):
-        plain = resolve_standing(30, 50)
-        buffed = resolve_standing(36, 50)
+        plain = resolve_standing(27, 50)
+        buffed = resolve_standing(31, 50)
         self.assertEqual(plain.chart_difference, buffed.chart_difference)
         self.assertGreater(buffed.slid.at_least(1), plain.slid.at_least(1))
 
     def test_a_pile_of_buffs_lifts_a_check_off_an_impossible_chart(self):
         """#4723: modifiers count in full, so a big enough pile reaches a winnable chart."""
-        # Unbuffed: Novice (rank 1), 67% through, against Mythic (rank 8): -6.33, chart -7.
-        plain = resolve_standing(20, 250)
+        # Unbuffed: rank 1, 25% through, against rank 8 (74): -6.75, chart -7.
+        plain = resolve_standing(20, 74)
         self.assertEqual(plain.chart_difference, -7)
         self.assertEqual(plain.slid.at_least(1), 0)
-        # +120 points: Grandmaster (rank 5), 62.5% through: -2.375, chart -3 slid 62.5%.
-        buffed = resolve_standing(20 + 120, 250)
+        # +34 points: rank 5, 50% through: -2.5, chart -3 slid 50%.
+        buffed = resolve_standing(20 + 34, 74)
         self.assertEqual(buffed.chart_difference, -3)
-        self.assertAlmostEqual(buffed.share, 0.625)
+        self.assertAlmostEqual(buffed.share, 0.5)
         self.assertGreater(buffed.slid.at_least(1), 0)
 
     def test_modifiers_on_the_target_count_in_full(self):
         """A heavily debuffed opponent is rolled against at its debuffed total."""
-        standing = resolve_standing(20, 120)
+        standing = resolve_standing(20, 50)
         self.assertEqual(standing.chart_difference, -4)
         self.assertGreater(standing.slid.at_least(1), 0)
 
     def test_buffs_count_in_full_at_a_three_rank_gap(self):
-        plain = resolve_standing(20, 80)
-        buffed = resolve_standing(120, 80)
+        plain = resolve_standing(26, 50)
+        buffed = resolve_standing(58, 50)
         self.assertGreater(buffed.slid.at_least(1), plain.slid.at_least(1) + 0.3)
 
     def test_below_the_lowest_chart_sits_at_the_bottom_of_its_band(self):
@@ -140,8 +141,8 @@ class StandingTests(SlideTestBase):
         self.assertEqual(standing.share, 0.0)
 
     def test_a_small_buff_slides_within_the_impossible_chart(self):
-        # Incompetent (rank 0) against Mythic (rank 8) is -8.0. +5 points: -7.5.
-        standing = resolve_standing(5, 250)
+        # Rank 0 against rank 8 (74) is -8.0. +9 points is half of rank 0's 18-point band: -7.5.
+        standing = resolve_standing(9, 74)
         self.assertEqual(standing.chart_difference, -8)
         self.assertAlmostEqual(standing.share, 0.5)
 
@@ -151,6 +152,6 @@ class StandingTests(SlideTestBase):
         ResultChart.objects.filter(rank_difference=-8).delete()
         ResultChart.clear_cache()
         # -7.5 is below the lowest chart (-7) once chart -8 is gone.
-        standing = resolve_standing(5, 250)
+        standing = resolve_standing(9, 74)
         self.assertEqual(standing.chart_difference, -7)
         self.assertEqual(standing.share, 0.0)

@@ -338,6 +338,35 @@ def _probe_mfa_secrets_key() -> ProbeResult:
     return ProbeResult(present=True)
 
 
+def _probe_check_level_baselines() -> ProbeResult:
+    """The CHECK lane has a baseline row for every level the ladder reads (#5093).
+
+    The ladder and every bonus read ``ModifierLevelBaseline`` (``level_baseline``,
+    ``level_width``), and a lane with no row at or below a level raises. Levels 1 up to the
+    highest authored row, or the highest ``CheckRank`` when that is higher, must each have
+    a row: a gap reads as a repeated threshold, a rank that starts where the one below it
+    does.
+    """
+    from world.checks.constants import ModifierLane  # noqa: PLC0415
+    from world.checks.modifier_models import ModifierLevelBaseline  # noqa: PLC0415
+    from world.traits.models import CheckRank  # noqa: PLC0415
+
+    present = set(
+        ModifierLevelBaseline.objects.filter(lane=ModifierLane.CHECK).values_list(
+            "level", flat=True
+        )
+    )
+    top_rank = max(CheckRank.objects.values_list("rank", flat=True), default=0)
+    top = max([*present, top_rank])
+    if top == 0:
+        return ProbeResult(present=False, detail="No check-lane ModifierLevelBaseline rows exist.")
+    missing = tuple(f"level {level}" for level in range(1, top + 1) if level not in present)
+    detail = (
+        f"No check-lane ModifierLevelBaseline row for: {', '.join(missing)}." if missing else ""
+    )
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
 def _technique_gap_link(gap: str) -> str | None:
     """The Technique changelist filtered to one authoring gap (#4545).
 
@@ -4271,20 +4300,18 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ContentDependency(
             key="modifier-level-baseline",
             label="Modifier level baselines (check lane)",
-            tier=DependencyTier.TUNING,
+            tier=DependencyTier.REQUIRED,
             consumer=(
-                "world/checks/modifier_values.py level_baseline(): the value table admin "
-                "and the tuning dashboard's modifier pile"
+                "world/checks/modifier_values.py level_baseline() and level_width(): the "
+                "check rank ladder (world/checks/slide.py load_ranks()), the value table "
+                "admin and the tuning dashboard's modifier pile"
             ),
             consequence=(
-                "Staff cannot read a value-table row as a share of a typical total or a "
-                "rank band, and the modifier pile simulator shows nothing."
+                "A check cannot place anyone on the rank ladder and raises a configuration "
+                "error instead of rolling; a gap in the levels repeats a rank threshold."
             ),
-            probe=FilteredRowProbe(
-                label="ModifierLevelBaseline",
-                filters=(("lane", "check"),),
-                absent_detail="No check-lane ModifierLevelBaseline rows exist.",
-            ),
+            probe=CustomProbe(fn=_probe_check_level_baselines),
+            admin_model="ModifierLevelBaseline",
         ),
         ContentDependency(
             key="modifier-taper",

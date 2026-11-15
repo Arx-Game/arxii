@@ -22,10 +22,9 @@ from world.skills.factories import (
     SpecializationFactory,
 )
 from world.skills.services import get_specialization_value, has_specialization
-from world.traits.factories import CheckSystemSetupFactory
+from world.traits.factories import CheckSystemSetupFactory, ensure_check_rank
 from world.traits.models import (
     CharacterTraitValue,
-    CheckRank,
     PointConversionRange,
     ResultChart,
     Trait,
@@ -47,9 +46,7 @@ class SpecializationInCheckTests(TestCase):
                 defaults={"max_value": 100, "points_per_level": 1},
             )
         for rank_val, min_pts, name in [(0, 0, "S0"), (1, 10, "S1"), (2, 25, "S2"), (3, 50, "S3")]:
-            CheckRank.objects.get_or_create(
-                rank=rank_val, defaults={"min_points": min_pts, "name": name}
-            )
+            ensure_check_rank(rank_val, min_pts, name)
         cls.character = CharacterSheetFactory().character
         cls.charm, _ = Trait.objects.get_or_create(
             name="spec_test_charm",

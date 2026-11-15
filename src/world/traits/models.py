@@ -22,6 +22,7 @@ from world.contributors.models import CreditedContent
 from world.roster.models import RosterTenure
 
 if TYPE_CHECKING:
+    from world.checks.slide import RankStep
     from world.skills.models import Specialization
 
 
@@ -512,19 +513,18 @@ class PointConversionRange(NaturalKeyMixin, SharedMemoryModel):
 
 class CheckRank(NaturalKeyMixin, SharedMemoryModel):
     """
-    Maps point totals to rank levels for check resolution.
+    A named rank of the check ladder (#5093: a rank means the level someone acts at).
 
-    Thresholds widen with rank (seeded 0/10/25/50/80/115/155/200/250); they are not
-    exponential. A total's place inside its rank's band is its band position
-    (``world.checks.slide.band_position``, #4601).
+    The row holds only the rank number and its name. Rank N starts at the CHECK lane's
+    level-N baseline total (``ModifierLevelBaseline``) and rank 0 at 0, so the thresholds
+    are rows staff tune in one place, not a second copy here. A total's place inside its
+    rank's band is its band position (``world.checks.slide.band_position``, #4601).
     """
 
     rank = models.SmallIntegerField(
         unique=True,
-        help_text="Rank level (0 = weakest, higher = stronger)",
-    )
-    min_points = models.PositiveIntegerField(
-        help_text="Minimum points needed to achieve this rank",
+        help_text="Rank level (0 = weakest, higher = stronger). Rank N starts at the level-N "
+        "check baseline.",
     )
     name = models.CharField(
         max_length=50,
@@ -544,27 +544,39 @@ class CheckRank(NaturalKeyMixin, SharedMemoryModel):
         ordering: ClassVar[list[str]] = ["rank"]
         indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["rank"]),
-            models.Index(fields=["min_points"]),
         ]
 
     def __str__(self) -> str:
-        return f"Rank {self.rank}: {self.name} ({self.min_points}+ pts)"
+        return f"Rank {self.rank}: {self.name}"
 
     @classmethod
-    def get_rank_for_points(cls, points: int) -> Optional["CheckRank"]:
-        """Get the highest rank achievable with the given points."""
-        return cls.objects.filter(min_points__lte=points).order_by("-rank").first()
+    def get_rank_for_points(cls, points: int) -> Optional["RankStep"]:
+        """The highest rung of the ladder the given points reach, or None below the ladder."""
+        from world.checks.slide import load_ranks
+
+        return cls._rank_in(load_ranks(), points)
 
     @classmethod
     def get_rank_difference(cls, roller_points: int, target_points: int) -> int:
         """Calculate rank difference between roller and target."""
-        roller_rank = cls.get_rank_for_points(roller_points)
-        target_rank = cls.get_rank_for_points(target_points)
+        from world.checks.slide import load_ranks
+
+        ranks = load_ranks()
+        roller_rank = cls._rank_in(ranks, roller_points)
+        target_rank = cls._rank_in(ranks, target_points)
 
         if not roller_rank or not target_rank:
             return 0
 
         return roller_rank.rank - target_rank.rank
+
+    @staticmethod
+    def _rank_in(ranks: "list[RankStep]", points: int) -> Optional["RankStep"]:
+        reached = None
+        for step in ranks:
+            if step.min_points <= points:
+                reached = step
+        return reached
 
 
 class CheckOutcome(NaturalKeyMixin, SharedMemoryModel):

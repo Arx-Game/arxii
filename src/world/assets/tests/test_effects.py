@@ -23,8 +23,8 @@ from world.npc_services.effects import dispatch_offer_effect
 from world.npc_services.factories import FunctionaryFactory, NPCServiceOfferFactory
 from world.npc_services.functionaries import functionaries_in_room
 from world.scenes.services import persona_for_character
-from world.traits.factories import CheckOutcomeFactory
-from world.traits.models import CheckRank, ResultChart, ResultChartOutcome
+from world.traits.factories import CheckOutcomeFactory, ensure_check_rank
+from world.traits.models import ResultChart, ResultChartOutcome
 
 
 class PromoteFunctionaryEffectTests(EvenniaTestCase):
@@ -204,12 +204,8 @@ class PromotionCapabilityModifierEffectTests(EvenniaTestCase):
         # is pinned at rank 1's threshold, so: capability_points=0 -> rank 0 ->
         # rank_difference -1 -> guaranteed-failure chart; capability_points=10
         # -> rank 1 -> rank_difference 0 -> guaranteed-success chart.
-        CheckRank.objects.get_or_create(
-            rank=0, defaults={"min_points": 0, "name": "AssetPromoCapabilityNone"}
-        )
-        CheckRank.objects.get_or_create(
-            rank=1, defaults={"min_points": 10, "name": "AssetPromoCapabilityReady"}
-        )
+        ensure_check_rank(0, 0, "AssetPromoCapabilityNone")
+        ensure_check_rank(1, 10, "AssetPromoCapabilityReady")
         failure_outcome = CheckOutcomeFactory(name="Capability Promo Failure", success_level=-1)
         success_outcome = CheckOutcomeFactory(name="Capability Promo Success", success_level=1)
         below_chart, _ = ResultChart.objects.get_or_create(
@@ -316,12 +312,8 @@ class TechniqueSourcedPromotionCapabilityModifierEffectTests(EvenniaTestCase):
 
         # Same rank/chart pipeline as the base class: rank 1 requires 10+ capability
         # points; weight 2.0 * calculate_value()==5 == 10, matching exactly.
-        CheckRank.objects.get_or_create(
-            rank=0, defaults={"min_points": 0, "name": "AssetPromoCapabilityNone"}
-        )
-        CheckRank.objects.get_or_create(
-            rank=1, defaults={"min_points": 10, "name": "AssetPromoCapabilityReady"}
-        )
+        ensure_check_rank(0, 0, "AssetPromoCapabilityNone")
+        ensure_check_rank(1, 10, "AssetPromoCapabilityReady")
         failure_outcome = CheckOutcomeFactory(
             name="Technique Capability Promo Failure", success_level=-1
         )

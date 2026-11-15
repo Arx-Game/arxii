@@ -106,7 +106,7 @@ class PointConversionRangeAdmin(admin.ModelAdmin):
 
 @admin.register(CheckRank)
 class CheckRankAdmin(admin.ModelAdmin):
-    list_display = ["rank", "name", "min_points"]
+    list_display = ["rank", "name"]
     ordering = ["rank"]
 
 

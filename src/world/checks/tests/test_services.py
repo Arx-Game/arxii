@@ -33,10 +33,9 @@ from world.conditions.factories import CapabilityTypeFactory
 from world.fatigue.constants import EffortLevel
 from world.progression.models import CharacterPathHistory, DevelopmentPoints, WeeklySkillUsage
 from world.progression.services.skill_development import calculate_check_dev_points
-from world.traits.factories import CheckSystemSetupFactory
+from world.traits.factories import CheckSystemSetupFactory, ensure_check_rank
 from world.traits.models import (
     CharacterTraitValue,
-    CheckRank,
     PointConversionRange,
     ResultChart,
     Trait,
@@ -343,10 +342,7 @@ class PerformCheckTests(TestCase):
             (2, 25, "TestCompetent"),
             (3, 50, "TestExpert"),
         ]:
-            CheckRank.objects.get_or_create(
-                rank=rank_val,
-                defaults={"min_points": min_pts, "name": name},
-            )
+            ensure_check_rank(rank_val, min_pts, name)
         cls.character = CharacterSheetFactory().character
         cls.strength, _ = Trait.objects.get_or_create(
             name="check_test_strength",
@@ -420,10 +416,7 @@ class PerformCheckEffortFatigueTests(TestCase):
             (2, 25, "EffortCompetent"),
             (3, 50, "EffortExpert"),
         ]:
-            CheckRank.objects.get_or_create(
-                rank=rank_val,
-                defaults={"min_points": min_pts, "name": name},
-            )
+            ensure_check_rank(rank_val, min_pts, name)
         cls.character = CharacterSheetFactory().character
         cls.strength, _ = Trait.objects.get_or_create(
             name="effort_test_strength",
@@ -557,10 +550,7 @@ class PreviewCheckDifficultyTests(TestCase):
             (2, 25, "PrevCompetent"),
             (3, 50, "PrevExpert"),
         ]:
-            CheckRank.objects.get_or_create(
-                rank=rank_val,
-                defaults={"min_points": min_pts, "name": name},
-            )
+            ensure_check_rank(rank_val, min_pts, name)
         cls.character = CharacterSheetFactory().character
         cls.strength, _ = Trait.objects.get_or_create(
             name="preview_strength",
@@ -752,10 +742,7 @@ class PerformCheckDevelopmentAwardTests(TestCase):
             (2, 25, "DpEffortCompetent"),
             (3, 50, "DpEffortExpert"),
         ]:
-            CheckRank.objects.get_or_create(
-                rank=rank_val,
-                defaults={"min_points": min_pts, "name": name},
-            )
+            ensure_check_rank(rank_val, min_pts, name)
         cls.sheet = CharacterSheetFactory()
         cls.character = cls.sheet.character
         cls.trait, _ = Trait.objects.get_or_create(

@@ -46,18 +46,18 @@ class ModifierRowReadersTests(TestCase):
         ModifierValue.objects.create(
             lane=ModifierLane.CHECK, level=6, size=ModifierSize.LARGE, value=10
         )
-        ModifierLevelBaseline.objects.create(lane=ModifierLane.CHECK, level=1, baseline=18)
-        ModifierLevelBaseline.objects.create(lane=ModifierLane.CHECK, level=6, baseline=58)
+        for level in range(1, 7):
+            ModifierLevelBaseline.objects.create(
+                lane=ModifierLane.CHECK, level=level, baseline=18 + 8 * (level - 1)
+            )
         ModifierTaper.objects.create(
             lane=ModifierLane.CHECK,
             source_kind=ModifierSourceKind.CONDITION,
             ratio=Decimal("0.8750"),
             floor=Decimal("0.6667"),
         )
-        for rank, min_points, name in ((2, 25, "Competent"), (3, 50, "Expert"), (4, 80, "Master")):
-            CheckRank.objects.get_or_create(
-                rank=rank, defaults={"min_points": min_points, "name": name}
-            )
+        for rank in range(2, 7):
+            CheckRank.objects.create(rank=rank, name=f"Rank {rank}")
 
     def test_the_value_table_loads_in_one_query(self) -> None:
         with self.assertNumQueries(1):
@@ -71,13 +71,13 @@ class ModifierRowReadersTests(TestCase):
         self.assertEqual(set(rules), {ModifierSourceKind.CONDITION})
         self.assertEqual(rules[ModifierSourceKind.CONDITION].ratio, Decimal("0.8750"))
 
-    def test_level_baseline_steps(self) -> None:
-        self.assertEqual(level_baseline(4), 18)
+    def test_level_baseline_reads_its_row_and_reuses_the_top_one_above_it(self) -> None:
+        self.assertEqual(level_baseline(4), 42)
         self.assertEqual(level_baseline(9), 58)
 
-    def test_rank_band_share_reads_a_value_in_ranks(self) -> None:
-        # 58 sits in Expert (50 to 80): a band of 30, so 10 points is a third of a rank.
-        self.assertEqual(rank_band_share(10, 58), Decimal("0.33"))
+    def test_rank_band_share_reads_a_value_in_level_widths(self) -> None:
+        # 58 is rank 6, whose level width is 8: 4 points is half a rank.
+        self.assertEqual(rank_band_share(4, 58), Decimal("0.50"))
 
 
 class PipelineTaperTests(TestCase):

@@ -29,7 +29,6 @@ from world.progression.services.skill_development import (
 from world.traits.constants import PrimaryStat
 from world.traits.models import (
     CheckOutcome,
-    CheckRank,
     PointConversionRange,
     ResultChart,
     ResultChartOutcome,
@@ -44,6 +43,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType, CheckTypeCapabilityModifier, Consequence
+    from world.checks.slide import RankStep
     from world.checks.types import ExtraTraitTerm, RollSnapshot
     from world.covenants.models import VowSituationalPerk
     from world.covenants.perks.context import SituationContext
@@ -443,8 +443,8 @@ class _CheckBreakdown(NamedTuple):
     level_points: int
     capability_points: int
     total_points: int
-    roller_rank: "CheckRank | None"
-    target_rank: "CheckRank | None"
+    roller_rank: "RankStep | None"
+    target_rank: "RankStep | None"
     rank_difference: int
     chart: "ResultChart | None"
     standing: CheckStanding

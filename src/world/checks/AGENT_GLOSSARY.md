@@ -5,11 +5,11 @@ A named, database-defined check (Stealth, Diplomacy, Composure, Penetration) com
 _Avoid_: skill check, roll type, test
 
 **CheckRank**:
-A lookup table mapping a point total to a discrete rank level by point thresholds (0/10/25/50/80/115/155/200/250 seeded; they widen with rank but are not exponential). Both the roller's points and the target difficulty are converted to ranks with band positions, and the fractional rank difference selects the chart and how far it slides. Shown with its number: Expert (rank 3).
+The level someone is acting at (#5093). A `CheckRank` row holds only the rank number and its name; rank N starts at the CHECK lane's level-N baseline total (`ModifierLevelBaseline`), and rank 0 starts at 0. Both the roller's points and the target difficulty are converted to ranks with band positions, and the fractional rank difference selects the chart and how far it slides. Shown with its number: Expert (rank 6).
 _Avoid_: tier, grade, rank band
 
 **Band position** (#4601):
-How far a total sits through its check rank's band, as a share: 40 points is Competent (rank 2), 60% toward Expert (rank 3). 0 at the rank's own threshold; 0 at the top rank. Both the roller's total and the difficulty have one (`world.checks.slide.band_position`), and result text shows it ("Expert (rank 3), 67% toward Master (rank 4)").
+How far a total sits through its check rank's band, as a share: with the seeded baselines, 40 points is Competent (rank 3), 75% toward rank 4. 0 at the rank's own threshold; 0 at the top rank. Both the roller's total and the difficulty have one (`world.checks.slide.band_position`), and result text shows it ("Master (rank 10), 38% toward Rank 11 (rank 11)").
 _Avoid_: progress, fraction of a rank, partial rank
 
 **Slide** (#4601):
@@ -199,6 +199,10 @@ The `ModifierValue` rows: what a modifier of each size is worth at each level, i
 and percentage points for the damage, to-hit and partial protection lanes, #4876). Sparse rows read as steps: a level reads the row at the highest
 authored level at or below it. The value is a magnitude; the authored modifier keeps its sign.
 _Avoid_: buff table, modifier curve
+
+**Level width** (#5093):
+The gap between one level's baseline and the next: `level_width(level, lane)` in `world.checks.modifier_values`. At or above the top authored level it reuses the top row's width. It is the unit a bonus is sized in (a share of one level), and the width of a rank band on the check lane.
+_Avoid_: level step, rank size
 
 **Level baseline** (#4594):
 The `ModifierLevelBaseline` rows: the typical total a character of each level reaches in a lane.

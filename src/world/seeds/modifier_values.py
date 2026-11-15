@@ -32,14 +32,13 @@ from world.checks.constants import ModifierLane, ModifierSize, ModifierSourceKin
 from world.checks.modifier_models import ModifierLevelBaseline, ModifierTaper, ModifierValue
 from world.magic.models.modifier_level import CastOutcomeLevelShift, CastPowerLevel
 
-# Typical check total of a character of each level on a check in their field.
-_LEVEL_BASELINES: tuple[tuple[int, int], ...] = (
-    (1, 18),
-    (6, 58),
-    (11, 98),
-    (16, 138),
-    (21, 178),
-    (26, 218),
+# Typical check total of a character of each level on a check in their field (#5093): one
+# row per level 1-30, 18 at level 1 and 8 more each level. These rows are the rank ladder
+# (rank N starts at level N's baseline) and each level's width is the step between rows.
+_LEVEL_BASELINE_START = 18
+_LEVEL_BASELINE_STEP = 8
+_LEVEL_BASELINES: tuple[tuple[int, int], ...] = tuple(
+    (level, _LEVEL_BASELINE_START + _LEVEL_BASELINE_STEP * (level - 1)) for level in range(1, 31)
 )
 
 # A Large modifier's value at each level; the other sizes are shares of it. Paramount rows
@@ -151,13 +150,22 @@ def _seed_effect_lanes() -> None:
             )
 
 
-def seed_modifier_value_tables() -> None:
-    """Create the example check, stat and maneuver effect lane rows and cast-level rows,
-    if missing."""
+def seed_check_level_baselines() -> None:
+    """Create the CHECK lane's dense level baseline rows (levels 1-30), if missing.
+
+    The rank ladder and every level width read these rows, so ``seed_check_resolution_tables``
+    seeds them with the ranks.
+    """
     for level, baseline in _LEVEL_BASELINES:
         ModifierLevelBaseline.objects.get_or_create(
             lane=ModifierLane.CHECK, level=level, defaults={"baseline": baseline}
         )
+
+
+def seed_modifier_value_tables() -> None:
+    """Create the example check, stat and maneuver effect lane rows and cast-level rows,
+    if missing."""
+    seed_check_level_baselines()
     for level, large in _LARGE_VALUES:
         for size, share in _SIZE_SHARES:
             ModifierValue.objects.get_or_create(

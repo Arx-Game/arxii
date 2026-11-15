@@ -22,8 +22,8 @@ from world.checks.types import (
 | `check_type` | `CheckType` | The check type that was resolved |
 | `outcome` | `CheckOutcome \| None` | The resolved outcome |
 | `chart` | `ResultChart \| None` | The result chart used |
-| `roller_rank` | `CheckRank \| None` | Roller's rank |
-| `target_rank` | `CheckRank \| None` | Target's rank |
+| `roller_rank` | `RankStep \| None` | Roller's rank (a `CheckRank` name at its baseline threshold, #5093) |
+| `target_rank` | `RankStep \| None` | Target's rank |
 | `rank_difference` | `int` | Whole rank difference of the chart the roll used (#4601: the floor of the fractional difference) |
 | `trait_points` | `int` | Points from weighted traits |
 | `aspect_bonus` | `int` | Bonus from path aspects |
@@ -38,7 +38,7 @@ from world.checks.types import (
 result.outcome_name   # str: outcome name or "Unknown"
 result.success_level  # int: outcome success_level or 0
 result.chart_name     # str: chart name or "No Chart Found"
-result.rank_text      # str: "Expert (rank 3), 67% toward Master (rank 4)" (#4601)
+result.rank_text      # str: "Master (rank 10), 38% toward Rank 11 (rank 11)" (#4601, #5093)
 result.target_rank_text  # str: the target's rank with number and band position
 result.standing_text  # str: "<roller> against <target>", each with band position
 ```
@@ -79,13 +79,17 @@ pages in `admin.py`. Example values are in `world/seeds/modifier_values.py` (clu
 | Model | Purpose | Key fields |
 |-------|---------|------------|
 | `ModifierValue` | The value table: what a modifier of `size` is worth at `level`, in the lane's units. Sparse rows read as steps (highest authored level at or below the modifier's). A magnitude; the authored modifier keeps its sign | `lane`, `level`, `size` (`ModifierSize`), `value`; unique (`lane`, `level`, `size`) |
-| `ModifierLevelBaseline` | The typical total at each level in a lane; the value admin and the tuning dashboard read a value as a share of it and of its rank band | `lane`, `level`, `baseline`; unique (`lane`, `level`) |
+| `ModifierLevelBaseline` | The typical total at each level in a lane, one row per level (the seed writes levels 1-30). On the check lane these rows ARE the rank ladder (rank N starts at the level-N baseline) and the gap between two levels is one level's width (#5093) | `lane`, `level`, `baseline`; unique (`lane`, `level`) |
 | `ModifierTaper` | Which source kinds taper in a lane: each further modifier of the kind counts `ratio` of the one before, never below `floor` | `lane`, `source_kind` (`ModifierSourceKind`), `ratio`, `floor`; unique (`lane`, `source_kind`) |
 
 Readers (`modifier_values.py`): `load_value_table(lane) -> ValueTable` (one query;
 `ValueTable.value(level, size) -> int | None`), `load_taper_rules(lane) -> dict[str, TaperRule]`
-(one query), `level_baseline(level, lane) -> int | None`, `rank_band_share(points, at_total) ->
-Decimal | None` (points as a share of the `CheckRank` band `at_total` sits in).
+(one query), `load_baselines(lane) -> BaselineTable` (one query; `.baseline(level)` is the level's
+row or the highest row below it, `.width(level)` is `baseline(level + 1) - baseline(level)`, and at or
+above the top row the top row's width; both raise `ModifierConfigError`, `world/checks/exceptions.py`,
+when no row sits at or below the level), `level_baseline(level, lane)` and `level_width(level, lane)`
+(thin wrappers), `rank_band_share(points, at_total) -> Decimal | None` (points as a share of one
+level's width at the rank `at_total` reaches). The required-content probe names a missing level.
 
 `ModifierContribution` carries `level`, `size` and `vow_part` (the untapered vow share: the
 equipment walk's vow terms, #4628, and a vowed caster's size step on a buff, #4747). `ModifierBreakdown(contributions, tapers)` counts each tapered kind's
@@ -462,7 +466,7 @@ term would double-count it. See ADR-0166.
    previous, never below 2/3, when ModifierTaper rows exist)
 
 4. Band positions and the slide (#4601, world/checks/slide.py resolve_standing):
-   each total -> its CheckRank and band position (rank number + share of the band)
+   each total -> its rank (from the CHECK baselines) and band position (rank number + share)
    difference = roller position - target position (fractional)
    chart = floor(difference), slid by the remainder toward the next chart
    (both totals count every point, modifiers included; #4723 removed the hopeless pin)
@@ -571,9 +575,12 @@ anything below -8 resolves to chart -8 (there is no clamp).
 `preview_check_difficulty`, the outcome wheel and the tuning dashboard all read it.
 
 - **Band position** (`band_position(points)`): the rank a total reaches and how far it is
-  through that rank's band, from the `CheckRank` rows. 40 points is "Competent (rank 2),
-  60% toward Expert (rank 3)". The top rank has no next rank (share 0); a total below
-  every threshold has no rank and counts as rank number 0, as before.
+  through that rank's band. `load_ranks()` builds the ladder (`RankStep(rank, name, min_points)`)
+  from the `CheckRank` names joined to the CHECK lane's baselines: rank N starts at
+  `baseline(N)`, rank 0 at 0 (#5093; `CheckRank.min_points` is gone). With the seeded baselines
+  (18 + 8 x (level - 1)), 40 points is "Competent (rank 3), 75% toward Rank 4 (rank 4)". The top
+  rank has no next rank (share 0); 5 points is rank 0 with rank 1 next; a total below rank 0
+  (negative) has no rank and counts as rank number 0.
 - **Fractional difference.** Roller position minus target position. The whole part picks
   the chart; the remainder is how far it slides toward the next.
 - **The slide** (`slide_chart`): each "at least X" chance of the chart's own outcomes moves
