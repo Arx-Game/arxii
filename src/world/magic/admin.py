@@ -74,6 +74,11 @@ from world.magic.models import (
     GlimpseTag,
     ImbuingProseTemplate,
     IntensityTier,
+    KindledDeedAward,
+    KindledStrengthTier,
+    Kindling,
+    KindlingConfig,
+    KindlingSituation,
     KnownUltimate,
     LevelPowerConfig,
     MagicActivitySkill,
@@ -88,6 +93,8 @@ from world.magic.models import (
     PortalAnchorKind,
     PoseEndorsement,
     PriceComponentRequirement,
+    RallyKindlingStrength,
+    Reflection,
     Reincarnation,
     RelationshipBondPullTuning,
     Resonance,
@@ -105,6 +112,7 @@ from world.magic.models import (
     SanctumHomecomingGainAward,
     SanctumPurgingRetentionAward,
     SceneEntryEndorsement,
+    SettlingRite,
     SignatureMotifBonus,
     SignatureMotifBonusAppliedCondition,
     SignatureMotifBonusDamageProfile,
@@ -173,10 +181,53 @@ from world.magic.specialization.models import (
 )
 
 
+class KindlingSituationInline(admin.TabularInline):
+    """What kindles a resonance, or every resonance of an affinity (#5124, Screen 8).
+
+    The columns are the vow perk situation columns (the same ``SituationCheck`` reads them),
+    then the strength rank and the reason a player reads. A used row cannot be deleted:
+    clear ``is_active`` to retire it.
+    """
+
+    model = KindlingSituation
+    extra = 1
+    verbose_name = "kindling situation"
+    verbose_name_plural = "What kindles it"
+    fields = [
+        "situation",
+        "threshold_percent",
+        "count_threshold",
+        "affinity",
+        "origin_side",
+        "condition_property",
+        "mission_theme",
+        "enemies_only",
+        "strength",
+        "is_active",
+        "display_order",
+        "reason_text",
+    ]
+    autocomplete_fields = ["affinity", "condition_property", "mission_theme"]
+
+
+class ResonanceKindlingSituationInline(KindlingSituationInline):
+    """The situations authored on one resonance."""
+
+    fk_name = "resonance"
+
+
+class AffinityKindlingSituationInline(KindlingSituationInline):
+    """The situations that count for every resonance of one affinity."""
+
+    fk_name = "for_affinity"
+    verbose_name_plural = "What kindles every resonance of this affinity"
+
+
 @admin.register(Affinity)
 class AffinityAdmin(admin.ModelAdmin):
     list_display = ["name", "corruption_coefficient", "burn_value", "description"]
     search_fields = ["name"]
+    inlines = [AffinityKindlingSituationInline]
 
 
 @admin.register(Resonance)
@@ -188,6 +239,8 @@ class ResonanceAdmin(admin.ModelAdmin):
     search_fields = ["name"]
     list_select_related = ["affinity", "opposite"]
     readonly_fields = ["get_gifts", "get_connections"]
+    autocomplete_fields = ["feeling"]
+    inlines = [ResonanceKindlingSituationInline]
 
     @admin.display(description="Opposite")
     def get_opposite(self, obj: Resonance) -> str:
@@ -3119,7 +3172,14 @@ class DriftConfigAdmin(admin.ModelAdmin):
 class DriftCorrectionConfigAdmin(admin.ModelAdmin):
     """The drift correction tuning singleton (#4733)."""
 
-    list_display = ("id", "rite", "check_type", "check_difficulty", "cap_percent")
+    list_display = (
+        "id",
+        "rite",
+        "check_type",
+        "check_difficulty",
+        "cap_percent",
+        "disown_deed_percent",
+    )
     list_select_related = ("rite", "check_type")
     autocomplete_fields = ("rite", "check_type")
 
@@ -3165,3 +3225,171 @@ class DriftConversionOfferAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
+
+
+# ---------------------------------------------------------------------------
+# Kindled resonances (#5124): the Kindling config page and the rows play writes
+# ---------------------------------------------------------------------------
+
+
+class KindledStrengthTierForm(forms.ModelForm):
+    """The strength row's form, with the rename note staff are told on this page."""
+
+    class Meta:
+        model = KindledStrengthTier
+        fields = "__all__"  # noqa: DJ007 - the admin shows every authored column
+        help_texts = {
+            "name": "Staff can rename each strength. Code only knows the order (rank).",
+            "min_bond_tier": (
+                "A thread-anchor bond at or above this tier reaches the strength. "
+                "0 means the strength is not reached this way."
+            ),
+            "min_severity": (
+                "A feeling condition at or above this severity reaches the strength. "
+                "0 means the strength is not reached this way."
+            ),
+        }
+
+
+@admin.register(KindledStrengthTier)
+class KindledStrengthTierAdmin(admin.ModelAdmin):
+    """What each kindled strength is called, what reaches it and what it gives (#5124).
+
+    One row per strength so the gains follow a curve, not a fixed step per point. The game
+    only knows the order; staff rename and tune. The changelist edits every number in place.
+    """
+
+    form = KindledStrengthTierForm
+    list_display = [
+        "rank",
+        "name",
+        "min_bond_tier",
+        "min_severity",
+        "pull_levels",
+        "give_in_max_depth",
+        "give_in_bonus_percent",
+        "give_in_ease",
+        "dig_deep_scale_percent",
+        "earn_percent",
+    ]
+    list_display_links = ["rank"]
+    list_editable = [
+        "name",
+        "min_bond_tier",
+        "min_severity",
+        "pull_levels",
+        "give_in_max_depth",
+        "give_in_bonus_percent",
+        "give_in_ease",
+        "dig_deep_scale_percent",
+        "earn_percent",
+    ]
+    search_fields = ["name"]
+
+    def changelist_view(self, request: HttpRequest, extra_context: dict | None = None):
+        """Tell staff on the list itself what the rows are (the list has no help text)."""
+        if request.method == "GET" and not request.GET.get("_popup"):
+            messages.info(
+                request,
+                "Staff can rename each strength and tune its numbers; the game only knows "
+                "their order. A reach column of 0 means the strength is not reached that way.",
+            )
+        return super().changelist_view(request, extra_context)
+
+
+@admin.register(KindlingConfig)
+class KindlingConfigAdmin(admin.ModelAdmin):
+    """The singleton Kindling config (#5124): the harm property."""
+
+    list_display = ["__str__", "harm_property"]
+    list_select_related = ["harm_property"]
+    autocomplete_fields = ["harm_property"]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        """This is a pk=1 singleton: one row only."""
+        return not KindlingConfig.objects.exists() and super().has_add_permission(request)
+
+    def has_delete_permission(self, request: HttpRequest, obj: object = None) -> bool:  # noqa: ARG002
+        return False
+
+
+@admin.register(KindledDeedAward)
+class KindledDeedAwardAdmin(admin.ModelAdmin):
+    """Resonance a kindled deed earns per roll result, before the strength's share (#5124)."""
+
+    list_display = ["outcome_tier", "amount"]
+    list_editable = ["amount"]
+    list_select_related = ["outcome_tier"]
+
+
+@admin.register(RallyKindlingStrength)
+class RallyKindlingStrengthAdmin(admin.ModelAdmin):
+    """The strength a Rally kindles at per roll result; no row kindles nothing (#5124)."""
+
+    list_display = ["outcome_tier", "strength"]
+    list_editable = ["strength"]
+    list_select_related = ["outcome_tier"]
+
+
+class PlayRowAdmin(admin.ModelAdmin):
+    """Rows play writes (#5124): staff inspect them, nobody adds, edits or deletes by hand."""
+
+    def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj: object = None) -> bool:  # noqa: ARG002
+        return False
+
+    def has_delete_permission(self, request: HttpRequest, obj: object = None) -> bool:  # noqa: ARG002
+        return False
+
+
+@admin.register(Kindling)
+class KindlingAdmin(PlayRowAdmin):
+    """A kindling a Rally or a GM wrote for the length of a fight or scene (#5124)."""
+
+    list_display = [
+        "id",
+        "character_sheet",
+        "resonance",
+        "strength",
+        "source",
+        "encounter",
+        "scene",
+        "kindled_by",
+        "created_at",
+    ]
+    list_filter = ["source", "strength", "resonance"]
+    list_select_related = ["character_sheet", "resonance", "encounter", "scene", "kindled_by"]
+    raw_id_fields = ["character_sheet", "kindled_by", "scene", "encounter"]
+    date_hierarchy = "created_at"
+
+
+@admin.register(Reflection)
+class ReflectionAdmin(PlayRowAdmin):
+    """What a piece of writing reflects on, and Embrace or Disown (#5124)."""
+
+    list_display = [
+        "id",
+        "character_sheet",
+        "choice",
+        "resonance",
+        "grant",
+        "rite",
+        "created_at",
+    ]
+    list_filter = ["choice", "resonance"]
+    list_select_related = ["character_sheet", "resonance", "grant", "rite"]
+    raw_id_fields = ["character_sheet", "grant", "interaction", "journal_entry", "rite"]
+    date_hierarchy = "created_at"
+
+
+@admin.register(SettlingRite)
+class SettlingRiteAdmin(PlayRowAdmin):
+    """One performed rite of settling: where, the roll's outcome and its share (#5124)."""
+
+    list_display = ["id", "character_sheet", "scene", "outcome", "share", "performed_at"]
+    list_filter = ["outcome"]
+    list_select_related = ["character_sheet", "scene", "outcome"]
+    raw_id_fields = ["character_sheet", "scene"]
+    date_hierarchy = "performed_at"

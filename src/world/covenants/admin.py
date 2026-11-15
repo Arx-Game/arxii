@@ -255,7 +255,7 @@ class VowSituationalPerkSituationInline(admin.TabularInline):
     model = VowSituationalPerkSituation
     formset = PerkSituationFormSet
     extra = 1
-    autocomplete_fields = ("condition_property",)
+    autocomplete_fields = ("condition_property", "mission_theme")
 
 
 class VowSituationalPerkRungInline(admin.TabularInline):
@@ -264,7 +264,7 @@ class VowSituationalPerkRungInline(admin.TabularInline):
     model = VowSituationalPerkRung
     formset = OneRowPerFormSet
     extra = 0
-    autocomplete_fields = ("condition_property",)
+    autocomplete_fields = ("condition_property", "mission_theme")
 
 
 class VowSituationalPerkForm(forms.ModelForm):
@@ -482,6 +482,7 @@ class VowAddedEffectAdmin(admin.ModelAdmin):
         "upgrades",
         "focus_pick",
         "condition_property",
+        "mission_theme",
     )
     inlines = [
         VowAddedEffectAppliedConditionInline,
