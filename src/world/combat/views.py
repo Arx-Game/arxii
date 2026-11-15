@@ -1286,6 +1286,7 @@ class CombatEncounterViewSet(ModelViewSet):
         detail=True,
         methods=[HTTPMethod.GET],
         url_path="rally-resonances",
+        # One ally's resonances: a short list bounded by what one character holds.
         pagination_class=None,
         filter_backends=[],
     )
@@ -1295,7 +1296,7 @@ class CombatEncounterViewSet(ModelViewSet):
         Names and a kindled flag, never how strongly. Read for the ally the rallier has
         picked, so the polled encounter payload carries no kindling evaluation. Only an active
         fighter may ask, only about another active fighter, and never in a PvP duel, where
-        the other fighter is the opponent.
+        the other fighter is the opponent. A finished fight returns nothing, as a duel does.
         """
         encounter = self.get_object()
         participant = self._get_participant(request, encounter)
@@ -1310,7 +1311,8 @@ class CombatEncounterViewSet(ModelViewSet):
             encounter=encounter,
             status=ParticipantStatus.ACTIVE,
         )
-        if ally.pk == participant.pk or encounter.encounter_type == EncounterType.DUEL:
+        finished = encounter.status == RoundStatus.COMPLETED
+        if ally.pk == participant.pk or finished or encounter.encounter_type == EncounterType.DUEL:
             return Response([])
         return Response(
             RallyResonanceChoiceSerializer(rally_resonance_choices(ally), many=True).data

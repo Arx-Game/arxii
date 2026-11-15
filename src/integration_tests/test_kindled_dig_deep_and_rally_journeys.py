@@ -32,6 +32,7 @@ from world.magic.factories import (
 )
 from world.magic.models import Kindling
 from world.magic.services.kindling import kindled_resonances_now
+from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory, SceneGMParticipationFactory
 from world.traits.factories import CheckOutcomeFactory
 
@@ -156,6 +157,16 @@ class RallyingANamedResonance(_KindledField):
         outsider = self.make_player("Odo", room=self.road)
 
         self.assertEqual(self.rally_picker(outsider, self.mira_seat).status_code, 403)
+
+    def test_a_finished_fight_returns_no_resonances(self) -> None:
+        kindle_resonance(self.mira.sheet_data, self.fury, self.blazing)
+        self.assertEqual(len(self.tomas_sees()), 2)
+
+        self.encounter.status = RoundStatus.COMPLETED
+        self.encounter.save(update_fields=["status"])
+
+        response = self.rally_picker(self.tomas, self.mira_seat)
+        self.assertEqual((response.status_code, response.json()), (200, []))
 
     def test_the_polled_encounter_payload_evaluates_no_kindling(self) -> None:
         client = self.api(self.account_of(self.tomas))

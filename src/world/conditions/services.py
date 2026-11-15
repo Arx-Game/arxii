@@ -523,29 +523,31 @@ def _clear_unseen_observer_if_concealing(
     clear_unseen_observer(scene, sheet)
 
 
-def concealed_from(actor_sheet: "CharacterSheet", target_ids: Iterable[int]) -> frozenset[int]:
-    """The ids among ``target_ids`` that ``actor_sheet`` cannot perceive, in one query.
-
-    The batched form of ``passes_concealment_check``: a target is unseen while it carries an
-    active concealing condition that the observer has not detected (#1225).
-    """
-    return frozenset(
-        ConditionInstance.objects.filter(
-            target_id__in=list(target_ids),
-            condition__category__conceals_from_perception=True,
-            is_suppressed=False,
-            resolved_at__isnull=True,
-        )
-        .exclude(detected_by=actor_sheet)
-        .values_list("target_id", flat=True)
+def _concealing(instances: QuerySet[ConditionInstance]) -> QuerySet[ConditionInstance]:
+    """The active perception-concealing instances among ``instances``: the one filter that
+    ``active_concealments`` and ``concealed_from`` share."""
+    return instances.filter(
+        condition__category__conceals_from_perception=True,
+        is_suppressed=False,
+        resolved_at__isnull=True,
     )
 
 
 def active_concealments(target: "ObjectDB") -> QuerySet[ConditionInstance]:  # noqa: OBJECTDB_PARAM
-    return target.condition_instances.filter(
-        condition__category__conceals_from_perception=True,
-        is_suppressed=False,
-        resolved_at__isnull=True,
+    return _concealing(target.condition_instances.all())
+
+
+def concealed_from(actor_sheet: "CharacterSheet", target_ids: Iterable[int]) -> frozenset[int]:
+    """The ids among ``target_ids`` that ``actor_sheet`` cannot perceive, in one query.
+
+    The batched form of ``passes_concealment_check``: a target is unseen while it carries an
+    active concealing condition (the ``active_concealments`` filter) that the observer has
+    not detected (#1225).
+    """
+    return frozenset(
+        _concealing(ConditionInstance.objects.filter(target_id__in=list(target_ids)))
+        .exclude(detected_by=actor_sheet)
+        .values_list("target_id", flat=True)
     )
 
 
