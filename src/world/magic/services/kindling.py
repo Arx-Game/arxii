@@ -90,17 +90,21 @@ class _Presence:
 def _presence(ctx: SituationContext) -> _Presence:
     """The holder's room contents plus, in a fight, its active roster and its opponents.
 
-    An opponent counts by its ObjectDB id and, for a story NPC, by its persona's sheet id.
+    A room occupant the holder cannot perceive (concealed and not yet detected by her) is
+    left out; a fighter is perceived by construction. An opponent counts by its ObjectDB id
+    and, for a story NPC, by its persona's sheet id.
     """
     from world.combat.constants import OpponentStatus, ParticipantStatus  # noqa: PLC0415
     from world.combat.models import CombatOpponent, CombatParticipant  # noqa: PLC0415
+    from world.conditions.services import concealed_from  # noqa: PLC0415
     from world.covenants.perks.evaluators import _resolution_participant  # noqa: PLC0415
 
     everyone: set[int] = set()
     character = ctx.holder.character
     location = character.location if character is not None else None
     if location is not None:
-        everyone.update(obj.pk for obj in location.contents)
+        occupants = {obj.pk for obj in location.contents}
+        everyone.update(occupants - concealed_from(ctx.holder, occupants))
 
     participant = _resolution_participant(ctx.resolution)
     opponents: set[int] = set()
@@ -242,12 +246,14 @@ def _member_sheet_ids(organization_id: int, pool: frozenset[int]) -> frozenset[i
 
 
 def _feeling_instances(
-    object_ids: Iterable[int], params: SituationParams
+    object_ids: Iterable[int], params: SituationParams, *, visible_only: bool = False
 ) -> list[ConditionInstance]:
     """Active conditions on ``object_ids`` carrying the row's property, at the row's severity.
 
     The property is on the condition's template or its current stage. ``count_threshold`` is
-    the minimum effective severity. No property means nothing qualifies.
+    the minimum effective severity. No property means nothing qualifies. ``visible_only``
+    drops conditions whose template is hidden from others (``is_visible_to_others``), for
+    reads of other people's conditions.
     """
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
     from world.covenants.perks.evaluators import _carries_property_q  # noqa: PLC0415
@@ -262,6 +268,8 @@ def _feeling_instances(
         .distinct()
     )
     floor = params.count_threshold or 0
+    if visible_only:
+        instances = instances.filter(condition__is_visible_to_others=True)
     return [i for i in instances if i.effective_severity >= floor]
 
 
@@ -288,7 +296,7 @@ def shared_feeling_evidence(
     others = (presence or _presence(ctx)).everyone - {ctx.holder.pk}
     if not others:
         return []
-    instances = _feeling_instances(others, params)
+    instances = _feeling_instances(others, params, visible_only=True)
     harm = KindlingConfig.objects.cached_singleton()
     if instances and harm is not None and harm.harm_property_id is not None:
         harmful = {

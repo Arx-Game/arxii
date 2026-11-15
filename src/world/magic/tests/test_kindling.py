@@ -4,6 +4,7 @@ from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
+from evennia_extensions.factories import RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import ClashFlavor, LockPcRole, OpponentTier
 from world.combat.factories import (
@@ -18,6 +19,7 @@ from world.combat.factories import (
 from world.combat.round_context import CombatRoundContext
 from world.conditions.factories import (
     BleedingOutConditionFactory,
+    ConditionCategoryFactory,
     ConditionInstanceFactory,
     ConditionTemplateFactory,
 )
@@ -33,7 +35,7 @@ from world.magic.factories import (
     ResonanceFactory,
     ThreadFactory,
 )
-from world.magic.models import KindledStrengthTier
+from world.magic.models import KindledStrengthTier, KindlingSituation
 from world.magic.services.kindling import kindled_for, kindled_resonances
 from world.magic.types.kindling import KindlingAct
 from world.mechanics.factories import PropertyFactory
@@ -167,8 +169,8 @@ class SharedFeelingTests(_Case):
         CombatParticipantFactory(encounter=self.encounter, character_sheet=self.ally)
         self.resolution = CombatRoundContext(self.mine)
 
-    def _lay(self, condition: str, *, laid_by, harmful: bool = False) -> None:
-        template = ConditionTemplateFactory(name=condition)
+    def _lay(self, condition: str, *, laid_by, harmful: bool = False, hidden: bool = False) -> None:
+        template = ConditionTemplateFactory(name=condition, is_visible_to_others=not hidden)
         template.properties.add(self.feeling)
         if harmful:
             template.properties.add(self.harm)
@@ -202,6 +204,12 @@ class SharedFeelingTests(_Case):
     def test_a_feeling_the_holder_laid_without_the_harm_property_counts(self) -> None:
         self._lay("Awe", laid_by=self.sheet)
         self.assertIsNotNone(self._kindled(resolution=self.resolution).tier)
+
+    def test_a_condition_hidden_from_others_neither_kindles_nor_is_named(self) -> None:
+        self._lay("Secret Wrath", laid_by=CharacterSheetFactory(), hidden=True)
+        result = self._kindled(resolution=self.resolution)
+        self.assertIsNone(result.tier)
+        self.assertEqual(result.reasons, ())
 
 
 class TargetInStateTests(_Case):
@@ -285,6 +293,64 @@ class ThreadAnchorTests(TestCase):
         self.thread.save()
         self.assertEqual(self.thread.target_kind, TargetKind.RELATIONSHIP_TRACK)
         self.assertIsNone(kindled_for(self.sheet, self.resonance, resolution=self.resolution).tier)
+
+
+class ConcealedPresenceTests(TestCase):
+    """A concealed room occupant the holder has not detected is not here for her."""
+
+    def setUp(self) -> None:
+        _tiers()
+        self.room = RoomProfileFactory().objectdb
+        self.sheet = CharacterSheetFactory()
+        self.sheet.character.location = self.room
+        self.rival = CharacterSheetFactory()
+        self.rival.character.location = self.room
+        self.resonance = ResonanceFactory()
+        CharacterResonanceFactory(character_sheet=self.sheet, resonance=self.resonance)
+        thread = ThreadFactory(owner=self.sheet, resonance=self.resonance, as_track_thread=True)
+        side = thread.target_relationship
+        side.target = self.rival
+        side.tier = 2
+        side.save()
+        KindlingSituationFactory(
+            resonance=self.resonance,
+            situation=Situation.THREAD_ANCHOR_PRESENT,
+            enemies_only=False,
+            strength=None,
+        )
+
+    def _conceal(self):
+        category = ConditionCategoryFactory(conceals_from_perception=True)
+        template = ConditionTemplateFactory(category=category)
+        return ConditionInstanceFactory(target=self.rival.character, condition=template)
+
+    def _result(self):
+        return kindled_for(self.sheet, self.resonance)
+
+    def test_a_visible_anchor_in_the_room_kindles_and_is_named(self) -> None:
+        result = self._result()
+        self.assertEqual(result.tier.rank, 2)
+        self.assertEqual(len(result.reasons), 1)
+
+    def test_a_concealed_anchor_neither_kindles_nor_is_named(self) -> None:
+        self._conceal()
+        result = self._result()
+        self.assertIsNone(result.tier)
+        self.assertEqual(result.reasons, ())
+
+    def test_an_anchor_she_has_detected_is_here_again(self) -> None:
+        self._conceal().detected_by.add(self.sheet)
+        self.assertEqual(self._result().tier.rank, 2)
+
+    def test_a_concealed_hurt_bystander_is_not_someone_in_trouble(self) -> None:
+        KindlingSituation.objects.all().delete()
+        KindlingSituationFactory(
+            resonance=self.resonance, situation=Situation.SOMEONE_IN_TROUBLE, strength=1
+        )
+        CharacterVitalsFactory(character_sheet=self.rival, health=1, max_health=10)
+        self.assertIsNotNone(self._result().tier)
+        self._conceal()
+        self.assertIsNone(self._result().tier)
 
 
 class MissionThemeTests(_Case):
