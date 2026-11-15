@@ -30,6 +30,7 @@ from world.narrative.models import NarrativeMessageDelivery
 from world.progression.factories import CodexKnowledgeRequirementFactory
 from world.progression.models import TechniqueKnownRequirement
 from world.roster.factories import RosterEntryFactory
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 
 
 def know(sheet, entry) -> None:
@@ -42,6 +43,7 @@ def know(sheet, entry) -> None:
 
 class TechniquesOpenedByTests(TestCase):
     def setUp(self) -> None:
+        seed_pool_and_cap_lanes()
         self.sheet = CharacterSheetFactory()
         self.gift = GiftFactory(kind=GiftKind.MINOR)
         self.entry = CodexEntryFactory()
@@ -124,6 +126,11 @@ class TechniquesOpenedByTests(TestCase):
 
 
 class OpenedTechniqueNoticeTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
+
     def _gated_entry(self):
         sheet = CharacterSheetFactory()
         gift = GiftFactory(kind=GiftKind.MINOR)

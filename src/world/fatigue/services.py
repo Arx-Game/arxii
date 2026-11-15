@@ -86,23 +86,40 @@ def get_fatigue_capacity(
     Returns:
         Integer fatigue capacity.
     """
-    endurance_stat_name = FATIGUE_ENDURANCE_STAT[category]
-    endurance_value = _get_stat_points(character_sheet, endurance_stat_name)
-    willpower_value = _get_stat_points(character_sheet, PrimaryStat.WILLPOWER.value)
+    return get_fatigue_capacities(character_sheet, (category,), well_rested=well_rested)[category]
 
+
+def get_fatigue_capacities(
+    character_sheet: CharacterSheet,
+    categories: Iterable[str] = tuple(FATIGUE_ENDURANCE_STAT),
+    *,
+    well_rested: bool | None = None,
+) -> dict[str, int]:
+    """Max fatigue capacity for each of ``categories``, reading the shared terms once.
+
+    The ``FatigueConfig`` row, the character's level bonus and the well-rested flag are the
+    same for every category, so a caller that needs several (a status block, a serializer)
+    asks for them together instead of paying for each lookup per category. See
+    ``get_fatigue_capacity`` for the formula and ``well_rested``.
+    """
     config = FatigueConfig.get_singleton()
-    base_capacity = (
-        endurance_value * config.stat_multiplier
-        + willpower_value * config.willpower_multiplier
-        + _level_bonus(character_sheet)
-    )
-
+    level_bonus = _level_bonus(character_sheet)
+    willpower_value = _get_stat_points(character_sheet, PrimaryStat.WILLPOWER.value)
     if well_rested is None:
         well_rested = get_or_create_fatigue_pool(character_sheet).well_rested
-    if well_rested:
-        return base_capacity * config.well_rested_percent // 100
 
-    return base_capacity
+    capacities: dict[str, int] = {}
+    for category in categories:
+        endurance_value = _get_stat_points(character_sheet, FATIGUE_ENDURANCE_STAT[category])
+        base_capacity = (
+            endurance_value * config.stat_multiplier
+            + willpower_value * config.willpower_multiplier
+            + level_bonus
+        )
+        if well_rested:
+            base_capacity = base_capacity * config.well_rested_percent // 100
+        capacities[category] = base_capacity
+    return capacities
 
 
 def _level_bonus(character_sheet: CharacterSheet) -> int:
@@ -599,7 +616,7 @@ def _tick_fatigue_collapse_for_target(
     try:
         # Probe fatigue capability once; targets without a traits handler
         # (NPCs / non-character objects in the round) are not fatigue-tracked.
-        capacities = {cat: get_fatigue_capacity(sheet, cat) for cat in FATIGUE_ENDURANCE_STAT}
+        capacities = get_fatigue_capacities(sheet)
     except AttributeError:
         return
     for category, capacity in capacities.items():
@@ -696,9 +713,10 @@ def get_full_status(character_sheet: CharacterSheet, *, pool: FatiguePool | None
     """
     well_rested = pool.well_rested if pool else False
     status: dict = {}
+    capacities = get_fatigue_capacities(character_sheet, well_rested=well_rested)
     for category in ActionCategory:
         cat = category.value
-        capacity = get_fatigue_capacity(character_sheet, cat, well_rested=well_rested)
+        capacity = capacities[cat]
         current = pool.get_current(cat) if pool else 0
         pct = _fatigue_percentage(current, capacity)
         zone = _zone_from_percentage(pct)

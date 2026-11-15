@@ -36,6 +36,7 @@ from world.magic.factories import (
     ensure_canonical_affinities,
 )
 from world.roster.seeds import ensure_rosters
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.skills.factories import SkillFactory
 from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
@@ -1861,6 +1862,7 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
 class FinalizeGMCharacterTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
+        seed_pool_and_cap_lanes()
         ensure_canonical_affinities()
         from world.gm.factories import GMProfileFactory, GMTableFactory
 
@@ -2000,6 +2002,7 @@ class FinalizeGMCharacterClaimAsNpcTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        seed_pool_and_cap_lanes()
         ensure_canonical_affinities()
         from world.gm.constants import GMLevel
         from world.gm.factories import GMProfileFactory, GMTableFactory, seed_default_gm_level_caps

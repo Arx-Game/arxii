@@ -65,6 +65,7 @@ from world.magic.specialization.services import resolve_specialized_variant
 from world.magic.types import PullActionContext
 from world.progression.services.dev_cost import dp_cost_for_step
 from world.roster.factories import RosterEntryFactory, grant_test_tenure
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.species.factories import SpeciesFactory, SpeciesGiftGrantFactory
 
 
@@ -288,6 +289,7 @@ class SpeciesGiftSpineSQLiteTest(_SpeciesGiftJourneyBase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        seed_pool_and_cap_lanes()
         cls._seed_common(drawback_condition=None)
 
     def test_spine_journey(self) -> None:
@@ -367,6 +369,7 @@ class SpeciesGiftFullJourneyPostgresTest(_SpeciesGiftJourneyBase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        seed_pool_and_cap_lanes()
         from world.conditions.factories import (
             ConditionResistanceModifierFactory,
             ConditionTemplateFactory,

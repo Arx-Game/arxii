@@ -20,10 +20,12 @@ from world.magic.factories import (
 from world.magic.models import CharacterGift, Thread
 from world.magic.services.technique_acquisition import learn_technique
 from world.progression.models import TechniqueKnownRequirement
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 
 
 class LearnTechniqueTest(TestCase):
     def setUp(self):
+        seed_pool_and_cap_lanes()
         self.sheet = CharacterSheetFactory()
         self.gift = GiftFactory(kind=GiftKind.MINOR)
         self.resonance = ResonanceFactory()
@@ -157,6 +159,7 @@ class TrainingRoomDiscountTests(TestCase):
     """A Training Room in the learner's room discounts technique AP (#675)."""
 
     def setUp(self):
+        seed_pool_and_cap_lanes()
         self.sheet = CharacterSheetFactory()
         self.gift = GiftFactory(kind=GiftKind.MINOR)
         self.resonance = ResonanceFactory()
@@ -231,6 +234,7 @@ class LearnTechniquePrerequisiteGateTest(TestCase):
     """
 
     def setUp(self):
+        seed_pool_and_cap_lanes()
         self.sheet = CharacterSheetFactory()
         self.gift = GiftFactory(kind=GiftKind.MINOR)
         self.resonance = ResonanceFactory()

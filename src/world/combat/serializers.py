@@ -57,7 +57,7 @@ from world.conditions.serializers import (
     serialize_compulsion_summary,
 )
 from world.conditions.services import get_active_conditions
-from world.fatigue.services import get_fatigue_capacity
+from world.fatigue.services import get_fatigue_capacities
 from world.magic.constants import AudereCeremony
 from world.magic.models import CharacterTechnique, Technique
 from world.magic.serializers_substance import CallUpOfferSerializer
@@ -993,7 +993,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
         Each pool is ``{"current": N, "capacity": M}``. ``current`` reads the
         persisted ``FatiguePool`` row (0 when no row exists yet); ``capacity``
         is derived from the character's endurance stats via
-        ``get_fatigue_capacity``. Gated by the same vitals-visibility rules as
+        ``get_fatigue_capacities``. Gated by the same vitals-visibility rules as
         health/strain — outsiders get ``None``.
 
         The frontend's VitalPools component reads this to render fatigue bars
@@ -1012,16 +1012,13 @@ class ParticipantSerializer(serializers.ModelSerializer):
         # exactly once — no per-category re-query. None when no row exists yet.
         fatigue_pool = character_sheet.fatigue_or_none
         well_rested = fatigue_pool.well_rested if fatigue_pool else False
+        capacities = get_fatigue_capacities(character_sheet, well_rested=well_rested)
         pools: dict[str, dict[str, int]] = {}
         for category in ActionCategory:
             current = fatigue_pool.get_current(category.value) if fatigue_pool else 0
             pools[category.value] = {
                 "current": current,
-                "capacity": get_fatigue_capacity(
-                    character_sheet,
-                    category.value,
-                    well_rested=well_rested,
-                ),
+                "capacity": capacities[category.value],
             }
         return pools
 

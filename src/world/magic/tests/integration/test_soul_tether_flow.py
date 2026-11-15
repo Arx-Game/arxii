@@ -59,6 +59,7 @@ from world.relationships.factories import (
     RelationshipTypeFactory,
 )
 from world.relationships.models import CharacterRelationship
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 
 # ---------------------------------------------------------------------------
 # Module-level helpers shared across all three test sub-tasks
@@ -279,6 +280,7 @@ class SoulTetherFullPipelineTests(TestCase):
     """
 
     def setUp(self) -> None:
+        seed_pool_and_cap_lanes()
         wire_soul_tether_content()
         self.track = RelationshipTypeFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
@@ -676,6 +678,7 @@ class ManyToManyIndependenceTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        seed_pool_and_cap_lanes()
         wire_soul_tether_content()
 
         # Shared track for Sinner A (required for RELATIONSHIP_TRACK unlock).

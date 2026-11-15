@@ -74,6 +74,7 @@ from world.magic.specialization.services import provision_latent_gift_thread
 from world.scenes.factories import SceneFactory
 from world.scenes.models import Scene
 from world.scenes.tests.cast_test_helpers import grant_technique, make_benign_castable_technique
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.traits.factories import CheckSystemSetupFactory, TraitFactory
 from world.traits.models import CheckOutcome
 from world.vitals.models import CharacterVitals
@@ -464,6 +465,7 @@ class CreatingACharacterWithSeveralResonances(FinalizationTestMixin, JourneyCase
 
     @classmethod
     def setUpTestData(cls) -> None:
+        seed_pool_and_cap_lanes()
         cls._setup_finalization_base(cls, prefix="Several", height_min=700, height_max=800)
         cls.staff = AccountFactory(is_staff=True)
         cls.celestial, cls.primal, cls.abyssal = ensure_canonical_affinities()
