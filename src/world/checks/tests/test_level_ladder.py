@@ -115,6 +115,40 @@ class LevelLadderTests(TestCase):
         self.assertIsNone(band_position(40).rank)
 
 
+class _RankManagerWithoutMinPoints:
+    """``CheckRank.objects`` as the migration's own schema had it: it takes ``min_points``.
+
+    The migration runs before the column is dropped, so it passes ``min_points`` in its
+    defaults; the live model no longer has the column, so this manager drops it.
+    """
+
+    def __init__(self, manager) -> None:
+        self._manager = manager
+
+    def exists(self) -> bool:
+        return self._manager.exists()
+
+    def get_or_create(self, defaults=None, **kwargs):
+        defaults = {k: v for k, v in (defaults or {}).items() if k != "min_points"}
+        return self._manager.get_or_create(defaults=defaults, **kwargs)
+
+
+class _RankModelWithoutMinPoints:
+    def __init__(self, model) -> None:
+        self.objects = _RankManagerWithoutMinPoints(model.objects)
+
+
+class _AppsWithoutMinPoints:
+    """The app registry, with ``CheckRank`` read the way the migration's own schema had it."""
+
+    def __init__(self, apps) -> None:
+        self._apps = apps
+
+    def get_model(self, app_label: str, model_name: str):
+        model = self._apps.get_model(app_label, model_name)
+        return _RankModelWithoutMinPoints(model) if model_name == "CheckRank" else model
+
+
 class CheckLadderRowsMigrationTests(TestCase):
     """U-keep: a data migration, which no journey runs.
 
@@ -129,7 +163,7 @@ class CheckLadderRowsMigrationTests(TestCase):
             path.stem for path in Path(migrations.__file__).parent.glob("*_check_ladder_rows.py")
         )
         migration = import_module(f"world.migrations.{name}")
-        migration.write_ladder_rows(apps, None)
+        migration.write_ladder_rows(_AppsWithoutMinPoints(apps), None)
 
     def test_a_database_with_ranks_gets_baselines_and_the_ranks_above(self) -> None:
         for rank in range(9):
