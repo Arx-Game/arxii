@@ -190,8 +190,13 @@ person.
   non-playable family; since #5130 each seat carries `head_relation`, what it is to
   the holder of the house's top title on the public record (a `RelationshipType`
   value, or `kin` where the two share a line or the family's name and the walk has
-  no closer word), null when there is no head or no relation on record, and each
-  family row on the list carries
+  no closer word), null when there is no head or no relation on record. The
+  relations are labelled from one `KinRecord` (`load_kin_record`: the parentage
+  and open unions within three steps of the head and the seats, a fixed handful
+  of queries a step), so the endpoint costs the same for one seat or twelve;
+  `derive_relationship(a, b, viewer, record=...)` reads the record for whoever
+  it covers and the database for anyone else, and answers the same either way.
+  Each family row on the list carries
   `has_open_seat`, which is what character creation offers a family by). The
   same `FamilyViewSet` is also
   mounted at `GET /api/character-creation/families/` (`character_creation/

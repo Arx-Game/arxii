@@ -900,6 +900,49 @@ class OpenSeatsViewTests(APITestCase):
         self.assertEqual(data["head_name"], "")
         self.assertEqual([row["head_relation"] for row in data["slots"]], [None])
 
+    def test_the_seats_endpoint_costs_the_same_for_one_seat_or_six(self) -> None:
+        """The relations are read once for the house, not walked per seat (#5130)."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.societies.factories import OrganizationFactory
+        from world.societies.houses.constants import TitleTier
+        from world.societies.houses.models import Title
+
+        def house(name: str, seats: int) -> Family:
+            family = FamilyFactory(name=name)
+            org = OrganizationFactory(name=f"House {name}", family=family)
+            head = kinship.create_person(name=f"{name} Head", family=family)
+            Title.objects.create(
+                name=f"Barony of {name}",
+                tier=TitleTier.BARONY,
+                realm=org.society.realm,
+                house=org,
+                holder=head,
+            )
+            for index in range(seats):
+                child = kinship.create_person(name=f"{name} Child {index}", family=family)
+                child.is_appable = True
+                child.save(update_fields=["is_appable"])
+                kinship.record_parentage(child=child, parent=head)
+            return family
+
+        one, six = house("Onefold", 1), house("Sixfold", 6)
+        self.client.force_authenticate(user=self.account)
+        # Warm the request-level caches so the pair differs only by seat count.
+        self.client.get(f"/api/roster/families/{one.pk}/slots/")
+        self.client.get(f"/api/roster/families/{six.pk}/slots/")
+        with CaptureQueriesContext(connection) as ctx_one:
+            res_one = self.client.get(f"/api/roster/families/{one.pk}/slots/")
+        with CaptureQueriesContext(connection) as ctx_six:
+            res_six = self.client.get(f"/api/roster/families/{six.pk}/slots/")
+        self.assertEqual(len(res_one.data["slots"]), 1)
+        self.assertEqual(len(res_six.data["slots"]), 6)
+        self.assertEqual(
+            {row["head_relation"] for row in res_six.data["slots"]}, {RelationshipType.CHILD}
+        )
+        self.assertEqual(len(ctx_one.captured_queries), len(ctx_six.captured_queries))
+
     def test_the_seat_keeps_its_name_lock(self) -> None:
         locked = {row["name"]: row["name_locked"] for row in self._seats(self.katta)["slots"]}
         self.assertTrue(locked["Kathryn"])

@@ -124,6 +124,28 @@ class JoiningAnEstablishedFamily(FinalizationTestMixin, JourneyCase):
         self.assertEqual(seats["slots"], [])
         self.assertFalse(self._offered()["Katta"])
 
+    def test_staff_adding_to_the_roster_need_a_seat_too(self) -> None:
+        """Staff add-to-roster passes the same completeness gate: no seat, no character."""
+        staff = AccountFactory(is_staff=True)
+        self.account = staff
+        draft = self._draft()
+        staff_api = self.api(staff)
+        url = f"/api/character-creation/drafts/{draft.pk}/"
+        staff_api.patch(url, {"family_id": self.katta.pk}, format="json")
+
+        refused = staff_api.post(f"{url}add-to-roster/", {}, format="json")
+        # The endpoint's answer to any incomplete draft; the page shows the stage's
+        # own error ("Choose your place in the family") and gates the button on it.
+        self.assertEqual(refused.status_code, 400, refused.content)
+        self.assertEqual(refused.json()["detail"], "Character creation failed.")
+        self.assertFalse(Kinsperson.objects.filter(sheet__isnull=False).exists())
+
+        staff_api.patch(url, {"claimed_kin_slot_id": self.seat.pk}, format="json")
+        added = staff_api.post(f"{url}add-to-roster/", {}, format="json")
+        self.assertEqual(added.status_code, 200, added.content)
+        self.seat.refresh_from_db()
+        self.assertEqual(self.seat.sheet_id, added.json()["character_id"])
+
     def test_a_seat_of_another_family_is_no_seat_here(self) -> None:
         draft = self._draft()
         other = FamilyFactory(name="Ashcombe", origin_realm=self.realm)
