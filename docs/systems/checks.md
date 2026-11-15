@@ -511,6 +511,9 @@ more than 4 to 5, and 10 to 11 more than 9 to 10 (owner ruling 2026-11-15; spec 
 Staff author a difficulty as a level, never as points. Three helpers in `world/checks/services.py`
 turn the stored number into the points a roll meets:
 
+- `level_strength(level)`: a level's CHECK baseline plus its tier bonus, the one place the two are
+  added (the admin, the analytics panels, the surroundings penalty and the Scaling panel read it).
+  `difficulty_points` is the same number read as an authored difficulty.
 - `difficulty_points(level)`: a standalone difficulty. The level's CHECK baseline plus its tier
   bonus (see "Tier jumps"), so a level-N lock is rolled at the rank a level-N NPC stands at. Level 0 is no difficulty (0 points); a level above the top baseline
   reads the top baseline; a database with no baseline rows reads 0.
