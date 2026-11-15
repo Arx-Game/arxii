@@ -269,3 +269,10 @@ for agent in /workspaces/arxii/tools/agents/*.md; do
   ln -sfn "$agent" "/home/vscode/.claude/agents/$name"
 done
 shopt -u nullglob
+
+# Install the permission-prompt hook into the container's user-level Claude config
+# (a named volume the host never reads). In a bypass or dontAsk session it answers a
+# Bash permission prompt with "deny" plus a rewrite hint, so an unattended agent
+# retries instead of waiting hours for a person. See tools/hooks/install.py. The
+# installer always exits 0; the guard below is a second line so setup never fails here.
+python3 /workspaces/arxii/tools/hooks/install.py || echo "[post-create] hook install failed" >&2

@@ -58,7 +58,9 @@ workstation) the wave rules below apply as written.
     before touching it;
   - each commits only its own files with a pathspec commit,
     `git commit -m <msg> -- <files>` (after `git add -- <file>` for a file git does
-    not track yet); never a plain `git commit`, `git add -A`, `git add .` or
+    not track yet), with every path typed out, never computed by an array, loop,
+    `xargs` or `$(...)` (Claude Code stops those for a person's approval even in
+    bypass mode); never a plain `git commit`, `git add -A`, `git add .` or
     `commit -a`, and never `git stash`, `git checkout <path>`, `git restore` or
     `git reset`. If a sibling's commit holds `index.lock`, wait and retry; never
     delete it. If the hook says an auto-fixer changed a file, re-run the same
