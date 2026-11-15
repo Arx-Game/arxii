@@ -10,7 +10,7 @@ import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import type { ReflectionDraft } from '@/magic/reflection';
-import { reflectionFields } from '@/magic/reflection';
+import { NO_REFLECTION, REFLECTION_INCOMPLETE_LINE, reflectionFields } from '@/magic/reflection';
 import type { ReflectionOption } from '@/magic/types';
 import { ReflectingOnRow } from './ReflectingOnRow';
 
@@ -22,26 +22,26 @@ vi.mock('@/magic/api', async (importOriginal) => ({
 import * as api from '@/magic/api';
 
 const options: ReflectionOption[] = [
+  { kind: 'deed', id: 33, label: "Barred the overseers' door · 5 Wonder", replaces_waiting: false },
   {
     kind: 'resonance',
     id: 21,
     label: 'Your Domination · unsettling you',
     replaces_waiting: true,
   },
-  { kind: 'deed', id: 33, label: "Barred the overseers' door · 5 Wonder", replaces_waiting: false },
 ];
 
-let latest: ReflectionDraft | null = null;
+let latest: ReflectionDraft = NO_REFLECTION;
 
 function Harness() {
-  const [value, setValue] = useState<ReflectionDraft | null>(null);
+  const [value, setValue] = useState<ReflectionDraft>(NO_REFLECTION);
   latest = value;
   return <ReflectingOnRow characterSheetId={7} value={value} onChange={setValue} />;
 }
 
 describe('ReflectingOnRow', () => {
   beforeEach(() => {
-    latest = null;
+    latest = NO_REFLECTION;
     vi.mocked(api.getReflectionOptions).mockReset();
   });
 
@@ -52,11 +52,21 @@ describe('ReflectingOnRow', () => {
 
     expect(await screen.findByText("Barred the overseers' door · 5 Wonder")).toBeInTheDocument();
     expect(screen.getByText('Your Domination · unsettling you')).toBeInTheDocument();
-    expect(screen.queryByTestId('reflect-choice-EMBRACE')).toBeNull();
+    // The deed is drawn before the unsettling resonance, and the pair is there from the start.
+    const pills = screen.getAllByTestId(/^reflect-option-/).map((el) => el.textContent);
+    expect(pills).toEqual([
+      "Barred the overseers' door · 5 Wonder",
+      'Your Domination · unsettling you',
+    ]);
+    expect(screen.getByTestId('reflect-choice-EMBRACE')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('reflect-choice-DISOWN')).toHaveAttribute('aria-pressed', 'false');
+    expect(reflectionFields(latest)).toEqual({});
 
     await user.click(screen.getByTestId('reflect-option-deed-33'));
-    expect(screen.getByTestId('reflect-choice-EMBRACE')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('reflect-incomplete')).toHaveTextContent(REFLECTION_INCOMPLETE_LINE);
+    expect(reflectionFields(latest)).toEqual({});
     await user.click(screen.getByTestId('reflect-choice-DISOWN'));
+    expect(screen.queryByTestId('reflect-incomplete')).toBeNull();
 
     expect(reflectionFields(latest)).toEqual({ reflect_choice: 'DISOWN', reflect_grant_id: 33 });
     expect(screen.queryByTestId('reflect-replaces-warning')).toBeNull();
@@ -68,6 +78,7 @@ describe('ReflectingOnRow', () => {
     renderWithProviders(<Harness />);
 
     await user.click(await screen.findByTestId('reflect-option-resonance-21'));
+    await user.click(screen.getByTestId('reflect-choice-EMBRACE'));
     expect(screen.getByTestId('reflect-replaces-warning')).toBeInTheDocument();
     expect(reflectionFields(latest)).toEqual({
       reflect_choice: 'EMBRACE',
@@ -75,7 +86,8 @@ describe('ReflectingOnRow', () => {
     });
 
     await user.click(screen.getByTestId('reflect-option-resonance-21'));
-    expect(latest).toBeNull();
+    await user.click(screen.getByTestId('reflect-choice-EMBRACE'));
+    expect(latest).toEqual(NO_REFLECTION);
     expect(screen.queryByTestId('reflect-replaces-warning')).toBeNull();
   });
 

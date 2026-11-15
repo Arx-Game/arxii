@@ -35,6 +35,7 @@ import { useCreateJournalEntry } from '../queries';
 import {
   EMPTY_ENTRY_FIELDS,
   isAboutUnresolved,
+  isReflectionUnfinished,
   type JournalEntryFieldsValue,
 } from '../entryFields';
 import { JournalEntryFields } from './JournalEntryFields';
@@ -80,8 +81,9 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
       payload.posthumous_override = value.posthumousOverride;
     }
     createEntry.mutate(payload, {
-      onSuccess: () => {
+      onSuccess: (entry) => {
         toast.success('Journal entry recorded.');
+        if (entry.reflection_line) toast.success(entry.reflection_line);
         onClose();
       },
       onError: (err: Error) => toast.error(err.message),
@@ -94,6 +96,7 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
     value.title.trim().length > 0 &&
     value.body.trim().length > 0 &&
     !isAboutUnresolved(value) &&
+    !isReflectionUnfinished(value) &&
     !createEntry.isPending;
   // Inline refusal rendering (#3412 T4) — a gate refusal (4xx `{detail}`, parsed into
   // `ApiError.message` by `readErrorDetail`/`createJournalEntry`) needs to stay readable

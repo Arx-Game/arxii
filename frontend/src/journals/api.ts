@@ -101,6 +101,8 @@ export interface JournalEntrySummary {
 
 /** Shape returned by retrieve/create/respond (`JournalEntryDetailSerializer`). */
 export interface JournalEntryDetail {
+  /** Told to the writer alone when the entry carried a reflection that was recorded (#5124). */
+  reflection_line?: string;
   id: number;
   author: number;
   author_name: string;

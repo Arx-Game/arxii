@@ -15,11 +15,18 @@ export const REFLECTION_CHOICES: { value: ReflectionChoice; label: string }[] = 
   { value: 'DISOWN', label: 'Disown' },
 ];
 
-/** What the writer has picked: the thing reflected on and whether they embrace or disown it. */
+/**
+ * What the writer has picked: the thing reflected on and whether they embrace or disown it.
+ * Both are null while the row is idle. A reflection needs both: one without the other is
+ * `isReflectionIncomplete`, and nothing posts until it is finished or cleared.
+ */
 export interface ReflectionDraft {
-  option: ReflectionOption;
-  choice: ReflectionChoice;
+  option: ReflectionOption | null;
+  choice: ReflectionChoice | null;
 }
+
+/** The idle row: nothing picked. */
+export const NO_REFLECTION: ReflectionDraft = { option: null, choice: null };
 
 /** The fields a pose or journal request carries for a reflection (none when not reflecting). */
 export interface ReflectionFields {
@@ -28,8 +35,21 @@ export interface ReflectionFields {
   reflect_resonance_id?: number;
 }
 
-export function reflectionFields(draft: ReflectionDraft | null): ReflectionFields {
-  if (draft === null) return {};
+/** A target or a choice is set but not both. */
+export function isReflectionIncomplete(draft: ReflectionDraft): boolean {
+  return (draft.option === null) !== (draft.choice === null);
+}
+
+/** Both a target and a choice are set. */
+export function isReflecting(draft: ReflectionDraft): boolean {
+  return draft.option !== null && draft.choice !== null;
+}
+
+export const REFLECTION_INCOMPLETE_LINE =
+  'Choose what you are reflecting on and Embrace or Disown, or clear them.';
+
+export function reflectionFields(draft: ReflectionDraft): ReflectionFields {
+  if (draft.option === null || draft.choice === null) return {};
   return {
     reflect_choice: draft.choice,
     ...(draft.option.kind === 'deed'

@@ -1,7 +1,7 @@
 /**
  * ReflectingOnRow (#5124, demo Screen 5): the optional "Reflecting on" row of a pose and of a
  * journal entry. The writer picks one thing the writing reflects on, a kindled deed or the
- * resonance unsettling them, then Embrace or Disown. Posting records the reflection and
+ * resonance unsettling them, and Embrace or Disown (the pair is always shown). Posting records the reflection and
  * changes nothing yet; the room sees only the pose, and only the writer sees this row.
  *
  * Reflecting on the unsettling resonance replaces an older reflection still waiting on it, so
@@ -14,6 +14,8 @@ import { cn } from '@/lib/utils';
 import { useReflectionOptions } from '@/magic/queries';
 import {
   REFLECTION_CHOICES,
+  REFLECTION_INCOMPLETE_LINE,
+  isReflectionIncomplete,
   sameOption,
   type ReflectionChoice,
   type ReflectionDraft,
@@ -22,8 +24,8 @@ import {
 interface Props {
   /** CharacterSheet pk (shared with the character ObjectDB pk) of the writer; null while unknown. */
   characterSheetId: number | null;
-  value: ReflectionDraft | null;
-  onChange: (value: ReflectionDraft | null) => void;
+  value: ReflectionDraft;
+  onChange: (value: ReflectionDraft) => void;
   className?: string;
 }
 
@@ -61,14 +63,11 @@ export function ReflectingOnRow({ characterSheetId, value, onChange, className }
   if (options.length === 0) return null;
 
   const pick = (option: (typeof options)[number]) => {
-    if (value !== null && sameOption(value.option, option)) {
-      onChange(null);
-      return;
-    }
-    onChange({ option, choice: value?.choice ?? 'EMBRACE' });
+    const same = value.option !== null && sameOption(value.option, option);
+    onChange({ ...value, option: same ? null : option });
   };
   const choose = (choice: ReflectionChoice) => {
-    if (value !== null) onChange({ ...value, choice });
+    onChange({ ...value, choice: value.choice === choice ? null : choice });
   };
 
   return (
@@ -84,7 +83,7 @@ export function ReflectingOnRow({ characterSheetId, value, onChange, className }
         {options.map((option) => (
           <Pill
             key={`${option.kind}-${option.id}`}
-            pressed={value !== null && sameOption(value.option, option)}
+            pressed={value.option !== null && sameOption(value.option, option)}
             onClick={() => pick(option)}
             testId={`reflect-option-${option.kind}-${option.id}`}
           >
@@ -92,21 +91,24 @@ export function ReflectingOnRow({ characterSheetId, value, onChange, className }
           </Pill>
         ))}
       </div>
-      {value !== null && (
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Embrace or disown">
-          {REFLECTION_CHOICES.map((choice) => (
-            <Pill
-              key={choice.value}
-              pressed={value.choice === choice.value}
-              onClick={() => choose(choice.value)}
-              testId={`reflect-choice-${choice.value}`}
-            >
-              {choice.label}
-            </Pill>
-          ))}
-        </div>
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Embrace or disown">
+        {REFLECTION_CHOICES.map((choice) => (
+          <Pill
+            key={choice.value}
+            pressed={value.choice === choice.value}
+            onClick={() => choose(choice.value)}
+            testId={`reflect-choice-${choice.value}`}
+          >
+            {choice.label}
+          </Pill>
+        ))}
+      </div>
+      {isReflectionIncomplete(value) && (
+        <p className="text-xs text-destructive" data-testid="reflect-incomplete" role="status">
+          {REFLECTION_INCOMPLETE_LINE}
+        </p>
       )}
-      {value?.option.replaces_waiting && (
+      {value.option?.replaces_waiting && (
         <p
           className="text-xs text-muted-foreground"
           data-testid="reflect-replaces-warning"

@@ -30,7 +30,14 @@ import type { TargetCandidate } from '@/scenes/components/TargetPicker';
 import { useAppSelector } from '@/store/hooks';
 import { ReflectingOnRow } from '@/magic/components/ReflectingOnRow';
 import { useRefreshReflectionOptions } from '@/magic/queries';
-import { reflectionFields, type ReflectionDraft } from '@/magic/reflection';
+import {
+  isReflecting,
+  isReflectionIncomplete,
+  NO_REFLECTION,
+  REFLECTION_INCOMPLETE_LINE,
+  reflectionFields,
+  type ReflectionDraft,
+} from '@/magic/reflection';
 import type { MyRosterEntry } from '@/roster/types';
 import type { Interaction } from '@/scenes/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
@@ -294,7 +301,7 @@ export function CommandInput({
   );
   // #5124 — what this pose reflects on, if anything. Cleared once the pose lands, so a
   // refused or failed send keeps the writer's pick along with their text.
-  const [reflection, setReflection] = useState<ReflectionDraft | null>(null);
+  const [reflection, setReflection] = useState<ReflectionDraft>(NO_REFLECTION);
   const refreshReflectionOptions = useRefreshReflectionOptions(characterSheetId);
   // The `client_request_id` of a socket-sent pose that carries a reflection, until its ack.
   const reflectedSendRef = useRef<string | null>(null);
@@ -483,8 +490,9 @@ export function CommandInput({
       if (payload.success) {
         if (reflectedSendRef.current === pending.clientRequestId) {
           reflectedSendRef.current = null;
-          setReflection(null);
+          setReflection(NO_REFLECTION);
           refreshReflectionOptions();
+          if (payload.message) toast.success(payload.message);
         }
         acknowledge(pending.clientRequestId);
         // Recorded unconditionally: this text demonstrably went out, so
@@ -642,6 +650,11 @@ export function CommandInput({
       if (replyRefusal && !replyRefusal.reachable) return false;
       if (tagRefusal && !tagRefusal.reachable) return false;
       if (!trimmed) return false;
+      // A reflection with a target but no choice, or the reverse, never posts half-chosen.
+      if (isReflectionIncomplete(reflection)) {
+        toast.error(REFLECTION_INCOMPLETE_LINE);
+        return false;
+      }
       if (draft.content.length > MAX_POSE_LENGTH) {
         toast.error(
           `Your pose is too long. Maximum ${MAX_POSE_LENGTH.toLocaleString()} characters.`
@@ -939,9 +952,12 @@ export function CommandInput({
         ...reflectionFields(reflection),
       })
         .then((response) => {
-          if (reflection !== null) {
-            if (response?.reflection_line) toast.success(response.reflection_line);
-            setReflection(null);
+          if (isReflecting(reflection)) {
+            if (response?.reflection_line) {
+              if (response.reflection_recorded === false) toast.error(response.reflection_line);
+              else toast.success(response.reflection_line);
+            }
+            setReflection(NO_REFLECTION);
             refreshReflectionOptions();
           }
           if (attachedAction && onSubmitAction) {
@@ -1001,13 +1017,16 @@ export function CommandInput({
     // A pose that reflects on something outside a scene (#5124) is a structured send like
     // `tt`: the registry `pose` action takes the reflection, and the draft and the pick clear
     // together on the matching ack (`handleActionResult`).
-    if (isPose && reflection !== null) {
+    if (isPose && isReflecting(reflection)) {
       const clientRequestId = beginSend(liveSpeechMode);
       pendingSpeechRef.current = { clientRequestId, text: trimmed };
       reflectedSendRef.current = clientRequestId;
+      // The typed "@Name" targets travel by name, as on the scene pose, and stay in the text.
+      const composerTargets = uniqueNames([...(composerMode?.targets ?? []), ...typedTargets]);
       executeAction(character, 'pose', {
         text: spoken,
         client_request_id: clientRequestId,
+        ...(composerTargets.length > 0 ? { target_names: composerTargets } : {}),
         ...reflectionFields(reflection),
       });
       submittingRef.current = false;
@@ -1352,6 +1371,7 @@ export function CommandInput({
           !ready ||
           Boolean(replyRefusal && !replyRefusal.reachable) ||
           Boolean(tagRefusal && !tagRefusal.reachable) ||
+          isReflectionIncomplete(reflection) ||
           heldNote !== null
         }
         disabled={draft.status === 'pending'}

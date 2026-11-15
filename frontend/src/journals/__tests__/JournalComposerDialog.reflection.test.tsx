@@ -66,6 +66,19 @@ describe('JournalComposerDialog reflection', () => {
     );
   });
 
+  it('holds Post entry while a picked target has no Embrace or Disown', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<JournalComposerDialog open onClose={vi.fn()} />);
+
+    await user.type(screen.getByLabelText('Title'), 'The collar');
+    await user.type(screen.getByLabelText('Entry'), 'I am putting it down.');
+    await user.click(await screen.findByTestId('reflect-option-resonance-21'));
+
+    expect(screen.getByRole('button', { name: /post entry/i })).toBeDisabled();
+    await user.click(screen.getByTestId('reflect-choice-EMBRACE'));
+    expect(screen.getByRole('button', { name: /post entry/i })).toBeEnabled();
+  });
+
   it('posts no reflection fields when nothing is picked', async () => {
     const user = userEvent.setup();
     renderWithProviders(<JournalComposerDialog open onClose={vi.fn()} />);

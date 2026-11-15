@@ -19,6 +19,7 @@ import { useCreateJournalEntry, useJournalSettings } from '../queries';
 import {
   EMPTY_ENTRY_FIELDS,
   isAboutUnresolved,
+  isReflectionUnfinished,
   type JournalEntryFieldsValue,
 } from '../entryFields';
 import { JournalEntryFields } from './JournalEntryFields';
@@ -39,6 +40,7 @@ export function JournalDesk({ onPosted, onDiscard }: JournalDeskProps) {
     value.title.trim().length > 0 &&
     value.body.trim().length > 0 &&
     !isAboutUnresolved(value) &&
+    !isReflectionUnfinished(value) &&
     !createEntry.isPending;
   const errorMessage =
     createEntry.isError && createEntry.error instanceof Error ? createEntry.error.message : null;
@@ -61,8 +63,9 @@ export function JournalDesk({ onPosted, onDiscard }: JournalDeskProps) {
       payload.posthumous_override = value.posthumousOverride;
     }
     createEntry.mutate(payload, {
-      onSuccess: () => {
+      onSuccess: (entry) => {
         toast.success('Journal entry recorded.');
+        if (entry.reflection_line) toast.success(entry.reflection_line);
         setValue(EMPTY_ENTRY_FIELDS);
         onPosted();
       },

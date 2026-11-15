@@ -289,6 +289,8 @@ export interface SubmitPoseResult {
   replayed?: boolean;
   /** Told to the writer alone when the pose carried a reflection that was recorded (#5124). */
   reflection_line?: string;
+  /** False when the pose posted but its reflection was not recorded; the line says why. */
+  reflection_recorded?: boolean;
 }
 
 export async function submitPose(body: SubmitPoseBody): Promise<SubmitPoseResult> {

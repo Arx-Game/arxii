@@ -145,7 +145,7 @@ describe('JournalComposerDialog', () => {
     const mutateMock = makeCreateMock();
     const onClose = vi.fn();
     mutateMock.mockImplementation((_vars, callbacks) => {
-      callbacks?.onSuccess?.();
+      callbacks?.onSuccess?.({});
     });
 
     render(<JournalComposerDialog open onClose={onClose} />);

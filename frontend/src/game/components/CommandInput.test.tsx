@@ -2310,6 +2310,7 @@ describe('the "Reflecting on" row on a pose (#5124)', () => {
     executeActionMock.mockClear();
     submitPoseMock.mockClear();
     submitPoseMock.mockImplementation(() => Promise.resolve());
+    mockRoomCharacters = [{ name: 'Bob', thumbnail_url: null, dbref: '#501' }];
     queryClient.clear();
     sessionStorage.clear();
   });
@@ -2339,7 +2340,57 @@ describe('the "Reflecting on" row on a pose (#5124)', () => {
       })
     );
     await poseLands();
-    await waitFor(() => expect(screen.queryByTestId('reflect-choice-DISOWN')).toBeNull());
+    await waitFor(() =>
+      expect(screen.getByTestId('reflect-choice-DISOWN')).toHaveAttribute('aria-pressed', 'false')
+    );
+  });
+
+  it('holds the send until a picked target has its Embrace or Disown', async () => {
+    render(
+      <CommandInput
+        character="Alice"
+        characterSheetId={7}
+        composerMode={pose}
+        sceneId="5"
+        personaId={9}
+      />
+    );
+    fireEvent.click(await screen.findByTestId('reflect-option-deed-33'));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'She sets the bar down.' } });
+
+    expect(screen.getByTestId('reflect-incomplete')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    expect(submitPoseMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('reflect-choice-EMBRACE'));
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
+  });
+
+  it('tells the writer when the pose posted but its reflection was not recorded', async () => {
+    submitPoseMock.mockImplementation(() =>
+      Promise.resolve({
+        id: 1,
+        reflection_line: 'Your pose was posted, but your reflection was not recorded: Too late.',
+        reflection_recorded: false,
+      })
+    );
+    render(
+      <CommandInput
+        character="Alice"
+        characterSheetId={7}
+        composerMode={pose}
+        sceneId="5"
+        personaId={9}
+      />
+    );
+    fireEvent.click(await screen.findByTestId('reflect-option-deed-33'));
+    fireEvent.click(screen.getByTestId('reflect-choice-EMBRACE'));
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'She sets the bar down.' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await poseLands();
+    expect(toastErrorMock).toHaveBeenCalledWith(expect.stringContaining('not recorded: Too late.'));
   });
 
   it('warns before a reflection replaces one already waiting on the unsettling resonance', async () => {
@@ -2355,8 +2406,9 @@ describe('the "Reflecting on" row on a pose (#5124)', () => {
   it('sends an out-of-scene reflecting pose through the pose action, never as raw text', async () => {
     render(<CommandInput character="Alice" characterSheetId={7} composerMode={pose} />);
     fireEvent.click(await screen.findByTestId('reflect-option-resonance-21'));
+    fireEvent.click(screen.getByTestId('reflect-choice-EMBRACE'));
     const textarea = screen.getByRole('textbox');
-    fireEvent.change(textarea, { target: { value: 'I give in.' } });
+    fireEvent.change(textarea, { target: { value: '@Bob I give in.' } });
     fireEvent.keyDown(textarea, { key: 'Enter' });
 
     expect(sendMock).not.toHaveBeenCalled();
@@ -2364,7 +2416,8 @@ describe('the "Reflecting on" row on a pose (#5124)', () => {
       'Alice',
       'pose',
       expect.objectContaining({
-        text: 'I give in.',
+        text: expect.stringContaining('I give in.'),
+        target_names: ['Bob'],
         reflect_choice: 'EMBRACE',
         reflect_resonance_id: 21,
       })
