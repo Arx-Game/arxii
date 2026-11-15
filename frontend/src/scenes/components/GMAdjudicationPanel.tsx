@@ -1153,7 +1153,13 @@ function StagePresentHere({ characterId }: { characterId: number }) {
 interface KindleOptions {
   strengths: { rank: number; name: string }[];
   resonances: { id: number; name: string }[];
-  kindled: { resonance_id: number; strength: number }[];
+  kindled: { resonance_id: number; strength: number; by_viewer: boolean }[];
+}
+
+/** "(kindled by you)" for the viewer's own GM kindling, "(kindled by a GM)" for another's. */
+function kindledLabel(row: KindleOptions['kindled'][number] | undefined): string {
+  if (row === undefined) return '';
+  return row.by_viewer ? ' (kindled by you)' : ' (kindled by a GM)';
 }
 
 // "Kindle" (#5124): the GM answers "is her Fury stirred?" with yes, for the rest of the scene.
@@ -1235,9 +1241,7 @@ function StageKindle({
           {options.resonances.map((entry) => (
             <option key={entry.id} value={entry.id}>
               {entry.name}
-              {options.kindled.some((row) => row.resonance_id === entry.id)
-                ? ' (kindled by you)'
-                : ''}
+              {kindledLabel(options.kindled.find((row) => row.resonance_id === entry.id))}
             </option>
           ))}
         </select>

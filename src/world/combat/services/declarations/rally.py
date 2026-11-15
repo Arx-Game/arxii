@@ -128,7 +128,6 @@ def _surge_rallied_ally(  # noqa: PLR0913 - the surge's fixed inputs plus the ki
     intensity_scale = (
         effect_value(rallier.character_sheet, ManeuverEffectKey.RALLY_SURGE_INTENSITY) / 100
     )
-    vow_scaled = intensity_scale != 1
     cause = f"{persona_name_of(rallier)} rallies {persona_name_of(ally)}."
     if kindled_tier is not None and resonance is not None:
         intensity_scale += kindled_tier.dig_deep_scale_percent / 100
@@ -144,7 +143,7 @@ def _surge_rallied_ally(  # noqa: PLR0913 - the surge's fixed inputs plus the ki
         source_character=rallier_character,
         tuning=tuning,
         cause=cause,
-        vow_scaled=vow_scaled,
+        vow_scaled=intensity_scale != 1,
     )
 
 

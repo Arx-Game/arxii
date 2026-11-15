@@ -1,6 +1,6 @@
 /**
  * RallyResonancePick - "Remind her of": the ally's resonances a Rally may name (#5124, demo
- * Screen 3). The rallier sees names only, never amounts and never whether one is kindled.
+ * Screen 3). The rallier sees each name and whether it is kindled, never how strongly.
  * Choosing none leaves a plain Rally; choosing the chosen one again clears it.
  */
 
@@ -55,8 +55,9 @@ export function RallyResonancePick({
       </div>
       {chosen && (
         <p className="text-xs text-muted-foreground" data-testid="rally-resonance-note">
-          If {chosen.name} is not kindled for them yet, your Rally kindles it until the end of the
-          fight.
+          {chosen.kindled
+            ? `${chosen.name} is already kindled for ${allyName || 'them'}, so your Rally surges them more.`
+            : `${chosen.name} is not kindled for ${allyName || 'them'} yet. Your Rally kindles it until the end of the fight.`}
         </p>
       )}
     </div>

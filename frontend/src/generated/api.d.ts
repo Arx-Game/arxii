@@ -49524,12 +49524,18 @@ export interface components {
       ally_participant_id: number;
       resonance_id?: number;
     };
-    /** @description One of an ally's resonances a Rally may name: its name only, never an amount (#5124). */
+    /**
+     * @description One of an ally's resonances a Rally may name (#5124).
+     *
+     *     The name, and whether it is kindled for the ally now: never how strongly.
+     */
     RallyResonanceChoice: {
       /** @description The resonance's id, sent back as resonance_id. */
       id: number;
       /** @description The resonance's name. */
       name: string;
+      /** @description Whether it is kindled for the ally now (a Rally then surges more). */
+      kindled: boolean;
     };
     /** @description Read serializer for RandomSceneTarget instances. */
     RandomSceneTarget: {
@@ -61983,7 +61989,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this title. */
+        id: number;
       };
       cookie?: never;
     };

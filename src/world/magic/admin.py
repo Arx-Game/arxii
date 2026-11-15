@@ -3308,7 +3308,7 @@ class KindledStrengthTierForm(forms.ModelForm):
             "give_in_max_depth": "Deepest give-in step",
             "give_in_bonus_percent": "Give-in bonus",
             "give_in_ease": "Control roll eased by",
-            "dig_deep_scale_percent": "Dig deep surge",
+            "dig_deep_scale_percent": "Dig deep and Rally surge",
             "earn_percent": "Earned",
         }
         help_texts = {
@@ -3325,6 +3325,11 @@ class KindledStrengthTierForm(forms.ModelForm):
                 "Thread levels as players read them, like a skill's: a thread pulled with "
                 "this resonance reads this many levels higher. Perks scale one step for every "
                 "ten levels, so a boost that would not raise a thread's step does nothing."
+            ),
+            "dig_deep_scale_percent": (
+                "Percent a Dig deep surge grows when the resonance named is kindled at this "
+                "strength. A Rally that names one of the ally's kindled resonances grows by the "
+                "same percent."
             ),
         }
 

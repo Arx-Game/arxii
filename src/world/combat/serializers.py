@@ -61,7 +61,6 @@ from world.fatigue.services import get_fatigue_capacity
 from world.magic.constants import AudereCeremony
 from world.magic.models import CharacterTechnique, Technique
 from world.magic.serializers_substance import CallUpOfferSerializer
-from world.magic.services.kindling import held_resonance_names
 from world.scenes.constants import RoundStatus
 from world.standoffs.serializers import (
     GMStandoffViewSerializer,
@@ -603,10 +602,16 @@ class DigDeepOfferSerializer(serializers.Serializer):
 
 
 class RallyResonanceChoiceSerializer(serializers.Serializer):
-    """One of an ally's resonances a Rally may name: its name only, never an amount (#5124)."""
+    """One of an ally's resonances a Rally may name (#5124).
+
+    The name, and whether it is kindled for the ally now: never how strongly.
+    """
 
     id = serializers.IntegerField(help_text="The resonance's id, sent back as resonance_id.")
     name = serializers.CharField(help_text="The resonance's name.")
+    kindled = serializers.BooleanField(
+        help_text="Whether it is kindled for the ally now (a Rally then surges more)."
+    )
 
 
 class _ParticipantListSerializer(serializers.ListSerializer):
@@ -622,9 +627,9 @@ class _ParticipantListSerializer(serializers.ListSerializer):
         from world.scenes.services import personas_for_sheets  # noqa: PLC0415
 
         participants = list(data.all() if isinstance(data, BaseManager) else data)
-        sheet_ids = [participant.character_sheet_id for participant in participants]
-        self.context["participant_personas"] = personas_for_sheets(sheet_ids)
-        self.context["participant_resonances"] = held_resonance_names(sheet_ids)
+        self.context["participant_personas"] = personas_for_sheets(
+            [participant.character_sheet_id for participant in participants]
+        )
         return super().to_representation(participants)
 
 
@@ -791,39 +796,31 @@ class ParticipantSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(RallyResonanceChoiceSerializer(many=True))
     def get_rally_resonances(self, obj: CombatParticipant) -> list[dict[str, Any]]:
-        """The resonances of this ally a Rally may name: names only, no amounts (#5124).
+        """The resonances of this ally a Rally may name, and whether each is kindled (#5124).
 
-        Sent only for another active fighter, and only to a viewer who is herself an active
-        fighter in this encounter; otherwise empty.
+        Never how strongly. Sent only for another active fighter, and only to a viewer who is
+        herself an active fighter in this encounter (the encounter serializer puts
+        ``viewer_is_fighter`` in the context); otherwise empty. Kindling is read in the
+        ally's own round, the same surroundings her panel and the Rally's resolution read.
         """
         if obj.status != ParticipantStatus.ACTIVE or self._is_viewers_own(obj):
             return []
-        if obj.encounter_id not in self._viewer_active_encounter_ids():
+        if not self.context.get("viewer_is_fighter", False):
             return []
-        held = self.context.get("participant_resonances")
-        if held is None:
-            held = held_resonance_names([obj.character_sheet_id])
-        return [{"id": pk, "name": name} for pk, name in held.get(obj.character_sheet_id, [])]
+        from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+        from world.magic.services.kindling import (  # noqa: PLC0415
+            active_mission_for,
+            kindled_resonances,
+        )
 
-    def _viewer_active_encounter_ids(self) -> frozenset[int]:
-        """The encounters the requesting account is an active fighter in (read once)."""
-        cached = self.context.get("viewer_active_encounter_ids")
-        if cached is not None:
-            return cached
-        request = self.context.get("request")
-        ids: frozenset[int] = frozenset()
-        if request and request.user.is_authenticated:
-            try:
-                sheet_ids = request.user.played_character_sheet_ids
-            except AttributeError:
-                sheet_ids = frozenset()
-            ids = frozenset(
-                CombatParticipant.objects.filter(
-                    character_sheet_id__in=sheet_ids, status=ParticipantStatus.ACTIVE
-                ).values_list("encounter_id", flat=True)
-            )
-        self.context["viewer_active_encounter_ids"] = ids
-        return ids
+        sheet = obj.character_sheet
+        entries = kindled_resonances(
+            sheet, resolution=CombatRoundContext(obj), mission=active_mission_for(sheet)
+        )
+        return [
+            {"id": entry.resonance.pk, "name": entry.resonance.name, "kindled": entry.is_kindled}
+            for entry in entries
+        ]
 
     @extend_schema_field(CallUpFightOfferSerializer(allow_null=True))
     def get_call_up(self, obj: CombatParticipant) -> dict[str, Any] | None:
@@ -1971,7 +1968,23 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         for list views.
         """
         self.context["is_gm"] = self._compute_is_gm(instance)
+        self.context["viewer_is_fighter"] = self._viewer_is_active_fighter(instance)
         return super().to_representation(instance)
+
+    def _viewer_is_active_fighter(self, obj: CombatEncounter) -> bool:
+        """Whether the requesting user plays an active fighter here (#5124).
+
+        Read from the participants the payload already holds, so it costs no query. The
+        participant rows read it to decide who may see an ally's resonance names.
+        """
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        character_ids = self._get_viewer_character_ids(request)
+        return any(
+            p.status == ParticipantStatus.ACTIVE and p.character_sheet.character_id in character_ids
+            for p in obj.participants_cached
+        )
 
     def get_is_participant(self, obj: CombatEncounter) -> bool:
         """Check whether the requesting user has a character in this encounter."""

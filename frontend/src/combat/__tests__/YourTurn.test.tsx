@@ -2800,8 +2800,8 @@ describe('YourTurn — rally/succor maneuver pickers (#3381)', () => {
     const ally = {
       ...makeParticipant(4, 'Ally Four'),
       rally_resonances: [
-        { id: 31, name: 'Fury' },
-        { id: 32, name: 'Mercy' },
+        { id: 31, name: 'Fury', kindled: true },
+        { id: 32, name: 'Mercy', kindled: false },
       ],
     };
     const encounter = makeEncounter({ status: 'declaring', participants: [ally] });
@@ -2813,7 +2813,14 @@ describe('YourTurn — rally/succor maneuver pickers (#3381)', () => {
     await userEvent.click(await screen.findByText('Ally Four'));
     await userEvent.click(screen.getByTestId('rally-resonance-32'));
 
-    expect(screen.getByTestId('rally-resonance-note')).toHaveTextContent('Mercy');
+    expect(screen.getByTestId('rally-resonance-note')).toHaveTextContent(
+      'Mercy is not kindled for Ally Four yet. Your Rally kindles it until the end of the fight.'
+    );
+    await userEvent.click(screen.getByTestId('rally-resonance-31'));
+    expect(screen.getByTestId('rally-resonance-note')).toHaveTextContent(
+      'Fury is already kindled for Ally Four, so your Rally surges them more.'
+    );
+    await userEvent.click(screen.getByTestId('rally-resonance-32'));
     await userEvent.click(screen.getByTestId('rally-confirm-btn'));
 
     expect(mockManeuverMutateAsync).toHaveBeenCalledWith({

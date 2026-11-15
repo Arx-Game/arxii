@@ -69,6 +69,7 @@ class DiggingDeepNamingAResonance(_KindledField):
 
         self.assertEqual(self.intensity(self.mira), 2 * DIG_DEEP_SUCCESS)
         self.assertIn("Your Fury is kindled, so the surge is larger.", told)
+        self.assertTold(self.mira, f"surge +{DIG_DEEP_SUCCESS}")
         self.assertIn("Fury", self.cause_of_last_surge())
 
     def test_an_unkindled_or_unnamed_resonance_surges_as_it_always_did(self) -> None:
@@ -120,18 +121,40 @@ class RallyingANamedResonance(_KindledField):
     def rows(self):
         return Kindling.objects.filter(character_sheet=self.mira.sheet_data)
 
-    def test_the_rallier_sees_the_allys_resonance_names_and_never_amounts(self) -> None:
+    def tomas_sees(self) -> dict:
         body = self.api(self.account_of(self.tomas)).get(f"/api/combat/{self.encounter.pk}/").json()
-        seats = {p["id"]: p for p in body["participants"]}
+        return {p["id"]: p for p in body["participants"]}
 
+    def test_the_rallier_sees_the_allys_resonance_names_and_whether_each_is_kindled(self) -> None:
+        kindle_resonance(self.mira.sheet_data, self.fury, self.blazing)
+
+        seats = self.tomas_sees()
+
+        # Names and a kindled flag only: never how strongly.
         self.assertEqual(
             seats[self.mira_seat.pk]["rally_resonances"],
             [
-                {"id": self.fury.pk, "name": "Fury"},
-                {"id": self.mercy.pk, "name": "Mercy"},
+                {"id": self.fury.pk, "name": "Fury", "kindled": True},
+                {"id": self.mercy.pk, "name": "Mercy", "kindled": False},
             ],
         )
         self.assertEqual(seats[self.tomas_seat.pk]["rally_resonances"], [])
+
+    def test_the_flag_follows_a_rally_that_kindles_it(self) -> None:
+        self.rally(self.success)
+
+        mercy = self.tomas_sees()[self.mira_seat.pk]["rally_resonances"][1]
+
+        self.assertEqual((mercy["name"], mercy["kindled"]), ("Mercy", True))
+
+    def test_someone_not_in_the_fight_sees_no_resonance_names(self) -> None:
+        outsider = self.make_player("Odo", room=self.road)
+        body = self.api(self.account_of(outsider)).get(f"/api/combat/{self.encounter.pk}/").json()
+
+        self.assertEqual(
+            [p["rally_resonances"] for p in body["participants"]],
+            [[] for _ in body["participants"]],
+        )
 
     def test_a_rally_kindles_an_unkindled_resonance_for_the_fight(self) -> None:
         self.assertIsNone(self.mira_strength(self.mercy))
@@ -287,5 +310,17 @@ class AGmKindlingByHand(_KindledField):
         self.assertEqual(self.mira_strength(self.mercy), 2)
         again = self.web(self.gm, "gm_list_kindling", target_id=self.mira.pk)
         self.assertEqual(
-            again.detail.data["kindled"], [{"resonance_id": self.mercy.pk, "strength": 2}]
+            again.detail.data["kindled"],
+            [{"resonance_id": self.mercy.pk, "strength": 2, "by_viewer": True}],
         )
+
+    def test_the_stage_list_reads_only_characters_in_the_gms_room(self) -> None:
+        elsewhere = self.make_player("Wren", room=self.make_room("The Ford"))
+        CharacterResonanceFactory(character_sheet=elsewhere.sheet_data, resonance=self.fury)
+
+        away = self.web(self.gm, "gm_list_kindling", target_id=elsewhere.pk)
+        junk = self.web(self.gm, "gm_list_kindling", target_id="not-a-number")
+
+        for refused in (away, junk):
+            self.assertFalse(refused.detail.success)
+            self.assertEqual(refused.detail.message, "Whose resonance? Name a character here.")

@@ -522,7 +522,7 @@ test('Stage tab in Kindle mode lists their resonances and dispatches stage_kindl
         { rank: 2, name: 'Blazing' },
       ],
       resonances: [{ id: 9, name: 'Fury' }],
-      kindled: [],
+      kindled: [{ resonance_id: 9, strength: 1, by_viewer: false }],
     },
   });
   render(<GMAdjudicationPanel scene={makeScene()} />);
@@ -530,7 +530,8 @@ test('Stage tab in Kindle mode lists their resonances and dispatches stage_kindl
   await user.selectOptions(screen.getByTestId('gm-adjudication-target-select'), '55');
   await user.click(screen.getByTestId('gm-tab-stage'));
   await user.selectOptions(screen.getByTestId('gm-stage-mode-select'), 'kindle');
-  await user.selectOptions(await screen.findByTestId('gm-stage-kindle-resonance'), '9');
+  expect(await screen.findByText('Fury (kindled by a GM)')).toBeInTheDocument();
+  await user.selectOptions(screen.getByTestId('gm-stage-kindle-resonance'), '9');
   await user.selectOptions(screen.getByTestId('gm-stage-kindle-strength'), '2');
   await user.click(screen.getByTestId('gm-stage-kindle-submit'));
 

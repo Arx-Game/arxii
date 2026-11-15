@@ -204,6 +204,7 @@ def dig_deep(participant: CombatParticipant, resonance: Resonance | None = None)
                 source_character=participant.character_sheet.character,
                 tuning=tuning,
                 intensity_scale=intensity_scale,
+                vow_scaled=intensity_scale != 1,
                 cause=_cause(participant, resonance, kindled_tier),
             )
         committed = True
