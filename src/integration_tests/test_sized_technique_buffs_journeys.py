@@ -129,7 +129,9 @@ class SizedBuffsOnChecks(JourneyCase):
         CharacterVitals.objects.create(
             character_sheet=sheet, health=50, max_health=50, base_max_health=50
         )
-        character.traits.set_trait_value(self.stat.name, 20)
+        # 21 stat points plus the level term (half the level's baseline) put a level-6
+        # character at 21 + 29 = 50, the start of rank 5.
+        character.traits.set_trait_value(self.stat.name, 21)
         return character
 
     # -- the cast and the check -------------------------------------------------
@@ -203,7 +205,7 @@ class SizedBuffsOnChecks(JourneyCase):
         hale_gain = self.ward_check(self.hale).total_points - hale_before.total_points
         self.assertEqual(pell_gain, hale_gain)
         # The seeded ladder is 8 points a level everywhere, so a Large buff's 4 points are half
-        # a rank on Pell (25, rank 1) and on Hale (100, rank 11).
+        # a rank on Pell (21 + 9 = 30, rank 2) and on Hale (21 + 69 = 90, rank 10).
         self.assertEqual(pell_gain, 4)
         self.assertEqual(rank_band_share(pell_gain, pell_before.total_points), Decimal("0.50"))
         self.assertEqual(rank_band_share(hale_gain, hale_before.total_points), Decimal("0.50"))
@@ -217,7 +219,7 @@ class SizedBuffsOnChecks(JourneyCase):
         self.assertEqual(self.ward_check(self.corin).total_points - before.total_points, 5)
 
     def test_totals_ranks_and_charts_through_the_check(self) -> None:
-        """Own totals are the stat's 20 points plus LEVEL_POINTS_PER_LEVEL (5) per level.
+        """Own totals are the stat's 21 points plus the level term, half the level's baseline.
 
         Rank N starts at 18 + 8 x (N - 1): 50 is the start of rank 5, 54 is rank 5 half way
         through (a Large buff is half a level's 8 points), and 79 is rank 8 (starts at 74)
@@ -267,8 +269,8 @@ class SizedBuffsOnChecks(JourneyCase):
         # An opponent carrying the same pile presents the same tapered total.
         self.assertEqual(opponent_condition_opposition(self.corin, self.ward_reading), 29)
 
-        self.assertEqual(self.ward_check(self.pell).total_points, 25)
-        self.assertEqual(self.ward_check(self.hale).total_points, 100)
+        self.assertEqual(self.ward_check(self.pell).total_points, 30)
+        self.assertEqual(self.ward_check(self.hale).total_points, 90)
 
     def test_the_cast_outcome_shifts_the_level(self) -> None:
         self.cast(self.maren, self.corin, self.buffs[0], outcome="Critical Success")
