@@ -1,15 +1,26 @@
 """Which resonances the situation kindles now, and how strongly (#5124, Task 3)."""
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.combat.constants import ClashFlavor, LockPcRole, OpponentTier
 from world.combat.factories import (
+    ClashContributionFactory,
+    ClashFactory,
+    ClashRoundFactory,
     CombatEncounterFactory,
     CombatOpponentFactory,
     CombatParticipantFactory,
+    CombatRoundActionFactory,
 )
 from world.combat.round_context import CombatRoundContext
-from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
+from world.conditions.factories import (
+    BleedingOutConditionFactory,
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+)
 from world.covenants.perks.constants import Situation
 from world.magic.constants import KindlingActKind, TargetKind
 from world.magic.factories import (
@@ -27,6 +38,11 @@ from world.magic.services.kindling import kindled_for, kindled_resonances
 from world.magic.types.kindling import KindlingAct
 from world.mechanics.factories import PropertyFactory
 from world.missions.factories import MissionInstanceFactory, MissionThemeFactory
+from world.scenes.constants import PersonaType
+from world.scenes.factories import PersonaFactory
+from world.scenes.services import set_active_persona
+from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
+from world.vitals.factories import CharacterVitalsFactory
 
 
 def _tiers() -> None:
@@ -165,6 +181,15 @@ class SharedFeelingTests(_Case):
         result = self._kindled(resolution=self.resolution)
         self.assertEqual(result.tier.rank, 1)
         self.assertEqual(result.reasons, ("Those around you carry Dread",))
+
+    def test_an_opponent_bearing_the_feeling_counts_as_present(self) -> None:
+        opponent = CombatOpponentFactory(encounter=self.encounter)
+        template = ConditionTemplateFactory(name="Bloodlust")
+        template.properties.add(self.feeling)
+        ConditionInstanceFactory(
+            target_id=opponent.objectdb_id, condition=template, source_character=None
+        )
+        self.assertIsNotNone(self._kindled(resolution=self.resolution).tier)
 
     def test_a_harm_the_holder_laid_does_not_count(self) -> None:
         self._lay("Torment", laid_by=self.sheet, harmful=True)
@@ -315,3 +340,192 @@ class LiveKindlingTests(_Case):
     def test_a_kindling_for_another_fight_does_not_count(self) -> None:
         KindlingFactory(character_sheet=self.sheet, resonance=self.resonance, strength=2)
         self.assertIsNone(self._kindled().tier)
+
+
+class _FightCase(_Case):
+    """A character in a fight with an ally who can be in trouble."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.encounter = CombatEncounterFactory()
+        self.mine = CombatParticipantFactory(encounter=self.encounter, character_sheet=self.sheet)
+        self.ally = CharacterSheetFactory()
+        CombatParticipantFactory(encounter=self.encounter, character_sheet=self.ally)
+        self.resolution = CombatRoundContext(self.mine)
+
+
+class SomeoneInTroubleTests(_FightCase):
+    def setUp(self) -> None:
+        super().setUp()
+        KindlingSituationFactory(
+            resonance=self.resonance, situation=Situation.SOMEONE_IN_TROUBLE, strength=2
+        )
+
+    def test_a_badly_hurt_ally_kindles_with_no_name_in_the_reason(self) -> None:
+        CharacterVitalsFactory(character_sheet=self.ally, health=10, max_health=100)
+        result = self._kindled(resolution=self.resolution)
+        self.assertEqual(result.tier.rank, 2)
+        self.assertEqual(result.reasons, ("Someone here is in trouble",))
+
+    def test_a_healthy_ally_does_not(self) -> None:
+        CharacterVitalsFactory(character_sheet=self.ally, health=90, max_health=100)
+        self.assertIsNone(self._kindled(resolution=self.resolution).tier)
+
+    def test_a_character_with_no_health_figures_is_not_hurt(self) -> None:
+        CharacterVitalsFactory(character_sheet=self.ally, health=0, max_health=0)
+        self.assertIsNone(self._kindled(resolution=self.resolution).tier)
+
+    def test_the_designated_peril_condition_kindles(self) -> None:
+        # The template is found through VitalsConsequenceConfig, never by its name.
+        bleeding = BleedingOutConditionFactory()
+        ConditionInstanceFactory(target=self.ally.character, condition=bleeding)
+        self.assertIsNotNone(self._kindled(resolution=self.resolution).tier)
+
+    def test_an_opponent_in_trouble_is_not_someone_to_aid(self) -> None:
+        opponent = CombatOpponentFactory(encounter=self.encounter, persona=PersonaFactory())
+        CharacterVitalsFactory(
+            character_sheet=opponent.persona.character_sheet, health=1, max_health=100
+        )
+        self.assertIsNone(self._kindled(resolution=self.resolution).tier)
+
+    def test_only_an_act_that_aids_earns_it(self) -> None:
+        CharacterVitalsFactory(character_sheet=self.ally, health=10, max_health=100)
+        aids = KindlingAct(kind=KindlingActKind.AID, target=self.ally, aids=True)
+        attacks = KindlingAct(kind=KindlingActKind.ATTACK, target=self.ally)
+        self.assertEqual(self._kindled(resolution=self.resolution, act=aids).tier.rank, 2)
+        self.assertIsNone(self._kindled(resolution=self.resolution, act=attacks).tier)
+
+    def _lock(self, *, held, rescuer) -> None:
+        clash = ClashFactory(
+            encounter=self.encounter,
+            flavor=ClashFlavor.LOCK,
+            lock_pc_role=LockPcRole.ESCAPING,
+            npc_win_threshold=None,
+            initiator=held,
+        )
+        ClashContributionFactory(clash_round=ClashRoundFactory(clash=clash), character=rescuer)
+
+    def test_the_held_side_of_a_lock_is_in_trouble_but_a_rescuer_is_not(self) -> None:
+        rescuer = CharacterSheetFactory()
+        CombatParticipantFactory(encounter=self.encounter, character_sheet=rescuer)
+        self._lock(held=self.sheet, rescuer=rescuer)  # the holder is the one held
+        self.assertIsNone(self._kindled(resolution=self.resolution).tier)
+        self._lock(held=self.ally, rescuer=self.sheet)
+        self.assertIsNotNone(self._kindled(resolution=self.resolution).tier)
+
+
+class OrganizationAnchorTests(_Case):
+    def setUp(self) -> None:
+        super().setUp()
+        self.organization = OrganizationFactory()
+        self.member = CharacterSheetFactory()
+        OrganizationMembershipFactory(
+            organization=self.organization, persona=self.member.primary_persona
+        )
+        thread = ThreadFactory(owner=self.sheet, resonance=self.resonance)
+        thread.target_kind = TargetKind.ORGANIZATION
+        thread.target_trait = None
+        thread.target_organization = self.organization
+        thread.save()
+        self.row = KindlingSituationFactory(
+            resonance=self.resonance, situation=Situation.THREAD_ANCHOR_PRESENT, strength=2
+        )
+        self.encounter = CombatEncounterFactory()
+        self.mine = CombatParticipantFactory(encounter=self.encounter, character_sheet=self.sheet)
+        self.resolution = CombatRoundContext(self.mine)
+
+    def test_an_organization_is_here_while_a_member_is_and_is_named_by_its_name(self) -> None:
+        CombatParticipantFactory(encounter=self.encounter, character_sheet=self.member)
+        result = self._kindled(resolution=self.resolution)
+        self.assertEqual(result.tier.rank, 2)
+        self.assertEqual(result.reasons, (f"{self.organization.name} is here",))
+
+    def test_no_member_present_means_not_kindled(self) -> None:
+        self.assertIsNone(self._kindled(resolution=self.resolution).tier)
+
+    def test_without_a_row_strength_an_organization_has_no_bond_tier_to_read(self) -> None:
+        CombatParticipantFactory(encounter=self.encounter, character_sheet=self.member)
+        self.row.strength = None
+        self.row.save()
+        self.assertIsNone(self._kindled(resolution=self.resolution).tier)
+
+
+class VowSituationAsKindlingRowTests(_FightCase):
+    def test_a_vow_library_situation_kindles_at_the_rows_strength(self) -> None:
+        KindlingSituationFactory(
+            resonance=self.resonance, situation=Situation.TARGET_IS_BOSS, strength=2
+        )
+        boss = CombatOpponentFactory(encounter=self.encounter, tier=OpponentTier.BOSS)
+        self.assertIsNone(self._kindled(resolution=self.resolution).tier)
+        CombatRoundActionFactory(
+            participant=self.mine,
+            round_number=self.encounter.round_number,
+            focused_opponent_target=boss,
+        )
+        result = self._kindled(resolution=self.resolution)
+        self.assertEqual(result.tier.rank, 2)
+        self.assertEqual(result.reasons, ("Target Is a Boss",))
+
+
+class MaskedNameTests(_FightCase):
+    def test_a_masked_anchor_is_named_by_the_mask_not_the_real_name(self) -> None:
+        anchor = CharacterSheetFactory()
+        real_name = anchor.primary_persona.name
+        mask = PersonaFactory(
+            character_sheet=anchor,
+            persona_type=PersonaType.TEMPORARY,
+            is_fake_name=True,
+            name="Hooded Stranger",
+        )
+        set_active_persona(anchor, mask)
+        thread = ThreadFactory(owner=self.sheet, resonance=self.resonance, as_track_thread=True)
+        side = thread.target_relationship
+        side.target = anchor
+        side.tier = 1
+        side.save()
+        KindlingSituationFactory(
+            resonance=self.resonance, situation=Situation.THREAD_ANCHOR_PRESENT, strength=None
+        )
+        CombatParticipantFactory(encounter=self.encounter, character_sheet=anchor)
+        result = self._kindled(resolution=self.resolution)
+        self.assertEqual(result.tier.rank, 1)
+        self.assertNotIn(real_name, " ".join(result.reasons))
+        self.assertNotIn(anchor.character.db_key, " ".join(result.reasons))
+
+
+class QueryCountTests(TestCase):
+    """The queries one call makes do not grow with how many resonances the character holds."""
+
+    def _count(self, resonances: int) -> int:
+        _tiers()
+        sheet = CharacterSheetFactory()
+        affinity = AffinityFactory()
+        feeling = PropertyFactory()
+        for _ in range(resonances):
+            CharacterResonanceFactory(
+                character_sheet=sheet, resonance=ResonanceFactory(affinity=affinity)
+            )
+        for situation in (
+            Situation.THREAD_ANCHOR_PRESENT,
+            Situation.SOMEONE_IN_TROUBLE,
+            Situation.TARGET_IS_BOSS,
+        ):
+            KindlingSituationFactory(
+                resonance=None, for_affinity=affinity, situation=situation, strength=1
+            )
+        KindlingSituationFactory(
+            resonance=None,
+            for_affinity=affinity,
+            situation=Situation.SHARED_FEELING,
+            condition_property=feeling,
+            strength=1,
+        )
+        encounter = CombatEncounterFactory()
+        mine = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
+        resolution = CombatRoundContext(mine)
+        with CaptureQueriesContext(connection) as queries:
+            kindled_resonances(sheet, resolution=resolution)
+        return len(queries)
+
+    def test_two_resonances_and_six_cost_the_same_queries(self) -> None:
+        self.assertEqual(self._count(2), self._count(6))

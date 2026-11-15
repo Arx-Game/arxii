@@ -115,17 +115,34 @@ def _presence(ctx: SituationContext) -> _Presence:
     )
 
 
-def _allies_present(ctx: SituationContext) -> frozenset[int]:
+def _allies_present(ctx: SituationContext, presence: _Presence | None) -> frozenset[int]:
     """Everyone here but the holder and the opponents."""
-    presence = _presence(ctx)
+    presence = presence or _presence(ctx)
     return presence.everyone - presence.opponents - {ctx.holder.pk}
+
+
+def _shown_names(viewer: CharacterSheet, sheet_ids: Iterable[int]) -> dict[int, str]:
+    """The name ``viewer`` knows each sheet's character by, keyed by sheet id.
+
+    The face each sheet presents (its active persona, else its primary) read through the
+    viewer's eyes, so a mask the viewer has not seen through keeps its mask. A sheet with no
+    persona is absent from the map.
+    """
+    from world.scenes.persona_display import build_persona_display_map  # noqa: PLC0415
+    from world.scenes.services import personas_for_sheets  # noqa: PLC0415
+
+    personas = personas_for_sheets(sheet_ids)
+    if not personas:
+        return {}
+    display = build_persona_display_map(personas.values(), viewer_sheet=viewer)
+    return {sheet_id: display[persona.pk][0] for sheet_id, persona in personas.items()}
 
 
 # --- Evidence finders -----------------------------------------------------------------
 
 
 def thread_anchor_evidence(
-    ctx: SituationContext, params: SituationParams
+    ctx: SituationContext, params: SituationParams, presence: _Presence | None = None
 ) -> list[KindlingEvidence]:
     """The holder's thread anchors that are here (opponents only with ``enemies_only``).
 
@@ -133,7 +150,8 @@ def thread_anchor_evidence(
     bond tier is the holder's OWN side's claimed tier. An organization anchor is here while
     one of its active members is; it has no bond tier, so its strength comes from the row.
     With an act in context, the act must be aimed at the anchor (an attack, a defense or a
-    technique on that person or one of the organization's members here).
+    technique on that person or one of the organization's members here). A person is named
+    as the holder knows them.
     """
     act = ctx.act
     if act is not None and (act.kind not in _ANCHOR_FEEDING_ACTS or act.target is None):
@@ -148,30 +166,37 @@ def thread_anchor_evidence(
                 TargetKind.ORGANIZATION,
             ),
         ).select_related(
-            "target_relationship__target__character",
-            "target_capstone__relationship__target__character",
+            "target_relationship",
+            "target_capstone__relationship",
             "target_organization",
         )
     )
     if not threads:
         return []
-    presence = _presence(ctx)
+    presence = presence or _presence(ctx)
     pool = presence.opponents if params.enemies_only else presence.everyone - {ctx.holder.pk}
     if not pool:
         return []
-    evidence: list[KindlingEvidence] = []
-    for thread in threads:
-        found = _anchor_evidence(thread, pool, act, enemies_only=params.enemies_only)
-        if found is not None:
-            evidence.append(found)
-    return evidence
-
-
-def _anchor_evidence(
-    thread: Thread, pool: frozenset[int], act: KindlingAct | None, *, enemies_only: bool
-) -> KindlingEvidence | None:
-    """This thread's anchor as evidence, or None when it is not among ``pool`` (or not aimed at)."""
     aimed_at = act.target.pk if act is not None and act.target is not None else None
+    hits = [hit for t in threads if (hit := _anchor_hit(t, pool, aimed_at)) is not None]
+    names = _shown_names(ctx.holder, [sheet_id for sheet_id, _, _ in hits if sheet_id is not None])
+    return [
+        KindlingEvidence(
+            reason=_anchor_reason(
+                org_name if sheet_id is None else names.get(sheet_id, "Someone"),
+                params.enemies_only,
+            ),
+            bond_tier=bond_tier,
+        )
+        for sheet_id, org_name, bond_tier in hits
+    ]
+
+
+def _anchor_hit(
+    thread: Thread, pool: frozenset[int], aimed_at: int | None
+) -> tuple[int | None, str, int] | None:
+    """``(person sheet id or None, organization name, bond tier)`` when the thread's anchor is
+    among ``pool`` (and the act, if any, is aimed at it), else None."""
     if thread.target_kind == TargetKind.ORGANIZATION:
         organization = thread.target_organization
         if organization is None:
@@ -179,7 +204,7 @@ def _anchor_evidence(
         members = _member_sheet_ids(organization.pk, pool)
         if not members or (aimed_at is not None and aimed_at not in members):
             return None
-        return KindlingEvidence(reason=_anchor_reason(organization.name, enemies_only))
+        return None, organization.name, 0
     row = thread.target_relationship or thread.target_capstone
     if row is None:
         return None
@@ -188,9 +213,7 @@ def _anchor_evidence(
         return None
     if aimed_at is not None and aimed_at != side.target_id:
         return None
-    return KindlingEvidence(
-        reason=_anchor_reason(side.target_name, enemies_only), bond_tier=side.tier
-    )
+    return side.target_id, "", side.tier
 
 
 def _anchor_reason(name: str, enemies_only: bool) -> str:
@@ -246,14 +269,16 @@ def own_feeling_evidence(ctx: SituationContext, params: SituationParams) -> list
 
 
 def shared_feeling_evidence(
-    ctx: SituationContext, params: SituationParams
+    ctx: SituationContext, params: SituationParams, presence: _Presence | None = None
 ) -> list[KindlingEvidence]:
     """Someone else here bears a condition with the feeling. Any act alongside them feeds it.
+
+    "Others present" is literal: opponents count too.
 
     A condition the holder laid that carries ``KindlingConfig.harm_property`` does not count;
     those are Abyssal, and ``TARGET_IN_STATE_THEY_CAUSED`` catches them.
     """
-    others = _allies_present(ctx)
+    others = (presence or _presence(ctx)).everyone - {ctx.holder.pk}
     if not others:
         return []
     instances = _feeling_instances(others, params)
@@ -289,19 +314,25 @@ def target_in_state_evidence(
     bearer_id = _target_bearer_id(ctx)
     if bearer_id is None:
         return []
+    caused = [
+        i for i in _feeling_instances([bearer_id], params) if i.source_character_id == ctx.holder.pk
+    ]
+    if not caused:
+        return []
+    name = _shown_names(ctx.holder, [bearer_id]).get(bearer_id) or caused[0].target.db_key
     return [
         KindlingEvidence(
-            reason=(f"You left {instance.target.db_key} in the grip of {instance.condition.name}"),
+            reason=f"You left {name} in the grip of {instance.condition.name}",
             severity=instance.effective_severity,
         )
-        for instance in _feeling_instances([bearer_id], params)
-        if instance.source_character_id == ctx.holder.pk
+        for instance in caused
     ]
 
 
 def someone_in_trouble_evidence(
     ctx: SituationContext,
     params: SituationParams,  # noqa: ARG001
+    presence: _Presence | None = None,
 ) -> list[KindlingEvidence]:
     """Someone here (not an opponent) is in peril, badly hurt or held.
 
@@ -311,7 +342,7 @@ def someone_in_trouble_evidence(
     """
     if ctx.act is not None and not ctx.act.aids:
         return []
-    others = _allies_present(ctx)
+    others = _allies_present(ctx, presence)
     if not others or not _anyone_in_trouble(ctx, others):
         return []
     return [KindlingEvidence(reason="Someone here is in trouble")]
@@ -348,26 +379,25 @@ def _in_peril(others: frozenset[int]) -> bool:
 
 
 def _held(ctx: SituationContext, others: frozenset[int]) -> bool:
-    """Someone is the held side of an active lock clash in the holder's fight."""
+    """Someone is the held side of an active lock clash in the holder's fight.
+
+    In a LOCK/ESCAPING clash the NPC holds the clash's ``initiator``; a PC who contributes
+    is helping them break free, not held.
+    """
     from world.combat.constants import ClashFlavor, ClashStatus, LockPcRole  # noqa: PLC0415
-    from world.combat.models import Clash, ClashContribution  # noqa: PLC0415
+    from world.combat.models import Clash  # noqa: PLC0415
     from world.covenants.perks.evaluators import _resolution_participant  # noqa: PLC0415
 
     participant = _resolution_participant(ctx.resolution)
     if participant is None:
         return False
-    held_clashes = Clash.objects.filter(
+    return Clash.objects.filter(
         encounter_id=participant.encounter_id,
         flavor=ClashFlavor.LOCK,
         lock_pc_role=LockPcRole.ESCAPING,
         status=ClashStatus.ACTIVE,
-    )
-    return (
-        held_clashes.filter(initiator_id__in=others).exists()
-        or ClashContribution.objects.filter(
-            clash_round__clash__in=held_clashes, character_id__in=others
-        ).exists()
-    )
+        initiator_id__in=others,
+    ).exists()
 
 
 def mission_theme_evidence(
@@ -385,10 +415,17 @@ def mission_theme_evidence(
     return [KindlingEvidence(reason=theme.player_text or theme.name)] if carries else []
 
 
+#: The finders that read who is here; ``_evaluate`` computes that once and passes it in.
+_PRESENCE_SITUATIONS = frozenset(
+    {
+        Situation.THREAD_ANCHOR_PRESENT,
+        Situation.SHARED_FEELING,
+        Situation.SOMEONE_IN_TROUBLE,
+    }
+)
+
 #: The six kindling situations' finders; each registered evaluator is ``bool(finder(...))``.
-KINDLING_EVIDENCE_FINDERS: dict[
-    str, Callable[[SituationContext, SituationParams], list[KindlingEvidence]]
-] = {
+KINDLING_EVIDENCE_FINDERS: dict[str, Callable[..., list[KindlingEvidence]]] = {
     Situation.THREAD_ANCHOR_PRESENT: thread_anchor_evidence,
     Situation.OWN_FEELING: own_feeling_evidence,
     Situation.SHARED_FEELING: shared_feeling_evidence,
@@ -453,19 +490,33 @@ def _effective_params(row: KindlingSituation, resonance: Resonance) -> Situation
     return params
 
 
-def _evidence(
-    row: KindlingSituation,
-    params: SituationParams,
-    ctx: SituationContext,
-    check: SituationCheck,
-) -> list[KindlingEvidence]:
-    """What made the row's situation hold; empty when it does not."""
-    finder = KINDLING_EVIDENCE_FINDERS.get(row.situation)
-    if finder is not None:
-        return finder(ctx, params)
-    if check.holds(row.situation, params, ctx.holder):
-        return [KindlingEvidence(reason=Situation(row.situation).label)]
-    return []
+@dataclass
+class _Evaluation:
+    """The locals of one ``kindled_resonances`` call: the context, who is here (read once),
+    and what each (situation, params) pair found. Thrown away when the call returns."""
+
+    ctx: SituationContext
+    check: SituationCheck
+    presence: _Presence | None
+    found: dict[tuple[str, SituationParams], list[KindlingEvidence]]
+
+    def evidence(self, situation: str, params: SituationParams) -> list[KindlingEvidence]:
+        """What made the situation hold; empty when it does not. Asked once per pair, so an
+        affinity row shared by several resonances costs one read."""
+        key = (situation, params)
+        if key not in self.found:
+            self.found[key] = self._read(situation, params)
+        return self.found[key]
+
+    def _read(self, situation: str, params: SituationParams) -> list[KindlingEvidence]:
+        finder = KINDLING_EVIDENCE_FINDERS.get(situation)
+        if finder is not None:
+            if situation in _PRESENCE_SITUATIONS:
+                return finder(self.ctx, params, presence=self.presence)
+            return finder(self.ctx, params)
+        if self.check.holds(situation, params, self.ctx.holder):
+            return [KindlingEvidence(reason=Situation(situation).label)]
+        return []
 
 
 def _live_kindlings(sheet: CharacterSheet) -> list[Kindling]:
@@ -491,16 +542,14 @@ def _live_kindlings(sheet: CharacterSheet) -> list[Kindling]:
     if scene is not None:
         live |= Q(scene_id=scene.pk)
     return list(
-        Kindling.objects.filter(character_sheet=sheet)
-        .filter(live)
-        .select_related("kindled_by__character")
+        Kindling.objects.filter(character_sheet=sheet).filter(live).select_related("kindled_by")
     )
 
 
-def _live_reason(kindling: Kindling) -> str:
+def _live_reason(kindling: Kindling, viewer: CharacterSheet) -> str:
     if kindling.source == KindlingSource.RALLY:
-        by = kindling.kindled_by
-        name = by.character.db_key if by is not None and by.character is not None else None
+        by_id = kindling.kindled_by_id
+        name = _shown_names(viewer, [by_id]).get(by_id) if by_id is not None else None
         return f"{name} rallied you" if name else "An ally rallied you"
     return "The GM has kindled it"
 
@@ -584,6 +633,13 @@ def _evaluate(
     check = SituationCheck(
         subject=sheet, target=target, resolution=resolution, mission=mission, act=act
     )
+    wants_presence = any(row.situation in _PRESENCE_SITUATIONS for row in rows)
+    evaluation = _Evaluation(
+        ctx=ctx,
+        check=check,
+        presence=_presence(ctx) if wants_presence else None,
+        found={},
+    )
 
     results: list[KindledResonance] = []
     for resonance in resonances:
@@ -591,12 +647,12 @@ def _evaluate(
         for row in rows:
             if row.resonance_id != resonance.pk and row.for_affinity_id != resonance.affinity_id:
                 continue
-            evidence = _evidence(row, _effective_params(row, resonance), ctx, check)
+            evidence = evaluation.evidence(row.situation, _effective_params(row, resonance))
             contribution = _row_contribution(row, evidence, tiers, by_rank) if evidence else None
             if contribution is not None:
                 contributions.append(contribution)
         contributions.extend(
-            _Contribution(rank=k.strength, reasons=(_live_reason(k),), situation=None)
+            _Contribution(rank=k.strength, reasons=(_live_reason(k, sheet),), situation=None)
             for k in live
             if k.resonance_id == resonance.pk and k.strength in by_rank
         )

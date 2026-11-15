@@ -39,6 +39,23 @@ class KindlingSituationTests(TestCase):
         with self.assertRaises(ValidationError):
             row.full_clean()
 
+    def test_a_situation_with_no_bond_or_severity_needs_a_strength(self) -> None:
+        # A mission theme has nothing to read a strength from; a feeling reads severity.
+        theme = MissionThemeFactory()
+        bare = KindlingSituationFactory.build(
+            resonance=ResonanceFactory(),
+            situation=Situation.MISSION_THEME,
+            mission_theme=theme,
+            strength=None,
+        )
+        with self.assertRaises(ValidationError) as caught:
+            bare.full_clean()
+        self.assertIn("strength", caught.exception.message_dict)
+        feeling = KindlingSituationFactory.build(
+            resonance=ResonanceFactory(), situation=Situation.OWN_FEELING, strength=None
+        )
+        feeling.full_clean(exclude=["resonance"])
+
     def test_the_theme_and_enemies_columns_ride_the_params(self) -> None:
         theme = MissionThemeFactory()
         row = KindlingSituationFactory(resonance=ResonanceFactory(), mission_theme=theme)

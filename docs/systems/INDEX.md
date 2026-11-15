@@ -10993,8 +10993,8 @@ history, one pooled depth, a tier claimed per side by capstone journal entry and
   `mutual_hostile(a, b)` + `mutual_hostile_expression(...)`, `known_label_q(...)`,
   `bond_combat_bonus` / `bond_bonus`, `companion_target_error`;
   `helpers.get_relationship_tier(a, b)` = the lower claimed tier of a mutual TEACHING-family
-  tie, read only by training's mentor multiplier (magic's fury cap reads the side's own
-  `tier` directly, `world/magic/services/fury.py:_bond_tier`)
+  tie, read only by training's mentor multiplier (kindled resonances read the side's own
+  `tier` directly, `thread_anchor_evidence` in `world/magic/services/kindling.py`, #5124)
 - **Reads (`reads.py`):** `build_tie_page(sides, *, viewer_sheet, is_staff,
   force_audience=None, include_allocation=True)` is the batched entry point the tie API and
   the sheet cast share (three extra queries regardless of page size — callers MUST pass the

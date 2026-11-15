@@ -193,7 +193,8 @@ Predicates and reads used by other apps:
   **mutual TEACHING-family** tie, else 0. Training's mentor multiplier (`(tier + 1)`) is its
   only consumer, and the mutual-Teaching narrowing is the point: it rewards a real
   mentorship. Anything wanting plain bond strength reads the side's own `tier` directly
-  instead (magic's fury cap does — `world/magic/services/fury.py:_bond_tier`).
+  instead (kindled resonances do: `thread_anchor_evidence` in
+  `world/magic/services/kindling.py` reads the thread side's own `tier`).
 
 Per-audience reads live in `reads.py`, never in `services.py`: `tie_audience`,
 `third_party_can_see` / `has_open_public_label`, `visible_labels`, `label_payload`,
@@ -265,8 +266,9 @@ Both surfaces converge on `actions/definitions/relationships.py` — `declare_la
   `RelationshipTier` ladder's `depth_threshold` rungs as its affection bands.
 - **Training** (`world/skills/services.py`) — the mentor multiplier is
   `get_relationship_tier(character, mentor) + 1` (a mutual Mentor/Student tie).
-- **Fury** (`world/magic/services/fury.py`) — `_bond_tier` reads the claimed `tier` on
-  the character's OWN side toward a person (kindling's thread-anchor strength, #5124), any
+- **Kindled resonances** (`world/magic/services/kindling.py`) — `thread_anchor_evidence` reads the
+  claimed `tier` on the character's OWN side toward a thread anchor (the strength of a
+  thread-anchor kindling, #5124; it replaced Fury's `_bond_tier`), any
   label and no reciprocity: a character can be provoked over someone who never declared
   anything back.
   Deliberately not `get_relationship_tier`, whose mutual-Teaching narrowing belongs to

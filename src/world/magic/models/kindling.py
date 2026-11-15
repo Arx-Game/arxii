@@ -25,6 +25,17 @@ from world.covenants.models import SituationRequirementMixin
 from world.covenants.perks.constants import Situation
 from world.magic.constants import KindlingSource
 
+#: The situations that can supply a strength themselves: a thread anchor through its bond tier,
+#: a feeling through its condition's severity. Any other situation needs the row's ``strength``.
+STRENGTH_FROM_SOURCE_SITUATIONS = frozenset(
+    {
+        Situation.THREAD_ANCHOR_PRESENT,
+        Situation.OWN_FEELING,
+        Situation.SHARED_FEELING,
+        Situation.TARGET_IN_STATE_THEY_CAUSED,
+    }
+)
+
 
 class KindlingSituation(SituationRequirementMixin, SharedMemoryModel):
     """One situation that kindles a resonance, or every resonance of an affinity (#5124).
@@ -91,6 +102,10 @@ class KindlingSituation(SituationRequirementMixin, SharedMemoryModel):
         if (self.resonance_id is None) == (self.for_affinity_id is None):
             msg = "Set exactly one of resonance and for_affinity."
             raise ValidationError({"resonance": msg, "for_affinity": msg})
+        if self.strength is None and self.situation not in STRENGTH_FROM_SOURCE_SITUATIONS:
+            raise ValidationError(
+                {"strength": "This situation has no bond or severity to read: set a strength."}
+            )
 
     def __str__(self) -> str:
         target = self.resonance_id or f"affinity {self.for_affinity_id}"
