@@ -75,6 +75,20 @@ absolute paths, or a tool's own directory flag. Inside the devcontainer no
 permission prompts fire at all, so this is host-only friction. Relax the rule if
 a future release stops flagging the shape.
 
+## A permission prompt stalls an overnight run, even in bypass mode (2026-11-15)
+
+Claude Code still asks a person to approve a Bash command that works out its own
+arguments while running (an array filled by `awk`, a `$(...)` substitution, a
+loop over files), because it cannot rule out `rm`. Sonnet subagents wrote commit
+commands like this to build the list of named files, and an unattended run sat at
+the prompt for hours. Two hooks in `tools/hooks/` now handle it. One answers every
+permission prompt with "deny" and a rewrite hint, inside the devcontainer or in a
+bypass, auto or dontAsk session. The other rejects a `git add` or `git commit`
+whose file list is computed. `.devcontainer/post-create.sh` registers both in the
+container's user-level settings by running `tools/hooks/install.py`. The older
+hooks in the gitignored `.claude/hooks/` were never registered in the
+devcontainer and do not run there.
+
 ## Batched mutating tool calls cascade-cancel
 
 When one call in a parallel batch errors or hits an approval prompt, the harness

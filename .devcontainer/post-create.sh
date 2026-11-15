@@ -269,3 +269,9 @@ for agent in /workspaces/arxii/tools/agents/*.md; do
   ln -sfn "$agent" "/home/vscode/.claude/agents/$name"
 done
 shopt -u nullglob
+
+# Register the hooks in tools/hooks/ in the container's user-level Claude settings
+# (a named volume the host never reads). They answer any permission prompt with
+# "deny" plus a rewrite hint, so an unattended agent retries instead of waiting
+# hours for a person. See tools/hooks/deny_permission_prompts.py.
+python3 /workspaces/arxii/tools/hooks/install.py
