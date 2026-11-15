@@ -36,11 +36,12 @@ from world.magic.models import (
     ThreadResonance,
 )
 from world.magic.models.crossing import CrossingChoice, PendingCrossingOffer
+from world.progression.services.dev_cost import dp_cost_for_step
 
 
 def imbue_cost(start: int, end: int) -> int:
     """Development points to carry a thread from stored ``start`` to stored ``end``."""
-    return sum(max((level - 9) * 100, 1) for level in range(start, end))
+    return sum(dp_cost_for_step(level) for level in range(start, end))
 
 
 class _ThreadCase(JourneyCase):

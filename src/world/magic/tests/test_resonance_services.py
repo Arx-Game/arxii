@@ -439,28 +439,27 @@ class ImbuReadyThreadsTests(TestCase):
 
 class NearXpLockThreadsTests(TestCase):
     def test_returns_thread_near_boundary(self) -> None:
-        """Thread at level 10, dev_points=5400, next boundary=20.
-        dp_needed = sum(max((n-9)*100,1) for n in range(10,20))
-                  = 100+200+300+400+500+600+700+800+900+1000 = 5500
-        dp_to_boundary = 5500-5400=100 → within=100 → included."""
+        """Thread at level 10, dev_points=20, next boundary=20.
+        dp_needed = ten steps of level 1's band at 10 dp each = 100
+        dp_to_boundary = 100-20=80 → within=100 → included."""
         sheet = CharacterSheetFactory()
         res = ResonanceFactory()
         thread = ThreadFactory(
-            owner=sheet, resonance=res, level=10, developed_points=5400, _trait_value=100
+            owner=sheet, resonance=res, level=10, developed_points=20, _trait_value=100
         )
         ThreadXPLockedLevelFactory(level=20, xp_cost=200)
         result = near_xp_lock_threads(sheet, within=100)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].thread, thread)
         self.assertEqual(result[0].boundary_level, 20)
-        self.assertEqual(result[0].dev_points_to_boundary, 100)
+        self.assertEqual(result[0].dev_points_to_boundary, 80)
 
     def test_excludes_already_unlocked_boundary(self) -> None:
         """Boundary already unlocked is excluded."""
         sheet = CharacterSheetFactory()
         res = ResonanceFactory()
         thread = ThreadFactory(
-            owner=sheet, resonance=res, level=10, developed_points=5400, _trait_value=100
+            owner=sheet, resonance=res, level=10, developed_points=20, _trait_value=100
         )
         ThreadXPLockedLevelFactory(level=20, xp_cost=200)
         ThreadLevelUnlockFactory(thread=thread, unlocked_level=20, xp_spent=200)
@@ -683,7 +682,7 @@ class CrossingThresholdImbuingTests(TestCase):
         """Imbuing 29→30 blocks at the level-30 crossing when requirement unmet."""
         self._gate(30)
         thread = self._make_thread_at_level(29)
-        result = self.spend(self.sheet, thread, thread.resonance, 2000)
+        result = self.spend(self.sheet, thread, thread.resonance, 15)
 
         assert result.blocked_by == "CROSSING_REQUIREMENT"
         assert result.new_level == 29  # did NOT cross to stored 30
@@ -695,7 +694,7 @@ class CrossingThresholdImbuingTests(TestCase):
         """Level 3 is not a crossing: a threshold row there never stops a 2→3 imbue."""
         self._gate(3)
         thread = self._make_thread_at_level(2)
-        result = self.spend(self.sheet, thread, thread.resonance, 1)
+        result = self.spend(self.sheet, thread, thread.resonance, 10)
 
         assert result.blocked_by == "NONE"
         assert result.new_level == 3
@@ -707,7 +706,7 @@ class CrossingThresholdImbuingTests(TestCase):
         self._gate(30)
         ItemInstanceFactory(template=self.template, holder_character_sheet=self.sheet)
         thread = self._make_thread_at_level(29)
-        result = self.spend(self.sheet, thread, thread.resonance, 2000)
+        result = self.spend(self.sheet, thread, thread.resonance, 15)
 
         assert result.blocked_by == "NONE"
         assert result.new_level == 30
@@ -716,7 +715,7 @@ class CrossingThresholdImbuingTests(TestCase):
     def test_fail_open_when_no_threshold_authored(self) -> None:
         """No ThreadCrossingThreshold row for (TRAIT, 30) → advance freely."""
         thread = self._make_thread_at_level(29)
-        result = self.spend(self.sheet, thread, thread.resonance, 2000)
+        result = self.spend(self.sheet, thread, thread.resonance, 15)
 
         assert result.blocked_by == "NONE"
         assert result.new_level == 30
@@ -728,7 +727,7 @@ class CrossingThresholdImbuingTests(TestCase):
 
         ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=30)
         thread = self._make_thread_at_level(29)
-        result = self.spend(self.sheet, thread, thread.resonance, 2000)
+        result = self.spend(self.sheet, thread, thread.resonance, 15)
 
         assert result.blocked_by == "NONE"
         assert result.new_level == 30
@@ -736,17 +735,17 @@ class CrossingThresholdImbuingTests(TestCase):
     def test_partial_advance_below_crossing(self) -> None:
         """Resonance is spent and levels below the crossing are gained.
 
-        From 27: 27→28 costs 1800 dp, 28→29 costs 1900, then the crossing at 30
+        From 27: 27→28 and 28→29 cost 15 dp each (level 2's band), then the crossing at 30
         blocks. Resonance is still deducted.
         """
         self._gate(30)
         thread = self._make_thread_at_level(27)
-        result = self.spend(self.sheet, thread, thread.resonance, 6000)
+        result = self.spend(self.sheet, thread, thread.resonance, 45)
 
         assert result.blocked_by == "CROSSING_REQUIREMENT"
         assert result.new_level == 29  # advanced 27→28→29, blocked at 30
         assert result.levels_gained == 2
-        assert result.resonance_spent == 6000
+        assert result.resonance_spent == 45
 
     def test_item_not_consumed_when_requirement_met(self) -> None:
         """The qualifying item is retained (possession-only, #1859 Decision 4)."""
@@ -760,7 +759,7 @@ class CrossingThresholdImbuingTests(TestCase):
         ).count()
 
         thread = self._make_thread_at_level(29)
-        self.spend(self.sheet, thread, thread.resonance, 2000)
+        self.spend(self.sheet, thread, thread.resonance, 15)
 
         count_after = ItemInstance.objects.filter(
             holder_character_sheet=self.sheet, template=self.template
@@ -791,7 +790,7 @@ class CrossingThresholdImbuingTests(TestCase):
         thread.level = 29
         thread.save(update_fields=["level"])
         self._unlock_boundaries(thread)
-        result = self.spend(self.sheet, thread, thread.resonance, 2000)
+        result = self.spend(self.sheet, thread, thread.resonance, 15)
         assert result.blocked_by == "NONE"
         assert result.new_level == 30
 

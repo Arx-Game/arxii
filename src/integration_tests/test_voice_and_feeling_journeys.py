@@ -575,9 +575,9 @@ class StudyingATongue(JourneyCase):
         self.assertEqual(self.earned(), 21)
 
     def test_a_session_that_crosses_a_threshold_raises_the_fluency(self) -> None:
-        # 93 + the default teacher rate (15) = 108 >= cumulative_dp_for_level(11) (100).
+        # 3 + the default teacher rate (15) = 18: past level 11 (10), short of level 12 (20).
         DevelopmentPoints.objects.create(
-            character_sheet=self.ysmay.sheet_data, trait=self.trait, total_earned=93
+            character_sheet=self.ysmay.sheet_data, trait=self.trait, total_earned=3
         )
         result = self.web(
             self.ysmay, "train_language", language_id=self.khatic.pk, teacher_id=self.hobb.pk

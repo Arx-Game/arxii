@@ -74,10 +74,10 @@ class ImbueCostMultiplierTests(TestCase):
     def test_gift_thread_costs_more_dp_to_imbue(self) -> None:
         """At the same level, a GIFT thread costs 2x the dp of a TRAIT thread.
 
-        Both threads start at level 0. Sub-10 levels each cost max((n-9)*100, 1) = 1 dp
-        base. GIFT multiplier 2 makes each level cost 2 dp; TRAIT multiplier 1 keeps
-        each level at 1 dp. We imbue enough to advance one level and compare the
-        developed_points consumed.
+        Both threads start at level 0, below the cost curve's start level, so a step costs
+        the base cost's tenth: 10 dp. GIFT multiplier 2 makes each level cost 20 dp; TRAIT
+        multiplier 1 keeps each level at 10 dp. We imbue enough to advance one level and
+        compare the developed_points consumed.
         """
         # TRAIT thread: needs a trait value >= 1 so anchor cap > 0.
         from world.traits.factories import CharacterTraitValueFactory
@@ -105,22 +105,22 @@ class ImbueCostMultiplierTests(TestCase):
             developed_points=0,
         )
 
-        # GIFT: 2 dp to advance 0→1 (1 base × 2 multiplier).
+        # GIFT: 20 dp to advance 0→1 (10 base × 2 multiplier).
         gift_result = spend_resonance_for_imbuing(
             character_sheet=self.sheet,
             thread=gift_thread,
             resonance=gift_thread.resonance,
-            amount=2,
+            amount=20,
         )
         self.assertEqual(gift_thread.level, 1)
         self.assertEqual(gift_result.levels_gained, 1)
 
-        # TRAIT: 1 dp to advance 0→1 (1 base × 1 multiplier).
+        # TRAIT: 10 dp to advance 0→1 (10 base × 1 multiplier).
         trait_result = spend_resonance_for_imbuing(
             character_sheet=self.sheet,
             thread=trait_thread,
             resonance=trait_thread.resonance,
-            amount=1,
+            amount=10,
         )
         self.assertEqual(trait_thread.level, 1)
         self.assertEqual(trait_result.levels_gained, 1)

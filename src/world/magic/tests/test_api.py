@@ -1128,7 +1128,7 @@ class RitualPerformViewTests(APITestCase):
             {
                 "character_sheet_id": self.sheet.pk,
                 "ritual_id": self.ritual.pk,
-                "kwargs": {"thread_id": self.thread.pk, "amount": 5},
+                "kwargs": {"thread_id": self.thread.pk, "amount": 10},
                 "components": [],
             },
             format="json",

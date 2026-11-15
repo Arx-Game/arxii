@@ -341,20 +341,20 @@ class DevelopmentRateModifierTest(TestCase):
             value=10,
         )
 
-        # Award 100 dp — exactly enough to go 10 -> 11
+        # Award 10 dp — exactly enough to go 10 -> 11
         award_development_points(
             character_sheet=self.sheet,
             trait=trait,
             source=DevelopmentSource.COMBAT,
-            amount=100,
+            amount=10,
             description="Combat training",
         )
 
         trait_value.refresh_from_db()
-        assert trait_value.value == 11  # Crossed threshold: 100 dp needed for level 11
+        assert trait_value.value == 11  # Crossed threshold: 10 dp needed for level 11
 
         dev_tracker = self.sheet.development_points.get(trait=trait)
-        assert dev_tracker.total_earned == 100
+        assert dev_tracker.total_earned == 10
 
     def test_development_point_threshold_blocking(self):
         """Test that dp below threshold do not trigger a level-up."""
@@ -370,12 +370,12 @@ class DevelopmentRateModifierTest(TestCase):
             value=10,
         )
 
-        # Award 50 dp — not enough for level 11 (needs 100)
+        # Award 5 dp — not enough for level 11 (needs 10)
         award_development_points(
             character_sheet=self.sheet,
             trait=trait,
             source=DevelopmentSource.SOCIAL,
-            amount=50,
+            amount=5,
             description="Social training",
         )
 

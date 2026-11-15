@@ -10,9 +10,10 @@ Training and use develop one ledger (``DevelopmentPoints``, #5010): it counts fr
 rating she was made with, and one weekly rust pass spares a skill she trained or used.
 
 The expected numbers come from the rules the issue and the skills docs state: weekly
-training pays ``5 x AP x path level`` development points, a skill level costs
-``(value - 9) x 100`` of them, a high-effort roll earns 20, a skill is worth one check
-point per rating point, and a week of rust is ``path level + 5``.
+training pays ``5 x AP x path level`` development points, a skill step costs a tenth of
+its level band on the shared curve (10 for steps 10 to 19, 22 for steps 30 to 39), a
+medium-effort roll earns 10 and a high-effort roll 20, a skill is worth one check point
+per rating point, and a week of rust is ``path level + 5``.
 """
 
 from __future__ import annotations
@@ -119,9 +120,9 @@ class TrainingASkillByTheWeek(_TrainedSkillCase):
 
         self.assertIn(
             f"Training allocation set for {self.skill.name}.",
-            self.telnet(self.ysmay, f"training add skill={self.skill.pk} ap=40"),
+            self.telnet(self.ysmay, f"training add skill={self.skill.pk} ap=2"),
         )
-        # 5 x 40 AP x path level 1 = 200 development points; 11 -> 12 costs 200.
+        # 5 x 2 AP x path level 1 = 10 development points; 11 -> 12 costs 10.
         run_weekly_skill_cron()
 
         self.assertSheetAndRollAgree(self.skill, 12)
@@ -135,8 +136,8 @@ class TrainingASkillByTheWeek(_TrainedSkillCase):
 
     def test_a_tick_that_buys_part_of_a_level_changes_neither(self) -> None:
         self.made_with(self.skill, 11)
-        self.telnet(self.ysmay, f"training add skill={self.skill.pk} ap=10")
-        run_weekly_skill_cron()  # 50 of the 200 points a level costs
+        self.telnet(self.ysmay, f"training add skill={self.skill.pk} ap=1")
+        run_weekly_skill_cron()  # 5 of the 10 points a level costs
         self.assertSheetAndRollAgree(self.skill, 11)
 
 
@@ -186,20 +187,18 @@ class LevellingASkillByUse(_TrainedSkillCase):
     def test_a_level_up_from_use_raises_the_sheet_and_the_roll_together(self) -> None:
         self.made_with(self.skill, 10)
         check_type = self.check_on(self.skill)
-        # A high-effort roll earns 20 development points; 10 -> 11 costs 100.
-        for _ in range(5):
-            self.assertEqual(self.sheet_shows(self.skill), 10)
-            perform_check(self.ysmay, check_type, effort_level=EffortLevel.HIGH)
+        # A medium-effort roll earns 10 development points; 10 -> 11 costs 10.
+        self.assertEqual(self.sheet_shows(self.skill), 10)
+        perform_check(self.ysmay, check_type, effort_level=EffortLevel.MEDIUM)
 
         self.assertSheetAndRollAgree(self.skill, 11)
 
     def test_use_counts_from_the_rating_she_was_made_with(self) -> None:
-        """Made at 30, 31 costs (30 - 9) x 100 = 2,100 points: 105 high-effort rolls of 20,
-        not the 23,100 that every level from 10 would cost (#5010 scenario 1)."""
+        """Made at 30, 31 costs one 22 point step: two high-effort rolls of 20, not the
+        272 points that every level from 10 would cost (#5010 scenario 1)."""
         self.made_with(self.skill, 30)
         check_type = self.check_on(self.skill)
-        for _ in range(104):
-            perform_check(self.ysmay, check_type, effort_level=EffortLevel.HIGH)
+        perform_check(self.ysmay, check_type, effort_level=EffortLevel.HIGH)
         self.assertSheetAndRollAgree(self.skill, 30)
 
         perform_check(self.ysmay, check_type, effort_level=EffortLevel.HIGH)
@@ -224,7 +223,7 @@ class OneWeeklyRustPass(_TrainedSkillCase):
         trained = SkillFactory()
         self.made_with(trained, 11)
         self.made_with(self.skill, 12)
-        self.telnet(self.ysmay, f"training add skill={trained.pk} ap=10")
+        self.telnet(self.ysmay, f"training add skill={trained.pk} ap=1")
         run_weekly_skill_cron()
 
         self.week_turns()
@@ -248,4 +247,5 @@ class OneWeeklyRustPass(_TrainedSkillCase):
 
         self.assertEqual(self.rust_entries(used), 0)
         self.assertEqual(self.rust_entries(self.skill), 1)
-        self.assertSheetAndRollAgree(used, 12)
+        # The roll's 20 development points bought two 10 point steps.
+        self.assertSheetAndRollAgree(used, 14)

@@ -63,6 +63,7 @@ from world.magic.services import spend_resonance_for_imbuing, spend_resonance_fo
 from world.magic.specialization.models import TechniqueVariant
 from world.magic.specialization.services import resolve_specialized_variant
 from world.magic.types import PullActionContext
+from world.progression.services.dev_cost import dp_cost_for_step
 from world.roster.factories import RosterEntryFactory, grant_test_tenure
 from world.species.factories import SpeciesFactory, SpeciesGiftGrantFactory
 
@@ -186,7 +187,7 @@ class _SpeciesGiftJourneyBase(TestCase):
             ThreadLevelUnlock.objects.get_or_create(
                 thread=thread, unlocked_level=boundary, defaults={"xp_spent": 0}
             )
-        dp = sum(max((level - 9) * 100, 1) for level in range(thread.level, target_level))
+        dp = sum(dp_cost_for_step(level) for level in range(thread.level, target_level))
         # Creation already seeded this row (lifetime only), so top it up rather than
         # re-create it: the factory's get_or_create would drop the balance.
         row, _ = CharacterResonance.objects.get_or_create(

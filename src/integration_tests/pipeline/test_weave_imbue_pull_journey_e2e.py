@@ -118,11 +118,11 @@ class WeaveImbulePullJourneyE2ETests(TestCase):
         # Resonance: use the catalog's reference resonance so ThreadPullEffect rows match
         cls.resonance = cls.catalog.canonical_resonance
 
-        # Resonance balance: enough to imbue (amount=5) and pull (tier-1 cost=1)
+        # Resonance balance: enough to imbue (amount=10) and pull (tier-1 cost=1)
         CharacterResonanceFactory(
             character_sheet=cls.sheet,
             resonance=cls.resonance,
-            balance=20,
+            balance=30,
             lifetime_earned=20,
         )
 
@@ -286,12 +286,12 @@ class WeaveImbulePullJourneyE2ETests(TestCase):
         # ------------------------------------------------------------------
         # Step 4: CmdImbue → thread level advances, pending effect consumed
         # ------------------------------------------------------------------
-        # Thread starts at level=0. Sub-10 levels each cost 1 dp. Imbuing 5 dp
-        # → thread advances from level 0 to level 5 (5 levels × 1 dp each).
+        # Thread starts at level=0, below the cost curve's start level, so a level costs
+        # 10 dp. Imbuing 10 dp → thread advances from level 0 to level 1.
         level_before = thread.level  # 0
         cmd_imbue = CmdImbue()
         cmd_imbue.caller = character
-        cmd_imbue.args = "thread=Ember of Endurance amount=5"
+        cmd_imbue.args = "thread=Ember of Endurance amount=10"
         cmd_imbue.raw_string = f"imbue {cmd_imbue.args}"
         cmd_imbue.func()
 
@@ -299,7 +299,7 @@ class WeaveImbulePullJourneyE2ETests(TestCase):
         self.assertGreater(
             thread.level,
             level_before,
-            "Step 4: Thread level must advance after imbuing 5 resonance.",
+            "Step 4: Thread level must advance after imbuing 10 resonance.",
         )
         self.assertFalse(
             PendingRitualEffect.objects.filter(

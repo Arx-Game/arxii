@@ -59,7 +59,7 @@ class WeaveRelationshipTrackImbueE2ETests(TestCase):
         cls.relationship = CharacterRelationshipFactory(source=cls.sheet, target=cls.partner_sheet)
         # invested_depth=50 → pair_depth()=50 (no reverse side, so pair_depth is just
         # this side's own depth) — RELATIONSHIP_TRACK anchor cap is the tie's pair
-        # depth (#3957), plenty of room for the level-0 → 5 imbue advance below.
+        # depth (#3957), plenty of room for the level-0 → 1 imbue advance below.
         # tier=2 clears the default RelationshipGrowthConfig.thread_min_tier gate.
         cls.relationship.invested_depth = 50
         cls.relationship.tier = 2
@@ -76,11 +76,11 @@ class WeaveRelationshipTrackImbueE2ETests(TestCase):
         cls.weaving_ritual = WeavingCeremonyFactory()
         cls.imbuing_ritual = ImbuingRitualFactory()
 
-        # Resonance balance: enough to imbue (amount=5).
+        # Resonance balance: enough to imbue (amount=10).
         CharacterResonanceFactory(
             character_sheet=cls.sheet,
             resonance=cls.resonance,
-            balance=20,
+            balance=30,
             lifetime_earned=20,
         )
 
@@ -136,7 +136,7 @@ class WeaveRelationshipTrackImbueE2ETests(TestCase):
         level_before = thread.level  # 0
         cmd_imbue = CmdImbue()
         cmd_imbue.caller = character
-        cmd_imbue.args = "thread=Bound to Partner amount=5"
+        cmd_imbue.args = "thread=Bound to Partner amount=10"
         cmd_imbue.raw_string = f"imbue {cmd_imbue.args}"
         cmd_imbue.func()
 
@@ -144,7 +144,7 @@ class WeaveRelationshipTrackImbueE2ETests(TestCase):
         self.assertGreater(
             thread.level,
             level_before,
-            "Step 4: Thread level must advance after imbuing 5 resonance.",
+            "Step 4: Thread level must advance after imbuing 10 resonance.",
         )
         self.assertFalse(
             PendingRitualEffect.objects.filter(

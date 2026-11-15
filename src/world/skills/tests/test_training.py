@@ -541,36 +541,36 @@ class ProcessWeeklyTrainingTests(TestCase):
         TrainingAllocation.objects.create(
             character=self.student_identity,
             skill=self.skill,
-            ap_amount=10,
+            ap_amount=1,
         )
         process_weekly_training()
-        # base = 5 * 10 * 1 = 50
-        self.assertEqual(self._progress(), 50)
+        # base = 5 * 1 * 1 = 5, short of the 10 dp a step in level 1's band costs.
+        self.assertEqual(self._progress(), 5)
 
     def test_levels_up_on_threshold(self) -> None:
         """Skill levels up when dev points exceed cost."""
         TrainingAllocation.objects.create(
             character=self.student_identity,
             skill=self.skill,
-            ap_amount=20,
+            ap_amount=2,
         )
         process_weekly_training()
         self.student_skill.refresh_from_db()
-        # base = 5 * 20 * 1 = 100. Cost 10->11 = 100. Level up!
+        # base = 5 * 2 * 1 = 10. Cost 10->11 = 10. Level up!
         self.assertEqual(self._progress(), 0)
         self.assertEqual(self.student_skill.value, 11)
 
     def test_overflow_carries_over(self) -> None:
         """Excess dev points carry into next level."""
-        self._ledger(banked=50)
+        self._ledger(banked=5)
         TrainingAllocation.objects.create(
             character=self.student_identity,
             skill=self.skill,
-            ap_amount=20,
+            ap_amount=2,
         )
         process_weekly_training()
-        # Had 50 + gained 100 = 150. Cost 10->11 = 100. Overflow = 50.
-        self.assertEqual(self._progress(), 50)
+        # Had 5 + gained 10 = 15. Cost 10->11 = 10. Overflow = 5.
+        self.assertEqual(self._progress(), 5)
         self.assertEqual(self.student_skill.value, 11)
 
     def test_multiple_level_ups(self) -> None:
@@ -583,13 +583,12 @@ class ProcessWeeklyTrainingTests(TestCase):
         TrainingAllocation.objects.create(
             character=self.student_identity,
             skill=self.skill,
-            ap_amount=20,
+            ap_amount=3,
         )
         process_weekly_training()
-        # base = 5 * 20 * 5 = 500. Cost 10->11=100, 11->12=200. Total=300.
-        # 500-300 = 200 left, cost 12->13=300. Can't. So level 12, 200 dev.
-        self.assertEqual(self._progress(), 200)
-        self.assertEqual(self.student_skill.value, 12)
+        # base = 5 * 3 * 5 = 75. Every step in level 1's band costs 10: seven steps, 5 left.
+        self.assertEqual(self._progress(), 5)
+        self.assertEqual(self.student_skill.value, 17)
 
     def test_stops_at_x9_boundary(self) -> None:
         """Dev points dissipate at X9 boundaries (19, 29, etc.) — never banked (#2115)."""
@@ -752,11 +751,11 @@ class RunWeeklySkillCronTests(TestCase):
         TrainingAllocation.objects.create(
             character=self.identity,
             skill=self.trained_skill,
-            ap_amount=20,
+            ap_amount=2,
         )
         run_weekly_skill_cron()
         self.trained_sv.refresh_from_db()
-        # Trained: 5*20*1 = 100 dev. 10->11 costs 100. Level up!
+        # Trained: 5*2*1 = 10 dev. 10->11 costs 10. Level up!
         self.assertEqual(self.trained_sv.value, 11)
         self.assertFalse(
             DevelopmentTransaction.objects.filter(source=DevelopmentSource.RUST).exists()
