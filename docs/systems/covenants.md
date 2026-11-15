@@ -264,9 +264,14 @@ modules import combat/checks contexts at function level, never the reverse):
 (`vow_situational_power_term`, `world.magic.services.power_terms` — see `docs/systems/magic.md`);
 `CHECK_BONUS` (slice 1) rides `perform_check`'s optional `situation_ctx` parameter
 (`world.checks.services._situational_perk_check_bonus`, scoped by `perk.check_type`, null = any
-check). Both scale a fired perk's `magnitude_tenths` by
-`total_thread_level_across_all_kinds(sheet)`, the same thread-level axis Layers 1-2 use, and
-truncate the same way (`Decimal` sum, `int()` truncation). As of slice 3 (ADR-0153), both also
+check). Both size a fired perk as a buff (#5093, ADR-0149 amendment):
+`magnitude_tenths / 10 ×` one CHECK level's width at `thread_rung` of the **holder's** COVENANT_ROLE
+thread on the perk's role (`sum_potency_scaled_magnitudes(fired)`; the holder is `FiredPerk.holder`,
+so a covenant mate's perk helping someone else is sized by the mate). Only that vow thread counts:
+a holder's other threads and the helped character's threads add nothing, and a holder with no vow
+thread (or one under rung 1) adds 0 without raising. Layers 1-2 read the vow thread the same way.
+A 1.0 perk on a rung-11 vow thread adds one level's width at that rung (8 on the example ladder). The
+arithmetic truncates as before (`Decimal` sum, `int()` truncation). As of slice 3 (ADR-0153), both also
 filter their fired set through `perk_scope_matches` before scaling — a `mission_category`/
 `mission_template`/`battle_action_kind` scope column that doesn't match `situation_ctx` drops the
 firing even though its `Situation`s all held.

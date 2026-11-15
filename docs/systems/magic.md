@@ -943,12 +943,16 @@ registered in `world.magic.services.power_terms._PROVIDERS`, each `(PowerTermCon
 int`. `covenant_role_blend_power_term` is the always-on **Layer 1** baseline for
 `covenants`' four-layer vow-power model (see `docs/systems/covenants.md`'s "Vow power,
 four-layer model" and ADR-0149): for every `character.covenant_roles.currently_engaged_roles()`
-row, it adds `total_thread_level_across_all_kinds(sheet) × role.blend_weight_for(technique.archetype_alignment)
+row, it adds `level_width × role.blend_weight_for(technique.archetype_alignment)
 × CovenantRoleBlendConfig.multiplier_tenths / 10`, floored at 0 when the technique or
-character has no engaged role. `total_thread_level_across_all_kinds(sheet)` (`world.magic.services.threads`)
-sums raw `thread.level` across **every** thread kind the character has (TECHNIQUE, GIFT,
-COVENANT_ROLE, SANCTUM, ...) — not the bucketed `thread_level_multiplier`
-`survivability_baseline` uses. `CovenantRoleBlendConfig` (pk=1 singleton,
+character has no engaged role. `level_width` is one CHECK level's width at the rung
+(`thread_rung`) of **that role's own vow thread** (#5093, ADR-0149 amendment):
+`vow_thread_level(sheet, role)` reads the character's live COVENANT_ROLE thread on the role's
+anchor from the cached `character.threads` handler (0 when she has none), and
+`vow_thread_width(thread_level, table=None)` (both in `world.magic.services.threads`) turns its
+stored level into the width (0 below rung 1, and 0 on a database with no CHECK baseline rows).
+Her other threads (TECHNIQUE, GIFT, SANCTUM, ...) add nothing to vow power; they still feed
+thread survivability through its own flattening sum, which is unchanged. `CovenantRoleBlendConfig` (pk=1 singleton,
 `get_covenant_role_blend_config()`, lazy-created) holds the tunable
 `multiplier_tenths` (default 10 = ×1.0). Kept as its own provider (not folded into an
 existing term) so the contribution stays attributable in cast breakdowns — Layer 4's
@@ -970,8 +974,9 @@ For each of `character.covenant_roles.currently_engaged_roles()`, the term colle
 `covenants.CovenantRoleTechniqueSpecialty` rows from the anchor role **plus** the
 resolved sub-role's own rows when it differs (both role ids go into one lookup), filtered
 to functions the cast technique carries (`technique.cached_function_tags`), and sums
-`total_thread_level_across_all_kinds(sheet) × row.multiplier_tenths / 10` per matching
-row. Returns 0 when the technique carries no `TechniqueFunctionTag`, no role is engaged,
+`level_width × row.multiplier_tenths / 10` per matching row, with `level_width` the CHECK
+width at the rung of the vow thread on that row's role anchor (#5093; a sub-role's row reads its
+parent's thread). Returns 0 when the technique carries no `TechniqueFunctionTag`, no role is engaged,
 or no specialty row matches. **Sub-role rows ADD to the anchor's — they are never
 normalized away** — the opposite of the anchor-only rule
 the blend weights use; a promoted (specialized) member reads as
@@ -1002,9 +1007,10 @@ Guards: no technique → 0 (perks are cast-scoped); no engaged covenant role on 
 0 (a cheap exit that never skips a case `applicable_perks` would otherwise have fired,
 since `applicable_perks`'s own ally-candidate path also requires the subject to hold at
 least one engaged role before a mate's group-beneficiary perk can reach them). When perks
-fire, the term sums, per firing, `total_thread_level_across_all_kinds(sheet) ×
-magnitude_tenths / 10` (int-truncated after summing in `Decimal` — the same arithmetic
-Layers 1-2 use) and calls `announce_fired_perks` (the presentation-contract seam, see
+fire, the term sums, per firing, `magnitude_tenths / 10 ×` one CHECK level's width at the rung of
+the **holder's** vow thread (`sum_potency_scaled_magnitudes`; int-truncated after summing in
+`Decimal`, the same arithmetic Layers 1-2 use). A covenant mate's perk helping the caster is
+sized by the mate's thread, never the caster's, and a holder with no vow thread adds 0 (#5093) and calls `announce_fired_perks` (the presentation-contract seam, see
 `docs/systems/covenants.md`) exactly once, since `_derive_power` calls this provider
 exactly once per real cast resolution (`use_technique`'s single orchestration call).
 
