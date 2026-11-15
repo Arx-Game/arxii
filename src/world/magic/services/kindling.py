@@ -1079,6 +1079,7 @@ def _told_of_deed(sheet: CharacterSheet, line: str) -> Callable[[], None]:
             body=line,
             category=NarrativeCategory.SYSTEM,
             ooc_note="Kindled deed",
+            frame_tags={"earned_resonance": True},
         )
 
     return _send

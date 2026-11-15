@@ -8,7 +8,7 @@
  * in the rituals module — not here.
  */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import * as api from './api';
 import { performRitual } from '@/rituals/api';
 import type { PerformRitualRequest } from '@/rituals/types';
@@ -901,6 +901,17 @@ export function usePendingDriftConversionOffers(enabled: boolean = true) {
     queryFn: () => api.getPendingDriftConversionOffers(),
     enabled,
   });
+}
+
+/**
+ * A deed was earned: what a reflection can name now includes it, and the rite's reading changes
+ * with it. The same two keys `usePerformSettlingRite` invalidates, from the live "You earned ..."
+ * line (the server tags that text frame `earned_resonance`) so the "Reflecting on" row lists the
+ * deed without a reload.
+ */
+export function refreshReflectableDeeds(queryClient: QueryClient): void {
+  queryClient.invalidateQueries({ queryKey: magicKeys.reflectionOptionsAll() }).catch(() => {});
+  queryClient.invalidateQueries({ queryKey: magicKeys.settlingRiteAll() }).catch(() => {});
 }
 
 /**
