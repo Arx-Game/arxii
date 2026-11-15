@@ -30,6 +30,7 @@ from world.mechanics.factories import (
     ChallengeTemplateFactory,
 )
 from world.missions.services.challenge_options import challenge_options_for_character
+from world.traits.factories import ensure_level_ladder
 
 
 class ChallengeOptionsForCharacterTests(TestCase):
@@ -37,7 +38,8 @@ class ChallengeOptionsForCharacterTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.challenge = ChallengeTemplateFactory(name="The Pit", severity_level=0)
+        ensure_level_ladder()
+        cls.challenge = ChallengeTemplateFactory(name="The Pit", severity_level=2)
 
         # char_with holds two capabilities, each granted by an active
         # condition; char_without holds none.
@@ -114,10 +116,11 @@ class ChallengeOptionsForCharacterTests(TestCase):
         without = challenge_options_for_character(self.challenge, self.char_without)
         self.assertNotIn(self.approach_fly.pk, {o.approach.pk for o in without})
 
-    def test_difficulty_is_the_challenge_severity(self) -> None:
+    def test_difficulty_is_the_challenge_severity_levels_baseline(self) -> None:
         options = challenge_options_for_character(self.challenge, self.char_with)
         self.assertTrue(options)
-        self.assertTrue(all(o.difficulty == 5 for o in options))
+        # level 2's baseline
+        self.assertTrue(all(o.difficulty == 26 for o in options))
 
     def test_option_carries_check_type_and_owner(self) -> None:
         [option] = challenge_options_for_character(self.challenge, self.char_without)

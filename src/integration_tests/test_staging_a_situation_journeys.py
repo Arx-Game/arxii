@@ -70,7 +70,7 @@ class StagingASituation(JourneyCase):
         self.assertIn(f"[{self.rising_water.pk}] Rising Water", told)
         told = self.telnet(self.ravenna, "setsituation find Gate")
         self.assertIn("No situation templates matched 'Gate'.", told)
-        self.assertIn(f"[{self.barred_gate.pk}] Barred Gate (Normal)", told)
+        self.assertIn(f"[{self.barred_gate.pk}] Barred Gate (level 2)", told)
 
         # A kind is found by name with its guidance; a bare find is the kind list, not the
         # templates; browsing never places anything.

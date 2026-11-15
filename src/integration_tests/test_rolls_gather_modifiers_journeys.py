@@ -75,6 +75,8 @@ OWN_STANDING = "Incompetent (rank 0), 50% toward Novice (rank 1)"
 GEARED_STANDING = "Novice (rank 1), 12% toward Rank 2 (rank 2)"
 # Trivial is 15 points: 15 of rank 0's 18 points.
 AGAINST_TRIVIAL = "against Incompetent (rank 0), 83% toward Novice (rank 1)"
+# The quarry face challenge is authored at level 1: its baseline, 18 points, where rank 1 starts.
+AGAINST_QUARRY_FACE = "against Novice (rank 1)"
 # Her capability from the approach's technique, and the gloves and the buff.
 CAPABILITY = 5
 GLOVES = ("equipment", "Equipped: Chalked Gloves", 5)
@@ -315,7 +317,7 @@ class AChallengeCountsHerGear(_TheOldQuarry):
         # 24 points: Novice (rank 1, starts at 18), 6 of its 8 points.
         self.assertEqual(
             roll.standing_text,
-            "Novice (rank 1), 75% toward Rank 2 (rank 2) " + AGAINST_TRIVIAL,
+            "Novice (rank 1), 75% toward Rank 2 (rank 2) " + AGAINST_QUARRY_FACE,
         )
         outcome = self.stored()
         self.assertEqual(

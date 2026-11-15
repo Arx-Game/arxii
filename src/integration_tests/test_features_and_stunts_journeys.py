@@ -679,7 +679,7 @@ class StaffReadWhatAFeatureTypeDoes(TestCase):
             "admin:arxii_challengetemplate_change", args=[feature_type.challenge_template.pk]
         )
         self.assertContains(response, f'<a href="{link}">Chandelier challenge</a>')
-        self.assertContains(response, "Hard")
+        self.assertContains(response, "level 5")
 
     def test_more_rows_cost_no_more_queries(self) -> None:
         self.make_type("Chandelier")
