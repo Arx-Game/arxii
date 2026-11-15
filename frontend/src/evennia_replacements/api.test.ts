@@ -47,9 +47,10 @@ describe('apiFetch keeps every request on this site (CodeQL alert #96)', () => {
     expect(mockFetch.mock.calls[0][0]).toBe(`${window.location.origin}/api/items/?page=3`);
   });
 
-  it('refuses a URL on another origin and sends nothing', () => {
-    expect(() => apiFetch('https://evil.example/api/x/')).toThrow(/off this site/);
-    expect(() => apiFetch('//evil.example/api/x/')).toThrow(/off this site/);
+  it('refuses a URL on another origin with a rejection and sends nothing', async () => {
+    await expect(apiFetch('https://evil.example/api/x/')).rejects.toThrow(/off this site/);
+    await expect(apiFetch('//evil.example/api/x/')).rejects.toThrow(/off this site/);
+    await expect(apiFetch('/\\evil.example/api/x/')).rejects.toThrow(/off this site/);
     expect(mockFetch).not.toHaveBeenCalled();
   });
 });

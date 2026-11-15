@@ -27,8 +27,14 @@ function sameOriginUrl(url: string): string {
   return `${origin}${target.pathname}${target.search}`;
 }
 
-export function apiFetch(url: string, options: RequestInit = {}) {
-  const requestUrl = sameOriginUrl(url);
+export function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  let requestUrl: string;
+  try {
+    requestUrl = sameOriginUrl(url);
+  } catch (error) {
+    // A refusal rejects, as fetch itself would, so `.catch` and `allSettled` callers see it.
+    return Promise.reject(error);
+  }
   const method = options.method?.toUpperCase() ?? 'GET';
   const headers = new Headers(options.headers);
 
