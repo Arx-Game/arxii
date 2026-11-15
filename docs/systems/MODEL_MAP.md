@@ -6741,6 +6741,7 @@
   - source_character_distinction -> distinctions.CharacterDistinction [FK] (nullable)
   - source_worship_rite_performance -> worship.WorshipRitePerformance [FK] (nullable)
   - source_kindling_situation -> magic.KindlingSituation [FK] (nullable)
+  - deed_label: CharField (nullable; set only for KINDLED_DEED)
   - source_settling_rite -> magic.SettlingRite [FK] (nullable)
   - source_reflection -> magic.Reflection [FK] (nullable)
 **Pointed to by:**

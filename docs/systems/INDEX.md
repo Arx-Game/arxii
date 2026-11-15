@@ -127,7 +127,7 @@
   replaced `fury_anchor`), Dig deep and Rally by resonance (`dig_deep(participant, resonance=)`,
   `declare_rally(..., resonance=)`, `CombatRoundAction.rally_resonance`, `record_rally_kindling`), GM
   `kindle_by_gm` (action `stage_kindle`, `gm_list_kindling`; telnet `stage kindle`). Earning:
-  `award_kindled_deeds` writes `GainSource.KINDLED_DEED` grants (`ResonanceGrant.source_kindling_situation`),
+  `award_kindled_deeds` writes `GainSource.KINDLED_DEED` grants (`ResonanceGrant.source_kindling_situation`, and `deed_label`, what the character did in her own words, from `KindlingAct.label`),
   and a mission option's `feeds` shows what it would earn. Reflections: `Reflection` and
   `SettlingRite` (`models/reflection.py`), `GainSource.EMBRACED_DEED`, `reflectable_for`,
   `record_reflection`, `unsettling_resonance`; pose and journal actions take `reflect_*` kwargs.
