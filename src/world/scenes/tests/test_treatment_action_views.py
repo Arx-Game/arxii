@@ -125,6 +125,7 @@ class TreatConditionActionViewTests(TestCase):
     ) -> None:
         """POST a valid candidate -> 201, auto-resolves (NPC target, #2214), FKs set."""
         outcome = MagicMock()
+        outcome.outcome = None
         outcome.target_resolved = False
         mock_perform_treatment.return_value = outcome
 
@@ -288,6 +289,7 @@ class TreatConditionActionViewTests(TestCase):
         thread, proving provenance cannot be forged.
         """
         outcome = MagicMock()
+        outcome.outcome = None
         outcome.target_resolved = False
         mock_perform_treatment.return_value = outcome
 
@@ -337,6 +339,7 @@ class TreatConditionActionViewTests(TestCase):
         and leaves target_condition_instance None.
         """
         outcome = MagicMock()
+        outcome.outcome = None
         outcome.target_resolved = False
         mock_perform_treatment.return_value = outcome
 

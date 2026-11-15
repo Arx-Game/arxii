@@ -52,6 +52,7 @@ def _make_pending_resolution(success: bool = True) -> PendingActionResolution:
     """
     check_result = MagicMock()
     check_result.success_level = 1 if success else -1
+    check_result.outcome = None
     check_result.outcome = None  # a hand-built double rolls no outcome tier
     check_result.outcome_name = "Success" if success else "Failure"
     main_result = StepResult(

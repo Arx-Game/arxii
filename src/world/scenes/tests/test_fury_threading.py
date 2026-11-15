@@ -49,6 +49,7 @@ from world.vitals.models import CharacterVitals
 def _make_pending_resolution(success_level: int = 1) -> PendingActionResolution:
     check_result = MagicMock()
     check_result.success_level = success_level
+    check_result.outcome = None
     check_result.outcome_name = "Success" if success_level > 0 else "Failure"
     main_result = StepResult(
         step_label="main",
