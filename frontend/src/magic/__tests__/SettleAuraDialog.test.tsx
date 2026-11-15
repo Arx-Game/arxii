@@ -1,6 +1,7 @@
 /**
- * Coverage for the drift conversion offer ceremony (#4733, Screen 5 of the
- * approved demo): DriftConversionOfferGate + dialog with real hooks
+ * Coverage for the Settle your aura dialog (#5123, Screen 4 of the approved demo) and
+ * the drift conversion offer ceremony (#4733) that is its Atone exit:
+ * DriftConversionOfferGate + dialog with real hooks
  * (usePendingDriftConversionOffers / useConvertDrift / useDeclineDriftConversion)
  * and a mocked api transport - same pattern as EntryFlourishOfferDialog.test.tsx.
  */
@@ -11,6 +12,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
 import type { ReactNode } from 'react';
 import { DriftConversionOfferGate } from '../components/DriftConversionOfferGate';
+import { SettleAuraDialog } from '../components/SettleAuraDialog';
 import type {
   DriftConversionOffer,
   DriftCorrectionResult,
@@ -24,11 +26,45 @@ vi.mock('../api', () => ({
 }));
 
 import * as api from '../api';
+import type { CharacterAura } from '../auraQueries';
 import { throwApiError } from '@/lib/errors';
+
+// The aura endpoints go through apiFetch; the gate reads the account's auras and the
+// dialog's Accept posts to the aura's accept action.
+const apiFetchMock = vi.hoisted(() => vi.fn());
+vi.mock('@/evennia_replacements/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/evennia_replacements/api')>()),
+  apiFetch: (...args: unknown[]) => apiFetchMock(...args),
+}));
+
+/** A primal character whose abyssal has grown past who they are. */
+const UNSETTLED_AURA: CharacterAura = {
+  id: 7,
+  character: 55,
+  shares: [
+    { affinity_id: 1, affinity_name: 'Primal', percent: '58.00', settled_percent: '66.00' },
+    { affinity_id: 2, affinity_name: 'Abyssal', percent: '42.00', settled_percent: '34.00' },
+  ],
+  dominant_affinity: 'Primal',
+  dominant_affinity_display: 'Primal',
+  unsettled: true,
+  unsettled_line: 'Your Domination has grown strong enough to make you unsettled.',
+  unsettled_affinity_name: 'Abyssal',
+  mire_share_words: 'none',
+  glimpse_state: 'NOT_STARTED',
+  updated_at: '2026-11-14T00:00:00Z',
+};
+const SETTLED_AURA: CharacterAura = {
+  ...UNSETTLED_AURA,
+  unsettled: false,
+  unsettled_line: '',
+  unsettled_affinity_name: '',
+};
 
 const OFFER: DriftConversionOffer = {
   id: 12,
   scene_id: 101,
+  character_id: 55,
   caps: [
     {
       target_resonance: { id: 20, name: 'Dawnlight', affinity: 'Celestial' },
@@ -94,8 +130,19 @@ function paginated(results: DriftConversionOffer[]): PaginatedDriftConversionOff
   return { count: results.length, next: null, previous: null, results };
 }
 
-function renderGate(offers: DriftConversionOffer[], sceneId: number | null = 101) {
+function renderGate(
+  offers: DriftConversionOffer[],
+  sceneId: number | null = 101,
+  auras: CharacterAura[] = []
+) {
   vi.mocked(api.getPendingDriftConversionOffers).mockResolvedValue(paginated(offers));
+  apiFetchMock.mockImplementation(async (_url: string, init?: RequestInit) =>
+    init?.method === 'POST'
+      ? new Response(JSON.stringify({ detail: 'You become more abyssal.', aura: SETTLED_AURA }), {
+          status: 200,
+        })
+      : new Response(JSON.stringify(auras), { status: 200 })
+  );
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
@@ -106,16 +153,17 @@ function renderGate(offers: DriftConversionOffer[], sceneId: number | null = 101
   return { ...view, client };
 }
 
-describe('DriftConversionOfferDialog (via DriftConversionOfferGate)', () => {
+describe('SettleAuraDialog Atone exit (via DriftConversionOfferGate)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('auto-opens headed "Conversion offer" with the cap remaining and mode-labelled pills', async () => {
+  it('auto-opens as Settle your aura with the cap remaining and mode-labelled pills', async () => {
     renderGate([OFFER]);
 
     const dialog = await screen.findByRole('dialog');
-    expect(dialog).toHaveTextContent('Conversion offer');
+    expect(dialog).toHaveTextContent('Settle your aura');
+    expect(screen.getByTestId('settle-exit-atone')).toHaveTextContent('Atone');
     expect(screen.getByTestId('drift-cap-20')).toHaveTextContent('Dawnlight');
     expect(screen.getByTestId('drift-cap-remaining-20')).toHaveTextContent('12');
     expect(screen.getByTestId('drift-component-501')).toHaveTextContent(
@@ -178,13 +226,13 @@ describe('DriftConversionOfferDialog (via DriftConversionOfferGate)', () => {
     );
   });
 
-  it('Perform the rite is disabled until a component is chosen and the amount is valid', async () => {
+  it('Begin the rite is disabled until a component is chosen and the amount is valid', async () => {
     const user = userEvent.setup();
     renderGate([OFFER]);
 
     await screen.findByRole('dialog');
     const perform = screen.getByTestId('drift-perform-20');
-    expect(perform).toHaveTextContent('Perform the rite');
+    expect(perform).toHaveTextContent('Begin the rite');
     expect(perform).toBeDisabled();
 
     await user.click(screen.getByTestId('drift-component-502'));
@@ -239,7 +287,7 @@ describe('DriftConversionOfferDialog (via DriftConversionOfferGate)', () => {
     expect(screen.getByTestId('drift-component-503')).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('Perform the rite posts the exact body and shows the result line', async () => {
+  it('Begin the rite posts the exact body and shows the result line', async () => {
     const user = userEvent.setup();
     vi.mocked(api.convertDrift).mockResolvedValue(RESULT);
     renderGate([OFFER]);
@@ -345,13 +393,13 @@ describe('DriftConversionOfferDialog (via DriftConversionOfferGate)', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
-  it('Decline posts { offer_id } and closes', async () => {
+  it('Not now posts { offer_id } and closes', async () => {
     const user = userEvent.setup();
     vi.mocked(api.declineDriftConversion).mockResolvedValue({ detail: 'ok' });
     renderGate([OFFER]);
 
     await screen.findByRole('dialog');
-    await user.click(screen.getByRole('button', { name: 'Decline' }));
+    await user.click(screen.getByRole('button', { name: 'Not now' }));
 
     await waitFor(() => {
       expect(api.declineDriftConversion).toHaveBeenCalledWith({ offer_id: 12 });
@@ -479,7 +527,7 @@ function lightThemeClasses(element: HTMLElement): string[] {
   return Array.from(element.classList).filter((c) => !c.includes(':'));
 }
 
-describe('DriftConversionOfferDialog - readable in the light theme', () => {
+describe('SettleAuraDialog - readable in the light theme', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -492,7 +540,7 @@ describe('DriftConversionOfferDialog - readable in the light theme', () => {
     const glow = screen.getByTestId('drift-conversion-gate-glow');
     expect(strip).not.toHaveClass('animate-pulse');
     expect(label).not.toHaveClass('animate-pulse');
-    expect(label).toHaveTextContent('Conversion offer');
+    expect(label).toHaveTextContent('Settle your aura');
     expect(glow).toHaveClass('animate-pulse', 'motion-reduce:animate-none');
     expect(glow).toHaveAttribute('aria-hidden', 'true');
   });
@@ -540,16 +588,21 @@ describe('DriftConversionOfferDialog - readable in the light theme', () => {
   });
 });
 
-describe('DriftConversionOfferDialog - the approved Screen 5 box', () => {
+describe('SettleAuraDialog - the approved Screen 4 box', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('is labelled "Conversion offer · this scene"', async () => {
-    renderGate([OFFER]);
+  it('is headed by the unsettled sentence once the aura is known', async () => {
+    renderGate([OFFER], 101, [UNSETTLED_AURA]);
 
-    const dialog = await screen.findByRole('dialog', { name: 'Conversion offer · this scene' });
+    const dialog = await screen.findByRole('dialog');
     expect(dialog).toBeInTheDocument();
+    expect(
+      await screen.findByRole('dialog', {
+        name: 'Your Domination has grown strong enough to make you unsettled.',
+      })
+    ).toBeInTheDocument();
   });
 
   it('names one held source in the system line', async () => {
@@ -561,7 +614,7 @@ describe('DriftConversionOfferDialog - the approved Screen 5 box', () => {
 
     await screen.findByRole('dialog');
     expect(screen.getByTestId('drift-system-line-20')).toHaveTextContent(
-      /^You hold Ruin that does not fit you\. Convert it to Dawnlight\.$/
+      /^The Ruin you gained turns to Dawnlight\.$/
     );
     // One source is a plain chip, not a picker.
     expect(screen.getByTestId('drift-source-20-30').tagName).toBe('SPAN');
@@ -573,21 +626,288 @@ describe('DriftConversionOfferDialog - the approved Screen 5 box', () => {
 
     await screen.findByRole('dialog');
     expect(screen.getByTestId('drift-system-line-20')).toHaveTextContent(
-      /^You hold Ruin and Spite that does not fit you\. Convert it to Dawnlight\.$/
+      /^The Ruin and Spite you gained turns to Dawnlight\.$/
     );
   });
 
-  it('holds Decline and Perform the rite in one right-aligned row inside the box', async () => {
+  it('opens the Atone exit with the rite and what it turns, as one line', async () => {
+    renderGate([OFFER]);
+
+    await screen.findByRole('dialog');
+    const opening = screen.getByTestId('settle-atone-line');
+    expect(opening).toHaveTextContent(
+      /^Perform the rite of atonement\. The Ruin and Spite you gained turns to Dawnlight\.$/
+    );
+    expect(opening).toContainElement(screen.getByTestId('drift-system-line-20'));
+    // The line leads the card; it is not squeezed into the cap block beside the cap.
+    expect(screen.getByTestId('drift-cap-20')).not.toContainElement(
+      screen.getByTestId('drift-system-line-20')
+    );
+  });
+
+  it('holds Begin the rite in a left-aligned outline row inside the Atone exit, and Not now below', async () => {
     renderGate([OFFER]);
 
     const dialog = await screen.findByRole('dialog');
     const row = screen.getByTestId('drift-actions-20');
-    expect(row).toHaveClass('justify-end');
-    expect(dialog).toContainElement(row);
+    expect(row).toHaveClass('justify-start');
+    expect(row).not.toHaveClass('justify-end');
+    // An outline button in the sheet's rust, as in the demo, not a solid one.
+    expect(screen.getByTestId('drift-perform-20')).toHaveClass('border-primary', 'text-primary');
+    expect(screen.getByTestId('drift-perform-20')).not.toHaveClass('bg-primary');
+    expect(screen.getByTestId('settle-exit-atone')).toContainElement(row);
     const buttons = Array.from(row.querySelectorAll('button')).map((b) => b.textContent);
-    expect(buttons).toEqual(['Decline', 'Perform the rite']);
-    // Decline appears once, in that row.
-    expect(screen.getAllByRole('button', { name: 'Decline' })).toHaveLength(1);
+    expect(buttons).toEqual(['Begin the rite']);
+    // Not now appears once, in the dialog's own footer.
+    expect(screen.getAllByRole('button', { name: 'Not now' })).toHaveLength(1);
+    expect(dialog).toContainElement(screen.getByTestId('settle-not-now'));
+  });
+});
+
+describe('SettleAuraDialog - Atone and Accept exits (#5123)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('shows the unsettled sentence and both exits while an offer is open', async () => {
+    renderGate([OFFER], 101, [UNSETTLED_AURA]);
+
+    await screen.findByTestId('settle-exit-accept');
+    expect(screen.getByTestId('settle-exit-atone')).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toHaveTextContent(
+      'Your Domination has grown strong enough to make you unsettled.'
+    );
+    expect(screen.getByText('Accept the changes to your Aura')).toBeInTheDocument();
+    expect(screen.getByTestId('settle-accept-line')).toHaveTextContent(
+      /^You become more abyssal\.$/
+    );
+    // The word the player never reads, and no figures.
+    expect(screen.getByRole('dialog')).not.toHaveTextContent(/accepted/i);
+    expect(screen.getByRole('dialog')).not.toHaveTextContent('42');
+  });
+
+  it('names the affinity the server names, not the one whose share grew most', async () => {
+    // Primal grew most in raw terms (+10), but only the Abyssal passed its settled share
+    // plus the tolerance, and that is the one accepting will name.
+    const aura: CharacterAura = {
+      ...UNSETTLED_AURA,
+      shares: [
+        { affinity_id: 1, affinity_name: 'Primal', percent: '70.00', settled_percent: '60.00' },
+        { affinity_id: 3, affinity_name: 'Celestial', percent: '10.00', settled_percent: '30.00' },
+        { affinity_id: 2, affinity_name: 'Abyssal', percent: '20.00', settled_percent: '10.00' },
+      ],
+    };
+    renderGate([OFFER], 101, [aura]);
+
+    expect(await screen.findByTestId('settle-accept-line')).toHaveTextContent(
+      /^You become more abyssal\.$/
+    );
+  });
+
+  it('hides Atone when no offer is open and still offers Accept', async () => {
+    // No offer means no gate; this is the dialog the sheet mounts.
+    const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    render(
+      <SettleAuraDialog
+        aura={UNSETTLED_AURA}
+        offer={null}
+        resultLine={null}
+        onResult={vi.fn()}
+        open
+        onOpenChange={vi.fn()}
+        onClose={vi.fn()}
+      />,
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        ),
+      }
+    );
+
+    expect(await screen.findByTestId('settle-exit-accept')).toBeInTheDocument();
+    expect(screen.queryByTestId('settle-exit-atone')).not.toBeInTheDocument();
+    expect(screen.queryByText('Atone')).not.toBeInTheDocument();
+  });
+
+  it('gives a lone Accept exit the dialog width, not half a two-column grid', async () => {
+    const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    render(
+      <SettleAuraDialog
+        aura={UNSETTLED_AURA}
+        offer={null}
+        resultLine={null}
+        onResult={vi.fn()}
+        open
+        onOpenChange={vi.fn()}
+        onClose={vi.fn()}
+      />,
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        ),
+      }
+    );
+
+    const exits = await screen.findByTestId('settle-exits');
+    expect(exits).not.toHaveClass('sm:grid-cols-2');
+    expect(exits).toContainElement(screen.getByTestId('settle-exit-accept'));
+  });
+
+  it('puts the two exits side by side only when both show', async () => {
+    renderGate([OFFER], 101, [UNSETTLED_AURA]);
+
+    await screen.findByTestId('settle-exit-accept');
+    expect(screen.getByTestId('settle-exits')).toHaveClass('sm:grid-cols-2');
+  });
+
+  it('draws Accept solid and Not now outlined, both in the sheet rust', async () => {
+    renderGate([OFFER], 101, [UNSETTLED_AURA]);
+
+    const accept = await screen.findByTestId('settle-accept-button');
+    expect(accept).toHaveClass('bg-primary');
+    expect(screen.getByTestId('settle-not-now')).toHaveClass('border-primary', 'text-primary');
+    // `.aura-settle-dialog` carries the rust fallback the portal would otherwise miss.
+    expect(screen.getByRole('dialog')).toHaveClass('aura-settle-dialog');
+  });
+
+  it('Accept posts to the aura accept endpoint and shows the server line', async () => {
+    const user = userEvent.setup();
+    renderGate([OFFER], 101, [UNSETTLED_AURA]);
+
+    await user.click(await screen.findByTestId('settle-accept-button'));
+
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalledWith('/api/magic/character-auras/7/accept/', {
+        method: 'POST',
+      });
+    });
+    expect(await screen.findByTestId('drift-result')).toHaveTextContent(
+      /^You become more abyssal\.$/
+    );
+  });
+
+  it('reads only the offer character aura and accepts for it, never another unsettled alt', async () => {
+    const user = userEvent.setup();
+    const alt: CharacterAura = {
+      ...UNSETTLED_AURA,
+      id: 8,
+      character: 99,
+      unsettled_line: 'Your Spite has grown strong enough to make you unsettled.',
+    };
+    // The mocked endpoint hands back both alts, as it would for staff; the gate must pick.
+    renderGate([OFFER], 101, [alt, UNSETTLED_AURA]);
+
+    await user.click(await screen.findByTestId('settle-accept-button'));
+
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalledWith('/api/magic/character-auras/7/accept/', {
+        method: 'POST',
+      });
+    });
+    expect(apiFetchMock).not.toHaveBeenCalledWith(
+      '/api/magic/character-auras/8/accept/',
+      expect.anything()
+    );
+    // The read was for the offer's character only.
+    expect(apiFetchMock).toHaveBeenCalledWith('/api/magic/character-auras/?character=55');
+    expect(screen.getByRole('dialog')).not.toHaveTextContent('Your Spite');
+  });
+
+  it('does not read any aura while no offer is open', async () => {
+    renderGate([], 101, [UNSETTLED_AURA]);
+
+    await waitFor(() => {
+      expect(api.getPendingDriftConversionOffers).toHaveBeenCalled();
+    });
+    await act(async () => {
+      await vi.mocked(api.getPendingDriftConversionOffers).mock.results[0].value;
+    });
+    expect(apiFetchMock).not.toHaveBeenCalled();
+  });
+
+  it('offers no Accept once the character is settled', async () => {
+    renderGate([OFFER], 101, [SETTLED_AURA]);
+
+    await screen.findByTestId('settle-exit-atone');
+    // The aura read must have been asked AND answered before absence means anything.
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalled();
+    });
+    await act(async () => {
+      await apiFetchMock.mock.results[0].value;
+    });
+    expect(screen.queryByTestId('settle-exit-accept')).not.toBeInTheDocument();
+  });
+});
+
+describe('SettleAuraDialog - reads the new state after it settles the character (#5123)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /** Reads of the aura answer with `current()`; the accept POST answers a settled aura. */
+  function serveAuras(current: () => CharacterAura[]) {
+    apiFetchMock.mockImplementation(async (_url: string, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? new Response(JSON.stringify({ detail: 'You become more abyssal.', aura: SETTLED_AURA }), {
+            status: 200,
+          })
+        : new Response(JSON.stringify(current()), { status: 200 })
+    );
+  }
+
+  const auraReads = () =>
+    apiFetchMock.mock.calls.filter(
+      ([url, init]) => String(url).includes('character-auras/?character=') && !init?.method
+    );
+
+  it('an atonement that settles her drops the unsettled header and the Accept card', async () => {
+    const user = userEvent.setup();
+    let settled = false;
+    vi.mocked(api.convertDrift).mockResolvedValue(RESULT);
+    renderGate([OFFER], 101, [UNSETTLED_AURA]);
+    serveAuras(() => [settled ? SETTLED_AURA : UNSETTLED_AURA]);
+    await screen.findByTestId('settle-exit-accept');
+    expect(screen.getByRole('dialog')).toHaveTextContent('has grown strong enough');
+    const readsBefore = auraReads().length;
+
+    // The server closes the offer and reads her settled once the rite has run.
+    settled = true;
+    vi.mocked(api.getPendingDriftConversionOffers).mockResolvedValue(paginated([]));
+    await user.click(screen.getByTestId('drift-component-502'));
+    await user.click(screen.getByTestId('drift-perform-20'));
+
+    expect(await screen.findByTestId('drift-result')).toHaveTextContent('Partial Success');
+    await waitFor(() => {
+      expect(screen.queryByTestId('settle-exit-accept')).not.toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('settle-exit-atone')).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog')).not.toHaveTextContent('has grown strong enough');
+    // The aura was asked for again, not just left as it was read at open.
+    expect(auraReads().length).toBeGreaterThan(readsBefore);
+  });
+
+  it('accepting refetches the offers, so the leftover Atone card goes with the offer', async () => {
+    const user = userEvent.setup();
+    let settled = false;
+    renderGate([OFFER], 101, [UNSETTLED_AURA]);
+    serveAuras(() => [settled ? SETTLED_AURA : UNSETTLED_AURA]);
+    const acceptButton = await screen.findByTestId('settle-accept-button');
+    // Accepting settles her; from then on the offer endpoint answers empty.
+    settled = true;
+    vi.mocked(api.getPendingDriftConversionOffers).mockResolvedValue(paginated([]));
+    await user.click(acceptButton);
+
+    await waitFor(() => {
+      expect(vi.mocked(api.getPendingDriftConversionOffers).mock.calls.length).toBeGreaterThan(1);
+    });
+    expect(await screen.findByTestId('drift-result')).toHaveTextContent(
+      /^You become more abyssal\.$/
+    );
+    await waitFor(() => {
+      expect(screen.queryByTestId('settle-exit-atone')).not.toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('settle-exit-accept')).not.toBeInTheDocument();
   });
 });
 

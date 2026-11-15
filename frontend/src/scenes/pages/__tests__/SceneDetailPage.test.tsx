@@ -300,6 +300,19 @@ vi.mock('@/magic/queries', () => ({
   useCharacterResonances: vi.fn(() => ({ data: [], isLoading: false })),
 }));
 
+// #5123: the Settle your aura dialog reads the aura and can accept its changes; no aura
+// here, so the gate shows only the offer's own exit.
+vi.mock('@/magic/auraQueries', () => ({
+  useCharacterAuras: () => ({ data: [] }),
+  useAcceptAura: () => ({
+    mutate: vi.fn(),
+    reset: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
+}));
+
 // SelfCheckPanel + CheckCallPromptCard (#3295) self-fetching queries — same
 // "mock the query module so the real fetch never fires" pattern as every
 // other panel query module in this file (jsdom's fetch cannot resolve a

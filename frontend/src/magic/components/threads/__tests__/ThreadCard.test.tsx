@@ -8,10 +8,12 @@ const makeThread = (overrides: Partial<Thread> = {}): Thread => ({
   owner: 100,
   resonance: 1,
   resonance_name: 'Bene',
+  resonances: [],
   target_kind: 'TRAIT',
   target_trait_id: null,
   target_technique_id: null,
   name: 'Test Thread',
+  display_name: overrides.name ?? 'Test Thread',
   description: '',
   level: 30,
   developed_points: 50,
@@ -42,11 +44,16 @@ describe('ThreadCard', () => {
     expect(screen.getByText('Test Thread')).toBeInTheDocument();
   });
 
-  it('renders "(unnamed)" when name is empty', () => {
+  it('names an unnamed Gift thread by its Gift, the server display name', () => {
     render(
-      <ThreadCard thread={makeThread({ name: '' })} summary={makeSummary()} onClick={vi.fn()} />
+      <ThreadCard
+        thread={makeThread({ name: '', display_name: 'Kindling' })}
+        summary={makeSummary()}
+        onClick={vi.fn()}
+      />
     );
-    expect(screen.getByText('(unnamed)')).toBeInTheDocument();
+    expect(screen.getByText('Kindling')).toBeInTheDocument();
+    expect(screen.queryByText('(unnamed)')).not.toBeInTheDocument();
   });
 
   it('renders target_kind badge', () => {
@@ -146,5 +153,28 @@ describe('ThreadCard', () => {
     fireEvent.click(screen.getByTestId('thread-card-7'));
     expect(handleClick).toHaveBeenCalledOnce();
     expect(handleClick).toHaveBeenCalledWith(thread);
+  });
+  it('says the thread mix in words when it holds several resonances', () => {
+    render(
+      <ThreadCard
+        thread={makeThread({
+          id: 3,
+          resonances: [
+            { resonance_id: 1, resonance_name: 'Fury', amount: 30, leads: true },
+            { resonance_id: 2, resonance_name: 'Domination', amount: 10, leads: false },
+          ],
+        })}
+        summary={makeSummary()}
+        onClick={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId('thread-card-mix-3')).toHaveTextContent(
+      'mostly Fury, some Domination'
+    );
+  });
+
+  it('names the leading resonance when the thread has no rows', () => {
+    render(<ThreadCard thread={makeThread({ id: 4 })} summary={makeSummary()} onClick={vi.fn()} />);
+    expect(screen.getByTestId('thread-card-mix-4')).toHaveTextContent('Bene');
   });
 });

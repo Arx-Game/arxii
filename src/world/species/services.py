@@ -19,8 +19,11 @@ from world.scenes.round_services import ensure_round_for_acute_condition
 from world.species.models import SpeciesGiftGrant
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from world.character_creation.models import Beginnings
     from world.character_sheets.models import CharacterSheet
+    from world.magic.models.affinity import Resonance
     from world.magic.models.gifts import CharacterGift
     from world.species.models import Language
 
@@ -271,14 +274,16 @@ def total_species_gift_cost(species) -> int:
     )
 
 
-def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[CharacterGift]:
+def provision_species_gifts(
+    sheet: CharacterSheet, *, resonances: Sequence[Resonance] = ()
+) -> list[CharacterGift]:
     """Mint the species' Minor Gift(s) + latent GIFT thread + any drawback. Idempotent.
 
-    ``resonance`` is the player's CG-chosen gift resonance (the same value the Major-gift
-    block resolves). When None, ``grant_gift_to_character`` resolves it via the shared
-    grant-time resolver (``_resolve_grant_resonance``) — for a Minor Gift this typically
-    anchors to the Major-gift thread's resonance, since that thread already exists by the
-    time this runs.
+    ``resonances`` are the player's CG-chosen gift resonances, heaviest first (the same
+    list the Major-gift block resolves). When empty, ``grant_gift_to_character`` resolves
+    one via the shared grant-time resolver (``_resolve_grant_resonance``) — for a Minor
+    Gift this typically anchors to the Major-gift thread's resonance, since that thread
+    already exists by the time this runs.
 
     Called from finalize_magic_data after the Major-gift block so the species
     gift thread anchors to the same resonance as the player's Major-gift thread.
@@ -295,7 +300,7 @@ def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[Ch
     minted: list[CharacterGift] = []
     for grant in grants:
         cg, _ = grant_gift_to_character(
-            sheet, grant.gift, resonance=resonance, origin=AcquisitionOrigin.SPECIES_GRANT
+            sheet, grant.gift, resonances=resonances, origin=AcquisitionOrigin.SPECIES_GRANT
         )
         minted.append(cg)
         if grant.drawback_condition_id is not None:

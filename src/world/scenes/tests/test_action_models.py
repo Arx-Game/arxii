@@ -247,7 +247,9 @@ class SceneActionPullDeclarationTests(TestCase):
             request=self.request,
             tier=CastPullTier.TIER_2,
         )
-        decl.threads.set([self.thread])
+        decl.threads.set(
+            [self.thread], through_defaults={"paying_resonance": self.thread.resonance}
+        )
         self.assertEqual(self.request.pull_declaration.tier, CastPullTier.TIER_2)
         self.assertEqual(
             list(self.request.pull_declaration.threads.values_list("pk", flat=True)),

@@ -199,6 +199,12 @@ def _perform_fall(
         partial=False,
     )
 
+    # A Fall or Redemption also moves who she is: her settled shares follow the new aura, so
+    # she comes out of the rite settled (#5123, owner ruling 2026-11-14).
+    from world.magic.services.drift import settle_shares  # noqa: PLC0415
+
+    settle_shares(character_sheet)
+
     # Create the irreversibility record
     record = FallRedemptionRecord.objects.create(
         character_sheet=character_sheet,

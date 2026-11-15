@@ -107,8 +107,14 @@ def _related_pull_effect(resolver: CombatTechniqueResolver, pull, **kwargs):
     from world.combat.factories import CombatPullResolvedEffectFactory
     from world.magic.constants import TargetKind
     from world.magic.factories import ThreadFactory
+    from world.magic.models import Thread
 
-    thread = ThreadFactory(
+    # One thread per anchor (#5123): a second effect on the same technique shares it.
+    thread = Thread.objects.filter(
+        owner=resolver.participant.character_sheet,
+        target_kind=TargetKind.TECHNIQUE,
+        target_technique=resolver.action.focused_action,
+    ).first() or ThreadFactory(
         owner=resolver.participant.character_sheet,
         target_kind=TargetKind.TECHNIQUE,
         target_trait=None,
@@ -777,7 +783,7 @@ class PullWideBonusTests(TestCase):
                 round_number=resolver.participant.encounter.round_number,
             )
             unrelated = ThreadFactory(owner=resolver.participant.character_sheet)
-            pull.threads.add(unrelated)
+            pull.threads.add(unrelated, through_defaults={"paying_resonance": unrelated.resonance})
             CombatPullResolvedEffectFactory(
                 pull=pull,
                 source_thread=unrelated,
@@ -789,7 +795,10 @@ class PullWideBonusTests(TestCase):
                 related = _related_pull_effect(
                     resolver, pull, kind=EffectKind.FLAT_BONUS, scaled_value=2
                 )
-                pull.threads.add(related.source_thread)
+                pull.threads.add(
+                    related.source_thread,
+                    through_defaults={"paying_resonance": related.source_thread.resonance},
+                )
             resolver.participant.character_sheet.character.combat_pulls.invalidate()
 
             total = _sum_active_flat_bonuses(

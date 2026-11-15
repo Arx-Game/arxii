@@ -25,9 +25,6 @@ resolution to this helper so the logic lives in exactly one place.
 (``CastTechniqueAction.round_declaration`` and
 ``_dispatch_clash_contribution``) call this helper instead of reading
 ``kwargs["cast_pull"]`` directly so both transports converge transparently.
-
-``round_pull_resonances`` reads the committed pull back at resolution, for the
-carried-drift focus roll the cast makes (#4732).
 """
 
 from __future__ import annotations
@@ -35,6 +32,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
@@ -45,19 +44,22 @@ if TYPE_CHECKING:
         CombatPullResolvedEffect,
     )
     from world.covenants.perks.context import SituationContext
-    from world.magic.models import Resonance
     from world.magic.types.burn import ResonanceBurnResult
     from world.magic.types.magic_skills import CastCheck
     from world.magic.types.pull import CastPullDeclaration, PullActionContext
 
 
-def build_cast_pull_declaration(
+_BURN_NOT_A_PAYER = "The burn must come from a resonance you are paying with."
+
+
+def build_cast_pull_declaration(  # noqa: PLR0913 - the pull's whole declaration
     owner_sheet_id: int,
     *,
     tier: int,
     thread_ids: list[int],
     burn: int = 0,
     burn_resonance_id: int | None = None,
+    payer_ids: Mapping[Any, Any] | None = None,
 ) -> CastPullDeclaration:
     """Resolve raw pull IDs into a ``CastPullDeclaration`` scoped to *owner_sheet_id*.
 
@@ -66,8 +68,8 @@ def build_cast_pull_declaration(
     (``world.scenes.action_serializers._validate_cast_pull``).  Telnet passes
     pre-built ``CastPullDeclaration`` objects and does not use this function.
 
-    The threads may be of different resonances; each is paid from its own (#5066,
-    maintainer ruling 2026-11-11).
+    The threads may be of different resonances; each is paid by the resonance named for
+    it in ``payer_ids``, else its leading one (#5066, #5123, maintainer ruling 2026-11-11).
 
     Args:
         owner_sheet_id: PK of the caster's ``CharacterSheet``; threads must be owned
@@ -77,8 +79,11 @@ def build_cast_pull_declaration(
         tier: Pull tier (1–3).
         thread_ids: Ordered list of ``Thread`` PKs to include in the pull.
         burn: Resonance the caster asks to burn with the pull for strain (#4736).
-        burn_resonance_id: Which pulled resonance the burn comes from (#5066); may be
-            omitted when every pulled thread shares one resonance.
+        burn_resonance_id: Which paying resonance the burn comes from (#5066); may be
+            omitted when every thread is paid by one resonance.
+        payer_ids: Thread id -> the id of the resonance paying for that thread (#5123).
+            Each key must be a pulled thread and each value a resonance the character
+            holds.
 
     Returns:
         A ``CastPullDeclaration`` carrying the resolved ``Thread`` rows (as a tuple)
@@ -93,12 +98,20 @@ def build_cast_pull_declaration(
             maps it to a ``ValidationError`` at the serializer boundary.
     """
     from world.magic.constants import MAX_RESONANCE_BURN  # noqa: PLC0415
-    from world.magic.exceptions import InvalidImbueAmount, ResonanceBurnInvalid  # noqa: PLC0415
+    from world.magic.exceptions import (  # noqa: PLC0415
+        InvalidImbueAmount,
+        PullValidationError,
+        ResonanceBurnInvalid,
+    )
     from world.magic.models import Resonance, Thread  # noqa: PLC0415
+    from world.magic.services.pull_payers import resolve_pull_payers  # noqa: PLC0415
+    from world.magic.services.threads import get_pull_cost  # noqa: PLC0415
     from world.magic.types.pull import CastPullDeclaration as _CastPullDeclaration  # noqa: PLC0415
 
     if not 0 <= burn <= MAX_RESONANCE_BURN:
         raise ResonanceBurnInvalid
+    # Refuse a tier with no authored cost row here, before the cast or commit reads it.
+    get_pull_cost(tier, None)
     threads = list(
         Thread.objects.filter(
             pk__in=thread_ids,
@@ -118,10 +131,10 @@ def build_cast_pull_declaration(
         threads=tuple(by_id[pk] for pk in thread_ids),
         burn=burn,
         burn_resonance=burn_resonance,
+        payers=resolve_pull_payers(owner_sheet_id, thread_ids, payer_ids),
     )
     if burn > 0 and declaration.burned_resonance is None:
-        msg = "Name which of the pulled resonances to burn."
-        raise InvalidImbueAmount(msg)
+        raise PullValidationError(_BURN_NOT_A_PAYER)
     return declaration
 
 
@@ -138,7 +151,9 @@ def resolve_pull_from_kwargs(
     - **Web** passes raw IDs: ``pull_tier`` (int), ``pull_thread_ids`` (list[int], of
       any resonances, #5066), and optionally ``pull_burn`` (int, #4736): the resonance
       to burn with the pull for strain, with ``pull_burn_resonance_id`` naming which
-      pulled resonance burns (needed only when the pull mixes resonances).
+      paying resonance burns (needed only when the pull mixes payers), and
+      ``pull_payers`` (``{thread_id: resonance_id}``, #5123) naming the resonance that
+      pays for each thread it lists (the others are paid by their leading resonance).
 
     This helper normalises both into a single ``CastPullDeclaration | None`` so
     both combat seams (``CastTechniqueAction.round_declaration`` and
@@ -177,6 +192,7 @@ def resolve_pull_from_kwargs(
     thread_ids = kwargs.get("pull_thread_ids")
     burn = _parse_pull_burn(kwargs.get("pull_burn"))
     burn_resonance_id = kwargs.get("pull_burn_resonance_id")
+    raw_payers = kwargs.get("pull_payers")
     if tier is not None and thread_ids is not None:
         return build_cast_pull_declaration(
             sheet.pk,
@@ -184,6 +200,7 @@ def resolve_pull_from_kwargs(
             thread_ids=[int(t) for t in thread_ids],
             burn=burn,
             burn_resonance_id=int(burn_resonance_id) if burn_resonance_id is not None else None,
+            payer_ids=raw_payers or None,
         )
     if burn > 0:
         from actions.errors import ActionDispatchError  # noqa: PLC0415
@@ -211,22 +228,6 @@ def _parse_pull_burn(raw: object) -> int:
     if isinstance(raw, bool) or not isinstance(raw, int) or not 0 <= raw <= MAX_RESONANCE_BURN:
         raise ActionDispatchError(ActionDispatchError.BURN_INVALID)
     return raw
-
-
-def round_pull_resonances(participant: CombatParticipant) -> tuple[Resonance, ...]:
-    """The resonances ``participant`` pulled this round, if any (#4732, #5066).
-
-    A combat cast's pull is committed as a ``CombatPull`` at declaration, so the
-    round resolver hands its threads' resonances to ``use_technique(pulled_resonances=...)``
-    for the cast's carried-drift focus roll.
-    """
-    character = participant.character_sheet.character
-    pulls = character.combat_pulls.active_for_encounter(participant.encounter)
-    seen: dict[int, Resonance] = {}
-    for pull in pulls:
-        for thread in pull.threads.all():
-            seen.setdefault(thread.resonance_id, thread.resonance)
-    return tuple(seen.values())
 
 
 def pull_action_context(
@@ -463,12 +464,18 @@ def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belo
             beseech_bonus=applied_bonus,
             burn=burn_result.reached if burn_result is not None else 0,
             burn_resonance=cast_pull.burned_resonance,
+            payers=cast_pull.payers,
             burn_valuation=burn_result.valuation if burn_result is not None else None,
             # Recorded whenever a burn was asked for (even one that reached nothing),
             # so a resubmitted declaration can be matched against it.
             burned_for=burned_for if cast_pull.burn > 0 else "",
         )
     except IntegrityError as exc:
+        # Only the one-pull-per-round unique key means "already pulled". The transaction
+        # has rolled back by now, so a pull row for this round is there only when it was
+        # committed before; any other integrity failure is a real fault and propagates.
+        if not _pull_committed_this_round(participant, encounter):
+            raise
         raise ActionDispatchError(ActionDispatchError.PULL_ALREADY_COMMITTED) from exc
     except MagicError as exc:
         raise ActionDispatchError(ActionDispatchError.PULL_INVALID) from exc
@@ -476,6 +483,15 @@ def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belo
         from world.magic.services.burn import announce_burn  # noqa: PLC0415
 
         announce_burn(sheet.character, burn_result)
+
+
+def _pull_committed_this_round(participant: CombatParticipant, encounter: CombatEncounter) -> bool:
+    """Whether ``participant`` already has a ``CombatPull`` row for the encounter's round."""
+    from world.combat.models import CombatPull  # noqa: PLC0415
+
+    return CombatPull.objects.filter(
+        participant=participant, round_number=encounter.round_number
+    ).exists()
 
 
 def _with_style_skill(sheet: CharacterSheet, trait_ids: tuple[int, ...]) -> tuple[int, ...]:
@@ -543,7 +559,9 @@ def _resolve_combat_burn(
             resonance=burned,
             requested=cast_pull.burn,
             runtime_intensity=stats.intensity,
-            pull_cost=pull_resonance_costs(cast_pull.tier, cast_pull.threads)[burned.pk],
+            pull_cost=pull_resonance_costs(cast_pull.tier, cast_pull.threads, cast_pull.payers)[
+                burned.pk
+            ],
             situation_ctx=SituationContext(
                 holder=sheet,
                 subject=sheet,

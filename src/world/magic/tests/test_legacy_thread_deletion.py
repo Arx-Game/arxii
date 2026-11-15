@@ -5,7 +5,9 @@ that REUSES the `magic_thread` table.
 Phase 2 dropped the original 5-axis Thread family. Phase 4 re-adds Thread with
 an entirely different schema. This test guards both: legacy classes other than
 Thread itself must remain absent, and the new Thread shape must expose its
-discriminator + typed FK fields.
+discriminator + typed FK fields. ThreadResonance was dropped in Phase 2 and is
+re-introduced by #5123 as one resonance's row inside a Thread, so it is checked
+for its new shape instead of for absence.
 """
 
 import importlib
@@ -19,7 +21,6 @@ class LegacyThreadFamilyDeletionTests(SimpleTestCase):
         for name in (
             "ThreadType",
             "ThreadJournal",
-            "ThreadResonance",
             "CharacterResonanceTotal",
         ):
             self.assertFalse(
@@ -40,3 +41,13 @@ class LegacyThreadFamilyDeletionTests(SimpleTestCase):
         self.assertIn("target_technique", field_names)
         self.assertIn("target_relationship", field_names)
         self.assertIn("target_capstone", field_names)
+
+    def test_thread_resonance_is_the_per_thread_row_not_the_legacy_class(self) -> None:
+        from world.magic.models import Thread, ThreadResonance
+
+        field_names = {f.name for f in ThreadResonance._meta.get_fields()}
+        self.assertEqual(
+            {"thread", "resonance", "amount", "created_at"},
+            field_names & {"thread", "resonance", "amount", "created_at"},
+        )
+        self.assertIs(ThreadResonance._meta.get_field("thread").related_model, Thread)

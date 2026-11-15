@@ -37,7 +37,9 @@ class CompanionCapacityTests(TestCase):
         self.gift = GiftFactory(name="Beastlord", kind=GiftKind.MINOR)
         self.resonance = ResonanceFactory()
         self.gift.resonances.add(self.resonance)
-        self.thread = provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)
+        self.thread = provision_latent_gift_thread(
+            self.sheet, self.gift, resonances=[self.resonance]
+        )
 
     def test_capacity_is_zero_with_no_authored_rows(self) -> None:
         self.assertEqual(companion_capacity(self.sheet, self.gift), 0)
@@ -251,7 +253,7 @@ class CompanionCapacityWithStablesTests(TestCase):
         self.thread = provision_latent_gift_thread(
             self.sheet,
             self.gift,
-            resonance=self.resonance,
+            resonances=[self.resonance],
         )
 
     def test_stables_bonus_added_to_capacity(self) -> None:

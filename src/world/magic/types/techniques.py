@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from world.checks.types import CheckResult
     from world.conditions.models import ConditionStage
     from world.magic.models import Resonance, Restriction, Technique
+    from world.magic.types.drift import FocusOutcome
     from world.magic.types.substance import SubstanceCallUp
     from world.mechanics.types import AppliedEffect
 
@@ -164,3 +165,7 @@ class TechniqueUseResult:
     runtime_intensity: int = 0
     #: #5018: what calling up her gift's substance spent and did on this cast, if any.
     substance_call_up: SubstanceCallUp | None = None
+    #: #5123: the focus roll an unsettled caster made on this cast, or ``None`` when she
+    #: was settled (no roll). Its ``lines`` are what telnet printed; the web cast result
+    #: carries the same sentences.
+    focus: FocusOutcome | None = None

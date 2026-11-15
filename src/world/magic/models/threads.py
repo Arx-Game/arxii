@@ -509,7 +509,7 @@ class Thread(SharedMemoryModel):
       target_kind" rule at the DB layer (so misuse via .objects.create() also
       fails).
     - Per-kind partial UniqueConstraints prevent duplicate threads within the
-      same (owner, resonance, target_kind, target_*) combination.
+      same (owner, target_kind, target_*) combination.
     """
 
     owner = models.ForeignKey(
@@ -522,7 +522,10 @@ class Thread(SharedMemoryModel):
         "arxii.Resonance",
         on_delete=models.PROTECT,
         related_name="threads",
-        help_text="Resonance this thread channels.",
+        help_text=(
+            "Leading resonance: a denormalized copy of the first ThreadResonance row, "
+            "written only by refresh_leading_resonance."
+        ),
     )
     target_kind = models.CharField(
         max_length=32,
@@ -668,26 +671,26 @@ class Thread(SharedMemoryModel):
         constraints = [
             # ---- Per-kind partial UniqueConstraints (one per TargetKind) ---------
             # Live threads only: a retired thread keeps its row (history) but never holds
-            # the (owner, resonance, anchor) place, so a thread can be re-anchored onto it.
+            # the (owner, anchor) place, so a thread can be re-anchored onto it.
             models.UniqueConstraint(
-                fields=["owner", "resonance", "target_trait"],
+                fields=["owner", "target_trait"],
                 condition=models.Q(target_kind=TargetKind.TRAIT, retired_at__isnull=True),
                 name="uniq_thread_trait",
             ),
             models.UniqueConstraint(
-                fields=["owner", "resonance", "target_technique"],
+                fields=["owner", "target_technique"],
                 condition=models.Q(target_kind=TargetKind.TECHNIQUE, retired_at__isnull=True),
                 name="uniq_thread_technique",
             ),
             models.UniqueConstraint(
-                fields=["owner", "resonance", "target_relationship"],
+                fields=["owner", "target_relationship"],
                 condition=models.Q(
                     target_kind=TargetKind.RELATIONSHIP_TRACK, retired_at__isnull=True
                 ),
                 name="uniq_thread_rel_track",
             ),
             models.UniqueConstraint(
-                fields=["owner", "resonance", "target_capstone"],
+                fields=["owner", "target_capstone"],
                 condition=models.Q(
                     target_kind=TargetKind.RELATIONSHIP_CAPSTONE, retired_at__isnull=True
                 ),
@@ -827,13 +830,10 @@ class Thread(SharedMemoryModel):
             # uniq_thread_covenant_role_active (one active thread per anchor).
             # Retired threads (retired_at IS NOT NULL) are excluded so a
             # character can retire a gift thread and later weave a new one on
-            # the same gift. Multi-resonance (#1619): a character may hold
-            # multiple active GIFT threads per gift, each at a different
-            # resonance — the constraint key includes ``resonance`` so the
-            # same (owner, gift) can have threads at different resonances,
-            # but not two at the same resonance.
+            # the same gift. One thread per anchor (#5123): the thread holds several
+            # resonances on its ThreadResonance rows instead of one thread each.
             models.UniqueConstraint(
-                fields=["owner", "target_gift", "resonance"],
+                fields=["owner", "target_gift"],
                 condition=models.Q(
                     target_kind=TargetKind.GIFT,
                     retired_at__isnull=True,
@@ -1078,6 +1078,51 @@ class Thread(SharedMemoryModel):
                     ),
                 },
             )
+
+
+class ThreadResonance(SharedMemoryModel):
+    """One resonance's development points inside a Thread (#5123).
+
+    A thread holds several resonances. ``amount`` is the cumulative total of that
+    resonance ever imbued into the thread: spending ``developed_points`` on a level
+    never lowers it, and rows change only by imbuing (and by the retune and Fall
+    moves). The first row by Meta ordering (largest amount, then earliest created)
+    is the leading resonance, which ``Thread.resonance`` copies. Written only by
+    services; shown read-only in admin.
+    """
+
+    thread = models.ForeignKey(
+        Thread,
+        on_delete=models.CASCADE,
+        related_name="resonance_rows",
+        help_text="Thread this resonance is developed into.",
+    )
+    resonance = models.ForeignKey(
+        "arxii.Resonance",
+        on_delete=models.PROTECT,
+        related_name="thread_rows",
+        help_text="Resonance whose points these are.",
+    )
+    amount = models.PositiveIntegerField(
+        default=0,
+        help_text="Development points this resonance put into the thread.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("thread", "-amount", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["thread", "resonance"],
+                name="uniq_thread_resonance_row",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["thread", "-amount", "id"], name="threadres_lead_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"ThreadResonance(thread={self.thread_id} res={self.resonance_id} {self.amount})"
 
 
 class ThreadLevelUnlock(SharedMemoryModel):

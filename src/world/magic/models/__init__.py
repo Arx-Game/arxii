@@ -22,7 +22,7 @@ Submodules (see Scope 6 §4.4):
 - motifs: Facet, FacetEffectBonus, Motif, MotifResonance, MotifResonanceAssociation
 - soulfray: SoulfrayConfig, MishapPoolTier, AnimaRitualBudgetAward
 - alterations: MagicalAlterationTemplate, PendingAlteration, MagicalAlterationEvent
-- threads: Thread, ThreadLevelUnlock, ThreadPullCost, ThreadXPLockedLevel,
+- threads: Thread, ThreadResonance, ThreadLevelUnlock, ThreadPullCost, ThreadXPLockedLevel,
   ThreadPullEffect
 - weaving: ThreadWeavingUnlock, CharacterThreadWeavingUnlock,
   ThreadWeavingTeachingOffer
@@ -266,6 +266,7 @@ from world.magic.models.threads import (
     ThreadLevelUnlock,
     ThreadPullCost,
     ThreadPullEffect,
+    ThreadResonance,
     ThreadSurvivabilityTuning,
     ThreadXPLockedLevel,
 )
@@ -523,6 +524,7 @@ __all__ = [
     "ThreadLevelUnlock",
     "ThreadPullCost",
     "ThreadPullEffect",
+    "ThreadResonance",
     "ThreadSurvivabilityTuning",
     "ThreadWeavingTeachingOffer",
     "ThreadWeavingUnlock",

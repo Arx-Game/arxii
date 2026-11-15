@@ -53,24 +53,38 @@ class ImbueAction(Action):
             new_picks,
             picks_opened_by_imbuing,
         )
+        from world.magic.crossing.handlers import thread_display_name  # noqa: PLC0415
         from world.magic.exceptions import (  # noqa: PLC0415
             AnchorCapExceeded,
             LevelCapExceeded,
             MagicError,
             ProtagonismLockedError,
+            UnknownResonance,
         )
         from world.magic.models import PendingRitualEffect  # noqa: PLC0415
         from world.magic.services.resonance import spend_resonance_for_imbuing  # noqa: PLC0415
+        from world.magic.services.thread_resonance import (  # noqa: PLC0415
+            resolve_target_resonance,
+        )
 
         sheet = actor.sheet_data
         thread = kwargs["thread"]
         amount = kwargs["amount"]
+        # The resonance that pays; the thread's leading one when none is named (#5123).
+        resonance_id = kwargs.get("resonance_id")
+        resonance = thread.resonance
+        if resonance_id is not None:
+            try:
+                resonance = resolve_target_resonance(resonance_id)
+            except UnknownResonance as exc:
+                return ActionResult(success=False, message=exc.user_message)
 
         try:
             with transaction.atomic():
                 result = spend_resonance_for_imbuing(
                     character_sheet=sheet,
                     thread=thread,
+                    resonance=resonance,
                     amount=amount,
                 )
                 PendingRitualEffect.objects.filter(
@@ -81,6 +95,7 @@ class ImbueAction(Action):
         except MagicError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
+        thread_name = thread_display_name(thread)
         opened = new_picks(picks_opened_by_imbuing(sheet, thread, result))
         lines = [row.line for row in opened]
         data = {
@@ -93,15 +108,15 @@ class ImbueAction(Action):
         if result.blocked_by == "CROSSING_REQUIREMENT" and result.blocked_requirement_messages:  # noqa: STRING_LITERAL
             req_list = "; ".join(result.blocked_requirement_messages)
             message = (
-                f"You complete the rite, advancing {thread.name} to level "
+                f"You complete the rite, advancing {thread_name} to level "
                 f"{shown}. The thread's resonance cannot cross further "
                 f"until you meet the crossing requirements: {req_list}"
             )
             return ActionResult(success=True, message=_with_lines(message, lines), data=data)
 
-        message = f"You complete the rite, imbuing {thread.name}."
+        message = f"You complete the rite, imbuing {thread_name}."
         if rose:
-            message += f" {thread.name} is now level {shown}."
+            message += f" {thread_name} is now level {shown}."
         cap_refusal = {"LEVEL_CAP": LevelCapExceeded, "ANCHOR_CAP": AnchorCapExceeded}.get(
             result.blocked_by
         )

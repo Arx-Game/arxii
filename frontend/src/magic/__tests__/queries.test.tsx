@@ -152,10 +152,12 @@ const mockThread = {
   owner: 10,
   resonance: 3,
   resonance_name: 'Starfire',
+  resonances: [],
   target_kind: 'RELATIONSHIP_CAPSTONE' as const,
   target_trait_id: null,
   target_technique_id: null,
   name: 'Bond of Stars',
+  display_name: 'Bond of Stars',
   description: '',
   level: 10,
   developed_points: 100,
@@ -788,7 +790,7 @@ describe('useImbueThread', () => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(api.imbueThreadAuto).toHaveBeenCalledWith(10, 7, 5);
+    expect(api.imbueThreadAuto).toHaveBeenCalledWith(10, 7, 5, undefined);
   });
 
   it('surfaces error on failure', async () => {

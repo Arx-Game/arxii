@@ -60,7 +60,7 @@ if TYPE_CHECKING:
     from world.checks.types import CheckResult
     from world.combat.models import CombatPull
     from world.forms.models import FormCombatProfile
-    from world.magic.models import Resonance, Restriction, Technique, Thread
+    from world.magic.models import Resonance, Restriction, Technique
     from world.magic.services.fury import FuryCast
     from world.magic.services.power_terms import ApplicableThread
     from world.magic.services.resonance_environment import ResonanceEnvironmentEffect
@@ -219,7 +219,11 @@ def _pull_spends_for_cast(  # noqa: PLR0913 - the cast, its charged pull, the re
             # Character has no CharacterSheet (e.g., NPCs); treat as no active pulls.
             active_pulls = []
     for pull in active_pulls:
-        _add_thread_spends(spends, pull.resonance_spent, list(pull.threads.all()))
+        _add_payer_spends(
+            spends,
+            pull.resonance_spent,
+            [row.paying_resonance for row in pull.pull_threads.all()],
+        )
         if (
             pull.resonance_burned > 0
             and combat_burn_for
@@ -233,7 +237,11 @@ def _pull_spends_for_cast(  # noqa: PLR0913 - the cast, its charged pull, the re
                 hasty_fall=pull.burn_hasty_fall,
             )
     if cast_pull is not None:
-        _add_thread_spends(spends, cast_pull_spent, list(cast_pull.threads))
+        _add_payer_spends(
+            spends,
+            cast_pull_spent,
+            [cast_pull.payer_for(thread) for thread in cast_pull.threads],
+        )
         if burn_result is not None:
             valuation = burn_result.valuation
             burned = burn_result.resonance
@@ -245,21 +253,21 @@ def _pull_spends_for_cast(  # noqa: PLR0913 - the cast, its charged pull, the re
     return spends
 
 
-def _add_thread_spends(
-    spends: dict[int, tuple[Resonance, _PullSpend]], spent: int, threads: list[Thread]
+def _add_payer_spends(
+    spends: dict[int, tuple[Resonance, _PullSpend]], spent: int, payers: list[Resonance]
 ) -> None:
-    """Add what a pull paid to each of its threads' own resonances (#5066).
+    """Add what a pull paid to each of its threads' paying resonances (#5066, #5123).
 
-    A pull may mix resonances; each thread paid the same tier cost from its own resonance
-    (maintainer ruling 2026-11-11), so the pull's recorded ``spent`` is split evenly over
-    its threads (any remainder to the first) and charged to each thread's resonance.
+    A pull may mix payers; each thread paid the same tier cost from its payer (maintainer
+    ruling 2026-11-11), so the pull's recorded ``spent`` is split evenly over its threads
+    (any remainder to the first) and charged to each thread's payer.
     """
-    if not threads or spent <= 0:
+    if not payers or spent <= 0:
         return
-    each, remainder = divmod(spent, len(threads))
-    for index, thread in enumerate(threads):
+    each, remainder = divmod(spent, len(payers))
+    for index, payer in enumerate(payers):
         share = each + (remainder if index == 0 else 0)
-        entry = spends.setdefault(thread.resonance_id, (thread.resonance, _PullSpend()))
+        entry = spends.setdefault(payer.pk, (payer, _PullSpend()))
         entry[1].raw += share
 
 
@@ -1221,6 +1229,7 @@ def _charge_cast_pull(  # noqa: PLR0913 - one pull charge, each argument is a di
         beseech_bonus=applied_bonus,
         burn=burn_result.reached if burn_result is not None else 0,
         burn_resonance=burn_result.resonance if burn_result is not None else None,
+        payers=cast_pull.payers,
     )
     if burn_result is not None:
         from world.magic.services.burn import announce_burn  # noqa: PLC0415
@@ -1422,15 +1431,15 @@ def _resolve_cast_burn(
     if sheet is None:
         return None
     from world.covenants.perks.context import SituationContext  # noqa: PLC0415
-    from world.magic.exceptions import InvalidImbueAmount  # noqa: PLC0415
+    from world.magic.exceptions import PullValidationError  # noqa: PLC0415
     from world.magic.services.burn import resolve_resonance_burn  # noqa: PLC0415
     from world.magic.services.threads import pull_resonance_costs  # noqa: PLC0415
 
     burned = cast_pull.burned_resonance
     if burned is None:
-        # A mixed pull's burn must name one of the pulled resonances (#5066).
-        msg = "Name which of the pulled resonances to burn."
-        raise InvalidImbueAmount(msg)
+        # A burn must name one of the resonances paying for the pull (#5066, #5123).
+        msg = "The burn must come from a resonance you are paying with."
+        raise PullValidationError(msg)
     burn_ctx = (
         situation_ctx
         if isinstance(situation_ctx, SituationContext)
@@ -1441,7 +1450,9 @@ def _resolve_cast_burn(
         resonance=burned,
         requested=cast_pull.burn,
         runtime_intensity=runtime_intensity,
-        pull_cost=pull_resonance_costs(cast_pull.tier, cast_pull.threads)[burned.pk],
+        pull_cost=pull_resonance_costs(cast_pull.tier, cast_pull.threads, cast_pull.payers)[
+            burned.pk
+        ],
         situation_ctx=burn_ctx,
     )
 
@@ -1593,8 +1604,6 @@ def _complete_technique_cast(  # noqa: PLR0913
     effective_strain,
     price_payment=None,
     defer_soulfray_reveal: bool = False,
-    cast_pull: CastPullDeclaration | None = None,
-    pulled_resonances: tuple[Resonance, ...] = (),
     substance_plan: SubstancePlan | None = None,
 ) -> TechniqueUseResult:
     """Deduct anima, resolve the cast, and emit all post-cast effects."""
@@ -1622,15 +1631,11 @@ def _complete_technique_cast(  # noqa: PLR0913
             room_changed=False,
             blocked=substance_plan.blocked,
         )
-    # Carried drift (#4732): one focus roll per cast, on every cast path, before
+    # Unsettled (#4732, #5123): one focus roll per cast, on every cast path, before
     # resolve_fn gathers the cast's modifiers so a conflict it applies reaches this roll.
     from world.magic.services.drift import check_resonance_focus  # noqa: PLC0415
 
-    check_resonance_focus(
-        character,
-        technique,
-        pulled_resonances=(cast_pull.resonances if cast_pull is not None else pulled_resonances),
-    )
+    focus_outcome = check_resonance_focus(character, technique)
     resolution_result, price_payment = _resolve_and_settle_price(
         character=character,
         technique=technique,
@@ -1698,6 +1703,7 @@ def _complete_technique_cast(  # noqa: PLR0913
         price_paid=price_payment.price if price_payment is not None else None,
         runtime_intensity=stats.intensity,
         substance_call_up=substance_call_up,
+        focus=focus_outcome,
     )
     from world.magic.audere import maybe_create_audere_offer  # noqa: PLC0415
 
@@ -1759,7 +1765,6 @@ def use_technique(  # noqa: PLR0913
     defer_soulfray_reveal: bool = False,
     cast_check: CastCheck | None = None,
     combat_burn_for: str = "",
-    pulled_resonances: tuple[Resonance, ...] = (),
     fury: FuryCast | None = None,
 ) -> TechniqueUseResult:
     """Orchestrate technique use from cost validation through post-cast events.
@@ -1775,11 +1780,6 @@ def use_technique(  # noqa: PLR0913
     and valued at declaration with the round's pull; a combat caller names the action
     it resolves as ``combat_burn_for`` (``PullBurnAction``) and only a burn declared
     for that action strains it, once.
-
-    ``pulled_resonances`` are the resonances a pull committed before this cast works,
-    for a caller whose pull is not ``cast_pull`` (a combat round's committed
-    ``CombatPull``); the carried-drift focus roll reads it (#4732). A ``cast_pull``
-    charged by this cast takes precedence.
 
     ``cast_check`` is the check this cast rolls, when the caller already holds it (#4450);
     a paid cast pull builds its involved traits from it. ``None`` re-resolves the caster's
@@ -1897,7 +1897,5 @@ def use_technique(  # noqa: PLR0913
         effective_strain=effective_strain,
         price_payment=price_payment,
         defer_soulfray_reveal=defer_soulfray_reveal,
-        cast_pull=cast_pull,
-        pulled_resonances=pulled_resonances,
         substance_plan=substance_plan,
     )

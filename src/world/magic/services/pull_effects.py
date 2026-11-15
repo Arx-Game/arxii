@@ -17,10 +17,12 @@ from world.magic.constants import TargetKind
 from world.magic.models import ThreadPullEffect
 
 if TYPE_CHECKING:
-    from world.magic.models import Thread
+    from world.magic.models import Resonance, Thread
 
 
-def get_pull_effects_for_thread(thread: Thread, **filters: object) -> list[ThreadPullEffect]:
+def get_pull_effects_for_thread(
+    thread: Thread, payer: Resonance, **filters: object
+) -> list[ThreadPullEffect]:
     """Return ThreadPullEffect rows for ``thread`` with gift-specific preference.
 
     For ``TargetKind.GIFT`` threads:
@@ -32,8 +34,11 @@ def get_pull_effects_for_thread(thread: Thread, **filters: object) -> list[Threa
         is byte-identical to the pre-#1580 state).
 
     Args:
-        thread: A Thread instance (must expose ``target_kind``, ``resonance``,
-            and—for GIFT kind—``target_gift``).
+        thread: A Thread instance (must expose ``target_kind`` and, for GIFT kind,
+            ``target_gift``).
+        payer: The resonance whose perks are read (#5123): the one paying for a pull, or
+            the thread's leading resonance for a passive read. The rows are the payer's,
+            whatever the thread's own ``resonance`` is.
         **filters: Additional ORM filter kwargs forwarded to the query
             (e.g. ``tier=0``, ``effect_kind=EffectKind.FLAT_BONUS``,
             ``min_thread_level__lte=t.level``).
@@ -43,7 +48,7 @@ def get_pull_effects_for_thread(thread: Thread, **filters: object) -> list[Threa
     """
     base_qs = ThreadPullEffect.objects.filter(
         target_kind=thread.target_kind,
-        resonance=thread.resonance,
+        resonance=payer,
         **filters,
     )
     if thread.target_kind == TargetKind.GIFT:

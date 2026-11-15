@@ -1059,6 +1059,65 @@ describe('ActionPanel', () => {
     expect(document.getElementById('cast-section')).toBeNull();
   });
 
+  it('prints the focus sentences an unsettled cast carries, and none for a settled one (#5123)', async () => {
+    const lines = [
+      'Your Dread has grown strong enough to make you unsettled. You must keep your focus.',
+      'You lose your focus as you work Ember Touch: Resonance Conflict.',
+    ];
+    vi.mocked(castTechnique).mockResolvedValue({
+      id: 1,
+      status: 'resolved',
+      result: {
+        action_key: 'cast',
+        power_ledger: { entries: [], total: 1 },
+        action_resolution: { current_phase: 'complete', main_result: null, gate_results: [] },
+        technique_result: {
+          confirmed: true,
+          anima_spent: 0,
+          soulfray_stage: null,
+          mishap_label: null,
+          focus_lines: lines,
+        },
+      },
+      action_interaction: 42,
+    });
+    const user = userEvent.setup();
+
+    await openCastDialogWithEmberTouch(user);
+    await user.click(await screen.findByRole('button', { name: /cast ember touch/i }));
+
+    const block = await screen.findByTestId('cast-focus-lines');
+    expect(block).toHaveTextContent(lines[0]);
+    expect(block).toHaveTextContent(lines[1]);
+  });
+
+  it('shows no focus block when the cast carries no focus sentences', async () => {
+    vi.mocked(castTechnique).mockResolvedValue({
+      id: 1,
+      status: 'resolved',
+      result: {
+        action_key: 'cast',
+        power_ledger: { entries: [], total: 1 },
+        action_resolution: { current_phase: 'complete', main_result: null, gate_results: [] },
+        technique_result: {
+          confirmed: true,
+          anima_spent: 0,
+          soulfray_stage: null,
+          mishap_label: null,
+          focus_lines: [],
+        },
+      },
+      action_interaction: 42,
+    });
+    const user = userEvent.setup();
+
+    await openCastDialogWithEmberTouch(user);
+    await user.click(await screen.findByRole('button', { name: /cast ember touch/i }));
+
+    await screen.findByTestId('cast-ledger-result');
+    expect(screen.queryByTestId('cast-focus-lines')).not.toBeInTheDocument();
+  });
+
   it('fires a "Combat has begun" toast with a Join Combat action when the cast seeds an encounter', async () => {
     vi.mocked(castTechnique).mockResolvedValue({
       id: 3,

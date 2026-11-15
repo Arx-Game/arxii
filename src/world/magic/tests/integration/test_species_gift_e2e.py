@@ -43,13 +43,12 @@ from unittest.mock import patch
 
 from django.test import TestCase, tag
 
-from world.character_creation.factories import CharacterDraftFactory
+from world.character_creation.factories import CharacterDraftFactory, single_resonance_weights
 from world.character_creation.services import finalize_magic_data
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
 from world.magic.constants import EffectKind, GiftKind, TargetKind
 from world.magic.factories import (
-    CharacterResonanceFactory,
     GiftFactory,
     ResonanceFactory,
     TechniqueFactory,
@@ -147,7 +146,7 @@ class _SpeciesGiftJourneyBase(TestCase):
             draft_data={
                 "selected_gift_id": self.major_gift.id,
                 "selected_technique_ids": [self.major_technique.id],
-                "selected_gift_resonance_id": self.resonance.id,
+                "gift_resonance_weights": single_resonance_weights(self.resonance),
             },
         )
         ensure_canonical_affinities()
@@ -180,7 +179,7 @@ class _SpeciesGiftJourneyBase(TestCase):
         """
         from world.classes.factories import CharacterClassFactory
         from world.classes.services import set_primary_class_level
-        from world.magic.models import ThreadLevelUnlock
+        from world.magic.models import CharacterResonance, ThreadLevelUnlock
 
         set_primary_class_level(sheet.character, CharacterClassFactory(), -(-target_level // 10))
         for boundary in range(10, target_level + 1, 10):
@@ -188,13 +187,15 @@ class _SpeciesGiftJourneyBase(TestCase):
                 thread=thread, unlocked_level=boundary, defaults={"xp_spent": 0}
             )
         dp = sum(max((level - 9) * 100, 1) for level in range(thread.level, target_level))
-        CharacterResonanceFactory(
-            character_sheet=sheet,
-            resonance=self.resonance,
-            balance=dp,
-            lifetime_earned=dp,
+        # Creation already seeded this row (lifetime only), so top it up rather than
+        # re-create it: the factory's get_or_create would drop the balance.
+        row, _ = CharacterResonance.objects.get_or_create(
+            character_sheet=sheet, resonance=self.resonance
         )
-        result = spend_resonance_for_imbuing(sheet, thread, amount=dp)
+        row.balance += dp
+        row.lifetime_earned += dp
+        row.save()
+        result = spend_resonance_for_imbuing(sheet, thread, thread.resonance, amount=dp)
         self.assertEqual(result.new_level, target_level, "imbue should reach the target level")
         sheet.character.threads.invalidate()
 
@@ -332,7 +333,7 @@ class SpeciesGiftSpineSQLiteTest(_SpeciesGiftJourneyBase):
         # on an unrelated Major gift, at a resonance the empty-set minor gift
         # could not have chosen on its own.
         other_resonance = ResonanceFactory(name="Other_e2e")
-        provision_latent_gift_thread(sheet, self.major_gift, resonance=other_resonance)
+        provision_latent_gift_thread(sheet, self.major_gift, resonances=[other_resonance])
 
         empty_gift = GiftFactory(name="Bare Nightform_e2e", kind=GiftKind.MINOR)
         SpeciesGiftGrantFactory(species=isolated_species, gift=empty_gift, drawback_condition=None)

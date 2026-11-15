@@ -342,6 +342,35 @@ class TestPerformFall(TestCase):
         # 100 (original Primal) + 120 (converted Celestial * 1.2) = 220
         self.assertEqual(primal_cr.balance, 220)
 
+    def test_a_fall_also_moves_who_she_is_so_she_comes_out_settled(self):
+        """A 55/45 Primal/Abyssal character falls: her settled shares follow the new aura."""
+        from world.magic.services.drift import drift_for, settle_shares
+
+        sheet = CharacterSheetFactory()
+        _, _, abyssal_aff, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
+        _setup_conversion_mappings(cele_res, primal_res, abyssal_res)
+        grant_resonance(sheet, primal_res, 55, source=GainSource.STAFF_GRANT)
+        grant_resonance(sheet, abyssal_res, 45, source=GainSource.STAFF_GRANT)
+        _set_aura(sheet, celestial=0, primal=55, abyssal=45)
+        settle_shares(sheet)
+        before = {s.affinity_id: s.settled_percent for s in sheet.aura_or_none.cached_shares}
+        self.assertEqual(before[abyssal_aff.pk], Decimal("45.00"))
+
+        result = perform_fall(sheet, target_affinity=abyssal_aff)
+
+        self.assertEqual(result.conversion_type, ConversionType.FALL)
+        shares = sheet.aura_or_none.cached_shares
+        self.assertEqual(
+            {s.affinity_id: s.settled_percent for s in shares},
+            {s.affinity_id: s.percent for s in shares},
+        )
+        # She moved: Abyssal is no longer the 45 she was settled at.
+        self.assertGreater(
+            next(s.settled_percent for s in shares if s.affinity_id == abyssal_aff.pk),
+            before[abyssal_aff.pk],
+        )
+        self.assertEqual(drift_for(sheet).steps_past, 0)
+
     def test_fall_eligibility_threshold_not_met(self):
         """Cannot Fall if target affinity is below threshold."""
         from world.magic.exceptions import FallEligibilityError

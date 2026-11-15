@@ -53,7 +53,7 @@ class GiftSpecificLookupTests(TestCase):
         cls.gift.resonances.add(cls.resonance)
 
         # Mint the latent GIFT thread (the canonical CG provisioning path).
-        cls.thread = provision_latent_gift_thread(cls.sheet, cls.gift, resonance=cls.resonance)
+        cls.thread = provision_latent_gift_thread(cls.sheet, cls.gift, resonances=[cls.resonance])
 
         # Null-fallback row (universal, target_gift=NULL).
         cls.null_row = ThreadPullEffectFactory(
@@ -78,6 +78,7 @@ class GiftSpecificLookupTests(TestCase):
         """Lookup for a GIFT thread returns the gift-specific row, not the fallback."""
         rows = get_pull_effects_for_thread(
             self.thread,
+            self.thread.resonance,
             tier=0,
             effect_kind=EffectKind.FLAT_BONUS,
         )
@@ -90,10 +91,11 @@ class GiftSpecificLookupTests(TestCase):
         other_gift = GiftFactory()
         other_gift.resonances.add(self.resonance)
         other_thread = provision_latent_gift_thread(
-            self.sheet, other_gift, resonance=self.resonance
+            self.sheet, other_gift, resonances=[self.resonance]
         )
         rows = get_pull_effects_for_thread(
             other_thread,
+            other_thread.resonance,
             tier=0,
             effect_kind=EffectKind.FLAT_BONUS,
         )
@@ -108,10 +110,11 @@ class GiftSpecificLookupTests(TestCase):
         empty_resonance = ResonanceFactory()
         empty_gift.resonances.add(empty_resonance)
         empty_thread = provision_latent_gift_thread(
-            self.sheet, empty_gift, resonance=empty_resonance
+            self.sheet, empty_gift, resonances=[empty_resonance]
         )
         rows = get_pull_effects_for_thread(
             empty_thread,
+            empty_thread.resonance,
             tier=0,
             effect_kind=EffectKind.FLAT_BONUS,
         )
@@ -127,7 +130,7 @@ class GiftFallbackOnlyTests(TestCase):
         cls.gift = GiftFactory()
         cls.resonance = ResonanceFactory()
         cls.gift.resonances.add(cls.resonance)
-        cls.thread = provision_latent_gift_thread(cls.sheet, cls.gift, resonance=cls.resonance)
+        cls.thread = provision_latent_gift_thread(cls.sheet, cls.gift, resonances=[cls.resonance])
         # Only the null-fallback row — no gift-specific row.
         cls.null_row = ThreadPullEffectFactory(
             target_kind=TargetKind.GIFT,
@@ -142,6 +145,7 @@ class GiftFallbackOnlyTests(TestCase):
         """When no gift-specific row exists the null-fallback row is returned."""
         rows = get_pull_effects_for_thread(
             self.thread,
+            self.thread.resonance,
             tier=0,
             effect_kind=EffectKind.FLAT_BONUS,
         )
@@ -190,6 +194,7 @@ class CovenantRoleNonRegressionTests(TestCase):
         """COVENANT_ROLE resolver returns the null-target_gift row (non-regression)."""
         rows = get_pull_effects_for_thread(
             self.thread,
+            self.thread.resonance,
             tier=1,
             effect_kind=EffectKind.FLAT_BONUS,
         )
@@ -210,6 +215,7 @@ class CovenantRoleNonRegressionTests(TestCase):
         )
         rows = get_pull_effects_for_thread(
             self.thread,
+            self.thread.resonance,
             tier=1,
             effect_kind=EffectKind.FLAT_BONUS,
         )
@@ -324,7 +330,9 @@ class GiftLookupIdColumnTests(TestCase):
             target_gift_id=self.gift.pk,
         )
 
-        rows = get_pull_effects_for_thread(stub, tier=0, effect_kind=EffectKind.FLAT_BONUS)
+        rows = get_pull_effects_for_thread(
+            stub, stub.resonance, tier=0, effect_kind=EffectKind.FLAT_BONUS
+        )
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].pk, self.pull_row.pk)

@@ -163,9 +163,10 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat autopull <tier>|off   - pull threads for defense when attacked
                                      (answer the Soulfray check-in: accept/decline
                                      dodgesoulfray)
-        combat pull <tier>=<thread>[,<thread>...] - pull threads (of any resonances)
-                                     for the round on their own; they boost every use
-                                     they relate to until your next turn
+        combat pull <tier>=<thread>[:<resonance>][,...] - pull threads (of any resonances;
+                                     name the payer after a colon) for the round on
+                                     their own; they boost every use they relate to
+                                     until your next turn
         combat steady [on|off] - steady an ally who loses their nerve
         combat charge <opp> with <technique> - mounted charge: close distance, then attack
         combat strike <opp> [with <weapon> [thrown]] [using <technique> [soulfray]]
@@ -274,31 +275,29 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         return kwargs
 
     def _resolve_round_pull_args(self, text: str) -> dict[str, Any]:
-        """``<tier>=<thread>[,<thread>...]``: a pull on its own (#5066).
+        """``<tier>=<thread>[:<resonance>][,<thread>[:<resonance>]...]``: a pull on its own.
 
-        The threads may be of any resonances; each is paid from its own.
+        The threads may be of any resonances; each is paid from its own, or from the
+        resonance named after its colon (#5066, #5123).
         """
-        from world.magic.models import Thread  # noqa: PLC0415
         from world.magic.types.pull import CastPullDeclaration  # noqa: PLC0415
 
-        usage = "Usage: combat pull <tier>=<thread>[,<thread>...]."
+        usage = "Usage: combat pull <tier>=<thread>[:<resonance>][,<thread>[:<resonance>]...]."
         tier, _, names = text.partition("=")
         tier = tier.strip()
         wanted = [n.strip() for n in names.split(",") if n.strip()]
         if not tier.isdigit() or not wanted:
             raise CommandError(usage)
+        sheet = self.caller.sheet_data
         threads = []
-        for thread_name in wanted:
-            thread = Thread.objects.filter(
-                owner=self.caller.sheet_data,
-                name__iexact=thread_name,
-                retired_at__isnull=True,
-            ).first()
-            if thread is None:
-                msg = f"You have no thread called '{thread_name}'."
-                raise CommandError(msg)
+        payers = {}
+        for entry in wanted:
+            thread, payer = self._thread_and_payer(sheet, entry)
             threads.append(thread)
-        return {"cast_pull": CastPullDeclaration(tier=int(tier), threads=tuple(threads))}
+            if payer is not None:
+                payers[thread.pk] = payer
+        declaration = CastPullDeclaration(tier=int(tier), threads=tuple(threads), payers=payers)
+        return {"cast_pull": declaration}
 
     def _resolve_autopull_args(self, text: str) -> dict[str, Any]:
         """``off``, or ``<tier>`` naming the saved defensive pull's tier."""

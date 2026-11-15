@@ -25,7 +25,7 @@ import { fetchScene, sceneKeys } from '../queries';
 import { PowerLedgerPanel } from '@/magic/components/PowerLedgerPanel';
 import { SurroundingsLines } from '@/magic/components/SurroundingsLines';
 import { GiftCallUpRow } from './GiftCallUpRow';
-import { CastSpendLine } from './CastSpendLine';
+import { CastFocusLines, CastSpendLine } from './CastSpendLine';
 import { TechniqueEffectSummaryDisplay } from '@/magic/components/TechniqueEffectSummary';
 import { ThreadPullPicker } from '@/magic/components/threads/ThreadPullPicker';
 import { PullBurnInput } from '@/magic/components/threads/PullBurnInput';
@@ -758,6 +758,7 @@ export function ActionPanel({ sceneId }: Props) {
                   {castLedgerResult?.result?.power_ledger && (
                     <div className="space-y-2" data-testid="cast-ledger-result">
                       <CastSpendLine result={castLedgerResult.result} />
+                      <CastFocusLines result={castLedgerResult.result} />
                       <PowerLedgerPanel ledger={castLedgerResult.result.power_ledger} />
                       <Button
                         size="sm"
@@ -969,6 +970,9 @@ export function ActionPanel({ sceneId }: Props) {
                             onToggleInapplicable={pull.setShowInapplicable}
                             onAutoRevertNotice={pull.setPullNotice}
                             balanceByResonanceId={pull.balanceByResonanceId}
+                            payers={pull.payerPicks}
+                            onPayerChange={pull.setPayer}
+                            onPayerResolve={pull.resolvePayer}
                           />
                           {pull.pullNotice && (
                             <p className="mt-1 text-xs text-amber-400">{pull.pullNotice}</p>

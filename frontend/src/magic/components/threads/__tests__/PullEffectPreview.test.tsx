@@ -35,10 +35,12 @@ const makeThread = (overrides: Partial<Thread> = {}): Thread => ({
   owner: 100,
   resonance: 1,
   resonance_name: 'Bene',
+  resonances: [],
   target_kind: 'RELATIONSHIP_TRACK',
   target_trait_id: null,
   target_technique_id: null,
   name: 'Test Thread',
+  display_name: overrides.name ?? 'Test Thread',
   description: '',
   level: 10,
   developed_points: 20,
@@ -59,6 +61,7 @@ const makePreviewResponse = (
   affordable: true,
   capped_intensity: false,
   resolved_effects: [],
+  per_thread: [],
   burn: null,
   ...overrides,
 });
@@ -177,6 +180,9 @@ describe('PullEffectPreview', () => {
             narrative_snippet: 'A flat bonus.',
             inactive: false,
             inactive_reason: null,
+            capability_name: null,
+            capability_value: null,
+            resistance_damage_type_name: null,
           },
         ],
       })
@@ -191,6 +197,39 @@ describe('PullEffectPreview', () => {
       },
       { timeout: 1000 }
     );
+    // The wording every perk row uses: what it does, with a signed value.
+    expect(screen.getByTestId('effect-row-FLAT_BONUS')).toHaveTextContent('Bonus to this cast+5');
+  });
+
+  it('names the capability a perk grants and shows its magnitude', async () => {
+    vi.mocked(magicApi.previewPull).mockResolvedValue(
+      makePreviewResponse({
+        resolved_effects: [
+          {
+            kind: 'CAPABILITY_GRANT',
+            authored_value: null,
+            level_multiplier: 1,
+            scaled_value: null as unknown as number,
+            vital_target: null,
+            source_thread_id: 1,
+            source_thread_level: 10,
+            source_tier: 1,
+            narrative_snippet: '',
+            inactive: false,
+            inactive_reason: null,
+            capability_name: 'Cowed',
+            capability_value: 2,
+            resistance_damage_type_name: null,
+          },
+        ],
+      })
+    );
+
+    render(<PullEffectPreview thread={makeThread()} />, { wrapper: createWrapper() });
+
+    const row = await screen.findByTestId('effect-row-CAPABILITY_GRANT', {}, { timeout: 1000 });
+    expect(row).toHaveTextContent('Grants Cowed2');
+    expect(row).not.toHaveTextContent('null');
   });
 
   it('shows inactive_reason for inactive effects', async () => {
@@ -209,6 +248,9 @@ describe('PullEffectPreview', () => {
             narrative_snippet: '',
             inactive: true,
             inactive_reason: 'Requires higher tier',
+            capability_name: null,
+            capability_value: null,
+            resistance_damage_type_name: null,
           },
         ],
       })

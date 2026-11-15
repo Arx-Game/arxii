@@ -20,13 +20,9 @@ from world.magic.types import AffinityShare, AuraDrift, AuraPercentages
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
-    from world.magic.models import Resonance
 
 _CENT = Decimal("0.01")
 _FULL = Decimal("100.00")
-#: Starting aura: the picked resonance's affinity holds the larger share (ruled, #4681).
-_STARTING_MAJOR = Decimal("80.00")
-_STARTING_MINOR = Decimal("20.00")
 
 
 def aura_percentages(aura: CharacterAura) -> AuraPercentages:
@@ -37,37 +33,61 @@ def aura_percentages(aura: CharacterAura) -> AuraPercentages:
     )
 
 
-@transaction.atomic
-def set_aura_shares(aura: CharacterAura, shares: Sequence[AffinityShare]) -> None:
-    """Replace an aura's share rows. The only writer of CharacterAuraShare.
+def _retire_absent_shares(aura: CharacterAura, kept_affinity_ids: list[int]) -> None:
+    """Drop share rows for affinities not kept; one holding a settled share stays at 0.00."""
+    absent = aura.shares.exclude(affinity_id__in=kept_affinity_ids)
+    absent.filter(settled_percent=0).delete()
+    for row in absent.filter(settled_percent__gt=0, percent__gt=0):
+        row.percent = Decimal(0)
+        row.save()
 
-    Upserts a row per share, deletes rows for affinities not given, rounds each
-    percent to 0.01 and folds any rounding remainder into the largest share (ties:
-    lowest affinity pk) so the shares sum to exactly 100.00. Clears the aura's share
-    cache.
 
-    Raises ValueError if the shares are empty, repeat an affinity, or are not within
-    rounding of 100.
+def _normalized_shares(
+    shares: Sequence[AffinityShare], *, subject: str, label: str
+) -> dict[int, tuple[Affinity, Decimal]]:
+    """Each share rounded to 0.01, with the rounding remainder folded into the largest.
+
+    The largest share ties to the lowest affinity pk, and the result sums to exactly 100.00.
+    Raises ValueError (worded with ``subject`` and ``label``) if the shares are empty,
+    repeat an affinity, or are not within rounding of 100.
     """
     if not shares:
-        msg = "An aura needs at least one affinity share."
+        msg = f"{subject} needs at least one affinity share."
         raise ValueError(msg)
-    rounded = {}
+    rounded: dict[int, tuple[Affinity, Decimal]] = {}
     for share in shares:
         if share.affinity.pk in rounded:
-            msg = "An aura holds one share per affinity."
+            msg = f"{subject} holds one share per affinity."
             raise ValueError(msg)
         rounded[share.affinity.pk] = (share.affinity, share.percent.quantize(_CENT))
     remainder = _FULL - sum((pct for _, pct in rounded.values()), Decimal(0))
     if abs(remainder) > _CENT * len(rounded):
-        msg = f"Aura shares must sum to 100, got {_FULL - remainder}."
+        msg = f"{label} must sum to 100, got {_FULL - remainder}."
         raise ValueError(msg)
     if remainder:
         largest_pk = min(rounded, key=lambda pk: (-rounded[pk][1], pk))
         affinity, pct = rounded[largest_pk]
         rounded[largest_pk] = (affinity, pct + remainder)
+    return rounded
 
-    aura.shares.exclude(affinity_id__in=list(rounded)).delete()
+
+@transaction.atomic
+def set_aura_shares(aura: CharacterAura, shares: Sequence[AffinityShare]) -> None:
+    """Replace an aura's share rows. The only writer of CharacterAuraShare.
+
+    Upserts a row per share, rounds each percent to 0.01 and folds any rounding
+    remainder into the largest share (ties: lowest affinity pk) so the shares sum to
+    exactly 100.00. A row for an affinity not given is deleted, unless it still holds a
+    settled share: that row stays at 0.00 so a faded streak's line survives and the
+    streak can return up to it without unsettling the character (#5123). Clears the
+    aura's share cache.
+
+    Raises ValueError if the shares are empty, repeat an affinity, or are not within
+    rounding of 100.
+    """
+    rounded = _normalized_shares(shares, subject="An aura", label="Aura shares")
+
+    _retire_absent_shares(aura, list(rounded))
     existing = {row.affinity_id: row for row in aura.shares.all()}
     for pk, (affinity, pct) in rounded.items():
         row = existing.get(pk)
@@ -79,22 +99,40 @@ def set_aura_shares(aura: CharacterAura, shares: Sequence[AffinityShare]) -> Non
     aura.__dict__.pop("cached_shares", None)
 
 
-def starting_aura_shares(resonance: Resonance | None) -> list[AffinityShare]:
-    """The aura a character begins with, before any resonance has been earned.
+@transaction.atomic
+def set_settled_shares(aura: CharacterAura, shares: Sequence[AffinityShare]) -> None:
+    """Write who the character is, per affinity, without touching the aura they have.
 
-    The picked resonance's affinity holds 80.00 and Abyssal 20.00 (Primal 20.00 when the
-    pick is itself Abyssal). With no pick: Primal 80.00, Abyssal 20.00.
+    Rounds each percent to 0.01 and folds any remainder into the largest share (ties:
+    lowest affinity pk) so the settled shares sum to 100.00. An affinity not given is
+    settled at 0; an affinity given with no share row yet gets one at 0.00 (the character
+    is settled in an affinity they have no resonance in, yet). A row left holding neither
+    a share nor a settled share is deleted.
+
+    Raises ValueError if the shares are empty, repeat an affinity, or are not within
+    rounding of 100.
     """
-    abyssal = Affinity.objects.get_abyssal_affinity()
-    if resonance is None:
-        major = Affinity.objects.get_primal_affinity()
-    else:
-        major = resonance.affinity
-    minor = Affinity.objects.get_primal_affinity() if major.pk == abyssal.pk else abyssal
-    return [
-        AffinityShare(affinity=major, percent=_STARTING_MAJOR),
-        AffinityShare(affinity=minor, percent=_STARTING_MINOR),
-    ]
+    rounded = _normalized_shares(shares, subject="A settled self", label="Settled shares")
+
+    existing = {row.affinity_id: row for row in aura.shares.all()}
+    for pk, row in existing.items():
+        if pk in rounded:
+            continue
+        if row.percent == 0:
+            row.delete()
+        elif row.settled_percent != 0:
+            row.settled_percent = Decimal(0)
+            row.save(update_fields=["settled_percent"])
+    for pk, (affinity, pct) in rounded.items():
+        row = existing.get(pk)
+        if row is None:
+            CharacterAuraShare.objects.create(
+                aura=aura, affinity=affinity, percent=Decimal(0), settled_percent=pct
+            )
+        elif row.settled_percent != pct:
+            row.settled_percent = pct
+            row.save(update_fields=["settled_percent"])
+    aura.__dict__.pop("cached_shares", None)
 
 
 def recompute_aura(character_sheet: CharacterSheet) -> AuraDrift | None:

@@ -37,7 +37,9 @@ from world.magic.models.drift import (
 from world.magic.models.resonance_environment import AffinityInteraction
 from world.magic.services.conversion import conversion_pair, convert_resonance_amount
 from world.magic.services.drift import (
+    close_spent_conversion_offers,
     convertible_drift,
+    drift_for,
     get_drift_correction_config,
     qualifying_components,
 )
@@ -50,6 +52,7 @@ from world.magic.types.drift import (
     DriftConversionPreview,
     DriftCorrectionResult,
     DriftOfferCapOption,
+    DriftReading,
     DriftSourceOption,
     QualifyingComponent,
 )
@@ -119,16 +122,22 @@ def _projected(amount: int, multiplier: Decimal) -> int:
 def preview_conversion(offer: DriftConversionOffer, target: Resonance) -> DriftConversionPreview:
     """What the character could convert toward ``target`` under ``offer``, at a full share.
 
-    Sources are the character's ``convertible_drift`` toward the target. ``cap_remaining``
-    is 0 when the offer holds no cap toward the target.
+    Sources are the character's ``convertible_drift`` toward the target; each may convert up
+    to the cap, its lifetime, and what its affinity stands past who the character is.
+    ``cap_remaining`` is 0 when the offer holds no cap toward the target.
     """
     sheet = offer.character_sheet
     cap = _cap_for(offer, target)
     cap_remaining = cap.cap if cap is not None else 0
+    reading = drift_for(sheet)
     sources = []
     for row in convertible_drift(sheet, target):
         pair = conversion_pair(row.resonance.affinity, target.affinity)
-        max_amount = min(cap_remaining, row.balance)
+        max_amount = min(
+            cap_remaining,
+            row.lifetime_earned,
+            reading.convertible_points(row.resonance.affinity_id, row.mire_lifetime),
+        )
         sources.append(
             DriftSourceOption(
                 resonance_id=row.resonance_id,
@@ -137,7 +146,9 @@ def preview_conversion(offer: DriftConversionOffer, target: Resonance) -> DriftC
                 multiplier=pair.conversion_multiplier,
                 conversion_type=pair.conversion_type,
                 max_amount=max_amount,
-                projected_output=_projected(max_amount, pair.conversion_multiplier),
+                projected_output=_projected(
+                    min(max_amount, row.balance), pair.conversion_multiplier
+                ),
             )
         )
     return DriftConversionPreview(
@@ -217,10 +228,12 @@ def _locked_offer(offer: DriftConversionOffer) -> DriftConversionOffer:
 
 def _validated_source(
     sheet: CharacterSheet, source: Resonance, target: Resonance, amount: int, cap_value: int
-) -> AffinityInteraction:
-    """Check the requested amount and source; return the authored pair.
+) -> tuple[AffinityInteraction, DriftReading]:
+    """Check the requested amount and source; return the authored pair and the reading.
 
-    Locks the source ``CharacterResonance`` row before reading its balance.
+    The amount is lifetime points: at most the cap, the source's lifetime and what its
+    affinity stands past who the character is. Locks the source ``CharacterResonance`` row
+    before reading its lifetime.
     """
     if amount <= 0:
         msg = "Convert at least 1."
@@ -229,7 +242,7 @@ def _validated_source(
         msg = f"You may convert at most {cap_value} toward that resonance."
         raise DriftConversionInvalidError(msg)
     if source.pk not in {row.resonance_id for row in convertible_drift(sheet, target)}:
-        msg = "That resonance is not drift you can convert."
+        msg = "You have nothing in that resonance to atone for."
         raise DriftConversionInvalidError(msg)
     try:
         pair = conversion_pair(source.affinity, target.affinity)
@@ -238,11 +251,16 @@ def _validated_source(
         raise DriftConversionInvalidError(msg) from exc
     rows = CharacterResonance.objects.filter(character_sheet=sheet, resonance=source)
     list(rows.select_for_update())
-    balance = rows.values_list("balance", flat=True).first() or 0
-    if amount > balance:
-        msg = f"You hold only {balance} of that resonance."
+    lifetime, row_mire = rows.values_list("lifetime_earned", "mire_lifetime").first() or (0, 0)
+    if amount > lifetime:
+        msg = f"You have earned only {lifetime} of that resonance."
         raise DriftConversionInvalidError(msg)
-    return pair
+    reading = drift_for(sheet)
+    convertible = reading.convertible_points(source.affinity_id, row_mire)
+    if amount > convertible:
+        msg = f"Only {convertible} of that resonance is past who you are."
+        raise DriftConversionInvalidError(msg)
+    return pair, reading
 
 
 @transaction.atomic
@@ -258,8 +276,11 @@ def perform_drift_correction_rite(
 
     Locks the offer, refuses a lapsed or unconfigured rite and an invalid request, picks
     the offering without spending it, rolls the configured check with ``focus_bonus`` as
-    extra modifiers, converts ``floor(amount x share)`` of the source at the pair rate,
-    granting it as ``DRIFT_CORRECTION``, and only then spends the offering. The cap shrinks
+    extra modifiers, converts ``floor(amount x share)`` lifetime points of the source, the
+    Mire's excess first, granting what balance there is at the pair rate as
+    ``DRIFT_CORRECTION``, and only then spends the offering. ``amount`` is lifetime points,
+    at most what the cap, the source and its affinity's excess allow, so atoning works even
+    when the excess was already spent. The cap shrinks
     by what converted; an exhausted cap row is deleted, and the offer with it once no cap is
     left. A tier whose share is 0.00 still spends the offering and moves nothing; a tier with
     no share row at all is refused up front (``rite_is_ready``), before the offer's cap and
@@ -287,7 +308,7 @@ def perform_drift_correction_rite(
     # Read the cap from the database, not the shared instance: the lock above serializes
     # writers, and the identity map would not refresh a cached row's value.
     cap_value = DriftConversionCap.objects.filter(pk=cap.pk).values_list("cap", flat=True)[0]
-    pair = _validated_source(sheet, source_resonance, target_resonance, amount, cap_value)
+    pair, reading = _validated_source(sheet, source_resonance, target_resonance, amount, cap_value)
 
     # Every step that can refuse runs before anything is written: the offering is only
     # chosen here, and spent after the roll, the share and the conversion. A raise after a
@@ -317,6 +338,8 @@ def perform_drift_correction_rite(
     success_level = outcome.success_level
 
     converted = int(Decimal(amount) * share_row.converted_share)
+    # The Mire's excess converts first, then their own (#5123).
+    mire_part = min(converted, reading.mire_excess_points.get(source_resonance.affinity_id, 0))
     granted = 0
     if converted > 0:
         try:
@@ -327,6 +350,7 @@ def perform_drift_correction_rite(
                 amount=converted,
                 multiplier=pair.conversion_multiplier,
                 gain_source=GainSource.DRIFT_CORRECTION,
+                mire_amount=mire_part,
             )
         except ValueError as exc:
             msg = "You no longer hold enough of that resonance."
@@ -341,6 +365,9 @@ def perform_drift_correction_rite(
             cap.delete()
             if not DriftConversionCap.objects.filter(offer=offer).exists():
                 offer.delete()
+        # Atoning can leave her settled with cap still unspent: nothing is left to convert,
+        # so the offer closes (one writer for that, shared with accepting).
+        close_spent_conversion_offers(sheet)
 
     return DriftCorrectionResult(
         source_resonance_id=source_resonance.pk,

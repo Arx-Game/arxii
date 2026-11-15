@@ -339,7 +339,23 @@ class TraitCrossingHandler(_CrossingChoiceHandler):
     target_kind = TargetKind.TRAIT
 
 
-def _open_labels_by_relationship_id(
+# What reading a thread's anchor label touches, so listing the labels costs no query per thread.
+THREAD_LABEL_RELATED = (
+    "resonance",
+    "target_trait",
+    "target_facet",
+    "target_gift",
+    "target_technique",
+    "target_mantle",
+    "target_relationship__target__character",
+    "target_relationship__target_companion",
+    "target_capstone__relationship__target__character",
+    "target_capstone__relationship__target_companion",
+    "target_sanctum_details__feature_instance__room_profile__objectdb",
+)
+
+
+def open_labels_by_relationship_id(
     threads: Iterable[Thread],
 ) -> dict[int, RelationshipLabel]:
     """Batch-fetch each RELATIONSHIP_TRACK thread's earliest open label in ONE query.
@@ -377,6 +393,50 @@ def _open_labels_by_relationship_id(
     }
 
 
+# The generic word an anchor reads as when it has no specific name to show.
+_ANCHOR_FALLBACK = {
+    TargetKind.TRAIT: "trait",  # noqa: STRING_LITERAL
+    TargetKind.FACET: "facet",  # noqa: STRING_LITERAL
+    TargetKind.RELATIONSHIP_TRACK: "relationship",  # noqa: STRING_LITERAL
+    TargetKind.RELATIONSHIP_CAPSTONE: "capstone",  # noqa: STRING_LITERAL
+    TargetKind.MANTLE: "mantle",  # noqa: STRING_LITERAL
+    TargetKind.SANCTUM: "sanctum",  # noqa: STRING_LITERAL
+}
+
+# Anchor kinds whose label is simply the ``name`` of the thread's target row.
+_NAMED_ANCHOR_ATTR = {
+    TargetKind.TRAIT: "target_trait",  # noqa: STRING_LITERAL
+    TargetKind.FACET: "target_facet",  # noqa: STRING_LITERAL
+    TargetKind.GIFT: "target_gift",  # noqa: STRING_LITERAL
+    TargetKind.TECHNIQUE: "target_technique",  # noqa: STRING_LITERAL
+    TargetKind.MANTLE: "target_mantle",  # noqa: STRING_LITERAL
+}
+
+
+def _named_anchor_label(thread: Thread) -> str | None:
+    """Return the target row's name for a trait/facet/gift/technique/mantle anchor."""
+    attr = _NAMED_ANCHOR_ATTR.get(thread.target_kind)
+    target = getattr(thread, attr) if attr is not None else None
+    return target.name if target is not None else None
+
+
+def _capstone_anchor_label(thread: Thread) -> str | None:
+    """Return the label for a relationship-capstone anchor, if it still exists."""
+    cap = thread.target_capstone
+    if cap is None:
+        return None
+    return f"capstone '{cap.title}' with {cap.relationship.target_name}"
+
+
+def _sanctum_anchor_label(thread: Thread) -> str | None:
+    """Return the label for a sanctum anchor, if its details still exist."""
+    sanctum = thread.target_sanctum_details
+    if sanctum is None:
+        return None
+    room = sanctum.feature_instance.room_profile.objectdb
+    return f"sanctum in {room.db_key}"
+
+
 def _relationship_track_label_for(
     thread: Thread,
     open_label_by_relationship_id: dict[int, RelationshipLabel] | None,
@@ -405,38 +465,39 @@ def anchor_label_for(
     generic placeholder.
 
     ``open_label_by_relationship_id``, when given, is a pre-built batch lookup
-    from ``_open_labels_by_relationship_id`` — the caller listing several
+    from ``open_labels_by_relationship_id`` — the caller listing several
     threads builds it once and passes it in, avoiding a query per thread.
     When omitted (a single-thread caller, e.g. ``_compose_crossing_message``,
     called once per crossing event — never in a loop), this queries directly;
     building a one-row batch for a single thread would be pointless.
     """
     kind = thread.target_kind
-    fallback = {
-        TargetKind.TRAIT: "trait",  # noqa: STRING_LITERAL
-        TargetKind.FACET: "facet",  # noqa: STRING_LITERAL
-        TargetKind.RELATIONSHIP_TRACK: "relationship",  # noqa: STRING_LITERAL
-        TargetKind.RELATIONSHIP_CAPSTONE: "capstone",  # noqa: STRING_LITERAL
-        TargetKind.MANTLE: "mantle",  # noqa: STRING_LITERAL
-        TargetKind.SANCTUM: "sanctum",  # noqa: STRING_LITERAL
-    }.get(kind, "thread")  # noqa: STRING_LITERAL
-    if kind == TargetKind.TRAIT and thread.target_trait is not None:
-        return thread.target_trait.name
-    if kind == TargetKind.FACET and thread.target_facet is not None:
-        return thread.target_facet.name
+    named = _named_anchor_label(thread)
+    if named is not None:
+        return named
     if kind == TargetKind.RELATIONSHIP_TRACK:
-        return _relationship_track_label_for(thread, open_label_by_relationship_id) or fallback
+        label = _relationship_track_label_for(thread, open_label_by_relationship_id)
+        return label or _ANCHOR_FALLBACK[kind]
     if kind == TargetKind.RELATIONSHIP_CAPSTONE:
-        cap = thread.target_capstone
-        if cap is not None:
-            return f"capstone '{cap.title}' with {cap.relationship.target_name}"
-    if kind == TargetKind.MANTLE and thread.target_mantle is not None:
-        return thread.target_mantle.name
-    if kind == TargetKind.SANCTUM and thread.target_sanctum_details is not None:
-        sanctum = thread.target_sanctum_details
-        room = sanctum.feature_instance.room_profile.objectdb
-        return f"sanctum in {room.db_key}"
-    return fallback
+        capstone_label = _capstone_anchor_label(thread)
+        if capstone_label is not None:
+            return capstone_label
+    if kind == TargetKind.SANCTUM:
+        sanctum_label = _sanctum_anchor_label(thread)
+        if sanctum_label is not None:
+            return sanctum_label
+    return _ANCHOR_FALLBACK.get(kind, "thread")  # noqa: STRING_LITERAL
+
+
+def thread_display_name(
+    thread: Thread,
+    open_label_by_relationship_id: dict[int, RelationshipLabel] | None = None,
+) -> str:
+    """The name a player calls the thread by: its own name, else its anchor's (#5123).
+
+    A Gift thread is minted with no name, so it reads as its Gift's name.
+    """
+    return thread.name.strip() or anchor_label_for(thread, open_label_by_relationship_id)
 
 
 def _compose_crossing_message(thread: Thread, crossing_level: int) -> str:

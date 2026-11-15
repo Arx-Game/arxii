@@ -138,6 +138,31 @@ class InvalidImbueAmount(MagicError):
     user_message = "Invalid imbue amount."
 
 
+class PullTierNotAvailable(InvalidImbueAmount):
+    """A pull at a tier staff have not authored a cost row for.
+
+    Raised by ``get_pull_cost``, the one place every pull path (preview, cast, commit)
+    resolves the cost, so each refuses with the same sentence instead of a server error.
+    """
+
+    user_message = "That pull tier is not available yet."
+
+
+class PullValidationError(InvalidImbueAmount):
+    """A pull declaration that names a payer or burn the pull cannot use (#5123).
+
+    The raise site authors the player-facing text, so a message passed in becomes the
+    ``user_message``.
+    """
+
+    user_message = "This pull cannot be paid that way."
+
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
+        if args and isinstance(args[0], str) and args[0]:
+            self.user_message = args[0]
+
+
 class CovenantRoleNotEngagedError(InvalidImbueAmount):
     """A COVENANT_ROLE Thread pull was attempted while no engaged membership matches."""
 
@@ -542,10 +567,6 @@ class DramaticMomentSuggestionWrongKind(MagicError):
 # =============================================================================
 
 
-class UnsupportedGiftResonanceError(MagicError):
-    user_message = "That resonance is not supported by this gift."
-
-
 class GiftResonanceUnresolvable(MagicError):
     """Raised when granting a gift (#2971) cannot resolve ANY resonance for its
     latent GIFT thread — no explicit pick, no supported-set member, no existing
@@ -935,7 +956,7 @@ class DriftCorrectionNotConfiguredError(DriftCorrectionError):
 class DriftOfferNotFoundError(DriftCorrectionError):
     """The offer is gone, its scene has finished, or it holds no cap toward the target."""
 
-    user_message = "You have no open chance to correct drift toward that resonance."
+    user_message = "You have no open chance to atone toward that resonance."
 
 
 class DriftConversionInvalidError(DriftCorrectionError):
@@ -947,6 +968,12 @@ class DriftConversionInvalidError(DriftCorrectionError):
         super().__init__(user_message)
         if user_message:
             self.user_message = user_message
+
+
+class NotUnsettledError(MagicError):
+    """Accepting the changes to the aura was asked of a character who is not unsettled (#5123)."""
+
+    user_message = "You are not unsettled, so there is nothing to accept."
 
 
 class ThreadResonanceChangeError(MagicError):
@@ -964,16 +991,21 @@ class ThreadResonanceChangeError(MagicError):
             self.user_message = user_message
 
 
-class ThreadAnchorTakenError(ThreadResonanceChangeError):
-    """Another process put a live thread on the same anchor at the target resonance first.
+ANCHOR_ALREADY_WOVEN_MESSAGE = "You already have a thread on that. Imbue it instead."
 
-    The partial unique index refused the re-anchor; nothing moved.
+
+class ThreadAnchorTakenError(ThreadResonanceChangeError):
+    """A live thread already holds the anchor, so a second one cannot be woven there.
+
+    One thread per anchor (#5123): weaving onto a held anchor names it and
+    points the player at imbuing; the partial unique index refusing a re-anchor raises it
+    with the default message. Nothing moved either way.
     """
 
     user_message = "Another thread has just taken that place; look at your threads again."
 
-    def __init__(self) -> None:
-        super().__init__(ThreadAnchorTakenError.user_message)
+    def __init__(self, user_message: str | None = None) -> None:
+        super().__init__(user_message or ThreadAnchorTakenError.user_message)
 
 
 class UnknownResonance(MagicError):

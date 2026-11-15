@@ -133,6 +133,7 @@ from world.magic.models import (
     ThreadLevelUnlock,
     ThreadPullCost,
     ThreadPullEffect,
+    ThreadResonance,
     ThreadSurvivabilityTuning,
     ThreadWeavingTeachingOffer,
     ThreadWeavingUnlock,
@@ -218,7 +219,6 @@ class AffinityInteractionAdmin(admin.ModelAdmin):
         "kind",
         "aggressor",
         "severity_multiplier",
-        "conflict_weight",
         "conversion_type",
         "conversion_multiplier",
     ]
@@ -1934,12 +1934,25 @@ class ThreadLevelUnlockInline(admin.TabularInline):
     readonly_fields = ["acquired_at"]
 
 
+class ThreadResonanceInline(admin.TabularInline):
+    """The resonances a thread holds, written only by services (#5123)."""
+
+    model = ThreadResonance
+    formset = OneRowPerFormSet
+    extra = 0
+    can_delete = False
+    fields = ["resonance", "amount", "created_at"]
+    readonly_fields = ["resonance", "amount", "created_at"]
+
+    def has_add_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+
 @admin.register(Thread)
 class ThreadAdmin(admin.ModelAdmin):
     list_display = ["id", "owner", "resonance", "target_kind", "level", "developed_points"]
     list_filter = ["target_kind", "resonance"]
     search_fields = ["owner__character__db_key", "resonance__name", "name"]
-    autocomplete_fields = ["resonance"]
     raw_id_fields = [
         "owner",
         "target_trait",
@@ -1948,8 +1961,14 @@ class ThreadAdmin(admin.ModelAdmin):
         "target_capstone",
     ]
     list_select_related = ["owner", "resonance"]
-    readonly_fields = ["created_at", "updated_at"]
-    inlines = [ThreadLevelUnlockInline]
+    # ``resonance`` is the denormalized leading resonance, written only by
+    # refresh_leading_resonance from the ThreadResonance rows (#5123).
+    readonly_fields = ["resonance", "created_at", "updated_at"]
+    inlines = [ThreadResonanceInline, ThreadLevelUnlockInline]
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        # Threads are created by the weave and creation services, which write their rows.
+        return False
 
 
 @admin.register(ThreadLevelUnlock)
@@ -3077,16 +3096,16 @@ class CastOutcomeLevelShiftAdmin(admin.ModelAdmin):
 
 @admin.register(DriftConfig)
 class DriftConfigAdmin(admin.ModelAdmin):
-    """Singleton tuning config for carried drift and the focus contest (#4732)."""
+    """Singleton tuning config for being unsettled and the focus contest (#4732)."""
 
     autocomplete_fields = ["focus_check_type", "conflict_condition", "updated_by"]
 
     list_display = (
         "pk",
-        "threshold_percent",
-        "threshold_floor",
-        "severity_step",
-        "off_aura_pull_steps",
+        "unsettled_tolerance_percent",
+        "unsettled_step_percent",
+        "creation_points",
+        "mire_allowance_percent",
         "focus_check_type",
         "conflict_condition",
         "updated_at",

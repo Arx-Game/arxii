@@ -57,7 +57,7 @@ class CompanionCombatBridgeE2ETests(EvenniaTestCase):
         self.owner.save()
         self.gift = ensure_companion_content()
         self.resonance = self.gift.resonances.first()
-        grant_gift_to_character(self.sheet, self.gift, resonance=self.resonance)
+        grant_gift_to_character(self.sheet, self.gift, resonances=[self.resonance])
 
         from world.magic.constants import TargetKind
         from world.magic.models.threads import Thread

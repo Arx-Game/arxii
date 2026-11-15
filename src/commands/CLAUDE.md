@@ -543,12 +543,21 @@ actions, backends, and service functions.
   pattern (#1337)
 - **`alterations.py`**: `CmdMageScar` (`magescar`) — telnet face of `ResolveAlterationAction` (#1490); lists and resolves pending Mage Scars by library template or scratch-authored fields. Uses namespaced `magescar list` / `magescar resolve <id> ...` subcommands.
 - **`imbue.py`**: `CmdImbue` (`imbue`) — finisher for the Rite of Imbuing CEREMONY;
-  parses `imbue thread=<name|id> amount=<n>`. Requires an active `PendingRitualEffect`
+  parses `imbue thread=<name|id> amount=<n> [resonance=<name>]` (`resonance=` names the held
+  resonance that pays and whose row of the thread grows, #5123; left out, the thread's leading
+  resonance pays; one the character does not hold is refused in words). Requires an active
+  `PendingRitualEffect`
   for Rite of Imbuing; calls `spend_resonance_for_imbuing` to advance thread level.
 - **`threads.py`**: `CmdThreads` (`threads`, #1993) — the thread management hub. Bare
-  `threads`/`threads list` shows all the caller's active threads (anchor, resonance,
-  display level) via `anchor_label_for` (`world/magic/crossing/handlers.py`, the same
-  helper the crossing ceremony uses). `threads crossing list` shows pending crossing
+  `threads`/`threads list` shows all the caller's active threads (anchor, each resonance with
+  its share of the thread in words, display level) via `anchor_label_for` (`world/magic/crossing/handlers.py`, the same
+  helper the crossing ceremony uses; a Gift thread reads as its Gift's name). Each line prints
+  the name a player can type (`thread_label`, `commands/utils/thread_lookup.py`). That module
+  is the one thread lookup (`find_thread` / `resolve_thread`): `imbue thread=` and `pull=`
+  resolve a thread by its own name or its anchor's name (a Gift thread by the Gift's name), or
+  its number; a name that fits two threads (including one thread's own name and another's
+  anchor) is refused with each candidate's number, and `threads` prints `[number N]` for a
+  thread whose names another shares. `threads crossing list` shows pending crossing
   offers + available `CrossingOption` rows; `threads crossing choose <id>` resolves a
   pending offer via `ResolveCrossingOfferAction` (the same action the web
   `CrossingRespondView` uses). Replaces the former standalone `crossing` command.
@@ -578,7 +587,13 @@ actions, backends, and service functions.
     the shared `_CombatCommandMixin` pull parser. The pull rides the `cast` or `clash`
     declaration — there is no standalone `pull` verb. In combat, one pull is allowed per
     round (a second attempt surfaces `PULL_ALREADY_COMMITTED`). `pull=` lists comma-separated
-    thread names or ids; `resonance=` names the resonance to spend from; `tier=` is 1, 2, or 3
+    thread names or ids, each optionally `<thread>:<resonance>` (`pull=Loom Strand:Ember`,
+    #5123) to name the held resonance that pays for that thread: a bare thread is paid by its
+    leading resonance, and an unknown resonance or one the character does not hold is refused
+    in words (`commands/utils/held_resonance.py`, the one lookup `aura atone` and `imbue
+    resonance=` share) with nothing charged. A standalone `combat pull <tier>=<thread>[:<resonance>][,...]`
+    reads the same way. `resonance=` names the resonance a burn comes from (it must be one of
+    the payers; formerly the resonance to spend from); `tier=` is 1, 2, or 3
     (default 1). Effects that don't apply to the current context are silently applied as
     far as they fit; the declaration is refused without charge only if none apply
     (inert-effect rule).
@@ -1648,17 +1663,22 @@ actions, backends, and service functions.
   `src/actions/CLAUDE.md` and `world/magic/CLAUDE.md` "Technique Entrance") instead — the
   technique cast IS the entrance's check. `CmdFlourish` (`flourish <resonance>`) — thin
   wrapper resolving a pending entry-flourish offer via `ResolveFlourishOfferAction`.
-- **`drift_correction.py`** (#4733): `CmdDrift` (`drift`): bare `drift` shows the character's
-  open conversion offer (per target resonance: cap, drift sources with rate and projected yield,
-  focus bonus, carried items that count as the offering, with the faceted and keepsake ones
-  marked as spent only when named); `drift convert <from>=<into> [<amount>] [with <item>]`
+- **`drift_correction.py`** (#4733, #5123): `CmdAura` (`aura`), which replaced `drift` with no
+  alias. Bare `aura` shows the aura in words (each affinity's share as "nearly all", "a tenth";
+  never a number), the unsettled line ("Your Ruin has grown strong enough to make you
+  unsettled." from `drift_for` / `unsettled_line`), the Mire's share in words, then the open
+  chance to atone (per target resonance: cap, sources with rate and projected yield, focus
+  bonus, carried items that count as the offering, with the faceted and keepsake ones marked
+  as spent only when named), or "You have no open chance to atone.", or the rite-not-ready
+  sentence. `aura atone <from>=<into> [<amount>] [with <item>]` (it was `drift convert`)
   dispatches `PerformDriftCorrectionAction` (no amount means the most allowed). By default it
   offers every carried item except those that count only as a facet or a keepsake, so a plain
   material is what gets spent; `with <item>` names one of the caller's own carried items
   (exact name, else a unique part of one) to spend instead, and a name that matches nothing,
-  several things, or an item that does not count is the command's own error. `drift decline`
-  dispatches `DeclineDriftCorrectionAction`. Thin: rules live in
-  `world/magic/services/drift_correction.py`.
+  several things, or an item that does not count is the command's own error. `aura decline`
+  dispatches `DeclineDriftCorrectionAction`; `aura accept` dispatches `AcceptAuraChangeAction`
+  (refused unless unsettled). Thin: rules live in `world/magic/services/drift_correction.py`
+  and `world/magic/services/drift.py`.
 
 ### Magic-Adjacent Commands (`commands/`)
 - **`dramatic_moments.py`** (#2183, #2227): `CmdMoment` (`moment`) — the GM-facing

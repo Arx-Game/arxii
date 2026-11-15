@@ -23,6 +23,7 @@ from world.magic.factories import (
     GiftFactory,
     ResonanceFactory,
     TechniqueFactory,
+    ThreadResonanceFactory,
 )
 from world.magic.models import Gift, Resonance, Technique, Thread
 from world.magic.services.technique_effects import invalidate_variant_payload_caches
@@ -124,7 +125,9 @@ class AvailableTechniqueFormsTest(TestCase):
 
     def _thread_at(self, level: int, resonance: Resonance | None = None) -> Thread:
         """A GIFT thread at ``level``."""
-        provision_latent_gift_thread(self.sheet, self.gift, resonance=resonance or self.resonance)
+        provision_latent_gift_thread(
+            self.sheet, self.gift, resonances=[resonance or self.resonance]
+        )
         thread = Thread.objects.get(
             owner=self.sheet,
             target_kind=TargetKind.GIFT,
@@ -197,8 +200,8 @@ class AvailableTechniqueFormsTest(TestCase):
         variant_ids = [f["variant_id"] for f in forms if f["variant_id"] is not None]
         self.assertEqual(variant_ids, [deeper.pk])
 
-    def test_multi_resonance_caster_gets_one_form_per_thread(self) -> None:
-        """#1619: a second thread at another resonance adds its own form."""
+    def test_two_row_gift_thread_lists_both_resonances_forms(self) -> None:
+        """#5123: every resonance the gift thread holds adds its own form."""
         tide_variant = TechniqueVariant.objects.create(
             parent_technique=self.technique,
             resonance=self.other_resonance,
@@ -206,15 +209,18 @@ class AvailableTechniqueFormsTest(TestCase):
             name_override="Tidewrack Lash",
         )
         self.technique.__dict__.pop("cached_variants", None)
-        self._thread_at(30)
-        self._thread_at(30, resonance=self.other_resonance)
+        thread = self._thread_at(30)
+        ThreadResonanceFactory(thread=thread, resonance=self.other_resonance)
+        self.sheet.character.threads.invalidate()
 
         forms = available_technique_forms(self.sheet.character, self.technique)
+
         names = {f["name"] for f in forms}
         self.assertIn("Ashfall Lash", names)
         self.assertIn("Tidewrack Lash", names)
         self.assertIn(tide_variant.pk, {f["variant_id"] for f in forms})
-        self.assertEqual(sum(1 for f in forms if f["is_default"]), 1)
+        defaults = [f for f in forms if f["is_default"]]
+        self.assertEqual([f["name"] for f in defaults], ["Ashfall Lash"])  # the leading row's
 
     def test_each_form_carries_its_own_effect_summary(self) -> None:
         """The block #2898 built, per form rather than per technique."""

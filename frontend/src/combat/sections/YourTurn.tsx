@@ -376,11 +376,18 @@ interface PullDispatch {
  * pull_tier / pull_thread_ids (of any resonances, #5066), and pull_burn with
  * pull_burn_resonance_id, for one dispatch.
  */
-function pullKwargsFor(pull: PullDispatch | null): Record<string, number | number[]> {
-  const pullKwargs: Record<string, number | number[]> = {};
+function pullKwargsFor(
+  pull: PullDispatch | null
+): Record<string, number | number[] | Record<number, number>> {
+  const pullKwargs: Record<string, number | number[] | Record<number, number>> = {};
   if (pull === null) return pullKwargs;
   pullKwargs.pull_tier = pull.selection.tier;
   pullKwargs.pull_thread_ids = pull.selection.thread_ids;
+  // The resonance the player picked to pay a thread (#5123); a thread left out is paid by
+  // its leading resonance.
+  if (Object.keys(pull.selection.payers).length > 0) {
+    pullKwargs.pull_payers = pull.selection.payers;
+  }
   if (pull.burn > 0) {
     pullKwargs.pull_burn = pull.burn;
     if (pull.burnResonanceId !== null) pullKwargs.pull_burn_resonance_id = pull.burnResonanceId;
@@ -2516,6 +2523,7 @@ export function YourTurn({
       character_sheet_id: characterSheetId,
       tier: selectedPull.tier,
       thread_ids: selectedPull.thread_ids,
+      ...(Object.keys(selectedPull.payers).length > 0 ? { payers: selectedPull.payers } : {}),
       technique_id: focusedContext.techniqueId,
       burn_resonance_id: burnResonanceId,
     };

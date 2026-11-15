@@ -16,6 +16,8 @@ from django.db import transaction
 from world.magic.constants import AcquisitionOrigin, TargetKind
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from world.character_sheets.models import CharacterSheet
     from world.covenants.models import CovenantRole
     from world.magic.models import Thread
@@ -32,29 +34,33 @@ def provision_latent_gift_thread(
     sheet: CharacterSheet,
     gift: Gift,
     *,
-    resonance: Resonance,
+    resonances: Sequence[Resonance],
 ) -> Thread:
-    """Create the latent level-0 GIFT thread for ``gift`` at ``resonance``.
+    """Create the latent level-0 GIFT thread for ``gift``, holding ``resonances`` at zero.
 
-    Idempotent on ``(owner, gift, resonance)``: if an active GIFT thread for
-    that triple already exists, return it unchanged. Multi-resonance (#1619):
-    a character may hold multiple active GIFT threads on the same gift at
-    different resonances. The first call provisions the "primary" thread;
-    additional resonances are added via ``provision_additional_gift_thread``.
+    One thread per gift (#5123): it holds every resonance on its ``ThreadResonance``
+    rows, written at amount 0 in the order given, so the first leads a tie. Idempotent
+    on ``(owner, gift)``: if an active GIFT thread on the gift already exists, return it
+    unchanged.
 
     Acquiring a gift IS intuitively weaving a (latent) thread — the Glimpse.
     Weaving (Rite of Weaving) commits a resonance; imbuing raises the level;
     crossing a variant's unlock_thread_level resolves the variant.
     """
+    from world.magic.services.thread_rows import (  # noqa: PLC0415
+        refresh_leading_resonance,
+        write_resonance_rows,
+    )
+
+    if not resonances:
+        msg = "A gift thread needs at least one resonance."
+        raise ValueError(msg)
     character = sheet.character
-    # Check for an existing thread at this exact resonance — idempotent.
     existing = next(
         (
             t
             for t in character.threads.all()
-            if t.target_kind == TargetKind.GIFT
-            and t.target_gift_id == gift.pk
-            and t.resonance_id == resonance.pk
+            if t.target_kind == TargetKind.GIFT and t.target_gift_id == gift.pk
         ),
         None,
     )
@@ -65,7 +71,7 @@ def provision_latent_gift_thread(
 
     thread = Thread(
         owner=sheet,
-        resonance=resonance,
+        resonance=resonances[0],
         target_kind=TargetKind.GIFT,
         target_gift=gift,
         level=0,
@@ -73,41 +79,13 @@ def provision_latent_gift_thread(
     thread.full_clean()
     with transaction.atomic():
         thread.save()
+        write_resonance_rows(thread, resonances)
+        refresh_leading_resonance(thread)
     # Invalidate the cached thread list so the new row is visible to the next
     # read through ``character.threads`` (mirrors the covenant-role invalidation
     # contract in covenants/services._invalidate_role_caches).
     character.threads.invalidate()
     return thread
-
-
-def provision_additional_gift_thread(
-    sheet: CharacterSheet,
-    gift: Gift,
-    *,
-    resonance: Resonance,
-) -> Thread:
-    """Add a second (or subsequent) resonance to an existing GIFT thread set.
-
-    For multi-resonance characters (#1619): a character who already has a GIFT
-    thread on ``gift`` at one resonance may add another at a different
-    resonance. The new thread starts at level 0 (the Glimpse) and must be
-    independently woven and imbued.
-
-    Validates that the resonance is in the gift's supported set, when that set
-    is non-empty. An EMPTY set means UNRESTRICTED (ruled 2026-08-04) — resonance
-    comes from the thread the player weaves, and the set is only an optional
-    narrowing. Raises ``UnsupportedGiftResonanceError`` when a non-empty set
-    excludes the resonance. If a thread at this resonance already exists,
-    returns it unchanged (idempotent — delegates to
-    ``provision_latent_gift_thread``).
-    """
-    from world.magic.exceptions import UnsupportedGiftResonanceError  # noqa: PLC0415
-
-    supported = gift.cached_resonances
-    if supported and not any(r.pk == resonance.pk for r in supported):
-        raise UnsupportedGiftResonanceError
-
-    return provision_latent_gift_thread(sheet, gift, resonance=resonance)
 
 
 def _first_gift_thread_resonance(sheet: CharacterSheet) -> Resonance | None:
@@ -125,13 +103,12 @@ def _first_gift_thread_resonance(sheet: CharacterSheet) -> Resonance | None:
 def _resolve_grant_resonance(
     sheet: CharacterSheet, gift: Gift, *, preferred: Resonance | None = None
 ) -> Resonance:
-    """Grant-time resonance policy (#2971). Empty supported set = unrestricted (#2968).
+    """Grant-time resonance policy (#2971). The gift's ``resonances`` list is a default
+    here, never a limit (#5123).
 
     In order, taking the first that resolves:
 
-    1. ``preferred`` (the caller's explicit pick), when the gift's supported set is
-       empty OR contains it — an explicit pick outside a non-empty set is NOT used
-       verbatim; it falls through to the set policy below instead.
+    1. ``preferred`` (the caller's explicit pick), whatever the gift's list holds.
     2. An existing active GIFT thread already covering ``gift`` (lineage-aware, via
        ``gift_threads_for``) — its resonance, regardless of the supported-set shape.
        Without this step, an unconditional re-grant (e.g. ``grant_path_magic`` looping
@@ -151,7 +128,7 @@ def _resolve_grant_resonance(
     from world.magic.models import CharacterResonance  # noqa: PLC0415
 
     supported = gift.cached_resonances
-    if preferred is not None and (not supported or any(r.pk == preferred.pk for r in supported)):
+    if preferred is not None:
         return preferred
     covering = gift_threads_for(sheet.character, gift)
     if covering:
@@ -193,7 +170,7 @@ def grant_gift_to_character(
     sheet: CharacterSheet,
     gift: Gift,
     *,
-    resonance: Resonance | None = None,
+    resonances: Sequence[Resonance] = (),
     origin: str = AcquisitionOrigin.CHARACTER_CREATION,
 ) -> tuple[CharacterGift, bool]:
     """Mint (idempotently) the CharacterGift link + the latent GIFT thread.
@@ -203,9 +180,11 @@ def grant_gift_to_character(
     path-crossing grant (#1579) and species-gift provisioning (#1580) so there is
     one place that does this, not a per-source copy.
 
-    ``resonance`` is the caller's preferred resonance for the latent thread, if any;
-    ``None`` (the default) means "resolve one for me." Either way, the resonance is
-    run through ``_resolve_grant_resonance`` (#2971) and a thread is ALWAYS
+    ``resonances`` are the caller's preferred resonances for the latent thread, leading
+    first (character creation's weighted picks, heaviest first); empty (the default)
+    means "resolve one for me" through ``_resolve_grant_resonance`` (#2971). Every pick
+    is kept: the gift's ``resonances`` list limits nothing, it is the default that
+    resolver reaches for when no pick is named (#5123). A thread is ALWAYS
     provisioned — a granted gift with an empty supported set no longer silently
     skips thread provisioning, since that left characters holding a gift and its
     techniques with no GIFT thread to read a resonance from anywhere downstream
@@ -228,11 +207,11 @@ def grant_gift_to_character(
     """
     from world.magic.models import CharacterGift  # noqa: PLC0415
 
-    resolved = _resolve_grant_resonance(sheet, gift, preferred=resonance)
+    held = list(resonances) or [_resolve_grant_resonance(sheet, gift)]
     character_gift, created = CharacterGift.objects.get_or_create(
         character=sheet, gift=gift, defaults={"origin": origin}
     )
-    provision_latent_gift_thread(sheet, gift, resonance=resolved)
+    provision_latent_gift_thread(sheet, gift, resonances=held)
     from world.items.services.natural_weapons import provision_natural_weapon  # noqa: PLC0415
 
     provision_natural_weapon(sheet, gift)
@@ -303,8 +282,9 @@ def gift_resonances_for(character, gift: Gift) -> list[Resonance]:
     """The resonance(s) this gift manifests as FOR THIS character.
 
     Derived on read from the character's active GIFT thread covering ``gift``:
-    the thread's resonance if one exists, else ``gift.resonances`` (the supported
-    set). Replaces ``technique.gift.resonances.all()`` at the four cast sites
+    the thread's resonances in row order (leading first; #5123) if one exists, else
+    ``gift.resonances`` (the supported set). Replaces ``technique.gift.resonances.all()`` at
+    the four cast sites
     (#1578). "Covering" walks the gift lineage (#2891) — a Vulpi thread manifests
     the Khati techniques Vulpi inherits, at the Vulpi thread's resonance.
 
@@ -330,10 +310,8 @@ def gift_resonances_for(character, gift: Gift) -> list[Resonance]:
     if sheet is None:
         return gift.cached_resonances
 
-    # #1619: Multi-resonance — return all GIFT thread resonances for this
-    # gift. When only one exists (the common case), this is a single-element
-    # list (same shape as before). When multiple exist, the caller gets the
-    # full set and may present a cast-time picker.
+    # #1619 / #5123: the gift's one thread holds several resonances on its rows;
+    # the caller gets them all, leading first, and may present a cast-time picker.
     #
     # The alt-self resonance override is NOT applied here — it's applied in
     # the variant resolver (_resolve_technique_variant), which is the single
@@ -342,7 +320,7 @@ def gift_resonances_for(character, gift: Gift) -> list[Resonance]:
     # and keeps the query-scaling budget intact.
     gift_threads = gift_threads_for(character, gift)
     if gift_threads:
-        return [t.resonance for t in gift_threads]
+        return character.threads.resonances_of(gift_threads[0])
     return gift.cached_resonances
 
 
@@ -369,13 +347,10 @@ def resolve_specialized_variant(
     role-granted technique specializes by the vow's depth, not the personal
     gift's depth.
 
-    ``preferred_resonance`` (#1619): when the character holds multiple GIFT
-    threads on the same gift at different resonances, the caller may pass the
-    resonance the player chose at cast time. This takes priority over the
-    alt-self resonance override and the thread's own resonance. The thread
-    *level* is read from the GIFT thread at the preferred resonance (or the
-    first GIFT thread on the gift if none matches — level is shared across
-    resonances for the same gift in the common case).
+    ``preferred_resonance`` (#1619): the resonance the player chose at cast time,
+    one of the gift thread's resonances (#5123). It takes priority over the
+    alt-self resonance override, which takes priority over the thread's leading
+    resonance. The thread has one level, read whichever resonance wins.
 
     ``_sheet`` is an internal optimisation parameter: callers that have already
     fetched the ``CharacterSheet`` for ``character`` may pass it here to avoid a
@@ -417,29 +392,21 @@ def _role_thread_for(character, character_technique):
     )
 
 
-def _gift_thread_for_variant(character, technique: Technique, *, preferred_resonance):
+def _gift_thread_for_variant(character, technique: Technique):
     """The GIFT thread whose level and resonance govern ``technique``'s variant.
 
     Covering threads are those on the technique's own gift OR on a descendant
     gift the character holds (#2891) — an inherited technique specializes from
     the child gift's thread, since that is the only thread its holder has.
 
-    #1619: when ``preferred_resonance`` is set (the cast-time picker), prefer the
-    covering thread at that resonance, falling back to any covering thread so the
-    level is still read.
+    One thread per gift (#5123): the cast-time picker (``preferred_resonance``) chooses
+    among that thread's resonances in ``_effective_variant_resonance``, and the thread's
+    level is read for whichever resonance wins.
     """
     if technique.gift_id is None:
         return None
     covering = gift_threads_for(character, technique.gift)
-    if not covering:
-        return None
-    if preferred_resonance is None:
-        return covering[0]
-    at_resonance = next(
-        (t for t in covering if t.resonance_id == preferred_resonance.pk),
-        None,
-    )
-    return at_resonance if at_resonance is not None else covering[0]
+    return covering[0] if covering else None
 
 
 def _effective_variant_resonance(sheet, thread, preferred_resonance):
@@ -503,9 +470,7 @@ def _resolve_technique_variant(
     if use_role_thread:
         thread = _role_thread_for(character, character_technique)
     else:
-        thread = _gift_thread_for_variant(
-            character, technique, preferred_resonance=preferred_resonance
-        )
+        thread = _gift_thread_for_variant(character, technique)
     if thread is None:
         return technique
 

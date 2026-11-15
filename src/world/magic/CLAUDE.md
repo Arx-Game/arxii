@@ -5,31 +5,45 @@ The magic system for Arx II. Power flows from identity and connection.
 ## Core Concepts
 
 - **Affinity**: Three magical sources (Celestial, Primal, Abyssal) - proper domain models with optional ModifierTarget link
-- **Aura**: A character's soul-state as percentages across affinities
+- **Aura**: A character's soul-state as percentages across affinities (their lifetime resonance); who they ARE is `CharacterAuraShare.settled_percent` per affinity, and growing another affinity past it makes them **unsettled** (#5123, ADR-5123-B)
 - **Resonance**: Style tags that define magical identity - proper domain models with FK to Affinity and optional ModifierTarget link
 - **Motif**: Character-level magical aesthetic containing resonances and facets
 - **Facet**: Flat vocabulary of imagery/symbolism (Wolf, Silk, Scythe — 2026-09-11 ruling, #3776) assigned to resonances
 - **Threads**: Per-character attachments anchored to a trait/technique/facet/
-  relationship-track/relationship-capstone/covenant-role/sanctum. Each Thread
-  channels a single Resonance (currency) and accrues `developed_points` → `level`
-  via the Imbuing ritual. The legacy 5-axis Thread family was removed and replaced
+  relationship-track/relationship-capstone/covenant-role/gift/mantle/sanctum, one thread per
+  anchor. Each Thread holds one or more Resonances (currency) on its `ThreadResonance` rows
+  (the cumulative amount of each ever imbued; `Thread.resonance` is the denormalized LEADING
+  one, written only by `refresh_leading_resonance`, #5123, ADR-5123-A) and accrues
+  `developed_points` → `level` via the Imbuing ritual. The legacy 5-axis Thread family was removed and replaced
   in Phase 4 of the resonance pivot.
 - **Resonance currency**: `CharacterResonance.balance` is spendable currency
   earned via `grant_resonance` (Spec C surfaces will write here) and spent
-  via `spend_resonance_for_imbuing` (advances Thread level — also charges a flat
+  via `spend_resonance_for_imbuing(sheet, thread, resonance, amount)` (spends that held
+  resonance, grows the thread's row for it, advances Thread level — also charges a flat
   AP cost, with the Unbound +50% surcharge applying via the same
   `magic_learning_ap_cost` modifier as technique learning, #2467) or
   `spend_resonance_for_pull` (low-level spend called by the pull helpers).
   `lifetime_earned` is monotonic audit. **Thread pulls are declaration modifiers**
   on `cast`/`clash`, or declared on their own for the round (`combat_pull`, #5066), or
   committed by the automatic defensive pull (`world/combat/services/auto_pull.py`). Every
-  pulled thread pays its tier's resonance and anima (`threads.pull_cost_totals`, #5066), and a
-  pull boosts only the uses its threads relate to (`round_pull_bonus`). The shared commit path
+  pulled thread pays its tier's resonance and anima (`threads.pull_cost_totals`, #5066) from
+  its **paying resonance**: the one the player names per thread (`payers`, thread id to
+  resonance id; telnet `pull=<thread>:<resonance>`), else the thread's leading one (#5123).
+  The payer is stored on the pull's through rows (`CombatPullThread`, `ScenePullThread`),
+  resolved from the wire by `services/pull_payers.resolve_pull_payers` (a held resonance
+  only, which need not have a row on the thread), and a pull boosts only the uses its
+  threads relate to (`round_pull_bonus`). The perks are the payer's (see "Pull perks by
+  payer" below). The shared commit path
   lives in `world/combat/pull_helpers.py`:
   `commit_combat_pull` (combat contexts), `build_cast_pull_declaration`,
   `resolve_pull_from_kwargs`. Non-combat cast uses `request_technique_cast(cast_pull=…)`.
-  Preview: `preview_resonance_pull` (`POST /api/magic/thread-pull-preview/`) — read-only,
-  unchanged.
+  Preview: `preview_resonance_pull` (`POST /api/magic/thread-pull-preview/`): read-only;
+  takes `payers` and returns `per_thread`: every resonance the character holds as a
+  `PayerOption` (cost, balance, affordable, the perks it would resolve with and the
+  `level_read`) for each pulled thread.
+  A tier with no authored `ThreadPullCost` row is refused with "That pull tier is not
+  available yet." on preview, cast and commit: `get_pull_cost` raises `PullTierNotAvailable`
+  (an `InvalidImbueAmount`) and `build_cast_pull_declaration` checks it up front.
 - **Burning resonance (#4736)**: a pull may also burn resonance as a Strain option
   (`services/burn.py`: `resolve_resonance_burn`, `value_burn`, `preview_burn`). The burn rides the
   pull and is debited with it in `spend_resonance_for_pull(burn=)`; a combat burn is resolved and
@@ -72,11 +86,14 @@ The magic system for Arx II. Power flows from identity and connection.
 - `Resonance` - Magical identity tags with FK to Affinity, optional opposite (self OneToOne), optional OneToOne to ModifierTarget
 
 ### Character State
-- `CharacterAura` - A character's aura; the affinity percentages are `CharacterAuraShare` rows (one per affinity, read through `cached_shares` / `percent_for(affinity)` / `dominant_affinity`)
+- `CharacterAura` - A character's aura; the affinity percentages are `CharacterAuraShare` rows (one per affinity, read through `cached_shares` / `percent_for(affinity)` / `dominant_affinity`). Each share carries `percent` (the aura now, from lifetime resonance via `recompute_aura`) and `settled_percent` (who the character IS, 0-100, summing to 100 once set; #5123): written at creation (`set_settled_shares`, weights plus the Glimpse nudge) and by `accept_aura_change`. The main affinity is the largest `settled_percent` (a tie to the lowest affinity id). `set_aura_shares` keeps a share row whose `settled_percent` is above zero even at `percent` 0, so a faded streak's line survives
 - `CharacterResonance` - Per-character per-resonance row. Identity anchor AND
   spendable currency bucket. Fields: `character_sheet` FK, `resonance` FK,
   `balance` (spendable), `lifetime_earned` (monotonic audit), `claimed_at`,
-  `flavor_text`. Unified per Spec A §2.2 — the old `scope`/`strength`/`is_active`
+  `flavor_text`, `mire_lifetime` (#5123: the part of `lifetime_earned` taken from the Mire as a
+  Sineater; written only on the Sineater's grant by `_grant_sineating_resonance`, moved in
+  proportion by every conversion, zeroed by a Fall and by accepting; a DB CheckConstraint keeps
+  it at or under `lifetime_earned`). Unified per Spec A §2.2 — the old `scope`/`strength`/`is_active`
   shape was dropped; row existence replaces `is_active`.
 - `CharacterAnima` - Magical resource (anima) tracking
 - `ANIMA_BANDS` / `anima_band_for(current, maximum)` (`constants.py`, #1446) - Qualitative
@@ -85,7 +102,7 @@ The magic system for Arx II. Power flows from identity and connection.
   by the web Status tab and the `sheet/status` telnet section
 
 ### Gifts & Techniques
-- `Gift` - Thematic collections of magical techniques (M2M to Resonance — the **supported set**: a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052). Carries a `kind` column (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable — species abilities and in-play powers are delivered as Minor Gifts; ADR-0050, #1577)
+- `Gift` - Thematic collections of magical techniques (M2M to Resonance — a default only: it limits no Gift thread, any held resonance can be woven, imbued or retuned into one; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052). Carries a `kind` column (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable — species abilities and in-play powers are delivered as Minor Gifts; ADR-0050, #1577)
 - **Gift lineage (#2891, ADR-0192)** — `Gift.parent` (self-FK, PROTECT, `related_name="children"`)
   hangs a gift beneath an umbrella gift. **Holding a gift reaches the techniques of that gift and
   of every ancestor, and the GIFT thread on the held gift is the thread for all of them** — one
@@ -247,7 +264,7 @@ catalog pick (see below). CG finalization also provisions the anima ritual itsel
 `provision_player_anima_ritual` at finalize, not post-CG. The player-authored `Ritual` row
 (SCENE_ACTION) carries check configuration via its `RitualCheckConfig` sidecar (stat, skill,
 resonance, check_type); as of #2971, that `resonance` is also populated at CG time — resolved
-from the same `selected_gift_resonance_id` pick the gift-thread grant resolves (see "GIFT
+from the heaviest `gift_resonance_weights` pick the gift-thread grant leads with (see "GIFT
 thread substrate" below) — since the anima ritual IS the character's magical identity.
 
 **Anima/severity budget per outcome tier (#1207):** `anima._budget_for_outcome` reads
@@ -897,18 +914,33 @@ admin all converge on the same service layer.
   `target_relationship` (the weaver's own `CharacterRelationship` side, #3957),
   `target_capstone`, `target_covenant_role`,
   `target_gift`, `target_mantle`, `target_sanctum_details`. Fields: `owner` (FK CharacterSheet), `resonance`
-  (FK Resonance), `name`, `description`, `developed_points`, `level`, timestamps,
+  (FK Resonance: the LEADING resonance, a denormalized copy of the first `ThreadResonance` row,
+  never written directly), `name`, `description`, `developed_points`, `level`, timestamps,
   `retired_at` (soft-retire), `slot_kind` (required for SANCTUM threads —
   `SanctumSlotKind`: PERSONAL_OWN / COVENANT / HELPER),
   `signature_bonus` (nullable FK → `SignatureMotifBonus`, PROTECT — only settable on
   TECHNIQUE-kind threads; enforced by `clean()` + DB CheckConstraint
   `"thread_signature_bonus_technique_only"`; #1582 ADR-0072).
   All typed FKs use `on_delete=PROTECT`. Three layers of integrity: `clean()`, per-kind
-  CheckConstraints, per-kind partial UniqueConstraints.
+  CheckConstraints, per-kind partial UniqueConstraints (one live thread per `(owner, anchor)`:
+  resonance is not part of the key since #5123; weaving on a taken anchor raises
+  `ThreadAnchorTakenError` with a pointer to imbuing it).
   **SANCTUM anchor:** `Thread.target_sanctum_details` (FK to `SanctumDetails`).
   Anchor cap = `sanctum.feature_instance.level × 10`. The thread is pull-applicable
   ("in-sanctum boost") while the character is inside the Sanctum's room.
   **Bare ROOM `target_kind` removed** — use SANCTUM for room-anchored threads.
+  `ThreadSerializer.display_name` (#5123) is the thread's own name, else `thread_display_name` (`crossing/handlers.py`): its anchor's label, so a Gift thread reads as its Gift.
+- `ThreadResonance` (#5123, ADR-5123-A) - One resonance's `amount` inside a Thread: the
+  CUMULATIVE total of that resonance ever imbued, never lowered by a level-up spending
+  `developed_points` (so it does NOT sum to `developed_points`). Unique `(thread, resonance)`;
+  Meta ordering `(thread, -amount, id)`, so the first row is the leading resonance and a tie
+  goes to the row created first. Written only by services in `services/thread_rows.py`
+  (`add_to_resonance_row` for imbuing, `write_resonance_rows` for weaving and creation at 0,
+  `refresh_leading_resonance` after every write); the retune rite and the Fall and Redemption
+  move or scale amounts, and a row that empties is deleted unless it is the only one. Every
+  writer calls `character.threads.invalidate()` (the handler caches rows: `resonances_of`,
+  `amount_of`). Read-only inline in admin. A row at 0 means the resonance is known but never
+  imbued: it pays a pull and gives no perks.
 - `ThreadLevelUnlock` - Per-thread XP-locked-boundary receipt. Unique per
   `(thread, unlocked_level)`. Records that a thread paid XP to cross a
   specific boundary (20, 30, ...).
@@ -976,16 +1008,40 @@ read — so drawback and gift resistance net. GIFT threads are pullable (added t
 `_ALWAYS_IN_ACTION_KINDS`: a species gift is intrinsic, always in-action). The DoT/trap seams
 apply neither condition resistance nor this gift resistance, so they stay byte-identical.
 
+**Pull perks by payer (#5123, ADR-5123-A).** `get_pull_effects_for_thread(thread, payer, ...)`
+(`services/pull_effects.py`) filters `ThreadPullEffect` on the PAYER, not on `thread.resonance`;
+`resolve_pull_effects(..., payers=)` and `thread_power_term` pass it. The thread level the payer's
+perks read is `thread_rows.payer_level_read(thread, payer)`: the leading resonance reads
+`thread.level`; another resonance with a nonzero row reads `max(0, level -
+DriftConfig.second_resonance_level_step)`, falling back to the leader's level when the lower
+level's `thread_level_multiplier` would beat the leader's (the curve is not monotonic below
+10); another resonance with no row, or a row at 0, gets `None` and no perks (the leading resonance
+always reads the thread's level, even at 0), but still pays an ordinary
+pull (the cost and the pull's plain benefit). That level feeds both the `min_thread_level` gate
+and the multiplier. Tier 0 (always-on) resolves only when the payer is the leading resonance,
+and the tier-0 passives outside pulls (`handlers.py`, `mechanics/services.py`,
+`companions/services.py`) key on the leading resonance. Pull applicability counts a thread
+when ANY resonance with a row would have an effect, since it runs before the payer is chosen.
+Aura alignment power (`power_terms._aura_alignment`) is one bonus, the largest over the cast's
+working affinities and the payers' affinities: the full `affinity_alignment_bonus` for an
+affinity with a settled share above zero, else the current percent, so a mixed character is
+never weaker than a pure one and a pull never lowers it. A worn alternate self keeps the
+acting-aura reading.
+
 **Combat-side models (live in `world/combat`, not magic):**
 - `CombatPull` - Per-(participant, round) commit envelope for a thread pull.
-  Unique per (participant, round_number). M2M to Thread for the threads
-  pulled; `resonance_spent` / `anima_spent` for audit. Committed via
+  Unique per (participant, round_number). The threads pulled are `CombatPullThread` rows
+  (`pull_threads`; M2M `threads` through them, #5123), each carrying `paying_resonance`;
+  `resonance_spent` / `anima_spent` for audit. Committed via
   `world/combat/pull_helpers.commit_combat_pull` (not called directly).
 - `CombatPullResolvedEffect` - Frozen snapshot of one resolved effect from
   a pull. Captures `kind`, `authored_value`, `level_multiplier`, `scaled_value`,
   `vital_target`, `resistance_damage_type` (RESISTANCE only; null = all types, #1580),
   `source_thread`, `source_thread_level`, `source_tier`,
-  `granted_capability`, `narrative_snippet`. Cascades from CombatPull;
+  `granted_capability`, `narrative_snippet` (copied only for the kinds whose payload
+  constraint allows prose, NARRATIVE_ONLY and CORRUPTION_RESISTANCE; blank on a numeric
+  kind). `level_multiplier` is the rounded int; the preview's wire field of that name is the
+  exact one (`ResolvedPullEffect.level_multiplier_exact`, 0.9 at level 9). Cascades from CombatPull;
   edits to authoring or Thread.level mid-round cannot retroactively alter
   what a committed pull granted.
 
@@ -1042,7 +1098,7 @@ exposing `name`/`intensity`/`control` with deltas; raw parent `Technique` when n
 matches). `CovenantRole` → the matching sub-role variant. Both paths read the active
 thread through the cached `character.threads` handler (the same cached queryset the
 passive bonuses read), never a fresh `Thread.objects.filter()`; a character with no
-`CharacterSheet` degrades gracefully (returns the parent entity / supported set). The
+`CharacterSheet` degrades gracefully (returns the parent entity / the Gift's `resonances` list). The
 GIFT-thread write-paths (`provision_latent_gift_thread`, `_weave_gift_thread`) call
 `character.threads.invalidate()` after mutation, mirroring the covenant-role
 invalidation contract. `_ResolvedTechnique`'s payload accessors
@@ -1066,54 +1122,69 @@ also standalone-callable. (`world/covenants/discovery.py` re-exports it as
 
 **GIFT thread substrate:**
 - `TargetKind.GIFT` + `Thread.target_gift` FK (PROTECT) — a thread anchored to a Gift. One
-  active GIFT thread per `(owner, gift)` for now (multi-resonance chooser deferred).
-- `grant_gift_to_character(sheet, gift, *, resonance=None)`
-  (`world/magic/specialization/services.py`) — the shared gift-acquisition primitive
+  active GIFT thread per `(owner, gift)`, holding every resonance the character put into the
+  Gift on its `ThreadResonance` rows (#5123); a second resonance is a row on that thread, never
+  a second thread (`provision_additional_gift_thread` is gone).
+- `grant_gift_to_character(sheet, gift, *, resonances=(), origin=...)`
+  (`world/magic/specialization/services.py`; `resonances` are the preferred resonances, leading
+  first, every one kept on the Gift thread, none named means resolve one) — the shared gift-acquisition primitive
   (path-crossing grant, species-gift provisioning, CG's gift-stage finalize, and
   `charge_and_learn`'s implicit gift acquisition all call this, not
   `provision_latent_gift_thread` directly). Mints (idempotently) the `CharacterGift` link
   and **always** provisions the gift's latent level-0 GIFT thread — resonance is resolved by
   `_resolve_grant_resonance` **before** the `CharacterGift` row is minted, so a raise leaves
-  no partial state. In order: the caller's explicit `resonance=` pick (when the gift's
-  supported set is empty or contains it); an existing active GIFT thread already covering
-  this gift, lineage-aware via `gift_threads_for` (makes a re-grant a true no-op); a
-  non-empty supported set's claimed-or-first member; the character's own earliest GIFT
+  no partial state. In order (the single-resonance fallback, used when no preferred resonance
+  is named): the caller's explicit pick, whatever the gift lists; an existing active GIFT thread already covering
+  this gift, lineage-aware via `gift_threads_for` (makes a re-grant a true no-op; its leading
+  resonance); a
+  non-empty `Gift.resonances` list's claimed-or-first member (the list's one role: a default);
+  the character's own earliest GIFT
   thread's resonance (their "main" one); their highest-`lifetime_earned` claimed resonance;
   the anima-ritual resonance. Raises `GiftResonanceUnresolvable` if nothing resolves — an
-  empty `Gift.resonances` (the "unrestricted" weave-gate meaning, ADR-0052/#2967) no longer
-  means "skip provisioning the thread" (#2971); see ADR-0203.
-- `provision_latent_gift_thread(sheet, gift, *, resonance)` — the idempotent level-0 GIFT
-  thread writer `grant_gift_to_character` calls once resonance is resolved; write-once on
-  resonance. Not called directly by any grant call site anymore.
-- `weave_thread(target_kind=GIFT)` — commits/chooses a resonance onto the existing latent
-  thread rather than creating a new one (validates the resonance is in the gift's
-  supported set, else `UnsupportedGiftResonanceError`, caught by `WeaveThreadAction`).
+  empty `Gift.resonances` no longer means "skip provisioning the thread" (#2971); see ADR-0203.
+- `provision_latent_gift_thread(sheet, gift, *, resonances)` — the idempotent level-0 GIFT
+  thread writer `grant_gift_to_character` calls once resonances are resolved; it writes a
+  `ThreadResonance` row at amount 0 per resonance in the order given (the first leads a tie),
+  then `refresh_leading_resonance`. An existing thread on the gift is returned unchanged
+  (the list is ignored). Not called directly by any grant call site anymore.
+- `weave_thread(target_kind=GIFT)`: provisions the character's one thread on the gift at the
+  named resonance (any resonance: the gift's `resonances` list limits nothing, and
+  `UnsupportedGiftResonanceError` is gone, #5123); a gift that already has a
+  thread raises `ThreadAnchorTakenError` ("imbue it instead"), as does every other anchor kind.
 - `gift_resonances_for(character, gift) -> list[Resonance]` — the derive-on-read seam
   replacing `technique.gift.resonances.all()` at the four cast sites (`power_terms`,
   `techniques` ×2, `resonance_environment` ×2). Reads the active GIFT thread through the
-  cached `character.threads` handler; returns `[thread.resonance]`, falling back to
-  `gift.cached_resonances` (the authored supported set) when no thread or no sheet.
-- `Gift.resonances` is repurposed to the **supported set** (weave constraint, not the
-  cast-time value) per ADR-0052.
+  cached `character.threads` handler; returns the thread's resonances in row order (leading
+  first, #5123), falling back to `gift.cached_resonances` (the authored `Gift.resonances` list) when
+  no thread or no sheet. `_first_gift_thread_resonance`, `_effective_variant_resonance` and
+  the technique forms read the leading resonance; `technique_forms` lists a form for every
+  resonance the thread holds.
+- `Gift.resonances` limits nothing (owner ruling 2026-11-14, #5123): a Gift is the substance
+  and resonance is how the character feels using it, so any resonance she holds can feed any
+  Gift's thread. The list is only the default `_resolve_grant_resonance` reaches for when a
+  grant names no resonance (and what a sheetless character's gift manifests as). It is not the
+  cast-time value (ADR-0052). Weaving, imbuing (`imbue_ready_threads`, the retune rite's
+  options, `ImbuePanel`) and creation read no list; the thread payload has no
+  `allowed_resonance_ids`.
 
 **GIFT anchor cap (#1580, #4585):** `compute_anchor_cap` handles `TargetKind.GIFT` by
 returning `compute_level_cap(thread.owner)` (character level × 10). GIFT threads are
 always in-action (`_ALWAYS_IN_ACTION_KINDS`; a species gift is intrinsic). The frontend CG
 resonance picker is built (`GiftStage`, #1620/#2426 Task 10 — writes
-`selected_gift_resonance_id`). Proven end-to-end by
+`gift_resonance_weights`). Proven end-to-end by
 `world/magic/tests/integration/test_gift_specialization_e2e.py` (#1578) and
 `world/magic/tests/integration/test_species_gift_e2e.py` (#1580).
 - **Species gift provisioning** — `SpeciesGiftGrant` (`world/species/models.py`; natural key
   `(species, gift)`) is the through-model linking a species to MINOR Gifts with an optional
-  `drawback_condition` FK. `provision_species_gifts(sheet, *, resonance=None)`
+  `drawback_condition` FK. `provision_species_gifts(sheet, *, resonances=())`
   (`world/species/services.py`) is called from `finalize_magic_data` after the Major-gift
   block; mints the MINOR `CharacterGift` via `grant_gift_to_character`, applies any
-  drawback idempotently. `resonance=None` (the common case — this call has no CG-picker
-  field of its own) lets the shared resolver anchor the Minor Gift's thread to the
-  character's Major-gift thread resonance, since that thread already exists by the time
-  species gifts provision (`finalize_magic_data`'s ordering runs the Major-gift block
-  first). See ADR-0071, ADR-0203.
-- **Gift-specific pull-effect lookup** — `get_pull_effects_for_thread(thread, **filters)`
+  drawback idempotently. Character creation passes its weighted picks (heaviest first), so a
+  species gift's thread starts with the same rows; empty `resonances` lets the shared resolver
+  anchor the Minor Gift's thread to the character's Major-gift thread's leading resonance,
+  since that thread already exists by the time species gifts provision
+  (`finalize_magic_data`'s ordering runs the Major-gift block first). See ADR-0071, ADR-0203.
+- **Gift-specific pull-effect lookup** — `get_pull_effects_for_thread(thread, payer, **filters)`
   (`world/magic/services/pull_effects.py`): for `TargetKind.GIFT` threads, tries rows where
   `target_gift == thread.target_gift` first, falls back to `target_gift IS NULL`; all other
   kinds get only `target_gift IS NULL` rows.
@@ -1147,8 +1218,8 @@ resonance picker is built (`GiftStage`, #1620/#2426 Task 10 — writes
   mints, idempotently, `CharacterGift` + the latent GIFT thread (reusing
   `provision_latent_gift_thread`) + `CharacterTechnique` rows for the path's `PathGiftGrant`
   sets, then announces via `announce_access_change` (`AccessChangeSource.PATH_ADVANCEMENT`).
-  Resonance for the latent thread = a claimed resonance in the gift's supported set, else the
-  gift's first supported resonance (the player commits the real choice later via the Rite of
+  Resonance for the latent thread = a claimed resonance in the gift's `resonances` list (its default role), else the
+  list's first (the player commits the real choice later via the Rite of
   Weaving). XP/advancement *gates* the crossing (ADR-0053); the grant is a consequence of path
   membership (ADR-0050), not an XP purchase.
 - **Hook:** `cross_threshold` (`audere_majora.py`) calls `grant_path_magic(sheet, chosen_path)`
@@ -1299,6 +1370,13 @@ during Sineating actions, which refills the Hollow's capacity.
 - `CharacterResonance.lifetime_helped` — PositiveIntegerField (monotonic); increments on
   every accepted Sineating unit and every rescue ritual. Drives `CORRUPTION_RESISTANCE`
   passive benefit on the Sineater's Thread.
+
+**The Mire share (#5123).** `_grant_sineating_resonance` grants both parties the resonance;
+the Sinner's gain is their own, the Sineater's passes `from_mire=True` to `grant_resonance`,
+which adds it to that row's `mire_lifetime` too. The Sineater's burden therefore arrives as any
+other resonance beyond who they are, shown apart as the Mire share and held to the wider
+`DriftConfig.mire_allowance_percent` before it unsettles them (`drift_for`). Atoning converts the
+Mire's excess first; accepting turns the Mire into their own.
 
 **New audit models (`models/soul_tether.py`):**
 - `Sineating` — Audit row for each Sineating offer/accept/decline cycle. FKs to
@@ -1760,24 +1838,32 @@ ACTS with (cast alignment, place of power on arrival and during a cast, defileme
 attacker affinity); `working_affinities` puts a cast in the worn self's affinity. Fall, Soul
 Tether and the sheet display keep the true `CharacterAura`. See `docs/systems/magic.md`.
 
-**Drift and Resonance Conflict (#4732):** `services/drift.py` holds `drift_for(sheet)` (weighted
-off-aura balance against `acting_aura(sheet).dominant_affinity`, via
-`AffinityInteraction.conflict_weight`) and `check_resonance_focus(character, technique, *,
-pulled_resonances=())`, called once per cast from `_complete_technique_cast` inside
+**Unsettled and Resonance Conflict (#4732, #5123):** `services/drift.py` holds `drift_for(sheet)`
+(whether the character is unsettled: on the TRUE aura, each non-main affinity's own share of
+lifetime resonance against its `CharacterAuraShare.settled_percent` plus the tolerance, and a
+Sineater's `mire_lifetime` share against its allowance) and `check_resonance_focus(character,
+technique)`, called once per cast from `_complete_technique_cast` inside
 `use_technique` (after anima, before `resolve_fn` runs), so every cast path rolls it; a pull is
-part of its cast. The pulled resonances are the cast's own `cast_pull` threads', else the
-`use_technique(pulled_resonances=...)` the combat round resolver and clash pass from the round's
-committed pull; nothing else reads combat pulls. Scene casts, combat casts, clash
+part of its cast and adds no steps, only being unsettled calls for the roll. Scene casts, combat casts, clash
 contributions and standoffs gather modifiers inside `resolve_fn` (scene casts after the
 PRE_CAST triggers too), so the conflict counts on the same roll. Technique-enhanced social
 actions gather modifiers before `use_technique`, so the penalty counts from her next roll;
 battles roll focus but their roll reads no condition modifiers (pre-existing,
 `BattleTechniqueResolver`); the joust is not a cast. Every number and both designations
 (focus check type, conflict condition) are on the `DriftConfig` singleton
-(`get_drift_config()`); unset designations skip the check and show on the Required content
+(`get_drift_config()`): `unsettled_tolerance_percent` (5) and `unsettled_step_percent` (5, one
+step of severity per band past it), `mire_allowance_percent` (30, the Sineater's wider room),
+`creation_points` (10) and `creation_seed_per_point` (10) for character creation,
+`second_resonance_level_step` (10) for pull perks, plus the focus check's base difficulty and
+per-step difficulty. The reading `drift_for` returns is a `DriftReading` (`types/drift.py`):
+`steps_past`, `main_affinity`, `leading_excess_resonance` (the resonance named in "Your X has
+grown strong enough to make you unsettled"), `own_shares`, `settled_shares`, `mire_share_percent`
+and the excess in lifetime points (what atoning may convert). A character with nothing settled
+(no aura, or magic not yet provisioned) reads zero. Unset designations skip the check and show on the Required content
 dashboard, which also flags a conflict condition with `break_free_mode` NONE or no
 `ConditionCheckModifier`. The penalty is the conflict condition's authored
 `ConditionCheckModifier`; never set `alters_behavior` for it (use `ConditionCategory.self_shakeable`).
+The focus sentences are built once on `FocusOutcome.lines` (`types/drift.py`): telnet prints them, and the web cast result's `technique_result.focus_lines` carries them (#5123).
 Stirring it up is an authored social action applying the condition at a severity (the higher wins), not code.
 
 `models/renown_config.py` — `RenownAwardConfig`: **abstract base** (SharedMemoryModel)
@@ -2034,8 +2120,9 @@ The Fall/Redemption system lets characters convert their affinity through
 dramatic ceremony. **Falling gains power; Redemption is lossy** (ADR-0054,
 ADR-0134). Compromising acts (combat kills, cruelty, malice) grant
 spendable non-native resonance via `grant_resonance` with
-`source=GainSource.COMPROMISE` — the existing `CharacterResonance` rows ARE
-the drift tracker. `recompute_aura` shifts affinity percentages; the Fall
+`source=GainSource.COMPROMISE` — the existing `CharacterResonance` rows hold it, and
+whether it has made the character unsettled is `drift_for`, read on the aura those rows feed
+(#5123). `recompute_aura` shifts affinity percentages; the Fall
 becomes available when the target affinity crosses
 `FallRedemptionConfig.fall_threshold_percent`.
 
@@ -2061,12 +2148,16 @@ becomes available when the target affinity crosses
   `lifetime_earned` (scaled by multiplier) from source to target resonance.
   `lifetime_earned` is transferred, not decremented — the total is preserved
   modulo the multiplier, so `recompute_aura` shifts correctly. Full
-  conversion re-anchors `Thread.resonance` FK (merging into existing
-  target-resonance threads if needed, retiring duplicates). Partial
+  conversion converts each live thread's `ThreadResonance` rows in the affinity (scaling
+  amounts and points, merging rows that land on one resonance, then
+  `refresh_leading_resonance`). Partial
   conversion (Atonement) does NOT touch threads.
 - `services/fall_redemption.py` — `grant_compromise_resonance()` (thin
   wrapper over `grant_resonance`), `perform_fall()` (the full ceremony,
-  gated by aura threshold + irreversibility), `get_fall_redemption_config()`.
+  gated by aura threshold + irreversibility; after the conversion it calls
+  `drift.settle_shares`, the settle step `accept_aura_change` also uses, so a Fall or
+  Redemption also moves who she is: her `settled_percent` follows her new own shares and
+  `steps_past` reads 0, #5123), `get_fall_redemption_config()`.
 
 **Extended Rite of Atonement (`services/atonement.py`):**
 The existing Rite of Atonement is extended to do BOTH:
@@ -2083,9 +2174,16 @@ Repeatable (not a Fall); each conversion loses half the value.
 (MISSION_REPORT shape). Three new `ResonanceGrant` CheckConstraints.
 `DRIFT_CORRECTION` (#4733) joins them with `res_grant_drift_correction_shape`.
 
-**Drift correction (#4733, slice 4 of #4672).** "Drift" here is `CharacterResonance` balance
-held off the aura's dominant affinity (`drift_holdings`); `AuraDrift` / `recompute_aura` is the
-older sense (shift in aura percentages). Do not mix the two in names.
+**Drift correction (#4733, slice 4 of #4672).** Atoning (#5123) reads
+lifetime, not balance: `drift_holdings` is resonance of a non-main affinity that stands past who
+the character is (`DriftReading.convertible_points`); `AuraDrift` / `recompute_aura` is the
+older sense (shift in aura percentages). Do not mix the two in names. The other exit from being
+unsettled is `accept_aura_change(sheet)` (`services/drift.py`, `AcceptAuraChangeAction`, key
+`accept_aura_change`): refused with `NotUnsettledError` unless `steps_past > 0`; moves every
+`mire_lifetime` into the character's own, sets each `settled_percent` to the resulting share,
+writes no corruption. `AcceptAuraResult.grown_affinity` is the affinity of the resonance that
+made them unsettled, read before accepting; it is what the action's "You become more
+abyssal." names (the main affinity is unchanged by an accept, so it cannot say what grew).
 - Models (`models/drift.py`): `DriftCorrectionConfig` (singleton; `rite`, `check_type` null until
   staff author them; `check_difficulty`; `cap_percent`), `DriftCorrectionOutcomeShare` (an
   `OutcomeTierAward`; `converted_share` is the fraction of the requested amount that converts,
@@ -2102,12 +2200,14 @@ older sense (shift in aura percentages). Do not mix the two in names.
   `lapse_conversion_offers`.
 - The rite (`services/drift_correction.py`): `perform_drift_correction_rite` refuses before it
   consumes anything unless the config has a rite, a check type and a share for every
-  `CheckOutcome`; converts `floor(amount x share)` through `convert_resonance_amount` as
-  `DRIFT_CORRECTION`; failure consumes the offering and leaves the cap. The check type is NOT a
+  `CheckOutcome`; converts `floor(amount x share)` lifetime points through `convert_resonance_amount` as
+  `DRIFT_CORRECTION` (lifetime moves by the points, the Mire's excess first; balance moves only as
+  far as it exists and only that part is granted at the pair rate; amount is capped by the cap, the
+  source's lifetime and its affinity's excess); failure consumes the offering and leaves the cap. The check type is NOT a
   `RitualCheckConfig` sidecar. Never match the rite, check or affinities by name.
   `rite_is_ready(config=None)` (rite, check type and a tier's share all present; one query,
   through `outcome_tiers_without_a_share()`, which the Required content probe reads too) is the
-  one readiness test; while it is false the rite, telnet `drift`/`drift convert` and the
+  one readiness test; while it is false the rite, telnet `aura`/`aura atone` and the
   pending serializer (`rite_ready`, `rite_not_ready_message`, from the view's
   `context["rite_ready"]`, once per request) say `RITE_NOT_READY_MESSAGE`, the exception's own
   `user_message`.
@@ -2115,23 +2215,26 @@ older sense (shift in aura percentages). Do not mix the two in names.
   `focus_bonus` adds to the check, not the output. `max_yield_per_earned_point` is the anti-farm
   estimator (per point). A cap grows by `amount x cap_percent // 100` per deed; only the deed
   that creates the cap row is floored at 1; `cap_percent` 0 opens no offer.
-- Surfaces: actions in `actions/definitions/drift_correction.py`, telnet `drift`
+- Closing: `close_spent_conversion_offers(sheet)` (`services/drift.py`, #5123) is the one writer that ends an offer early: it deletes the caps whose target has no convertible drift left, and the offer with its last cap. The rite and `accept_aura_change` call it after they write.
+- Surfaces: actions in `actions/definitions/drift_correction.py`, telnet `aura`
   (`commands/drift_correction.py`), REST `/api/magic/drift-correction/`, React gate on the scene
   and game pages (`frontend/src/magic/CLAUDE.md`). Required content row `drift-correction-config`.
   Details: `docs/systems/magic.md` "Drift correction".
 
-**Thread retune (#4735, slice 6 of #4672).** `services/thread_resonance.py` moves ONE thread
-through the SERVICE ritual at `THREAD_RESONANCE_SERVICE_PATH` (found by path, never by name):
-same affinity one to one, across affinities at the `conversion_pair` rate floored at 1, merging
-into a live same-anchor thread via `conversion._reanchor_thread` (shared with the full Fall).
-`PerformRitualAction._precheck` calls `check_thread_resonance_change` before components and anima
-are spent; `kwargs["target_resonance"]` is the components' `resonance_context`. A refusal after the
-spend (`ThreadAnchorTakenError`, or any caught exception a SERVICE raises) rolls the perform back,
+**Thread retune (#4735, slice 6 of #4672; reshaped by #5123).** `services/thread_resonance.py` moves
+part of ONE `ThreadResonance` row of a thread to another resonance's row through the SERVICE
+ritual at `THREAD_RESONANCE_SERVICE_PATH` (found by path, never by name): same affinity one to one,
+across affinities at the `conversion_pair` rate floored at 1, "from" defaulting to the leading
+resonance and the amount to all of that row. Level and `developed_points` are unchanged;
+`refresh_leading_resonance` runs after. `PerformRitualAction._precheck` calls
+`check_thread_resonance_change` before components and anima are spent;
+`kwargs["target_resonance"]` is the components' `resonance_context`. A refusal after the
+spend (any caught exception a SERVICE raises) rolls the perform back,
 and `_spend_restored_on_raise` puts the cached items, their game objects, the holder's contents
-and the anima row back to match, for every ritual; `perform_fall` does the same for the resonance
-and thread rows a half-done Fall moved (`conversion_restored_on_raise`). Both sit OUTSIDE the
+and the anima row back to match, for every ritual; `perform_fall` does the same for the resonance,
+thread and thread-row state a half-done Fall moved (`conversion_restored_on_raise`). Both sit OUTSIDE the
 `transaction.atomic()` they guard, so they run after the rollback. Telnet
-`resonance=<id>`, REST `GET /api/magic/threads/{id}/resonance-options/`. A SANCTUM thread or a
+`from=<id> amount=<n> resonance=<id>`, REST `GET /api/magic/threads/{id}/resonance-options/`. A SANCTUM thread or a
 TECHNIQUE thread whose signature bonus requires a resonance cannot move
 (`thread_resonance_refusal`); a GIFT thread stays within a non-empty `gift.cached_resonances`.
 Required content rows `thread-resonance-ritual`, `thread-resonance-ritual-single`,

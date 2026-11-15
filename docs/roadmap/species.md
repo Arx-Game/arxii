@@ -13,8 +13,8 @@ Code wins over this doc.
 - `CharacterDistinction` (effects→modifiers, trust gating; can grant *rituals*).
 - **Species-gift grant + provisioning (#1580)** [BUILT & WIRED]: `SpeciesGiftGrant`
   (through-model: `species → MINOR Gift + optional drawback_condition`) +
-  `provision_species_gifts(sheet, *, resonance=None)` called from `finalize_magic_data`.
-  Mints the `CharacterGift`, the latent GIFT thread (via `provision_latent_gift_thread`),
+  `provision_species_gifts(sheet, *, resonances=())` called from `finalize_magic_data`.
+  Mints the `CharacterGift`, the latent GIFT thread (via `provision_latent_gift_thread`, holding each CG resonance pick, #5123),
   and applies any drawback idempotently. GIFT anchor cap built: `path_stage × 10`.
   The gift's GIFT thread carries a tier-0 `ThreadPullEffect` with `effect_kind=RESISTANCE`
   that nets against the drawback vulnerability at the combat-damage seam (`apply_damage_to_participant`).

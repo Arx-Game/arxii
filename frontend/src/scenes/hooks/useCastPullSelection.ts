@@ -12,7 +12,7 @@
  *   successful cast or when the dialog closes.
  */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import { useThreads, useCharacterResonances, usePullBurnPreview } from '@/magic/queries';
 import type {
   Thread,
@@ -47,6 +47,15 @@ export interface CastPullSelection {
   /** The chosen pull's tier, for the ceiling line; null with no paid pull. */
   pullTier: 1 | 2 | 3 | null;
   balanceByResonanceId: Record<number, number>;
+  /** Thread id → the resonance the player picked to pay it (#5123), for the list to show. */
+  payerPicks: Record<number, number>;
+  setPayer: (threadId: number, resonanceId: number) => void;
+  /** Thread id → the resonance the pull names to pay it, as reported by that thread's payer
+   *  list: only while it shows the choice and the payer is not the leading resonance. A
+   *  thread left out is paid by its leading resonance. */
+  payers: Record<number, number>;
+  /** The payer list reports the resonance to name for a thread, or null for none. */
+  resolvePayer: (threadId: number, resonanceId: number | null) => void;
   handlePullsChange: (next: Record<number, 0 | 1 | 2 | 3>) => void;
   /** Returns ``{ pull }`` (or ``{}``) on success, or ``{ error }`` when the
    *  threads cache hasn't resolved for the changed thread yet. */
@@ -75,6 +84,8 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
   const [pullNotice, setPullNotice] = useState<string | null>(null);
   const [burn, setBurn] = useState(0);
   const [chosenBurnResonanceId, setBurnResonanceId] = useState<number | null>(null);
+  const [payerPicks, setPayerPicks] = useState<Record<number, number>>({});
+  const [payers, setPayers] = useState<Record<number, number>>({});
 
   // A burn is sized against the technique's ceiling; a new technique starts over.
   const selectedTechniqueId = selectedTechnique?.id ?? null;
@@ -100,6 +111,11 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
     return Object.fromEntries(resonances.map((cr) => [cr.resonance, cr.balance ?? 0]));
   }, [resonances]);
 
+  const resonanceNameById = useMemo(
+    () => new Map((resonances ?? []).map((cr) => [cr.resonance, cr.resonance_name])),
+    [resonances]
+  );
+
   // Applicability context for the thread-pull picker — only while a technique
   // is selected in the open cast section.
   const pullsContext = useMemo<ApplicablePullsRequest | null>(() => {
@@ -118,12 +134,18 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
     if (paid.length === 0) return null;
     const threads = paid.map(([id]) => threadById.get(Number(id)));
     if (threads.some((thread) => thread === undefined)) return null;
+    const threadIds = paid.map(([id]) => Number(id));
+    // Only the payers the lists name, for threads that are still pulled.
+    const picked = Object.fromEntries(
+      threadIds.filter((id) => payers[id] !== undefined).map((id) => [id, payers[id]])
+    );
     return {
-      resonances: pulledResonances(threads as Thread[]),
+      resonances: pulledResonances(threads as Thread[], picked, (id) => resonanceNameById.get(id)),
       tier: paid[0][1] as 1 | 2 | 3,
-      threadIds: paid.map(([id]) => Number(id)),
+      threadIds,
+      payers: picked,
     };
-  }, [selectedPulls, threadById]);
+  }, [selectedPulls, threadById, payers, resonanceNameById]);
   const pullTier = pullGroup?.tier ?? null;
   const pulled = useMemo(() => pullGroup?.resonances ?? [], [pullGroup]);
   const burnResonanceId = burnResonanceFor(pulled, chosenBurnResonanceId);
@@ -133,6 +155,7 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
       character_sheet_id: characterId,
       tier: pullGroup.tier,
       thread_ids: pullGroup.threadIds,
+      ...(Object.keys(pullGroup.payers).length > 0 ? { payers: pullGroup.payers } : {}),
       technique_id: selectedTechnique.id,
       burn_resonance_id: burnResonanceId,
     };
@@ -195,6 +218,7 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
       tier: paid[0][1] as 1 | 2 | 3,
       thread_ids: paid.map(([id]) => Number(id)),
     };
+    if (Object.keys(pullGroup.payers).length > 0) pull.payers = pullGroup.payers;
     // The ceiling can shrink when the pull changes; never send past it.
     const burnToSend = effectiveBurn(burnPreview, burn);
     if (burnToSend > 0) {
@@ -204,8 +228,26 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
     return { pull };
   }
 
+  function setPayer(threadId: number, resonanceId: number): void {
+    setPayerPicks((prev) => ({ ...prev, [threadId]: resonanceId }));
+  }
+
+  // The payer list reports what the pull names; null (or the same value) changes nothing.
+  const resolvePayer = useCallback((threadId: number, resonanceId: number | null): void => {
+    setPayers((prev) => {
+      if (resonanceId === null) {
+        if (prev[threadId] === undefined) return prev;
+        const { [threadId]: _dropped, ...rest } = prev;
+        return rest;
+      }
+      return prev[threadId] === resonanceId ? prev : { ...prev, [threadId]: resonanceId };
+    });
+  }, []);
+
   function reset(): void {
     setSelectedPulls({});
+    setPayerPicks({});
+    setPayers({});
     setPullNotice(null);
     setBurn(0);
     setBurnResonanceId(null);
@@ -226,6 +268,10 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
     burnPreview,
     pullTier,
     balanceByResonanceId,
+    payerPicks,
+    setPayer,
+    payers,
+    resolvePayer,
     handlePullsChange,
     buildPullPayload,
     reset,

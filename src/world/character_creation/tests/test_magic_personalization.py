@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
 from world.character_creation.constants import TECHNIQUE_PERSONALIZATIONS_KEY
-from world.character_creation.factories import CharacterDraftFactory
+from world.character_creation.factories import CharacterDraftFactory, single_resonance_weights
 from world.character_creation.serializers import CharacterDraftSerializer
 from world.character_creation.services import finalize_magic_data
 from world.character_sheets.factories import CharacterSheetFactory
@@ -239,7 +239,7 @@ class FinalizeTests(_Catalog, TestCase):
             draft_data={
                 "selected_gift_id": self.gift.pk,
                 "selected_technique_ids": [self.technique.pk],
-                "selected_gift_resonance_id": self.frost.pk,
+                "gift_resonance_weights": single_resonance_weights(self.frost),
                 TECHNIQUE_PERSONALIZATIONS_KEY: self._personalization(),
             },
         )
@@ -267,7 +267,7 @@ class FinalizeTests(_Catalog, TestCase):
             draft_data={
                 "selected_gift_id": self.gift.pk,
                 "selected_technique_ids": [self.technique.pk],
-                "selected_gift_resonance_id": self.frost.pk,
+                "gift_resonance_weights": single_resonance_weights(self.frost),
             },
         )
         finalize_magic_data(draft, sheet)
@@ -281,7 +281,7 @@ class FinalizeTests(_Catalog, TestCase):
             draft_data={
                 "selected_gift_id": self.gift.pk,
                 "selected_technique_ids": [self.technique.pk],
-                "selected_gift_resonance_id": self.frost.pk,
+                "gift_resonance_weights": single_resonance_weights(self.frost),
                 TECHNIQUE_PERSONALIZATIONS_KEY: self._personalization(),
             },
         )
@@ -303,7 +303,7 @@ class FinalizeTests(_Catalog, TestCase):
             draft_data={
                 "selected_gift_id": self.gift.pk,
                 "selected_technique_ids": [],
-                "selected_gift_resonance_id": self.frost.pk,
+                "gift_resonance_weights": single_resonance_weights(self.frost),
                 TECHNIQUE_PERSONALIZATIONS_KEY: self._personalization(),
             },
         )
@@ -377,12 +377,13 @@ class PersonalizationOptionsEndpointTests(_Catalog, TestCase):
         self.client.force_authenticate(self.account)
 
     def _draft(self, resonance_id):
+        weights = None if resonance_id is None else [{"resonance_id": resonance_id, "weight": 10}]
         return CharacterDraftFactory(
             account=self.account,
             draft_data={
                 "selected_gift_id": self.gift.pk,
                 "selected_technique_ids": [self.technique.pk],
-                "selected_gift_resonance_id": resonance_id,
+                "gift_resonance_weights": weights,
             },
         )
 
@@ -455,7 +456,7 @@ class PersonalizationOptionsEndpointTests(_Catalog, TestCase):
             draft_data={
                 "selected_gift_id": self.gift.pk,
                 "selected_technique_ids": [self.technique.pk, ultimate.pk],
-                "selected_gift_resonance_id": self.frost.pk,
+                "gift_resonance_weights": single_resonance_weights(self.frost),
             },
         )
         response = self.client.get(
@@ -483,7 +484,7 @@ class PersonalizationOptionsEndpointTests(_Catalog, TestCase):
             draft_data={
                 "selected_gift_id": self.gift.pk,
                 "selected_technique_ids": [self.technique.pk, second_technique.pk],
-                "selected_gift_resonance_id": self.frost.pk,
+                "gift_resonance_weights": single_resonance_weights(self.frost),
             },
         )
 
@@ -522,7 +523,7 @@ class PersonalizationOptionsEndpointTests(_Catalog, TestCase):
             draft_data={
                 "selected_gift_id": self.gift.pk,
                 "selected_technique_ids": [self.technique.pk, second_technique.pk],
-                "selected_gift_resonance_id": self.frost.pk,
+                "gift_resonance_weights": single_resonance_weights(self.frost),
             },
         )
         response = self.client.get(

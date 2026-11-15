@@ -118,7 +118,9 @@ class PulledResistanceCommitTests(TestCase):
         ThreadPullCostFactory(tier=1, resonance_cost=2, anima_per_thread=1)
         self.fire = DamageTypeFactory(name="Fire")
         self.gift = GiftFactory()
-        self.thread = provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)
+        self.thread = provision_latent_gift_thread(
+            self.sheet, self.gift, resonances=[self.resonance]
+        )
         ThreadPullEffectFactory(
             target_kind=TargetKind.GIFT,
             target_gift=self.gift,

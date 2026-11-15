@@ -27,7 +27,6 @@ from world.magic.models import (
     FallRedemptionRecord,
     ResonanceConversion,
 )
-from world.magic.services.aura import starting_aura_shares
 from world.magic.services.corruption import accrue_corruption_for_cast
 from world.magic.services.fall_redemption import perform_fall
 from world.magic.services.resonance import grant_resonance
@@ -114,7 +113,7 @@ class RenamingACanonicalAffinity(TestCase):
             seed_canonical_affinities()
         self.addCleanup(Affinity.objects.clear_cache)
 
-    def test_after_a_restart_the_getter_and_the_starting_aura_raise(self) -> None:
+    def test_after_a_restart_the_getter_raises(self) -> None:
         self.assertEqual(Affinity.objects.get_primal_affinity().name, "Primal")
 
         primal = Affinity.objects.get(name="Primal")
@@ -124,7 +123,4 @@ class RenamingACanonicalAffinity(TestCase):
 
         with self.assertRaises(AffinityNotConfigured) as getter:
             Affinity.objects.get_primal_affinity()
-        with self.assertRaises(AffinityNotConfigured) as starting:
-            starting_aura_shares(None)  # what character creation calls for a fresh aura
-        for raised in (getter.exception, starting.exception):
-            self.assertEqual(str(raised), "No Affinity row named 'Primal' is configured.")
+        self.assertEqual(str(getter.exception), "No Affinity row named 'Primal' is configured.")

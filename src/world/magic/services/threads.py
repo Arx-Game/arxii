@@ -29,11 +29,14 @@ from world.magic.constants import (
     VitalBonusTarget,
 )
 from world.magic.exceptions import (
+    ANCHOR_ALREADY_WOVEN_MESSAGE,
     AnchorCapExceeded,
     InvalidImbueAmount,
     MantleNotClearedError,
+    PullTierNotAvailable,
     RelationshipBondNotOwned,
     RelationshipTierTooLow,
+    ThreadAnchorTakenError,
     WeavingUnlockMissing,
     XPInsufficient,
 )
@@ -45,10 +48,12 @@ from world.magic.models import (
     ThreadPullCost,
     ThreadXPLockedLevel,
 )
+from world.magic.services.thread_rows import write_resonance_rows
 from world.magic.types import ThreadSurvivabilitySaves, ThreadXPLockProspect
+from world.magic.types.pull import pull_payer
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Mapping
 
     from evennia.objects.models import ObjectDB
 
@@ -201,7 +206,12 @@ def _bound_covenant_role_cap_by_court_grant(
     return min(base_cap, granted if granted is not None else 0)
 
 
-def compute_anchor_cap(thread: Thread) -> int:  # noqa: C901
+#: Anchor kinds whose cap keys on a resonance, so an unsaved thread with none set (the
+#: creation-time TECHNIQUE probe) never reads one it does not need.
+_RESONANCE_KEYED_ANCHORS = frozenset({TargetKind.FACET, TargetKind.ORGANIZATION})
+
+
+def compute_anchor_cap(thread: Thread, resonance: ResonanceModel | None = None) -> int:  # noqa: C901
     """Return the anchor-side cap for this thread (Spec A §2.4).
 
     Rules per target_kind:
@@ -229,7 +239,12 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: C901
 
     The character-level cap is NOT applied here; ``compute_effective_cap`` takes the
     lower of this and ``compute_level_cap`` (#4585: every cap is "lower of").
+
+    ``resonance`` is the resonance being imbued (#5123); the FACET and ORGANIZATION caps
+    key on it. It defaults to the thread's leading resonance.
     """
+    if resonance is None and thread.target_kind in _RESONANCE_KEYED_ANCHORS:
+        resonance = thread.resonance
     match thread.target_kind:
         case TargetKind.TRAIT:
             value = (
@@ -245,7 +260,7 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: C901
         case TargetKind.RELATIONSHIP_CAPSTONE:
             return int(thread.target_capstone.relationship.pair_depth())
         case TargetKind.FACET:
-            lifetime = thread.owner.character.resonances.lifetime(thread.resonance)
+            lifetime = thread.owner.character.resonances.lifetime(resonance)
             return lifetime // ANCHOR_CAP_FACET_DIVISOR
         case TargetKind.COVENANT_ROLE:
             from world.societies.services import get_character_role_legend  # noqa: PLC0415
@@ -282,7 +297,7 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: C901
             return compute_level_cap(thread.owner)
         case TargetKind.ORGANIZATION:
             org = thread.target_organization
-            return int(org.gift_grants_handler.anchor_cap_for(thread.resonance))
+            return int(org.gift_grants_handler.anchor_cap_for(resonance))
     return 0
 
 
@@ -301,7 +316,9 @@ def compute_level_cap(character_sheet: CharacterSheet) -> int:
     return get_character_path_level(character_sheet.character) * PATH_LEVEL_CAP_MULTIPLIER
 
 
-def cap_exceeded_error(thread: Thread) -> type[AnchorCapExceeded]:
+def cap_exceeded_error(
+    thread: Thread, resonance: ResonanceModel | None = None
+) -> type[AnchorCapExceeded]:
     """The refusal naming whichever cap binds ``thread`` (#4585).
 
     ``LevelCapExceeded`` when the character-level cap is at or below the anchor cap
@@ -311,17 +328,18 @@ def cap_exceeded_error(thread: Thread) -> type[AnchorCapExceeded]:
     """
     from world.magic.exceptions import LevelCapExceeded  # noqa: PLC0415
 
-    if compute_level_cap(thread.owner) <= compute_anchor_cap(thread):
+    if compute_level_cap(thread.owner) <= compute_anchor_cap(thread, resonance):
         return LevelCapExceeded
     return AnchorCapExceeded
 
 
-def compute_effective_cap(thread: Thread) -> int:
+def compute_effective_cap(thread: Thread, resonance: ResonanceModel | None = None) -> int:
     """Return min(level cap, anchor cap), the binding limit on this thread (Spec A §2.4).
 
-    The only place the character-level cap applies (#4585).
+    The only place the character-level cap applies (#4585). ``resonance`` is the one being
+    imbued (#5123), for the anchor kinds whose cap keys on a resonance.
     """
-    return min(compute_level_cap(thread.owner), compute_anchor_cap(thread))
+    return min(compute_level_cap(thread.owner), compute_anchor_cap(thread, resonance))
 
 
 # =============================================================================
@@ -350,16 +368,22 @@ def pull_cost_totals(tier: int, n_threads: int) -> PullCostTotals:
     )
 
 
-def pull_resonance_costs(tier: int, threads: Iterable[Thread]) -> dict[int, int]:
-    """What a pull at ``tier`` costs each resonance, keyed by resonance id (#5066).
+def pull_resonance_costs(
+    tier: int,
+    threads: Iterable[Thread],
+    payers: Mapping[int, ResonanceModel] | None = None,
+) -> dict[int, int]:
+    """What a pull at ``tier`` costs each paying resonance, keyed by resonance id (#5066).
 
-    A pull may mix threads of several resonances; each thread pays the tier's resonance
-    cost from its own resonance (maintainer ruling 2026-11-11).
+    Each thread pays the tier's resonance cost from its payer: the resonance picked for it
+    in ``payers`` (keyed by thread id), else its leading resonance (#5123; maintainer
+    ruling 2026-11-11). Threads may be paid by different resonances.
     """
     each = get_pull_cost(tier, None).resonance_cost
     costs: dict[int, int] = {}
     for thread in threads:
-        costs[thread.resonance_id] = costs.get(thread.resonance_id, 0) + each
+        payer_id = pull_payer(thread, payers).pk
+        costs[payer_id] = costs.get(payer_id, 0) + each
     return costs
 
 
@@ -382,14 +406,18 @@ def get_pull_cost(tier: int, target_kind: str | None) -> ThreadPullCost:
 
     Raises:
         ValueError: If ``target_kind`` is not a valid ``TargetKind`` value.
-        ThreadPullCost.DoesNotExist: If no universal row exists for ``tier``.
+        PullTierNotAvailable: If no universal row exists for ``tier`` (a player-facing
+            refusal, "That pull tier is not available yet.").
     """
     if target_kind is not None:
         TargetKind(target_kind)  # validate; raises ValueError on bad input
         specific = ThreadPullCost.objects.filter(tier=tier, target_kind=target_kind).first()
         if specific is not None:
             return specific
-    return ThreadPullCost.objects.get(tier=tier, target_kind__isnull=True)
+    try:
+        return ThreadPullCost.objects.get(tier=tier, target_kind__isnull=True)
+    except ThreadPullCost.DoesNotExist:
+        raise PullTierNotAvailable from None
 
 
 def get_imbue_cost_multiplier(target_kind: str | None) -> int:
@@ -407,7 +435,7 @@ def get_imbue_cost_multiplier(target_kind: str | None) -> int:
     """
     try:
         return get_pull_cost(1, target_kind).imbue_cost_multiplier
-    except ThreadPullCost.DoesNotExist:
+    except PullTierNotAvailable:
         return 1
 
 
@@ -498,61 +526,33 @@ def _weave_gift_thread(
     name: str = "",
     description: str = "",
 ) -> Thread:
-    """GIFT weave: commit/choose a resonance onto a latent GIFT thread.
+    """GIFT weave: provision the character's one thread on ``gift`` at ``resonance``.
 
-    With multi-resonance (#1619), a character may hold multiple GIFT threads
-    on the same gift at different resonances. Weaving finds the thread at the
-    specified resonance (or provisions one if none exists at that resonance).
-    It does NOT change the resonance of an existing thread at a different
-    resonance — each resonance gets its own thread.
+    A gift carries one thread per character (#5123); it holds every resonance on its
+    rows. A character who already has a thread on the gift is told to imbue it instead.
     """
-    # Resonance-in-supported-set check: read the gift's cached resonance list
-    # (list-comp) rather than ``gift.resonances.filter(pk=…).exists()`` per
-    # project cached-property rule.
-    #
-    # An EMPTY supported set means UNRESTRICTED, not "nothing allowed" (ruled
-    # 2026-08-04). Resonance comes from the thread the player weaves, not from
-    # the gift; the set is only an optional narrowing. Every one of the 17
-    # authored gifts carries an empty set, so the old reading locked all of
-    # them out of this path. Character creation goes through
-    # ``grant_gift_to_character`` (#2971), which resolves a resonance via
-    # ``_resolve_grant_resonance`` and always provisions a thread — an empty
-    # supported set is UNRESTRICTED there too, not a skip.
-    supported = gift.cached_resonances
-    if supported and not any(r.pk == resonance.pk for r in supported):
-        from world.magic.exceptions import UnsupportedGiftResonanceError  # noqa: PLC0415
-
-        raise UnsupportedGiftResonanceError
+    # The gift's ``resonances`` list limits nothing here: a Gift is the substance and any
+    # resonance the character holds can feed its thread (owner ruling 2026-11-14, #5123).
 
     # Read the existing threads through the cached ``character.threads``
     # handler (same cached queryset the resolver reads), not a fresh
     # ``Thread.objects.filter()``. The handler's list is already filtered to
     # retired_at__isnull=True.
     character = character_sheet.character
-    # #1619: Look for a thread at the specified resonance first.
-    thread = next(
-        (
-            t
-            for t in character.threads.all()
-            if t.target_kind == TargetKind.GIFT
-            and t.target_gift_id == gift.pk
-            and t.resonance_id == resonance.pk
-        ),
-        None,
+    if any(
+        t.target_kind == TargetKind.GIFT and t.target_gift_id == gift.pk
+        for t in character.threads.all()
+    ):
+        raise ThreadAnchorTakenError(ANCHOR_ALREADY_WOVEN_MESSAGE)
+
+    from world.magic.specialization.services import (  # noqa: PLC0415
+        provision_latent_gift_thread,
     )
-    if thread is None:
-        # No thread at this resonance yet: provision one (idempotent).
-        from world.magic.specialization.services import (  # noqa: PLC0415
-            provision_latent_gift_thread,
-        )
 
-        return provision_latent_gift_thread(character_sheet, gift, resonance=resonance)
-
-    if name:
-        thread.name = name
-    if description:
-        thread.description = description
+    thread = provision_latent_gift_thread(character_sheet, gift, resonances=[resonance])
     if name or description:
+        thread.name = name
+        thread.description = description
         thread.save(update_fields=["name", "description"])
     return thread
 
@@ -728,6 +728,30 @@ def _validate_anchor(
         raise WeavingUnlockMissing(msg)
 
 
+_ANCHOR_FIELDS: dict[str, str] = {
+    TargetKind.TRAIT: "target_trait",
+    TargetKind.TECHNIQUE: "target_technique",
+    TargetKind.RELATIONSHIP_TRACK: "target_relationship",
+    TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
+    TargetKind.FACET: "target_facet",
+    TargetKind.COVENANT_ROLE: "target_covenant_role",
+    TargetKind.MANTLE: "target_mantle",
+    TargetKind.ORGANIZATION: "target_organization",
+}
+
+
+def _refuse_taken_anchor(character_sheet: CharacterSheet, target_kind: str, target: object) -> None:
+    """Raise ``ThreadAnchorTakenError`` when the character already has a live thread on it.
+
+    One thread per anchor (#5123): a thread holds several resonances, so a second weave on
+    the same anchor is an imbue on the first.
+    """
+    field = f"{_ANCHOR_FIELDS[target_kind]}_id"
+    for thread in character_sheet.character.threads.threads_of_kind(target_kind):
+        if getattr(thread, field) == target.pk:  # type: ignore[attr-defined]
+            raise ThreadAnchorTakenError(ANCHOR_ALREADY_WOVEN_MESSAGE)
+
+
 @transaction.atomic
 def weave_thread(  # noqa: PLR0913
     character_sheet: CharacterSheet,
@@ -775,6 +799,7 @@ def weave_thread(  # noqa: PLR0913
         return thread
 
     _validate_anchor(character_sheet, target_kind, target)
+    _refuse_taken_anchor(character_sheet, target_kind, target)
 
     if target_kind in (TargetKind.RELATIONSHIP_TRACK, TargetKind.RELATIONSHIP_CAPSTONE):
         _validate_relationship_ownership(character_sheet, target)
@@ -790,16 +815,6 @@ def weave_thread(  # noqa: PLR0913
     if target_kind == TargetKind.TECHNIQUE:
         _validate_technique_ownership(character_sheet, target)
 
-    field_map: dict[str, str] = {
-        TargetKind.TRAIT: "target_trait",
-        TargetKind.TECHNIQUE: "target_technique",
-        TargetKind.RELATIONSHIP_TRACK: "target_relationship",
-        TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
-        TargetKind.FACET: "target_facet",
-        TargetKind.COVENANT_ROLE: "target_covenant_role",
-        TargetKind.MANTLE: "target_mantle",
-        TargetKind.ORGANIZATION: "target_organization",
-    }
     kwargs: dict[str, object] = {
         "owner": character_sheet,
         "resonance": resonance,
@@ -809,10 +824,13 @@ def weave_thread(  # noqa: PLR0913
         "level": 0,
         "developed_points": 0,
     }
-    kwargs[field_map[target_kind]] = target
+    kwargs[_ANCHOR_FIELDS[target_kind]] = target
     thread = Thread.objects.create(**kwargs)
-    recompute_max_health_with_threads(character_sheet)
+    write_resonance_rows(thread, [resonance])
+    # Invalidate first: the weave's own checks may have loaded the handler's cache, and the
+    # recompute reads the baseline from it (it must see the thread just woven).
     character_sheet.character.threads.invalidate()
+    recompute_max_health_with_threads(character_sheet)
 
     # For ORGANIZATION threads, mint CharacterTechnique rows for the org's
     # acquired gifts whose supported-resonance set contains the thread's chosen
@@ -872,6 +890,7 @@ def weave_creation_technique_thread(
         raise AnchorCapExceeded(msg)
     thread.full_clean()
     thread.save()
+    write_resonance_rows(thread, [resonance])
     character_sheet.character.threads.invalidate()
     recompute_max_health_with_threads(character_sheet)
     return thread
@@ -918,9 +937,11 @@ def update_thread_narrative(
 
 
 def imbue_ready_threads(character_sheet: CharacterSheet) -> list[Thread]:
-    """Return threads that have matching CharacterResonance balance > 0 and level < cap.
+    """Return threads that any resonance the character holds can imbue (#5123).
 
-    Spec A §3.6.
+    A thread is ready when some held resonance has a balance above zero and the thread's
+    level is under the cap that resonance faces (the FACET and ORGANIZATION caps key on
+    the resonance). Spec A §3.6.
     """
     threads = list(
         Thread.objects.filter(owner=character_sheet, retired_at__isnull=True).select_related(
@@ -932,20 +953,27 @@ def imbue_ready_threads(character_sheet: CharacterSheet) -> list[Thread]:
             "target_capstone__relationship",
         )
     )
-    crs = {
-        cr.resonance_id: cr
-        for cr in CharacterResonance.objects.filter(character_sheet=character_sheet)
-    }
+    funded = [
+        cr.resonance
+        for cr in CharacterResonance.objects.filter(
+            character_sheet=character_sheet, balance__gt=0
+        ).select_related("resonance")
+    ]
     level_cap = compute_level_cap(character_sheet)
-    out: list[Thread] = []
-    for t in threads:
-        cr = crs.get(t.resonance_id)
-        if cr is None or cr.balance <= 0:
-            continue
-        effective_cap = min(level_cap, compute_anchor_cap(t))
-        if t.level < effective_cap:
-            out.append(t)
-    return out
+    return [t for t in threads if _can_be_imbued_by_any(t, funded, level_cap)]
+
+
+def _can_be_imbued_by_any(thread: Thread, funded: list[ResonanceModel], level_cap: int) -> bool:
+    """Whether some funded resonance can raise the thread's level.
+
+    Every funded resonance may feed any thread. The anchor cap is read once unless the
+    anchor's cap keys on the resonance being spent (FACET, ORGANIZATION).
+    """
+    if not funded:
+        return False
+    if thread.target_kind in _RESONANCE_KEYED_ANCHORS:
+        return any(thread.level < min(level_cap, compute_anchor_cap(thread, r)) for r in funded)
+    return thread.level < min(level_cap, compute_anchor_cap(thread))
 
 
 def near_xp_lock_threads(

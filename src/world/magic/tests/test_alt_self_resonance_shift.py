@@ -77,7 +77,7 @@ class AltSelfResonanceShiftTests(TestCase):
 
     def _provision_and_level_thread(self) -> Thread:
         """Provision a GIFT thread at the Celestial resonance and level it to 3."""
-        provision_latent_gift_thread(self.sheet, self.gift, resonance=self.celestial)
+        provision_latent_gift_thread(self.sheet, self.gift, resonances=[self.celestial])
         thread = Thread.objects.get(
             owner=self.sheet,
             target_kind=TargetKind.GIFT,

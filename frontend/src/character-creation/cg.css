@@ -2205,3 +2205,100 @@
 .interview .choice-row button.beyond {
   border-style: dashed;
 }
+
+/* The Gift stage's resonance step (#5123): each resonance a row with its points as pips
+   between a less and a more button, the aura those points make previewed underneath. */
+.interview .resonance-weights {
+  display: grid;
+  gap: 0.9rem;
+}
+.interview .resonance-budget {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--cg-muted);
+  font-variant-numeric: tabular-nums;
+}
+.interview .resonance-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.interview .resonance-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--cg-hairline);
+}
+.interview .resonance-row:last-child {
+  border-bottom: none;
+}
+.interview .resonance-name {
+  font-weight: 600;
+  color: var(--cg-text);
+}
+.interview .resonance-affinity {
+  margin-left: 0.5rem;
+  font-family: 'Cinzel', serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cg-muted);
+}
+.interview .resonance-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.interview .resonance-stepper button {
+  width: 1.75rem;
+  height: 1.75rem;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 1px solid var(--cg-hairline-strong);
+  color: var(--cg-text-soft);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+.interview .resonance-stepper button:hover:not(:disabled) {
+  border-color: var(--cg-accent);
+  color: var(--cg-accent);
+}
+.interview .resonance-stepper button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.interview .resonance-pips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  max-width: 14rem;
+}
+.interview .resonance-pip {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  border: 1.5px solid var(--cg-accent);
+  background: var(--cg-accent);
+}
+.interview .resonance-row-body {
+  grid-column: 1 / -1;
+}
+.interview .resonance-row-body p {
+  margin: 0;
+  font-style: italic;
+  color: var(--cg-muted);
+}
+.interview .resonance-row-body .ledger-line {
+  font-style: normal;
+}
+.interview .resonance-aura-label {
+  font-family: 'Cinzel', serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cg-muted);
+}

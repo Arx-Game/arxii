@@ -1,7 +1,7 @@
 """Drift correction actions (#4733, slice 4 of #4672).
 
 ``PerformDriftCorrectionAction`` performs the rite under an open ``DriftConversionOffer``;
-``DeclineDriftCorrectionAction`` lets the character let the offer go. Telnet ``drift`` and the
+``DeclineDriftCorrectionAction`` lets the character let the offer go. Telnet ``aura`` and the
 REST ``/api/magic/drift-correction/`` endpoints converge here.
 
 World imports are lazy inside ``execute()``: the action registry is imported very early and
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
     from actions.types import ActionContext
 
-_NOT_YOUR_OFFER = "That chance to correct drift is not yours."
+_NOT_YOUR_OFFER = "That chance to atone is not yours."
 _NOT_CARRIED = "You are not carrying everything you offered."
 
 
@@ -44,7 +44,7 @@ class PerformDriftCorrectionAction(Action):
     """
 
     key: str = "perform_drift_correction"
-    name: str = "Correct Drift"
+    name: str = "Atone"
     icon: str = "sparkles"
     category: str = "magic"
     target_type: TargetType = TargetType.SELF
@@ -88,6 +88,11 @@ class PerformDriftCorrectionAction(Action):
             return ActionResult(success=False, message=exc.user_message)
         if result.converted_amount == 0:
             message = "The rite fails; nothing is converted."
+        elif result.granted_amount == 0:
+            message = (
+                f"{result.outcome_name}: {result.converted_amount} {source_resonance.name} "
+                f"turned to {target_resonance.name}."
+            )
         else:
             message = (
                 f"{result.outcome_name}: {result.converted_amount} {source_resonance.name} became "
@@ -105,7 +110,7 @@ class DeclineDriftCorrectionAction(Action):
     """Let an open drift conversion offer go. Free; the offer is deleted."""
 
     key: str = "decline_drift_correction"
-    name: str = "Decline Drift Correction"
+    name: str = "Let the chance to atone pass"
     icon: str = "x"
     category: str = "magic"
     target_type: TargetType = TargetType.SELF
@@ -122,4 +127,4 @@ class DeclineDriftCorrectionAction(Action):
         if sheet_pk is None or offer.character_sheet_id != sheet_pk:
             return ActionResult(success=False, message=_NOT_YOUR_OFFER)
         offer.delete()
-        return ActionResult(success=True, message="You let the chance to correct drift pass.")
+        return ActionResult(success=True, message="You let the chance to atone pass.")

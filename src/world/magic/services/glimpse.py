@@ -112,18 +112,20 @@ GLIMPSE_AFFINITY_NUDGE_PERCENT = 3
 
 
 def apply_glimpse_affinity_nudge(aura: CharacterAura) -> None:
-    """Apply a small aura affinity nudge from TONE/TRIGGER Glimpse tags.
+    """Apply a small nudge to who the character is from TONE/TRIGGER Glimpse tags.
 
-    Reads the character's chosen TONE and TRIGGER tags (single-select axes
-    where the emotional register / trigger story most directly maps to an
-    affinity). For each tag that carries an ``affinity`` FK, shifts that
-    affinity by ``GLIMPSE_AFFINITY_NUDGE_PERCENT`` percentage points, then
-    re-normalizes so the three values still sum to 100.00.
+    The nudge moves the settled shares only (#5123): the aura a character has is their
+    resonance history, which a tag does not change.
 
-    Called once at CG finalize, after tags are set but before the final
-    ``recompute_aura`` call. Tags without an ``affinity`` (including all
-    CONSEQUENCE, WITNESS, and SENSORY tags) are inert — the nudge only fires
-    on TONE and TRIGGER.
+    Reads the character's chosen TONE and TRIGGER tags (single-select axes where the
+    emotional register / trigger story most directly maps to an affinity). For each tag
+    that carries an ``affinity`` FK, shifts that affinity by
+    ``GLIMPSE_AFFINITY_NUDGE_PERCENT`` percentage points, then re-normalizes so the
+    settled shares still sum to 100.00.
+
+    Called once at CG finalize, after tags are set and the aura is settled. Tags without
+    an ``affinity`` (including all CONSEQUENCE, WITNESS, and SENSORY tags) are inert; the
+    nudge only fires on TONE and TRIGGER.
 
     Idempotent: calling it twice doubles the nudge, but in practice it is
     called exactly once from ``_finalize_glimpse_data``.
@@ -150,13 +152,13 @@ def apply_glimpse_affinity_nudge(aura: CharacterAura) -> None:
     if not affinity_counts:
         return
 
-    from world.magic.services.aura import set_aura_shares  # noqa: PLC0415
+    from world.magic.services.aura import set_settled_shares  # noqa: PLC0415
     from world.magic.types import AffinityShare  # noqa: PLC0415
 
     values: dict[int, Decimal] = {}
     for share in aura.cached_shares:
         affinities[share.affinity_id] = share.affinity
-        values[share.affinity_id] = Decimal(share.percent)
+        values[share.affinity_id] = Decimal(share.settled_percent)
     for pk in affinity_counts:
         values.setdefault(pk, Decimal(0))
     _spread_nudges(values, affinity_counts)
@@ -167,7 +169,7 @@ def apply_glimpse_affinity_nudge(aura: CharacterAura) -> None:
     total = sum(clamped.values())
     if total == 0:
         return
-    set_aura_shares(
+    set_settled_shares(
         aura,
         [
             AffinityShare(affinity=affinities[pk], percent=v * Decimal(100) / total)

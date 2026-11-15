@@ -406,6 +406,11 @@ export interface TechniqueResultData {
   mishap_label: string | null;
   /** What calling up her gift's substance took on this cast (#5018), if anything. */
   substance_call_up?: SubstanceCallUpData | null;
+  /**
+   * What an unsettled caster is told about her focus on this cast (#5123), the sentences
+   * telnet prints; empty when she was settled.
+   */
+  focus_lines?: string[];
 }
 
 export interface SubstanceCallUpData {
@@ -601,6 +606,11 @@ export interface CastPullRequestBody {
   tier: 1 | 2 | 3;
   /** The threads may mix resonances; each is paid from its own (#5066). */
   thread_ids: number[];
+  /**
+   * Thread id -> the resonance id paying for that thread (#5123). A thread left out is
+   * paid by its leading resonance.
+   */
+  payers?: Record<number, number>;
   /** Resonance burned for strain (#4736); omitted when 0. */
   burn?: number;
   /** Which pulled resonance the burn comes from, when the pull mixes several (#5066). */

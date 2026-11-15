@@ -387,4 +387,98 @@ describe('useCastPullSelection', () => {
       expect(result.current.burn).toBe(0);
     });
   });
+  // -------------------------------------------------------------------------
+  // Payers (#5123)
+  // -------------------------------------------------------------------------
+  describe('payers', () => {
+    it('sends only the payers the lists name, for threads still pulled', () => {
+      const wrapper = createWrapper();
+      const { result } = renderHook(() => useCastPullSelection(baseParams), { wrapper });
+      act(() => result.current.handlePullsChange({ 1: 2, 3: 2 }));
+      act(() => result.current.resolvePayer(1, 20));
+      act(() => result.current.resolvePayer(2, 20));
+      // Thread 2 is not pulled, so it is left out; thread 3 names none.
+      expect(result.current.buildPullPayload()).toEqual({
+        pull: { tier: 2, thread_ids: [1, 3], payers: { 1: 20 } },
+      });
+    });
+
+    it('keeps a pick for the list to show but sends nothing until the list names it', () => {
+      const wrapper = createWrapper();
+      const { result } = renderHook(() => useCastPullSelection(baseParams), { wrapper });
+      act(() => result.current.handlePullsChange({ 1: 2 }));
+      act(() => result.current.setPayer(1, 20));
+      expect(result.current.payerPicks).toEqual({ 1: 20 });
+      expect(result.current.buildPullPayload()).toEqual({ pull: { tier: 2, thread_ids: [1] } });
+    });
+
+    it('stops sending a payer once its list no longer names one (a tier change)', () => {
+      const wrapper = createWrapper();
+      const { result } = renderHook(() => useCastPullSelection(baseParams), { wrapper });
+      act(() => result.current.handlePullsChange({ 1: 3 }));
+      act(() => result.current.setPayer(1, 20));
+      act(() => result.current.resolvePayer(1, 20));
+      expect(result.current.buildPullPayload()).toEqual({
+        pull: { tier: 3, thread_ids: [1], payers: { 1: 20 } },
+      });
+      // At tier 1 the leader can pay: the list shows no choice and names nobody.
+      act(() => result.current.handlePullsChange({ 1: 1 }));
+      act(() => result.current.resolvePayer(1, null));
+      expect(result.current.buildPullPayload()).toEqual({ pull: { tier: 1, thread_ids: [1] } });
+      expect(result.current.pulledResonances).toEqual([{ id: 10, name: 'Dawnlight' }]);
+      expect(mockUsePullBurnPreview).toHaveBeenLastCalledWith(
+        expect.not.objectContaining({ payers: expect.anything() })
+      );
+    });
+
+    it('omits payers when nobody picked one: the leading resonance pays', () => {
+      const wrapper = createWrapper();
+      const { result } = renderHook(() => useCastPullSelection(baseParams), { wrapper });
+      act(() => result.current.handlePullsChange({ 1: 2 }));
+      expect(result.current.buildPullPayload()).toEqual({ pull: { tier: 2, thread_ids: [1] } });
+    });
+
+    it("still names a pulled thread's payer when its row is hidden, but not once deselected", () => {
+      const wrapper = createWrapper();
+      const { result } = renderHook(() => useCastPullSelection(baseParams), { wrapper });
+      act(() => result.current.handlePullsChange({ 1: 2, 3: 2 }));
+      act(() => result.current.resolvePayer(1, 20));
+      // A hidden row reports nothing, so the cast still names the pick.
+      expect(result.current.buildPullPayload()).toEqual({
+        pull: { tier: 2, thread_ids: [1, 3], payers: { 1: 20 } },
+      });
+      // Deselecting the thread leaves it out of the pull, and its payer with it.
+      act(() => result.current.handlePullsChange({ 1: 0, 3: 2 }));
+      expect(result.current.buildPullPayload()).toEqual({
+        pull: { tier: 2, thread_ids: [3] },
+      });
+    });
+
+    it('lets the picked payer choose which resonance a burn can come from', () => {
+      setupResonances([
+        { resonance: 10, resonance_name: 'Dawnlight', balance: 5 },
+        { resonance: 20, resonance_name: 'Gloam', balance: 3 },
+      ] as never);
+      const wrapper = createWrapper();
+      const { result } = renderHook(() => useCastPullSelection(baseParams), { wrapper });
+      act(() => result.current.handlePullsChange({ 1: 2 }));
+      act(() => result.current.resolvePayer(1, 20));
+      expect(result.current.pulledResonances).toEqual([{ id: 20, name: 'Gloam' }]);
+      expect(result.current.burnResonanceId).toBe(20);
+    });
+
+    it('sends the picks to the burn preview and clears them on reset', () => {
+      const wrapper = createWrapper();
+      const { result } = renderHook(() => useCastPullSelection(baseParams), { wrapper });
+      act(() => result.current.handlePullsChange({ 1: 2 }));
+      act(() => result.current.setPayer(1, 20));
+      act(() => result.current.resolvePayer(1, 20));
+      expect(mockUsePullBurnPreview).toHaveBeenLastCalledWith(
+        expect.objectContaining({ thread_ids: [1], payers: { 1: 20 } })
+      );
+      act(() => result.current.reset());
+      expect(result.current.payers).toEqual({});
+      expect(result.current.payerPicks).toEqual({});
+    });
+  });
 });

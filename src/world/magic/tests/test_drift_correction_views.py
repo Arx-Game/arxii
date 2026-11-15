@@ -83,6 +83,8 @@ class PendingOfferTests(DriftCorrectionViewTestBase):
         response = self.client.get(_PENDING_URL)
         row = response.data["results"][0]
         self.assertEqual(row["scene_id"], self.scene.pk)
+        # The Settle your aura dialog reads and accepts this character's aura (#5123).
+        self.assertEqual(row["character_id"], self.sheet.pk)
         (cap,) = row["caps"]
         self.assertEqual(cap["target_resonance"]["id"], self.dawnlight.pk)
         self.assertEqual(cap["target_resonance"]["name"], "Drift Dawnlight")
@@ -164,9 +166,10 @@ class TwoCharacterAccountTests(DriftCorrectionViewTestBase):
             roster_entry=RosterEntryFactory(character_sheet=self.second),
         )
         set_aura_split(
-            CharacterAuraFactory(character=self.second), celestial="80", primal="10", abyssal="10"
+            CharacterAuraFactory(character=self.second), celestial="100", primal="0", abyssal="0"
         )
-        _hold(self.second, self.dawnlight, 0, lifetime=500)
+        # 30 Abyssal on 170 Celestial: unsettled, with something to atone for.
+        _hold(self.second, self.dawnlight, 0, lifetime=170)
         _hold(self.second, self.dread, 30)
         self.second_offer = DriftConversionOfferFactory(
             character_sheet=self.second, scene=SceneFactory()

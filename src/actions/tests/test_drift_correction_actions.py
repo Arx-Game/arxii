@@ -76,9 +76,7 @@ class PerformDriftCorrectionActionTests(DriftActionTestBase):
     def test_no_cap_toward_the_target_surfaces_the_service_message(self) -> None:
         result = self.perform(target_resonance=self.sunrise)
         self.assertFalse(result.success)
-        self.assertEqual(
-            result.message, "You have no open chance to correct drift toward that resonance."
-        )
+        self.assertEqual(result.message, "You have no open chance to atone toward that resonance.")
 
     def test_missing_offering_surfaces_the_component_message(self) -> None:
         result = self.perform(components_provided=[])
@@ -106,7 +104,7 @@ class PerformDriftCorrectionActionTests(DriftActionTestBase):
                 components_provided=[self.component],
             )
         self.assertFalse(result.success)
-        self.assertEqual(result.message, "That chance to correct drift is not yours.")
+        self.assertEqual(result.message, "That chance to atone is not yours.")
         self.assertEqual(self.cap_value(), 12)
 
 

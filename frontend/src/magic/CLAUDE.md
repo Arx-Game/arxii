@@ -122,11 +122,13 @@ REST API client for all soul-tether, thread, character-resonance, thread-spendin
 - `getCharacterResonances()` — GET `/api/magic/character-resonances/`
 - `getThreadHubSummary(characterSheetId?)` — GET `/api/magic/thread-hub-summary/`
 - `getTeachingOffers()` — GET `/api/magic/teaching-offers/`
-- `getThreadResonanceOptions(id)` — GET `/api/magic/threads/{id}/resonance-options/` →
+- `getThreadResonanceOptions(id, move?)` — GET `/api/magic/threads/{id}/resonance-options/` →
   `ThreadResonanceOptions` (`{ritual_id, offering_required, offering_count,
 unavailable_reason, options: [{resonance_id, resonance_name, affinity_name,
-conversion_type, projected_points, merges_into_thread_id, qualifying}]}`; owner-only,
-  slice 6 of #4672)
+conversion_type, projected_points, qualifying}]}`; owner-only, slice 6 of #4672).
+  `move` is `{fromResonance?, amount?}`, sent as `from_resonance` / `amount`: which of the
+  thread's own resonance rows the points come from (default the leading one) and how many
+  (default all of the row). `projected_points` is what the target's row would gain (#5123)
 
 **Thread mutations:**
 
@@ -135,14 +137,21 @@ conversion_type, projected_points, merges_into_thread_id, qualifying}]}`; owner-
 - `retireThread(id)` — DELETE `/api/magic/threads/{id}/` → `void`
 - `crossXPLock(threadId, body)` — POST `/api/magic/threads/{id}/cross_xp_lock/` → `CrossXPLockResponse` (`{thread_id, unlocked_level, xp_spent}`)
 - `imbueThread(body)` — wraps `performRitual` with imbuing ritual id + kwargs
-- `imbueThreadAuto(characterSheetId, threadId, amount)` — resolves the Rite of
+- `imbueThreadAuto(characterSheetId, threadId, amount, resonanceId?)` — resolves the Rite of
   Imbuing via the serialized `is_imbuing` flag (NOT `service_function_path`,
   which the serializer never sends — the old filter made web imbuing dead on
   every server, #audit2), then POSTs `rituals/perform/` with
-  `{ thread_id, amount }`. The canonical rite is CEREMONY-kind and the web is
+  `{ thread_id, amount, resonance_id? }` (`resonance_id` is the held resonance that pays;
+  omitted, the thread's leading resonance pays, #5123). The canonical rite is CEREMONY-kind and the web is
   its client-hosted UI, so the backend fuses the `imbue` finisher into that
   one POST (performing the ceremony alone would only mint the pending effect).
-- `previewPull(body)` — POST `/api/magic/thread-pull-preview/` → `PullPreviewResponse`
+- `previewPull(body)` — POST `/api/magic/thread-pull-preview/` → `PullPreviewResponse`.
+  The request may carry `payers` (thread id to the resonance paying for it; a thread left
+  out is paid by its leading resonance). The response's `per_thread` lists, for each pulled
+  thread, one `PayerOption` per resonance the character holds: `{resonance_id,
+resonance_name, cost, balance, affordable, effects, level_read}`, the effects being that
+  payer's own on that thread (never summed across threads) and `level_read` the thread
+  level they were read at (#5123)
 
 **Teaching offer mutations:**
 
@@ -268,11 +277,12 @@ React Query hooks with a `magicKeys` query key factory.
 - `useWeaveThread()` — invalidates `threadList`, `threadHubSummary`
 - `usePatchThreadNarrative(id)` — invalidates `thread(id)`, `threadList`
 - `useRetireThread()` — invalidates `threadList`, `threadHubSummary`
-- `useThreadResonanceOptions(threadId, enabled)` — read hook for the retune dialog's
-  options (`threadResonanceOptions(id)`, `gcTime: 0`, fetched only while the dialog is open)
+- `useThreadResonanceOptions(threadId, enabled, move?)` — read hook for the retune dialog's
+  options (`threadResonanceOptions(id, fromResonance, amount)`, `gcTime: 0`, fetched only
+  while the dialog is open; each from-row or amount is its own query)
 - `useRetuneThread()` — performs the retune rite through `performRitual`; invalidates
   `threads()`, `thread-hub-summary`, `characterResonances()`
-- `useImbueThread()` — takes `{ characterSheetId, threadId, amount }`;
+- `useImbueThread()` — takes `{ characterSheetId, threadId, amount, resonanceId? }`;
   invalidates `thread(id)`, `threadHubSummary`, `characterResonanceList`
 - `useCrossXPLock()` — takes `{ threadId, body }`;
   invalidates `thread(id)`, `threadHubSummary`
@@ -373,11 +383,37 @@ that opens `WeaveThreadWizard`. Links to `/threads/:id` and `/threads/teaching`.
 Thread detail page at `/threads/:id`. Renders the full thread record with `ImbuePanel`,
 `XPLockBoundaryPanel`, `PullEffectPreview`, `ThreadRenameDialog`, `ThreadRetireDialog`, and
 `ThreadResonanceDialog` (opened by the "Change resonance" button, shown on a live thread).
+The Resonance stat says the thread's mix in words (`threadMixInWords`), and `ImbuePanel`
+gets every resonance the character holds from `useCharacterResonances` (#5123).
 
 ### `pages/WeavingTeachingOffersPage.tsx`
 
 Teaching-offer inbox at `/threads/teaching`. Lists incoming `ThreadWeavingTeachingOffer`
 rows via `TeachingOfferCard`; each card opens `AcceptOfferDialog` to pay XP and accept.
+
+### `aura.ts`, `auraQueries.ts`, `components/AuraHalo.tsx` (#5123)
+
+The aura in words and as a halo. `aura.ts` is the one place an aura's figures become language
+(never a number to a player): `shareInWords(share, total)` (the backend `share_in_words`
+thresholds in `world/magic/services/drift.py`, so every surface reads alike), `auraSentence(shares)`
+("Mostly primal, a third abyssal."), `wordsToPart(words)` (the midpoint of a word's band, for
+sizing a segment where the API sends only a word), `affinitySlug` and `haloGradient(segments)` (the
+conic gradient over the `--aura-*` tokens in `character_sheets/sheet.css`). `auraQueries.ts` holds
+`useCharacterAuras(characterId | null, enabled)` (GET `/api/magic/character-auras/[?character=]`,
+the owner's own auras with `settled_percent`, `unsettled`, `unsettled_line`, `mire_share_words`) and
+`useAcceptAura()` (POST `.../{id}/accept/`; invalidates the aura keys and `['character-sheets', id]`).
+They live apart from `api.ts` and `queries.ts`, so a test that mocks `@/magic/queries` wholesale
+must also mock `@/magic/auraQueries`. `AuraHalo` replaces the old `AuraStrip`: props `shares`,
+optional `settled` (a dashed ring of who they are), `mire {words, part}` (a Sineater's Mire share
+drawn apart from their own Abyssal, with a key), `unsettled` and `unsettledLine` (restless halo,
+the Unsettled status and the ruled line in place of the split sentence), `size 'full' | 'mini'`,
+`sentence` and `children`; it imports `sheet.css` itself so the creation page gets the colours,
+and renders nothing without shares. The sheet payload carries no settled or unsettled data: the
+settled ring, the Mire key and the Unsettled status show to the owner only (`isMyCharacter`,
+read from `useCharacterAuras`); everyone else sees the halo and the words. Mounted by
+`SpellbookTab` (with a "Settle your aura" button while unsettled) and by the Gift stage's resonance
+step in character creation (`character-creation/components/gift/ResonanceWeights.tsx`, with
+`auraSentence` of the weighted picks).
 
 ### `components/threads/ResonanceBalanceCard.tsx`
 
@@ -390,12 +426,58 @@ Small badge that maps a thread's `state` field to a colored label (Active, Dorma
 
 ### `components/threads/ThreadCard.tsx`
 
-Card for a single thread in the hub grid. Shows name, state badge, resonance, XP-lock level,
-and a link to the detail page.
+Card for a single thread in the hub grid. Shows name, state badge, the thread's resonance
+mix in words ("mostly Fury, some Domination"; the leading resonance's name when the thread
+has no rows), XP-lock level, and a link to the detail page.
 
 ### `components/threads/ImbuePanel.tsx`
 
 Panel in `ThreadDetailPage` for spending resonance to imbue a thread. Calls `useImbueThread`.
+With more than one held resonance (`held` prop) it shows a "Spend" pill per resonance with
+its balance, starting on the thread's leading resonance; the amount stepper stops at the
+picked resonance's balance and the pick goes out as `resonanceId`. Every held resonance is
+offered, whatever the thread's Gift lists (a Gift's `resonances` limits nothing). The panel is
+keyed on the thread id (`ThreadDetailPage`) and starts on the first held resonance when the
+leader is not one of them. With one offered resonance that is the
+leader there is no choice to show and nothing is sent.
+
+### `components/threads/PayerOptions.tsx`, `PerkInspect.tsx` (#5123)
+
+The pull's "Pay with" choice, for one pulled thread, drawn from `per_thread` in the pull
+preview. `PayerOptions` lists each payer with `cost` Name `· you have` balance and its own
+perk rows (label, value, flavor snippet), starting on the thread's leading resonance (or
+the first that can pay when the leader cannot); a payer that cannot afford the cost cannot be picked, and one the thread never took in
+reads "No perks on this thread". A thread holding one resonance shows "Pays with X" and its
+perks with no radio, unless its own resonance cannot pay: `showsPayerChoice` (`burn.ts`) is
+true for several rows or an unaffordable own resonance, and the picker's tier strip uses the
+same rule. `ThreadMakeup` is the "Level 3 · mostly Fury,
+some Domination" line (just "Level 3" for one resonance). "Inspect perks" opens `PerkInspect`: per perk the amount, how it was
+worked out (authored value x level multiplier), its source ("{Resonance} pull perk for {kind}
+threads, tier N") and "Thread level used" (`level_read`, with a note when the payer is not the
+leading resonance). Perk labels and values come from `effectLabel` / `effectValue` in
+`burn.ts`; a capability perk reads "Grants {capability_name}" with its `capability_value`, a resistance "Resistance to {damage type}" (the preview effect carries `capability_name`, `capability_value`, `resistance_damage_type_name`; no perk has an authored duration). Mounted in `ThreadPullPicker` rows (the cast flow) and `ThreadPullDialog`
+(combat declarations).
+
+### `components/threads/ThreadPullPicker.tsx` and `ThreadPullDialog.tsx`
+
+Both pick a tier and pulled threads; each pulled thread is paid by one resonance. A payer
+list (`PayerOptions`) keeps the player's pick (`onSelect`) apart from what the pull has to
+name (`onResolve`): the picked or starting payer, only while the list shows the choice and
+the payer is not the leading resonance, otherwise nobody. A list that unmounts reports
+nothing (a name filter only hides a pulled thread's row); the pulls keep only the payers of
+threads still pulled. So a pick made at tier 3, where the leader cannot pay, does not follow the player to
+tier 1, where the row reads "Pays with Leader" and nothing is sent. The picker takes
+`payers` (the picks), `onPayerChange` and `onPayerResolve`; `useCastPullSelection` keeps
+`payerPicks` / `setPayer` and `payers` / `resolvePayer`, and sends `payers` as `pull.payers`
+(a thread without one is paid by its leading resonance). The tier strip stays open while ANY
+held resonance can pay. The dialog does the same with its own state, sends the named payers
+to the preview and returns them on `PullSelection.payers` beside `resonances` (the distinct
+payers, which a mixed pull's burn picks from). The dialog offers Gift threads (its always-in-action kinds mirror the server's; only a social pull excludes a Gift thread, via `exclude_gift`, #1919, which the dialog never sends) and a thread while any held
+resonance has a balance, and its cost line reads "3 Fury, 3 Domination" from the named
+payers, not a flat total.
+In combat, `combat/dodging.ts` (`roundPullRequest`) and `combat/sections/YourTurn.tsx` forward
+`selection.payers` as the `pull_payers` kwarg (and `payers` on the burn preview), so a pick made
+in the dialog reaches the declaration.
 
 ### `components/threads/XPLockBoundaryPanel.tsx`
 
@@ -416,17 +498,21 @@ Dialog for renaming a thread (patching `name` + `description`). Calls `usePatchT
 Moves a thread to another resonance (slice 6 of #4672, Screen 6 of the #4735 demo). Reads
 `useThreadResonanceOptions`; shows the server's `unavailable_reason` in place of the "Change
 to" pills when the thread cannot move (no rite, a sanctum thread, a signed technique thread,
-no options). Each pill carries a swatch for the move kind (retune / Fall / Redemption, keyed
-on `conversion_type`) and a "merges" chip when `merges_into_thread_id` is set. Offering pills
-appear only when `offering_required`, and exactly `min(offering_count, qualifying.length)`
-picks enable the button. Performs via `useRetuneThread` with `kwargs: {thread_id,
-target_resonance}`; a 400 shows the server's detail; after a merge it navigates to the
-surviving thread (`result.thread_id`). Tests: `__tests__/ThreadResonanceDialog.test.tsx`.
+no options). A thread holds several resonance rows (`thread.resonances`), so the dialog
+has a "Move from" pill per row (hidden for a one-row thread; default the leading row) and a
+"Points to move" stepper with an "All" reset (default all of the row); both go to the options
+endpoint, and `projected_points` is what the target's row gains. Each "Change to" pill carries
+a swatch for the move kind (retune / Fall / Redemption, keyed on `conversion_type`). Offering
+pills appear only when `offering_required`, and exactly `min(offering_count,
+qualifying.length)` picks enable the button. Performs via `useRetuneThread` with `kwargs:
+{thread_id, target_resonance, from_resonance?, amount?}` (`amount` only when the player chose
+one); a 400 shows the server's detail; a result naming a different thread navigates to it
+(`result.thread_id`). Tests: `__tests__/ThreadResonanceDialog.test.tsx`.
 
 ### `components/pillClass.ts`
 
 `pillClass(selected)`: the outlined / filled pill classes shared by
-`DriftConversionOfferDialog` and `ThreadResonanceDialog`.
+`SettleAuraDialog` and `ThreadResonanceDialog`.
 
 ### `components/threads/ThreadRetireDialog.tsx`
 
@@ -660,16 +746,17 @@ non-integer AP input (e.g. `2.5`) is treated as unset rather than sent fractiona
 success-outcome line after a train call resolves; the 400 `detail` message renders under
 the row that failed.
 
-### Drift conversion offers (#4733, slice 4 of #4672)
+### Settle your aura: conversion offers and accepting (#4733, #5123)
 
-A deed in a live scene opens a conversion offer; the player answers it with the drift
-correction rite. Mirrors the entry-flourish front end (gate, dialog, 5 s poll).
+A deed in the main affinity in a live scene opens a conversion offer; the player answers it with
+the drift correction rite (Atone). Accepting the changes to the aura needs no offer. Mirrors the
+entry-flourish front end (gate, dialog, 5 s poll).
 
 **Wire contract** (`/api/magic/drift-correction/`, generated types, re-exported in `types.ts`):
 
 - `getPendingDriftConversionOffers()` - GET `pending/` -> `PaginatedDriftConversionOfferList`.
-  Account-scoped (the row carries no character id). Each `DriftConversionOffer` is
-  `{ id, scene_id, caps[], rite_ready, rite_not_ready_message }` (`rite_ready` is false while
+  Account-scoped (`character_id` names the character the offer was made for). Each `DriftConversionOffer` is
+  `{ id, scene_id, character_id, caps[], rite_ready, rite_not_ready_message }` (`rite_ready` is false while
   the rite, its check type or a tier's share is missing; the message is the rite's own refusal, empty
   while ready); each cap is `{ target_resonance {id, name, affinity},
 cap_remaining, focus_bonus, sources[], qualifying_components[] }`. A source is
@@ -688,28 +775,39 @@ target_resonance_id, amount, component_ids }` -> `DriftCorrectionResult`
 polls every 5 s, no `throwOnError`), `useConvertDrift()` (invalidates the pending key and
 `characterResonanceList()`), `useDeclineDriftConversion()` (invalidates the pending key).
 
-**Components:** `DriftConversionOfferGate` (strip + auto-open once per offer id via
-`useAutoOpenOncePerOffer`; takes `sceneId` and shows the offer whose `scene_id` matches it,
-polling only once the scene is known; keeps the result line after an exhausted
-offer leaves the inbox; only an `aria-hidden` glow behind the strip pulses, so its words
-keep full contrast) and `DriftConversionOfferDialog` (Screen 5, one framed box: the small-caps
-title "Conversion offer · this scene"; per cap a system line "You hold <sources with a balance,
-joined with commas and 'and'> that does not fit you. Convert it to <target>." beside the cap
-remaining; a quiet row with the source picker (a plain chip when there is one source) and an
-amount bounded by the chosen source's `max_amount`, defaulting to it; single-select component
-pills `<name> · <mode>`, the chosen one filled `bg-primary text-primary-foreground`, the rest
-outlined; a rate line built from the source's `multiplier` ("Redemption: 12 Ruin becomes about
-6 Dawnlight", plus "; a focus adds N" only when `focus_bonus > 0`); the result and error lines;
-and one right-aligned row with Decline and "Perform the rite" (primary), Perform disabled until
-a component is chosen and the amount is valid; with several caps Decline sits in the last cap's
-row). While `rite_ready` is false each block shows `rite_not_ready_message` in place of the
-component pills and the button stays disabled. The yield for a typed amount is
-`max(1, floor(amount * multiplier))`, the server's own rounding.
+**Components:** `DriftConversionOfferGate` (strip headed "Settle your aura" + auto-open once per
+offer id via `useAutoOpenOncePerOffer`; takes `sceneId` and shows the offer whose `scene_id` matches
+it, polling only once the scene is known; keeps the result line after an exhausted offer leaves the
+inbox; only an `aria-hidden` glow behind the strip pulses, so its words keep full contrast; it reads
+the aura of the offer's own `character_id` through `useCharacterAuras` and only while an offer is
+open, so Accept never writes to another character's aura) and `SettleAuraDialog` (Screen 4, one
+framed box titled with the unsettled line, falling back to "Settle your aura", with up to two exits
+side by side, each with a small `AuraHalo` of the aura after it).
+
+- **Atone** shows only with an open offer (in a scene). Per cap, a system line "The <sources with a
+  balance, joined with commas and 'and'> you gained turns to <target>." beside the cap remaining; a
+  quiet row with the source picker (a plain chip when there is one source) and an amount bounded by
+  the chosen source's `max_amount`, defaulting to it; single-select component pills `<name> ·
+<mode>`, the chosen one filled `bg-primary text-primary-foreground`, the rest outlined; a rate line
+  built from the source's `multiplier` ("Redemption: 12 Ruin becomes about 6 Dawnlight", plus "; a
+  focus adds N" only when `focus_bonus > 0`); the result and error lines; and "Begin the rite"
+  (primary), disabled until a component is chosen and the amount is valid. While `rite_ready` is
+  false each block shows `rite_not_ready_message` in place of the component pills and the button
+  stays disabled. The yield for a typed amount is `max(1, floor(amount * multiplier))`, the
+  server's own rounding.
+- **Accept the changes to your Aura** shows whenever the character is unsettled, with or without an
+  offer; opened from the sheet outside a scene it is the only exit. A line "You become more
+  <affinity>." (the aura's `unsettled_affinity_name`, the affinity the accept action itself names;
+  the server's own line replaces it after) and an Accept button that calls `useAcceptAura`.
+- The footer "Not now" declines an open offer, else just closes; the character stays unsettled.
+  The word "accepted" is never shown to the player.
 
 **Mounts (once per surface):** `SceneDetailPage` (`isActive` guard, beside
 `EntryFlourishOfferGate`, `sceneId` from the scene) and `GamePage`'s `GameCenter` (when the
-session has a scene, `sceneId` from the session's scene). Tests that
-mock `@/magic/queries` wholesale (`SceneDetailPage.test.tsx`) must add the three drift hooks.
+session has a scene, `sceneId` from the session's scene); the sheet's `SpellbookTab` opens
+`SettleAuraDialog` itself with no offer. Tests that mock `@/magic/queries` wholesale
+(`SceneDetailPage.test.tsx`) must add the three drift hooks and mock `@/magic/auraQueries`
+(`GamePage.test.tsx` and `SceneDetailPage.test.tsx` do, so the gate never fetches).
 
 ## Data Flow
 

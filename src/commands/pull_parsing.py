@@ -18,9 +18,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from commands.exceptions import CommandError
+from commands.utils.held_resonance import held_resonance
+from commands.utils.thread_lookup import find_thread
 from world.magic.constants import MAX_RESONANCE_BURN
 
 if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
+    from world.magic.models import Resonance, Thread
     from world.magic.types.pull import CastPullDeclaration
 
 
@@ -35,6 +39,8 @@ _OPENLY_KEYWORD = "openly"
 # Keyword prefixes used to parse fury=<tier> anchor=<name> from cast command args.
 _FURY_PREFIX = "fury="
 _ANCHOR_PREFIX = "anchor="
+# Separates a pulled thread from the resonance paying for it: ``pull=<thread>:<resonance>``.
+_PAYER_SEPARATOR = ":"
 # Keyword prefix for burning resonance with a pull when straining (#4736).
 _BURN_PREFIX = "burn="
 
@@ -199,6 +205,40 @@ class PullParsingMixin:
             raise CommandError(ResonanceBurnNeedsPull.user_message)
         return " ".join(kept), burn
 
+    def _thread_and_payer(self, sheet: CharacterSheet, val: str) -> tuple[Thread, Resonance | None]:
+        """Resolve one ``pull=`` entry, ``<thread>`` or ``<thread>:<resonance>`` (#5123).
+
+        A bare thread is paid by its leading resonance (the payer comes back ``None``). A
+        named resonance must be one the character holds; it need not be one the thread
+        carries (it pays, and brings no perks). A thread whose own name holds a colon still
+        resolves by its whole name before the entry is split. A thread answers to its own
+        name, its anchor's (a Gift thread by the Gift's name) or its number, see ``find_thread``.
+
+        Raises:
+            CommandError: No such active thread, or a resonance that is unknown or that the
+                character does not hold. Each in plain words.
+        """
+        whole = find_thread(sheet, val) if _PAYER_SEPARATOR in val else None
+        if whole is not None:
+            return whole, None
+        thread_text, separator, payer_text = val.rpartition(_PAYER_SEPARATOR)
+        if not separator:
+            thread_text, payer_text = val, ""
+        thread_text, payer_text = thread_text.strip(), payer_text.strip()
+        thread = find_thread(sheet, thread_text)
+        if thread is None:
+            msg = f"No active thread '{thread_text}' found. Check that the thread is active."
+            raise CommandError(msg)
+        if not separator:
+            return thread, None
+        if not payer_text:
+            from world.magic.crossing.handlers import thread_display_name  # noqa: PLC0415
+
+            name = thread_display_name(thread)
+            msg = f"Name the resonance that pays for {name}: pull={name}:<resonance>."
+            raise CommandError(msg)
+        return thread, held_resonance(sheet, payer_text)
+
     def _resolve_cast_pull(
         self,
         pull_thread_str: str | None,
@@ -229,7 +269,7 @@ class PullParsingMixin:
         if pull_thread_str is None:
             return None
 
-        from world.magic.models import Resonance, Thread  # noqa: PLC0415
+        from world.magic.models import Resonance  # noqa: PLC0415
         from world.magic.types.pull import CastPullDeclaration  # noqa: PLC0415
 
         burn_resonance = None
@@ -247,16 +287,12 @@ class PullParsingMixin:
             raise CommandError(msg)
 
         threads: list[Thread] = []
+        payers: dict[int, Resonance] = {}
         for val in thread_vals:
-            qs = Thread.objects.filter(owner=sheet, retired_at__isnull=True)
-            if val.isdigit():
-                thread = qs.filter(pk=int(val)).first()
-            else:
-                thread = qs.filter(name__iexact=val).first()
-            if thread is None:
-                msg = f"No active thread '{val}' found. Check that the thread exists and is active."
-                raise CommandError(msg)
+            thread, payer = self._thread_and_payer(sheet, val)
             threads.append(thread)
+            if payer is not None:
+                payers[thread.pk] = payer
 
         declaration = CastPullDeclaration(
             tier=pull_tier,
@@ -264,6 +300,7 @@ class PullParsingMixin:
             beseech_bonus=beseech_bonus,
             burn=burn,
             burn_resonance=burn_resonance,
+            payers=payers,
         )
         if burn > 0 and declaration.burned_resonance is None:
             msg = "Name which of the pulled resonances to burn with resonance=<name>."

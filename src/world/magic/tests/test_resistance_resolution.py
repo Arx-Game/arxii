@@ -47,7 +47,9 @@ class PassiveGiftResistanceHandlerTests(TestCase):
         self.resonance = ResonanceFactory()
         self.gift = GiftFactory()
         self.fire = DamageTypeFactory(name="Fire")
-        self.thread = provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)
+        self.thread = provision_latent_gift_thread(
+            self.sheet, self.gift, resonances=[self.resonance]
+        )
         ThreadPullEffectFactory(
             target_kind=TargetKind.GIFT,
             target_gift=self.gift,
@@ -117,7 +119,9 @@ class ResolvePullEffectsResistanceScalingTests(TestCase):
         self.resonance = ResonanceFactory()
         self.gift = GiftFactory()
         self.fire = DamageTypeFactory(name="Fire")
-        self.thread = provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)
+        self.thread = provision_latent_gift_thread(
+            self.sheet, self.gift, resonances=[self.resonance]
+        )
         ThreadPullEffectFactory(
             target_kind=TargetKind.GIFT,
             target_gift=self.gift,
@@ -174,7 +178,7 @@ class GiftResistanceNettingTests(TestCase):
         cls.fire = DamageTypeFactory(name="Fire")
         cls.resonance = ResonanceFactory()
         cls.gift = GiftFactory()
-        cls.thread = provision_latent_gift_thread(cls.sheet, cls.gift, resonance=cls.resonance)
+        cls.thread = provision_latent_gift_thread(cls.sheet, cls.gift, resonances=[cls.resonance])
         # +3 fire gift resistance, switching on at thread level 10.
         ThreadPullEffectFactory(
             target_kind=TargetKind.GIFT,

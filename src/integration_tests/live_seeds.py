@@ -50,7 +50,10 @@ def seed_motif_facet_spec(*, username: str) -> MotifFacetSeed:
     from evennia_extensions.factories import CharacterFactory  # noqa: PLC0415
     from evennia_extensions.models import PlayerData  # noqa: PLC0415
     from world.character_creation.constants import Stage  # noqa: PLC0415
-    from world.character_creation.factories import CharacterDraftFactory  # noqa: PLC0415
+    from world.character_creation.factories import (  # noqa: PLC0415
+        CharacterDraftFactory,
+        single_resonance_weights,
+    )
     from world.character_creation.models import CharacterDraft  # noqa: PLC0415
     from world.character_sheets.factories import CharacterSheetFactory  # noqa: PLC0415
     from world.magic.factories import (  # noqa: PLC0415
@@ -95,7 +98,10 @@ def seed_motif_facet_spec(*, username: str) -> MotifFacetSeed:
     if draft is None:
         draft = CharacterDraftFactory(account=account)
     draft.current_stage = Stage.GIFT
-    draft.draft_data = {**draft.draft_data, "selected_gift_resonance_id": resonance.pk}
+    draft.draft_data = {
+        **draft.draft_data,
+        "gift_resonance_weights": single_resonance_weights(resonance),
+    }
     draft.save()
 
     return MotifFacetSeed(

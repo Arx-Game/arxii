@@ -57,7 +57,11 @@ from world.scenes.action_constants import (
     CAST_DIFFICULTY_BANDS,
     ActionRequestStatus,
 )
-from world.scenes.action_models import SceneActionPullDeclaration, SceneActionRequest
+from world.scenes.action_models import (
+    SceneActionPullDeclaration,
+    SceneActionRequest,
+    ScenePullThread,
+)
 from world.scenes.constants import InteractionMode, InteractionVisibility
 from world.scenes.interaction_services import (
     create_interaction,
@@ -810,11 +814,14 @@ def _resolve_cast_pull(
     if declaration is None:
         return None, None
     threads = list(declaration.threads.filter(retired_at__isnull=True))
+    payers = declaration.payers()
     preview = (
         preview_resonance_pull(
             initiator_persona.character_sheet,
             declaration.tier,
             threads,
+            payers=payers,
+            with_options=False,  # only ``affordable`` is read here
         )
         if threads
         else None
@@ -825,6 +832,7 @@ def _resolve_cast_pull(
             threads=tuple(threads),
             burn=declaration.burn,
             burn_resonance=declaration.burn_resonance,
+            payers=payers,
         )
         return cast_pull, None
     return None, _PULL_FIZZLE_NOTE
@@ -1493,7 +1501,14 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
                 burn=cast_pull.burn,
                 burn_resonance=cast_pull.burned_resonance if cast_pull.burn else None,
             )
-            declaration.threads.set(cast_pull.threads)
+            ScenePullThread.objects.bulk_create(
+                ScenePullThread(
+                    declaration=declaration,
+                    thread=thread,
+                    paying_resonance_id=cast_pull.payer_for(thread).pk,
+                )
+                for thread in cast_pull.threads
+            )
     return CastResult(request=request)
 
 

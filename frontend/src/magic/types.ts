@@ -137,6 +137,8 @@ export interface ImbueRequest {
   kwargs: {
     thread_id: number;
     amount: number;
+    /** The held resonance that pays; omitted, the thread's leading resonance pays (#5123). */
+    resonance_id?: number;
   };
 }
 
@@ -183,6 +185,15 @@ export type PullPreviewRequest = Omit<
 export type PreviewedEffect = components['schemas']['ResolvedPullEffect'];
 
 export type PullPreviewResponse = components['schemas']['ThreadPullPreviewResponse'];
+
+/** One resonance's row on a thread: how much of it went in, and whether it leads (#5123). */
+export type ThreadResonanceRow = components['schemas']['ThreadResonanceRow'];
+
+/** One resonance that could pay for a pulled thread, with its cost, balance and perks (#5123). */
+export type PayerOption = components['schemas']['PayerOption'];
+
+/** The payer options for one pulled thread in a pull preview (#5123). */
+export type ThreadPayerPreview = components['schemas']['ThreadPayerPreview'];
 
 /** Burn numbers on a pull preview (#4736); null when the preview named no technique. */
 export type BurnPreview = components['schemas']['BurnPreview'];

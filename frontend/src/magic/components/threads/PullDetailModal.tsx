@@ -37,7 +37,7 @@ export function PullDetailModal({ thread, open, onOpenChange }: PullDetailModalP
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg" data-testid="pull-detail-modal" {...NO_DESCRIPTION}>
         <DialogHeader>
-          <DialogTitle>{thread.name || `Thread #${thread.id}`}</DialogTitle>
+          <DialogTitle>{thread.display_name}</DialogTitle>
         </DialogHeader>
         <div className="mt-2">
           <PullEffectPreview thread={thread} />

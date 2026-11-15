@@ -38,10 +38,12 @@ const makeThread = (overrides: Partial<Thread> = {}): Thread => ({
   owner: 100,
   resonance: 1,
   resonance_name: 'Bene',
+  resonances: [],
   target_kind: 'TRAIT',
   target_trait_id: null,
   target_technique_id: null,
   name: 'Test Thread',
+  display_name: overrides.name ?? 'Test Thread',
   description: '',
   level: 10,
   developed_points: 20,
@@ -317,5 +319,118 @@ describe('ImbuePanel', () => {
     fireEvent.click(screen.getByTestId('imbue-button'));
 
     expect(screen.getByTestId('imbue-levels-gained')).toHaveTextContent(expected);
+  });
+  describe('payer (#5123)', () => {
+    const held = [
+      { resonance_id: 1, resonance_name: 'Fury', balance: 10 },
+      { resonance_id: 2, resonance_name: 'Domination', balance: 2 },
+    ];
+
+    it('shows no payer choice when the character holds one resonance', () => {
+      render(
+        <ImbuePanel thread={makeThread()} balance={10} held={[held[0]]} characterSheetId={100} />,
+        { wrapper: createWrapper() }
+      );
+      expect(screen.queryByTestId('imbue-payers')).not.toBeInTheDocument();
+    });
+
+    it('starts on the thread leading resonance and sends the picked one', () => {
+      const mockMutate = vi.fn();
+      vi.mocked(magicQueries.useImbueThread).mockReturnValue(
+        makeMutation({ mutate: mockMutate }) as unknown as ReturnType<
+          typeof magicQueries.useImbueThread
+        >
+      );
+      render(
+        <ImbuePanel
+          thread={makeThread({ id: 5 })}
+          balance={10}
+          held={held}
+          characterSheetId={200}
+        />,
+        { wrapper: createWrapper() }
+      );
+      expect(screen.getByTestId('imbue-payer-1')).toHaveAttribute('aria-checked', 'true');
+      fireEvent.click(screen.getByTestId('imbue-payer-2'));
+      expect(screen.getByTestId('imbue-payer-2')).toHaveAttribute('aria-checked', 'true');
+      fireEvent.click(screen.getByTestId('imbue-button'));
+      expect(mockMutate).toHaveBeenCalledWith(
+        { characterSheetId: 200, threadId: 5, amount: 1, resonanceId: 2 },
+        expect.any(Object)
+      );
+    });
+
+    it('limits the amount to the picked resonance balance', () => {
+      render(<ImbuePanel thread={makeThread()} balance={10} held={held} characterSheetId={100} />, {
+        wrapper: createWrapper(),
+      });
+      fireEvent.click(screen.getByTestId('imbue-payer-2'));
+      fireEvent.click(screen.getByTestId('imbue-increment'));
+      fireEvent.click(screen.getByTestId('imbue-increment'));
+      expect(screen.getByTestId('imbue-amount').textContent).toBe('2');
+      expect(screen.getByTestId('imbue-increment')).toBeDisabled();
+    });
+
+    it('offers every held resonance, whatever Gift the thread is on', () => {
+      const three = [...held, { resonance_id: 3, resonance_name: 'Wonder', balance: 4 }];
+      render(
+        <ImbuePanel
+          thread={makeThread({ target_kind: 'GIFT' })}
+          balance={10}
+          held={three}
+          characterSheetId={100}
+        />,
+        { wrapper: createWrapper() }
+      );
+      expect(screen.getByTestId('imbue-payer-1')).toBeInTheDocument();
+      expect(screen.getByTestId('imbue-payer-2')).toBeInTheDocument();
+      expect(screen.getByTestId('imbue-payer-3')).toBeInTheDocument();
+    });
+
+    it('starts on the first held resonance when the leader is not held, and sends it', () => {
+      const mockMutate = vi.fn();
+      vi.mocked(magicQueries.useImbueThread).mockReturnValue(
+        makeMutation({ mutate: mockMutate }) as unknown as ReturnType<
+          typeof magicQueries.useImbueThread
+        >
+      );
+      render(
+        <ImbuePanel
+          thread={makeThread({ id: 5, resonance: 9 })}
+          balance={0}
+          held={held}
+          characterSheetId={200}
+        />,
+        { wrapper: createWrapper() }
+      );
+      expect(screen.getByTestId('imbue-payer-1')).toHaveAttribute('aria-checked', 'true');
+      fireEvent.click(screen.getByTestId('imbue-button'));
+      expect(mockMutate).toHaveBeenCalledWith(
+        { characterSheetId: 200, threadId: 5, amount: 1, resonanceId: 1 },
+        expect.any(Object)
+      );
+    });
+
+    it('names the lone resonance that pays when it is not the leader', () => {
+      render(
+        <ImbuePanel
+          thread={makeThread({ resonance: 2 })}
+          balance={10}
+          held={[held[0]]}
+          characterSheetId={100}
+        />,
+        { wrapper: createWrapper() }
+      );
+      expect(screen.queryByTestId('imbue-payers')).not.toBeInTheDocument();
+      expect(screen.getByTestId('imbue-lone-payer')).toHaveTextContent('Spends Fury');
+    });
+
+    it('names no payer when the lone resonance is the leader', () => {
+      render(
+        <ImbuePanel thread={makeThread()} balance={10} held={[held[0]]} characterSheetId={100} />,
+        { wrapper: createWrapper() }
+      );
+      expect(screen.queryByTestId('imbue-lone-payer')).not.toBeInTheDocument();
+    });
   });
 });

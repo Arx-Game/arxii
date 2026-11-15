@@ -14415,6 +14415,31 @@ export interface paths {
     patch: operations['magic_character_auras_partial_update'];
     trace?: never;
   };
+  '/api/magic/character-auras/{id}/accept/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Accept the changes to the aura: settle who the character has become (#5123).
+     *
+     *     Dispatches ``AcceptAuraChangeAction`` (the same action telnet ``aura accept`` runs)
+     *     for the character the aura belongs to. ``get_object`` finds the auras of characters
+     *     the requester plays and, for staff, every aura, so staff may accept for any
+     *     character. Refused with the action's own sentence while the character is not
+     *     unsettled.
+     */
+    post: operations['magic_character_auras_accept_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/character-auras/{id}/link-glimpse-distinction/': {
     parameters: {
       query?: never;
@@ -14885,7 +14910,7 @@ export interface paths {
      *     GET /api/magic/drift-correction/pending/{id}/
      *
      *     Scoped to the authenticated user's character sheets (active tenures), and to offers
-     *     whose scene has not finished, the same rule telnet's ``drift`` uses. A finish route
+     *     whose scene has not finished, the same rule telnet's ``aura`` uses. A finish route
      *     that skips ``Scene.finish_scene`` can leave an offer row behind; it is never listed.
      */
     get: operations['magic_drift_correction_pending_list'];
@@ -14911,7 +14936,7 @@ export interface paths {
      *     GET /api/magic/drift-correction/pending/{id}/
      *
      *     Scoped to the authenticated user's character sheets (active tenures), and to offers
-     *     whose scene has not finished, the same rule telnet's ``drift`` uses. A finish route
+     *     whose scene has not finished, the same rule telnet's ``aura`` uses. A finish route
      *     that skips ``Scene.finish_scene`` can leave an offer row behind; it is never listed.
      */
     get: operations['magic_drift_correction_pending_retrieve'];
@@ -15694,7 +15719,7 @@ export interface paths {
      * @description Read-only list of Resonance rows with their Affinity, for pickers.
      *
      *     The character-creation Gift stage lists every Resonance and stores the chosen
-     *     pk as ``draft_data["selected_gift_resonance_id"]``. Filter by ``?affinity=<pk>``.
+     *     picks as ``draft_data["gift_resonance_weights"]``. Filter by ``?affinity=<pk>``.
      */
     get: operations['magic_resonances_list'];
     put?: never;
@@ -15716,7 +15741,7 @@ export interface paths {
      * @description Read-only list of Resonance rows with their Affinity, for pickers.
      *
      *     The character-creation Gift stage lists every Resonance and stores the chosen
-     *     pk as ``draft_data["selected_gift_resonance_id"]``. Filter by ``?affinity=<pk>``.
+     *     picks as ``draft_data["gift_resonance_weights"]``. Filter by ``?affinity=<pk>``.
      */
     get: operations['magic_resonances_retrieve'];
     put?: never;
@@ -16977,17 +17002,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description ViewSet for Thread records (Spec A §4.5).
-     *
-     *     list / retrieve: returns threads the requesting account owns (staff can
-     *     see all), excluding soft-retired rows.
-     *     create: delegates to the serializer, which calls ``weave_thread``. The
-     *     caller MUST supply ``character_sheet_id`` identifying which owned sheet
-     *     to weave the thread for — no implicit first-sheet selection.
-     *     destroy: soft-retire — sets ``retired_at`` rather than deleting the row,
-     *     so historical references remain.
-     */
+    /** @description List the page of threads, reading every thread's resonance rows in one query. */
     get: operations['magic_threads_list'];
     put?: never;
     /**
@@ -17102,11 +17117,15 @@ export interface paths {
      *
      *     GET /api/magic/threads/{id}/resonance-options/  (slice 6 of #4672)
      *
+     *     Query: ``from_resonance`` (id of one of the thread's resonances, default the leading
+     *     one) and ``amount`` (points to move, default all of that resonance's row).
+     *
      *     Response: ``{ritual_id, offering_required, offering_count, unavailable_reason,
      *     options: [{resonance_id, resonance_name, affinity_name, conversion_type,
-     *     projected_points, merges_into_thread_id, qualifying: [{item_id, name, mode}]}]}``.
+     *     projected_points, qualifying: [{item_id, name, mode}]}]}``.
      *     ``ritual_id`` is null while no retune rite is authored; perform it through
-     *     ``POST /api/magic/rituals/perform/`` with ``kwargs: {thread_id, target_resonance}``.
+     *     ``POST /api/magic/rituals/perform/`` with
+     *     ``kwargs: {thread_id, target_resonance, from_resonance?, amount?}``.
      *     ``qualifying`` is filled only when the rite asks for a target-resonance offering.
      */
     get: operations['magic_threads_resonance_options_retrieve'];
@@ -28208,6 +28227,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** @description What accepting the changes to the aura answers: the line told, and the aura as it now is. */
+    AcceptAuraResponse: {
+      detail: string;
+      aura: components['schemas']['CharacterAura'];
+    };
     /**
      * @description Write serializer for forming a Soul Tether (Spec B §12).
      *
@@ -30740,6 +30764,10 @@ export interface components {
     CastPullRequestRequest: {
       tier: number;
       thread_ids: number[];
+      /** @description Thread id -> the id of the resonance paying for that thread (#5123); a thread left out is paid by its leading resonance. */
+      payers?: {
+        [key: string]: number;
+      };
     };
     /**
      * @description The cast endpoint's pull, which may also burn resonance for strain (#4736).
@@ -30749,6 +30777,10 @@ export interface components {
     CastPullWithBurnRequestRequest: {
       tier: number;
       thread_ids: number[];
+      /** @description Thread id -> the id of the resonance paying for that thread (#5123); a thread left out is paid by its leading resonance. */
+      payers?: {
+        [key: string]: number;
+      };
       /** @default 0 */
       burn: number;
       /** @description Which pulled resonance the burn comes from (#5066); needed only when the pull's threads mix resonances. */
@@ -31253,6 +31285,19 @@ export interface components {
       readonly dominant_affinity: string;
       /** @description The dominant affinity's name for display. */
       readonly dominant_affinity_display: string;
+      /** @description True when an affinity other than the main one has grown past who they are. */
+      readonly unsettled: boolean;
+      /** @description The sentence naming the resonance that made them unsettled; blank when settled. */
+      readonly unsettled_line: string;
+      /**
+       * @description The affinity "You become more ..." names on accepting; blank when settled.
+       *
+       *     The same one the accept action names (``accept_aura_change``): the affinity of the
+       *     resonance that grew most past who they are.
+       */
+      readonly unsettled_affinity_name: string;
+      /** @description The Mire's share of everything they have gained, in words. */
+      readonly mire_share_words: string;
       /**
        * @description Deferral/progress state of the Glimpse (#2427). Cache of prose+tag truth — maintained by world.magic.services.glimpse, never written directly.
        *
@@ -31278,6 +31323,11 @@ export interface components {
        * @description This affinity's share of the aura, 0-100.
        */
       readonly percent: string;
+      /**
+       * Format: decimal
+       * @description Who the character is, per affinity, 0-100: set at creation and by accepting the changes to the aura. The main affinity is the largest settled share.
+       */
+      readonly settled_percent: string;
     };
     /** @description Full serializer for character class detail with core traits. */
     CharacterClass: {
@@ -31452,6 +31502,7 @@ export interface components {
       /** @description Get total stat point budget (base + bonuses). */
       readonly stats_budget: number;
       readonly starting_technique_picks: number;
+      readonly resonance_creation_points: number;
       readonly magic_training: {
         [key: string]: unknown;
       };
@@ -33911,6 +33962,7 @@ export interface components {
     DriftConversionOffer: {
       readonly id: number;
       readonly scene_id: number;
+      readonly character_id: number;
       readonly caps: components['schemas']['DriftConversionCap'][];
       readonly rite_ready: boolean;
       readonly rite_not_ready_message: string;
@@ -47430,7 +47482,7 @@ export interface components {
      *     - effective_cap: min(level_cap, anchor_cap)
      */
     PatchedThreadRequest: {
-      /** @description Resonance this thread channels. */
+      /** @description Leading resonance: a denormalized copy of the first ThreadResonance row, written only by refresh_leading_resonance. */
       resonance?: number;
       /**
        * @description Discriminator selecting which target_* FK is populated.
@@ -47795,6 +47847,16 @@ export interface components {
       suggested_value: number;
       /** @description Order for display in CG */
       display_order?: number;
+    };
+    /** @description One resonance that could pay for a pulled thread, with its cost and balance (#5123). */
+    PayerOption: {
+      resonance_id: number;
+      resonance_name: string;
+      cost: number;
+      balance: number;
+      affordable: boolean;
+      effects: components['schemas']['ResolvedPullEffect'][];
+      level_read: number;
     };
     /** @description Read-only serializer for pending alterations shown on character sheet. */
     PendingAlteration: {
@@ -49939,6 +50001,7 @@ export interface components {
     ResolvedPullEffect: {
       kind: string;
       authored_value: number | null;
+      /** Format: double */
       level_multiplier: number;
       scaled_value: number;
       vital_target: string | null;
@@ -49949,6 +50012,11 @@ export interface components {
       narrative_snippet: string;
       inactive: boolean;
       inactive_reason: string | null;
+      /** @description The granted capability's name, or None for any other kind of effect. */
+      readonly capability_name: string | null;
+      capability_value: number | null;
+      /** @description The damage type a RESISTANCE mitigates, or None (all types, or not a resistance). */
+      readonly resistance_damage_type_name: string | null;
     };
     /** @description Serializer for Resonance records. */
     Resonance: {
@@ -49996,6 +50064,7 @@ export interface components {
        *     * `DRIFT_CORRECTION` - Drift correction
        *     * `CORRUPTION_CLEANSING` - Corruption cleansing payout
        *     * `SINEATING` - Sineating payout
+       *     * `CHARACTER_CREATION` - Character creation
        */
       readonly source: components['schemas']['ResonanceGrantSourceEnum'];
       /** Format: date-time */
@@ -50030,6 +50099,7 @@ export interface components {
      *     * `DRIFT_CORRECTION` - Drift correction
      *     * `CORRUPTION_CLEANSING` - Corruption cleansing payout
      *     * `SINEATING` - Sineating payout
+     *     * `CHARACTER_CREATION` - Character creation
      * @enum {string}
      */
     ResonanceGrantSourceEnum:
@@ -50056,7 +50126,8 @@ export interface components {
       | 'WORSHIP_RITE'
       | 'DRIFT_CORRECTION'
       | 'CORRUPTION_CLEANSING'
-      | 'SINEATING';
+      | 'SINEATING'
+      | 'CHARACTER_CREATION';
     ResonanceLine: {
       resonance: number;
       tier: components['schemas']['ResonanceLineTierEnum'];
@@ -54318,9 +54389,10 @@ export interface components {
       readonly id: number;
       /** @description Character who owns this thread. */
       readonly owner: number;
-      /** @description Resonance this thread channels. */
+      /** @description Leading resonance: a denormalized copy of the first ThreadResonance row, written only by refresh_leading_resonance. */
       resonance: number;
       readonly resonance_name: string;
+      readonly resonances: components['schemas']['ThreadResonanceRow'][];
       /**
        * @description Discriminator selecting which target_* FK is populated.
        *
@@ -54340,6 +54412,7 @@ export interface components {
       readonly target_technique_id: number | null;
       /** @default  */
       name: string;
+      readonly display_name: string;
       /** @default  */
       description: string;
       /** @description Current level on the internal scale (multiples of 10). */
@@ -54386,6 +54459,11 @@ export interface components {
       weavable_techniques: components['schemas']['_WeavableTechnique'][];
       weavable_relationship_type_ids: number[];
     };
+    /** @description Every held resonance as a payer option for one pulled thread (#5123). */
+    ThreadPayerPreview: {
+      thread_id: number;
+      options: components['schemas']['PayerOption'][];
+    };
     /**
      * @description Request serializer for POST /api/magic/thread-pull-preview/.
      *
@@ -54397,6 +54475,9 @@ export interface components {
       tier: number;
       thread_ids: number[];
       burn_resonance_id?: number | null;
+      payers?: {
+        [key: string]: number;
+      };
       action_context?: components['schemas']['PullActionContextRequest'];
       scene_id?: number | null;
       /** @default false */
@@ -54411,6 +54492,7 @@ export interface components {
       resolved_effects: components['schemas']['ResolvedPullEffect'][];
       capped_intensity: boolean;
       burn: components['schemas']['BurnPreview'] | null;
+      per_thread: components['schemas']['ThreadPayerPreview'][];
     };
     /**
      * @description Serializer for Thread records (Spec A §4.5).
@@ -54428,7 +54510,7 @@ export interface components {
      *     - effective_cap: min(level_cap, anchor_cap)
      */
     ThreadRequest: {
-      /** @description Resonance this thread channels. */
+      /** @description Leading resonance: a denormalized copy of the first ThreadResonance row, written only by refresh_leading_resonance. */
       resonance: number;
       /**
        * @description Discriminator selecting which target_* FK is populated.
@@ -54459,9 +54541,8 @@ export interface components {
      *     ``qualifying`` reads ``context["qualifying"]``: the carried items that pay, keyed by
      *     resonance pk, worked out once for every option by the view
      *     (``qualifying_components_by_target``), so this serializer queries nothing per option.
-     *     ``conversion_type`` is null for a retune within the thread's own affinity.
-     *     ``merges_into_thread_id`` is the live thread on the same anchor the move would merge
-     *     into, null when the thread moves on its own.
+     *     ``conversion_type`` is null for a retune within the source resonance's own affinity.
+     *     ``projected_points`` is what the target's row would gain from the amount being moved.
      */
     ThreadResonanceOption: {
       resonance_id: number;
@@ -54470,7 +54551,6 @@ export interface components {
       conversion_type:
         (components['schemas']['ConversionTypeEnum'] | components['schemas']['NullEnum']) | null;
       projected_points: number;
-      merges_into_thread_id: number | null;
       readonly qualifying: components['schemas']['DriftQualifyingComponent'][];
     };
     /**
@@ -54487,6 +54567,15 @@ export interface components {
       offering_count: number;
       unavailable_reason: string;
       options: components['schemas']['ThreadResonanceOption'][];
+    };
+    /** @description One resonance a thread holds, with how much of it went in and whether it leads (#5123). */
+    ThreadResonanceRow: {
+      readonly resonance_id: number;
+      readonly resonance_name: string;
+      /** @description Development points this resonance put into the thread. */
+      readonly amount: number;
+      /** @description True for the row ``Thread.resonance`` copies (the largest amount). */
+      readonly leads: boolean;
     };
     /**
      * @description * `TRAIT` - Trait
@@ -75266,6 +75355,27 @@ export interface operations {
       };
     };
   };
+  magic_character_auras_accept_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AcceptAuraResponse'];
+        };
+      };
+    };
+  };
   magic_character_auras_link_glimpse_distinction_create: {
     parameters: {
       query?: never;
@@ -76810,8 +76920,10 @@ export interface operations {
          *     * `DRIFT_CORRECTION` - Drift correction
          *     * `CORRUPTION_CLEANSING` - Corruption cleansing payout
          *     * `SINEATING` - Sineating payout
+         *     * `CHARACTER_CREATION` - Character creation
          */
         source?:
+          | 'CHARACTER_CREATION'
           | 'COMBO_DISCOVERY'
           | 'COMPROMISE'
           | 'CORRUPTION_CLEANSING'

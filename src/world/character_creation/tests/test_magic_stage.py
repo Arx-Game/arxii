@@ -18,6 +18,7 @@ from world.character_creation.factories import (
     BeginningTraditionFactory,
     CharacterDraftFactory,
     DistinctionOfferFactory,
+    single_resonance_weights,
 )
 from world.character_creation.services import (
     _finalize_academy_entrance_obligation,
@@ -106,7 +107,7 @@ class MagicStageValidationTest(TestCase):
         draft_data = {
             "selected_gift_id": self.gift.id,
             "selected_technique_ids": [self.pool_techniques[0].id],
-            "selected_gift_resonance_id": self.resonance.id,
+            "gift_resonance_weights": single_resonance_weights(self.resonance),
             "anima_check_stat_id": self.stat_trait.id,
             "anima_check_skill_id": self.skill.id,
         }
@@ -178,7 +179,7 @@ class MagicStageValidationTest(TestCase):
 
     def test_no_gift_resonance_fails(self):
         """Resonance is required — anchors the latent GIFT thread (#1620)."""
-        draft = self._draft(selected_gift_resonance_id=None)
+        draft = self._draft(gift_resonance_weights=None)
         errors = compute_magic_errors(draft)
         assert errors == ["Select a gift resonance"]
 
@@ -192,7 +193,7 @@ class MagicStageValidationTest(TestCase):
         """
         doomed_resonance = ResonanceFactory()
         doomed_id = doomed_resonance.id
-        draft = self._draft(selected_gift_resonance_id=doomed_id)
+        draft = self._draft(gift_resonance_weights=[{"resonance_id": doomed_id, "weight": 10}])
         doomed_resonance.delete()
 
         errors = compute_magic_errors(draft)
@@ -454,7 +455,7 @@ class GiftGrantNotificationTest(TestCase):
             draft_data={
                 "selected_gift_id": gift.id,
                 "selected_technique_ids": [technique.id],
-                "selected_gift_resonance_id": resonance.id,
+                "gift_resonance_weights": single_resonance_weights(resonance),
             },
         )
         return draft, sheet, technique

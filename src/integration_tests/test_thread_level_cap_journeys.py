@@ -21,6 +21,7 @@ from world.action_points.models import ActionPointConfig, ActionPointPool
 from world.classes.factories import CharacterClassFactory
 from world.classes.services import set_primary_class_level
 from world.magic.constants import TargetKind
+from world.magic.crossing.handlers import thread_display_name
 from world.magic.factories import (
     CharacterAuraFactory,
     CharacterResonanceFactory,
@@ -32,6 +33,7 @@ from world.magic.models import (
     CharacterResonance,
     Thread,
     ThreadLevelUnlock,
+    ThreadResonance,
 )
 from world.magic.models.crossing import CrossingChoice, PendingCrossingOffer
 
@@ -109,7 +111,7 @@ class ACrossingArrivesAtThirty(_ThreadCase):
 
         told = self.imbue(thread, imbue_cost(29, 30))
 
-        self.assertIn(f"You complete the rite, imbuing {thread.name}.", told)
+        self.assertIn(f"You complete the rite, imbuing {thread_display_name(thread)}.", told)
         self.assertEqual(thread.level, 30)
         self.assertIn("Crossing level 30", self.crossing_list())
         self.assertTrue(
@@ -206,6 +208,7 @@ class AGiftThreadIsHeldByHerLevel(_ThreadCase):
             target_gift=GiftFactory(),
             level=19,
         )
+        ThreadResonance.objects.create(thread=thread, resonance=self.resonance)
         self.boundaries_paid(thread, 30)
 
         told = self.imbue(thread, imbue_cost(19, 25))
@@ -233,6 +236,7 @@ class AnOrganizationThreadTakesTheLowerCap(_ThreadCase):
             target_organization=org,
             level=level,
         )
+        ThreadResonance.objects.create(thread=thread, resonance=self.resonance)
         self.boundaries_paid(thread, 40)
         return thread
 

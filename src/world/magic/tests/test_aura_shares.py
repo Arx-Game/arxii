@@ -1,15 +1,14 @@
-"""Tests for aura share rows (#4681): shares, dominance, starting split, renamed rows."""
+"""Tests for aura share rows (#4681): shares, dominance, renamed rows."""
 
 from decimal import Decimal
 
 from django.test import TestCase
 
-from world.character_creation.magic_writer import _glimpse
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.exceptions import AffinityNotConfigured
 from world.magic.factories import AffinityFactory, CharacterAuraFactory, ResonanceFactory
 from world.magic.models import Affinity, CharacterAura, CharacterResonance
-from world.magic.services.aura import recompute_aura, set_aura_shares, starting_aura_shares
+from world.magic.services.aura import recompute_aura, set_aura_shares
 from world.magic.types import AffinityShare
 
 
@@ -62,6 +61,10 @@ class AuraShareTests(TestCase):
             ],
         )
         assert sum(s.percent for s in aura.cached_shares) == Decimal("100.00")
+        # The factory settled the shares where they stood; this one no longer is.
+        unsettled = aura.shares.get(affinity=self.abyssal)
+        unsettled.settled_percent = Decimal(0)
+        unsettled.save()
         set_aura_shares(
             aura,
             [
@@ -71,6 +74,14 @@ class AuraShareTests(TestCase):
         )
         assert aura.percent_for(self.abyssal) == Decimal(0)
         assert aura.shares.count() == 2
+
+    def test_set_aura_shares_keeps_a_settled_row_at_zero(self):
+        aura = CharacterAuraFactory(character=self.sheet, celestial=0, primal=70, abyssal=30)
+        set_aura_shares(aura, [AffinityShare(affinity=self.primal, percent=Decimal(100))])
+        kept = aura.shares.get(affinity=self.abyssal)
+        assert kept.percent == Decimal(0)
+        assert kept.settled_percent == Decimal(30)
+        assert aura.percent_for(self.primal) == Decimal(100)
 
     def test_set_aura_shares_refuses_a_bad_total(self):
         aura = CharacterAuraFactory(character=self.sheet)
@@ -86,41 +97,6 @@ class AuraShareTests(TestCase):
         )
         lower = min(self.primal, self.abyssal, key=lambda a: a.pk)
         assert aura.dominant_affinity == lower
-
-    def test_starting_split_follows_pick(self):
-        picked = starting_aura_shares(ResonanceFactory(affinity=self.celestial))
-        assert {(s.affinity, s.percent) for s in picked} == {
-            (self.celestial, Decimal("80.00")),
-            (self.abyssal, Decimal("20.00")),
-        }
-        abyssal_pick = starting_aura_shares(ResonanceFactory(affinity=self.abyssal))
-        assert {(s.affinity, s.percent) for s in abyssal_pick} == {
-            (self.abyssal, Decimal("80.00")),
-            (self.primal, Decimal("20.00")),
-        }
-        no_pick = starting_aura_shares(None)
-        assert {(s.affinity, s.percent) for s in no_pick} == {
-            (self.primal, Decimal("80.00")),
-            (self.abyssal, Decimal("20.00")),
-        }
-
-    def test_new_aura_gets_starting_split_summing_to_100(self):
-        from world.character_creation.magic_writer import MagicPicks
-
-        picks = MagicPicks(
-            tradition=None,
-            gift=None,
-            techniques=[],
-            resonance=ResonanceFactory(affinity=self.celestial),
-            anima_stat=None,
-            anima_skill=None,
-            ritual_name="",
-            account=None,
-            origin="",
-        )
-        aura = _glimpse(self.sheet, picks)
-        assert aura.percent_for(self.celestial) == Decimal("80.00")
-        assert sum(s.percent for s in aura.cached_shares) == Decimal("100.00")
 
     def test_renamed_affinity_still_counts(self):
         aura = CharacterAuraFactory(character=self.sheet)

@@ -11,7 +11,9 @@ Single-actor path (SERVICE/CEREMONY kind):
     ``ritual <name> key=value [key=value]``  — with ritual parameters (numeric only,
         e.g. ``thread=<id>``/``tradition_id=<id>``/``target_affinity=<id>``/
         ``resonance=<id>``; ``resonance=`` (alias ``target_resonance=``) names the
-        resonance to move a thread to: ``ritual <rite> thread=5 resonance=12``)
+        resonance to move part of a thread to, ``from=<id>`` the resonance it takes from
+        (default: its leading one) and ``amount=<n>`` how much (default: all of it):
+        ``ritual <rite> thread=5 from=3 amount=5 resonance=12``)
     ``ritual Rite of Honors honoree=<name> deed=<id> title=<text> body=<text>``
         — amplify a witnessed deed; free-text grammar special-cased for the Rite
         of Honors (#3466); see ``_resolve_honors_args`` below for why this one
@@ -54,6 +56,12 @@ _THREAD_ID_KEY = "thread_id"
 # toward, e.g. the thread retune (slice 6 of #4672); it reaches the action as a Resonance.
 _RESONANCE_KWARG = "resonance"
 _TARGET_RESONANCE_KWARG = "target_resonance"
+# ``from=<id>`` (alias ``from_resonance=<id>``) names the resonance of the thread the retune
+# takes from, and ``amount=<n>`` how much (#5123); each defaults to the leading resonance and
+# all of it.
+_FROM_RESONANCE_KWARG = "from_resonance"
+_FROM_ALIAS_KWARG = "from"
+_AMOUNT_KWARG = "amount"
 #: ``ritual anima`` performs the caller's own personal anima ritual (#4451), whatever
 #: its authored name is.
 _ANIMA_SHORTHAND = "anima"
@@ -550,12 +558,34 @@ class CmdRitual(ArxCommand):
                 raise CommandError(err.user_message) from err
 
         self._move_target_resonance(raw_kwargs, service_kwargs)
+        self._move_from_resonance(ritual, raw_kwargs, service_kwargs)
+        self._name_imbuing_payer(ritual, service_kwargs)
         self._refuse_incomplete_retune(ritual, service_kwargs)
 
         service_kwargs.update(raw_kwargs)
 
         components = self._gather_components()
         return {"ritual": ritual, "components_provided": components, **service_kwargs}
+
+    @staticmethod
+    def _name_imbuing_payer(ritual: Any, service_kwargs: dict[str, Any]) -> None:
+        """Give a SERVICE-dispatched imbuing rite the resonance that pays (#5123).
+
+        The imbuing service takes ``resonance=``; the player's ``resonance=<id>`` was moved
+        under ``target_resonance`` above for the rites that move one, so it is taken back
+        here, and a thread named with none is paid from its leading resonance, as the web
+        does (``RitualPerformView._resolve_imbuing_kwargs``).
+        """
+        from world.magic.constants import is_imbuing_ritual  # noqa: PLC0415
+
+        thread = service_kwargs.get("thread")
+        if thread is None or not is_imbuing_ritual(
+            name=ritual.name, service_function_path=ritual.service_function_path
+        ):
+            return
+        service_kwargs[_RESONANCE_KWARG] = (
+            service_kwargs.pop(_TARGET_RESONANCE_KWARG, None) or thread.resonance
+        )
 
     @staticmethod
     def _refuse_incomplete_retune(ritual: Any, service_kwargs: dict[str, Any]) -> None:
@@ -584,12 +614,49 @@ class CmdRitual(ArxCommand):
         refusal = thread_resonance_refusal(thread)
         if refusal:
             raise CommandError(refusal)
-        options = thread_resonance_options(thread)
+        options = thread_resonance_options(
+            thread, service_kwargs.get(_FROM_RESONANCE_KWARG), service_kwargs.get(_AMOUNT_KWARG)
+        )
         msg = (
             "Name the resonance to move it to: resonance=<id>. "
             f"{options_sentence(options, with_ids=True)}"
         )
         raise CommandError(msg)
+
+    @staticmethod
+    def _move_from_resonance(
+        ritual: Any, raw_kwargs: dict[str, int], service_kwargs: dict[str, Any]
+    ) -> None:
+        """Pop the retune's ``from=`` (alias ``from_resonance=``) and ``amount=`` (#5123).
+
+        Only for the retune rite (``amount=`` means something else on the Rite of Imbuing,
+        which never reaches here). ``from`` becomes a Resonance under ``from_resonance``;
+        ``amount`` is checked as a whole number of at least 1. An unknown id is refused.
+        """
+        from world.magic.exceptions import (  # noqa: PLC0415
+            ThreadResonanceChangeError,
+            UnknownResonance,
+        )
+        from world.magic.services.thread_resonance import (  # noqa: PLC0415
+            THREAD_RESONANCE_SERVICE_PATH,
+            resolve_retune_amount,
+            resolve_target_resonance,
+        )
+
+        if ritual.service_function_path != THREAD_RESONANCE_SERVICE_PATH:
+            return
+        from_id = raw_kwargs.pop(_FROM_ALIAS_KWARG, None)
+        alias_id = raw_kwargs.pop(_FROM_RESONANCE_KWARG, None)
+        if from_id is None:
+            from_id = alias_id
+        try:
+            if from_id is not None:
+                service_kwargs[_FROM_RESONANCE_KWARG] = resolve_target_resonance(from_id)
+            amount = resolve_retune_amount(raw_kwargs.pop(_AMOUNT_KWARG, None))
+        except (UnknownResonance, ThreadResonanceChangeError) as err:
+            raise CommandError(err.user_message) from err
+        if amount is not None:
+            service_kwargs[_AMOUNT_KWARG] = amount
 
     def _move_target_resonance(
         self, raw_kwargs: dict[str, int], service_kwargs: dict[str, Any]

@@ -107,17 +107,76 @@ class ImbueCostMultiplierTests(TestCase):
 
         # GIFT: 2 dp to advance 0→1 (1 base × 2 multiplier).
         gift_result = spend_resonance_for_imbuing(
-            character_sheet=self.sheet, thread=gift_thread, amount=2
+            character_sheet=self.sheet,
+            thread=gift_thread,
+            resonance=gift_thread.resonance,
+            amount=2,
         )
         self.assertEqual(gift_thread.level, 1)
         self.assertEqual(gift_result.levels_gained, 1)
 
         # TRAIT: 1 dp to advance 0→1 (1 base × 1 multiplier).
         trait_result = spend_resonance_for_imbuing(
-            character_sheet=self.sheet, thread=trait_thread, amount=1
+            character_sheet=self.sheet,
+            thread=trait_thread,
+            resonance=trait_thread.resonance,
+            amount=1,
         )
         self.assertEqual(trait_thread.level, 1)
         self.assertEqual(trait_result.levels_gained, 1)
 
         # The GIFT thread needed more dp to cross the same level boundary.
         self.assertGreater(gift_result.developed_points_added, trait_result.developed_points_added)
+
+
+class UnauthoredPullTierTests(TestCase):
+    """A tier staff have not authored a cost row for is refused with one sentence."""
+
+    SENTENCE = "That pull tier is not available yet."
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        ThreadPullCostFactory(tier=1, target_kind=None, resonance_cost=1, anima_per_thread=0)
+        cls.sheet = CharacterSheetFactory()
+        cls.resonance = ResonanceFactory()
+        CharacterResonanceFactory(
+            character_sheet=cls.sheet, resonance=cls.resonance, balance=20, lifetime_earned=20
+        )
+        cls.thread = ThreadFactory(owner=cls.sheet, resonance=cls.resonance, level=1)
+
+    def test_the_cost_resolver_refuses_in_a_player_sentence(self) -> None:
+        from world.magic.exceptions import InvalidImbueAmount, PullTierNotAvailable
+        from world.magic.services.threads import get_pull_cost
+
+        with self.assertRaises(PullTierNotAvailable) as raised:
+            get_pull_cost(2, None)
+
+        self.assertEqual(raised.exception.user_message, self.SENTENCE)
+        self.assertIsInstance(raised.exception, InvalidImbueAmount)
+
+    def test_committing_a_pull_at_the_tier_refuses_and_charges_nothing(self) -> None:
+        from world.magic.exceptions import PullTierNotAvailable
+        from world.magic.models import CharacterResonance
+        from world.magic.services.resonance import spend_resonance_for_pull
+        from world.magic.types import PullActionContext
+
+        with self.assertRaises(PullTierNotAvailable):
+            spend_resonance_for_pull(
+                character_sheet=self.sheet,
+                threads=[self.thread],
+                tier=2,
+                action_context=PullActionContext(),
+            )
+
+        row = CharacterResonance.objects.get(character_sheet=self.sheet, resonance=self.resonance)
+        self.assertEqual(row.balance, 20)
+
+    def test_declaring_a_cast_pull_at_the_tier_refuses(self) -> None:
+        from world.combat.pull_helpers import build_cast_pull_declaration
+        from world.magic.exceptions import PullTierNotAvailable
+
+        with self.assertRaises(PullTierNotAvailable):
+            build_cast_pull_declaration(self.sheet.pk, tier=2, thread_ids=[self.thread.pk])
+
+    def test_the_imbue_multiplier_still_defaults_to_one_with_no_row(self) -> None:
+        self.assertEqual(get_imbue_cost_multiplier(TargetKind.GIFT), 1)

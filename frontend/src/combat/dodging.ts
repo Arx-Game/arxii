@@ -33,6 +33,9 @@ export function roundPullRequest(selection: PullSelection): DispatchActionReques
     kwargs: {
       pull_tier: selection.tier,
       pull_thread_ids: selection.thread_ids,
+      // The resonance the player picked to pay a thread (#5123); a thread left out is paid
+      // by its leading resonance.
+      ...(Object.keys(selection.payers).length > 0 ? { pull_payers: selection.payers } : {}),
     },
   };
 }

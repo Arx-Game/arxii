@@ -349,6 +349,32 @@ class StartingTechniquePicksFieldTest(TestCase):
         assert updated.starting_technique_picks == 1
 
 
+class ResonanceCreationPointsFieldTest(TestCase):
+    """resonance_creation_points (#5123) - read-only, backs the Gift stage's resonance
+    step budget ("n of m placed"); it is DriftConfig.creation_points, never hard-coded."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.draft = CharacterDraftFactory(account=AccountFactory())
+
+    def test_reads_the_drift_config(self) -> None:
+        from world.magic.services.drift import get_drift_config
+
+        config = get_drift_config()
+        config.creation_points = 7
+        config.save()
+        serializer = CharacterDraftSerializer(instance=self.draft)
+        assert serializer.data["resonance_creation_points"] == 7
+
+    def test_is_read_only(self) -> None:
+        serializer = CharacterDraftSerializer(
+            instance=self.draft, data={"resonance_creation_points": 99}, partial=True
+        )
+        assert serializer.is_valid(), serializer.errors
+        serializer.save()
+        assert serializer.data["resonance_creation_points"] != 99
+
+
 class CGExplanationsSerializerPersonalizationPlaceholderTest(TestCase):
     """A missing make-it-yours panel key is filled at read time (#4099).
 

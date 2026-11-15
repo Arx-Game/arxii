@@ -748,6 +748,18 @@ class AuraPowerTermTests(TestCase):
         from world.magic.factories import AuraPowerConfigFactory
         from world.magic.services.power_terms import aura_power_term
 
+        # Celestial is 50% of the aura and part of who she is (settled), so a cast in it
+        # takes the full bonus rather than half of it (#5123).
+        AuraPowerConfigFactory(affinity_alignment_bonus=20)
+        self.assertEqual(aura_power_term(self._ctx()), 20)
+
+    def test_affinity_alignment_reads_the_current_percent_when_not_settled(self):
+        from world.magic.factories import AuraPowerConfigFactory
+        from world.magic.services.power_terms import aura_power_term
+
+        for share in self.sheet.aura.cached_shares:
+            share.settled_percent = Decimal(0)
+            share.save()
         AuraPowerConfigFactory(affinity_alignment_bonus=20)  # 50% celestial * 20 = 10
         self.assertEqual(aura_power_term(self._ctx()), 10)
 

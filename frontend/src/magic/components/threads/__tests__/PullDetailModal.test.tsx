@@ -49,10 +49,12 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     owner: 100,
     resonance: 1,
     resonance_name: 'Bene',
+    resonances: [],
     target_kind: 'FACET',
     target_trait_id: null,
     target_technique_id: null,
     name: 'Tidal Surge',
+    display_name: overrides.name ?? 'Tidal Surge',
     description: '',
     level: 10,
     developed_points: 20,
@@ -73,6 +75,7 @@ function makePreviewResponse(overrides: Partial<PullPreviewResponse> = {}): Pull
     affordable: true,
     capped_intensity: false,
     resolved_effects: [],
+    per_thread: [],
     burn: null,
     ...overrides,
   };
@@ -119,17 +122,17 @@ describe('PullDetailModal', () => {
     expect(screen.getByText('Vow of the Drowned')).toBeInTheDocument();
   });
 
-  it('falls back to "Thread #id" when thread has no name', () => {
+  it("names an unnamed Gift thread by its Gift, the server's display name", () => {
     render(
       <PullDetailModal
-        thread={makeThread({ name: '', id: 42 })}
+        thread={makeThread({ name: '', display_name: 'Kindling', id: 42 })}
         open={true}
         onOpenChange={() => {}}
       />,
       { wrapper: createWrapper() }
     );
 
-    expect(screen.getByText('Thread #42')).toBeInTheDocument();
+    expect(screen.getByText('Kindling')).toBeInTheDocument();
   });
 
   it('renders the PullEffectPreview panel inside the modal', () => {

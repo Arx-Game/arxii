@@ -158,6 +158,15 @@ class CastPullRequestSerializer(serializers.Serializer):
         allow_empty=False,
         max_length=20,
     )
+    payers = serializers.DictField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=dict,
+        help_text=(
+            "Thread id -> the id of the resonance paying for that thread (#5123); a thread "
+            "left out is paid by its leading resonance."
+        ),
+    )
 
 
 class CastPullWithBurnRequestSerializer(CastPullRequestSerializer):
@@ -234,11 +243,13 @@ def _validate_pull_declaration(attrs: dict, *, hostile_check: bool = False) -> d
             thread_ids=pull["thread_ids"],
             burn=pull.get("burn", 0),
             burn_resonance_id=pull.get("burn_resonance_id"),
+            payer_ids=pull.get("payers"),
         )
     except InvalidImbueAmount as exc:
         raise serializers.ValidationError({"pull": exc.user_message}) from exc
 
     pull["threads"] = list(declaration.threads)
+    pull["payer_map"] = dict(declaration.payers)
     pull["burn_resonance"] = declaration.burned_resonance if declaration.burn else None
     return attrs
 
@@ -811,6 +822,17 @@ class TechniqueResultSerializer(serializers.Serializer):
     mishap_label = serializers.SerializerMethodField()
     # #5018: what calling up her gift's substance took on this cast, if anything.
     substance_call_up = serializers.SerializerMethodField()
+    # #5123: the sentences an unsettled caster is told about her focus on this cast, the
+    # same ones telnet prints (empty when she was settled).
+    focus_lines = serializers.SerializerMethodField()
+
+    @extend_schema_field(serializers.ListField(child=serializers.CharField()))
+    def get_focus_lines(self, obj: object) -> list[str]:
+        from world.magic.types import TechniqueUseResult  # noqa: PLC0415
+
+        if not isinstance(obj, TechniqueUseResult) or obj.focus is None:
+            return []
+        return list(obj.focus.lines)
 
     @extend_schema_field(SubstanceCallUpSerializer(allow_null=True))
     def get_substance_call_up(self, obj: object) -> dict | None:

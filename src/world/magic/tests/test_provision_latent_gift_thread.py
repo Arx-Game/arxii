@@ -23,7 +23,7 @@ class ProvisionLatentGiftThreadTests(TestCase):
         cls.gift.resonances.add(cls.resonance)
 
     def test_provision_creates_level_0_gift_thread(self) -> None:
-        provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)
+        provision_latent_gift_thread(self.sheet, self.gift, resonances=[self.resonance])
         thread = Thread.objects.get(
             owner=self.sheet,
             target_kind=TargetKind.GIFT,
@@ -34,8 +34,8 @@ class ProvisionLatentGiftThreadTests(TestCase):
         self.assertIsNone(thread.retired_at)
 
     def test_provision_idempotent(self) -> None:
-        provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)
-        provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)
+        provision_latent_gift_thread(self.sheet, self.gift, resonances=[self.resonance])
+        provision_latent_gift_thread(self.sheet, self.gift, resonances=[self.resonance])
         self.assertEqual(
             Thread.objects.filter(
                 owner=self.sheet,
@@ -55,7 +55,7 @@ class GiftResonancesForTests(TestCase):
         cls.gift.resonances.add(cls.resonance)
 
     def test_returns_thread_resonance_when_owned(self) -> None:
-        provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)
+        provision_latent_gift_thread(self.sheet, self.gift, resonances=[self.resonance])
         result = gift_resonances_for(self.sheet.character, self.gift)
         self.assertEqual([r.pk for r in result], [self.resonance.pk])
 
@@ -75,7 +75,7 @@ class ResolveSpecializedVariantTests(TestCase):
         cls.technique = TechniqueFactory(gift=cls.gift)
 
     def test_resolves_parent_when_thread_below_threshold(self) -> None:
-        provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)
+        provision_latent_gift_thread(self.sheet, self.gift, resonances=[self.resonance])
         # thread level 0, variant unlock 3 -> parent technique
         result = resolve_specialized_variant(entity=self.technique, character=self.sheet.character)
         self.assertEqual(result, self.technique)

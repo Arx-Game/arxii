@@ -604,7 +604,7 @@ class ProtagonismLockResonanceSpendTests(TestCase):
         thread = ThreadFactory(owner=sheet, resonance=res)
 
         with self.assertRaises(ProtagonismLockedError):
-            spend_resonance_for_imbuing(sheet, thread, 10)
+            spend_resonance_for_imbuing(sheet, thread, thread.resonance, 10)
 
     def test_spend_resonance_for_pull_blocked(self) -> None:
         from world.magic.exceptions import ProtagonismLockedError
@@ -683,7 +683,7 @@ class CrossingThresholdImbuingTests(TestCase):
         """Imbuing 29→30 blocks at the level-30 crossing when requirement unmet."""
         self._gate(30)
         thread = self._make_thread_at_level(29)
-        result = self.spend(self.sheet, thread, 2000)
+        result = self.spend(self.sheet, thread, thread.resonance, 2000)
 
         assert result.blocked_by == "CROSSING_REQUIREMENT"
         assert result.new_level == 29  # did NOT cross to stored 30
@@ -695,7 +695,7 @@ class CrossingThresholdImbuingTests(TestCase):
         """Level 3 is not a crossing: a threshold row there never stops a 2→3 imbue."""
         self._gate(3)
         thread = self._make_thread_at_level(2)
-        result = self.spend(self.sheet, thread, 1)
+        result = self.spend(self.sheet, thread, thread.resonance, 1)
 
         assert result.blocked_by == "NONE"
         assert result.new_level == 3
@@ -707,7 +707,7 @@ class CrossingThresholdImbuingTests(TestCase):
         self._gate(30)
         ItemInstanceFactory(template=self.template, holder_character_sheet=self.sheet)
         thread = self._make_thread_at_level(29)
-        result = self.spend(self.sheet, thread, 2000)
+        result = self.spend(self.sheet, thread, thread.resonance, 2000)
 
         assert result.blocked_by == "NONE"
         assert result.new_level == 30
@@ -716,7 +716,7 @@ class CrossingThresholdImbuingTests(TestCase):
     def test_fail_open_when_no_threshold_authored(self) -> None:
         """No ThreadCrossingThreshold row for (TRAIT, 30) → advance freely."""
         thread = self._make_thread_at_level(29)
-        result = self.spend(self.sheet, thread, 2000)
+        result = self.spend(self.sheet, thread, thread.resonance, 2000)
 
         assert result.blocked_by == "NONE"
         assert result.new_level == 30
@@ -728,7 +728,7 @@ class CrossingThresholdImbuingTests(TestCase):
 
         ThreadCrossingThreshold.objects.create(target_kind=TargetKind.TRAIT, level=30)
         thread = self._make_thread_at_level(29)
-        result = self.spend(self.sheet, thread, 2000)
+        result = self.spend(self.sheet, thread, thread.resonance, 2000)
 
         assert result.blocked_by == "NONE"
         assert result.new_level == 30
@@ -741,7 +741,7 @@ class CrossingThresholdImbuingTests(TestCase):
         """
         self._gate(30)
         thread = self._make_thread_at_level(27)
-        result = self.spend(self.sheet, thread, 6000)
+        result = self.spend(self.sheet, thread, thread.resonance, 6000)
 
         assert result.blocked_by == "CROSSING_REQUIREMENT"
         assert result.new_level == 29  # advanced 27→28→29, blocked at 30
@@ -760,7 +760,7 @@ class CrossingThresholdImbuingTests(TestCase):
         ).count()
 
         thread = self._make_thread_at_level(29)
-        self.spend(self.sheet, thread, 2000)
+        self.spend(self.sheet, thread, thread.resonance, 2000)
 
         count_after = ItemInstance.objects.filter(
             holder_character_sheet=self.sheet, template=self.template
@@ -771,7 +771,7 @@ class CrossingThresholdImbuingTests(TestCase):
         """The gate fires at the level-60 crossing too."""
         self._gate(60)
         thread = self._make_thread_at_level(59)
-        result = self.spend(self.sheet, thread, 5000)
+        result = self.spend(self.sheet, thread, thread.resonance, 5000)
 
         assert result.blocked_by == "CROSSING_REQUIREMENT"
         assert result.new_level == 59
@@ -784,14 +784,14 @@ class CrossingThresholdImbuingTests(TestCase):
         self._gate(30)
         # A GIFT thread at 29 should NOT be gated by a TRAIT threshold
         gift = GiftFactory()
-        provision_latent_gift_thread(self.sheet, gift, resonance=self.resonance)
+        provision_latent_gift_thread(self.sheet, gift, resonances=[self.resonance])
         thread = next(
             t for t in self.sheet.character.threads.all() if t.target_kind == TargetKind.GIFT
         )
         thread.level = 29
         thread.save(update_fields=["level"])
         self._unlock_boundaries(thread)
-        result = self.spend(self.sheet, thread, 2000)
+        result = self.spend(self.sheet, thread, thread.resonance, 2000)
         assert result.blocked_by == "NONE"
         assert result.new_level == 30
 
@@ -844,7 +844,7 @@ class ImbueApChargeTests(TestCase):
         config = GiftAcquisitionConfig.objects.cached_singleton()
         expected_ap = config.imbue_ap_cost if config else 2
 
-        self.spend(self.sheet, thread, 100)
+        self.spend(self.sheet, thread, thread.resonance, 100)
 
         self.ap_pool.refresh_from_db()
         self.assertEqual(self.ap_pool.current, 200 - expected_ap)
@@ -859,7 +859,7 @@ class ImbueApChargeTests(TestCase):
         thread = self._make_thread_at_level(0)
 
         with self.assertRaises(MagicError):
-            self.spend(self.sheet, thread, 100)
+            self.spend(self.sheet, thread, thread.resonance, 100)
 
         # Resonance balance is unchanged (atomic — both or neither).
         cr = CharacterResonance.objects.get(character_sheet=self.sheet, resonance=self.resonance)
@@ -893,7 +893,7 @@ class ImbueApChargeTests(TestCase):
         base_ap = config.imbue_ap_cost if config else 2
         expected_ap = math.ceil(base_ap * 150 / 100)
 
-        self.spend(self.sheet, thread, 100)
+        self.spend(self.sheet, thread, thread.resonance, 100)
 
         self.ap_pool.refresh_from_db()
         self.assertEqual(self.ap_pool.current, 200 - expected_ap)
@@ -906,7 +906,7 @@ class ImbueApChargeTests(TestCase):
         config = GiftAcquisitionConfig.objects.cached_singleton()
         expected_ap = config.imbue_ap_cost if config else 2
 
-        self.spend(self.sheet, thread, 100)
+        self.spend(self.sheet, thread, thread.resonance, 100)
 
         self.ap_pool.refresh_from_db()
         self.assertEqual(self.ap_pool.current, 200 - expected_ap)
@@ -922,7 +922,7 @@ class ImbueApChargeTests(TestCase):
         GiftAcquisitionConfig.objects.flush_singleton_cache()
 
         thread = self._make_thread_at_level(0)
-        self.spend(self.sheet, thread, 100)
+        self.spend(self.sheet, thread, thread.resonance, 100)
 
         self.ap_pool.refresh_from_db()
         self.assertEqual(self.ap_pool.current, 200 - 4)

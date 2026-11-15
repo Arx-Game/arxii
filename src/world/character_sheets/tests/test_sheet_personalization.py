@@ -20,6 +20,7 @@ from world.magic.factories import (
 )
 from world.magic.models import PriceComponentRequirement, Thread
 from world.magic.services.technique_forms import next_signatures_by_technique
+from world.magic.services.thread_rows import write_resonance_rows
 
 
 class SheetPersonalizationTests(TestCase):
@@ -103,12 +104,11 @@ class SheetPersonalizationTests(TestCase):
 
 
 class NextSignaturesByTechniqueTieBreakTests(TestCase):
-    """#4099 fix round 1: several TECHNIQUE threads on one technique pick deterministically.
+    """#4099 fix round 1: several flourishes ahead of one TECHNIQUE thread pick deterministically.
 
-    ``uniq_thread_technique`` allows more than one TECHNIQUE thread per
-    ``(owner, target_technique)`` as long as the resonance differs, so a
-    multi-resonance caster can hold two threads naming the same technique. The
-    pick must not depend on dict-overwrite (iteration) order.
+    A thread holds one anchor (#5123), so a technique has one thread and the flourishes
+    it can open are the ones gated on its leading resonance. The nearest wins by
+    ``min_crossing_level``, then name, so the pick never depends on catalog order.
     """
 
     @classmethod
@@ -117,32 +117,31 @@ class NextSignaturesByTechniqueTieBreakTests(TestCase):
         gift = GiftFactory()
         CharacterGiftFactory(character=cls.sheet, gift=gift)
         cls.technique = TechniqueFactory(gift=gift, name="Scorch Lash", level=1)
-        cls.resonance_a = ResonanceFactory()
-        cls.resonance_b = ResonanceFactory()
+        cls.resonance = ResonanceFactory()
+        cls.other_resonance = ResonanceFactory()
 
-    def _threads(self) -> None:
-        Thread.objects.create(
+    def _thread(self) -> None:
+        thread = Thread.objects.create(
             owner=self.sheet,
-            resonance=self.resonance_a,
+            resonance=self.resonance,
             target_kind=TargetKind.TECHNIQUE,
             target_technique=self.technique,
             level=1,
         )
-        Thread.objects.create(
-            owner=self.sheet,
-            resonance=self.resonance_b,
-            target_kind=TargetKind.TECHNIQUE,
-            target_technique=self.technique,
-            level=1,
-        )
+        write_resonance_rows(thread, [self.resonance])
 
     def test_picks_the_lowest_min_crossing_level(self) -> None:
-        self._threads()
+        self._thread()
         SignatureMotifBonusFactory(
-            name="Farther flourish", required_resonance=self.resonance_a, min_crossing_level=60
+            name="Farther flourish", required_resonance=self.resonance, min_crossing_level=60
         )
         SignatureMotifBonusFactory(
-            name="Nearer flourish", required_resonance=self.resonance_b, min_crossing_level=30
+            name="Nearer flourish", required_resonance=self.resonance, min_crossing_level=30
+        )
+        SignatureMotifBonusFactory(
+            name="Other resonance flourish",
+            required_resonance=self.other_resonance,
+            min_crossing_level=10,
         )
 
         result = next_signatures_by_technique(self.sheet.character)
@@ -151,12 +150,12 @@ class NextSignaturesByTechniqueTieBreakTests(TestCase):
         self.assertEqual(result[self.technique.pk]["min_level"], 30)
 
     def test_ties_on_level_break_by_name(self) -> None:
-        self._threads()
+        self._thread()
         SignatureMotifBonusFactory(
-            name="Zed flourish", required_resonance=self.resonance_a, min_crossing_level=30
+            name="Zed flourish", required_resonance=self.resonance, min_crossing_level=30
         )
         SignatureMotifBonusFactory(
-            name="Able flourish", required_resonance=self.resonance_b, min_crossing_level=30
+            name="Able flourish", required_resonance=self.resonance, min_crossing_level=30
         )
 
         result = next_signatures_by_technique(self.sheet.character)

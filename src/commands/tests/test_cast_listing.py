@@ -147,7 +147,7 @@ class CastListingFormsTests(TestCase):
             unlock_thread_level=30,
             name_override="Ashfall Lash",
         )
-        provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)
+        provision_latent_gift_thread(self.sheet, self.gift, resonances=[self.resonance])
         thread = Thread.objects.get(
             owner=self.sheet, target_kind=TargetKind.GIFT, target_gift=self.gift
         )

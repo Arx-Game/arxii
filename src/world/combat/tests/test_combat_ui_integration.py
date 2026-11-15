@@ -169,7 +169,7 @@ class CombatUIRoundTripIntegrationTests(TestCase):
             resonance_spent=2,
             anima_spent=0,
         )
-        pull.threads.add(thread)
+        pull.threads.add(thread, through_defaults={"paying_resonance": thread.resonance})
 
         fetched = CombatPull.objects.get(pk=pull.pk)
         self.assertEqual(fetched.resonance_spent, 2)
@@ -228,7 +228,7 @@ class CombatUIRoundTripIntegrationTests(TestCase):
             resonance_spent=2,
             anima_spent=0,
         )
-        pull.threads.add(thread)
+        pull.threads.add(thread, through_defaults={"paying_resonance": thread.resonance})
 
         # Step C — ACTION interactions then POSE with auto-link.
         action_a = self._make_interaction(mode=InteractionMode.ACTION, ts_offset_seconds=1)

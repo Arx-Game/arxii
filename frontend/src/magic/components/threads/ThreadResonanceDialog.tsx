@@ -1,14 +1,15 @@
 /**
- * ThreadResonanceDialog (#4735, Screen 6 of the approved demo) - move a thread to
- * another resonance.
+ * ThreadResonanceDialog (#4735, Screen 6 of the approved demo) - move part of a thread's
+ * resonance to another resonance (#5123: a thread holds several, on rows with amounts).
  *
- * One framed box headed "Thread: <name> · level <n> · <resonance>", a "Change to" row of
- * resonance pills, the component pills for the chosen option, the points the thread keeps,
- * and a right-aligned Retune thread button. The rite is the authored retune ritual the
- * options endpoint names. When the thread cannot move (no rite, an anchor that holds its
+ * One framed box headed "Thread: <name> · level <n> · <resonance>", a "Move from" row of the
+ * thread's own resonances (when it holds more than one), a "Points to move" stepper (all of
+ * the row by default), a "Change to" row of resonance pills, the component pills for the
+ * chosen option, the points that land, and a right-aligned Retune thread button. The rite is
+ * the authored retune ritual the options endpoint names. When the thread cannot move (no rite, an anchor that holds its
  * resonance, no options) the server's `unavailable_reason` stands in for the pills.
  * Offerings are picked only when the rite asks for them (`offering_required`), up to
- * `offering_count`. A move that merges into another thread opens the survivor afterwards.
+ * `offering_count`. When the result names a different thread, that thread opens afterwards.
  */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -17,7 +18,12 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle, NO_DESCRIPTION } from '@/components/ui/dialog';
 import { pillClass } from '../pillClass';
 import { useRetuneThread, useThreadResonanceOptions } from '../../queries';
-import type { ConversionType, Thread, ThreadResonanceOption } from '../../types';
+import type {
+  ConversionType,
+  Thread,
+  ThreadResonanceOption,
+  ThreadResonanceRow,
+} from '../../types';
 
 const CONVERSION_TYPE_LABELS: Record<ConversionType, string> = {
   FALL: 'Fall',
@@ -49,6 +55,183 @@ function survivorId(result: Record<string, unknown> | undefined): number | null 
   return typeof id === 'number' ? id : null;
 }
 
+/** The retune's optional kwargs: which row it draws from, and how much when not all of it. */
+function moveKwargs(
+  fromRow: ThreadResonanceRow | undefined,
+  moveAmount: number | null,
+  moving: number
+): { from_resonance?: number; amount?: number } {
+  return {
+    ...(fromRow ? { from_resonance: fromRow.resonance_id } : {}),
+    ...(moveAmount !== null ? { amount: moving } : {}),
+  };
+}
+
+interface FromRowProps {
+  rows: ThreadResonanceRow[];
+  activeId: number | undefined;
+  onPick: (resonanceId: number) => void;
+}
+
+/** "Move from": the thread's own resonances, one pill each. */
+function FromRow({ rows, activeId, onPick }: FromRowProps) {
+  return (
+    <div
+      className="flex flex-wrap items-center gap-2"
+      role="radiogroup"
+      aria-label="Move from"
+      data-testid="resonance-from"
+    >
+      <span className="text-sm text-muted-foreground">Move from</span>
+      {rows.map((r) => (
+        <button
+          key={r.resonance_id}
+          type="button"
+          role="radio"
+          aria-checked={r.resonance_id === activeId}
+          onClick={() => onPick(r.resonance_id)}
+          data-testid={`resonance-from-${r.resonance_id}`}
+          className={pillClass(r.resonance_id === activeId)}
+        >
+          {r.resonance_name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+interface AmountStepperProps {
+  moving: number;
+  rowAmount: number;
+  isAll: boolean;
+  onStep: (delta: number) => void;
+  onAll: () => void;
+}
+
+/** "Points to move": a stepper, with a button back to all of the row. */
+function AmountStepper({ moving, rowAmount, isAll, onStep, onAll }: AmountStepperProps) {
+  return (
+    <div className="flex flex-wrap items-center gap-2" data-testid="resonance-amount">
+      <span className="text-sm text-muted-foreground">Points to move</span>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        aria-label="Move fewer points"
+        onClick={() => onStep(-1)}
+        disabled={moving <= 1}
+        data-testid="resonance-amount-down"
+      >
+        -
+      </Button>
+      <span
+        className="w-10 text-center font-medium tabular-nums"
+        data-testid="resonance-amount-value"
+      >
+        {moving}
+      </span>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        aria-label="Move more points"
+        onClick={() => onStep(1)}
+        disabled={moving >= rowAmount}
+        data-testid="resonance-amount-up"
+      >
+        +
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={onAll}
+        disabled={isAll}
+        data-testid="resonance-amount-all"
+      >
+        All
+      </Button>
+    </div>
+  );
+}
+
+interface OptionSectionProps {
+  options: ThreadResonanceOption[];
+  selected: ThreadResonanceOption;
+  moving: number;
+  offeringRequired: boolean;
+  componentIds: number[];
+  onPickOption: (resonanceId: number) => void;
+  onToggleComponent: (itemId: number) => void;
+}
+
+/** "Change to" pills, the chosen option's components, and the points that land. */
+function OptionSection({
+  options,
+  selected,
+  moving,
+  offeringRequired,
+  componentIds,
+  onPickOption,
+  onToggleComponent,
+}: OptionSectionProps) {
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm text-muted-foreground">Change to</span>
+        {options.map((o) => (
+          <button
+            key={o.resonance_id}
+            type="button"
+            aria-pressed={o.resonance_id === selected.resonance_id}
+            onClick={() => onPickOption(o.resonance_id)}
+            data-testid={`resonance-option-${o.resonance_id}`}
+            className={`inline-flex items-center gap-1.5 ${pillClass(
+              o.resonance_id === selected.resonance_id
+            )}`}
+          >
+            <span
+              aria-hidden="true"
+              data-testid={`resonance-swatch-${o.resonance_id}`}
+              className={`h-2.5 w-2.5 rounded-sm ${swatchFor(
+                o,
+                o.resonance_id === selected.resonance_id
+              )}`}
+            />
+            {o.resonance_name} {optionSuffix(o)}
+          </button>
+        ))}
+      </div>
+
+      {offeringRequired && selected.qualifying.length > 0 ? (
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Components">
+          {selected.qualifying.map((c) => (
+            <button
+              key={c.item_id}
+              type="button"
+              aria-pressed={componentIds.includes(c.item_id)}
+              onClick={() => onToggleComponent(c.item_id)}
+              data-testid={`resonance-component-${c.item_id}`}
+              className={pillClass(componentIds.includes(c.item_id))}
+            >
+              {c.name} · {c.mode}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {offeringRequired && selected.qualifying.length === 0 ? (
+        <p role="status" className="text-sm" data-testid="resonance-no-offering">
+          You carry no offering for {selected.resonance_name}.
+        </p>
+      ) : null}
+
+      <p className="text-sm" data-testid="resonance-projected">
+        {moving} points → {selected.projected_points}
+      </p>
+    </>
+  );
+}
+
 interface ThreadResonanceDialogProps {
   thread: Thread;
   open: boolean;
@@ -56,11 +239,23 @@ interface ThreadResonanceDialogProps {
 }
 
 export function ThreadResonanceDialog({ thread, open, onOpenChange }: ThreadResonanceDialogProps) {
-  const { data, isLoading, isError } = useThreadResonanceOptions(thread.id, open);
   const retune = useRetuneThread();
   const navigate = useNavigate();
   const [pickedResonanceId, setPickedResonanceId] = useState<number | null>(null);
   const [componentIds, setComponentIds] = useState<number[]>([]);
+  const rows = thread.resonances ?? [];
+  const [fromId, setFromId] = useState<number | null>(null);
+  // null = move all of the row.
+  const [moveAmount, setMoveAmount] = useState<number | null>(null);
+
+  const fromRow = rows.find((r) => r.resonance_id === fromId) ?? rows.find((r) => r.leads);
+  const rowAmount = fromRow?.amount ?? thread.developed_points;
+  const moving = moveAmount === null ? rowAmount : Math.min(moveAmount, rowAmount);
+  const { data, isLoading, isError } = useThreadResonanceOptions(
+    thread.id,
+    open,
+    fromRow ? { fromResonance: fromRow.resonance_id, amount: moveAmount } : undefined
+  );
 
   const options = data?.options ?? [];
   const unavailableReason = data?.unavailable_reason ?? '';
@@ -79,6 +274,26 @@ export function ThreadResonanceDialog({ thread, open, onOpenChange }: ThreadReso
     selected !== undefined &&
     (!offeringRequired || (picksNeeded > 0 && componentIds.length === picksNeeded)) &&
     !retune.isPending;
+
+  function pickFrom(resonanceId: number) {
+    retune.reset();
+    setFromId(resonanceId);
+    setMoveAmount(null);
+    setPickedResonanceId(null);
+    setComponentIds([]);
+  }
+
+  function stepAmount(delta: number) {
+    retune.reset();
+    setMoveAmount(Math.max(1, Math.min(rowAmount, moving + delta)));
+    setComponentIds([]);
+  }
+
+  function resetAmount() {
+    retune.reset();
+    setMoveAmount(null);
+    setComponentIds([]);
+  }
 
   function pickOption(resonanceId: number) {
     retune.reset();
@@ -102,7 +317,11 @@ export function ThreadResonanceDialog({ thread, open, onOpenChange }: ThreadReso
       {
         character_sheet_id: thread.owner,
         ritual_id: ritualId,
-        kwargs: { thread_id: thread.id, target_resonance: selected.resonance_id },
+        kwargs: {
+          thread_id: thread.id,
+          target_resonance: selected.resonance_id,
+          ...moveKwargs(fromRow, moveAmount, moving),
+        },
         components: offeringRequired ? componentIds : [],
       },
       {
@@ -124,8 +343,7 @@ export function ThreadResonanceDialog({ thread, open, onOpenChange }: ThreadReso
         data-testid="thread-resonance-dialog"
       >
         <DialogTitle className="text-sm font-semibold">
-          Thread: {thread.name.trim() || '(unnamed)'} · level {thread.level} ·{' '}
-          {thread.resonance_name}
+          Thread: {thread.display_name} · level {thread.level} · {thread.resonance_name}
         </DialogTitle>
 
         {isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
@@ -141,68 +359,30 @@ export function ThreadResonanceDialog({ thread, open, onOpenChange }: ThreadReso
           </p>
         ) : null}
 
+        {rows.length > 1 ? (
+          <FromRow rows={rows} activeId={fromRow?.resonance_id} onPick={pickFrom} />
+        ) : null}
+
+        {fromRow && rowAmount > 1 ? (
+          <AmountStepper
+            moving={moving}
+            rowAmount={rowAmount}
+            isAll={moveAmount === null}
+            onStep={stepAmount}
+            onAll={resetAmount}
+          />
+        ) : null}
+
         {selected ? (
-          <>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm text-muted-foreground">Change to</span>
-              {options.map((o) => (
-                <button
-                  key={o.resonance_id}
-                  type="button"
-                  aria-pressed={o.resonance_id === selected.resonance_id}
-                  onClick={() => pickOption(o.resonance_id)}
-                  data-testid={`resonance-option-${o.resonance_id}`}
-                  className={`inline-flex items-center gap-1.5 ${pillClass(
-                    o.resonance_id === selected.resonance_id
-                  )}`}
-                >
-                  <span
-                    aria-hidden="true"
-                    data-testid={`resonance-swatch-${o.resonance_id}`}
-                    className={`h-2.5 w-2.5 rounded-sm ${swatchFor(
-                      o,
-                      o.resonance_id === selected.resonance_id
-                    )}`}
-                  />
-                  {o.resonance_name} {optionSuffix(o)}
-                  {o.merges_into_thread_id !== null ? (
-                    <span
-                      className="rounded-sm border border-current px-1 text-xs"
-                      data-testid={`resonance-merges-${o.resonance_id}`}
-                    >
-                      merges
-                    </span>
-                  ) : null}
-                </button>
-              ))}
-            </div>
-
-            {offeringRequired && selected.qualifying.length > 0 ? (
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Components">
-                {selected.qualifying.map((c) => (
-                  <button
-                    key={c.item_id}
-                    type="button"
-                    aria-pressed={componentIds.includes(c.item_id)}
-                    onClick={() => toggleComponent(c.item_id)}
-                    data-testid={`resonance-component-${c.item_id}`}
-                    className={pillClass(componentIds.includes(c.item_id))}
-                  >
-                    {c.name} · {c.mode}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            {offeringRequired && selected.qualifying.length === 0 ? (
-              <p role="status" className="text-sm" data-testid="resonance-no-offering">
-                You carry no offering for {selected.resonance_name}.
-              </p>
-            ) : null}
-
-            <p className="text-sm" data-testid="resonance-projected">
-              {thread.developed_points} points → {selected.projected_points}
-            </p>
-          </>
+          <OptionSection
+            options={options}
+            selected={selected}
+            moving={moving}
+            offeringRequired={offeringRequired}
+            componentIds={componentIds}
+            onPickOption={pickOption}
+            onToggleComponent={toggleComponent}
+          />
         ) : null}
 
         {retune.isError ? (

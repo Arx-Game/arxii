@@ -1,8 +1,9 @@
 """Tests for the Glimpse affinity nudge mechanic (#2694).
 
-The nudge is a one-time CG-finalize adjustment: after recompute_aura sets
-the aura from resonance history, TONE and TRIGGER tags with an ``affinity``
-FK shift the matching affinity by a few percentage points.
+The nudge is a one-time CG-finalize adjustment: after the aura is settled from the
+seeded resonance, TONE and TRIGGER tags with an ``affinity`` FK shift the matching
+affinity's settled share by a few percentage points (#5123). The aura the character has
+(resonance history) is not touched.
 """
 
 from decimal import Decimal
@@ -22,6 +23,17 @@ from world.magic.services.glimpse import (
 )
 
 
+def settled_for(aura, affinity) -> Decimal:
+    """The affinity's settled share (who the character is), 0 when it has no row."""
+    row = aura.shares.filter(affinity=affinity).first()
+    return row.settled_percent if row else Decimal(0)
+
+
+def settled_total(aura) -> Decimal:
+    """The sum of the settled shares."""
+    return sum((row.settled_percent for row in aura.shares.all()), Decimal(0))
+
+
 class GlimpseAffinityNudgeTests(TestCase):
     """Tests for apply_glimpse_affinity_nudge."""
 
@@ -39,9 +51,9 @@ class GlimpseAffinityNudgeTests(TestCase):
         )
         apply_glimpse_affinity_nudge(aura)
         aura.refresh_from_db()
-        assert aura.percent_for(self.celestial) == Decimal("10.00")
-        assert aura.percent_for(self.primal) == Decimal("70.00")
-        assert aura.percent_for(self.abyssal) == Decimal("20.00")
+        assert settled_for(aura, self.celestial) == Decimal("10.00")
+        assert settled_for(aura, self.primal) == Decimal("70.00")
+        assert settled_for(aura, self.abyssal) == Decimal("20.00")
 
     def test_tag_without_affinity_no_change(self):
         """A tag with affinity=None is inert."""
@@ -55,9 +67,9 @@ class GlimpseAffinityNudgeTests(TestCase):
         CharacterGlimpseTagFactory(aura=aura, tag=tag)
         apply_glimpse_affinity_nudge(aura)
         aura.refresh_from_db()
-        assert aura.percent_for(self.celestial) == Decimal("10.00")
-        assert aura.percent_for(self.primal) == Decimal("70.00")
-        assert aura.percent_for(self.abyssal) == Decimal("20.00")
+        assert settled_for(aura, self.celestial) == Decimal("10.00")
+        assert settled_for(aura, self.primal) == Decimal("70.00")
+        assert settled_for(aura, self.abyssal) == Decimal("20.00")
 
     def test_consequence_tag_no_change(self):
         """CONSEQUENCE axis tags are ignored even if they have an affinity."""
@@ -72,9 +84,9 @@ class GlimpseAffinityNudgeTests(TestCase):
         CharacterGlimpseTagFactory(aura=aura, tag=tag)
         apply_glimpse_affinity_nudge(aura)
         aura.refresh_from_db()
-        assert aura.percent_for(self.celestial) == Decimal("10.00")
-        assert aura.percent_for(self.primal) == Decimal("70.00")
-        assert aura.percent_for(self.abyssal) == Decimal("20.00")
+        assert settled_for(aura, self.celestial) == Decimal("10.00")
+        assert settled_for(aura, self.primal) == Decimal("70.00")
+        assert settled_for(aura, self.abyssal) == Decimal("20.00")
 
     def test_sensory_tag_no_change(self):
         """SENSORY axis tags are ignored."""
@@ -87,9 +99,9 @@ class GlimpseAffinityNudgeTests(TestCase):
         CharacterGlimpseTagFactory(aura=aura, tag=tag)
         apply_glimpse_affinity_nudge(aura)
         aura.refresh_from_db()
-        assert aura.percent_for(self.celestial) == Decimal("10.00")
-        assert aura.percent_for(self.primal) == Decimal("70.00")
-        assert aura.percent_for(self.abyssal) == Decimal("20.00")
+        assert settled_for(aura, self.celestial) == Decimal("10.00")
+        assert settled_for(aura, self.primal) == Decimal("70.00")
+        assert settled_for(aura, self.abyssal) == Decimal("20.00")
 
     def test_witness_tag_no_change(self):
         """WITNESS axis tags are ignored."""
@@ -104,9 +116,9 @@ class GlimpseAffinityNudgeTests(TestCase):
         CharacterGlimpseTagFactory(aura=aura, tag=tag)
         apply_glimpse_affinity_nudge(aura)
         aura.refresh_from_db()
-        assert aura.percent_for(self.celestial) == Decimal("10.00")
-        assert aura.percent_for(self.primal) == Decimal("70.00")
-        assert aura.percent_for(self.abyssal) == Decimal("20.00")
+        assert settled_for(aura, self.celestial) == Decimal("10.00")
+        assert settled_for(aura, self.primal) == Decimal("70.00")
+        assert settled_for(aura, self.abyssal) == Decimal("20.00")
 
     def test_tone_tag_nudges_celestial(self):
         """A TONE tag with affinity=Celestial shifts celestial up."""
@@ -121,13 +133,11 @@ class GlimpseAffinityNudgeTests(TestCase):
         aura.refresh_from_db()
         nudge = Decimal(GLIMPSE_AFFINITY_NUDGE_PERCENT)
         # celestial goes up by nudge, primal and abyssal each down by nudge/2
-        assert aura.percent_for(self.celestial) == (Decimal("33.33") + nudge).quantize(
+        assert settled_for(aura, self.celestial) == (Decimal("33.33") + nudge).quantize(
             Decimal("0.01")
         )
         # sum must be 100.00
-        assert aura.percent_for(self.celestial) + aura.percent_for(self.primal) + aura.percent_for(
-            self.abyssal
-        ) == Decimal("100.00")
+        assert settled_total(aura) == Decimal("100.00")
 
     def test_trigger_tag_nudges_abyssal(self):
         """A TRIGGER tag with affinity=Abyssal shifts abyssal up."""
@@ -141,12 +151,10 @@ class GlimpseAffinityNudgeTests(TestCase):
         apply_glimpse_affinity_nudge(aura)
         aura.refresh_from_db()
         nudge = Decimal(GLIMPSE_AFFINITY_NUDGE_PERCENT)
-        assert aura.percent_for(self.abyssal) == (Decimal("20.00") + nudge).quantize(
+        assert settled_for(aura, self.abyssal) == (Decimal("20.00") + nudge).quantize(
             Decimal("0.01")
         )
-        assert aura.percent_for(self.celestial) + aura.percent_for(self.primal) + aura.percent_for(
-            self.abyssal
-        ) == Decimal("100.00")
+        assert settled_total(aura) == Decimal("100.00")
 
     def test_tone_and_trigger_both_nudge(self):
         """A TONE tag and a TRIGGER tag both fire (different affinities).
@@ -172,12 +180,10 @@ class GlimpseAffinityNudgeTests(TestCase):
         aura.refresh_from_db()
         # The key invariant: sum stays 100.00 and both nudged affinities
         # end up higher than they started.
-        assert aura.percent_for(self.celestial) > Decimal("33.33")
-        assert aura.percent_for(self.abyssal) > Decimal("33.33")
-        assert aura.percent_for(self.primal) < Decimal("33.34")
-        assert aura.percent_for(self.celestial) + aura.percent_for(self.primal) + aura.percent_for(
-            self.abyssal
-        ) == Decimal("100.00")
+        assert settled_for(aura, self.celestial) > Decimal("33.33")
+        assert settled_for(aura, self.abyssal) > Decimal("33.33")
+        assert settled_for(aura, self.primal) < Decimal("33.34")
+        assert settled_total(aura) == Decimal("100.00")
 
     def test_tone_and_trigger_same_affinity_stacks(self):
         """TONE and TRIGGER both nudging the same affinity stack."""
@@ -196,10 +202,8 @@ class GlimpseAffinityNudgeTests(TestCase):
         aura.refresh_from_db()
         nudge = Decimal(GLIMPSE_AFFINITY_NUDGE_PERCENT)
         expected_abyssal = Decimal("10.00") + nudge * 2
-        assert aura.percent_for(self.abyssal) == expected_abyssal.quantize(Decimal("0.01"))
-        assert aura.percent_for(self.celestial) + aura.percent_for(self.primal) + aura.percent_for(
-            self.abyssal
-        ) == Decimal("100.00")
+        assert settled_for(aura, self.abyssal) == expected_abyssal.quantize(Decimal("0.01"))
+        assert settled_total(aura) == Decimal("100.00")
 
     def test_aura_percentages_sum_to_100(self):
         """After nudge, the three percentages always sum to exactly 100.00."""
@@ -212,9 +216,7 @@ class GlimpseAffinityNudgeTests(TestCase):
         CharacterGlimpseTagFactory(aura=aura, tag=tag)
         apply_glimpse_affinity_nudge(aura)
         aura.refresh_from_db()
-        assert aura.percent_for(self.celestial) + aura.percent_for(self.primal) + aura.percent_for(
-            self.abyssal
-        ) == Decimal("100.00")
+        assert settled_total(aura) == Decimal("100.00")
 
     def test_no_negative_percentages(self):
         """Clamping prevents any affinity from going below 0."""
@@ -229,9 +231,38 @@ class GlimpseAffinityNudgeTests(TestCase):
         CharacterGlimpseTagFactory(aura=aura, tag=tag)
         apply_glimpse_affinity_nudge(aura)
         aura.refresh_from_db()
-        assert aura.percent_for(self.celestial) >= Decimal("0.00")
-        assert aura.percent_for(self.primal) >= Decimal("0.00")
-        assert aura.percent_for(self.abyssal) >= Decimal("0.00")
-        assert aura.percent_for(self.celestial) + aura.percent_for(self.primal) + aura.percent_for(
-            self.abyssal
-        ) == Decimal("100.00")
+        assert settled_for(aura, self.celestial) >= Decimal("0.00")
+        assert settled_for(aura, self.primal) >= Decimal("0.00")
+        assert settled_for(aura, self.abyssal) >= Decimal("0.00")
+        assert settled_total(aura) == Decimal("100.00")
+
+    def test_nudge_leaves_the_aura_the_character_has(self):
+        """The aura (resonance history) keeps its shares; only the settled self moves."""
+        aura = CharacterAuraFactory(
+            celestial=Decimal("10.00"),
+            primal=Decimal("70.00"),
+            abyssal=Decimal("20.00"),
+        )
+        tag = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="wonder", affinity=self.celestial)
+        CharacterGlimpseTagFactory(aura=aura, tag=tag)
+        apply_glimpse_affinity_nudge(aura)
+        shares = {row.affinity_id: row.percent for row in aura.shares.all()}
+        assert shares == {
+            self.celestial.pk: Decimal("10.00"),
+            self.primal.pk: Decimal("70.00"),
+            self.abyssal.pk: Decimal("20.00"),
+        }
+        assert settled_for(aura, self.celestial) == Decimal("13.00")
+
+    def test_nudge_into_an_affinity_with_no_share_settles_it_at_zero_aura(self):
+        """A tag for an affinity the aura holds no share of settles it, with no aura share."""
+        aura = CharacterAuraFactory(
+            celestial=Decimal("0.00"),
+            primal=Decimal("100.00"),
+            abyssal=Decimal("0.00"),
+        )
+        tag = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="wonder", affinity=self.celestial)
+        CharacterGlimpseTagFactory(aura=aura, tag=tag)
+        apply_glimpse_affinity_nudge(aura)
+        assert settled_for(aura, self.celestial) == Decimal("3.00")
+        assert aura.shares.get(affinity=self.celestial).percent == Decimal("0.00")

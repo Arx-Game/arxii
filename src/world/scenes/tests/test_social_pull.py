@@ -101,11 +101,12 @@ class ChargeSocialPullTests(TestCase):
         cls.check_type = CheckTypeFactory()
         cls.action_template = ActionTemplateFactory(check_type=cls.check_type)
 
-    def _make_request_with_pull(self, thread, *, tier=1):
+    def _make_request_with_pull(self, thread, *, tier=1, payers=None):
         """Create a PENDING action request with a persisted pull declaration."""
         cast_pull = CastPullDeclaration(
             tier=tier,
             threads=(thread,),
+            payers=payers or {},
         )
         request = create_action_request(
             scene=self.scene,
@@ -131,6 +132,28 @@ class ChargeSocialPullTests(TestCase):
             character_sheet=self.initiator_sheet, resonance=self.resonance
         )
         assert cr.balance == 18  # 20 - 2 resonance_cost
+
+    def test_charges_the_stored_non_leading_payer(self):
+        """The payer picked at declaration is the resonance debited at the later charge (#5123)."""
+        thread = _setup_pull_seed(sheet=self.initiator_sheet, resonance=self.resonance)
+        other = ResonanceFactory()
+        CharacterResonanceFactory(
+            character_sheet=self.initiator_sheet, resonance=other, balance=20, lifetime_earned=20
+        )
+        request = self._make_request_with_pull(thread, payers={thread.pk: other})
+
+        stored = SceneActionPullDeclaration.objects.get(request=request).payers()
+        _charge_social_pull(action_request=request, check_type=self.check_type)
+
+        assert stored == {thread.pk: other}
+        leading = CharacterResonance.objects.get(
+            character_sheet=self.initiator_sheet, resonance=self.resonance
+        )
+        paying = CharacterResonance.objects.get(
+            character_sheet=self.initiator_sheet, resonance=other
+        )
+        assert leading.balance == 20
+        assert paying.balance == 18
 
     def test_waives_anima_in_low_stakes_scene(self):
         """Anima is not charged when no combat or DANGER round is active."""

@@ -19,7 +19,7 @@ class GiftResonancesReadSeamTests(TestCase):
         cls.supported_b = ResonanceFactory()
         cls.gift.resonances.add(cls.supported_a, cls.supported_b)
         # ...but the character's thread is woven at supported_a only.
-        provision_latent_gift_thread(cls.sheet, cls.gift, resonance=cls.supported_a)
+        provision_latent_gift_thread(cls.sheet, cls.gift, resonances=[cls.supported_a])
 
     def test_gift_resonances_for_returns_only_thread_resonance(self) -> None:
         from world.magic.specialization.services import gift_resonances_for

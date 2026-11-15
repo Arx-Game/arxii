@@ -37,6 +37,7 @@ from django.db import transaction
 from actions.constants import ActionBackend
 from actions.errors import ActionDispatchError
 from actions.round_context import RoundContext
+from core.identity_map import CacheGuard
 from world.character_sheets.models import CharacterSheet
 from world.combat.constants import CombatManeuver, ParticipantStatus, PullBurnAction
 from world.combat.models import (
@@ -142,6 +143,27 @@ def _refuse_weapon_technique(technique: Technique) -> None:
     else (#5026): there is no second way to cast one."""
     if technique.enchants_strike:
         raise ActionDispatchError(ActionDispatchError.CAST_INTO_STRIKE)
+
+
+def _keep_pull_rows(participant: CombatParticipant, kwargs: dict[str, Any]) -> CacheGuard | None:
+    """Keep the cached rows a declaration's pull would write, or ``None`` when it has no pull.
+
+    The pull debits the sheet's resonances and anima, may move max health on its vitals row
+    and creates its own pull rows, all identity-mapped; a ``CacheGuard`` can put them back
+    if the declaration is then refused and the transaction rolls back.
+    """
+    if kwargs.get("pull_tier") is None and kwargs.get("cast_pull") is None:
+        return None
+    from world.combat.models import CombatPullResolvedEffect, CombatPullThread  # noqa: PLC0415
+    from world.magic.models import CharacterResonance  # noqa: PLC0415
+
+    sheet = participant.character_sheet
+    guard = CacheGuard()
+    guard.keep(*CharacterResonance.objects.filter(character_sheet=sheet))
+    guard.keep(sheet.anima_or_none)
+    guard.keep(sheet.vitals_or_none)
+    guard.watch_created(CombatPull, CombatPullThread, CombatPullResolvedEffect)
+    return guard
 
 
 class CombatRoundContext(RoundContext):
@@ -374,7 +396,7 @@ class CombatRoundContext(RoundContext):
         """True when this round's committed pull is the one ``cast_pull`` declares (#4736).
 
         A pull is one per participant per round. When the web resubmits a focused cast
-        whose pull already committed, the same resonance, tier, threads and burn are a
+        whose pull already committed, the same payers, tier, threads and burn are a
         no-op. Any other pull already committed this round is refused.
 
         The burn matches when one was asked for both times (``burned_for`` is the focused
@@ -394,8 +416,8 @@ class CombatRoundContext(RoundContext):
         expected_burned_for = PullBurnAction.CAST if cast_pull.burn > 0 else ""
         same = (
             existing.tier == cast_pull.tier
-            and set(existing.threads.values_list("pk", flat=True))
-            == {thread.pk for thread in cast_pull.threads}
+            and set(existing.pull_threads.values_list("thread_id", "paying_resonance_id"))
+            == {(thread.pk, cast_pull.payer_for(thread).pk) for thread in cast_pull.threads}
             and existing.burned_for == expected_burned_for
             and existing.resonance_burned <= cast_pull.burn
         )
@@ -403,8 +425,34 @@ class CombatRoundContext(RoundContext):
             raise ActionDispatchError(ActionDispatchError.PULL_ALREADY_COMMITTED)
         return True
 
-    @transaction.atomic
     def _record_combat_declaration(
+        self,
+        participant: CombatParticipant,
+        player_action: Any,
+        kwargs: dict[str, Any],
+    ) -> None:
+        """Record a combat declaration; a refusal puts what its pull spent back in memory.
+
+        The focused cast's pull is committed first and the declaration can still be refused
+        after it (a strain over budget, a target conflict). The transaction rolls the
+        tables back, but the identity-mapped resonance, anima and vitals rows keep the
+        debit until a restart (django_notes "Idmapper Rollback Staleness"), so the rows the
+        pull writes are kept before it commits and restored from here, outside the
+        transaction, once it has rolled back (ADR-4626).
+        """
+        guard = _keep_pull_rows(participant, kwargs)
+        try:
+            self._record_combat_declaration_in_transaction(participant, player_action, kwargs)
+        except BaseException:
+            if guard is not None:
+                guard.restore()
+                character = participant.character_sheet.character
+                character.resonances.invalidate()
+                character.combat_pulls.invalidate()
+            raise
+
+    @transaction.atomic
+    def _record_combat_declaration_in_transaction(
         self,
         participant: CombatParticipant,
         player_action: Any,

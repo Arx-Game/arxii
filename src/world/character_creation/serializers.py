@@ -23,6 +23,7 @@ from world.character_creation.constants import (
     FAMILY_PATRON_BEING_ID,
     FIGURE_NAME_MAX_LENGTH,
     GIFT_FACETS_KEY,
+    GIFT_RESONANCE_WEIGHTS_KEY,
     OFFICIALLY_DEAD_KEY,
     ORGANIZATIONS_KEY,
     PERSONALIZATION_COPY_KEYS,
@@ -72,6 +73,7 @@ from world.character_creation.offers import (
     schooling_training_points,
     youngest_age_for_points,
 )
+from world.character_creation.resonance_weights import parse_resonance_weights
 from world.character_creation.services import (
     age_bounds,
     assign_route,
@@ -81,7 +83,7 @@ from world.character_creation.services import (
     set_family_path,
 )
 from world.character_creation.types import StageValidationErrors
-from world.character_creation.validators import stat_value_error
+from world.character_creation.validators import resonance_weights_error, stat_value_error
 from world.character_sheets.models import DAYS_IN_MONTH, Gender, Heritage, Pronouns
 from world.classes.models import Path, PathStage
 from world.covenants.models import CombatStyle
@@ -1519,6 +1521,9 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     # base 1 + any distinction bonus; the GiftStage funnel's technique picker
     # needs it for the "n of m chosen" budget banner.
     starting_technique_picks = serializers.IntegerField(read_only=True)
+    # The points the Gift stage's resonance step spreads (#5123): DriftConfig's
+    # creation_points, so the stepper's budget is never a number the frontend owns.
+    resonance_creation_points = serializers.SerializerMethodField()
     # The Magic-skill training pool and the player's allocation of it (#4659).
     magic_training = serializers.SerializerMethodField()
     # The age range CG accepts for this draft: the general cap tightened by
@@ -1608,6 +1613,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stats_points_remaining",
             "stats_budget",
             "starting_technique_picks",
+            "resonance_creation_points",
             "magic_training",
             "age_min",
             "age_max",
@@ -1647,6 +1653,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stats_points_remaining",
             "stats_budget",
             "starting_technique_picks",
+            "resonance_creation_points",
             "magic_training",
             "bundled_distinctions",
             "derived_anchors",
@@ -1742,6 +1749,11 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     def get_stats_budget(self, obj: CharacterDraft) -> int:
         """Get total stat point budget (base + bonuses)."""
         return obj.calculate_stat_budget()
+
+    def get_resonance_creation_points(self, _obj: CharacterDraft) -> int:
+        from world.magic.services.drift import get_drift_config  # noqa: PLC0415
+
+        return get_drift_config().creation_points
 
     def get_age_min(self, obj: CharacterDraft) -> int:
         return age_bounds(obj.selected_species, obj.selected_beginnings, get_ic_now()).minimum
@@ -2119,6 +2131,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         self._validate_family_patron_being_id(value)
         self._validate_technique_personalizations(value)
         self._validate_gift_facets(value)
+        self._validate_gift_resonance_weights(value)
 
         goals = value.get("goals")
         if goals is not None:
@@ -2155,6 +2168,24 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             if value is not None and (not isinstance(value, int) or isinstance(value, bool)):
                 return False
         return True
+
+    @staticmethod
+    def _validate_gift_resonance_weights(data: dict) -> None:
+        """``gift_resonance_weights`` (#5123): the stage's own check, minus the full spread.
+
+        Saving a spread that is still being worked through is fine; a resonance picked
+        twice, one that does not exist, a pick under one point or more points than the
+        creation points are refused here with the stage's own wording. The stage check
+        still asks for the whole spread before the Gift stage reads complete.
+        """
+        raw = data.get(GIFT_RESONANCE_WEIGHTS_KEY)
+        if not raw:
+            return
+        error = resonance_weights_error(
+            raw, parse_resonance_weights(raw), require_full_spread=False
+        )
+        if error:
+            raise serializers.ValidationError({GIFT_RESONANCE_WEIGHTS_KEY: error})
 
     @staticmethod
     def _validate_gift_facets(data: dict) -> None:

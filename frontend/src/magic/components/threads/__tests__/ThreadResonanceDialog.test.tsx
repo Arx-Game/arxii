@@ -32,6 +32,7 @@ const thread = {
   resonance_name: 'Bene',
   target_kind: 'TRAIT',
   name: 'Oath',
+  display_name: 'Oath',
   description: '',
   level: 30,
   developed_points: 40,
@@ -55,7 +56,6 @@ const makeOptions = (overrides: Partial<ThreadResonanceOptions> = {}): ThreadRes
       affinity_name: 'Celestial',
       conversion_type: null,
       projected_points: 40,
-      merges_into_thread_id: null,
       qualifying: [
         { item_id: 55, name: 'Silver ring', mode: 'keepsake' },
         { item_id: 56, name: 'Lumen candle', mode: 'material' },
@@ -67,19 +67,28 @@ const makeOptions = (overrides: Partial<ThreadResonanceOptions> = {}): ThreadRes
       affinity_name: 'Abyssal',
       conversion_type: 'FALL',
       projected_points: 30,
-      merges_into_thread_id: 12,
       qualifying: [],
     },
   ],
   ...overrides,
 });
 
-function renderDialog() {
+const threadWithRows = {
+  ...thread,
+  resonance: 1,
+  developed_points: 40,
+  resonances: [
+    { resonance_id: 1, resonance_name: 'Bene', amount: 30, leads: true },
+    { resonance_id: 4, resonance_name: 'Gale', amount: 10, leads: false },
+  ],
+} as Thread;
+
+function renderDialog(forThread: Thread = thread) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const Wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
-  return render(<ThreadResonanceDialog thread={thread} open onOpenChange={vi.fn()} />, {
+  return render(<ThreadResonanceDialog thread={forThread} open onOpenChange={vi.fn()} />, {
     wrapper: Wrapper,
   });
 }
@@ -148,20 +157,18 @@ describe('ThreadResonanceDialog', () => {
     expect(screen.getByTestId('resonance-retune')).toBeDisabled();
   });
 
-  it('marks an option that merges and opens the surviving thread afterwards', async () => {
+  it('opens the thread the result names when it is a different one', async () => {
     vi.mocked(magicApi.getThreadResonanceOptions).mockResolvedValue(
       makeOptions({ offering_required: false, offering_count: 0 })
     );
     vi.mocked(ritualsApi.performRitual).mockResolvedValue({
       ritual_id: 9,
       execution_kind: 'SERVICE',
-      message: 'Merged.',
-      result: { thread_id: 12, merged: true },
+      message: 'Moved.',
+      result: { thread_id: 12 },
     });
     renderDialog();
-    expect(await screen.findByTestId('resonance-merges-3')).toHaveTextContent('merges');
-    expect(screen.queryByTestId('resonance-merges-2')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('resonance-option-3'));
+    fireEvent.click(await screen.findByTestId('resonance-option-3'));
     fireEvent.click(screen.getByTestId('resonance-retune'));
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/threads/12'));
   });
@@ -240,5 +247,96 @@ describe('ThreadResonanceDialog', () => {
     );
     expect(screen.queryByText('Change to')).not.toBeInTheDocument();
     expect(screen.getByTestId('resonance-retune')).toBeDisabled();
+  });
+  describe('rows (#5123)', () => {
+    it('asks for the leading row and all of it by default, and names it in the rite', async () => {
+      vi.mocked(magicApi.getThreadResonanceOptions).mockResolvedValue(
+        makeOptions({ offering_required: false, offering_count: 0 })
+      );
+      vi.mocked(ritualsApi.performRitual).mockResolvedValue({
+        ritual_id: 9,
+        execution_kind: 'SERVICE',
+        message: 'Retuned.',
+        result: { thread_id: 7 },
+      });
+      renderDialog(threadWithRows);
+      await screen.findByText('Lumen (same affinity)');
+      expect(magicApi.getThreadResonanceOptions).toHaveBeenCalledWith(7, {
+        fromResonance: 1,
+        amount: null,
+      });
+      expect(screen.getByTestId('resonance-from-1')).toHaveAttribute('aria-checked', 'true');
+      expect(screen.getByTestId('resonance-amount-value')).toHaveTextContent('30');
+      fireEvent.click(screen.getByTestId('resonance-retune'));
+      await waitFor(() =>
+        expect(ritualsApi.performRitual).toHaveBeenCalledWith({
+          character_sheet_id: 100,
+          ritual_id: 9,
+          kwargs: { thread_id: 7, target_resonance: 2, from_resonance: 1 },
+          components: [],
+        })
+      );
+    });
+
+    it('moves from another row, and part of it, reading the options for that move', async () => {
+      vi.mocked(magicApi.getThreadResonanceOptions).mockResolvedValue(
+        makeOptions({ offering_required: false, offering_count: 0 })
+      );
+      vi.mocked(ritualsApi.performRitual).mockResolvedValue({
+        ritual_id: 9,
+        execution_kind: 'SERVICE',
+        message: 'Retuned.',
+        result: { thread_id: 7 },
+      });
+      renderDialog(threadWithRows);
+      await screen.findByText('Lumen (same affinity)');
+      fireEvent.click(screen.getByTestId('resonance-from-4'));
+      await waitFor(() =>
+        expect(magicApi.getThreadResonanceOptions).toHaveBeenLastCalledWith(7, {
+          fromResonance: 4,
+          amount: null,
+        })
+      );
+      expect(screen.getByTestId('resonance-amount-value')).toHaveTextContent('10');
+      fireEvent.click(screen.getByTestId('resonance-amount-down'));
+      fireEvent.click(screen.getByTestId('resonance-amount-down'));
+      expect(screen.getByTestId('resonance-amount-value')).toHaveTextContent('8');
+      await waitFor(() =>
+        expect(magicApi.getThreadResonanceOptions).toHaveBeenLastCalledWith(7, {
+          fromResonance: 4,
+          amount: 8,
+        })
+      );
+      expect(await screen.findByTestId('resonance-projected')).toHaveTextContent('8 points');
+      fireEvent.click(screen.getByTestId('resonance-retune'));
+      await waitFor(() =>
+        expect(ritualsApi.performRitual).toHaveBeenCalledWith(
+          expect.objectContaining({
+            kwargs: { thread_id: 7, target_resonance: 2, from_resonance: 4, amount: 8 },
+          })
+        )
+      );
+    });
+
+    it('gives All back once an amount was chosen', async () => {
+      vi.mocked(magicApi.getThreadResonanceOptions).mockResolvedValue(makeOptions());
+      renderDialog(threadWithRows);
+      await screen.findByText('Lumen (same affinity)');
+      expect(screen.getByTestId('resonance-amount-all')).toBeDisabled();
+      fireEvent.click(screen.getByTestId('resonance-amount-down'));
+      expect(screen.getByTestId('resonance-amount-value')).toHaveTextContent('29');
+      fireEvent.click(screen.getByTestId('resonance-amount-all'));
+      expect(screen.getByTestId('resonance-amount-value')).toHaveTextContent('30');
+    });
+
+    it('shows no from-row choice for a thread with one resonance row', async () => {
+      vi.mocked(magicApi.getThreadResonanceOptions).mockResolvedValue(makeOptions());
+      renderDialog({
+        ...threadWithRows,
+        resonances: [{ resonance_id: 1, resonance_name: 'Bene', amount: 40, leads: true }],
+      } as Thread);
+      await screen.findByText('Lumen (same affinity)');
+      expect(screen.queryByTestId('resonance-from')).not.toBeInTheDocument();
+    });
   });
 });

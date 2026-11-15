@@ -12,6 +12,7 @@ from world.magic.factories import (
     ResonanceFactory,
     TechniqueFactory,
     ThreadFactory,
+    ThreadPullCostFactory,
 )
 from world.scenes.action_serializers import TechniqueCastCreateSerializer
 from world.scenes.factories import SceneFactory
@@ -31,6 +32,8 @@ class CastPullValidationTests(TestCase):
             effect_type=BinaryEffectTypeFactory(),
             damage_profile=False,
         )
+        # A pull tier needs an authored cost row; without one it is refused (#5123).
+        ThreadPullCostFactory(tier=2, resonance_cost=1, anima_per_thread=1)
         cls.thread = ThreadFactory(
             owner=cls.sheet,
             resonance=cls.resonance,
@@ -71,13 +74,20 @@ class CastPullValidationTests(TestCase):
         self.assertIn("pull", ser.errors)
 
     def test_threads_of_two_resonances_are_one_pull(self) -> None:
-        """A pull may mix resonances, each thread paid from its own (#5066)."""
+        """A pull may mix resonances, each thread paid from its own (#5066).
+
+        A thread holds one anchor (#5123), so the second resonance's thread sits on
+        another technique.
+        """
         other = ThreadFactory(
             owner=self.sheet,
             resonance=ResonanceFactory(),
             target_kind=TargetKind.TECHNIQUE,
             target_trait=None,
-            target_technique=self.technique,
+            target_technique=TechniqueFactory(
+                effect_type=BinaryEffectTypeFactory(),
+                damage_profile=False,
+            ),
         )
         ser = TechniqueCastCreateSerializer(data=self._data(thread_ids=[self.thread.pk, other.pk]))
         self.assertTrue(ser.is_valid(), ser.errors)
@@ -110,7 +120,7 @@ class CastPullValidationTests(TestCase):
         """A thread with retired_at set must be rejected by pull validation.
 
         Uses a separate Technique anchor to avoid the unique constraint on
-        (owner, resonance, target_technique) that would prevent two threads
+        (owner, target_technique) that would prevent two threads
         for the same combination.
         """
         other_technique = TechniqueFactory(

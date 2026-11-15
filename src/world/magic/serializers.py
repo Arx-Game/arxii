@@ -24,6 +24,7 @@ from world.character_sheets.models import CharacterSheet
 
 if TYPE_CHECKING:
     from world.magic.audere import AudereThreshold
+    from world.magic.types.drift import DriftReading
     from world.magic.types.threads import ThreadResonanceOption
 from world.conditions.models import (
     CapabilityType,
@@ -76,6 +77,7 @@ from world.magic.models import (
     TechniqueStyle,
     Thread,
     ThreadLevelUnlock,
+    ThreadResonance,
     ThreadWeavingTeachingOffer,
 )
 from world.magic.models.dramatic_moment import (
@@ -587,8 +589,15 @@ class CharacterAuraShareSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CharacterAuraShare
-        fields = ["affinity_id", "affinity_name", "percent"]
+        fields = ["affinity_id", "affinity_name", "percent", "settled_percent"]
         read_only_fields = fields
+
+
+def aura_drift_readings(auras: list[CharacterAura]) -> "dict[int, DriftReading]":
+    """Each aura's drift reading, read once, for serializer ``context["drift_readings"]``."""
+    from world.magic.services.drift import drift_for  # noqa: PLC0415
+
+    return {aura.pk: drift_for(aura.character) for aura in auras}
 
 
 class CharacterAuraSerializer(serializers.ModelSerializer):
@@ -597,6 +606,12 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
     shares = CharacterAuraShareSerializer(source="cached_shares", many=True, read_only=True)
     dominant_affinity = serializers.SerializerMethodField()
     dominant_affinity_display = serializers.SerializerMethodField()
+    # #5123: whether the character is unsettled, the sentence naming what made them so, and
+    # the Mire's share of all their resonance in words (never a number).
+    unsettled = serializers.SerializerMethodField()
+    unsettled_line = serializers.SerializerMethodField()
+    unsettled_affinity_name = serializers.SerializerMethodField()
+    mire_share_words = serializers.SerializerMethodField()
 
     class Meta:
         model = CharacterAura
@@ -606,6 +621,10 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
             "shares",
             "dominant_affinity",
             "dominant_affinity_display",
+            "unsettled",
+            "unsettled_line",
+            "unsettled_affinity_name",
+            "mire_share_words",
             "glimpse_state",
             "updated_at",
         ]
@@ -614,9 +633,52 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
             "shares",
             "dominant_affinity",
             "dominant_affinity_display",
+            "unsettled",
+            "unsettled_line",
+            "unsettled_affinity_name",
+            "mire_share_words",
             "glimpse_state",
             "updated_at",
         ]
+
+    def _reading(self, obj: CharacterAura) -> "DriftReading":
+        """The aura's drift reading: the view's, read once per aura, else read now.
+
+        ``context["drift_readings"]`` maps an aura's pk to its reading (``aura_drift_readings``).
+        Without it (a staff write answering with the row it saved) the reading is taken here.
+        """
+        from world.magic.services.drift import drift_for  # noqa: PLC0415
+
+        reading = self.context.get("drift_readings", {}).get(obj.pk)
+        return reading if reading is not None else drift_for(obj.character)
+
+    def get_unsettled(self, obj: CharacterAura) -> bool:
+        """True when an affinity other than the main one has grown past who they are."""
+        return self._reading(obj).steps_past > 0
+
+    def get_unsettled_line(self, obj: CharacterAura) -> str:
+        """The sentence naming the resonance that made them unsettled; blank when settled."""
+        from world.magic.services.drift import unsettled_line  # noqa: PLC0415
+
+        return unsettled_line(self._reading(obj))
+
+    def get_unsettled_affinity_name(self, obj: CharacterAura) -> str:
+        """The affinity "You become more ..." names on accepting; blank when settled.
+
+        The same one the accept action names (``accept_aura_change``): the affinity of the
+        resonance that grew most past who they are.
+        """
+        reading = self._reading(obj)
+        leading = reading.leading_excess_resonance
+        if reading.steps_past <= 0 or leading is None:
+            return ""
+        return leading.affinity.name
+
+    def get_mire_share_words(self, obj: CharacterAura) -> str:
+        """The Mire's share of everything they have gained, in words."""
+        from world.magic.services.drift import share_in_words  # noqa: PLC0415
+
+        return share_in_words(self._reading(obj).mire_share_percent)
 
     def get_dominant_affinity(self, obj: CharacterAura) -> str:
         """The dominant affinity's name, blank before the aura holds any share."""
@@ -625,6 +687,13 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
     def get_dominant_affinity_display(self, obj: CharacterAura) -> str:
         """The dominant affinity's name for display."""
         return self.get_dominant_affinity(obj)
+
+
+class AcceptAuraResponseSerializer(serializers.Serializer):
+    """What accepting the changes to the aura answers: the line told, and the aura as it now is."""
+
+    detail = serializers.CharField()
+    aura = CharacterAuraSerializer()
 
 
 class GlimpseSetTagsSerializer(serializers.Serializer):
@@ -999,6 +1068,41 @@ class AlterationResolutionResponseSerializer(serializers.Serializer):
 # =============================================================================
 
 
+class ThreadResonanceRowSerializer(serializers.ModelSerializer):
+    """One resonance a thread holds, with how much of it went in and whether it leads (#5123)."""
+
+    resonance_id = serializers.IntegerField(read_only=True)
+    resonance_name = serializers.CharField(source="resonance.name", read_only=True)
+    leads = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ThreadResonance
+        fields = ["resonance_id", "resonance_name", "amount", "leads"]
+        read_only_fields = fields
+
+    def get_leads(self, obj: ThreadResonance) -> bool:
+        """True for the row ``Thread.resonance`` copies (the largest amount)."""
+        leading_id = self.context.get("leading_resonance_id")
+        if leading_id is None:
+            leading_id = obj.thread.resonance_id
+        return obj.resonance_id == leading_id
+
+
+def thread_rows_by_thread(threads: list[Thread]) -> dict[int, list[ThreadResonance]]:
+    """Every resonance row of ``threads``, grouped by thread id, in one query (#5123).
+
+    A list endpoint passes this through serializer ``context=`` as ``thread_rows``. It is
+    not a ``to_attr`` prefetch on the threads: they are identity-mapped instances,
+    so a prefetched list would stick to the shared instance and go stale across requests
+    (see ``CharacterThreadHandler._rows_by_thread``).
+    """
+    grouped: dict[int, list[ThreadResonance]] = {thread.pk: [] for thread in threads}
+    rows = ThreadResonance.objects.filter(thread__in=list(grouped)).select_related("resonance")
+    for row in rows:
+        grouped[row.thread_id].append(row)
+    return grouped
+
+
 class ThreadSerializer(serializers.ModelSerializer):
     """Serializer for Thread records (Spec A §4.5).
 
@@ -1016,6 +1120,10 @@ class ThreadSerializer(serializers.ModelSerializer):
     """
 
     resonance_name = serializers.CharField(source=_SOURCE_RESONANCE_NAME, read_only=True)
+    # #5123: every resonance the thread holds, leading one first; ``resonance`` above stays
+    # the leading resonance.
+    resonances = serializers.SerializerMethodField()
+    # Null when any resonance may be imbued; a restricted Gift thread lists its Gift's set.
     target_id = serializers.IntegerField(write_only=True, required=True)
     # The anchor of a TRAIT / TECHNIQUE thread, read back so a combat pull dialog can offer
     # the threads related to what she is using (#5066); null for every other kind.
@@ -1030,6 +1138,9 @@ class ThreadSerializer(serializers.ModelSerializer):
     target_persona_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     character_sheet_id = serializers.IntegerField(write_only=True, required=True)
     name = serializers.CharField(required=False, allow_blank=True, default="")
+    # The name a player calls the thread by (#5123): its own name, else its anchor's, so a
+    # Gift thread (minted with no name) reads as its Gift. The same text telnet prints.
+    display_name = serializers.SerializerMethodField()
     description = serializers.CharField(required=False, allow_blank=True, default="")
     level_cap = serializers.SerializerMethodField()
     anchor_cap = serializers.SerializerMethodField()
@@ -1042,6 +1153,7 @@ class ThreadSerializer(serializers.ModelSerializer):
             "owner",
             "resonance",
             "resonance_name",
+            "resonances",
             "target_kind",
             "target_id",
             "target_trait_id",
@@ -1049,6 +1161,7 @@ class ThreadSerializer(serializers.ModelSerializer):
             "target_persona_id",
             "character_sheet_id",
             "name",
+            "display_name",
             "description",
             "level",
             "developed_points",
@@ -1062,6 +1175,7 @@ class ThreadSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "owner",
+            "display_name",
             "level",
             "developed_points",
             "level_cap",
@@ -1071,6 +1185,31 @@ class ThreadSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    @extend_schema_field(serializers.CharField())
+    def get_display_name(self, obj: Thread) -> str:
+        """The thread's own name, else its anchor's (``thread_display_name``).
+
+        A list view passes each relationship thread's open label in one query as
+        ``context["open_labels"]``; a single thread reads its own.
+        """
+        from world.magic.crossing.handlers import thread_display_name  # noqa: PLC0415
+
+        return thread_display_name(obj, self.context.get("open_labels"))
+
+    @extend_schema_field(ThreadResonanceRowSerializer(many=True))
+    def get_resonances(self, obj: Thread) -> list[dict]:
+        """Every resonance row of the thread, the leading one first (#5123).
+
+        A list view passes every row in one query as ``context["thread_rows"]``
+        (``thread_rows_by_thread``); a single thread reads its own.
+        """
+        rows = self.context.get("thread_rows", {}).get(obj.pk)
+        if rows is None:
+            rows = ThreadResonance.objects.filter(thread=obj).select_related("resonance")
+        return ThreadResonanceRowSerializer(
+            rows, many=True, context={"leading_resonance_id": obj.resonance_id}
+        ).data
 
     def get_level_cap(self, obj: Thread) -> int:
         """Return the character-level cap for this thread's owner (#4585)."""
@@ -1659,6 +1798,9 @@ class ThreadPullPreviewRequestSerializer(serializers.Serializer):
     # #5066: which pulled resonance a burn would come from; the burn preview uses it, and
     # a pull of one resonance needs none.
     burn_resonance_id = serializers.IntegerField(required=False, allow_null=True)
+    # #5123: thread id -> the id of the resonance paying for that thread; a thread left out
+    # is paid by its leading resonance.
+    payers = serializers.DictField(child=serializers.IntegerField(), required=False, default=dict)
     action_context = PullActionContextSerializer(required=False)
     # #1919: Optional scene-scoped params for social-action pull previews.
     # scene_id: when provided, the preview computes the combat/DANGER state
@@ -1682,7 +1824,11 @@ class ResolvedPullEffectSerializer(serializers.Serializer):
 
     kind = serializers.CharField()
     authored_value = serializers.IntegerField(allow_null=True)
-    level_multiplier = serializers.IntegerField()
+    # The exact thread-level multiplier (0.9 at level 9), not the rounded int a combat row
+    # stores, so authored x multiplier reads the same as scaled_value (#5123).
+    level_multiplier = serializers.DecimalField(
+        source="level_multiplier_exact", max_digits=5, decimal_places=1, coerce_to_string=False
+    )
     scaled_value = serializers.IntegerField()
     vital_target = serializers.CharField(allow_null=True)
     source_thread_id = serializers.SerializerMethodField()
@@ -1691,10 +1837,24 @@ class ResolvedPullEffectSerializer(serializers.Serializer):
     narrative_snippet = serializers.CharField()
     inactive = serializers.BooleanField()
     inactive_reason = serializers.CharField(allow_null=True)
+    # #5123: the perk row names what it grants. A CAPABILITY_GRANT carries the capability's
+    # name and its curved magnitude; a RESISTANCE names the damage type (null = all types).
+    capability_name = serializers.SerializerMethodField()
+    capability_value = serializers.IntegerField(source="capability_grant_value", allow_null=True)
+    resistance_damage_type_name = serializers.SerializerMethodField()
 
     def get_source_thread_id(self, obj) -> int:
         """Expose the source thread's PK (the dataclass carries the Thread instance)."""
         return obj.source_thread.pk
+
+    def get_capability_name(self, obj) -> str | None:
+        """The granted capability's name, or None for any other kind of effect."""
+        return obj.granted_capability.name if obj.granted_capability is not None else None
+
+    def get_resistance_damage_type_name(self, obj) -> str | None:
+        """The damage type a RESISTANCE mitigates, or None (all types, or not a resistance)."""
+        damage_type = obj.resistance_damage_type
+        return damage_type.name if damage_type is not None else None
 
 
 class BurnPreviewSerializer(serializers.Serializer):
@@ -1719,6 +1879,25 @@ class BurnPreviewSerializer(serializers.Serializer):
     ceiling_tier_name = serializers.CharField(allow_null=True)
 
 
+class PayerOptionSerializer(serializers.Serializer):
+    """One resonance that could pay for a pulled thread, with its cost and balance (#5123)."""
+
+    resonance_id = serializers.IntegerField(source="resonance.pk")
+    resonance_name = serializers.CharField(source="resonance.name")
+    cost = serializers.IntegerField()
+    balance = serializers.IntegerField()
+    affordable = serializers.BooleanField()
+    effects = ResolvedPullEffectSerializer(many=True)
+    level_read = serializers.IntegerField()
+
+
+class ThreadPayerPreviewSerializer(serializers.Serializer):
+    """Every held resonance as a payer option for one pulled thread (#5123)."""
+
+    thread_id = serializers.IntegerField()
+    options = PayerOptionSerializer(many=True)
+
+
 class ThreadPullPreviewResponseSerializer(serializers.Serializer):
     """Response serializer for POST /api/magic/thread-pull-preview/."""
 
@@ -1728,6 +1907,7 @@ class ThreadPullPreviewResponseSerializer(serializers.Serializer):
     resolved_effects = ResolvedPullEffectSerializer(many=True)
     capped_intensity = serializers.BooleanField()
     burn = BurnPreviewSerializer(allow_null=True)
+    per_thread = ThreadPayerPreviewSerializer(many=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1802,6 +1982,7 @@ class RitualPerformRequestSerializer(serializers.Serializer):
         ``views_sanctum.py``'s ``SanctumViewSet.install``.
         """
         actor = attrs.get("character_sheet_id")
+        self._validate_imbuing_payer(attrs, actor)
         instances = attrs.get("components") or []
         if actor is not None and instances:
             not_owned = [
@@ -1811,6 +1992,31 @@ class RitualPerformRequestSerializer(serializers.Serializer):
                 msg = f"ItemInstance(s) not in your inventory: {sorted(not_owned)}."
                 raise serializers.ValidationError(msg)
         return attrs
+
+    @staticmethod
+    def _validate_imbuing_payer(attrs: dict, sheet: CharacterSheet | None) -> None:
+        """An imbue's ``resonance_id`` names a resonance the character holds (#5123).
+
+        Left alone when absent (the thread's leading resonance pays) or not an integer
+        (the view refuses that on its own).
+        """
+        ritual = attrs.get("ritual_id")
+        resonance_id = (attrs.get("kwargs") or {}).get("resonance_id")
+        if (
+            sheet is None
+            or ritual is None
+            or not isinstance(resonance_id, int)
+            or isinstance(resonance_id, bool)
+            or not is_imbuing_ritual(
+                name=ritual.name, service_function_path=ritual.service_function_path
+            )
+        ):
+            return
+        if not CharacterResonance.objects.filter(
+            character_sheet=sheet, resonance_id=resonance_id
+        ).exists():
+            msg = "You do not hold that resonance."
+            raise serializers.ValidationError({"resonance_id": msg})
 
 
 # =============================================================================
@@ -4183,13 +4389,23 @@ class DriftConversionOfferSerializer(serializers.ModelSerializer):
     queries it per offer.
     """
 
+    # The offer's character: the aura the Settle your aura dialog reads and accepts for
+    # (a CharacterAura's ``character`` is the same sheet pk, #5123).
+    character_id = serializers.IntegerField(source="character_sheet_id", read_only=True)
     caps = serializers.SerializerMethodField()
     rite_ready = serializers.SerializerMethodField()
     rite_not_ready_message = serializers.SerializerMethodField()
 
     class Meta:
         model = DriftConversionOffer
-        fields = ["id", "scene_id", "caps", "rite_ready", "rite_not_ready_message"]
+        fields = [
+            "id",
+            "scene_id",
+            "character_id",
+            "caps",
+            "rite_ready",
+            "rite_not_ready_message",
+        ]
         read_only_fields = fields
 
     @extend_schema_field(serializers.BooleanField())
@@ -4300,7 +4516,7 @@ def _own_drift_offer(offer_id: int, request: Request) -> DriftConversionOffer:
         .first()
     )
     if offer is None:
-        msg = "No open drift conversion offer found."
+        msg = "You have no open chance to atone."
         raise NotFound(msg)
     return offer
 
@@ -4430,9 +4646,8 @@ class ThreadResonanceOptionSerializer(serializers.Serializer):
     ``qualifying`` reads ``context["qualifying"]``: the carried items that pay, keyed by
     resonance pk, worked out once for every option by the view
     (``qualifying_components_by_target``), so this serializer queries nothing per option.
-    ``conversion_type`` is null for a retune within the thread's own affinity.
-    ``merges_into_thread_id`` is the live thread on the same anchor the move would merge
-    into, null when the thread moves on its own.
+    ``conversion_type`` is null for a retune within the source resonance's own affinity.
+    ``projected_points`` is what the target's row would gain from the amount being moved.
     """
 
     resonance_id = serializers.IntegerField(source="resonance.pk")
@@ -4440,7 +4655,6 @@ class ThreadResonanceOptionSerializer(serializers.Serializer):
     affinity_name = serializers.CharField(source="resonance.affinity.name")
     conversion_type = serializers.ChoiceField(choices=ConversionType.choices, allow_null=True)
     projected_points = serializers.IntegerField()
-    merges_into_thread_id = serializers.IntegerField(allow_null=True)
     qualifying = serializers.SerializerMethodField()
 
     @extend_schema_field(DriftQualifyingComponentSerializer(many=True))

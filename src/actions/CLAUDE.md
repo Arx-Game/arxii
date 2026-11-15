@@ -50,8 +50,13 @@ They do not use the command system, dispatchers, or handlers.
   `drift_correction.py` (#4733): `PerformDriftCorrectionAction` (`"perform_drift_correction"`)
   and `DeclineDriftCorrectionAction` (`"decline_drift_correction"`), REGISTRY, `target_type=SELF`,
   `category="magic"`; each checks the offer belongs to the actor's sheet, and the rite also
-  that every offered item is held by it. Shared by telnet `CmdDrift` and the web
+  that every offered item is held by it. Shared by telnet `CmdAura` and the web
   `DriftCorrectionConvertView` / `DriftCorrectionDeclineView`;
+  `accept_aura.py` (#5123): `AcceptAuraChangeAction` (`"accept_aura_change"`, "Accept the
+  changes to your Aura"), REGISTRY, `target_type=SELF`, `category="magic"`, no kwargs; refuses
+  unless the character is unsettled (`NotUnsettledError`) and otherwise calls
+  `world.magic.services.drift.accept_aura_change`. Shared by telnet `aura accept` and the web
+  `CharacterAuraViewSet.accept`;
   `cast.py` — `CastTechniqueAction`, key `"cast_technique"`, the SCENE_ADAPTIVE
   seam for standalone technique casts — see "SCENE_ADAPTIVE Backend" below;
   `combat_maneuvers.py` (#1453/#1452, Succor #1744, USE_ITEM/READY-pace #2120) — the
@@ -77,8 +82,9 @@ They do not use the command system, dispatchers, or handlers.
   available-actions list, dispatched by key)/
   `PullForTheRoundAction` (key `combat_pull`, #5066, `definitions/round_pull.py`: a thread
   pull declared on its own for the round, no action slot; kwargs `pull_tier`,
-  `pull_thread_ids` (any resonances, each thread paid from its own); telnet
-  `combat pull <tier>=<thread>[,...]`) (keys
+  `pull_thread_ids` (any resonances) and `pull_payers` (`{thread_id: resonance_id}`, the
+  resonance paying each thread, else its leading one, #5123); telnet
+  `combat pull <tier>=<thread>[:<resonance>][,...]`) (keys
   prefixed `combat_`). `DodgeSettingsAction` (key `dodge_settings`, #5066,
   `definitions/dodge_settings.py`: her standing dodge answers for the fight, kwargs
   `technique_id`, `save_default`, `into_soulfray`, `auto_pull`, `pull_tier`; telnet `combat dodgewith|dodgedefault|autopull`, and `accept|decline

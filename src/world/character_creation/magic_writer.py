@@ -2,19 +2,19 @@
 
 ``provision_magic`` is what character creation's ``finalize_magic_data`` does, taking
 explicit picks instead of a draft, so finalize and staff edit mode's Grant magic share
-one writer and one ordering. The ordering matters: the gift thread anchors to the CG
-resonance, species gifts anchor to the same thread, the aura is recomputed once every
-resonance source exists, and the anima ritual (the character's magical identity) carries
-that resonance too. Finalize's draft-only steps (technique personalizations, the
-Glimpse-born distinction links, the codex grants of the other CG choices) ride hooks
-at the exact points they always ran.
+one writer and one ordering. The ordering matters: the gift thread holds the CG picks
+(heaviest leading), species gifts hold the same picks, the picks are seeded as lifetime
+resonance so the aura and the settled self come from their weights, and the anima ritual
+(the character's magical identity) carries the heaviest pick. Finalize's draft-only
+steps (technique personalizations, the Glimpse-born distinction links, the codex grants
+of the other CG choices) ride hooks at the exact points they always ran.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
 
@@ -33,6 +33,14 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
+class WeightedResonance:
+    """A creation resonance pick and the creation points the player spread onto it."""
+
+    resonance: Resonance
+    weight: int
+
+
+@dataclass(frozen=True)
 class MagicPicks:
     """Everything magic needs, as rows. ``origin`` stamps the gift and technique links.
 
@@ -43,7 +51,7 @@ class MagicPicks:
     tradition: Tradition
     gift: Gift | None
     techniques: Sequence[Technique]
-    resonance: Resonance | None
+    resonances: Sequence[WeightedResonance]
     anima_stat: Trait | None
     anima_skill: Skill | None
     ritual_name: str
@@ -53,6 +61,17 @@ class MagicPicks:
     beginnings: Beginnings | None = None
     glimpse_story: str = ""
     glimpse_tag_ids: Sequence[int] = field(default_factory=tuple)
+
+    @property
+    def ordered_resonances(self) -> list[WeightedResonance]:
+        """The picks heaviest first (a tie keeps the order given): the first one leads."""
+        return sorted(self.resonances, key=lambda pick: -pick.weight)
+
+    @property
+    def lead_resonance(self) -> Resonance | None:
+        """The heaviest pick: the one resonance creation needs where it can use only one."""
+        ordered = self.ordered_resonances
+        return ordered[0].resonance if ordered else None
 
 
 @dataclass(frozen=True)
@@ -158,7 +177,7 @@ def validate_staff_magic(sheet: CharacterSheet, picks: MagicPicks) -> None:
         msg = "Choose a gift the tradition offers on this path."
         raise SheetWriteError(msg)
     _check_techniques(sheet, picks, path, gift)
-    if picks.resonance is None:
+    if not picks.resonances:
         refuse("Choose the gift's resonance.")
     if picks.anima_stat is None or picks.anima_skill is None:
         refuse("Choose the stat and skill the character's magic rolls.")
@@ -175,7 +194,12 @@ def link_gift_and_techniques(sheet: CharacterSheet, picks: MagicPicks) -> None:
 
     if picks.gift is None:
         return
-    grant_gift_to_character(sheet, picks.gift, resonance=picks.resonance, origin=picks.origin)
+    grant_gift_to_character(
+        sheet,
+        picks.gift,
+        resonances=[pick.resonance for pick in picks.ordered_resonances],
+        origin=picks.origin,
+    )
     species_ids = {
         technique.pk
         for technique in get_species_technique_options(picks.species, include_unready=True)
@@ -199,13 +223,12 @@ def link_gift_and_techniques(sheet: CharacterSheet, picks: MagicPicks) -> None:
 
 
 def _glimpse(sheet: CharacterSheet, picks: MagicPicks) -> CharacterAura:
-    """The aura, its Glimpse tags by axis, and its prose (versioned through the services)."""
+    """The aura row, its Glimpse tags by axis, and its prose (versioned through the services).
+
+    The shares come later: the settled self and the seeded resonance (``_seed_resonances``).
+    """
     from world.magic.constants import GlimpseTagAxis  # noqa: PLC0415
     from world.magic.models import CharacterAura, GlimpseTag  # noqa: PLC0415
-    from world.magic.services.aura import (  # noqa: PLC0415
-        set_aura_shares,
-        starting_aura_shares,
-    )
     from world.magic.services.glimpse import (  # noqa: PLC0415
         refresh_glimpse_state,
         set_glimpse_prose,
@@ -217,8 +240,6 @@ def _glimpse(sheet: CharacterSheet, picks: MagicPicks) -> CharacterAura:
         aura = CharacterAura(character=sheet)
         aura.full_clean()
         aura.save()
-    if not aura.cached_shares:
-        set_aura_shares(aura, starting_aura_shares(picks.resonance))
     if picks.glimpse_tag_ids:
         tags = list(GlimpseTag.objects.filter(pk__in=list(picks.glimpse_tag_ids), is_active=True))
         for axis in GlimpseTagAxis:
@@ -259,8 +280,87 @@ def _anima(sheet: CharacterSheet, picks: MagicPicks) -> None:
         ritual_name=picks.ritual_name,
         stat=picks.anima_stat,
         skill=picks.anima_skill,
-        resonance=picks.resonance,
+        resonance=picks.lead_resonance,
     )
+
+
+def _split_by_weight(total: int, weights: list[int]) -> list[int]:
+    """``total`` shared out by ``weights`` (largest remainder), every part at least 1.
+
+    The caller guarantees ``total`` is at least ``len(weights)``.
+    """
+    weight_sum = sum(weights)
+    parts = [total * weight // weight_sum for weight in weights]
+    by_remainder = sorted(
+        range(len(weights)), key=lambda i: (-(total * weights[i] % weight_sum), i)
+    )
+    for i in by_remainder[: total - sum(parts)]:
+        parts[i] += 1
+    for i, part in enumerate(parts):
+        if part == 0:
+            parts[parts.index(max(parts))] -= 1
+            parts[i] = 1
+    return parts
+
+
+def _seed_resonances(sheet: CharacterSheet, picks: MagicPicks, aura: CharacterAura) -> None:
+    """Settle who the character is, then seed each pick's lifetime to match it (#5123).
+
+    The settled shares start as the picks' weights (over any lifetime the sheet already
+    holds), the Glimpse nudge moves them (the one place that nudge is written), and the
+    lifetime is seeded from the nudged settled shares: each affinity's resonance gets its
+    settled share of the total, split across that affinity's picks by weight. So a fresh
+    character's aura is their settled self, they read no unsettled steps (a nudge of two
+    same-affinity tags included), and their first gain extends the aura rather than wiping
+    it. With no nudge a pick's lifetime is exactly its weight x ``creation_seed_per_point``.
+    """
+    from decimal import ROUND_HALF_UP, Decimal  # noqa: PLC0415
+
+    from world.magic.models import CharacterResonance  # noqa: PLC0415
+    from world.magic.services.aura import recompute_aura, set_settled_shares  # noqa: PLC0415
+    from world.magic.services.drift import get_drift_config  # noqa: PLC0415
+    from world.magic.services.glimpse import apply_glimpse_affinity_nudge  # noqa: PLC0415
+    from world.magic.services.resonance import seed_creation_resonance  # noqa: PLC0415
+    from world.magic.types import AffinityShare  # noqa: PLC0415
+
+    per_point = get_drift_config().creation_seed_per_point
+    affinities = {}
+    existing: dict[int, int] = {}
+    for row in CharacterResonance.objects.filter(character_sheet=sheet).select_related(
+        "resonance__affinity"
+    ):
+        affinity = row.resonance.affinity
+        affinities[affinity.pk] = affinity
+        existing[affinity.pk] = existing.get(affinity.pk, 0) + row.lifetime_earned
+    by_affinity: dict[int, list[WeightedResonance]] = {}
+    for pick in picks.ordered_resonances:
+        affinities[pick.resonance.affinity.pk] = pick.resonance.affinity
+        by_affinity.setdefault(pick.resonance.affinity_id, []).append(pick)
+    base = {
+        pk: existing.get(pk, 0) + sum(pick.weight for pick in by_affinity.get(pk, ())) * per_point
+        for pk in affinities
+    }
+    grand_total = sum(base.values())
+    if grand_total == 0:
+        return
+    set_settled_shares(
+        aura,
+        [
+            AffinityShare(affinity=affinities[pk], percent=Decimal(total) * 100 / grand_total)
+            for pk, total in base.items()
+            if total
+        ],
+    )
+    apply_glimpse_affinity_nudge(aura)
+    settled = {share.affinity_id: share.settled_percent for share in aura.cached_shares}
+    denominator = sum(settled.get(pk, Decimal(0)) for pk in base if base[pk]) or Decimal(100)
+    for pk, group in by_affinity.items():
+        target = Decimal(grand_total) * settled.get(pk, Decimal(0)) / denominator
+        wanted = int((target - existing.get(pk, 0)).to_integral_value(ROUND_HALF_UP))
+        amounts = _split_by_weight(max(wanted, len(group)), [pick.weight for pick in group])
+        for pick, amount in zip(group, amounts, strict=True):
+            seed_creation_resonance(sheet, pick.resonance, amount)
+    recompute_aura(sheet)
 
 
 @transaction.atomic
@@ -278,8 +378,6 @@ def provision_magic(
     """
     from world.codex.models import TraditionCodexGrant  # noqa: PLC0415
     from world.magic.models import CharacterTradition  # noqa: PLC0415
-    from world.magic.services.aura import recompute_aura  # noqa: PLC0415
-    from world.magic.services.glimpse import apply_glimpse_affinity_nudge  # noqa: PLC0415
     from world.species.services import (  # noqa: PLC0415
         provision_species_gifts,
         provision_starting_languages,
@@ -287,7 +385,7 @@ def provision_magic(
 
     hooks = hooks or MagicHooks()
     link_gift_and_techniques(sheet, picks)
-    provision_species_gifts(sheet, resonance=picks.resonance)
+    provision_species_gifts(sheet, resonances=[pick.resonance for pick in picks.ordered_resonances])
     provision_starting_languages(sheet, beginnings=picks.beginnings)
     if hooks.after_languages:
         hooks.after_languages()
@@ -305,15 +403,15 @@ def provision_magic(
     aura = _glimpse(sheet, picks)
     if hooks.after_aura:
         hooks.after_aura(aura)
-    recompute_aura(sheet)
-    apply_glimpse_affinity_nudge(aura)
+    _seed_resonances(sheet, picks, aura)
     _anima(sheet, picks)
-    if picks.resonance is not None and picks.resonance.codex_entry_id is not None:
-        grant_codex_entries(
-            sheet,
-            [picks.resonance.codex_entry_id],
-            require_roster_entry=require_roster_entry,
-        )
+    codex_entry_ids = [
+        pick.resonance.codex_entry_id
+        for pick in picks.ordered_resonances
+        if pick.resonance.codex_entry_id is not None
+    ]
+    if codex_entry_ids:
+        grant_codex_entries(sheet, codex_entry_ids, require_roster_entry=require_roster_entry)
 
 
 def academy_entrance_obligation(sheet: CharacterSheet, tradition: Tradition) -> None:
@@ -348,6 +446,26 @@ def academy_entrance_obligation(sheet: CharacterSheet, tradition: Tradition) -> 
         origin=ObligationOrigin.ACADEMY_ENTRANCE,
         defaults=defaults,
     )
+
+
+def resolve_weighted_resonances(draft_data: Mapping[str, Any]) -> list[WeightedResonance]:
+    """The draft's resonance picks as rows with their weights, heaviest first.
+
+    A pick whose resonance no longer exists is dropped; the stage validated them all, so
+    that only happens when the catalog changed under the draft.
+    """
+    from world.character_creation.resonance_weights import (  # noqa: PLC0415
+        draft_resonance_weights,
+    )
+    from world.magic.models import Resonance  # noqa: PLC0415
+
+    weights = draft_resonance_weights(draft_data)
+    by_id = Resonance.objects.in_bulk([pick.resonance_id for pick in weights])
+    return [
+        WeightedResonance(by_id[pick.resonance_id], pick.weight)
+        for pick in weights
+        if pick.resonance_id in by_id
+    ]
 
 
 def resolve_rows(model: type, ids: Iterable[int]) -> list:

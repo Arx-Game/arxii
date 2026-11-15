@@ -1,13 +1,13 @@
 """Journeys for the aura as one share per Affinity row (#4681).
 
-A character starts with the picked resonance's affinity at 80 and Abyssal at 20 (Primal
-at 20 when the pick is Abyssal). Resonance she then earns moves the shares, the dominant
-affinity the aura API names follows, and the Academy's fit line reads that dominant
-affinity. Staff renaming an Affinity row loses nothing: recompute keys on the row, never
+A character starts with the aura her weighted creation picks make (every point on one
+resonance is wholly that resonance's affinity). Resonance she then earns moves the shares,
+the dominant affinity the aura API names follows, and the Academy's fit line reads that
+dominant affinity. Staff renaming an Affinity row loses nothing: recompute keys on the row, never
 on its name. Each journey reads what the REST payload and the Academy menu show.
 
-Expected numbers come from the ruled starting split (80 / 20), and the shares a grant
-produces are lifetime earned by affinity as a percentage of the total. Names are invented.
+Expected numbers come from the seeded creation lifetime (10 points x 10), and the shares
+a grant produces are lifetime earned by affinity as a percentage of the total. Names are invented.
 """
 
 from __future__ import annotations
@@ -35,8 +35,9 @@ from world.magic.factories import (
     ensure_canonical_affinities,
 )
 from world.magic.models import Affinity, CharacterAura
-from world.magic.services.aura import set_aura_shares, starting_aura_shares
+from world.magic.services.aura import set_aura_shares
 from world.magic.services.resonance import grant_resonance
+from world.magic.types import AffinityShare
 
 
 def _shares(payload: dict) -> dict[str, Decimal]:
@@ -71,16 +72,16 @@ class StartingAuraAtCharacterCreation(FinalizationTestMixin, JourneyCase):
         self.assertEqual(len(rows), 1, rows)
         return rows[0]
 
-    def test_a_primal_pick_starts_primal_eighty_abyssal_twenty(self) -> None:
+    def test_a_primal_pick_starts_wholly_primal(self) -> None:
         character = self._character_made_picking("Wren", self.primal)
         payload = self._aura_payload(character)
-        self.assertEqual(_shares(payload), {"Primal": Decimal(80), "Abyssal": Decimal(20)})
+        self.assertEqual(_shares(payload), {"Primal": Decimal(100)})
         self.assertEqual(payload["dominant_affinity"], "Primal")
 
-    def test_an_abyssal_pick_starts_abyssal_eighty_primal_twenty(self) -> None:
+    def test_an_abyssal_pick_starts_wholly_abyssal(self) -> None:
         character = self._character_made_picking("Corin", self.abyssal)
         payload = self._aura_payload(character)
-        self.assertEqual(_shares(payload), {"Abyssal": Decimal(80), "Primal": Decimal(20)})
+        self.assertEqual(_shares(payload), {"Abyssal": Decimal(100)})
         self.assertEqual(payload["dominant_affinity"], "Abyssal")
 
     def test_granting_resonance_moves_the_dominant_affinity_the_api_shows(self) -> None:
@@ -91,13 +92,14 @@ class StartingAuraAtCharacterCreation(FinalizationTestMixin, JourneyCase):
         grant_resonance(
             sheet,
             ResonanceFactory(affinity=self.abyssal),
-            100,
+            300,
             source=GainSource.STAFF_GRANT,
         )
 
+        # 100 lifetime seeded at creation, 300 earned since: the aura extends, it is not replaced.
         payload = self._aura_payload(character)
         self.assertEqual(payload["dominant_affinity"], "Abyssal")
-        self.assertEqual(_shares(payload), {"Abyssal": Decimal(100)})
+        self.assertEqual(_shares(payload), {"Abyssal": Decimal(75), "Primal": Decimal(25)})
 
 
 class AuraAffinityAtTheAcademy(_AcademyCourseCase):
@@ -114,9 +116,15 @@ class AuraAffinityAtTheAcademy(_AcademyCourseCase):
         tradition.favored_affinities.add(self.dawn)
         self.role.teaches_tradition = tradition
         self.role.save()
-        # She began with the split character creation gives a Primal pick.
+        # She began mostly Primal, with an Abyssal streak.
         aura = CharacterAura.objects.create(character=self.sheet)
-        set_aura_shares(aura, starting_aura_shares(ResonanceFactory(affinity=self.primal)))
+        set_aura_shares(
+            aura,
+            [
+                AffinityShare(affinity=self.primal, percent=Decimal("80.00")),
+                AffinityShare(affinity=self.abyssal, percent=Decimal("20.00")),
+            ],
+        )
         self.dawn_resonance = ResonanceFactory(name="Daybreak Hymn", affinity=self.dawn)
 
     def fit_line(self) -> str:

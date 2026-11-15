@@ -12,6 +12,7 @@ from django.test.utils import CaptureQueriesContext
 from evennia.accounts.models import AccountDB
 
 from world.character_creation.constants import FamilyPath
+from world.character_creation.factories import single_resonance_weights
 from world.character_creation.models import CharacterDraft, StartingArea
 from world.character_creation.services import (
     DraftIncompleteError,
@@ -1402,10 +1403,8 @@ class FinalizeGiftAndTechniquesTests(TestCase):
         finalize_magic_data(draft, sheet)
 
         aura = CharacterAura.objects.get(character=sheet)
-        # The draft picked self.resonance: its affinity holds 80, Abyssal 20.
-        _, _, abyssal = ensure_canonical_affinities()
-        assert aura.percent_for(self.resonance.affinity) == Decimal("80.00")
-        assert aura.percent_for(abyssal) == Decimal("20.00")
+        # The draft put every creation point on self.resonance: its affinity holds all of it.
+        assert aura.percent_for(self.resonance.affinity) == Decimal("100.00")
         assert sum(share.percent for share in aura.cached_shares) == Decimal("100.00")
         assert aura.glimpse_story == ""
 
@@ -1455,7 +1454,7 @@ class FinalizeGiftAndTechniquesTests(TestCase):
         draft_data: dict = {
             "selected_gift_id": self.gift.id,
             "selected_technique_ids": technique_ids or [self.technique_one.id],
-            "selected_gift_resonance_id": (resonance or self.resonance).id,
+            "gift_resonance_weights": single_resonance_weights(resonance or self.resonance),
             "anima_check_stat_id": self.stat_trait.id,
             "anima_check_skill_id": self.skill.id,
         }
@@ -1728,10 +1727,8 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
         character = finalize_character(draft, add_to_roster=True)
 
         aura = CharacterAura.objects.get(character=character.sheet_data)
-        # The draft picked self.resonance: its affinity holds 80, Abyssal 20.
-        _, _, abyssal = ensure_canonical_affinities()
-        assert aura.percent_for(self.resonance.affinity) == Decimal("80.00")
-        assert aura.percent_for(abyssal) == Decimal("20.00")
+        # The draft put every creation point on self.resonance: its affinity holds all of it.
+        assert aura.percent_for(self.resonance.affinity) == Decimal("100.00")
         assert sum(share.percent for share in aura.cached_shares) == Decimal("100.00")
 
     def test_finalize_saves_glimpse_story(self):

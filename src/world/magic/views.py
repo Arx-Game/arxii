@@ -21,6 +21,7 @@ from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
 from evennia.accounts.models import AccountDB
+from evennia.objects.models import ObjectDB
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -43,11 +44,16 @@ from world.magic.constants import (
     is_ghost_tutor_ritual,
     is_imbuing_ritual,
 )
+from world.magic.crossing.handlers import (
+    THREAD_LABEL_RELATED,
+    open_labels_by_relationship_id,
+)
 from world.magic.exceptions import (
     DuplicateTechniqueName,
     InvalidImbueAmount,
     TechniqueAuthoringNotPermitted,
     TechniqueBudgetExceeded,
+    UnknownResonance,
 )
 from world.magic.filters import (
     CharacterAnimaFilter,
@@ -75,6 +81,7 @@ from world.magic.models import (
     Gift,
     GlimpseTag,
     PendingAlteration,
+    PendingRitualEffect,
     PoseEndorsement,
     Resonance,
     ResonanceGrant,
@@ -100,6 +107,7 @@ from world.magic.permissions import (
     IsThreadOwner,
 )
 from world.magic.serializers import (
+    AcceptAuraResponseSerializer,
     AcceptSoulTetherSerializer,
     AcceptTeachingOfferResponseSerializer,
     AcceptTeachingOfferSerializer,
@@ -181,7 +189,9 @@ from world.magic.serializers import (
     ThreadResonanceOptionsSerializer,
     ThreadSerializer,
     ThreadWeavingTeachingOfferSerializer,
+    aura_drift_readings,
     primary_persona_names_for,
+    thread_rows_by_thread,
 )
 from world.magic.services import (
     facets as facet_services,
@@ -192,6 +202,7 @@ from world.magic.services import (
 from world.magic.services.auth import _resolve_actor_sheet, _resolve_endorser_sheet
 from world.magic.services.gain import account_for_sheet, retract_pose_endorsement
 from world.magic.services.pull_applicability import PullActionContext, compute_thread_applicability
+from world.magic.services.pull_payers import resolve_pull_payers
 from world.magic.services.technique_builder import (
     PlayerPolicy,
     StaffPolicy,
@@ -208,6 +219,8 @@ _ERR_IMBUING_REQUIRES_THREAD = "Imbuing ritual requires thread_id in kwargs (int
 _ERR_IMBUING_REQUIRES_AMOUNT = "Imbuing ritual requires amount in kwargs (positive int)."
 _KWARG_TARGET_AFFINITY = "target_affinity"
 _KWARG_TARGET_RESONANCE = "target_resonance"
+_KWARG_FROM_RESONANCE = "from_resonance"
+_KWARG_AMOUNT = "amount"
 _KWARG_THREAD_ID = "thread_id"
 
 # =============================================================================
@@ -244,7 +257,7 @@ class ResonanceViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only list of Resonance rows with their Affinity, for pickers.
 
     The character-creation Gift stage lists every Resonance and stores the chosen
-    pk as ``draft_data["selected_gift_resonance_id"]``. Filter by ``?affinity=<pk>``.
+    picks as ``draft_data["gift_resonance_weights"]``. Filter by ``?affinity=<pk>``.
     """
 
     queryset = Resonance.objects.select_related("affinity").order_by("affinity__name", "name")
@@ -685,6 +698,44 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
             aura_shares_prefetch()
         )
 
+    def get_serializer(self, *args, **kwargs):
+        """Hand the serializer every aura's drift reading, each read once (ADR-0260)."""
+        instance = args[0] if args else kwargs.get("instance")
+        if instance is not None:
+            auras = list(instance) if kwargs.get("many") else [instance]
+            kwargs["context"] = {
+                **self.get_serializer_context(),
+                "drift_readings": aura_drift_readings(auras),
+            }
+        return super().get_serializer(*args, **kwargs)
+
+    @extend_schema(request=None, responses={200: AcceptAuraResponseSerializer})
+    @action(detail=True, methods=["post"], url_path="accept")
+    def accept(self, request: Request, pk: int | None = None) -> Response:
+        """Accept the changes to the aura: settle who the character has become (#5123).
+
+        Dispatches ``AcceptAuraChangeAction`` (the same action telnet ``aura accept`` runs)
+        for the character the aura belongs to. ``get_object`` finds the auras of characters
+        the requester plays and, for staff, every aura, so staff may accept for any
+        character. Refused with the action's own sentence while the character is not
+        unsettled.
+        """
+        from actions.definitions.accept_aura import AcceptAuraChangeAction  # noqa: PLC0415
+
+        aura = self.get_object()
+        result = AcceptAuraChangeAction().run(actor=aura.character.character)
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        context = {
+            **self.get_serializer_context(),
+            "drift_readings": aura_drift_readings([aura]),
+        }
+        return Response(
+            AcceptAuraResponseSerializer(
+                {"detail": result.message, "aura": aura}, context=context
+            ).data
+        )
+
     @extend_schema(request=GlimpseSetTagsSerializer, responses={200: CharacterAuraSerializer})
     @action(detail=True, methods=["post"], url_path="set-glimpse-tags")
     def set_glimpse_tags(self, request: Request, pk: int | None = None) -> Response:
@@ -707,7 +758,7 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
                 {"detail": exc.messages[0] if exc.messages else "Invalid tag selection."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        return Response(CharacterAuraSerializer(aura).data)
+        return Response(self.get_serializer(aura).data)
 
     @extend_schema(request=GlimpseSetProseSerializer, responses={200: CharacterAuraSerializer})
     @action(detail=True, methods=["post"], url_path="set-glimpse-prose")
@@ -717,7 +768,7 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         aura = self.get_object()
         glimpse_services.set_glimpse_prose(aura, serializer.validated_data["text"])
-        return Response(CharacterAuraSerializer(aura).data)
+        return Response(self.get_serializer(aura).data)
 
     @extend_schema(
         request=GlimpseDistinctionLinkSerializer, responses={200: CharacterAuraSerializer}
@@ -740,7 +791,7 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
                 {"detail": exc.messages[0] if exc.messages else "Cannot link."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        return Response(CharacterAuraSerializer(aura).data)
+        return Response(self.get_serializer(aura).data)
 
     @extend_schema(
         request=GlimpseDistinctionLinkSerializer, responses={200: CharacterAuraSerializer}
@@ -757,7 +808,7 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
             character=aura.character,
         )
         glimpse_services.unlink_distinction_from_glimpse(character_distinction)
-        return Response(CharacterAuraSerializer(aura).data)
+        return Response(self.get_serializer(aura).data)
 
 
 class CharacterResonanceViewSet(viewsets.ModelViewSet):
@@ -1049,12 +1100,9 @@ class ThreadViewSet(viewsets.ModelViewSet):
             .select_related(
                 "owner",
                 "owner__character",
-                "resonance",
                 "resonance__affinity",
-                "target_trait",
-                "target_technique",
-                "target_relationship",
-                "target_capstone",
+                # Everything a thread's display name reads, so a list costs no query per thread.
+                *THREAD_LABEL_RELATED,
             )
             .order_by("-pk")
         )
@@ -1064,6 +1112,24 @@ class ThreadViewSet(viewsets.ModelViewSet):
             cast(AccountDB, user),
         ).character_ids()
         return qs.filter(owner_id__in=character_ids)
+
+    def list(self, request: Request, *args, **kwargs) -> Response:
+        """List the page of threads, reading every thread's resonance rows in one query."""
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        threads = list(queryset) if page is None else page
+        serializer = self.get_serializer(
+            threads,
+            many=True,
+            context={
+                **self.get_serializer_context(),
+                "thread_rows": thread_rows_by_thread(threads),
+                "open_labels": open_labels_by_relationship_id(threads),
+            },
+        )
+        if page is None:
+            return Response(serializer.data)
+        return self.get_paginated_response(serializer.data)
 
     def destroy(self, request: Request, *args, **kwargs) -> Response:
         """Soft-retire the thread by stamping ``retired_at`` instead of deleting.
@@ -1115,11 +1181,15 @@ class ThreadViewSet(viewsets.ModelViewSet):
 
         GET /api/magic/threads/{id}/resonance-options/  (slice 6 of #4672)
 
+        Query: ``from_resonance`` (id of one of the thread's resonances, default the leading
+        one) and ``amount`` (points to move, default all of that resonance's row).
+
         Response: ``{ritual_id, offering_required, offering_count, unavailable_reason,
         options: [{resonance_id, resonance_name, affinity_name, conversion_type,
-        projected_points, merges_into_thread_id, qualifying: [{item_id, name, mode}]}]}``.
+        projected_points, qualifying: [{item_id, name, mode}]}]}``.
         ``ritual_id`` is null while no retune rite is authored; perform it through
-        ``POST /api/magic/rituals/perform/`` with ``kwargs: {thread_id, target_resonance}``.
+        ``POST /api/magic/rituals/perform/`` with
+        ``kwargs: {thread_id, target_resonance, from_resonance?, amount?}``.
         ``qualifying`` is filled only when the rite asks for a target-resonance offering.
         """
         from world.magic.services.drift import (  # noqa: PLC0415
@@ -1137,7 +1207,19 @@ class ThreadViewSet(viewsets.ModelViewSet):
 
         thread = self.get_object()
         ritual = thread_resonance_ritual()
-        options = thread_resonance_options(thread) if ritual is not None else []
+        options: list = []
+        if ritual is not None:
+            query: dict = {}
+            for key in (_KWARG_FROM_RESONANCE, _KWARG_AMOUNT):
+                # Two parameters of this one detail action, not a list filter.
+                if key in request.query_params:  # noqa: USE_FILTERSET
+                    query[key] = request.query_params[key]  # noqa: USE_FILTERSET
+            error = _resolve_retune_kwargs(query)
+            if error is not None:
+                return error
+            options = thread_resonance_options(
+                thread, query.get(_KWARG_FROM_RESONANCE), query.get(_KWARG_AMOUNT)
+            )
         offering_count = target_resonance_offering_count(ritual) if ritual is not None else 0
         qualifying = {}
         if offering_count:
@@ -1165,14 +1247,44 @@ class ThreadViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+def _pull_preview_target(sheet: CharacterSheet, action_ctx: dict) -> ObjectDB | None:
+    """The live target a pull preview modulates against, or None (#2035)."""
+    # #2035: resolve the optional live target so relationship-bond/Court-regard
+    # pull modulation (apply_target_modulation) shows up in the preview exactly
+    # as it would at commit time (spend_resonance_for_pull). Gated by
+    # can_perceive — this is a free, repeatable, uncommitted read, so (unlike
+    # the commit path) it must not become an oracle for probing private
+    # regard/relationship facts about personas the requester cannot perceive
+    # (mirrors pull_applicability.py's _court_pull_would_have_effect /
+    # _relationship_pull_would_have_effect gates, ADR-0086). An unresolvable or
+    # unperceivable target silently degrades to the unmodulated preview.
+    target = None
+    target_persona_id = action_ctx.get("target_persona_id") if action_ctx else None
+    if target_persona_id:
+        from world.conditions.services import can_perceive  # noqa: PLC0415
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        target_persona = (
+            Persona.objects.select_related("character_sheet__character")
+            .filter(pk=target_persona_id)
+            .first()
+        )
+        if target_persona is not None:
+            target_character = target_persona.character_sheet.character
+            if can_perceive(sheet.character, target_character):
+                target = target_character
+    return target
+
+
 class ThreadPullPreviewView(APIView):
     """Read-only preview of a resonance pull (Spec A §5.6).
 
     POST /api/magic/thread-pull-preview/
 
-    Request body: ``{tier, thread_ids[], burn_resonance_id?, action_context?, technique_id?}``
-    (the threads may mix resonances, #5066).
-    Response: ``{resonance_cost, anima_cost, affordable, resolved_effects[],
+    Request body: ``{tier, thread_ids[], payers?, burn_resonance_id?, action_context?,
+    technique_id?}`` (``payers`` maps a thread id to the resonance id paying for it, else
+    its leading resonance, #5123).
+    Response: ``{resonance_cost, anima_cost, affordable, resolved_effects[], per_thread[],
     capped_intensity, burn}``; ``burn`` is null without ``technique_id`` (#4736).
     Never mutates state.
     """
@@ -1211,6 +1323,11 @@ class ThreadPullPreviewView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        try:
+            payers = resolve_pull_payers(sheet.pk, thread_ids, data.get("payers"))
+        except InvalidImbueAmount as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+
         combat_encounter = None
         action_ctx = data.get("action_context") or {}
         encounter_id = action_ctx.get("combat_encounter_id") if action_ctx else None
@@ -1219,30 +1336,7 @@ class ThreadPullPreviewView(APIView):
 
             combat_encounter = get_object_or_404(CombatEncounter, pk=encounter_id)
 
-        # #2035: resolve the optional live target so relationship-bond/Court-regard
-        # pull modulation (apply_target_modulation) shows up in the preview exactly
-        # as it would at commit time (spend_resonance_for_pull). Gated by
-        # can_perceive — this is a free, repeatable, uncommitted read, so (unlike
-        # the commit path) it must not become an oracle for probing private
-        # regard/relationship facts about personas the requester cannot perceive
-        # (mirrors pull_applicability.py's _court_pull_would_have_effect /
-        # _relationship_pull_would_have_effect gates, ADR-0086). An unresolvable or
-        # unperceivable target silently degrades to the unmodulated preview.
-        target = None
-        target_persona_id = action_ctx.get("target_persona_id") if action_ctx else None
-        if target_persona_id:
-            from world.conditions.services import can_perceive  # noqa: PLC0415
-            from world.scenes.models import Persona  # noqa: PLC0415
-
-            target_persona = (
-                Persona.objects.select_related("character_sheet__character")
-                .filter(pk=target_persona_id)
-                .first()
-            )
-            if target_persona is not None:
-                target_character = target_persona.character_sheet.character
-                if can_perceive(sheet.character, target_character):
-                    target = target_character
+        target = _pull_preview_target(sheet, action_ctx)
 
         technique = None
         technique_id = data.get("technique_id")
@@ -1263,6 +1357,7 @@ class ThreadPullPreviewView(APIView):
                 excluded_kinds=frozenset({TargetKind.GIFT}) if data.get("exclude_gift") else None,
                 target=target,
                 burn_resonance=burn_resonance,
+                payers=payers,
             )
         except InvalidImbueAmount as exc:
             return Response(
@@ -1337,6 +1432,28 @@ def _validate_imbuing_amount(kwargs: dict) -> Response | None:
     return None
 
 
+def _resolve_retune_kwargs(kwargs: dict) -> Response | None:
+    """Resolve the retune's optional ``from_resonance`` id and ``amount`` in place (#5123).
+
+    ``from_resonance`` becomes a ``Resonance`` and ``amount`` a positive int; either that
+    is not one is a 400. Both share their resolvers with the telnet ``ritual`` command.
+    """
+    from world.magic.exceptions import ThreadResonanceChangeError  # noqa: PLC0415
+    from world.magic.services.thread_resonance import (  # noqa: PLC0415
+        resolve_retune_amount,
+        resolve_target_resonance,
+    )
+
+    try:
+        if kwargs.get(_KWARG_FROM_RESONANCE) is not None:
+            kwargs[_KWARG_FROM_RESONANCE] = resolve_target_resonance(kwargs[_KWARG_FROM_RESONANCE])
+        if _KWARG_AMOUNT in kwargs:
+            kwargs[_KWARG_AMOUNT] = resolve_retune_amount(kwargs[_KWARG_AMOUNT])
+    except (UnknownResonance, ThreadResonanceChangeError) as err:
+        return Response({"detail": err.user_message}, status=status.HTTP_400_BAD_REQUEST)
+    return None
+
+
 def _model_ref_dict(pairs: list[tuple[str, object]]) -> dict:
     """``asdict`` dict factory that sends a model instance as its ``{id, name}`` reference.
 
@@ -1374,7 +1491,9 @@ class RitualPerformView(APIView):
         """Resolve/validate the imbuing ``thread_id``/``amount`` kwargs in place.
 
         Returns a 400 ``Response`` on invalid input, else ``None`` (with
-        ``kwargs["thread"]`` resolved to an owned, non-retired Thread).
+        ``kwargs["thread"]`` resolved to an owned, non-retired Thread and
+        ``kwargs["resonance"]`` to the resonance that pays: the optional ``resonance_id``,
+        else the thread's leading one, #5123).
         """
         thread_id = kwargs.pop("thread_id", None)
         if not isinstance(thread_id, int):
@@ -1393,6 +1512,18 @@ class RitualPerformView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         kwargs["thread"] = thread
+        resonance_id = kwargs.pop("resonance_id", None)
+        resonance = thread.resonance
+        if resonance_id is not None:
+            from world.magic.services.thread_resonance import (  # noqa: PLC0415
+                resolve_target_resonance,
+            )
+
+            try:
+                resonance = resolve_target_resonance(resonance_id)
+            except UnknownResonance as err:
+                return Response({"detail": err.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        kwargs["resonance"] = resonance
         return _validate_imbuing_amount(kwargs)
 
     @staticmethod
@@ -1461,6 +1592,9 @@ class RitualPerformView(APIView):
             error = self._resolve_owned_thread_kwargs(sheet, kwargs)
             if error is not None:
                 return error
+            error = _resolve_retune_kwargs(kwargs)
+            if error is not None:
+                return error
         error = self._resolve_target_resonance_kwargs(kwargs)
         if error is not None:
             return error
@@ -1498,7 +1632,6 @@ class RitualPerformView(APIView):
         Shares ``resolve_target_resonance`` with telnet's ``resonance=``: a non-integer or
         unknown id is a 400.
         """
-        from world.magic.exceptions import UnknownResonance  # noqa: PLC0415
         from world.magic.services.thread_resonance import (  # noqa: PLC0415
             resolve_target_resonance,
         )
@@ -1525,9 +1658,16 @@ class RitualPerformView(APIView):
         from actions.definitions.imbue import ImbueAction  # noqa: PLC0415
 
         finisher_result = ImbueAction().run(
-            actor=sheet.character, thread=kwargs["thread"], amount=kwargs["amount"]
+            actor=sheet.character,
+            thread=kwargs["thread"],
+            amount=kwargs["amount"],
+            resonance_id=kwargs["resonance"].pk,
         )
         if not finisher_result.success:
+            # The web sends one POST and has no later finisher to complete the rite, so a
+            # refused imbue ends it: left pending, the next valid imbue would be answered
+            # "A Rite of Imbuing is already in progress." (#5123).
+            PendingRitualEffect.objects.filter(character=sheet, ritual=ritual).delete()
             return Response({"detail": finisher_result.message}, status=status.HTTP_400_BAD_REQUEST)
         imbue_result = finisher_result.data.get("result")
         return Response(
@@ -2362,7 +2502,7 @@ class PendingDriftConversionOfferViewSet(viewsets.ReadOnlyModelViewSet):
     GET /api/magic/drift-correction/pending/{id}/
 
     Scoped to the authenticated user's character sheets (active tenures), and to offers
-    whose scene has not finished, the same rule telnet's ``drift`` uses. A finish route
+    whose scene has not finished, the same rule telnet's ``aura`` uses. A finish route
     that skips ``Scene.finish_scene`` can leave an offer row behind; it is never listed.
     """
 

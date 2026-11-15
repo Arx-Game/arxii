@@ -6,7 +6,7 @@ from world.character_creation.constants import (
     CG_MODIFIER_CATEGORY,
     MAGIC_TRAINING_POINTS_TARGET,
 )
-from world.character_creation.factories import CharacterDraftFactory
+from world.character_creation.factories import CharacterDraftFactory, single_resonance_weights
 from world.character_creation.types import DistinctionBonusSource
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.magic.factories import (
@@ -45,9 +45,11 @@ class MagicTrainingPoolTest(TestCase):
         else:
             data["selected_gift_id"] = GiftFactory().id
         if affinity:
-            data["selected_gift_resonance_id"] = self.resonance.id
+            data["gift_resonance_weights"] = single_resonance_weights(self.resonance)
         else:
-            data["selected_gift_resonance_id"] = ResonanceFactory(affinity=AffinityFactory()).id
+            data["gift_resonance_weights"] = single_resonance_weights(
+                ResonanceFactory(affinity=AffinityFactory())
+            )
         return CharacterDraftFactory(
             draft_data=data, selected_tradition=self.tradition if tradition else None
         )
@@ -133,7 +135,7 @@ class MagicSkillAllocationTest(TestCase):
     def _draft(self, magic_skills, *, gift=None, trained=True):
         data = {
             "selected_gift_id": (gift or self.gift).id,
-            "selected_gift_resonance_id": self.resonance.id,
+            "gift_resonance_weights": single_resonance_weights(self.resonance),
             "distinctions": ([{"distinction_id": self.training.id, "rank": 1}] if trained else []),
             "magic_skills": magic_skills,
         }

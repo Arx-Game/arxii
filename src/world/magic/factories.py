@@ -111,6 +111,7 @@ from world.magic.models import (
     ThreadLevelUnlock,
     ThreadPullCost,
     ThreadPullEffect,
+    ThreadResonance,
     ThreadSurvivabilityTuning,
     ThreadWeavingTeachingOffer,
     ThreadWeavingUnlock,
@@ -378,12 +379,26 @@ class DistinctionResonanceRankThresholdFactory(factory.django.DjangoModelFactory
     lifetime_earned_threshold = 10
 
 
+def _settle_where_standing(aura: CharacterAura) -> None:
+    """Make each share of ``aura`` who the character is: settled equals its percent."""
+    for share in aura.cached_shares:
+        share.settled_percent = share.percent
+        share.save()
+
+
 def set_aura_split(aura: CharacterAura, *, celestial: str, primal: str, abyssal: str) -> None:
-    """Set an aura's shares to a Celestial / Primal / Abyssal split (zero writes no row)."""
+    """Set an aura's shares to a Celestial / Primal / Abyssal split (zero writes no row).
+
+    The split is also who the character is: each share is settled where it stands.
+    """
     from world.magic.services.aura import set_aura_shares
     from world.magic.types import AffinityShare
 
     rows = ensure_canonical_affinities()
+    # A row with a settled share survives set_aura_shares, so unsettle before rewriting.
+    for share in aura.cached_shares:
+        share.settled_percent = Decimal(0)
+        share.save()
     set_aura_shares(
         aura,
         [
@@ -392,6 +407,7 @@ def set_aura_split(aura: CharacterAura, *, celestial: str, primal: str, abyssal:
             if Decimal(percent) > 0
         ],
     )
+    _settle_where_standing(aura)
 
 
 class CharacterAuraFactory(factory.django.DjangoModelFactory):
@@ -399,8 +415,10 @@ class CharacterAuraFactory(factory.django.DjangoModelFactory):
 
     ``celestial`` / ``primal`` / ``abyssal`` are convenience percentages for the three
     canonical affinities (rows named Celestial / Primal / Abyssal, created if absent);
-    a zero percent writes no row. The three old columns of the same names still exist on
-    the model until Task 7 drops them; the factory never writes them.
+    a zero percent writes no row. Each share is settled where it stands, so the aura
+    reads as who the character is (``settled_percent`` equals ``percent``). The three old
+    columns of the same names still exist on the model until Task 7 drops them; the
+    factory never writes them.
     """
 
     class Meta:
@@ -435,6 +453,8 @@ class CharacterAuraFactory(factory.django.DjangoModelFactory):
         Affinity.objects.clear_cache()
         if shares:
             set_aura_shares(aura, shares)
+            # The aura a test builds is who the character is: settled where it stands.
+            _settle_where_standing(aura)
         return aura
 
 
@@ -1883,6 +1903,42 @@ class ThreadFactory(factory.django.DjangoModelFactory):
         self.target_kind = TargetKind.COVENANT_ROLE
         self.target_covenant_role = role
         self.target_trait = None  # type: ignore[assignment]
+
+    # Declared last: every thread holds a row for its resonance (#5123), sized to the
+    # points the factory gave the thread so the rows' sum equals ``developed_points``.
+    @factory.post_generation  # type: ignore[misc]
+    def _resonance_row(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:
+        if not create:
+            return
+        ThreadResonance.objects.get_or_create(
+            thread=self,
+            resonance=self.resonance,
+            defaults={"amount": self.developed_points},
+        )
+
+
+class ThreadResonanceFactory(factory.django.DjangoModelFactory):
+    """Factory for ThreadResonance.
+
+    ``ThreadFactory`` already writes the row for the thread's own resonance, so asking
+    for that pair again updates its amount instead of failing on the unique constraint.
+    """
+
+    class Meta:
+        model = ThreadResonance
+
+    thread = factory.SubFactory(ThreadFactory)
+    resonance = factory.SubFactory(ResonanceFactory)
+    amount = 0
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        row, _ = model_class.objects.update_or_create(
+            thread=kwargs.pop("thread"),
+            resonance=kwargs.pop("resonance"),
+            defaults=kwargs,
+        )
+        return row
 
 
 class ThreadLevelUnlockFactory(factory.django.DjangoModelFactory):

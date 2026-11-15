@@ -7,8 +7,8 @@ their aura back toward resonances they want to grow. A deed in a scene opens one
 that cap was measured from). Staff tune the rite through ``DriftCorrectionConfig`` and how
 much of the cap a roll converts through ``DriftCorrectionOutcomeShare``.
 
-Carried drift (#4732) is measured and contested through ``DriftConfig``: a character
-carrying drift past its threshold rolls to keep her focus when she works her magic.
+Being unsettled (#4732, #5123) is measured and contested through ``DriftConfig``: a
+character grown past who they are rolls to keep her focus when she works her magic.
 """
 
 from __future__ import annotations
@@ -25,33 +25,49 @@ _RESONANCE_FK = "arxii.Resonance"
 
 
 class DriftConfig(SharedMemoryModel):
-    """Singleton (pk=1) of thresholds and the focus roll for carried drift.
+    """Singleton (pk=1) of unsettled tuning, creation points and the focus roll.
 
-    The threshold is ``max(threshold_floor, threshold_percent of the dominant
-    affinity's balance)``; each ``severity_step`` drift points past it is one
-    step of severity on the conflict condition.
+    A character is unsettled when a non-main affinity's share of their aura passes its
+    settled share by ``unsettled_tolerance_percent``; each ``unsettled_step_percent``
+    past that is one step of severity on the conflict condition.
 
     Access via ``get_drift_config()`` in ``world.magic.services.drift``.
     """
 
     objects = ArxSharedMemoryManager()
 
-    threshold_percent = models.PositiveSmallIntegerField(
-        default=50,
-        help_text="Carried drift must pass this percent of the dominant affinity's balance.",
+    unsettled_tolerance_percent = models.PositiveSmallIntegerField(
+        default=5,
+        validators=[MaxValueValidator(100)],
+        help_text="Percentage points an affinity may exceed its settled share before unsettled.",
     )
-    threshold_floor = models.PositiveIntegerField(
-        default=20,
-        help_text="The threshold never falls below this many drift points.",
+    unsettled_step_percent = models.PositiveSmallIntegerField(
+        default=5,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text="Percentage points past the tolerance that add one step of severity.",
     )
-    severity_step = models.PositiveIntegerField(
-        default=20,
+    creation_points = models.PositiveSmallIntegerField(
+        default=10,
         validators=[MinValueValidator(1)],
-        help_text="Drift points past the threshold that add one step of severity.",
+        help_text="Points a new character spreads across their starting resonances.",
     )
-    off_aura_pull_steps = models.PositiveSmallIntegerField(
-        default=1,
-        help_text="Severity steps added when the working affinity is not the aura's dominant one.",
+    creation_seed_per_point = models.PositiveSmallIntegerField(
+        default=10,
+        validators=[MinValueValidator(1)],
+        help_text="Lifetime resonance points seeded per creation point.",
+    )
+    second_resonance_level_step = models.PositiveSmallIntegerField(
+        default=10,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "Thread levels a non-leading resonance reads below the thread's level "
+            "when it pays a pull."
+        ),
+    )
+    mire_allowance_percent = models.PositiveSmallIntegerField(
+        default=30,
+        validators=[MaxValueValidator(100)],
+        help_text="Percent of a Sineater's lifetime resonance the Mire may hold before unsettled.",
     )
     focus_base_difficulty = models.PositiveSmallIntegerField(
         default=10,

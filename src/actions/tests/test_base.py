@@ -300,6 +300,7 @@ class ActionRegistryTests(TestCase):
             "perform_ritual",
             "perform_drift_correction",
             "decline_drift_correction",
+            "accept_aura_change",
             "tavern_game_open",
             "tavern_game_join",
             "tavern_game_roll",

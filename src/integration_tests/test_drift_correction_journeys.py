@@ -59,7 +59,7 @@ from world.magic.models import (
     Resonance,
     ResonanceGrant,
 )
-from world.magic.services.drift import get_drift_correction_config
+from world.magic.services.drift import get_drift_config, get_drift_correction_config
 from world.magic.services.resonance import grant_resonance
 from world.scenes.factories import SceneFactory, SceneOwnerParticipationFactory
 from world.scenes.interaction_services import get_active_scene, invalidate_active_scene_cache
@@ -68,9 +68,9 @@ from world.seeds.game_content.magic import _seed_affinity_interactions, seed_can
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 from world.traits.services import ensure_canonical_check_outcome
 
-NO_OFFER = "You have no open chance to correct drift."
-NOTICE = "You carry resonance that does not fit you. Use drift to see what you can correct."
-LAPSE = "The chance to correct drift passes with the scene."
+NO_OFFER = "You have no open chance to atone."
+NOTICE = "You have grown unsettled. Use aura to see how you can atone."
+LAPSE = "The chance to atone passes with the scene."
 NOT_READY = "The rite of correction is not set up yet; tell staff."
 PENDING = "/api/magic/drift-correction/pending/"
 CONVERT = "/api/magic/drift-correction/convert/"
@@ -107,7 +107,8 @@ class DriftJourneyCase(JourneyCase):
     """The Lantern, a live scene, the seeded affinities and the authored rite.
 
     ``self.ysmay`` is Celestial: 500 lifetime Dawnlight (balance 0, so a deed's gain is
-    all there is to read back), 30 Ruin (Abyssal) drift, an aura of 80/10/10.
+    all there is to read back), 30 Ruin (Abyssal) of unsettled excess (an aura of 100/0/0,
+    no tolerance).
     """
 
     def setUp(self) -> None:
@@ -139,10 +140,15 @@ class DriftJourneyCase(JourneyCase):
         self.hold(self.ysmay, self.ruin, 30)
         set_aura_split(
             CharacterAuraFactory(character=self.ysmay.sheet_data),
-            celestial="80",
-            primal="10",
-            abyssal="10",
+            celestial="100",
+            primal="0",
+            abyssal="0",
         )
+        # Nothing of Ruin is who she is and no tolerance is allowed it, so all 30 of it is
+        # unsettled excess, which is what the rite may convert.
+        tolerance = get_drift_config()
+        tolerance.unsettled_tolerance_percent = 0
+        tolerance.save()
         self.dawn_flourish = DramaticMomentTypeFactory(
             label="Dawn Flourish", resonance=self.dawnlight, per_scene_cap=3, resonance_amount=20
         )
@@ -212,7 +218,7 @@ class CorrectingDriftAtTheKeyboard(DriftJourneyCase):
         self.connect_telnet(self.ysmay)
         thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
 
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "drift"))
+        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura"))
         self.assertIsNone(self.offer_of(self.ysmay))
 
         # First deed: 20 Dawnlight granted; the cap is 50% of 20 = 10.
@@ -221,8 +227,8 @@ class CorrectingDriftAtTheKeyboard(DriftJourneyCase):
         self.assertEqual(balance(self.ysmay, self.dawnlight), 20)
         self.assertIn(NOTICE, strip_ansi(self.said(self.ysmay)))
 
-        shown = strip_ansi(self.telnet(self.ysmay, "drift"))
-        self.assertIn("You may correct drift.", shown)
+        shown = strip_ansi(self.telnet(self.ysmay, "aura"))
+        self.assertIn("You may atone.", shown)
         self.assertIn("Toward Dawnlight: up to 10.", shown)
         # Ruin is Abyssal, Dawnlight Celestial: the seeded Redemption pair at 0.5, so the
         # whole cap (10) would give 5. She holds all 30 Ruin.
@@ -236,13 +242,13 @@ class CorrectingDriftAtTheKeyboard(DriftJourneyCase):
         self.deed(self.ysmay)
         self.assertNotIn(NOTICE, strip_ansi("\n".join(self.mailbox(self.ysmay).lines[before:])))
         self.assertEqual(DriftConversionOffer.objects.filter(scene=self.scene).count(), 1)
-        shown = strip_ansi(self.telnet(self.ysmay, "drift"))
+        shown = strip_ansi(self.telnet(self.ysmay, "aura"))
         self.assertIn("Toward Dawnlight: up to 20.", shown)
         self.assertIn("Converting 20 would give 10.", shown)
 
         # Convert 12 Ruin at a full share: 12 x 0.5 = 6 Dawnlight.
         with force_check_outcome(self.outcomes["Success"]):
-            told = self.telnet(self.ysmay, "drift convert Ruin=Dawnlight 12")
+            told = self.telnet(self.ysmay, "aura atone Ruin=Dawnlight 12")
         self.assertIn("Success: 12 Ruin became 6 Dawnlight.", told)
         self.assertEqual(balance(self.ysmay, self.ruin), 30 - 12)
         # 20 + 20 from the two deeds, +6 from the rite.
@@ -253,7 +259,7 @@ class CorrectingDriftAtTheKeyboard(DriftJourneyCase):
         self.assertEqual(self.cap_toward(self.ysmay, self.dawnlight), 20 - 12)
 
         # What is left: 8 of cap, 18 Ruin, 8 x 0.5 = 4, and nothing to offer.
-        shown = strip_ansi(self.telnet(self.ysmay, "drift"))
+        shown = strip_ansi(self.telnet(self.ysmay, "aura"))
         self.assertIn("Toward Dawnlight: up to 8.", shown)
         self.assertIn("From Ruin: you hold 18", shown)
         self.assertIn("Converting 8 would give 4.", shown)
@@ -263,21 +269,21 @@ class CorrectingDriftAtTheKeyboard(DriftJourneyCase):
         self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
         self.deed(self.ysmay)
         with force_check_outcome(self.outcomes["Success"]):
-            told = self.telnet(self.ysmay, "drift convert Ruin=Dawnlight")
+            told = self.telnet(self.ysmay, "aura atone Ruin=Dawnlight")
         # Cap 10, 30 Ruin held: 10 Ruin -> int(10 x 0.5) = 5 Dawnlight; the cap is spent,
         # so the offer is gone.
         self.assertIn("Success: 10 Ruin became 5 Dawnlight.", told)
         self.assertEqual(balance(self.ysmay, self.ruin), 20)
         self.assertEqual(balance(self.ysmay, self.dawnlight), 25)
         self.assertIsNone(self.offer_of(self.ysmay))
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "drift"))
+        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura"))
 
     def test_an_offering_that_does_not_count_is_refused_and_nothing_moves(self) -> None:
         other = ResonanceFactory(name="Sunrise", affinity=self.celestial)
         stranger = self.carry(self.ysmay, other, "Sunrise Candle")
         self.deed(self.ysmay)
         with force_check_outcome(self.outcomes["Success"]):
-            told = self.telnet(self.ysmay, "drift convert Ruin=Dawnlight 10")
+            told = self.telnet(self.ysmay, "aura atone Ruin=Dawnlight 10")
         self.assertIn(
             "Ritual 'Rite of Drift Correction' requires 1x offering for Dawnlight "
             "that you don't have.",
@@ -305,11 +311,11 @@ class CorrectingDriftAtTheKeyboard(DriftJourneyCase):
         materialize_item_game_object(cloak, self.ysmay.sheet_data)
         self.deed(self.ysmay)
 
-        shown = strip_ansi(self.telnet(self.ysmay, "drift"))
+        shown = strip_ansi(self.telnet(self.ysmay, "aura"))
         self.assertIn("Spent only if named (with <item>): Sigil Cloak (facet).", shown)
 
         with force_check_outcome(self.outcomes["Success"]):
-            told = self.telnet(self.ysmay, "drift convert Ruin=Dawnlight 10")
+            told = self.telnet(self.ysmay, "aura atone Ruin=Dawnlight 10")
         self.assertIn(
             "Ritual 'Rite of Drift Correction' requires 1x offering for Dawnlight "
             "that you don't have.",
@@ -321,7 +327,7 @@ class CorrectingDriftAtTheKeyboard(DriftJourneyCase):
 
         cloak_pk = cloak.pk
         with force_check_outcome(self.outcomes["Success"]):
-            told = self.telnet(self.ysmay, "drift convert Ruin=Dawnlight 10 with cloak")
+            told = self.telnet(self.ysmay, "aura atone Ruin=Dawnlight 10 with cloak")
         self.assertIn("Success: 10 Ruin became 5 Dawnlight.", told)
         self.assertTrue(consumed(cloak_pk))
         self.assertEqual(balance(self.ysmay, self.ruin), 20)
@@ -331,22 +337,22 @@ class LettingTheChancePassOrFailingTheRite(DriftJourneyCase):
     def test_declining_changes_nothing_but_the_offer(self) -> None:
         thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
         self.deed(self.ysmay)
-        told = self.telnet(self.ysmay, "drift decline")
-        self.assertIn("You let the chance to correct drift pass.", told)
+        told = self.telnet(self.ysmay, "aura decline")
+        self.assertIn("You let the chance to atone pass.", told)
         self.assertIsNone(self.offer_of(self.ysmay))
         self.assertFalse(consumed(thread))
         self.assertEqual(balance(self.ysmay, self.ruin), 30)
         self.assertEqual(balance(self.ysmay, self.dawnlight), 20)
         self.assertEqual(drift_grants(), [])
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "drift"))
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "drift decline"))
+        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura"))
+        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura decline"))
 
     def test_a_failed_roll_costs_the_offering_and_moves_nothing(self) -> None:
         thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
         self.set_shares(Failure="0.00")
         self.deed(self.ysmay)
         with force_check_outcome(self.outcomes["Failure"]):
-            told = self.telnet(self.ysmay, "drift convert Ruin=Dawnlight 10")
+            told = self.telnet(self.ysmay, "aura atone Ruin=Dawnlight 10")
         self.assertIn("The rite fails; nothing is converted.", told)
         self.assertTrue(consumed(thread))
         self.assertEqual(balance(self.ysmay, self.ruin), 30)
@@ -354,14 +360,14 @@ class LettingTheChancePassOrFailingTheRite(DriftJourneyCase):
         self.assertEqual(drift_grants(), [])
         # The chance itself stays: the cap is whole and she may try again.
         self.assertEqual(self.cap_toward(self.ysmay, self.dawnlight), 10)
-        self.assertIn("Toward Dawnlight: up to 10.", self.telnet(self.ysmay, "drift"))
+        self.assertIn("Toward Dawnlight: up to 10.", self.telnet(self.ysmay, "aura"))
 
     def test_a_half_share_converts_half_and_keeps_the_rest_of_the_cap(self) -> None:
         thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
         self.set_shares(**{"Partial Success": "0.50"})
         self.deed(self.ysmay)
         with force_check_outcome(self.outcomes["Partial Success"]):
-            told = self.telnet(self.ysmay, "drift convert Ruin=Dawnlight 10")
+            told = self.telnet(self.ysmay, "aura atone Ruin=Dawnlight 10")
         # Half of 10 is 5 Ruin, which is 5 x 0.5 = 2 Dawnlight (floored); the cap falls by 5.
         # The tier leads the line, so a partial conversion never reads as a full one.
         self.assertIn("Partial Success: 5 Ruin became 2 Dawnlight.", told)
@@ -378,7 +384,7 @@ class TheSameChanceOnTheWeb(DriftJourneyCase):
         mine = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
         hobbs = self.carry(self.hobb, self.dawnlight, "Hobb's Dawn Thread")
         self.deed(self.ysmay)
-        shown = strip_ansi(self.telnet(self.ysmay, "drift"))
+        shown = strip_ansi(self.telnet(self.ysmay, "aura"))
         self.assertIn("Toward Dawnlight: up to 10.", shown)
         self.assertIn("Converting 10 would give 5.", shown)
 
@@ -441,7 +447,7 @@ class TheSameChanceOnTheWeb(DriftJourneyCase):
         self.assertEqual((grant.resonance, grant.amount), (self.dawnlight, 5))
         # The cap was spent, so the inbox is empty and telnet agrees.
         self.assertEqual(ysmay_api.get(PENDING).data["results"], [])
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "drift"))
+        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura"))
 
     def test_another_account_neither_sees_nor_acts_on_her_offer(self) -> None:
         mine = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
@@ -502,9 +508,9 @@ class TheSameChanceOnTheWeb(DriftJourneyCase):
         offer_id = ysmay_api.get(PENDING).data["results"][0]["id"]
         done = post(ysmay_api, DECLINE, {"offer_id": offer_id})
         self.assertEqual(done.status_code, 200)
-        self.assertEqual(done.data["detail"], "You let the chance to correct drift pass.")
+        self.assertEqual(done.data["detail"], "You let the chance to atone pass.")
         self.assertEqual(ysmay_api.get(PENDING).data["results"], [])
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "drift"))
+        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura"))
         self.assertFalse(consumed(mine))
         self.assertEqual(balance(self.ysmay, self.ruin), 30)
         self.assertEqual(post(ysmay_api, DECLINE, {"offer_id": offer_id}).status_code, 404)
@@ -519,14 +525,12 @@ class WhenStaffHaveNotSetUpTheRite(DriftJourneyCase):
         config.save(update_fields=[field])
 
     def assert_not_ready_everywhere(self, thread: int) -> None:
-        shown = strip_ansi(self.telnet(self.ysmay, "drift"))
+        shown = strip_ansi(self.telnet(self.ysmay, "aura"))
         self.assertIn(NOT_READY, shown)
         # She carries a thread tied to Dawnlight; the old display wrongly said she had none.
         self.assertNotIn("You carry nothing that counts as the offering.", shown)
         self.assertNotIn("Toward Dawnlight", shown)
-        self.assertIn(
-            NOT_READY, strip_ansi(self.telnet(self.ysmay, "drift convert Ruin=Dawnlight 2"))
-        )
+        self.assertIn(NOT_READY, strip_ansi(self.telnet(self.ysmay, "aura atone Ruin=Dawnlight 2")))
 
         (offer,) = self.api(self.account_of(self.ysmay)).get(PENDING).data["results"]
         self.assertEqual((offer["rite_ready"], offer["rite_not_ready_message"]), (False, NOT_READY))
@@ -583,8 +587,8 @@ class TheChanceLapsesWithTheScene(DriftJourneyCase):
         self.assertIsNone(self.offer_of(self.ysmay))
         self.assertEqual(DriftConversionCap.objects.count(), 0)
         self.assertEqual(ysmay_api.get(PENDING).data["results"], [])
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "drift"))
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "drift convert Ruin=Dawnlight 5"))
+        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura"))
+        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura atone Ruin=Dawnlight 5"))
         self.assertFalse(consumed(mine))
         self.assertEqual(balance(self.ysmay, self.ruin), 30)
         self.assertEqual(drift_grants(), [])
@@ -606,7 +610,7 @@ class TheChanceLapsesWithTheScene(DriftJourneyCase):
 
         self.assertEqual(balance(self.ysmay, self.dawnlight), 20)
         self.assertIsNone(self.offer_of(self.ysmay))
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "drift"))
+        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura"))
 
 
 class WhenNothingOpensAChance(DriftJourneyCase):
@@ -625,7 +629,7 @@ class WhenNothingOpensAChance(DriftJourneyCase):
         self.assertEqual(balance(self.hobb, self.dawnlight), 20)
         self.assertIsNone(self.offer_of(self.hobb))
         self.assertNotIn(NOTICE, strip_ansi(self.said(self.hobb)))
-        self.assertIn(NO_OFFER, self.telnet(self.hobb, "drift"))
+        self.assertIn(NO_OFFER, self.telnet(self.hobb, "aura"))
 
     def test_a_staff_grant_is_not_a_deed_and_opens_nothing(self) -> None:
         # The only real face of a staff grant is the admin action `grant_resonance_action`
@@ -645,7 +649,7 @@ class WhenNothingOpensAChance(DriftJourneyCase):
         self.assertEqual(balance(self.ysmay, self.dawnlight), 1)
         self.assertIsNone(self.offer_of(self.ysmay))
         self.assertNotIn(NOTICE, strip_ansi(self.said(self.ysmay)))
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "drift"))
+        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura"))
 
     def test_a_deed_in_a_room_with_no_live_scene_opens_nothing(self) -> None:
         elsewhere = self.make_room("The Cellar")
@@ -658,7 +662,7 @@ class WhenNothingOpensAChance(DriftJourneyCase):
             dramatic_moment=DramaticMomentTagFactory(character_sheet=self.ysmay.sheet_data),
         )
         self.assertIsNone(self.offer_of(self.ysmay))
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "drift"))
+        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura"))
 
 
 class AFallingCharacterCorrectsTheOtherWay(DriftJourneyCase):
@@ -670,9 +674,9 @@ class AFallingCharacterCorrectsTheOtherWay(DriftJourneyCase):
         self.hold(bram, self.dawnlight, 30)
         set_aura_split(
             CharacterAuraFactory(character=bram.sheet_data),
-            celestial="10",
-            primal="10",
-            abyssal="80",
+            celestial="0",
+            primal="0",
+            abyssal="100",
         )
         ruin_flourish = DramaticMomentTypeFactory(
             label="Ruin Flourish", resonance=self.ruin, per_scene_cap=3, resonance_amount=20
@@ -681,14 +685,14 @@ class AFallingCharacterCorrectsTheOtherWay(DriftJourneyCase):
         self.deed(bram, ruin_flourish.label)
         self.assertEqual(balance(bram, self.ruin), 20)
 
-        shown = strip_ansi(self.telnet(bram, "drift"))
+        shown = strip_ansi(self.telnet(bram, "aura"))
         self.assertIn("Toward Ruin: up to 10.", shown)
         # Celestial -> Abyssal is the seeded Fall pair at 1.50: 10 x 1.5 = 15.
         self.assertIn("From Dawnlight: you hold 30, FALL at 1.5", shown)
         self.assertIn("Converting 10 would give 15.", shown)
 
         with force_check_outcome(self.outcomes["Success"]):
-            told = self.telnet(bram, "drift convert Dawnlight=Ruin 10")
+            told = self.telnet(bram, "aura atone Dawnlight=Ruin 10")
         self.assertIn("Success: 10 Dawnlight became 15 Ruin.", told)
         self.assertEqual(balance(bram, self.dawnlight), 20)
         # 20 from the deed + 15 from the rite.

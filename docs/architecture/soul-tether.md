@@ -26,6 +26,13 @@
 > read `src/world/relationships/CLAUDE.md` and `docs/systems/magic.md`; this document stays
 > as the record of the design as approved.
 
+> **Superseded in part by #5123 (ADR-5123-A, ADR-5123-B), 2026-11-14.** A thread holds several
+> resonances (one thread per anchor, `Thread.resonance` the leading one), so a Sineater no longer
+> weaves one thread per resonance on a bond; the uniqueness constraints below are `(owner,
+> target)`. The Sineater's grant from Sineating is the Mire's, recorded in
+> `CharacterResonance.mire_lifetime`, shown apart from their own resonance and held to its own
+> allowance (`DriftConfig.mire_allowance_percent`) before it makes them unsettled.
+
 ---
 
 ## 1. Context & Design Intent

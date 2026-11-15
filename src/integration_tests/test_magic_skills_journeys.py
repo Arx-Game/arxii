@@ -538,7 +538,7 @@ class BindingASummonedCompanion(JourneyCase):
         self.ysmay = self.make_player("Ysmay", room=self.room)
         sheet = self.ysmay.sheet_data
         self.gift = ensure_companion_content()
-        grant_gift_to_character(sheet, self.gift, resonance=self.gift.resonances.first())
+        grant_gift_to_character(sheet, self.gift, resonances=[self.gift.resonances.first()])
         thread = Thread.objects.get(owner=sheet, target_kind=TargetKind.GIFT, target_gift=self.gift)
         thread.level = 10
         thread.save(update_fields=["level"])

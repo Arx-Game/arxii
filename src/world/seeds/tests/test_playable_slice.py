@@ -9,6 +9,7 @@ pipeline and a live multi-round encounter are Phase 2, out of scope here.
 
 from django.test import TestCase
 
+from world.character_creation.factories import single_resonance_weights
 from world.character_sheets.factories import CharacterSheetFactory
 from world.seeds.database import seed_dev_database
 from world.seeds.tests.content_stub import stub_content_root
@@ -170,7 +171,7 @@ class TestSeededCharacterCreation(TestCase):
             "tarot_reversed": False,
             "selected_gift_id": gift.id,
             "selected_technique_ids": [technique.id],
-            "selected_gift_resonance_id": resonance.id,
+            "gift_resonance_weights": single_resonance_weights(resonance),
             "anima_check_stat_id": stat.id,
             "anima_check_skill_id": skill.id,
         }
@@ -331,7 +332,7 @@ class TestAcademyTrainingLoopReachable(TestCase):
             # charge_and_learn's implicit-acquisition path, which cannot resolve
             # a resonance and never provisions a thread —
             # not a real player state, just a test-only bare persona artifact.
-            grant_gift_to_character(sheet, gift, resonance=ResonanceFactory())
+            grant_gift_to_character(sheet, gift, resonances=[ResonanceFactory()])
             pool = ActionPointPool.get_or_create_for_character(character)
             pool.current = 200
             pool.save()

@@ -1,4 +1,8 @@
-"""convert_resonance_amount: the single-resonance conversion primitive (slice 4 of #4672)."""
+"""convert_resonance_amount: the single-resonance conversion primitive (slice 4 of #4672).
+
+Since #5123 the amount is lifetime points (who the character has become); balance moves
+only as far as it exists. The penance path still moves lifetime in proportion to balance.
+"""
 
 from decimal import Decimal
 
@@ -12,7 +16,7 @@ from world.magic.factories import (
     ResonanceFactory,
 )
 from world.magic.models import CharacterResonance, Resonance, ResonanceGrant
-from world.magic.services.conversion import convert_resonance_amount
+from world.magic.services.conversion import _convert_partial, convert_resonance_amount
 
 
 class ConvertResonanceAmountTests(TestCase):
@@ -41,14 +45,14 @@ class ConvertResonanceAmountTests(TestCase):
     def _row(self, resonance: Resonance) -> CharacterResonance:
         return CharacterResonance.objects.get(character_sheet=self.sheet, resonance=resonance)
 
-    def test_moves_proportional_lifetime_and_writes_one_grant(self) -> None:
+    def test_moves_lifetime_by_the_amount_and_writes_one_grant(self) -> None:
         result = self._convert(10, "0.5")
 
-        self.assertEqual(result, (5, 20))
+        self.assertEqual(result, (5, 10))
         source = self._row(self.abyssal)
-        self.assertEqual((source.balance, source.lifetime_earned), (10, 20))
+        self.assertEqual((source.balance, source.lifetime_earned), (10, 30))
         target = self._row(self.celestial)
-        self.assertEqual((target.balance, target.lifetime_earned), (5, 20))
+        self.assertEqual((target.balance, target.lifetime_earned), (5, 10))
         grants = ResonanceGrant.objects.filter(
             character_sheet=self.sheet, source=GainSource.DRIFT_CORRECTION
         )
@@ -57,14 +61,24 @@ class ConvertResonanceAmountTests(TestCase):
     def test_multiplier_flooring_to_zero_still_grants_one(self) -> None:
         result = self._convert(1, "0.5")
 
-        self.assertEqual(result[0], 1)
+        self.assertEqual(result, (1, 1))
         self.assertEqual(self._row(self.celestial).balance, 1)
         self.assertEqual(self._row(self.abyssal).balance, 19)
 
-    def test_amount_over_balance_raises(self) -> None:
+    def test_amount_past_the_balance_converts_the_spent_lifetime_too(self) -> None:
+        # 20 balance on 40 lifetime: 30 converts, the balance moves only as far as it goes.
+        result = self._convert(30, "0.5")
+
+        self.assertEqual(result, (10, 30))
+        source = self._row(self.abyssal)
+        self.assertEqual((source.balance, source.lifetime_earned), (0, 10))
+        target = self._row(self.celestial)
+        self.assertEqual((target.balance, target.lifetime_earned), (10, 30))
+
+    def test_amount_over_lifetime_raises(self) -> None:
         with self.assertRaises(ValueError):
-            self._convert(21, "0.5")
-        self.assertEqual(self._row(self.abyssal).balance, 20)
+            self._convert(41, "0.5")
+        self.assertEqual(self._row(self.abyssal).lifetime_earned, 40)
 
     def test_non_positive_amount_raises(self) -> None:
         with self.assertRaises(ValueError):
@@ -90,7 +104,7 @@ class ConvertResonanceAmountTests(TestCase):
 
 
 class ProportionalLifetimeIsExactTests(TestCase):
-    """The lifetime share moved is ``amount x lifetime // balance``, never one short."""
+    """Penance moves lifetime as ``amount x lifetime // balance``, never one short."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -107,14 +121,10 @@ class ProportionalLifetimeIsExactTests(TestCase):
         )
 
     def _convert(self, amount: int) -> tuple[int, int]:
-        return convert_resonance_amount(
-            self.sheet,
-            source_resonance=self.abyssal,
-            target_resonance=self.celestial,
-            amount=amount,
-            multiplier=Decimal("0.5"),
-            gain_source=GainSource.DRIFT_CORRECTION,
-        )
+        row = CharacterResonance.objects.get(character_sheet=self.sheet, resonance=self.abyssal)
+        result = _convert_partial(row, self.sheet, self.celestial, Decimal("0.5"), amount)
+        assert result is not None
+        return result
 
     def _lifetime(self, resonance: Resonance) -> int:
         return CharacterResonance.objects.get(

@@ -278,7 +278,7 @@ class AffinityTiltGiftThreadTests(TestCase):
         # Character with a woven GIFT thread whose resonance is abyssal.
         sheet = CharacterSheetFactory()
         CharacterResonanceFactory(character_sheet=sheet, resonance=thread_resonance, balance=100)
-        provision_latent_gift_thread(sheet, gift, resonance=thread_resonance)
+        provision_latent_gift_thread(sheet, gift, resonances=[thread_resonance])
         # Elevate the thread to level 3 so it's a real woven thread.
         thread = Thread.objects.get(owner=sheet, target_kind=TargetKind.GIFT, target_gift=gift)
         thread.level = 3

@@ -1980,6 +1980,9 @@ class CharacterDraft(SharedMemoryModel):
         bonuses only apply on top of some training (``base > 0``).
         """
         from world.character_creation.magic_training import training_skills  # noqa: PLC0415
+        from world.character_creation.resonance_weights import (  # noqa: PLC0415
+            draft_lead_resonance_id,
+        )
         from world.magic.models import Gift, Resonance  # noqa: PLC0415
         from world.magic.services.teaching_fit import (  # noqa: PLC0415
             get_teaching_config,
@@ -1995,7 +1998,7 @@ class CharacterDraft(SharedMemoryModel):
         )
         base = sum(source.points for source in sources)
         gift_id = self.draft_data.get("selected_gift_id")
-        resonance_id = self.draft_data.get("selected_gift_resonance_id")
+        resonance_id = draft_lead_resonance_id(self.draft_data)
         gift = Gift.objects.filter(pk=gift_id).first() if gift_id else None
         resonance = (
             Resonance.objects.select_related("affinity").filter(pk=resonance_id).first()

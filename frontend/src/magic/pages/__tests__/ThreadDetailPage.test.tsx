@@ -75,10 +75,12 @@ const makeThread = (overrides: Partial<Thread> = {}): Thread => ({
   owner: 100,
   resonance: 1,
   resonance_name: 'Bene',
+  resonances: [],
   target_kind: 'RELATIONSHIP_TRACK',
   target_trait_id: null,
   target_technique_id: null,
   name: 'Ember Thread',
+  display_name: overrides.name ?? 'Ember Thread',
   description: 'A test description.',
   level: 10,
   developed_points: 25,
@@ -204,6 +206,17 @@ describe('ThreadDetailPage', () => {
   it('renders the thread name as heading', () => {
     render(<ThreadDetailPage />, { wrapper: createWrapper() });
     expect(screen.getByTestId('thread-detail-title')).toHaveTextContent('Ember Thread');
+  });
+
+  it('titles an unnamed Gift thread by its Gift, never "(unnamed)"', () => {
+    vi.mocked(magicQueries.useThread).mockReturnValue(
+      makeQueryResult(makeThread({ name: '', display_name: 'Kindling' })) as ReturnType<
+        typeof magicQueries.useThread
+      >
+    );
+    render(<ThreadDetailPage />, { wrapper: createWrapper() });
+    expect(screen.getByTestId('thread-detail-title')).toHaveTextContent('Kindling');
+    expect(screen.getByTestId('thread-detail-title')).not.toHaveTextContent('(unnamed)');
   });
 
   it('renders the breadcrumb with Threads link', () => {
@@ -357,5 +370,27 @@ describe('ThreadDetailPage', () => {
     );
     render(<ThreadDetailPage />, { wrapper: createWrapper() });
     expect(screen.getByText('Thread not found.')).toBeInTheDocument();
+  });
+  it('says the mix in words and offers each held resonance as the imbue payer (#5123)', () => {
+    vi.mocked(magicQueries.useThread).mockReturnValue(
+      makeQueryResult(
+        makeThread({
+          resonances: [
+            { resonance_id: 1, resonance_name: 'Bene', amount: 30, leads: true },
+            { resonance_id: 2, resonance_name: 'Gale', amount: 10, leads: false },
+          ],
+        })
+      ) as ReturnType<typeof magicQueries.useThread>
+    );
+    vi.mocked(magicQueries.useCharacterResonances).mockReturnValue(
+      makeQueryResult([
+        makeCharacterResonance(),
+        makeCharacterResonance({ id: 11, resonance: 2, resonance_name: 'Gale', balance: 7 }),
+      ]) as ReturnType<typeof magicQueries.useCharacterResonances>
+    );
+    render(<ThreadDetailPage />, { wrapper: createWrapper() });
+    expect(screen.getByTestId('thread-stat-resonance')).toHaveTextContent('mostly Bene, some Gale');
+    expect(screen.getByTestId('imbue-payer-1')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('imbue-payer-2')).toHaveTextContent('Gale 7');
   });
 });

@@ -306,7 +306,7 @@ class CourtJourneyEndToEndTests(TestCase):
         # Imbuing greedily raises the thread up TO the cap (stored 10), no further.
         # Levels 0-9 cost 1 dp each; the stored-10 XP boundary is already paid.
         ThreadLevelUnlock.objects.create(thread=thread, unlocked_level=10, xp_spent=0)
-        spend_resonance_for_imbuing(self.servant, thread, 12)
+        spend_resonance_for_imbuing(self.servant, thread, thread.resonance, 12)
         thread.refresh_from_db()
         self.assertEqual(
             thread.level,
@@ -315,7 +315,7 @@ class CourtJourneyEndToEndTests(TestCase):
         )
         # A pull/imbue ABOVE the granted level is rejected by the cap.
         with self.assertRaises(AnchorCapExceeded):
-            spend_resonance_for_imbuing(self.servant, thread, 1)
+            spend_resonance_for_imbuing(self.servant, thread, thread.resonance, 1)
 
         # Combat context for the pull.
         encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)

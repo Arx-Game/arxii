@@ -773,6 +773,20 @@ class ThreadPullPreviewTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_preview_of_a_tier_with_no_cost_row_is_a_refusal_not_a_server_error(self) -> None:
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:thread-pull-preview"),
+            {
+                "character_sheet_id": self.sheet.pk,
+                "tier": 2,  # only tier 1 has an authored cost row
+                "thread_ids": [self.thread.pk],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+        self.assertEqual(response.data["detail"], "That pull tier is not available yet.")
+
     def test_preview_rejects_bad_tier(self) -> None:
         self.client.force_authenticate(user=self.account)
         response = self.client.post(
@@ -1132,6 +1146,47 @@ class RitualPerformViewTests(APITestCase):
                 ritual=self.ritual,
             ).exists(),
         )
+
+    def test_a_refused_imbue_does_not_leave_the_rite_in_progress(self) -> None:
+        """An imbue the finisher refuses (more than she holds) ends the rite (#5123).
+
+        The next valid imbue then goes through, not "already in progress".
+        """
+        # Her own thread: the class-level one is shared with the other imbue tests.
+        thread = ThreadFactory(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_trait=TraitFactory(),
+            level=2,
+            _trait_value=9,
+        )
+        self.client.force_authenticate(user=self.account)
+        url = reverse("magic:ritual-perform")
+
+        refused = self.client.post(
+            url,
+            {
+                "character_sheet_id": self.sheet.pk,
+                "ritual_id": self.ritual.pk,
+                "kwargs": {"thread_id": thread.pk, "amount": 500},
+            },
+            format="json",
+        )
+
+        self.assertEqual(refused.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(
+            PendingRitualEffect.objects.filter(character=self.sheet, ritual=self.ritual).exists()
+        )
+        valid = self.client.post(
+            url,
+            {
+                "character_sheet_id": self.sheet.pk,
+                "ritual_id": self.ritual.pk,
+                "kwargs": {"thread_id": thread.pk, "amount": 5},
+            },
+            format="json",
+        )
+        self.assertEqual(valid.status_code, status.HTTP_200_OK, valid.data)
 
     def test_imbuing_ceremony_requires_thread_kwargs(self) -> None:
         """A bare imbuing perform 400s — the web has no finisher to consume it."""

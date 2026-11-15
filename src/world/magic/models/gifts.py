@@ -77,7 +77,12 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         Resonance,
         blank=True,
         related_name="gifts",
-        help_text="Resonances associated with this gift.",
+        help_text=(
+            "Resonances this gift is associated with. Limits nothing: any resonance a "
+            "character holds can feed the gift's thread. Used only as the default when a "
+            "grant names no resonance: the thread takes the first of these the character "
+            "holds, else the first."
+        ),
     )
     creator = models.ForeignKey(
         CHARACTER_SHEET_MODEL,

@@ -8,7 +8,44 @@ Replaces the standalone ``crossing`` command. Provides:
 
 from __future__ import annotations
 
+from decimal import Decimal
+from typing import TYPE_CHECKING
+
 from commands.command import ArxCommand
+from commands.utils.thread_lookup import (
+    active_threads,
+    anchor_labels,
+    shared_name_pks,
+    thread_label,
+)
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
+    from world.magic.models import Thread, ThreadResonance
+
+
+def _resonance_mix(thread: Thread, rows: list[ThreadResonance]) -> str:
+    """The resonances a thread holds, the leading one first, each with its share in words.
+
+    One resonance reads as its name alone. Several read as ``Fury (most), Domination (a
+    fifth)``: each row's part of what went into the thread, in words and never as a number
+    (#5123). A resonance with nothing imbued is left out while another has something; a thread
+    with nothing imbued yet lists its resonances by name.
+    """
+    from world.magic.services.drift import share_in_words  # noqa: PLC0415
+
+    if not rows:
+        return thread.resonance.name if thread.resonance else "???"
+    imbued = [row for row in rows if row.amount > 0]
+    if not imbued:
+        return ", ".join(row.resonance.name for row in rows)
+    if len(imbued) == 1:
+        return imbued[0].resonance.name
+    total = sum(row.amount for row in imbued)
+    return ", ".join(
+        f"{row.resonance.name} ({share_in_words(Decimal(row.amount) * 100 / total)})"
+        for row in imbued
+    )
 
 
 class CmdThreads(ArxCommand):
@@ -51,46 +88,31 @@ class CmdThreads(ArxCommand):
         else:
             self.msg("Usage: threads list | threads crossing list | threads crossing choose <id>")
 
-    def _list_threads(self, sheet: object) -> None:
-        from world.magic.crossing.handlers import (  # noqa: PLC0415
-            _open_labels_by_relationship_id,
-            anchor_label_for,
-        )
-        from world.magic.models import Thread  # noqa: PLC0415
+    def _list_threads(self, sheet: CharacterSheet) -> None:
+        from world.magic.models import ThreadResonance  # noqa: PLC0415
 
-        threads = list(
-            Thread.objects.filter(
-                owner=sheet,
-                retired_at__isnull=True,
-            ).select_related(
-                "resonance",
-                "target_trait",
-                "target_facet",
-                "target_technique",
-                "target_mantle",
-                "target_relationship__target__character",
-                "target_relationship__target_companion",
-                "target_capstone__relationship__target__character",
-                "target_capstone__relationship__target_companion",
-                "target_sanctum_details__feature_instance__room_profile__objectdb",
-            )
-        )
+        threads = active_threads(sheet)
         if not threads:
             self.msg("You have no active threads.")
             return
 
-        open_labels = _open_labels_by_relationship_id(threads)
+        anchors = anchor_labels(threads)
+        shared = shared_name_pks(threads, anchors)
+        # One query, read fresh: a prefetch would stay on the shared Thread instances.
+        rows_by_thread: dict[int, list[ThreadResonance]] = {}
+        for row in ThreadResonance.objects.filter(thread__in=threads).select_related("resonance"):
+            rows_by_thread.setdefault(row.thread_id, []).append(row)
         lines = ["|wYour threads:|n"]
         for thread in threads:
-            anchor = anchor_label_for(thread, open_labels)
-            res_name = thread.resonance.name if thread.resonance else "???"
-            lines.append(f"  {res_name} {anchor} (level {thread.level})")
+            mix = _resonance_mix(thread, rows_by_thread.get(thread.pk, []))
+            label = thread_label(thread, anchors[thread.pk], show_number=thread.pk in shared)
+            lines.append(f"  {mix} {label} (level {thread.level})")
         self.msg("\n".join(lines))
 
     def _list_crossing_offers(self, sheet: object) -> None:
         from world.magic.crossing.handlers import (  # noqa: PLC0415
-            _open_labels_by_relationship_id,
             anchor_label_for,
+            open_labels_by_relationship_id,
         )
         from world.magic.models.crossing import (  # noqa: PLC0415
             CrossingOption,
@@ -102,6 +124,8 @@ class CmdThreads(ArxCommand):
                 "thread__resonance",
                 "thread__target_trait",
                 "thread__target_facet",
+                "thread__target_gift",
+                "thread__target_technique",
                 "thread__target_mantle",
                 "thread__target_relationship__target__character",
                 "thread__target_relationship__target_companion",
@@ -113,7 +137,7 @@ class CmdThreads(ArxCommand):
         if not offers:
             self.msg("You have no pending crossing offers.")
             return
-        open_labels = _open_labels_by_relationship_id(offer.thread for offer in offers)
+        open_labels = open_labels_by_relationship_id(offer.thread for offer in offers)
         for offer in offers:
             anchor_label = anchor_label_for(offer.thread, open_labels)
             res_name = offer.thread.resonance.name if offer.thread.resonance else "???"

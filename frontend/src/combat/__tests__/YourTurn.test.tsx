@@ -56,6 +56,7 @@ vi.mock('@/magic/components/threads/ThreadPullDialog', () => ({
       tier: 1 | 2 | 3;
       thread_ids: number[];
       resonances: { id: number; name: string }[];
+      payers: Record<number, number>;
     }) => void;
   }) => {
     if (!open) return null;
@@ -68,10 +69,29 @@ vi.mock('@/magic/components/threads/ThreadPullDialog', () => ({
           type="button"
           data-testid="simulate-pull-select"
           onClick={() =>
-            onSelect?.({ tier: 2, thread_ids: [10, 11], resonances: [{ id: 5, name: 'Veil' }] })
+            onSelect?.({
+              tier: 2,
+              thread_ids: [10, 11],
+              resonances: [{ id: 5, name: 'Veil' }],
+              payers: {},
+            })
           }
         >
           Simulate Select Pull
+        </button>
+        <button
+          type="button"
+          data-testid="simulate-pull-select-payer"
+          onClick={() =>
+            onSelect?.({
+              tier: 2,
+              thread_ids: [10, 11],
+              resonances: [{ id: 6, name: 'Ember' }],
+              payers: { 10: 6 },
+            })
+          }
+        >
+          Simulate Select Pull With Payer
         </button>
       </div>
     );
@@ -1761,6 +1781,26 @@ describe('YourTurn — combat pull dispatch kwargs (issue-1455, #4736)', () => {
       pull_thread_ids: [10, 11],
       pull_burn: 3,
       pull_burn_resonance_id: 5,
+    });
+  });
+
+  it('sends the picked payer with the pull on the focused cast (#5123)', async () => {
+    setupMocks();
+    render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
+
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    await userEvent.click(screen.getByTestId('open-pull-dialog-btn'));
+    await userEvent.click(screen.getByTestId('simulate-pull-select-payer'));
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+
+    const focusedCall = mockMutateAsync.mock.calls[0] as DispatchCall;
+    expect(focusedCall[0].kwargs).toMatchObject({
+      pull_tier: 2,
+      pull_thread_ids: [10, 11],
+      pull_payers: { 10: 6 },
     });
   });
 

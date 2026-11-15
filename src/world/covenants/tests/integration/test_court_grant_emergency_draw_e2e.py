@@ -112,7 +112,7 @@ class EmergencyDrawE2ETests(TestCase):
         # for there to be any applicable effect to scale at all. The emergency
         # draw only affects the multiplier of an ALREADY-unlocked effect.
         ThreadLevelUnlock.objects.create(thread=self.thread, unlocked_level=10, xp_spent=0)
-        spend_resonance_for_imbuing(self.servant_sheet, self.thread, 10)
+        spend_resonance_for_imbuing(self.servant_sheet, self.thread, self.thread.resonance, 10)
         self.thread.refresh_from_db()
         self.starting_thread_level = self.thread.level
         self.assertEqual(self.starting_thread_level, 10)

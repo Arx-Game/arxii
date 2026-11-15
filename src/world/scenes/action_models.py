@@ -19,6 +19,7 @@ from world.scenes.action_constants import (
 )
 
 if TYPE_CHECKING:
+    from world.magic.models import Resonance
     from world.scenes.models import Persona
 
 _PERSONA_MODEL = "arxii.Persona"
@@ -477,8 +478,9 @@ class SceneActionPullDeclaration(SharedMemoryModel):
     )
     threads = models.ManyToManyField(
         "arxii.Thread",
+        through="arxii.ScenePullThread",
         related_name="action_pull_declarations",
-        help_text="Threads pulled, owned by the actor; each is paid from its own resonance.",
+        help_text="Threads pulled, owned by the actor; each is paid by its pull row's resonance.",
     )
     charged_at = models.DateTimeField(
         null=True,
@@ -495,5 +497,47 @@ class SceneActionPullDeclaration(SharedMemoryModel):
         "idempotent subsequent calls without re-charging (#1919).",
     )
 
+    def payers(self) -> dict[int, Resonance]:
+        """Thread id -> the resonance that pays for it, as recorded when it was declared."""
+        return {
+            row.thread_id: row.paying_resonance
+            for row in self.pull_threads.select_related("paying_resonance")
+        }
+
     def __str__(self) -> str:
         return f"Action pull (tier {self.tier}) for request {self.request_id}"
+
+
+class ScenePullThread(SharedMemoryModel):
+    """One thread in a scene action's pull declaration, with the resonance that pays (#5123).
+
+    The payer is a fact about a (declaration, thread) pair, and may be a resonance the
+    thread holds no row for (the character holds it, so it can pay; it brings no perks).
+    """
+
+    declaration = models.ForeignKey(
+        SceneActionPullDeclaration,
+        on_delete=models.CASCADE,
+        related_name="pull_threads",
+    )
+    thread = models.ForeignKey(
+        "arxii.Thread",
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+    paying_resonance = models.ForeignKey(
+        "arxii.Resonance",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The resonance this pull charges for the thread, and whose perks apply.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["declaration", "thread"], name="uniq_scene_pull_thread"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"ScenePullThread(declaration={self.declaration_id} thread={self.thread_id})"

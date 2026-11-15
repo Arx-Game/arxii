@@ -1,7 +1,10 @@
 /**
  * DriftConversionOfferGate (#4733) - polls the account's open drift conversion
- * offers, renders a call-out strip, and auto-opens DriftConversionOfferDialog
- * once per offer id (re-openable from the strip). Mirrors EntryFlourishOfferGate.
+ * offers, renders a call-out strip, and auto-opens SettleAuraDialog (#5123) once per
+ * offer id (re-openable from the strip). Mirrors EntryFlourishOfferGate.
+ *
+ * The offer names its character, so the dialog's aura is that character's: the
+ * Accept exit sits beside Atone while they are unsettled.
  *
  * Mounted on every surface a live player sits on (the scene page and the game
  * page), once per surface. The inbox is account-scoped and carries no character
@@ -16,7 +19,8 @@ import { useState } from 'react';
 import { Flame } from 'lucide-react';
 import { usePendingDriftConversionOffers } from '@/magic/queries';
 import { useAutoOpenOncePerOffer } from '@/magic/hooks';
-import { DriftConversionOfferDialog } from './DriftConversionOfferDialog';
+import { useCharacterAuras } from '@/magic/auraQueries';
+import { SettleAuraDialog } from './SettleAuraDialog';
 
 interface DriftConversionOfferGateProps {
   sceneId: number | null;
@@ -28,6 +32,11 @@ export function DriftConversionOfferGate({ sceneId }: DriftConversionOfferGatePr
 
   const offer =
     sceneId === null ? null : (data?.results?.find((o) => o.scene_id === sceneId) ?? null);
+
+  // Only the offer's own character's aura, and only while an offer is open: Accept writes
+  // to it, so it must be the character the offer was made for.
+  const { data: auras } = useCharacterAuras(offer?.character_id ?? null, offer !== null);
+  const aura = auras?.find((row) => row.character === offer?.character_id) ?? null;
 
   const { dialogOpen, setDialogOpen } = useAutoOpenOncePerOffer(offer?.id ?? null);
 
@@ -54,10 +63,11 @@ export function DriftConversionOfferGate({ sceneId }: DriftConversionOfferGatePr
             data-testid="drift-conversion-gate-glow"
           />
           <Flame className="h-4 w-4 shrink-0" />
-          <span data-testid="drift-conversion-gate-label">Conversion offer</span>
+          <span data-testid="drift-conversion-gate-label">Settle your aura</span>
         </button>
       ) : null}
-      <DriftConversionOfferDialog
+      <SettleAuraDialog
+        aura={aura}
         offer={offer}
         resultLine={resultLine}
         onResult={setResultLine}

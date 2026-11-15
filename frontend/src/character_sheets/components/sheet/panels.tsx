@@ -208,7 +208,7 @@ function ThreadsBlock({ sheetId }: { sheetId: number }) {
         {threads.map((thread) => (
           <Entry
             key={thread.id}
-            name={thread.name || thread.target_kind}
+            name={thread.display_name}
             tags={
               <>
                 <Tag>{thread.target_kind}</Tag>
