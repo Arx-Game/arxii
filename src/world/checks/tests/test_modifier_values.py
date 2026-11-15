@@ -2,12 +2,18 @@
 
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import ModifierLane, ModifierSize, ModifierSourceKind
 from world.checks.factories import CheckTypeFactory
-from world.checks.modifier_models import ModifierLevelBaseline, ModifierTaper, ModifierValue
+from world.checks.modifier_models import (
+    ModifierLevelBaseline,
+    ModifierSizeFraction,
+    ModifierTaper,
+    ModifierValue,
+)
 from world.checks.modifier_values import (
     BaselineTable,
     ValueTable,
@@ -126,3 +132,26 @@ class PipelineTaperTests(TestCase):
         )
 
         self.assertEqual(opponent_condition_opposition(self.sheet.character, self.check_type), 26)
+
+
+class SizedLaneOnlyTests(SimpleTestCase):
+    """U-keep: staff form validation on rows, no player seam."""
+
+    def test_a_lane_with_no_sizes_refuses_size_fractions_overrides_and_tapers(self) -> None:
+        rows = (
+            ModifierSizeFraction(lane=ModifierLane.ANIMA_POOL, size=3, fraction=Decimal("0.5")),
+            ModifierValue(lane=ModifierLane.MOON_TUNING, level=1, size=3, value=4),
+            ModifierTaper(
+                lane=ModifierLane.HOLLOW_MAX,
+                source_kind=ModifierSourceKind.CONDITION,
+                ratio=Decimal("0.5"),
+                floor=Decimal("0.5"),
+            ),
+        )
+        for row in rows:
+            with self.subTest(row=type(row).__name__), self.assertRaises(ValidationError) as caught:
+                row.clean()
+            self.assertIn("lane", caught.exception.message_dict)
+
+    def test_a_sized_lane_is_accepted(self) -> None:
+        ModifierSizeFraction(lane=ModifierLane.TO_HIT, size=3, fraction=Decimal("0.5")).clean()

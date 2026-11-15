@@ -167,6 +167,19 @@ class ModifierLane(models.TextChoices):
     VOW_EFFECT_DAMAGE = "vow_effect_damage", "Vow effect damage"
 
 
+#: The lanes that value a sized modifier, so the only lanes that carry size fractions, value
+#: overrides and tapers (#5093). The pool, cap and rung lanes hold only level baselines.
+SIZED_MODIFIER_LANES: frozenset[str] = frozenset(
+    {
+        ModifierLane.CHECK,
+        ModifierLane.STAT,
+        ModifierLane.TO_HIT,
+        ModifierLane.DAMAGE,
+        ModifierLane.PARTIAL_PROTECTION,
+    }
+)
+
+
 class ModifierSize(models.IntegerChoices):
     """How big a modifier is for its level (#4551 section 5.3, #4594).
 

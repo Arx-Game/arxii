@@ -26,13 +26,27 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
-from world.checks.constants import ModifierLane, ModifierSize, ModifierSourceKind
+from world.checks.constants import (
+    SIZED_MODIFIER_LANES,
+    ModifierLane,
+    ModifierSize,
+    ModifierSourceKind,
+)
 
 _LANE_HELP = "The kind of quantity this row values (check points, stats, and later lanes)."
+
+
+def _require_sized_lane(lane: str, row_noun: str) -> None:
+    """Refuse a row in a lane that holds only level baselines (pool, cap and rung lanes)."""
+    if lane not in SIZED_MODIFIER_LANES:
+        label = ModifierLane(lane).label if lane in ModifierLane.values else lane
+        msg = f"The {label} lane holds only level baselines, so it has no {row_noun}."
+        raise ValidationError({"lane": msg})
 
 
 class ModifierSizeFraction(SharedMemoryModel):
@@ -78,6 +92,10 @@ class ModifierSizeFraction(SharedMemoryModel):
     def __str__(self) -> str:
         size_label = ModifierSize(self.size).label
         return f"{self.get_lane_display()}: {size_label} = {self.fraction} of a level"
+
+    def clean(self) -> None:
+        super().clean()
+        _require_sized_lane(self.lane, "size fractions")
 
 
 class ModifierValue(SharedMemoryModel):
@@ -125,6 +143,10 @@ class ModifierValue(SharedMemoryModel):
     def __str__(self) -> str:
         size_label = ModifierSize(self.size).label
         return f"{self.get_lane_display()}: {size_label} at level {self.level} = {self.value}"
+
+    def clean(self) -> None:
+        super().clean()
+        _require_sized_lane(self.lane, "value overrides")
 
 
 class ModifierLevelBaseline(SharedMemoryModel):
@@ -249,3 +271,7 @@ class ModifierTaper(SharedMemoryModel):
             f"{self.get_lane_display()}: {self.get_source_kind_display()} "
             f"x{self.ratio}, floor {self.floor}"
         )
+
+    def clean(self) -> None:
+        super().clean()
+        _require_sized_lane(self.lane, "tapers")
