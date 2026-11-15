@@ -24,7 +24,6 @@ from world.game_clock.models import GameWeek
 from world.game_clock.week_services import get_current_game_week
 from world.progression.constants import (
     DP_BASE_LEVEL,
-    DP_COST_MULTIPLIER,
     EFFORT_DEV_BASE,
     PATH_LEVEL_DIVISOR,
     RUST_BASE_AMOUNT,
@@ -34,6 +33,7 @@ from world.progression.models.rewards import (
     DevelopmentTransaction,
     WeeklySkillUsage,
 )
+from world.progression.services.dev_cost import dp_cost_for_step
 from world.progression.types import DevelopmentSource, ProgressionReason
 
 if TYPE_CHECKING:
@@ -229,10 +229,9 @@ def apply_skill_rust(
         return 0
 
     rust_amount = character_level + RUST_BASE_AMOUNT
-    # Cap rust at the cost that was paid to reach the current level from the
-    # previous one: (trait_level - DP_BASE_LEVEL) * DP_COST_MULTIPLIER.
-    # For level 11 this is 100, for level 15 it is 500.
-    max_rust = (trait_level - DP_BASE_LEVEL) * DP_COST_MULTIPLIER
+    # Cap rust at the cost that was paid to reach the current level from the previous one,
+    # a step on the shared cost curve.
+    max_rust = dp_cost_for_step(trait_level - 1)
     # Outstanding debt never exceeds that one level's cost either, however long the
     # skill sits idle (the training-side rule before #5010).
     rust_amount = min(rust_amount, max_rust - cast(int, dev_points.rust_debt))

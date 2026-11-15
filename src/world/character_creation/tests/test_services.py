@@ -576,10 +576,8 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
 
     def test_finalize_creates_skill_values(self):
         """Finalization writes each skill's rating to its trait's CharacterTraitValue."""
-        from world.progression.models.rewards import (
-            DevelopmentPoints,
-            cumulative_dp_for_level,
-        )
+        from world.progression.models.rewards import DevelopmentPoints
+        from world.progression.services.dev_cost import cumulative_dp_for_level
 
         draft = self._create_complete_draft()
         draft.draft_data["skills"] = {str(self.melee_skill.pk): 30}

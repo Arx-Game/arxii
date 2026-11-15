@@ -51,6 +51,7 @@ from world.magic.models import (
 from world.magic.services.thread_rows import write_resonance_rows
 from world.magic.types import ThreadSurvivabilitySaves, ThreadXPLockProspect
 from world.magic.types.pull import pull_payer
+from world.progression.services.dev_cost import dp_cost_for_step
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -1007,7 +1008,7 @@ def near_xp_lock_threads(
             continue
         if (t.pk, next_boundary) in unlocked_pairs:
             continue
-        dp_needed = sum(max((n - 9) * 100, 1) for n in range(t.level, next_boundary))
+        dp_needed = sum(dp_cost_for_step(n) for n in range(t.level, next_boundary))
         dp_to_boundary = dp_needed - t.developed_points
         if dp_to_boundary <= within:
             out.append(

@@ -53,6 +53,7 @@ from world.magic.types import (
     ThreadPayerPreview,
 )
 from world.magic.types.pull import pull_payer
+from world.progression.services.dev_cost import dp_cost_for_step
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -453,7 +454,7 @@ def _check_imbue_level_advance(  # noqa: PLR0913
     stopped advancement (or ``"NONE"`` if the bucket is simply exhausted and
     ``blocked_requirement_messages`` carries crossing-requirement failures.
     """
-    cost = max((thread.level - 9) * 100, 1) * imbue_multiplier
+    cost = dp_cost_for_step(thread.level) * imbue_multiplier
     if thread.developed_points < cost:
         if amount == 0:
             return False, "INSUFFICIENT_BUCKET", []
@@ -540,11 +541,10 @@ def spend_resonance_for_imbuing(
     ``ThreadResonance`` rows (created on first use of a resonance), each a cumulative
     total: levelling spends ``developed_points`` and never lowers a row. The leading
     resonance is refreshed afterwards, so a resonance whose total overtakes the others
-    becomes ``thread.resonance``. Cost formula:
-    max((current_level - 9) * 100, 1) dp per level.
-    Sub-10 levels each cost 1 dp. Advancement continues until the bucket is
-    exhausted, the next level hits an XP-lock gate, or the effective cap is
-    reached.
+    becomes ``thread.resonance``. A level costs ``dp_cost_for_step(current_level)``, the
+    shared development cost curve, times the thread kind's imbue cost multiplier.
+    Advancement continues until the bucket is exhausted, the next level hits an XP-lock gate,
+    or the effective cap is reached.
 
     Args:
         character_sheet: Character performing the imbuing.
@@ -610,7 +610,7 @@ def spend_resonance_for_imbuing(
         )
         if not should_advance:
             break
-        cost = max((thread.level - 9) * 100, 1) * imbue_multiplier
+        cost = dp_cost_for_step(thread.level) * imbue_multiplier
         thread.level = next_level
         thread.developed_points -= cost
 

@@ -59,7 +59,8 @@ from world.npc_services.factories import (
 from world.npc_services.models import SkillCourseEnrollment
 from world.progression.factories import ExperiencePointsDataFactory
 from world.progression.models import TraitRatingUnlock, TraitXPCost, XPCostChart, XPCostEntry
-from world.progression.models.rewards import DevelopmentPoints, cumulative_dp_for_level
+from world.progression.models.rewards import DevelopmentPoints
+from world.progression.services.dev_cost import cumulative_dp_for_level
 from world.skills.factories import SkillFactory
 from world.societies.constants import ObligationState
 from world.societies.factories import OrganizationFactory, OrganizationObligationFactory

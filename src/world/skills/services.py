@@ -15,8 +15,8 @@ from world.progression.constants import DP_BASE_LEVEL
 from world.progression.models.rewards import (
     DevelopmentPoints,
     DevelopmentTransaction,
-    cumulative_dp_for_level,
 )
+from world.progression.services.dev_cost import cumulative_dp_for_level, dp_cost_for_step
 from world.progression.types import DevelopmentSource, ProgressionReason
 from world.relationships.helpers import get_relationship_tier
 from world.relationships.services import standing_tie_ap
@@ -414,22 +414,6 @@ def set_skill_trait(sheet: CharacterSheet, skill: Skill, value: int, source: str
     align_development_floors(sheet, {skill: value})
 
 
-def _development_cost(current_value: int) -> int:
-    """Calculate the development point cost to reach the next skill level.
-
-    Cost formula: ``max((current_value - 9) * 100, 1)``.
-
-    Examples: 10->11 costs 100, 11->12 costs 200, 15->16 costs 600.
-
-    Args:
-        current_value: The current skill or specialization value.
-
-    Returns:
-        Development points required to advance one level (minimum 1).
-    """
-    return max((current_value - 9) * 100, 1)
-
-
 def _is_at_xp_boundary(value: int) -> bool:
     """Check whether a skill value is at an XP boundary.
 
@@ -779,7 +763,7 @@ def _apply_development_to_specialization(
     spec_value.development_points += dev_points
 
     message = None
-    cost = _development_cost(spec_value.value)
+    cost = dp_cost_for_step(spec_value.value)
     while spec_value.development_points >= cost:
         spec_value.development_points -= cost
         spec_value.value += 1
@@ -788,7 +772,7 @@ def _apply_development_to_specialization(
                 message = skill_cap_message(name, cap)
             spec_value.development_points = 0
             break
-        cost = _development_cost(spec_value.value)
+        cost = dp_cost_for_step(spec_value.value)
 
     spec_value.save()
     return message

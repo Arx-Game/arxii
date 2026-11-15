@@ -23,6 +23,7 @@ from world.progression.models.character_xp import (
     CharacterXP,
     CharacterXPTransaction,
 )
+from world.progression.models.dev_cost_config import DevelopmentCostConfig
 from world.progression.models.durance_cohort import (
     CohortEnrollment,
     DuranceCohort,
@@ -55,7 +56,6 @@ from world.progression.models.rewards import (
     ExperiencePointsData,
     WeeklySkillUsage,
     XPTransaction,
-    cumulative_dp_for_level,
 )
 from world.progression.models.stat_points import LevelStatPointSpend
 from world.progression.models.unlocks import (
@@ -100,6 +100,7 @@ __all__ = [
     "ClassXPCost",
     "CodexKnowledgeRequirement",
     "CohortEnrollment",
+    "DevelopmentCostConfig",
     "DevelopmentPoints",
     "DevelopmentTransaction",
     "DuranceCohort",
@@ -136,5 +137,4 @@ __all__ = [
     "XPCostChart",
     "XPCostEntry",
     "XPTransaction",
-    "cumulative_dp_for_level",
 ]

@@ -15,8 +15,8 @@ from world.progression.models import TraitRatingUnlock, TraitXPCost, XPCostChart
 from world.progression.models.rewards import (
     DevelopmentPoints,
     ExperiencePointsData,
-    cumulative_dp_for_level,
 )
+from world.progression.services.dev_cost import cumulative_dp_for_level
 from world.roster.factories import grant_test_tenure
 from world.species.factories import LanguageFactory
 from world.species.language_progression import (

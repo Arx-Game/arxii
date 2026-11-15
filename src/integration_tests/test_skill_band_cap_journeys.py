@@ -36,8 +36,8 @@ from world.progression.models import (
     XPCostChart,
     XPCostEntry,
 )
-from world.progression.models.rewards import cumulative_dp_for_level
 from world.progression.services.awards import award_development_points
+from world.progression.services.dev_cost import cumulative_dp_for_level
 from world.progression.types import DevelopmentSource
 from world.roster.services.staff_characters import mint_gm_character
 from world.skills.factories import SkillFactory

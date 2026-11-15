@@ -9,8 +9,8 @@ from world.classes.factories import CharacterClassLevelFactory
 from world.progression.models.rewards import (
     DevelopmentPoints,
     DevelopmentTransaction,
-    cumulative_dp_for_level,
 )
+from world.progression.services.dev_cost import cumulative_dp_for_level
 from world.progression.types import DevelopmentSource
 from world.relationships.models import RelationshipAllocation
 from world.relationships.services import get_or_create_side

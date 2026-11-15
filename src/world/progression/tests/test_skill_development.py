@@ -11,9 +11,9 @@ from world.game_clock.week_services import get_current_game_week
 from world.progression.models import (
     DevelopmentTransaction,
     WeeklySkillUsage,
-    cumulative_dp_for_level,
 )
 from world.progression.models.rewards import DevelopmentPoints
+from world.progression.services.dev_cost import cumulative_dp_for_level
 from world.progression.services.skill_development import (
     apply_skill_rust,
     award_check_development,
@@ -43,24 +43,22 @@ class CumulativeDpForLevelTest(TestCase):
         assert cumulative_dp_for_level(1) == 0
 
     def test_level_11(self) -> None:
-        # (10 - 9) * 100 = 100
-        assert cumulative_dp_for_level(11) == 100
+        # Level 1's band costs 100 over its ten steps: 10 a step.
+        assert cumulative_dp_for_level(11) == 10
 
     def test_level_12(self) -> None:
-        # 100 + 200 = 300
-        assert cumulative_dp_for_level(12) == 300
-
-    def test_level_13(self) -> None:
-        # 100 + 200 + 300 = 600
-        assert cumulative_dp_for_level(13) == 600
+        assert cumulative_dp_for_level(12) == 20
 
     def test_level_15(self) -> None:
-        # 100 + 200 + 300 + 400 + 500 = 1500
-        assert cumulative_dp_for_level(15) == 1500
+        assert cumulative_dp_for_level(15) == 50
 
     def test_level_20(self) -> None:
-        # sum((n-9)*100 for n in range(10,20)) = 100+200+...+1000 = 5500
-        assert cumulative_dp_for_level(20) == 5500
+        # The whole of level 1's band: 10 steps * 10.
+        assert cumulative_dp_for_level(20) == 100
+
+    def test_level_30(self) -> None:
+        # Level 2's band costs 150 over ten steps: 15 a step.
+        assert cumulative_dp_for_level(30) == 250
 
 
 class CalculateCheckDevPointsTest(TestCase):
@@ -108,13 +106,13 @@ class DevelopmentPointsAwardTest(TestCase):
         CharacterTraitValue.flush_instance_cache()
 
     def test_award_no_level_up(self) -> None:
-        """Awarding < 100 dp to a level-10 trait triggers no level-up."""
+        """Awarding < 10 dp to a level-10 trait triggers no level-up."""
         dev = DevelopmentPoints.objects.create(
             character_sheet=self.sheet, trait=self.trait, total_earned=0
         )
-        level_ups = dev.award_points(50)
+        level_ups = dev.award_points(5)
         assert level_ups == []
-        assert dev.total_earned == 50
+        assert dev.total_earned == 5
         # Trait value should stay at 10
         tv = CharacterTraitValue.objects.get(character=self.character.sheet_data, trait=self.trait)
         assert tv.value == 10
@@ -124,11 +122,11 @@ class DevelopmentPointsAwardTest(TestCase):
         ).exists()
 
     def test_award_single_level_up(self) -> None:
-        """Awarding exactly 100 dp triggers 10->11."""
+        """Awarding exactly 10 dp triggers 10->11."""
         dev = DevelopmentPoints.objects.create(
             character_sheet=self.sheet, trait=self.trait, total_earned=0
         )
-        level_ups = dev.award_points(100)
+        level_ups = dev.award_points(10)
         assert level_ups == [(10, 11)]
         tv = CharacterTraitValue.objects.get(character=self.character.sheet_data, trait=self.trait)
         assert tv.value == 11
@@ -138,7 +136,7 @@ class DevelopmentPointsAwardTest(TestCase):
         dev = DevelopmentPoints.objects.create(
             character_sheet=self.sheet, trait=self.trait, total_earned=0
         )
-        dev.award_points(100)
+        dev.award_points(10)
         change = CharacterTraitChange.objects.get(
             character_sheet=self.character.sheet_data, trait=self.trait
         )
@@ -147,11 +145,11 @@ class DevelopmentPointsAwardTest(TestCase):
         assert change.source == TraitChangeSource.DEVELOPMENT_LEVEL_UP
 
     def test_award_multiple_level_ups(self) -> None:
-        """Awarding 300 dp triggers 10->11 and 11->12 (thresholds: 100, 300)."""
+        """Awarding 20 dp triggers 10->11 and 11->12 (thresholds: 10, 20)."""
         dev = DevelopmentPoints.objects.create(
             character_sheet=self.sheet, trait=self.trait, total_earned=0
         )
-        level_ups = dev.award_points(300)
+        level_ups = dev.award_points(20)
         assert level_ups == [(10, 11), (11, 12)]
         tv = CharacterTraitValue.objects.get(character=self.character.sheet_data, trait=self.trait)
         assert tv.value == 12
@@ -161,33 +159,33 @@ class DevelopmentPointsAwardTest(TestCase):
         dev = DevelopmentPoints.objects.create(
             character_sheet=self.sheet, trait=self.trait, total_earned=0
         )
-        # First award: 60 dp, no level-up
-        level_ups = dev.award_points(60)
+        # First award: 6 dp, no level-up
+        level_ups = dev.award_points(6)
         assert level_ups == []
 
-        # Second award: 40 dp, total now 100 -> level-up
+        # Second award: 4 dp, total now 10 -> level-up
         dev.refresh_from_db()
-        level_ups = dev.award_points(40)
+        level_ups = dev.award_points(4)
         assert level_ups == [(10, 11)]
         tv = CharacterTraitValue.objects.get(character=self.character.sheet_data, trait=self.trait)
         assert tv.value == 11
 
     def test_existing_trait_value_respected(self) -> None:
-        """If trait is already at level 12, need cumulative dp >= 600 for level 13."""
+        """If trait is already at level 12, need cumulative dp >= 30 for level 13."""
         CharacterTraitValue.objects.create(
             character=self.character.sheet_data, trait=self.trait, value=12
         )
         dev = DevelopmentPoints.objects.create(
-            character_sheet=self.sheet, trait=self.trait, total_earned=300
+            character_sheet=self.sheet, trait=self.trait, total_earned=20
         )
-        # At level 12, need 600 cumulative for 13. Have 300, award 250 -> 550, not enough.
-        level_ups = dev.award_points(250)
+        # At level 12, need 30 cumulative for 13. Have 20, award 7 -> 27, not enough.
+        level_ups = dev.award_points(7)
         assert level_ups == []
-        assert dev.total_earned == 550
+        assert dev.total_earned == 27
 
-        # Award 50 more -> 600, level up to 13
+        # Award 3 more -> 30, level up to 13
         dev.refresh_from_db()
-        level_ups = dev.award_points(50)
+        level_ups = dev.award_points(3)
         assert level_ups == [(12, 13)]
 
 
@@ -237,15 +235,15 @@ class AwardCheckDevelopmentTest(TestCase):
         assert result == []
 
     def test_medium_effort_awards_dp(self) -> None:
-        """Medium effort at path level 1 awards 10 dp to each trait."""
+        """Medium effort at path level 1 awards 10 dp to each trait, a level's worth at 10."""
         result = award_check_development(
             character_sheet=self.sheet,
             check_type=self.check_type,
             effort_level=EffortLevel.MEDIUM,
             path_level=1,
         )
-        # No level-ups (need 100 dp for 10->11)
-        assert result == []
+        # 10 dp is exactly what 10->11 costs, so both traits rise one level.
+        assert len(result) == 2
 
         # Check DevelopmentPoints were created
         dp1 = DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.trait1)
@@ -289,14 +287,14 @@ class AwardCheckDevelopmentTest(TestCase):
 
     def test_level_up_returned(self) -> None:
         """When enough dp are accumulated, level-ups are returned."""
-        # Pre-load 90 dp
+        # Pre-load 5 dp
         DevelopmentPoints.objects.create(
-            character_sheet=self.sheet, trait=self.trait1, total_earned=90
+            character_sheet=self.sheet, trait=self.trait1, total_earned=5
         )
         DevelopmentPoints.objects.create(
-            character_sheet=self.sheet, trait=self.trait2, total_earned=90
+            character_sheet=self.sheet, trait=self.trait2, total_earned=5
         )
-        # Medium effort + path level 1 = 10 dp -> total 100 -> level 11
+        # Medium effort + path level 1 = 10 dp -> total 15 -> level 11
         result = award_check_development(
             character_sheet=self.sheet,
             check_type=self.check_type,
@@ -411,7 +409,7 @@ class AwardCheckDevelopmentParksAtBoundaryTest(TestCase):
 
     def test_a_rating_lowered_outside_the_ledger_does_not_climb_back(self) -> None:
         """A rating lowered by a path that skips the ledger (the admin) stays lowered."""
-        self.skill_value.value = 15
+        self.skill_value.value = 25
         self.skill_value.save()
         DevelopmentPoints.objects.update_or_create(
             character_sheet=self.sheet,
@@ -426,7 +424,7 @@ class AwardCheckDevelopmentParksAtBoundaryTest(TestCase):
             path_level=1,
         )
 
-        assert CharacterTraitValue.objects.get(pk=self.skill_value.pk).value == 15
+        assert CharacterTraitValue.objects.get(pk=self.skill_value.pk).value == 25
 
 
 class RustDebtPayoffTest(TestCase):
@@ -478,26 +476,26 @@ class RustDebtPayoffTest(TestCase):
     def test_no_level_up_while_paying_debt(self) -> None:
         """A character with rust_debt doesn't level up even if award is large enough."""
         dev = DevelopmentPoints.objects.create(
-            character_sheet=self.sheet, trait=self.trait, total_earned=90, rust_debt=50
+            character_sheet=self.sheet, trait=self.trait, total_earned=9, rust_debt=5
         )
-        # Need 100 total_earned for level 11. Have 90 + award 50.
-        # But 50 of the award pays debt, so total_earned stays at 90.
-        level_ups = dev.award_points(50)
+        # Need 10 total_earned for level 11. Have 9 + award 5.
+        # But all 5 of the award pays debt, so total_earned stays at 9.
+        level_ups = dev.award_points(5)
         assert level_ups == []
         dev.refresh_from_db()
         assert dev.rust_debt == 0
-        assert dev.total_earned == 90
+        assert dev.total_earned == 9
 
     def test_no_debt_works_normally(self) -> None:
         """When rust_debt is 0, award_points behaves as before."""
         dev = DevelopmentPoints.objects.create(
             character_sheet=self.sheet, trait=self.trait, total_earned=0, rust_debt=0
         )
-        level_ups = dev.award_points(100)
+        level_ups = dev.award_points(10)
         assert level_ups == [(10, 11)]
         dev.refresh_from_db()
         assert dev.rust_debt == 0
-        assert dev.total_earned == 100
+        assert dev.total_earned == 10
 
 
 class ApplySkillRustTest(TestCase):
@@ -520,7 +518,7 @@ class ApplySkillRustTest(TestCase):
             character_sheet=self.sheet, trait=self.trait, total_earned=100, rust_debt=0
         )
         result = apply_skill_rust(dev, character_level=3, trait_level=11)
-        # 3 + 5 = 8, cap = (11 - 10) * 100 = 100, so 8 applies
+        # 3 + 5 = 8, cap = the 10 dp step 10->11 cost, so 8 applies
         assert result == 8
         dev.refresh_from_db()
         assert dev.rust_debt == 8
@@ -530,12 +528,12 @@ class ApplySkillRustTest(TestCase):
         dev = DevelopmentPoints.objects.create(
             character_sheet=self.sheet, trait=self.trait, total_earned=100, rust_debt=0
         )
-        # trait_level=11, cap = (11-10)*100 = 100
-        # character_level=300, rust = 305, capped at 100
+        # trait_level=11, cap = the 10 dp step 10->11 cost
+        # character_level=300, rust = 305, capped at 10
         result = apply_skill_rust(dev, character_level=300, trait_level=11)
-        assert result == 100
+        assert result == 10
         dev.refresh_from_db()
-        assert dev.rust_debt == 100
+        assert dev.rust_debt == 10
 
     def test_no_rust_below_base_level(self) -> None:
         """Skills at or below level 10 don't get rust."""
@@ -558,13 +556,13 @@ class ApplySkillRustTest(TestCase):
     def test_rust_accumulates(self) -> None:
         """Repeated rust calls accumulate debt."""
         dev = DevelopmentPoints.objects.create(
-            character_sheet=self.sheet, trait=self.trait, total_earned=100, rust_debt=10
+            character_sheet=self.sheet, trait=self.trait, total_earned=100, rust_debt=2
         )
-        result = apply_skill_rust(dev, character_level=5, trait_level=12)
-        # 5 + 5 = 10, cap = (12-10)*100 = 200, so 10 applies
-        assert result == 10
+        result = apply_skill_rust(dev, character_level=1, trait_level=12)
+        # 1 + 5 = 6, cap = the 10 dp step 11->12 cost less the 2 owed, so 6 applies
+        assert result == 6
         dev.refresh_from_db()
-        assert dev.rust_debt == 20
+        assert dev.rust_debt == 8
 
 
 class ProcessWeeklySkillDevelopmentTest(TestCase):
@@ -668,7 +666,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
             .values("rust_debt")
             .first()
         )
-        # char_level=5, rust = 5+5 = 10, cap = (12-10)*100 = 200
+        # char_level=5, rust = 5+5 = 10, cap = 10, the dp step 11->12 cost
         assert dev["rust_debt"] == 10
 
     def test_rust_spares_npcs_and_stops_at_one_level(self) -> None:
@@ -677,7 +675,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         npc_dev = DevelopmentPoints.objects.create(character_sheet=npc, trait=self.trait_unused)
         CharacterTraitValue.objects.create(character=npc, trait=self.trait_unused, value=12)
         DevelopmentPoints.objects.create(
-            character_sheet=self.sheet, trait=self.trait_unused, total_earned=300, rust_debt=195
+            character_sheet=self.sheet, trait=self.trait_unused, total_earned=300, rust_debt=5
         )
         CharacterTraitValue.objects.create(
             character=self.character.sheet_data, trait=self.trait_unused, value=12
@@ -687,7 +685,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
 
         npc_dev.refresh_from_db()
         pc_dev = DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.trait_unused)
-        assert (npc_dev.rust_debt, pc_dev.rust_debt) == (0, 200)
+        assert (npc_dev.rust_debt, pc_dev.rust_debt) == (0, 10)
 
     def test_rust_creates_audit_transaction(self) -> None:
         """Rust application creates a DevelopmentTransaction with source=RUST."""
@@ -870,16 +868,16 @@ class RustPayoffLevelThresholdTest(TestCase):
         CharacterTraitValue.objects.filter(character=self.character.sheet_data).delete()
 
     def test_rust_payoff_crossing_level_threshold(self) -> None:
-        """rust_debt=150, award 250 -> 150 pays debt, 100 remains -> level 10->11."""
+        """rust_debt=15, award 25 -> 15 pays debt, 10 remains -> level 10->11."""
         dev = DevelopmentPoints.objects.create(
-            character_sheet=self.sheet, trait=self.trait, total_earned=0, rust_debt=150
+            character_sheet=self.sheet, trait=self.trait, total_earned=0, rust_debt=15
         )
-        level_ups = dev.award_points(250)
+        level_ups = dev.award_points(25)
         dev.refresh_from_db()
         assert dev.rust_debt == 0
-        # 250 - 150 debt = 100 dp toward advancement
-        assert dev.total_earned == 100
-        # 100 dp is the threshold for level 11
+        # 25 - 15 debt = 10 dp toward advancement
+        assert dev.total_earned == 10
+        # 10 dp is the threshold for level 11
         assert level_ups == [(10, 11)]
         tv = CharacterTraitValue.objects.get(character=self.character.sheet_data, trait=self.trait)
         assert tv.value == 11

@@ -8,8 +8,8 @@ from world.progression.models import MaturationStatCap
 from world.progression.models.rewards import (
     DevelopmentPoints,
     DevelopmentTransaction,
-    cumulative_dp_for_level,
 )
+from world.progression.services.dev_cost import cumulative_dp_for_level
 from world.progression.types import DevelopmentSource
 from world.skills.factories import SkillFactory, SkillRatingFactory
 from world.skills.services import points_to_next_boundary, train_skill

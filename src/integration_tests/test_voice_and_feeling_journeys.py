@@ -31,8 +31,8 @@ from world.progression.models import TraitRatingUnlock
 from world.progression.models.rewards import (
     DevelopmentPoints,
     DevelopmentTransaction,
-    cumulative_dp_for_level,
 )
+from world.progression.services.dev_cost import cumulative_dp_for_level
 from world.progression.types import DevelopmentSource
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import PersonaFactory

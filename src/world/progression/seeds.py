@@ -292,3 +292,19 @@ def seed_maturation_stat_caps() -> None:
     }
     for stage, cap in caps.items():
         MaturationStatCap.objects.get_or_create(path_stage=stage, defaults={"stat_cap": cap})
+
+
+def seed_development_cost_config() -> None:
+    """Create the development cost curve's singleton row if missing (#5093).
+
+    A band costs 100 development points at character level 1 and 150 percent of the band
+    before it from there. Written from explicit values, never a factory; get_or_create keeps a
+    staff retune on re-run (PLACEHOLDER tuning values).
+    """
+    from world.progression.models import DevelopmentCostConfig  # noqa: PLC0415
+    from world.progression.models.dev_cost_config import SINGLETON_PK  # noqa: PLC0415
+
+    DevelopmentCostConfig.objects.get_or_create(
+        pk=SINGLETON_PK,
+        defaults={"start_level": 1, "base_cost": 100, "growth_percent": 150},
+    )
