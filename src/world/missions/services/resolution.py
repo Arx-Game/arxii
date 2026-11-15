@@ -356,9 +356,11 @@ def _resolve_check_type(option: MissionOption) -> CheckType:
 def _contest_opposition(option: MissionOption) -> int:
     """The passive opposition term a CONTEST adds to the template's difficulty (#3568).
 
-    The opposition sheet is a character, so it counts as its full check total on the
-    opposition check type at its effective combat level (#5093, ``compute_obstacle_rating``);
-    it never rolls (spec Decision 2). Every caller adds it to an authored difficulty, as here.
+    An NPC opposition sheet (the usual case) counts as its level's baseline on the opposition
+    check type at its effective combat level (#5093, ``compute_obstacle_rating`` through
+    ``level_opposition``): a level and no points, and it never rolls (spec Decision 2,
+    ADR-0265). Only a player character's sheet would count as her full check total. Every
+    caller adds it to an authored difficulty, as here.
     """
     sheet = option.opposition_sheet
     return compute_obstacle_rating(

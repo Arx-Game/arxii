@@ -387,10 +387,12 @@ increment = compute_resist_increment(
 # contributes the baseline alone. 0 at level 0 and where no baseline rows exist.
 difficulty = level_opposition(check_type, level=defender_level, character=defender_character)
 
-# A character who is the obstacle (concealment, a held condition, a mission opposition
-# sheet, a resisted social move) counts as her full check total, not her level (#5093):
-# compute_check_rating plus the modifiers she carries on the check, counted once. A defender
-# with no sheet is an NPC and counts as its level's baseline through level_opposition.
+# A PLAYER character who is the obstacle (concealment, a held condition, a resisted social
+# move) counts as her full check total, not her level (#5093): compute_check_rating plus the
+# modifiers she carries on the check, counted once. Player means a sheet for which
+# roster.services.activity.is_player_character holds. Every other obstacle, with a sheet or
+# without (a named or story NPC, a mission opposition sheet), is an NPC and counts as its
+# level's baseline through level_opposition.
 # compute_resist_increment is this on the Composure check plus the effort modifier.
 difficulty = compute_obstacle_rating(caster, check_type, level_override=None)
 # A hold's caster adds caster_opposition(instance, check_type) (world/conditions/services.py):

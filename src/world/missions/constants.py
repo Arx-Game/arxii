@@ -139,7 +139,8 @@ class OptionKind(models.TextChoices):
     (#3565).
 
     CONTEST (#3568): a CHECK whose difficulty adds the opposition's
-    full total (`compute_obstacle_rating`) for `opposition_sheet` at
+    level baseline (`compute_obstacle_rating`: an NPC sheet is a level and never rolls, ADR-0265;
+    a player character's sheet counts as her full total) for `opposition_sheet` at
     `effective_combat_level`; tiers and routes are a CHECK's.
     """
 

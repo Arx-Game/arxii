@@ -1571,27 +1571,32 @@ def compute_obstacle_rating(
 ) -> int:
     """What a character who is the obstacle counts for on *check_type*, her full total (#5093).
 
-    A character with a sheet who opposes a check (a concealed cast, a held condition, a
-    mission opposition sheet, a resisted social move) is not a level: she counts as everything
-    she would bring to a roll on the check. That is :func:`compute_check_rating` plus every
-    modifier she carries on it, gathered through the seam a modifier-aware roll uses and
-    counted once (``extra_modifiers_total`` leaves out what the rating already holds). Nothing
-    is rolled, spent or announced. Clamped to 0 or more: an obstacle never lowers the
-    difficulty.
+    A PLAYER character who opposes a check (a concealed cast, a held condition, a resisted
+    social move) is not a level: she counts as everything she would bring to a roll on the
+    check. That is :func:`compute_check_rating` plus every modifier she carries on it, gathered
+    through the seam a modifier-aware roll uses and counted once (``extra_modifiers_total``
+    leaves out what the rating already holds). Nothing is rolled, spent or announced. Clamped to
+    0 or more: an obstacle never lowers the difficulty. A player character is a character with
+    a sheet for whom ``world.roster.services.activity.is_player_character`` holds (held by an
+    account, or puppeted; never a story NPC).
 
-    An obstacle with NO sheet is an NPC (an ephemeral ``CombatOpponent``, a mook, a plain
-    object): it has a level and no points of its own, so it counts as its level's baseline
-    through :func:`level_opposition`, at *level_override* or its own class level, with its
-    active conditions and any opposing aspect match. That keeps an NPC's social resistance at
-    the same size as its passive opposition to an attack.
+    Every other obstacle is an NPC, whether it has no sheet (an ephemeral ``CombatOpponent``, a
+    mook, a plain object) or has one (a named or story NPC, a mission opposition sheet): an NPC
+    has a level and no points of its own, so it counts as its level's baseline through
+    :func:`level_opposition`, at *level_override* or its own class level, with its active
+    conditions and any opposing aspect match. That keeps an NPC's social resistance the same
+    size as its passive opposition to an attack, and keeps a mission CONTEST's opposition a
+    level only (ADR-0265).
 
     ``extra_modifiers`` is added to her carried modifiers (:func:`compute_resist_increment`
     passes an effort modifier). ``level_override`` and ``stat_override`` are forwarded to
-    ``compute_check_rating`` unchanged. Exclusive with :func:`level_opposition` for a
-    character with a sheet, which would count her level a second time.
+    ``compute_check_rating`` unchanged (a player character only). Exclusive with
+    :func:`level_opposition` for a player character, which would count her level a second time.
     """
+    from world.roster.services.activity import is_player_character  # noqa: PLC0415
+
     sheet = _sheet_or_none(character)
-    if sheet is None:
+    if sheet is None or not is_player_character(sheet):
         level = (
             level_override if level_override is not None else get_character_path_level(character)
         )
@@ -1633,10 +1638,11 @@ def compute_resist_increment(
     they would bring to a Composure roll: a ``poise`` modifier raises it, a condition's
     Composure penalty lowers it. Left out: scene check modifiers and the fashion bonus,
     which need a scene this function is not given. A once-only condition counts while
-    held and is never spent here; only a real roll spends one. A defender with no sheet is an
-    NPC (an ephemeral ``CombatOpponent``): it resists as its level's baseline plus effort
-    (``compute_obstacle_rating``), the same size as its passive opposition. A staff roll modifier
-    (``get_rollmod``) is not counted: it shifts the dice of a roll, and there is none here.
+    held and is never spent here; only a real roll spends one. A defender who is not a player
+    character (an ephemeral ``CombatOpponent``, a named or story NPC) resists as its level's
+    baseline plus effort (``compute_obstacle_rating``), the same size as its passive
+    opposition. A staff roll modifier (``get_rollmod``) is not counted: it shifts the dice of a
+    roll, and there is none here.
 
     Perk points remain 0 here: this function has no ``situation_ctx`` parameter, so
     ``_situational_perk_check_bonus`` short-circuits before firing — deliberately,

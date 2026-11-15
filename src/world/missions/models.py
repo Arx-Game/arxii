@@ -703,7 +703,8 @@ class MissionOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text="ENCOUNTER options only: the spawned encounter opens as a standoff.",
     )
     # #3568 CONTEST: the party rolls authored_check_type against the template's
-    # difficulty plus compute_obstacle_rating(opposition_sheet.character, ...) for this sheet.
+    # difficulty plus compute_obstacle_rating(opposition_sheet.character, ...) for this sheet (an
+    # NPC sheet counts as its level's baseline, a player character's as her full total).
     # PROTECT (not SET_NULL): resolution reads this sheet unconditionally for a
     # CONTEST option, so a staff hard-delete of the sheet must be blocked at the
     # database rather than surfacing as a runtime crash during resolution.

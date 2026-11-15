@@ -63,7 +63,7 @@ level, character=None)`: an NPC's difficulty is its level's CHECK baseline (the 
 N, #5093), plus — when a `character` is given — the acting check's aspects scored against the
 *defender's* Path (each match a share of one level's width) and the defender's active condition
 modifiers at their derived value, so a debuff lowers the NPC. A player character who is the
-obstacle does not come through here: she counts as her full check total
+obstacle (`is_player_character`) does not come through here: she counts as her full check total
 (`compute_obstacle_rating`).
 Used when the defender is not spending a check of their own (an authored lock, a ward, a
 combat attack against a `CombatOpponent`). Deliberately exclusive with resist increment

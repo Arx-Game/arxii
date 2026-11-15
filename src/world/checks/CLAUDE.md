@@ -174,9 +174,10 @@ exclusive** — a call site uses one or the other, never both:
   the defender's active condition modifiers at their derived value. `character=None` (an
   ephemeral NPC with no sheet) contributes the baseline alone.
 - `compute_obstacle_rating(character, check_type, *, extra_modifiers=0, level_override=None,
-  stat_override=None) -> int` — a character who is the obstacle counts as her full check
-  total (`compute_check_rating` plus carried modifiers counted once); a sheet-less obstacle
-  counts as its level's baseline through `level_opposition`. `compute_resist_increment` is
+  stat_override=None) -> int` — a PLAYER character (a sheet for whom
+  `roster.services.activity.is_player_character` holds) who is the obstacle counts as her full
+  check total (`compute_check_rating` plus carried modifiers counted once); every other
+  obstacle, sheeted NPC or not, counts as its level's baseline through `level_opposition`. `compute_resist_increment` is
   this on Composure plus the effort modifier.
 
 Combining both at one call site would double-count the defender's level — see ADR-0166

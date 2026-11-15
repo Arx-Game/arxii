@@ -18,12 +18,27 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.checks.types import ExtraTraitTerm
     from world.traits.models import CheckOutcome
 
 
 _local = threading.local()
+
+
+def make_player_character(sheet: CharacterSheet) -> CharacterSheet:
+    """Give ``sheet`` an open tenure on a roster entry, so it is a player character.
+
+    ``is_player_character`` holds for a sheet held by an account, whatever the player's
+    connection state (#4091). Tests that need a character to count as a PC for an obstacle
+    or resist (#5093) use this; a bare ``CharacterSheetFactory`` sheet is an NPC.
+    """
+    from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+
+    entry = RosterEntryFactory(character_sheet=sheet)
+    RosterTenureFactory(roster_entry=entry, end_date=None)
+    return sheet
 
 
 @dataclass

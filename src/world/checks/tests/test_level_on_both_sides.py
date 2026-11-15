@@ -28,6 +28,7 @@ from world.checks.services import (
     level_points,
     preview_check_difficulty,
 )
+from world.checks.test_helpers import make_player_character
 from world.classes.factories import (
     AspectFactory,
     CharacterClassFactory,
@@ -173,11 +174,16 @@ class PlayerCharacterAsObstacleTests(TestCase):
         CheckScaleConfig.objects.update_or_create(pk=1, defaults={"level_share": Decimal("0.5")})
         cls.check_type = CheckTypeFactory(name="ObstacleCheck")
         character_class = CharacterClassFactory()
-        cls.sheet = CharacterSheetFactory()
+        cls.sheet = make_player_character(CharacterSheetFactory())
         CharacterClassLevelFactory(
             character=cls.sheet, character_class=character_class, level=11, is_primary=True
         )
         cls.character = cls.sheet.character
+        # A named NPC has a sheet too, but no tenure: it is a level, not a rating.
+        cls.npc_sheet = CharacterSheetFactory()
+        CharacterClassLevelFactory(
+            character=cls.npc_sheet, character_class=character_class, level=11, is_primary=True
+        )
 
     def test_she_counts_as_her_full_check_total(self) -> None:
         # Her level term is 49; no traits, no modifiers.
@@ -203,6 +209,13 @@ class PlayerCharacterAsObstacleTests(TestCase):
         )
 
         self.assertEqual(compute_obstacle_rating(self.character, self.check_type), 49 + 10)
+
+    def test_a_named_npc_with_a_sheet_counts_as_its_levels_baseline(self) -> None:
+        # Level 11 with a sheet but no tenure: 98, the whole baseline, never her 49.
+        self.assertEqual(compute_obstacle_rating(self.npc_sheet.character, self.check_type), 98)
+
+    def test_a_rostered_player_character_counts_her_full_total(self) -> None:
+        self.assertEqual(compute_obstacle_rating(self.character, self.check_type), 49)
 
     def test_an_obstacle_with_no_sheet_counts_as_its_levels_baseline(self) -> None:
         npc = ObjectDBFactory(db_key="ObstacleSheetlessNpc")
@@ -255,7 +268,7 @@ class CasterOppositionTests(TestCase):
         cls.template = ConditionTemplateFactory(name="CasterOppositionHold")
 
     def _caster(self, level: int):
-        sheet = CharacterSheetFactory()
+        sheet = make_player_character(CharacterSheetFactory())
         CharacterClassLevelFactory(
             character=sheet, character_class=self.character_class, level=level, is_primary=True
         )
