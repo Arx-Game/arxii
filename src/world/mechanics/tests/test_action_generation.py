@@ -16,8 +16,9 @@ from world.mechanics.factories import (
 from world.mechanics.models import ChallengeInstance
 from world.mechanics.services import get_available_actions
 from world.mechanics.types import CapabilitySource
-from world.scenes.action_constants import DIFFICULTY_BAND_STEP
+from world.scenes.action_constants import DIFFICULTY_BAND_SHIFT_TENTHS
 from world.seeds.checks import seed_check_resolution_tables
+from world.traits.factories import ensure_level_ladder
 
 
 def _make_source(  # noqa: PLR0913
@@ -46,6 +47,7 @@ class ActionGenerationTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        ensure_level_ladder()
         cls.character = ObjectDBFactory(db_key="ActionChar")
         cls.location = ObjectDBFactory(db_key="ActionRoom")
 
@@ -59,7 +61,7 @@ class ActionGenerationTests(TestCase):
 
         cls.template = ChallengeTemplateFactory(
             name="Wooden Door",
-            severity=5,
+            severity_level=0,
         )
         cls.template.properties.add(cls.prop_flammable)
 
@@ -106,7 +108,7 @@ class ActionGenerationTests(TestCase):
         risk-transparency lie, and risk transparency is a stated design principle
         of the challenge system.
         """
-        self.challenge_instance.severity_adjustment = DIFFICULTY_BAND_STEP
+        self.challenge_instance.severity_adjustment_tenths = DIFFICULTY_BAND_SHIFT_TENTHS
         self.challenge_instance.adjustment_reason = "braced from the far side"
         self.challenge_instance.save()
         self.addCleanup(self._clear_adjustment)
@@ -122,10 +124,11 @@ class ActionGenerationTests(TestCase):
         ) as spy:
             get_available_actions(self.character, self.location, capability_sources=[source])
 
-        assert spy.call_args.args[2] == self.template.severity + DIFFICULTY_BAND_STEP
+        # the template is level 0 (no difficulty); the shift is three levels' width (24 points)
+        assert spy.call_args.args[2] == 24
 
     def _clear_adjustment(self) -> None:
-        self.challenge_instance.severity_adjustment = 0
+        self.challenge_instance.severity_adjustment_tenths = 0
         self.challenge_instance.adjustment_reason = ""
         self.challenge_instance.save()
 
@@ -183,6 +186,7 @@ class EffectPropertyFilterTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        ensure_level_ladder()
         cls.character = ObjectDBFactory(db_key="EffectChar")
         cls.location = ObjectDBFactory(db_key="EffectRoom")
 
@@ -199,7 +203,7 @@ class EffectPropertyFilterTests(TestCase):
 
         cls.template = ChallengeTemplateFactory(
             name="Wooden Wall EPF",
-            severity=5,
+            severity_level=0,
         )
         cls.template.properties.add(cls.prop_flammable)
 
@@ -250,6 +254,7 @@ class DifficultyIndicatorForCheckTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        ensure_level_ladder()
         cls.character = ObjectDBFactory(db_key="DiffChar")
         cls.location = ObjectDBFactory(db_key="DiffRoom")
 
@@ -260,7 +265,7 @@ class DifficultyIndicatorForCheckTests(TestCase):
             capability=cls.capability,
             target_property=cls.prop,
         )
-        cls.template = ChallengeTemplateFactory(name="DiffChallenge", severity=5)
+        cls.template = ChallengeTemplateFactory(name="DiffChallenge", severity_level=0)
         cls.template.properties.add(cls.prop)
 
         cls.approach = ChallengeApproachFactory(
@@ -312,6 +317,7 @@ class ImpossibleApproachListedTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        ensure_level_ladder()
         seed_check_resolution_tables()
         cls.character = CharacterFactory(db_key="GapChar")
         cls.location = ObjectDBFactory(db_key="GapRoom")
@@ -324,14 +330,17 @@ class ImpossibleApproachListedTests(TestCase):
                 source_type=CapabilitySourceType.TRAIT,
             )
         ]
-        # Severity is target difficulty points; the character carries none, so Legendary
-        # (200) is seven ranks up and Mythic (250) eight, Competent (25) two.
-        for severity in (25, 200, 250):
+        # Severity is a level read as its baseline; the character carries none, so level 24
+        # (202 points) is far up the ladder and level 30 (250) farther, and level 2 (26) is two
+        # ranks up.
+        for severity in (2, 24, 30):
             prop = PropertyFactory(name=f"gap_prop_{severity}")
             app = ApplicationFactory(
                 name=f"Gap {severity}", capability=cls.capability, target_property=prop
             )
-            template = ChallengeTemplateFactory(name=f"Gap door {severity}", severity=severity)
+            template = ChallengeTemplateFactory(
+                name=f"Gap door {severity}", severity_level=severity
+            )
             template.properties.add(prop)
             ChallengeApproachFactory(challenge_template=template, application=app)
             ChallengeInstance.objects.create(
@@ -348,9 +357,9 @@ class ImpossibleApproachListedTests(TestCase):
         )
         labels = {a.challenge_name: a.difficulty_indicator for a in actions}
         assert labels == {
-            "Gap door 25": DifficultyIndicator.VERY_HARD,
-            "Gap door 200": DifficultyIndicator.IMPOSSIBLE,
-            "Gap door 250": DifficultyIndicator.IMPOSSIBLE,
+            "Gap door 2": DifficultyIndicator.VERY_HARD,
+            "Gap door 24": DifficultyIndicator.IMPOSSIBLE,
+            "Gap door 30": DifficultyIndicator.IMPOSSIBLE,
         }
 
 
@@ -379,7 +388,7 @@ class TechniqueMarksReachApproachTests(TestCase):
             target_property=cls.prop_flammable,
             required_effect_property=cls.prop_fire,
         )
-        template = ChallengeTemplateFactory(name="Wooden Wall Marks", severity=5)
+        template = ChallengeTemplateFactory(name="Wooden Wall Marks", severity_level=0)
         template.properties.add(cls.prop_flammable)
         ChallengeApproachFactory(
             challenge_template=template, application=application, display_name="Burn it"

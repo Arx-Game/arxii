@@ -17,7 +17,6 @@ from world.areas.positioning.models import (
     RampartElementResistance,
 )
 from world.areas.worldmap.models import RegionMap, RegionMapUpload
-from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
 
 
 @admin.register(Area)
@@ -127,10 +126,8 @@ class FeatureTypeAdmin(admin.ModelAdmin):
 
     @admin.display(description="Difficulty")
     def difficulty(self, obj: FeatureType) -> str:
-        """The band whose value sits nearest the template's severity."""
-        severity = obj.challenge_template.severity
-        band = min(DIFFICULTY_VALUES, key=lambda b: abs(DIFFICULTY_VALUES[b] - severity))
-        return DifficultyChoice(band).label
+        """The challenge's severity as a level."""
+        return f"level {obj.challenge_template.severity_level}"
 
 
 class BlueprintFeatureInline(admin.TabularInline):

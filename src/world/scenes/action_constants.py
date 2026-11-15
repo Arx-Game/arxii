@@ -70,6 +70,14 @@ assert all(  # noqa: S101 -- import-time invariant on an authored constant table
     hi - lo == DIFFICULTY_BAND_STEP for lo, hi in pairwise(_DIFFICULTY_POINTS)
 ), "DIFFICULTY_VALUES bands must stay evenly spaced for DIFFICULTY_BAND_STEP to be meaningful."
 
+#: One band as a GM shift on a placed challenge (#5093): a ``DIFFICULTY_BAND_STEP`` in points was
+#: three levels' worth, so the shift is stored in tenths of one level's width at two tenths a
+#: point.
+DIFFICULTY_BAND_SHIFT_TENTHS: int = DIFFICULTY_BAND_STEP * 2
+
+#: The top authored level a placed challenge may be shifted up to (#5093).
+MAX_CHALLENGE_LEVEL: int = 30
+
 #: Lowest and highest authored difficulty in points — the bounds a per-instance
 #: severity adjustment may not shift a challenge past (refuse, never clamp).
 MIN_DIFFICULTY_POINTS: int = _DIFFICULTY_POINTS[0]

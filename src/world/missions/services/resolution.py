@@ -69,7 +69,7 @@ from evennia_extensions.models import RoomProfile
 from world.areas.services import area_subtree_pks
 from world.checks.models import Consequence
 from world.checks.outcome_utils import select_weighted
-from world.checks.services import compute_obstacle_rating, perform_check
+from world.checks.services import compute_obstacle_rating, difficulty_points, perform_check
 from world.checks.theater import maybe_emit_resolution_theater
 from world.checks.types import CheckResult, ResolutionContext
 from world.covenants.mentorship import effective_combat_level
@@ -428,7 +428,7 @@ def _resolve_challenge_check(
     return perform_check(
         character,
         chosen_approach.check_type,
-        target_difficulty=challenge.severity,
+        target_difficulty=difficulty_points(challenge.severity_level),
         extra_modifiers=extra_modifiers,
         situation_ctx=mission_situation_ctx(character, instance),
     )

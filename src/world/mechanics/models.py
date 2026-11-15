@@ -48,9 +48,7 @@ from world.mechanics.constants import (
     ResolutionType,
 )
 from world.scenes.action_constants import (
-    DIFFICULTY_BAND_STEP,
-    DIFFICULTY_VALUES,
-    DifficultyChoice,
+    DIFFICULTY_BAND_SHIFT_TENTHS,
 )
 
 _DAMAGE_TYPE_MODEL_PATH = "arxii.DamageType"
@@ -1570,12 +1568,11 @@ class ChallengeTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="challenge_templates",
         blank=True,
     )
-    severity = models.PositiveIntegerField(
-        default=DIFFICULTY_VALUES[DifficultyChoice.NORMAL],
+    severity_level = models.PositiveSmallIntegerField(
+        default=2,
         help_text=(
-            "Authored difficulty in DIFFICULTY_VALUES points (15 Trivial .. 90 Harrowing), "
-            "passed straight to perform_check's target_difficulty. NOT a 1-5 rating: the "
-            "old default of 1 resolved every authored challenge at the bottom rank (#2865)."
+            "Authored difficulty as a level (0 = no difficulty): the roll meets that level's "
+            "baseline, passed to perform_check as its target_difficulty. NOT a 1-5 rating."
         ),
     )
     goal = models.TextField(blank=True)
@@ -2040,19 +2037,20 @@ class ChallengeInstance(SharedMemoryModel):
     )
     is_active = models.BooleanField(default=True)
     is_revealed = models.BooleanField(default=True)
-    severity_adjustment = models.SmallIntegerField(
+    severity_adjustment_tenths = models.SmallIntegerField(
         default=0,
         help_text=(
             "Signed one-band shift a GM applied when placing this challenge (#2865), in "
-            "DIFFICULTY_VALUES points. Folded into the template's severity at resolution. "
-            "Constrained to exactly one band either way — never an arbitrary offset."
+            "tenths of one level's width at the template's level. Folded into the template's "
+            "severity level at resolution. Constrained to exactly one band either way, never "
+            "an arbitrary offset."
         ),
     )
     adjustment_reason = models.CharField(
         max_length=200,
         blank=True,
         help_text=(
-            "Why the GM shifted the band. Required whenever severity_adjustment is "
+            "Why the GM shifted the band. Required whenever severity_adjustment_tenths is "
             "non-zero, and GM-facing only — never surfaced to players."
         ),
     )
@@ -2062,12 +2060,16 @@ class ChallengeInstance(SharedMemoryModel):
         constraints = [
             models.CheckConstraint(
                 condition=models.Q(
-                    severity_adjustment__in=[-DIFFICULTY_BAND_STEP, 0, DIFFICULTY_BAND_STEP]
+                    severity_adjustment_tenths__in=[
+                        -DIFFICULTY_BAND_SHIFT_TENTHS,
+                        0,
+                        DIFFICULTY_BAND_SHIFT_TENTHS,
+                    ]
                 ),
                 name="challenge_instance_adjustment_one_band",
             ),
             models.CheckConstraint(
-                condition=models.Q(severity_adjustment=0) | ~models.Q(adjustment_reason=""),
+                condition=models.Q(severity_adjustment_tenths=0) | ~models.Q(adjustment_reason=""),
                 name="challenge_instance_adjustment_needs_reason",
             ),
         ]
@@ -2077,13 +2079,21 @@ class ChallengeInstance(SharedMemoryModel):
 
     @property
     def effective_severity(self) -> int:
-        """Authored severity plus this instance's GM band shift, in difficulty points.
+        """Authored severity level's baseline plus this instance's GM band shift, in points.
 
-        The single reader of ``severity_adjustment`` — every resolution path takes its
+        The single reader of ``severity_adjustment_tenths`` — every resolution path takes its
         ``target_difficulty`` from here so a placed challenge and a situation-minted one
-        cannot drift apart.
+        cannot drift apart. The shift is tenths of one level's width at the template's level.
         """
-        return self.template.severity + self.severity_adjustment
+        from world.checks.services import (  # noqa: PLC0415
+            difficulty_points,
+            difficulty_step_points,
+        )
+
+        level = self.template.severity_level
+        return difficulty_points(level) + difficulty_step_points(
+            self.severity_adjustment_tenths, level
+        )
 
 
 class CharacterChallengeRecord(SharedMemoryModel):

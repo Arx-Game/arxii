@@ -652,7 +652,7 @@ class TargetMenuAPITests(TestCase):
         known = CharacterTechniqueFactory(character=self.sheet, technique=technique)
         prop = PropertyFactory()
         ObjectProperty.objects.create(object=self.obj, property=prop, value=1)
-        template = ChallengeTemplateFactory(severity=3)
+        template = ChallengeTemplateFactory(severity_level=0)
         template.properties.add(prop)
         application = ApplicationFactory(
             capability=capability, target_property=prop, default_template=template

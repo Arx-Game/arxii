@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from world.checks.services import difficulty_points
 from world.conditions.services import get_effective_capability_value
 from world.mechanics.models import ChallengeApproach, ChallengeTemplate
 from world.missions.types import ChallengeOption
@@ -75,7 +76,7 @@ def challenge_options_for_character(
                 approach=approach,
                 check_type=approach.check_type,
                 auto_succeeds=approach.auto_succeeds,
-                difficulty=challenge.severity,
+                difficulty=difficulty_points(challenge.severity_level),
                 owner=character,
             )
         )

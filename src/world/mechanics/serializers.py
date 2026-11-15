@@ -201,7 +201,7 @@ class ChallengeTemplateListSerializer(serializers.ModelSerializer):
             "name",
             "category",
             "category_name",
-            "severity",
+            "severity_level",
             "challenge_type",
             "discovery_type",
         ]
@@ -228,7 +228,7 @@ class ChallengeTemplateDetailSerializer(serializers.ModelSerializer):
             "category_name",
             "description_template",
             "goal",
-            "severity",
+            "severity_level",
             "challenge_type",
             "discovery_type",
             "template_properties",

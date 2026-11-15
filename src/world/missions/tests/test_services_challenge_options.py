@@ -37,7 +37,7 @@ class ChallengeOptionsForCharacterTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.challenge = ChallengeTemplateFactory(name="The Pit", severity=5)
+        cls.challenge = ChallengeTemplateFactory(name="The Pit", severity_level=0)
 
         # char_with holds two capabilities, each granted by an active
         # condition; char_without holds none.

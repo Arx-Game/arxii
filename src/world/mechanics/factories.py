@@ -41,7 +41,6 @@ from world.mechanics.models import (
     SituationTrapLink,
     TraitCapabilityDerivation,
 )
-from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
 
 _OBJECTDB_FACTORY = "evennia_extensions.factories.ObjectDBFactory"
 
@@ -402,7 +401,7 @@ class ChallengeTemplateFactory(DjangoModelFactory):
     # Severity is in DIFFICULTY_VALUES points, not a 1-5 rating (#2865). The old
     # literal 1 put every factory-built challenge at the bottom rank, so tests
     # exercised a difficulty no authored challenge should ever have.
-    severity = DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
+    severity_level = 2
     goal = factory.Faker("sentence")
     category = factory.SubFactory(ChallengeCategoryFactory)
 

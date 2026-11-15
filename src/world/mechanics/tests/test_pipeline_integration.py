@@ -271,7 +271,7 @@ class ChallengePathTests(PipelineTestMixin, TestCase):
         # Challenge template
         cls.challenge_template = ChallengeTemplateFactory(
             name="Wooden Barricade",
-            severity=5,
+            severity_level=0,
         )
         ChallengeTemplatePropertyFactory(
             challenge_template=cls.challenge_template,
@@ -892,7 +892,7 @@ class TechniqueUseFlowTests(PipelineTestMixin, TestCase):
         # Challenge setup (reuse from ChallengePathTests pattern)
         cls.challenge_template = ChallengeTemplateFactory(
             name="Flame Wall",
-            severity=5,
+            severity_level=0,
         )
         ChallengeTemplatePropertyFactory(
             challenge_template=cls.challenge_template,

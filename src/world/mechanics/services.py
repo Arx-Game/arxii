@@ -18,7 +18,11 @@ from django.db.models import Prefetch, Q, Sum
 
 from typeclasses.characters import Character
 from world.checks.modifier_values import ValueTable, load_value_table
-from world.checks.services import chart_has_success_outcomes, preview_check_difficulty
+from world.checks.services import (
+    chart_has_success_outcomes,
+    difficulty_points,
+    preview_check_difficulty,
+)
 from world.conditions.services import (
     condition_capability_contributions,
     thread_passive_capability_grants,
@@ -2134,7 +2138,7 @@ def _build_bare_object_action(  # noqa: PLR0913
         difficulty = _get_difficulty_indicator_for_check(
             character,
             approach.check_type,
-            template.severity,
+            difficulty_points(template.severity_level),
             source,
         )
         # An IMPOSSIBLE grade stays in the list, labelled, rather than being dropped

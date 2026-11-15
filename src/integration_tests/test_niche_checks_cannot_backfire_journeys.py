@@ -47,7 +47,6 @@ from world.mechanics.factories import (
 )
 from world.mechanics.models import ChallengeInstance, ModifierTarget
 from world.npc_services.factories import FunctionaryFactory, NPCRoleFactory
-from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
 from world.scenes.interaction_services import get_active_scene
 from world.scenes.models import PersonaDiscovery
 from world.scenes.tests.cast_test_helpers import grant_technique
@@ -139,9 +138,7 @@ class AClimberSeesWhyHerFallWasOnlyAFailure(_NicheCase):
         self.telnet(self.maren, "pose settles in to watch.")
         scaling = CapabilityTypeFactory(name="Scaling")
         prop = PropertyFactory(name="sheer")
-        template = ChallengeTemplateFactory(
-            name="The Quarry Face", severity=DIFFICULTY_VALUES[DifficultyChoice.TRIVIAL]
-        )
+        template = ChallengeTemplateFactory(name="The Quarry Face", severity_level=1)
         template.properties.add(prop)
         for tier, label in (("Failure", SLIPPED), ("Critical Failure", FELL)):
             ChallengeTemplateConsequenceFactory(

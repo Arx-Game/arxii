@@ -18,7 +18,7 @@ from evennia.objects.models import ObjectDB
 
 from actions.base import Action
 from actions.constants import ActionCategory
-from actions.definitions.gm_shift import difficulty_label, resolve_severity_shift
+from actions.definitions.gm_shift import challenge_level_label, resolve_severity_shift
 from actions.prerequisites import MinimumGMLevelPrerequisite
 from actions.types import ActionContext, ActionResult, TargetType
 from world.gm.constants import GMLevel
@@ -143,7 +143,7 @@ class PlaceChallengeAction(Action):
             return ActionResult(success=False, message="You are nowhere to place that.")
 
         shift = resolve_severity_shift(
-            template.severity,
+            template.severity_level,
             str(kwargs.get("edge_reason") or "").strip(),
             str(kwargs.get("setback_reason") or "").strip(),
         )
@@ -157,14 +157,14 @@ class PlaceChallengeAction(Action):
             target = create_challenge_target_object(target_name)
             instance = instantiate_challenge(template, location=location, target_object=target)
             if adjustment:
-                instance.severity_adjustment = adjustment
+                instance.severity_adjustment_tenths = adjustment
                 instance.adjustment_reason = reason
-                instance.save(update_fields=["severity_adjustment", "adjustment_reason"])
+                instance.save(update_fields=["severity_adjustment_tenths", "adjustment_reason"])
 
         hidden_note = "" if instance.is_revealed else " (hidden until discovered)"
         message = (
             f"{template.name} placed on {target_name} "
-            f"({difficulty_label(instance.effective_severity)}){shift_note}{hidden_note}."
+            f"({challenge_level_label(instance.effective_severity)}){shift_note}{hidden_note}."
         )
         return ActionResult(success=True, message=message)
 

@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
-from actions.definitions.gm_shift import difficulty_label
 from actions.prerequisites import MinimumGMLevelPrerequisite, Prerequisite
 from actions.types import ActionContext, ActionResult, TargetType
 from commands.exceptions import CommandError
@@ -58,7 +57,7 @@ def _format_challenge_row(template: ChallengeTemplate) -> str:
     it is the number ``resolve_challenge`` will roll against.
     """
     snippet = _description_snippet(template.goal or template.description_template)
-    row = f"[{template.pk}] {template.name} ({difficulty_label(template.severity)})"
+    row = f"[{template.pk}] {template.name} (level {template.severity_level})"
     return f"{row} -- {snippet}" if snippet else row
 
 

@@ -57,7 +57,6 @@ from world.mechanics.models import (
     Property,
     PropertyCategory,
 )
-from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
 from world.seeds.sample_content import authored_or_sample
 from world.traits.models import CheckOutcome
 
@@ -139,15 +138,16 @@ def ensure_fall_content() -> None:
 # ---------------------------------------------------------------------------
 
 # Sample difficulty of the catch challenge. Difficulty lives on the
-# ChallengeTemplate.severity row (this constant feeds that authored field) —
+# ChallengeTemplate.severity_level row (this constant feeds that authored field) —
 # never as a literal target_difficulty in engine code, and only ever when
 # SEED_SAMPLE_CONTENT is on (the lore-repo row governs otherwise).
 #
-# Severity is in DIFFICULTY_VALUES points, not a 1-5 rating (#2865): it feeds
-# perform_check's target_difficulty directly, so the old literal 3 made catching
-# a falling person an auto-pass. HARD because it should be the harder ask among
-# the reactive combat challenges; the authored row is where that gets tuned.
-_CATCH_SEVERITY: int = DIFFICULTY_VALUES[DifficultyChoice.HARD]
+# Severity is a level, not a 1-5 rating (#2865, #5093): its baseline feeds
+# perform_check's target_difficulty directly, so a level of 0 would make catching
+# a falling person an auto-pass. Level 5 (the old HARD band of 60 points) because it
+# should be the harder ask among the reactive combat challenges; the authored row is
+# where that gets tuned.
+_CATCH_SEVERITY_LEVEL: int = 5
 
 # Seed catch capabilities. Each entry: (capability name, Application name,
 # approach display_name, approach fiction). The named four are SEED EXAMPLES —
@@ -319,7 +319,7 @@ def ensure_catch_content() -> None:
                 "{faller} is plummeting — someone with the means may try to "
                 "catch them before they strike the ground."
             ),
-            "severity": _CATCH_SEVERITY,
+            "severity_level": _CATCH_SEVERITY_LEVEL,
             "goal": "Catch the falling character before impact.",
             "category": challenge_category,
             "challenge_type": ChallengeType.THREAT,

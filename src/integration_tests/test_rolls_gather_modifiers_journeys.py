@@ -62,7 +62,6 @@ from world.mechanics.factories import (
     PropertyFactory,
 )
 from world.mechanics.models import ChallengeInstance
-from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
 from world.scenes.tests.cast_test_helpers import grant_technique
 from world.seeds.checks import seed_check_resolution_tables
 from world.traits.models import CheckOutcome, ResultChart
@@ -250,9 +249,7 @@ class AChallengeCountsHerGear(_TheOldQuarry):
         super().setUp()
         self.scaling = CapabilityTypeFactory(name="Scaling")
         prop = PropertyFactory(name="sheer")
-        template = ChallengeTemplateFactory(
-            name="The Quarry Face", severity=DIFFICULTY_VALUES[DifficultyChoice.TRIVIAL]
-        )
+        template = ChallengeTemplateFactory(name="The Quarry Face", severity_level=1)
         template.properties.add(prop)
         self.approach = ChallengeApproachFactory(
             challenge_template=template,

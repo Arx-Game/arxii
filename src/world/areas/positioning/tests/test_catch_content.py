@@ -64,7 +64,7 @@ class EnsureCatchContentTests(TestCase):
         ensure_fall_content()
         tmpl = ChallengeTemplate.objects.get(name=CATCH_THE_FALLER_NAME)
         # Difficulty lives on the authored row, not as a literal in engine code.
-        self.assertGreaterEqual(tmpl.severity, 1)
+        self.assertGreaterEqual(tmpl.severity_level, 1)
         # The catch property is linked to the template so its approaches surface
         # in _match_approaches (which gates on the challenge's properties).
         catch_property = Property.objects.get(name=CATCHABLE_PROPERTY_NAME)

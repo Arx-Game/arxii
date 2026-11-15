@@ -653,7 +653,7 @@ class StaffReadWhatAFeatureTypeDoes(TestCase):
         self.client.force_login(staff)
 
     def make_type(self, name: str, *, miss: str = "Fall") -> FeatureType:
-        template = ChallengeTemplateFactory(name=f"{name} challenge", severity=60)
+        template = ChallengeTemplateFactory(name=f"{name} challenge", severity_level=5)
         ChallengeTemplatePropertyFactory(
             challenge_template=template, property=PropertyFactory(name=f"{name}-aerial")
         )

@@ -28,6 +28,7 @@ from world.areas.positioning.exceptions import PositionError
 from world.areas.positioning.models import Position, PositionEdge, PositionFeature
 from world.areas.positioning.services import force_move_to_position, position_of
 from world.areas.positioning.types import StuntOption
+from world.checks.services import difficulty_points
 from world.mechanics.challenge_resolution import instantiate_challenge, resolve_challenge
 from world.mechanics.models import ChallengeApproach
 from world.mechanics.services import (
@@ -179,7 +180,10 @@ def stunt_options(character: ObjectDB) -> list[StuntOption]:  # noqa: OBJECTDB_P
         approach, source = listed[0]
         if approach.pk not in difficulty_by_approach:
             difficulty_by_approach[approach.pk] = _get_difficulty_indicator_for_check(
-                character, approach.check_type, template.severity, source
+                character,
+                approach.check_type,
+                difficulty_points(template.severity_level),
+                source,
             )
         options.extend(
             StuntOption(

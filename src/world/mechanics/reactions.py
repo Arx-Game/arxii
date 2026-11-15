@@ -214,7 +214,7 @@ def _fresh_reaction_instance(
         location=instance.location,
         target_object=instance.target_object,
         situation_instance=instance.situation_instance,
-        severity_adjustment=instance.severity_adjustment,
+        severity_adjustment_tenths=instance.severity_adjustment_tenths,
         adjustment_reason=instance.adjustment_reason,
         is_active=True,
         is_revealed=True,

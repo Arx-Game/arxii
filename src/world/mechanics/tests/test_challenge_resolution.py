@@ -35,11 +35,9 @@ from world.mechanics.types import (
     ChallengeResolutionResult,
 )
 from world.scenes.action_constants import (
-    DIFFICULTY_BAND_STEP,
-    DIFFICULTY_VALUES,
-    DifficultyChoice,
+    DIFFICULTY_BAND_SHIFT_TENTHS,
 )
-from world.traits.factories import CheckOutcomeFactory
+from world.traits.factories import CheckOutcomeFactory, ensure_level_ladder
 
 
 def _make_source(
@@ -81,7 +79,7 @@ class ResolveValidationTests(TestCase):
 
         cls.template = ChallengeTemplateFactory(
             name="Wooden Gate",
-            severity=5,
+            severity_level=0,
         )
         ChallengeTemplatePropertyFactory(
             challenge_template=cls.template,
@@ -411,7 +409,7 @@ class ResolveFullTests(TestCase):
 
         cls.template = ChallengeTemplateFactory(
             name="Barricade",
-            severity=5,
+            severity_level=0,
         )
         ChallengeTemplatePropertyFactory(
             challenge_template=cls.template,
@@ -893,9 +891,10 @@ class EffectiveSeverityTests(TestCase):
             capability=cls.capability,
             target_property=cls.prop,
         )
+        ensure_level_ladder()
         cls.template = ChallengeTemplateFactory(
             name="Adjusted Gate",
-            severity=DIFFICULTY_VALUES[DifficultyChoice.NORMAL],
+            severity_level=2,
         )
         cls.approach = ChallengeApproachFactory(
             challenge_template=cls.template,
@@ -918,23 +917,24 @@ class EffectiveSeverityTests(TestCase):
     def test_effective_severity_defaults_to_the_authored_value(self) -> None:
         instance = self._instance()
 
-        assert instance.severity_adjustment == 0
-        assert instance.effective_severity == DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
+        assert instance.severity_adjustment_tenths == 0
+        assert instance.effective_severity == 26  # level 2's baseline
 
     def test_effective_severity_folds_in_a_setback(self) -> None:
         instance = self._instance(
-            severity_adjustment=DIFFICULTY_BAND_STEP,
+            severity_adjustment_tenths=DIFFICULTY_BAND_SHIFT_TENTHS,
             adjustment_reason="braced from the far side",
         )
 
-        assert instance.effective_severity == DIFFICULTY_VALUES[DifficultyChoice.HARD]
+        # 26 plus three levels' width (30 tenths of 8 is 24): level 5's baseline
+        assert instance.effective_severity == 50
 
     def test_resolution_rolls_against_the_adjusted_difficulty(self) -> None:
-        """resolve_challenge reads effective_severity, not template.severity."""
+        """resolve_challenge reads effective_severity, not the template's severity level."""
         from world.mechanics.challenge_resolution import resolve_challenge
 
         instance = self._instance(
-            severity_adjustment=DIFFICULTY_BAND_STEP,
+            severity_adjustment_tenths=DIFFICULTY_BAND_SHIFT_TENTHS,
             adjustment_reason="braced from the far side",
         )
 
@@ -944,17 +944,17 @@ class EffectiveSeverityTests(TestCase):
         ) as spy:
             resolve_challenge(self.character, instance, self.approach, self.source)
 
-        assert spy.call_args.kwargs["target_difficulty"] == DIFFICULTY_VALUES[DifficultyChoice.HARD]
+        assert spy.call_args.kwargs["target_difficulty"] == 50
 
     def test_adjustment_without_a_reason_is_rejected_by_the_database(self) -> None:
         with self.assertRaises(IntegrityError):
-            self._instance(severity_adjustment=DIFFICULTY_BAND_STEP)
+            self._instance(severity_adjustment_tenths=DIFFICULTY_BAND_SHIFT_TENTHS)
 
     def test_arbitrary_offset_is_rejected_by_the_database(self) -> None:
         """Exactly one band either way -- never a freehand number."""
         with self.assertRaises(IntegrityError):
             self._instance(
-                severity_adjustment=DIFFICULTY_BAND_STEP + 1,
+                severity_adjustment_tenths=DIFFICULTY_BAND_SHIFT_TENTHS + 1,
                 adjustment_reason="a little bit harder",
             )
 
@@ -976,7 +976,7 @@ class TechniqueSkillTermTests(TestCase):
             target_property=PropertyFactory(name="flammable_skill_term"),
         )
         cls.outcome = CheckOutcomeFactory(name="Success_skill_term", success_level=1)
-        cls.template = ChallengeTemplateFactory(name="Thornwall", severity=5)
+        cls.template = ChallengeTemplateFactory(name="Thornwall", severity_level=0)
         cls.approach = ChallengeApproachFactory(
             challenge_template=cls.template,
             application=cls.application,

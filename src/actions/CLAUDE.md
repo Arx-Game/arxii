@@ -515,7 +515,7 @@ They do not use the command system, dispatchers, or handlers.
   (`situation_instance=None`) — the lightweight path #2857's SENIOR gate on
   `InvokeCatalogCheckAction` left missing. Kwargs: `challenge_template_id`,
   `target_object_name`, and mutually exclusive `edge_reason`/`setback_reason`, which
-  persist as `ChallengeInstance.severity_adjustment`/`adjustment_reason` (DB-constrained
+  persist as `ChallengeInstance.severity_adjustment_tenths`/`adjustment_reason` (DB-constrained
   to exactly one `DIFFICULTY_BAND_STEP` either way, reason required). The whole placement
   runs in one `transaction.atomic()`. Band-shift resolution + bounds live in
   `actions/definitions/gm_shift.py`, shared with `InvokeCatalogCheckAction` — do NOT
