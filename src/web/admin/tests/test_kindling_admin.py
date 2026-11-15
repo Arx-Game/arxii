@@ -150,6 +150,23 @@ class KindlingAdminPagesTests(TestCase):
         row = KindlingSituation.objects.get(resonance=self.resonance, reason_text="Held in common")
         self.assertEqual((row.situation, row.strength), (Situation.IN_MELEE, 2))
 
+    def test_the_config_tables_show_no_raw_caption_and_fit_the_page(self) -> None:
+        RallyKindlingStrength.objects.create(outcome_tier=CheckOutcomeFactory(), strength=2)
+        KindledDeedAward.objects.create(outcome_tier=CheckOutcomeFactory(), amount=4)
+        self.client.force_login(self.staff)
+        page = self.client.get(
+            reverse("admin:arxii_kindlingconfig_change", args=[self.config.pk])
+        ).content.decode()
+        # Saved rows read in words wherever the model is named, never as a constructor call.
+        self.assertNotIn("KindledStrengthTier(", page)
+        self.assertNotIn("KindlingSituation(", page)
+        self.assertIn(str(KindledStrengthTier.objects.get(rank=1)), ["Faint"])
+        # The stock caption cell is hidden and the table is fitted to the module, in a rule
+        # on the page itself.
+        self.assertIn(".kindling-config-inline td.original p { display: none; }", page)
+        self.assertIn("table-layout: fixed", page)
+        self.assertEqual(page.count('class="kindling-config-inline"'), 3)
+
     def test_the_config_page_saves_all_its_tables_in_one_submit(self) -> None:
         self.client.force_login(self.staff)
         url = reverse("admin:arxii_kindlingconfig_change", args=[self.config.pk])

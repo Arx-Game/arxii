@@ -167,7 +167,7 @@ class KindledStrengthTier(NaturalKeyMixin, SharedMemoryModel):
         ordering = ["rank"]
 
     def __str__(self) -> str:
-        return f"KindledStrengthTier({self.rank}: {self.name})"
+        return self.name
 
 
 class KindlingConfig(SharedMemoryModel):
@@ -209,7 +209,7 @@ class KindledDeedAward(OutcomeTierAward):
         verbose_name = "Kindled deed award"
 
     def __str__(self) -> str:
-        return f"{self.outcome_tier_id}: {self.amount}"
+        return f"{self.outcome_tier.name}: {self.amount}"
 
 
 class RallyKindlingStrength(OutcomeTierAward):
@@ -228,7 +228,7 @@ class RallyKindlingStrength(OutcomeTierAward):
         verbose_name_plural = "Rally kindling strengths"
 
     def __str__(self) -> str:
-        return f"{self.outcome_tier_id}: strength {self.strength}"
+        return f"{self.outcome_tier.name}: kindles at strength {self.strength}"
 
 
 class Kindling(SharedMemoryModel):
