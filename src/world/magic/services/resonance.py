@@ -1040,6 +1040,15 @@ def _resolve_one_pull_effect(  # noqa: PLR0913 - mirrors resolve_pull_effects' i
     )
 
 
+def _beseeched_level(
+    thread: Thread, level_read: int, beseech_bonus_thread_id: int | None, beseech_bonus: int
+) -> int:
+    """Return ``level_read``, plus the beseech bonus for the beseeched thread (#1718)."""
+    if beseech_bonus_thread_id is not None and thread.pk == beseech_bonus_thread_id:
+        return level_read + beseech_bonus
+    return level_read
+
+
 def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; both target (#1831) and beseech (#1718) params are required
     threads: list[Thread],
     tier: int,
@@ -1093,10 +1102,9 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
         level_read = payer_level_read(t, payer)
         if level_read is None:
             continue
-        effective_level = level_read
-        if beseech_bonus_thread_id is not None and t.pk == beseech_bonus_thread_id:
-            effective_level = level_read + beseech_bonus
-        multiplier = thread_level_multiplier(effective_level)
+        multiplier = thread_level_multiplier(
+            _beseeched_level(t, level_read, beseech_bonus_thread_id, beseech_bonus)
+        )
         first_tier = 0 if payer.pk == t.resonance_id else 1
         for effect_tier in range(first_tier, tier + 1):
             rows = get_pull_effects_for_thread(

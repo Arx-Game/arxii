@@ -365,10 +365,8 @@ def accept_aura_change(sheet: CharacterSheet) -> AcceptAuraResult:
     leading = reading.leading_excess_resonance
     grown = leading.affinity if leading is not None else None
     mire_moved = 0
-    for row in list(
-        CharacterResonance.objects.select_for_update().filter(
-            character_sheet=sheet, mire_lifetime__gt=0
-        )
+    for row in CharacterResonance.objects.select_for_update().filter(
+        character_sheet=sheet, mire_lifetime__gt=0
     ):
         mire_moved += row.mire_lifetime
         row.mire_lifetime = 0
@@ -523,10 +521,8 @@ def close_spent_conversion_offers(sheet: CharacterSheet) -> int:
     """
     closed = 0
     for offer in DriftConversionOffer.objects.filter(character_sheet=sheet):
-        for cap in list(
-            DriftConversionCap.objects.filter(offer=offer).select_related(
-                "target_resonance__affinity"
-            )
+        for cap in DriftConversionCap.objects.filter(offer=offer).select_related(
+            "target_resonance__affinity"
         ):
             if not convertible_drift(sheet, cap.target_resonance):
                 cap.delete()
