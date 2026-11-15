@@ -709,16 +709,15 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
 
     @staticmethod
     def _fury_line(action: Any) -> str:
-        """The Fury tier declared this round and the anchor it answers to."""
+        """The Fury tier declared this round and the resonance she gives in to."""
         from world.magic.services.fury import fury_tier_label  # noqa: PLC0415
 
-        anchor_name = "unknown"
-        if action.fury_anchor_id and action.fury_anchor is not None:
-            anchor_char = action.fury_anchor.character
-            if anchor_char is not None:
-                anchor_name = anchor_char.db_key
+        resonance_name = "unknown"
+        if action.fury_resonance_id and action.fury_resonance is not None:
+            resonance_name = action.fury_resonance.name
         return (
-            f"Fury declared: {fury_tier_label(action.fury_commitment)}, answering to {anchor_name}"
+            f"Fury declared: {fury_tier_label(action.fury_commitment)}, "
+            f"giving in to {resonance_name}"
         )
 
     @staticmethod
@@ -820,9 +819,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             from world.combat.models import CombatRoundAction  # noqa: PLC0415
 
             action = (
-                CombatRoundAction.objects.select_related(
-                    "fury_commitment", "fury_anchor__character"
-                )
+                CombatRoundAction.objects.select_related("fury_commitment", "fury_resonance")
                 .filter(
                     participant=participant,
                     round_number=participant.encounter.round_number,

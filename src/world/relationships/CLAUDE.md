@@ -265,9 +265,10 @@ Both surfaces converge on `actions/definitions/relationships.py` — `declare_la
   `RelationshipTier` ladder's `depth_threshold` rungs as its affection bands.
 - **Training** (`world/skills/services.py`) — the mentor multiplier is
   `get_relationship_tier(character, mentor) + 1` (a mutual Mentor/Student tie).
-- **Fury** (`world/magic/services/fury.py`) — `provocation_cap` reads the claimed `tier` on
-  the character's OWN side toward the fury anchor (`_bond_tier`), any label and no
-  reciprocity: a character can be provoked over someone who never declared anything back.
+- **Fury** (`world/magic/services/fury.py`) — `_bond_tier` reads the claimed `tier` on
+  the character's OWN side toward a person (kindling's thread-anchor strength, #5124), any
+  label and no reciprocity: a character can be provoked over someone who never declared
+  anything back.
   Deliberately not `get_relationship_tier`, whose mutual-Teaching narrowing belongs to
   training.
 - **Progression** — `RelationshipRequirement` counts the character's own **sides** that hold

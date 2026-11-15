@@ -10,7 +10,7 @@ class FuryFieldTests(TestCase):
         for model in (SceneActionRequest, ClashContributionDeclaration):
             names = {f.name for f in model._meta.get_fields()}
             self.assertIn("fury_commitment", names)
-            self.assertIn("fury_anchor", names)
+            self.assertIn("fury_resonance", names)
 
     def test_interaction_has_fury_committed(self):
         self.assertIn("fury_committed", {f.name for f in Interaction._meta.get_fields()})

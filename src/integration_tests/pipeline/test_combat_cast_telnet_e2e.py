@@ -57,7 +57,6 @@ from world.magic.factories import (
 from world.magic.models import CharacterTechnique
 from world.magic.seeds_cast import ensure_technique_cast_content
 from world.mechanics.factories import CharacterEngagementFactory
-from world.relationships.factories import CharacterRelationshipFactory
 from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
@@ -434,31 +433,35 @@ class CombatCastTelnetE2ETests(TestCase):
         self.assertLess(self.opponent.health, self.opponent.max_health)
 
     def test_fury_commitment_realized_and_audited(self) -> None:
-        """A telnet-declared fury tier + anchor is recorded, realized, and audited."""
-        from world.magic.factories import FuryConfigFactory, FuryTierFactory
+        """A telnet-declared fury tier + resonance is recorded, realized, and audited."""
+        from world.magic.factories import (
+            FuryConfigFactory,
+            FuryTierFactory,
+            KindledStrengthTierFactory,
+            ResonanceFactory,
+        )
 
         FuryConfigFactory()
         tier = FuryTierFactory()
-        anchor_sheet = CharacterSheetFactory()
-        # A tie deep enough for the tier: a deeper tier is refused at declaration (#4738).
-        CharacterRelationshipFactory(source=self.sheet, target=anchor_sheet, tier=2)
+        resonance = ResonanceFactory()
+        # A strength deep enough for the tier: a deeper tier is refused at declaration (#4738).
+        KindledStrengthTierFactory(rank=3, give_in_max_depth=2)
 
-        # Declare through the real telnet command: cast ... fury=<tier> anchor=<name>.
+        # Declare through the real telnet command: cast ... fury=<tier> givein=<resonance>.
         with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
             _make_cmd(
                 self.character,
                 f"{self.technique.name} at {self.opponent_name} "
-                f"fury={tier.name} anchor={anchor_sheet.character.db_key}",
+                f"fury={tier.name} givein={resonance.name}",
             ).func()
 
         action = CombatRoundAction.objects.get(participant=self.participant, round_number=1)
         self.assertEqual(action.fury_commitment_id, tier.pk, "fury tier recorded on declaration")
-        self.assertEqual(action.fury_anchor_id, anchor_sheet.pk, "fury anchor recorded")
+        self.assertEqual(action.fury_resonance_id, resonance.pk, "fury resonance recorded")
 
-        # Resolve: bond gives a real provocation cap; control check succeeds (no Berserk).
+        # Resolve: the strength row gives a real depth cap; control check succeeds (no Berserk).
         with (
             patch("world.combat.services.perform_check") as mock_offense,
-            patch("world.magic.services.fury._bond_tier", return_value=2),
             patch("world.checks.services.perform_check") as mock_control,
         ):
             mock_offense.return_value = MagicMock(success_level=2)
@@ -490,25 +493,26 @@ class CombatCastTelnetE2ETests(TestCase):
             BerserkConditionTemplateFactory,
             FuryConfigFactory,
             FuryTierFactory,
+            KindledStrengthTierFactory,
+            ResonanceFactory,
         )
 
         FuryConfigFactory()
         BerserkConditionTemplateFactory()  # seed the Berserk ConditionTemplate
         tier = FuryTierFactory(berserk_severity=3)
-        anchor_sheet = CharacterSheetFactory()
-        # A tie deep enough for the tier: a deeper tier is refused at declaration (#4738).
-        CharacterRelationshipFactory(source=self.sheet, target=anchor_sheet, tier=2)
+        resonance = ResonanceFactory()
+        # A strength deep enough for the tier: a deeper tier is refused at declaration (#4738).
+        KindledStrengthTierFactory(rank=3, give_in_max_depth=2)
 
         with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
             _make_cmd(
                 self.character,
                 f"{self.technique.name} at {self.opponent_name} "
-                f"fury={tier.name} anchor={anchor_sheet.character.db_key}",
+                f"fury={tier.name} givein={resonance.name}",
             ).func()
 
         with (
             patch("world.combat.services.perform_check") as mock_offense,
-            patch("world.magic.services.fury._bond_tier", return_value=2),
             patch("world.checks.services.perform_check") as mock_control,
         ):
             mock_offense.return_value = MagicMock(success_level=2)
@@ -551,20 +555,25 @@ class CombatCastTelnetE2ETests(TestCase):
         self.assertIn("death risk", out)
 
     def test_combat_hub_shows_committed_fury(self) -> None:
-        """A declared fury tier + anchor surfaces on the combat hub (pre-resolve)."""
-        from world.magic.factories import FuryConfigFactory, FuryTierFactory
+        """A declared fury tier + resonance surfaces on the combat hub (pre-resolve)."""
+        from world.magic.factories import (
+            FuryConfigFactory,
+            FuryTierFactory,
+            KindledStrengthTierFactory,
+            ResonanceFactory,
+        )
 
         FuryConfigFactory()
         tier = FuryTierFactory()
-        anchor_sheet = CharacterSheetFactory()
-        # A tie deep enough for the tier: a deeper tier is refused at declaration (#4738).
-        CharacterRelationshipFactory(source=self.sheet, target=anchor_sheet, tier=2)
+        resonance = ResonanceFactory()
+        # A strength deep enough for the tier: a deeper tier is refused at declaration (#4738).
+        KindledStrengthTierFactory(rank=3, give_in_max_depth=2)
 
         with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
             _make_cmd(
                 self.character,
                 f"{self.technique.name} at {self.opponent_name} "
-                f"fury={tier.name} anchor={anchor_sheet.character.db_key}",
+                f"fury={tier.name} givein={resonance.name}",
             ).func()
 
         cmd = _make_combat_cmd(self.character, "")
@@ -573,7 +582,7 @@ class CombatCastTelnetE2ETests(TestCase):
         out = "\n".join(cmd._captured)
         self.assertIn(
             f"Fury declared: {tier.name}: surrender {tier.control_surrendered} control, "
-            f"answering to {anchor_sheet.character.db_key}",
+            f"giving in to {resonance.name}",
             out,
         )
         self.assertNotIn("Berserk:", out)
@@ -585,25 +594,26 @@ class CombatCastTelnetE2ETests(TestCase):
             BerserkConditionTemplateFactory,
             FuryConfigFactory,
             FuryTierFactory,
+            KindledStrengthTierFactory,
+            ResonanceFactory,
         )
 
         FuryConfigFactory()
         BerserkConditionTemplateFactory()
         tier = FuryTierFactory(berserk_severity=3)
-        anchor_sheet = CharacterSheetFactory()
-        # A tie deep enough for the tier: a deeper tier is refused at declaration (#4738).
-        CharacterRelationshipFactory(source=self.sheet, target=anchor_sheet, tier=2)
+        resonance = ResonanceFactory()
+        # A strength deep enough for the tier: a deeper tier is refused at declaration (#4738).
+        KindledStrengthTierFactory(rank=3, give_in_max_depth=2)
 
         with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
             _make_cmd(
                 self.character,
                 f"{self.technique.name} at {self.opponent_name} "
-                f"fury={tier.name} anchor={anchor_sheet.character.db_key}",
+                f"fury={tier.name} givein={resonance.name}",
             ).func()
 
         with (
             patch("world.combat.services.perform_check") as mock_offense,
-            patch("world.magic.services.fury._bond_tier", return_value=2),
             patch("world.checks.services.perform_check") as mock_control,
         ):
             mock_offense.return_value = MagicMock(success_level=2)

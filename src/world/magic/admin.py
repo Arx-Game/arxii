@@ -2678,9 +2678,6 @@ class FuryConfigAdmin(admin.ModelAdmin):
 
     list_display = [
         "check_trait",
-        "provocation_cap_per_tier",
-        "bonus_scale_per_cap_point",
-        "cap_ease_per_point",
         "default_berserk_duration_rounds",
         "berserk_condition",
     ]

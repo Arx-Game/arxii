@@ -60,16 +60,6 @@ class FuryConfig(SharedMemoryModel):
         default=FuryCheckTrait.COMPOSURE,
         help_text="Trait rolled for the control-retention check.",
     )
-    provocation_cap_per_tier = models.PositiveSmallIntegerField(
-        default=1, help_text="Provocation magnitude required per accessible tier of depth."
-    )
-    bonus_scale_per_cap_point = models.PositiveSmallIntegerField(
-        default=10,
-        help_text="Percent the intensity Fury buys grows per point of provocation cap.",
-    )
-    cap_ease_per_point = models.PositiveSmallIntegerField(
-        default=1, help_text="Check difficulty reduction per point of provocation cap."
-    )
     default_berserk_duration_rounds = models.PositiveSmallIntegerField(
         default=3, help_text="Default rounds_remaining for an applied Berserk condition."
     )

@@ -2254,26 +2254,28 @@ Journeys: `src/integration_tests/test_resonance_strain_journeys.py`.
 
 ### Fury: surrendering control for intensity (#4738 part B, #4727 decision 5) [BUILT & WIRED]
 
-Fury is a chosen trade, not a per-cast bonus. A character declares a `FuryTier` and an anchor
-(a character she has a tie toward) with a technique cast; the tier is a preset amount of control
+Fury is a chosen trade, not a per-cast bonus. A character declares a `FuryTier` and the resonance
+she gives in to (#5124 replaced the anchor person) with a technique cast; the tier is a preset amount of control
 she surrenders for the rest of her engagement, and her control roll's outcome picks how much
 intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magic/models/fury.py`.
 
 - **Models.** `FuryTier`: `name`, `depth`, `control_surrendered`, `base_check_difficulty`,
-  `berserk_severity`. `FuryConfig` (singleton): `check_trait`, `provocation_cap_per_tier`,
-  `bonus_scale_per_cap_point`, `cap_ease_per_point`, `default_berserk_duration_rounds`,
+  `berserk_severity`. `FuryConfig` (singleton): `check_trait`, `default_berserk_duration_rounds`,
   `berserk_condition`. `FuryDegreeShare` (an `OutcomeTierAward`): `intensity_percent` per
   outcome tier; `clean()` enforces that a better outcome never buys a smaller percent.
   `StrainConfig.intensity_per_control_surrendered` (Decimal, default 0) is the rate.
   `CharacterEngagement.fury_control_surrendered` tallies what was surrendered, for display.
   Migration 0327 (`control_penalty` renamed to `control_surrendered`; `intensity_bonus` and
   `lucid_grade_floor` removed, empty in production).
-- **Cap.** The anchor caps the depth: `provocation_cap` = her own side's relationship tier
-  toward the anchor // `provocation_cap_per_tier`; `clamp_tier` drops a deeper declaration to
-  the deepest tier within the cap. Each cap point also eases the control roll by
-  `cap_ease_per_point` and scales the trade up by `bonus_scale_per_cap_point` percent.
-- **The trade.** `fury_intensity_for(tier, cap, outcome)` = floor(`control_surrendered` x
-  `intensity_per_control_surrendered` x (100 + `bonus_scale_per_cap_point` x cap) / 100 x
+- **Cap.** The resonance's strength caps the depth (#5124). The depth cap, the bonus and the
+  ease come from a `KindledStrengthTier` row (`give_in_max_depth`, `give_in_bonus_percent`,
+  `give_in_ease`); `clamp_tier` drops a deeper declaration to the deepest tier within the cap.
+  Until the kindling evaluation (Task 3 and Task 6 of #5124) reads the declared resonance's own
+  strength, `provocation_cap`, `provocation_bonus_percent` and `provocation_ease` read the rank 3
+  row for every declared resonance. Migration 0412 seeded the three rows from the old
+  `FuryConfig` numbers and 0413 dropped them and `fury_anchor`.
+- **The trade.** `fury_intensity_for(tier, bonus_percent, outcome)` = floor(`control_surrendered` x
+  `intensity_per_control_surrendered` x (100 + `give_in_bonus_percent`) / 100 x
   `intensity_percent` / 100), Decimal math floored once. An outcome with no `FuryDegreeShare`
   row buys nothing; the control is still surrendered.
 - **Where it lands.** Each path builds a `FuryCast` (`fury_cast_for`) and hands it to
@@ -2300,7 +2302,7 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
   `use_technique` and read `FuryCast.realized_tier` back for the audit. None passes a Fury power
   term; `use_technique`'s `control_penalty` parameter is gone.
 - **Validation.** `_cap_fury_by_provocation` (scene action and cast serializers) refuses Fury
-  without a technique, without an anchor, above the cap, and with no engagement ("Fury needs
+  without a technique, without a resonance, above the cap, and with no engagement ("Fury needs
   something at stake: you are not engaged."). A combat cast declaration (web or telnet) refuses a
   tier deeper than the anchor's cap with the same message (`fury_over_cap_message`, from
   `CastTechniqueAction._combat_fury_cap_refusal` in `round_declaration`); nothing is recorded or

@@ -446,7 +446,7 @@ function makeCastPlayerAction(
     ref: { ...base.ref, technique_id: techniqueId },
     soulfray_warning: null,
     available_fury_tiers: [],
-    eligible_fury_anchors: [],
+    eligible_fury_resonances: [],
     ...overrides,
   };
 }
@@ -1927,9 +1927,9 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
     },
   ];
 
-  const furyAnchors = [
-    { id: 20, name: 'Keth', provocation_cap: 2, tier_full_intensities: [] },
-    { id: 21, name: 'Lira', provocation_cap: 5, tier_full_intensities: [] },
+  const furyResonances = [
+    { id: 20, name: 'Wrath', provocation_cap: 2, tier_full_intensities: [] },
+    { id: 21, name: 'Grief', provocation_cap: 5, tier_full_intensities: [] },
   ];
 
   it('shows the Soulfray gate the anima the cast will really cost (#4799)', async () => {
@@ -2045,7 +2045,7 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
     const cast = makeCastPlayerAction(8, 'Fury Cast', {
       soulfray_warning: null,
       available_fury_tiers: furyTiers,
-      eligible_fury_anchors: furyAnchors,
+      eligible_fury_resonances: furyResonances,
     });
 
     mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
@@ -2081,17 +2081,17 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
     const calls = mockMutateAsync.mock.calls as Array<[{ kwargs: Record<string, unknown> }]>;
     expect(calls[0][0].kwargs).toMatchObject({ effort_level: 'medium' });
     expect(calls[0][0].kwargs).not.toHaveProperty('fury_commitment_id');
-    expect(calls[0][0].kwargs).not.toHaveProperty('fury_anchor_id');
+    expect(calls[0][0].kwargs).not.toHaveProperty('fury_resonance_id');
 
     mockActionDeclarationCard.mockImplementation(defaultCardImpl);
   });
 
-  it('sends fury_commitment_id + fury_anchor_id when fury is chosen within cap', async () => {
+  it('sends fury_commitment_id + fury_resonance_id when fury is chosen within cap', async () => {
     setupMocks();
     const cast = makeCastPlayerAction(9, 'Fury Cast', {
       soulfray_warning: null,
       available_fury_tiers: furyTiers,
-      eligible_fury_anchors: furyAnchors,
+      eligible_fury_resonances: furyResonances,
     });
 
     mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
@@ -2117,16 +2117,16 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
 
     await userEvent.click(screen.getByTestId('card-select-technique-focused'));
 
-    // Pick tier Spark (depth 1) and anchor Keth (cap 2) — within cap.
+    // Pick tier Spark (depth 1) and resonance Wrath (cap 2) — within cap.
     const tierTrigger = screen.getByTestId('fury-tier-select');
     await userEvent.click(tierTrigger);
     const tierOption = await screen.findByText('Spark: surrender 3 control');
     await userEvent.click(tierOption);
 
-    const anchorTrigger = screen.getByTestId('fury-anchor-select');
-    await userEvent.click(anchorTrigger);
-    const anchorOption = await screen.findByText('Keth (cap 2)');
-    await userEvent.click(anchorOption);
+    const resonanceTrigger = screen.getByTestId('fury-resonance-select');
+    await userEvent.click(resonanceTrigger);
+    const resonanceOption = await screen.findByText('Wrath (cap 2)');
+    await userEvent.click(resonanceOption);
 
     await userEvent.click(screen.getByTestId('submit-declarations-btn'));
 
@@ -2138,7 +2138,7 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
     expect(calls[0][0].kwargs).toMatchObject({
       effort_level: 'medium',
       fury_commitment_id: 10,
-      fury_anchor_id: 20,
+      fury_resonance_id: 20,
     });
 
     mockActionDeclarationCard.mockImplementation(defaultCardImpl);

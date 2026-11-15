@@ -24059,8 +24059,10 @@ paths:
           - DISTINCTION
           - DRAMATIC_MOMENT
           - DRIFT_CORRECTION
+          - EMBRACED_DEED
           - ENTRY_FLOURISH
           - FALL_CONVERSION
+          - KINDLED_DEED
           - MISSION_REPORT
           - MISSION_REWARD
           - OUTFIT_TRICKLE
@@ -24105,6 +24107,8 @@ paths:
           * `CORRUPTION_CLEANSING` - Corruption cleansing payout
           * `SINEATING` - Sineating payout
           * `CHARACTER_CREATION` - Character creation
+          * `KINDLED_DEED` - Kindled deed
+          * `EMBRACED_DEED` - Embraced deed
       tags:
       - magic
       security:
@@ -47070,29 +47074,6 @@ components:
         display_name:
           type: string
           maxLength: 100
-    AnchorOption:
-      type: object
-      description: Read-only representation of one eligible bonded fury anchor (#1543).
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        name:
-          type: string
-          readOnly: true
-        provocation_cap:
-          type: integer
-          readOnly: true
-        tier_full_intensities:
-          type: array
-          items:
-            $ref: '#/components/schemas/AnchorTierIntensity'
-          readOnly: true
-      required:
-      - id
-      - name
-      - provocation_cap
-      - tier_full_intensities
     AnchorSourceEnum:
       enum:
       - pool
@@ -47107,20 +47088,6 @@ components:
         * `same_as` - The same group as an earlier question
         * `served_house` - The house the character's family served
         * `own_family` - The character's own family
-    AnchorTierIntensity:
-      type: object
-      description: Read-only full-share intensity of one Fury tier under one anchor
-        (#4738).
-      properties:
-        tier_id:
-          type: integer
-          readOnly: true
-        full_intensity:
-          type: integer
-          readOnly: true
-      required:
-      - full_intensity
-      - tier_id
     AngleView:
       type: object
       properties:
@@ -58105,6 +58072,8 @@ components:
           readOnly: true
         scene_id:
           type: integer
+          nullable: true
+          description: The scene the offer first opened in.
           readOnly: true
         character_id:
           type: integer
@@ -61374,6 +61343,44 @@ components:
           type: integer
       required:
       - resonance_reserve
+    FuryResonanceOption:
+      type: object
+      description: Read-only representation of one resonance a character can give
+        in to (#5124).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        provocation_cap:
+          type: integer
+          readOnly: true
+        tier_full_intensities:
+          type: array
+          items:
+            $ref: '#/components/schemas/FuryResonanceTierIntensity'
+          readOnly: true
+      required:
+      - id
+      - name
+      - provocation_cap
+      - tier_full_intensities
+    FuryResonanceTierIntensity:
+      type: object
+      description: Read-only full-share intensity of one Fury tier at one resonance's
+        strength (#4738).
+      properties:
+        tier_id:
+          type: integer
+          readOnly: true
+        full_intensity:
+          type: integer
+          readOnly: true
+      required:
+      - full_intensity
+      - tier_id
     FuryTierOption:
       type: object
       description: Read-only representation of one selectable FuryTier (#1543).
@@ -85641,10 +85648,10 @@ components:
           items:
             $ref: '#/components/schemas/FuryTierOption'
           readOnly: true
-        eligible_fury_anchors:
+        eligible_fury_resonances:
           type: array
           items:
-            $ref: '#/components/schemas/AnchorOption'
+            $ref: '#/components/schemas/FuryResonanceOption'
           readOnly: true
         cast_preview:
           allOf:
@@ -85672,7 +85679,7 @@ components:
       - description
       - difficulty
       - display_name
-      - eligible_fury_anchors
+      - eligible_fury_resonances
       - enchant_damage_types
       - enchants_strike
       - enhancements
@@ -89087,6 +89094,8 @@ components:
             * `CORRUPTION_CLEANSING` - Corruption cleansing payout
             * `SINEATING` - Sineating payout
             * `CHARACTER_CREATION` - Character creation
+            * `KINDLED_DEED` - Kindled deed
+            * `EMBRACED_DEED` - Embraced deed
         granted_at:
           type: string
           format: date-time
@@ -89145,6 +89154,8 @@ components:
       - CORRUPTION_CLEANSING
       - SINEATING
       - CHARACTER_CREATION
+      - KINDLED_DEED
+      - EMBRACED_DEED
       type: string
       description: |-
         * `POSE_ENDORSEMENT` - Pose endorsement
@@ -89172,6 +89183,8 @@ components:
         * `CORRUPTION_CLEANSING` - Corruption cleansing payout
         * `SINEATING` - Sineating payout
         * `CHARACTER_CREATION` - Character creation
+        * `KINDLED_DEED` - Kindled deed
+        * `EMBRACED_DEED` - Embraced deed
     ResonanceLine:
       type: object
       properties:
@@ -90630,7 +90643,7 @@ components:
         fury_commitment_id:
           type: integer
           nullable: true
-        fury_anchor_id:
+        fury_resonance_id:
           type: integer
           nullable: true
         delivery:
@@ -97955,7 +97968,7 @@ components:
         fury_commitment_id:
           type: integer
           nullable: true
-        fury_anchor_id:
+        fury_resonance_id:
           type: integer
           nullable: true
         pull:

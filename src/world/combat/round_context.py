@@ -490,19 +490,19 @@ class CombatRoundContext(RoundContext):
 
             fury_commitment = FuryTier.objects.filter(pk=fury_commitment_id).first()
 
-        fury_anchor = None
-        fury_anchor_id = kwargs.get("fury_anchor_id")
-        if fury_anchor_id is not None:
-            from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+        fury_resonance = None
+        fury_resonance_id = kwargs.get("fury_resonance_id")
+        if fury_resonance_id is not None:
+            from world.magic.models import Resonance  # noqa: PLC0415
 
-            fury_anchor = CharacterSheet.objects.filter(pk=fury_anchor_id).first()
+            fury_resonance = Resonance.objects.filter(pk=fury_resonance_id).first()
 
         # The web dispatch reaches here without the cast's round_declaration hook, so the
-        # provocation cap is enforced again before anything is charged (#4738).
+        # strength's depth cap is enforced again before anything is charged (#4738).
         if fury_commitment is not None:
             from world.magic.services.fury import provocation_cap  # noqa: PLC0415
 
-            if provocation_cap(participant.character_sheet, fury_anchor) < fury_commitment.depth:
+            if provocation_cap(participant.character_sheet, fury_resonance) < fury_commitment.depth:
                 raise ActionDispatchError(ActionDispatchError.FURY_OVER_CAP)
 
         slot = player_action.ref.action_slot or CombatActionSlot.FOCUSED
@@ -554,7 +554,7 @@ class CombatRoundContext(RoundContext):
                 confirm_soulfray_risk=confirm_soulfray_risk,
                 strain_commitment=strain_commitment,
                 fury_commitment=fury_commitment,
-                fury_anchor=fury_anchor,
+                fury_resonance=fury_resonance,
                 cast_destination=cast_positions["cast_destination"],
                 cast_position_a=cast_positions["cast_position_a"],
                 cast_position_b=cast_positions["cast_position_b"],

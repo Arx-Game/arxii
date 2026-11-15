@@ -284,23 +284,23 @@ class MagicServiceRollSiteTests(ActivityTermTestCase):
         )
 
     def test_fury_control(self) -> None:
+        from world.magic.factories import KindledStrengthTierFactory, ResonanceFactory
         from world.magic.services.fury import FuryCast
         from world.mechanics.factories import CharacterEngagementFactory
-        from world.relationships.factories import CharacterRelationshipFactory
 
         sheet = CharacterSheetFactory()
         character = sheet.character
         # Fury needs something at stake (#4738): without an engagement nothing is rolled.
         CharacterEngagementFactory(character=sheet)
-        anchor = CharacterSheetFactory()
-        # A tie deep enough for the tier, or the cap clamps it to nothing and nothing rolls.
-        CharacterRelationshipFactory(source=sheet, target=anchor, tier=2)
+        resonance = ResonanceFactory()
+        # A strength deep enough for the tier, or the cap clamps it to nothing and nothing rolls.
+        KindledStrengthTierFactory(rank=3, give_in_max_depth=2)
         tier = FuryTierFactory()
 
         self.assert_terms_reach(
             "world.checks.services.perform_check_with_modifiers",
             MagicActivity.FURY_CONTROL,
-            lambda: FuryCast(character=character, tier=tier, anchor=anchor).surrender(),
+            lambda: FuryCast(character=character, tier=tier, resonance=resonance).surrender(),
         )
 
     def test_enduring_hostile_resonance(self) -> None:

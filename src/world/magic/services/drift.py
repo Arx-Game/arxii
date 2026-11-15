@@ -415,7 +415,10 @@ def _tell_non_web(character: ObjectDB, text: str) -> None:
 
 
 def open_or_extend_conversion_offer(grant: ResonanceGrant) -> DriftConversionOffer | None:
-    """Open (or extend) the character's conversion offer for the scene a deed grant happened in.
+    """Open (or extend) the character's one conversion offer from a deed grant made in a scene.
+
+    A character holds one offer (#5124); a later deed, in any scene, extends it, and its caps
+    merge per resonance. ``DriftConversionOffer.scene`` records the scene it first opened in.
 
     Returns None, changing nothing, unless all of these hold: the grant is a deed; it grew a
     resonance of the character's own affinity; the configured ``cap_percent`` is above 0;
@@ -456,7 +459,7 @@ def open_or_extend_conversion_offer(grant: ResonanceGrant) -> DriftConversionOff
     for _attempt in range(2):
         with transaction.atomic():
             offer, offer_created = DriftConversionOffer.objects.get_or_create(
-                character_sheet=sheet, scene=scene
+                character_sheet=sheet, defaults={"scene": scene}
             )
             # Lock the offer row so concurrent grants for it serialize. A filter, not
             # get(): the identity map would answer get() without the database or the lock.

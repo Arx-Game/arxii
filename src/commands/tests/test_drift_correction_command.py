@@ -19,7 +19,6 @@ from world.items.factories import ItemFacetFactory, ItemInstanceFactory, ItemTem
 from world.items.models import ItemInstance
 from world.items.services.materialize import materialize_item_game_object
 from world.magic.factories import (
-    DriftConversionCapFactory,
     DriftConversionOfferFactory,
     FacetFactory,
     MotifResonanceAssociationFactory,
@@ -194,11 +193,6 @@ class OfferLookupTests(DriftCommandTestBase):
         finished = SceneFactory(is_active=False, date_finished=timezone.now())
         DriftConversionOfferFactory(character_sheet=self.sheet, scene=finished)
         self.assertIn("You have no open chance to atone.", self.lines(""))
-
-    def test_with_two_open_offers_the_most_recent_is_used(self) -> None:
-        newer = DriftConversionOfferFactory(character_sheet=self.sheet, scene=SceneFactory())
-        DriftConversionCapFactory(offer=newer, target_resonance=self.sunrise, cap=3)
-        self.assertIn("Toward Drift Sunrise: up to 3.", self.lines(""))
 
     def test_a_sheetless_caller_gets_the_friendly_refusal(self) -> None:
         cmd = self.command("")

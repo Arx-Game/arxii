@@ -260,7 +260,7 @@ interface RoundScopedState {
   pullCommitted: boolean;
   soulfrayAccepted: boolean;
   furyTierId: number | null;
-  furyAnchorId: number | null;
+  furyResonanceId: number | null;
   coverAllyId: string;
   maneuverError: string | null;
   guardAllyId: string;
@@ -308,7 +308,7 @@ function initialRoundState(): RoundScopedState {
     pullCommitted: false,
     soulfrayAccepted: false,
     furyTierId: null,
-    furyAnchorId: null,
+    furyResonanceId: null,
     coverAllyId: '',
     maneuverError: null,
     guardAllyId: GUARD_ANYONE_VALUE,
@@ -426,7 +426,7 @@ function buildFocusedJob(
   soulfrayAccepted: boolean,
   soulfrayWarning: SoulfrayWarningData | null,
   furyTierId: number | null,
-  furyAnchorId: number | null,
+  furyResonanceId: number | null,
   castPosition: CastPosition,
   positionTargetShape: PositionTargetShape,
   isWardBearing: boolean
@@ -446,7 +446,7 @@ function buildFocusedJob(
 
   const furyKwargs: Record<string, number> = {};
   if (furyTierId !== null) furyKwargs.fury_commitment_id = furyTierId;
-  if (furyAnchorId !== null) furyKwargs.fury_anchor_id = furyAnchorId;
+  if (furyResonanceId !== null) furyKwargs.fury_resonance_id = furyResonanceId;
   const soulfrayKwarg =
     soulfrayAccepted && (soulfrayWarning !== null || isWardBearing)
       ? { confirm_soulfray_risk: true }
@@ -820,7 +820,7 @@ function submitBlockReason(args: {
     return 'Accept the Soulfray risk to proceed.';
   }
   if (args.furyOverCap) {
-    return 'Chosen fury tier exceeds your bond with the anchor.';
+    return 'Chosen fury tier is deeper than that resonance lets you go.';
   }
   if (!args.positionRequirementMet) {
     return 'Select a position target for this technique.';
@@ -1927,14 +1927,15 @@ function isPositionRequirementMet(shape: PositionTargetShape, castPosition: Cast
 
 function furySelectionOverCap(
   tiers: NonNullable<PlayerAction['available_fury_tiers']>,
-  anchors: NonNullable<PlayerAction['eligible_fury_anchors']>,
+  resonances: NonNullable<PlayerAction['eligible_fury_resonances']>,
   tierId: number | null,
-  anchorId: number | null
+  resonanceId: number | null
 ): boolean {
-  if (tierId === null || anchorId === null) return false;
+  if (tierId === null || resonanceId === null) return false;
   const tierDepth = tiers.find((tier) => tier.id === tierId)?.depth ?? 0;
-  const anchorCap = anchors.find((anchor) => anchor.id === anchorId)?.provocation_cap ?? 0;
-  return tierDepth > anchorCap;
+  const resonanceCap =
+    resonances.find((resonance) => resonance.id === resonanceId)?.provocation_cap ?? 0;
+  return tierDepth > resonanceCap;
 }
 
 function participantForId(
@@ -2105,7 +2106,7 @@ export function YourTurn({
     pullCommitted,
     soulfrayAccepted,
     furyTierId,
-    furyAnchorId,
+    furyResonanceId,
     coverAllyId,
     maneuverError,
     guardAllyId,
@@ -2169,7 +2170,7 @@ export function YourTurn({
   );
   const setSoulfrayAccepted = useMemo(() => makeFieldSetter('soulfrayAccepted'), []);
   const setFuryTierId = useMemo(() => makeFieldSetter('furyTierId'), []);
-  const setFuryAnchorId = useMemo(() => makeFieldSetter('furyAnchorId'), []);
+  const setFuryResonanceId = useMemo(() => makeFieldSetter('furyResonanceId'), []);
   const setCoverAllyId = useMemo(() => makeFieldSetter('coverAllyId'), []);
   const setManeuverError = useMemo(() => makeFieldSetter('maneuverError'), []);
   const setGuardAllyId = useMemo(() => makeFieldSetter('guardAllyId'), []);
@@ -2404,8 +2405,8 @@ export function YourTurn({
   // covers the ward (see the soulfrayKwarg logic in buildFocusedJob).
   const isWardBearingCast = focusedCastDescriptor?.reactive_anima_cost != null;
   const furyTiers = focusedCastDescriptor?.available_fury_tiers ?? [];
-  const furyAnchors = focusedCastDescriptor?.eligible_fury_anchors ?? [];
-  const furyOverCap = furySelectionOverCap(furyTiers, furyAnchors, furyTierId, furyAnchorId);
+  const furyResonances = focusedCastDescriptor?.eligible_fury_resonances ?? [];
+  const furyOverCap = furySelectionOverCap(furyTiers, furyResonances, furyTierId, furyResonanceId);
 
   // Current declared maneuver (from own round action).
   const declaredManeuver = ownRoundAction?.maneuver ?? null;
@@ -2576,7 +2577,7 @@ export function YourTurn({
       soulfrayAccepted,
       soulfrayWarning,
       furyTierId,
-      furyAnchorId,
+      furyResonanceId,
       castPosition,
       focusedTechniquePositionShape,
       isWardBearingCast
@@ -3011,11 +3012,11 @@ export function YourTurn({
         {furyTiers.length > 0 && (
           <FuryDeclaration
             tiers={furyTiers}
-            anchors={furyAnchors}
+            resonances={furyResonances}
             tierId={furyTierId}
-            anchorId={furyAnchorId}
+            resonanceId={furyResonanceId}
             onTierChange={setFuryTierId}
-            onAnchorChange={setFuryAnchorId}
+            onResonanceChange={setFuryResonanceId}
             disabled={isLocked}
           />
         )}

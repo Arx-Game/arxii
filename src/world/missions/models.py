@@ -125,6 +125,37 @@ class MissionCategory(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return self.name
 
 
+class MissionTheme(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """What a mission or an option is about (#5124).
+
+    Not a category: categories sort the board, themes kindle resonances. A kindling situation
+    names a theme, and a mission option that carries it feeds the resonance.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    player_text = models.CharField(
+        max_length=300,
+        blank=True,
+        help_text=(
+            "The reason line a player reads when this theme kindles a resonance, such as "
+            "'This mission is about people held for what they are'."
+        ),
+    )
+    display_order = models.PositiveIntegerField(default=0)
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        ordering = ["display_order", "name"]
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class MissionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """An authored mission: the static graph plus its availability metadata.
 
@@ -222,6 +253,12 @@ class MissionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "assassination, courtly, heist). Drives browse/filter in the "
             "authoring tool."
         ),
+    )
+    themes = models.ManyToManyField(
+        MissionTheme,
+        blank=True,
+        related_name="templates",
+        help_text="What this mission is about (#5124); a kindled resonance can feed on it.",
     )
 
     @staticmethod
@@ -655,6 +692,15 @@ class MissionOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "default. Empty = inherit the node. This is what expresses "
             "location-split beats (one node, options live in different "
             "rooms — choosing either resolves the node down that route)."
+        ),
+    )
+    themes = models.ManyToManyField(
+        MissionTheme,
+        blank=True,
+        related_name="options",
+        help_text=(
+            "What taking this option is about (#5124); a kindled resonance the theme "
+            "feeds earns when a character takes it."
         ),
     )
     spawns_instance = models.BooleanField(

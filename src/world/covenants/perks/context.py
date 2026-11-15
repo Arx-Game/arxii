@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.magic.models.affinity import Affinity
     from world.mechanics.models import Property
-    from world.missions.models import MissionInstance
+    from world.missions.models import MissionInstance, MissionTheme
 
 
 @dataclass(frozen=True)
@@ -105,6 +105,8 @@ class SituationParams:
     affinity: Affinity | None = None
     origin_side: str = ""
     condition_property: Property | None = None
+    mission_theme: MissionTheme | None = None
+    enemies_only: bool = False
 
 
 #: Shared no-parameter instance (the default for every pre-#2623 row shape).

@@ -256,9 +256,9 @@ class CastTechniqueAction(Action):
         fury_commitment_id = kwargs.get("fury_commitment_id")
         if fury_commitment_id is not None:
             decl_kwargs["fury_commitment_id"] = fury_commitment_id
-        fury_anchor_id = kwargs.get("fury_anchor_id")
-        if fury_anchor_id is not None:
-            decl_kwargs["fury_anchor_id"] = fury_anchor_id
+        fury_resonance_id = kwargs.get("fury_resonance_id")
+        if fury_resonance_id is not None:
+            decl_kwargs["fury_resonance_id"] = fury_resonance_id
         position_params = kwargs.get("position_params")
         if position_params:
             decl_kwargs["position_params"] = position_params
@@ -272,7 +272,7 @@ class CastTechniqueAction(Action):
 
     @staticmethod
     def _combat_fury_cap_refusal(ctx: Any, kwargs: dict[str, Any]) -> ActionResult | None:
-        """Refuse a Fury tier deeper than the anchor's provocation cap (#4738).
+        """Refuse a Fury tier deeper than the resonance's strength allows (#4738).
 
         Mirrors the scene serializer's ``_cap_fury_by_provocation`` with the same message,
         so the player learns it at declaration instead of finding a shallower tier (and
@@ -281,8 +281,7 @@ class CastTechniqueAction(Action):
         fury_commitment_id = kwargs.get("fury_commitment_id")
         if fury_commitment_id is None:
             return None
-        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
-        from world.magic.models import FuryTier  # noqa: PLC0415
+        from world.magic.models import FuryTier, Resonance  # noqa: PLC0415
         from world.magic.services.fury import (  # noqa: PLC0415
             fury_over_cap_message,
             provocation_cap,
@@ -291,13 +290,13 @@ class CastTechniqueAction(Action):
         tier = FuryTier.objects.filter(pk=fury_commitment_id).first()
         if tier is None:
             return ActionResult(success=False, message="Unknown Fury tier.")
-        fury_anchor_id = kwargs.get("fury_anchor_id")
-        anchor = (
-            CharacterSheet.objects.filter(pk=fury_anchor_id).first()
-            if fury_anchor_id is not None
+        fury_resonance_id = kwargs.get("fury_resonance_id")
+        resonance = (
+            Resonance.objects.filter(pk=fury_resonance_id).first()
+            if fury_resonance_id is not None
             else None
         )
-        cap = provocation_cap(ctx.participant.character_sheet, anchor)
+        cap = provocation_cap(ctx.participant.character_sheet, resonance)
         if cap < tier.depth:
             return ActionResult(success=False, message=fury_over_cap_message(tier, cap))
         return None
@@ -334,7 +333,7 @@ class CastTechniqueAction(Action):
             "focused_ally_target_id",
             "action_slot",
             "fury_commitment_id",
-            "fury_anchor_id",
+            "fury_resonance_id",
         ):
             _value = kwargs.get(_key)
             if _value is not None:

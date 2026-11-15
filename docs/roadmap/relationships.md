@@ -92,7 +92,7 @@ the woven thread.
   grief/peril/hated-foe legs, magic thread anchors (`Thread.target_relationship`) with the
   tier-gated weave and the depth/gauge-keyed pull terms, social difficulty's affection bands,
   training's mentor multiplier (a mutual Mentor/Student tie, via `get_relationship_tier`),
-  magic's fury provocation cap (the character's own side's claimed tier, any label),
+  magic's kindled thread-anchor strength (the character's own side's claimed tier, any label),
   `RelationshipRequirement`, and the NPC regard mirror.
 - **Harness:** `frontend/e2e/ties.spec.ts` mounts the real sheet and tie page against
   fixtures for the three audiences (the #3898 evidence lesson).

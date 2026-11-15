@@ -60,7 +60,7 @@ class ActionDispatchError(Exception):
         PULL_NEEDS_SOULFRAY_CONSENT: (
             "Accept the Soulfray risk before pulling a thread on this cast."
         ),
-        FURY_OVER_CAP: "That Fury tier exceeds your provocation cap with that anchor.",
+        FURY_OVER_CAP: "That Fury tier is deeper than that resonance lets you go.",
         TARGET_REQUIRED: "That technique needs an opponent to target.",
         TARGET_KIND_MISMATCH: "That technique cannot target them.",
         TARGET_DEFEATED: "That opponent is already defeated.",

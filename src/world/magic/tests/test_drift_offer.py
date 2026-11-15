@@ -315,7 +315,7 @@ class LapseTests(DriftOfferTestBase):
     def test_lapse_conversion_offers_deletes_scene_offers(self) -> None:
         self.deed()
         other = DriftConversionOffer.objects.create(
-            character_sheet=self.sheet, scene=SceneFactory()
+            character_sheet=CharacterSheetFactory(), scene=SceneFactory()
         )
         self.assertEqual(lapse_conversion_offers(self.scene), 1)
         self.assertEqual(list(DriftConversionOffer.objects.all()), [other])
@@ -325,7 +325,7 @@ class LapseTests(DriftOfferTestBase):
         # The event-completion route calls scene.finish_scene() without finish_scene_full.
         self.deed()
         other = DriftConversionOffer.objects.create(
-            character_sheet=self.sheet, scene=SceneFactory()
+            character_sheet=CharacterSheetFactory(), scene=SceneFactory()
         )
         self.scene.finish_scene()
         self.assertEqual(list(DriftConversionOffer.objects.all()), [other])
@@ -335,7 +335,7 @@ class LapseTests(DriftOfferTestBase):
 
         self.deed()
         other = DriftConversionOffer.objects.create(
-            character_sheet=self.sheet, scene=SceneFactory()
+            character_sheet=CharacterSheetFactory(), scene=SceneFactory()
         )
         finish_scene_full(self.scene)
         self.assertEqual(list(DriftConversionOffer.objects.all()), [other])

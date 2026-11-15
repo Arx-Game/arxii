@@ -133,8 +133,13 @@ class PendingOfferTests(DriftCorrectionViewTestBase):
 
     def test_readiness_is_asked_once_however_many_offers_are_listed(self) -> None:
         for _ in range(2):
+            extra_sheet = CharacterSheetFactory()
+            RosterTenureFactory(
+                roster_entry=RosterEntryFactory(character_sheet=extra_sheet),
+                player_data=self.player_data,
+            )
             extra = DriftConversionOfferFactory(
-                character_sheet=self.sheet, scene=SceneFactory(is_active=True)
+                character_sheet=extra_sheet, scene=SceneFactory(is_active=True)
             )
             DriftConversionCapFactory(offer=extra, target_resonance=self.dawnlight, cap=3)
         share_table = DriftCorrectionOutcomeShare._meta.db_table

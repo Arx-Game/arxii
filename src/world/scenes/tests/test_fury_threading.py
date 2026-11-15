@@ -26,16 +26,14 @@ from world.magic.factories import (
     CharacterAnimaFactory,
     FuryConfigFactory,
     FuryTierFactory,
+    KindledStrengthTierFactory,
+    ResonanceFactory,
     TechniqueFactory,
 )
 from world.magic.services.fury import NO_ENGAGEMENT_MESSAGE
 from world.magic.types.techniques import AnimaCostResult, TechniqueUseResult
 from world.mechanics.engagement import CharacterEngagement
 from world.mechanics.factories import CharacterEngagementFactory
-from world.relationships.constants import LabelAwareness, TypeFamily
-from world.relationships.factories import CharacterRelationshipFactory, RelationshipTypeFactory
-from world.relationships.services import declare_label
-from world.roster.factories import grant_test_tenure
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_services import respond_to_action_request
 from world.scenes.factories import PersonaFactory, SceneActionRequestFactory, SceneFactory
@@ -98,13 +96,10 @@ def _next_room_key() -> str:
     return f"FuryTestRoom{_ROOM_COUNTER[0]}"
 
 
-def _setup_fury_fixture(*, tier_depth: int = 2, bond_tier_number: int = 2):
-    """Two personas, fury tier, config, and a bond giving cap >= tier_depth.
+def _setup_fury_fixture(*, tier_depth: int = 2):
+    """Two personas, fury tier, config, and a strength row giving cap >= tier_depth.
 
-    Returns (scene, initiator_persona, anchor_persona, fury_tier, fury_config).
-
-    provocation_cap = bond_tier_number // provocation_cap_per_tier (default per=1).
-    We need bond_tier_number >= tier_depth to allow the commitment.
+    Returns (scene, initiator_persona, target_persona, fury_tier, fury_config, resonance).
     """
     CheckSystemSetupFactory.create()
     room = create_object("typeclasses.rooms.Room", key=_next_room_key(), nohome=True)
@@ -121,7 +116,7 @@ def _setup_fury_fixture(*, tier_depth: int = 2, bond_tier_number: int = 2):
 
     cfg = FuryConfigFactory()
     tier = FuryTierFactory(
-        name=f"Tier_{tier_depth}_{bond_tier_number}",
+        name=f"Tier_{tier_depth}",
         depth=tier_depth,
         control_surrendered=4,
         base_check_difficulty=10,
@@ -130,26 +125,11 @@ def _setup_fury_fixture(*, tier_depth: int = 2, bond_tier_number: int = 2):
     # Fury needs something at stake (#4738): the initiator is engaged.
     CharacterEngagementFactory(character=initiator.character_sheet)
 
-    # Mutual Mentor/Student bond at bond_tier_number (#3957 — get_relationship_tier
-    # requires two mutually-consented TEACHING labels, not a track catalog entry).
-    mentor = RelationshipTypeFactory(family=TypeFamily.TEACHING)
-    student = RelationshipTypeFactory(family=TypeFamily.TEACHING, counterpart=mentor)
-    mentor.counterpart = student
-    mentor.save(update_fields=["counterpart"])
-    forward = CharacterRelationshipFactory(
-        source=initiator.character_sheet, target=anchor.character_sheet, tier=bond_tier_number
-    )
-    backward = CharacterRelationshipFactory(
-        source=anchor.character_sheet, target=initiator.character_sheet, tier=bond_tier_number
-    )
-    forward_tenure = grant_test_tenure(initiator.character_sheet)
-    backward_tenure = grant_test_tenure(anchor.character_sheet)
-    declare_label(side=forward, type=mentor, awareness=LabelAwareness.PUBLIC, tenure=forward_tenure)
-    declare_label(
-        side=backward, type=student, awareness=LabelAwareness.PUBLIC, tenure=backward_tenure
-    )
+    # The strength row Fury reads until Task 6 of #5124 reads the declared resonance's own.
+    KindledStrengthTierFactory(rank=3, give_in_max_depth=tier_depth)
+    resonance = ResonanceFactory()
 
-    return scene, initiator, anchor, tier, cfg
+    return scene, initiator, anchor, tier, cfg, resonance
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +138,7 @@ def _setup_fury_fixture(*, tier_depth: int = 2, bond_tier_number: int = 2):
 
 
 class SerializerFuryCapRejectionTests(TestCase):
-    """Serializer rejects fury_commitment whose depth exceeds the provocation cap."""
+    """Serializer rejects fury_commitment whose depth exceeds the strength cap."""
 
     def test_fury_above_cap_rejected(self) -> None:
         from rest_framework.exceptions import ValidationError
@@ -167,12 +147,13 @@ class SerializerFuryCapRejectionTests(TestCase):
             SceneActionRequestCreateSerializer,
         )
 
-        # No relationship → provocation_cap = 0 → any tier is rejected.
+        # No strength row → provocation_cap = 0 → any tier is rejected.
         # technique_id provided so validation reaches the cap check.
         initiator = PersonaFactory()
         CharacterEngagementFactory(character=initiator.character_sheet)
         anchor = PersonaFactory()
-        tier = FuryTierFactory(name="HighTierNoBond", depth=3)
+        resonance = ResonanceFactory()
+        tier = FuryTierFactory(name="HighTierNoStrength", depth=3)
         technique = TechniqueFactory(damage_profile=False)
 
         ser = SceneActionRequestCreateSerializer(
@@ -183,7 +164,7 @@ class SerializerFuryCapRejectionTests(TestCase):
                 "action_key": "intimidate",
                 "technique_id": technique.pk,
                 "fury_commitment_id": tier.pk,
-                "fury_anchor_id": anchor.character_sheet.pk,
+                "fury_resonance_id": resonance.pk,
             }
         )
         with self.assertRaises(ValidationError) as ctx:
@@ -195,9 +176,7 @@ class SerializerFuryCapRejectionTests(TestCase):
             SceneActionRequestCreateSerializer,
         )
 
-        _scene, initiator, anchor, tier, _cfg = _setup_fury_fixture(
-            tier_depth=2, bond_tier_number=2
-        )
+        _scene, initiator, anchor, tier, _cfg, resonance = _setup_fury_fixture(tier_depth=2)
         technique = TechniqueFactory(damage_profile=False)
 
         ser = SceneActionRequestCreateSerializer(
@@ -208,7 +187,7 @@ class SerializerFuryCapRejectionTests(TestCase):
                 "action_key": "intimidate",
                 "technique_id": technique.pk,
                 "fury_commitment_id": tier.pk,
-                "fury_anchor_id": anchor.character_sheet.pk,
+                "fury_resonance_id": resonance.pk,
             }
         )
         self.assertTrue(ser.is_valid(), msg=ser.errors)
@@ -221,9 +200,7 @@ class SerializerFuryCapRejectionTests(TestCase):
             SceneActionRequestCreateSerializer,
         )
 
-        _scene, initiator, anchor, tier, _cfg = _setup_fury_fixture(
-            tier_depth=2, bond_tier_number=2
-        )
+        _scene, initiator, anchor, tier, _cfg, resonance = _setup_fury_fixture(tier_depth=2)
 
         ser = SceneActionRequestCreateSerializer(
             data={
@@ -233,14 +210,14 @@ class SerializerFuryCapRejectionTests(TestCase):
                 "action_key": "intimidate",
                 # No technique_id — plain action
                 "fury_commitment_id": tier.pk,
-                "fury_anchor_id": anchor.character_sheet.pk,
+                "fury_resonance_id": resonance.pk,
             }
         )
         with self.assertRaises(ValidationError) as ctx:
             ser.is_valid(raise_exception=True)
         self.assertIn("fury_commitment_id", ctx.exception.detail)
 
-    def test_fury_anchor_required_when_commitment_declared(self) -> None:
+    def test_fury_resonance_required_when_commitment_declared(self) -> None:
         from rest_framework.exceptions import ValidationError
 
         from world.scenes.action_serializers import (
@@ -249,7 +226,7 @@ class SerializerFuryCapRejectionTests(TestCase):
 
         initiator = PersonaFactory()
         anchor = PersonaFactory()
-        tier = FuryTierFactory(name="NeedsAnchorTier", depth=1)
+        tier = FuryTierFactory(name="NeedsResonanceTier", depth=1)
         technique = TechniqueFactory(damage_profile=False)
 
         ser = SceneActionRequestCreateSerializer(
@@ -260,7 +237,7 @@ class SerializerFuryCapRejectionTests(TestCase):
                 "action_key": "intimidate",
                 "technique_id": technique.pk,
                 "fury_commitment_id": tier.pk,
-                # fury_anchor_id omitted
+                # fury_resonance_id omitted
             }
         )
         with self.assertRaises(ValidationError):
@@ -279,7 +256,7 @@ class SerializerBerserkAndEngagementTests(TestCase):
     DISTINCT ON path.
     """
 
-    def _serializer(self, scene, initiator, anchor, tier):
+    def _serializer(self, scene, initiator, anchor, tier, resonance):
         from world.scenes.action_serializers import (
             SceneActionRequestCreateSerializer,
         )
@@ -292,27 +269,27 @@ class SerializerBerserkAndEngagementTests(TestCase):
                 "action_key": "intimidate",
                 "technique_id": TechniqueFactory(damage_profile=False).pk,
                 "fury_commitment_id": tier.pk,
-                "fury_anchor_id": anchor.character_sheet.pk,
+                "fury_resonance_id": resonance.pk,
             }
         )
 
     def test_berserk_caster_may_declare_fury_again(self) -> None:
         berserk_template = BerserkConditionTemplateFactory()
-        scene, initiator, anchor, tier, _cfg = _setup_fury_fixture(tier_depth=2, bond_tier_number=2)
+        scene, initiator, anchor, tier, _cfg, resonance = _setup_fury_fixture(tier_depth=2)
         ConditionInstanceFactory(
             target=initiator.character_sheet.character,
             condition=berserk_template,
             is_suppressed=False,
         )
 
-        ser = self._serializer(scene, initiator, anchor, tier)
+        ser = self._serializer(scene, initiator, anchor, tier, resonance)
         self.assertTrue(ser.is_valid(), msg=ser.errors)
 
     def test_fury_with_no_engagement_is_refused(self) -> None:
-        scene, initiator, anchor, tier, _cfg = _setup_fury_fixture(tier_depth=2, bond_tier_number=2)
+        scene, initiator, anchor, tier, _cfg, resonance = _setup_fury_fixture(tier_depth=2)
         CharacterEngagement.objects.filter(character=initiator.character_sheet).delete()
 
-        ser = self._serializer(scene, initiator, anchor, tier)
+        ser = self._serializer(scene, initiator, anchor, tier, resonance)
         self.assertFalse(ser.is_valid())
         self.assertEqual(ser.errors["fury_commitment_id"], [NO_ENGAGEMENT_MESSAGE])
 
@@ -327,7 +304,9 @@ class FuryCommittedAuditTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.scene, cls.initiator, cls.anchor, cls.tier, cls.cfg = _setup_fury_fixture()
+        cls.scene, cls.initiator, cls.anchor, cls.tier, cls.cfg, cls.resonance = (
+            _setup_fury_fixture()
+        )
         cls.action_template = ActionTemplateFactory()
         cls.technique = TechniqueFactory(
             action_template=cls.action_template,
@@ -360,7 +339,7 @@ class FuryCommittedAuditTests(TestCase):
             action_key="intimidate",
             technique=self.technique,
             fury_commitment=self.tier,
-            fury_anchor=self.anchor.character_sheet,
+            fury_resonance=self.resonance,
         )
         request.action_template = self.action_template
         request.save(update_fields=["action_template"])
@@ -392,7 +371,9 @@ class BerserkTierIsChosenTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.scene, cls.initiator, cls.anchor, cls.tier, cls.cfg = _setup_fury_fixture()
+        cls.scene, cls.initiator, cls.anchor, cls.tier, cls.cfg, cls.resonance = (
+            _setup_fury_fixture()
+        )
         cls.action_template = ActionTemplateFactory()
         cls.technique = TechniqueFactory(
             action_template=cls.action_template,
@@ -428,7 +409,7 @@ class BerserkTierIsChosenTests(TestCase):
             action_key="intimidate",
             technique=self.technique,
             fury_commitment=self.tier,
-            fury_anchor=self.anchor.character_sheet,
+            fury_resonance=self.resonance,
         )
         request.action_template = self.action_template
         request.save(update_fields=["action_template"])
@@ -470,7 +451,9 @@ class EffortThreadsIntoTechniqueCheckTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.scene, cls.initiator, cls.anchor, cls.tier, cls.cfg = _setup_fury_fixture()
+        cls.scene, cls.initiator, cls.anchor, cls.tier, cls.cfg, cls.resonance = (
+            _setup_fury_fixture()
+        )
         cls.action_template = ActionTemplateFactory()
         cls.technique = TechniqueFactory(
             action_template=cls.action_template,

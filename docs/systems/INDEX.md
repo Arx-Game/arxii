@@ -8601,7 +8601,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   JOUST (#1843, see "Mounted combat" below) / STRIKE (#4858, see "The basic Strike" below;
   its weapon is `item_instance`, null for bare hands); plus the
   player-decision fields `confirm_soulfray_risk` + the `CommittingDeclaration` fury mixin
-  `fury_commitment` / `fury_anchor`, #1454; `cast_destination` / `cast_position_a` /
+  `fury_commitment` / `fury_resonance`, #1454, #5124; `cast_destination` / `cast_position_a` /
   `cast_position_b` — nullable FKs → `areas.Position` carrying a declared cast-position
   target/pair for position-consuming techniques, #2206, see "Cast-position targeting" below;
   `redirect_opponent_target` (FK `CombatOpponent`, SET_NULL) / `redirect_object_target`
@@ -11074,7 +11074,7 @@ history, one pooled depth, a tier claimed per side by capstone journal entry and
   (`can_retort`/`annotate_can_retort`, and the capstone IS a `JournalEntry`), combat (bond
   bonus off the claimed tier; the surge engine off `fuels_escalation_spikes` + side depth),
   magic (`Thread.target_relationship`, weaving gated on `thread_min_tier`, pull modulation
-  off `pair_depth()` and the gauges, fury's provocation cap off the side's own `tier`), scenes
+  off `pair_depth()` and the gauges, kindled thread-anchor strength off the side's own `tier`), scenes
   (`finish_scene` → `credit_scene_depth`; social difficulty), skills (mentor multiplier),
   progression (`RelationshipRequirement` — it counts qualifying SIDES, not labels, so two
   labels on one side count once; XP spend),

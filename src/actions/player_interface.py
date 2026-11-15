@@ -80,10 +80,10 @@ from actions.round_context import RoundContext, get_active_round_context
 from actions.types import (
     ActionRef,
     ActionResult,
-    AnchorOption,
-    AnchorTierIntensity,
     CastPreview,
     DispatchResult,
+    FuryResonanceOption,
+    FuryResonanceTierIntensity,
     FuryTierOption,
     PlayerAction,
     StrainAvailability,
@@ -611,45 +611,42 @@ def _fury_tier_options(ladder: list[FuryTier]) -> tuple[FuryTierOption, ...]:
     )
 
 
-def _eligible_fury_anchors(
+def _eligible_fury_resonances(
     character: ObjectDB, sheet: CharacterSheet, ladder: list[FuryTier]
-) -> tuple[AnchorOption, ...]:
-    """Active relationships whose bond can carry a provocation (#1543, #3957).
+) -> tuple[FuryResonanceOption, ...]:
+    """The resonances the character holds that her strength lets her give in to (#5124).
 
-    Each carries the most every tier can buy under its cap: the trade at the highest
-    authored degree share (#4738).
+    Each carries the most every tier can buy at its strength: the trade at the highest
+    authored degree share (#4738). Task 6 of #5124 narrows this to kindled resonances.
     """
     from world.magic.services.fury import (  # noqa: PLC0415
         full_trade_intensities,
+        provocation_bonus_percent,
         provocation_cap,
         top_share_percent,
     )
-    from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
     top_percent = top_share_percent()
-    anchors: list[AnchorOption] = []
-    for rel in CharacterRelationship.objects.filter(source=sheet, is_active=True).select_related(
-        "target", "target__character"
-    ):
-        anchor_sheet = rel.target
-        cap = provocation_cap(character, anchor_sheet)
+    options: list[FuryResonanceOption] = []
+    for held in sheet.cached_resonances:
+        resonance = held.resonance
+        cap = provocation_cap(character, resonance)
         if cap < 1:
             continue
-        anchor_char = anchor_sheet.character
-        name = anchor_char.key if anchor_char is not None else str(anchor_sheet)
-        full = full_trade_intensities(ladder, cap, top_percent=top_percent)
-        anchors.append(
-            AnchorOption(
-                id=anchor_sheet.pk,
-                name=name,
+        bonus = provocation_bonus_percent(character, resonance)
+        full = full_trade_intensities(ladder, bonus, top_percent=top_percent)
+        options.append(
+            FuryResonanceOption(
+                id=resonance.pk,
+                name=resonance.name,
                 provocation_cap=cap,
                 tier_full_intensities=tuple(
-                    AnchorTierIntensity(tier_id=tier.pk, full_intensity=full[tier.pk])
+                    FuryResonanceTierIntensity(tier_id=tier.pk, full_intensity=full[tier.pk])
                     for tier in ladder
                 ),
             )
         )
-    return tuple(anchors)
+    return tuple(options)
 
 
 def _combat_actions(
@@ -732,7 +729,7 @@ def _combat_actions(
     fury_ladder = _fury_ladder()
     fury_tiers = _fury_tier_options(fury_ladder)
     soulfray_warning = get_soulfray_warning(character)
-    eligible_fury_anchors = _eligible_fury_anchors(character, sheet, fury_ladder)
+    eligible_fury_resonances = _eligible_fury_resonances(character, sheet, fury_ladder)
 
     # The caster's personal magic check is the same for every technique: read it once.
     personal_check = get_character_cast_check(character)
@@ -780,7 +777,7 @@ def _combat_actions(
                 position_target_shape=position_target_shape(technique),
                 soulfray_warning=soulfray_warning,
                 available_fury_tiers=fury_tiers,
-                eligible_fury_anchors=eligible_fury_anchors,
+                eligible_fury_resonances=eligible_fury_resonances,
                 is_ultimate=technique.is_ultimate,
                 cast_preview=_cast_preview(character, technique, lethal=lethal),
                 enchants_strike=technique.enchants_strike,

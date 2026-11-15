@@ -1,20 +1,21 @@
 """Surrendering control to Fury (#4738 part B, slice of #4727 decision 5).
 
-Brannoc fights a bandit on "The Ford" with Ilse, the one he would burn the world for (a tie of
-tier 2 toward her). He casts and declares Fury: ``cast <technique> at <bandit> fury=<tier>
-anchor=Ilse``. The tier is a preset amount of control he surrenders; his control roll's outcome
+Brannoc fights a bandit on "The Ford" with Wrath running through him (a strength row that lets
+him go as deep as depth 2). He casts and declares Fury: ``cast <technique> at <bandit> fury=<tier>
+givein=Wrath``. The tier is a preset amount of control he surrenders; his control roll's outcome
 picks how much of the full trade he buys. The trade lands on his engagement for the rest of the
 fight, and the cast he declared it with already channels it.
 
-Hand-worked numbers. StrainConfig: 1.50 intensity per control surrendered. FuryConfig: 10%
-more per point of provocation cap, one cap point per relationship tier, so Ilse's tier 2 gives
-cap 2 and a x1.2 scale. Degree shares: Critical Failure 0%, Failure 25%, Partial Success 50%,
-Success 75%, Critical Success 100%.
+Hand-worked numbers. StrainConfig: 1.50 intensity per control surrendered. The strongest
+strength row gives a depth cap of 2 and 20% more intensity, a x1.2 scale. (Until Task 6 of #5124
+reads the declared resonance's own strength, every declared resonance reads that row.)
+Degree shares: Critical Failure 0%, Failure 25%, Partial Success 50%, Success 75%,
+Critical Success 100%.
 - Seething (depth 1) surrenders 6 control: full trade 6 x 1.5 x 1.2 = 10.8.
   Success buys floor(8.1) = 8; Partial Success floor(5.4) = 5.
 - Unbound (depth 3, a Berserk tier) surrenders 12 control; declaring it past cap 2 is refused.
-- What the picker previews: Seething's full trade is 6 x 1.5 = 9 with no anchor, 10 with Ilse;
-  Unbound's is 18, and 21 with Ilse (21.6).
+- What the picker previews: Seething's full trade is 6 x 1.5 = 9 with no bonus, 10 with Wrath;
+  Unbound's is 18, and 21 with Wrath (21.6).
 Every roll in the round is forced (the control roll included), so each outcome is the test's
 choice.
 """
@@ -50,20 +51,22 @@ from world.fatigue.constants import EffortLevel
 from world.magic import services as magic_services
 from world.magic.factories import (
     CharacterAnimaFactory,
+    CharacterResonanceFactory,
     CharacterTechniqueFactory,
     EffectTypeFactory,
     FuryConfigFactory,
     FuryDegreeShareFactory,
     FuryTierFactory,
     GiftFactory,
+    KindledStrengthTierFactory,
+    ResonanceFactory,
     TechniqueFactory,
 )
+from world.magic.models import KindledStrengthTier
 from world.magic.types.techniques import SoulfrayWarning
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
 from world.mechanics.services import begin_engagement
-from world.relationships.factories import CharacterRelationshipFactory
-from world.relationships.models import CharacterRelationship
 from world.scenes.constants import RoundStatus
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
@@ -96,7 +99,8 @@ class _AtTheFord(JourneyCase):
         CharacterVitals.objects.create(
             character_sheet=sheet, health=50, max_health=50, base_max_health=50
         )
-        CharacterRelationshipFactory(source=sheet, target=self.ilse.sheet_data, tier=2)
+        self.wrath = ResonanceFactory(name="Wrath")
+        CharacterResonanceFactory(character_sheet=sheet, resonance=self.wrath)
 
         cast_check = CheckTypeFactory()
         CheckTypeTraitFactory(check_type=cast_check, trait=StatTraitFactory(), weight=1)
@@ -130,7 +134,8 @@ class _AtTheFord(JourneyCase):
             self.brannoc, EngagementType.COMBAT, source=self.encounter
         )
 
-        FuryConfigFactory(provocation_cap_per_tier=1, bonus_scale_per_cap_point=10)
+        FuryConfigFactory()
+        KindledStrengthTierFactory(rank=3, give_in_max_depth=2, give_in_bonus_percent=20)
         config = get_strain_config()
         config.intensity_per_control_surrendered = Decimal("1.50")
         config.save()
@@ -151,7 +156,7 @@ class _AtTheFord(JourneyCase):
     def declare_fury(self, tier) -> str:
         return self.telnet(
             self.brannoc,
-            f"cast {self.technique.name} at {self.bandit.name} fury={tier.name} anchor=Ilse",
+            f"cast {self.technique.name} at {self.bandit.name} fury={tier.name} givein=Wrath",
         )
 
     def resolve_with(self, outcome_name: str, *, stop_the_cast=None) -> list[int]:
@@ -208,7 +213,7 @@ class SurrenderingControl(_AtTheFord):
         self.assertEqual(partial, 5 + 1)
         self.assertGreater(8 + 1, partial)
 
-    def test_a_tier_deeper_than_the_anchor_cap_is_refused_at_declaration(self) -> None:
+    def test_a_tier_deeper_than_the_strength_cap_is_refused_at_declaration(self) -> None:
         told = self.declare_fury(self.unbound)
 
         self.assertIn("Fury tier depth (3) exceeds provocation cap (2).", told)
@@ -227,7 +232,7 @@ class SurrenderingControl(_AtTheFord):
             "effort_level": EffortLevel.MEDIUM,
             "focused_opponent_target_id": self.bandit.pk,
             "fury_commitment_id": self.unbound.pk,
-            "fury_anchor_id": self.ilse.sheet_data.pk,
+            "fury_resonance_id": self.wrath.pk,
         }
 
         with self.assertRaises(ActionDispatchError) as refused:
@@ -235,7 +240,7 @@ class SurrenderingControl(_AtTheFord):
 
         self.assertEqual(
             refused.exception.user_message,
-            "That Fury tier exceeds your provocation cap with that anchor.",
+            "That Fury tier is deeper than that resonance lets you go.",
         )
         self.assertFalse(
             CombatRoundAction.objects.filter(
@@ -342,9 +347,9 @@ class OnlyACastThatGoesOffPays(_AtTheFord):
         self.assertToldItFaltered()
         self.assertTold(self.brannoc, "Something here stopped your cast before it left your hands.")
 
-    def test_a_tie_lapsed_since_declaring_rolls_nothing(self) -> None:
+    def test_a_strength_removed_since_declaring_rolls_nothing(self) -> None:
         self.declare_fury(self.seething)
-        CharacterRelationship.objects.filter(source=self.brannoc.sheet_data).delete()
+        KindledStrengthTier.objects.all().delete()
 
         # The control roll's check type is only fetched when the roll is made.
         with patch("world.magic.services.fury._ensure_fury_check_type") as control_roll:
@@ -375,7 +380,7 @@ class SeeingTheTrade(_AtTheFord):
             "Fury tiers: Seething: surrender 6 control; Unbound: surrender 12 control (Berserk)",
             told,
         )
-        self.assertIn("Fury declared: Seething: surrender 6 control, answering to Ilse", told)
+        self.assertIn("Fury declared: Seething: surrender 6 control, giving in to Wrath", told)
         self.assertIn("Pressure: intensity +0, control +0", told)
         self.assertNotIn("Fury: surrendered", told)
 
@@ -422,9 +427,9 @@ class SeeingTheTrade(_AtTheFord):
             ],
             [("Seething", 6, False, 9), ("Unbound", 12, True, 18)],
         )
-        ilse = next(a for a in cast["eligible_fury_anchors"] if a["name"] == "Ilse")
+        wrath = next(r for r in cast["eligible_fury_resonances"] if r["name"] == "Wrath")
         self.assertEqual(
-            {row["tier_id"]: row["full_intensity"] for row in ilse["tier_full_intensities"]},
+            {row["tier_id"]: row["full_intensity"] for row in wrath["tier_full_intensities"]},
             {self.seething.pk: 10, self.unbound.pk: 21},
         )
 

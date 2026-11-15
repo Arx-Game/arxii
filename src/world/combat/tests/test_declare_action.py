@@ -3,7 +3,6 @@
 from django.test import TestCase
 from evennia.utils.idmapper import models as idmapper_models
 
-from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import ActionCategory
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -18,6 +17,7 @@ from world.magic.factories import (
     EffectTypeFactory,
     FuryTierFactory,
     GiftFactory,
+    ResonanceFactory,
     TechniqueAppliedConditionFactory,
     TechniqueFactory,
 )
@@ -153,7 +153,7 @@ class DeclareActionTargetValidationTests(TestCase):
 
 
 class DeclareActionSoulFrayFuryFieldsTests(TestCase):
-    """declare_action persists confirm_soulfray_risk, fury_commitment, fury_anchor (Task 2, #1454).
+    """declare_action persists confirm_soulfray_risk, fury_commitment, fury_resonance (#1454).
 
     Tests two levels:
     1. Direct declare_action call — verifies the service persists the fields.
@@ -166,7 +166,7 @@ class DeclareActionSoulFrayFuryFieldsTests(TestCase):
         idmapper_models.flush_cache()
         _, self.participant, _ = _make_encounter_and_participant()
         self.fury_tier = FuryTierFactory()
-        self.anchor_sheet = CharacterSheetFactory()
+        self.resonance = ResonanceFactory()
 
     def test_declare_action_persists_confirm_soulfray_risk(self) -> None:
         """confirm_soulfray_risk=True is stored on the CombatRoundAction row."""
@@ -186,14 +186,14 @@ class DeclareActionSoulFrayFuryFieldsTests(TestCase):
         )
         self.assertEqual(action.fury_commitment, self.fury_tier)
 
-    def test_declare_action_persists_fury_anchor(self) -> None:
-        """fury_anchor FK is stored on the CombatRoundAction row."""
+    def test_declare_action_persists_fury_resonance(self) -> None:
+        """fury_resonance FK is stored on the CombatRoundAction row."""
         action = declare_action(
             self.participant,
             effort_level=EffortLevel.MEDIUM,
-            fury_anchor=self.anchor_sheet,
+            fury_resonance=self.resonance,
         )
-        self.assertEqual(action.fury_anchor, self.anchor_sheet)
+        self.assertEqual(action.fury_resonance, self.resonance)
 
     def test_declare_action_persists_all_three_fields_together(self) -> None:
         """All three soulfray/fury fields are persisted together on one row."""
@@ -202,21 +202,21 @@ class DeclareActionSoulFrayFuryFieldsTests(TestCase):
             effort_level=EffortLevel.MEDIUM,
             confirm_soulfray_risk=True,
             fury_commitment=self.fury_tier,
-            fury_anchor=self.anchor_sheet,
+            fury_resonance=self.resonance,
         )
         self.assertTrue(action.confirm_soulfray_risk)
         self.assertEqual(action.fury_commitment, self.fury_tier)
-        self.assertEqual(action.fury_anchor, self.anchor_sheet)
+        self.assertEqual(action.fury_resonance, self.resonance)
 
     def test_full_declaration_path_threads_soulfray_fury_fields(self) -> None:
         """Full path: round_declaration → ctx.record_declaration persists soulfray/fury.
 
         CastTechniqueAction.round_declaration forwards confirm_soulfray_risk +
-        fury_commitment_id + fury_anchor_id into decl_kwargs; _record_combat_declaration
+        fury_commitment_id + fury_resonance_id into decl_kwargs; _record_combat_declaration
         resolves those ids and passes instances to declare_action.
         """
         from actions.definitions.cast import CastTechniqueAction
-        from world.relationships.factories import CharacterRelationshipFactory
+        from world.magic.factories import KindledStrengthTierFactory
 
         gift = GiftFactory()
         effect_type = EffectTypeFactory(name="Buff_fury", base_power=None)
@@ -225,10 +225,8 @@ class DeclareActionSoulFrayFuryFieldsTests(TestCase):
 
         ctx = CombatRoundContext(self.participant)
         action = CastTechniqueAction()
-        # A tie deep enough for the tier: a deeper one is refused at declaration (#4738).
-        CharacterRelationshipFactory(
-            source=self.participant.character_sheet, target=self.anchor_sheet, tier=2
-        )
+        # A strength deep enough for the tier: a deeper one is refused at declaration (#4738).
+        KindledStrengthTierFactory(rank=3, give_in_max_depth=2)
 
         # round_declaration returns (PlayerAction, decl_kwargs) with the ids forwarded.
         result = action.round_declaration(
@@ -237,7 +235,7 @@ class DeclareActionSoulFrayFuryFieldsTests(TestCase):
             effort_level=EffortLevel.MEDIUM,
             confirm_soulfray_risk=True,
             fury_commitment_id=self.fury_tier.pk,
-            fury_anchor_id=self.anchor_sheet.pk,
+            fury_resonance_id=self.resonance.pk,
         )
         self.assertIsNotNone(result, "round_declaration must return a tuple in CombatRoundContext.")
         pa, decl_kwargs = result
@@ -245,7 +243,7 @@ class DeclareActionSoulFrayFuryFieldsTests(TestCase):
         # Verify the ids were forwarded into decl_kwargs.
         self.assertTrue(decl_kwargs.get("confirm_soulfray_risk"))
         self.assertEqual(decl_kwargs.get("fury_commitment_id"), self.fury_tier.pk)
-        self.assertEqual(decl_kwargs.get("fury_anchor_id"), self.anchor_sheet.pk)
+        self.assertEqual(decl_kwargs.get("fury_resonance_id"), self.resonance.pk)
 
         # Now exercise _record_combat_declaration via record_declaration.
         ctx.record_declaration(self.participant.character_sheet, pa, decl_kwargs)
@@ -257,4 +255,4 @@ class DeclareActionSoulFrayFuryFieldsTests(TestCase):
         )
         self.assertTrue(round_action.confirm_soulfray_risk)
         self.assertEqual(round_action.fury_commitment, self.fury_tier)
-        self.assertEqual(round_action.fury_anchor, self.anchor_sheet)
+        self.assertEqual(round_action.fury_resonance, self.resonance)

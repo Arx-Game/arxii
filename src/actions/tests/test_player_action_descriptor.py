@@ -4,7 +4,7 @@ from actions.constants import ActionBackend, TargetKind
 from actions.player_interface import _combat_actions
 from actions.types import (
     ActionRef,
-    AnchorOption,
+    FuryResonanceOption,
     FuryTierOption,
     PlayerAction,
     StrainAvailability,
@@ -73,8 +73,8 @@ class TestPlayerActionFurySoulfrayDefaults(TestCase):
     def test_available_fury_tiers_defaults_empty(self) -> None:
         assert _base_player_action().available_fury_tiers == ()
 
-    def test_eligible_fury_anchors_defaults_empty(self) -> None:
-        assert _base_player_action().eligible_fury_anchors == ()
+    def test_eligible_fury_resonances_defaults_empty(self) -> None:
+        assert _base_player_action().eligible_fury_resonances == ()
 
     def test_fury_tier_option_is_frozen(self) -> None:
         opt = FuryTierOption(
@@ -92,8 +92,8 @@ class TestPlayerActionFurySoulfrayDefaults(TestCase):
             return
         self.fail("FuryTierOption must be frozen")
 
-    def test_anchor_option_fields(self) -> None:
-        opt = AnchorOption(id=7, name="Rival", provocation_cap=3)
+    def test_resonance_option_fields(self) -> None:
+        opt = FuryResonanceOption(id=7, name="Rage", provocation_cap=3)
         assert opt.provocation_cap == 3
 
 
@@ -115,14 +115,14 @@ class TestPlayerActionSerializerFurySoulfray(TestCase):
                     full_intensity=6,
                 ),
             ),
-            eligible_fury_anchors=(AnchorOption(id=7, name="Rival", provocation_cap=3),),
+            eligible_fury_resonances=(FuryResonanceOption(id=7, name="Rage", provocation_cap=3),),
         )
         data = PlayerActionSerializer(pa).data
         assert data["available_fury_tiers"][0]["depth"] == 2
         assert data["available_fury_tiers"][0]["control_surrendered"] == 4
         assert data["available_fury_tiers"][0]["is_berserk"] is True
         assert data["available_fury_tiers"][0]["full_intensity"] == 6
-        assert data["eligible_fury_anchors"][0]["provocation_cap"] == 3
+        assert data["eligible_fury_resonances"][0]["provocation_cap"] == 3
         assert data["soulfray_warning"] is None
 
 
@@ -132,23 +132,18 @@ class TestCombatActionsDescriptorEnrichment(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         from actions.factories import ActionTemplateFactory
-        from world.character_sheets.factories import CharacterSheetFactory
         from world.checks.factories import CheckTypeFactory
         from world.combat.constants import ParticipantStatus
         from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
         from world.magic.factories import (
+            CharacterResonanceFactory,
             CharacterTechniqueFactory,
             FuryConfigFactory,
             FuryTierFactory,
+            KindledStrengthTierFactory,
+            ResonanceFactory,
             TechniqueFactory,
         )
-        from world.relationships.constants import LabelAwareness, TypeFamily
-        from world.relationships.factories import (
-            CharacterRelationshipFactory,
-            RelationshipLabelFactory,
-            RelationshipTypeFactory,
-        )
-        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
         from world.scenes.constants import RoundStatus
 
         # Active DECLARING encounter with an ACTIVE participant.
@@ -183,35 +178,10 @@ class TestCombatActionsDescriptorEnrichment(TestCase):
             depth=3,
         )
 
-        # A mutual TEACHING label at tier 1 on both sides so provocation_cap >= 1
-        # (get_relationship_tier requires a mutual teaching-family label + both
-        # sides' claimed tier -- #3957 replaced the old track/tier-threshold shape).
-        cls.anchor_sheet = CharacterSheetFactory()
-        source_tenure = RosterTenureFactory(
-            roster_entry=RosterEntryFactory(character_sheet=cls.sheet)
-        )
-        anchor_tenure = RosterTenureFactory(
-            roster_entry=RosterEntryFactory(character_sheet=cls.anchor_sheet)
-        )
-        teaching_type = RelationshipTypeFactory(name="Mentorship", family=TypeFamily.TEACHING)
-        cls.relationship = CharacterRelationshipFactory(
-            source=cls.sheet, target=cls.anchor_sheet, is_active=True, tier=1
-        )
-        reverse = CharacterRelationshipFactory(
-            source=cls.anchor_sheet, target=cls.sheet, is_active=True, tier=1
-        )
-        RelationshipLabelFactory(
-            relationship=cls.relationship,
-            type=teaching_type,
-            awareness=LabelAwareness.PUBLIC,
-            declared_by_tenure=source_tenure,
-        )
-        RelationshipLabelFactory(
-            relationship=reverse,
-            type=teaching_type,
-            awareness=LabelAwareness.PUBLIC,
-            declared_by_tenure=anchor_tenure,
-        )
+        # A held resonance, and a strength row deep enough to give in to it.
+        KindledStrengthTierFactory(rank=3, give_in_max_depth=1)
+        cls.resonance = ResonanceFactory()
+        CharacterResonanceFactory(character_sheet=cls.sheet, resonance=cls.resonance)
 
     def test_cast_descriptor_carries_fury_tiers(self) -> None:
         actions = _combat_actions(self.character)
@@ -228,8 +198,8 @@ class TestCombatActionsDescriptorEnrichment(TestCase):
         cast = next(a for a in actions if a.ref.technique_id == self.technique.pk)
         self.assertIsNone(cast.soulfray_warning)
 
-    def test_anchors_listed_only_for_nonzero_bond(self) -> None:
+    def test_held_resonance_listed_while_a_strength_reaches_a_tier(self) -> None:
         actions = _combat_actions(self.character)
         cast = next(a for a in actions if a.ref.technique_id == self.technique.pk)
-        self.assertTrue(any(a.provocation_cap >= 1 for a in cast.eligible_fury_anchors))
-        self.assertTrue(all(a.provocation_cap >= 1 for a in cast.eligible_fury_anchors))
+        self.assertEqual([r.id for r in cast.eligible_fury_resonances], [self.resonance.pk])
+        self.assertTrue(all(r.provocation_cap >= 1 for r in cast.eligible_fury_resonances))

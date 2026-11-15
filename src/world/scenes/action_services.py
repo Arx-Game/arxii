@@ -225,7 +225,7 @@ if TYPE_CHECKING:
     )
     from world.conditions.models import ConditionInstance, TreatmentTemplate
     from world.conditions.types import TreatmentOutcome
-    from world.magic.models import FuryTier, PendingAlteration, Technique, Thread
+    from world.magic.models import FuryTier, PendingAlteration, Resonance, Technique, Thread
     from world.magic.types import SoulfrayReveal
     from world.magic.types.pull import CastPullDeclaration
     from world.roster.models import RosterTenure
@@ -531,7 +531,7 @@ def create_action_request(  # noqa: PLR0913 - the one dispatch orchestrator
     ritual_id: int | None = None,
     strain_commitment: int = 0,
     fury_commitment: FuryTier | None = None,
-    fury_anchor: CharacterSheet | None = None,
+    fury_resonance: Resonance | None = None,
     delivery: str = "",
     delivery_receivers: list[Persona] | None = None,
     additional_target_personas: list[Persona] | None = None,
@@ -572,7 +572,7 @@ def create_action_request(  # noqa: PLR0913 - the one dispatch orchestrator
             CommittingDeclaration mixin and consumed downstream when the
             interaction is recorded.
         fury_commitment: Optional FuryTier the initiator declares for this action.
-        fury_anchor: CharacterSheet of the anchor character whose bond caps the tier.
+        fury_resonance: the kindled Resonance she gives in to; its strength caps the tier.
         delivery: Explicit audience-routing override (#903). Blank defers to
             the template's default_delivery at resolution time.
         delivery_receivers: Explicit WHISPER audience. Empty/None = the
@@ -658,7 +658,7 @@ def create_action_request(  # noqa: PLR0913 - the one dispatch orchestrator
         technique=technique,
         strain_commitment=strain_commitment,
         fury_commitment=fury_commitment,
-        fury_anchor=fury_anchor,
+        fury_resonance=fury_resonance,
         delivery=delivery,
         treatment=treatment,
         target_condition_instance=target_condition_instance,
@@ -1459,7 +1459,7 @@ def _resolve_action_against_persona(
             effort_level=effort_level,
             strain_commitment=action_request.strain_commitment,
             fury_commitment=action_request.fury_commitment,
-            fury_anchor=action_request.fury_anchor,
+            fury_resonance=action_request.fury_resonance,
             extra_traits=technique_terms,
         )
         # Spend when the main check rolled; a resolution that paused before it carries
@@ -1862,7 +1862,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
     effort_level: str | None = None,
     strain_commitment: int = 0,
     fury_commitment: FuryTier | None = None,
-    fury_anchor: CharacterSheet | None = None,
+    fury_resonance: Resonance | None = None,
     cast_pull: CastPullDeclaration | None = None,
     extra_traits: Sequence[ExtraTraitTerm] = (),
 ) -> EnhancedSceneActionResult:
@@ -1892,7 +1892,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
             technique's baseline cost. Forwarded to use_technique so the cost
             calculation accounts for the strain.
         fury_commitment: Optional FuryTier the player declared.
-        fury_anchor: CharacterSheet of the anchor character (bond caps the tier).
+        fury_resonance: the kindled Resonance she gives in to (its strength caps the tier).
         extra_traits: Skill terms the action's main check adds (#4450), passed to
             start_action_resolution. The caller collects the matching modifiers.
 
@@ -1917,7 +1917,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
     fury = fury_cast_for(
         character=character,
         fury_commitment=fury_commitment,
-        fury_anchor=fury_anchor,
+        fury_resonance=fury_resonance,
         source_technique=technique,
     )
 

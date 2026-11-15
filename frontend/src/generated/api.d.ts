@@ -28879,13 +28879,6 @@ export interface components {
     AlternateSelfRequest: {
       display_name?: string;
     };
-    /** @description Read-only representation of one eligible bonded fury anchor (#1543). */
-    AnchorOption: {
-      readonly id: number;
-      readonly name: string;
-      readonly provocation_cap: number;
-      readonly tier_full_intensities: components['schemas']['AnchorTierIntensity'][];
-    };
     /**
      * @description * `pool` - Every group of a type in a realm
      *     * `listed` - Groups I name
@@ -28895,11 +28888,6 @@ export interface components {
      * @enum {string}
      */
     AnchorSourceEnum: 'pool' | 'listed' | 'same_as' | 'served_house' | 'own_family';
-    /** @description Read-only full-share intensity of one Fury tier under one anchor (#4738). */
-    AnchorTierIntensity: {
-      readonly tier_id: number;
-      readonly full_intensity: number;
-    };
     AngleView: {
       group_id: number;
       faction_rule_id: number;
@@ -33961,7 +33949,8 @@ export interface components {
      */
     DriftConversionOffer: {
       readonly id: number;
-      readonly scene_id: number;
+      /** @description The scene the offer first opened in. */
+      readonly scene_id: number | null;
       readonly character_id: number;
       readonly caps: components['schemas']['DriftConversionCap'][];
       readonly rite_ready: boolean;
@@ -35570,6 +35559,18 @@ export interface components {
       | 'mend';
     FundWardResult: {
       resonance_reserve: number;
+    };
+    /** @description Read-only representation of one resonance a character can give in to (#5124). */
+    FuryResonanceOption: {
+      readonly id: number;
+      readonly name: string;
+      readonly provocation_cap: number;
+      readonly tier_full_intensities: components['schemas']['FuryResonanceTierIntensity'][];
+    };
+    /** @description Read-only full-share intensity of one Fury tier at one resonance's strength (#4738). */
+    FuryResonanceTierIntensity: {
+      readonly tier_id: number;
+      readonly full_intensity: number;
     };
     /** @description Read-only representation of one selectable FuryTier (#1543). */
     FuryTierOption: {
@@ -48472,7 +48473,7 @@ export interface components {
       readonly is_movement: boolean;
       readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
       readonly available_fury_tiers: components['schemas']['FuryTierOption'][];
-      readonly eligible_fury_anchors: components['schemas']['AnchorOption'][];
+      readonly eligible_fury_resonances: components['schemas']['FuryResonanceOption'][];
       readonly cast_preview: components['schemas']['CastPreview'] | null;
       readonly is_ultimate: boolean;
       readonly enchants_strike: boolean;
@@ -50065,6 +50066,8 @@ export interface components {
        *     * `CORRUPTION_CLEANSING` - Corruption cleansing payout
        *     * `SINEATING` - Sineating payout
        *     * `CHARACTER_CREATION` - Character creation
+       *     * `KINDLED_DEED` - Kindled deed
+       *     * `EMBRACED_DEED` - Embraced deed
        */
       readonly source: components['schemas']['ResonanceGrantSourceEnum'];
       /** Format: date-time */
@@ -50100,6 +50103,8 @@ export interface components {
      *     * `CORRUPTION_CLEANSING` - Corruption cleansing payout
      *     * `SINEATING` - Sineating payout
      *     * `CHARACTER_CREATION` - Character creation
+     *     * `KINDLED_DEED` - Kindled deed
+     *     * `EMBRACED_DEED` - Embraced deed
      * @enum {string}
      */
     ResonanceGrantSourceEnum:
@@ -50127,7 +50132,9 @@ export interface components {
       | 'DRIFT_CORRECTION'
       | 'CORRUPTION_CLEANSING'
       | 'SINEATING'
-      | 'CHARACTER_CREATION';
+      | 'CHARACTER_CREATION'
+      | 'KINDLED_DEED'
+      | 'EMBRACED_DEED';
     ResonanceLine: {
       resonance: number;
       tier: components['schemas']['ResonanceLineTierEnum'];
@@ -50830,7 +50837,7 @@ export interface components {
       /** @default 0 */
       strain_commitment: number;
       fury_commitment_id?: number | null;
-      fury_anchor_id?: number | null;
+      fury_resonance_id?: number | null;
       /** @default  */
       delivery: components['schemas']['DeliveryEnum'] | components['schemas']['BlankEnum'];
       delivery_receiver_ids?: number[];
@@ -54191,7 +54198,7 @@ export interface components {
       /** @default 0 */
       strain_commitment: number;
       fury_commitment_id?: number | null;
-      fury_anchor_id?: number | null;
+      fury_resonance_id?: number | null;
       pull?: components['schemas']['CastPullWithBurnRequestRequest'] | null;
       /** @default false */
       use_base_form: boolean;
@@ -76921,6 +76928,8 @@ export interface operations {
          *     * `CORRUPTION_CLEANSING` - Corruption cleansing payout
          *     * `SINEATING` - Sineating payout
          *     * `CHARACTER_CREATION` - Character creation
+         *     * `KINDLED_DEED` - Kindled deed
+         *     * `EMBRACED_DEED` - Embraced deed
          */
         source?:
           | 'CHARACTER_CREATION'
@@ -76930,8 +76939,10 @@ export interface operations {
           | 'DISTINCTION'
           | 'DRAMATIC_MOMENT'
           | 'DRIFT_CORRECTION'
+          | 'EMBRACED_DEED'
           | 'ENTRY_FLOURISH'
           | 'FALL_CONVERSION'
+          | 'KINDLED_DEED'
           | 'MISSION_REPORT'
           | 'MISSION_REWARD'
           | 'OUTFIT_TRICKLE'

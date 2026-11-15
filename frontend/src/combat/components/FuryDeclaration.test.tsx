@@ -21,10 +21,10 @@ const tiers = [
     full_intensity: 18,
   },
 ];
-const anchors = [
+const resonances = [
   {
     id: 7,
-    name: 'Rival',
+    name: 'Rage',
     provocation_cap: 1,
     tier_full_intensities: [
       { tier_id: 1, full_intensity: 9 },
@@ -33,7 +33,7 @@ const anchors = [
   },
   {
     id: 8,
-    name: 'Ilse',
+    name: 'Wrath',
     provocation_cap: 3,
     tier_full_intensities: [
       { tier_id: 1, full_intensity: 10 },
@@ -42,25 +42,25 @@ const anchors = [
   },
 ];
 
-function renderDeclaration(tierId: number | null, anchorId: number | null) {
+function renderDeclaration(tierId: number | null, resonanceId: number | null) {
   return render(
     <FuryDeclaration
       tiers={tiers}
-      anchors={anchors}
+      resonances={resonances}
       tierId={tierId}
-      anchorId={anchorId}
+      resonanceId={resonanceId}
       onTierChange={() => {}}
-      onAnchorChange={() => {}}
+      onResonanceChange={() => {}}
     />
   );
 }
 
 describe('FuryDeclaration', () => {
-  it('is headed "Surrender control" with tier and anchor selects', () => {
+  it('is headed "Surrender control" with tier and resonance selects', () => {
     renderDeclaration(null, null);
     expect(screen.getByText('Surrender control')).toBeInTheDocument();
     expect(screen.getByTestId('fury-tier-select')).toBeInTheDocument();
-    expect(screen.getByTestId('fury-anchor-select')).toBeInTheDocument();
+    expect(screen.getByTestId('fury-resonance-select')).toBeInTheDocument();
     expect(screen.queryByTestId('fury-preview')).not.toBeInTheDocument();
   });
 
@@ -71,14 +71,14 @@ describe('FuryDeclaration', () => {
     expect(screen.getByText('Unbound: surrender 12 control (Berserk)')).toBeInTheDocument();
   });
 
-  it("previews the trade with the chosen anchor's full-share intensity", () => {
+  it("previews the trade with the chosen resonance's full-share intensity", () => {
     renderDeclaration(1, 8);
     expect(screen.getByTestId('fury-preview')).toHaveTextContent(
       '6 control → up to +10 intensity, by your roll'
     );
   });
 
-  it('shows an over-cap warning when the chosen tier exceeds the anchor cap', () => {
+  it('shows an over-cap warning when the chosen tier exceeds the resonance cap', () => {
     renderDeclaration(2, 7);
     expect(screen.getByTestId('fury-over-cap-warning')).toBeInTheDocument();
   });

@@ -58,8 +58,7 @@ def _own_sheet(caller: ObjectDB) -> CharacterSheet:
 def _open_offer(sheet: CharacterSheet) -> DriftConversionOffer:
     """The character's open offer: one whose scene has not finished, wherever they stand.
 
-    A character in two live scenes holds two offers (one per scene); the most recent one
-    is used, the same order the web inbox lists them in.
+    A character holds one offer (#5124), so there is at most one to find.
     """
     from world.magic.models import DriftConversionOffer  # noqa: PLC0415
 

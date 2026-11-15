@@ -33,6 +33,9 @@ Submodules (see Scope 6 §4.4):
 - ritual_pool: RitualAnimaContribution (#3001)
 - reincarnation: Reincarnation
 - grant: ResonanceGrant
+- kindling: KindlingSituation, KindledStrengthTier, KindlingConfig, KindledDeedAward,
+  RallyKindlingStrength, Kindling (#5124)
+- reflection: Reflection, SettlingRite (#5124)
 - progression_milestone: MagicProgressionMilestone
 - drift: DriftCorrectionConfig, DriftCorrectionOutcomeShare, DriftConversionOffer,
   DriftConversionCap (#4733)
@@ -155,6 +158,14 @@ from world.magic.models.grants import (
     TraditionGiftGrant,
     TraditionRitualGrant,
 )
+from world.magic.models.kindling import (
+    KindledDeedAward,
+    KindledStrengthTier,
+    Kindling,
+    KindlingConfig,
+    KindlingSituation,
+    RallyKindlingStrength,
+)
 from world.magic.models.knowledge import CharacterRitualKnowledge
 from world.magic.models.liturgy import RitualLiturgy
 from world.magic.models.magic_activity import MagicActivitySkill
@@ -182,6 +193,7 @@ from world.magic.models.power_config import (
 # prepared per-character Audere text (#4101)
 from world.magic.models.prepared_text import CharacterCrossingText, CharacterSurgeText
 from world.magic.models.progression_milestone import MagicProgressionMilestone
+from world.magic.models.reflection import Reflection, SettlingRite
 from world.magic.models.reincarnation import Reincarnation
 from world.magic.models.relationship_bond_pull_tuning import RelationshipBondPullTuning
 from world.magic.models.resonance_environment import AffinityInteraction, ResonanceEnvironmentConfig
@@ -390,6 +402,12 @@ __all__ = [
     # rituals
     "ImbuingProseTemplate",
     "IntensityTier",
+    # kindled resonances (#5124)
+    "KindledDeedAward",
+    "KindledStrengthTier",
+    "Kindling",
+    "KindlingConfig",
+    "KindlingSituation",
     # known ultimates (#4098)
     "KnownUltimate",
     # power config (#637)
@@ -431,6 +449,8 @@ __all__ = [
     "PresentationEndorsement",
     # reincarnation
     "PriceComponentRequirement",
+    "RallyKindlingStrength",
+    "Reflection",
     "Reincarnation",
     # relationship bond pull modulation (#1849)
     "RelationshipBondPullTuning",
@@ -467,6 +487,7 @@ __all__ = [
     "SanctumPurgingRetentionAward",
     # endorsement (Spec C §2.3)
     "SceneEntryEndorsement",
+    "SettlingRite",
     # signature motif bonuses (#1582)
     "SignatureMotifBonus",
     "SignatureMotifBonusAppliedCondition",

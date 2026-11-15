@@ -36,9 +36,9 @@ _SECONDARY_KEYWORD = "secondary"
 _BASE_KEYWORD = "base"
 # Standalone keyword that waives a subtle style's cast concealment for this cast (#2710).
 _OPENLY_KEYWORD = "openly"
-# Keyword prefixes used to parse fury=<tier> anchor=<name> from cast command args.
+# Keyword prefixes used to parse fury=<tier> givein=<resonance> from cast command args.
 _FURY_PREFIX = "fury="
-_ANCHOR_PREFIX = "anchor="
+_GIVE_IN_PREFIX = "givein="
 # Separates a pulled thread from the resonance paying for it: ``pull=<thread>:<resonance>``.
 _PAYER_SEPARATOR = ":"
 # Keyword prefix for burning resonance with a pull when straining (#4736).
@@ -63,13 +63,13 @@ class PullParsingMixin:
         """Return True when *tok* marks the start of a non-pull keyword boundary.
 
         Stops on any ``pull_keys``-prefixed token (``pull=``, ``resonance=``,
-        ``tier=``), on ``effort=`` / ``secondary``, and on ``fury=`` / ``anchor=``
+        ``tier=``), on ``effort=`` / ``secondary``, and on ``fury=`` / ``givein=``
         (all handled elsewhere) so a greedy pull value never swallows them.
         """
         lower = tok.lower()
         return (
             any(lower.startswith(k + "=") for k in pull_keys)
-            or lower.startswith((_EFFORT_PREFIX, _FURY_PREFIX, _ANCHOR_PREFIX, _BURN_PREFIX))
+            or lower.startswith((_EFFORT_PREFIX, _FURY_PREFIX, _GIVE_IN_PREFIX, _BURN_PREFIX))
             or lower in (_SECONDARY_KEYWORD, _BASE_KEYWORD)
         )
 

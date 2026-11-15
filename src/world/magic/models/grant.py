@@ -154,6 +154,37 @@ class ResonanceGrant(SharedMemoryModel):
         help_text="Set when source=WORSHIP_RITE (#3777).",
     )
 
+    source_kindling_situation = models.ForeignKey(
+        "arxii.KindlingSituation",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="resonance_grants",
+        help_text=(
+            "Set when source=KINDLED_DEED (#5124); the authored situation that held. "
+            "PROTECT: staff retire a used row with is_active."
+        ),
+    )
+    source_settling_rite = models.ForeignKey(
+        "arxii.SettlingRite",
+        null=True,
+        blank=True,
+        # RESTRICT, never SET_NULL: res_grant_embraced_deed_shape requires this FK on every
+        # EMBRACED_DEED grant. RESTRICT (not PROTECT) so deleting a character, whose grants
+        # and rites go together, still works.
+        on_delete=models.RESTRICT,
+        related_name="resonance_grants",
+        help_text="Set when source=EMBRACED_DEED (#5124); the rite that grew the deed.",
+    )
+    source_reflection = models.ForeignKey(
+        "arxii.Reflection",
+        null=True,
+        blank=True,
+        on_delete=models.RESTRICT,
+        related_name="resonance_grants",
+        help_text="Set when source=EMBRACED_DEED (#5124); the reflection the rite applied.",
+    )
+
     class Meta:
         indexes = [
             models.Index(
@@ -184,6 +215,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="ROOM_RESIDENCE"),
             ),
@@ -205,6 +239,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="STAFF_GRANT"),
             ),
@@ -227,6 +264,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="MISSION_REPORT"),
             ),
@@ -250,6 +290,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="STAKE_REWARD"),
             ),
@@ -271,6 +314,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="POSE_ENDORSEMENT"),
             ),
@@ -292,6 +338,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="SCENE_ENTRY"),
             ),
@@ -313,6 +362,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="OUTFIT_TRICKLE"),
             ),
@@ -337,6 +389,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="SANCTUM_WEAVING"),
             ),
@@ -357,6 +412,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="SANCTUM_OWNER_BONUS"),
             ),
@@ -379,6 +437,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="SANCTUM_DISSOLUTION_RECOVERY"),
             ),
@@ -400,6 +461,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="PROJECT_CONTRIBUTION"),
             ),
@@ -421,6 +485,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="ENTRY_FLOURISH"),
             ),
@@ -442,6 +509,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="DRAMATIC_MOMENT"),
             ),
@@ -463,6 +533,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="STYLE_PRESENTATION"),
             ),
@@ -484,6 +557,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_character_distinction__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="MISSION_REWARD"),
             ),
@@ -508,6 +584,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="DISTINCTION"),
             ),
@@ -530,6 +609,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="COMPROMISE"),
             ),
@@ -550,6 +632,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="PENANCE"),
             ),
@@ -570,6 +655,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="FALL_CONVERSION"),
             ),
@@ -594,6 +682,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="DRIFT_CORRECTION"),
             ),
@@ -616,6 +707,9 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
                     & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="CHARACTER_CREATION"),
             ),
@@ -638,8 +732,59 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
                     & Q(source_character_distinction__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
                 )
                 | ~Q(source="WORSHIP_RITE"),
+            ),
+            # KINDLED_DEED (#5124): the situation that held is the source and stays (PROTECT).
+            models.CheckConstraint(
+                name="res_grant_kindled_deed_shape",
+                check=(
+                    Q(source="KINDLED_DEED")
+                    & Q(source_kindling_situation__isnull=False)
+                    & Q(source_room_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
+                    & Q(source_sanctum_details__isnull=True)
+                    & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
+                    & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_settling_rite__isnull=True)
+                    & Q(source_reflection__isnull=True)
+                )
+                | ~Q(source="KINDLED_DEED"),
+            ),
+            # EMBRACED_DEED (#5124): the rite and the reflection it applied are the source.
+            models.CheckConstraint(
+                name="res_grant_embraced_deed_shape",
+                check=(
+                    Q(source="EMBRACED_DEED")
+                    & Q(source_settling_rite__isnull=False)
+                    & Q(source_reflection__isnull=False)
+                    & Q(source_room_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
+                    & Q(source_sanctum_details__isnull=True)
+                    & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
+                    & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                )
+                | ~Q(source="EMBRACED_DEED"),
             ),
         ]
 

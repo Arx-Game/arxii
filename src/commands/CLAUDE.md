@@ -576,7 +576,7 @@ actions, backends, and service functions.
   - `CmdDeclareTechnique` (`cast`, alias `declare`) — unified scene-adaptive
     technique cast (#1351/#1330); thin `DispatchCommand` that parses
     `cast <technique> [at <name>] [effort=<level>] [secondary]
-    [pull=<thread>[,…] resonance=<name> [tier=<1-3>] [beseech=N]] [fury=<tier> anchor=<name>]`
+    [pull=<thread>[,…] resonance=<name> [tier=<1-3>] [beseech=N]] [fury=<tier> givein=<resonance>]`
     and emits a SCENE_ADAPTIVE `ActionRef` keyed to `"cast_technique"`. Outside combat:
     runs `CastTechniqueAction.execute()` immediately (non-combat cast via
     `request_technique_cast`). In a DECLARING round: calls
@@ -619,10 +619,10 @@ actions, backends, and service functions.
     pull=<thread> resonance=<name> beseech=N` outside any encounter rolls the
     same petition check and gets the same bonus/debt treatment.
 
-    **Fury params** (`fury=<tier>` / `anchor=<name>`, #1454) — single-token values: `fury=`
-    names a `FuryTier` by name or depth; `anchor=` names the bonded character whose harm the
-    rage answers to (resolved to a `CharacterSheet` by character key). They inject
-    `fury_commitment_id` / `fury_anchor_id` into the dispatch kwargs, which `round_declaration`
+    **Fury params** (`fury=<tier>` / `givein=<resonance>`, #1454, #5124) — single-token values:
+    `fury=` names a `FuryTier` by name or depth; `givein=` names the resonance she gives in to
+    (resolved to a `Resonance` by name). They inject
+    `fury_commitment_id` / `fury_resonance_id` into the dispatch kwargs, which `round_declaration`
     forwards onto the `CombatRoundAction`; `resolve_combat_technique` consumes them: the tier
     is control she surrenders for the rest of the engagement, her control roll decides the
     intensity it buys, and a Berserk tier applies Berserk (#4738). The caster is told
