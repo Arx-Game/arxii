@@ -139,6 +139,9 @@ class KindlingAdminPagesTests(TestCase):
         url = reverse("admin:arxii_kindlingconfig_change", args=[self.config.pk])
         response = self.client.get(url)
         self.assertEqual(len(response.context["inline_admin_formsets"]), 3)
+        tiers = response.context["inline_admin_formsets"][0].formset
+        self.assertNotIn("rank", tiers.forms[0].fields)
+        self.assertEqual(len(tiers.forms), 3)
         page = response.content.decode()
         self.assertIn("Staff can rename each strength", page)
         # The demo's order: strengths, then the harm property, then Rally, then earned.
@@ -153,6 +156,7 @@ class KindlingAdminPagesTests(TestCase):
         success, good = CheckOutcomeFactory(), CheckOutcomeFactory()
         data["harm_property"] = str(harm.pk)
         data["kindledstrengthtier-0-name"] = "Glimmer"
+        data["kindledstrengthtier-0-rank"] = "9"  # not a form field: must be ignored
         data["kindledstrengthtier-0-pull_levels"] = "4"
         rally = "rallykindlingstrength"
         data[f"{rally}-0-outcome_tier"] = str(success.pk)
@@ -166,5 +170,6 @@ class KindlingAdminPagesTests(TestCase):
         self.assertEqual(KindlingConfig.objects.get(pk=self.config.pk).harm_property, harm)
         tier = KindledStrengthTier.objects.get(rank=1)
         self.assertEqual((tier.name, tier.pull_levels), ("Glimmer", 4))
+        self.assertFalse(KindledStrengthTier.objects.filter(rank=9).exists())
         self.assertEqual(RallyKindlingStrength.objects.get(outcome_tier=success).strength, 2)
         self.assertEqual(KindledDeedAward.objects.get(outcome_tier=good).amount, 5)

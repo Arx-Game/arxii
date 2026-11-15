@@ -12,16 +12,16 @@ from django.forms.models import _get_foreign_key, inlineformset_factory
 from django.test import SimpleTestCase, TestCase
 
 from world.admin_utils import OneRowPerFormSet
+from world.magic.admin import ConfigRowsInline
 from world.roster.constants import ParentageKind
 from world.roster.factories import KinspersonFactory
 from world.roster.models import Kinsperson, ParentageEdge
 
 
 def _one_row_per_value_rules(inline, parent_model) -> list[tuple[str, ...]]:
-    try:
-        fk = _get_foreign_key(parent_model, inline.model, fk_name=inline.fk_name)
-    except ValueError:
+    if issubclass(inline, ConfigRowsInline):
         return []  # a whole-table inline (the Kindling config page) has no parent key
+    fk = _get_foreign_key(parent_model, inline.model, fk_name=inline.fk_name)
     opts = inline.model._meta
     rules = [tuple(constraint.fields) for constraint in opts.total_unique_constraints]
     rules.extend(tuple(names) for names in opts.unique_together)

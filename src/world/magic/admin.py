@@ -3302,7 +3302,6 @@ class KindledStrengthTierForm(forms.ModelForm):
         fields = "__all__"  # noqa: DJ007 - the admin shows every authored column
         labels = {
             "name": "Strength",
-            "rank": "Order",
             "min_bond_tier": "Reached by bond tier",
             "min_severity": "Reached by severity",
             "pull_levels": "Pull reads higher by",
@@ -3389,8 +3388,12 @@ class KindledStrengthTierInline(ConfigRowsInline):
 
     model = KindledStrengthTier
     form = KindledStrengthTierForm
+    # The three rows are seeded. Their rank is what every stored strength means, so it is
+    # shown here but never edited, and no row is added or removed from this page.
     extra = 0
+    max_num = 0
     can_delete = False
+    readonly_fields = ["rank"]
     verbose_name_plural = "What each strength gives"
     fields = [
         "name",
@@ -3404,6 +3407,10 @@ class KindledStrengthTierInline(ConfigRowsInline):
         "dig_deep_scale_percent",
         "earn_percent",
     ]
+
+    def has_add_permission(self, request: HttpRequest, obj: object = None) -> bool:  # noqa: ARG002
+        return False
+
     note = (
         "One row per strength, so the gains follow a curve, not a fixed step per point. Staff "
         "can rename each strength and tune its numbers; the game only knows their order."
