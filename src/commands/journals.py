@@ -37,6 +37,7 @@ _KEY_ENTRY = "entry"
 _KEY_VALUE = "value"
 _KEY_ABOUT = "about"
 _FLAG_PUBLIC = "public"
+_SWITCH_REFLECT = "reflect"
 _VALUE_ABOUT_NONE = "none"
 
 # Multi-word value keys — their value runs until the next ``key=`` token or a
@@ -61,11 +62,17 @@ class CmdJournal(ArxCommand):
         journal                         - list your recent entries
         journal list                    - same as bare ``journal``
         journal write title=<text> body=<text> [public] [tags=a,b,c] [about=<id>]
+        journal/reflect <deed number or resonance>=<embrace|disown> title=<text> body=<text>
+            [public] [tags=a,b,c] [about=<id>]
         journal respond <id|#> type=praise|retort|condemn title=<text> body=<text>
         journal edit <id|#> [title=<text>] [body=<text>] [about=<id>|about=none]
         journal disposition sheet=<reveal|seal>
         journal disposition entry=<id|#> value=<inherit|reveal|seal>
         journal consent rivals|anyone
+
+    ``journal/reflect`` writes an entry like ``write`` and records that it reflects on a deed
+    (the number ``reflect`` lists) or on the resonance unsettling you (its name), embracing or
+    disowning it. Only you see the reflection.
 
     ``title`` / ``body`` are free text - their values run to the next
     ``key=`` token. ``public`` is a bare flag (entries are private by default).
@@ -81,10 +88,14 @@ class CmdJournal(ArxCommand):
     aliases: list[str] = []
     locks = "cmd:all()"
     action = None
+    takes_switches = True
 
     def func(self) -> None:
         try:
             raw = (self.args or "").strip()
+            if self.switches:
+                self._switched(raw)
+                return
             if not raw or raw.lower() == _SUBVERB_LIST:
                 self._show_recent()
                 return
@@ -108,7 +119,22 @@ class CmdJournal(ArxCommand):
 
     # -- write verbs ----------------------------------------------------------
 
-    def _write(self, rest: str) -> None:
+    def _switched(self, rest: str) -> None:
+        if list(self.switches) != [_SWITCH_REFLECT]:
+            raise CommandError(self._usage())
+        from commands.reflection import reflection_kwargs_and_rest  # noqa: PLC0415
+
+        reflection, rest = reflection_kwargs_and_rest(
+            self._actor_sheet(self.caller),
+            rest,
+            usage=(
+                "Usage: journal/reflect <deed or resonance>=<embrace|disown> "
+                "title=<text> body=<text> [public] [tags=a,b,c] [about=<id>]"
+            ),
+        )
+        self._write(rest, reflection=reflection)
+
+    def _write(self, rest: str, *, reflection: dict[str, Any] | None = None) -> None:
         kwargs, flags = parse_kv_and_flags(
             rest, multiword_keys=_MULTIWORD_KEYS, known_flags=_KNOWN_FLAGS
         )
@@ -127,6 +153,7 @@ class CmdJournal(ArxCommand):
             is_public=_FLAG_PUBLIC in flags,
             tags=tags,
             about_id=about_id,
+            **(reflection or {}),
         )
         if result.message:
             self.msg(result.message)

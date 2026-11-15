@@ -632,6 +632,13 @@ class ReflectionChoice(models.TextChoices):
     DISOWN = "DISOWN", "Disown"
 
 
+class ReflectionTargetKind(models.TextChoices):
+    """What a "Reflecting on" row can name (#5124): one deed, or the unsettling resonance."""
+
+    DEED = "deed", "Deed"
+    RESONANCE = "resonance", "Resonance"
+
+
 class KindlingSource(models.TextChoices):
     """How a stored ``Kindling`` row came to be (#5124): a Rally or a GM."""
 

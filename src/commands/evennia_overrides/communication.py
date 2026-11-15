@@ -28,6 +28,7 @@ from world.scenes.place_models import Place
 
 _CMD_ALL_LOCK = "cmd:all()"
 _SWITCH_PROMPT = "prompt"
+_SWITCH_REFLECT = "reflect"
 
 
 def _flag_page_contact(sender_char: object, target_char: object) -> None:
@@ -392,22 +393,46 @@ class CmdPose(ArxCommand):
 
     Traditional MUSH convention: ``emote`` is an alias for pose (name-prefixed).
     Use ``emit`` for raw text with no automatic name prefix.
+
+    Usage:
+        pose <text>
+        pose/reflect <deed number or resonance>=<embrace|disown> <text>
+
+    ``pose/reflect`` poses ``<text>`` and records that it reflects on a deed (the number
+    ``reflect`` lists) or on the resonance unsettling you (its name), embracing or
+    disowning it. The room sees only the pose.
     """
 
     key = "pose"
     aliases: ClassVar[list[str]] = ["emote"]
     locks = _CMD_ALL_LOCK
     action = PoseAction()
+    takes_switches = True
 
     def resolve_action_args(self) -> dict[str, Any]:
-        text = (self.args or "").strip()
+        reflection: dict[str, Any] = {}
+        args = self.args or ""
+        if self.switches:
+            if list(self.switches) != [_SWITCH_REFLECT]:
+                msg = (
+                    "Usage: pose <text> | pose/reflect <deed or resonance>=<embrace|disown> <text>"
+                )
+                raise CommandError(msg)
+            from commands.reflection import reflection_kwargs_and_rest  # noqa: PLC0415
+
+            reflection, args = reflection_kwargs_and_rest(
+                self.caller.character_sheet,
+                args,
+                usage="Usage: pose/reflect <deed or resonance>=<embrace|disown> <text>",
+            )
+        text = args.strip()
         if not text:
             msg = "Pose what?"
             raise CommandError(msg)
         from commands.parsing import parse_targets_from_text  # noqa: PLC0415
 
         remaining, targets = parse_targets_from_text(text, self.caller.location)
-        result: dict[str, Any] = {"text": remaining or text}
+        result: dict[str, Any] = {"text": remaining or text, **reflection}
         if targets:
             result["targets"] = targets
         return result

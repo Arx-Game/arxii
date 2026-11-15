@@ -45,6 +45,7 @@ if TYPE_CHECKING:
 
     from flows.object_states.base_state import BaseState
     from world.gm.models import GMPrompt
+    from world.magic.types.reflection import PendingReflection
     from world.scenes.models import Interaction, Persona, Scene
     from world.scenes.place_models import Place
     from world.species.language_constants import Fluency
@@ -479,8 +480,13 @@ def _record_pose_submission(  # noqa: PLR0913
     reply_to: ReplyTarget | None,
     broadcast: Callable[[], None],
     client_request_id: object,
+    after_first_acceptance: Callable[[Interaction | None], None] | None = None,
 ) -> ActionResult | None:
-    """Record an idempotent pose and broadcast only on first acceptance."""
+    """Record an idempotent pose and broadcast only on first acceptance.
+
+    ``after_first_acceptance`` runs with the recorded row (None in an ephemeral scene) on first
+    acceptance only, never on a replay: a retried pose must not record its reflection twice.
+    """
     from world.scenes.interaction_services import idempotent_record_interaction  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
@@ -508,6 +514,8 @@ def _record_pose_submission(  # noqa: PLR0913
         )
     if not result.replayed:
         broadcast()
+        if after_first_acceptance is not None:
+            after_first_acceptance(result.interaction)
     return None
 
 
@@ -696,7 +704,13 @@ class OOCSayAction(Action):
 
 @dataclass
 class PoseAction(Action):
-    """Pose/emote to the room."""
+    """Pose/emote to the room.
+
+    An optional reflection (#5124) rides with the pose: ``reflect_choice`` (``EMBRACE`` or
+    ``DISOWN``) with one of ``reflect_grant_id`` (a kindled deed) or ``reflect_resonance_id``
+    (the resonance unsettling the poser). It is checked before anything is posted, recorded
+    once the pose is, and never reaches the room: only the pose text is broadcast.
+    """
 
     key: str = "pose"
     name: str = "Pose"
@@ -725,9 +739,18 @@ class PoseAction(Action):
             return place_error
         if not text:
             return ActionResult(success=False, message="Pose what?")
+        pending, reflection_error = _pending_pose_reflection(actor, kwargs)
+        if reflection_error is not None:
+            return reflection_error
         sdm = context.scene_data if context else SceneDataManager()
         caller_state = sdm.initialize_state_for_object(actor)
         target_personas = _characters_to_active_personas(targets) if targets else None
+
+        told: list[str] = []
+
+        def _reflect(interaction: Interaction | None) -> None:
+            if pending is not None:
+                told.append(_record_pose_reflection(actor, pending, interaction))
 
         client_request_id = kwargs.get("client_request_id")
         if client_request_id is not None:
@@ -739,12 +762,13 @@ class PoseAction(Action):
                 reply_to=reply_to,
                 broadcast=lambda: _broadcast_pose(actor, caller_state, text, place),
                 client_request_id=client_request_id,
+                after_first_acceptance=_reflect,
             )
             if failure is not None:
                 return failure
         else:
             _broadcast_pose(actor, caller_state, text, place)
-            record_interaction(
+            interaction = record_interaction(
                 character=actor,
                 content=text,
                 mode=InteractionMode.POSE,
@@ -752,9 +776,37 @@ class PoseAction(Action):
                 place=place,
                 reply_to=reply_to,
             )
+            _reflect(interaction)
         if targets:
             _flag_blocked_contact_for_targets(actor, targets, scene=_active_scene_for(actor))
-        return ActionResult(success=True)
+        return ActionResult(success=True, message=told[0] if told else None)
+
+
+def _pending_pose_reflection(
+    actor: ObjectDB, kwargs: dict[str, Any]
+) -> tuple[PendingReflection | None, ActionResult | None]:
+    """The checked reflection a pose asked for, or the refusal that stops the pose."""
+    from world.magic.exceptions import ReflectionError  # noqa: PLC0415
+    from world.magic.services.reflection import pending_reflection_from  # noqa: PLC0415
+
+    try:
+        return pending_reflection_from(actor.character_sheet, kwargs), None
+    except ReflectionError as exc:
+        return None, ActionResult(success=False, message=exc.user_message)
+
+
+def _record_pose_reflection(
+    actor: ObjectDB, pending: PendingReflection, interaction: Interaction | None
+) -> str:
+    """Record the reflection a pose carried, once the pose itself is down; returns the line
+    the poser reads."""
+    from world.magic.services.reflection import (  # noqa: PLC0415
+        record_pending_reflection,
+        recorded_line,
+    )
+
+    reflection = record_pending_reflection(actor.character_sheet, pending, writing=interaction)
+    return recorded_line(reflection)
 
 
 @dataclass

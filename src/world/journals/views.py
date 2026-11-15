@@ -335,6 +335,9 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
             tags=serializer.validated_data.get("tags"),
             posthumous_override=serializer.validated_data.get("posthumous_override"),
             about_id=serializer.validated_data.get("about"),
+            reflect_choice=serializer.validated_data.get("reflect_choice"),
+            reflect_grant_id=serializer.validated_data.get("reflect_grant_id"),
+            reflect_resonance_id=serializer.validated_data.get("reflect_resonance_id"),
         )
         if not result.success:
             return Response(

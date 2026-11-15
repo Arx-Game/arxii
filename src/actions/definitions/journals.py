@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from django.db import transaction
+
 from actions.base import Action
 from actions.prerequisites import HasCharacterSheetPrerequisite, Prerequisite, resolve_actor_sheet
 from actions.types import ActionResult, TargetType
@@ -71,6 +73,12 @@ class CreateJournalEntryAction(_BaseJournalAction):
     ) -> ActionResult:
         from world.journals.constants import PosthumousOverride  # noqa: PLC0415
         from world.journals.services import create_journal_entry  # noqa: PLC0415
+        from world.magic.exceptions import ReflectionError  # noqa: PLC0415
+        from world.magic.services.reflection import (  # noqa: PLC0415
+            pending_reflection_from,
+            record_pending_reflection,
+            recorded_line,
+        )
 
         sheet = self._sheet(actor)
         if sheet is None:
@@ -84,18 +92,34 @@ class CreateJournalEntryAction(_BaseJournalAction):
         if error is not None:
             return ActionResult(success=False, message=error)
 
-        entry = create_journal_entry(
-            author=sheet,
-            title=kwargs.get("title", ""),
-            body=kwargs.get("body", ""),
-            is_public=bool(kwargs.get("is_public", False)),
-            tags=kwargs.get("tags"),
-            posthumous_override=posthumous_override,
-            about=about,
-        )
+        # A reflection (#5124) is checked before the entry is written, so a refused one costs
+        # the writer nothing.
+        try:
+            pending = pending_reflection_from(sheet, kwargs)
+        except ReflectionError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        with transaction.atomic():
+            entry = create_journal_entry(
+                author=sheet,
+                title=kwargs.get("title", ""),
+                body=kwargs.get("body", ""),
+                is_public=bool(kwargs.get("is_public", False)),
+                tags=kwargs.get("tags"),
+                posthumous_override=posthumous_override,
+                about=about,
+            )
+            reflection = (
+                record_pending_reflection(sheet, pending, writing=entry)
+                if pending is not None
+                else None
+            )
         return ActionResult(
             success=True,
-            message=f"You write a new journal entry: {entry.title}.",
+            message=(
+                f"You write a new journal entry: {entry.title}."
+                + (f" {recorded_line(reflection)}" if reflection is not None else "")
+            ),
             data={"entry_id": entry.pk},
         )
 

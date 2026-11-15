@@ -976,6 +976,29 @@ class NotUnsettledError(MagicError):
     user_message = "You are not unsettled, so there is nothing to accept."
 
 
+class ReflectionError(MagicError):
+    """A reflection cannot be recorded (#5124); the raise site names which rule it broke."""
+
+    user_message = "You cannot reflect on that."
+
+    def __init__(self, user_message: str | None = None) -> None:
+        super().__init__(user_message)
+        if user_message:
+            self.user_message = user_message
+
+
+class DeedAlreadyReflectedError(ReflectionError):
+    """A deed can be reflected on only once (#5124)."""
+
+    user_message = "You have already reflected on that deed."
+
+
+class ResonanceNotUnsettlingError(ReflectionError):
+    """Only the resonance that is unsettling the character can be reflected on (#5124)."""
+
+    user_message = "That resonance is not what is unsettling you."
+
+
 class ThreadResonanceChangeError(MagicError):
     """A thread cannot be moved to the asked-for resonance (slice 6 of #4672).
 

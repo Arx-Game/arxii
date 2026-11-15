@@ -157,6 +157,7 @@ from commands.progression import CmdProgressionUnlock, CmdTraining
 from commands.progression_rewards import CmdKudos, CmdNominate, CmdPathIntent, CmdRandomScene
 from commands.projects import CmdProject
 from commands.react import CmdReact
+from commands.reflection import CmdReflect  # #5124
 from commands.relationships import CmdRelationship
 from commands.resonance import CmdResonance
 from commands.retire import CmdRetire  # #2287
@@ -615,6 +616,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdResonance,
             # #5124 - which resonances are kindled, how strongly, and why.
             CmdKindledResonances,
+            # #5124 - what you can reflect on, for pose/reflect and journal/reflect.
+            CmdReflect,
             # #2640 — the Sphinx of Black Quartz's vow-suitability verdict.
             CmdSphinx,
             # #4929 - a vow holder's focus picks: list them, choose one.

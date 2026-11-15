@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import serializers
 
+from world.magic.serializers_reflection import ReflectionFieldsMixin
 from world.scenes.constants import InteractionMode, PoseKind, ScenePrivacyMode
 from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.line_rendering import render_line
@@ -1084,7 +1085,7 @@ class ReplyTargetSerializer(serializers.Serializer):
         return attrs
 
 
-class PoseSubmitSerializer(serializers.Serializer):
+class PoseSubmitSerializer(ReflectionFieldsMixin):
     """Write serializer for submitting a POSE-mode Interaction from the web frontend.
 
     Validates persona ownership and action_link_ids integrity before the view

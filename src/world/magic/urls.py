@@ -178,6 +178,11 @@ from world.magic.views_kindling import KindledResonanceViewSet  # noqa: E402
 
 router.register("kindled-resonances", KindledResonanceViewSet, basename="kindled-resonance")
 
+# #5124 - the "Reflecting on" row: the deeds and the unsettling resonance a writer can name
+from world.magic.views_reflection import ReflectableViewSet  # noqa: E402
+
+router.register("reflectables", ReflectableViewSet, basename="reflectable")
+
 
 urlpatterns = [
     # Literal paths MUST come before *router.urls so that "rituals/perform/" is
