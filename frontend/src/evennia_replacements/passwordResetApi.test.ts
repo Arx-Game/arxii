@@ -13,10 +13,14 @@ describe('allauth password recovery contract', () => {
   it('sends the request email and validates the email-link key in a header', async () => {
     fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
     await requestPasswordReset('owner@example.com');
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/auth/browser/v1/auth/password/request');
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${window.location.origin}/api/auth/browser/v1/auth/password/request`
+    );
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ email: 'owner@example.com' });
     await validatePasswordResetKey('test-key');
-    expect(fetchMock.mock.calls[1][0]).toBe('/api/auth/browser/v1/auth/password/reset');
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      `${window.location.origin}/api/auth/browser/v1/auth/password/reset`
+    );
     expect(fetchMock.mock.calls[1][1].headers.get('X-Password-Reset-Key')).toBe('test-key');
   });
 
