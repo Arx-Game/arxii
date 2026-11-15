@@ -257,7 +257,7 @@ target, takes `modifier_target_contributions(sheet, target, lane=CHECK)` (distin
 pieces, the equipment walk) with each value multiplied by the row's weight and truncated, labelled
 `"<source> (<Aspect>)"`, keeping its source kind so the check lane's taper treats a card's Aspect
 bonus as part of the same pile. It needs no path and does not scale with level: it is a different
-term from the path aspect bonus below (`check weight x path weight x level`), which is untouched;
+term from the path aspect bonus below (`check weight x path weight x one level's width`, #5093), which is untouched here;
 #4775's rule for that term does not apply here. The rate card prices an Aspect at a roll modifier's
 rate (1.5 per point), which is this shape. Reaches every roll through the seam (`perform_check_with_modifiers`,
 scene actions, combat, challenges); the breakdown-only paths (`compute_resist_increment`,
@@ -803,7 +803,9 @@ the FK.
 # Calculate weighted trait points from CheckTypeTrait entries
 _calculate_trait_points(handler, check_type, *, stat_override=None, extra_traits=()) -> int
 
-# Calculate aspect bonus from character's most recent path
+# Aspect bonus from character's most recent path: each matching check weight x path weight is a
+# share of one level's width at `level`, rounded half up (#5093). The acting side reads it at
+# the roller's level and `level_opposition` reads it at the NPC's: one sizing for both.
 _calculate_aspect_bonus(character, check_type, level) -> int
 
 # Calculate weighted capability points from authored CheckTypeCapabilityModifier rows (#2505)

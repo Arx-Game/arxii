@@ -48,10 +48,11 @@ LEVEL_ONE_TERM = 9
 
 
 class CalculateAspectBonusTests(TestCase):
-    """Test aspect bonus calculation from path weights."""
+    """Test aspect bonus calculation from path weights, sized by a level's width (#5093)."""
 
     @classmethod
     def setUpTestData(cls):
+        ensure_level_ladder()
         cls.character = CharacterSheetFactory().character
         cls.path = PathFactory(name="TestSpyPath", stage=PathStage.PROSPECT, minimum_level=1)
         cls.intrigue = Aspect.objects.create(name="test_svc_intrigue")
@@ -62,7 +63,7 @@ class CalculateAspectBonusTests(TestCase):
         cls.check_type = CheckTypeFactory(name="TestSpyCheck")
 
     def test_aspect_bonus_with_matching_path(self):
-        """Aspect bonus = sum(check_weight * path_weight * level) truncated to int."""
+        """Aspect bonus = sum(check_weight * path_weight * level's width), rounded half up."""
         CheckTypeAspectFactory(
             check_type=self.check_type,
             aspect=self.intrigue,
@@ -73,9 +74,10 @@ class CalculateAspectBonusTests(TestCase):
             aspect=self.subterfuge,
             weight=Decimal("0.5"),
         )
-        # Level 3: intrigue = int(1.0 * 2 * 3) = 6, subterfuge = int(0.5 * 1 * 3) = 1
+        # Level 3 is 8 points wide on the standard ladder: intrigue = 1.0 * 2 * 8 = 16,
+        # subterfuge = 0.5 * 1 * 8 = 4
         bonus = _calculate_aspect_bonus(self.character, self.check_type, level=3)
-        assert bonus == 7
+        assert bonus == 20
 
     def test_aspect_bonus_zero_with_no_path(self):
         other_char = CharacterFactory()
@@ -96,16 +98,24 @@ class CalculateAspectBonusTests(TestCase):
         # but this test uses a different check_type)
         assert bonus == 0
 
-    def test_aspect_bonus_truncates_to_int(self):
-        check = CheckTypeFactory(name="TruncateCheck")
+    def test_aspect_bonus_rounds_half_up(self):
+        check = CheckTypeFactory(name="RoundingCheck")
         CheckTypeAspectFactory(
             check_type=check,
             aspect=self.subterfuge,
-            weight=Decimal("0.75"),
+            weight=Decimal("0.35"),
         )
-        # 0.75 * 1 * 3 = 2.25 -> int = 2
+        # 0.35 * 1 * 8 = 2.8 -> 3 (a truncating sum would read 2)
         bonus = _calculate_aspect_bonus(self.character, check, level=3)
-        assert bonus == 2
+        assert bonus == 3
+
+    def test_aspect_bonus_zero_below_level_one(self):
+        CheckTypeAspectFactory(
+            check_type=self.check_type,
+            aspect=self.intrigue,
+            weight=Decimal("1.0"),
+        )
+        assert _calculate_aspect_bonus(self.character, self.check_type, level=0) == 0
 
 
 class CalculateCapabilityPointsTests(TestCase):

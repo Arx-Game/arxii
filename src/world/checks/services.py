@@ -87,7 +87,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     Main check resolution function.
 
     1. Calculate weighted trait points using TraitHandler
-    2. Calculate aspect bonus from path (scaled by class level)
+    2. Calculate aspect bonus from path (a share of the class level's width, #5093)
     3. Calculate level points: the configured share of the class level's baseline
        (``level_points``, #2707, #5093) — a guaranteed term every check gets, on top of
        (not instead of) the aspect bonus
@@ -1231,26 +1231,13 @@ def _calculate_aspect_bonus(
     check_type: "CheckType",
     level: int,
 ) -> int:
-    """Aspect bonus from the character's most recent path, scaled by ``level``.
+    """The aspect-match term for the character's most recent path, sized at ``level`` (#5093).
 
-    ``bonus += int(check_aspect_weight * path_aspect_weight * level)`` per matching aspect
-    (see ``_aspect_match_weights``). The acting side's term; the opposing side sizes the same
-    match as a modifier (``_opposing_aspect_term``).
-    """
-    return sum(int(weight * level) for weight in _aspect_match_weights(character, check_type))
-
-
-def _opposing_aspect_term(
-    character: "ObjectDB",
-    check_type: "CheckType",
-    level: int,
-) -> int:
-    """The opposing side's aspect-match term, sized as a modifier at ``level`` (#5093).
-
-    The acting check's aspects scored against the defender's Path. Each matching aspect's
-    weight product is a share of one level's width at ``level``, like a modifier's size
-    fraction, rounded half up. 0 below level 1 and on a database whose CHECK baselines are too
-    few to give a width (fewer than two rows).
+    Each matching aspect's weight product (``_aspect_match_weights``) is a share of one
+    level's width at ``level``, like a modifier's size fraction, rounded half up. The acting
+    side reads it at the roller's level, and the opposing side reads it at the defender's
+    (``level_opposition``): one sizing for both. 0 below level 1 and on a database whose CHECK
+    baselines are too few to give a width (fewer than two rows).
     """
     weights = _aspect_match_weights(character, check_type)
     if not weights or level < 1:
@@ -1600,7 +1587,7 @@ def level_opposition(
       This is what makes a level 1 attacker's swing at a level 5 defender land as it should,
       on checks with no authored defensive content at all. 0 at level 0 and on a database
       with no baseline rows.
-    * ``_opposing_aspect_term(character, check_type, level)`` — the acting check's aspects
+    * ``_calculate_aspect_bonus(character, check_type, level)`` — the acting check's aspects
       scored against the DEFENDER's Path, so what you are trying to do to them is harder when
       it is their wheelhouse, sized as a modifier at *level*. Skipped entirely when
       *character* is None (an ephemeral NPC with no sheet), which contributes the baseline
@@ -1624,7 +1611,7 @@ def level_opposition(
     """
     total = _level_strength_or_zero(level)
     if character is not None:
-        total += _opposing_aspect_term(character, check_type, level)
+        total += _calculate_aspect_bonus(character, check_type, level)
         from world.conditions.services import opponent_condition_opposition  # noqa: PLC0415
 
         total += opponent_condition_opposition(character, check_type)
