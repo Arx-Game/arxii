@@ -18,7 +18,10 @@ from world.roster.models import Kinsperson, ParentageEdge
 
 
 def _one_row_per_value_rules(inline, parent_model) -> list[tuple[str, ...]]:
-    fk = _get_foreign_key(parent_model, inline.model, fk_name=inline.fk_name)
+    try:
+        fk = _get_foreign_key(parent_model, inline.model, fk_name=inline.fk_name)
+    except ValueError:
+        return []  # a whole-table inline (the Kindling config page) has no parent key
     opts = inline.model._meta
     rules = [tuple(constraint.fields) for constraint in opts.total_unique_constraints]
     rules.extend(tuple(names) for names in opts.unique_together)

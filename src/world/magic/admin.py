@@ -1,11 +1,16 @@
+from functools import partial
+
 from django import forms
 from django.contrib import admin, messages
 from django.contrib.admin import helpers
-from django.core.exceptions import ValidationError
+from django.contrib.admin.checks import InlineModelAdminChecks
+from django.contrib.admin.utils import flatten_fieldsets
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Count, Prefetch
-from django.forms.models import BaseInlineFormSet
-from django.http import HttpRequest
+from django.forms.models import BaseInlineFormSet, BaseModelFormSet, modelformset_factory
+from django.http import HttpRequest, HttpResponseRedirect
 from django.template.response import TemplateResponse
+from django.urls import reverse
 from django.utils.html import format_html
 
 from web.admin.authoring.offers import DistinctionOfferFormSetMixin
@@ -181,7 +186,35 @@ from world.magic.specialization.models import (
 )
 
 
-class KindlingSituationInline(admin.TabularInline):
+class StrengthByNameMixin:
+    """An inline whose ``strength`` column is a select naming the strengths (#5124).
+
+    The choices are the ``KindledStrengthTier`` rows (label = name, value = rank), read when
+    the formset is built for a request, never at import. ``blank_strength_label`` adds a
+    leading blank option that stores null; leave it ``None`` where a strength is required.
+    """
+
+    blank_strength_label: str | None = None
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name != "strength":  # noqa: STRING_LITERAL - a model field name
+            return super().formfield_for_dbfield(db_field, request, **kwargs)
+        choices: list[tuple[int | str, str]] = [
+            (tier.rank, tier.name) for tier in KindledStrengthTier.objects.order_by("rank")
+        ]
+        if self.blank_strength_label is not None:
+            choices.insert(0, ("", self.blank_strength_label))
+        return forms.TypedChoiceField(
+            choices=choices,
+            coerce=int,
+            empty_value=None,
+            required=self.blank_strength_label is None,
+            label="Strength",
+            help_text=kwargs.get("help_text", db_field.help_text),
+        )
+
+
+class KindlingSituationInline(StrengthByNameMixin, admin.TabularInline):
     """What kindles a resonance, or every resonance of an affinity (#5124, Screen 8).
 
     The columns are the vow perk situation columns (the same ``SituationCheck`` reads them),
@@ -191,6 +224,7 @@ class KindlingSituationInline(admin.TabularInline):
 
     model = KindlingSituation
     extra = 1
+    blank_strength_label = "From the source"
     verbose_name = "kindling situation"
     verbose_name_plural = "What kindles it"
     fields = [
@@ -211,9 +245,10 @@ class KindlingSituationInline(admin.TabularInline):
 
 
 class ResonanceKindlingSituationInline(KindlingSituationInline):
-    """The situations authored on one resonance."""
+    """The situations authored on one resonance, with a note of its affinity's own list."""
 
     fk_name = "resonance"
+    template = "admin/magic/kindling_situation_inline.html"
 
 
 class AffinityKindlingSituationInline(KindlingSituationInline):
@@ -241,6 +276,33 @@ class ResonanceAdmin(admin.ModelAdmin):
     readonly_fields = ["get_gifts", "get_connections"]
     autocomplete_fields = ["feeling"]
     inlines = [ResonanceKindlingSituationInline]
+
+    def render_change_form(  # noqa: PLR0913 - ModelAdmin.render_change_form's own signature
+        self, request, context, add=False, change=False, form_url="", obj=None
+    ):
+        """Add the note naming the situations this resonance also gets from its affinity."""
+        if obj is not None and obj.pk is not None:
+            context["affinity_list_note"] = self._affinity_list_note(obj)
+        return super().render_change_form(
+            request, context, add=add, change=change, form_url=form_url, obj=obj
+        )
+
+    @staticmethod
+    def _affinity_list_note(resonance: Resonance) -> str:
+        rows = [
+            row.get_situation_display()
+            for row in KindlingSituation.objects.filter(
+                for_affinity_id=resonance.affinity_id, is_active=True
+            )
+        ]
+        affinity = resonance.affinity.name
+        if not rows:
+            return f"The {affinity} affinity's own list has no rows."
+        noun = "row" if len(rows) == 1 else "rows"
+        return (
+            f"Also kindled by the {affinity} affinity's own list "
+            f"({len(rows)} {noun}: {'; '.join(rows)})."
+        )
 
     @admin.display(description="Opposite")
     def get_opposite(self, obj: Resonance) -> str:
@@ -3233,13 +3295,25 @@ class DriftConversionOfferAdmin(admin.ModelAdmin):
 
 
 class KindledStrengthTierForm(forms.ModelForm):
-    """The strength row's form, with the rename note staff are told on this page."""
+    """The strength row's form: the demo's column names and the rename note (#5124)."""
 
     class Meta:
         model = KindledStrengthTier
         fields = "__all__"  # noqa: DJ007 - the admin shows every authored column
+        labels = {
+            "name": "Strength",
+            "rank": "Order",
+            "min_bond_tier": "Reached by bond tier",
+            "min_severity": "Reached by severity",
+            "pull_levels": "Pull reads higher by",
+            "give_in_max_depth": "Deepest give-in step",
+            "give_in_bonus_percent": "Give-in bonus",
+            "give_in_ease": "Control roll eased by",
+            "dig_deep_scale_percent": "Dig deep surge",
+            "earn_percent": "Earned",
+        }
         help_texts = {
-            "name": "Staff can rename each strength. Code only knows the order (rank).",
+            "name": "Staff can rename each strength.",
             "min_bond_tier": (
                 "A thread-anchor bond at or above this tier reaches the strength. "
                 "0 means the strength is not reached this way."
@@ -3251,84 +3325,154 @@ class KindledStrengthTierForm(forms.ModelForm):
         }
 
 
-@admin.register(KindledStrengthTier)
-class KindledStrengthTierAdmin(admin.ModelAdmin):
-    """What each kindled strength is called, what reaches it and what it gives (#5124).
+class ConfigRowsFormSet(BaseModelFormSet):
+    """The rows of a table the Kindling config page edits beside its own one row.
 
-    One row per strength so the gains follow a curve, not a fixed step per point. The game
-    only knows the order; staff rename and tune. The changelist edits every number in place.
+    The admin builds every inline's formset with the parent row as ``instance``; these
+    tables hang off no parent, so the argument is dropped.
     """
 
-    form = KindledStrengthTierForm
-    list_display = [
-        "rank",
-        "name",
-        "min_bond_tier",
-        "min_severity",
-        "pull_levels",
-        "give_in_max_depth",
-        "give_in_bonus_percent",
-        "give_in_ease",
-        "dig_deep_scale_percent",
-        "earn_percent",
-    ]
-    list_display_links = ["rank"]
-    list_editable = [
-        "name",
-        "min_bond_tier",
-        "min_severity",
-        "pull_levels",
-        "give_in_max_depth",
-        "give_in_bonus_percent",
-        "give_in_ease",
-        "dig_deep_scale_percent",
-        "earn_percent",
-    ]
-    search_fields = ["name"]
+    def __init__(self, *args, instance=None, save_as_new=False, **kwargs):
+        del instance, save_as_new
+        super().__init__(*args, **kwargs)
 
-    def changelist_view(self, request: HttpRequest, extra_context: dict | None = None):
-        """Tell staff on the list itself what the rows are (the list has no help text)."""
-        if request.method == "GET" and not request.GET.get("_popup"):
-            messages.info(
-                request,
-                "Staff can rename each strength and tune its numbers; the game only knows "
-                "their order. A reach column of 0 means the strength is not reached that way.",
-            )
-        return super().changelist_view(request, extra_context)
+    @classmethod
+    def get_default_prefix(cls) -> str:
+        """The model's name, as an inline's reverse name would be: three of these on one
+        page must not all be ``form``."""
+        return cls.model.__name__.lower()
+
+
+class _NoParentInlineChecks(InlineModelAdminChecks):
+    """Skip the check that the inline's model has a foreign key to the parent model."""
+
+    def _check_relation(self, obj, parent_model):  # noqa: ARG002
+        return []
+
+    def _check_exclude_of_parent_model(self, obj, parent_model):  # noqa: ARG002
+        return []
+
+
+class ConfigRowsInline(admin.TabularInline):
+    """A tabular inline over a whole table, on the page of a singleton that owns none of it.
+
+    ``note`` is the help line shown under the table (the demo's "Staff can rename each
+    strength..."). The singleton's change page then edits its own row and these tables in one
+    form, one submit and one transaction, with the admin's own save and refused-save handling.
+    """
+
+    formset = ConfigRowsFormSet
+    checks_class = _NoParentInlineChecks
+    template = "admin/magic/kindling_config_inline.html"
+    note = ""
+
+    def get_formset(self, request, obj=None, **kwargs):
+        fields = kwargs.pop("fields", None) or flatten_fieldsets(self.get_fieldsets(request, obj))
+        exclude = list(self.get_readonly_fields(request, obj)) or None
+        return modelformset_factory(
+            self.model,
+            form=self.form,
+            formset=self.formset,
+            fields=fields,
+            exclude=exclude,
+            formfield_callback=partial(self.formfield_for_dbfield, request=request),
+            extra=self.get_extra(request, obj),
+            min_num=self.get_min_num(request, obj),
+            max_num=self.get_max_num(request, obj),
+            can_delete=self.can_delete and self.has_delete_permission(request, obj),
+            **kwargs,
+        )
+
+
+class KindledStrengthTierInline(ConfigRowsInline):
+    """What each strength is called, what reaches it and what it gives (screen 8)."""
+
+    model = KindledStrengthTier
+    form = KindledStrengthTierForm
+    extra = 0
+    can_delete = False
+    verbose_name_plural = "What each strength gives"
+    fields = [
+        "name",
+        "rank",
+        "min_bond_tier",
+        "min_severity",
+        "pull_levels",
+        "give_in_max_depth",
+        "give_in_bonus_percent",
+        "give_in_ease",
+        "dig_deep_scale_percent",
+        "earn_percent",
+    ]
+    note = (
+        "One row per strength, so the gains follow a curve, not a fixed step per point. Staff "
+        "can rename each strength and tune its numbers; the game only knows their order."
+    )
+
+
+class RallyKindlingStrengthInline(StrengthByNameMixin, ConfigRowsInline):
+    """The strength a Rally kindles at per roll result (screen 8)."""
+
+    model = RallyKindlingStrength
+    extra = 1
+    verbose_name_plural = "Rally kindles at"
+    fields = ["outcome_tier", "strength"]
+    note = "A failed Rally kindles nothing: a result with no row kindles nothing."
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        field = super().formfield_for_dbfield(db_field, request, **kwargs)
+        if db_field.name == "outcome_tier":  # noqa: STRING_LITERAL - a model field name
+            field.label = "Rally's result"
+        return field
+
+
+class KindledDeedAwardInline(ConfigRowsInline):
+    """What a kindled deed earns per roll result, before the strength's share (screen 8)."""
+
+    model = KindledDeedAward
+    extra = 1
+    verbose_name_plural = "Earned per result"
+    fields = ["outcome_tier", "amount"]
+    note = "Before the strength's Earned share. A result with no row earns nothing."
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        field = super().formfield_for_dbfield(db_field, request, **kwargs)
+        if db_field.name == "outcome_tier":  # noqa: STRING_LITERAL - a model field name
+            field.label = "Result"
+        elif db_field.name == "amount":  # noqa: STRING_LITERAL - a model field name
+            field.label = "Earned"
+        return field
 
 
 @admin.register(KindlingConfig)
 class KindlingConfigAdmin(admin.ModelAdmin):
-    """The singleton Kindling config (#5124): the harm property."""
+    """The one Kindling config page (#5124, screen 8).
 
-    list_display = ["__str__", "harm_property"]
-    list_select_related = ["harm_property"]
+    Its change form edits the harm property and, on the same page and in the same submit,
+    the strength table, Rally's table and the earned table. The list page opens the single
+    row, creating it the first time.
+    """
+
+    change_form_template = "admin/magic/kindlingconfig/change_form.html"
+    fields = ["harm_property"]
     autocomplete_fields = ["harm_property"]
+    inlines = [KindledStrengthTierInline, RallyKindlingStrengthInline, KindledDeedAwardInline]
+
+    def changelist_view(
+        self,
+        request: HttpRequest,
+        extra_context: dict | None = None,  # noqa: ARG002
+    ):
+        if not self.has_view_or_change_permission(request):
+            raise PermissionDenied
+        config, _ = KindlingConfig.objects.get_or_create(pk=1)
+        return HttpResponseRedirect(reverse("admin:arxii_kindlingconfig_change", args=(config.pk,)))
 
     def has_add_permission(self, request: HttpRequest) -> bool:
-        """This is a pk=1 singleton: one row only."""
         return not KindlingConfig.objects.exists() and super().has_add_permission(request)
 
     def has_delete_permission(self, request: HttpRequest, obj: object = None) -> bool:  # noqa: ARG002
         return False
-
-
-@admin.register(KindledDeedAward)
-class KindledDeedAwardAdmin(admin.ModelAdmin):
-    """Resonance a kindled deed earns per roll result, before the strength's share (#5124)."""
-
-    list_display = ["outcome_tier", "amount"]
-    list_editable = ["amount"]
-    list_select_related = ["outcome_tier"]
-
-
-@admin.register(RallyKindlingStrength)
-class RallyKindlingStrengthAdmin(admin.ModelAdmin):
-    """The strength a Rally kindles at per roll result; no row kindles nothing (#5124)."""
-
-    list_display = ["outcome_tier", "strength"]
-    list_editable = ["strength"]
-    list_select_related = ["outcome_tier"]
 
 
 class PlayRowAdmin(admin.ModelAdmin):
