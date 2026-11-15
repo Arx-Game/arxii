@@ -147,7 +147,7 @@ class CalculateSoulfraySeverityTests(TestCase):
             severity_scale=10,
             deficit_scale=5,
             resilience_check_type=cls.check_type,
-            base_check_difficulty=15,
+            base_check_difficulty_level=1,
         )
 
     def test_above_threshold_no_severity(self) -> None:

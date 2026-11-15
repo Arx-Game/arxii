@@ -79,17 +79,19 @@ class PerformRitualCheckReturnShapeTests(TestCase):
             ensure_sanctum_rituals,
         )
         from world.scenes.factories import PersonaFactory
+        from world.traits.factories import ensure_level_ladder
 
         ensure_sanctum_rituals()
         map_ritual_working_skill()
         ensure_magic_check_content()
+        ensure_level_ladder()
         persona = PersonaFactory()
         character = persona.character_sheet.character
 
         with patch("world.checks.services.perform_check") as mock_check:
             mock_check.return_value = self._mock_check_result(success_level=1)
-            # Homecoming has non_founder_target_difficulty=None — should fall back
+            # Homecoming has non_founder_target_difficulty_level=None — should fall back
             perform_ritual_check(HOMECOMING_RITUAL_NAME, character, founder_standing=False)
             _args, kwargs = mock_check.call_args
-            # target_difficulty for Homecoming is 10 (from seeds_checks._RITUAL_CHECK_CONFIGS)
-            self.assertEqual(kwargs["target_difficulty"], 10)
+            # Homecoming is authored at level 1 (seeds_checks._RITUAL_CHECK_CONFIGS): 18 points
+            self.assertEqual(kwargs["target_difficulty"], 18)

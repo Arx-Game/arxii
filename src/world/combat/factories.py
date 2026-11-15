@@ -602,7 +602,7 @@ class EncounterAftermathRuleFactory(factory_django.DjangoModelFactory):
     outcome = EncounterOutcome.DEFEAT
     risk_level = RiskLevel.MODERATE
     check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
-    base_difficulty = 25
+    base_difficulty_level = 2
     consequence_pool = None
 
 
@@ -1530,8 +1530,8 @@ class EscalationCurveFactory(factory_django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Escalation Curve {n}")
     start_round = 2
     intensity_step = 1
-    pace_difficulty_base = 0
-    pace_difficulty_per_level = 0
+    pace_difficulty_base_level = 0
+    pace_difficulty_per_level_tenths = 0
     control_step_on_success = 1
     control_step_on_partial = 0
     control_step_on_botch = -1
@@ -1632,7 +1632,7 @@ def wire_flee_config():
     from actions.models import ConsequencePool, ConsequencePoolEntry
     from world.checks.models import Consequence
     from world.combat.constants import (
-        FLEE_BASE_DIFFICULTY,
+        FLEE_BASE_DIFFICULTY_LEVEL,
         FLEE_CHECK_TYPE_NAME,
         FLEE_PARTIAL_SUCCESS_LEVEL,
     )
@@ -1698,22 +1698,22 @@ def wire_flee_config():
             pk=1,
             defaults={
                 "check_type": check_type,
-                "base_difficulty": FLEE_BASE_DIFFICULTY,
+                "base_difficulty_level": FLEE_BASE_DIFFICULTY_LEVEL,
                 "consequence_pool": pool,
             },
         )
 
     # --- Tier modifier rows ---
     for tier, modifier in [
-        (OpponentTier.SWARM, -5),
+        (OpponentTier.SWARM, -10),
         (OpponentTier.MOOK, 0),
-        (OpponentTier.ELITE, 5),
-        (OpponentTier.BOSS, 10),
-        (OpponentTier.HERO_KILLER, 20),
+        (OpponentTier.ELITE, 10),
+        (OpponentTier.BOSS, 20),
+        (OpponentTier.HERO_KILLER, 40),
     ]:
         FleeTierModifier.objects.get_or_create(
             tier=tier,
-            defaults={"difficulty_modifier": modifier},
+            defaults={"difficulty_modifier_tenths": modifier},
         )
 
     return config

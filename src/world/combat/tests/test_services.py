@@ -13,7 +13,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectType
 from world.checks.factories import CheckTypeFactory, ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.outcome_models import ConsequenceOutcome
-from world.checks.test_helpers import force_check_outcome
+from world.checks.test_helpers import SeededLevelLadderMixin, force_check_outcome
 from world.checks.types import CheckResult
 from world.combat.constants import (
     ActionCategory,
@@ -625,7 +625,7 @@ class GetFleeConfigTest(TestCase):
         assert result.check_type == check_type
 
 
-class ResolveFleeTest(TestCase):
+class ResolveFleeTest(SeededLevelLadderMixin, TestCase):
     """Tests for _resolve_flee inside resolve_round (#878).
 
     Flee resolves as a graded check during round resolution: PARTIAL or
@@ -634,11 +634,13 @@ class ResolveFleeTest(TestCase):
     tier modifier; covering allies add the catalog's Cover escape bonus each.
     """
 
-    BASE_DIFFICULTY = 50
+    BASE_DIFFICULTY_LEVEL = 5
+    BASE_DIFFICULTY = 50  # level 5's baseline: 18 + 8 x 4
     COVER_ESCAPE = 7
 
     @classmethod
     def setUpTestData(cls) -> None:
+        super().setUpTestData()
         # Lower speed rank than NPC_SPEED_RANK (15) → the fleer resolves first.
         cls.fast_role = CovenantRoleFactory(speed_rank=3)
 
@@ -665,7 +667,7 @@ class ResolveFleeTest(TestCase):
         FleeConfig.objects.filter(pk=1).delete()
         defaults = {
             "check_type": CheckTypeFactory(),
-            "base_difficulty": self.BASE_DIFFICULTY,
+            "base_difficulty_level": self.BASE_DIFFICULTY_LEVEL,
         }
         defaults.update(overrides)
         return FleeConfig.objects.create(pk=1, **defaults)
@@ -779,15 +781,16 @@ class ResolveFleeTest(TestCase):
         )
         participant = self._add_pc(encounter, role=self.fast_role)
         self._seed_config()
-        FleeTierModifier.objects.create(tier=OpponentTier.BOSS, difficulty_modifier=30)
-        FleeTierModifier.objects.create(tier=OpponentTier.MOOK, difficulty_modifier=10)
+        FleeTierModifier.objects.create(tier=OpponentTier.BOSS, difficulty_modifier_tenths=30)
+        FleeTierModifier.objects.create(tier=OpponentTier.MOOK, difficulty_modifier_tenths=10)
         declare_flee(participant)
 
         success = CheckOutcomeFactory(name="FleeTestDifficulty", success_level=0)
         with force_check_outcome(success) as capture:
             resolve_round(encounter)
 
-        assert capture.target_difficulty == self.BASE_DIFFICULTY + 30
+        # BOSS's 30 tenths of a level's width (8) is 24 points over the base
+        assert capture.target_difficulty == self.BASE_DIFFICULTY + 24
 
     def test_flee_difficulty_is_base_with_no_active_opponents(self) -> None:
         """Zero ACTIVE opponents → difficulty is base alone (no auto-success term)."""
@@ -797,7 +800,7 @@ class ResolveFleeTest(TestCase):
         participant = self._add_pc(encounter, role=self.fast_role)
         self._seed_config()
         # A modifier row for the defeated opponent's tier must NOT contribute.
-        FleeTierModifier.objects.create(tier=OpponentTier.MOOK, difficulty_modifier=10)
+        FleeTierModifier.objects.create(tier=OpponentTier.MOOK, difficulty_modifier_tenths=10)
         declare_flee(participant)
 
         success = CheckOutcomeFactory(name="FleeTestNoOpponents", success_level=0)

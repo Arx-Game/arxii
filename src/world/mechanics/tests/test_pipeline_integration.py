@@ -1458,7 +1458,7 @@ class SoulfrayProgressionTests(PipelineTestMixin, TestCase):
             severity_scale=10,
             deficit_scale=5,
             resilience_check_type=cls.resilience_check_type,
-            base_check_difficulty=15,
+            base_check_difficulty_level=1,
         )
 
         # === 6. MishapPoolTier for control deficit mishaps ===

@@ -41,9 +41,8 @@ class ResonanceEnvironmentConfigTests(TestCase):
         # Produces DISTINCT outcomes: low room (magnitude ~10) vs high room (magnitude ~80)
         # differ by 70, far outside the band → different direction every time.
         self.assertEqual(cfg.balanced_band, 10)
-        # backfire_base_difficulty: OPPOSED checks start at 30 (moderate challenge).
-        self.assertEqual(cfg.backfire_base_difficulty, 30)
-        # backfire_difficulty_per_magnitude: adds 0.500 per magnitude point so a
-        # magnitude-10 room adds 5 (total 35) and a magnitude-80 room adds 40 (total 70).
-        # The high-room backfire is dramatically harder than the low-room backfire.
-        self.assertEqual(cfg.backfire_difficulty_per_magnitude, Decimal("0.500"))
+        # backfire_base_difficulty_level: OPPOSED checks start at level 2 (moderate challenge).
+        self.assertEqual(cfg.backfire_base_difficulty_level, 2)
+        # backfire_difficulty_per_magnitude_tenths: adds one tenth of a level's width per
+        # magnitude point, so the high-room backfire is dramatically harder than the low-room one.
+        self.assertEqual(cfg.backfire_difficulty_per_magnitude_tenths, Decimal("1.000"))

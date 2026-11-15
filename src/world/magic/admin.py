@@ -1527,7 +1527,7 @@ class SoulfrayConfigAdmin(admin.ModelAdmin):
         "severity_scale",
         "deficit_scale",
         "resilience_check_type",
-        "base_check_difficulty",
+        "base_check_difficulty_level",
         "social_safety_bonus",
     ]
     list_select_related = ["condition", "resilience_check_type"]
@@ -1687,8 +1687,8 @@ class ResonanceEnvironmentConfigAdmin(admin.ModelAdmin):
         "base_coefficient",
         "caster_power_scalar",
         "balanced_band",
-        "backfire_base_difficulty",
-        "backfire_difficulty_per_magnitude",
+        "backfire_base_difficulty_level",
+        "backfire_difficulty_per_magnitude_tenths",
         "updated_at",
     )
 
@@ -2657,7 +2657,7 @@ class FuryTierAdmin(admin.ModelAdmin):
         "name",
         "depth",
         "control_surrendered",
-        "base_check_difficulty",
+        "base_check_difficulty_level",
         "berserk_severity",
     ]
     search_fields = ["name"]
@@ -3122,7 +3122,7 @@ class DriftConfigAdmin(admin.ModelAdmin):
 class DriftCorrectionConfigAdmin(admin.ModelAdmin):
     """The drift correction tuning singleton (#4733)."""
 
-    list_display = ("id", "rite", "check_type", "check_difficulty", "cap_percent")
+    list_display = ("id", "rite", "check_type", "check_difficulty_level", "cap_percent")
     list_select_related = ("rite", "check_type")
     autocomplete_fields = ("rite", "check_type")
 

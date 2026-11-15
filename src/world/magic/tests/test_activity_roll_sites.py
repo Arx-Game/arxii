@@ -988,7 +988,7 @@ class CompanionBindingRollSiteTests(ActivityTermTestCase):
         thread = Thread.objects.get(owner=sheet, target_kind=TargetKind.GIFT, target_gift=gift)
         thread.level = 10
         thread.save(update_fields=["level"])
-        archetype = CompanionArchetypeFactory(bind_difficulty=20, capacity_cost=5)
+        archetype = CompanionArchetypeFactory(bind_difficulty_level=1, capacity_cost=5)
         opponent = CombatOpponentFactory(
             encounter=CombatEncounterFactory(), threat_pool=ThreatPoolFactory()
         )

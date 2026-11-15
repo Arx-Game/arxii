@@ -11,7 +11,11 @@ from decimal import Decimal
 import math
 from typing import TYPE_CHECKING
 
-from world.checks.services import compute_check_rating, perform_check_with_modifiers
+from world.checks.services import (
+    compute_check_rating,
+    difficulty_step_points,
+    perform_check_with_modifiers,
+)
 from world.magic.constants import MagicActivity
 from world.magic.models import TrainingOutcomeAward
 from world.magic.services.gift_acquisition import get_gift_acquisition_config
@@ -73,9 +77,11 @@ def resolve_training_check(
         raise TechniqueTrainingNotConfigured from exc
 
     # 2. Compute target_difficulty from the three drivers.
-    target_difficulty = technique.tier * config.training_tier_difficulty_step
-
     learner_level = get_character_path_level(learner.character) or 0
+    target_difficulty = difficulty_step_points(
+        technique.tier * config.training_tier_difficulty_step_tenths, learner_level
+    )
+
     target_difficulty -= learner_level // config.training_level_divisor
 
     learning_terms = activity_skill_terms(MagicActivity.TECHNIQUE_LEARNING)
@@ -86,7 +92,9 @@ def resolve_training_check(
         teacher_skill_bonus = teacher_rating // config.training_teacher_skill_divisor
     else:
         teacher_skill_bonus = 0
-        target_difficulty += config.training_self_study_difficulty_penalty
+        target_difficulty += difficulty_step_points(
+            config.training_self_study_difficulty_penalty_tenths, learner_level
+        )
 
     target_difficulty = max(0, target_difficulty - teacher_skill_bonus)
 

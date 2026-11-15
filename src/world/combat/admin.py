@@ -628,7 +628,7 @@ class EncounterOutcomeMappingAdmin(admin.ModelAdmin):
 class FleeConfigAdmin(admin.ModelAdmin):
     """#3831 - the singleton authored flee-check wiring (#878)."""
 
-    list_display = ["pk", "check_type", "base_difficulty", "updated_at"]
+    list_display = ["pk", "check_type", "base_difficulty_level", "updated_at"]
     autocomplete_fields = ["check_type", "consequence_pool", "updated_by"]
 
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
@@ -723,7 +723,7 @@ class SocialManeuverConfigAdmin(admin.ModelAdmin):
 class FleeTierModifierAdmin(admin.ModelAdmin):
     """#3831 - the authored flee-difficulty modifier per opponent tier."""
 
-    list_display = ["tier", "difficulty_modifier"]
+    list_display = ["tier", "difficulty_modifier_tenths"]
     list_filter = ["tier"]
 
 
@@ -731,7 +731,7 @@ class FleeTierModifierAdmin(admin.ModelAdmin):
 class EncounterAftermathRuleAdmin(admin.ModelAdmin):
     """#3831 - the authored aftermath wiring per (outcome, risk_level) cell."""
 
-    list_display = ["outcome", "risk_level", "check_type", "base_difficulty"]
+    list_display = ["outcome", "risk_level", "check_type", "base_difficulty_level"]
     list_filter = ["outcome", "risk_level"]
     list_select_related = ["check_type", "consequence_pool"]
     autocomplete_fields = ["check_type", "consequence_pool"]

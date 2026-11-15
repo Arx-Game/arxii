@@ -42,6 +42,7 @@ def _apply_aftermath_rules(
         resolve_pool_consequences,
         select_consequence,
     )
+    from world.checks.services import difficulty_points  # noqa: PLC0415
     from world.checks.types import ResolutionContext  # noqa: PLC0415
     from world.scenes.models import Persona  # noqa: PLC0415
 
@@ -70,7 +71,7 @@ def _apply_aftermath_rules(
         pending = select_consequence(
             character,
             rule.check_type,
-            rule.base_difficulty,
+            difficulty_points(rule.base_difficulty_level),
             consequences,
             extra_modifiers=breakdown.extra_modifiers_total,
         )

@@ -493,7 +493,7 @@ def difficulty_points(level: int) -> int:
     return _level_baseline_or_zero(level)
 
 
-def difficulty_step_points(tenths: int, at_level: int) -> int:
+def difficulty_step_points(tenths: int | Decimal, at_level: int) -> int:
     """An authored difficulty increment in tenths of a level as points at ``at_level`` (#5093).
 
     A per-step increment, or a difficulty added on top of another one, is a share of one

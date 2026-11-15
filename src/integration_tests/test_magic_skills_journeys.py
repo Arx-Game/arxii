@@ -542,7 +542,7 @@ class BindingASummonedCompanion(JourneyCase):
         thread = Thread.objects.get(owner=sheet, target_kind=TargetKind.GIFT, target_gift=self.gift)
         thread.level = 10
         thread.save(update_fields=["level"])
-        self.archetype = CompanionArchetypeFactory(bind_difficulty=20, capacity_cost=5)
+        self.archetype = CompanionArchetypeFactory(bind_difficulty_level=1, capacity_cost=5)
         self.summon = CombatOpponentFactory(
             encounter=CombatEncounterFactory(room=self.room), threat_pool=ThreatPoolFactory()
         )

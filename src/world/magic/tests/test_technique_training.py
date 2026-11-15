@@ -15,6 +15,7 @@ from world.magic.models import (
     TrainingOutcomeAward,
 )
 from world.magic.services.technique_training import resolve_training_check
+from world.traits.factories import ensure_level_ladder
 from world.traits.models import CheckOutcome
 
 # Canonical outcome tiers (name -> success_level), matching seeds/checks.py.
@@ -36,6 +37,7 @@ def _ensure_outcome(name: str, success_level: int) -> CheckOutcome:
 
 class ResolveTrainingCheckTest(TestCase):
     def setUp(self):
+        ensure_level_ladder()
         self.sheet = CharacterSheetFactory()
         self.technique = TechniqueFactory()
         self.pool = ActionPointPool.get_or_create_for_character(self.sheet.character)

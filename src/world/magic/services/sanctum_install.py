@@ -411,7 +411,7 @@ def perform_dissolution(sanctum: SanctumDetails, leader_persona: Persona) -> Dis
     """Tear down the Sanctum with a tiered magical check.
 
     Difficulty is authored on the Ritual's RitualCheckConfig. Non-founder
-    actors roll against ``non_founder_target_difficulty`` when set.
+    actors roll against ``non_founder_target_difficulty_level`` when set.
     Outcome tier determines the recovery fraction, looked up from the
     authored ``SanctumDissolutionRecoveryAward`` table.
     """

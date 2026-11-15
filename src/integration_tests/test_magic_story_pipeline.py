@@ -55,7 +55,8 @@ Seeded by seed_starter_magic_story() itself:
 - AffinityInteraction (Abyssal→Abyssal)  ALIGNED/AMPLIFY/severity=1.00  (pair #5)
 - AffinityInteraction (Abyssal→Primal)   OPPOSED/CORRUPT/aggressor=caster (pair #6)
 - ResonanceEnvironmentConfig (base_coefficient=1.000, caster_power_scalar=0.500,
-  backfire_base_difficulty=30, backfire_difficulty_per_magnitude=0.500, balanced_band=10)
+  backfire_base_difficulty_level=2, backfire_difficulty_per_magnitude_tenths=1.000,
+  balanced_band=10)
 - ConsequencePool for pair #4 with 4 Consequence rows keyed by CheckOutcome
 - CheckOutcomes "Critical Success", "Success", "Failure", "Critical Failure"
 

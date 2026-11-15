@@ -34,7 +34,7 @@ from world.combat.constants import (
     COMBO_MIN_SLOTS,
     DEFAULT_OPPONENT_MORALE,
     DEFAULT_PACE_TIMER_MINUTES,
-    FLEE_BASE_DIFFICULTY,
+    FLEE_BASE_DIFFICULTY_LEVEL,
     MAX_HOPS_PER_ROUND,
     MAX_OPPONENT_MORALE,
     NPC_DEFAULT_HOPS,
@@ -2915,11 +2915,12 @@ class StrainConfig(SharedMemoryModel):
             "share and the anchor's scaling."
         ),
     )
-    strain_check_difficulty = models.PositiveSmallIntegerField(
+    strain_check_difficulty_level = models.PositiveSmallIntegerField(
         default=0,
         help_text=(
             "Target difficulty of the strain check a character rolls to push hard when "
-            "she burns resonance. Higher makes reaching the burn harder."
+            "she burns resonance. Higher makes reaching the burn harder. Authored as a "
+            "level (0 = no difficulty): the roll meets that level's baseline."
         ),
     )
     strain_check_type = models.ForeignKey(
@@ -3147,9 +3148,12 @@ class FleeConfig(SharedMemoryModel):
         related_name="+",
         help_text="CheckType rolled for flee attempts.",
     )
-    base_difficulty = models.PositiveIntegerField(
-        default=FLEE_BASE_DIFFICULTY,
-        help_text="Flee difficulty before opponent-tier modifiers.",
+    base_difficulty_level = models.PositiveSmallIntegerField(
+        default=FLEE_BASE_DIFFICULTY_LEVEL,
+        help_text=(
+            "Flee difficulty before opponent-tier modifiers. Authored as a level (0 = "
+            "no difficulty): the roll meets that level's baseline."
+        ),
     )
     consequence_pool = models.ForeignKey(
         CONSEQUENCE_POOL_MODEL,
@@ -3367,24 +3371,28 @@ class SocialManeuverConfig(SharedMemoryModel):
 class FleeTierModifier(SharedMemoryModel):
     """Authored flee-difficulty modifier per opponent tier (#878).
 
-    Encounter flee difficulty = FleeConfig.base_difficulty + max(modifier over
-    active opponents' tiers); zero active opponents → base difficulty alone.
+    Encounter flee difficulty = the baseline of FleeConfig.base_difficulty_level plus the max
+    modifier over active opponents' tiers (tenths of one level's width); zero active
+    opponents → base difficulty alone.
     """
 
     tier = models.CharField(max_length=20, choices=OpponentTier.choices, unique=True)
-    difficulty_modifier = models.IntegerField(default=0)
+    difficulty_modifier_tenths = models.IntegerField(
+        default=0,
+        help_text=("Authored in tenths of one level's width."),
+    )
 
     class Meta:
         ordering = ["tier"]
 
     def __str__(self) -> str:
-        return f"FleeTierModifier({self.tier}: {self.difficulty_modifier:+d})"
+        return f"FleeTierModifier({self.tier}: {self.difficulty_modifier_tenths:+d})"
 
 
 class EncounterAftermathRule(SharedMemoryModel):
     """Authored aftermath wiring per (outcome, risk_level) cell (#876).
 
-    Mirrors FleeConfig's authored-wiring pattern: check_type + base_difficulty
+    Mirrors FleeConfig's authored-wiring pattern: check_type + base_difficulty_level
     drive a graded per-participant roll against consequence_pool. A missing
     cell means no aftermath for that combination; a null pool means the cell
     rolls nothing (outcome-only). Never an XP source — Legend awards are
@@ -3399,8 +3407,11 @@ class EncounterAftermathRule(SharedMemoryModel):
         related_name="+",
         help_text="CheckType rolled per affected participant.",
     )
-    base_difficulty = models.PositiveIntegerField(
-        help_text="Authored difficulty for the aftermath check.",
+    base_difficulty_level = models.PositiveSmallIntegerField(
+        help_text=(
+            "Authored difficulty for the aftermath check. Authored as a level (0 = no "
+            "difficulty): the roll meets that level's baseline."
+        ),
     )
     consequence_pool = models.ForeignKey(
         CONSEQUENCE_POOL_MODEL,
@@ -4413,13 +4424,19 @@ class EscalationCurve(SharedMemoryModel):
         related_name="escalation_curves",
         help_text="Check rolled each tick to keep control in pace with intensity.",
     )
-    pace_difficulty_base = models.PositiveIntegerField(
+    pace_difficulty_base_level = models.PositiveSmallIntegerField(
         default=0,
-        help_text="Base difficulty of the pace check.",
+        help_text=(
+            "Base difficulty of the pace check. Authored as a level (0 = no "
+            "difficulty): the roll meets that level's baseline."
+        ),
     )
-    pace_difficulty_per_level = models.PositiveIntegerField(
+    pace_difficulty_per_level_tenths = models.PositiveIntegerField(
         default=0,
-        help_text="Difficulty added per accumulated escalation level.",
+        help_text=(
+            "Difficulty added per accumulated escalation level. Authored in tenths of "
+            "one level's width."
+        ),
     )
     control_step_on_success = models.PositiveIntegerField(
         default=1,

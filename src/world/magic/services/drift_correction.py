@@ -18,7 +18,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Max, QuerySet
 
-from world.checks.services import perform_check_with_modifiers
+from world.checks.services import difficulty_points, perform_check_with_modifiers
 from world.items.services.materials import consume_materials
 from world.magic.constants import GainSource
 from world.magic.exceptions import (
@@ -324,7 +324,7 @@ def perform_drift_correction_rite(
     check = perform_check_with_modifiers(
         sheet.character,
         config.check_type,
-        config.check_difficulty,
+        difficulty_points(config.check_difficulty_level),
         extra_modifiers=bonus,
     )
     outcome = check.outcome

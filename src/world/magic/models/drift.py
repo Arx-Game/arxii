@@ -69,13 +69,19 @@ class DriftConfig(SharedMemoryModel):
         validators=[MaxValueValidator(100)],
         help_text="Percent of a Sineater's lifetime resonance the Mire may hold before unsettled.",
     )
-    focus_base_difficulty = models.PositiveSmallIntegerField(
-        default=10,
-        help_text="Difficulty of the focus roll before any severity steps.",
+    focus_base_difficulty_level = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            "Difficulty of the focus roll before any severity steps. Authored as a "
+            "level (0 = no difficulty): the roll meets that level's baseline."
+        ),
     )
-    focus_difficulty_per_step = models.PositiveSmallIntegerField(
-        default=2,
-        help_text="Difficulty added to the focus roll per severity step.",
+    focus_difficulty_per_step_tenths = models.PositiveIntegerField(
+        default=4,
+        help_text=(
+            "Difficulty added to the focus roll per severity step. Authored in tenths "
+            "of one level's width."
+        ),
     )
     focus_check_type = models.ForeignKey(
         "arxii.CheckType",
@@ -136,9 +142,12 @@ class DriftCorrectionConfig(SharedMemoryModel):
         related_name="+",
         help_text="The check rolled when the rite is performed.",
     )
-    check_difficulty = models.PositiveSmallIntegerField(
+    check_difficulty_level = models.PositiveSmallIntegerField(
         default=0,
-        help_text="Difficulty of the rite's check.",
+        help_text=(
+            "Difficulty of the rite's check. Authored as a level (0 = no difficulty): "
+            "the roll meets that level's baseline."
+        ),
     )
     cap_percent = models.PositiveSmallIntegerField(
         default=50,

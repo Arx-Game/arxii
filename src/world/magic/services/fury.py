@@ -357,7 +357,10 @@ class FuryCast:
             self.resolution = FuryResolution(None, 0, 0, 0)
             return False
 
-        from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+        from world.checks.services import (  # noqa: PLC0415
+            difficulty_points,
+            perform_check_with_modifiers,
+        )
         from world.magic.constants import MagicActivity  # noqa: PLC0415
         from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
 
@@ -366,7 +369,9 @@ class FuryCast:
         check = perform_check_with_modifiers(
             self.character,
             check_type,
-            target_difficulty=max(self.tier.base_check_difficulty - ease, 0),
+            target_difficulty=max(
+                difficulty_points(self.tier.base_check_difficulty_level) - ease, 0
+            ),
             extra_traits=activity_skill_terms(MagicActivity.FURY_CONTROL),
         )
         self.resolution = resolve_fury(

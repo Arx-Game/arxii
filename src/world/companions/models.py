@@ -38,18 +38,21 @@ class CompanionArchetype(NaturalKeyMixin, SharedMemoryModel):
     )
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
-    bind_difficulty = models.PositiveSmallIntegerField(
-        help_text="Feeds perform_check's target_difficulty for the bind attempt.",
+    bind_difficulty_level = models.PositiveSmallIntegerField(
+        help_text=(
+            "Feeds perform_check's target_difficulty for the bind attempt. Authored as "
+            "a level (0 = no difficulty): the roll meets that level's baseline."
+        ),
     )
     capacity_cost = models.PositiveSmallIntegerField(
         help_text="Companion Capacity consumed while this archetype is bonded.",
     )
-    charm_difficulty_reduction = models.PositiveSmallIntegerField(
+    charm_difficulty_reduction_tenths = models.PositiveIntegerField(
         default=0,
         help_text=(
-            "Reduction to bind_difficulty when binding a charmed target. "
-            "0 = no charm bonus; equal to bind_difficulty = auto-success. "
-            "Per-archetype staff-tunable knob (#2502)."
+            "Reduction to bind_difficulty when binding a charmed target. 0 = no charm "
+            "bonus; equal to bind_difficulty = auto-success. Per-archetype staff- "
+            "tunable knob (#2502). Authored in tenths of one level's width."
         ),
     )
     # Combat stats for bridging into encounters/battles (#1873).

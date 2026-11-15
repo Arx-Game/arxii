@@ -1288,7 +1288,7 @@ class SoulfrayConfigFactory(factory.django.DjangoModelFactory):
     severity_scale = 10
     deficit_scale = 5
     resilience_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
-    base_check_difficulty = 15
+    base_check_difficulty_level = 1
     ritual_severity_cost_per_point = 1
     social_safety_bonus = 10
     # The template made under the seed name by SoulfrayTemplateFactory or
@@ -1668,7 +1668,7 @@ class RitualCheckConfigFactory(factory.django.DjangoModelFactory):
     specialization = None
     resonance = None
     check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
-    target_difficulty = 3
+    target_difficulty_level = 0
 
 
 class AnimaRitualPerformanceFactory(factory.django.DjangoModelFactory):
@@ -4544,7 +4544,7 @@ class FuryTierFactory(factory.django.DjangoModelFactory):
     name = "Unleashed"
     depth = 2
     control_surrendered = 4
-    base_check_difficulty = 10
+    base_check_difficulty_level = 1
     berserk_severity = 0
 
 

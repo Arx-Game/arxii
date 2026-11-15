@@ -251,11 +251,11 @@ class GiftAcquisitionConfig(SharedMemoryModel):
             "1 = no effect (same cap). Higher = slower per-week progress."
         ),
     )
-    training_tier_difficulty_step = models.PositiveIntegerField(
-        default=10,
+    training_tier_difficulty_step_tenths = models.PositiveIntegerField(
+        default=20,
         help_text=(
-            "Points of target_difficulty added per technique tier. "
-            "A T5 technique adds 50 difficulty at default."
+            "Difficulty added per technique tier, in tenths of one level's width at the "
+            "learner's level. A T5 technique adds 100 tenths (ten levels' widths) at default."
         ),
     )
     training_level_divisor = models.PositiveIntegerField(
@@ -265,10 +265,11 @@ class GiftAcquisitionConfig(SharedMemoryModel):
             "Level 20 with divisor 2 reduces difficulty by 10."
         ),
     )
-    training_self_study_difficulty_penalty = models.PositiveIntegerField(
-        default=10,
+    training_self_study_difficulty_penalty_tenths = models.PositiveIntegerField(
+        default=20,
         help_text=(
-            "Flat difficulty added when training without a teacher (teacher=None). 0 = no penalty."
+            "Flat difficulty added when training without a teacher (teacher=None). 0 = "
+            "no penalty. Authored in tenths of one level's width."
         ),
     )
     training_teacher_skill_divisor = models.PositiveIntegerField(

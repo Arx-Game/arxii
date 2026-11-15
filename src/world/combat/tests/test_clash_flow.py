@@ -910,7 +910,7 @@ class AudereDuringClashTests(TestCase):
             severity_scale=5,
             deficit_scale=5,
             resilience_check_type=cls.resilience_check_type,
-            base_check_difficulty=0,
+            base_check_difficulty_level=0,
         )
 
         # --- Audere ConditionTemplate (required by offer_audere) ---

@@ -342,7 +342,7 @@ describe('WonOverRows', () => {
           domain: 'bruiser',
           name: 'Sellsword',
           description: '',
-          bind_difficulty: 2,
+          bind_difficulty_level: 2,
           capacity_cost: 1,
         },
       ],

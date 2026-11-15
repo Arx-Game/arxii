@@ -58,7 +58,7 @@ interface FormState {
   resonance_id: string;
   /** FK id for checks.CheckType */
   check_type_id: string;
-  target_difficulty: string;
+  target_difficulty_level: string;
 }
 
 function initFormState(ritual: RitualWithSchema): FormState {
@@ -71,7 +71,7 @@ function initFormState(ritual: RitualWithSchema): FormState {
     specialization_id: '',
     resonance_id: '',
     check_type_id: '',
-    target_difficulty: '3',
+    target_difficulty_level: '0',
   };
 }
 
@@ -122,7 +122,7 @@ export function AnimaRitualEditDialog({
     const statId = parseInt(form.stat_id, 10);
     const skillId = parseInt(form.skill_id, 10);
     const checkTypeId = parseInt(form.check_type_id, 10);
-    const difficulty = parseInt(form.target_difficulty, 10);
+    const difficulty = parseInt(form.target_difficulty_level, 10);
     const specializationId = form.specialization_id ? parseInt(form.specialization_id, 10) : null;
     const resonanceId = form.resonance_id ? parseInt(form.resonance_id, 10) : null;
 
@@ -136,7 +136,7 @@ export function AnimaRitualEditDialog({
           stat_id: Number.isNaN(statId) ? undefined : statId,
           skill_id: Number.isNaN(skillId) ? undefined : skillId,
           check_type_id: Number.isNaN(checkTypeId) ? undefined : checkTypeId,
-          target_difficulty: Number.isNaN(difficulty) ? 3 : difficulty,
+          target_difficulty_level: Number.isNaN(difficulty) ? 0 : difficulty,
           specialization_id: Number.isNaN(specializationId) ? null : specializationId,
           resonance_id: Number.isNaN(resonanceId) ? null : resonanceId,
         },
@@ -338,15 +338,15 @@ export function AnimaRitualEditDialog({
                 htmlFor="anima-ritual-target-difficulty"
                 className="mb-1 block text-sm font-medium"
               >
-                Target Difficulty
+                Target Difficulty Level
               </label>
               <input
                 id="anima-ritual-target-difficulty"
                 type="number"
-                min={1}
-                max={10}
-                value={form.target_difficulty}
-                onChange={(e) => handleChange('target_difficulty', e.target.value)}
+                min={0}
+                max={30}
+                value={form.target_difficulty_level}
+                onChange={(e) => handleChange('target_difficulty_level', e.target.value)}
                 disabled={patchMutation.isPending}
                 data-testid="field-target-difficulty"
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"

@@ -541,22 +541,22 @@ class FleeTierModifierTests(TestCase):
         """Two FleeTierModifier rows with the same tier raise IntegrityError."""
         from world.combat.models import FleeTierModifier
 
-        FleeTierModifier.objects.create(tier=OpponentTier.MOOK, difficulty_modifier=5)
+        FleeTierModifier.objects.create(tier=OpponentTier.MOOK, difficulty_modifier_tenths=5)
         with self.assertRaises(IntegrityError):
-            FleeTierModifier.objects.create(tier=OpponentTier.MOOK, difficulty_modifier=10)
+            FleeTierModifier.objects.create(tier=OpponentTier.MOOK, difficulty_modifier_tenths=10)
 
     def test_str(self) -> None:
         """__str__ includes tier and sign-formatted modifier."""
         from world.combat.models import FleeTierModifier
 
-        modifier = FleeTierModifier(tier=OpponentTier.BOSS, difficulty_modifier=8)
+        modifier = FleeTierModifier(tier=OpponentTier.BOSS, difficulty_modifier_tenths=8)
         self.assertEqual(str(modifier), "FleeTierModifier(boss: +8)")
 
     def test_negative_modifier_str(self) -> None:
         """__str__ correctly formats negative modifiers."""
         from world.combat.models import FleeTierModifier
 
-        modifier = FleeTierModifier(tier=OpponentTier.SWARM, difficulty_modifier=-3)
+        modifier = FleeTierModifier(tier=OpponentTier.SWARM, difficulty_modifier_tenths=-3)
         self.assertEqual(str(modifier), "FleeTierModifier(swarm: -3)")
 
 

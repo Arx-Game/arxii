@@ -142,7 +142,10 @@ def resolve_resonance_burn(  # noqa: PLR0913 - one burn request and the action i
         ResonanceBurnUnavailable: No strain check type is designated.
         ConversionMappingError: A hasty fall with no Fall pair authored.
     """
-    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+    from world.checks.services import (  # noqa: PLC0415
+        difficulty_points,
+        perform_check_with_modifiers,
+    )
     from world.combat.services.encounter.config import get_strain_config  # noqa: PLC0415
     from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
 
@@ -160,7 +163,7 @@ def resolve_resonance_burn(  # noqa: PLR0913 - one burn request and the action i
         check_result = perform_check_with_modifiers(
             sheet.character,
             config.strain_check_type,
-            target_difficulty=config.strain_check_difficulty,
+            target_difficulty=difficulty_points(config.strain_check_difficulty_level),
             situation_ctx=situation_ctx,
             extra_traits=activity_skill_terms(MagicActivity.PUSHING_HARD),
         )

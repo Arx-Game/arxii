@@ -41,8 +41,11 @@ class SoulfrayConfig(SharedMemoryModel):
         on_delete=models.PROTECT,
         help_text="Check type for Soulfray resilience (e.g., magical endurance).",
     )
-    base_check_difficulty = models.PositiveIntegerField(
-        help_text="Base difficulty for the resilience check before stage modifiers.",
+    base_check_difficulty_level = models.PositiveSmallIntegerField(
+        help_text=(
+            "Base difficulty for the resilience check before stage modifiers. Authored "
+            "as a level (0 = no difficulty): the roll meets that level's baseline."
+        ),
     )
     ritual_severity_cost_per_point = models.PositiveIntegerField(default=1)
     social_safety_bonus = models.PositiveIntegerField(

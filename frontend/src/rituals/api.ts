@@ -72,7 +72,7 @@ export interface AnimaRitualPatchBody {
   resonance_id?: number | null;
   /** FK pk for checks.CheckType */
   check_type_id?: number | null;
-  target_difficulty?: number;
+  target_difficulty_level?: number;
 }
 
 /**

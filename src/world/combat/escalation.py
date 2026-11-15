@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import F
 
+from world.checks.services import difficulty_points, difficulty_step_points
 from world.combat.constants import ParticipantStatus, SurgeTriggerKind
 from world.combat.types import DramaticSurgeBeat, EscalationTickResult
 from world.mechanics.constants import EngagementType
@@ -125,9 +126,11 @@ def apply_escalation_tick(
         if not capped:
             engagement.escalation_level += 1
             engagement.intensity_modifier += curve.intensity_step + step_bonus
-            difficulty = (
-                curve.pace_difficulty_base
-                + curve.pace_difficulty_per_level * engagement.escalation_level
+            difficulty = difficulty_points(
+                curve.pace_difficulty_base_level
+            ) + difficulty_step_points(
+                curve.pace_difficulty_per_level_tenths * engagement.escalation_level,
+                curve.pace_difficulty_base_level,
             )
             check_result = check_fn(character, curve.pace_check_type, target_difficulty=difficulty)
             outcome = check_result.outcome

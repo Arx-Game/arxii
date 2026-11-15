@@ -48,9 +48,9 @@ class PromoteSummonTests(TestCase):
 
         self.archetype = CompanionArchetypeFactory(
             name="Promote Test Beast",
-            bind_difficulty=20,
+            bind_difficulty_level=1,
             capacity_cost=5,
-            charm_difficulty_reduction=0,
+            charm_difficulty_reduction_tenths=0,
         )
 
         self.encounter = CombatEncounterFactory()
@@ -108,7 +108,7 @@ class PromoteSummonTests(TestCase):
         # Fill capacity with an expensive companion.
         expensive_archetype = CompanionArchetypeFactory(
             name="Expensive Beast",
-            bind_difficulty=20,
+            bind_difficulty_level=1,
             capacity_cost=100,  # exceeds capacity (thread level 10 → low capacity)
         )
         # Use a summon to attempt promotion
@@ -142,9 +142,9 @@ class PromoteSummonTests(TestCase):
         # Create the charmed archetype with auto-success reduction.
         charmed_archetype = CompanionArchetypeFactory(
             name="Charmed Beast",
-            bind_difficulty=20,
+            bind_difficulty_level=1,
             capacity_cost=5,
-            charm_difficulty_reduction=20,  # auto-success
+            charm_difficulty_reduction_tenths=40,  # auto-success
         )
 
         opponent = CombatOpponentFactory(
@@ -191,7 +191,7 @@ class PromoteSummonTests(TestCase):
         from world.traits.factories import CheckOutcomeFactory
 
         archetype = CompanionArchetypeFactory(
-            bind_difficulty=20, capacity_cost=5, charm_difficulty_reduction=20
+            bind_difficulty_level=1, capacity_cost=5, charm_difficulty_reduction_tenths=40
         )
         opponent = CombatOpponentFactory(encounter=self.encounter, threat_pool=self.threat_pool)
         charm = ConditionTemplate.get_by_name(CHARM_CONDITION_NAME)
@@ -264,9 +264,9 @@ class PromoteSummonTests(TestCase):
 
         charmed_archetype = CompanionArchetypeFactory(
             name="Won Over Beast",
-            bind_difficulty=20,
+            bind_difficulty_level=1,
             capacity_cost=5,
-            charm_difficulty_reduction=20,  # auto-success
+            charm_difficulty_reduction_tenths=40,  # auto-success
         )
 
         opponent = CombatOpponentFactory(
@@ -360,9 +360,9 @@ class PromoteSummonTests(TestCase):
 
         charmed_archetype = CompanionArchetypeFactory(
             name="Renamed Charm Beast",
-            bind_difficulty=20,
+            bind_difficulty_level=1,
             capacity_cost=5,
-            charm_difficulty_reduction=20,  # auto-success
+            charm_difficulty_reduction_tenths=40,  # auto-success
         )
 
         opponent = CombatOpponentFactory(
@@ -452,9 +452,9 @@ class PromoteSummonTests(TestCase):
 
         charmed_archetype = CompanionArchetypeFactory(
             name="Twice Bound Beast",
-            bind_difficulty=20,
+            bind_difficulty_level=1,
             capacity_cost=5,
-            charm_difficulty_reduction=20,  # auto-success
+            charm_difficulty_reduction_tenths=40,  # auto-success
         )
 
         opponent = CombatOpponentFactory(

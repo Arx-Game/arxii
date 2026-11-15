@@ -114,7 +114,7 @@ def _setup_bonded_pair(*, tier_depth: int = 2, bond_tier_number: int = 2):
         name=f"IntTier_{tier_depth}_{bond_tier_number}",
         depth=tier_depth,
         control_surrendered=4,
-        base_check_difficulty=10,
+        base_check_difficulty_level=1,
         berserk_severity=3,
     )
     # Fury needs something at stake (#4738): the initiator is engaged.

@@ -30,7 +30,7 @@ class CompanionArchetypeAdmin(admin.ModelAdmin):
     list_display = [
         "name",
         "domain",
-        "bind_difficulty",
+        "bind_difficulty_level",
         "capacity_cost",
         "max_health",
         "soak_value",

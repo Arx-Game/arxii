@@ -14,7 +14,11 @@ from world.areas.models import AreaClosure
 from world.checks.consequence_resolution import apply_resolution, select_consequence_from_result
 from world.checks.constants import EffectType
 from world.checks.models import CheckType
-from world.checks.services import perform_check_with_modifiers
+from world.checks.services import (
+    difficulty_points,
+    difficulty_step_points,
+    perform_check_with_modifiers,
+)
 from world.checks.types import ResolutionContext
 from world.conditions.services import apply_condition, remove_condition
 from world.locations.constants import KeyType
@@ -56,8 +60,8 @@ class ResonanceEnvironmentEffect:
                           Carried from the primitive so consumers never re-query it.
     backfire_difficulty:  Precomputed check difficulty for OPPOSED backfire.
                           0 when inert or when valence is not OPPOSED.
-                          Formula: backfire_base_difficulty + round(magnitude *
-                          backfire_difficulty_per_magnitude).
+                          Formula: baseline(backfire_base_difficulty_level) + magnitude *
+                          backfire_difficulty_per_magnitude_tenths of a level's width.
     """
 
     valence: str
@@ -521,8 +525,11 @@ def evaluate_resonance_environment(
     # Formula mirrors the (now-deleted) flow adapter: base + round(magnitude * per_magnitude).
     backfire_difficulty = 0
     if interaction.valence == ResonanceValence.OPPOSED:
-        backfire_difficulty = config.backfire_base_difficulty + round(
-            magnitude * float(config.backfire_difficulty_per_magnitude)
+        backfire_difficulty = difficulty_points(
+            config.backfire_base_difficulty_level
+        ) + difficulty_step_points(
+            magnitude * config.backfire_difficulty_per_magnitude_tenths,
+            config.backfire_base_difficulty_level,
         )
 
     return ResonanceEnvironmentEffect(

@@ -220,7 +220,7 @@ class FleeBreaksEngagementLockTest(TestCase):
         )
 
         FleeConfig.objects.filter(pk=1).delete()
-        FleeConfig.objects.create(pk=1, check_type=CheckTypeFactory(), base_difficulty=1)
+        FleeConfig.objects.create(pk=1, check_type=CheckTypeFactory(), base_difficulty_level=0)
         declare_flee(participant)
 
         success = CheckOutcomeFactory(name="FleeE2ESuccess", success_level=0)

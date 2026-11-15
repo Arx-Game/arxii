@@ -7,7 +7,7 @@ export interface CompanionArchetypeSummary {
   domain: string;
   name: string;
   description: string;
-  bind_difficulty: number;
+  bind_difficulty_level: number;
   capacity_cost: number;
 }
 
