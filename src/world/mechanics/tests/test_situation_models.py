@@ -17,8 +17,8 @@ class SituationTrapLinkModelTest(TestCase):
             consequence_pool=ConsequencePoolFactory(),
             detect_check_type=CheckTypeFactory(name="Detect Traps"),
             disarm_check_type=CheckTypeFactory(name="Disarm Traps"),
-            detect_difficulty=20,
-            disarm_difficulty=25,
+            detect_difficulty_level=1,
+            disarm_difficulty_level=2,
         )
 
         assert link.is_hidden is True
@@ -31,6 +31,6 @@ class SituationTrapLinkFactoryTest(TestCase):
         link = SituationTrapLinkFactory()
 
         assert link.pk is not None
-        assert link.detect_difficulty == 20
-        assert link.disarm_difficulty == 20
+        assert link.detect_difficulty_level == 1
+        assert link.disarm_difficulty_level == 1
         assert link.is_hidden is True

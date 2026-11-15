@@ -133,7 +133,7 @@ class ClueRevealHandlerTests(TestCase):
             label="Ask",
             is_final=True,
             check_type=check_type,
-            check_difficulty=10,
+            check_difficulty_level=1,
         )
         ClueRevealOfferDetailsFactory(offer=offer, clue=self.clue)
 
@@ -161,7 +161,7 @@ class ClueRevealHandlerTests(TestCase):
             label="Ask",
             is_final=True,
             check_type=check_type,
-            check_difficulty=10,
+            check_difficulty_level=1,
         )
         ClueRevealOfferDetailsFactory(offer=offer, clue=self.clue)
 
@@ -218,7 +218,7 @@ class ClueRevealJourneyTests(TestCase):
             label="Ask about the smugglers",
             is_final=True,
             check_type=self.check_type,
-            check_difficulty=10,
+            check_difficulty_level=1,
         )
         ClueRevealOfferDetailsFactory(offer=self.offer, clue=self.clue)
 

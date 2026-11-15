@@ -313,7 +313,7 @@ class CaptureHandlerTests(TestCase):
             capture_rescue_template=rescue_template,
             capture_clue_name="Signs of a struggle",
             capture_clue_description="PLACEHOLDER",
-            capture_clue_detect_difficulty=2,
+            capture_clue_detect_difficulty_level=2,
         )
 
         result = apply_effect(effect, ResolutionContext(character=character))
@@ -324,7 +324,7 @@ class CaptureHandlerTests(TestCase):
         placement = RoomClue.objects.get(room_profile=room_profile)
         assert placement.clue.target_kind == ClueTargetKind.RESCUE
         assert placement.clue.target_captivity == captivity
-        assert placement.detect_difficulty == 2
+        assert placement.detect_difficulty_level == 2
 
     def test_capture_grants_the_captive_their_loop(self) -> None:
         # With a captive template on the effect (override-then-default), the

@@ -27,6 +27,7 @@ def _new_baseline(level):
 
 def points_to_level(points):
     """The level an old point difficulty converts to (ties go to the lower level)."""
+    points = max(points, 0)  # a negative authored value reads as no difficulty
     rank = max(i for i, t in enumerate(OLD_RANK_THRESHOLDS) if t <= points)
     threshold = OLD_RANK_THRESHOLDS[rank]
     return min(LEVELS, key=lambda level: (abs(_new_baseline(level) - threshold), level))

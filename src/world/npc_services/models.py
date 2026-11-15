@@ -624,11 +624,12 @@ class NPCServiceOffer(NaturalKeyMixin, SharedMemoryModel):
             "Final actions ignore this — the effect IS the payoff."
         ),
     )
-    check_difficulty = models.IntegerField(
+    check_difficulty_level = models.PositiveSmallIntegerField(
         default=0,
         help_text=(
-            "Target difficulty passed to `perform_check` when `check_type` is "
-            "set. Meaningless when `check_type` is null."
+            "Target difficulty passed to `perform_check` when `check_type` is set. "
+            "Meaningless when `check_type` is null. Authored as a level (0 = no "
+            "difficulty): the roll meets that level's baseline."
         ),
     )
 
@@ -1096,8 +1097,11 @@ class SkillCourseOfferDetails(SharedMemoryModel):
         related_name="+",
         help_text="The check rolled each session.",
     )
-    check_difficulty = models.IntegerField(
-        help_text="Target difficulty of the session check.",
+    check_difficulty_level = models.PositiveSmallIntegerField(
+        help_text=(
+            "Target difficulty of the session check. Authored as a level (0 = no "
+            "difficulty): the roll meets that level's baseline."
+        ),
     )
 
     class Meta:

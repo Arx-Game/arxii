@@ -936,7 +936,7 @@ def _apply_capture(
         cell_description=effect.capture_cell_description,
         clue_name=effect.capture_clue_name,
         clue_description=effect.capture_clue_description,
-        clue_detect_difficulty=effect.capture_clue_detect_difficulty,
+        clue_detect_difficulty_level=effect.capture_clue_detect_difficulty_level,
     )
 
     try:
@@ -1286,7 +1286,7 @@ def _setup_rescue_discovery(captivity: object, setup: object) -> None:
         room_profile,
         name=setup.clue_name,
         description=setup.clue_description,
-        detect_difficulty=setup.clue_detect_difficulty,
+        detect_difficulty_level=setup.clue_detect_difficulty_level,
     )
 
 

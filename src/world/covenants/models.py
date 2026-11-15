@@ -2084,9 +2084,13 @@ class CourtGrantConfig(SharedMemoryModel):
         related_name="+",
         help_text="Shared check rolled for every Court grant petition/emergency draw.",
     )
-    petition_base_difficulty = models.SmallIntegerField(
+    petition_base_difficulty_level = models.PositiveSmallIntegerField(
         default=0,
-        help_text="Base target_difficulty for petition_check_type before affection easing.",
+        help_text=(
+            "Base target_difficulty for petition_check_type before affection easing. "
+            "Authored as a level (0 = no difficulty): the roll meets that level's "
+            "baseline."
+        ),
     )
     escalation_consequence_pool = models.ForeignKey(
         "arxii.ConsequencePool",

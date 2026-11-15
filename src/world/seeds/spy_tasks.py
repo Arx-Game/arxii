@@ -209,7 +209,7 @@ def ensure_spy_task_templates() -> int:
                 "description": description,
                 "category": category,
                 "check_type": check_type,
-                "check_difficulty": 10,  # PLACEHOLDER
+                "check_difficulty_level": 1,  # PLACEHOLDER
                 "duration": timedelta(days=3),  # PLACEHOLDER
                 "target_kind": target_kind,
                 "consequence_pool": pool,

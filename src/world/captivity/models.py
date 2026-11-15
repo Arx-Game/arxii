@@ -201,9 +201,13 @@ class CaptivityConfig(SharedMemoryModel):
         default="",
         help_text="Default rescue-clue description (player-visible — author in your voice).",
     )
-    clue_detect_difficulty = models.PositiveIntegerField(
+    clue_detect_difficulty_level = models.PositiveSmallIntegerField(
         default=0,
-        help_text="Default Search-check difficulty to spot the rescue clue. Placeholder.",
+        help_text=(
+            "Default Search-check difficulty to spot the rescue clue. Placeholder. "
+            "Authored as a level (0 = no difficulty): the roll meets that level's "
+            "baseline."
+        ),
     )
 
     @classmethod

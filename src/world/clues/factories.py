@@ -37,7 +37,7 @@ class RoomClueFactory(DjangoModelFactory):
 
     room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
     clue = factory.SubFactory(ClueFactory)
-    detect_difficulty = 0
+    detect_difficulty_level = 0
     is_active = True
 
 

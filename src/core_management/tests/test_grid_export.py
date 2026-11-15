@@ -202,7 +202,7 @@ class GridExportTests(TestCase):
                     "fixture_key": "arx-city/golden-hart-taproom/torn-letter",
                     "room": "arx-city/golden-hart-taproom",
                     "clue": "torn-letter",
-                    "detect_difficulty": 5,
+                    "detect_difficulty_level": 3,
                     "eligibility_rule": {},
                     "is_active": True,
                 }

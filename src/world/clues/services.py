@@ -70,10 +70,13 @@ def create_accusation_counter_clue(secret: Secret, *, area: Area, difficulty: in
     Creates (or reuses) a RESEARCH-resolution SECRET clue targeting ``secret`` and
     places it in up to ``ACCUSATION_CLUE_HUB_CAP`` of the social hubs inside ``area``
     (the rumor's reach, or the room's own area for a trail with no rumor, #4085) at
-    ``detect_difficulty=difficulty`` — the accuser's own roll sets how hard their
-    trail is to unearth. Existing placements keep their original difficulty (no
+    ``detect_difficulty_level`` the highest level whose baseline is at or below ``difficulty``
+    (points) — the accuser's own roll sets how hard their trail is to unearth. Existing
+    placements keep their original difficulty (no
     silent re-difficulty on re-runs). Clue name/description are PLACEHOLDER prose.
     """
+    from world.checks.services import difficulty_level_for_points  # noqa: PLC0415
+
     clue, _ = Clue.objects.get_or_create(
         target_kind=ClueTargetKind.SECRET,
         target_secret=secret,
@@ -90,7 +93,7 @@ def create_accusation_counter_clue(secret: Secret, *, area: Area, difficulty: in
         RoomClue.objects.get_or_create(
             room_profile=profile,
             clue=clue,
-            defaults={"detect_difficulty": difficulty},
+            defaults={"detect_difficulty_level": difficulty_level_for_points(difficulty)},
         )
     return clue
 
@@ -325,7 +328,7 @@ def plant_rescue_clue(
     *,
     name: str,
     description: str,
-    detect_difficulty: int = 0,
+    detect_difficulty_level: int = 0,
 ) -> RoomClue:
     """Plant a discoverable rescue clue at a location for a held captive (#931 Phase 4).
 
@@ -344,7 +347,7 @@ def plant_rescue_clue(
     return RoomClue.objects.create(
         room_profile=room_profile,
         clue=clue,
-        detect_difficulty=detect_difficulty,
+        detect_difficulty_level=detect_difficulty_level,
     )
 
 
@@ -384,11 +387,14 @@ def search_room(
     """Search a room: roll ``search_check_type`` against each hidden clue's difficulty.
 
     Surfaces and acquires every not-yet-held clue the character spots (a success against
-    its ``detect_difficulty``); AUTOMATIC clues also grant their target immediately. The
+    its ``detect_difficulty_level``); AUTOMATIC clues also grant their target immediately. The
     caller (the Search action) charges AP + fatigue and resolves which check type to use.
     Returns the clues found this search (empty if the searcher has no roster entry).
     """
-    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+    from world.checks.services import (  # noqa: PLC0415
+        difficulty_points,
+        perform_check_with_modifiers,
+    )
 
     roster_entry = _roster_entry_for(character)
     if roster_entry is None:
@@ -408,7 +414,9 @@ def search_room(
         if not _placement_passes_eligibility(placement, character, context_holder):
             continue
         result = perform_check_with_modifiers(
-            character, search_check_type, target_difficulty=placement.detect_difficulty
+            character,
+            search_check_type,
+            target_difficulty=difficulty_points(placement.detect_difficulty_level),
         )
         if result.outcome is None or result.outcome.success_level < 0:
             continue

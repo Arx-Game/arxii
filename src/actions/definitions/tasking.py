@@ -338,7 +338,7 @@ class PostListenerAction(Action):
                 room,
                 persona,
                 check_type=check_type,
-                check_difficulty=int(kwargs.get("check_difficulty") or 0),
+                check_difficulty_level=int(kwargs.get("check_difficulty_level") or 0),
             )
         except TaskingError as exc:
             return ActionResult(success=False, message=exc.user_message)

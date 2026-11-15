@@ -289,9 +289,13 @@ class RoomClue(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="room_placements",
     )
-    detect_difficulty = models.PositiveIntegerField(
+    detect_difficulty_level = models.PositiveSmallIntegerField(
         default=0,
-        help_text="Search-check target difficulty to spot this clue here. Placeholder.",
+        help_text=(
+            "Search-check target difficulty to spot this clue here. Placeholder. "
+            "Authored as a level (0 = no difficulty): the roll meets that level's "
+            "baseline."
+        ),
     )
     is_active = models.BooleanField(
         default=True,

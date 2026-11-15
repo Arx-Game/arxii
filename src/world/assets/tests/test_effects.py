@@ -262,7 +262,7 @@ class PromotionCapabilityModifierEffectTests(EvenniaTestCase):
             role=functionary.role,
             kind=OfferKind.INFORMANT,
             check_type=self.gated_check_type,
-            check_difficulty=10,
+            check_difficulty_level=1,
         )
         result = dispatch_offer_effect(offer, self.persona)
         asset = NPCAsset.objects.get(promoter_persona=self.persona)
@@ -275,7 +275,7 @@ class PromotionCapabilityModifierEffectTests(EvenniaTestCase):
             role=functionary.role,
             kind=OfferKind.INFORMANT,
             check_type=self.ungated_check_type,
-            check_difficulty=10,
+            check_difficulty_level=1,
         )
         dispatch_offer_effect(offer, self.persona)
         self.assertFalse(NPCAsset.objects.filter(promoter_persona=self.persona).exists())
@@ -388,7 +388,7 @@ class TechniqueSourcedPromotionCapabilityModifierEffectTests(EvenniaTestCase):
             role=functionary.role,
             kind=OfferKind.INFORMANT,
             check_type=self.gated_check_type,
-            check_difficulty=10,
+            check_difficulty_level=1,
         )
         result = dispatch_offer_effect(offer, self.persona_with_technique)
         asset = NPCAsset.objects.get(promoter_persona=self.persona_with_technique)
@@ -401,7 +401,7 @@ class TechniqueSourcedPromotionCapabilityModifierEffectTests(EvenniaTestCase):
             role=functionary.role,
             kind=OfferKind.INFORMANT,
             check_type=self.gated_check_type,
-            check_difficulty=10,
+            check_difficulty_level=1,
         )
         result = dispatch_offer_effect(offer, self.persona_without_technique)
         self.assertFalse(

@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from world.assets.constants import AssetRoleContext
+from world.checks.services import difficulty_points
 from world.npc_services.effects import EffectResult
 
 if TYPE_CHECKING:
@@ -35,7 +36,7 @@ def _promote_functionary(
     Resolves the Functionary from the PC's current location + the offer's
     role (place_functionary guarantees at most one active Functionary per
     (role, room), so this lookup is deterministic). Rolls
-    offer.check_type/check_difficulty directly (final-action offers don't
+    offer.check_type/check_difficulty_level directly (final-action offers don't
     auto-roll checks — "the effect IS the payoff").
 
     #2827 phase 3 — recruitment is **in-place by default**: success
@@ -80,7 +81,7 @@ def _promote_functionary(
     check_result = perform_check_with_modifiers(
         character,
         offer.check_type,
-        target_difficulty=offer.check_difficulty,
+        target_difficulty=difficulty_points(offer.check_difficulty_level),
         extra_modifiers=preference_modifier(functionary.persona, offer.check_type),
     )
     if check_result.success_level <= 0:
@@ -185,7 +186,9 @@ def run_asset_intel_task(offer: NPCServiceOffer, persona: Persona) -> EffectResu
     character = persona.character_sheet.character
     if offer.check_type_id is not None:
         check_result = perform_check_with_modifiers(
-            character, offer.check_type, target_difficulty=offer.check_difficulty
+            character,
+            offer.check_type,
+            target_difficulty=difficulty_points(offer.check_difficulty_level),
         )
         if check_result.success_level <= 0:
             return EffectResult(

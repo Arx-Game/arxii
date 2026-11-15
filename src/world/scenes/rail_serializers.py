@@ -85,7 +85,7 @@ class GMStoryRailClueSerializer(serializers.Serializer):
 
     id = serializers.IntegerField()
     clue_name = serializers.CharField()
-    detect_difficulty = serializers.IntegerField()
+    detect_difficulty_level = serializers.IntegerField()
     is_active = serializers.BooleanField()
 
 

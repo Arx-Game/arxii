@@ -136,7 +136,7 @@ class _AcademyCourseCase(JourneyCase):
             session_ap_cost=SESSION_AP,
             coin_cost=COIN,
             check_type=CheckTypeFactory(),
-            check_difficulty=0,
+            check_difficulty_level=0,
         )
 
         self.ysmay = self.make_player("Ysmay", room=self.hall)

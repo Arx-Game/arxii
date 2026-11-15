@@ -15,7 +15,14 @@ class TaskOutcomeRouteInline(admin.TabularInline):
 
 @admin.register(TaskTemplate)
 class TaskTemplateAdmin(admin.ModelAdmin):
-    list_display = ("name", "category", "check_type", "check_difficulty", "duration", "is_active")
+    list_display = (
+        "name",
+        "category",
+        "check_type",
+        "check_difficulty_level",
+        "duration",
+        "is_active",
+    )
     list_filter = ("category", "is_active")
     search_fields = ("name",)
     autocomplete_fields = ("check_type", "mission_template", "consequence_pool")

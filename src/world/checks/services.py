@@ -1,5 +1,6 @@
 """Check resolution service functions."""
 
+from bisect import bisect_right
 from decimal import Decimal
 import logging
 import random
@@ -509,6 +510,18 @@ def difficulty_step_points(tenths: int | Decimal, at_level: int) -> int:
     if len(table.levels) < _MIN_BASELINE_ROWS_FOR_WIDTH:
         return 0
     return round_half_up(Decimal(tenths) * table.width(max(at_level, 1)) / 10)
+
+
+def difficulty_level_for_points(points: int) -> int:
+    """The highest level whose baseline is at or below ``points``, 0 below level 1 (#5093).
+
+    The inverse of :func:`difficulty_points` for a difficulty computed at runtime in points
+    (a code constant, an accuser's roll) that has to be stored where staff author a level.
+    A database with no baseline rows reads 0.
+    """
+    table = load_baselines()
+    index = bisect_right(table.baselines, points)
+    return table.levels[index - 1] if index else 0
 
 
 def level_points(level: int) -> int:

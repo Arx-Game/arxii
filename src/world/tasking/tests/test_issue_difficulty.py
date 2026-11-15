@@ -14,7 +14,7 @@ from world.tasking.constants import DIFFICULTY_STEP_PER_LEVEL, TaskTargetKind
 from world.tasking.factories import TaskTemplateFactory
 from world.tasking.models import OrgTask
 from world.tasking.services import assign_agent, create_task, task_difficulty
-from world.traits.factories import CheckOutcomeFactory
+from world.traits.factories import CheckOutcomeFactory, ensure_level_ladder
 
 NORMAL = DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
 
@@ -23,7 +23,8 @@ class IssueDifficultyTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.org = OrganizationFactory()
-        cls.template = TaskTemplateFactory()
+        ensure_level_ladder()
+        cls.template = TaskTemplateFactory(check_difficulty_level=2)
         cls.steward = PersonaFactory()
         cls.good = CheckOutcomeFactory(name="issue good", success_level=2)
         cls.botch = CheckOutcomeFactory(name="issue botch", success_level=-20)
@@ -73,7 +74,7 @@ class IssueDifficultyTests(TestCase):
 
     def test_task_difficulty_falls_back_to_the_template(self) -> None:
         task = OrgTask(template=self.template, org=self.org, issued_by=self.steward)
-        self.assertEqual(task_difficulty(task), self.template.check_difficulty)
+        self.assertEqual(task_difficulty(task), 26)  # level 2's baseline
 
     def test_the_roll_itself_is_not_stored(self) -> None:
         with force_check_outcome(self.good):

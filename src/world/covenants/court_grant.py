@@ -211,7 +211,7 @@ def ensure_court_grant_role(covenant: Covenant) -> NPCRole:
         label="Petition for greater strength",
         is_final=True,
         check_type=check_type,
-        check_difficulty=config.petition_base_difficulty,
+        check_difficulty_level=config.petition_base_difficulty_level,
     )
     CourtGrantOfferDetails.objects.create(offer=offer, covenant=covenant)
 

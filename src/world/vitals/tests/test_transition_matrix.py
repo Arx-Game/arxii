@@ -237,7 +237,7 @@ class TrapHitKnockoutTests(SeededLevelLadderMixin, TestCase):
             room_profile=self.room_profile,
             consequence_pool=pool,
             detect_check_type=CheckTypeFactory(name="Detect-Trap-KO"),
-            detect_difficulty=20,
+            detect_difficulty_level=1,
         )
 
     def _always_fail(
@@ -311,7 +311,7 @@ class TrapHitBleedOutTests(SeededLevelLadderMixin, TestCase):
             room_profile=self.room_profile,
             consequence_pool=pool,
             detect_check_type=CheckTypeFactory(name="Detect-Trap-Death"),
-            detect_difficulty=20,
+            detect_difficulty_level=1,
         )
 
     def _always_fail(

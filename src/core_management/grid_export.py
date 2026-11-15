@@ -214,7 +214,7 @@ def _serialize_clues(clues, room_fixture_by_pk: dict) -> list[dict]:
             "fixture_key": row.fixture_key,
             "room": room_fixture_by_pk[row.room_profile_id],
             "clue": row.clue.slug,
-            "detect_difficulty": row.detect_difficulty,
+            "detect_difficulty_level": row.detect_difficulty_level,
             "eligibility_rule": row.eligibility_rule,
             "is_active": row.is_active,
         }

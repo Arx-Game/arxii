@@ -267,7 +267,7 @@ export function RoomDetailPanel({
             <div key={clue.id} className="flex items-center gap-1.5">
               <span className="flex-1 truncate text-sm">{clue.clue_name}</span>
               <span className="whitespace-nowrap text-xs text-muted-foreground">
-                difficulty {clue.detect_difficulty}
+                difficulty level {clue.detect_difficulty_level}
               </span>
               <Button
                 variant="ghost"

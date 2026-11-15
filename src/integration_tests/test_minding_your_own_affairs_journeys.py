@@ -481,7 +481,7 @@ class SearchingTheRoom(JourneyCase):
             description="Accounts kept in two hands.",
             resolution_mode=ClueResolution.RESEARCH,
         )
-        RoomClueFactory(room_profile=self.profile, clue=self.clue, detect_difficulty=10)
+        RoomClueFactory(room_profile=self.profile, clue=self.clue, detect_difficulty_level=1)
         self.lab = ensure_lab_kind()
 
     def held(self) -> bool:

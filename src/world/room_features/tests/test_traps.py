@@ -81,8 +81,8 @@ class _TrapSceneMixin:
             consequence_pool=pool,
             detect_check_type=CheckTypeFactory(name="Detect Traps"),
             disarm_check_type=CheckTypeFactory(name="Disarm Traps"),
-            detect_difficulty=20,
-            disarm_difficulty=20,
+            detect_difficulty_level=1,
+            disarm_difficulty_level=1,
         )
 
     def _health(self) -> int:
@@ -316,8 +316,8 @@ class SituationInstantiatedTrapEntryTest(_TrapSceneMixin, TestCase):
             consequence_pool=pool,
             detect_check_type=detect_check_type,
             disarm_check_type=disarm_check_type,
-            detect_difficulty=20,
-            disarm_difficulty=20,
+            detect_difficulty_level=1,
+            disarm_difficulty_level=1,
         )
 
         instantiate_situation(template, self.room)

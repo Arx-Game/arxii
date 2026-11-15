@@ -119,7 +119,7 @@ describe('CategoryDoorDialog', () => {
               id: 11,
               clue_name: 'The Bloodied Ledger',
               clue_slug: 'bloodied-ledger',
-              detect_difficulty: 30,
+              detect_difficulty_level: 4,
               fixture_key: null,
             },
           ],

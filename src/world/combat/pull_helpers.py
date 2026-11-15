@@ -31,6 +31,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from world.checks.services import difficulty_points
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
@@ -656,7 +658,7 @@ def _resolve_emergency_draw(
     check_result = perform_check(
         sheet.character,
         config.petition_check_type,
-        target_difficulty=config.petition_base_difficulty,
+        target_difficulty=difficulty_points(config.petition_base_difficulty_level),
         extra_modifiers=ease,
         situation_ctx=situation_ctx,
         extra_traits=activity_skill_terms(MagicActivity.COURT_PETITION),

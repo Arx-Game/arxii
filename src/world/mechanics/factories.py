@@ -491,8 +491,8 @@ class SituationTrapLinkFactory(DjangoModelFactory):
     consequence_pool = factory.SubFactory("actions.factories.ConsequencePoolFactory")
     detect_check_type = factory.SubFactory(_CHECK_TYPE_FACTORY_PATH)
     disarm_check_type = factory.SubFactory(_CHECK_TYPE_FACTORY_PATH)
-    detect_difficulty = 20
-    disarm_difficulty = 20
+    detect_difficulty_level = 1
+    disarm_difficulty_level = 1
     is_hidden = True
 
 

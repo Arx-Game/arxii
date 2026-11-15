@@ -1933,8 +1933,18 @@ class SituationTrapLink(NaturalKeyMixin, SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="disarm_situation_traps",
     )
-    detect_difficulty = models.PositiveIntegerField(default=0)
-    disarm_difficulty = models.PositiveIntegerField(default=0)
+    detect_difficulty_level = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Authored as a level (0 = no difficulty): the roll meets that level's baseline."
+        ),
+    )
+    disarm_difficulty_level = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Authored as a level (0 = no difficulty): the roll meets that level's baseline."
+        ),
+    )
     is_hidden = models.BooleanField(default=True)
 
     objects = NaturalKeyManager()

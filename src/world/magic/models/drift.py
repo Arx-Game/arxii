@@ -118,7 +118,7 @@ class DriftCorrectionConfig(SharedMemoryModel):
     Every foreign key is nullable so the lazily created row is valid before staff author
     it; the rite refuses to run until the rite and check type are set.
 
-    ``check_type`` and ``check_difficulty`` are deliberately NOT a ``RitualCheckConfig``
+    ``check_type`` and ``check_difficulty_level`` are deliberately NOT a ``RitualCheckConfig``
     sidecar: that model requires a stat and a skill, and ``perform_ritual_check`` looks the
     config up by ritual NAME and accepts no extra modifiers. This rite designates its ritual
     and its check by foreign key and rolls with a focus modifier.

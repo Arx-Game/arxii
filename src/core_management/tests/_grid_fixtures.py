@@ -183,7 +183,7 @@ def build_sample_grid() -> SimpleNamespace:  # noqa: PLR0915
     room_clue = RoomClue.objects.create(
         room_profile=taproom,
         clue=torn_letter,
-        detect_difficulty=5,
+        detect_difficulty_level=3,
         fixture_key="arx-city/golden-hart-taproom/torn-letter",
     )
     clue_trigger = ClueTrigger.objects.create(

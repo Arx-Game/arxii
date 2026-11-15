@@ -124,7 +124,7 @@ class WorldBuilderRoomClueSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     clue_name = serializers.CharField()
     clue_slug = serializers.CharField()
-    detect_difficulty = serializers.IntegerField()
+    detect_difficulty_level = serializers.IntegerField()
     fixture_key = serializers.CharField(allow_null=True)
 
 

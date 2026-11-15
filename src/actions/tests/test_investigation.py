@@ -176,8 +176,8 @@ class SearchThenDisarmJourneyTest(TestCase):
             consequence_pool=pool,
             detect_check_type=CheckTypeFactory(name="Journey Detect Traps"),
             disarm_check_type=CheckTypeFactory(name="Journey Disarm Traps"),
-            detect_difficulty=10,
-            disarm_difficulty=10,
+            detect_difficulty_level=1,
+            disarm_difficulty_level=1,
         )
 
     def _health(self) -> int:

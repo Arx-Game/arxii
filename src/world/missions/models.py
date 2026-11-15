@@ -2143,9 +2143,12 @@ class MissionAssistPattern(SharedMemoryModel):
         related_name="+",
         help_text="The CheckType rolled when a helper declares this support move.",
     )
-    difficulty = models.PositiveSmallIntegerField(
-        default=5,
-        help_text="Difficulty for the support move's check (retunable).",
+    difficulty_level = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Difficulty for the support move's check (retunable). Authored as a level "
+            "(0 = no difficulty): the roll meets that level's baseline."
+        ),
     )
     easing = models.IntegerField(
         default=2,
@@ -2219,7 +2222,12 @@ class MissionNodeSupportOption(SharedMemoryModel):
         related_name="+",
         help_text="The CheckType rolled when a helper declares this support move.",
     )
-    difficulty = models.PositiveSmallIntegerField(default=5)
+    difficulty_level = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Authored as a level (0 = no difficulty): the roll meets that level's baseline."
+        ),
+    )
     easing = models.IntegerField(default=2)
     complication_consequence = models.ForeignKey(
         _CONSEQUENCE_FK,

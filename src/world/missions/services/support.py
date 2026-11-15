@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from world.checks.consequence_resolution import apply_resolution
-from world.checks.services import perform_check
+from world.checks.services import difficulty_points, perform_check
 from world.checks.types import ResolutionContext
 from world.conditions.services import get_effective_capability_value
 from world.missions.services._situation import mission_situation_ctx
@@ -117,7 +117,7 @@ def _gem_support_moves(
                 label=gem.flavor_template or "Support",
                 capability_name=gem.capability.name if gem.capability_id else None,
                 check_type_name=gem.support_check_type.name,
-                difficulty=gem.difficulty,
+                difficulty=difficulty_points(gem.difficulty_level),
                 easing=gem.easing,
                 flavor=gem.flavor_template,
                 rumored=is_rumored and not qualifies,
@@ -166,7 +166,7 @@ def _pattern_support_moves(node: MissionNode, character: ObjectDB) -> list[Suppo
                 label=pattern.name,
                 capability_name=(pattern.capability.name if pattern.capability_id else None),
                 check_type_name=pattern.support_check_type.name,
-                difficulty=pattern.difficulty,
+                difficulty=difficulty_points(pattern.difficulty_level),
                 easing=pattern.easing,
                 flavor=pattern.flavor_template,
                 rumored=is_rumored and not qualifies,
@@ -263,7 +263,7 @@ def _roll_and_bank(  # noqa: PLR0913
         result = perform_check(
             character,
             move.support_check_type,
-            target_difficulty=move.difficulty,
+            target_difficulty=difficulty_points(move.difficulty_level),
             situation_ctx=mission_situation_ctx(character, instance),
         )
         is_success = result.success_level >= 1

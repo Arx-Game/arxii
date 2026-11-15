@@ -262,7 +262,7 @@ def resolve_capture_setup(  # noqa: PLR0913 — keyword-only; each arg is a dist
     cell_description: str = "",
     clue_name: str = "",
     clue_description: str = "",
-    clue_detect_difficulty: int | None = None,
+    clue_detect_difficulty_level: int | None = None,
 ) -> CaptureSetup:
     """Resolve one capture's loops + cell flavor: per-capture override, else default.
 
@@ -280,10 +280,10 @@ def resolve_capture_setup(  # noqa: PLR0913 — keyword-only; each arg is a dist
         cell_description=cell_description or config.cell_description,
         clue_name=clue_name or config.clue_name,
         clue_description=clue_description or config.clue_description,
-        clue_detect_difficulty=(
-            clue_detect_difficulty
-            if clue_detect_difficulty is not None
-            else config.clue_detect_difficulty
+        clue_detect_difficulty_level=(
+            clue_detect_difficulty_level
+            if clue_detect_difficulty_level is not None
+            else config.clue_detect_difficulty_level
         ),
     )
 

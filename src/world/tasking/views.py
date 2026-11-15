@@ -161,7 +161,7 @@ class ListenerPostViewSet(
             npc_asset_id=data["npc_asset"],
             room_id=data["room"],
             check_type_id=data.get("check_type"),
-            check_difficulty=data.get("check_difficulty", 0),
+            check_difficulty_level=data.get("check_difficulty_level", 0),
         )
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)

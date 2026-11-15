@@ -68,7 +68,7 @@ class GridRoundTripJourneyTests(TestCase):
         display.save()
         self.grid.city.name = "Somewhere Else"
         self.grid.city.save()
-        self.grid.room_clue.detect_difficulty = 1
+        self.grid.room_clue.detect_difficulty_level = 1
         self.grid.room_clue.save()
 
         world_result = load_world_content(self.root)
@@ -91,7 +91,7 @@ class GridRoundTripJourneyTests(TestCase):
         self.assertEqual(restored_starting_area.default_starting_room_id, self.grid.taproom.pk)
 
         restored_clue = RoomClue.objects.get(fixture_key=clue_fixture_key)
-        self.assertEqual(restored_clue.detect_difficulty, 5)
+        self.assertEqual(restored_clue.detect_difficulty_level, 3)
         self.assertTrue(
             PortalAnchor.objects.active().filter(fixture_key=anchor_fixture_key).exists()
         )

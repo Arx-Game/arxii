@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
+from world.checks.services import difficulty_points
 from world.tasking.exceptions import TaskingError
 from world.tasking.models import ListenerPost
 
@@ -158,7 +159,7 @@ def suppress_listener(actor: Persona, post: ListenerPost) -> bool:
     result = _roll(
         actor,
         SUPPRESS_CHECK_NAME,
-        SUPPRESS_BASE_DIFFICULTY + post.check_difficulty,
+        SUPPRESS_BASE_DIFFICULTY + difficulty_points(post.check_difficulty_level),
         target_persona=target,
     )
     if result.success_level <= 0:
@@ -187,7 +188,7 @@ def flip_listener(actor: Persona, post: ListenerPost) -> bool:
     result = _roll(
         actor,
         FLIP_CHECK_NAME,
-        FLIP_BASE_DIFFICULTY + post.check_difficulty,
+        FLIP_BASE_DIFFICULTY + difficulty_points(post.check_difficulty_level),
         target_persona=target,
     )
     if result.success_level <= 0:
@@ -281,7 +282,8 @@ def detect_listeners(actor: Persona, room: RoomProfile) -> list[dict]:
         result = perform_check_with_modifiers(
             character,
             check_type,
-            target_difficulty=DETECT_BASE_DIFFICULTY + post.check_difficulty,
+            target_difficulty=DETECT_BASE_DIFFICULTY
+            + difficulty_points(post.check_difficulty_level),
         )
         if result.success_level > 0:
             asset = post.assignment.npc_asset

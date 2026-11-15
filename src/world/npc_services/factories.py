@@ -88,7 +88,7 @@ class NPCServiceOfferFactory(DjangoModelFactory):
     rapport_delta_failure = 0
     cooldown = None
     check_type = None
-    check_difficulty = 0
+    check_difficulty_level = 0
 
 
 class OfferCooldownFactory(DjangoModelFactory):
@@ -139,7 +139,7 @@ class SkillCourseOfferDetailsFactory(DjangoModelFactory):
     session_ap_cost = 5
     coin_cost = 1000
     check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
-    check_difficulty = 0
+    check_difficulty_level = 0
 
 
 class SkillCourseEnrollmentFactory(DjangoModelFactory):

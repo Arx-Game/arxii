@@ -599,10 +599,14 @@ class ConsequenceEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default="",
         help_text="Override rescue-clue description. Unset = the CaptivityConfig default.",
     )
-    capture_clue_detect_difficulty = models.PositiveIntegerField(
+    capture_clue_detect_difficulty_level = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
-        help_text="Override Search difficulty to spot the rescue clue. Unset = config default.",
+        help_text=(
+            "Override Search difficulty to spot the rescue clue. Unset = config "
+            "default. Authored as a level (0 = no difficulty): the roll meets that "
+            "level's baseline."
+        ),
     )
 
     # Trial effects (#4501). ``grants_known`` is read by GRANT_CODEX; the rest by

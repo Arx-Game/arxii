@@ -43,6 +43,7 @@ from world.checks.consequence_resolution import (
     resolve_pool_consequences,
     select_consequence,
 )
+from world.checks.services import difficulty_points
 from world.checks.types import ResolutionContext
 
 if TYPE_CHECKING:
@@ -134,7 +135,9 @@ def resolve_trap_on_character(trap: Trap, character: Character) -> None:
     if not trap.is_hidden:
         trap.detected_by.add(sheet)
         return
-    pending = _resolve_trap_pool(trap, character, trap.detect_check_type, trap.detect_difficulty)
+    pending = _resolve_trap_pool(
+        trap, character, trap.detect_check_type, difficulty_points(trap.detect_difficulty_level)
+    )
     trap.detected_by.add(sheet)
     # A real (saved) selected_consequence means the rolled outcome tier matched
     # an authored pool entry and effects were applied (`apply_resolution` ->
@@ -186,7 +189,10 @@ def search_room_traps(character: Character, room_profile: RoomProfile) -> list[T
 
     Returns the traps newly detected by this search, for the caller's message.
     """
-    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+    from world.checks.services import (  # noqa: PLC0415
+        difficulty_points,
+        perform_check_with_modifiers,
+    )
     from world.room_features.models import Trap  # noqa: PLC0415
 
     try:
@@ -201,7 +207,9 @@ def search_room_traps(character: Character, room_profile: RoomProfile) -> list[T
     detected: list[Trap] = []
     for trap in candidates:
         result = perform_check_with_modifiers(
-            character, trap.detect_check_type, target_difficulty=trap.detect_difficulty
+            character,
+            trap.detect_check_type,
+            target_difficulty=difficulty_points(trap.detect_difficulty_level),
         )
         if result.outcome is not None and result.outcome.success_level >= 0:
             trap.detected_by.add(sheet)
