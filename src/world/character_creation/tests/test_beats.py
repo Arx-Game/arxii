@@ -416,6 +416,45 @@ class BeatsEndpointTests(TestCase):
         self.assertEqual(resp.status_code, 200, resp.content)
         self.assertEqual(len(resp.json()["distinctions"]), 2)
 
+    def test_a_save_costs_the_same_however_many_cards_are_held(self):
+        """One read of the draft's offers and one of the species' innate list per save
+        (#5134). The save used to make both once per card in the payload, so every
+        click was slower than the last as a life filled in."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.species.factories import SpeciesFactory
+
+        self.draft.selected_species = SpeciesFactory()
+        self.draft.save(update_fields=["selected_species"])
+        open_beat = LifeBeatFactory(
+            name="What you carry",
+            life_stage=LifeStage.SINCE_THE_GLIMPSE,
+            selection=BeatSelection.ANY,
+        )
+        cards = [_answer(open_beat, f"Card {index}", 1) for index in range(12)]
+        url = f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/"
+
+        def save(held) -> int:
+            body = {
+                "distinctions": [
+                    {"id": card.distinction_id, "rank": 1, "offer_id": card.pk} for card in held
+                ]
+            }
+            with CaptureQueriesContext(connection) as ctx:
+                resp = self.client.put(url, body, format="json")
+            self.assertEqual(resp.status_code, 200, resp.content)
+            self.assertEqual(len(resp.json()["distinctions"]), len(held))
+            return len(ctx.captured_queries)
+
+        # Each size is saved twice and the second is counted, so both are the same
+        # save of an unchanged draft and differ only in how many cards it holds.
+        save(cards[:2])
+        two = save(cards[:2])
+        save(cards)
+        twelve = save(cards)
+        self.assertEqual(two, twelve)
+
     def test_recent_history_is_text_of_a_bounded_length(self):
         """The optional text a life ends on (#4830): up to the limit saves, over it is
         refused naming the limit, and null clears it."""

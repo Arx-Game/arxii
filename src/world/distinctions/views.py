@@ -266,7 +266,12 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         return ValidatedDistinction(distinction=distinction, rank=rank, notes=notes, offer=offer)
 
     def _resolve_offer(
-        self, offer_id: object, distinction: Distinction, draft: CharacterDraft
+        self,
+        offer_id: object,
+        distinction: Distinction,
+        draft: CharacterDraft,
+        *,
+        visible: dict[int, DistinctionOffer] | None = None,
     ) -> DistinctionOffer:
         """Resolve and validate an ``offer_id`` against the draft's visible offers.
 
@@ -276,10 +281,15 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         distinction, or when the offer doesn't arrive as a CHOICE (a client may
         never pick a BUNDLED or CARRIED offer directly, those are applied only
         by ``reconcile_offer_picks``).
+
+        ``visible`` is the draft's ``visible_offers``, read once by a caller that
+        resolves many entries (#5134): the read is the whole active offer table,
+        and ``sync`` used to make it once per card the draft holds.
         """
         if not isinstance(offer_id, int):
             raise ValidationError({"detail": f"{distinction.name} requires an offer_id."})
-        visible = visible_offers(draft)
+        if visible is None:
+            visible = visible_offers(draft)
         offer = visible.get(offer_id)
         if (
             offer is None
@@ -298,22 +308,40 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         return offer
 
     def _check_species_innate_bulk(self, distinctions, draft: CharacterDraft) -> None:
-        """Apply the species-innate gate (#2846) to every distinction in a sync payload."""
-        for distinction in distinctions:
-            self._check_species_innate(distinction, draft)
+        """Apply the species-innate gate (#2846) to every distinction in a sync payload.
 
-    def _check_species_innate(self, distinction: Distinction, draft: CharacterDraft) -> None:
+        The species' innate ids are read once for the payload (#5134), not once per
+        distinction in it.
+        """
+        innate = self._species_innate_ids(draft)
+        for distinction in distinctions:
+            self._check_species_innate(distinction, draft, innate=innate)
+
+    @staticmethod
+    def _species_innate_ids(draft: CharacterDraft) -> set[int]:
+        """The distinctions the drafted species grants on its own; none with no species."""
+        if draft.selected_species_id is None:
+            return set()
+        from world.species.services import species_innate_distinction_ids  # noqa: PLC0415
+
+        return set(species_innate_distinction_ids(draft.selected_species))
+
+    def _check_species_innate(
+        self,
+        distinction: Distinction,
+        draft: CharacterDraft,
+        *,
+        innate: set[int] | None = None,
+    ) -> None:
         """Reject selecting a distinction the drafted species grants innately (#2846).
 
         The species' own ``SpeciesGiftGrant.drawback_distinction`` rows stamp at
         finalize — selecting one in CG would double it up (and, for the
         reimbursing sun drawbacks, double-refund the counterweight).
         """
-        if draft.selected_species_id is None:
-            return
-        from world.species.services import species_innate_distinction_ids  # noqa: PLC0415
-
-        if distinction.id in species_innate_distinction_ids(draft.selected_species):
+        if innate is None:
+            innate = self._species_innate_ids(draft)
+        if distinction.id in innate:
             raise ValidationError(
                 {
                     "detail": (
@@ -699,11 +727,13 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         arrivals appended, rank raised to the max requested).
         """
         labels = self._resolve_sync_features(distinction_entries, by_id, draft)
+        # One read of what the draft is offered, for every entry (#5134).
+        visible = visible_offers(draft)
         new_by_key: dict[tuple[int, str, int], dict] = {}
         for entry in distinction_entries:
             distinction = by_id[entry["id"]]
             rank = entry["rank"]
-            offer = self._resolve_offer(entry["offer_id"], distinction, draft)
+            offer = self._resolve_offer(entry["offer_id"], distinction, draft, visible=visible)
             trait_name, marking_id = self._entry_feature(entry, distinction)
             key = (distinction.id, trait_name, marking_id)
             # A per-feature line names the same offer on every feature, so its source

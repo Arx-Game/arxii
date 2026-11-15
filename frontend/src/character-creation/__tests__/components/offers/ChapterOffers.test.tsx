@@ -21,7 +21,13 @@ const mutate = vi.fn();
 // Mutable so a test can flip isPending/isError before rendering (F2, #3675
 // final fix): a real useMutation() exposes both while a PUT is in flight or
 // after it fails.
-let syncState = { isPending: false, isError: false };
+// `pendingEntries` is the picks a save in flight is writing (#5134), from this grid
+// or another on the page; absent in a test that does not set it.
+let syncState: {
+  isPending: boolean;
+  isError: boolean;
+  pendingEntries?: { id: number; rank: number; offer_id: number }[] | null;
+} = { isPending: false, isError: false };
 
 vi.mock('../../../queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../queries')>()),
@@ -229,6 +235,90 @@ describe('ChapterOffers', () => {
     expect(screen.getByRole('button', { name: /Silver Tongue/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Raise Magical Scar' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Lower Magical Scar' })).toBeDisabled();
+  });
+
+  describe('while a save is in flight (#5134)', () => {
+    const silverTongueHeld: DraftDistinctionEntry = {
+      ...otherChapterEntry,
+      distinction_id: 1,
+      distinction_name: 'Silver Tongue',
+      rank: 1,
+      offer_ids: [101],
+    };
+
+    it('the card being saved shows picked before the server answers', () => {
+      // The saved list does not hold Silver Tongue yet; the save in flight does.
+      syncState = {
+        isPending: true,
+        isError: false,
+        pendingEntries: [
+          { id: 50, rank: 2, offer_id: 999 },
+          { id: 1, rank: 1, offer_id: 101 },
+        ],
+      };
+      renderWithCharacterCreationProviders(
+        <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+      );
+      expect(screen.getByRole('button', { name: /Silver Tongue/ })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+    });
+
+    it('a card the save lets go shows unpicked at once', () => {
+      draftDistinctions = [otherChapterEntry, silverTongueHeld];
+      syncState = {
+        isPending: true,
+        isError: false,
+        pendingEntries: [{ id: 50, rank: 2, offer_id: 999 }],
+      };
+      renderWithCharacterCreationProviders(
+        <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+      );
+      expect(screen.getByRole('button', { name: /Silver Tongue/ })).toHaveAttribute(
+        'aria-pressed',
+        'false'
+      );
+    });
+
+    it('a card held some other way than by choice keeps its state through a save', () => {
+      // Bundled by a Lineage answer: no save carries it, so no save lets it go.
+      draftDistinctions = [{ ...silverTongueHeld, arrivals: ['bundled'] }];
+      syncState = { isPending: true, isError: false, pendingEntries: [] };
+      renderWithCharacterCreationProviders(
+        <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+      );
+      expect(screen.getByRole('button', { name: /Silver Tongue/ })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+    });
+
+    it("another grid's save holds this grid's cards too", () => {
+      // This grid's own mutation is idle; the save is another grid's on the same page.
+      // A click here would be computed from the list that save is about to replace.
+      syncState = {
+        isPending: false,
+        isError: false,
+        pendingEntries: [{ id: 50, rank: 2, offer_id: 999 }],
+      };
+      renderWithCharacterCreationProviders(
+        <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+      );
+      expect(screen.getByRole('button', { name: /Silver Tongue/ })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Raise Magical Scar' })).toBeDisabled();
+    });
+
+    it('with no save in flight the cards read the saved list', () => {
+      draftDistinctions = [otherChapterEntry, silverTongueHeld];
+      syncState = { isPending: false, isError: false, pendingEntries: null };
+      renderWithCharacterCreationProviders(
+        <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+      );
+      const card = screen.getByRole('button', { name: /Silver Tongue/ });
+      expect(card).toHaveAttribute('aria-pressed', 'true');
+      expect(card).not.toBeDisabled();
+    });
   });
 
   it('prints the sync error hint when the mutation fails', () => {
