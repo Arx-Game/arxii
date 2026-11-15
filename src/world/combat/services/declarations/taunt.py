@@ -181,6 +181,6 @@ def _resolve_taunt(
     elif action.focused_ally_target is not None:
         _resolve_taunt_on_participant(participant, action.focused_ally_target)
         # #5124: the taunter rolls nothing against a player character (the target rolls).
-        award_unrolled(participant, action, kind=KindlingActKind.SOCIAL)
+        award_unrolled(participant, action, kind=KindlingActKind.SOCIAL, what="Taunted")
 
     return outcome

@@ -188,7 +188,11 @@ def _resolve_flee(
     success_level = pending.check_result.success_level
     # #5124: the flee roll earns what the act feeds (any act while a feeling holds).
     award_rolled(
-        participant, action, kind=KindlingActKind.OTHER, outcome=pending.check_result.outcome
+        participant,
+        action,
+        kind=KindlingActKind.OTHER,
+        what="Fled",
+        outcome=pending.check_result.outcome,
     )
     escaped = success_level >= FLEE_PARTIAL_SUCCESS_LEVEL
     consequence_applies = success_level <= FLEE_PARTIAL_SUCCESS_LEVEL

@@ -172,6 +172,7 @@ def _award_clash_contribution(
     character_sheet: CharacterSheet,
     participant: CombatParticipant | None,
     outcome: CheckOutcome,
+    technique: Technique,
 ) -> None:
     """Earn what a clash contribution feeds (#5124), scaled by its roll.
 
@@ -181,7 +182,11 @@ def _award_clash_contribution(
     from world.combat.constants import ClashFlavor, LockPcRole  # noqa: PLC0415
     from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
     from world.magic.constants import KindlingActKind  # noqa: PLC0415
-    from world.magic.services.kindling import award_kindled_deeds  # noqa: PLC0415
+    from world.magic.services.kindling import (  # noqa: PLC0415
+        act_label,
+        award_kindled_deeds,
+        sheet_name,
+    )
     from world.magic.types.kindling import KindlingAct  # noqa: PLC0415
 
     freeing = (
@@ -196,6 +201,11 @@ def _award_clash_contribution(
             kind=KindlingActKind.TECHNIQUE,
             target=clash.initiator if freeing else None,
             aids=freeing,
+            label=(
+                act_label("Freed", sheet_name(character_sheet, clash.initiator))
+                if freeing
+                else act_label(technique.name)
+            ),
         ),
         outcome=outcome,
         resolution=CombatRoundContext(participant) if participant is not None else None,
@@ -435,7 +445,7 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
         msg = "commit_to_clash: CheckResult has no outcome — check pipeline returned empty result."
         raise ValueError(msg)
     check_outcome: CheckOutcome = check_result.outcome
-    _award_clash_contribution(clash, character_sheet, participant, check_outcome)
+    _award_clash_contribution(clash, character_sheet, participant, check_outcome, technique)
 
     # 7. Convert outcome to progress delta (power-scaled formula).
     progress_delta = outcome_to_delta(

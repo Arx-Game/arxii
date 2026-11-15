@@ -240,15 +240,15 @@ class Situation(models.TextChoices):
         "Enemies With a Condition Property Nearby",
     )
     TARGET_LOW_HEALTH = "target_low_health", "Target Low Health"
-    THREAD_ANCHOR_PRESENT = "thread_anchor_present", "Thread Anchor Present"
-    OWN_FEELING = "own_feeling", "Own Feeling"
-    SHARED_FEELING = "shared_feeling", "Shared Feeling"
+    THREAD_ANCHOR_PRESENT = "thread_anchor_present", "Someone a thread is tied to"
+    OWN_FEELING = "own_feeling", "Their own feeling"
+    SHARED_FEELING = "shared_feeling", "A feeling held in common"
     TARGET_IN_STATE_THEY_CAUSED = (
         "target_in_state_they_caused",
-        "Target in a State They Caused",
+        "Someone in a state they caused",
     )
-    SOMEONE_IN_TROUBLE = "someone_in_trouble", "Someone in Trouble"
-    MISSION_THEME = "mission_theme", "Mission Theme"
+    SOMEONE_IN_TROUBLE = "someone_in_trouble", "Someone in trouble they help"
+    MISSION_THEME = "mission_theme", "What the scene is about"
 
 
 class PerkEffectKind(models.TextChoices):

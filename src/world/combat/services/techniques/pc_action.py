@@ -226,7 +226,7 @@ def _resolve_pc_action(
 
     if action.maneuver == CombatManeuver.COVER and action.focused_ally_target is not None:
         # Covering an ally rolls nothing of its own; the Cover bonus lands on their flee.
-        award_unrolled(participant, action, kind=KindlingActKind.AID, aids=True)
+        award_unrolled(participant, action, kind=KindlingActKind.AID, what="Covered", aids=True)
 
     return resolve_pc_technique(participant, action, offense_check_fn)
 

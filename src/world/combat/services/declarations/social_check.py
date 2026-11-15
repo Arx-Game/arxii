@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from world.checks.social_target import SocialDifficulty, social_target_difficulty
 from world.checks.types import ModifierContribution
+from world.combat.constants import CombatManeuver
 from world.combat.models import CombatOpponent, CombatParticipant, CombatRoundAction
 from world.combat.services.techniques.technique_targets import _resolve_primary_target_sheet
 from world.fatigue.constants import EffortLevel
@@ -96,6 +97,14 @@ def _social_combat_difficulty(
     )
 
 
+# What a social verb's deed reads as, by the maneuver that made it.
+_VERB_DEED_WORDS = {
+    CombatManeuver.DEMORALIZE: "Demoralized",
+    CombatManeuver.PARLEY: "Parleyed with",
+    CombatManeuver.TAUNT: "Taunted",
+}
+
+
 def _social_verb_success_level(
     participant: CombatParticipant,
     check_type: CheckType | None,
@@ -126,7 +135,13 @@ def _social_verb_success_level(
     from world.magic.constants import KindlingActKind  # noqa: PLC0415
 
     # #5124: the verb's own roll earns what the act feeds (demoralize, taunt, parley).
-    award_rolled(participant, action, kind=KindlingActKind.SOCIAL, outcome=result.outcome)
+    award_rolled(
+        participant,
+        action,
+        kind=KindlingActKind.SOCIAL,
+        what=_VERB_DEED_WORDS.get(action.maneuver, "Spoke to"),
+        outcome=result.outcome,
+    )
     return result.success_level or 0
 
 

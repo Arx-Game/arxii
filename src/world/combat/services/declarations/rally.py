@@ -255,7 +255,13 @@ def _resolve_tuned_rally(
     success_level = rally_result.success_level or 0
     ally = action.focused_ally_target
     # #5124: the Rally's own roll earns what the act feeds (an ally encouraged).
-    award_rolled(participant, action, kind=KindlingActKind.SOCIAL, outcome=rally_result.outcome)
+    award_rolled(
+        participant,
+        action,
+        kind=KindlingActKind.SOCIAL,
+        what="Rallied",
+        outcome=rally_result.outcome,
+    )
     # Read before this Rally writes anything: a resonance she kindles does not surge itself.
     named = action.rally_resonance if ally is not None else None
     kindled_tier = _kindled_tier_of(ally, named) if ally is not None and named else None

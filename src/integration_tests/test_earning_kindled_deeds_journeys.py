@@ -172,6 +172,8 @@ class EarningFromAMissionOption(_Gate):
         grant = self.deeds().get()
         self.assertEqual((grant.amount, grant.resonance), (5, self.domination))
         self.assertEqual(grant.source_kindling_situation, row)
+        # The grant records what she did, in the option's own title.
+        self.assertEqual(grant.deed_label, "[check option 0]")
         self.assertEqual(self.balance(), 5)
         self.assertTold(self.mira, "You earned 5 Domination.")
 
@@ -330,6 +332,8 @@ class EarningFromACombatStrike(_StrikeField):
         grant = ResonanceGrant.objects.get(source=GainSource.KINDLED_DEED)
         self.assertEqual((grant.amount, grant.resonance), (5, self.wrath))
         self.assertEqual(grant.source_kindling_situation, self.row)
+        # The grant records what he did, naming the opponent he struck.
+        self.assertEqual(grant.deed_label, "Struck Bandit")
         self.assertTold(self.hobb, "You earned 5 Wrath.")
 
 

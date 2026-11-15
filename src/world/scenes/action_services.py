@@ -165,15 +165,22 @@ def _resolve_treatment_request(
 
     # #5124: treating someone is an aid, scaled by the treatment's own roll.
     from world.magic.constants import KindlingActKind  # noqa: PLC0415
-    from world.magic.services.kindling import award_kindled_deeds  # noqa: PLC0415
+    from world.magic.services.kindling import (  # noqa: PLC0415
+        act_label,
+        award_kindled_deeds,
+        sheet_name,
+    )
     from world.magic.types.kindling import KindlingAct  # noqa: PLC0415
 
+    healer = action_request.initiator_persona.character_sheet
+    patient = action_request.target_persona.character_sheet
     award_kindled_deeds(
-        action_request.initiator_persona.character_sheet,
+        healer,
         act=KindlingAct(
             kind=KindlingActKind.AID,
-            target=action_request.target_persona.character_sheet,
+            target=patient,
             aids=True,
+            label=act_label("Treated", sheet_name(healer, patient)),
         ),
         outcome=outcome.outcome,
     )
@@ -1582,16 +1589,19 @@ def _award_kindled_deeds_for_action(
     SOCIAL act; a beneficial technique on someone else aids them. A PC resisting an NPC's action
     did not act, and a paused or unrolled resolution earns nothing.
     """
+    from actions.registry import get_action  # noqa: PLC0415
     from world.magic.services.kindling import award_scene_act  # noqa: PLC0415
 
     main = result.action_resolution.main_result
     if main is None or _pc_resists(action_request, action_request.target_persona):
         return
+    action_obj = get_action(action_request.action_key)
     award_scene_act(
         action_request.initiator_persona.character_sheet,
         action_request.target_persona.character_sheet,
         action_request.technique,
         main.check_result.outcome,
+        action_name=action_obj.name if action_obj is not None else action_request.action_key,
     )
 
 

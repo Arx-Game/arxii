@@ -154,6 +154,16 @@ class ResonanceGrant(SharedMemoryModel):
         help_text="Set when source=WORSHIP_RITE (#3777).",
     )
 
+    deed_label = models.CharField(
+        max_length=200,
+        null=True,
+        blank=True,
+        help_text=(
+            "Set when source=KINDLED_DEED: what the character did, in the player's "
+            "own words (an option's title, a technique's name, 'Struck the bandit'). Play "
+            "state, written once with the grant."
+        ),
+    )
     source_kindling_situation = models.ForeignKey(
         "arxii.KindlingSituation",
         null=True,

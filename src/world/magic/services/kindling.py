@@ -497,6 +497,19 @@ def _row_contribution(
     return _Contribution(rank=scored[0][0], reasons=reasons, situation=row)
 
 
+def situation_reason(row: KindlingSituation) -> str:
+    """The reason a player reads for ``row`` when no live scene is at hand, or "".
+
+    The row's own ``reason_text``, else the player text of its mission theme, which is what
+    the panel shows for a theme situation. A situation whose reason needs the scene (an
+    anchor's name, a bearer's name) has none to give here.
+    """
+    if row.reason_text:
+        return row.reason_text
+    theme = row.mission_theme
+    return (theme.player_text or theme.name) if theme is not None else ""
+
+
 def _effective_params(row: KindlingSituation, resonance: Resonance) -> SituationParams:
     """The row's params; the feeling situations fall back to the resonance's ``feeling``."""
     params = row.params
@@ -947,20 +960,40 @@ def lowest_success_outcome() -> CheckOutcome | None:
     return CheckOutcome.objects.filter(success_level__gt=0).order_by("success_level", "pk").first()
 
 
+def sheet_name(viewer: CharacterSheet, sheet: CharacterSheet | None) -> str | None:
+    """The name ``viewer`` knows ``sheet``'s character by, or None for no sheet or no persona."""
+    if sheet is None:
+        return None
+    return shown_names(viewer, [sheet.pk]).get(sheet.pk)
+
+
+def act_label(what: str, target_name: str | None = None, joiner: str = " ") -> str:
+    """An act in the player's own words: ``what`` and, when there is one, who it was aimed at.
+
+    "Struck Mira" (``joiner`` a space) or "Pyromancy on Mira" (``joiner=" on "``). The label
+    is what a kindled-deed grant records, so keep ``what`` to the act's own name.
+    """
+    return f"{what}{joiner}{target_name}" if target_name else what
+
+
 def award_scene_act(
     initiator: CharacterSheet,
     target: CharacterSheet | None,
     technique: Technique | None,
     outcome: CheckOutcome | None,
+    *,
+    action_name: str = "",
 ) -> list[ResonanceGrant]:
     """Earn what a scene act feeds (#5124), scaled by its roll: the one place a scene act's
     kind is decided.
 
     An act made with a ``technique`` is a TECHNIQUE act and any other is a SOCIAL act. A
-    beneficial technique on someone else aids them.
+    beneficial technique on someone else aids them. The deed is labelled by the technique's
+    name, else by ``action_name`` (the scene action's own name).
     """
     from world.magic.services.hostility import is_technique_hostile  # noqa: PLC0415
 
+    what = technique.name if technique is not None else action_name
     return award_kindled_deeds(
         initiator,
         act=KindlingAct(
@@ -970,6 +1003,7 @@ def award_scene_act(
             and target is not None
             and target != initiator
             and not is_technique_hostile(technique),
+            label=act_label(what, sheet_name(initiator, target), " on " if technique else " "),
         ),
         outcome=outcome,
     )
@@ -1025,6 +1059,7 @@ def award_kindled_deeds(
             amount,
             source=GainSource.KINDLED_DEED,
             kindling_situation=situation,
+            deed_label=act.label or None,
             ledger_out=grants,
         )
         transaction.on_commit(_told_of_deed(sheet, f"You earned {amount} {entry.resonance.name}."))
@@ -1049,6 +1084,7 @@ def _told_of_deed(sheet: CharacterSheet, line: str) -> Callable[[], None]:
 
 __all__ = [
     "KINDLING_EVIDENCE_FINDERS",
+    "act_label",
     "award_kindled_deeds",
     "award_scene_act",
     "held_resonance_names",
@@ -1062,6 +1098,8 @@ __all__ = [
     "own_feeling_evidence",
     "record_rally_kindling",
     "shared_feeling_evidence",
+    "sheet_name",
+    "situation_reason",
     "someone_in_trouble_evidence",
     "target_in_state_evidence",
     "thread_anchor_evidence",

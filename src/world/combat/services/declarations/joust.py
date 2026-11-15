@@ -167,6 +167,7 @@ def _resolve_joust_pass(
         participant,
         action,
         kind=KindlingActKind.ATTACK,
+        what="Jousted",
         outcome=check_a.outcome,
         target=other.character_sheet,
     )
@@ -174,6 +175,7 @@ def _resolve_joust_pass(
         other,
         other_action,
         kind=KindlingActKind.ATTACK,
+        what="Jousted",
         outcome=check_b.outcome,
         target=participant.character_sheet,
     )

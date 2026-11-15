@@ -790,7 +790,15 @@ def resolve_option(  # noqa: PLR0913
     with transaction.atomic():
         award_kindled_deeds(
             actor.character,
-            act=KindlingAct(kind=KindlingActKind.MISSION_OPTION, mission_option=option),
+            act=KindlingAct(
+                kind=KindlingActKind.MISSION_OPTION,
+                mission_option=option,
+                label=(
+                    chosen_approach.display_name
+                    if chosen_approach is not None
+                    else option.authored_ic_framing
+                ),
+            ),
             outcome=lowest_success_outcome() if auto else result.outcome,
             mission=instance,
         )

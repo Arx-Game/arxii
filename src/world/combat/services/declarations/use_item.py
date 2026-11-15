@@ -146,6 +146,7 @@ def _resolve_use_item(
                     participant,
                     action,
                     kind=KindlingActKind.OTHER,
+                    what=f"Used {action.item_instance.display_name}",
                     aids=action.focused_ally_target is not None,
                 )
 

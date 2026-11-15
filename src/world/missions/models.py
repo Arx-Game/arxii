@@ -258,7 +258,10 @@ class MissionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         MissionTheme,
         blank=True,
         related_name="templates",
-        help_text="What this mission is about (#5124); a kindled resonance can feed on it.",
+        help_text=(
+            "What this mission is about. Options can carry themes too; taking one is the act "
+            "that earns."
+        ),
     )
 
     @staticmethod
@@ -699,8 +702,8 @@ class MissionOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         blank=True,
         related_name="options",
         help_text=(
-            "What taking this option is about (#5124); a kindled resonance the theme "
-            "feeds earns when a character takes it."
+            "What taking this option is about; a kindled resonance the theme feeds earns "
+            "when a character takes it."
         ),
     )
     spawns_instance = models.BooleanField(

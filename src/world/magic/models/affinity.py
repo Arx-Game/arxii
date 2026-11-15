@@ -165,11 +165,7 @@ class Resonance(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         null=True,
         blank=True,
         related_name="feeling_of_resonances",
-        help_text=(
-            "The condition property that counts as this resonance's feeling (#5124). A "
-            "character bearing a condition with it, or others present who do, kindles the "
-            "resonance. Matched through the property, never by name."
-        ),
+        help_text=("Conditions carrying this property count as this resonance's feeling."),
     )
     objects = ResonanceManager()
 

@@ -14,9 +14,11 @@ from world.combat.round_context import CombatRoundContext
 from world.combat.types import CombatTechniqueResolution, CombatTechniqueResult
 from world.magic.constants import KindlingActKind
 from world.magic.services.kindling import (
+    act_label,
     active_mission_for,
     award_kindled_deeds,
     lowest_success_outcome,
+    sheet_name,
 )
 from world.magic.types.kindling import KindlingAct
 
@@ -42,17 +44,40 @@ def target_sheet(action: CombatRoundAction) -> CharacterSheet | None:
     return None
 
 
-def award_rolled(  # noqa: PLR0913 - the act's kind, who it was aimed at and what it rolled
+def _target_name(
+    participant: CombatParticipant,
+    action: CombatRoundAction | None,
+    target: CharacterSheet | None,
+) -> str | None:
+    """Who the act was aimed at, as the actor knows them: an allied PC or a named opponent."""
+    viewer = participant.character_sheet
+    if target is not None:
+        return sheet_name(viewer, target)
+    if action is None:
+        return None
+    ally = action.focused_ally_target
+    if ally is not None:
+        return sheet_name(viewer, ally.character_sheet)
+    opponent = action.focused_opponent_target
+    return opponent.name if opponent is not None else None
+
+
+def award_rolled(  # noqa: PLR0913 - the act's kind, name, who it was aimed at and what it rolled
     participant: CombatParticipant,
     action: CombatRoundAction | None,
     *,
     kind: str,
+    what: str,
     outcome: CheckOutcome | None,
     target: CharacterSheet | None = None,
+    target_name: str | None = None,
+    joiner: str = " ",
     aids: bool = False,
 ) -> None:
     """Earn what a PC's act feeds, scaled by the ``outcome`` of the roll it made.
 
+    ``what`` names the act in player words ("Struck", "Covered", a technique's name); the
+    deed is labelled with it and the target's name, which ``target_name`` overrides.
     ``target`` defaults to the person ``action`` is aimed at. A failed roll earns by its own
     outcome row (normally none).
     """
@@ -62,6 +87,13 @@ def award_rolled(  # noqa: PLR0913 - the act's kind, who it was aimed at and wha
             kind=kind,
             target=target if target is not None else (target_sheet(action) if action else None),
             aids=aids,
+            label=act_label(
+                what,
+                target_name
+                if target_name is not None
+                else _target_name(participant, action, target),
+                joiner,
+            ),
         ),
         outcome=outcome,
         resolution=CombatRoundContext(participant),
@@ -69,11 +101,12 @@ def award_rolled(  # noqa: PLR0913 - the act's kind, who it was aimed at and wha
     )
 
 
-def award_unrolled(
+def award_unrolled(  # noqa: PLR0913 - the act's kind, name and who it was aimed at
     participant: CombatParticipant,
     action: CombatRoundAction | None,
     *,
     kind: str,
+    what: str,
     target: CharacterSheet | None = None,
     aids: bool = False,
 ) -> None:
@@ -86,6 +119,7 @@ def award_unrolled(
         participant,
         action,
         kind=kind,
+        what=what,
         outcome=lowest_success_outcome(),
         target=target,
         aids=aids,
@@ -118,6 +152,8 @@ def award_for_technique_cast(
         participant,
         action,
         kind=KindlingActKind.TECHNIQUE,
+        what=action.focused_action.name if action.focused_action is not None else "Cast",
+        joiner=" on ",
         outcome=check.outcome,
         aids=action.focused_ally_target is not None,
     )
@@ -135,6 +171,8 @@ def award_defense_deed(
         participant,
         None,
         kind=KindlingActKind.DEFEND,
+        what="Stood against",
+        target_name=attacker.name,
         outcome=outcome,
         target=persona.character_sheet if persona is not None else None,
     )
@@ -144,4 +182,6 @@ def award_for_strike(
     participant: CombatParticipant, action: CombatRoundAction, hit: CheckResult
 ) -> None:
     """Earn the resonances a Strike feeds, scaled by its hit roll."""
-    award_rolled(participant, action, kind=KindlingActKind.ATTACK, outcome=hit.outcome)
+    award_rolled(
+        participant, action, kind=KindlingActKind.ATTACK, what="Struck", outcome=hit.outcome
+    )

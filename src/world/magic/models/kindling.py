@@ -108,8 +108,7 @@ class KindlingSituation(SituationRequirementMixin, SharedMemoryModel):
             )
 
     def __str__(self) -> str:
-        target = self.resonance_id or f"affinity {self.for_affinity_id}"
-        return f"KindlingSituation({self.situation} -> {target})"
+        return self.get_situation_display()
 
 
 class KindledStrengthTierManager(NaturalKeyManager):
@@ -182,7 +181,10 @@ class KindlingConfig(SharedMemoryModel):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="+",
-        help_text="A condition carrying this property harms whoever bears it.",
+        help_text=(
+            "A condition carrying this property harms whoever bears it. A feeling the "
+            "character spread that harms others is Abyssal, not a shared Primal feeling."
+        ),
     )
 
     class Meta:

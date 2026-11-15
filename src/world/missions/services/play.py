@@ -339,7 +339,11 @@ def _kindled_feeds(
     if not earning or sheet is None:
         return feeds
     acts = [
-        KindlingAct(kind=KindlingActKind.MISSION_OPTION, mission_option=presented[i].option)
+        KindlingAct(
+            kind=KindlingActKind.MISSION_OPTION,
+            mission_option=presented[i].option,
+            label=presented[i].ic_framing,
+        )
         for i in earning
     ]
     for index, entries in zip(

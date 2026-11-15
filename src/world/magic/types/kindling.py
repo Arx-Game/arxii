@@ -21,13 +21,16 @@ class KindlingAct:
     """One act of the character, as the kindling situations read it.
 
     ``kind`` is a ``KindlingActKind`` value. ``aids`` is true when the act helps someone
-    (cover, interpose, succor, a heal, freeing them).
+    (cover, interpose, succor, a heal, freeing them). ``label`` is the act in the player's
+    own words (the mission option's title, the technique's name, "Struck the bandit"); a
+    deed grant records it so the character can tell one deed from another later.
     """
 
     kind: str
     target: CharacterSheet | None = None
     mission_option: MissionOption | None = None
     aids: bool = False
+    label: str = ""
 
 
 @dataclass(frozen=True)

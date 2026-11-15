@@ -25,6 +25,7 @@ from world.magic.exceptions import (
 )
 from world.magic.models import Reflection, Resonance, ResonanceGrant
 from world.magic.services.drift import drift_for
+from world.magic.services.kindling import situation_reason
 from world.magic.types.reflection import (
     PendingReflection,
     Reflectable,
@@ -56,11 +57,16 @@ def unsettling_resonance(sheet: CharacterSheet | None) -> Resonance | None:
 
 
 def deed_what(grant: ResonanceGrant) -> str:
-    """What held when the deed was done, in the words staff wrote for the situation."""
+    """What the character did, in her own words.
+
+    The act's label recorded on the grant when it was earned; a grant with none falls back to
+    the reason the "Your resonances" panel gives for the situation (``situation_reason``),
+    never the situation's type name.
+    """
+    if grant.deed_label:
+        return grant.deed_label
     situation = grant.source_kindling_situation
-    if situation is None:
-        return ""
-    return situation.reason_text or situation.get_situation_display()
+    return situation_reason(situation) if situation is not None else ""
 
 
 def deed_label(grant: ResonanceGrant) -> str:

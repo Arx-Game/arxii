@@ -119,6 +119,7 @@ def grant_resonance(  # noqa: PLR0913
     settling_rite: SettlingRite | None = None,
     reflection: Reflection | None = None,
     from_mire: bool = False,
+    deed_label: str | None = None,
     ledger_out: list[ResonanceGrant] | None = None,
 ) -> CharacterResonance:
     """Atomically grant resonance AND write the ResonanceGrant ledger row.
@@ -154,6 +155,8 @@ def grant_resonance(  # noqa: PLR0913
         reflection: Required for EMBRACED_DEED source (#5124); the reflection the rite applied.
         from_mire: True when a Sineater takes the resonance from the Mire (#5123); the
             grant also counts toward the row's ``mire_lifetime``.
+        deed_label: What the character did, in her own words, recorded on a KINDLED_DEED
+            grant (#5124); None for every other source.
         ledger_out: When given, the ``ResonanceGrant`` row this call writes is appended to it,
             for a caller that needs the ledger row as well as the updated resonance.
 
@@ -248,6 +251,7 @@ def grant_resonance(  # noqa: PLR0913
         source_character_distinction=source_character_distinction,
         source_worship_rite_performance=worship_rite_performance,
         source_kindling_situation=kindling_situation,
+        deed_label=deed_label,
         source_settling_rite=settling_rite,
         source_reflection=reflection,
     )

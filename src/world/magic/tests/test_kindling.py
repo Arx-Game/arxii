@@ -595,3 +595,46 @@ class QueryCountTests(TestCase):
 
     def test_two_resonances_and_six_cost_the_same_queries(self) -> None:
         self.assertEqual(self._count(2), self._count(6))
+
+
+class DeedNamingTests(_Case):
+    """A deed reads as what the character did, never as the situation's type name."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.theme = MissionThemeFactory(player_text="This mission is about people held captive.")
+        self.row = KindlingSituationFactory(
+            resonance=self.resonance,
+            situation=Situation.MISSION_THEME,
+            mission_theme=self.theme,
+            strength=1,
+        )
+
+    def _deed(self, **kwargs: object):
+        from world.magic.constants import GainSource
+        from world.magic.services.resonance import grant_resonance
+
+        grants: list = []
+        grant_resonance(
+            self.sheet,
+            self.resonance,
+            5,
+            source=GainSource.KINDLED_DEED,
+            kindling_situation=self.row,
+            ledger_out=grants,
+            **kwargs,
+        )
+        return grants[0]
+
+    def test_the_recorded_label_is_what_the_deed_reads_as(self) -> None:
+        from world.magic.services.reflection import deed_label
+
+        grant = self._deed(deed_label="Bar the overseers' door")
+        self.assertEqual(deed_label(grant), f"Bar the overseers' door · 5 {self.resonance.name}")
+
+    def test_without_a_label_the_deed_reads_as_the_panels_reason_for_the_row(self) -> None:
+        from world.magic.services.reflection import deed_what
+
+        self.assertEqual(deed_what(self._deed()), "This mission is about people held captive.")
+        self.row.reason_text = "Barred the overseers' door"
+        self.assertEqual(deed_what(self._deed()), "Barred the overseers' door")
