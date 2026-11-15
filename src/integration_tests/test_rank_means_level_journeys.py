@@ -32,12 +32,14 @@ from unittest.mock import patch
 
 from actions.factories import ActionTemplateFactory
 from integration_tests.harness import JourneyCase
+from world.action_points.models import ActionPointPool
 from world.checks.constants import ModifierSize
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
 from world.checks.services import perform_check, perform_check_with_modifiers
 from world.checks.test_helpers import force_check_outcome
 from world.checks.types import CheckResult
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
+from world.clues.constants import SEARCH_CHECK_TYPE_NAME
 from world.combat.constants import ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -61,7 +63,6 @@ from world.magic.factories import (
 from world.magic.models.techniques import ConditionTargetKind
 from world.mechanics.maneuver_effects import ensure_maneuver_effects
 from world.room_features.factories import TrapFactory
-from world.room_features.trap_services import search_room_traps
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory
 from world.scenes.tests.cast_test_helpers import grant_technique
@@ -161,10 +162,18 @@ class _LevelElevenField(JourneyCase):
 
     def hit_roll(self) -> tuple[CheckResult, dict[str, Any]]:
         """Hobb Strikes the bandit bare-handed and the round resolves; the hit roll comes back."""
+        self.connect_telnet(self.hobb)
+        self.watch(self.hobb)
         declared = self.web(self.hobb, "combat_strike", opponent_id=self.bandit.pk)
         self.assertTrue(declared.detail.success, declared.detail.message)
-        with self.real_rolls() as rolled:
+        with self.captureOnCommitCallbacks(execute=True), self.real_rolls() as rolled:
             resolve_round(self.encounter)
+        hit = rolled[0][0]
+        # What Hobb is told is the hit or miss line for the roll the round really made.
+        if hit.success_level < 1:
+            self.assertTold(self.hobb, "You strike at Bandit with your bare hands and miss.")
+        else:
+            self.assertTold(self.hobb, "You strike Bandit with your bare hands. A ")
         return rolled[0]
 
 
@@ -324,8 +333,8 @@ LOCK_RANK = 11  # (98 - 18) / 8 + 1
 class ALockAuthoredAtLevelEightIsRolledAtItsLevelsRank(JourneyCase):
     """A hidden trap authored at ``detect_difficulty_level=8`` with no owner (#5093).
 
-    The room-feature seam is ``search_room_traps``, the roll the Search action makes against
-    every hidden trap. The lock has a level and no points, so it asks the strength of level 8
+    Mira types ``search``: the Search action rolls the trap's own check type against it. The
+    lock has a level and no points, so it asks the strength of level 8
     (its baseline plus the level-6 tier), and a level-8 searcher whose skill is half of the
     baseline rolls on the even chart.
     """
@@ -343,9 +352,13 @@ class ALockAuthoredAtLevelEightIsRolledAtItsLevelsRank(JourneyCase):
             level=LOCK_LEVEL,
             is_primary=True,
         )
+        pool = ActionPointPool.get_or_create_for_character(self.mira)
+        pool.current = 200
+        pool.save()
         search_skill = SkillTraitFactory(name="Search")
         # Half the baseline is her level term; the skill makes the other half, one point each.
         CharacterTraitValueFactory(character=sheet, trait=search_skill, value=LOCK_BASELINE // 2)
+        CheckTypeFactory(name=SEARCH_CHECK_TYPE_NAME)  # the room search's own check, no clues here
         self.search = CheckTypeFactory(name="Search the Vault")
         CheckTypeTraitFactory(check_type=self.search, trait=search_skill, weight=1)
         self.lock = TrapFactory(
@@ -363,7 +376,7 @@ class ALockAuthoredAtLevelEightIsRolledAtItsLevelsRank(JourneyCase):
             return result
 
         with patch("world.checks.services.perform_check_with_modifiers", side_effect=spy):
-            search_room_traps(self.mira, self.mira.location.room_profile)
+            told = self.telnet(self.mira, "search")
 
         result, rolled_with = rolled[0]
         self.assertEqual(rolled_with["target_difficulty"], LOCK_STRENGTH)
@@ -371,3 +384,8 @@ class ALockAuthoredAtLevelEightIsRolledAtItsLevelsRank(JourneyCase):
         self.assertEqual(result.standing.roller.rank.rank, LOCK_RANK)
         self.assertEqual(result.standing.target.rank.rank, LOCK_RANK)
         self.assertEqual(result.rank_difference, 0)
+        # What Mira is told follows the real roll: the trap she spots, or nothing found.
+        if result.success_level >= 0:
+            self.assertIn(f"You spot a trap:\n  {self.lock.name}", told)
+        else:
+            self.assertIn("You search but turn up nothing.", told)
