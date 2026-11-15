@@ -747,8 +747,9 @@ class BecomingUnsettled(_Drifting):
     Abyssal (her Ruin), 15 past the line and its tolerance of 5.
 
     The sheet reads her aura payload: unsettled, in the sentence the dialog shows, naming her
-    Abyssal resonance. Her next cast rolls the focus check (difficulty 10 + 2 for each of the
-    three steps past the line = 16). A settled character reads none of this.
+    Abyssal resonance. Her next cast rolls the focus check (level 1's baseline of 18 plus
+    4 tenths of its width of 8 for each of the three steps past the line, 12 tenths = 10, so 28).
+    A settled character reads none of this.
     """
 
     def aura(self) -> dict:
@@ -766,7 +767,7 @@ class BecomingUnsettled(_Drifting):
 
         rec = self.cast(focus="Failure")
 
-        self.assertEqual(rec.focus_difficulties, [16])
+        self.assertEqual(rec.focus_difficulties, [28])
         self.assertIsNotNone(self.conflict())
         self.assertTold(
             self.ysmay,
