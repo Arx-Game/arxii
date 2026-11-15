@@ -157,7 +157,7 @@ if effect.valence == OPPOSED and effect.kind in (REJECT, REPEL):
 
 - `backfire_difficulty` is the config-derived value
   `ResonanceEnvironmentConfig.backfire_base_difficulty +
-  round(magnitude * backfire_difficulty_per_magnitude)`. **Correction to an
+  round(magnitude * backfire_difficulty_per_magnitude_tenths)`. **Correction to an
   earlier draft claim:** this is currently computed in the flow adapter
   `flows/service_functions/resonance_environment.py`
   (`flow_evaluate_resonance_environment`), *not* in the primitive — and that

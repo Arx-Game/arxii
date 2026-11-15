@@ -136,7 +136,7 @@ commitment period of an active pact (`_grade_commitment_period`):
   ease moves her back a stage the message says so ("Sworn now applies."), as a worsening does.
 - **Short**: the rise is `ceil(severity_per_miss * shortfall / required)`. When the rise would
   reach the next worse stage and that stage has a resist check, the check rolls first
-  (`perform_check_with_modifiers`) at the stage's `resist_difficulty` minus the favor band's ease
+  (`perform_check_with_modifiers`) at the stage's `resist_difficulty_level` (a level, read as its baseline) minus the favor band's ease
   (`invocation_services.favor_ease_for`: the `DevotionConfig` low and high bands). A Botch is
   lifted to Failure (`sacrifice_services.lift_botch`), so a niche cannot backfire. The tier sets
   the move:

@@ -232,8 +232,10 @@ class PoolGateTests(TestCase):
 
     def test_deficit_rolls_the_ritual_check_with_a_bump(self):
         from world.magic.factories import RitualCheckConfigFactory
+        from world.traits.factories import ensure_level_ladder
 
-        config = RitualCheckConfigFactory()
+        ensure_level_ladder()
+        config = RitualCheckConfigFactory(target_difficulty_level=1)
         ritual = config.ritual
         ritual.anima_requirement = 50
         ritual.save(update_fields=["anima_requirement"])
@@ -244,8 +246,8 @@ class PoolGateTests(TestCase):
         with patch("world.checks.services.perform_check", return_value=_Result()) as check:
             gate = resolve_pool_gate(ritual=ritual, performer_sheet=self.sheet, pool=25)
         self.assertTrue(gate.proceeded)
-        # deficit 25 of 50 -> bump ceil(3 * 25/50) = 2 over base difficulty 3.
-        self.assertEqual(check.call_args.args[2], 5)
+        # deficit 25 of 50 -> bump ceil(3 * 25/50) = 2 over level 1's baseline of 18.
+        self.assertEqual(check.call_args.args[2], 20)
 
     def test_failed_deficit_check_fizzles(self):
         from world.magic.factories import RitualCheckConfigFactory

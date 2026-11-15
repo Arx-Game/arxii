@@ -6392,8 +6392,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this title.
+          type: string
         required: true
       tags:
       - character-creation
@@ -54273,16 +54272,18 @@ components:
         description:
           type: string
           readOnly: true
-        bind_difficulty:
+        bind_difficulty_level:
           type: integer
           readOnly: true
-          description: Feeds perform_check's target_difficulty for the bind attempt.
+          description: 'Feeds perform_check''s target_difficulty for the bind attempt.
+            Authored as a level (0 = no difficulty): the roll meets that level''s
+            baseline.'
         capacity_cost:
           type: integer
           readOnly: true
           description: Companion Capacity consumed while this archetype is bonded.
       required:
-      - bind_difficulty
+      - bind_difficulty_level
       - capacity_cost
       - description
       - domain
@@ -62358,13 +62359,13 @@ components:
           type: integer
         clue_name:
           type: string
-        detect_difficulty:
+        detect_difficulty_level:
           type: integer
         is_active:
           type: boolean
       required:
       - clue_name
-      - detect_difficulty
+      - detect_difficulty_level
       - id
       - is_active
     GMStoryRailParticipant:
@@ -71702,12 +71703,13 @@ components:
             this check type and `check_difficulty`. Success → `rapport_delta_success`;
             failure → `rapport_delta_failure`. Final actions ignore this — the effect
             IS the payoff.'
-        check_difficulty:
+        check_difficulty_level:
           type: integer
-          maximum: 2147483647
-          minimum: -2147483648
-          description: Target difficulty passed to `perform_check` when `check_type`
-            is set. Meaningless when `check_type` is null.
+          maximum: 32767
+          minimum: 0
+          description: 'Target difficulty passed to `perform_check` when `check_type`
+            is set. Meaningless when `check_type` is null. Authored as a level (0
+            = no difficulty): the roll meets that level''s baseline.'
       required:
       - id
       - kind
@@ -71838,12 +71840,13 @@ components:
             this check type and `check_difficulty`. Success → `rapport_delta_success`;
             failure → `rapport_delta_failure`. Final actions ignore this — the effect
             IS the payoff.'
-        check_difficulty:
+        check_difficulty_level:
           type: integer
-          maximum: 2147483647
-          minimum: -2147483648
-          description: Target difficulty passed to `perform_check` when `check_type`
-            is set. Meaningless when `check_type` is null.
+          maximum: 32767
+          minimum: 0
+          description: 'Target difficulty passed to `perform_check` when `check_type`
+            is set. Meaningless when `check_type` is null. Authored as a level (0
+            = no difficulty): the roll meets that level''s baseline.'
       required:
       - kind
       - label
@@ -82277,12 +82280,13 @@ components:
             this check type and `check_difficulty`. Success → `rapport_delta_success`;
             failure → `rapport_delta_failure`. Final actions ignore this — the effect
             IS the payoff.'
-        check_difficulty:
+        check_difficulty_level:
           type: integer
-          maximum: 2147483647
-          minimum: -2147483648
-          description: Target difficulty passed to `perform_check` when `check_type`
-            is set. Meaningless when `check_type` is null.
+          maximum: 32767
+          minimum: 0
+          description: 'Target difficulty passed to `perform_check` when `check_type`
+            is set. Meaningless when `check_type` is null. Authored as a level (0
+            = no difficulty): the roll meets that level''s baseline.'
     PatchedNPCStandingRequest:
       type: object
       description: |-
@@ -83486,11 +83490,13 @@ components:
           type: integer
           description: Check both the handler (dispatch) and the agent (resolution)
             roll.
-        check_difficulty:
+        check_difficulty_level:
           type: integer
-          maximum: 2147483647
-          minimum: -2147483648
-          description: Target difficulty for both dispatch and resolution rolls.
+          maximum: 32767
+          minimum: 0
+          description: 'Target difficulty for both dispatch and resolution rolls.
+            Authored as a level (0 = no difficulty): the roll meets that level''s
+            baseline.'
         duration:
           type: string
           description: Real time from assignment to resolution by the game clock.
@@ -89509,9 +89515,9 @@ components:
         check_type_id:
           type: integer
           nullable: true
-        target_difficulty:
+        target_difficulty_level:
           type: integer
-          minimum: 1
+          minimum: 0
     RitualCheckConfigPatchRequest:
       type: object
       description: |-
@@ -89534,9 +89540,9 @@ components:
         check_type_id:
           type: integer
           nullable: true
-        target_difficulty:
+        target_difficulty_level:
           type: integer
-          minimum: 1
+          minimum: 0
     RitualPatch:
       type: object
       description: |-
@@ -97605,11 +97611,13 @@ components:
           type: integer
           description: Check both the handler (dispatch) and the agent (resolution)
             roll.
-        check_difficulty:
+        check_difficulty_level:
           type: integer
-          maximum: 2147483647
-          minimum: -2147483648
-          description: Target difficulty for both dispatch and resolution rolls.
+          maximum: 32767
+          minimum: 0
+          description: 'Target difficulty for both dispatch and resolution rolls.
+            Authored as a level (0 = no difficulty): the roll meets that level''s
+            baseline.'
         duration:
           type: string
           description: Real time from assignment to resolution by the game clock.
@@ -97662,11 +97670,13 @@ components:
           type: integer
           description: Check both the handler (dispatch) and the agent (resolution)
             roll.
-        check_difficulty:
+        check_difficulty_level:
           type: integer
-          maximum: 2147483647
-          minimum: -2147483648
-          description: Target difficulty for both dispatch and resolution rolls.
+          maximum: 32767
+          minimum: 0
+          description: 'Target difficulty for both dispatch and resolution rolls.
+            Authored as a level (0 = no difficulty): the roll meets that level''s
+            baseline.'
         duration:
           type: string
           description: Real time from assignment to resolution by the game clock.
@@ -102330,7 +102340,7 @@ components:
           type: string
         clue_slug:
           type: string
-        detect_difficulty:
+        detect_difficulty_level:
           type: integer
         fixture_key:
           type: string
@@ -102338,7 +102348,7 @@ components:
       required:
       - clue_name
       - clue_slug
-      - detect_difficulty
+      - detect_difficulty_level
       - fixture_key
       - id
     WorldBuilderRoomDescVariant:

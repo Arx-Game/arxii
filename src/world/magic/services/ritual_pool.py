@@ -223,7 +223,7 @@ def resolve_pool_gate(
             "The rite gutters and dies — the pool never held enough anima.",
         )
 
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import difficulty_points, perform_check  # noqa: PLC0415
     from world.magic.constants import MagicActivity  # noqa: PLC0415
     from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
 
@@ -231,7 +231,7 @@ def resolve_pool_gate(
     result = perform_check(
         performer_sheet.character,
         config.check_type,
-        config.target_difficulty + difficulty_bump,
+        difficulty_points(config.target_difficulty_level) + difficulty_bump,
         extra_traits=activity_skill_terms(MagicActivity.RITUAL_WORKING),
     )
     if result.success_level > 0:

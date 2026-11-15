@@ -473,7 +473,7 @@ when it is unset (#4739; the Required content dashboard lists it). The template 
 each resisted with the existing Endurance `CheckType` (the same survivability semantic
 Bleeding-Out already uses):
 
-| Stage order | Name | `resist_difficulty` |
+| Stage order | Name | `resist_difficulty_level` |
 |---|---|---|
 | 1 | Encircled | 15 |
 | 2 | Overwhelmed | 25 |
@@ -504,7 +504,7 @@ decide the actual odds, never a hardcoded gate:
   don't apply to location-less battles).
 
 The roll is dispatched through `select_consequence` against the entry stage's
-`resist_check_type` / `resist_difficulty` with those `extra_modifiers`; if the selected
+`resist_check_type` / `resist_difficulty_level` with those `extra_modifiers`; if the selected
 consequence's label is `"surrounded"`, `apply_condition(target=character,
 condition=template)` applies the condition — the `has_progression=True` template
 auto-initializes `current_stage` to stage 1.

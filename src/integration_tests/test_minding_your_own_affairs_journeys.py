@@ -52,7 +52,7 @@ from world.seeds.investigation_checks import seed_investigation_check_content
 from world.seeds.security_checks import seed_security_check_content
 from world.societies.factories import LegendEntryFactory
 from world.societies.models import LegendDeedStory, LegendSpread, PersonaDeedKnowledge
-from world.traits.factories import CheckOutcomeFactory
+from world.traits.factories import CheckOutcomeFactory, ensure_level_ladder
 
 
 def persona_of(character):
@@ -471,6 +471,7 @@ class SearchingTheRoom(JourneyCase):
 
     def setUp(self) -> None:
         super().setUp()
+        ensure_level_ladder()
         seed_investigation_check_content()
         self.study = self.make_room("The Study")
         self.profile = RoomProfileFactory(objectdb=self.study)
@@ -493,7 +494,7 @@ class SearchingTheRoom(JourneyCase):
         with force_check_outcome(CheckOutcomeFactory(name="Missed", success_level=-1)) as roll:
             told = self.telnet(self.ysmay, "search")
         self.assertEqual(roll.check_type.name, "Search")
-        self.assertEqual(roll.target_difficulty, 10)
+        self.assertEqual(roll.target_difficulty, 18)  # level 1's baseline
         self.assertIn("You search but turn up nothing.", told)
         self.assertFalse(self.held())
         self.assertIn(

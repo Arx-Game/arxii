@@ -448,6 +448,39 @@ term would double-count it. See ADR-0166.
 
 ---
 
+## Authored difficulty as a level (#5093)
+
+Staff author a difficulty as a level, never as points. Three helpers in `world/checks/services.py`
+turn the stored number into the points a roll meets:
+
+- `difficulty_points(level)`: a standalone difficulty. The level's CHECK baseline, so a level-N
+  lock is rolled at rank N. Level 0 is no difficulty (0 points); a level above the top baseline
+  reads the top baseline; a database with no baseline rows reads 0.
+- `difficulty_step_points(tenths, at_level)`: a difficulty added on top of another one, or a
+  per-step increment, in tenths of one level's width at `at_level` (the base difficulty's level,
+  the opposing caster's level, or the character's own). Rounded half up; negative tenths keep
+  their sign; a level below 1 uses level 1's width.
+- `difficulty_level_for_points(points)`: the inverse, the highest level whose baseline is at or
+  below `points`, for a difficulty a rule computes at runtime in points (a smear's counter-clue)
+  and has to store where staff author a level.
+
+Columns named `*_level` are standalone (a lock's detect and disarm, a condition's cure and
+resist, a recipe, a task or offer, a mission support move, a ritual, the survivability checks).
+Columns named `*_tenths` are increments (a condition's break-free and subtlety on top of the
+caster, a compulsion's difficulty per severity, a flee tier's modifier, the vitals per-percent
+scaling, the escalation per-level step). The conversion that carried the old point values across
+(migrations 0416 to 0424, three expand, convert and contract triples) mapped a point difficulty to
+the old nine-rank ladder's rank (thresholds 0, 10, 25, 50, 80, 115, 155, 200, 250), then to the
+level whose new baseline is nearest that rank's old threshold (levels 0, 1, 2, 5, 9, 13, 18, 24,
+30), and an increment to tenths at two tenths a point (the old ladder spent five points a level).
+Not converted: `MovementConfig.reaction_difficulty_step` (its integer also scales fatigue and
+anima cost per reaction), the agriculture pool-size ramp (it adds to a `DifficultyChoice` band
+value), `ChallengeTemplate.severity` and `ChallengeInstance.severity_adjustment` (see "Quick-Placing
+an Authored Challenge"), and the recorded results `difficulty_points`, `resolved_difficulty` and
+`snapshot_target_difficulty`.
+
+---
+
 ## Resolution Pipeline
 
 ```

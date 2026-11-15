@@ -3,10 +3,12 @@
 
 ADR-0237 data disposition: RESTRUCTURE. Each dropped point column was carried across by
 ``0423_difficulty_levels_batch3_convert`` into its ``*_level`` replacement (the old point
-difficulty is mapped to a level), so no authored value is lost. Schema-only.
+difficulty is mapped to a level), so no authored value is lost. Schema-only. It also refreshes the help text on
+``NPCServiceOffer.check_type``, which named the dropped column.
 """
 
-from django.db import migrations
+from django.db import migrations, models
+import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
@@ -74,5 +76,17 @@ class Migration(migrations.Migration):
         migrations.RemoveField(
             model_name="trap",
             name="disarm_difficulty",
+        ),
+        migrations.AlterField(
+            model_name="npcserviceoffer",
+            name="check_type",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Optional: if set, non-final actions roll `perform_check` against this check type and `check_difficulty_level`. Success → `rapport_delta_success`; failure → `rapport_delta_failure`. Final actions ignore this — the effect IS the payoff.",
+                null=True,
+                on_delete=django.db.models.deletion.PROTECT,
+                related_name="+",
+                to="arxii.checktype",
+            ),
         ),
     ]

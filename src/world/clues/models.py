@@ -274,7 +274,7 @@ class RoomClue(SharedMemoryModel):
     """A clue hidden in a room, found via a Search check (#1154).
 
     Mirrors ``room_features.Trap``: room-anchored, with an authored detect difficulty;
-    a room may hold several. The Search action rolls against ``detect_difficulty`` to
+    a room may hold several. The Search action rolls against ``detect_difficulty_level`` to
     surface it; which clues are placed where and how hard they are is staff-editable
     data (placeholder magnitudes deferred to a later author pass per #1143).
     """

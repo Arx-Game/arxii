@@ -29,7 +29,7 @@ from actions.factories import ActionTemplateFactory
 from integration_tests.harness import JourneyCase
 from world.checks.constants import ModifierSize
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
-from world.checks.services import perform_check
+from world.checks.services import perform_check, perform_check_with_modifiers
 from world.checks.test_helpers import force_check_outcome
 from world.checks.types import CheckResult
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
@@ -55,6 +55,8 @@ from world.magic.factories import (
 )
 from world.magic.models.techniques import ConditionTargetKind
 from world.mechanics.maneuver_effects import ensure_maneuver_effects
+from world.room_features.factories import TrapFactory
+from world.room_features.trap_services import search_room_traps
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory
 from world.scenes.tests.cast_test_helpers import grant_technique
@@ -243,3 +245,58 @@ class ALevelElevenPCMeetsALevelElevenNPCEvenly(_LevelElevenField):
             modifier_level=LEVEL,
             modifier_size=ModifierSize.LARGE,
         )
+
+
+LOCK_LEVEL = 8
+LOCK_BASELINE = 74  # 18 + 8 x 7
+
+
+class ALockAuthoredAtLevelEightIsRolledAtRankEight(JourneyCase):
+    """A hidden trap authored at ``detect_difficulty_level=8`` with no owner (#5093).
+
+    The room-feature seam is ``search_room_traps``, the roll the Search action makes against
+    every hidden trap. The lock has a level and no points, so it asks the baseline of level 8,
+    and a level-8 searcher whose skill is half of that baseline rolls on the even chart.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        seed_check_resolution_tables()
+        seed_modifier_value_tables()
+        room = self.make_room("The Vault Corridor")
+        self.mira = self.make_player("Mira", room=room)
+        sheet = self.mira.sheet_data
+        CharacterClassLevelFactory(
+            character=sheet,
+            character_class=CharacterClassFactory(),
+            level=LOCK_LEVEL,
+            is_primary=True,
+        )
+        search_skill = SkillTraitFactory(name="Search")
+        # Half the baseline is her level term; the skill makes the other half, one point each.
+        CharacterTraitValueFactory(character=sheet, trait=search_skill, value=LOCK_BASELINE // 2)
+        self.search = CheckTypeFactory(name="Search the Vault")
+        CheckTypeTraitFactory(check_type=self.search, trait=search_skill, weight=1)
+        self.lock = TrapFactory(
+            room_profile=room.room_profile,
+            detect_check_type=self.search,
+            detect_difficulty_level=LOCK_LEVEL,
+        )
+
+    def test_the_lock_is_rolled_against_rank_eight_with_no_rank_difference(self) -> None:
+        rolled: list[tuple[CheckResult, dict[str, Any]]] = []
+
+        def spy(character, check_type, *args, **kwargs):
+            result = perform_check_with_modifiers(character, check_type, *args, **kwargs)
+            rolled.append((result, kwargs))
+            return result
+
+        with patch("world.checks.services.perform_check_with_modifiers", side_effect=spy):
+            search_room_traps(self.mira, self.mira.location.room_profile)
+
+        result, rolled_with = rolled[0]
+        self.assertEqual(rolled_with["target_difficulty"], LOCK_BASELINE)
+        self.assertEqual(result.total_points, LOCK_BASELINE)
+        self.assertEqual(result.standing.roller.rank.rank, LOCK_LEVEL)
+        self.assertEqual(result.standing.target.rank.rank, LOCK_LEVEL)
+        self.assertEqual(result.rank_difference, 0)

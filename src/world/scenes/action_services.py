@@ -17,6 +17,7 @@ from actions.services import (
     start_action_resolution,
     start_resisted_action_resolution,
 )
+from world.checks.services import difficulty_points
 from world.checks.theater import check_outcome_faces, maybe_emit_resolution_theater
 from world.checks.types import ResolutionContext
 from world.fatigue.constants import EffortLevel
@@ -743,7 +744,7 @@ def _snapshot_kwargs_from_ritual(ritual_id: int) -> dict[str, object]:
         "snapshot_specialization": config.specialization,
         "snapshot_resonance": config.resonance,
         "snapshot_check_type": config.check_type,
-        "snapshot_target_difficulty": config.target_difficulty,
+        "snapshot_target_difficulty": difficulty_points(config.target_difficulty_level),
     }
 
 

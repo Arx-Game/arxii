@@ -7,7 +7,7 @@ persistent, room-present companion.
 ## Models (`world.companions`)
 
 - `CompanionArchetype` — staff-authored catalog row (`domain`, `name`,
-  `description`, `bind_difficulty`, `capacity_cost`, `is_mount` — whether the
+  `description`, `bind_difficulty_level`, `capacity_cost`, `is_mount` — whether the
   archetype is ridable, #1843). Binding is
   archetype-selection: no discrete in-room "wild creature" object is required.
 - `Companion` — the bound instance (`owner` → `CharacterSheet`, `archetype`,
@@ -247,7 +247,7 @@ charmer must still be in the room, not merely have charmed the enemy at some poi
 same predicate the won-over digest row's `can_bind` flag and telnet `companion promote` consult,
 so all three agree on whether a bind is on offer.
 
-On the charmed-enemy path, `bind_difficulty` is reduced by
+On the charmed-enemy path, `bind_difficulty_level` is reduced by
 `CompanionArchetype.charm_difficulty_reduction`, and the charm condition is consumed on a
 successful bind. Stored allegiance stays `ENEMY` the whole time (derived-on-read, per ADR-4091);
 only the effective allegiance says this opponent is friendly. The charmed enemy's own

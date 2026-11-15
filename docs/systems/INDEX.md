@@ -6534,7 +6534,7 @@ Gift letting a PC bind a wild beast archetype as a persistent, room-present
 companion. Full detail: [companions.md](companions.md).
 
 - **Models:** `CompanionArchetype` (staff-authored catalog: `domain`, `name`,
-  `bind_difficulty`, `capacity_cost` — binding is archetype-selection, no
+  `bind_difficulty_level`, `capacity_cost` — binding is archetype-selection, no
   discrete in-room "wild creature" object), `Companion` (the bound instance:
   `owner` → `CharacterSheet`, `archetype`, `granting_gift` → `magic.Gift`,
   `name`, `objectdb` → live `CompanionObject`, `bonded_at`/`released_at`;
@@ -10789,7 +10789,7 @@ combat, poison, spells, exhaustion, and any damage source.
   FK scenes.Scene — bounds the ghost emit window + death-kudos eligibility — and `retired_at`,
   the final puppet lock), `VitalsConsequenceConfig` (singleton pk=1; tunable difficulty scaling +
   pool FKs: `knockout_pool`, `default_wound_pool`, `default_death_pool`; #2287: wake-arc knobs
-  `wake_base_difficulty`/`wake_scaling_per_percent`/`wake_ease_per_round`/`wake_guaranteed_rounds`,
+  `wake_base_difficulty_level`/`wake_scaling_per_percent_tenths`/`wake_ease_per_round_tenths`/`wake_guaranteed_rounds`,
   `auto_retire_days`, admin-editable `death_condolence_body`), `WoundDetails` (#2644; OneToOne →
   `conditions.ConditionInstance`, CASCADE, `related_name="wound_details"` — FK direction
   specific→general per ADR-0010; `damage_taken` PositiveInt — the debit that caused the wound,
@@ -10803,7 +10803,7 @@ combat, poison, spells, exhaustion, and any damage source.
   that target's first writer, folded in by `recompute_max_health`). `world/vitals/aging.py`
   carries the three IC-cadence cron services — `run_birthday_tick` (AFK-safe window query
   advancing `matured_years`), `run_decline_checks` (Aging Resistance stamina check,
-  difficulty = `aging_difficulty_per_year` × years past `Species.decline_start_age`;
+  difficulty = `aging_difficulty_per_year_tenths` × years past `Species.decline_start_age`;
   Failure/Partial deepen Frailty by `frailty_fail_severity`/`frailty_partial_severity`),
   `run_death_sweep` (resolves `CharacterVitals.aging_death_ic_deadline` via `_mark_dead` →
   estates settlement). Config knobs live on `VitalsConsequenceConfig` (all PLACEHOLDER);

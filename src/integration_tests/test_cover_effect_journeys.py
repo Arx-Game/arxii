@@ -69,7 +69,7 @@ class CoverReadsTheCatalog(JourneyCase):
         self.perrin = self.make_player("Perrin", room=self.steading)
         self.flee_check = CheckTypeFactory()
         FleeConfig.objects.filter(pk=1).delete()
-        FleeConfig.objects.create(pk=1, check_type=self.flee_check, base_difficulty=50)
+        FleeConfig.objects.create(pk=1, check_type=self.flee_check, base_difficulty_level=5)
 
         self.encounter = CombatEncounterFactory(
             status=RoundStatus.DECLARING, round_number=1, room=self.steading

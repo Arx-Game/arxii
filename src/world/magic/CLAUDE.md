@@ -408,7 +408,7 @@ Three independent gates per target, evaluated in order: (1) **cast-SL row gate**
 removes nothing); (2) **`can_be_dispelled` hard gate** — a condition whose template has
 `can_be_dispelled=False` is a no-op (never an error); (3) **opposed cure check** — when the
 condition's `cure_check_type` is set, `perform_check_with_modifiers(caster, cure_check_type,
-cure_difficulty, extra_modifiers=power_bonus)` is rolled, where `power_bonus =
+cure_difficulty_level, extra_modifiers=power_bonus)` is rolled, where `power_bonus =
 int(row.cure_power_multiplier * eff_intensity)` (#3391 — power leg); removal succeeds iff
 `check_result.success_level > 0`, else resisted (no-op for that target, cast continues). When
 `cure_check_type` is null, removal proceeds unconditionally (uncontested dispel) — power has

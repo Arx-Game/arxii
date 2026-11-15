@@ -619,7 +619,7 @@ class NPCServiceOffer(NaturalKeyMixin, SharedMemoryModel):
         related_name="+",
         help_text=(
             "Optional: if set, non-final actions roll `perform_check` against "
-            "this check type and `check_difficulty`. Success → "
+            "this check type and `check_difficulty_level`. Success → "
             "`rapport_delta_success`; failure → `rapport_delta_failure`. "
             "Final actions ignore this — the effect IS the payoff."
         ),
@@ -1057,7 +1057,7 @@ class SkillCourseOfferDetails(SharedMemoryModel):
     (``coin_cost`` coppers) and one Golden Hare are paid once, when enrolling.
     Each session (the ``run_skill_course_offer`` handler in ``effects.py``)
     costs ``session_ap_cost`` AP and rolls ``check_type`` at
-    ``check_difficulty``; the training roll's outcome scales
+    ``check_difficulty_level``; the training roll's outcome scales
     ``session_development`` (through ``TrainingOutcomeAward``) to the points the
     session adds. The session AP is charged by the handler, not by
     ``NPCServiceOffer.ap_cost`` (the generic pre-dispatch charge), so

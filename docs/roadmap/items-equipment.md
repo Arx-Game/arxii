@@ -217,7 +217,7 @@ What landed:
 
 - **Schema (`ItemTemplate`):** `on_use_pool` FK → `actions.ConsequencePool` (null = not usable),
   `on_use_check_type` FK → `checks.CheckType` (null ⇒ deterministic apply; set ⇒ check-gated),
-  `on_use_difficulty` (authored difficulty, required iff `on_use_check_type` set; enforced in
+  `on_use_difficulty_level` (authored difficulty, required iff `on_use_check_type` set; enforced in
   `clean()`). No new through-model — reuses the pool abstraction.
 - **Soft-delete (`ItemInstance`):** new `destroyed_at` marker + `differs_from_template` property
   + `objects.in_play()` queryset. At 0 charges, instances carrying per-instance data (custom

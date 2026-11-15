@@ -2241,7 +2241,7 @@ push the cast harder. The burn rides the pull: no pull, no burn (`ResonanceBurnN
   when the pull or the technique changes. The demo's "intensity after" and "anima cost"
   projection rows are not built (they need a server projection of the spiral).
 - **Authored numbers.** `StrainConfig.burn_per_intensity`, `engagement_share_percent`,
-  `strain_check_type`, `strain_check_difficulty`; `StrainBurnReach` rows; `Affinity.burn_value`;
+  `strain_check_type`, `strain_check_difficulty_level`; `StrainBurnReach` rows; `Affinity.burn_value`;
   `CorruptionConfig.hasty_fall_multiplier`; and for digging deep (#4738)
   `dig_deep_fatigue_category`, `dig_deep_fatigue_cost`, `free_dig_deeps_per_encouragement`.
   Migrations 0314 (fields, `CombatPull` burn columns) and 0315 (`SceneActionPullDeclaration.burn`).
@@ -3385,8 +3385,8 @@ of it lives in `world/magic/services/drift.py` and the `DriftConfig` singleton
 
 - `DriftConfig` fields for the reading: `unsettled_tolerance_percent` (5: points an affinity
   may stand over its settled share), `unsettled_step_percent` (5: points past that per severity
-  step), `mire_allowance_percent` (30), plus `focus_base_difficulty`,
-  `focus_difficulty_per_step`, and two designations by FK, `focus_check_type` and
+  step), `mire_allowance_percent` (30), plus `focus_base_difficulty_level`,
+  `focus_difficulty_per_step_tenths`, and two designations by FK, `focus_check_type` and
   `conflict_condition`. Either designation unset means the check does not run; the Required
   content dashboard probes list both, require the conflict condition's category to be
   `self_shakeable` and its `break_free_mode` not to be NONE (the field's default; breakfree,
@@ -3422,7 +3422,7 @@ of it lives in `world/magic/services/drift.py` and the `DriftConfig` singleton
   reads no condition modifiers at all (pre-existing), so the conflict reaches only her later
   non-battle rolls. The joust is not a cast and rolls nothing. The condition's own authored `ConditionCheckModifier` reaches the
   roll under its own label through `condition_contributions`. Difficulty is
-  `focus_base_difficulty + steps * focus_difficulty_per_step`; the roll is `focus_check_type` with
+  `focus_base_difficulty_level + steps * focus_difficulty_per_step_tenths`; the roll is `focus_check_type` with
   `MagicActivity.KEEPING_FOCUS` skill terms. Before the roll she is told "Your X has grown strong
   enough to make you unsettled", X being the resonance contributing most to the excess; a
   failure also tells her the condition took hold. A success level of 1 or more changes nothing.
@@ -4772,7 +4772,7 @@ shares alone. Journeys and tests:
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `AffinityInteraction` | 9 directed (caster, place) affinity pairing rows; tuning table | `source_affinity` FK, `environment_affinity` FK, `valence` (ALIGNED/OPPOSED), `kind` (AMPLIFY/REJECT/REPEL/CORRUPT), `severity`, `consequence_pool` FK (nullable — OPPOSED backfire pool) |
-| `ResonanceEnvironmentConfig` | Singleton with scalar tuning coefficients | `backfire_base_difficulty`, `backfire_difficulty_per_magnitude`, the six gift-substance numbers (#5018) |
+| `ResonanceEnvironmentConfig` | Singleton with scalar tuning coefficients | `backfire_base_difficulty_level`, `backfire_difficulty_per_magnitude_tenths`, the six gift-substance numbers (#5018) |
 | `ResonanceAlignmentBoonTier` | Authored: which buff `ConditionTemplate` an ALIGNED pairing grants at or above a magnitude band | `affinity_interaction` FK (must be ALIGNED diagonal row), `min_magnitude`, `condition_template` FK. `UniqueConstraint(affinity_interaction, min_magnitude)`. `clean()` validates ALIGNED valence. Tier selection is Python `max()` over `interaction.cached_alignment_boon_tiers` — no `Meta.ordering` |
 
 `AffinityInteraction.consequence_pool` (added migration `magic/0064`) is a nullable FK to

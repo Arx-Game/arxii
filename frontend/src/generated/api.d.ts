@@ -32225,7 +32225,7 @@ export interface components {
       readonly name: string;
       readonly description: string;
       /** @description Feeds perform_check's target_difficulty for the bind attempt. */
-      readonly bind_difficulty: number;
+      readonly bind_difficulty_level: number;
       /** @description Companion Capacity consumed while this archetype is bonded. */
       readonly capacity_cost: number;
     };
@@ -35967,7 +35967,7 @@ export interface components {
     GMStoryRailClue: {
       id: number;
       clue_name: string;
-      detect_difficulty: number;
+      detect_difficulty_level: number;
       is_active: boolean;
     };
     /** @description One character currently present in the scene's room (location-derived). */
@@ -40471,7 +40471,7 @@ export interface components {
       /** @description Optional: if set, non-final actions roll `perform_check` against this check type and `check_difficulty`. Success → `rapport_delta_success`; failure → `rapport_delta_failure`. Final actions ignore this — the effect IS the payoff. */
       check_type?: number | null;
       /** @description Target difficulty passed to `perform_check` when `check_type` is set. Meaningless when `check_type` is null. */
-      check_difficulty?: number;
+      check_difficulty_level?: number;
     };
     /**
      * @description * `permit` - Permit
@@ -40568,7 +40568,7 @@ export interface components {
       /** @description Optional: if set, non-final actions roll `perform_check` against this check type and `check_difficulty`. Success → `rapport_delta_success`; failure → `rapport_delta_failure`. Final actions ignore this — the effect IS the payoff. */
       check_type?: number | null;
       /** @description Target difficulty passed to `perform_check` when `check_type` is set. Meaningless when `check_type` is null. */
-      check_difficulty?: number;
+      check_difficulty_level?: number;
     };
     /**
      * @description Staff CRUD for per-(PC persona, NPC persona) affection rows.
@@ -46691,7 +46691,7 @@ export interface components {
       /** @description Optional: if set, non-final actions roll `perform_check` against this check type and `check_difficulty`. Success → `rapport_delta_success`; failure → `rapport_delta_failure`. Final actions ignore this — the effect IS the payoff. */
       check_type?: number | null;
       /** @description Target difficulty passed to `perform_check` when `check_type` is set. Meaningless when `check_type` is null. */
-      check_difficulty?: number;
+      check_difficulty_level?: number;
     };
     /**
      * @description Staff CRUD for per-(PC persona, NPC persona) affection rows.
@@ -47402,7 +47402,7 @@ export interface components {
       /** @description Check both the handler (dispatch) and the agent (resolution) roll. */
       check_type?: number;
       /** @description Target difficulty for both dispatch and resolution rolls. */
-      check_difficulty?: number;
+      check_difficulty_level?: number;
       /** @description Real time from assignment to resolution by the game clock. */
       duration?: string;
       /**
@@ -50281,7 +50281,7 @@ export interface components {
       specialization_id?: number | null;
       resonance_id?: number | null;
       check_type_id?: number | null;
-      target_difficulty?: number;
+      target_difficulty_level?: number;
     };
     /**
      * @description Write serializer for the nested check_config on a PATCH.
@@ -50296,7 +50296,7 @@ export interface components {
       specialization_id?: number | null;
       resonance_id?: number | null;
       check_type_id?: number | null;
-      target_difficulty?: number;
+      target_difficulty_level?: number;
     };
     /**
      * @description Write serializer for partial PATCH of player-authored Rituals.
@@ -54008,7 +54008,7 @@ export interface components {
       /** @description Check both the handler (dispatch) and the agent (resolution) roll. */
       check_type: number;
       /** @description Target difficulty for both dispatch and resolution rolls. */
-      check_difficulty?: number;
+      check_difficulty_level?: number;
       /** @description Real time from assignment to resolution by the game clock. */
       duration: string;
       /**
@@ -54039,7 +54039,7 @@ export interface components {
       /** @description Check both the handler (dispatch) and the agent (resolution) roll. */
       check_type: number;
       /** @description Target difficulty for both dispatch and resolution rolls. */
-      check_difficulty?: number;
+      check_difficulty_level?: number;
       /** @description Real time from assignment to resolution by the game clock. */
       duration: string;
       /**
@@ -56252,7 +56252,7 @@ export interface components {
       id: number;
       clue_name: string;
       clue_slug: string;
-      detect_difficulty: number;
+      detect_difficulty_level: number;
       fixture_key: string | null;
     };
     /** @description One authored season/phase description variant (#3291). */

@@ -116,7 +116,7 @@ The condition effect that modifies check rolls (`ConditionCheckModifier`: per-ch
 _Avoid_: roll bonus, skill modifier
 
 **Resist-check gate**:
-The apply-time gate (`ConditionTemplate.resist_check_type` / `resist_difficulty`)
+The apply-time gate (`ConditionTemplate.resist_check_type` / `resist_difficulty_level`)
 that lets a target roll to resist a condition being applied at all, distinct from
 the damage-axis `ConditionResistanceModifier`. The target's own check (folded
 through the existing check-modifier seam, so a permanent `ConditionCheckModifier`
