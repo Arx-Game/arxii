@@ -136,15 +136,17 @@ def _resolve_use_item(
             elif action.focused_opponent_target is not None:
                 target = action.focused_opponent_target.objectdb
 
-            UseItemAction().run(actor=character, item=item_object, target=target)
+            used = UseItemAction().run(actor=character, item=item_object, target=target)
             # UseItemAction's effects (healing, conditions) are applied by the action
             # itself; the combat round just needs to know the maneuver resolved.
-            # #5124: an item rolls nothing of its own; on an ally it aids them.
-            award_unrolled(
-                participant,
-                action,
-                kind=KindlingActKind.OTHER,
-                aids=action.focused_ally_target is not None,
-            )
+            # #5124: an item rolls nothing of its own; on an ally it aids them. A refused
+            # use (a failed prerequisite or cost) did not happen and earns nothing.
+            if used.success:
+                award_unrolled(
+                    participant,
+                    action,
+                    kind=KindlingActKind.OTHER,
+                    aids=action.focused_ally_target is not None,
+                )
 
     return outcome

@@ -1582,27 +1582,16 @@ def _award_kindled_deeds_for_action(
     SOCIAL act; a beneficial technique on someone else aids them. A PC resisting an NPC's action
     did not act, and a paused or unrolled resolution earns nothing.
     """
-    from world.magic.constants import KindlingActKind  # noqa: PLC0415
-    from world.magic.services.hostility import is_technique_hostile  # noqa: PLC0415
-    from world.magic.services.kindling import award_kindled_deeds  # noqa: PLC0415
-    from world.magic.types.kindling import KindlingAct  # noqa: PLC0415
+    from world.magic.services.kindling import award_scene_act  # noqa: PLC0415
 
     main = result.action_resolution.main_result
     if main is None or _pc_resists(action_request, action_request.target_persona):
         return
-    initiator = action_request.initiator_persona.character_sheet
-    target = action_request.target_persona.character_sheet
-    technique = action_request.technique
-    award_kindled_deeds(
-        initiator,
-        act=KindlingAct(
-            kind=KindlingActKind.TECHNIQUE if technique else KindlingActKind.SOCIAL,
-            target=target,
-            aids=technique is not None
-            and target != initiator
-            and not is_technique_hostile(technique),
-        ),
-        outcome=main.check_result.outcome,
+    award_scene_act(
+        action_request.initiator_persona.character_sheet,
+        action_request.target_persona.character_sheet,
+        action_request.technique,
+        main.check_result.outcome,
     )
 
 

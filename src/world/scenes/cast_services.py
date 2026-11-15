@@ -599,6 +599,18 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
     if result is None:
         return None, None, None
 
+    # #5124: a cast on a person earns what it feeds, scaled by the cast's own roll. This one
+    # seam covers the immediate cast and the consent-accepted one.
+    if result.action_resolution.main_result is not None:
+        from world.magic.services.kindling import award_scene_act  # noqa: PLC0415
+
+        award_scene_act(
+            caster_persona.character_sheet,
+            target_persona.character_sheet if target_persona is not None else None,
+            technique,
+            result.action_resolution.main_result.check_result.outcome,
+        )
+
     # Apply technique-authored conditions to resolved targets.
     success_level = (
         result.action_resolution.main_result.check_result.success_level

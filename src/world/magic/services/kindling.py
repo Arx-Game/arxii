@@ -52,6 +52,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
     from world.conditions.models import ConditionInstance
+    from world.magic.models import Technique
     from world.missions.models import MissionInstance
     from world.scenes.models import Scene
     from world.traits.models import CheckOutcome
@@ -929,6 +930,34 @@ def lowest_success_outcome() -> CheckOutcome | None:
     return CheckOutcome.objects.filter(success_level__gt=0).order_by("success_level", "pk").first()
 
 
+def award_scene_act(
+    initiator: CharacterSheet,
+    target: CharacterSheet | None,
+    technique: Technique | None,
+    outcome: CheckOutcome | None,
+) -> list[ResonanceGrant]:
+    """Earn what a scene act feeds (#5124), scaled by its roll: the one place a scene act's
+    kind is decided.
+
+    An act made with a ``technique`` is a TECHNIQUE act and any other is a SOCIAL act. A
+    beneficial technique on someone else aids them.
+    """
+    from world.magic.services.hostility import is_technique_hostile  # noqa: PLC0415
+
+    return award_kindled_deeds(
+        initiator,
+        act=KindlingAct(
+            kind=KindlingActKind.TECHNIQUE if technique else KindlingActKind.SOCIAL,
+            target=target,
+            aids=technique is not None
+            and target is not None
+            and target != initiator
+            and not is_technique_hostile(technique),
+        ),
+        outcome=outcome,
+    )
+
+
 def award_kindled_deeds(
     sheet: CharacterSheet,
     *,
@@ -1003,6 +1032,7 @@ def _told_of_deed(sheet: CharacterSheet, line: str) -> Callable[[], None]:
 __all__ = [
     "KINDLING_EVIDENCE_FINDERS",
     "award_kindled_deeds",
+    "award_scene_act",
     "held_resonance_names",
     "holds_resonance",
     "kindle_by_gm",
