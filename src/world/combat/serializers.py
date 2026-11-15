@@ -602,16 +602,25 @@ class DigDeepOfferSerializer(serializers.Serializer):
 
 
 class RallyResonanceChoiceSerializer(serializers.Serializer):
-    """One of an ally's resonances a Rally may name (#5124).
+    """One of an ally's resonances a Rally may name (#5124), read from a ``KindledResonance``.
 
     The name, and whether it is kindled for the ally now: never how strongly.
     """
 
-    id = serializers.IntegerField(help_text="The resonance's id, sent back as resonance_id.")
-    name = serializers.CharField(help_text="The resonance's name.")
-    kindled = serializers.BooleanField(
-        help_text="Whether it is kindled for the ally now (a Rally then surges more)."
+    id = serializers.IntegerField(
+        source="resonance.pk", help_text="The resonance's id, sent back as resonance_id."
     )
+    name = serializers.CharField(source="resonance.name", help_text="The resonance's name.")
+    kindled = serializers.BooleanField(
+        source="is_kindled",
+        help_text="Whether it is kindled for the ally now (a Rally then surges more).",
+    )
+
+
+class RallyResonancesQuerySerializer(serializers.Serializer):
+    """Query for the Rally picker's resonance read: the ally's participant id."""
+
+    ally = serializers.IntegerField(min_value=1, help_text="The ally's participant id.")
 
 
 class _ParticipantListSerializer(serializers.ListSerializer):
@@ -674,7 +683,6 @@ class ParticipantSerializer(serializers.ModelSerializer):
     compulsion = serializers.SerializerMethodField()
     steady_plan = serializers.SerializerMethodField()
     dig_deep = serializers.SerializerMethodField()
-    rally_resonances = serializers.SerializerMethodField()
     call_up = serializers.SerializerMethodField()
     strike_weapons = serializers.SerializerMethodField()
 
@@ -708,7 +716,6 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "compulsion",
             "steady_plan",
             "dig_deep",
-            "rally_resonances",
             "call_up",
             "strike_weapons",
         ]
@@ -793,34 +800,6 @@ class ParticipantSerializer(serializers.ModelSerializer):
             and engagement.last_dug_deep_round == obj.encounter.round_number,
             "given_by": self._dig_deep_giver_name(engagement),
         }
-
-    @extend_schema_field(RallyResonanceChoiceSerializer(many=True))
-    def get_rally_resonances(self, obj: CombatParticipant) -> list[dict[str, Any]]:
-        """The resonances of this ally a Rally may name, and whether each is kindled (#5124).
-
-        Never how strongly. Sent only for another active fighter, and only to a viewer who is
-        herself an active fighter in this encounter (the encounter serializer puts
-        ``viewer_is_fighter`` in the context); otherwise empty. Kindling is read in the
-        ally's own round, the same surroundings her panel and the Rally's resolution read.
-        """
-        if obj.status != ParticipantStatus.ACTIVE or self._is_viewers_own(obj):
-            return []
-        if not self.context.get("viewer_is_fighter", False):
-            return []
-        from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
-        from world.magic.services.kindling import (  # noqa: PLC0415
-            active_mission_for,
-            kindled_resonances,
-        )
-
-        sheet = obj.character_sheet
-        entries = kindled_resonances(
-            sheet, resolution=CombatRoundContext(obj), mission=active_mission_for(sheet)
-        )
-        return [
-            {"id": entry.resonance.pk, "name": entry.resonance.name, "kindled": entry.is_kindled}
-            for entry in entries
-        ]
 
     @extend_schema_field(CallUpFightOfferSerializer(allow_null=True))
     def get_call_up(self, obj: CombatParticipant) -> dict[str, Any] | None:
@@ -1968,23 +1947,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         for list views.
         """
         self.context["is_gm"] = self._compute_is_gm(instance)
-        self.context["viewer_is_fighter"] = self._viewer_is_active_fighter(instance)
         return super().to_representation(instance)
-
-    def _viewer_is_active_fighter(self, obj: CombatEncounter) -> bool:
-        """Whether the requesting user plays an active fighter here (#5124).
-
-        Read from the participants the payload already holds, so it costs no query. The
-        participant rows read it to decide who may see an ally's resonance names.
-        """
-        request = self.context.get("request")
-        if not request or not request.user.is_authenticated:
-            return False
-        character_ids = self._get_viewer_character_ids(request)
-        return any(
-            p.status == ParticipantStatus.ACTIVE and p.character_sheet.character_id in character_ids
-            for p in obj.participants_cached
-        )
 
     def get_is_participant(self, obj: CombatEncounter) -> bool:
         """Check whether the requesting user has a character in this encounter."""

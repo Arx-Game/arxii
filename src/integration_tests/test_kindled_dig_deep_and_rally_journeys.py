@@ -12,6 +12,8 @@ and 8 when the named resonance was already kindled at that strength.
 
 from __future__ import annotations
 
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from integration_tests.test_dig_deep_journeys import _DigDeepField
@@ -121,40 +123,50 @@ class RallyingANamedResonance(_KindledField):
     def rows(self):
         return Kindling.objects.filter(character_sheet=self.mira.sheet_data)
 
-    def tomas_sees(self) -> dict:
-        body = self.api(self.account_of(self.tomas)).get(f"/api/combat/{self.encounter.pk}/").json()
-        return {p["id"]: p for p in body["participants"]}
+    def tomas_sees(self, seat=None) -> list[dict]:
+        """What Tomas's Rally picker reads for the ally at ``seat`` (Mira by default)."""
+        seat = seat or self.mira_seat
+        return self.rally_picker(self.tomas, seat).json()
+
+    def rally_picker(self, viewer, seat):
+        url = f"/api/combat/{self.encounter.pk}/rally-resonances/?ally={seat.pk}"
+        return self.api(self.account_of(viewer)).get(url)
 
     def test_the_rallier_sees_the_allys_resonance_names_and_whether_each_is_kindled(self) -> None:
         kindle_resonance(self.mira.sheet_data, self.fury, self.blazing)
 
-        seats = self.tomas_sees()
-
         # Names and a kindled flag only: never how strongly.
         self.assertEqual(
-            seats[self.mira_seat.pk]["rally_resonances"],
+            self.tomas_sees(),
             [
                 {"id": self.fury.pk, "name": "Fury", "kindled": True},
                 {"id": self.mercy.pk, "name": "Mercy", "kindled": False},
             ],
         )
-        self.assertEqual(seats[self.tomas_seat.pk]["rally_resonances"], [])
+        self.assertEqual(self.tomas_sees(self.tomas_seat), [])
 
     def test_the_flag_follows_a_rally_that_kindles_it(self) -> None:
         self.rally(self.success)
 
-        mercy = self.tomas_sees()[self.mira_seat.pk]["rally_resonances"][1]
+        mercy = self.tomas_sees()[1]
 
         self.assertEqual((mercy["name"], mercy["kindled"]), ("Mercy", True))
 
-    def test_someone_not_in_the_fight_sees_no_resonance_names(self) -> None:
+    def test_someone_not_in_the_fight_is_refused_the_resonance_names(self) -> None:
         outsider = self.make_player("Odo", room=self.road)
-        body = self.api(self.account_of(outsider)).get(f"/api/combat/{self.encounter.pk}/").json()
 
-        self.assertEqual(
-            [p["rally_resonances"] for p in body["participants"]],
-            [[] for _ in body["participants"]],
-        )
+        self.assertEqual(self.rally_picker(outsider, self.mira_seat).status_code, 403)
+
+    def test_the_polled_encounter_payload_evaluates_no_kindling(self) -> None:
+        client = self.api(self.account_of(self.tomas))
+        url = f"/api/combat/{self.encounter.pk}/"
+        client.get(url)
+        with CaptureQueriesContext(connection) as queries:
+            body = client.get(url).json()
+
+        kindling_reads = [q["sql"] for q in queries.captured_queries if "kindl" in q["sql"].lower()]
+        self.assertEqual(kindling_reads, [])
+        self.assertTrue(all("rally_resonances" not in p for p in body["participants"]))
 
     def test_a_rally_kindles_an_unkindled_resonance_for_the_fight(self) -> None:
         self.assertIsNone(self.mira_strength(self.mercy))

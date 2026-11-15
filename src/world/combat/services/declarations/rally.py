@@ -24,6 +24,7 @@ from world.scenes.constants import RoundStatus
 if TYPE_CHECKING:
     from world.combat.models import SurgeTuning
     from world.magic.models import KindledStrengthTier, Resonance
+    from world.magic.types.kindling import KindledResonance
     from world.traits.models import CheckOutcome
 
 
@@ -94,6 +95,26 @@ def declare_rally(
         },
     )
     return action
+
+
+def rally_resonance_choices(ally: CombatParticipant) -> list[KindledResonance]:
+    """The ally's resonances a Rally may name, each with whether it is kindled now (#5124).
+
+    Read in the ally's own round and mission, the same surroundings her panel and the Rally's
+    resolution read. Callers show the name and the kindled flag, never the strength. This is
+    one full kindling evaluation, so it is read for the one ally the rallier has picked, not
+    for every fighter on the encounter payload.
+    """
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+    from world.magic.services.kindling import (  # noqa: PLC0415
+        active_mission_for,
+        kindled_resonances,
+    )
+
+    sheet = ally.character_sheet
+    return kindled_resonances(
+        sheet, resolution=CombatRoundContext(ally), mission=active_mission_for(sheet)
+    )
 
 
 def _surge_rallied_ally(  # noqa: PLR0913 - the surge's fixed inputs plus the kindled resonance

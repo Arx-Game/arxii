@@ -30,7 +30,9 @@ from world.areas.positioning.models import Position
 from world.character_sheets.models import CharacterSheet
 from world.combat.constants import (
     DuelChallengeStatus,
+    EncounterType,
     OpponentTier,
+    ParticipantStatus,
 )
 from world.combat.filters import (
     CombatEncounterFilter,
@@ -81,6 +83,8 @@ from world.combat.serializers import (
     OpponentStatBlockSerializer,
     OpponentTargetSerializer,
     ProposeLethalDuelSerializer,
+    RallyResonanceChoiceSerializer,
+    RallyResonancesQuerySerializer,
     RallySerializer,
     RemoveOpponentSerializer,
     RemoveParticipantSerializer,
@@ -101,6 +105,7 @@ from world.combat.services import (
     scan_round_combos,
     update_encounter_settings,
 )
+from world.combat.services.declarations.rally import rally_resonance_choices
 from world.conditions.models import ConditionInstance
 from world.covenants.models import CovenantRole
 from world.gm.permissions import IsGMOrStaff
@@ -501,6 +506,7 @@ class CombatEncounterViewSet(ModelViewSet):
             "use_item",
             "leave",
             "rally",
+            "rally_resonances",
             "dig_deep",
             "demoralize",
             "taunt",
@@ -1269,6 +1275,46 @@ class CombatEncounterViewSet(ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return self._serialize_encounter(request, encounter)
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter("ally", int, required=True, description="The ally's participant id.")
+        ],
+        responses=RallyResonanceChoiceSerializer(many=True),
+    )
+    @action(
+        detail=True,
+        methods=[HTTPMethod.GET],
+        url_path="rally-resonances",
+        pagination_class=None,
+        filter_backends=[],
+    )
+    def rally_resonances(self, request: Request, pk: int | None = None) -> Response:
+        """The resonances of one ally a Rally may name, and whether each is kindled (#5124).
+
+        Names and a kindled flag, never how strongly. Read for the ally the rallier has
+        picked, so the polled encounter payload carries no kindling evaluation. Only an active
+        fighter may ask, only about another active fighter, and never in a PvP duel, where
+        the other fighter is the opponent.
+        """
+        encounter = self.get_object()
+        participant = self._get_participant(request, encounter)
+        if participant is None or participant.status != ParticipantStatus.ACTIVE:
+            return Response({"detail": _ERR_NOT_PARTICIPANT}, status=status.HTTP_403_FORBIDDEN)
+        # A lookup argument of one detail action, not a list filter.
+        query = RallyResonancesQuerySerializer(data=request.query_params)  # noqa: USE_FILTERSET
+        query.is_valid(raise_exception=True)
+        ally = get_object_or_404(
+            CombatParticipant,
+            pk=query.validated_data["ally"],
+            encounter=encounter,
+            status=ParticipantStatus.ACTIVE,
+        )
+        if ally.pk == participant.pk or encounter.encounter_type == EncounterType.DUEL:
+            return Response([])
+        return Response(
+            RallyResonanceChoiceSerializer(rally_resonance_choices(ally), many=True).data
+        )
 
     @extend_schema(request=DigDeepSerializer, responses=EncounterDetailSerializer)
     @action(detail=True, methods=[HTTPMethod.POST], url_path="dig-deep")
