@@ -313,7 +313,11 @@ class KindleResonanceAction(Action):
     def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
         from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
         from world.magic.models import Resonance  # noqa: PLC0415
-        from world.magic.services.kindling import holds_resonance, kindle_by_gm  # noqa: PLC0415
+        from world.magic.services.kindling import (  # noqa: PLC0415
+            holds_resonance,
+            kindle_by_gm,
+            shown_names,
+        )
         from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
         account = resolve_account_or_none(actor)
@@ -342,12 +346,12 @@ class KindleResonanceAction(Action):
             return ActionResult(success=False, message="No such strength.")
         gm_sheet = CharacterSheet.objects.filter(pk=actor.pk).first()
         kindle_by_gm(sheet=sheet, resonance=resonance, tier=tier, scene=scene, gm=gm_sheet)
+        shown = (
+            shown_names(gm_sheet, [sheet.pk]).get(sheet.pk) if gm_sheet is not None else None
+        ) or target.db_key
         return ActionResult(
             success=True,
-            message=(
-                f"{target.db_key}'s {resonance.name} is kindled, {tier.name.lower()}, "
-                "for this scene."
-            ),
+            message=f"{shown}'s {resonance.name} is kindled, {tier.name.lower()}, for this scene.",
             data={"resonance_id": resonance.pk, "strength": tier.rank},
         )
 

@@ -13,7 +13,11 @@ from typing import TYPE_CHECKING
 from world.combat.round_context import CombatRoundContext
 from world.combat.types import CombatTechniqueResolution, CombatTechniqueResult
 from world.magic.constants import KindlingActKind
-from world.magic.services.kindling import award_kindled_deeds, lowest_success_outcome
+from world.magic.services.kindling import (
+    active_mission_for,
+    award_kindled_deeds,
+    lowest_success_outcome,
+)
 from world.magic.types.kindling import KindlingAct
 
 if TYPE_CHECKING:
@@ -61,6 +65,7 @@ def award_rolled(  # noqa: PLR0913 - the act's kind, who it was aimed at and wha
         ),
         outcome=outcome,
         resolution=CombatRoundContext(participant),
+        mission=active_mission_for(participant.character_sheet),
     )
 
 

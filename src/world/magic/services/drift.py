@@ -491,8 +491,9 @@ def open_or_extend_conversion_offer(grant: ResonanceGrant) -> DriftConversionOff
         return None
     if not convertible_drift(sheet, grant.resonance):
         return None
-    # A decline or a lapse can delete the offer between get_or_create and the lock; one
-    # retry then opens a fresh offer instead of writing a cap onto a vanished row.
+    # A rite of settling can delete the offer (``close_spent_conversion_offers``) between
+    # get_or_create and the lock; one retry then opens a fresh offer instead of writing a cap
+    # onto a vanished row.
     for _attempt in range(2):
         with transaction.atomic():
             offer, offer_created = DriftConversionOffer.objects.get_or_create(

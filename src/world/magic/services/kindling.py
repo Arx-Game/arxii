@@ -132,7 +132,7 @@ def _allies_present(ctx: SituationContext, presence: _Presence | None) -> frozen
     return presence.everyone - presence.opponents - {ctx.holder.pk}
 
 
-def _shown_names(viewer: CharacterSheet, sheet_ids: Iterable[int]) -> dict[int, str]:
+def shown_names(viewer: CharacterSheet, sheet_ids: Iterable[int]) -> dict[int, str]:
     """The name ``viewer`` knows each sheet's character by, keyed by sheet id.
 
     The face each sheet presents (its active persona, else its primary) read through the
@@ -190,7 +190,7 @@ def thread_anchor_evidence(
         return []
     aimed_at = act.target.pk if act is not None and act.target is not None else None
     hits = [hit for t in threads if (hit := _anchor_hit(t, pool, aimed_at)) is not None]
-    names = _shown_names(ctx.holder, [sheet_id for sheet_id, _, _ in hits if sheet_id is not None])
+    names = shown_names(ctx.holder, [sheet_id for sheet_id, _, _ in hits if sheet_id is not None])
     return [
         KindlingEvidence(
             reason=_anchor_reason(
@@ -334,7 +334,7 @@ def target_in_state_evidence(
     ]
     if not caused:
         return []
-    name = _shown_names(ctx.holder, [bearer_id]).get(bearer_id) or caused[0].target.db_key
+    name = shown_names(ctx.holder, [bearer_id]).get(bearer_id) or caused[0].target.db_key
     return [
         KindlingEvidence(
             reason=f"You left {name} in the grip of {instance.condition.name}",
@@ -564,7 +564,7 @@ def _live_kindlings(sheet: CharacterSheet) -> list[Kindling]:
 def _live_reason(kindling: Kindling, viewer: CharacterSheet) -> str:
     if kindling.source == KindlingSource.RALLY:
         by_id = kindling.kindled_by_id
-        name = _shown_names(viewer, [by_id]).get(by_id) if by_id is not None else None
+        name = shown_names(viewer, [by_id]).get(by_id) if by_id is not None else None
         return f"{name} rallied you" if name else "An ally rallied you"
     return "The GM has kindled it"
 
@@ -1002,10 +1002,11 @@ def award_kindled_deeds(
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
     from world.roster.services.activity import is_player_character  # noqa: PLC0415
 
-    if outcome is None or not is_player_character(sheet):
+    if outcome is None:
         return []
+    # The one-row award lookup comes first: an NPC attack calls this for every strike.
     award = KindledDeedAward.objects.filter(outcome_tier=outcome).first()
-    if award is None:
+    if award is None or not is_player_character(sheet):
         return []
     if resolution is None and mission is None:
         context = kindling_context_for(sheet)
