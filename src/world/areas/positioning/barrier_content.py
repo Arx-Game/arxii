@@ -35,11 +35,11 @@ from world.mechanics.models import (
     Property,
     PropertyCategory,
 )
-from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
 from world.seeds.sample_content import authored_or_sample
 from world.traits.models import CheckOutcome
 
-_BARRIER_SEVERITY: int = DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
+# 45 points (the old Normal band) converts to level 2 (#5093).
+_BARRIER_SEVERITY_LEVEL: int = 2
 _BARRIER_CHECK_TYPE_NAME: str = "Athletics"
 
 # (property name, property category, capability, application, approach, fiction)
@@ -98,7 +98,7 @@ def ensure_conjured_barrier_content() -> None:
         ChallengeTemplate,
         {
             "description_template": "A conjured wall bars the way.",
-            "severity": _BARRIER_SEVERITY,
+            "severity_level": _BARRIER_SEVERITY_LEVEL,
             "goal": "Get past the conjured wall.",
             "category": category,
             "challenge_type": ChallengeType.INHIBITOR,
