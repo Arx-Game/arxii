@@ -273,3 +273,10 @@ stat 30->31 cost 22 | 39->40 cost 22 | 40->41 cost 33
 - Browser or WebSocket check of the combat flow (2a, 2b): BLOCKED, not run. I used the dispatch seam in `evennia shell`.
 - Spec Verification items 2 (Large buff half a rank), 3 (Large debuff) and 4 (a lock authored at level 8) were outside this pass's brief. The journeys in `integration_tests/test_rank_means_level_journeys.py` cover them through the test runner, not on a live database.
 - A clean forward, back and forward with `just prod-migration-check` itself: blocked by bug 1.
+
+## Re-run after the 0411 fix
+
+0411 now gives each new rank row a `min_points` value (0 for rank 0, otherwise that rank's new baseline), because the column is still NOT NULL until 0412 drops it. I re-ran `just prod-migration-check` on the same production dump, `arxii-20261115T033001Z`. Every migration from 0404 through 0436 applied OK on the production copy, including 0411 and 0412.
+
+- Rows before: 9 `arxii_checkrank` rows, 0 `arxii_modifierlevelbaseline` rows, 3 `arxii_challengetemplate` rows. The `arxii_leveltier` table did not exist yet.
+- The step back failed for an unrelated reason. The tool steps back to main's tip, `0417_kindled_deed_label`, which this branch does not contain, because main has since added its own 0411 to 0417. That is the ordinary collision between migration numbers, and it gets fixed by renumbering this branch's migrations after main's tip. The earlier hand walk above covers reversibility: 0412 and 0421 are the two migrations that cannot be reversed.

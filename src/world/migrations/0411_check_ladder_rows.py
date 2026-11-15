@@ -39,7 +39,12 @@ def write_ladder_rows(apps, schema_editor):
             defaults={"baseline": _BASELINE_AT_LEVEL_1 + _BASELINE_STEP * (level - 1)},
         )
     for rank in range(31):
-        CheckRank.objects.get_or_create(rank=rank, defaults={"name": f"Rank {rank}"})
+        # min_points still exists (NOT NULL, no default) until 0412 drops it, so a new row
+        # fills it with the threshold the ladder now derives: 0 for rank 0, else baseline(rank).
+        threshold = 0 if rank == 0 else _BASELINE_AT_LEVEL_1 + _BASELINE_STEP * (rank - 1)
+        CheckRank.objects.get_or_create(
+            rank=rank, defaults={"name": f"Rank {rank}", "min_points": threshold}
+        )
 
 
 class Migration(migrations.Migration):
