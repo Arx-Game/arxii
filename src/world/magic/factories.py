@@ -1589,7 +1589,7 @@ class DriftCorrectionRiteFactory(RitualFactory):
 
     name = "Rite of Drift Correction"
     execution_kind = RitualExecutionKind.SERVICE
-    service_function_path = "world.magic.services.drift_correction.perform_drift_correction_rite"
+    service_function_path = "world.magic.services.drift_correction.perform_settling_rite"
     flow = None
     client_hosted = True
 

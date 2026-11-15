@@ -1,19 +1,24 @@
-"""Journeys through drift correction (#4733, slice 4 of #4672).
+"""Journeys through the rite of settling and the open chance to atone (#4733, #5124).
 
 A deed grows a resonance of the character's own affinity while she carries resonance that
-does not fit her; the game offers a chance to correct that drift for the length of the
-scene. Ysmay is a Celestial character holding Ruin (Abyssal) drift; Marrow is staff and
-tags her moments; Hobb is the other player on the account side.
+does not fit her, and the game opens a chance to atone that stays open until the rite spends
+it. A character writes reflections (a pose or a journal entry that names a deed, or the
+resonance unsettling her, and Embrace or Disown); one rite of settling, one offering and one
+roll, carries out every reflection waiting. Ysmay is a Celestial character holding Ruin
+(Abyssal) drift; Marrow is staff and tags her moments; Hobb is the other player on the
+account side.
 
 Everything the rate depends on is the SEEDED pair rows (``seed_canonical_affinities`` and
 ``_seed_affinity_interactions``): Abyssal -> Celestial is Redemption at 0.5, Celestial ->
 Abyssal is Fall at 1.50. Only the characters, scene, resonances, the rite, the check type
 and the per-tier outcome shares are built by factories. Expected numbers are worked out by
-hand in each journey, from those rows and the authored cap of 50 percent per deed:
+hand in each journey, from those rows, the authored cap of 50 percent per deed and the
+authored 75 percent a disowned deed turns:
 
 * A Dawnlight deed of 20 raises the cap toward Dawnlight by 50% of 20 = 10.
-* Converting N Ruin at a full share yields int(N x 0.5) Dawnlight (Redemption), and
-  int(N x 1.50) at the Fall rate.
+* Converting N Ruin at a full share yields int(N x 0.5) Dawnlight (Redemption).
+* Embracing a deed of N at share s grows it by int(N x s); disowning a deed of N turns
+  int(N x 0.75 x s) of it.
 
 The check is the one thing a journey cannot play for: ``force_check_outcome`` pins the tier
 the roll lands on, so the share (authored per tier) is the only thing left to decide.
@@ -43,6 +48,7 @@ from world.magic.factories import (
     DramaticMomentTypeFactory,
     DriftCorrectionRiteFactory,
     FacetFactory,
+    KindlingSituationFactory,
     MotifResonanceAssociationFactory,
     MotifResonanceFactory,
     ResonanceFactory,
@@ -52,14 +58,21 @@ from world.magic.factories import (
 from world.magic.models import (
     Affinity,
     AffinityInteraction,
+    CharacterAuraShare,
     CharacterResonance,
     DriftConversionCap,
     DriftConversionOffer,
     DriftCorrectionOutcomeShare,
+    Reflection,
     Resonance,
     ResonanceGrant,
+    SettlingRite,
 )
-from world.magic.services.drift import get_drift_config, get_drift_correction_config
+from world.magic.services.drift import (
+    drift_for,
+    get_drift_config,
+    get_drift_correction_config,
+)
 from world.magic.services.resonance import grant_resonance
 from world.scenes.factories import SceneFactory, SceneOwnerParticipationFactory
 from world.scenes.interaction_services import get_active_scene, invalidate_active_scene_cache
@@ -68,13 +81,12 @@ from world.seeds.game_content.magic import _seed_affinity_interactions, seed_can
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 from world.traits.services import ensure_canonical_check_outcome
 
-NO_OFFER = "You have no open chance to atone."
 NOTICE = "You have grown unsettled. Use aura to see how you can atone."
-LAPSE = "The chance to atone passes with the scene."
 NOT_READY = "The rite of correction is not set up yet; tell staff."
+NOTHING_WAITING = "You have no reflections waiting."
 PENDING = "/api/magic/drift-correction/pending/"
-CONVERT = "/api/magic/drift-correction/convert/"
-DECLINE = "/api/magic/drift-correction/decline/"
+RITE = "/api/magic/settling-rite/"
+POSE = "sets the iron on the altar and looks at it."
 
 
 def balance(character, resonance: Resonance) -> int:
@@ -210,89 +222,148 @@ class DriftJourneyCase(JourneyCase):
             .first()
         )
 
+    def reflect(self, character, target: str, choice: str) -> str:
+        """Write a pose that reflects on ``target`` (a deed's number or a resonance's name)."""
+        return self.telnet(character, f"pose/reflect {target}={choice} {POSE}")
 
-class CorrectingDriftAtTheKeyboard(DriftJourneyCase):
-    """Ysmay is granted her own resonance twice, then converts her Ruin into Dawnlight."""
+    def kindled_deed(self, character, resonance: Resonance, amount: int) -> ResonanceGrant:
+        """Grant ``character`` a kindled deed of ``amount`` of ``resonance``."""
+        situation = KindlingSituationFactory(resonance=resonance, reason_text="Held the line")
+        grant_resonance(
+            character.sheet_data,
+            resonance,
+            amount,
+            source=GainSource.KINDLED_DEED,
+            kindling_situation=situation,
+        )
+        return ResonanceGrant.objects.filter(
+            character_sheet=character.sheet_data, source=GainSource.KINDLED_DEED
+        ).latest("pk")
 
-    def test_two_deeds_raise_the_cap_and_a_conversion_runs_at_the_seeded_rate(self) -> None:
+    def waiting(self, character) -> int:
+        return Reflection.objects.filter(
+            character_sheet=character.sheet_data, rite__isnull=True
+        ).count()
+
+    def settle(self, character, offering: str, tier: str = "Success") -> str:
+        with force_check_outcome(self.outcomes[tier]):
+            return strip_ansi(self.telnet(character, f"aura settle {offering}"))
+
+
+class DisowningWhatUnsettlesHer(DriftJourneyCase):
+    """Ysmay disowns her Ruin; the rite atones up to the chance a deed opened."""
+
+    def test_two_deeds_raise_the_cap_and_the_rite_turns_ruin_at_the_seeded_rate(self) -> None:
         self.connect_telnet(self.ysmay)
         thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
 
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura"))
+        self.assertIn(NOTHING_WAITING, strip_ansi(self.telnet(self.ysmay, "aura")))
         self.assertIsNone(self.offer_of(self.ysmay))
 
-        # First deed: 20 Dawnlight granted; the cap is 50% of 20 = 10.
-        told = self.deed(self.ysmay)
-        self.assertIn("You tagged Ysmay with 'Dawn Flourish'. 20 Dawnlight and renown", told)
-        self.assertEqual(balance(self.ysmay, self.dawnlight), 20)
+        # First deed: 20 Dawnlight granted; the cap is 50% of 20 = 10. A second raises it
+        # to 20 and tells her nothing new.
+        self.deed(self.ysmay)
         self.assertIn(NOTICE, strip_ansi(self.said(self.ysmay)))
-
-        shown = strip_ansi(self.telnet(self.ysmay, "aura"))
-        self.assertIn("You may atone.", shown)
-        self.assertIn("Toward Dawnlight: up to 10.", shown)
-        # Ruin is Abyssal, Dawnlight Celestial: the seeded Redemption pair at 0.5, so the
-        # whole cap (10) would give 5. She holds all 30 Ruin.
-        self.assertIn("From Ruin: you hold 30, REDEMPTION at 0.5", shown)
-        self.assertIn("Converting 10 would give 5.", shown)
-        self.assertIn("Offering you carry: Dawn-gold Thread (material).", shown)
-
-        # A second deed in the same scene raises the cap to 10 + 10, and tells her nothing
-        # new (the offer was already open).
         before = len(self.mailbox(self.ysmay).lines)
         self.deed(self.ysmay)
         self.assertNotIn(NOTICE, strip_ansi("\n".join(self.mailbox(self.ysmay).lines[before:])))
-        self.assertEqual(DriftConversionOffer.objects.filter(scene=self.scene).count(), 1)
-        shown = strip_ansi(self.telnet(self.ysmay, "aura"))
-        self.assertIn("Toward Dawnlight: up to 20.", shown)
-        self.assertIn("Converting 20 would give 10.", shown)
-
-        # Convert 12 Ruin at a full share: 12 x 0.5 = 6 Dawnlight.
-        with force_check_outcome(self.outcomes["Success"]):
-            told = self.telnet(self.ysmay, "aura atone Ruin=Dawnlight 12")
-        self.assertIn("Success: 12 Ruin became 6 Dawnlight.", told)
-        self.assertEqual(balance(self.ysmay, self.ruin), 30 - 12)
-        # 20 + 20 from the two deeds, +6 from the rite.
-        self.assertEqual(balance(self.ysmay, self.dawnlight), 46)
-        (grant,) = drift_grants()
-        self.assertEqual((grant.resonance, grant.amount), (self.dawnlight, 6))
-        self.assertTrue(consumed(thread))
-        self.assertEqual(self.cap_toward(self.ysmay, self.dawnlight), 20 - 12)
-
-        # What is left: 8 of cap, 18 Ruin, 8 x 0.5 = 4, and nothing to offer.
-        shown = strip_ansi(self.telnet(self.ysmay, "aura"))
-        self.assertIn("Toward Dawnlight: up to 8.", shown)
-        self.assertIn("From Ruin: you hold 18", shown)
-        self.assertIn("Converting 8 would give 4.", shown)
-        self.assertIn("You carry nothing that counts as the offering.", shown)
-
-    def test_naming_no_amount_converts_the_most_she_may(self) -> None:
-        self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
-        self.deed(self.ysmay)
-        with force_check_outcome(self.outcomes["Success"]):
-            told = self.telnet(self.ysmay, "aura atone Ruin=Dawnlight")
-        # Cap 10, 30 Ruin held: 10 Ruin -> int(10 x 0.5) = 5 Dawnlight; the cap is spent,
-        # so the offer is gone.
-        self.assertIn("Success: 10 Ruin became 5 Dawnlight.", told)
-        self.assertEqual(balance(self.ysmay, self.ruin), 20)
-        self.assertEqual(balance(self.ysmay, self.dawnlight), 25)
-        self.assertIsNone(self.offer_of(self.ysmay))
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura"))
-
-    def test_an_offering_that_does_not_count_is_refused_and_nothing_moves(self) -> None:
-        other = ResonanceFactory(name="Sunrise", affinity=self.celestial)
-        stranger = self.carry(self.ysmay, other, "Sunrise Candle")
-        self.deed(self.ysmay)
-        with force_check_outcome(self.outcomes["Success"]):
-            told = self.telnet(self.ysmay, "aura atone Ruin=Dawnlight 10")
-        self.assertIn(
-            "Ritual 'Rite of Drift Correction' requires 1x offering for Dawnlight "
-            "that you don't have.",
-            told,
+        self.assertEqual(
+            DriftConversionOffer.objects.filter(character_sheet=self.ysmay.sheet_data).count(), 1
         )
-        self.assertFalse(consumed(stranger))
+        self.assertEqual(self.cap_toward(self.ysmay, self.dawnlight), 20)
+
+        told = self.reflect(self.ysmay, "Ruin", "disown")
+        self.assertIn("recorded", told)
+        shown = strip_ansi(self.telnet(self.ysmay, "aura"))
+        self.assertIn("Your reflections, waiting for the rite of settling:", shown)
+        self.assertIn("Disown your Ruin", shown)
+        self.assertIn("Ruin turns toward Dawnlight, up to 20.", shown)
+        self.assertIn("Offering you carry: Dawn-gold Thread.", shown)
+        self.assertIn("A chance to atone is open: up to 20 toward Dawnlight.", shown)
+
+        # The rite turns the whole cap: 20 Ruin at 0.5 is 10 Dawnlight.
+        told = self.settle(self.ysmay, "Dawn-gold")
+        self.assertIn("Success.", told)
+        self.assertIn("You disown your Ruin: 20 Ruin became 10 Dawnlight.", told)
+        self.assertEqual(balance(self.ysmay, self.ruin), 30 - 20)
+        # 20 + 20 from the two deeds, +10 from the rite.
+        self.assertEqual(balance(self.ysmay, self.dawnlight), 50)
+        (grant,) = drift_grants()
+        self.assertEqual((grant.resonance, grant.amount), (self.dawnlight, 10))
+        self.assertTrue(consumed(thread))
+        # The cap was spent, so the chance closed; the reflection is no longer waiting.
+        self.assertIsNone(self.offer_of(self.ysmay))
+        self.assertEqual(self.waiting(self.ysmay), 0)
+        rite = SettlingRite.objects.get()
+        self.assertEqual((rite.share, rite.outcome.name), (Decimal("1.00"), "Success"))
+        self.assertEqual(Reflection.objects.get().rite, rite)
+        self.assertIn(NOTHING_WAITING, strip_ansi(self.telnet(self.ysmay, "aura")))
+
+    def test_a_half_share_turns_half_the_cap_and_keeps_the_rest_of_it(self) -> None:
+        thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
+        self.set_shares(**{"Partial Success": "0.50"})
+        self.deed(self.ysmay)
+        self.reflect(self.ysmay, "Ruin", "disown")
+
+        told = self.settle(self.ysmay, "Dawn-gold", "Partial Success")
+
+        # Half of the cap of 10 is 5 Ruin, which is int(5 x 0.5) = 2 Dawnlight; the cap falls
+        # by 5. The tier leads the line, so a partial rite never reads as a full one.
+        self.assertIn("Partial Success.", told)
+        self.assertIn("You disown your Ruin: 5 Ruin became 2 Dawnlight.", told)
+        self.assertTrue(consumed(thread))
+        self.assertEqual(balance(self.ysmay, self.ruin), 25)
+        self.assertEqual(balance(self.ysmay, self.dawnlight), 22)
+        self.assertEqual(self.cap_toward(self.ysmay, self.dawnlight), 5)
+        self.assertEqual(self.waiting(self.ysmay), 0)
+
+    def test_a_failed_roll_costs_the_offering_and_takes_every_reflection_for_nothing(self) -> None:
+        thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
+        self.set_shares(Failure="0.00")
+        self.deed(self.ysmay)
+        self.reflect(self.ysmay, "Ruin", "disown")
+
+        told = self.settle(self.ysmay, "Dawn-gold", "Failure")
+
+        self.assertIn("Failure.", told)
+        self.assertIn("the rite turns nothing of it away", told)
+        self.assertTrue(consumed(thread))
         self.assertEqual(balance(self.ysmay, self.ruin), 30)
         self.assertEqual(balance(self.ysmay, self.dawnlight), 20)
         self.assertEqual(drift_grants(), [])
+        # Every reflection took the rite even at a share of 0, and the chance itself stays.
+        self.assertEqual(self.waiting(self.ysmay), 0)
+        self.assertEqual(SettlingRite.objects.get().share, Decimal("0.00"))
+        self.assertEqual(self.cap_toward(self.ysmay, self.dawnlight), 10)
+
+
+class WhenTheRiteRefuses(DriftJourneyCase):
+    """A refusal writes nothing and leaves every reflection waiting."""
+
+    def test_with_no_reflection_waiting_nothing_is_spent(self) -> None:
+        thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
+        self.deed(self.ysmay)
+
+        told = self.settle(self.ysmay, "Dawn-gold")
+
+        self.assertIn("You have no reflections waiting.", told)
+        self.assertFalse(consumed(thread))
+        self.assertEqual(SettlingRite.objects.count(), 0)
+        self.assertEqual(balance(self.ysmay, self.ruin), 30)
+
+    def test_an_offering_that_counts_for_nothing_the_rite_moves_is_refused(self) -> None:
+        other = ResonanceFactory(name="Sunrise", affinity=self.celestial)
+        stranger = self.carry(self.ysmay, other, "Sunrise Candle")
+        self.deed(self.ysmay)
+        self.reflect(self.ysmay, "Ruin", "disown")
+
+        told = self.settle(self.ysmay, "Candle")
+
+        self.assertIn("Sunrise Candle does not count as an offering", told)
+        self.assertFalse(consumed(stranger))
+        self.assertEqual(self.waiting(self.ysmay), 1)
+        self.assertEqual(SettlingRite.objects.count(), 0)
+        self.assertEqual(balance(self.ysmay, self.ruin), 30)
         self.assertEqual(self.cap_toward(self.ysmay, self.dawnlight), 10)
 
     def test_a_faceted_cloak_is_spent_only_when_she_names_it(self) -> None:
@@ -310,119 +381,168 @@ class CorrectingDriftAtTheKeyboard(DriftJourneyCase):
         ItemFacetFactory(item_instance=cloak, facet=sigil)
         materialize_item_game_object(cloak, self.ysmay.sheet_data)
         self.deed(self.ysmay)
+        self.reflect(self.ysmay, "Ruin", "disown")
 
-        shown = strip_ansi(self.telnet(self.ysmay, "aura"))
-        self.assertIn("Spent only if named (with <item>): Sigil Cloak (facet).", shown)
-
-        with force_check_outcome(self.outcomes["Success"]):
-            told = self.telnet(self.ysmay, "aura atone Ruin=Dawnlight 10")
         self.assertIn(
-            "Ritual 'Rite of Drift Correction' requires 1x offering for Dawnlight "
-            "that you don't have.",
-            told,
+            "Offering you carry: Sigil Cloak.", strip_ansi(self.telnet(self.ysmay, "aura"))
         )
+        self.assertIn("You carry nothing called 'Thread'", self.settle(self.ysmay, "Thread"))
         self.assertFalse(consumed(cloak.pk))
-        self.assertEqual(balance(self.ysmay, self.ruin), 30)
-        self.assertEqual(self.cap_toward(self.ysmay, self.dawnlight), 10)
 
         cloak_pk = cloak.pk
-        with force_check_outcome(self.outcomes["Success"]):
-            told = self.telnet(self.ysmay, "aura atone Ruin=Dawnlight 10 with cloak")
-        self.assertIn("Success: 10 Ruin became 5 Dawnlight.", told)
+        told = self.settle(self.ysmay, "cloak")
+        self.assertIn("You disown your Ruin: 10 Ruin became 5 Dawnlight.", told)
         self.assertTrue(consumed(cloak_pk))
-        self.assertEqual(balance(self.ysmay, self.ruin), 20)
 
-
-class LettingTheChancePassOrFailingTheRite(DriftJourneyCase):
-    def test_declining_changes_nothing_but_the_offer(self) -> None:
+    def test_when_staff_have_not_set_up_the_rite_it_says_so_everywhere(self) -> None:
         thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
+        # The rite and its check type are set; only the Partial Success share is missing.
+        DriftCorrectionOutcomeShare.objects.filter(
+            outcome_tier=self.outcomes["Partial Success"]
+        ).delete()
         self.deed(self.ysmay)
-        told = self.telnet(self.ysmay, "aura decline")
-        self.assertIn("You let the chance to atone pass.", told)
-        self.assertIsNone(self.offer_of(self.ysmay))
+        self.reflect(self.ysmay, "Ruin", "disown")
+
+        self.assertIn(NOT_READY, strip_ansi(self.telnet(self.ysmay, "aura")))
+        self.assertIn(NOT_READY, self.settle(self.ysmay, "Dawn-gold"))
+        reading = self.api(self.account_of(self.ysmay)).get(
+            RITE, {"character_sheet": self.ysmay.sheet_data.pk}
+        )
+        self.assertEqual(reading.status_code, 200)
+        self.assertEqual(
+            (
+                reading.data["rite_ready"],
+                reading.data["not_ready_message"],
+                reading.data["offerings"],
+            ),
+            (False, NOT_READY, []),
+        )
         self.assertFalse(consumed(thread))
-        self.assertEqual(balance(self.ysmay, self.ruin), 30)
-        self.assertEqual(balance(self.ysmay, self.dawnlight), 20)
-        self.assertEqual(drift_grants(), [])
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura"))
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura decline"))
+        self.assertEqual(self.waiting(self.ysmay), 1)
+        probe = _probe_drift_correction_config()
+        self.assertEqual((probe.present, probe.missing), (False, ("Partial Success",)))
 
-    def test_a_failed_roll_costs_the_offering_and_moves_nothing(self) -> None:
-        thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
-        self.set_shares(Failure="0.00")
-        self.deed(self.ysmay)
-        with force_check_outcome(self.outcomes["Failure"]):
-            told = self.telnet(self.ysmay, "aura atone Ruin=Dawnlight 10")
-        self.assertIn("The rite fails; nothing is converted.", told)
-        self.assertTrue(consumed(thread))
-        self.assertEqual(balance(self.ysmay, self.ruin), 30)
-        self.assertEqual(balance(self.ysmay, self.dawnlight), 20)
-        self.assertEqual(drift_grants(), [])
-        # The chance itself stays: the cap is whole and she may try again.
-        self.assertEqual(self.cap_toward(self.ysmay, self.dawnlight), 10)
-        self.assertIn("Toward Dawnlight: up to 10.", self.telnet(self.ysmay, "aura"))
 
-    def test_a_half_share_converts_half_and_keeps_the_rest_of_the_cap(self) -> None:
+class ReflectingOnDeeds(DriftJourneyCase):
+    def test_embracing_a_deed_grows_what_it_earned_by_the_share(self) -> None:
         thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
         self.set_shares(**{"Partial Success": "0.50"})
-        self.deed(self.ysmay)
-        with force_check_outcome(self.outcomes["Partial Success"]):
-            told = self.telnet(self.ysmay, "aura atone Ruin=Dawnlight 10")
-        # Half of 10 is 5 Ruin, which is 5 x 0.5 = 2 Dawnlight (floored); the cap falls by 5.
-        # The tier leads the line, so a partial conversion never reads as a full one.
-        self.assertIn("Partial Success: 5 Ruin became 2 Dawnlight.", told)
+        deed = self.kindled_deed(self.ysmay, self.dawnlight, 8)
+        self.assertIn("recorded", self.reflect(self.ysmay, str(deed.pk), "embrace"))
+        before = balance(self.ysmay, self.dawnlight)
+
+        told = self.settle(self.ysmay, "Dawn-gold", "Partial Success")
+
+        # int(8 x 0.5) = 4.
+        self.assertIn("You embrace Held the line: your Dawnlight grows by 4.", told)
+        self.assertEqual(balance(self.ysmay, self.dawnlight), before + 4)
+        embraced = ResonanceGrant.objects.get(source=GainSource.EMBRACED_DEED)
+        self.assertEqual((embraced.resonance, embraced.amount), (self.dawnlight, 4))
+        reflection = Reflection.objects.get()
+        self.assertEqual(
+            (embraced.source_reflection, embraced.source_settling_rite),
+            (reflection, reflection.rite),
+        )
         self.assertTrue(consumed(thread))
-        self.assertEqual(balance(self.ysmay, self.ruin), 25)
-        self.assertEqual(balance(self.ysmay, self.dawnlight), 22)
-        self.assertEqual(self.cap_toward(self.ysmay, self.dawnlight), 5)
+
+    def test_disowning_a_deed_turns_most_of_it_toward_the_main_affinity_with_no_chance_open(
+        self,
+    ) -> None:
+        thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
+        deed = self.kindled_deed(self.ysmay, self.ruin, 10)
+        # A deed of Ruin is not of her own affinity, so it opens no chance to atone.
+        self.assertIsNone(self.offer_of(self.ysmay))
+        self.reflect(self.ysmay, str(deed.pk), "disown")
+
+        told = self.settle(self.ysmay, "Dawn-gold")
+
+        # int(10 x 75 / 100) = 7 Ruin, at 0.5 is 3 Dawnlight.
+        self.assertIn("You disown Held the line: 7 Ruin became 3 Dawnlight.", told)
+        self.assertEqual(balance(self.ysmay, self.ruin), 40 - 7)
+        self.assertEqual(balance(self.ysmay, self.dawnlight), 3)
+        self.assertTrue(consumed(thread))
+
+    def test_a_deed_is_reflected_on_once_and_the_deeds_show_on_the_aura_until_then(self) -> None:
+        self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
+        deed = self.kindled_deed(self.ysmay, self.dawnlight, 8)
+        shown = strip_ansi(self.telnet(self.ysmay, "aura"))
+        self.assertIn("Deeds not yet reflected on:", shown)
+        self.assertIn(f"#{deed.pk} Held the line", shown)
+        self.reflect(self.ysmay, str(deed.pk), "embrace")
+        self.assertNotIn("Deeds not yet reflected on:", strip_ansi(self.telnet(self.ysmay, "aura")))
+        self.assertIn("already reflected on", self.reflect(self.ysmay, str(deed.pk), "disown"))
 
 
-class TheSameChanceOnTheWeb(DriftJourneyCase):
-    """The pending inbox, convert and decline, as the browser dialog calls them."""
+class AcceptingWhatSheHasBecome(DriftJourneyCase):
+    def test_embracing_the_unsettling_resonance_settles_her_in_full_at_a_full_share(self) -> None:
+        sheet = self.ysmay.sheet_data
+        # A tolerance of 1 point keeps the shares' rounding (5.45 stored, 5.4545 read) from
+        # reading as excess once she is settled; the setup's tolerance of 0 would.
+        tolerance = get_drift_config()
+        tolerance.unsettled_tolerance_percent = 1
+        tolerance.save()
+        self.carry(self.ysmay, self.ruin, "Ruin-iron Ring")
+        self.assertGreater(drift_for(sheet).steps_past, 0)
+        self.reflect(self.ysmay, "Ruin", "embrace")
 
-    def test_the_inbox_shows_what_telnet_showed_and_convert_runs_the_same_rite(self) -> None:
+        told = self.settle(self.ysmay, "Ring")
+
+        self.assertIn("You become more abyssal.", told)
+        self.assertEqual(drift_for(sheet).steps_past, 0)
+        share = CharacterAuraShare.objects.get(aura__character=sheet, affinity=self.abyssal)
+        self.assertEqual(share.settled_percent, share.percent)
+        self.assertEqual(self.waiting(self.ysmay), 0)
+
+    def test_a_weaker_roll_moves_her_only_part_of_the_way(self) -> None:
+        sheet = self.ysmay.sheet_data
+        self.set_shares(**{"Partial Success": "0.50"})
+        self.carry(self.ysmay, self.ruin, "Ruin-iron Ring")
+        self.reflect(self.ysmay, "Ruin", "embrace")
+
+        told = self.settle(self.ysmay, "Ring", "Partial Success")
+
+        self.assertIn("You move part of the way toward being more abyssal.", told)
+        share = CharacterAuraShare.objects.get(aura__character=sheet, affinity=self.abyssal)
+        self.assertTrue(0 < share.settled_percent < share.percent)
+        self.assertGreater(drift_for(sheet).steps_past, 0)
+        self.assertEqual(self.waiting(self.ysmay), 0)
+
+
+class TheSameRiteOnTheWeb(DriftJourneyCase):
+    """The rite's reading and its perform, as the browser dialog calls them."""
+
+    def test_the_reading_shows_what_telnet_showed_and_perform_runs_the_same_rite(self) -> None:
         mine = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
         hobbs = self.carry(self.hobb, self.dawnlight, "Hobb's Dawn Thread")
         self.deed(self.ysmay)
-        shown = strip_ansi(self.telnet(self.ysmay, "aura"))
-        self.assertIn("Toward Dawnlight: up to 10.", shown)
-        self.assertIn("Converting 10 would give 5.", shown)
-
+        self.reflect(self.ysmay, "Ruin", "disown")
+        sheet_id = self.ysmay.sheet_data.pk
         ysmay_api = self.api(self.account_of(self.ysmay))
-        response = ysmay_api.get(PENDING)
-        self.assertEqual(response.status_code, 200)
-        (offer,) = response.data["results"]
-        self.assertEqual(offer["scene_id"], self.scene.pk)
-        self.assertEqual((offer["rite_ready"], offer["rite_not_ready_message"]), (True, ""))
-        (cap,) = offer["caps"]
-        self.assertEqual(cap["target_resonance"]["name"], "Dawnlight")
-        self.assertEqual(cap["target_resonance"]["affinity"], "Celestial")
-        self.assertEqual(cap["cap_remaining"], 10)
-        self.assertEqual(cap["focus_bonus"], 0)
-        (source,) = cap["sources"]
-        self.assertEqual(source["resonance_name"], "Ruin")
+
+        reading = ysmay_api.get(RITE, {"character_sheet": sheet_id})
+        self.assertEqual(reading.status_code, 200)
+        (reflection,) = reading.data["reflections"]
         self.assertEqual(
-            (source["balance"], source["max_amount"], source["projected_output"]), (30, 10, 5)
+            (reflection["choice"], reflection["kind"], reflection["title"]),
+            ("DISOWN", "resonance", "Disown your Ruin"),
         )
-        self.assertEqual(Decimal(source["multiplier"]), Decimal("0.5"))
-        self.assertEqual(source["conversion_type"], "REDEMPTION")
-        (offering,) = cap["qualifying_components"]
+        self.assertEqual(reflection["effect_line"], "Ruin turns toward Dawnlight, up to 10.")
+        self.assertEqual(reflection["excerpt"], POSE)
+        self.assertEqual(reflection["where"], "Pose in " + self.scene.name)
+        (offering,) = reading.data["offerings"]
         self.assertEqual(
             (offering["item_id"], offering["name"], offering["mode"]),
             (mine, "Dawn-gold Thread", "material"),
         )
+        (offer,) = ysmay_api.get(PENDING).data["results"]
+        (cap,) = offer["caps"]
+        self.assertEqual((cap["target_resonance"]["name"], cap["cap_remaining"]), ("Dawnlight", 10))
 
-        body = {
-            "offer_id": offer["id"],
-            "source_resonance_id": self.ruin.pk,
-            "target_resonance_id": self.dawnlight.pk,
-            "amount": 10,
-        }
-
-        # Her own offer, offering an item she does not hold or one that does not exist.
+        body = {"character_sheet_id": sheet_id}
+        # An item she does not hold, or one that does not exist, is refused before anything.
         with force_check_outcome(self.outcomes["Success"]):
-            foreign = post(ysmay_api, CONVERT, {**body, "component_ids": [hobbs]})
-            missing = post(ysmay_api, CONVERT, {**body, "component_ids": [mine + 9999]})
+            foreign = ysmay_api.post(RITE, {**body, "component_ids": [hobbs]}, format="json")
+            missing = ysmay_api.post(RITE, {**body, "component_ids": [mine + 9999]}, format="json")
         for refused in (foreign, missing):
             self.assertEqual(refused.status_code, 400)
             self.assertEqual(
@@ -430,148 +550,51 @@ class TheSameChanceOnTheWeb(DriftJourneyCase):
             )
         self.assertFalse(consumed(mine))
         self.assertFalse(consumed(hobbs))
-
-        # The honest request: 10 Ruin at 0.5 is 5 Dawnlight.
+        # No offering at all is the service's own refusal.
         with force_check_outcome(self.outcomes["Success"]):
-            done = post(ysmay_api, CONVERT, {**body, "component_ids": [mine]})
+            bare = ysmay_api.post(RITE, body, format="json")
+        self.assertEqual(bare.status_code, 400)
+        self.assertEqual(self.waiting(self.ysmay), 1)
+
+        with force_check_outcome(self.outcomes["Success"]):
+            done = ysmay_api.post(RITE, {**body, "component_ids": [mine]}, format="json")
         self.assertEqual(done.status_code, 200)
-        self.assertEqual(done.data["converted_amount"], 10)
-        self.assertEqual(done.data["granted_amount"], 5)
         self.assertEqual(done.data["outcome_name"], "Success")
-        self.assertEqual(done.data["conversion_type"], "REDEMPTION")
+        self.assertEqual(done.data["lines"], ["You disown your Ruin: 10 Ruin became 5 Dawnlight."])
         self.assertEqual(balance(self.ysmay, self.ruin), 20)
         self.assertEqual(balance(self.ysmay, self.dawnlight), 25)
         self.assertTrue(consumed(mine))
         self.assertFalse(consumed(hobbs))
-        (grant,) = drift_grants()
-        self.assertEqual((grant.resonance, grant.amount), (self.dawnlight, 5))
-        # The cap was spent, so the inbox is empty and telnet agrees.
+        self.assertEqual(ysmay_api.get(RITE, {"character_sheet": sheet_id}).data["reflections"], [])
         self.assertEqual(ysmay_api.get(PENDING).data["results"], [])
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura"))
 
-    def test_another_account_neither_sees_nor_acts_on_her_offer(self) -> None:
+    def test_another_account_neither_reads_nor_performs_her_rite(self) -> None:
         mine = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
-        hobbs = self.carry(self.hobb, self.dawnlight, "Hobb's Dawn Thread")
         self.deed(self.ysmay)
-        offer_id = self.offer_of(self.ysmay).pk
-        body = {
-            "offer_id": offer_id,
-            "source_resonance_id": self.ruin.pk,
-            "target_resonance_id": self.dawnlight.pk,
-            "amount": 10,
-        }
+        self.reflect(self.ysmay, "Ruin", "disown")
+        sheet_id = self.ysmay.sheet_data.pk
         hobb_api = self.api(self.account_of(self.hobb))
-        self.assertEqual(hobb_api.get(PENDING).data["results"], [])
-        self.assertEqual(
-            post(hobb_api, CONVERT, {**body, "component_ids": [hobbs]}).status_code, 404
-        )
-        self.assertEqual(post(hobb_api, DECLINE, {"offer_id": offer_id}).status_code, 404)
-        self.assertEqual(self.api().get(PENDING).status_code, 403)
-        # Nothing moved: her offer, her thread and her Ruin are as they were.
-        self.assertEqual(self.offer_of(self.ysmay).pk, offer_id)
-        self.assertFalse(consumed(mine))
-        self.assertFalse(consumed(hobbs))
-        self.assertEqual(balance(self.ysmay, self.ruin), 30)
-        self.assertEqual(drift_grants(), [])
 
-    def test_a_failed_roll_is_reported_and_the_chance_stays(self) -> None:
-        mine = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
-        self.set_shares(Failure="0.00")
-        self.deed(self.ysmay)
-        ysmay_api = self.api(self.account_of(self.ysmay))
-        offer_id = ysmay_api.get(PENDING).data["results"][0]["id"]
-        with force_check_outcome(self.outcomes["Failure"]):
-            done = post(
-                ysmay_api,
-                CONVERT,
-                {
-                    "offer_id": offer_id,
-                    "source_resonance_id": self.ruin.pk,
-                    "target_resonance_id": self.dawnlight.pk,
-                    "amount": 10,
-                    "component_ids": [mine],
-                },
+        self.assertEqual(hobb_api.get(RITE, {"character_sheet": sheet_id}).status_code, 404)
+        with force_check_outcome(self.outcomes["Success"]):
+            stolen = hobb_api.post(
+                RITE, {"character_sheet_id": sheet_id, "component_ids": [mine]}, format="json"
             )
-        self.assertEqual(done.status_code, 200)
-        self.assertEqual((done.data["converted_amount"], done.data["granted_amount"]), (0, 0))
-        self.assertEqual(done.data["outcome_name"], "Failure")
-        self.assertTrue(consumed(mine))
-        self.assertEqual(balance(self.ysmay, self.ruin), 30)
-        self.assertEqual(drift_grants(), [])
-        self.assertEqual(len(ysmay_api.get(PENDING).data["results"]), 1)
-        self.assertEqual(self.cap_toward(self.ysmay, self.dawnlight), 10)
-
-    def test_declining_on_the_web_lets_the_offer_go(self) -> None:
-        mine = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
-        self.deed(self.ysmay)
-        ysmay_api = self.api(self.account_of(self.ysmay))
-        offer_id = ysmay_api.get(PENDING).data["results"][0]["id"]
-        done = post(ysmay_api, DECLINE, {"offer_id": offer_id})
-        self.assertEqual(done.status_code, 200)
-        self.assertEqual(done.data["detail"], "You let the chance to atone pass.")
-        self.assertEqual(ysmay_api.get(PENDING).data["results"], [])
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura"))
+        self.assertEqual(stolen.status_code, 404)
+        self.assertEqual(hobb_api.get(PENDING).data["results"], [])
+        self.assertEqual(self.api().get(PENDING).status_code, 403)
         self.assertFalse(consumed(mine))
+        self.assertEqual(self.waiting(self.ysmay), 1)
         self.assertEqual(balance(self.ysmay, self.ruin), 30)
-        self.assertEqual(post(ysmay_api, DECLINE, {"offer_id": offer_id}).status_code, 404)
 
 
-class WhenStaffHaveNotSetUpTheRite(DriftJourneyCase):
-    """A deed still opens the chance, but every surface says the rite is not ready."""
-
-    def unset(self, field: str) -> None:
-        config = get_drift_correction_config()
-        setattr(config, field, None)
-        config.save(update_fields=[field])
-
-    def assert_not_ready_everywhere(self, thread: int) -> None:
-        shown = strip_ansi(self.telnet(self.ysmay, "aura"))
-        self.assertIn(NOT_READY, shown)
-        # She carries a thread tied to Dawnlight; the old display wrongly said she had none.
-        self.assertNotIn("You carry nothing that counts as the offering.", shown)
-        self.assertNotIn("Toward Dawnlight", shown)
-        self.assertIn(NOT_READY, strip_ansi(self.telnet(self.ysmay, "aura atone Ruin=Dawnlight 2")))
-
-        (offer,) = self.api(self.account_of(self.ysmay)).get(PENDING).data["results"]
-        self.assertEqual((offer["rite_ready"], offer["rite_not_ready_message"]), (False, NOT_READY))
-
-        self.assertFalse(consumed(thread))
-        self.assertEqual(balance(self.ysmay, self.ruin), 30)
-        self.assertEqual(self.cap_toward(self.ysmay, self.dawnlight), 10)
-        self.assertEqual(drift_grants(), [])
-
-    def test_no_rite_is_named_on_telnet_and_the_web(self) -> None:
-        thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
-        self.unset("rite")
-        self.deed(self.ysmay)
-        self.assert_not_ready_everywhere(thread)
-
-    def test_a_tier_with_no_share_is_named_on_telnet_and_the_web(self) -> None:
-        thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
-        # The rite and its check type are set; only the Partial Success share is missing.
-        DriftCorrectionOutcomeShare.objects.filter(
-            outcome_tier=self.outcomes["Partial Success"]
-        ).delete()
-        self.deed(self.ysmay)
-        self.assert_not_ready_everywhere(thread)
-        probe = _probe_drift_correction_config()
-        self.assertEqual((probe.present, probe.missing), (False, ("Partial Success",)))
-
-    def test_no_check_type_is_named_on_telnet_and_the_web(self) -> None:
-        thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
-        self.unset("check_type")
-        self.deed(self.ysmay)
-        self.assert_not_ready_everywhere(thread)
-
-
-class TheChanceLapsesWithTheScene(DriftJourneyCase):
-    def test_finishing_the_scene_takes_the_offer_and_says_so(self) -> None:
+class TheChanceStaysOpenWhenTheSceneEnds(DriftJourneyCase):
+    def test_finishing_the_scene_leaves_the_chance_and_the_rite_still_uses_it(self) -> None:
         self.connect_telnet(self.ysmay)
         self.watch(self.ysmay)
-        mine = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
+        thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
         self.deed(self.ysmay)
         self.assertIn(NOTICE, strip_ansi(self.said(self.ysmay)))
-        self.assertIsNotNone(self.offer_of(self.ysmay))
         ysmay_api = self.api(self.account_of(self.ysmay))
         self.assertEqual(len(ysmay_api.get(PENDING).data["results"]), 1)
 
@@ -583,15 +606,22 @@ class TheChanceLapsesWithTheScene(DriftJourneyCase):
         self.scene.refresh_from_db()
         self.assertTrue(self.scene.is_finished)
 
-        self.assertIn(LAPSE, strip_ansi(self.said(self.ysmay)))
+        self.assertNotIn("passes with the scene", strip_ansi(self.said(self.ysmay)))
+        self.assertIsNotNone(self.offer_of(self.ysmay))
+        self.assertEqual(self.cap_toward(self.ysmay, self.dawnlight), 10)
+        self.assertEqual(len(ysmay_api.get(PENDING).data["results"]), 1)
+        self.assertIn(
+            "A chance to atone is open: up to 10 toward Dawnlight.",
+            strip_ansi(self.telnet(self.ysmay, "aura")),
+        )
+
+        # Out of any scene, she writes the reflection and settles; the cap is still hers.
+        self.reflect(self.ysmay, "Ruin", "disown")
+        told = self.settle(self.ysmay, "Dawn-gold")
+        self.assertIn("You disown your Ruin: 10 Ruin became 5 Dawnlight.", told)
+        self.assertTrue(consumed(thread))
         self.assertIsNone(self.offer_of(self.ysmay))
-        self.assertEqual(DriftConversionCap.objects.count(), 0)
-        self.assertEqual(ysmay_api.get(PENDING).data["results"], [])
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura"))
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura atone Ruin=Dawnlight 5"))
-        self.assertFalse(consumed(mine))
-        self.assertEqual(balance(self.ysmay, self.ruin), 30)
-        self.assertEqual(drift_grants(), [])
+        self.assertEqual(SettlingRite.objects.get().scene, None)
 
     def test_a_deed_after_the_scene_finished_opens_nothing_even_on_a_stale_room_cache(
         self,
@@ -610,7 +640,6 @@ class TheChanceLapsesWithTheScene(DriftJourneyCase):
 
         self.assertEqual(balance(self.ysmay, self.dawnlight), 20)
         self.assertIsNone(self.offer_of(self.ysmay))
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura"))
 
 
 class WhenNothingOpensAChance(DriftJourneyCase):
@@ -629,7 +658,6 @@ class WhenNothingOpensAChance(DriftJourneyCase):
         self.assertEqual(balance(self.hobb, self.dawnlight), 20)
         self.assertIsNone(self.offer_of(self.hobb))
         self.assertNotIn(NOTICE, strip_ansi(self.said(self.hobb)))
-        self.assertIn(NO_OFFER, self.telnet(self.hobb, "aura"))
 
     def test_a_staff_grant_is_not_a_deed_and_opens_nothing(self) -> None:
         # The only real face of a staff grant is the admin action `grant_resonance_action`
@@ -649,7 +677,6 @@ class WhenNothingOpensAChance(DriftJourneyCase):
         self.assertEqual(balance(self.ysmay, self.dawnlight), 1)
         self.assertIsNone(self.offer_of(self.ysmay))
         self.assertNotIn(NOTICE, strip_ansi(self.said(self.ysmay)))
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura"))
 
     def test_a_deed_in_a_room_with_no_live_scene_opens_nothing(self) -> None:
         elsewhere = self.make_room("The Cellar")
@@ -662,41 +689,3 @@ class WhenNothingOpensAChance(DriftJourneyCase):
             dramatic_moment=DramaticMomentTagFactory(character_sheet=self.ysmay.sheet_data),
         )
         self.assertIsNone(self.offer_of(self.ysmay))
-        self.assertIn(NO_OFFER, self.telnet(self.ysmay, "aura"))
-
-
-class AFallingCharacterCorrectsTheOtherWay(DriftJourneyCase):
-    """Bram is Abyssal and holds Celestial drift: the seeded Fall pair multiplies."""
-
-    def test_fall_direction_converts_at_one_and_a_half(self) -> None:
-        bram = self.make_player("Bram", room=self.lantern)
-        self.hold(bram, self.ruin, 0, lifetime=500)
-        self.hold(bram, self.dawnlight, 30)
-        set_aura_split(
-            CharacterAuraFactory(character=bram.sheet_data),
-            celestial="0",
-            primal="0",
-            abyssal="100",
-        )
-        ruin_flourish = DramaticMomentTypeFactory(
-            label="Ruin Flourish", resonance=self.ruin, per_scene_cap=3, resonance_amount=20
-        )
-        thread = self.carry(bram, self.ruin, "Ashen Thread")
-        self.deed(bram, ruin_flourish.label)
-        self.assertEqual(balance(bram, self.ruin), 20)
-
-        shown = strip_ansi(self.telnet(bram, "aura"))
-        self.assertIn("Toward Ruin: up to 10.", shown)
-        # Celestial -> Abyssal is the seeded Fall pair at 1.50: 10 x 1.5 = 15.
-        self.assertIn("From Dawnlight: you hold 30, FALL at 1.5", shown)
-        self.assertIn("Converting 10 would give 15.", shown)
-
-        with force_check_outcome(self.outcomes["Success"]):
-            told = self.telnet(bram, "aura atone Dawnlight=Ruin 10")
-        self.assertIn("Success: 10 Dawnlight became 15 Ruin.", told)
-        self.assertEqual(balance(bram, self.dawnlight), 20)
-        # 20 from the deed + 15 from the rite.
-        self.assertEqual(balance(bram, self.ruin), 35)
-        (grant,) = drift_grants()
-        self.assertEqual((grant.resonance, grant.amount), (self.ruin, 15))
-        self.assertTrue(consumed(thread))

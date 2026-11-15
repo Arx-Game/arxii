@@ -953,21 +953,13 @@ class DriftCorrectionNotConfiguredError(DriftCorrectionError):
     user_message = "The rite of correction is not set up yet; tell staff."
 
 
-class DriftOfferNotFoundError(DriftCorrectionError):
-    """The offer is gone, its scene has finished, or it holds no cap toward the target."""
+class NoWaitingReflectionError(DriftCorrectionError):
+    """The rite of settling needs at least one waiting reflection (#5124)."""
 
-    user_message = "You have no open chance to atone toward that resonance."
-
-
-class DriftConversionInvalidError(DriftCorrectionError):
-    """The requested conversion breaks a rule; the raise site names which one."""
-
-    user_message = "That conversion cannot be made."
-
-    def __init__(self, user_message: str | None = None) -> None:
-        super().__init__(user_message)
-        if user_message:
-            self.user_message = user_message
+    user_message = (
+        "You have no reflections waiting. Reflect on a deed, or on what is unsettling you, "
+        "in a pose or a journal entry first."
+    )
 
 
 class NotUnsettledError(MagicError):

@@ -1,0 +1,127 @@
+"""The rite of settling, read for the sheet and the rite dialog (#5124).
+
+``settling_rite_reading`` lists the character's waiting reflections as a player reads them
+(what each is, the writing behind it, what the rite would do at a full share) with the
+carried items that count as the offering and what the roll is. It writes nothing.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterable
+from decimal import Decimal
+from typing import TYPE_CHECKING
+
+from world.magic.constants import ReflectionChoice
+from world.magic.models.drift import DriftConversionCap
+from world.magic.models.reflection import Reflection
+from world.magic.services.drift import get_drift_correction_config
+from world.magic.services.drift_correction import (
+    RITE_NOT_READY_MESSAGE,
+    main_affinity_rows,
+    offerings_for,
+    reflected_resonance,
+    rite_is_ready,
+    waiting_reflections,
+)
+from world.magic.services.reflection import deed_what
+from world.magic.types.drift import ReflectionReading, SettlingRiteReading
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
+    from world.items.models import ItemInstance
+
+_EXCERPT_LENGTH = 160
+_ONE_HUNDRED = Decimal(100)
+
+
+def _excerpt(text: str) -> str:
+    text = " ".join(text.split())
+    if len(text) <= _EXCERPT_LENGTH:
+        return text
+    return text[: _EXCERPT_LENGTH - 1].rstrip() + "…"
+
+
+def _writing(reflection: Reflection) -> tuple[str, str]:
+    """(where, excerpt) for the writing that carries ``reflection``; blanks when it is gone."""
+    entry = reflection.journal_entry
+    if entry is not None:
+        return f'"{entry.title}" · journal', _excerpt(entry.body)
+    pose = reflection.interaction
+    if pose is not None:
+        scene = pose.scene
+        where = f"Pose in {scene.name}" if scene is not None else "Pose"
+        return where, _excerpt(pose.content)
+    return "", ""
+
+
+def open_cap_line(sheet: CharacterSheet) -> str:
+    """The sentence naming the character's open chance to atone, blank when none is open."""
+    caps = DriftConversionCap.objects.filter(
+        offer__character_sheet=sheet, cap__gt=0
+    ).select_related("target_resonance")
+    parts = [f"up to {cap.cap} toward {cap.target_resonance.name}" for cap in caps]
+    if not parts:
+        return ""
+    return f"A chance to atone is open: {', '.join(parts)}."
+
+
+def _effect_line(
+    reflection: Reflection, target_name: str, caps: dict[int, int], disown_percent: int
+) -> str:
+    resonance = reflected_resonance(reflection)
+    embrace = reflection.choice == ReflectionChoice.EMBRACE
+    if reflection.grant is not None:
+        grant = reflection.grant
+        if embrace:
+            what = deed_what(grant) or f"your {resonance.name}"
+            return f"Your {resonance.name} from {what} grows, up to {grant.amount}."
+        most = int(Decimal(grant.amount) * Decimal(disown_percent) / _ONE_HUNDRED)
+        return f"{resonance.name} turns toward {target_name}, up to {most}."
+    if embrace:
+        return "Who you are moves toward who you have become."
+    most = max(caps.values(), default=0)
+    return f"{resonance.name} turns toward {target_name}, up to {most}."
+
+
+def _title(reflection: Reflection) -> str:
+    verb = "Embrace" if reflection.choice == ReflectionChoice.EMBRACE else "Disown"
+    if reflection.grant is not None:
+        grant = reflection.grant
+        return f"{verb} {deed_what(grant) or f'your {grant.resonance.name}'}"
+    return f"{verb} your {reflection.resonance.name}"
+
+
+def settling_rite_reading(
+    sheet: CharacterSheet, items: Iterable[ItemInstance]
+) -> SettlingRiteReading:
+    """The waiting reflections, the offerings among ``items``, and whether the rite is ready."""
+    config = get_drift_correction_config()
+    reflections = waiting_reflections(sheet)
+    main_rows = main_affinity_rows(sheet)
+    target_name = main_rows[0].resonance.name if main_rows else "your own affinity"
+    caps = {
+        cap.target_resonance_id: cap.cap
+        for cap in DriftConversionCap.objects.filter(offer__character_sheet=sheet)
+    }
+    readings = []
+    for reflection in reflections:
+        where, excerpt = _writing(reflection)
+        readings.append(
+            ReflectionReading(
+                id=reflection.pk,
+                choice=reflection.choice,
+                kind="deed" if reflection.grant is not None else "resonance",
+                title=_title(reflection),
+                where=where,
+                excerpt=excerpt,
+                effect_line=_effect_line(reflection, target_name, caps, config.disown_deed_percent),
+            )
+        )
+    ready = rite_is_ready(config)
+    return SettlingRiteReading(
+        reflections=tuple(readings),
+        offerings=tuple(offerings_for(sheet, reflections, items)) if ready else (),
+        rite_ready=ready,
+        not_ready_message="" if ready else RITE_NOT_READY_MESSAGE,
+        check_name=config.check_type.name if config.check_type_id is not None else "",
+    )

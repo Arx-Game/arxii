@@ -2087,7 +2087,7 @@ def _probe_soulfray_death_risk() -> ProbeResult:
 def _probe_drift_correction_config() -> ProbeResult:
     """The drift correction rite has a rite, a check type, and a share for every tier (#4733).
 
-    Consumer: `world/magic/services/drift_correction.py perform_drift_correction_rite()`.
+    Consumer: `world/magic/services/drift_correction.py perform_settling_rite()`.
     It refuses with "not set up yet" unless `rite_is_ready()`: `DriftCorrectionConfig.rite`
     and `.check_type` set and a `DriftCorrectionOutcomeShare` row for every `CheckOutcome`
     (`outcome_tiers_without_a_share()` empty), since the roll can land on any of them. The
@@ -3897,8 +3897,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             label="Drift correction rite, check and outcome shares",
             tier=DependencyTier.REQUIRED,
             consumer=(
-                "world/magic/services/drift_correction.py rite_is_ready(), "
-                "perform_drift_correction_rite()"
+                "world/magic/services/drift_correction.py rite_is_ready(), perform_settling_rite()"
             ),
             consequence=(
                 "A deed still opens a conversion offer and tells the player, but telnet "

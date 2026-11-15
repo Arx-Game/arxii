@@ -16,7 +16,6 @@ from drf_spectacular.utils import extend_schema_field
 from evennia.accounts.models import AccountDB
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
-from rest_framework.request import Request
 
 from actions.models import ConsequencePool
 from actions.serializers import TargetSpecSerializer
@@ -663,10 +662,9 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
         return unsettled_line(self._reading(obj))
 
     def get_unsettled_affinity_name(self, obj: CharacterAura) -> str:
-        """The affinity "You become more ..." names on accepting; blank when settled.
+        """The affinity of the resonance that grew most past who they are; blank when settled.
 
-        The same one the accept action names (``accept_aura_change``): the affinity of the
-        resonance that grew most past who they are.
+        The one embracing it ("You become more ...", ``accept_aura_change``) names.
         """
         reading = self._reading(obj)
         leading = reading.leading_excess_resonance
@@ -687,13 +685,6 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
     def get_dominant_affinity_display(self, obj: CharacterAura) -> str:
         """The dominant affinity's name for display."""
         return self.get_dominant_affinity(obj)
-
-
-class AcceptAuraResponseSerializer(serializers.Serializer):
-    """What accepting the changes to the aura answers: the line told, and the aura as it now is."""
-
-    detail = serializers.CharField()
-    aura = CharacterAuraSerializer()
 
 
 class GlimpseSetTagsSerializer(serializers.Serializer):
@@ -4345,20 +4336,8 @@ class EntryFlourishResultSerializer(serializers.Serializer):
 # =============================================================================
 
 
-class DriftSourceOptionSerializer(serializers.Serializer):
-    """One drift holding the rite could convert toward a cap's target (read-only)."""
-
-    resonance_id = serializers.IntegerField()
-    resonance_name = serializers.CharField()
-    balance = serializers.IntegerField()
-    multiplier = serializers.DecimalField(max_digits=6, decimal_places=2)
-    conversion_type = serializers.CharField()
-    max_amount = serializers.IntegerField()
-    projected_output = serializers.IntegerField()
-
-
 class DriftQualifyingComponentSerializer(serializers.Serializer):
-    """A carried item that counts toward the rite's offering, and its route (read-only)."""
+    """A carried item that counts toward a target-resonance offering, and its route (read-only)."""
 
     item_id = serializers.IntegerField(source="item.pk")
     name = serializers.CharField(source="item.display_name")
@@ -4372,157 +4351,119 @@ class DriftTargetResonanceSerializer(serializers.Serializer):
 
 
 class DriftConversionCapSerializer(serializers.Serializer):
-    """One cap of an offer as a player sees it (read-only)."""
+    """One cap of an open chance to atone: what may still be turned toward a resonance."""
 
     target_resonance = DriftTargetResonanceSerializer()
-    cap_remaining = serializers.IntegerField(source="preview.cap_remaining")
-    focus_bonus = serializers.IntegerField(source="preview.focus_bonus")
-    sources = DriftSourceOptionSerializer(many=True, source="preview.sources")
-    qualifying_components = DriftQualifyingComponentSerializer(many=True, source="qualifying")
+    cap_remaining = serializers.IntegerField(source="cap")
 
 
 class DriftConversionOfferSerializer(serializers.ModelSerializer):
-    """Player-facing view of an open drift conversion offer. Read-only.
+    """The character's open chance to atone (read-only): where it opened and its caps."""
 
-    ``rite_ready`` is false while the rite, its check type or any outcome tier's share is
-    missing; the rite then refuses with ``rite_not_ready_message``, which the dialog shows
-    in place of the offering picker. The message is empty while the rite is ready.
-
-    Readiness is the same for every offer, so the caller works it out once per request
-    (``rite_is_ready()``) and passes it as ``context["rite_ready"]``; this serializer never
-    queries it per offer.
-    """
-
-    # The offer's character: the aura the Settle your aura dialog reads and accepts for
-    # (a CharacterAura's ``character`` is the same sheet pk, #5123).
+    # The offer's character: the aura the sheet reads (a CharacterAura's ``character`` is the
+    # same sheet pk, #5123).
     character_id = serializers.IntegerField(source="character_sheet_id", read_only=True)
     caps = serializers.SerializerMethodField()
-    rite_ready = serializers.SerializerMethodField()
-    rite_not_ready_message = serializers.SerializerMethodField()
 
     class Meta:
         model = DriftConversionOffer
-        fields = [
-            "id",
-            "scene_id",
-            "character_id",
-            "caps",
-            "rite_ready",
-            "rite_not_ready_message",
-        ]
+        fields = ["id", "scene_id", "character_id", "caps"]
         read_only_fields = fields
-
-    @extend_schema_field(serializers.BooleanField())
-    def get_rite_ready(self, _offer: DriftConversionOffer) -> bool:
-        return self.context["rite_ready"]
-
-    @extend_schema_field(serializers.CharField())
-    def get_rite_not_ready_message(self, _offer: DriftConversionOffer) -> str:
-        from world.magic.services.drift_correction import (  # noqa: PLC0415
-            RITE_NOT_READY_MESSAGE,
-        )
-
-        return "" if self.context["rite_ready"] else RITE_NOT_READY_MESSAGE
 
     @extend_schema_field(DriftConversionCapSerializer(many=True))
     def get_caps(self, offer: DriftConversionOffer) -> list[dict]:
-        from world.magic.services.drift_correction import offer_options  # noqa: PLC0415
-
-        # One fetch of what the character carries per offer; qualifying items are worked
-        # out once per cap inside offer_options, never per source.
-        items = ItemInstance.objects.filter(
-            holder_character_sheet_id=offer.character_sheet_id
-        ).select_related("template")
-        return DriftConversionCapSerializer(offer_options(offer, items), many=True).data
+        caps = offer.caps.select_related("target_resonance__affinity")
+        return DriftConversionCapSerializer(caps, many=True).data
 
 
-class DriftCorrectionConvertSerializer(serializers.Serializer):
-    """Request shape for POST /api/magic/drift-correction/convert/.
+class RiteReflectionSerializer(serializers.Serializer):
+    """One waiting reflection as the rite shows it (read-only)."""
 
-    ``validate`` resolves everything the action needs: the caller's own offer (anyone
-    else's is a 404), both resonances, and the offered items, each of which must be held
-    by the offer's character (a foreign or stray pk is a 400, never passed on).
+    id = serializers.IntegerField()
+    choice = serializers.CharField()
+    kind = serializers.CharField()
+    title = serializers.CharField()
+    where = serializers.CharField(allow_blank=True)
+    excerpt = serializers.CharField(allow_blank=True)
+    effect_line = serializers.CharField()
+
+
+class RiteOfferingSerializer(serializers.Serializer):
+    """A carried item that can be the rite's offering (read-only)."""
+
+    item_id = serializers.IntegerField(source="component.item.pk")
+    name = serializers.CharField(source="component.item.display_name")
+    mode = serializers.CharField(source="component.mode")
+    resonance_name = serializers.CharField(source="resonance.name")
+    focus_bonus = serializers.IntegerField()
+
+
+class SettlingRiteReadingSerializer(serializers.Serializer):
+    """What the rite of settling would take and ask for (read-only)."""
+
+    reflections = RiteReflectionSerializer(many=True)
+    offerings = RiteOfferingSerializer(many=True)
+    rite_ready = serializers.BooleanField()
+    not_ready_message = serializers.CharField(allow_blank=True)
+    check_name = serializers.CharField(allow_blank=True)
+
+
+class _OwnSheetSerializer(serializers.Serializer):
+    """Resolves a character sheet id the caller plays, else 404 (never another's)."""
+
+    def _own_sheet(self, sheet_id: int) -> CharacterSheet:
+        own = RosterEntry.objects.for_account(self.context["request"].user).character_ids()
+        sheet = CharacterSheet.objects.filter(pk=sheet_id, pk__in=own).first()
+        if sheet is None:
+            msg = "You have no such character."
+            raise NotFound(msg)
+        return sheet
+
+
+class SettlingRiteReadQuerySerializer(_OwnSheetSerializer):
+    """Query shape for GET /api/magic/settling-rite/."""
+
+    character_sheet = serializers.IntegerField()
+
+    def validate(self, attrs: dict) -> dict:
+        return {"sheet": self._own_sheet(attrs["character_sheet"])}
+
+
+class SettlingRitePerformSerializer(_OwnSheetSerializer):
+    """Request shape for POST /api/magic/settling-rite/.
+
+    ``validate`` resolves the caller's own character and the offered items, each of which must
+    be held by that character (a foreign or stray pk is a 400, never passed on).
     """
 
-    offer_id = serializers.IntegerField()
-    source_resonance_id = serializers.IntegerField()
-    target_resonance_id = serializers.IntegerField()
-    amount = serializers.IntegerField(min_value=1)
+    character_sheet_id = serializers.IntegerField()
     component_ids = serializers.ListField(
         child=serializers.IntegerField(), required=False, default=list
     )
 
     def validate(self, attrs: dict) -> dict:
-        offer = _own_drift_offer(attrs["offer_id"], self.context["request"])
-        resonances = {
-            r.pk: r
-            for r in Resonance.objects.filter(
-                pk__in={attrs["source_resonance_id"], attrs["target_resonance_id"]}
-            ).select_related("affinity")
-        }
-        try:
-            source = resonances[attrs["source_resonance_id"]]
-            target = resonances[attrs["target_resonance_id"]]
-        except KeyError as exc:
-            msg = "Resonance not found."
-            raise NotFound(msg) from exc
+        sheet = self._own_sheet(attrs["character_sheet_id"])
         wanted = list(dict.fromkeys(attrs["component_ids"]))
         held = {
             item.pk: item
             for item in ItemInstance.objects.filter(
-                pk__in=wanted, holder_character_sheet_id=offer.character_sheet_id
+                pk__in=wanted, holder_character_sheet_id=sheet.pk
             ).select_related("template", "quality_tier")
         }
         components = [held[pk] for pk in wanted if pk in held]
         if len(components) != len(wanted):
             msg = "You are not carrying everything you offered."
             raise serializers.ValidationError({"component_ids": msg})
-        return {
-            "offer": offer,
-            "source_resonance": source,
-            "target_resonance": target,
-            "amount": attrs["amount"],
-            "components": components,
-        }
+        return {"sheet": sheet, "components": components}
 
 
-class DriftCorrectionDeclineSerializer(serializers.Serializer):
-    """Request shape for POST /api/magic/drift-correction/decline/."""
+class SettlingRiteResultSerializer(serializers.Serializer):
+    """What the rite did, for the one who performed it (read serializer for the result type)."""
 
-    offer_id = serializers.IntegerField()
-
-    def validate(self, attrs: dict) -> dict:
-        return {"offer": _own_drift_offer(attrs["offer_id"], self.context["request"])}
-
-
-class DriftCorrectionResultSerializer(serializers.Serializer):
-    """Read serializer for DriftCorrectionResult (types/drift.py dataclass)."""
-
-    source_resonance_id = serializers.IntegerField()
-    target_resonance_id = serializers.IntegerField()
-    attempted_amount = serializers.IntegerField()
-    converted_amount = serializers.IntegerField()
-    granted_amount = serializers.IntegerField()
     outcome_name = serializers.CharField()
     success_level = serializers.IntegerField()
-    conversion_type = serializers.CharField()
     focus_bonus = serializers.IntegerField()
-
-
-def _own_drift_offer(offer_id: int, request: Request) -> DriftConversionOffer:
-    """The open offer ``offer_id`` if one of the caller's own characters holds it, else 404."""
-    offer = (
-        DriftConversionOffer.objects.filter(
-            pk=offer_id,
-            character_sheet_id__in=RosterEntry.objects.for_account(request.user).character_ids(),
-        )
-        .select_related("character_sheet__character")
-        .first()
-    )
-    if offer is None:
-        msg = "You have no open chance to atone."
-        raise NotFound(msg)
-    return offer
+    lines = serializers.ListField(child=serializers.CharField())
 
 
 # =============================================================================

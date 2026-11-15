@@ -107,7 +107,6 @@ from world.magic.permissions import (
     IsThreadOwner,
 )
 from world.magic.serializers import (
-    AcceptAuraResponseSerializer,
     AcceptSoulTetherSerializer,
     AcceptTeachingOfferResponseSerializer,
     AcceptTeachingOfferSerializer,
@@ -137,9 +136,6 @@ from world.magic.serializers import (
     DramaticMomentTagSerializer,
     DramaticMomentTypeSerializer,
     DriftConversionOfferSerializer,
-    DriftCorrectionConvertSerializer,
-    DriftCorrectionDeclineSerializer,
-    DriftCorrectionResultSerializer,
     EffectTypeSerializer,
     EntryFlourishRespondSerializer,
     EntryFlourishResultSerializer,
@@ -170,6 +166,10 @@ from world.magic.serializers import (
     RitualSessionDetailSerializer,
     RitualSessionDraftSerializer,
     SceneEntryEndorsementSerializer,
+    SettlingRitePerformSerializer,
+    SettlingRiteReadingSerializer,
+    SettlingRiteReadQuerySerializer,
+    SettlingRiteResultSerializer,
     SineatingOfferSerializer,
     SineatingRequestSerializer,
     SineatingRespondSerializer,
@@ -708,33 +708,6 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
                 "drift_readings": aura_drift_readings(auras),
             }
         return super().get_serializer(*args, **kwargs)
-
-    @extend_schema(request=None, responses={200: AcceptAuraResponseSerializer})
-    @action(detail=True, methods=["post"], url_path="accept")
-    def accept(self, request: Request, pk: int | None = None) -> Response:
-        """Accept the changes to the aura: settle who the character has become (#5123).
-
-        Dispatches ``AcceptAuraChangeAction`` (the same action telnet ``aura accept`` runs)
-        for the character the aura belongs to. ``get_object`` finds the auras of characters
-        the requester plays and, for staff, every aura, so staff may accept for any
-        character. Refused with the action's own sentence while the character is not
-        unsettled.
-        """
-        from actions.definitions.accept_aura import AcceptAuraChangeAction  # noqa: PLC0415
-
-        aura = self.get_object()
-        result = AcceptAuraChangeAction().run(actor=aura.character.character)
-        if not result.success:
-            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
-        context = {
-            **self.get_serializer_context(),
-            "drift_readings": aura_drift_readings([aura]),
-        }
-        return Response(
-            AcceptAuraResponseSerializer(
-                {"detail": result.message, "aura": aura}, context=context
-            ).data
-        )
 
     @extend_schema(request=GlimpseSetTagsSerializer, responses={200: CharacterAuraSerializer})
     @action(detail=True, methods=["post"], url_path="set-glimpse-tags")
@@ -2496,14 +2469,13 @@ class EntryFlourishRespondView(APIView):
 
 
 class PendingDriftConversionOfferViewSet(viewsets.ReadOnlyModelViewSet):
-    """Read-only inbox of open drift conversion offers (#4733).
+    """Read-only inbox of the caller's open chances to atone (#4733, one per character, #5124).
 
     GET /api/magic/drift-correction/pending/
     GET /api/magic/drift-correction/pending/{id}/
 
-    Scoped to the authenticated user's character sheets (active tenures), and to offers
-    whose scene has not finished, the same rule telnet's ``aura`` uses. A finish route
-    that skips ``Scene.finish_scene`` can leave an offer row behind; it is never listed.
+    Scoped to the authenticated user's character sheets (active tenures). A chance stays open
+    until the rite of settling spends it, so a finished scene hides nothing.
     """
 
     permission_classes = [IsAuthenticated]
@@ -2512,18 +2484,12 @@ class PendingDriftConversionOfferViewSet(viewsets.ReadOnlyModelViewSet):
     def get_serializer_class(self) -> type:
         return DriftConversionOfferSerializer
 
-    def get_serializer_context(self) -> dict:
-        """Add ``rite_ready``, worked out once for the request, not once per offer."""
-        from world.magic.services.drift_correction import rite_is_ready  # noqa: PLC0415
-
-        return {**super().get_serializer_context(), "rite_ready": rite_is_ready()}
-
     def get_queryset(self) -> QuerySet:
         from world.magic.models import DriftConversionOffer  # noqa: PLC0415
 
         return _account_scoped_offer_queryset(
             DriftConversionOffer, self.request.user, "character_sheet", "scene"
-        ).filter(scene__is_active=True, scene__date_finished__isnull=True)
+        )
 
 
 def _plain_detail(errors: object) -> str:
@@ -2537,28 +2503,46 @@ def _plain_detail(errors: object) -> str:
     return " ".join(part for part in parts if part)
 
 
-class DriftCorrectionConvertView(APIView):
-    """Perform the drift correction rite under an open offer (#4733).
+class SettlingRiteView(APIView):
+    """The rite of settling (#5124): read what it would take, and perform it.
 
-    POST /api/magic/drift-correction/convert/
-    Body: {offer_id, source_resonance_id, target_resonance_id, amount, component_ids}
+    GET  /api/magic/settling-rite/?character_sheet=<id>
+        The character's waiting reflections, the carried items that count as the offering,
+        and whether the rite is set up. Only the character's own player may read it.
+    POST /api/magic/settling-rite/  {character_sheet_id, component_ids}
+        Dispatches ``PerformSettlingRiteAction`` for that character: one offering, one roll,
+        every waiting reflection. A refusal is a 400 ``{detail}``.
     """
 
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        request=DriftCorrectionConvertSerializer,
-        responses={200: DriftCorrectionResultSerializer},
+        parameters=[OpenApiParameter("character_sheet", int, required=True)],
+        responses={200: SettlingRiteReadingSerializer},
+    )
+    def get(self, request: Request) -> Response:
+        from world.magic.services.settling_preview import settling_rite_reading  # noqa: PLC0415
+
+        serializer = SettlingRiteReadQuerySerializer(
+            data=request.query_params, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+        sheet = serializer.validated_data["sheet"]
+        items = ItemInstance.objects.filter(holder_character_sheet_id=sheet.pk).select_related(
+            "template"
+        )
+        return Response(SettlingRiteReadingSerializer(settling_rite_reading(sheet, items)).data)
+
+    @extend_schema(
+        request=SettlingRitePerformSerializer, responses={200: SettlingRiteResultSerializer}
     )
     def post(self, request: Request) -> Response:
         """Dispatch the rite through its action (telnet + web converge)."""
         from actions.definitions.drift_correction import (  # noqa: PLC0415
-            PerformDriftCorrectionAction,
+            PerformSettlingRiteAction,
         )
 
-        serializer = DriftCorrectionConvertSerializer(
-            data=request.data, context={"request": request}
-        )
+        serializer = SettlingRitePerformSerializer(data=request.data, context={"request": request})
         if not serializer.is_valid():
             # The same {detail} shape an action refusal has: the player reads the sentence,
             # never the request field it came from.
@@ -2567,53 +2551,12 @@ class DriftCorrectionConvertView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         data = serializer.validated_data
-        offer = data["offer"]
-        result = PerformDriftCorrectionAction().run(
-            actor=offer.character_sheet.character,
-            offer=offer,
-            source_resonance=data["source_resonance"],
-            target_resonance=data["target_resonance"],
-            amount=data["amount"],
-            components_provided=data["components"],
+        result = PerformSettlingRiteAction().run(
+            actor=data["sheet"].character, components_provided=data["components"]
         )
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(
-            DriftCorrectionResultSerializer(result.data["drift_correction_result"]).data
-        )
-
-
-class DriftCorrectionDeclineView(APIView):
-    """Let an open drift conversion offer go (#4733).
-
-    POST /api/magic/drift-correction/decline/  {offer_id}
-    """
-
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        request=DriftCorrectionDeclineSerializer,
-        responses={
-            200: inline_serializer("DriftCorrectionDeclined", {"detail": serializers.CharField()})
-        },
-    )
-    def post(self, request: Request) -> Response:
-        """Dispatch the decline through its action."""
-        from actions.definitions.drift_correction import (  # noqa: PLC0415
-            DeclineDriftCorrectionAction,
-        )
-
-        serializer = DriftCorrectionDeclineSerializer(
-            data=request.data, context={"request": request}
-        )
-        serializer.is_valid(raise_exception=True)
-        offer = serializer.validated_data["offer"]
-        result = DeclineDriftCorrectionAction().run(
-            actor=offer.character_sheet.character, offer=offer
-        )
-        if not result.success:
-            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({"detail": result.message})
+        return Response(SettlingRiteResultSerializer(result.data["settling_rite_result"]).data)
 
 
 # =============================================================================

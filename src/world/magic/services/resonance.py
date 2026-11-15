@@ -70,9 +70,11 @@ if TYPE_CHECKING:
         KindledStrengthTier,
         KindlingSituation,
         PoseEndorsement,
+        Reflection,
         Resonance as ResonanceModel,
         SanctumDetails,
         SceneEntryEndorsement,
+        SettlingRite,
         StylePresentationEndorsement,
         Technique,
     )
@@ -114,6 +116,8 @@ def grant_resonance(  # noqa: PLR0913
     source_character_distinction: CharacterDistinction | None = None,
     worship_rite_performance: WorshipRitePerformance | None = None,
     kindling_situation: KindlingSituation | None = None,
+    settling_rite: SettlingRite | None = None,
+    reflection: Reflection | None = None,
     from_mire: bool = False,
     ledger_out: list[ResonanceGrant] | None = None,
 ) -> CharacterResonance:
@@ -146,6 +150,8 @@ def grant_resonance(  # noqa: PLR0913
         worship_rite_performance: Required for WORSHIP_RITE source (#3777).
         kindling_situation: Required for KINDLED_DEED source (#5124); the authored situation
             that held.
+        settling_rite: Required for EMBRACED_DEED source (#5124); the rite that grew the deed.
+        reflection: Required for EMBRACED_DEED source (#5124); the reflection the rite applied.
         from_mire: True when a Sineater takes the resonance from the Mire (#5123); the
             grant also counts toward the row's ``mire_lifetime``.
         ledger_out: When given, the ``ResonanceGrant`` row this call writes is appended to it,
@@ -181,6 +187,8 @@ def grant_resonance(  # noqa: PLR0913
         source_character_distinction=source_character_distinction,
         worship_rite_performance=worship_rite_performance,
         kindling_situation=kindling_situation,
+        settling_rite=settling_rite,
+        reflection=reflection,
     )
 
     if source in ACCELERATED_GAIN_SOURCES:
@@ -240,6 +248,8 @@ def grant_resonance(  # noqa: PLR0913
         source_character_distinction=source_character_distinction,
         source_worship_rite_performance=worship_rite_performance,
         source_kindling_situation=kindling_situation,
+        source_settling_rite=settling_rite,
+        source_reflection=reflection,
     )
     ledger = [] if ledger_out is None else ledger_out
     ledger.append(grant)
@@ -352,6 +362,8 @@ def _validate_grant_source_shape(  # noqa: PLR0913
     source_character_distinction: CharacterDistinction | None = None,
     worship_rite_performance: WorshipRitePerformance | None = None,
     kindling_situation: KindlingSituation | None = None,
+    settling_rite: SettlingRite | None = None,
+    reflection: Reflection | None = None,
 ) -> None:
     """Raise ValueError if the source discriminator doesn't match the supplied kwargs.
 
@@ -375,6 +387,8 @@ def _validate_grant_source_shape(  # noqa: PLR0913
             source_character_distinction=source_character_distinction,
             worship_rite_performance=worship_rite_performance,
             kindling_situation=kindling_situation,
+            settling_rite=settling_rite,
+            reflection=reflection,
         )
         if value is None:
             msg = f"{source} source requires {name}= kwarg."
@@ -430,6 +444,12 @@ _SOURCE_REQUIRED_KWARG: dict[str, Callable[..., tuple[object | None, str]]] = {
         "worship_rite_performance",
     ),
     GainSource.KINDLED_DEED: lambda **kw: (kw["kindling_situation"], "kindling_situation"),
+    # Both the rite and the reflection are required; naming the rite when either is missing
+    # keeps the one-value shape of this table (the constraint refuses a row with only one).
+    GainSource.EMBRACED_DEED: lambda **kw: (
+        kw["settling_rite"] if kw["reflection"] is not None else None,
+        "settling_rite and reflection",
+    ),
 }
 
 

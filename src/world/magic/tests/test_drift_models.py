@@ -99,7 +99,7 @@ class DriftCorrectionConfigTests(TestCase):
         self.assertTrue(rite.client_hosted)
         self.assertEqual(
             rite.service_function_path,
-            "world.magic.services.drift_correction.perform_drift_correction_rite",
+            "world.magic.services.drift_correction.perform_settling_rite",
         )
         requirement = rite.requirements.get()
         self.assertTrue(requirement.matches_target_resonance)

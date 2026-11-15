@@ -345,7 +345,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdMageScar,
             CmdEnter,
             CmdFlourish,
-            # #4733 - drift correction rite: show, convert, decline.
+            # #4733, #5124 - the aura, its waiting reflections and the rite of settling.
             CmdAura,
             CmdThreads,
             CmdEndorse,

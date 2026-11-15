@@ -23,8 +23,6 @@ from world.magic.views import (
     CrossingRespondView,
     DramaticMomentTagViewSet,
     DramaticMomentTypeViewSet,
-    DriftCorrectionConvertView,
-    DriftCorrectionDeclineView,
     EffectTypeViewSet,
     EntryFlourishRespondView,
     FacetViewSet,
@@ -48,6 +46,7 @@ from world.magic.views import (
     RitualSessionViewSet,
     RitualViewSet,
     SceneEntryEndorsementViewSet,
+    SettlingRiteView,
     SineatingPendingOfferViewSet,
     SineatingRequestView,
     SineatingRespondView,
@@ -357,7 +356,7 @@ urlpatterns = [
         EntryFlourishRespondView.as_view(),
         name="entry-flourish-respond",
     ),
-    # #4733 — Drift correction offer inbox + convert + decline
+    # #4733, #5124 — the open chance to atone, and the rite of settling
     path(
         "drift-correction/pending/",
         PendingDriftConversionOfferViewSet.as_view({"get": "list"}),
@@ -369,14 +368,9 @@ urlpatterns = [
         name="drift-correction-pending-detail",
     ),
     path(
-        "drift-correction/convert/",
-        DriftCorrectionConvertView.as_view(),
-        name="drift-correction-convert",
-    ),
-    path(
-        "drift-correction/decline/",
-        DriftCorrectionDeclineView.as_view(),
-        name="drift-correction-decline",
+        "settling-rite/",
+        SettlingRiteView.as_view(),
+        name="settling-rite",
     ),
     # #1989 — Trait crossing offer inbox + respond
     path(

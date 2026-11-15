@@ -1,7 +1,7 @@
 """Resolve a player-typed resonance name among the resonances the character holds (#5123).
 
 One lookup and one refusal for every verb that names a resonance a character must hold:
-``aura atone``, ``imbue ... resonance=`` and ``pull=<thread>:<resonance>``.
+``imbue ... resonance=`` and ``pull=<thread>:<resonance>``.
 """
 
 from __future__ import annotations

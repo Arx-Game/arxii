@@ -12,7 +12,6 @@ from decimal import Decimal
 
 from django.test import TestCase
 
-from actions.definitions.accept_aura import AcceptAuraChangeAction
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import GainSource
 from world.magic.exceptions import NotUnsettledError
@@ -72,61 +71,56 @@ class SpentExcessTests(_UnsettledOfferBase):
 
 
 class AtoneTests(DriftRiteTestBase):
+    """Disowning the unsettling resonance: the rite atones, bounded by the cap and the excess."""
+
     def setUp(self) -> None:
         super().setUp()
         set_aura_split(self.sheet.aura_or_none, celestial="100", primal="0", abyssal="0")
         _set(self.sheet, self.dawnlight, balance=0, lifetime=170)
         self.cap.cap = 40
         self.cap.save()
+        self.reflect_disown_dread()
 
     def test_atone_converts_lifetime_without_balance(self) -> None:
         _set(self.sheet, self.dread, balance=0, lifetime=30)
 
-        result = self.perform(amount=12)
+        self.perform()
 
-        self.assertEqual((result.converted_amount, result.granted_amount), (12, 0))
+        # The excess is 20 points (15 percent of 200 against a tolerance of 5): the cap of
+        # 40 is bounded by it.
         dread = _row(self.sheet, self.dread)
-        self.assertEqual((dread.balance, dread.lifetime_earned), (0, 18))
+        self.assertEqual((dread.balance, dread.lifetime_earned), (0, 10))
         dawn = _row(self.sheet, self.dawnlight)
-        self.assertEqual((dawn.balance, dawn.lifetime_earned), (0, 182))
+        self.assertEqual((dawn.balance, dawn.lifetime_earned), (0, 190))
 
     def test_atone_moves_balance_only_as_far_as_it_exists(self) -> None:
         _set(self.sheet, self.dread, balance=5, lifetime=30)
 
-        result = self.perform(amount=12)
+        self.perform()
 
-        self.assertEqual((result.converted_amount, result.granted_amount), (12, 2))
         dread = _row(self.sheet, self.dread)
-        self.assertEqual((dread.balance, dread.lifetime_earned), (0, 18))
+        self.assertEqual((dread.balance, dread.lifetime_earned), (0, 10))
         dawn = _row(self.sheet, self.dawnlight)
-        self.assertEqual((dawn.balance, dawn.lifetime_earned), (2, 182))
-
-    def test_atone_refuses_past_the_excess(self) -> None:
-        from world.magic.exceptions import DriftConversionInvalidError
-
-        _set(self.sheet, self.dread, balance=0, lifetime=30)
-        excess = drift_for(self.sheet).convertible_points(self.abyssal.pk)
-
-        with self.assertRaises(DriftConversionInvalidError):
-            self.perform(amount=excess + 1)
+        self.assertEqual((dawn.balance, dawn.lifetime_earned), (2, 190))
 
     def test_atone_that_leaves_her_settled_closes_the_offer(self) -> None:
         _set(self.sheet, self.dread, balance=0, lifetime=30)
-        excess = drift_for(self.sheet).convertible_points(self.abyssal.pk)
 
-        self.perform(amount=excess)
+        self.perform()
 
         self.assertEqual(drift_for(self.sheet).steps_past, 0)
         self.assertFalse(DriftConversionOffer.objects.filter(pk=self.offer.pk).exists())
         self.assertFalse(DriftConversionCap.objects.filter(offer_id=self.offer.pk).exists())
 
-    def test_atone_that_leaves_drift_keeps_the_offer_open(self) -> None:
+    def test_a_weaker_roll_spends_only_its_share_of_the_cap_and_keeps_the_offer_open(self) -> None:
         _set(self.sheet, self.dread, balance=0, lifetime=30)
+        self.set_shares(Success="0.25")
 
-        self.perform(amount=12)
+        self.perform()
 
+        # int(40 x 0.25) = 10 turned; the cap falls to 30 and drift is left.
         self.assertGreater(drift_for(self.sheet).steps_past, 0)
-        self.assertEqual(self.cap_value(), 28)
+        self.assertEqual(self.cap_value(), 30)
         self.assertTrue(DriftConversionOffer.objects.filter(pk=self.offer.pk).exists())
 
     def _sineater(self) -> None:
@@ -139,47 +133,25 @@ class AtoneTests(DriftRiteTestBase):
         self._sineater()
         reading = drift_for(self.sheet)
         self.assertEqual(reading.mire_excess_points[self.abyssal.pk], 6)
-        self.assertGreater(reading.own_excess_points[self.abyssal.pk], 0)
+        self.cap.cap = 6
+        self.cap.save()
 
-        self.perform(amount=6)
+        self.perform()
 
         dread = _row(self.sheet, self.dread)
         self.assertEqual((dread.lifetime_earned, dread.mire_lifetime), (74, 54))
 
     def test_atone_past_the_mire_excess_then_converts_own(self) -> None:
         self._sineater()
+        self.cap.cap = 10
+        self.cap.save()
 
-        self.perform(amount=10)
+        self.perform()
 
         dread = _row(self.sheet, self.dread)
         self.assertEqual((dread.lifetime_earned, dread.mire_lifetime), (70, 54))
         dawn = _row(self.sheet, self.dawnlight)
         self.assertEqual(dawn.mire_lifetime, 0)
-
-    def test_atone_from_a_row_without_the_mire_converts_at_most_own_excess(self) -> None:
-        from world.magic.exceptions import DriftConversionInvalidError
-
-        other = ResonanceFactory(name="Atone Other Dread", affinity=self.abyssal)
-        # The Mire sits in the Dread row; the player atones from the other Abyssal row.
-        _set(self.sheet, self.dread, balance=60, lifetime=60, mire=60)
-        _set(self.sheet, other, balance=20, lifetime=50)
-        _set(self.sheet, self.dawnlight, balance=0, lifetime=60)
-        self.cap.cap = 500
-        self.cap.save()
-        reading = drift_for(self.sheet)
-        own = reading.own_excess_points[self.abyssal.pk]
-        self.assertGreater(reading.mire_excess_points[self.abyssal.pk], 0)
-        self.assertEqual(reading.convertible_points(self.abyssal.pk, 0), own)
-
-        # The other row's lifetime covers the amount, so the refusal is the convertible cap.
-        with self.assertRaises(DriftConversionInvalidError) as raised:
-            self.perform(amount=own + 1, source=other)
-        self.assertEqual(
-            raised.exception.user_message, f"Only {own} of that resonance is past who you are."
-        )
-        self.perform(amount=own, source=other)
-
-        self.assertEqual(_row(self.sheet, self.dread).mire_lifetime, 60)
 
     def test_mire_never_exceeds_lifetime_after_atone(self) -> None:
         _set(self.sheet, self.dread, balance=60, lifetime=80, mire=60)
@@ -265,18 +237,24 @@ class AcceptTests(TestCase):
         for row in CharacterResonance.objects.filter(character_sheet=self.sheet):
             self.assertEqual((row.corruption_current, row.corruption_lifetime), (0, 0))
 
-    def test_the_action_accepts_and_refuses_in_player_words(self) -> None:
+    def test_a_share_of_zero_moves_nothing_and_a_part_share_moves_part_of_the_way(self) -> None:
         _set(self.sheet, self.dawnlight, balance=70, lifetime=70)
-        _set(self.sheet, self.dread, balance=30, lifetime=30)
-        action = AcceptAuraChangeAction()
+        _set(self.sheet, self.dread, balance=30, lifetime=30, mire=10)
 
-        done = action.run(self.sheet.character)
-        again = action.run(self.sheet.character)
+        nothing = accept_aura_change(self.sheet, fraction=Decimal(0))
+        self.assertEqual(nothing.mire_moved, 0)
+        self.assertGreater(drift_for(self.sheet).steps_past, 0)
 
-        self.assertTrue(done.success)
-        self.assertEqual(done.message, "You become more abyssal.")
-        self.assertFalse(again.success)
-        self.assertNotIn("accepted", again.message)
+        part = accept_aura_change(self.sheet, fraction=Decimal("0.5"))
+        # A share of the Mire moves by the same share: half of 10.
+        self.assertEqual(part.mire_moved, 5)
+        self.assertEqual(_row(self.sheet, self.dread).mire_lifetime, 5)
+        shares = {s.affinity_id: s.settled_percent for s in self.aura.shares.all()}
+        # Settled began at 90/10; own shares are 70/30 (less the Mire's part), so halfway
+        # lands between them, and the shares still sum to 100.
+        self.assertEqual(sum(shares.values()), Decimal(100))
+        self.assertTrue(shares[self.abyssal.pk] > Decimal(10))
+        self.assertTrue(shares[self.abyssal.pk] < Decimal(30))
 
 
 class AcceptClosesTheOfferTests(DriftRiteTestBase):

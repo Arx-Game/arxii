@@ -55,7 +55,7 @@ def unsettling_resonance(sheet: CharacterSheet | None) -> Resonance | None:
     return reading.leading_excess_resonance if reading.steps_past > 0 else None
 
 
-def _deed_what(grant: ResonanceGrant) -> str:
+def deed_what(grant: ResonanceGrant) -> str:
     """What held when the deed was done, in the words staff wrote for the situation."""
     situation = grant.source_kindling_situation
     if situation is None:
@@ -66,14 +66,14 @@ def _deed_what(grant: ResonanceGrant) -> str:
 def deed_label(grant: ResonanceGrant) -> str:
     """The line a player reads for a deed: what held, then what it earned."""
     earned = f"{grant.amount} {grant.resonance.name}"
-    what = _deed_what(grant)
+    what = deed_what(grant)
     return f"{what} · {earned}" if what else earned
 
 
 def recorded_line(reflection: Reflection) -> str:
     """The line the writer reads once a reflection is recorded (no one else is told)."""
     if reflection.grant is not None:
-        on = _deed_what(reflection.grant) or f"your {reflection.grant.resonance.name}"
+        on = deed_what(reflection.grant) or f"your {reflection.grant.resonance.name}"
     else:
         on = f"your {reflection.resonance.name}"
     return (
@@ -276,6 +276,7 @@ def record_pending_reflection(
 
 __all__ = [
     "deed_label",
+    "deed_what",
     "parse_reflection_choice",
     "pending_reflection_from",
     "record_pending_reflection",
