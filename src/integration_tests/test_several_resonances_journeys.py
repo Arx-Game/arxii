@@ -315,8 +315,8 @@ class ImbuingWithAResonance(JourneyCase):
         row = ThreadResonance.objects.get(thread=self.thread, resonance=self.ember)
         self.assertEqual(row.amount, 3)
         self.thread.refresh_from_db()
-        # Three points at a point a level (stored level 0): the thread climbs three levels.
-        self.assertEqual(self.thread.level, 3)
+        # A level from stored level 0 costs ten points: three points bank toward it.
+        self.assertEqual((self.thread.level, self.thread.developed_points), (0, 3))
 
     def test_a_stray_word_after_the_amount_is_ignored_and_resonance_still_reads(self) -> None:
         told = self.imbue("amount=2 please resonance=ember")
