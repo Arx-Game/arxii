@@ -1,0 +1,23 @@
+EXPECTED RESULTS, written before any run (PR #5143, issue #5140)
+
+Item 6 (same-origin absolute next links are still followed)
+  Action: sign in as e2e_test_account / TestPass123! on http://localhost:3000 (Vite dev, proxies /api to :4001).
+          The account owns 25 PlayerMail rows (page size 20), so GET /api/roster/mail/ has two pages.
+          Call fetchAllPages('/api/roster/mail/', ...) from the real module (/src/lib/pagination.ts).
+  Expect: request 1 GET /api/roster/mail/ -> 200, body has "next" starting with http://localhost:4001/api/roster/mail/?page=2 (or the origin the server uses)
+          request 2 GET that absolute next URL -> 200 (apiFetch rewrites it to the page origin, so the browser request goes to the same host)
+          fetchAllPages returns 25 items.
+
+Item 7 (a URL on another origin is refused and nothing is sent)
+  Action: on the signed-in page, import /src/evennia_replacements/api.ts and call apiFetch('https://evil.example/api/x/').
+  Expect: promise rejects with message containing "Refusing to send a request off this site".
+          Playwright network log has zero requests whose URL host is evil.example.
+          The page does not navigate off localhost.
+
+Failure I would count as FAIL: a request to evil.example appears in the log, or item 6's page 2 is not fetched (only 20 items returned), or the rejection is a different error.
+
+RE-RUN after fix commit 00d74d15d (fetchAllPages follows the next link's path and query on the page origin)
+Item 6: call fetchAllPages('/api/roster/mail/') via page.evaluate import of /src/lib/pagination.ts.
+  Expect: returns 25 rows; network log shows page 1 GET http://localhost:3000/api/roster/mail/ -> 200 then
+          GET http://localhost:3000/api/roster/mail/?page=2 -> 200; no refusal.
+Item 7: apiFetch('https://evil.example/api/x/') rejects with "Refusing to send a request off this site"; no request to evil.example in the window.
