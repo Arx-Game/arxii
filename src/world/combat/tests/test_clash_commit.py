@@ -21,7 +21,7 @@ from world.conditions.factories import SoulfrayTemplateFactory
 from world.magic.factories import CharacterAnimaFactory, SoulfrayConfigFactory, TechniqueFactory
 from world.mechanics.factories import CharacterEngagementFactory
 from world.skills.factories import SkillFactory
-from world.traits.factories import CheckOutcomeFactory
+from world.traits.factories import CheckOutcomeFactory, ensure_level_ladder
 
 
 class CommitToClashTests(TestCase):
@@ -729,6 +729,7 @@ class CommitToClashSituationalPerkTests(TestCase):
         cls.config_clash = ClashConfigFactory()
         cls.check_type = ActionTemplateFactory().check_type
         cls.success_outcome = CheckOutcomeFactory(name="clash_at_range_success", success_level=1)
+        ensure_level_ladder()
 
     def _make_character_with_anima(self) -> CharacterSheetFactory:
         sheet = CharacterSheetFactory()
@@ -742,7 +743,7 @@ class CommitToClashSituationalPerkTests(TestCase):
 
     def _commit_with_at_range_perk(self, *, at_range: bool) -> int:
         """Build a fresh clash + PC + AT_RANGE-gated SELF perk (magnitude 13,
-        thread level 7) and return the resulting result.power. `at_range`
+        vow thread at level 110) and return the resulting result.power. `at_range`
         controls whether the opponent shares the PC's position (IN_MELEE) or
         not (AT_RANGE)."""
         from world.areas.positioning.services import (
@@ -794,7 +795,7 @@ class CommitToClashSituationalPerkTests(TestCase):
             magnitude_tenths=13,
         )
         VowSituationalPerkSituationFactory(perk=perk, situation=Situation.AT_RANGE)
-        ThreadFactory(owner=sheet, level=7)
+        ThreadFactory(owner=sheet, level=110, as_covenant_role_thread=role)
 
         with force_check_outcome(self.success_outcome):
             result = commit_to_clash(
@@ -811,5 +812,5 @@ class CommitToClashSituationalPerkTests(TestCase):
     def test_at_range_perk_raises_clash_power(self) -> None:
         power_at_range = self._commit_with_at_range_perk(at_range=True)
         power_in_melee = self._commit_with_at_range_perk(at_range=False)
-        # 7 * 13 / 10 = 9.1 -> 9, mirrors the round-path arithmetic exactly.
-        self.assertEqual(power_at_range - power_in_melee, 9)
+        # level_width(11) = 8: 8 * 13 / 10 = 10.4 -> 10, mirrors the round-path arithmetic.
+        self.assertEqual(power_at_range - power_in_melee, 10)

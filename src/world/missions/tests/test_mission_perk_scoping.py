@@ -43,10 +43,10 @@ from world.missions.factories import (
     MissionTemplateFactory,
 )
 from world.missions.services import resolve_option
-from world.traits.factories import CheckOutcomeFactory
+from world.traits.factories import CheckOutcomeFactory, ensure_level_ladder
 
 _PERFORM_CHECK = "world.missions.services.resolution.perform_check"
-_EXPECTED_BONUS = 10  # magnitude_tenths=10 * thread level=10 / 10 == 10
+_EXPECTED_BONUS = 8  # magnitude_tenths=10 x level_width(11) (the vow thread's rung) / 10
 
 
 class MissionCheckSituationCtxScopingTests(TestCase):
@@ -58,6 +58,7 @@ class MissionCheckSituationCtxScopingTests(TestCase):
     """
 
     def setUp(self) -> None:
+        ensure_level_ladder()
         self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
         self.check_type = CheckTypeFactory(name="CourtScopeSneak")
@@ -79,7 +80,7 @@ class MissionCheckSituationCtxScopingTests(TestCase):
             check_type=None,
             mission_category=self.category,
         )
-        ThreadFactory(owner=self.sheet, level=10)
+        ThreadFactory(owner=self.sheet, level=110, as_covenant_role_thread=role)
 
     def _build_run(self, *, matching_category: bool):
         template = MissionTemplateFactory(risk_tier=1)

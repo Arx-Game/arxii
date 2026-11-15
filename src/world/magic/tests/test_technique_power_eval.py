@@ -16,6 +16,8 @@ from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
+from world.checks.constants import ModifierLane
+from world.checks.modifier_models import ModifierLevelBaseline
 from world.conditions.factories import (
     ConditionDamageOverTimeFactory,
     ConditionTemplateFactory,
@@ -38,6 +40,7 @@ from world.magic.services.power_terms import (
 )
 from world.magic.services.technique_power_eval import evaluate_technique, provenance_split
 from world.magic.services.techniques import calculate_effective_anima_cost
+from world.magic.services.threads import vow_thread_width
 from world.magic.types.technique_power import (
     EvalContext,
     PayloadValuation,
@@ -113,18 +116,24 @@ class TechniquePowerEvalDamageTests(TestCase):
         self.assertEqual(report.estimated_baseline_de, 0.0)
 
     def test_amplified_power_matches_role_band_pure_helpers(self) -> None:
-        """amplified_power - baseline_power == int(blend) + int(specialty) at thread_level."""
+        """amplified_power - baseline_power == int(blend) + int(specialty) at one level's
+        width at the rung of a vow thread stored at thread_level (#5093)."""
         technique = self._technique(intensity=4)
         TechniqueDamageProfileFactory(technique=technique, base_damage=5, minimum_success_level=1)
-        context = EvalContext(thread_level=3)
+        # Two CHECK baseline rows make a width: rungs 11 and 12, 8 points apart.
+        for level, baseline in ((11, 98), (12, 106)):
+            ModifierLevelBaseline.objects.create(
+                lane=ModifierLane.CHECK, level=level, baseline=baseline
+            )
+        context = EvalContext(thread_level=110)
 
         report = evaluate_technique(technique, context, _PLACEHOLDER_REFERENCE)
 
         config = get_covenant_role_blend_config()
-        expected_blend = int(
-            blend_power_contribution(context.thread_level, Decimal(1), config.multiplier_tenths)
-        )
-        expected_specialty = int(specialty_power_contribution(context.thread_level, 10))
+        width = vow_thread_width(context.thread_level)
+        self.assertEqual(width, 8)
+        expected_blend = int(blend_power_contribution(width, Decimal(1), config.multiplier_tenths))
+        expected_specialty = int(specialty_power_contribution(width, 10))
 
         self.assertEqual(
             report.amplified_power - report.baseline_power,
@@ -179,28 +188,28 @@ class PowerTermPureHelperExtractionTests(TestCase):
     """Regression guard: extracted helpers reproduce the pre-refactor inline arithmetic (#3279)."""
 
     def test_blend_power_contribution_matches_inline_formula(self) -> None:
-        thread_level, blend_weight, multiplier_tenths = 7, Decimal("0.5"), 20
-        expected = Decimal(thread_level) * blend_weight * multiplier_tenths / 10
+        level_width, blend_weight, multiplier_tenths = 7, Decimal("0.5"), 20
+        expected = Decimal(level_width) * blend_weight * multiplier_tenths / 10
         self.assertEqual(
-            blend_power_contribution(thread_level, blend_weight, multiplier_tenths), expected
+            blend_power_contribution(level_width, blend_weight, multiplier_tenths), expected
         )
 
     def test_blend_power_contribution_second_sample(self) -> None:
-        thread_level, blend_weight, multiplier_tenths = 12, Decimal(1), 15
-        expected = Decimal(thread_level) * blend_weight * multiplier_tenths / 10
+        level_width, blend_weight, multiplier_tenths = 12, Decimal(1), 15
+        expected = Decimal(level_width) * blend_weight * multiplier_tenths / 10
         self.assertEqual(
-            blend_power_contribution(thread_level, blend_weight, multiplier_tenths), expected
+            blend_power_contribution(level_width, blend_weight, multiplier_tenths), expected
         )
 
     def test_specialty_power_contribution_matches_inline_formula(self) -> None:
-        thread_level, multiplier_tenths = 7, 15
-        expected = Decimal(thread_level) * multiplier_tenths / 10
-        self.assertEqual(specialty_power_contribution(thread_level, multiplier_tenths), expected)
+        level_width, multiplier_tenths = 7, 15
+        expected = Decimal(level_width) * multiplier_tenths / 10
+        self.assertEqual(specialty_power_contribution(level_width, multiplier_tenths), expected)
 
     def test_specialty_power_contribution_second_sample(self) -> None:
-        thread_level, multiplier_tenths = 20, 10
-        expected = Decimal(thread_level) * multiplier_tenths / 10
-        self.assertEqual(specialty_power_contribution(thread_level, multiplier_tenths), expected)
+        level_width, multiplier_tenths = 20, 10
+        expected = Decimal(level_width) * multiplier_tenths / 10
+        self.assertEqual(specialty_power_contribution(level_width, multiplier_tenths), expected)
 
 
 class ProvenanceSplitTests(TestCase):

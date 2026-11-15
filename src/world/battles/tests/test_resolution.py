@@ -255,7 +255,9 @@ class BattleActionKindCheckBonusScopingTests(TestCase):
         )
         from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind
         from world.magic.factories import ThreadFactory
+        from world.traits.factories import ensure_level_ladder
 
+        ensure_level_ladder()
         self.sheet = CharacterSheetFactory()
         self.technique = TechniqueFactory(
             action_template=ActionTemplateFactory(), damage_profile=False
@@ -278,7 +280,7 @@ class BattleActionKindCheckBonusScopingTests(TestCase):
             check_type=None,
             battle_action_kind=BattleActionKind.ROUT,
         )
-        ThreadFactory(owner=self.sheet, level=10)
+        ThreadFactory(owner=self.sheet, level=110, as_covenant_role_thread=role)
 
     def test_check_bonus_fires_on_matching_action_kind_only(self) -> None:
         from world.battles.resolution import resolve_battle_technique
@@ -330,9 +332,9 @@ class BattleActionKindCheckBonusScopingTests(TestCase):
         _capture(BattleActionKind.ROUT, "rout")
         _capture(BattleActionKind.RALLY, "rally")
 
-        # magnitude_tenths=10 * thread level=10 / 10 == 10 (mirrors #2536 slice 3
+        # magnitude_tenths=10 x level_width(11) (8) / 10 == 8 (mirrors #2536 slice 3
         # Court wiring's world.missions.tests.test_mission_perk_scoping calibration).
-        self.assertEqual(captured["rout"], captured["rally"] + 10)
+        self.assertEqual(captured["rout"], captured["rally"] + 8)
 
 
 class DeclareBattleActionTests(TestCase):

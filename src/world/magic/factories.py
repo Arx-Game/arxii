@@ -1723,6 +1723,7 @@ class ThreadFactory(factory.django.DjangoModelFactory):
     - _class_level=<int>       → give thread.owner a primary class level, which sets
                                  the level cap (level × 10) on every thread (#4585)
     - as_covenant_role_thread=True → switch to COVENANT_ROLE kind; creates a CovenantRole
+                                 (or pass a CovenantRole to anchor on that role)
 
     NOTE: this factory intentionally does NOT call full_clean(). DB-level
     CheckConstraints catch shape errors at write time; clean() is opt-in via
@@ -1888,12 +1889,17 @@ class ThreadFactory(factory.django.DjangoModelFactory):
     def as_covenant_role_thread(
         self: Thread, create: bool, extracted: object, **kwargs: object
     ) -> None:
-        """Switch to COVENANT_ROLE kind: create a CovenantRole."""
+        """Switch to COVENANT_ROLE kind on a fresh CovenantRole, or on the one passed.
+
+        ``as_covenant_role_thread=True`` creates a role; passing a ``CovenantRole`` anchors
+        the thread on it (a vow thread for a perk or specialty authored on that role).
+        """
         if not create or not extracted:
             return
         from world.covenants.factories import CovenantRoleFactory
+        from world.covenants.models import CovenantRole
 
-        role = CovenantRoleFactory()
+        role = extracted if isinstance(extracted, CovenantRole) else CovenantRoleFactory()
         Thread.objects.filter(pk=self.pk).update_with_reason(
             reason="issue #3817: intentional atomic write",
             target_kind=TargetKind.COVENANT_ROLE,

@@ -3,7 +3,7 @@
 ``perform_check`` gains a keyword-only ``situation_ctx`` (a ``SituationContext``,
 ``world.covenants.perks.context``) that — when provided — fires ``CHECK_BONUS``
 perks (``world.covenants.perks.services.applicable_perks``) scoped to the check's
-``CheckType`` (or scope-less perks) and folds their thread-level-scaled magnitude
+``CheckType`` (or scope-less perks) and folds their vow-thread-sized magnitude
 into the same total ``extra_modifiers`` feeds. ``situation_ctx=None`` (the default,
 every pre-#2536 call site) is byte-identical — no query, no perk lookup — which is
 also why the existing checks suite passes UNMODIFIED (the primary proof; this file
@@ -91,7 +91,7 @@ class SituationalPerkCheckBonusTests(TestCase):
             magnitude_tenths=50,
             check_type=None,
         )
-        ThreadFactory(owner=self.sheet, level=10)
+        ThreadFactory(owner=self.sheet, level=110, as_covenant_role_thread=role)
 
         # +LEVEL_ONE_TERM (#2707, #5093): the character has no CharacterClassLevel row,
         # so get_character_path_level defaults to 1 and every breakdown carries that floor.
@@ -99,7 +99,7 @@ class SituationalPerkCheckBonusTests(TestCase):
 
     def test_null_scope_perk_fires_on_any_check(self) -> None:
         """check_type=None on the perk row -> fires regardless of which
-        CheckType is being rolled. 8 * 15 / 10 = 12.0 -> 12."""
+        CheckType is being rolled. level_width(11) = 8, so 8 * 15 / 10 = 12."""
         role = self._engage_role()
         VowSituationalPerkFactory(
             covenant_role=role,
@@ -108,7 +108,7 @@ class SituationalPerkCheckBonusTests(TestCase):
             magnitude_tenths=15,
             check_type=None,
         )
-        ThreadFactory(owner=self.sheet, level=8)
+        ThreadFactory(owner=self.sheet, level=110, as_covenant_role_thread=role)
 
         ctx = SituationContext(holder=self.sheet, subject=self.sheet, target=None, resolution=None)
         other_check_type = CheckTypeFactory(name="Stealth")
@@ -132,13 +132,13 @@ class SituationalPerkCheckBonusTests(TestCase):
             magnitude_tenths=20,
             check_type=self.check_type,
         )
-        ThreadFactory(owner=self.sheet, level=6)
+        ThreadFactory(owner=self.sheet, level=110, as_covenant_role_thread=role)
 
         ctx = SituationContext(holder=self.sheet, subject=self.sheet, target=None, resolution=None)
         other_check_type = CheckTypeFactory(name="Stealth")
         # +LEVEL_ONE_TERM (#2707, #5093): default level 1 floor, on every check.
         self.assertEqual(
-            self._breakdown_total(self.check_type, situation_ctx=ctx), 12 + LEVEL_ONE_TERM
+            self._breakdown_total(self.check_type, situation_ctx=ctx), 16 + LEVEL_ONE_TERM
         )
         self.assertEqual(self._breakdown_total(other_check_type, situation_ctx=ctx), LEVEL_ONE_TERM)
 
@@ -146,7 +146,7 @@ class SituationalPerkCheckBonusTests(TestCase):
         """#2536 slice 3 Court scoping: a mission_category-scoped perk never
         fires when situation_ctx.mission is None, and fires when the ctx
         carries a MissionInstance whose template carries that category.
-        10 * 10 / 10 = 10."""
+        1.0 x level_width(11) = 8."""
         role = self._engage_role()
         category = MissionCategoryFactory()
         VowSituationalPerkFactory(
@@ -157,7 +157,7 @@ class SituationalPerkCheckBonusTests(TestCase):
             check_type=None,
             mission_category=category,
         )
-        ThreadFactory(owner=self.sheet, level=10)
+        ThreadFactory(owner=self.sheet, level=110, as_covenant_role_thread=role)
 
         ctx_no_mission = SituationContext(
             holder=self.sheet, subject=self.sheet, target=None, resolution=None
@@ -176,7 +176,7 @@ class SituationalPerkCheckBonusTests(TestCase):
         )
         self.assertEqual(
             self._breakdown_total(self.check_type, situation_ctx=ctx_with_mission),
-            10 + LEVEL_ONE_TERM,
+            8 + LEVEL_ONE_TERM,
         )
 
     def test_mission_category_scope_does_not_fire_for_non_matching_category(self) -> None:
@@ -192,7 +192,7 @@ class SituationalPerkCheckBonusTests(TestCase):
             check_type=None,
             mission_category=category,
         )
-        ThreadFactory(owner=self.sheet, level=10)
+        ThreadFactory(owner=self.sheet, level=110, as_covenant_role_thread=role)
 
         template = MissionTemplateFactory()
         template.categories.add(other_category)
@@ -220,7 +220,7 @@ class SituationalPerkCheckBonusTests(TestCase):
         template = MissionTemplateFactory()
         template.categories.add(category)
         instance = MissionInstanceFactory(template=template)
-        ThreadFactory(owner=self.sheet, level=10)
+        ThreadFactory(owner=self.sheet, level=110, as_covenant_role_thread=role)
 
         def _add_scoped_perk() -> None:
             VowSituationalPerkFactory(
@@ -249,13 +249,13 @@ class SituationalPerkCheckBonusTests(TestCase):
         with CaptureQueriesContext(connection) as one_perk_queries:
             total_one = self._breakdown_total(self.check_type, situation_ctx=ctx)
         # +LEVEL_ONE_TERM (#2707, #5093): default level 1 floor, on every check.
-        self.assertEqual(total_one, 10 + LEVEL_ONE_TERM)
+        self.assertEqual(total_one, 8 + LEVEL_ONE_TERM)
         self.assertEqual(_categories_query_count(one_perk_queries), 1)
 
         _add_scoped_perk()
         with CaptureQueriesContext(connection) as two_perk_queries:
             total_two = self._breakdown_total(self.check_type, situation_ctx=ctx)
-        self.assertEqual(total_two, 20 + LEVEL_ONE_TERM)
+        self.assertEqual(total_two, 16 + LEVEL_ONE_TERM)
         self.assertEqual(_categories_query_count(two_perk_queries), 1)
 
         self.assertEqual(
@@ -264,7 +264,7 @@ class SituationalPerkCheckBonusTests(TestCase):
 
     def test_battle_action_kind_scope_matches_exact_kind(self) -> None:
         """#2536 slice 3 Battle scoping: a battle_action_kind=ROUT perk fires
-        only when situation_ctx.battle_action_kind == 'rout'. 10 * 10 / 10 = 10."""
+        only when situation_ctx.battle_action_kind == 'rout'. 1.0 x level_width(11) = 8."""
         role = self._engage_role()
         VowSituationalPerkFactory(
             covenant_role=role,
@@ -274,7 +274,7 @@ class SituationalPerkCheckBonusTests(TestCase):
             check_type=None,
             battle_action_kind=BattleActionKind.ROUT,
         )
-        ThreadFactory(owner=self.sheet, level=10)
+        ThreadFactory(owner=self.sheet, level=110, as_covenant_role_thread=role)
 
         ctx_no_kind = SituationContext(
             holder=self.sheet, subject=self.sheet, target=None, resolution=None
@@ -306,7 +306,7 @@ class SituationalPerkCheckBonusTests(TestCase):
         )
         self.assertEqual(
             self._breakdown_total(self.check_type, situation_ctx=ctx_matching_kind),
-            10 + LEVEL_ONE_TERM,
+            8 + LEVEL_ONE_TERM,
         )
 
     def test_ally_beneficiary_check_bonus_fires_for_covenant_mate(self) -> None:
@@ -346,13 +346,17 @@ class SituationalPerkCheckBonusTests(TestCase):
             check_type=None,
         )
 
-        ThreadFactory(owner=self.sheet, level=6)  # subject's own thread level, not the mate's
+        # The MATE's vow thread sizes the mate's perk; the subject's own threads (a vow
+        # thread on her own role included) add nothing to it.
+        ThreadFactory(owner=mate_sheet, level=110, as_covenant_role_thread=mate_role)
+        ThreadFactory(owner=self.sheet, level=60)
+        ThreadFactory(owner=self.sheet, level=110, as_covenant_role_thread=subject_role)
 
         ctx = SituationContext(holder=self.sheet, subject=self.sheet, target=None, resolution=None)
-        # 6 * 10 / 10 = 6 -- proves the mate's COVENANT_ALLIES perk fired for the subject.
-        # +LEVEL_ONE_TERM (#2707, #5093): default level 1 floor, on every check.
+        # 1.0 x level_width(11) = 8 -- the mate's COVENANT_ALLIES perk fired for the subject,
+        # sized by the mate's vow thread. +LEVEL_ONE_TERM (#2707, #5093): default level 1 floor.
         self.assertEqual(
-            self._breakdown_total(self.check_type, situation_ctx=ctx), 6 + LEVEL_ONE_TERM
+            self._breakdown_total(self.check_type, situation_ctx=ctx), 8 + LEVEL_ONE_TERM
         )
 
     def test_perform_check_integration_folds_perk_bonus_into_total_points(self) -> None:
@@ -370,13 +374,13 @@ class SituationalPerkCheckBonusTests(TestCase):
             magnitude_tenths=10,
             check_type=self.check_type,
         )
-        ThreadFactory(owner=self.sheet, level=4)
+        ThreadFactory(owner=self.sheet, level=110, as_covenant_role_thread=role)
 
         ctx = SituationContext(holder=self.sheet, subject=self.sheet, target=None, resolution=None)
         with patch("world.checks.services.random.randint", return_value=50):
             result = perform_check(self.character, self.check_type, situation_ctx=ctx)
-        # 4 * 10 / 10 = 4. +LEVEL_ONE_TERM (#2707, #5093): default level 1 floor, on every check.
-        self.assertEqual(result.total_points, 4 + LEVEL_ONE_TERM)
+        # 1.0 x level_width(11) = 8. +LEVEL_ONE_TERM (#2707, #5093): level 1 floor on every check.
+        self.assertEqual(result.total_points, 8 + LEVEL_ONE_TERM)
 
     def test_fired_perk_announced_exactly_once(self) -> None:
         """Wiring + no-double-announce proof (#2536 Task 6): one
@@ -402,7 +406,7 @@ class SituationalPerkCheckBonusTests(TestCase):
             magnitude_tenths=10,
             check_type=self.check_type,
         )
-        ThreadFactory(owner=self.sheet, level=4)
+        ThreadFactory(owner=self.sheet, level=110, as_covenant_role_thread=role)
 
         ctx = SituationContext(holder=self.sheet, subject=self.sheet, target=None, resolution=None)
         with (

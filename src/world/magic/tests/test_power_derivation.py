@@ -14,7 +14,12 @@ from world.distinctions.factories import (
     DistinctionFactory,
 )
 from world.magic.constants import TechniqueFunction
-from world.magic.factories import ResonanceFactory, TechniqueDamageProfileFactory, TechniqueFactory
+from world.magic.factories import (
+    ResonanceFactory,
+    TechniqueDamageProfileFactory,
+    TechniqueFactory,
+    ThreadFactory,
+)
 from world.magic.services.techniques import _derive_power
 from world.mechanics.constants import POWER_CATEGORY_NAME
 from world.mechanics.factories import (
@@ -29,6 +34,7 @@ from world.mechanics.services import (
     get_modifier_breakdown,
     get_modifier_total,
 )
+from world.traits.factories import ensure_level_ladder
 
 
 class PowerDerivationTests(TestCase):
@@ -945,6 +951,7 @@ class CovenantRoleBlendPowerTermTests(TestCase):
     """covenant_role_blend_power_term: always-on blend floor for engaged roles (#2529)."""
 
     def setUp(self):
+        ensure_level_ladder()
         self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
 
@@ -957,11 +964,9 @@ class CovenantRoleBlendPowerTermTests(TestCase):
         return TechniqueFactory(archetype_alignment=alignment)
 
     def _thread(self, level):
-        from world.magic.factories import ThreadFactory
-
         return ThreadFactory(owner=self.sheet, level=level)
 
-    def _engage_role(self, *, sword=0, shield=0, crown=0, covenant=None):
+    def _engage_role(self, *, sword=0, shield=0, crown=0, covenant=None, thread=True):
         from world.covenants.factories import (
             CharacterCovenantRoleFactory,
             CovenantFactory,
@@ -979,6 +984,9 @@ class CovenantRoleBlendPowerTermTests(TestCase):
             covenant_role=role,
             engaged=True,
         )
+        if thread:
+            # The vow thread the term reads: rung 11, where one level is 8 points wide.
+            ThreadFactory(owner=self.sheet, level=110, as_covenant_role_thread=role)
         return role
 
     def test_no_engaged_role_returns_zero(self):
@@ -991,37 +999,36 @@ class CovenantRoleBlendPowerTermTests(TestCase):
     def test_no_threads_returns_zero(self):
         from world.magic.services.power_terms import covenant_role_blend_power_term
 
-        self._engage_role(sword=Decimal("0.6"), crown=Decimal("0.4"))
+        self._thread(level=110)  # a thread of another kind is not the vow thread
+        self._engage_role(sword=Decimal("0.6"), crown=Decimal("0.4"), thread=False)
         technique = self._technique("sword")
         self.assertEqual(covenant_role_blend_power_term(self._ctx(technique)), 0)
 
     def test_no_technique_returns_zero(self):
         from world.magic.services.power_terms import covenant_role_blend_power_term
 
-        self._thread(level=10)
         self._engage_role(sword=Decimal("0.6"), crown=Decimal("0.4"))
         self.assertEqual(covenant_role_blend_power_term(self._ctx(None)), 0)
 
     def test_sword_aligned_technique_scales_by_sword_weight(self):
         from world.magic.services.power_terms import covenant_role_blend_power_term
 
-        self._thread(level=10)
         self._engage_role(sword=Decimal("0.6"), crown=Decimal("0.4"))
         technique = self._technique("sword")
-        self.assertEqual(covenant_role_blend_power_term(self._ctx(technique)), 6)
+        # width(11)=8: 8 * 0.6 = 4.8 -> 4
+        self.assertEqual(covenant_role_blend_power_term(self._ctx(technique)), 4)
 
     def test_crown_aligned_technique_scales_by_crown_weight(self):
         from world.magic.services.power_terms import covenant_role_blend_power_term
 
-        self._thread(level=10)
         self._engage_role(sword=Decimal("0.6"), crown=Decimal("0.4"))
         technique = self._technique("crown")
-        self.assertEqual(covenant_role_blend_power_term(self._ctx(technique)), 4)
+        # 8 * 0.4 = 3.2 -> 3
+        self.assertEqual(covenant_role_blend_power_term(self._ctx(technique)), 3)
 
     def test_shield_aligned_technique_with_zero_weight_returns_zero(self):
         from world.magic.services.power_terms import covenant_role_blend_power_term
 
-        self._thread(level=10)
         self._engage_role(sword=Decimal("0.6"), crown=Decimal("0.4"))
         technique = self._technique("shield")
         self.assertEqual(covenant_role_blend_power_term(self._ctx(technique)), 0)
@@ -1030,12 +1037,11 @@ class CovenantRoleBlendPowerTermTests(TestCase):
         from world.covenants.factories import CovenantFactory
         from world.magic.services.power_terms import covenant_role_blend_power_term
 
-        self._thread(level=10)
         self._engage_role(sword=Decimal("0.6"), crown=Decimal("0.4"), covenant=CovenantFactory())
         self._engage_role(sword=Decimal("0.3"), crown=Decimal("0.7"), covenant=CovenantFactory())
         technique = self._technique("sword")
-        # (10*0.6*1.0) + (10*0.3*1.0) = 6.0 + 3.0 = 9.0 -> int(9.0) = 9
-        self.assertEqual(covenant_role_blend_power_term(self._ctx(technique)), 9)
+        # (8*0.6*1.0) + (8*0.3*1.0) = 4.8 + 2.4 = 7.2 -> int(7.2) = 7, each role on its own thread
+        self.assertEqual(covenant_role_blend_power_term(self._ctx(technique)), 7)
 
     def test_multiplier_tenths_scales_result(self):
         from world.magic.services.power_terms import (
@@ -1043,19 +1049,20 @@ class CovenantRoleBlendPowerTermTests(TestCase):
             get_covenant_role_blend_config,
         )
 
-        self._thread(level=10)
         self._engage_role(sword=Decimal("0.6"), crown=Decimal("0.4"))
         technique = self._technique("sword")
         config = get_covenant_role_blend_config()
         config.multiplier_tenths = 20
         config.save()
-        self.assertEqual(covenant_role_blend_power_term(self._ctx(technique)), 12)
+        # 8 * 0.6 * 2.0 = 9.6 -> 9
+        self.assertEqual(covenant_role_blend_power_term(self._ctx(technique)), 9)
 
 
 class CovenantRoleSpecialtyPowerTermTests(TestCase):
     """covenant_role_specialty_power_term: per-vow technique-specialty boost (#2443)."""
 
     def setUp(self):
+        ensure_level_ladder()
         self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
 
@@ -1069,7 +1076,7 @@ class CovenantRoleSpecialtyPowerTermTests(TestCase):
 
         return ThreadFactory(owner=self.sheet, level=level)
 
-    def _engage_role(self, role=None, *, engaged=True, covenant=None):
+    def _engage_role(self, role=None, *, engaged=True, covenant=None, thread=True):
         from world.covenants.factories import (
             CharacterCovenantRoleFactory,
             CovenantFactory,
@@ -1083,26 +1090,28 @@ class CovenantRoleSpecialtyPowerTermTests(TestCase):
             covenant_role=role,
             engaged=engaged,
         )
+        if thread:
+            # The vow thread the term reads: rung 11, where one level is 8 points wide.
+            ThreadFactory(owner=self.sheet, level=110, as_covenant_role_thread=role)
         return role
 
     def test_matching_tag_boosted(self):
         from world.magic.factories import TechniqueFactory, TechniqueFunctionTagFactory
         from world.magic.services.power_terms import covenant_role_specialty_power_term
 
-        self._thread(level=10)
         role = self._engage_role()
         CovenantRoleTechniqueSpecialtyFactory(
             covenant_role=role, function=TechniqueFunction.WEAKEN, multiplier_tenths=15
         )
         technique = TechniqueFactory()
         TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.WEAKEN)
-        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 15)
+        # width(11)=8: 8 * 15 / 10 = 12
+        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 12)
 
     def test_untagged_technique_returns_zero(self):
         from world.magic.factories import TechniqueFactory
         from world.magic.services.power_terms import covenant_role_specialty_power_term
 
-        self._thread(level=10)
         role = self._engage_role()
         CovenantRoleTechniqueSpecialtyFactory(
             covenant_role=role, function=TechniqueFunction.WEAKEN, multiplier_tenths=15
@@ -1114,7 +1123,6 @@ class CovenantRoleSpecialtyPowerTermTests(TestCase):
         from world.magic.factories import TechniqueFactory, TechniqueFunctionTagFactory
         from world.magic.services.power_terms import covenant_role_specialty_power_term
 
-        self._thread(level=10)
         role = self._engage_role()
         CovenantRoleTechniqueSpecialtyFactory(
             covenant_role=role, function=TechniqueFunction.WEAKEN, multiplier_tenths=10
@@ -1127,8 +1135,8 @@ class CovenantRoleSpecialtyPowerTermTests(TestCase):
         TechniqueFunctionTagFactory(
             technique=technique, function=TechniqueFunction.DAMAGE_BUFF_SELF
         )
-        # 10*10/10 (WEAKEN) + 10*10/10 (DAMAGE_BUFF_SELF) = 10 + 10 = 20
-        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 20)
+        # 8*10/10 (WEAKEN) + 8*10/10 (DAMAGE_BUFF_SELF) = 8 + 8 = 16
+        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 16)
 
     def test_two_engaged_roles_sum(self):
         """Two SEPARATELY engaged CovenantRole memberships (different covenants) each
@@ -1139,7 +1147,6 @@ class CovenantRoleSpecialtyPowerTermTests(TestCase):
         from world.magic.factories import TechniqueFactory, TechniqueFunctionTagFactory
         from world.magic.services.power_terms import covenant_role_specialty_power_term
 
-        self._thread(level=10)
         role_a = self._engage_role()
         role_b = self._engage_role()
         CovenantRoleTechniqueSpecialtyFactory(
@@ -1150,8 +1157,8 @@ class CovenantRoleSpecialtyPowerTermTests(TestCase):
         )
         technique = TechniqueFactory()
         TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.WEAKEN)
-        # role_a: 10*10/10=10, role_b: 10*15/10=15 -> 10 + 15 = 25
-        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 25)
+        # role_a: 8*10/10=8, role_b: 8*15/10=12 -> 8 + 12 = 20, each on its own vow thread
+        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 20)
 
     def test_sub_role_row_adds_to_anchor_row(self):
         """A qualifying COVENANT_ROLE thread promotes the engaged role to its sub-role
@@ -1176,7 +1183,7 @@ class CovenantRoleSpecialtyPowerTermTests(TestCase):
         sub_role = SubroleCovenantRoleFactory(
             parent_role=parent, resonance=resonance, unlock_thread_level=30
         )
-        self._engage_role(role=parent)  # membership row stays on the parent
+        self._engage_role(role=parent, thread=False)  # membership row stays on the parent
         ThreadFactory(
             owner=self.sheet,
             resonance=resonance,
@@ -1196,14 +1203,14 @@ class CovenantRoleSpecialtyPowerTermTests(TestCase):
         )
         technique = TechniqueFactory()
         TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.WEAKEN)
-        # anchor row (parent, 30*10/10=30) + sub-role's own row (30*5/10=15) = 45
-        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 45)
+        # The sub-role reads the anchor's thread (rung 3, width 8): anchor row (parent,
+        # 8*10/10=8) + sub-role's own row (8*5/10=4) = 12
+        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 12)
 
     def test_non_engaged_role_returns_zero(self):
         from world.magic.factories import TechniqueFactory, TechniqueFunctionTagFactory
         from world.magic.services.power_terms import covenant_role_specialty_power_term
 
-        self._thread(level=10)
         role = self._engage_role(engaged=False)
         CovenantRoleTechniqueSpecialtyFactory(
             covenant_role=role, function=TechniqueFunction.WEAKEN, multiplier_tenths=15
@@ -1222,16 +1229,17 @@ class CovenantRoleSpecialtyPowerTermTests(TestCase):
         )
         from world.magic.services.power_terms import covenant_role_specialty_power_term
 
-        self._thread(level=10)
-        ThreadFactory(owner=self.sheet, level=100, retired_at=timezone.now())  # ignored
-        role = self._engage_role()
+        role = self._engage_role(thread=False)
+        ThreadFactory(
+            owner=self.sheet, level=110, retired_at=timezone.now(), as_covenant_role_thread=role
+        )
         CovenantRoleTechniqueSpecialtyFactory(
             covenant_role=role, function=TechniqueFunction.WEAKEN, multiplier_tenths=10
         )
         technique = TechniqueFactory()
         TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.WEAKEN)
-        # Only the level-10 thread counts: 10*10/10 = 10, not (110)*10/10 = 110.
-        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 10)
+        # A retired vow thread is no vow thread: the specialty adds nothing.
+        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 0)
 
     def test_specialty_at_default_multiplier_not_more_than_blend_at_weight_one(self):
         """Ratified 0.5-1.0x-of-baseline frame: specialty <= blend for the same character
@@ -1243,7 +1251,6 @@ class CovenantRoleSpecialtyPowerTermTests(TestCase):
             covenant_role_specialty_power_term,
         )
 
-        self._thread(level=10)
         role = CovenantRoleFactory(sword_weight=1, shield_weight=0, crown_weight=0)
         self._engage_role(role=role)
         CovenantRoleTechniqueSpecialtyFactory(
@@ -1257,28 +1264,55 @@ class CovenantRoleSpecialtyPowerTermTests(TestCase):
         self.assertLessEqual(specialty, blend)
 
 
-class TotalThreadLevelAcrossAllKindsTests(TestCase):
-    """total_thread_level_across_all_kinds sums raw levels across thread kinds (#2529)."""
+class VowThreadHelperTests(TestCase):
+    """vow_thread_level reads only the vow thread; vow_thread_width sizes it (#5093)."""
 
     def setUp(self):
+        ensure_level_ladder()
         self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
 
-    def test_sums_across_thread_kinds_and_ignores_retired(self):
+    def test_reads_only_the_covenant_role_thread_on_the_anchor(self):
         from django.utils import timezone
 
+        from world.covenants.factories import CovenantRoleFactory, SubroleCovenantRoleFactory
         from world.magic.factories import ThreadFactory
-        from world.magic.services.threads import total_thread_level_across_all_kinds
+        from world.magic.services.threads import vow_thread_level
 
-        ThreadFactory(owner=self.sheet, level=4)  # TRAIT (default kind)
-        ThreadFactory(owner=self.sheet, level=6, as_technique_thread=True)
-        ThreadFactory(owner=self.sheet, level=100, retired_at=timezone.now())  # ignored
-        self.assertEqual(total_thread_level_across_all_kinds(self.sheet), 10)
+        role = CovenantRoleFactory()
+        sub_role = SubroleCovenantRoleFactory(parent_role=role)
+        ThreadFactory(owner=self.sheet, level=40)  # TRAIT (default kind): not the vow thread
+        ThreadFactory(owner=self.sheet, level=60, as_technique_thread=True)
+        ThreadFactory(owner=self.sheet, level=110, as_covenant_role_thread=role)
+        ThreadFactory(
+            owner=self.sheet,
+            level=200,
+            retired_at=timezone.now(),
+            as_covenant_role_thread=CovenantRoleFactory(),
+        )
+        self.assertEqual(vow_thread_level(self.sheet, role), 110)
+        self.assertEqual(vow_thread_level(self.sheet, sub_role), 110)
 
-    def test_empty_returns_zero(self):
-        from world.magic.services.threads import total_thread_level_across_all_kinds
+    def test_no_vow_thread_is_zero(self):
+        from world.covenants.factories import CovenantRoleFactory
+        from world.magic.factories import ThreadFactory
+        from world.magic.services.threads import vow_thread_level
 
-        self.assertEqual(total_thread_level_across_all_kinds(self.sheet), 0)
+        ThreadFactory(owner=self.sheet, level=110)  # not a vow thread
+        self.assertEqual(vow_thread_level(self.sheet, CovenantRoleFactory()), 0)
+
+    def test_width_is_one_level_at_the_threads_rung(self):
+        from world.magic.services.threads import vow_thread_width
+
+        self.assertEqual(vow_thread_width(110), 8)  # rung 11
+        self.assertEqual(vow_thread_width(300), 8)  # rung 30, the top authored level
+        self.assertEqual(vow_thread_width(400), 8)  # above the ladder reuses the top width
+
+    def test_width_is_zero_below_rung_one(self):
+        from world.magic.services.threads import vow_thread_width
+
+        self.assertEqual(vow_thread_width(0), 0)
+        self.assertEqual(vow_thread_width(9), 0)
 
 
 class VowSituationalPowerTermTests(TestCase):
@@ -1290,6 +1324,7 @@ class VowSituationalPowerTermTests(TestCase):
     """
 
     def setUp(self):
+        ensure_level_ladder()
         self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
 
@@ -1323,6 +1358,10 @@ class VowSituationalPowerTermTests(TestCase):
             covenant_role=role,
             engaged=engaged,
         )
+        # The vow thread the perk is sized by (its holder's): rung 11, one level 8 points wide.
+        from world.magic.factories import ThreadFactory
+
+        ThreadFactory(owner=sheet or self.sheet, level=110, as_covenant_role_thread=role)
         return role
 
     def _combat_room_with_positions(self):
@@ -1339,7 +1378,6 @@ class VowSituationalPowerTermTests(TestCase):
     def test_no_technique_returns_zero(self):
         from world.magic.services.power_terms import vow_situational_power_term
 
-        self._thread(level=10)
         self._engage_role()
         self.assertEqual(vow_situational_power_term(self._ctx(None)), 0)
 
@@ -1353,7 +1391,7 @@ class VowSituationalPowerTermTests(TestCase):
     def test_battle_action_kind_scope_requires_matching_ctx(self):
         """#2536 slice 3 Battle scoping: a POWER_BONUS perk scoped to
         battle_action_kind=ROUT does not fire without a matching ctx kind, and
-        fires once the ctx supplies it. 10 * 10 / 10 = 10."""
+        fires once the ctx supplies it. 1.0 x width(11) = 8."""
         from world.battles.constants import BattleActionKind
         from world.covenants.factories import VowSituationalPerkFactory
         from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind
@@ -1368,7 +1406,6 @@ class VowSituationalPowerTermTests(TestCase):
             magnitude_tenths=10,
             battle_action_kind=BattleActionKind.ROUT,
         )
-        self._thread(level=10)
         technique = TechniqueFactory()
 
         ctx_no_kind = self._ctx(technique)
@@ -1396,12 +1433,12 @@ class VowSituationalPowerTermTests(TestCase):
                 battle_action_kind=BattleActionKind.ROUT,
             ),
         )
-        self.assertEqual(vow_situational_power_term(ctx_matching_kind), 10)
+        self.assertEqual(vow_situational_power_term(ctx_matching_kind), 8)
 
     def test_perk_fires_with_combat_situation_ctx_exact_arithmetic(self):
         """AT_RANGE (a combat-positioning situation) holds; the fired perk's
-        magnitude scales by the subject's total thread level, int-truncated —
-        7 * 13 / 10 = 9.1 -> 9 (mirrors covenant_role_specialty_power_term's
+        magnitude is a share of one level's width at the rung of her vow thread,
+        int-truncated — 8 * 13 / 10 = 10.4 -> 10 (mirrors covenant_role_specialty_power_term's
         truncation style)."""
         from world.areas.positioning.services import place_in_position
         from world.combat.factories import (
@@ -1441,10 +1478,9 @@ class VowSituationalPowerTermTests(TestCase):
         )
         VowSituationalPerkSituationFactory(perk=perk, situation=Situation.AT_RANGE)
 
-        self._thread(level=7)
         technique = TechniqueFactory()
         ctx = self._ctx(technique, situation_ctx=CombatRoundContext(participant))
-        self.assertEqual(vow_situational_power_term(ctx), 9)
+        self.assertEqual(vow_situational_power_term(ctx), 10)
 
     def test_situations_unmet_returns_zero(self):
         """Same perk as above, but the opponent shares the subject's position
@@ -1487,7 +1523,6 @@ class VowSituationalPowerTermTests(TestCase):
         )
         VowSituationalPerkSituationFactory(perk=perk, situation=Situation.AT_RANGE)
 
-        self._thread(level=7)
         technique = TechniqueFactory()
         ctx = self._ctx(technique, situation_ctx=CombatRoundContext(participant))
         self.assertEqual(vow_situational_power_term(ctx), 0)
@@ -1519,16 +1554,15 @@ class VowSituationalPowerTermTests(TestCase):
         )
         VowSituationalPerkSituationFactory(perk=perk, situation=Situation.DURING_NEGOTIATION)
 
-        self._thread(level=5)
         technique = TechniqueFactory()
         ctx = self._ctx(technique, situation_ctx=None)
-        # 5 * 20 / 10 = 10
-        self.assertEqual(vow_situational_power_term(ctx), 10)
+        # 8 * 20 / 10 = 16
+        self.assertEqual(vow_situational_power_term(ctx), 16)
 
     def test_ally_beneficiary_perk_boosts_subject_cast(self):
         """A COVENANT_ALLIES perk held by a co-present covenant-mate in
-        the same encounter, fires on the SUBJECT's cast (scaled by the SUBJECT's
-        own thread level, not the mate's)."""
+        the same encounter, fires on the SUBJECT's cast, sized by the MATE's vow thread
+        (the holder's), never the subject's own threads."""
         from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
         from world.combat.round_context import CombatRoundContext
         from world.covenants.factories import (
@@ -1538,6 +1572,7 @@ class VowSituationalPowerTermTests(TestCase):
             VowSituationalPerkFactory,
         )
         from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind
+        from world.magic.factories import ThreadFactory
         from world.magic.services.power_terms import vow_situational_power_term
 
         covenant = CovenantFactory()
@@ -1565,11 +1600,12 @@ class VowSituationalPowerTermTests(TestCase):
             magnitude_tenths=10,
         )
 
-        self._thread(level=6)  # subject's own thread level, not the mate's
+        ThreadFactory(owner=mate_sheet, level=110, as_covenant_role_thread=mate_role)
+        self._thread(level=60)  # the subject's own other thread adds nothing
         technique = TechniqueFactory()
         ctx = self._ctx(technique, situation_ctx=CombatRoundContext(subject_participant))
-        # 6 * 10 / 10 = 6 -- proves the mate's COVENANT_ALLIES perk fired for the subject
-        self.assertEqual(vow_situational_power_term(ctx), 6)
+        # 1.0 x width(11) = 8 -- the mate's COVENANT_ALLIES perk fired for the subject
+        self.assertEqual(vow_situational_power_term(ctx), 8)
 
     def _favorably_disposed_setup(self, *, disposed: bool):
         """Shared rig for the two target-keyed tests below: a TARGET_FAVORABLY_DISPOSED
@@ -1607,14 +1643,13 @@ class VowSituationalPowerTermTests(TestCase):
         """TARGET_FAVORABLY_DISPOSED (a target-keyed situation) fires for POWER_BONUS
         once ``target_sheet`` is threaded onto the context (#2536, Task 4 review
         fix — previously hard-inert with ``target=None`` always passed to
-        ``applicable_perks``). 5 * 14 / 10 = 7.0 -> 7."""
+        ``applicable_perks``). 8 * 14 / 10 = 11.2 -> 11."""
         from world.magic.services.power_terms import vow_situational_power_term
 
         target_sheet = self._favorably_disposed_setup(disposed=True)
-        self._thread(level=5)
         technique = TechniqueFactory()
         ctx = self._ctx(technique, target_sheet=target_sheet)
-        self.assertEqual(vow_situational_power_term(ctx), 7)
+        self.assertEqual(vow_situational_power_term(ctx), 11)
 
     def test_target_keyed_perk_returns_zero_without_target(self):
         """Same TARGET_FAVORABLY_DISPOSED perk + the disposition row that would make
@@ -1625,7 +1660,6 @@ class VowSituationalPowerTermTests(TestCase):
         from world.magic.services.power_terms import vow_situational_power_term
 
         self._favorably_disposed_setup(disposed=True)
-        self._thread(level=5)
         technique = TechniqueFactory()
         ctx = self._ctx(technique, target_sheet=None)
         self.assertEqual(vow_situational_power_term(ctx), 0)
@@ -1677,12 +1711,11 @@ class VowSituationalPowerTermTests(TestCase):
         )
         VowSituationalPerkSituationFactory(perk=perk, situation=Situation.AT_RANGE)
 
-        self._thread(level=7)
         technique = TechniqueFactory()
         ctx = self._ctx(technique, situation_ctx=CombatRoundContext(participant))
 
         with patch("world.covenants.perks.services.announce_fired_perks") as mock_announce:
-            self.assertEqual(vow_situational_power_term(ctx), 9)
+            self.assertEqual(vow_situational_power_term(ctx), 10)
 
         assert mock_announce.call_count == 1
         (fired_arg,), kwargs = mock_announce.call_args

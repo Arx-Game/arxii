@@ -122,7 +122,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
             byte-identical to pre-#2536 behavior — no query, no perk lookup.
             When provided, fires ``CHECK_BONUS`` situational perks
             (``world.covenants.perks``) scoped to ``check_type`` (or
-            scope-less perks) and folds their thread-level-scaled magnitude
+            scope-less perks) and folds their vow-thread-sized magnitude
             into the same total ``extra_modifiers`` feeds — see
             ``_situational_perk_check_bonus``. It also fires
             ``TIER_FLOOR``/``BOTCH_IMMUNITY`` outcome guarantees (#2536 slice 2)
@@ -636,11 +636,13 @@ def _situational_perk_check_bonus(
     check_type: "CheckType",
     situation_ctx: "SituationContext | None",
 ) -> int:
-    """Σ fired ``CHECK_BONUS`` situational perks scaled by thread level (#2536, Task 5).
+    """Σ fired ``CHECK_BONUS`` situational perks, each a share of one level's width at the
+    rung of its holder's vow thread (#2536, Task 5; #5093).
 
     Mirrors ``vow_situational_power_term``'s arithmetic exactly (same
-    thread-level scaling, same integer truncation after summing in
-    ``Decimal``) but scopes fired perks to ``check_type``: a perk with
+    vow-thread sizing, same integer truncation after summing in
+    ``Decimal``, through ``sum_potency_scaled_magnitudes``) but scopes fired perks to
+    ``check_type``: a perk with
     ``check_type=None`` fires on any check; a perk scoped to a specific
     ``CheckType`` fires only when it matches THIS check. Also applies
     ``perks.services.perk_scope_matches`` (#2536 slice 3) — the shared
@@ -686,9 +688,6 @@ def _situational_perk_check_bonus(
         mission_category_ids_for,
         perk_scope_matches,
         sum_potency_scaled_magnitudes,
-    )
-    from world.magic.services.threads import (  # noqa: PLC0415
-        total_thread_level_across_all_kinds,
     )
 
     fired = applicable_perks(
@@ -736,11 +735,7 @@ def _situational_perk_check_bonus(
 
     announce_fired_perks(scoped, subject=sheet, location=character.location)
 
-    total_threads = total_thread_level_across_all_kinds(sheet)
-    if total_threads == 0:
-        return 0
-
-    return sum_potency_scaled_magnitudes(scoped, total_threads)
+    return sum_potency_scaled_magnitudes(scoped)
 
 
 def _guarantee_floor(
