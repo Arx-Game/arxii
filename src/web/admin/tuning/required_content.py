@@ -4275,11 +4275,12 @@ def _declarations() -> tuple[ContentDependency, ...]:
             probe=AnyRowProbe(label="StandoffReactionLine"),
         ),
         ContentDependency(
-            key="modifier-value-table",
-            label="Modifier value table (check lane)",
+            key="modifier-size-fraction",
+            label="Modifier size fractions (check lane)",
             tier=DependencyTier.TUNING,
             consumer=(
-                "world/checks/modifier_values.py load_value_table(), read by "
+                "world/checks/modifier_values.py load_value_table() (size fraction x level "
+                "width, with ModifierValue rows as per-level overrides), read by "
                 "world/conditions/services.py _check_modifier_for_target() (technique buffs), "
                 "world/checks/services.py _equipment_check_contributions() (worn items, "
                 "#4628) and _scene_check_contributions() (scene surroundings, #4638), and "
@@ -4289,12 +4290,12 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consequence=(
                 "A sized technique buff or debuff, worn item, distinction effect or scene "
                 "surroundings modifier keeps its flat authored check modifier instead of "
-                "the value its level and size are worth."
+                "the value its level and size are worth, and a vow's size step adds nothing."
             ),
             probe=FilteredRowProbe(
-                label="ModifierValue",
+                label="ModifierSizeFraction",
                 filters=(("lane", "check"),),
-                absent_detail="No check-lane ModifierValue rows exist.",
+                absent_detail="No check-lane ModifierSizeFraction rows exist.",
             ),
         ),
         ContentDependency(

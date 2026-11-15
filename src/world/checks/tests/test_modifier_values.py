@@ -9,6 +9,7 @@ from world.checks.constants import ModifierLane, ModifierSize, ModifierSourceKin
 from world.checks.factories import CheckTypeFactory
 from world.checks.modifier_models import ModifierLevelBaseline, ModifierTaper, ModifierValue
 from world.checks.modifier_values import (
+    BaselineTable,
     ValueTable,
     level_baseline,
     load_taper_rules,
@@ -26,18 +27,20 @@ from world.traits.models import CheckRank
 
 
 class ValueTableLookupTests(SimpleTestCase):
-    TABLE = ValueTable(rows_by_size={ModifierSize.LARGE: [(1, 3), (6, 10), (11, 16)]})
+    TABLE = ValueTable(
+        overrides={(1, ModifierSize.LARGE): 3, (6, ModifierSize.LARGE): 10},
+        fractions={ModifierSize.LARGE: Decimal("0.5")},
+        baselines=BaselineTable(levels=(1, 2, 3, 4), baselines=(18, 26, 34, 42)),
+    )
 
-    def test_sparse_rows_read_as_steps(self) -> None:
+    def test_an_override_row_covers_only_its_own_level(self) -> None:
         self.assertEqual(self.TABLE.value(1, ModifierSize.LARGE), 3)
-        self.assertEqual(self.TABLE.value(5, ModifierSize.LARGE), 3)
         self.assertEqual(self.TABLE.value(6, ModifierSize.LARGE), 10)
-        self.assertEqual(self.TABLE.value(30, ModifierSize.LARGE), 16)
+        # Level 2 has no override: half of its width of 8.
+        self.assertEqual(self.TABLE.value(2, ModifierSize.LARGE), 4)
 
-    def test_no_row_for_the_size_or_below_the_first_level(self) -> None:
-        self.assertIsNone(self.TABLE.value(6, ModifierSize.MINOR))
-        table = ValueTable(rows_by_size={ModifierSize.LARGE: [(3, 7)]})
-        self.assertIsNone(table.value(2, ModifierSize.LARGE))
+    def test_no_fraction_for_the_size_means_no_value(self) -> None:
+        self.assertIsNone(self.TABLE.value(2, ModifierSize.MINOR))
 
 
 class ModifierRowReadersTests(TestCase):
@@ -59,11 +62,11 @@ class ModifierRowReadersTests(TestCase):
         for rank in range(2, 7):
             CheckRank.objects.create(rank=rank, name=f"Rank {rank}")
 
-    def test_the_value_table_loads_in_one_query(self) -> None:
-        with self.assertNumQueries(1):
+    def test_the_value_table_loads_in_three_queries(self) -> None:
+        with self.assertNumQueries(3):
             table = load_value_table()
 
-        self.assertEqual(table.value(7, ModifierSize.LARGE), 10)
+        self.assertEqual(table.value(6, ModifierSize.LARGE), 10)
 
     def test_taper_rules_by_kind(self) -> None:
         rules = load_taper_rules()

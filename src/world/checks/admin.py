@@ -18,11 +18,16 @@ from world.checks.models import (
     Consequence,
     ConsequenceEffect,
     ModifierLevelBaseline,
+    ModifierSizeFraction,
     ModifierTaper,
     ModifierValue,
 )
-from world.checks.modifier_values import level_baseline, rank_band_share
+from world.checks.modifier_values import level_baseline, load_baselines, rank_band_share
+from world.checks.types import round_half_up
 from world.societies.admin_inlines import ConsequenceNamedOrganizationInline
+
+# Levels the size fraction form shows its derived values at.
+_SAMPLE_LEVELS = (1, 6, 11, 16, 21, 26)
 
 
 class CheckTypeInline(admin.TabularInline):
@@ -218,9 +223,39 @@ class CheckTypeSpecializationAdmin(admin.ModelAdmin):
     autocomplete_fields = ["check_type", "specialization"]
 
 
+@admin.register(ModifierSizeFraction)
+class ModifierSizeFractionAdmin(admin.ModelAdmin):
+    """How much of one level's width each modifier size is worth in a lane (#5093).
+
+    A modifier's value is its size's fraction times the level width at its level. The
+    change form shows what that comes to at a few levels.
+    """
+
+    list_display = ["lane", "size", "fraction"]
+    list_editable = ["fraction"]
+    list_filter = ["lane"]
+    ordering = ["lane", "size"]
+    readonly_fields = ["derived_values"]
+
+    @admin.display(description="Derived values at levels 1, 6, 11, 16, 21 and 26")
+    def derived_values(self, obj: ModifierSizeFraction) -> str:
+        if obj.pk is None:
+            return "Save the row to see the values it derives."
+        baselines = load_baselines(obj.lane)
+        shown = []
+        for level in _SAMPLE_LEVELS:
+            try:
+                width = baselines.width(level)
+            except ModifierConfigError:
+                return f"No {obj.get_lane_display()} level baseline rows cover level {level} yet."
+            shown.append(f"level {level}: {max(1, round_half_up(obj.fraction * width))}")
+        return "; ".join(shown)
+
+
 @admin.register(ModifierValue)
 class ModifierValueAdmin(admin.ModelAdmin):
-    """The modifier value table (#4594): what each size is worth at each level.
+    """Overrides of the derived modifier value (#4594, #5093): a row sets what one size
+    is worth at one exact level, instead of its fraction times the level width.
 
     The change form reads the row against the level baseline: its share of that total
     and, on the check lane, the share of a rank band it spans there.

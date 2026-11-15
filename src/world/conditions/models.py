@@ -1799,8 +1799,8 @@ class ConditionInstance(SharedMemoryModel):
             "The vow size step's share in tenths (#4747), fixed at cast: the matching "
             "technique specialty's multiplier_tenths (the larger when role and sub-role "
             "both match), times SecondaryVowConfig.potency_tenths / 10 for a secondary "
-            "vow. Each modifier adds (value(modifier_vow_level, size + 1) minus "
-            "value(modifier_vow_level, size)) x this / 10, rounded half up, never "
+            "vow. Each modifier adds (fraction(size + 1) minus fraction(size)) x the "
+            "lane's level width at modifier_vow_level x this / 10, rounded half up, never "
             "tapered. Null or 0 means no step."
         ),
     )

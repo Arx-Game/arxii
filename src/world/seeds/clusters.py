@@ -896,7 +896,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         CGExplanation,
         StartingArea,
     )
-    from world.checks.models import CheckType, ModifierValue  # noqa: PLC0415
+    from world.checks.models import CheckType, ModifierSizeFraction  # noqa: PLC0415
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
     from world.gm.models import GMLevelCap, GMRewardConfig, SituationKind  # noqa: PLC0415
@@ -963,8 +963,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
 
     return {
         "checks": [CheckType, ResultChart],
-        # Example modifier value table, baselines, tapers and cast-level rows (#4594).
-        "modifier_values": [ModifierValue, CastPowerLevel],
+        # Example size fractions, level baselines, tapers and cast-level rows (#4594, #5093).
+        "modifier_values": [ModifierSizeFraction, CastPowerLevel],
         # Combat checks: the Melee Combat skill + weapon-class specializations + the
         # Melee Attack CheckType (stat + skill + spec) (#1706). Shared spine/skill rows
         # counted under "checks"; appears as a seeded cluster.

@@ -19,6 +19,7 @@ from world.checks.constants import (
 # Modifier value table, level baselines and tapers (#4594).
 from world.checks.modifier_models import (  # noqa: F401
     ModifierLevelBaseline,
+    ModifierSizeFraction,
     ModifierTaper,
     ModifierValue,
 )

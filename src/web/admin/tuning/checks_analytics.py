@@ -404,14 +404,14 @@ def compute_modifier_pile(
 ) -> ModifierPileReport | None:
     """Simulate ``count`` modifiers of (``modifier_level``, ``size``) on one character.
 
-    None when the value table or level baseline has no row covering the inputs; the
+    None when the size fractions or level baselines have no row covering the inputs; the
     panel says which rows to author.
     """
     try:
         baseline = level_baseline(character_level)
+        value = load_value_table().value(modifier_level, size)
     except ModifierConfigError:
         return None
-    value = load_value_table().value(modifier_level, size)
     if value is None:
         return None
     tapers = load_taper_rules()

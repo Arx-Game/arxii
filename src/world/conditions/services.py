@@ -35,7 +35,7 @@ from world.checks.constants import ModifierLane, ModifierSourceKind
 from world.checks.models import CheckType
 from world.checks.modifier_values import ValueTable, load_taper_rules, load_value_table
 from world.checks.services import perform_check_with_modifiers
-from world.checks.types import ModifierBreakdown, ModifierContribution, round_half_up
+from world.checks.types import ModifierBreakdown, ModifierContribution
 from world.conditions.constants import (
     POISON_CATEGORY_NAME,
     POISON_DAMAGE_TYPE_NAME,
@@ -3020,21 +3020,17 @@ def _vow_step_value(
 ) -> int:
     """The caster's vow size step on one of ``instance``'s sized modifiers, or 0 (#4747).
 
-    (value(L, size + 1) - value(L, size)) x tenths / 10 at the stored
-    ``modifier_vow_level`` L and ``modifier_vow_tenths``, rounded half up and signed
-    like the authored value, so a debuff's step is a further penalty. 0 when the
-    instance has no step or the table lacks either row. Read from stored columns only:
-    no query.
+    (fraction(size + 1) - fraction(size)) x width(L) x tenths / 10 at the stored
+    ``modifier_vow_level`` L and ``modifier_vow_tenths`` (``ValueTable.vow_step``), rounded
+    half up and signed like the authored value, so a debuff's step is a further penalty.
+    0 when the instance has no step or the lane lacks either size's fraction. Read from
+    stored columns and the loaded table only: no query.
     """
     vow_level = instance.modifier_vow_level
     tenths = instance.modifier_vow_tenths
     if not vow_level or not tenths or not _is_sized(instance):
         return 0
-    stepped = value_table.signed_value(authored_value, vow_level, instance.modifier_size + 1)
-    base = value_table.signed_value(authored_value, vow_level, instance.modifier_size)
-    if stepped is None or base is None:
-        return 0
-    return round_half_up(Decimal(stepped - base) * tenths / 10)
+    return value_table.vow_step(authored_value, vow_level, instance.modifier_size, tenths)
 
 
 def _priced_sized_modifier(

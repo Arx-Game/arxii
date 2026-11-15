@@ -1,14 +1,17 @@
-"""Modifier value table, level baseline and taper rows (#4551, #4594).
+"""Modifier size fraction, value override, level baseline and taper rows (#4551, #4594, #5093).
 
-A modifier carries a level and a size. These three tables, each keyed by a
+A modifier carries a level and a size. These tables, each keyed by a
 ``ModifierLane`` column, turn that pair into a number and decide how piles of
 modifiers add up:
 
-* ``ModifierValue`` - the value table: what a modifier of a given size is worth at a
-  given level, in the lane's own units (check points for the check lane).
+* ``ModifierSizeFraction`` - how much of one level's width a modifier of each size is
+  worth (#5093). A modifier's value is its size's fraction times the lane's level width.
+* ``ModifierValue`` - an override of that derived value: what a modifier of a given size
+  is worth at one exact level, in the lane's own units. Optional; a size and level with
+  no row read the derived value.
 * ``ModifierLevelBaseline`` - the typical total a character of each level reaches in
-  the lane (a check total on a check in their field). Staff read a value against it,
-  as a share and, on the check lane, as rank bands.
+  the lane (a check total on a check in their field). One level's width is the step
+  between two rows, and on the check lane the rows are the rank ladder.
 * ``ModifierTaper`` - which source kinds taper in a lane, and how lightly: each
   further modifier of the kind counts ``ratio`` of the one before, never below
   ``floor`` of its own value.
@@ -30,15 +33,59 @@ from world.checks.constants import ModifierLane, ModifierSize, ModifierSourceKin
 _LANE_HELP = "The kind of quantity this row values (check points, stats, and later lanes)."
 
 
-class ModifierValue(SharedMemoryModel):
-    """One cell of a lane's value table: a modifier of ``size`` at ``level`` is worth
-    ``value`` in the lane's units.
+class ModifierSizeFraction(SharedMemoryModel):
+    """How much of one level's width a modifier of ``size`` is worth in a lane (#5093).
 
-    Rows may be sparse: a modifier reads the row at the highest authored level at or
-    below its own, so staff can author levels 1, 5, 10 and so on and fill in later. A
-    modifier whose level is below every authored row for its size keeps its flat
-    authored value. The value is a magnitude; the authored modifier's sign says
-    whether it is a bonus or a penalty. The target's level is never read.
+    A modifier's value is ``fraction`` times the lane's level width at the modifier's
+    level, rounded half up and never below 1. A Large check buff at 0.5 is half a rank.
+    A size with no row in the lane has no derived value (the modifier keeps its flat
+    authored value). A vow's size step reads the difference between two sizes' fractions.
+    The target's level is never read.
+    """
+
+    lane = models.CharField(
+        max_length=20,
+        choices=ModifierLane.choices,
+        default=ModifierLane.CHECK,
+        db_default=ModifierLane.CHECK,
+        help_text=_LANE_HELP,
+    )
+    size = models.PositiveSmallIntegerField(
+        choices=ModifierSize.choices,
+        help_text="The modifier size this fraction values.",
+    )
+    fraction = models.DecimalField(
+        max_digits=5,
+        decimal_places=3,
+        validators=[MinValueValidator(Decimal(0))],
+        help_text="The share of one level's width this size is worth (example: 0.500 for "
+        "half a level).",
+    )
+
+    class Meta:
+        ordering = ["lane", "size"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["lane", "size"],
+                name="unique_modifier_size_fraction_per_lane_size",
+            ),
+        ]
+        verbose_name = "Modifier size fraction"
+        verbose_name_plural = "Modifier size fractions"
+
+    def __str__(self) -> str:
+        size_label = ModifierSize(self.size).label
+        return f"{self.get_lane_display()}: {size_label} = {self.fraction} of a level"
+
+
+class ModifierValue(SharedMemoryModel):
+    """An override of a derived modifier value: a modifier of ``size`` at exactly
+    ``level`` is worth ``value`` in the lane's units, whatever its size fraction says.
+
+    Optional (#5093): without a row the value is the size's fraction times the level's
+    width. A row covers only its own level, never the levels above it. The value is a
+    magnitude; the authored modifier's sign says whether it is a bonus or a penalty. The
+    target's level is never read.
     """
 
     lane = models.CharField(
@@ -50,8 +97,7 @@ class ModifierValue(SharedMemoryModel):
     )
     level = models.PositiveSmallIntegerField(
         validators=[MinValueValidator(1)],
-        help_text="The modifier level this row starts at (it covers higher levels until "
-        "the next authored row).",
+        help_text="The modifier level this override applies to.",
     )
     size = models.PositiveSmallIntegerField(
         choices=ModifierSize.choices,
