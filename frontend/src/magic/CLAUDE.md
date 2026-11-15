@@ -423,6 +423,18 @@ step in character creation (`character-creation/components/gift/ResonanceWeights
 30 s). Mounted in the scene tools (`SceneDetailPage`) and in the combat rail beside Dig deep
 (`YourTurn`); renders nothing for a character with no resonance.
 
+### `components/ReflectingOnRow.tsx` (#5124)
+
+The optional "Reflecting on" row of a pose and of a journal entry (demo Screen 5): the
+unsettling resonance and each unreflected kindled deed as pills, then Embrace or Disown once one
+is picked; picking the same pill again clears it; a note says a new reflection replaces a waiting
+one when `replaces_waiting` is set. Reads `useReflectionOptions(characterSheetId)`
+(`GET /api/magic/reflectables/`) and renders nothing when there is nothing to reflect on. State
+is a `ReflectionDraft` (`reflection.ts`); `reflectionFields(draft)` gives the three
+`reflect_*` fields a request carries. Mounted by `CommandInput` (pose mode, not Commands or
+companion; a scene pose sends the fields to `submit-pose`, an out-of-scene one dispatches the
+registry `pose` action) and by `JournalEntryFields` (the desk and the composer dialog).
+
 ### `components/threads/ResonanceBalanceCard.tsx`
 
 HoverCard showing a single resonance balance (current balance + lifetime earned + flavor text).

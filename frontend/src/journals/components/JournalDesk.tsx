@@ -11,6 +11,8 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+import { reflectionFields } from '@/magic/reflection';
+
 import type { CreateJournalEntryRequest } from '../api';
 import { PRIMARY_BUTTON_CLASS, QUIET_BUTTON_CLASS } from '../fieldClasses';
 import { useCreateJournalEntry, useJournalSettings } from '../queries';
@@ -52,6 +54,7 @@ export function JournalDesk({ onPosted, onDiscard }: JournalDeskProps) {
       is_public: value.isPublic,
       tags: value.tags,
       about: value.about?.id ?? null,
+      ...reflectionFields(value.reflection),
     };
     // Never send a no-op override: INHERIT is what the backend already does.
     if (value.posthumousOverride !== 'inherit') {

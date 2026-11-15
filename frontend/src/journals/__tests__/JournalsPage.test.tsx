@@ -44,6 +44,11 @@ vi.mock('@/roster/useBrowsingIdentity', () => ({
 
 const useJournalEntriesMock = vi.fn();
 const useMyJournalEntriesMock = vi.fn();
+// The "Reflecting on" row reads the active character and what they can reflect on; its own
+// tests cover it, so these tests stand it aside (#5124).
+vi.mock('@/gm-adjudication/useActiveCharacterId', () => ({ useActiveCharacterId: () => null }));
+vi.mock('@/magic/components/ReflectingOnRow', () => ({ ReflectingOnRow: () => null }));
+
 vi.mock('../queries', () => ({
   useJournalEntries: (filters: unknown, markVisitOnce?: boolean) =>
     useJournalEntriesMock(filters, markVisitOnce),

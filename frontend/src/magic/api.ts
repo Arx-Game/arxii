@@ -19,6 +19,7 @@ import type { components } from '@/generated/api';
 import type {
   KindledResonance,
   ManifestChoice,
+  ReflectionOption,
   ThreadResonanceOptions,
   AcceptTeachingOfferRequest,
   AcceptTeachingOfferResponse,
@@ -1450,5 +1451,23 @@ export async function getKindledResonances(characterSheetId: number): Promise<Ki
   const res = await apiFetch(`${KINDLED_RESONANCES_URL}?character_sheet=${characterSheetId}`);
   if (!res.ok) await readErrorDetail(res, 'Failed to load your resonances');
   const page = (await res.json()) as { results: KindledResonance[] };
+  return page.results;
+}
+
+// ---------------------------------------------------------------------------
+// Reflections (#5124)
+// ---------------------------------------------------------------------------
+
+const REFLECTABLES_URL = '/api/magic/reflectables/';
+
+/**
+ * GET /api/magic/reflectables/?character_sheet=<id> (#5124): what the character can reflect
+ * on now, the resonance unsettling them first, then each kindled deed not yet reflected on.
+ * Owner only.
+ */
+export async function getReflectionOptions(characterSheetId: number): Promise<ReflectionOption[]> {
+  const res = await apiFetch(`${REFLECTABLES_URL}?character_sheet=${characterSheetId}`);
+  if (!res.ok) await readErrorDetail(res, 'Failed to load what you can reflect on');
+  const page = (await res.json()) as { results: ReflectionOption[] };
   return page.results;
 }

@@ -753,3 +753,10 @@ export type ManifestOptionChoice = components['schemas']['ManifestOptionChoice']
 
 /** One resonance the character holds: kindled or not, the strength word, the reasons. */
 export type KindledResonance = components['schemas']['KindledResonance'];
+
+// ---------------------------------------------------------------------------
+// Reflections (#5124): the "Reflecting on" row on a pose or a journal entry.
+// ---------------------------------------------------------------------------
+
+/** One thing a pose or entry can reflect on: a kindled deed, or the unsettling resonance. */
+export type ReflectionOption = components['schemas']['ReflectionOption'];

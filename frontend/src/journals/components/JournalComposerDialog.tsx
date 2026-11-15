@@ -28,6 +28,8 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 
+import { reflectionFields } from '@/magic/reflection';
+
 import type { CreateJournalEntryRequest } from '../api';
 import { useCreateJournalEntry } from '../queries';
 import {
@@ -71,6 +73,7 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
       is_public: value.isPublic,
       tags: value.tags,
       about: value.about?.id ?? null,
+      ...reflectionFields(value.reflection),
     };
     // Omit the field entirely at the INHERIT default — never send a no-op override.
     if (value.posthumousOverride !== 'inherit') {

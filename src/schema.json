@@ -24035,6 +24035,35 @@ paths:
                 items:
                   $ref: '#/components/schemas/ProgressionStage'
           description: ''
+  /api/magic/reflectables/:
+    get:
+      operationId: magic_reflectables_list
+      description: What the requester's character can reflect on, as the "Reflecting
+        on" row's options.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedReflectionOptionList'
+          description: ''
   /api/magic/resonance-grants/:
     get:
       operationId: magic_resonance_grants_list
@@ -78651,6 +78680,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RecordedProfile'
+    PaginatedReflectionOptionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReflectionOption'
     PaginatedRelationshipCapstoneList:
       type: object
       required:
@@ -88364,6 +88416,31 @@ components:
         * `story_resolved` - Story resolved
         * `chapter_reached` - Chapter reached or passed
         * `episode_reached` - Episode reached or passed
+    ReflectionOption:
+      type: object
+      description: One entry of the "Reflecting on" row.
+      properties:
+        kind:
+          $ref: '#/components/schemas/ReflectionOptionKindEnum'
+        id:
+          type: integer
+        label:
+          type: string
+        replaces_waiting:
+          type: boolean
+      required:
+      - id
+      - kind
+      - label
+      - replaces_waiting
+    ReflectionOptionKindEnum:
+      enum:
+      - deed
+      - resonance
+      type: string
+      description: |-
+        * `deed` - Deed
+        * `resonance` - Resonance
     RegardRequest:
       type: object
       description: '``{target_type, target_id, value, reason}``: the NPC''s opinion

@@ -521,6 +521,7 @@ export function SceneDetailPage() {
                       />
                       <CommandInput
                         character={activeCharacter}
+                        characterSheetId={characterSheetId > 0 ? characterSheetId : null}
                         composerMode={composerMode}
                         onModeChange={handleComposerModeChange}
                         targetToAppend={targetToAppend}

@@ -7,6 +7,8 @@
 import { useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { magicKeys } from '@/magic/queries';
+
 import * as api from './api';
 import type {
   CreateJournalEntryRequest,
@@ -80,6 +82,8 @@ export function useCreateJournalEntry() {
       queryClient.invalidateQueries({ queryKey: journalsKeys.lists() }).catch(() => {});
       queryClient.invalidateQueries({ queryKey: journalsKeys.all }).catch(() => {});
       queryClient.invalidateQueries({ queryKey: journalsKeys.settings() }).catch(() => {});
+      // A reflection the entry carried used up a deed, or replaced a waiting one (#5124).
+      queryClient.invalidateQueries({ queryKey: magicKeys.reflectionOptionsAll() }).catch(() => {});
     },
   });
 }

@@ -28,6 +28,9 @@ import {
 } from '@/scenes/components/EntranceTechniqueAttachment';
 import type { TargetCandidate } from '@/scenes/components/TargetPicker';
 import { useAppSelector } from '@/store/hooks';
+import { ReflectingOnRow } from '@/magic/components/ReflectingOnRow';
+import { useRefreshReflectionOptions } from '@/magic/queries';
+import { reflectionFields, type ReflectionDraft } from '@/magic/reflection';
 import type { MyRosterEntry } from '@/roster/types';
 import type { Interaction } from '@/scenes/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
@@ -151,6 +154,11 @@ function buildFullCommand(
 
 interface CommandInputProps {
   character: MyRosterEntry['name'];
+  /**
+   * The active character's sheet id (the character's own id) — reads what a pose can reflect
+   * on (#5124). Omitted, the "Reflecting on" row is not offered.
+   */
+  characterSheetId?: number | null;
   composerMode?: ComposerMode;
   onModeChange?: (mode: ComposerMode) => void;
   targetToAppend?: string | null;
@@ -245,6 +253,7 @@ function getComposerBanner(draft: Draft, isStrandedDraft: boolean): ComposerBann
 
 export function CommandInput({
   character,
+  characterSheetId = null,
   composerMode,
   onModeChange,
   targetToAppend,
@@ -283,6 +292,12 @@ export function CommandInput({
   const [entranceTechnique, setEntranceTechnique] = useState<EntranceTechniqueSelection | null>(
     null
   );
+  // #5124 — what this pose reflects on, if anything. Cleared once the pose lands, so a
+  // refused or failed send keeps the writer's pick along with their text.
+  const [reflection, setReflection] = useState<ReflectionDraft | null>(null);
+  const refreshReflectionOptions = useRefreshReflectionOptions(characterSheetId);
+  // The `client_request_id` of a socket-sent pose that carries a reflection, until its ack.
+  const reflectedSendRef = useRef<string | null>(null);
   const submittingRef = useRef(false);
   const { send, sendConsole, executeAction } = useGameSocket();
   const isCommandsMode = composerMode?.command === COMMANDS_MODE;
@@ -466,6 +481,11 @@ export function CommandInput({
       if (payload.client_request_id !== pending.clientRequestId) return;
       pendingSpeechRef.current = null;
       if (payload.success) {
+        if (reflectedSendRef.current === pending.clientRequestId) {
+          reflectedSendRef.current = null;
+          setReflection(null);
+          refreshReflectionOptions();
+        }
         acknowledge(pending.clientRequestId);
         // Recorded unconditionally: this text demonstrably went out, so
         // ArrowUp should recall it whether or not the player has since
@@ -479,7 +499,7 @@ export function CommandInput({
         toast.error(payload.message ?? 'Failed to send.');
       }
     },
-    [acknowledge, rejectDraft]
+    [acknowledge, rejectDraft, refreshReflectionOptions]
   );
   useActionResult(handleActionResult);
 
@@ -916,8 +936,14 @@ export function CommandInput({
         ...(replyTarget
           ? { reply_to: { id: replyTarget.id, timestamp: replyTarget.timestamp } }
           : {}),
+        ...reflectionFields(reflection),
       })
         .then((response) => {
+          if (reflection !== null) {
+            if (response?.reflection_line) toast.success(response.reflection_line);
+            setReflection(null);
+            refreshReflectionOptions();
+          }
           if (attachedAction && onSubmitAction) {
             onSubmitAction(attachedAction, clientRequestId);
           }
@@ -969,6 +995,22 @@ export function CommandInput({
     }
     if (usesRestSubmit) {
       submitScenePose(sceneId, personaId);
+      return;
+    }
+
+    // A pose that reflects on something outside a scene (#5124) is a structured send like
+    // `tt`: the registry `pose` action takes the reflection, and the draft and the pick clear
+    // together on the matching ack (`handleActionResult`).
+    if (isPose && reflection !== null) {
+      const clientRequestId = beginSend(liveSpeechMode);
+      pendingSpeechRef.current = { clientRequestId, text: trimmed };
+      reflectedSendRef.current = clientRequestId;
+      executeAction(character, 'pose', {
+        text: spoken,
+        client_request_id: clientRequestId,
+        ...reflectionFields(reflection),
+      });
+      submittingRef.current = false;
       return;
     }
 
@@ -1031,6 +1073,8 @@ export function CommandInput({
     replyRefusal,
     tagRefusal,
     composerLine,
+    reflection,
+    refreshReflectionOptions,
   ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1344,6 +1388,18 @@ export function CommandInput({
             <StaffConsole character={character} active sendConsole={sendConsole} />
           ) : (
             sceneRightSlot
+          )
+        }
+        footer={
+          !isCommandsMode &&
+          !asCompanion &&
+          (!composerMode || composerMode.command === 'pose') && (
+            <ReflectingOnRow
+              characterSheetId={characterSheetId}
+              value={reflection}
+              onChange={setReflection}
+              className="m-2"
+            />
           )
         }
         ghostText={ghostText}

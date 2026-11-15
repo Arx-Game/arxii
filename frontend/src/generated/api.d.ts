@@ -15671,6 +15671,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/reflectables/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description What the requester's character can reflect on, as the "Reflecting on" row's options. */
+    get: operations['magic_reflectables_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/resonance-grants/': {
     parameters: {
       query?: never;
@@ -44482,6 +44499,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['RecordedProfile'][];
     };
+    PaginatedReflectionOptionList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ReflectionOption'][];
+    };
     PaginatedRelationshipCapstoneList: {
       /** @example 123 */
       count: number;
@@ -49763,6 +49795,19 @@ export interface components {
      * @enum {string}
      */
     ReferencedMilestoneTypeEnum: 'story_resolved' | 'chapter_reached' | 'episode_reached';
+    /** @description One entry of the "Reflecting on" row. */
+    ReflectionOption: {
+      kind: components['schemas']['ReflectionOptionKindEnum'];
+      id: number;
+      label: string;
+      replaces_waiting: boolean;
+    };
+    /**
+     * @description * `deed` - Deed
+     *     * `resonance` - Resonance
+     * @enum {string}
+     */
+    ReflectionOptionKindEnum: 'deed' | 'resonance';
     /** @description ``{target_type, target_id, value, reason}``: the NPC's opinion of one target. */
     RegardRequest: {
       target_type: components['schemas']['TargetTypeFedEnum'];
@@ -76989,6 +77034,30 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ProgressionStage'][];
+        };
+      };
+    };
+  };
+  magic_reflectables_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedReflectionOptionList'];
         };
       };
     };

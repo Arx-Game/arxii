@@ -112,6 +112,10 @@ export const magicKeys = {
   kindledResonances: (characterSheetId: number) =>
     [...magicKeys.all, 'kindled-resonances', characterSheetId] as const,
 
+  reflectionOptionsAll: () => [...magicKeys.all, 'reflection-options'] as const,
+  reflectionOptions: (characterSheetId: number) =>
+    [...magicKeys.all, 'reflection-options', characterSheetId] as const,
+
   audereUltimates: (characterSheetId: number) =>
     [...magicKeys.all, 'audere', 'ultimates', characterSheetId] as const,
 
@@ -1199,6 +1203,30 @@ export function useSetManifestChoice(characterSheetId: number) {
 
 /** How often the panel re-reads what is kindled; it changes as a scene or a fight moves. */
 const KINDLED_RESONANCES_REFETCH_MS = 30_000;
+
+/**
+ * What the character can reflect on now (#5124): the resonance unsettling them, then each
+ * kindled deed not yet reflected on. Empty when there is nothing, and until `characterSheetId`
+ * is known.
+ */
+export function useReflectionOptions(characterSheetId: number | null) {
+  return useQuery({
+    queryKey: magicKeys.reflectionOptions(characterSheetId ?? 0),
+    queryFn: () => api.getReflectionOptions(characterSheetId ?? 0),
+    enabled: characterSheetId != null && characterSheetId > 0,
+  });
+}
+
+/** Re-read what a character can reflect on, once a reflection is recorded. */
+export function useRefreshReflectionOptions(characterSheetId: number | null) {
+  const queryClient = useQueryClient();
+  return () => {
+    if (characterSheetId == null) return;
+    void queryClient.invalidateQueries({
+      queryKey: magicKeys.reflectionOptions(characterSheetId),
+    });
+  };
+}
 
 /** Each resonance the character holds, kindled or not, with the strength word and reasons. */
 export function useKindledResonances(characterSheetId: number) {

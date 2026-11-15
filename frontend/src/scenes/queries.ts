@@ -268,6 +268,10 @@ export interface SubmitPoseBody {
    * straight off the reader can be forwarded here verbatim.
    */
   reply_to?: { id: number; timestamp: string };
+  /** What the pose reflects on, and Embrace or Disown (#5124). Omit for no reflection. */
+  reflect_choice?: 'EMBRACE' | 'DISOWN';
+  reflect_grant_id?: number;
+  reflect_resonance_id?: number;
 }
 
 /**
@@ -283,6 +287,8 @@ export interface SubmitPoseResult {
   id?: number;
   ephemeral?: boolean;
   replayed?: boolean;
+  /** Told to the writer alone when the pose carried a reflection that was recorded (#5124). */
+  reflection_line?: string;
 }
 
 export async function submitPose(body: SubmitPoseBody): Promise<SubmitPoseResult> {
