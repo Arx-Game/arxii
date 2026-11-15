@@ -29,6 +29,7 @@ from world.magic.factories import (
     KindledStrengthTierFactory,
     ResonanceFactory,
     TechniqueFactory,
+    kindle_resonance,
 )
 from world.magic.services.fury import NO_ENGAGEMENT_MESSAGE
 from world.magic.types.techniques import AnimaCostResult, TechniqueUseResult
@@ -125,9 +126,13 @@ def _setup_fury_fixture(*, tier_depth: int = 2):
     # Fury needs something at stake (#4738): the initiator is engaged.
     CharacterEngagementFactory(character=initiator.character_sheet)
 
-    # The strength row Fury reads until Task 6 of #5124 reads the declared resonance's own.
-    KindledStrengthTierFactory(rank=3, give_in_max_depth=tier_depth)
+    # The resonance she gives in to is kindled at a strength that reaches the tier.
     resonance = ResonanceFactory()
+    kindle_resonance(
+        initiator.character_sheet,
+        resonance,
+        KindledStrengthTierFactory(rank=3, give_in_max_depth=tier_depth),
+    )
 
     return scene, initiator, anchor, tier, cfg, resonance
 
@@ -147,7 +152,7 @@ class SerializerFuryCapRejectionTests(TestCase):
             SceneActionRequestCreateSerializer,
         )
 
-        # No strength row → provocation_cap = 0 → any tier is rejected.
+        # The resonance is not kindled → any tier is refused.
         # technique_id provided so validation reaches the cap check.
         initiator = PersonaFactory()
         CharacterEngagementFactory(character=initiator.character_sheet)
@@ -169,7 +174,7 @@ class SerializerFuryCapRejectionTests(TestCase):
         )
         with self.assertRaises(ValidationError) as ctx:
             ser.is_valid(raise_exception=True)
-        self.assertIn("provocation cap", str(ctx.exception.detail["fury_commitment_id"]))
+        self.assertIn("not kindled", str(ctx.exception.detail["fury_commitment_id"]))
 
     def test_fury_within_cap_accepted(self) -> None:
         from world.scenes.action_serializers import (

@@ -216,7 +216,7 @@ class DeclareActionSoulFrayFuryFieldsTests(TestCase):
         resolves those ids and passes instances to declare_action.
         """
         from actions.definitions.cast import CastTechniqueAction
-        from world.magic.factories import KindledStrengthTierFactory
+        from world.magic.factories import KindledStrengthTierFactory, kindle_resonance
 
         gift = GiftFactory()
         effect_type = EffectTypeFactory(name="Buff_fury", base_power=None)
@@ -225,8 +225,12 @@ class DeclareActionSoulFrayFuryFieldsTests(TestCase):
 
         ctx = CombatRoundContext(self.participant)
         action = CastTechniqueAction()
-        # A strength deep enough for the tier: a deeper one is refused at declaration (#4738).
-        KindledStrengthTierFactory(rank=3, give_in_max_depth=2)
+        # Kindled deep enough for the tier: a deeper one is refused at declaration (#4738).
+        kindle_resonance(
+            self.participant.character_sheet,
+            self.resonance,
+            KindledStrengthTierFactory(rank=3, give_in_max_depth=2),
+        )
 
         # round_declaration returns (PlayerAction, decl_kwargs) with the ids forwarded.
         result = action.round_declaration(

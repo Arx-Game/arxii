@@ -284,7 +284,11 @@ class MagicServiceRollSiteTests(ActivityTermTestCase):
         )
 
     def test_fury_control(self) -> None:
-        from world.magic.factories import KindledStrengthTierFactory, ResonanceFactory
+        from world.magic.factories import (
+            KindledStrengthTierFactory,
+            ResonanceFactory,
+            kindle_resonance,
+        )
         from world.magic.services.fury import FuryCast
         from world.mechanics.factories import CharacterEngagementFactory
 
@@ -293,8 +297,8 @@ class MagicServiceRollSiteTests(ActivityTermTestCase):
         # Fury needs something at stake (#4738): without an engagement nothing is rolled.
         CharacterEngagementFactory(character=sheet)
         resonance = ResonanceFactory()
-        # A strength deep enough for the tier, or the cap clamps it to nothing and nothing rolls.
-        KindledStrengthTierFactory(rank=3, give_in_max_depth=2)
+        # Kindled deep enough for the tier, or the cap clamps it to nothing and nothing rolls.
+        kindle_resonance(sheet, resonance, KindledStrengthTierFactory(rank=3, give_in_max_depth=2))
         tier = FuryTierFactory()
 
         self.assert_terms_reach(

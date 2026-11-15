@@ -143,6 +143,7 @@ class TestCombatActionsDescriptorEnrichment(TestCase):
             KindledStrengthTierFactory,
             ResonanceFactory,
             TechniqueFactory,
+            kindle_resonance,
         )
         from world.scenes.constants import RoundStatus
 
@@ -178,10 +179,13 @@ class TestCombatActionsDescriptorEnrichment(TestCase):
             depth=3,
         )
 
-        # A held resonance, and a strength row deep enough to give in to it.
-        KindledStrengthTierFactory(rank=3, give_in_max_depth=1)
+        # A kindled resonance whose strength reaches the shallowest tier, and a held one
+        # that is not kindled (never offered).
         cls.resonance = ResonanceFactory()
-        CharacterResonanceFactory(character_sheet=cls.sheet, resonance=cls.resonance)
+        cls.strength = KindledStrengthTierFactory(rank=3, name="Blazing", give_in_max_depth=1)
+        kindle_resonance(cls.sheet, cls.resonance, cls.strength)
+        cls.unkindled = ResonanceFactory()
+        CharacterResonanceFactory(character_sheet=cls.sheet, resonance=cls.unkindled)
 
     def test_cast_descriptor_carries_fury_tiers(self) -> None:
         actions = _combat_actions(self.character)
@@ -198,8 +202,9 @@ class TestCombatActionsDescriptorEnrichment(TestCase):
         cast = next(a for a in actions if a.ref.technique_id == self.technique.pk)
         self.assertIsNone(cast.soulfray_warning)
 
-    def test_held_resonance_listed_while_a_strength_reaches_a_tier(self) -> None:
+    def test_only_a_kindled_resonance_is_offered_with_its_strength_word(self) -> None:
         actions = _combat_actions(self.character)
         cast = next(a for a in actions if a.ref.technique_id == self.technique.pk)
         self.assertEqual([r.id for r in cast.eligible_fury_resonances], [self.resonance.pk])
         self.assertTrue(all(r.provocation_cap >= 1 for r in cast.eligible_fury_resonances))
+        self.assertEqual([r.strength_name for r in cast.eligible_fury_resonances], ["Blazing"])

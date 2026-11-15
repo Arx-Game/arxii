@@ -59,6 +59,7 @@ from world.magic.factories import (
     KindledStrengthTierFactory,
     ResonanceFactory,
     TechniqueFactory,
+    kindle_resonance,
 )
 from world.magic.services import use_technique
 from world.mechanics.factories import CharacterEngagementFactory
@@ -118,9 +119,13 @@ def _setup_fury_pair(*, tier_depth: int = 2):
     # Fury needs something at stake (#4738): the initiator is engaged.
     CharacterEngagementFactory(character=initiator.character_sheet)
 
-    # The strength row Fury reads until Task 6 of #5124 reads the declared resonance's own.
-    KindledStrengthTierFactory(rank=3, give_in_max_depth=tier_depth)
+    # The resonance she gives in to is kindled at a strength that reaches the tier.
     resonance = ResonanceFactory()
+    kindle_resonance(
+        initiator.character_sheet,
+        resonance,
+        KindledStrengthTierFactory(rank=3, give_in_max_depth=tier_depth),
+    )
 
     return scene, initiator, anchor, tier, cfg, resonance
 
@@ -479,24 +484,23 @@ class FuryCapZeroTests(TestCase):
             control_surrendered=2,
             berserk_severity=5,  # non-zero — should not fire
         )
-        # No KindledStrengthTier row → cap = 0.
+        # A resonance that is not kindled → cap = 0.
         cls.caster_sheet = CharacterSheetFactory()
         cls.resonance = ResonanceFactory()
 
     def test_no_strength_row_fury_unavailable(self) -> None:
-        """No strength row → provocation_cap=0 → resolve_fury returns None tier."""
-        from world.magic.services.fury import resolve_fury
+        """Not kindled → provocation_cap=0 → resolve_fury returns None tier."""
+        from world.magic.services.fury import give_in_strength, resolve_fury
 
         # No strength row → cap = 0 → realized_tier = None.
         res = resolve_fury(
-            character=self.caster_sheet.character,
             tier=self.tier,
-            resonance=self.resonance,
+            strength=give_in_strength(self.caster_sheet, self.resonance),
             check_result=_FakeCheck(success_level=5),
         )
         self.assertIsNone(
             res.realized_tier,
-            "No strength row → provocation_cap=0 → realized_tier must be None.",
+            "Not kindled → provocation_cap=0 → realized_tier must be None.",
         )
         self.assertEqual(res.berserk_severity, 0)
         self.assertEqual(res.control_surrendered, 0)
@@ -504,12 +508,11 @@ class FuryCapZeroTests(TestCase):
 
     def test_no_resonance_fury_unavailable(self) -> None:
         """resonance=None → provocation_cap=0 → FuryResolution with None tier."""
-        from world.magic.services.fury import resolve_fury
+        from world.magic.services.fury import give_in_strength, resolve_fury
 
         res = resolve_fury(
-            character=self.caster_sheet.character,
             tier=self.tier,
-            resonance=None,
+            strength=give_in_strength(self.caster_sheet, None),
             check_result=_FakeCheck(success_level=5),
         )
         self.assertIsNone(res.realized_tier)

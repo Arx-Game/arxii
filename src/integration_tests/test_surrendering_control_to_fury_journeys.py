@@ -1,14 +1,14 @@
 """Surrendering control to Fury (#4738 part B, slice of #4727 decision 5).
 
-Brannoc fights a bandit on "The Ford" with Wrath running through him (a strength row that lets
-him go as deep as depth 2). He casts and declares Fury: ``cast <technique> at <bandit> fury=<tier>
-givein=Wrath``. The tier is a preset amount of control he surrenders; his control roll's outcome
-picks how much of the full trade he buys. The trade lands on his engagement for the rest of the
-fight, and the cast he declared it with already channels it.
+Brannoc fights a bandit on "The Ford" with Wrath kindled in him (a Rally at a strength that lets
+him go as deep as depth 2) and Calm held but not kindled. He casts and gives in: ``cast
+<technique> at <bandit> givein=Wrath:<tier>``. The tier is a preset amount of control he
+surrenders; his control roll's outcome picks how much of the full trade he buys. The trade
+lands on his engagement for the rest of the fight, and the cast he declared it with already
+channels it.
 
-Hand-worked numbers. StrainConfig: 1.50 intensity per control surrendered. The strongest
-strength row gives a depth cap of 2 and 20% more intensity, a x1.2 scale. (Until Task 6 of #5124
-reads the declared resonance's own strength, every declared resonance reads that row.)
+Hand-worked numbers. StrainConfig: 1.50 intensity per control surrendered. Wrath's strength
+row gives a depth cap of 2 and 20% more intensity, a x1.2 scale.
 Degree shares: Critical Failure 0%, Failure 25%, Partial Success 50%, Success 75%,
 Critical Success 100%.
 - Seething (depth 1) surrenders 6 control: full trade 6 x 1.5 x 1.2 = 10.8.
@@ -59,10 +59,11 @@ from world.magic.factories import (
     FuryTierFactory,
     GiftFactory,
     KindledStrengthTierFactory,
+    KindlingFactory,
     ResonanceFactory,
     TechniqueFactory,
 )
-from world.magic.models import KindledStrengthTier
+from world.magic.models import Kindling
 from world.magic.types.techniques import SoulfrayWarning
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
@@ -100,7 +101,9 @@ class _AtTheFord(JourneyCase):
             character_sheet=sheet, health=50, max_health=50, base_max_health=50
         )
         self.wrath = ResonanceFactory(name="Wrath")
-        CharacterResonanceFactory(character_sheet=sheet, resonance=self.wrath)
+        self.calm = ResonanceFactory(name="Calm")
+        for held in (self.wrath, self.calm):
+            CharacterResonanceFactory(character_sheet=sheet, resonance=held)
 
         cast_check = CheckTypeFactory()
         CheckTypeTraitFactory(check_type=cast_check, trait=StatTraitFactory(), weight=1)
@@ -135,7 +138,12 @@ class _AtTheFord(JourneyCase):
         )
 
         FuryConfigFactory()
-        KindledStrengthTierFactory(rank=3, give_in_max_depth=2, give_in_bonus_percent=20)
+        KindledStrengthTierFactory(
+            rank=3, name="Blazing", give_in_max_depth=2, give_in_bonus_percent=20
+        )
+        KindlingFactory(
+            character_sheet=sheet, resonance=self.wrath, strength=3, encounter=self.encounter
+        )
         config = get_strain_config()
         config.intensity_per_control_surrendered = Decimal("1.50")
         config.save()
@@ -153,10 +161,10 @@ class _AtTheFord(JourneyCase):
     def engage_before_the_fight(self) -> None:
         """Stakes Brannoc already holds when the fight starts; none by default."""
 
-    def declare_fury(self, tier) -> str:
+    def declare_fury(self, tier, resonance_name: str = "Wrath") -> str:
         return self.telnet(
             self.brannoc,
-            f"cast {self.technique.name} at {self.bandit.name} fury={tier.name} givein=Wrath",
+            f"cast {self.technique.name} at {self.bandit.name} givein={resonance_name}:{tier.name}",
         )
 
     def resolve_with(self, outcome_name: str, *, stop_the_cast=None) -> list[int]:
@@ -213,10 +221,20 @@ class SurrenderingControl(_AtTheFord):
         self.assertEqual(partial, 5 + 1)
         self.assertGreater(8 + 1, partial)
 
+    def test_a_resonance_that_is_not_kindled_is_refused_at_declaration(self) -> None:
+        told = self.declare_fury(self.seething, "Calm")
+
+        self.assertIn("Your Calm is not kindled right now, so you cannot give in to it.", told)
+        self.assertFalse(
+            CombatRoundAction.objects.filter(participant__character_sheet=self.brannoc.sheet_data)
+            .exclude(fury_commitment=None)
+            .exists()
+        )
+
     def test_a_tier_deeper_than_the_strength_cap_is_refused_at_declaration(self) -> None:
         told = self.declare_fury(self.unbound)
 
-        self.assertIn("Fury tier depth (3) exceeds provocation cap (2).", told)
+        self.assertIn("Your Wrath is not kindled enough to give in as far as Unbound.", told)
         self.assertFalse(
             CombatRoundAction.objects.filter(participant__character_sheet=self.brannoc.sheet_data)
             .exclude(fury_commitment=None)
@@ -240,7 +258,7 @@ class SurrenderingControl(_AtTheFord):
 
         self.assertEqual(
             refused.exception.user_message,
-            "That Fury tier is deeper than that resonance lets you go.",
+            "That resonance is not kindled enough to give in that far.",
         )
         self.assertFalse(
             CombatRoundAction.objects.filter(
@@ -347,9 +365,9 @@ class OnlyACastThatGoesOffPays(_AtTheFord):
         self.assertToldItFaltered()
         self.assertTold(self.brannoc, "Something here stopped your cast before it left your hands.")
 
-    def test_a_strength_removed_since_declaring_rolls_nothing(self) -> None:
+    def test_a_resonance_no_longer_kindled_since_declaring_rolls_nothing(self) -> None:
         self.declare_fury(self.seething)
-        KindledStrengthTier.objects.all().delete()
+        Kindling.objects.all().delete()
 
         # The control roll's check type is only fetched when the roll is made.
         with patch("world.magic.services.fury._ensure_fury_check_type") as control_roll:
@@ -427,7 +445,10 @@ class SeeingTheTrade(_AtTheFord):
             ],
             [("Seething", 6, False, 9), ("Unbound", 12, True, 18)],
         )
-        wrath = next(r for r in cast["eligible_fury_resonances"] if r["name"] == "Wrath")
+        # Only the kindled resonance is offered, with its strength word.
+        self.assertEqual([r["name"] for r in cast["eligible_fury_resonances"]], ["Wrath"])
+        wrath = cast["eligible_fury_resonances"][0]
+        self.assertEqual(wrath["strength_name"], "Blazing")
         self.assertEqual(
             {row["tier_id"]: row["full_intensity"] for row in wrath["tier_full_intensities"]},
             {self.seething.pk: 10, self.unbound.pk: 21},

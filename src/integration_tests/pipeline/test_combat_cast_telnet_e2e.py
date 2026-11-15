@@ -439,20 +439,25 @@ class CombatCastTelnetE2ETests(TestCase):
             FuryTierFactory,
             KindledStrengthTierFactory,
             ResonanceFactory,
+            kindle_resonance,
         )
 
         FuryConfigFactory()
         tier = FuryTierFactory()
         resonance = ResonanceFactory()
         # A strength deep enough for the tier: a deeper tier is refused at declaration (#4738).
-        KindledStrengthTierFactory(rank=3, give_in_max_depth=2)
+        kindle_resonance(
+            self.participant.character_sheet,
+            resonance,
+            KindledStrengthTierFactory(rank=3, give_in_max_depth=2),
+        )
 
-        # Declare through the real telnet command: cast ... fury=<tier> givein=<resonance>.
+        # Declare through the real telnet command: cast ... givein=<resonance>:<tier>.
         with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
             _make_cmd(
                 self.character,
                 f"{self.technique.name} at {self.opponent_name} "
-                f"fury={tier.name} givein={resonance.name}",
+                f"givein={resonance.name.replace(' ', '_')}:{tier.name.replace(' ', '_')}",
             ).func()
 
         action = CombatRoundAction.objects.get(participant=self.participant, round_number=1)
@@ -495,6 +500,7 @@ class CombatCastTelnetE2ETests(TestCase):
             FuryTierFactory,
             KindledStrengthTierFactory,
             ResonanceFactory,
+            kindle_resonance,
         )
 
         FuryConfigFactory()
@@ -502,13 +508,17 @@ class CombatCastTelnetE2ETests(TestCase):
         tier = FuryTierFactory(berserk_severity=3)
         resonance = ResonanceFactory()
         # A strength deep enough for the tier: a deeper tier is refused at declaration (#4738).
-        KindledStrengthTierFactory(rank=3, give_in_max_depth=2)
+        kindle_resonance(
+            self.participant.character_sheet,
+            resonance,
+            KindledStrengthTierFactory(rank=3, give_in_max_depth=2),
+        )
 
         with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
             _make_cmd(
                 self.character,
                 f"{self.technique.name} at {self.opponent_name} "
-                f"fury={tier.name} givein={resonance.name}",
+                f"givein={resonance.name.replace(' ', '_')}:{tier.name.replace(' ', '_')}",
             ).func()
 
         with (
@@ -561,19 +571,24 @@ class CombatCastTelnetE2ETests(TestCase):
             FuryTierFactory,
             KindledStrengthTierFactory,
             ResonanceFactory,
+            kindle_resonance,
         )
 
         FuryConfigFactory()
         tier = FuryTierFactory()
         resonance = ResonanceFactory()
         # A strength deep enough for the tier: a deeper tier is refused at declaration (#4738).
-        KindledStrengthTierFactory(rank=3, give_in_max_depth=2)
+        kindle_resonance(
+            self.participant.character_sheet,
+            resonance,
+            KindledStrengthTierFactory(rank=3, give_in_max_depth=2),
+        )
 
         with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
             _make_cmd(
                 self.character,
                 f"{self.technique.name} at {self.opponent_name} "
-                f"fury={tier.name} givein={resonance.name}",
+                f"givein={resonance.name.replace(' ', '_')}:{tier.name.replace(' ', '_')}",
             ).func()
 
         cmd = _make_combat_cmd(self.character, "")
@@ -596,6 +611,7 @@ class CombatCastTelnetE2ETests(TestCase):
             FuryTierFactory,
             KindledStrengthTierFactory,
             ResonanceFactory,
+            kindle_resonance,
         )
 
         FuryConfigFactory()
@@ -603,13 +619,17 @@ class CombatCastTelnetE2ETests(TestCase):
         tier = FuryTierFactory(berserk_severity=3)
         resonance = ResonanceFactory()
         # A strength deep enough for the tier: a deeper tier is refused at declaration (#4738).
-        KindledStrengthTierFactory(rank=3, give_in_max_depth=2)
+        kindle_resonance(
+            self.participant.character_sheet,
+            resonance,
+            KindledStrengthTierFactory(rank=3, give_in_max_depth=2),
+        )
 
         with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
             _make_cmd(
                 self.character,
                 f"{self.technique.name} at {self.opponent_name} "
-                f"fury={tier.name} givein={resonance.name}",
+                f"givein={resonance.name.replace(' ', '_')}:{tier.name.replace(' ', '_')}",
             ).func()
 
         with (
