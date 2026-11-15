@@ -78,6 +78,7 @@ import {
   useDispatchPlayerAction,
   useFleeMutation,
   useGuardMutation,
+  useRallyResonances,
   useRegistryDispatch,
   useUpgradeCombo,
 } from '../queries';
@@ -97,6 +98,7 @@ import type {
 import type { components } from '@/generated/api';
 
 type ConditionInstance = components['schemas']['ConditionInstance'];
+type RallyResonanceChoice = components['schemas']['RallyResonanceChoice'];
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1664,6 +1666,7 @@ interface ManeuverDeclarationSectionProps {
   animaCurrent: number | null;
   coverAllyId: string;
   rallyAllyId: string;
+  rallyResonances: RallyResonanceChoice[];
   rallyResonanceId: string;
   succorAllyId: string;
   guardPending: boolean;
@@ -1707,6 +1710,7 @@ function ManeuverDeclarationSection({
   animaCurrent,
   coverAllyId,
   rallyAllyId,
+  rallyResonances,
   rallyResonanceId,
   succorAllyId,
   guardPending,
@@ -1732,7 +1736,6 @@ function ManeuverDeclarationSection({
   handleSuccor,
 }: ManeuverDeclarationSectionProps) {
   const rallyAlly = coverableAllies.find((ally) => String(ally.id) === rallyAllyId);
-  const rallyResonances = rallyAlly?.rally_resonances ?? [];
   return (
     <div className="space-y-2" data-testid="maneuver-declaration-section">
       <p
@@ -2290,6 +2293,11 @@ export function YourTurn({
 
   const { data: availableCombos, isLoading: combosLoading } = useAvailableCombos(encounterId);
   const { mutate: upgradeCombo, isPending: upgradePending } = useUpgradeCombo(encounterId);
+  // The picked Rally ally's resonances, read only once she is picked (#5124).
+  const { data: rallyResonances = [] } = useRallyResonances(
+    encounterId,
+    rallyAllyId === '' ? null : Number(rallyAllyId)
+  );
 
   // ---------------------------------------------------------------------------
   // Flee / Cover mutations
@@ -3352,6 +3360,7 @@ export function YourTurn({
           animaCurrent={animaCurrent}
           coverAllyId={coverAllyId}
           rallyAllyId={rallyAllyId}
+          rallyResonances={rallyResonances}
           rallyResonanceId={rallyResonanceId}
           succorAllyId={succorAllyId}
           guardPending={guardPending}

@@ -26,6 +26,7 @@ export type ConsequenceOutcomeModifier = components['schemas']['ConsequenceOutco
 
 /** One row in the duel-challenge inbox (GET /api/combat/duel-challenges/). */
 export type DuelChallenge = components['schemas']['DuelChallenge'];
+export type RallyResonanceChoice = components['schemas']['RallyResonanceChoice'];
 
 /** Direction of a duel challenge relative to the requesting player. */
 export type DuelChallengeRole = 'incoming' | 'outgoing';
@@ -549,6 +550,25 @@ export async function fetchAvailableCombos(encounterId: number): Promise<RoundCo
   const res = await apiFetch(`/api/combat/${encounterId}/available_combos/`);
   if (!res.ok) throw new Error('Failed to load available combos');
   return res.json() as Promise<RoundCombo[]>;
+}
+
+// ---------------------------------------------------------------------------
+// Rally resonance picker (#5124)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch the resonances of one ally a Rally may name, each with whether it is kindled now.
+ * GET /api/combat/{encounterId}/rally-resonances/?ally={allyParticipantId}
+ */
+export async function fetchRallyResonances(
+  encounterId: number,
+  allyParticipantId: number
+): Promise<RallyResonanceChoice[]> {
+  const res = await apiFetch(
+    `/api/combat/${encounterId}/rally-resonances/?ally=${allyParticipantId}`
+  );
+  if (!res.ok) throw new Error('Failed to load the ally resonances');
+  return res.json() as Promise<RallyResonanceChoice[]>;
 }
 
 // ---------------------------------------------------------------------------

@@ -27,6 +27,7 @@ import { isTargetReachable } from '../reach';
 
 vi.mock('@/combat/queries', () => ({
   useAvailableCombos: vi.fn(),
+  useRallyResonances: vi.fn(() => ({ data: undefined })),
   useUpgradeCombo: vi.fn(),
   useDispatchPlayerAction: vi.fn(),
   useFleeMutation: vi.fn(),
@@ -278,7 +279,6 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           dig_deep: null,
           call_up: null,
           strike_weapons: null,
-          rally_resonances: [],
         },
       ],
       opponents: [
@@ -415,7 +415,6 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           dig_deep: null,
           call_up: null,
           strike_weapons: null,
-          rally_resonances: [],
         },
       ],
       opponents: [
@@ -579,7 +578,6 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           dig_deep: null,
           call_up: null,
           strike_weapons: null,
-          rally_resonances: [],
         },
       ],
       opponents: [
@@ -723,7 +721,6 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           dig_deep: null,
           call_up: null,
           strike_weapons: null,
-          rally_resonances: [],
         },
         {
           id: 7,
@@ -754,7 +751,6 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           dig_deep: null,
           call_up: null,
           strike_weapons: null,
-          rally_resonances: [],
         },
       ],
       opponents: [
@@ -845,7 +841,6 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           dig_deep: null,
           call_up: null,
           strike_weapons: null,
-          rally_resonances: [],
         },
       ],
     });

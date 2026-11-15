@@ -290,7 +290,6 @@ describe('CombatTacticalMap', () => {
             dig_deep: null,
             call_up: null,
             strike_weapons: null,
-            rally_resonances: [],
           },
         ],
         opponents: [
@@ -400,7 +399,6 @@ describe('CombatTacticalMap', () => {
       dig_deep: null,
       call_up: null,
       strike_weapons: null,
-      rally_resonances: [],
     },
     {
       id: 3,
@@ -431,7 +429,6 @@ describe('CombatTacticalMap', () => {
       dig_deep: null,
       call_up: null,
       strike_weapons: null,
-      rally_resonances: [],
     },
   ];
   const overlayOpponents = [
@@ -858,7 +855,6 @@ describe('CombatTacticalMap', () => {
             dig_deep: null,
             call_up: null,
             strike_weapons: null,
-            rally_resonances: [],
           },
         ],
         opponents: [],
@@ -1012,7 +1008,6 @@ describe('CombatTacticalMap', () => {
             dig_deep: null,
             call_up: null,
             strike_weapons: null,
-            rally_resonances: [],
             current_square: null,
             current_position: { id: 101, name: 'North Wall' },
           },
@@ -1128,7 +1123,6 @@ describe('CombatTacticalMap', () => {
             compulsion: null,
             steady_plan: null,
             strike_weapons: null,
-            rally_resonances: [],
             dig_deep: null,
             call_up: null,
             current_square: null,

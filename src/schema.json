@@ -9800,6 +9800,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/EncounterDetail'
           description: ''
+  /api/combat/{id}/rally-resonances/:
+    get:
+      operationId: combat_rally_resonances_list
+      description: |-
+        The resonances of one ally a Rally may name, and whether each is kindled (#5124).
+
+        Names and a kindled flag, never how strongly. Read for the ally the rallier has
+        picked, so the polled encounter payload carries no kindling evaluation. Only an active
+        fighter may ask, only about another active fighter, and never in a PvP duel, where
+        the other fighter is the opponent.
+      parameters:
+      - in: query
+        name: ally
+        schema:
+          type: integer
+        description: The ally's participant id.
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RallyResonanceChoice'
+          description: ''
   /api/combat/{id}/ready/:
     post:
       operationId: combat_ready_create
@@ -80518,11 +80554,6 @@ components:
           - $ref: '#/components/schemas/DigDeepOffer'
           nullable: true
           readOnly: true
-        rally_resonances:
-          type: array
-          items:
-            $ref: '#/components/schemas/RallyResonanceChoice'
-          readOnly: true
         call_up:
           allOf:
           - $ref: '#/components/schemas/CallUpFightOffer'
@@ -80557,7 +80588,6 @@ components:
       - intensity_modifier
       - max_health
       - persona_id
-      - rally_resonances
       - reactions_used
       - steady_plan
       - strike_weapons
@@ -87747,7 +87777,7 @@ components:
     RallyResonanceChoice:
       type: object
       description: |-
-        One of an ally's resonances a Rally may name (#5124).
+        One of an ally's resonances a Rally may name (#5124), read from a ``KindledResonance``.
 
         The name, and whether it is kindled for the ally now: never how strongly.
       properties:

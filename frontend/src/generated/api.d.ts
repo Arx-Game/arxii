@@ -6681,6 +6681,30 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/rally-resonances/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The resonances of one ally a Rally may name, and whether each is kindled (#5124).
+     *
+     *     Names and a kindled flag, never how strongly. Read for the ally the rallier has
+     *     picked, so the polled encounter payload carries no kindling evaluation. Only an active
+     *     fighter may ask, only about another active fighter, and never in a PvP duel, where
+     *     the other fighter is the opponent.
+     */
+    get: operations['combat_rally_resonances_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/{id}/ready/': {
     parameters: {
       query?: never;
@@ -45683,7 +45707,6 @@ export interface components {
       readonly compulsion: components['schemas']['Compulsion'] | null;
       readonly steady_plan: components['schemas']['SteadyPlan'] | null;
       readonly dig_deep: components['schemas']['DigDeepOffer'] | null;
-      readonly rally_resonances: components['schemas']['RallyResonanceChoice'][];
       readonly call_up: components['schemas']['CallUpFightOffer'] | null;
       readonly strike_weapons: components['schemas']['StrikeWeaponOption'][] | null;
     };
@@ -49465,7 +49488,7 @@ export interface components {
       resonance_id?: number;
     };
     /**
-     * @description One of an ally's resonances a Rally may name (#5124).
+     * @description One of an ally's resonances a Rally may name (#5124), read from a ``KindledResonance``.
      *
      *     The name, and whether it is kindled for the ally now: never how strongly.
      */
@@ -65009,6 +65032,31 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_rally_resonances_list: {
+    parameters: {
+      query: {
+        /** @description The ally's participant id. */
+        ally: number;
+      };
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RallyResonanceChoice'][];
         };
       };
     };

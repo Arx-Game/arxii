@@ -27,6 +27,7 @@ import { Provider } from 'react-redux';
 vi.mock('@/combat/queries', () => ({
   useCombatEncounter: vi.fn(),
   useAvailableCombos: vi.fn(),
+  useRallyResonances: vi.fn(() => ({ data: undefined })),
   useUpgradeCombo: vi.fn(),
   useDispatchPlayerAction: vi.fn(),
   useAvailableActions: vi.fn().mockReturnValue({
@@ -229,7 +230,6 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     dig_deep: null,
     call_up: null,
     strike_weapons: null,
-    rally_resonances: [],
     ...overrides,
   };
 }
@@ -800,7 +800,6 @@ describe('CombatTurnPanel, aftermath digest (#3551)', () => {
           dig_deep: null,
           call_up: null,
           strike_weapons: null,
-          rally_resonances: [],
         }),
       ],
     });

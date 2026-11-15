@@ -20,6 +20,7 @@ import type { ReactNode } from 'react';
 
 vi.mock('@/combat/queries', () => ({
   useAvailableCombos: vi.fn(),
+  useRallyResonances: vi.fn(),
   useUpgradeCombo: vi.fn(),
   useDispatchPlayerAction: vi.fn(),
   useFleeMutation: vi.fn(),
@@ -222,6 +223,7 @@ function createWrapper() {
 }
 
 const mockedUseAvailableCombos = combatQueries.useAvailableCombos as ReturnType<typeof vi.fn>;
+const mockedUseRallyResonances = combatQueries.useRallyResonances as ReturnType<typeof vi.fn>;
 const mockedUseUpgradeCombo = combatQueries.useUpgradeCombo as ReturnType<typeof vi.fn>;
 const mockedUseDispatchPlayerAction = combatQueries.useDispatchPlayerAction as ReturnType<
   typeof vi.fn
@@ -245,8 +247,13 @@ function setupMocks(
     combos?: RoundCombo[];
     combosLoading?: boolean;
     inventory?: Array<{ id: number; display_name: string; is_usable: boolean }>;
+    /** What the Rally picker reads for the ally with participant id 4. */
+    rallyResonances?: Array<{ id: number; name: string; kindled: boolean }>;
   } = {}
 ) {
+  mockedUseRallyResonances.mockImplementation((_encounterId: number, allyId: number | null) => ({
+    data: allyId === 4 ? options.rallyResonances : undefined,
+  }));
   mockedUseAvailableCombos.mockReturnValue({
     data: options.combos ?? [],
     isLoading: options.combosLoading ?? false,
@@ -324,7 +331,6 @@ function makeParticipant(
     dig_deep: null,
     call_up: null,
     strike_weapons: null,
-    rally_resonances: [],
   };
 }
 
@@ -2796,21 +2802,23 @@ describe('YourTurn — rally/succor maneuver pickers (#3381)', () => {
   });
 
   it('rally names one of the ally resonances, names only, and sends its id (#5124)', async () => {
-    setupMocks();
-    const ally = {
-      ...makeParticipant(4, 'Ally Four'),
-      rally_resonances: [
+    setupMocks({
+      rallyResonances: [
         { id: 31, name: 'Fury', kindled: true },
         { id: 32, name: 'Mercy', kindled: false },
       ],
-    };
-    const encounter = makeEncounter({ status: 'declaring', participants: [ally] });
+    });
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeParticipant(4, 'Ally Four')],
+    });
 
     render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
 
     expect(screen.queryByTestId('rally-resonance-pick')).toBeNull();
     await userEvent.click(screen.getByTestId('rally-ally-select'));
     await userEvent.click(await screen.findByText('Ally Four'));
+    expect(mockedUseRallyResonances).toHaveBeenLastCalledWith(expect.anything(), 4);
     await userEvent.click(screen.getByTestId('rally-resonance-32'));
 
     expect(screen.getByTestId('rally-resonance-note')).toHaveTextContent(
