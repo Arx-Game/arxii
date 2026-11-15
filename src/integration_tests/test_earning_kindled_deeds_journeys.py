@@ -17,15 +17,20 @@ from unittest.mock import patch
 
 from integration_tests.harness import JourneyCase
 from integration_tests.test_kindled_dig_deep_and_rally_journeys import _KindledField
-from integration_tests.test_strike_journeys import _StrikeField
+from integration_tests.test_strike_journeys import SWORD_DAMAGE, _StrikeField
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
 from world.checks.test_helpers import force_check_outcome
-from world.combat.constants import SurgeTriggerKind
-from world.combat.factories import SocialManeuverConfigFactory
+from world.combat.constants import OpponentStatus, ParticipantStatus, SurgeTriggerKind
+from world.combat.factories import CombatParticipantFactory, SocialManeuverConfigFactory
+from world.combat.models import CombatOpponent
+from world.combat.services import resolve_round
+from world.combat.tests.test_mounted_combat import _equip_weapon
 from world.conditions.factories import ConditionTemplateFactory
 from world.covenants.perks.constants import Situation
+from world.items.constants import GearArchetype
 from world.magic.constants import GainSource, KindlingSource
 from world.magic.factories import (
+    AffinityFactory,
     CharacterAuraFactory,
     CharacterResonanceFactory,
     KindledDeedAwardFactory,
@@ -45,7 +50,10 @@ from world.magic.models import (
     KindlingSituation,
     ResonanceGrant,
 )
+from world.magic.services.kindling import kindled_resonances_now
+from world.mechanics.constants import EngagementType
 from world.mechanics.factories import ChallengeApproachFactory, ChallengeTemplateFactory
+from world.mechanics.services import begin_engagement
 from world.missions.constants import OptionKind, OptionSource
 from world.missions.factories import (
     MissionNodeFactory,
@@ -323,6 +331,66 @@ class EarningFromACombatStrike(_StrikeField):
         self.assertEqual((grant.amount, grant.resonance), (5, self.wrath))
         self.assertEqual(grant.source_kindling_situation, self.row)
         self.assertTold(self.hobb, "You earned 5 Wrath.")
+
+
+class AnOutcomeNoActOfHersWasAimedAt(_StrikeField):
+    """Hobb's Abyssal Cruelty is kindled, and he stands in the fight while Tomas kills the bandit.
+
+    Hobb declares nothing: the bandit's death is an outcome, not an act of his, so it earns him
+    nothing, however kindled his Cruelty is.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.watch(self.hobb)
+        self.connect_telnet(self.hobb)
+        KindledDeedAwardFactory(outcome_tier=CheckOutcome.objects.get(name="Success"), amount=10)
+        faint = KindledStrengthTierFactory(rank=1, name="Faint", earn_percent=50)
+        abyssal = AffinityFactory(name="Abyssal")
+        self.cruelty = ResonanceFactory(name="Cruelty", affinity=abyssal)
+        kindle_resonance(self.sheet, self.cruelty, faint)
+        self.assertEqual(
+            [e.tier.name for e in kindled_resonances_now(self.sheet) if e.tier is not None],
+            ["Faint"],
+        )
+
+        self.tomas = self.make_player("Tomas", room=self.steading)
+        self.watch(self.tomas)
+        CharacterVitals.objects.create(
+            character_sheet=self.tomas.sheet_data, health=100, max_health=100, base_max_health=100
+        )
+        CombatParticipantFactory(
+            encounter=self.encounter,
+            character_sheet=self.tomas.sheet_data,
+            status=ParticipantStatus.ACTIVE,
+        )
+        begin_engagement(self.tomas, EngagementType.COMBAT, source=self.encounter)
+        self.sword = _equip_weapon(
+            self.tomas, archetype=GearArchetype.MELEE_ONE_HAND, damage=SWORD_DAMAGE
+        )
+
+    def test_a_captor_killed_by_someone_elses_strike_earns_the_kindled_bystander_nothing(
+        self,
+    ) -> None:
+        self.bandit.health = 1
+        self.bandit.save(update_fields=["health"])
+        result = self.web(self.tomas, "combat_strike", opponent_id=self.bandit.pk)
+        self.assertTrue(result.detail.success, result.detail.message)
+
+        with self.captureOnCommitCallbacks(execute=True), self.forced_rolls("Success", "Success"):
+            resolve_round(self.encounter)
+
+        self.assertEqual(
+            CombatOpponent.objects.get(pk=self.bandit.pk).status, OpponentStatus.DEFEATED
+        )
+        self.assertFalse(ResonanceGrant.objects.filter(character_sheet=self.sheet).exists())
+        self.assertNotTold(self.hobb, "You earned")
+        self.assertEqual(
+            CharacterResonance.objects.get(
+                character_sheet=self.sheet, resonance=self.cruelty
+            ).lifetime_earned,
+            0,
+        )
 
 
 class WhatEarnsAndWhatIsPromised(_Gate):

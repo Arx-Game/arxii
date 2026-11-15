@@ -32,7 +32,7 @@ _SUBVERBS: dict[str, str] = {
     # #5018: "is there shadow here?" "Yes." Marks a gift's substance present for the scene.
     _SUBVERB_PRESENT: "stage_substance",
     _SUBVERB_ABSENT: "stage_substance",
-    # #5124: "is her Fury stirred?" "Yes." Kindles a character's resonance for the scene.
+    # #5124: "is her Fury kindled?" "Yes." Kindles a character's resonance for the scene.
     _SUBVERB_KINDLE: "stage_kindle",
 }
 

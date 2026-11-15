@@ -2315,8 +2315,9 @@ The following models have been removed and replaced:
 - `AnimaRitualType` - Replaced by freeform stat+skill+resonance system
 - `ResonanceAssociation` - Replaced by the `Facet` model (flat vocabulary as of the
   2026-09-11 ruling, #3776 — originally hierarchical)
-- `Thread` (legacy 5-axis model), `ThreadType`, `ThreadJournal`,
-  `ThreadResonance` - Legacy 5-axis thread family. Replaced by the new
+- `Thread` (legacy 5-axis model), `ThreadType`, `ThreadJournal` - Legacy 5-axis thread family
+  (a legacy `ThreadResonance` went with it; the live `ThreadResonance` of #5123 is a new model,
+  see "Thread System"). Replaced by the new
   `Thread` discriminator + typed-FK model and supporting catalogs
   (`ThreadPullCost` / `ThreadXPLockedLevel` / `ThreadPullEffect` /
   `ThreadWeavingUnlock` / `ThreadLevelUnlock` / `CharacterThreadWeavingUnlock` /

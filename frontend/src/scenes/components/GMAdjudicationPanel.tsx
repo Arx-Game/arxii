@@ -1162,7 +1162,7 @@ function kindledLabel(row: KindleOptions['kindled'][number] | undefined): string
   return row.by_viewer ? ' (kindled by you)' : ' (kindled by a GM)';
 }
 
-// "Kindle" (#5124): the GM answers "is her Fury stirred?" with yes, for the rest of the scene.
+// "Kindle" (#5124): the GM answers "is her Fury kindled?" with yes, for the rest of the scene.
 // The target is the panel's shared participant picker; the resonances it lists are the ones
 // that character holds, and the strengths are the words staff gave them.
 function StageKindle({

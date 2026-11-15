@@ -2368,8 +2368,8 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
   situation never kindles a give-in; the panel and the picker agree. If the resonance stops being
   kindled between declaring and the cast, the caster is told "Your Wrath is no longer kindled, so
   you hold steady." and nothing is rolled or traded.
-  Migration 0412 seeded the three rows from the old
-  `FuryConfig` numbers and 0413 dropped them and `fury_anchor`.
+  Migration 0413 seeded the three rows from the old
+  `FuryConfig` numbers and 0414 dropped those fields and `fury_anchor`.
 - **The trade.** `fury_intensity_for(tier, bonus_percent, outcome)` = floor(`control_surrendered` x
   `intensity_per_control_surrendered` x (100 + `give_in_bonus_percent`) / 100 x
   `intensity_percent` / 100), Decimal math floored once. An outcome with no `FuryDegreeShare`

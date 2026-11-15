@@ -296,7 +296,7 @@ def _resolve_kindle_tier(value: object) -> KindledStrengthTier | None:
 
 @dataclass
 class KindleResonanceAction(Action):
-    """GM improv (#5124): "is her Fury stirred?" "Yes." Kindles it for the rest of the scene.
+    """GM improv (#5124): "is her Fury kindled?" "Yes." Kindles it for the rest of the scene.
 
     Writes a GM ``Kindling`` for the character, resonance and the room's active scene at a
     strength the GM picks (a strength's name or its rank; the weakest when none is named).
