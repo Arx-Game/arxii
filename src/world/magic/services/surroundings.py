@@ -80,8 +80,7 @@ def _penalty(character: ObjectDB) -> int:  # noqa: OBJECTDB_PARAM - a caster
 
     A negative number.
     """
-    from world.checks.exceptions import ModifierConfigError  # noqa: PLC0415
-    from world.checks.modifier_values import level_baseline, tier_bonus  # noqa: PLC0415
+    from world.checks.services import level_strength  # noqa: PLC0415
     from world.magic.services.resonance_environment import (  # noqa: PLC0415
         get_resonance_environment_config,
     )
@@ -89,10 +88,7 @@ def _penalty(character: ObjectDB) -> int:  # noqa: OBJECTDB_PARAM - a caster
 
     sheet = _get_character_sheet(character)
     level = sheet.current_level if sheet is not None else 1
-    try:
-        baseline = level_baseline(level) + tier_bonus(level)
-    except ModifierConfigError:
-        baseline = 0
+    baseline = level_strength(level)
     pct = get_resonance_environment_config().unmet_surroundings_penalty_pct
     return -round(baseline * pct / 100)
 

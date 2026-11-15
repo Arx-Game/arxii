@@ -29,13 +29,11 @@ from django.db.models import Prefetch
 from world.checks.constants import BOTCH_SUCCESS_LEVEL_MAX, ModifierSourceKind
 from world.checks.exceptions import ModifierConfigError
 from world.checks.modifier_values import (
-    level_baseline,
     load_taper_rules,
     load_value_table,
     rank_band_share,
-    tier_bonus,
 )
-from world.checks.services import botch_floor_level
+from world.checks.services import botch_floor_level, level_strength
 from world.checks.slide import load_ranks, resolve_standing, slide_chart
 from world.checks.types import ModifierBreakdown, ModifierContribution
 from world.traits.models import CheckRank, ResultChart, ResultChartOutcome
@@ -408,8 +406,10 @@ def compute_modifier_pile(
     None when the size fractions or level baselines have no row covering the inputs; the
     panel says which rows to author.
     """
+    baseline = level_strength(character_level)
+    if baseline == 0:
+        return None
     try:
-        baseline = level_baseline(character_level) + tier_bonus(character_level)
         value = load_value_table().value(modifier_level, size)
     except ModifierConfigError:
         return None

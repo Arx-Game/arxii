@@ -30,7 +30,6 @@ from world.checks.modifier_values import (
     level_width,
     load_baselines,
     rank_band_share,
-    tier_bonus,
 )
 from world.checks.types import round_half_up
 from world.societies.admin_inlines import ConsequenceNamedOrganizationInline
@@ -278,15 +277,22 @@ class ModifierValueAdmin(admin.ModelAdmin):
 
     @admin.display(description="Read against the level baseline")
     def read_against_baseline(self, obj: ModifierValue) -> str:
+        # Imported here: the services module's import chain reaches admin autodiscovery.
+        from world.checks.services import level_strength  # noqa: PLC0415
+
         if obj.pk is None:
             return "Save the row to read it against the level baseline."
         try:
-            baseline = level_baseline(obj.level, obj.lane)
-        except ModifierConfigError:
-            return f"No level baseline row covers level {obj.level} yet."
-        if obj.lane == ModifierLane.CHECK:
             # A check total also carries the level's tier jump (#5093).
-            baseline += tier_bonus(obj.level)
+            baseline = (
+                level_strength(obj.level)
+                if obj.lane == ModifierLane.CHECK
+                else level_baseline(obj.level, obj.lane)
+            )
+        except ModifierConfigError:
+            baseline = 0
+        if baseline == 0:
+            return f"No level baseline row covers level {obj.level} yet."
         share = rank_band_share(obj.value, baseline)
         band = f"; {share} of a rank band at that total" if share is not None else ""
         return (

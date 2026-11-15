@@ -33,8 +33,8 @@ from world.checks.modifier_values import BaselineTable, TierTable, ValueTable, l
 from world.checks.scale_config import CheckScaleConfig
 from world.checks.services import (
     DifficultyTables,
-    difficulty_points,
     level_points,
+    level_strength,
 )
 from world.checks.slide import band_position, load_ranks
 from world.fatigue.models import FatigueConfig
@@ -344,7 +344,7 @@ def _strength_rows(
 
     base = [_baseline_or_none(baselines, level) for level in levels]
     term = [level_points(level, tables, level_share) if has_baselines else None for level in levels]
-    opposition = [difficulty_points(level, tables) if has_baselines else None for level in levels]
+    opposition = [level_strength(level, tables) if has_baselines else None for level in levels]
     widths = [_width_or_none(baselines, level) for level in levels]
     return (
         StrengthRow(
@@ -376,7 +376,7 @@ def _example(tables: DifficultyTables) -> WorkedExample:
 
     A character of level L with ordinary skills and stats totals her level's strength (the
     level term and what skills supply add up to the baseline, and the tier bonus comes on top),
-    so each side is ``difficulty_points``. The difference is the band positions' difference,
+    so each side is ``level_strength``. The difference is the band positions' difference,
     the same subtraction ``resolve_standing`` makes.
     """
     try:
@@ -389,8 +389,8 @@ def _example(tables: DifficultyTables) -> WorkedExample:
         difference: Decimal | None = None
         edge = False
         if ranks:
-            roller = band_position(difficulty_points(character_level, tables), ranks)
-            target = band_position(difficulty_points(npc_level, tables), ranks)
+            roller = band_position(level_strength(character_level, tables), ranks)
+            target = band_position(level_strength(npc_level, tables), ranks)
             raw = roller.value - target.value
             difference = Decimal(str(raw))
             edge = authored is not None and raw >= authored[1]

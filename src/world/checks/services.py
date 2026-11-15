@@ -504,13 +504,15 @@ def _level_baseline_or_zero(level: int, table: BaselineTable | None = None) -> i
     return table.baseline(level)
 
 
-def _level_strength_or_zero(level: int, tables: DifficultyTables | None = None) -> int:
+def level_strength(level: int, tables: DifficultyTables | None = None) -> int:
     """A level's strength in points: its CHECK baseline plus its tier jump (#5093).
 
     What an NPC of ``level`` opposes with and what a staff-set difficulty level asks of the
     roller: ``_level_baseline_or_zero`` plus ``tier_bonus``, the bonus of every ``LevelTier``
     the level has reached, added in full. 0 wherever the baseline is 0 (a level below 1, or no
-    baseline rows), so a "no difficulty" level never picks up a tier.
+    baseline rows), so a "no difficulty" level never picks up a tier. The one place a baseline
+    and its tier jump are added: read it, never add ``level_baseline`` and ``tier_bonus`` by
+    hand. A loop passes one ``tables`` (``load_difficulty_tables``) so the rows load once.
     """
     if level < 1:
         return 0
@@ -533,7 +535,7 @@ def difficulty_points(level: int, tables: DifficultyTables | None = None) -> int
     ``target_difficulty``. A loop over many levels passes one ``tables``
     (``load_difficulty_tables``) so the rows load once; a level below 1 reads no table at all.
     """
-    return _level_strength_or_zero(level, tables)
+    return level_strength(level, tables)
 
 
 def difficulty_step_points(
@@ -1645,7 +1647,7 @@ def level_opposition(
     authored difficulty (a lock's rating, a ward's barrier strength) rather than
     replacing it.
     """
-    total = _level_strength_or_zero(level)
+    total = level_strength(level)
     if character is not None:
         total += _calculate_aspect_bonus(character, check_type, level)
         from world.conditions.services import opponent_condition_opposition  # noqa: PLC0415
