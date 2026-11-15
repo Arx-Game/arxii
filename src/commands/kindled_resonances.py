@@ -1,7 +1,7 @@
 """Telnet ``resonances`` (#5124): the "Your resonances" panel as lines.
 
 Lists each resonance the character holds, whether it is kindled, how strongly (in the
-strength's own word) and why. The same read the web panel makes (``kindled_resonances``);
+strength's own word) and why. The same read the web panel makes (``kindled_resonances_now``);
 no numbers and no game logic live here.
 """
 
@@ -44,13 +44,13 @@ class CmdKindledResonances(ArxCommand):
     action = None
 
     def func(self) -> None:
-        from world.magic.services.kindling import kindled_resonances  # noqa: PLC0415
+        from world.magic.services.kindling import kindled_resonances_now  # noqa: PLC0415
 
         sheet = self.caller.character_sheet
         if sheet is None:
             self.msg(NO_SHEET)
             return
-        rows = kindled_resonances(sheet)
+        rows = kindled_resonances_now(sheet)
         if not rows:
             self.msg(NO_RESONANCES)
             return

@@ -3111,7 +3111,12 @@ export function YourTurn({
       )}
 
       {/* #5124 Your resonances, beside Dig deep: what is kindled and why. */}
-      {characterSheetId > 0 && <KindledResonancesPanel characterSheetId={characterSheetId} />}
+      {characterSheetId > 0 && (
+        <KindledResonancesPanel
+          characterSheetId={characterSheetId}
+          refreshKey={encounter?.round_number ?? null}
+        />
+      )}
 
       {myParticipantSelf?.dig_deep && (
         <DigDeep

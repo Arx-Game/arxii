@@ -584,6 +584,50 @@ def kindled_resonances(
     return _evaluate(sheet, resonances, resolution=resolution, mission=mission, act=act)
 
 
+@dataclass(frozen=True)
+class KindlingContext:
+    """The live surroundings a kindling read needs when no caller supplies them.
+
+    ``resolution`` is a ``CombatRoundContext`` for the sheet's active fight (or None) and
+    ``mission`` the sheet's newest ACTIVE ``MissionInstance`` she takes part in (or None).
+    """
+
+    resolution: object | None = None
+    mission: MissionInstance | None = None
+
+
+def kindling_context_for(sheet: CharacterSheet) -> KindlingContext:
+    """Build the live fight and mission context for ``sheet``, for any read outside a roll.
+
+    A panel, a telnet list or a Dig deep read has no round of its own, so this finds the
+    character's active combat participant (``resolve_combat_round_context``: ACTIVE in a
+    live encounter, newest first) and the newest ACTIVE mission she participates in. A caller
+    that already holds a round context (a cast, a pull) passes its own to ``kindled_for`` /
+    ``kindled_resonances`` instead.
+    """
+    from world.combat.round_context import resolve_combat_round_context  # noqa: PLC0415
+    from world.missions.constants import MissionStatus  # noqa: PLC0415
+    from world.missions.models import MissionInstance  # noqa: PLC0415
+
+    mission = (
+        MissionInstance.objects.filter(status=MissionStatus.ACTIVE, participants__character=sheet)
+        .select_related("template")
+        .order_by("-pk")
+        .first()
+    )
+    return KindlingContext(resolution=resolve_combat_round_context(sheet), mission=mission)
+
+
+def kindled_resonances_now(sheet: CharacterSheet) -> list[KindledResonance]:
+    """``kindled_resonances`` read in the character's live fight and mission (no act).
+
+    What the "Your resonances" panel and telnet ``resonances`` show; the same context a
+    surge or a cast reads, so the panel never disagrees with what happens.
+    """
+    context = kindling_context_for(sheet)
+    return kindled_resonances(sheet, resolution=context.resolution, mission=context.mission)
+
+
 def kindled_for(
     sheet: CharacterSheet,
     resonance: Resonance,

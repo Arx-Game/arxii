@@ -8,6 +8,7 @@
  * Wire contract: GET /api/magic/kindled-resonances/ (KindledResonanceViewSet).
  */
 
+import { useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { useKindledResonances } from '@/magic/queries';
 import type { KindledResonance } from '@/magic/types';
@@ -15,6 +16,8 @@ import type { KindledResonance } from '@/magic/types';
 interface Props {
   /** CharacterSheet pk (shared with the character ObjectDB pk) of the acting character. */
   characterSheetId: number;
+  /** A value that changes when the situation moves (the combat round); re-reads on change. */
+  refreshKey?: number | null;
 }
 
 /** "Kindled, blazing" when a situation kindles it (a strength word is always sent), else "Not kindled". */
@@ -52,8 +55,14 @@ function ResonanceRow({ row }: { row: KindledResonance }) {
   );
 }
 
-export function KindledResonancesPanel({ characterSheetId }: Props) {
-  const { data: rows = [] } = useKindledResonances(characterSheetId);
+export function KindledResonancesPanel({ characterSheetId, refreshKey = null }: Props) {
+  const { data: rows = [], refetch } = useKindledResonances(characterSheetId);
+  const lastKey = useRef(refreshKey);
+  useEffect(() => {
+    if (lastKey.current === refreshKey) return;
+    lastKey.current = refreshKey;
+    refetch().catch(() => {});
+  }, [refreshKey, refetch]);
 
   if (rows.length === 0) return null;
 
