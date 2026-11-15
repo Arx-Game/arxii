@@ -11,7 +11,11 @@
  * mocked) live at the bottom of this file.
  */
 
-import { screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Provider } from 'react-redux';
+import { MemoryRouter } from 'react-router-dom';
+import { store } from '@/store/store';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -492,6 +496,45 @@ describe('SpellbookTab', () => {
     await user.click(screen.getByTestId('settle-aura-button'));
 
     expect(await screen.findByText('Settling your aura')).toBeInTheDocument();
+  });
+
+  it('keeps the rite dialog open when the rite settles the last thing the card lists', async () => {
+    const user = userEvent.setup();
+    mockPayload(makeMagic());
+    mockOwnAuras([makeOwnAura({ unsettled: true, unsettled_line: 'Unsettled line.' })]);
+    mockRiteReadings({
+      reflections: [
+        {
+          id: 1,
+          choice: 'DISOWN',
+          kind: 'resonance',
+          title: 'Disown your Domination',
+          where: '"The collar" · journal',
+          from_line: 'from your journal, "The collar"',
+          excerpt: 'I set the iron collar on the altar.',
+          effect_line: 'Domination turns toward Fury, up to 3.',
+        },
+      ],
+    });
+    const queryClient = new QueryClient();
+    const tree = () => (
+      <Provider store={store}>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <SpellbookTab characterId={1} isMyCharacter />
+          </MemoryRouter>
+        </QueryClientProvider>
+      </Provider>
+    );
+    const { rerender } = render(tree());
+    await user.click(screen.getByTestId('settle-aura-button'));
+    expect(await screen.findByText('Settling your aura')).toBeInTheDocument();
+
+    // The rite ran: nothing waits and nothing is left unreflected.
+    mockRiteReadings();
+    rerender(tree());
+
+    expect(screen.getByText('Settling your aura')).toBeInTheDocument();
   });
 
   it('shows the card to the owner only', () => {

@@ -36,7 +36,9 @@ export function AuraReflections({ characterSheetId }: Props) {
     offers?.results?.find((offer) => offer.character_id === characterSheetId)
   );
 
-  if (reflections.length === 0 && deeds.length === 0 && !chance) return null;
+  // The dialog stays mounted while open: a rite that settles the last thing listed here
+  // still has to show its result.
+  if (reflections.length === 0 && deeds.length === 0 && !chance && !settleOpen) return null;
 
   return (
     <div className="refsheet-stack" data-testid="aura-reflections">
