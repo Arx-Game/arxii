@@ -130,29 +130,6 @@ def _social_verb_success_level(
     return result.success_level or 0
 
 
-def _resolve_social_check(  # noqa: PLR0913 - mirrors roll_social_check's terms
-    participant: CombatParticipant,
-    check_type: CheckType,
-    target_difficulty: int,
-    target: CharacterSheet | None = None,
-    extra_contributions: list[ModifierContribution] | None = None,
-    extra_modifiers: int = 0,
-) -> int:
-    """Roll a social-combat check and return the success_level (#2015).
-
-    A thin wrapper over ``roll_social_check``; see it for the modifier handling.
-    """
-    result = roll_social_check(
-        participant,
-        check_type,
-        target_difficulty,
-        target=target,
-        extra_contributions=extra_contributions,
-        extra_modifiers=extra_modifiers,
-    )
-    return result.success_level or 0
-
-
 def roll_social_check(  # noqa: PLR0913 - each term feeds the one roll
     participant: CombatParticipant,
     check_type: CheckType,
@@ -167,8 +144,8 @@ def roll_social_check(  # noqa: PLR0913 - each term feeds the one roll
     folding in ``extra_contributions`` (the actor-side terms from
     ``social_target_difficulty``), then ``perform_check``. ``extra_modifiers`` is a flat
     term added on top (a strained compulsion's penalty, #4802). Returns
-    the ``CheckResult`` (``_resolve_social_check`` keeps only its success_level; the
-    surge roll (#4737) also needs the outcome).
+    the ``CheckResult`` (the verbs read its success level and outcome; the surge roll (#4737)
+    reads the outcome).
 
     ``target`` (#2536 Task 6 fold-in fix, extended to Parley on review): the
     acting participant's declared opponent, when this social action has one

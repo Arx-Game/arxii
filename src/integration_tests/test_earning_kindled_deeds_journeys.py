@@ -12,6 +12,9 @@ nothing. Only Mira is told "You earned ..."; Tomas is told nothing.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+from unittest.mock import patch
+
 from integration_tests.harness import JourneyCase
 from integration_tests.test_kindled_dig_deep_and_rally_journeys import _KindledField
 from integration_tests.test_strike_journeys import _StrikeField
@@ -431,8 +434,14 @@ class EarningFromAnAllyInTrouble(_KindledField):
         self.assertTold(self.tomas, "You earned 10 Fury.")
 
     def test_a_reaction_that_answers_for_an_ally_in_trouble_earns(self) -> None:
+        """Through the shared reaction spine (Succor, Interpose, Cover, catching a faller).
+
+        The spine's two seams, which pick the reaction and roll the challenge, are the only
+        doubles: the capability content that offers a real Succor or Interpose is PostgreSQL
+        only. Deleting the spine's award hook turns this red.
+        """
         from world.checks.types import CheckResult
-        from world.mechanics.reactions import _award_reaction_deed
+        from world.mechanics.reactions import dispatch_capability_reaction
         from world.mechanics.types import ChallengeResolutionResult
 
         check = CheckResult(
@@ -457,8 +466,27 @@ class EarningFromAnAllyInTrouble(_KindledField):
             challenge_deactivated=False,
             display_consequences=[],
         )
+        instance = SimpleNamespace(target_object_id=self.mira.pk)
+        offered = SimpleNamespace(
+            challenge_name="Interpose",
+            resolved_challenge_instance=instance,
+            resolved_challenge_approach=SimpleNamespace(),
+            capability_source=SimpleNamespace(),
+        )
 
-        with self.captureOnCommitCallbacks(execute=True):
-            _award_reaction_deed(self.tomas, self.mira, result)
+        with (
+            patch("world.mechanics.services.get_available_actions", return_value=[offered]),
+            patch("world.mechanics.reactions._fresh_reaction_instance", return_value=instance),
+            patch("world.mechanics.challenge_resolution.resolve_challenge", return_value=result),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            dispatch_capability_reaction(
+                self.tomas,
+                self.mira,
+                challenge_name="Interpose",
+                approach=None,
+                error_msg="",
+                outcome_fn=lambda _result: None,
+            )
 
         self.assertEqual(self.tomas_deeds().get().resonance, self.mercy)

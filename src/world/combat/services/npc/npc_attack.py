@@ -286,7 +286,7 @@ def resolve_npc_attack(
     # opponent row instead (the ATTACKER_AFFINITY evaluator's data source).
     # Mirrors the offense sites' sheet + CombatRoundContext construction
     # (services.py:435-448) with `holder`/`subject` both the defender's own
-    # sheet, matching `_resolve_social_check`'s pattern above.
+    # sheet, matching `roll_social_check`'s pattern.
     from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
     from world.covenants.perks.context import SituationContext  # noqa: PLC0415
 

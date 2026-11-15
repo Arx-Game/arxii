@@ -207,7 +207,8 @@ def _award_reaction_deed(
     aided = CharacterSheet.objects.filter(pk=target_object.pk).first()
     award_kindled_deeds(
         helper,
-        act=KindlingAct(kind=KindlingActKind.AID, target=aided, aids=True),
+        # A reaction aimed at something that is not a character aids nobody.
+        act=KindlingAct(kind=KindlingActKind.AID, target=aided, aids=aided is not None),
         outcome=result.check_result.outcome,
     )
 

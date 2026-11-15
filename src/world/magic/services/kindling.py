@@ -724,7 +724,16 @@ def _evaluate_acts(
         .select_related("condition_property", "mission_theme", "affinity")
     )
     live = _live_kindlings(sheet)
-    wants_presence = any(row.situation in _PRESENCE_SITUATIONS for row in rows)
+    # Who is here does not depend on the act, so it is read once for all of them.
+    presence = (
+        _presence(
+            SituationContext(
+                holder=sheet, subject=sheet, target=None, resolution=resolution, mission=mission
+            )
+        )
+        if any(row.situation in _PRESENCE_SITUATIONS for row in rows)
+        else None
+    )
     return [
         _evaluate_act(
             sheet,
@@ -734,7 +743,7 @@ def _evaluate_acts(
             live=live,
             tiers=tiers,
             by_rank=by_rank,
-            wants_presence=wants_presence,
+            presence=presence,
             resolution=resolution,
             mission=mission,
         )
@@ -751,7 +760,7 @@ def _evaluate_act(  # noqa: PLR0913 - the shared reads and the one act's context
     live: list[Kindling],
     tiers: list[KindledStrengthTier],
     by_rank: dict[int, KindledStrengthTier],
-    wants_presence: bool,
+    presence: _Presence | None,
     resolution: object | None,
     mission: MissionInstance | None,
 ) -> list[KindledResonance]:
@@ -770,7 +779,7 @@ def _evaluate_act(  # noqa: PLR0913 - the shared reads and the one act's context
     evaluation = _Evaluation(
         ctx=ctx,
         check=check,
-        presence=_presence(ctx) if wants_presence else None,
+        presence=presence,
         found={},
     )
 
