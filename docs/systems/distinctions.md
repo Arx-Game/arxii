@@ -553,7 +553,10 @@ a silent drop.
   `visible_offers` once and the species' innate distinctions once and resolves every entry
   against those (#5134): it used to read both once per entry, so a save cost more with
   every card the draft held. It answers with the draft's whole list, and the client puts
-  that answer in its cache in place of a second request (`useSyncDistinctions`).
+  that answer in its cache in place of a second request (`useSyncDistinctions`). The
+  same answer re-prices the cached draft's CG point totals at once (#5141), because every
+  entry carries the `cost` it was charged; while the save is in flight the page shows the
+  totals for the picks being saved (`useShownPicks`).
 
 ---
 

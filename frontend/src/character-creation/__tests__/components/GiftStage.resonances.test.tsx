@@ -38,6 +38,7 @@ vi.mock('../../queries', async (importOriginal) => ({
 vi.mock('@/hooks/useDistinctions', () => ({
   useDraftDistinctions: () => ({ data: [] }),
   useSyncDistinctions: () => ({ mutate: vi.fn() }),
+  usePendingSync: () => null,
 }));
 
 const served = [

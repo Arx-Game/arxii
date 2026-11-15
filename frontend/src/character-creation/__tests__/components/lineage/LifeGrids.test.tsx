@@ -14,6 +14,9 @@ import { LifeGrids } from '../../../components/lineage/LifeGrids';
 import { createMockDraft, mockBeginnings, mockBeginningsUnknownFamily } from '../../fixtures';
 import { renderWithCharacterCreationProviders } from '../../testUtils';
 import type { BeatPoolEntry, OffersResponse, VisibleOffer } from '../../../types';
+import { characterCreationKeys } from '../../../queries';
+import type { DraftDistinctionEntry, SyncDistinctionEntry } from '@/types/distinctions';
+import { QueryClient } from '@tanstack/react-query';
 
 const mutateAsync = vi.fn().mockResolvedValue({});
 const syncMutate = vi.fn();
@@ -21,7 +24,16 @@ const loadMutate = vi.fn();
 const clearMutate = vi.fn();
 let pool: BeatPoolEntry[] = [];
 let offersResponse: OffersResponse = { offers: [], terms: [] };
-let draftDistinctions: { id: number; rank: number; offer_ids: number[]; arrivals: string[] }[] = [];
+let draftDistinctions: {
+  id: number;
+  distinction_id?: number;
+  rank: number;
+  cost?: number;
+  offer_ids: number[];
+  arrivals: string[];
+}[] = [];
+// The picks a save in flight is writing (#5141), null when none is.
+let pendingSync: SyncDistinctionEntry[] | null = null;
 
 vi.mock('../../../queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../queries')>()),
@@ -34,6 +46,7 @@ vi.mock('../../../queries', async (importOriginal) => ({
 vi.mock('@/hooks/useDistinctions', () => ({
   useDraftDistinctions: () => ({ data: draftDistinctions }),
   useSyncDistinctions: () => ({ mutate: syncMutate, isPending: false, isError: false }),
+  usePendingSync: () => pendingSync,
 }));
 
 function beat(over: Partial<BeatPoolEntry>): BeatPoolEntry {
@@ -96,6 +109,7 @@ describe('LifeGrids', () => {
     mutateAsync.mockClear();
     syncMutate.mockClear();
     draftDistinctions = [];
+    pendingSync = null;
     pool = [
       beat({ beat_id: 1, answer_offer_ids: [10, 11, 12] }),
       beat({
@@ -478,8 +492,8 @@ describe('LifeGrids', () => {
 
   it('the ledger rail lists the purse and every pick under its stage, and the life so far', async () => {
     draftDistinctions = [picked(101, 11), picked(300, 30)];
-    // The purse reads the demo's way: the net points moved, Spent when positive and
-    // Gained when the world paid more than it took.
+    // The purse is two totals, Starting and Remaining (owner ruling 2026-11-15; the
+    // Spent and Gained lines the demo carried are gone).
     const draft = createMockDraft({
       cg_points_spent: -5,
       cg_points_remaining: 105,
@@ -488,7 +502,7 @@ describe('LifeGrids', () => {
     renderWithCharacterCreationProviders(<LifeGrids draft={draft} copy={{}} />);
     const ledger = screen.getByRole('complementary', { name: 'CG points' });
     const totals = Array.from(ledger.querySelectorAll('.tot')).map((el) => el.textContent);
-    expect(totals).toEqual(['Starting100', 'Spent0', 'Gained5', 'Remaining105']);
+    expect(totals).toEqual(['Starting100', 'Remaining105']);
     const rows = Array.from(ledger.querySelectorAll('.row')).map((el) => el.textContent);
     expect(rows).toEqual(['Spoiled+10', 'Spied for a house (secret)−10']);
     expect(Array.from(ledger.querySelectorAll('.st')).map((el) => el.textContent)).toEqual([
@@ -503,6 +517,39 @@ describe('LifeGrids', () => {
       'Spoiled',
       'Spied for a house (secret; cover: Nothing shown)',
     ]);
+  });
+
+  it('while a save is in flight the rail and its totals read the picks being saved (#5141)', () => {
+    // Held: Spoiled (the world pays 10) and Spied for a house (10). The draft's totals
+    // were added up from that list, so they net to nothing spent.
+    const held = [
+      { ...picked(101, 11), distinction_id: 101, cost: -10 },
+      { ...picked(300, 30), distinction_id: 300, cost: 10 },
+    ];
+    draftDistinctions = held;
+    const draft = createMockDraft({
+      cg_points_spent: 0,
+      cg_points_remaining: 100,
+      draft_data: { distinctions: held as unknown as DraftDistinctionEntry[] },
+    });
+    // The click: Patient (10) in place of Spoiled on the one-of row. No answer yet.
+    pendingSync = [
+      { id: 300, rank: 1, offer_id: 30, feature_trait: '', feature_marking: 0 },
+      { id: 100, rank: 1, offer_id: 10, feature_trait: '', feature_marking: 0 },
+    ];
+    const queryClient = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
+    queryClient.setQueryData(
+      characterCreationKeys.draftOffers(draft.id, 'backgrounds'),
+      offersResponse
+    );
+    renderWithCharacterCreationProviders(<LifeGrids draft={draft} copy={{}} />, { queryClient });
+    const ledger = screen.getByRole('complementary', { name: 'CG points' });
+    const rows = Array.from(ledger.querySelectorAll('.row')).map((el) => el.textContent);
+    expect(rows).toEqual(['Patient−10', 'Spied for a house−10']);
+    // Spoiled's 10 is given back and Patient's 10 is paid: 20 spent of the 100.
+    const totals = Array.from(ledger.querySelectorAll('.tot')).map((el) => el.textContent);
+    expect(totals).toEqual(['Starting100', 'Remaining80']);
+    expect(screen.getByText('2 taken, 20 of 100 points spent')).toBeInTheDocument();
   });
 
   it('with nothing chosen the rail and the life so far say so', () => {

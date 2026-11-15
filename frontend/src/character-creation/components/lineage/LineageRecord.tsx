@@ -6,6 +6,7 @@
  */
 
 import { useCGPointBudget } from '../../queries';
+import { useShownPicks } from '../../useShownPicks';
 import {
   chosenGroupForSlot,
   choiceCost,
@@ -30,6 +31,7 @@ function costLabel(cost: number): string {
 export function LineageRecord({ draft, template, path }: Props) {
   const { data: cgBudget } = useCGPointBudget();
   const starting = cgBudget?.starting_points ?? 100;
+  const { spent } = useShownPicks(draft);
 
   const shown = shownSlotIds(template, draft, path);
   const picks = draft.draft_data.origin_choices ?? {};
@@ -62,7 +64,7 @@ export function LineageRecord({ draft, template, path }: Props) {
       {draft.bundled_distinctions.map((d) => (
         <p key={d.distinction_id}>{`${d.name} · bundled`}</p>
       ))}
-      <p>{`CG points: ${draft.cg_points_spent} of ${starting}`}</p>
+      <p>{`CG points: ${spent} of ${starting}`}</p>
     </section>
   );
 }

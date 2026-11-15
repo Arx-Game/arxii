@@ -8,6 +8,7 @@
 import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
 import { characterCreationKeys } from '@/character-creation/queries';
+import type { CharacterDraft } from '@/character-creation/types';
 import type {
   AddDistinctionRequest,
   Distinction,
@@ -317,6 +318,23 @@ export function useSyncDistinctions(draftId: number) {
       // as it stands. Asking for the same list again made every card wait on a
       // second request before it showed its pick.
       queryClient.setQueryData(distinctionKeys.draftDistinctions(draftId), saved.distinctions);
+      // The points move with the list (#5141). The cached draft's totals were added up
+      // from its own list, and every entry carries the price the server charged, so the
+      // new totals are the old ones re-priced; the draft fetch below then replaces them
+      // with the server's own figures. Waiting for that fetch left the purse on the old
+      // number for the length of the heaviest request on the page.
+      queryClient.setQueryData<CharacterDraft>(characterCreationKeys.draft(), (draft) => {
+        if (!draft || draft.id !== draftId) return draft;
+        const price = (entries: DraftDistinctionEntry[] | undefined) =>
+          (entries ?? []).reduce((sum, entry) => sum + (entry.cost ?? 0), 0);
+        const moved = price(saved.distinctions) - price(draft.draft_data.distinctions);
+        return {
+          ...draft,
+          cg_points_spent: draft.cg_points_spent + moved,
+          cg_points_remaining: draft.cg_points_remaining - moved,
+          draft_data: { ...draft.draft_data, distinctions: saved.distinctions },
+        };
+      });
       // Also invalidate the distinctions list to refresh lock status
       queryClient.invalidateQueries({
         queryKey: distinctionKeys.lists(),
