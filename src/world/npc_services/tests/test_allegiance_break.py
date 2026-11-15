@@ -29,7 +29,7 @@ from actions.factories import (
 )
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
-from world.checks.test_helpers import force_check_outcome
+from world.checks.test_helpers import force_check_outcome, make_player_character
 from world.classes.factories import CharacterClassLevelFactory
 from world.combat.constants import ActionCategory
 from world.combat.factories import (
@@ -200,7 +200,7 @@ class AttemptAllegianceBreakTests(TestCase):
         so a level-12 target no longer voids a level-12 caster's severity-6
         hold for free.
         """
-        caster_sheet = CharacterSheetFactory()
+        caster_sheet = make_player_character(CharacterSheetFactory())
         CharacterClassLevelFactory(character=caster_sheet, level=12, is_primary=True)
         self.instance.source_character = caster_sheet.character
         self.instance.save(update_fields=["source_character"])

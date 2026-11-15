@@ -26,6 +26,7 @@ from world.checks.factories import (
     create_resistance_check_types,
 )
 from world.checks.services import compute_check_rating, compute_resist_increment, level_opposition
+from world.checks.test_helpers import make_player_character
 from world.classes.factories import (
     AspectFactory,
     CharacterClassFactory,
@@ -81,7 +82,7 @@ class OpposedDifficultyTests(TestCase):
         cls.composure_check_type = check_types["Composure"]
         cls.willpower_trait = StatTraitFactory(name="willpower")
 
-        cls.plain_defender = CharacterSheetFactory().character
+        cls.plain_defender = make_player_character(CharacterSheetFactory()).character
         CharacterTraitValue.objects.create(
             character=cls.plain_defender.sheet_data, trait=cls.willpower_trait, value=10
         )
@@ -89,7 +90,7 @@ class OpposedDifficultyTests(TestCase):
         # decorated_defender owns the same willpower value PLUS a Path/aspect
         # match, an owned specialization, and an authored capability -- the
         # terms gap 1 was dropping.
-        cls.decorated_defender = CharacterSheetFactory().character
+        cls.decorated_defender = make_player_character(CharacterSheetFactory()).character
         CharacterTraitValue.objects.create(
             character=cls.decorated_defender.sheet_data, trait=cls.willpower_trait, value=10
         )
@@ -132,7 +133,7 @@ class OpposedDifficultyTests(TestCase):
         # override merely substituted, the two must match exactly; if it instead added
         # on top of the level-3 defender's own level, they would not.
         override_class = CharacterClassFactory()
-        cls.override_low = CharacterSheetFactory().character
+        cls.override_low = make_player_character(CharacterSheetFactory()).character
         CharacterTraitValue.objects.create(
             character=cls.override_low.sheet_data, trait=cls.willpower_trait, value=10
         )
@@ -144,7 +145,7 @@ class OpposedDifficultyTests(TestCase):
             is_primary=True,
         )
 
-        cls.override_high = CharacterSheetFactory().character
+        cls.override_high = make_player_character(CharacterSheetFactory()).character
         CharacterTraitValue.objects.create(
             character=cls.override_high.sheet_data, trait=cls.willpower_trait, value=10
         )
@@ -319,7 +320,7 @@ class ResistCountsComposureModifiersTests(TestCase):
         willpower = StatTraitFactory(name="willpower")
 
         def defender():
-            character = CharacterSheetFactory().character
+            character = make_player_character(CharacterSheetFactory()).character
             CharacterTraitValue.objects.create(
                 character=character.sheet_data, trait=willpower, value=10
             )

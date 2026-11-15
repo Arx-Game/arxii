@@ -1,4 +1,4 @@
-"""CONTEST options (#3568): difficulty adds the opposition's full total; tiers route as CHECK."""
+"""CONTEST options (#3568): difficulty adds the opposition's level baseline; routes as CHECK."""
 
 from __future__ import annotations
 
@@ -67,12 +67,12 @@ class ContestResolutionTests(TestCase):
             option=self.contest, outcome_tier=self.failure, target_node=self.node_b
         )
 
-    def test_difficulty_is_template_risk_plus_the_opposition_sheets_total(self) -> None:
+    def test_difficulty_is_template_risk_plus_the_opposition_sheets_level_baseline(self) -> None:
         with mock.patch(_LEVEL, return_value=4), force_check_outcome(self.success) as capture:
             resolve_option(self.instance, self.entry, self.contest, self.actor)
-        # The opposition sheet counts as its full total on the opposition check: no trait
-        # points, so level 4's term, half of its 42-point baseline (#5093).
-        self.assertEqual(capture.target_difficulty, self.template.risk_tier + 21)
+        # The opposition sheet is an NPC (no tenure): a level and no points, so level 4's whole
+        # 42-point baseline (#5093, ADR-0265), never half of it.
+        self.assertEqual(capture.target_difficulty, self.template.risk_tier + 42)
         self.assertEqual(capture.check_type, self.check_type)
 
     def test_tiers_route_like_check(self) -> None:
