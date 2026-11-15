@@ -193,7 +193,7 @@ def resolve_cast_audience(
       byte-identical to pre-#2710 behaviour.
 
     Otherwise each co-located character rolls the detection check against
-    ``cast_concealment`` plus the caster's level opposition (ADR-0166) and lands in
+    ``cast_concealment`` plus the caster's full check total (#5093, ADR-0166) and lands in
     ``full`` (``success_level >= CAST_DETECTION_ATTRIBUTION_LEVEL``), ``vague``
     (exactly 1), or ``effect_only``. The caster is always in ``full``.
     """

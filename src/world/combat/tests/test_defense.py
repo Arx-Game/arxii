@@ -575,9 +575,8 @@ class ResolveNpcAttackConditionJourneyTests(TestCase):
         it -- the defense-side mirror of the offense journey's
         ``test_a_condition_on_the_opponent_makes_it_easier_to_hit``.
 
-        The condition's penalty (-70) is sized to exactly reproduce a level-1
-        attacker's target_difficulty against a level-15 one
-        (``LEVEL_POINTS_PER_LEVEL * (15 - 1) == 70``; the ephemeral opponent has
+        The condition's penalty (-70) takes the level-15 opponent's 130-point baseline to 60,
+        close to a level-1 attacker's own level baseline swing (the ephemeral opponent has
         no CharacterPathHistory row, so the aspect bonus is 0 either way).
         """
         staggered = ConditionTemplateFactory(name="JourneyDefenseStaggered")

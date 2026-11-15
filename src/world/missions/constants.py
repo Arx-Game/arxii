@@ -138,8 +138,8 @@ class OptionKind(models.TextChoices):
     EncounterOutcomeMapping assigns to (encounter outcome, encounter_risk_level)
     (#3565).
 
-    CONTEST (#3568): a CHECK whose difficulty adds the opposition's passive
-    level term (`level_opposition`) for `opposition_sheet` at
+    CONTEST (#3568): a CHECK whose difficulty adds the opposition's
+    full total (`compute_obstacle_rating`) for `opposition_sheet` at
     `effective_combat_level`; tiers and routes are a CHECK's.
     """
 

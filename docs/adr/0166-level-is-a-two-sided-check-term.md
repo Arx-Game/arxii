@@ -11,6 +11,11 @@ that closes both gaps at once.
 
 ## Decision
 
+> Amended by #5093: the five-points-a-level constant is gone. The acting side's level term is
+> `CheckScaleConfig.level_share` (0.5) times the CHECK baseline at the level, and a passive NPC
+> opposes with the level's baseline itself. The two-sided, unconditional, additive shape below
+> stands; the numbers it quotes are the pre-#5093 ones.
+
 **Level contributes `LEVEL_POINTS_PER_LEVEL` (5) points per level on the acting side of
 every check, unconditionally.** `_compute_check_breakdown` adds `level_points =
 LEVEL_POINTS_PER_LEVEL * level` into `total_points` for every `perform_check` call,

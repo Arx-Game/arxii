@@ -26,8 +26,8 @@ blank means no allegiance effect. Read by this field, never by the condition's
 name, so renaming the row changes nothing. **Hold strength** is the derived
 difficulty of breaking that hold by force: severity points
 (`charm_strength_points`, severity times a tuning constant) plus the hold's own
-caster's level opposition, the same `level_opposition` term `attempt_break_free`
-already uses. The bearer itself never rolls to shake an allegiance hold off
+caster's opposition (`caster_opposition`, #5093: her full check total, or her level's
+baseline for a hold she put on herself), the same term `attempt_break_free` already uses. The bearer itself never rolls to shake an allegiance hold off
 (`attempt_break_free` refuses outright); only a PC's settle action or a PC's
 blow against the held NPC can end it, both reading hold strength to decide how
 hard it is.

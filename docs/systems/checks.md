@@ -91,6 +91,7 @@ longer follows the stat lane's: the universality test now compares the stat lane
 | Model | Purpose | Key fields |
 |-------|---------|------------|
 | `ModifierSizeFraction` | How much of one level's width a modifier of `size` is worth in a lane (#5093). A size with no row has no derived value | `lane`, `size` (`ModifierSize`), `fraction` (decimal, 3 places); unique (`lane`, `size`) |
+| `CheckScaleConfig` | Singleton (pk 1, `world/checks/scale_config.py`, #5093): `level_share`, the share of a level's CHECK baseline that a character's level adds to every roll (seed 0.5). Read by `level_points(level)`; staff edit the row. |
 | `ModifierValue` | An override of the derived value: what a modifier of `size` is worth at exactly `level`, in the lane's units. It covers only its own level (the step lookup is gone). A magnitude; the authored modifier keeps its sign | `lane`, `level`, `size` (`ModifierSize`), `value`; unique (`lane`, `level`, `size`) |
 | `ModifierLevelBaseline` | The typical total at each level in a lane, one row per level (the seed writes levels 1-30). On the check lane these rows ARE the rank ladder (rank N starts at the level-N baseline) and the gap between two levels is one level's width (#5093) | `lane`, `level`, `baseline`; unique (`lane`, `level`) |
 | `ModifierTaper` | Which source kinds taper in a lane: each further modifier of the kind counts `ratio` of the one before, never below `floor` | `lane`, `source_kind` (`ModifierSourceKind`), `ratio`, `floor`; unique (`lane`, `source_kind`) |
@@ -301,7 +302,7 @@ result.outcome_name    # "Success", "Catastrophic Failure", etc.
 result.success_level   # -10 to +10
 result.trait_points    # Points from character's traits
 result.aspect_bonus    # Bonus from path aspects
-result.level_points    # LEVEL_POINTS_PER_LEVEL x class level, on every check (#2707)
+result.level_points    # CheckScaleConfig.level_share x the level's baseline, on every check (#2707, #5093)
 result.total_points    # Final total
 ```
 
@@ -378,11 +379,22 @@ increment = compute_resist_increment(
     target.objectdb, effort_level, level_override=target.level
 )
 
-# PASSIVE: the defender contributes nothing beyond existing. LEVEL_POINTS_PER_LEVEL
-# * level always; plus, when a character is given, the acting check's aspects
-# scored against the DEFENDER's Path (their wheelhouse protects them). A
-# character=None (an ephemeral NPC with no sheet) contributes level alone.
+# PASSIVE: an NPC has a level and no points, so it opposes with its level's CHECK baseline
+# (the start of rank N, #5093); plus, when a character is given, the acting check's aspects
+# scored against the DEFENDER's Path, each match a share of one level's width at that level
+# (their wheelhouse protects them); plus the defender's active condition modifiers at their
+# derived value, so a debuff lowers the NPC. A character=None (an ephemeral NPC with no sheet)
+# contributes the baseline alone. 0 at level 0 and where no baseline rows exist.
 difficulty = level_opposition(check_type, level=defender_level, character=defender_character)
+
+# A character who is the obstacle (concealment, a held condition, a mission opposition
+# sheet, a resisted social move) counts as her full check total, not her level (#5093):
+# compute_check_rating plus the modifiers she carries on the check, counted once. A defender
+# with no sheet is an NPC and counts as its level's baseline through level_opposition.
+# compute_resist_increment is this on the Composure check plus the effort modifier.
+difficulty = compute_obstacle_rating(caster, check_type, level_override=None)
+# A hold's caster adds caster_opposition(instance, check_type) (world/conditions/services.py):
+# her full total, or her level's baseline when she put the hold on herself.
 ```
 
 `social_target_difficulty` (`world/checks/social_target.py`, #4145) is the one difficulty
@@ -448,11 +460,15 @@ term would double-count it. See ADR-0166.
    For each CheckTypeAspect with matching PathAspect:
      bonus += int(check_aspect_weight * path_aspect_weight * character_level)
 
-2.4. Level points (#2707): LEVEL_POINTS_PER_LEVEL x character_level, on EVERY check.
+2.4. Level points (#2707, #5093): CheckScaleConfig.level_share x the CHECK baseline at
+   character_level (``level_points(level)``, rounded half up), on EVERY check.
    Level was previously only reachable through the aspect bonus above, which is zero
    unless the CheckType has an authored CheckTypeAspect matching the character's Path
-   -- so on most checks level did nothing. This is a guaranteed floor, additive with
-   (not a replacement for) the aspect bonus.
+   -- so on most checks level did nothing. This is a guaranteed term, additive with
+   (not a replacement for) the aspect bonus. With share 0.5 and a level-11 baseline of 98
+   the term is 49; skills and stats supply the other half of the climb. 0 at level 0 and
+   where no CHECK baseline rows exist; above the top row it reuses the top baseline.
+   ``CheckScaleConfig`` is a pk-1 singleton (``get_check_scale_config``); the seed writes 0.5.
 
 2.5. Capability points from authored CheckTypeCapabilityModifier rows (#2505)
    No authored rows on check_type -> 0, capability oracle never called (curated gate).

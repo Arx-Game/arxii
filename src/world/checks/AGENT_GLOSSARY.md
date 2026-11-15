@@ -49,7 +49,8 @@ A flat per-character roll modifier summed from the character sheet's and the con
 _Avoid_: luck, roll bonus, fudge
 
 **Level points** (#2707, ADR-0166):
-`LEVEL_POINTS_PER_LEVEL * character level` (5 points/level) — a guaranteed term summed
+`CheckScaleConfig.level_share` (seed 0.5) times the CHECK baseline at the character's level
+(`level_points(level)`, #5093) — a guaranteed term summed
 into every `perform_check`'s `total_points`, sourced from
 `get_character_path_level`. Additive to the aspect bonus, never a replacement for it: a
 character whose Path matches the check's authored aspects still gets both. Unlike the
@@ -58,8 +59,12 @@ _Avoid_: level bonus, level modifier (both imply optional; level points are unco
 
 **Level opposition** (#2707, ADR-0166):
 The PASSIVE half of an opposed check's difficulty, via `level_opposition(check_type, *,
-level, character=None)`: `LEVEL_POINTS_PER_LEVEL * level` always, plus — when a
-`character` is given — the acting check's aspects scored against the *defender's* Path.
+level, character=None)`: an NPC's difficulty is its level's CHECK baseline (the start of rank
+N, #5093), plus — when a `character` is given — the acting check's aspects scored against the
+*defender's* Path (each match a share of one level's width) and the defender's active condition
+modifiers at their derived value, so a debuff lowers the NPC. A player character who is the
+obstacle does not come through here: she counts as her full check total
+(`compute_obstacle_rating`).
 Used when the defender is not spending a check of their own (an authored lock, a ward, a
 combat attack against a `CombatOpponent`). Deliberately exclusive with resist increment
 (below) — a call site uses one or the other, never both, since resist increment already

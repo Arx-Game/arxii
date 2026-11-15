@@ -330,9 +330,9 @@ away from character creation holding." A kit is priced at level 1 and gift threa
   `OptionSource` (PATH, TRADITION, SPECIES).
 - `starting_stats_roller_points` turns the character's own twelve stats into the report's
   roller-points knob: the mean of the twelve stats converted through `PointConversionRange`,
-  plus `LEVEL_POINTS_PER_LEVEL`. An empty `PointConversionRange` table converts every stat to
+  plus `level_points(1)` (the level-one level term, `CheckScaleConfig.level_share` x the level-1 baseline). An empty `PointConversionRange` table converts every stat to
   0 points (matching the live check path, no raw-value fallback), so an unseeded server prices
-  every kit at the level-one floor alone. The required-content sentinel (below) carries a
+  every kit at the level-one term alone. The required-content sentinel (below) carries a
   `point-conversion-ranges-stat` REQUIRED entry for exactly this table.
 - The kit itself is the top `1 + extra_picks` options ranked by baseline DE. `extra_picks`
   lets staff model a distinction that grants a few extra starting picks, capped at
