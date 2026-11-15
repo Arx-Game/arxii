@@ -1044,3 +1044,106 @@ def seed_family_seats_spec(*, username: str) -> FamilySeatsSeed:
         open_seat_id=seats[SEATS_SPEC_OPEN_SEAT].pk,
         open_seat_name=SEATS_SPEC_OPEN_SEAT,
     )
+
+
+@dataclass(frozen=True)
+class LifePointsSeed:
+    """What `frontend/e2e/life-points.spec.ts` reads back."""
+
+    draft_id: int
+    costly_card: str
+    costly_price: int
+    paying_card: str
+    paying_price: int
+
+
+#: The life-points spec's own route, beat and the two cards on it.
+LIFE_POINTS_ROUTE = "Raised on the ledger road"
+LIFE_POINTS_BEAT = "What the road taught you"
+LIFE_POINTS_COSTLY_CARD = "Counting-house clerk"
+LIFE_POINTS_COSTLY_PRICE = 15
+LIFE_POINTS_PAYING_CARD = "Owes the road"
+LIFE_POINTS_PAYING_PRICE = 10
+
+
+def seed_life_points_spec(*, username: str) -> LifePointsSeed:
+    """A creation draft of *username*'s at Lineage with one life beat and two cards (#5141).
+
+    The beat is offered to this draft's beginning alone, so no other account's draft
+    meets it. One card costs 15 CG points and the world pays 10 for the other. The
+    draft holds no pick and is stamped as having loaded its suggested life, so the page
+    opens on the beat with nothing chosen.
+    """
+    from django.db import transaction  # noqa: PLC0415
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+
+    from world.character_creation.constants import (  # noqa: PLC0415
+        BeatAudience,
+        BeatSelection,
+        OfferChapter,
+        Parentage,
+        Stage,
+    )
+    from world.character_creation.factories import (  # noqa: PLC0415
+        CharacterDraftFactory,
+        DistinctionOfferFactory,
+        LifeBeatExclusionFactory,
+        LifeBeatFactory,
+        OriginTemplateFactory,
+    )
+    from world.character_creation.models import CharacterDraft, LifeBeat  # noqa: PLC0415
+    from world.distinctions.factories import DistinctionFactory  # noqa: PLC0415
+
+    account = AccountDB.objects.get(username=username)
+    with transaction.atomic():
+        if not LifeBeat.objects.filter(name=LIFE_POINTS_BEAT).exists():
+            template = OriginTemplateFactory(
+                name=LIFE_POINTS_ROUTE,
+                allows_claim_family=False,
+                allows_name_family=False,
+                allows_no_family=True,
+                parentage=Parentage.UNKNOWN,
+            )
+            beginning = template.beginning
+            beat = LifeBeatFactory(
+                name=LIFE_POINTS_BEAT,
+                prompt="What did the road make of you.",
+                selection=BeatSelection.ANY,
+                offered_to=BeatAudience.ONLY_LISTED,
+            )
+            LifeBeatExclusionFactory(beat=beat, beginning=beginning)
+            for name, price in (
+                (LIFE_POINTS_COSTLY_CARD, LIFE_POINTS_COSTLY_PRICE),
+                (LIFE_POINTS_PAYING_CARD, -LIFE_POINTS_PAYING_PRICE),
+            ):
+                DistinctionOfferFactory(
+                    chapter=OfferChapter.BACKGROUNDS,
+                    beat=beat,
+                    appearance_section=None,
+                    prompt="",
+                    distinction=DistinctionFactory(name=name, cost_per_rank=price, max_rank=1),
+                )
+
+            draft = CharacterDraft.objects.filter(account=account).first()
+            if draft is None:
+                draft = CharacterDraftFactory(account=account)
+            draft.selected_area = beginning.starting_area
+            draft.selected_beginnings = beginning
+            draft.selected_origin_template = template
+            draft.current_stage = Stage.LINEAGE
+            draft.draft_data = {
+                **draft.draft_data,
+                "first_name": "Maren",
+                "life_loaded_for": beginning.pk,
+                "distinctions": [],
+            }
+            draft.save()
+
+    draft = CharacterDraft.objects.get(account=account)
+    return LifePointsSeed(
+        draft_id=draft.pk,
+        costly_card=LIFE_POINTS_COSTLY_CARD,
+        costly_price=LIFE_POINTS_COSTLY_PRICE,
+        paying_card=LIFE_POINTS_PAYING_CARD,
+        paying_price=LIFE_POINTS_PAYING_PRICE,
+    )

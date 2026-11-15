@@ -247,6 +247,22 @@ jobs:
           open('/tmp/family-seats-seed.json', 'w').write(json.dumps(dataclasses.asdict(seats_seed)))
           print(seats_seed)
           "
+      - name: Seed the life-points spec's draft
+        # #5141: the life-points spec signs in as its own account, e2e_life_points_account,
+        # for the same reason the seats spec does: it needs that account's creation draft
+        # at Lineage. Its beat is offered to its own beginning alone, so no other spec's
+        # draft meets it. Its ids go to the JSON file the spec reads (LIFE_POINTS_SEED in
+        # frontend/e2e/life-points.spec.ts).
+        run: |
+          uv run arx manage shell -c "
+          import dataclasses, json
+          from world.seeds.test_account import seed_test_account
+          print(seed_test_account(username='e2e_life_points_account', email='e2e_life_points@example.com', password='TestPass123!'))
+          from integration_tests.live_seeds import seed_life_points_spec
+          points_seed = seed_life_points_spec(username='e2e_life_points_account')
+          open('/tmp/life-points-seed.json', 'w').write(json.dumps(dataclasses.asdict(points_seed)))
+          print(points_seed)
+          "
       - name: Run the live-server Playwright specs
         working-directory: frontend
         # The only specs that talk to :4001 are these (the rest mock the API
@@ -257,7 +273,7 @@ jobs:
           e2e/account-settings.spec.ts e2e/user-journey.spec.ts
           e2e/motif-facets.spec.ts e2e/gift-substance.spec.ts
           e2e/thrown-and-enchanted-strike.spec.ts e2e/missives.spec.ts e2e/channels.spec.ts e2e/one-scale.spec.ts
-          e2e/family-seats.spec.ts e2e/home-while-connected.spec.ts
+          e2e/family-seats.spec.ts e2e/home-while-connected.spec.ts e2e/life-points.spec.ts
       - name: Stop the server
         if: always()
         run: uv run arx stop || true
