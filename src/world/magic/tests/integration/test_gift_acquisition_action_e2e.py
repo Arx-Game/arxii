@@ -37,10 +37,16 @@ from world.magic.models import (
     Thread,
 )
 from world.roster.factories import grant_test_tenure
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 
 
 class GiftAcquisitionActionE2ETest(TestCase):
     """purchase_gift_unlock -> accept_technique_offer, both via action.run()."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
 
     def setUp(self):
         from evennia_extensions.factories import AccountFactory

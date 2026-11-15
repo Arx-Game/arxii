@@ -38,7 +38,7 @@ from integration_tests.test_surge_rolls_journeys import (
     SUCCESS_INTENSITY,
     _SurgeField,
 )
-from world.checks.test_helpers import force_check_outcome
+from world.checks.test_helpers import SeededLevelLadderMixin, force_check_outcome
 from world.combat.constants import EncounterType, SurgeTriggerKind, TargetingMode, TargetSelection
 from world.combat.factories import (
     CombatOpponentActionFactory,
@@ -298,7 +298,7 @@ class ARenamedBleedingOutStillHolds(_StaffRenameRows, JourneyCase):
 
 
 @tag("postgres")  # Bleeding Out is progressive: apply_condition uses DISTINCT ON
-class RenamingBleedingOutChangesNothing(_StaffRenameRows, _SurgeField):
+class RenamingBleedingOutChangesNothing(SeededLevelLadderMixin, _StaffRenameRows, _SurgeField):
     """Mira is bonded to Tomas; the captain's blow drops him into the renamed Bleeding Out."""
 
     PERIL_SPIKE = 5

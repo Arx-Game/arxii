@@ -42,6 +42,7 @@ from world.magic.factories import (
 )
 from world.magic.models import CharacterGift, CharacterTechnique, TechniqueGrant, Thread
 from world.progression.models import TechniqueKnownRequirement
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 
 NOT_HERE = "Could not find '{}'."
 
@@ -360,6 +361,11 @@ class DressingAndPacking(JourneyCase):
 
 class UsingWhatSheCarries(JourneyCase):
     """Ysmay drinks a draught, salves a friend, and studies a grimoire."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
 
     def setUp(self) -> None:
         super().setUp()

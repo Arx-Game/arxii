@@ -88,6 +88,7 @@ from world.items.factories import (
 )
 from world.items.services.crafting import craft_attach_facet
 from world.magic.factories import FacetFactory
+from world.mechanics.models import ModifierTarget
 from world.traits.factories import CharacterTraitValueFactory, CheckOutcomeFactory
 
 
@@ -354,13 +355,16 @@ class BuildCraftingQuoteQueryCountTests(TestCase):
     def test_build_crafting_quote_query_count(self) -> None:
         """build_crafting_quote must not scale queries with consequence/cap/material row count.
 
-        Pinned at 12 queries (measured on SQLite, #1031 baseline):
+        Pinned at 11 queries (measured on SQLite, #1031 baseline):
           recipe GET (1) + ActionPointConfig × 2 + ActionPointPool GET (3)
           + CharacterAnima filter.first (1) + material_requirements select_related (1)
           + ItemInstance IN-list (1) + trait-value lookup (1)
           + CraftingSkillCap.for_skill (1) + consequence_rows select_related (1)
-          + LevelTier rows for the difficulty's level strength (1, #5093)
-          = 12 queries.
+          = 11 queries.
+
+        The recipe's difficulty is level 0, which reads no baseline or tier row (#5093). The
+        trait-to-modifier-target map is a process-wide cache that a test running alone finds
+        cold (one more query), so the test warms it first and counts the same in any order.
 
         material_requirements: single SELECT — NOT one per requirement.
         CraftingSkillCap.for_skill: single SELECT — NOT one per cap row.
@@ -371,7 +375,8 @@ class BuildCraftingQuoteQueryCountTests(TestCase):
         """
         from world.items.crafting.constants import CraftingRecipeKind
 
-        with self.assertNumQueries(12):
+        ModifierTarget.get_for_trait(_enchanting_trait())
+        with self.assertNumQueries(11):
             quote = build_crafting_quote(
                 kind=CraftingRecipeKind.FACET_ATTACH,
                 crafter_character=self.character,

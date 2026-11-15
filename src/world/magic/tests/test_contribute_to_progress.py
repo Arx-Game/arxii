@@ -13,9 +13,15 @@ from world.magic.models import (
     TechniqueProgressWeekly,
 )
 from world.magic.services.technique_progress import contribute_to_technique_progress
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 
 
 class ContributeToProgressTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
+
     def setUp(self):
         self.sheet = CharacterSheetFactory()
         self.technique = TechniqueFactory()

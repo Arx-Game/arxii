@@ -55,6 +55,7 @@ from world.scenes.constants import InteractionMode, InteractionVisibility
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.models import Interaction, Scene
 from world.scenes.narrator import NARRATOR_PERSONA_NAME
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.societies.factories import OrganizationFactory
 from world.species.factories import make_language_with_target, make_understanding_condition
 from world.species.language_services import comprehension_value
@@ -324,6 +325,11 @@ class CallingAnImpromptuCheck(_TheLongTable):
 class RewardingAPlayerByFiat(_TheLongTable):
     """Ravenna, a Junior GM, rewards Ysmay from her seat: XP, development, a Golden
     Hare, a stat and a technique, each written with the GM's own name on it."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
 
     def setUp(self) -> None:
         super().setUp()

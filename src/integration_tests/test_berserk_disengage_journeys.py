@@ -17,7 +17,7 @@ from integration_tests.harness import JourneyCase
 from world.checks.constants import ModifierSourceKind
 from world.checks.factories import CheckTypeFactory
 from world.checks.services import collect_check_modifiers
-from world.checks.test_helpers import force_check_outcome
+from world.checks.test_helpers import SeededLevelLadderMixin, force_check_outcome
 from world.combat.constants import CombatManeuver, EncounterType, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -139,7 +139,7 @@ class ARagingCharacterMayParley(_RagingMira):
         self.assertIn(PARLEY_PENALTY, terms)
 
 
-class ARagingCharacterRollsToWalkAway(_RagingMira):
+class ARagingCharacterRollsToWalkAway(SeededLevelLadderMixin, _RagingMira):
     def test_leaving_rolls_against_the_rage_instead_of_being_refused(self) -> None:
         # The roll follows the compulsion on the condition (#4802), not its name.
         failure = ensure_canonical_check_outcome("Failure")
@@ -156,5 +156,6 @@ class ARagingCharacterRollsToWalkAway(_RagingMira):
             result = self.web(self.mira, "combat_leave")
 
         self.assertFalse(result.detail.success)
-        self.assertIn("vs 12: Failure.", result.detail.message)
+        # Level 1 is 18 points, plus 4 tenths of an 8-point level for severity 1 (3.2, so 3).
+        self.assertIn("vs 21: Failure.", result.detail.message)
         self.assertIn("You cannot break away.", result.detail.message)

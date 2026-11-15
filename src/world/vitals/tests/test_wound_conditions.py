@@ -12,7 +12,7 @@ from decimal import Decimal
 from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.checks.test_helpers import force_check_outcome
+from world.checks.test_helpers import SeededLevelLadderMixin, force_check_outcome
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionTemplate
 from world.conditions.services import get_active_conditions
@@ -30,7 +30,7 @@ from world.vitals.services import mend_wound, process_damage_consequences
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
-class WoundPoolAppliesConditionTests(TestCase):
+class WoundPoolAppliesConditionTests(SeededLevelLadderMixin, TestCase):
     """The audit's central gap: the wound pool now applies real conditions.
 
     Gates on SEED_SAMPLE_CONTENT (#2698) — ``seed_survivability_content``

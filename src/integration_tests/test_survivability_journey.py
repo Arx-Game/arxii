@@ -16,7 +16,7 @@ from evennia import create_object
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.types import LifecycleState
-from world.checks.test_helpers import force_check_outcome
+from world.checks.test_helpers import SeededLevelLadderMixin, force_check_outcome
 from world.combat.constants import OpponentTier
 from world.combat.factories import LethalDuelFactory, ThreatPoolEntryFactory, ThreatPoolFactory
 from world.combat.models import CombatOpponentAction, CombatRoundAction
@@ -35,13 +35,14 @@ from world.vitals.services import advance_bleed_out, attempt_wake, retire_charac
 
 @tag("postgres")
 @override_settings(SEED_SAMPLE_CONTENT=True)
-class SurvivabilityJourneyTests(TestCase):
+class SurvivabilityJourneyTests(SeededLevelLadderMixin, TestCase):
     """Exercise the three survivability arcs through their real service seams."""
 
     @classmethod
     def setUpTestData(cls) -> None:
         from world.vitals.seeds import seed_survivability_content
 
+        super().setUpTestData()
         seed_survivability_content()
         from world.traits.models import CheckOutcome
 

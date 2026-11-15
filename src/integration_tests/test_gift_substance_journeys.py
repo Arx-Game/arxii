@@ -30,8 +30,7 @@ from integration_tests.harness import JourneyCase
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.checks import services as check_services
-from world.checks.constants import ModifierLane
-from world.checks.modifier_models import ModifierLevelBaseline
+from world.classes.factories import CharacterClassLevelFactory
 from world.combat.constants import ParticipantStatus, RiskLevel
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -467,8 +466,10 @@ class ATechniqueThatNeedsOtherSurroundings(_ShadowField):
         )
         self.technique.restrictions.add(self.needs_wet)
         self.technique.__dict__.pop("cached_restrictions", None)
-        # Staff's typical roll at her level: what the penalty is a share of.
-        ModifierLevelBaseline.objects.create(lane=ModifierLane.CHECK, level=0, baseline=58)
+        # The penalty is a share of a typical roll at her character level, so she holds one:
+        # level 10 is baseline 18 + 8 x 9 = 90, and this database seeds no level tiers.
+        CharacterClassLevelFactory(character=self.sheet, level=10, is_primary=True)
+        self.sheet.invalidate_class_level_cache()
 
     def labels(self) -> dict[str, int]:
         real = check_services.collect_check_modifiers
@@ -488,7 +489,7 @@ class ATechniqueThatNeedsOtherSurroundings(_ShadowField):
         lines = [line["text"] for line in self.card()["surroundings"]]
 
         self.assertIn("Needs wet air: very heavy penalty here", lines)
-        self.assertEqual(self.labels()["Surroundings: Needs wet air (here: dry)"], -58)
+        self.assertEqual(self.labels()["Surroundings: Needs wet air (here: dry)"], -90)
 
     def test_on_a_gift_whose_own_substance_it_names_it_does_nothing(self) -> None:
         self.substance.stat_key = StatKey.WET

@@ -65,11 +65,17 @@ from world.npc_services.factories import (
 from world.progression.factories import CharacterPathHistoryFactory
 from world.progression.models import TechniqueKnownRequirement
 from world.scenes.factories import PersonaFactory
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.societies.factories import OrganizationFactory
 
 
 class ChargeAndLearnPrerequisitesTest(TestCase):
     """``charge_and_learn`` gates on ``check_requirements_for_technique``."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
 
     def setUp(self):
         self.gift = GiftFactory(kind=GiftKind.MINOR)
@@ -203,6 +209,11 @@ class TrainOfferStillOffersGatedTechniqueTest(TestCase):
     longer excludes it, and ``charge_and_learn``'s per-character
     ``check_requirements_for_technique`` call decides per learner.
     """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
 
     def setUp(self):
         from world.action_points.models import ActionPointPool

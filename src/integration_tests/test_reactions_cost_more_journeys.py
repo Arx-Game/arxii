@@ -54,7 +54,7 @@ from actions.types import ActionRef
 from integration_tests.harness import JourneyCase
 from world.areas.positioning.plummet_content import ensure_catch_content
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
-from world.checks.test_helpers import force_check_outcome
+from world.checks.test_helpers import SeededLevelLadderMixin, force_check_outcome
 from world.checks.types import CheckResult
 from world.combat.constants import (
     ActionCategory,
@@ -436,7 +436,7 @@ def casting_well() -> Iterator[None]:
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # the survivability seed gates on #2698
-class TheWoundClock(_TheYard):
+class TheWoundClock(SeededLevelLadderMixin, _TheYard):
     """Cassian is wounded in round 1; Ilse mends it in round 1, in round 4, or in a new fight."""
 
     def setUp(self) -> None:
@@ -461,7 +461,7 @@ class TheWoundClock(_TheYard):
             target_kind=TreatmentTargetKind.PRIMARY,
             target_condition=ConditionTemplate.objects.get(name=WOUND_CRIPPLING_NAME),
             check_type=CheckTypeFactory(),
-            target_difficulty=0,
+            target_difficulty_level=0,
             scene_required=False,
             once_per_scene_per_helper=False,
             reduction_on_crit=0,

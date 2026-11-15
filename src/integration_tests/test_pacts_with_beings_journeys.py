@@ -64,7 +64,7 @@ from world.checks.factories import (
     ConsequenceFactory,
 )
 from world.checks.services import perform_check
-from world.checks.test_helpers import force_check_outcome
+from world.checks.test_helpers import SeededLevelLadderMixin, force_check_outcome
 from world.checks.types import CheckResult
 from world.combat.constants import ActionCategory, CombatAllegiance, OpponentTier
 from world.combat.factories import (
@@ -155,7 +155,7 @@ def every_combat_check_at(outcome: CheckOutcome) -> Iterator[None]:
         yield
 
 
-class PactJourneyBase(JourneyCase):
+class PactJourneyBase(SeededLevelLadderMixin, JourneyCase):
     """Hesk offers a pact on a pledge; Corwen and Hobb stand in the Hollow's scene."""
 
     def setUp(self) -> None:
@@ -446,10 +446,11 @@ class ServingThePact(PactJourneyBase):
         self.deed(self.corwen, 3)
         with force_check_outcome(self.outcomes["Failure"]) as roll:
             self.period_ends(self.corwen)
-        self.assertEqual(roll.target_difficulty, 10)
+        # Strained's resist is level 1: 18 points on the seeded ladder, with no favor ease.
+        self.assertEqual(roll.target_difficulty, 18)
         self.assertTold(
             self.corwen,
-            "That would raise severity by 7 (to 15) and reach Strained. Resist check: 10. "
+            "That would raise severity by 7 (to 15) and reach Strained. Resist check: 18. "
             "Result: Failure, so the full rise applies.",
         )
         self.assertTold(self.corwen, "Strained now applies. Earn 8 next period to ease it by 10.")
@@ -544,7 +545,7 @@ class BreachingAPact(PactJourneyBase):
         with force_check_outcome(self.outcomes["Failure"]):
             self.period_ends(self.corwen)
 
-        self.assertTold(self.corwen, "reach Breached. Resist check: 10. Result: Failure")
+        self.assertTold(self.corwen, "reach Breached. Resist check: 18. Result: Failure")
         self.assertTold(self.corwen, "[closing text]")
         self.assertTold(self.corwen, "Hesk is no longer your patron.")
         self.assertTold(self.corwen, "Breached eases by 10 each period until it is gone.")

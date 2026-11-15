@@ -27,10 +27,16 @@ from world.magic.services.gift_acquisition import (
     spend_xp_on_gift_unlock,
 )
 from world.roster.factories import grant_test_tenure
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 
 
 class GiftAcquisitionE2ETest(TestCase):
     """Drives the full post-CG gift-acquisition journey end-to-end."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
 
     def setUp(self):
         from evennia_extensions.factories import AccountFactory

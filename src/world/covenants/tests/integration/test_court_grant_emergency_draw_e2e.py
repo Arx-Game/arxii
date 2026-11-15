@@ -99,7 +99,7 @@ class EmergencyDrawE2ETests(TestCase):
         )
 
         CharacterResonanceFactory(
-            character_sheet=self.servant_sheet, resonance=self.resonance, balance=20
+            character_sheet=self.servant_sheet, resonance=self.resonance, balance=110
         )
         CharacterAnimaFactory(character=self.servant_sheet, current=10, maximum=20)
         ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=0)
@@ -112,7 +112,9 @@ class EmergencyDrawE2ETests(TestCase):
         # for there to be any applicable effect to scale at all. The emergency
         # draw only affects the multiplier of an ALREADY-unlocked effect.
         ThreadLevelUnlock.objects.create(thread=self.thread, unlocked_level=10, xp_spent=0)
-        spend_resonance_for_imbuing(self.servant_sheet, self.thread, self.thread.resonance, 10)
+        # A level costs a tenth of a band on the shared development curve (10 points in the
+        # starting band), so levels 0 to 10 cost 100 points; 10 of the balance are left.
+        spend_resonance_for_imbuing(self.servant_sheet, self.thread, self.thread.resonance, 100)
         self.thread.refresh_from_db()
         self.starting_thread_level = self.thread.level
         self.assertEqual(self.starting_thread_level, 10)

@@ -58,12 +58,18 @@ from world.npc_services.factories import (
 )
 from world.progression.factories import CodexKnowledgeRequirementFactory
 from world.progression.models import TechniqueKnownRequirement
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.societies.factories import OrganizationFactory
 from world.traits.factories import CheckOutcomeFactory
 
 
 class ATrialInTheCrypt(JourneyCase):
     """Ysolde takes the staff-authored crypt trial; each tier gives and costs something."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
 
     def setUp(self) -> None:
         super().setUp()
@@ -321,6 +327,11 @@ class ATrialInTheCrypt(JourneyCase):
 
 class ATrialBuiltOnThePage(JourneyCase):
     """Staff build the crypt trial on the Trial builder page; a player then runs it (#4513)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
 
     def setUp(self) -> None:
         super().setUp()
