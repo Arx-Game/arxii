@@ -1,9 +1,9 @@
 """The REST surface of a character with several resonances (#5123).
 
 A thread lists every resonance it holds, the aura says whether the character is unsettled
-in words, the pull preview lists each pulled thread's payers with their own perks, the
-accept endpoint dispatches the action the telnet verb runs, an imbue names the resonance
-that pays, and the character creation draft takes the weighted resonance picks.
+in words, the pull preview lists each pulled thread's payers with their own perks, an imbue
+names the resonance that pays, and the character creation draft takes the weighted resonance
+picks.
 """
 
 from __future__ import annotations
@@ -129,7 +129,7 @@ class AuraPayloadTests(_CharacterWithResonances):
         """Settled Celestial 60, Primal 30, Abyssal 10; now Celestial 70, Primal 10, Abyssal 20.
 
         Celestial grew most in raw terms, but only the Abyssal has passed what was settled
-        plus the tolerance, so the aura names Abyssal, as accepting will.
+        plus the tolerance, so the aura names Abyssal.
         """
         aura = CharacterAuraFactory(character=self.sheet)
         set_aura_split(aura, celestial="60", primal="30", abyssal="10")
@@ -141,9 +141,6 @@ class AuraPayloadTests(_CharacterWithResonances):
         response = self.client.get(self._aura_url())
 
         self.assertEqual(response.data["unsettled_affinity_name"], self.abyssal.name)
-        done = self.client.post(self._aura_url("accept/"))
-        self.assertEqual(done.data["detail"], "You become more abyssal.")
-        self.assertEqual(done.data["aura"]["unsettled_affinity_name"], "")
 
     def test_each_aura_reads_its_resonances_once(self) -> None:
         self._primal_character_who_has_grown_abyssal(mire=10)
@@ -166,37 +163,6 @@ class AuraPayloadTests(_CharacterWithResonances):
         self.assertIs(response.data["unsettled"], False)
         self.assertEqual(response.data["unsettled_line"], "")
         self.assertEqual(response.data["mire_share_words"], "none")
-
-
-class AcceptEndpointTests(_CharacterWithResonances):
-    def test_accept_endpoint(self) -> None:
-        self._primal_character_who_has_grown_abyssal()
-
-        done = self.client.post(self._aura_url("accept/"))
-        again = self.client.post(self._aura_url("accept/"))
-
-        self.assertEqual(done.status_code, status.HTTP_200_OK, done.data)
-        self.assertEqual(done.data["detail"], "You become more abyssal.")
-        self.assertIs(done.data["aura"]["unsettled"], False)
-        settled = {row["affinity_name"]: row for row in done.data["aura"]["shares"]}
-        self.assertEqual(float(settled[self.abyssal.name]["settled_percent"]), 30.0)
-        # Nothing left to accept: refused in the action's own words.
-        self.assertEqual(again.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertNotIn("accepted", again.data["detail"])
-
-    def test_nobody_accepts_for_another_players_character(self) -> None:
-        self._primal_character_who_has_grown_abyssal()
-        self.client.force_authenticate(user=AccountFactory())
-
-        response = self.client.post(self._aura_url("accept/"))
-
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(
-            CharacterResonance.objects.get(
-                character_sheet=self.sheet, resonance=self.domination
-            ).mire_lifetime,
-            0,
-        )
 
 
 class PreviewPayloadTests(_CharacterWithResonances):
