@@ -29,7 +29,21 @@ const BEAT = {
   allowance_is_points: false,
 };
 
-const offer = (offerId: number, distinctionId: number, name: string, text: string) => ({
+const SECOND_BEAT = {
+  ...BEAT,
+  beat_id: 2,
+  name: 'What you were taught',
+  prompt: 'What did they make sure you learned?',
+  answer_offer_ids: [201, 202],
+};
+
+const offer = (
+  offerId: number,
+  distinctionId: number,
+  name: string,
+  text: string,
+  beatId: number = BEAT.beat_id
+) => ({
   offer_id: offerId,
   distinction_id: distinctionId,
   name,
@@ -44,7 +58,7 @@ const offer = (offerId: number, distinctionId: number, name: string, text: strin
   is_locked: false,
   lock_reason: '',
   // The life page shows a beat the offers whose opener is that beat.
-  opener_key: `beat:${BEAT.beat_id}`,
+  opener_key: `beat:${beatId}`,
   first_look: true,
   held: false,
   effect_line: '',
@@ -60,6 +74,10 @@ const OFFERS = [
   offer(101, 1, 'Hard scrabble', 'Nothing came easy, and you learned to make do.'),
   offer(102, 2, 'Spoiled', 'Whatever you wanted, someone fetched it.'),
   offer(103, 3, 'Bookish', 'You were raised among books and little else.'),
+];
+const SECOND_OFFERS = [
+  offer(201, 21, 'Apprenticed', 'A master took you on and worked you hard.', SECOND_BEAT.beat_id),
+  offer(202, 22, 'Tutored', 'Someone was paid to teach you letters.', SECOND_BEAT.beat_id),
 ];
 
 interface Entry {
@@ -159,5 +177,104 @@ test.describe('character creation: a clicked card shows at once (#5134)', () => 
     expect(listRequests.length).toBe(listRequestsBefore);
     await page.screenshot({ path: shot('2-after-the-save-answers.png'), fullPage: true });
     expect(errors).toEqual([]);
+  });
+
+  /**
+   * Two beats on one page, each its own card grid with its own save. On the build
+   * before #5134 the second grid did not know the first grid's save was in flight: a
+   * click there was built from the list that save was replacing, and the first pick was
+   * lost. `EVIDENCE_OLD_BUILD=1` runs this walk against that build and expects the loss;
+   * without it the walk expects the second grid held until the first save answers, and
+   * both picks kept.
+   */
+  test('a pick in a second beat does not cost the first beat its pick', async ({ page }) => {
+    const oldBuild = process.env.EVIDENCE_OLD_BUILD === '1';
+    await page.setViewportSize({ width: 1280, height: 1500 });
+    const draft = await mockCg(page, CRADLE);
+    (draft.draft_data as Record<string, unknown>) = { life_loaded_for: BEGINNING.id };
+
+    const all = [...OFFERS, ...SECOND_OFFERS];
+    let held: Entry[] = [];
+    const saves: number[][] = [];
+    let answered = 0;
+    await page.route('**/api/**', async (route: Route) => {
+      const url = new URL(route.request().url());
+      const p = url.pathname;
+      const method = route.request().method();
+      if (p === `/api/character-creation/drafts/${DRAFT_ID}/beats/`) {
+        await route.fulfill({ json: [BEAT, SECOND_BEAT] });
+      } else if (p === `/api/character-creation/drafts/${DRAFT_ID}/offers/`) {
+        const chapter = url.searchParams.get('chapter');
+        await route.fulfill({ json: { offers: chapter === 'backgrounds' ? all : [], terms: [] } });
+      } else if (p === `/api/distinctions/drafts/${DRAFT_ID}/distinctions/` && method === 'GET') {
+        await route.fulfill({ json: held });
+      } else if (p === `/api/distinctions/drafts/${DRAFT_ID}/distinctions/sync/`) {
+        const body = route.request().postDataJSON() as {
+          distinctions: { id: number; rank: number; offer_id: number }[];
+        };
+        const first = saves.length === 0;
+        saves.push(body.distinctions.map((row) => row.offer_id));
+        // A save replaces the draft's whole list, as the server does.
+        const mine: Entry[] = body.distinctions.map((row) => {
+          const picked = all.find((o) => o.offer_id === row.offer_id)!;
+          return {
+            distinction_id: row.id,
+            distinction_name: picked.name,
+            distinction_slug: picked.name.toLowerCase().replace(/ /g, '-'),
+            category_slug: 'background',
+            rank: row.rank,
+            cost: picked.cost_per_rank * row.rank,
+            notes: '',
+            offer_ids: [row.offer_id],
+            sources: [BEAT.name],
+            arrivals: ['choice'],
+          };
+        });
+        held = mine;
+        // The first save is the slow one; the second answers quickly.
+        await new Promise((resolve) => setTimeout(resolve, first ? 4000 : 300));
+        answered += 1;
+        await route.fulfill({ json: { distinctions: mine, stat_adjustments: [] } });
+      } else {
+        await route.fallback();
+      }
+    });
+
+    await page.goto('/characters/create');
+    const first = page.getByRole('button', { name: /^Hard scrabble/ });
+    await expect(first).toBeVisible({ timeout: 15000 });
+    await first.click();
+
+    // Open the second beat while the first beat's save is still in flight.
+    await page.getByRole('button', { name: /What you were taught/ }).click();
+    const second = page.getByRole('button', { name: /^Apprenticed/ });
+    await expect(second).toBeVisible();
+    expect(answered).toBe(0);
+
+    if (oldBuild) {
+      // Before #5134: the card is open, the click is taken, and its save carries the
+      // second pick alone, so the server ends holding one card.
+      await expect(second).toBeEnabled();
+      await second.click();
+      await expect.poll(() => answered, { timeout: 8000 }).toBe(2);
+      expect(saves).toEqual([[101], [201]]);
+      expect(held.map((entry) => entry.offer_ids[0])).toEqual([201]);
+      await page.waitForTimeout(1500);
+      await page.screenshot({ path: shot('old-build-first-pick-lost.png'), fullPage: true });
+      return;
+    }
+
+    // Since #5134: the second grid is held until the first save answers.
+    await expect(second).toBeDisabled();
+    await page.screenshot({ path: shot('3-second-beat-held-during-the-save.png'), fullPage: true });
+    await expect(second).toBeEnabled({ timeout: 8000 });
+    await second.click();
+    await expect.poll(() => answered, { timeout: 8000 }).toBe(2);
+    // The second save carries both picks, and the server holds both.
+    expect(saves).toEqual([[101], [101, 201]]);
+    expect(held.map((entry) => entry.offer_ids[0])).toEqual([101, 201]);
+    await expect(second).toHaveAttribute('aria-pressed', 'true');
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: shot('4-both-picks-kept.png'), fullPage: true });
   });
 });
