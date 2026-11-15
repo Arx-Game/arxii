@@ -1,2 +1,113 @@
-{% include "admin/edit_inline/tabular.html" %}
+{% load i18n admin_urls %}
+{# Four columns, as the approved demo draws them: Situation, Setting, Strength, Delete. #}
+{# The Setting cell holds the one parameter the chosen situation reads (the script shows #}
+{# only that one; with no script every parameter shows). Reason, order and active sit in a #}
+{# details line under it so no column is lost. #}
+<div class="js-inline-admin-formset inline-group kindling-inline" id="{{ inline_admin_formset.formset.prefix }}-group"
+     data-inline-type="tabular"
+     data-inline-formset="{{ inline_admin_formset.inline_formset_data }}">
+  <div class="tabular inline-related {% if forloop.last %}last-related{% endif %}">
+{{ inline_admin_formset.formset.management_form }}
+<fieldset class="module {{ inline_admin_formset.classes }}" aria-labelledby="{{ inline_admin_formset.formset.prefix }}-heading">
+  <h2 id="{{ inline_admin_formset.formset.prefix }}-heading" class="inline-heading">{{ inline_admin_formset.opts.verbose_name_plural|capfirst }}</h2>
+  {{ inline_admin_formset.formset.non_form_errors }}
+  <table>
+    <thead><tr>
+      <th class="column-situation required">Situation</th>
+      <th class="column-setting">Setting</th>
+      <th class="column-strength required">Strength</th>
+      <th>{% if inline_admin_formset.formset.can_delete and inline_admin_formset.has_delete_permission %}{% translate "Delete?" %}{% endif %}</th>
+    </tr></thead>
+    <tbody>
+    {% for inline_admin_form in inline_admin_formset %}
+      {% with form=inline_admin_form.form %}
+      {% if form.non_field_errors %}
+      <tr class="row-form-errors"><td colspan="4">{{ form.non_field_errors }}</td></tr>
+      {% endif %}
+      <tr class="form-row {% if inline_admin_form.original %}has_original{% endif %}{% if forloop.last and inline_admin_formset.has_add_permission %} empty-form{% endif %}"
+          id="{{ inline_admin_formset.formset.prefix }}-{% if forloop.last and inline_admin_formset.has_add_permission %}empty{% else %}{{ forloop.counter0 }}{% endif %}">
+        <td class="field-situation">
+          {{ form.situation.errors }}{{ form.situation }}
+          {% if inline_admin_form.needs_explicit_pk_field %}{{ inline_admin_form.pk_field.field }}{% endif %}
+          {% if inline_admin_form.fk_field %}{{ inline_admin_form.fk_field.field }}{% endif %}
+        </td>
+        <td class="field-setting">
+          <span class="kp" data-param="threshold_percent">{{ form.threshold_percent.errors }}<label>{{ form.threshold_percent.label }} {{ form.threshold_percent }}</label></span>
+          <span class="kp" data-param="count_threshold">{{ form.count_threshold.errors }}<label>{{ form.count_threshold.label }} {{ form.count_threshold }}</label></span>
+          <span class="kp" data-param="affinity">{{ form.affinity.errors }}<label>{{ form.affinity.label }}</label> {{ form.affinity }}</span>
+          <span class="kp" data-param="origin_side">{{ form.origin_side.errors }}<label>{{ form.origin_side.label }} {{ form.origin_side }}</label></span>
+          <span class="kp" data-param="condition_property">{{ form.condition_property.errors }}<label>{{ form.condition_property.label }}</label> {{ form.condition_property }}</span>
+          <span class="kp" data-param="mission_theme">{{ form.mission_theme.errors }}<label>{{ form.mission_theme.label }}</label> {{ form.mission_theme }}</span>
+          <span class="kp" data-param="enemies_only">{{ form.enemies_only.errors }}<label>{{ form.enemies_only }} {{ form.enemies_only.label }}</label></span>
+          <span class="kp-none">no setting</span>
+          <details class="kp-more"{% if form.reason_text.errors or form.display_order.errors or form.is_active.errors %} open{% endif %}>
+            <summary>Reason, order, active</summary>
+            <div>{{ form.reason_text.errors }}<label>{{ form.reason_text.label }}</label> {{ form.reason_text }}</div>
+            <div>{{ form.display_order.errors }}<label>{{ form.display_order.label }} {{ form.display_order }}</label></div>
+            <div>{{ form.is_active.errors }}<label>{{ form.is_active }} {{ form.is_active.label }}</label></div>
+          </details>
+        </td>
+        <td class="field-strength">{{ form.strength.errors }}{{ form.strength }}</td>
+        <td class="delete">{% if inline_admin_formset.formset.can_delete and inline_admin_formset.has_delete_permission and inline_admin_form.original %}{{ inline_admin_form.deletion_field.field }}{% endif %}</td>
+      </tr>
+      {% endwith %}
+    {% endfor %}
+    </tbody>
+  </table>
+</fieldset>
+  </div>
+</div>
+{{ inline_admin_formset.opts.param_map|json_script:"kindling-param-map" }}
+<style>
+  .kindling-inline td.field-setting .kp { display: inline-block; margin: 0 12px 4px 0; vertical-align: top; }
+  .kindling-inline td.field-setting .kp[hidden], .kindling-inline td.field-setting .kp-none[hidden] { display: none; }
+  .kindling-inline td.field-setting .kp-none { color: var(--body-quiet-color, #666); font-style: italic; }
+  .kindling-inline td.field-setting label { display: inline; width: auto; float: none; padding: 0; }
+  .kindling-inline td.field-setting input[type="number"] { width: 5em; }
+  .kindling-inline .kp-more { margin-top: 4px; font-size: 0.9em; }
+  .kindling-inline .kp-more > div { margin: 4px 0; }
+  .kindling-inline .kp-more input[type="text"] { width: 28em; max-width: 100%; }
+</style>
+<script>
+(function () {
+  var mapEl = document.getElementById("kindling-param-map");
+  if (!mapEl) { return; }
+  var allowedBySituation = JSON.parse(mapEl.textContent);
+  var group = document.getElementById("{{ inline_admin_formset.formset.prefix }}-group");
+  if (!group) { return; }
+
+  function hasValue(span) {
+    var inputs = span.querySelectorAll("input, select");
+    for (var i = 0; i < inputs.length; i++) {
+      var el = inputs[i];
+      if (el.type === "hidden") { continue; }
+      if (el.type === "checkbox" ? el.checked : el.value !== "") { return true; }
+    }
+    return false;
+  }
+
+  function apply(row) {
+    var select = row.querySelector("td.field-situation select");
+    if (!select) { return; }
+    var allowed = allowedBySituation[select.value] || [];
+    var shown = 0;
+    row.querySelectorAll(".kp").forEach(function (span) {
+      var show = allowed.indexOf(span.getAttribute("data-param")) !== -1 || hasValue(span);
+      span.hidden = !show;
+      if (show) { shown += 1; }
+    });
+    var none = row.querySelector(".kp-none");
+    if (none) { none.hidden = shown > 0; }
+  }
+
+  group.querySelectorAll("tr.form-row").forEach(apply);
+  group.addEventListener("change", function (event) {
+    var row = event.target.closest("tr.form-row");
+    if (row) { apply(row); }
+  });
+  document.addEventListener("formset:added", function (event) {
+    if (group.contains(event.target)) { apply(event.target); }
+  });
+})();
+</script>
 {% if affinity_list_note %}<p class="help" style="padding: 0 10px 10px">{{ affinity_list_note }}</p>{% endif %}

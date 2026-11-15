@@ -20,6 +20,7 @@ from world.character_creation.models import DistinctionOffer
 from world.codex.admin import GrantReachOnSaveMixin
 from world.codex.models import TraditionCodexGrant
 from world.conditions.inspection import inspect_condition_template
+from world.covenants.perks.constants import SITUATION_PARAM_SPECS, Situation
 from world.magic.audere import AudereThreshold
 from world.magic.audere_majora import (
     AudereMajoraFaithVariant,
@@ -217,12 +218,15 @@ class StrengthByNameMixin:
 class KindlingSituationInline(StrengthByNameMixin, admin.TabularInline):
     """What kindles a resonance, or every resonance of an affinity (#5124, Screen 8).
 
-    The columns are the vow perk situation columns (the same ``SituationCheck`` reads them),
-    then the strength rank and the reason a player reads. A used row cannot be deleted:
-    clear ``is_active`` to retire it.
+    The page shows the demo's four columns: Situation, Setting, Strength, Delete. Every
+    vow perk situation parameter (the same ``SituationCheck`` reads them) and the reason,
+    order and active flag are still form fields; the template puts the parameters in the one
+    Setting cell and shows only the ones the chosen situation reads. A used row cannot be
+    deleted: clear ``is_active`` to retire it.
     """
 
     model = KindlingSituation
+    template = "admin/magic/kindling_situation_inline.html"
     extra = 1
     blank_strength_label = "From the source"
     verbose_name = "kindling situation"
@@ -243,12 +247,21 @@ class KindlingSituationInline(StrengthByNameMixin, admin.TabularInline):
     ]
     autocomplete_fields = ["affinity", "condition_property", "mission_theme"]
 
+    @property
+    def param_map(self) -> dict[str, list[str]]:
+        """Situation value -> the parameter fields it reads, for the Setting cell's script."""
+        return {
+            situation: sorted(SITUATION_PARAM_SPECS[situation].allowed)
+            if situation in SITUATION_PARAM_SPECS
+            else []
+            for situation in Situation.values
+        }
+
 
 class ResonanceKindlingSituationInline(KindlingSituationInline):
     """The situations authored on one resonance, with a note of its affinity's own list."""
 
     fk_name = "resonance"
-    template = "admin/magic/kindling_situation_inline.html"
 
 
 class AffinityKindlingSituationInline(KindlingSituationInline):

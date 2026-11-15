@@ -117,6 +117,22 @@ class KindlingAdminPagesTests(TestCase):
         )
         self.assertContains(response, f"Also kindled by the {self.affinity.name} affinity")
 
+    def test_the_situation_inline_has_the_demos_four_columns_and_no_raw_caption(self) -> None:
+        self.client.force_login(self.staff)
+        for url in (
+            reverse("admin:arxii_resonance_change", args=[self.resonance.pk]),
+            reverse("admin:arxii_affinity_change", args=[self.affinity.pk]),
+        ):
+            with self.subTest(url=url):
+                page = self.client.get(url).content.decode()
+                headers = ("Situation", "Setting", "Strength", "Delete?")
+                positions = [page.index(f">{name}</th>") for name in headers]
+                self.assertEqual(positions, sorted(positions))
+                self.assertNotIn("KindlingSituation(", page)
+                # Every setting field is still on the page; the script shows the applicable one.
+                self.assertIn('data-param="mission_theme"', page)
+                self.assertIn('id="kindling-param-map"', page)
+
     def test_a_situation_row_saves_through_the_resonance_admin(self) -> None:
         self.client.force_login(self.staff)
         url = reverse("admin:arxii_resonance_change", args=[self.resonance.pk])
