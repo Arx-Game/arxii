@@ -161,13 +161,13 @@ class RevealConditionAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.checks.services import level_opposition, perform_check  # noqa: PLC0415
+        from world.checks.services import (  # noqa: PLC0415
+            compute_obstacle_rating,
+            perform_check,
+        )
         from world.conditions.models import ConditionInstance  # noqa: PLC0415
         from world.magic.constants import MagicActivity  # noqa: PLC0415
         from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
-        from world.progression.services.skill_development import (  # noqa: PLC0415
-            get_character_path_level,
-        )
 
         target = kwargs.get("target")
         if target is None:
@@ -199,8 +199,8 @@ class RevealConditionAction(Action):
         difficulty = template.subtlety
         caster = instance.source_character
         if caster is not None:
-            caster_level = get_character_path_level(caster)
-            difficulty += level_opposition(check_type, level=caster_level, character=caster)
+            # The caster is the obstacle: her full check total, not her level (#5093).
+            difficulty += compute_obstacle_rating(caster, check_type)
 
         # Spotting a loss of self (corruption, atavism, possession) is sensing magic.
         sensing = (
@@ -248,14 +248,14 @@ class RallyAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.checks.services import level_opposition, perform_check  # noqa: PLC0415
+        from world.checks.services import (  # noqa: PLC0415
+            compute_obstacle_rating,
+            perform_check,
+        )
         from world.conditions.services import (  # noqa: PLC0415
             attempt_break_free,
             rally_target_instance,
             record_rally_landed,
-        )
-        from world.progression.services.skill_development import (  # noqa: PLC0415
-            get_character_path_level,
         )
 
         target = kwargs.get("target")
@@ -278,8 +278,8 @@ class RallyAction(Action):
         difficulty = instance.condition.break_free_difficulty
         caster = instance.source_character
         if caster is not None:
-            caster_level = get_character_path_level(caster)
-            difficulty += level_opposition(check_type, level=caster_level, character=caster)
+            # The caster is the obstacle: her full check total, not her level (#5093).
+            difficulty += compute_obstacle_rating(caster, check_type)
 
         result = perform_check(
             actor,

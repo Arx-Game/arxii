@@ -4418,13 +4418,10 @@ def attempt_break_free(
     """
     from world.checks.constants import ModifierSourceKind  # noqa: PLC0415
     from world.checks.services import (  # noqa: PLC0415
-        level_opposition,
+        compute_obstacle_rating,
         perform_check_with_modifiers,
     )
     from world.checks.types import ModifierContribution  # noqa: PLC0415
-    from world.progression.services.skill_development import (  # noqa: PLC0415
-        get_character_path_level,
-    )
 
     template = instance.condition
 
@@ -4455,8 +4452,8 @@ def attempt_break_free(
     difficulty = template.break_free_difficulty
     caster = instance.source_character
     if caster is not None:
-        caster_level = get_character_path_level(caster)
-        difficulty += level_opposition(check_type, level=caster_level, character=caster)
+        # The caster is the obstacle: her full check total, not her level (#5093).
+        difficulty += compute_obstacle_rating(caster, check_type)
 
     rally_bonus = instance.pending_rally_bonus
     if rally_bonus > 0:

@@ -30,7 +30,7 @@ from django.utils import timezone
 
 from world.character_creation.constants import REQUIRED_STATS, STAT_DEFAULT_VALUE
 from world.character_creation.models import Beginnings
-from world.checks.constants import LEVEL_POINTS_PER_LEVEL
+from world.checks.services import level_points
 from world.classes.models import Path, PathStage
 from world.magic.models.gifts import Gift, Tradition
 from world.magic.models.grants import PathGiftGrant
@@ -324,7 +324,8 @@ def starting_stats_roller_points(stats: dict[str, int]) -> int:
     """Convert CG stats (stored values) to a representative level-one check pool.
 
     A technique has no single check type, so the kit report uses the mean of the
-    twelve starting stat pools plus the level-one floor. This preserves the real
+    twelve starting stat pools plus the level-one level term
+    (`world.checks.services.level_points`). This preserves the real
     CG allocation (rather than the catalog's level-10 anchor) while keeping the
     report honest about being a representative combat context. An empty
     `PointConversionRange` table converts every stat to 0 points, same as the live
@@ -339,7 +340,7 @@ def starting_stats_roller_points(stats: dict[str, int]) -> int:
         PointConversionRange.objects.filter(trait_type=TraitType.STAT).order_by("min_value")
     )
     converted = [_points_from_ranges(ranges, value) for value in values]
-    return round(sum(converted) / len(converted)) + LEVEL_POINTS_PER_LEVEL
+    return round(sum(converted) / len(converted)) + level_points(1)
 
 
 #: The context a character has at the end of character creation (#3716 Decision 2).

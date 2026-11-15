@@ -26,6 +26,9 @@ from world.checks.modifier_models import (  # noqa: F401
 
 # Import outcome models so migrations and admin discover them.
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier  # noqa: F401
+
+# The level share of the check scale (#5093).
+from world.checks.scale_config import CheckScaleConfig  # noqa: F401
 from world.contributors.models import CreditedContent
 from world.scenes.action_constants import DifficultyChoice
 

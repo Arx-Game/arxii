@@ -10,15 +10,25 @@ from django.db.models import Max, Q
 
 from world.checks.constants import (
     BOTCH_SUCCESS_LEVEL_MAX,
-    LEVEL_POINTS_PER_LEVEL,
     MODIFIER_SOURCE_LABEL_MAX_LENGTH,
     ModifierLane,
     ModifierSourceKind,
 )
-from world.checks.modifier_values import load_taper_rules, load_value_table
+from world.checks.modifier_values import (
+    level_width,
+    load_baselines,
+    load_taper_rules,
+    load_value_table,
+)
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
+from world.checks.scale_config import CheckScaleConfig
 from world.checks.slide import CheckRoll, CheckStanding, resolve_standing
-from world.checks.types import CheckResult, ModifierBreakdown, ModifierContribution
+from world.checks.types import (
+    CheckResult,
+    ModifierBreakdown,
+    ModifierContribution,
+    round_half_up,
+)
 from world.classes.models import PathAspect
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER
 from world.progression.models import CharacterPathHistory
@@ -77,8 +87,9 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
 
     1. Calculate weighted trait points using TraitHandler
     2. Calculate aspect bonus from path (scaled by class level)
-    3. Calculate level points: LEVEL_POINTS_PER_LEVEL x class level (#2707) — a
-       guaranteed floor every check gets, on top of (not instead of) the aspect bonus
+    3. Calculate level points: the configured share of the class level's baseline
+       (``level_points``, #2707, #5093) — a guaranteed term every check gets, on top of
+       (not instead of) the aspect bonus
     4. Sum: trait_points + aspect_bonus + level_points + extra_modifiers + effort_modifier
        + fatigue_penalty
     5. Both totals -> band positions -> the slid chart (``world.checks.slide``, #4601)
@@ -450,6 +461,37 @@ class _CheckBreakdown(NamedTuple):
     standing: CheckStanding
 
 
+def _level_baseline_or_zero(level: int) -> int:
+    """The CHECK lane's baseline at ``level``, or 0 where the ladder has nothing to give.
+
+    A level below 1 (a level-0 or brand-new character) is below the first baseline row and
+    reads 0, as does a database with no CHECK baseline rows at all: nothing is authored, so
+    there is nothing to scale against (an empty ``PointConversionRange`` converts to 0 the
+    same way). Otherwise ``BaselineTable.baseline``: the level's own row, else the highest
+    row below it, so a level above the top row reads the top row.
+    """
+    if level < 1:
+        return 0
+    table = load_baselines()
+    if not table.levels:
+        return 0
+    return table.baseline(level)
+
+
+def level_points(level: int) -> int:
+    """The level term of a roll at ``level``: ``level_share`` of that level's baseline (#5093).
+
+    The one place the character's level becomes points, replacing the old per-level
+    coefficient. ``CheckScaleConfig.level_share`` and the CHECK baselines are rows; with
+    share 0.5 and a level-11 baseline of 98 the term is 49. Rounded half up. 0 at level 0
+    and on a database with no baseline rows (see ``_level_baseline_or_zero``).
+    """
+    baseline = _level_baseline_or_zero(level)
+    if baseline == 0:
+        return 0
+    return round_half_up(CheckScaleConfig.get_singleton().level_share * baseline)
+
+
 def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirror perform_check
     character: "ObjectDB",
     check_type: "CheckType",
@@ -468,8 +510,8 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
 
     (no dice roll). Shared by ``perform_check`` (which then rolls) and the forced-outcome
     test path (which supplies the outcome directly) — the single source of the check's
-    point math. Level contributes ``LEVEL_POINTS_PER_LEVEL`` points on its own (#2707) in
-    addition to scaling the aspect bonus below — a guaranteed floor, not a replacement for it.
+    point math. Level contributes ``level_points(level)`` on its own (#2707, #5093) in
+    addition to scaling the aspect bonus below — a guaranteed term, not a replacement for it.
 
     ``level_override`` (#2707 whole-branch-review fix): when ``None`` (every existing
     caller), behavior is byte-identical to before — ``level`` comes from
@@ -504,7 +546,7 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
     )
     specialization_points = _calculate_specialization_points(character, check_type, specialization)
     aspect_bonus = _calculate_aspect_bonus(character, check_type, level)
-    level_points = LEVEL_POINTS_PER_LEVEL * level
+    level_term = level_points(level)
     capability_points = _calculate_capability_points(
         character, check_type, extra_traits=extra_traits
     )
@@ -513,7 +555,7 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
         trait_points
         + specialization_points
         + aspect_bonus
-        + level_points
+        + level_term
         + capability_points
         + extra_modifiers
         + perk_bonus
@@ -527,7 +569,7 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
         trait_points=trait_points,
         specialization_points=specialization_points,
         aspect_bonus=aspect_bonus,
-        level_points=level_points,
+        level_points=level_term,
         capability_points=capability_points,
         total_points=total_points,
         roller_rank=standing.roller.rank,
@@ -1070,19 +1112,18 @@ def _check_result(
     )
 
 
-def _calculate_aspect_bonus(
+def _aspect_match_weights(
     character: "ObjectDB",
     check_type: "CheckType",
-    level: int,
-) -> int:
-    """
-    Calculate aspect bonus from the character's most recent path.
+) -> list[Decimal]:
+    """Each check-aspect weight x path-aspect weight where the character's Path matches.
 
     1. Get character's most recent path from CharacterPathHistory (ordered by -selected_at)
     2. Get PathAspect weights for that path
     3. For each CheckTypeAspect, find matching PathAspect weight
-    4. bonus += int(check_aspect_weight * path_aspect_weight * level)
-    5. Return total
+    4. One product (check weight x path weight) per matching aspect
+
+    Empty when the character has no Path history, the path has no aspects, or none match.
     """
     latest_history = (
         # pk filter: callers pass the ObjectDB; the FK targets CharacterSheet (PK-shared).
@@ -1092,7 +1133,7 @@ def _calculate_aspect_bonus(
         .first()
     )
     if not latest_history:
-        return 0
+        return []
 
     path = latest_history.path
 
@@ -1101,17 +1142,48 @@ def _calculate_aspect_bonus(
         for pa in PathAspect.objects.filter(character_path=path).select_related("aspect")
     }
     if not path_aspects:
-        return 0
+        return []
 
     check_type_aspects = check_type.aspects.select_related("aspect").all()  # type: ignore[attr-defined] — reverse FK manager from CheckTypeAspect
 
-    bonus = 0
+    weights: list[Decimal] = []
     for check_aspect in check_type_aspects:
         path_weight = path_aspects.get(check_aspect.aspect_id, 0)
         if path_weight:
-            bonus += int(check_aspect.weight * path_weight * level)
+            weights.append(check_aspect.weight * path_weight)
+    return weights
 
-    return bonus
+
+def _calculate_aspect_bonus(
+    character: "ObjectDB",
+    check_type: "CheckType",
+    level: int,
+) -> int:
+    """Aspect bonus from the character's most recent path, scaled by ``level``.
+
+    ``bonus += int(check_aspect_weight * path_aspect_weight * level)`` per matching aspect
+    (see ``_aspect_match_weights``). The acting side's term; the opposing side sizes the same
+    match as a modifier (``_opposing_aspect_term``).
+    """
+    return sum(int(weight * level) for weight in _aspect_match_weights(character, check_type))
+
+
+def _opposing_aspect_term(
+    character: "ObjectDB",
+    check_type: "CheckType",
+    level: int,
+) -> int:
+    """The opposing side's aspect-match term, sized as a modifier at ``level`` (#5093).
+
+    The acting check's aspects scored against the defender's Path. Each matching aspect's
+    weight product is a share of one level's width at ``level``, like a modifier's size
+    fraction, rounded half up. 0 below level 1 and on a database with no CHECK baselines.
+    """
+    weights = _aspect_match_weights(character, check_type)
+    if not weights or _level_baseline_or_zero(level) == 0:
+        return 0
+    width = level_width(level)
+    return sum(round_half_up(weight * width) for weight in weights)
 
 
 def _calculate_trait_points(
@@ -1440,27 +1512,32 @@ def level_opposition(
     level: int,
     character: "ObjectDB | None" = None,  # noqa: OBJECTDB_PARAM
 ) -> int:
-    """Difficulty an opposing entity of *level* adds to *check_type* (#2707).
+    """Difficulty an opposing NPC of *level* adds to *check_type* (#2707, #5093).
 
     The PASSIVE half of opposed checks — what a defender contributes when they
-    are not actively resisting with a defence check of their own. Two terms:
+    are not actively resisting with a defence check of their own. An NPC has a level and
+    no points of its own, so its difficulty is its level's baseline, which is exactly where
+    rank N starts: a level-N character with ordinary skills meets a level-N NPC on the even
+    chart. Three terms:
 
-    * ``LEVEL_POINTS_PER_LEVEL * level`` — always. This is what makes a level 1
-      attacker's swing at a level 5 defender land as it should, on checks with
-      no authored defensive content at all.
-    * ``_calculate_aspect_bonus(character, check_type, level)`` — the acting
-      check's aspects scored against the DEFENDER's Path, so what you are trying
-      to do to them is harder when it is their wheelhouse. Skipped entirely when
-      *character* is None (an ephemeral NPC with no sheet), which contributes
-      level alone rather than raising.
+    * ``level_baseline(level)`` — always. This is what makes a level 1 attacker's swing at a
+      level 5 defender land as it should, on checks with no authored defensive content at
+      all. 0 at level 0 and on a database with no baseline rows.
+    * ``_opposing_aspect_term(character, check_type, level)`` — the acting check's aspects
+      scored against the DEFENDER's Path, so what you are trying to do to them is harder when
+      it is their wheelhouse, sized as a modifier at *level*. Skipped entirely when
+      *character* is None (an ephemeral NPC with no sheet), which contributes the baseline
+      alone rather than raising.
     * ``opponent_condition_opposition(character, check_type)`` (#3384) — the
       defender's own active ``ConditionCheckModifier`` rows, read directly off
       its ObjectDB (no ``CharacterSheet`` required, so an ephemeral
-      ``CombatOpponent`` is covered). Summed as-authored, no sign flip: a
-      penalty condition (negative ``modifier_value``) LOWERS the total, so a
-      staggered/distracted opponent presents less difficulty to whoever is
-      acting against it. Skipped entirely when *character* is None, same as
-      the aspect bonus.
+      ``CombatOpponent`` is covered), each at its derived value at the level the condition was
+      applied at. Summed as-authored, no sign flip: a penalty condition LOWERS the total, so a
+      debuffed opponent acts as an opponent of a lower level and presents less difficulty to
+      whoever is acting against it. Skipped entirely when *character* is None.
+
+    A PLAYER CHARACTER who is the obstacle does not come through here: she counts as her full
+    check total, ``compute_obstacle_rating``.
 
     Deliberately EXCLUSIVE with :func:`compute_resist_increment`: an active
     resistance rating already contains the defender's level points, so a call
@@ -1468,13 +1545,52 @@ def level_opposition(
     authored difficulty (a lock's rating, a ward's barrier strength) rather than
     replacing it.
     """
-    total = LEVEL_POINTS_PER_LEVEL * max(0, level)
+    total = _level_baseline_or_zero(level)
     if character is not None:
-        total += _calculate_aspect_bonus(character, check_type, level)
+        total += _opposing_aspect_term(character, check_type, level)
         from world.conditions.services import opponent_condition_opposition  # noqa: PLC0415
 
         total += opponent_condition_opposition(character, check_type)
     return total
+
+
+def compute_obstacle_rating(
+    character: "ObjectDB",
+    check_type: "CheckType",
+    *,
+    extra_modifiers: int = 0,
+    level_override: int | None = None,
+    stat_override: str | int | None = None,
+) -> int:
+    """What a character who is the obstacle counts for on *check_type*, her full total (#5093).
+
+    A player character who opposes a check (a concealed cast, a held condition, a mission
+    opposition sheet, a resisted social move) is not a level: she counts as everything she
+    would bring to a roll on the check. That is :func:`compute_check_rating` plus every
+    modifier she carries on it, gathered through the seam a modifier-aware roll uses and
+    counted once (``extra_modifiers_total`` leaves out what the rating already holds). Nothing
+    is rolled, spent or announced; a character with no sheet carries no modifiers. Clamped
+    to 0 or more: an obstacle never lowers the difficulty.
+
+    ``extra_modifiers`` is added to her carried modifiers (:func:`compute_resist_increment`
+    passes an effort modifier). ``level_override`` and ``stat_override`` are forwarded to
+    ``compute_check_rating`` unchanged. Exclusive with :func:`level_opposition`, which would
+    count her level a second time.
+    """
+    modifier = extra_modifiers
+    sheet = _sheet_or_none(character)
+    if sheet is not None:
+        modifier += collect_check_modifiers(
+            sheet, check_type, skip_fashion=True
+        ).extra_modifiers_total
+    rating = compute_check_rating(
+        character,
+        check_type,
+        extra_modifiers=modifier,
+        level_override=level_override,
+        stat_override=stat_override,
+    )
+    return max(0, rating)
 
 
 def compute_resist_increment(
@@ -1577,25 +1693,19 @@ def compute_resist_increment(
     if composure_check_type is None:
         return 0
 
-    modifier = EFFORT_CHECK_MODIFIER.get(resist_effort_level, 0)
     # Everything the defender carries on a Composure roll counts toward how hard they are
     # to sway (#4720): Poise, a condition, a worn item. Gathered through
     # the same seam a modifier-aware roll uses; nothing is rolled, spent or announced.
-    sheet = _sheet_or_none(defender_character)
-    if sheet is not None:
-        modifier += collect_check_modifiers(
-            sheet, composure_check_type, skip_fashion=True
-        ).extra_modifiers_total
-    rating = compute_check_rating(
+    rating = compute_obstacle_rating(
         defender_character,
         composure_check_type,
-        extra_modifiers=modifier,
+        extra_modifiers=EFFORT_CHECK_MODIFIER.get(resist_effort_level, 0),
         level_override=level_override,
         stat_override=stat_override,
     )
     if award_development:
         _award_check_development(defender_character, composure_check_type, resist_effort_level)
-    return max(0, rating)
+    return rating
 
 
 def preview_check_difficulty(  # noqa: PLR0913 - keyword-only check params mirror perform_check

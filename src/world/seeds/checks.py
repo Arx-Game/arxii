@@ -21,7 +21,7 @@ make them non-idempotent, so the spine is seeded through ``get_or_create``.
 
 from __future__ import annotations
 
-from world.seeds.modifier_values import seed_check_level_baselines
+from world.seeds.modifier_values import seed_check_level_baselines, seed_check_scale_config
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 from world.traits.models import (
     CheckOutcome,
@@ -227,6 +227,7 @@ def seed_check_resolution_tables() -> None:
         )
 
     seed_check_level_baselines()
+    seed_check_scale_config()
     for rank, name in _CHECK_RANKS:
         CheckRank.objects.get_or_create(rank=rank, defaults={"name": name})
 

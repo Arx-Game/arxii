@@ -23,7 +23,6 @@ from django.test.utils import CaptureQueriesContext
 from evennia_extensions.factories import CharacterFactory
 from world.battles.constants import BattleActionKind
 from world.character_sheets.factories import CharacterSheetFactory
-from world.checks.constants import LEVEL_POINTS_PER_LEVEL
 from world.checks.factories import CheckTypeFactory
 from world.checks.services import _compute_check_breakdown, perform_check
 from world.covenants.factories import (
@@ -40,6 +39,11 @@ from world.missions.factories import (
     MissionInstanceFactory,
     MissionTemplateFactory,
 )
+from world.traits.factories import ensure_level_ladder
+
+# Half of level 1's 18-point baseline: the level term of a character with no class level row
+# on the standard ladder (``ensure_level_ladder``, level share 0.5).
+LEVEL_ONE_TERM = 9
 
 
 class SituationalPerkCheckBonusTests(TestCase):
@@ -48,6 +52,7 @@ class SituationalPerkCheckBonusTests(TestCase):
     power-term suites."""
 
     def setUp(self) -> None:
+        ensure_level_ladder()
         self.character = CharacterFactory()
         self.sheet = CharacterSheetFactory(character=self.character)
         self.check_type = CheckTypeFactory(name="Perception")
@@ -88,11 +93,9 @@ class SituationalPerkCheckBonusTests(TestCase):
         )
         ThreadFactory(owner=self.sheet, level=10)
 
-        # +LEVEL_POINTS_PER_LEVEL (#2707): the character has no CharacterClassLevel row,
+        # +LEVEL_ONE_TERM (#2707, #5093): the character has no CharacterClassLevel row,
         # so get_character_path_level defaults to 1 and every breakdown carries that floor.
-        self.assertEqual(
-            self._breakdown_total(self.check_type, situation_ctx=None), LEVEL_POINTS_PER_LEVEL
-        )
+        self.assertEqual(self._breakdown_total(self.check_type, situation_ctx=None), LEVEL_ONE_TERM)
 
     def test_null_scope_perk_fires_on_any_check(self) -> None:
         """check_type=None on the perk row -> fires regardless of which
@@ -109,13 +112,13 @@ class SituationalPerkCheckBonusTests(TestCase):
 
         ctx = SituationContext(holder=self.sheet, subject=self.sheet, target=None, resolution=None)
         other_check_type = CheckTypeFactory(name="Stealth")
-        # +LEVEL_POINTS_PER_LEVEL (#2707): default level 1 floor, on every check.
+        # +LEVEL_ONE_TERM (#2707, #5093): default level 1 floor, on every check.
         self.assertEqual(
-            self._breakdown_total(self.check_type, situation_ctx=ctx), 12 + LEVEL_POINTS_PER_LEVEL
+            self._breakdown_total(self.check_type, situation_ctx=ctx), 12 + LEVEL_ONE_TERM
         )
         self.assertEqual(
             self._breakdown_total(other_check_type, situation_ctx=ctx),
-            12 + LEVEL_POINTS_PER_LEVEL,
+            12 + LEVEL_ONE_TERM,
         )
 
     def test_scoped_perk_fires_only_on_matching_check_type(self) -> None:
@@ -133,13 +136,11 @@ class SituationalPerkCheckBonusTests(TestCase):
 
         ctx = SituationContext(holder=self.sheet, subject=self.sheet, target=None, resolution=None)
         other_check_type = CheckTypeFactory(name="Stealth")
-        # +LEVEL_POINTS_PER_LEVEL (#2707): default level 1 floor, on every check.
+        # +LEVEL_ONE_TERM (#2707, #5093): default level 1 floor, on every check.
         self.assertEqual(
-            self._breakdown_total(self.check_type, situation_ctx=ctx), 12 + LEVEL_POINTS_PER_LEVEL
+            self._breakdown_total(self.check_type, situation_ctx=ctx), 12 + LEVEL_ONE_TERM
         )
-        self.assertEqual(
-            self._breakdown_total(other_check_type, situation_ctx=ctx), LEVEL_POINTS_PER_LEVEL
-        )
+        self.assertEqual(self._breakdown_total(other_check_type, situation_ctx=ctx), LEVEL_ONE_TERM)
 
     def test_mission_category_scope_requires_matching_mission(self) -> None:
         """#2536 slice 3 Court scoping: a mission_category-scoped perk never
@@ -161,10 +162,10 @@ class SituationalPerkCheckBonusTests(TestCase):
         ctx_no_mission = SituationContext(
             holder=self.sheet, subject=self.sheet, target=None, resolution=None
         )
-        # +LEVEL_POINTS_PER_LEVEL (#2707): default level 1 floor, on every check.
+        # +LEVEL_ONE_TERM (#2707, #5093): default level 1 floor, on every check.
         self.assertEqual(
             self._breakdown_total(self.check_type, situation_ctx=ctx_no_mission),
-            LEVEL_POINTS_PER_LEVEL,
+            LEVEL_ONE_TERM,
         )
 
         template = MissionTemplateFactory()
@@ -175,7 +176,7 @@ class SituationalPerkCheckBonusTests(TestCase):
         )
         self.assertEqual(
             self._breakdown_total(self.check_type, situation_ctx=ctx_with_mission),
-            10 + LEVEL_POINTS_PER_LEVEL,
+            10 + LEVEL_ONE_TERM,
         )
 
     def test_mission_category_scope_does_not_fire_for_non_matching_category(self) -> None:
@@ -199,10 +200,8 @@ class SituationalPerkCheckBonusTests(TestCase):
         ctx = SituationContext(
             holder=self.sheet, subject=self.sheet, target=None, resolution=None, mission=instance
         )
-        # +LEVEL_POINTS_PER_LEVEL (#2707): default level 1 floor, on every check.
-        self.assertEqual(
-            self._breakdown_total(self.check_type, situation_ctx=ctx), LEVEL_POINTS_PER_LEVEL
-        )
+        # +LEVEL_ONE_TERM (#2707, #5093): default level 1 floor, on every check.
+        self.assertEqual(self._breakdown_total(self.check_type, situation_ctx=ctx), LEVEL_ONE_TERM)
 
     def test_mission_category_scope_hoists_categories_query_across_perks(self) -> None:
         """#2536 slice 3 review fix: ``perk_scope_matches``'s mission-category
@@ -249,14 +248,14 @@ class SituationalPerkCheckBonusTests(TestCase):
 
         with CaptureQueriesContext(connection) as one_perk_queries:
             total_one = self._breakdown_total(self.check_type, situation_ctx=ctx)
-        # +LEVEL_POINTS_PER_LEVEL (#2707): default level 1 floor, on every check.
-        self.assertEqual(total_one, 10 + LEVEL_POINTS_PER_LEVEL)
+        # +LEVEL_ONE_TERM (#2707, #5093): default level 1 floor, on every check.
+        self.assertEqual(total_one, 10 + LEVEL_ONE_TERM)
         self.assertEqual(_categories_query_count(one_perk_queries), 1)
 
         _add_scoped_perk()
         with CaptureQueriesContext(connection) as two_perk_queries:
             total_two = self._breakdown_total(self.check_type, situation_ctx=ctx)
-        self.assertEqual(total_two, 20 + LEVEL_POINTS_PER_LEVEL)
+        self.assertEqual(total_two, 20 + LEVEL_ONE_TERM)
         self.assertEqual(_categories_query_count(two_perk_queries), 1)
 
         self.assertEqual(
@@ -280,10 +279,10 @@ class SituationalPerkCheckBonusTests(TestCase):
         ctx_no_kind = SituationContext(
             holder=self.sheet, subject=self.sheet, target=None, resolution=None
         )
-        # +LEVEL_POINTS_PER_LEVEL (#2707): default level 1 floor, on every check.
+        # +LEVEL_ONE_TERM (#2707, #5093): default level 1 floor, on every check.
         self.assertEqual(
             self._breakdown_total(self.check_type, situation_ctx=ctx_no_kind),
-            LEVEL_POINTS_PER_LEVEL,
+            LEVEL_ONE_TERM,
         )
 
         ctx_wrong_kind = SituationContext(
@@ -295,7 +294,7 @@ class SituationalPerkCheckBonusTests(TestCase):
         )
         self.assertEqual(
             self._breakdown_total(self.check_type, situation_ctx=ctx_wrong_kind),
-            LEVEL_POINTS_PER_LEVEL,
+            LEVEL_ONE_TERM,
         )
 
         ctx_matching_kind = SituationContext(
@@ -307,7 +306,7 @@ class SituationalPerkCheckBonusTests(TestCase):
         )
         self.assertEqual(
             self._breakdown_total(self.check_type, situation_ctx=ctx_matching_kind),
-            10 + LEVEL_POINTS_PER_LEVEL,
+            10 + LEVEL_ONE_TERM,
         )
 
     def test_ally_beneficiary_check_bonus_fires_for_covenant_mate(self) -> None:
@@ -351,9 +350,9 @@ class SituationalPerkCheckBonusTests(TestCase):
 
         ctx = SituationContext(holder=self.sheet, subject=self.sheet, target=None, resolution=None)
         # 6 * 10 / 10 = 6 -- proves the mate's COVENANT_ALLIES perk fired for the subject.
-        # +LEVEL_POINTS_PER_LEVEL (#2707): default level 1 floor, on every check.
+        # +LEVEL_ONE_TERM (#2707, #5093): default level 1 floor, on every check.
         self.assertEqual(
-            self._breakdown_total(self.check_type, situation_ctx=ctx), 6 + LEVEL_POINTS_PER_LEVEL
+            self._breakdown_total(self.check_type, situation_ctx=ctx), 6 + LEVEL_ONE_TERM
         )
 
     def test_perform_check_integration_folds_perk_bonus_into_total_points(self) -> None:
@@ -376,8 +375,8 @@ class SituationalPerkCheckBonusTests(TestCase):
         ctx = SituationContext(holder=self.sheet, subject=self.sheet, target=None, resolution=None)
         with patch("world.checks.services.random.randint", return_value=50):
             result = perform_check(self.character, self.check_type, situation_ctx=ctx)
-        # 4 * 10 / 10 = 4. +LEVEL_POINTS_PER_LEVEL (#2707): default level 1 floor, on every check.
-        self.assertEqual(result.total_points, 4 + LEVEL_POINTS_PER_LEVEL)
+        # 4 * 10 / 10 = 4. +LEVEL_ONE_TERM (#2707, #5093): default level 1 floor, on every check.
+        self.assertEqual(result.total_points, 4 + LEVEL_ONE_TERM)
 
     def test_fired_perk_announced_exactly_once(self) -> None:
         """Wiring + no-double-announce proof (#2536 Task 6): one

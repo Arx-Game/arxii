@@ -13,7 +13,9 @@ from typing import Any
 from unittest.mock import patch
 
 from django.core.cache import cache
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from web.admin.tuning import technique_analytics as ta
@@ -45,6 +47,7 @@ from world.traits.factories import (
     PointConversionRangeFactory,
     ResultChartFactory,
     ResultChartOutcomeFactory,
+    ensure_level_ladder,
 )
 from world.traits.models import PointConversionRange, ResultChart
 
@@ -348,10 +351,12 @@ class RollerPointsTests(TestCase):
     def setUp(self) -> None:
         cache.clear()
         self.addCleanup(cache.clear)
+        # The level-one level term: half of level 1's 18-point baseline (share 0.5).
+        ensure_level_ladder()
 
     def test_empty_range_table_converts_every_stat_to_zero(self) -> None:
         stats = dict.fromkeys(REQUIRED_STATS, STAT_DEFAULT_VALUE)
-        self.assertEqual(ta.starting_stats_roller_points(stats), ta.LEVEL_POINTS_PER_LEVEL)
+        self.assertEqual(ta.starting_stats_roller_points(stats), 9)
 
     def test_matches_calculate_points_for_a_small_authored_range_set(self) -> None:
         PointConversionRangeFactory(
@@ -364,7 +369,7 @@ class RollerPointsTests(TestCase):
         expected_per_stat = PointConversionRange.calculate_points(
             TraitType.STAT, STAT_DEFAULT_VALUE
         )
-        expected = expected_per_stat + ta.LEVEL_POINTS_PER_LEVEL
+        expected = expected_per_stat + 9
         self.assertEqual(ta.starting_stats_roller_points(stats), expected)
 
     def test_fetches_the_stat_ranges_once_for_all_twelve_stats(self) -> None:
@@ -372,8 +377,10 @@ class RollerPointsTests(TestCase):
             trait_type=TraitType.STAT, min_value=1, max_value=50, points_per_level=1
         )
         stats = dict.fromkeys(REQUIRED_STATS, STAT_DEFAULT_VALUE)
-        with self.assertNumQueries(1):
+        with CaptureQueriesContext(connection) as captured:
             ta.starting_stats_roller_points(stats)
+        range_queries = [q for q in captured if "arxii_pointconversionrange" in q["sql"]]
+        self.assertEqual(len(range_queries), 1)
 
 
 class CombatFloorTests(TestCase):

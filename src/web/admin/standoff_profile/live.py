@@ -11,8 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from world.checks.constants import LEVEL_POINTS_PER_LEVEL
-from world.checks.services import level_opposition
+from world.checks.services import level_opposition, level_points
 from world.checks.social_target import DriveHit, social_target_difficulty
 from world.combat.constants import CauseKind
 from world.combat.models import OpponentTierTemplate
@@ -106,7 +105,7 @@ def _grade(check_type: CheckType | None, level: int, hits: list[DriveHit], bands
         resist_increment=level_opposition(check_type, level=level),
         extra_bands=bands,
     ).difficulty
-    rank_difference = CheckRank.get_rank_difference(LEVEL_POINTS_PER_LEVEL * level, difficulty)
+    rank_difference = CheckRank.get_rank_difference(level_points(level), difficulty)
     return difficulty_indicator_for_rank_difference(rank_difference).value
 
 

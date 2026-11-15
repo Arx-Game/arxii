@@ -33,9 +33,13 @@ from world.checks.modifier_models import (
     ModifierSizeFraction,
     ModifierTaper,
 )
+from world.checks.scale_config import SINGLETON_PK, CheckScaleConfig
 from world.magic.models.modifier_level import CastOutcomeLevelShift, CastPowerLevel
 
 _LEVELS = range(1, 31)
+
+# The share of a level's baseline that a character's level adds to a roll (#5093).
+_LEVEL_SHARE = Decimal("0.5")
 
 # Typical check total of a character of each level on a check in their field (#5093): one
 # row per level 1-30, 18 at level 1 and 8 more each level. These rows are the rank ladder
@@ -187,6 +191,15 @@ def _seed_derived_lane(lane: str, start: int, large_values: tuple[tuple[int, int
         baseline += widths.get(level, 0)
     _seed_fractions(lane)
     _seed_taper(lane, _STAT_TAPERED_KINDS)
+
+
+def seed_check_scale_config() -> None:
+    """Create the check scale's singleton row, level share 0.5, if missing (#5093).
+
+    A character's level adds half of that level's baseline to a roll; skills and stats supply
+    the rest. Written from an explicit value, never a factory.
+    """
+    CheckScaleConfig.objects.get_or_create(pk=SINGLETON_PK, defaults={"level_share": _LEVEL_SHARE})
 
 
 def seed_check_level_baselines() -> None:

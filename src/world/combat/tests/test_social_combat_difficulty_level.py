@@ -17,10 +17,10 @@ opponent, never a persona-backed one.
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.checks.constants import LEVEL_POINTS_PER_LEVEL
 from world.checks.factories import CheckTypeFactory, create_resistance_check_types
 from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory
 from world.combat.services import _social_combat_difficulty
+from world.traits.factories import ensure_level_ladder
 from world.traits.models import PointConversionRange, TraitType
 
 
@@ -29,6 +29,7 @@ class SocialCombatDifficultyLevelTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        ensure_level_ladder()
         create_resistance_check_types()
         PointConversionRange.objects.get_or_create(
             trait_type=TraitType.STAT,
@@ -59,4 +60,5 @@ class SocialCombatDifficultyLevelTests(TestCase):
         ).difficulty
 
         self.assertGreater(high_difficulty, low_difficulty)
-        self.assertEqual(high_difficulty - low_difficulty, LEVEL_POINTS_PER_LEVEL * (20 - 1))
+        # The level term: half of level 20's baseline (170) less half of level 1's (18).
+        self.assertEqual(high_difficulty - low_difficulty, 85 - 9)

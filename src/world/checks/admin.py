@@ -10,6 +10,7 @@ from world.checks.models import (
     CheckCall,
     CheckCallTarget,
     CheckCategory,
+    CheckScaleConfig,
     CheckType,
     CheckTypeAspect,
     CheckTypeCapabilityModifier,
@@ -291,6 +292,24 @@ class ModifierLevelBaselineAdmin(admin.ModelAdmin):
     list_editable = ["baseline"]
     list_filter = ["lane"]
     ordering = ["lane", "level"]
+
+
+@admin.register(CheckScaleConfig)
+class CheckScaleConfigAdmin(admin.ModelAdmin):
+    """The share of a level's baseline a character's level adds to every roll (#5093).
+
+    A singleton at pk 1: one row, never added or deleted.
+    """
+
+    list_display = ["level_share"]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not CheckScaleConfig.objects.exists()
+
+    def has_delete_permission(self, request: object, obj: object = None) -> bool:  # noqa: ARG002
+        """The singleton is never deleted."""
+        return False
 
 
 @admin.register(ModifierTaper)

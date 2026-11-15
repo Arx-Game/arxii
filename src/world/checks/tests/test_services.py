@@ -7,7 +7,6 @@ from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.checks.constants import LEVEL_POINTS_PER_LEVEL
 from world.checks.factories import (
     CheckCategoryFactory,
     CheckTypeAspectFactory,
@@ -33,7 +32,7 @@ from world.conditions.factories import CapabilityTypeFactory
 from world.fatigue.constants import EffortLevel
 from world.progression.models import CharacterPathHistory, DevelopmentPoints, WeeklySkillUsage
 from world.progression.services.skill_development import calculate_check_dev_points
-from world.traits.factories import CheckSystemSetupFactory, ensure_check_rank
+from world.traits.factories import CheckSystemSetupFactory, ensure_check_rank, ensure_level_ladder
 from world.traits.models import (
     CharacterTraitValue,
     PointConversionRange,
@@ -42,6 +41,10 @@ from world.traits.models import (
     TraitCategory,
     TraitType,
 )
+
+# Half of level 1's 18-point baseline: the level term of a character with no class level row
+# on the standard ladder (``ensure_level_ladder``, level share 0.5).
+LEVEL_ONE_TERM = 9
 
 
 class CalculateAspectBonusTests(TestCase):
@@ -110,6 +113,7 @@ class CalculateCapabilityPointsTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        ensure_level_ladder()
         cls.check_type = CheckTypeFactory(name="test_svc_capability_check")
         cls.capability = CapabilityTypeFactory(name="test_svc_fire_control", innate_baseline=5)
 
@@ -196,9 +200,9 @@ class CalculateCapabilityPointsTests(TestCase):
             specialization=None,
         )
         assert breakdown.capability_points == 10
-        # total = capability_points(10) + level_points(LEVEL_POINTS_PER_LEVEL * 1, the
-        # default level for a character with no CharacterClassLevel row) (#2707)
-        assert breakdown.total_points == 10 + LEVEL_POINTS_PER_LEVEL
+        # total = capability_points(10) + level_points(9: half of level 1's baseline, the
+        # default level for a character with no CharacterClassLevel row) (#2707, #5093)
+        assert breakdown.total_points == 10 + LEVEL_ONE_TERM
 
     def test_unimpaired_character_contributes_zero(self):
         """D3: value == innate_baseline contributes exactly 0 — no inflation."""
@@ -906,6 +910,7 @@ class CapabilityCountedOnceTests(TestCase):
     def setUp(self):
         from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
 
+        ensure_level_ladder()
         self.character = CharacterFactory()
         self.sheet = CharacterSheetFactory(character=self.character)
         self.check_type = CheckTypeFactory(name="test_svc_capability_counted_once")
@@ -920,9 +925,9 @@ class CapabilityCountedOnceTests(TestCase):
     def test_wrapper_total_equals_perform_check_total(self):
         bare = perform_check(self.character, self.check_type)
         wrapped = perform_check_with_modifiers(self.character, self.check_type)
-        # Pinned: level 1 (LEVEL_POINTS_PER_LEVEL) + capability 10, counted once.
-        assert bare.total_points == LEVEL_POINTS_PER_LEVEL + 10
-        assert wrapped.total_points == LEVEL_POINTS_PER_LEVEL + 10
+        # Pinned: level 1's term (9) + capability 10, counted once.
+        assert bare.total_points == LEVEL_ONE_TERM + 10
+        assert wrapped.total_points == LEVEL_ONE_TERM + 10
 
     def test_impairment_is_counted_once(self):
         from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
@@ -937,8 +942,8 @@ class CapabilityCountedOnceTests(TestCase):
         # effective 0 vs baseline 5 -> deviation -5, weight 2.0 -> -10, once.
         bare = perform_check(self.character, impaired_check)
         wrapped = perform_check_with_modifiers(self.character, impaired_check)
-        assert bare.total_points == LEVEL_POINTS_PER_LEVEL - 10
-        assert wrapped.total_points == LEVEL_POINTS_PER_LEVEL - 10
+        assert bare.total_points == LEVEL_ONE_TERM - 10
+        assert wrapped.total_points == LEVEL_ONE_TERM - 10
 
     def test_wrapper_adds_only_kinds_the_roll_does_not_count(self):
         self.sheet.rollmod = 3

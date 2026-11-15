@@ -1,7 +1,7 @@
 """Tests for the two mutually-exclusive answers to what the opposing side of a
 check contributes (#2707, Task 4):
 
-* ``level_opposition`` -- the PASSIVE half: a defender's level plus (when a
+* ``level_opposition`` -- the PASSIVE half: a defender's level baseline plus (when a
   character is given) the acting check's aspects scored against the
   defender's Path.
 * ``compute_resist_increment`` -- the ACTIVE half: a defender's full pre-roll
@@ -18,7 +18,6 @@ from django.test import TestCase
 
 from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.checks.constants import LEVEL_POINTS_PER_LEVEL
 from world.checks.factories import (
     CheckTypeAspectFactory,
     CheckTypeCapabilityModifierFactory,
@@ -43,7 +42,7 @@ from world.conditions.factories import (
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER
 from world.progression.factories import CharacterPathHistoryFactory
 from world.skills.factories import CharacterSpecializationValueFactory, SpecializationFactory
-from world.traits.factories import StatTraitFactory
+from world.traits.factories import StatTraitFactory, ensure_level_ladder
 from world.traits.models import CharacterTraitValue, PointConversionRange, Trait, TraitType
 
 
@@ -53,6 +52,7 @@ class OpposedDifficultyTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         Trait.flush_instance_cache()
+        ensure_level_ladder()
         PointConversionRange.objects.get_or_create(
             trait_type=TraitType.STAT,
             min_value=1,
@@ -163,7 +163,9 @@ class OpposedDifficultyTests(TestCase):
     def test_level_opposition_scales_with_level(self):
         low = level_opposition(self.check_type, level=1)
         high = level_opposition(self.check_type, level=5)
-        self.assertEqual(high - low, LEVEL_POINTS_PER_LEVEL * 4)
+        # An opposing NPC is its level's baseline: level 5 is 50, level 1 is 18.
+        self.assertEqual(low, 18)
+        self.assertEqual(high, 50)
 
     def test_level_opposition_adds_the_defenders_aspect_match(self):
         """Their wheelhouse protects them: the ACTING check's aspects scored against
@@ -174,7 +176,7 @@ class OpposedDifficultyTests(TestCase):
 
     def test_level_opposition_without_a_character_is_level_alone(self):
         """An ephemeral NPC with no sheet contributes level and nothing else."""
-        self.assertEqual(level_opposition(self.check_type, level=4), LEVEL_POINTS_PER_LEVEL * 4)
+        self.assertEqual(level_opposition(self.check_type, level=4), 42)
 
     def test_level_opposition_folds_in_the_opposed_entitys_conditions(self):
         """#3384: a penalty condition on the opposed entity LOWERS the total --
@@ -280,10 +282,10 @@ class OpposedDifficultyTests(TestCase):
         self.assertEqual(overridden, actually_level_ten)
         double_counted = own_level_three + (actually_level_ten - own_level_three) * 2
         self.assertNotEqual(overridden, double_counted)
-        # A concrete additive failure mode: own rating (level 3) plus a bare
-        # LEVEL_POINTS_PER_LEVEL * 10 term stacked on top (as if level_override fed
-        # an ADDED level_opposition-style term rather than substituting).
-        self.assertNotEqual(overridden, own_level_three + LEVEL_POINTS_PER_LEVEL * 10)
+        # A concrete additive failure mode: own rating (level 3) plus a bare level-10 level
+        # term (half of level 10's baseline, 90, is 45) stacked on top (as if level_override
+        # fed an ADDED term rather than substituting).
+        self.assertNotEqual(overridden, own_level_three + 45)
 
 
 class ResistCountsComposureModifiersTests(TestCase):

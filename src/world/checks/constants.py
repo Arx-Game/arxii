@@ -10,19 +10,6 @@ world.magic.services.sanctum_install previously declared locally."""
 # The longest recorded modifier label (``ConsequenceOutcomeModifier.source_label``).
 MODIFIER_SOURCE_LABEL_MAX_LENGTH = 120
 
-LEVEL_POINTS_PER_LEVEL = 5
-"""Points a character's class level contributes to EVERY check, on both sides (#2707).
-
-Level was previously only reachable through the aspect bonus, which is zero unless
-a CheckType has an authored CheckTypeAspect matching the character's Path — so on
-most checks level did nothing at all. This is the guaranteed floor; the aspect
-bonus still applies on top of it, never instead of it.
-
-Sized against the seeded rank ladder (rungs at 0/10/25/50/...): level 1 contributes
-5 points and level 5 contributes 25, two rungs apart on level alone. Tunable spine
-value, not engine logic.
-"""
-
 
 #: ``CheckOutcome.success_level`` at and above which a tier counts as Success (#4501).
 SUCCESS_TIER_MIN_LEVEL = 1

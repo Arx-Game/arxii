@@ -87,6 +87,21 @@ def ensure_check_rank(rank: int, min_points: int, name: str) -> CheckRank:
     return CheckRank.objects.get_or_create(rank=rank, defaults={"name": name})[0]
 
 
+def ensure_level_ladder() -> None:
+    """The standard check ladder: CHECK baselines 18 + 8 x (level - 1) for levels 1-30 (#5093).
+
+    Each level is one 8-point step wide and the level-N baseline is where rank N starts, the
+    same example ladder the seeds write. Writes the baselines it needs (create-if-missing, so a
+    ladder a test already shaped keeps its rows) and the matching rank rows 0-30.
+    """
+    for level in range(1, 31):
+        ModifierLevelBaseline.objects.get_or_create(
+            lane=ModifierLane.CHECK, level=level, defaults={"baseline": 18 + 8 * (level - 1)}
+        )
+    for rank in range(31):
+        CheckRank.objects.get_or_create(rank=rank, defaults={"name": f"Rank {rank}"})
+
+
 class CheckRankFactory(factory_django.DjangoModelFactory):
     """Factory for creating CheckRank instances.
 
