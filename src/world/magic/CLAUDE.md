@@ -2174,52 +2174,69 @@ Repeatable (not a Fall); each conversion loses half the value.
 (MISSION_REPORT shape). Three new `ResonanceGrant` CheckConstraints.
 `DRIFT_CORRECTION` (#4733) joins them with `res_grant_drift_correction_shape`.
 
-**Drift correction (#4733, slice 4 of #4672).** Atoning (#5123) reads
+**Drift correction and the rite of settling (#4733, slice 4 of #4672; #5124).** Atoning (#5123) reads
 lifetime, not balance: `drift_holdings` is resonance of a non-main affinity that stands past who
 the character is (`DriftReading.convertible_points`); `AuraDrift` / `recompute_aura` is the
-older sense (shift in aura percentages). Do not mix the two in names. The other exit from being
-unsettled is `accept_aura_change(sheet)` (`services/drift.py`, `AcceptAuraChangeAction`, key
-`accept_aura_change`): refused with `NotUnsettledError` unless `steps_past > 0`; moves every
-`mire_lifetime` into the character's own, sets each `settled_percent` to the resulting share,
-writes no corruption. `AcceptAuraResult.grown_affinity` is the affinity of the resonance that
-made them unsettled, read before accepting; it is what the action's "You become more
-abyssal." names (the main affinity is unchanged by an accept, so it cannot say what grew).
+older sense (shift in aura percentages). Do not mix the two in names. Nothing settles without a
+reflection behind it: the one **rite of settling** (`perform_settling_rite`,
+`services/drift_correction.py`; action `PerformSettlingRiteAction`, key
+`perform_settling_rite`) takes every waiting `Reflection` (`rite` null) and applies one roll's share to
+each. `accept_aura_change(sheet, fraction=Decimal(1))` (`services/drift.py`) is its internal step for
+Embrace of the unsettling resonance, no longer an action: refused with `NotUnsettledError` unless
+`steps_past > 0`; at a full fraction it moves every `mire_lifetime` into the character's own and sets
+each `settled_percent` to the resulting share, at a part fraction each settled share and the Mire move
+that part of the way (`settle_shares(sheet, fraction)`), at 0 nothing moves; writes no corruption.
+`AcceptAuraResult.grown_affinity` is the affinity of the resonance that made them unsettled, read
+before accepting; it is what "You become more abyssal." names.
 - Models (`models/drift.py`): `DriftCorrectionConfig` (singleton; `rite`, `check_type` null until
-  staff author them; `check_difficulty`; `cap_percent`), `DriftCorrectionOutcomeShare` (an
-  `OutcomeTierAward`; `converted_share` is the fraction of the requested amount that converts,
-  not of the cap; `clean` keeps it monotonic by success level),
-  `DriftConversionOffer` (one per sheet and scene), `DriftConversionCap` (per offer and target
-  resonance; `grants` names the deed grants it was measured from; `cap` is a snapshot).
-  `RitualComponentRequirement` has a third mode, `matches_target_resonance` (optional
-  `min_item_meaning`, minimum 1), exclusive with `item_template` and `min_touchstone_tier`.
+  staff author them; `check_difficulty`; `cap_percent`; `disown_deed_percent`, the share of a disowned
+  deed the rite converts at a full roll), `DriftCorrectionOutcomeShare` (an `OutcomeTierAward`;
+  `converted_share` is the fraction of each reflection the rite carries out; `clean` keeps it
+  monotonic by success level), `DriftConversionOffer` (one per sheet; `scene` is where it first
+  opened), `DriftConversionCap` (per offer and target resonance; `grants` names the deed grants it was
+  measured from; `cap` is a snapshot). `RitualComponentRequirement` has a third mode,
+  `matches_target_resonance` (optional `min_item_meaning`, minimum 1), exclusive with `item_template`
+  and `min_touchstone_tier`.
 - Deeds: every `GainSource` is in exactly one of `DEED_GAIN_SOURCES` / `NON_DEED_GAIN_SOURCES`
   (test-enforced); a new member must be placed. `grant_resonance` ends with
   `open_or_extend_conversion_offer(grant)` (`services/drift.py`): deed, own-affinity target,
   convertible drift, and the grantee standing in a live scene (room scene at grant time, so a
-  deed settled away from a scene opens nothing). `Scene.finish_scene` calls
-  `lapse_conversion_offers`.
-- The rite (`services/drift_correction.py`): `perform_drift_correction_rite` refuses before it
-  consumes anything unless the config has a rite, a check type and a share for every
-  `CheckOutcome`; converts `floor(amount x share)` lifetime points through `convert_resonance_amount` as
-  `DRIFT_CORRECTION` (lifetime moves by the points, the Mire's excess first; balance moves only as
-  far as it exists and only that part is granted at the pair rate; amount is capped by the cap, the
-  source's lifetime and its affinity's excess); failure consumes the offering and leaves the cap. The check type is NOT a
-  `RitualCheckConfig` sidecar. Never match the rite, check or affinities by name.
-  `rite_is_ready(config=None)` (rite, check type and a tier's share all present; one query,
-  through `outcome_tiers_without_a_share()`, which the Required content probe reads too) is the
-  one readiness test; while it is false the rite, telnet `aura`/`aura atone` and the
-  pending serializer (`rite_ready`, `rite_not_ready_message`, from the view's
-  `context["rite_ready"]`, once per request) say `RITE_NOT_READY_MESSAGE`, the exception's own
-  `user_message`.
-- Components: `qualifying_components` (`ComponentMode` MATERIAL, FACET, KEEPSAKE, in that order).
-  `focus_bonus` adds to the check, not the output. `max_yield_per_earned_point` is the anti-farm
-  estimator (per point). A cap grows by `amount x cap_percent // 100` per deed; only the deed
-  that creates the cap row is floored at 1; `cap_percent` 0 opens no offer.
+  deed settled away from a scene opens nothing). The chance no longer lapses with the scene: it
+  stays open until the rite spends it, and later deeds in any scene extend its caps.
+- The rite: refuses, writing nothing, with no waiting reflection (`NoWaitingReflectionError`), with
+  the rite unready (`rite_is_ready`: a rite, a check type and a share for every `CheckOutcome`;
+  `RITE_NOT_READY_MESSAGE`) and with an offering that satisfies the rite for none of the resonances it
+  moves (`rite_resonances`: each reflection's resonance, then the main-affinity resonances when
+  anything is disowned). Then it rolls `check_type` with `focus_bonus` toward the resonance the
+  offering is tied to, writes a `SettlingRite` (outcome, share, scene), spends the offering whatever
+  the roll, applies the share and sets `rite` on every reflection, even at a share of 0. Order:
+  disowned deeds, the disowned unsettling resonance, embraced deeds, accepting last. Embrace a deed
+  grows `grant.amount x s` as `EMBRACED_DEED` (`grant_resonance(settling_rite=, reflection=)`);
+  disown a deed converts `amount x disown_deed_percent x s` (no open chance needed, up to the
+  deed's resonance lifetime); embrace the unsettling resonance calls `accept_aura_change(fraction=s)`;
+  disown it converts up to the open cap toward the conversion target x s, bounded by what stands past
+  who she is (the Mire's excess first), and the cap falls by what converted. Conversions turn toward
+  the main-affinity resonance the offering is tied to, else the largest main-affinity resonance held,
+  through `convert_resonance_amount` as `DRIFT_CORRECTION`; nothing after the roll raises (an effect
+  that cannot happen is a line saying so). The check type is NOT a `RitualCheckConfig` sidecar.
+  Never match the rite, check or affinities by name. `rite_is_ready(config=None)` (one query,
+  through `outcome_tiers_without_a_share()`, which the Required content probe reads too) is the one
+  readiness test. `SettlingRiteResult.lines` are the performer's alone.
+- Reads: `services/settling_preview.py` `settling_rite_reading(sheet, items)` (waiting reflections as
+  a player reads them, the offerings among `items`, readiness) feeds `GET /api/magic/settling-rite/`
+  and telnet `aura`; `open_cap_line(sheet)` is the open-chance sentence.
+- Components: `qualifying_components_by_target` (`ComponentMode` MATERIAL, FACET, KEEPSAKE, in that
+  order). `focus_bonus` adds to the check, not the output. `max_yield_per_earned_point` is the
+  anti-farm estimator (per point). A cap grows by `amount x cap_percent // 100` per deed; only the
+  deed that creates the cap row is floored at 1; `cap_percent` 0 opens no offer.
 - Closing: `close_spent_conversion_offers(sheet)` (`services/drift.py`, #5123) is the one writer that ends an offer early: it deletes the caps whose target has no convertible drift left, and the offer with its last cap. The rite and `accept_aura_change` call it after they write.
-- Surfaces: actions in `actions/definitions/drift_correction.py`, telnet `aura`
-  (`commands/drift_correction.py`), REST `/api/magic/drift-correction/`, React gate on the scene
-  and game pages (`frontend/src/magic/CLAUDE.md`). Required content row `drift-correction-config`.
-  Details: `docs/systems/magic.md` "Drift correction".
+- Surfaces: `PerformSettlingRiteAction` (`actions/definitions/drift_correction.py`), telnet `aura` /
+  `aura settle <offering>` (`commands/drift_correction.py`), REST `/api/magic/settling-rite/` (GET
+  reading, POST perform) and `/api/magic/drift-correction/pending/` (the open chance), React
+  `SettleAuraDialog` and the sheet's `AuraReflections` (`frontend/src/magic/CLAUDE.md`). Removed with
+  #5124: `AcceptAuraChangeAction`, `PerformDriftCorrectionAction`, `DeclineDriftCorrectionAction`,
+  their endpoints and verbs, `DriftConversionOfferGate` and `lapse_conversion_offers`. Required
+  content row `drift-correction-config`. Details: `docs/systems/magic.md` "Drift correction".
 
 **Thread retune (#4735, slice 6 of #4672; reshaped by #5123).** `services/thread_resonance.py` moves
 part of ONE `ThreadResonance` row of a thread to another resonance's row through the SERVICE

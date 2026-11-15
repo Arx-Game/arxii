@@ -1160,22 +1160,23 @@ once per scene, with a rite. It is read on lifetime, so it works after the exces
 **Built:**
 - Deed classification: `DEED_GAIN_SOURCES` / `NON_DEED_GAIN_SOURCES` beside the accelerated sets,
   with a total-classification test; `GainSource.DRIFT_CORRECTION` for the conversion itself.
-- Offers: `DriftConversionOffer` (one per character and scene) with a `DriftConversionCap` per
-  target resonance, opened or extended from `grant_resonance` and lapsed in `Scene.finish_scene`.
-  An offer needs the grantee standing in a live scene at grant time, so a deed settled away from a
-  scene (the weekly pose-endorsement settlement) opens none; accepted as the cost of a one-scene
-  window. Telnet players get a line on open and on lapse; web players poll.
+- Offers: `DriftConversionOffer` (one per character since #5124) with a `DriftConversionCap` per
+  target resonance, opened or extended from `grant_resonance` and open until the rite spends it (the
+  scene-end lapse is gone). An offer needs the grantee standing in a live scene at grant time, so a deed
+  settled away from a scene (the weekly pose-endorsement settlement) opens none. Telnet players get a
+  line on open; the sheet's aura card shows the open chance.
 - The rite: `DriftCorrectionConfig` (rite, check type, difficulty, cap percent) and
   `DriftCorrectionOutcomeShare` (share of the request converted per outcome tier, never lower at
-  a better tier), run by `perform_drift_correction_rite` at the authored Fall and Redemption pair
-  rates through the new `convert_resonance_amount`. A failed roll spends the offering and keeps the
-  cap. Worn focus adds to the check. `max_yield_per_earned_point` estimates farm risk for tuning.
+  a better tier), run since #5124 by the rite of settling (`perform_settling_rite`) over every waiting
+  reflection, at the authored Fall and Redemption pair rates through `convert_resonance_amount`. A
+  failed roll spends the offering and keeps the cap. Worn focus adds to the check. `max_yield_per_earned_point` estimates farm risk for tuning.
 - Offering: a third `RitualComponentRequirement` mode (`matches_target_resonance`,
   `min_item_meaning`) accepting an item tied to the target resonance, carrying a motif facet of it,
   or meaning enough to the performer.
-- Surfaces: two actions (plus `accept_aura_change`, #5123), telnet `aura` (`aura atone`, `aura
-  decline`, `aura accept`), REST `/api/magic/drift-correction/`, and the React gate
-  and `SettleAuraDialog` on the scene page and game page; admin pages for the tuning rows; Required content row
+- Surfaces (reshaped by #5124): `PerformSettlingRiteAction`, telnet `aura` / `aura settle <offering>`,
+  REST `/api/magic/settling-rite/` and `/api/magic/drift-correction/pending/`, and the sheet's aura card
+  with `SettleAuraDialog` (the scene-page and game-page gate, the atone, decline and accept actions and
+  verbs are removed); admin pages for the tuning rows; Required content row
   `drift-correction-config`. Journey: `integration_tests/test_drift_correction_journeys.py`.
 
 Drift thresholds (slice 3, #4732) were built after this slice and replaced by the unsettled reading
@@ -1259,16 +1260,16 @@ A mixed character is the normal case. Built, as one PR:
   (set at creation from the weighted picks, nudged by the Glimpse, moved by accepting);
   `CharacterResonance.mire_lifetime` is a Sineater's Mire share with its own allowance. A
   non-main affinity grown past its settled share plus the tolerance makes the character
-  unsettled; a pull outside the main affinity calls for no check of its own. Exits: Atone (in a
-  live scene, lifetime-based, Mire first) and Accept the changes to your Aura. A mixed character
+  unsettled; a pull outside the main affinity calls for no check of its own. Exit (since #5124): the
+  rite of settling over what the character reflected on, which atones (lifetime-based, Mire first) or
+  accepts the aura's change by the roll's share. A mixed character
   casts at the full alignment bonus in every affinity they are settled in.
 - **Creation.** The Gift stage's resonance step spreads `DriftConfig.creation_points` across
   several resonances with a live halo in words; `provision_magic` seeds lifetime (a
   `CHARACTER_CREATION` ledger row) so a new character reads exactly settled. The 80/20
   `starting_aura_shares` is gone.
-- **Surfaces.** The sheet's `AuraHalo` (settled line, Mire share apart, Unsettled status and a
-  Settle your aura button), `SettleAuraDialog`, telnet `aura` / `aura atone` / `aura accept`,
-  `POST /api/magic/character-auras/{id}/accept/`.
+- **Surfaces.** The sheet's `AuraHalo` (settled line, Mire share apart, Unsettled status) and its
+  reflections card with `SettleAuraDialog` (#5124), telnet `aura` / `aura settle <offering>`.
 - **Removed:** `DriftConfig.threshold_percent`, `threshold_floor`, `severity_step`,
   `off_aura_pull_steps`, `AffinityInteraction.conflict_weight`, `provision_additional_gift_thread`,
   the telnet `drift` command, the merge-two-threads paths (ADR-0237: deliberate discards of tuning

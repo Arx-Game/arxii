@@ -590,7 +590,7 @@ actions, backends, and service functions.
     thread names or ids, each optionally `<thread>:<resonance>` (`pull=Loom Strand:Ember`,
     #5123) to name the held resonance that pays for that thread: a bare thread is paid by its
     leading resonance, and an unknown resonance or one the character does not hold is refused
-    in words (`commands/utils/held_resonance.py`, the one lookup `aura atone` and `imbue
+    in words (`commands/utils/held_resonance.py`, the one lookup `imbue
     resonance=` share) with nothing charged. A standalone `combat pull <tier>=<thread>[:<resonance>][,...]`
     reads the same way. `resonance=` names the resonance a burn comes from (it must be one of
     the payers; formerly the resonance to spend from); `tier=` is 1, 2, or 3
@@ -1663,22 +1663,19 @@ actions, backends, and service functions.
   `src/actions/CLAUDE.md` and `world/magic/CLAUDE.md` "Technique Entrance") instead — the
   technique cast IS the entrance's check. `CmdFlourish` (`flourish <resonance>`) — thin
   wrapper resolving a pending entry-flourish offer via `ResolveFlourishOfferAction`.
-- **`drift_correction.py`** (#4733, #5123): `CmdAura` (`aura`), which replaced `drift` with no
+- **`drift_correction.py`** (#4733, #5123, #5124): `CmdAura` (`aura`), which replaced `drift` with no
   alias. Bare `aura` shows the aura in words (each affinity's share as "nearly all", "a tenth";
   never a number), the unsettled line ("Your Ruin has grown strong enough to make you
-  unsettled." from `drift_for` / `unsettled_line`), the Mire's share in words, then the open
-  chance to atone (per target resonance: cap, sources with rate and projected yield, focus
-  bonus, carried items that count as the offering, with the faceted and keepsake ones marked
-  as spent only when named), or "You have no open chance to atone.", or the rite-not-ready
-  sentence. `aura atone <from>=<into> [<amount>] [with <item>]` (it was `drift convert`)
-  dispatches `PerformDriftCorrectionAction` (no amount means the most allowed). By default it
-  offers every carried item except those that count only as a facet or a keepsake, so a plain
-  material is what gets spent; `with <item>` names one of the caller's own carried items
-  (exact name, else a unique part of one) to spend instead, and a name that matches nothing,
-  several things, or an item that does not count is the command's own error. `aura decline`
-  dispatches `DeclineDriftCorrectionAction`; `aura accept` dispatches `AcceptAuraChangeAction`
-  (refused unless unsettled). Thin: rules live in `world/magic/services/drift_correction.py`
-  and `world/magic/services/drift.py`.
+  unsettled." from `drift_for` / `unsettled_line`), the Mire's share in words, then the
+  waiting reflections (each as "<title> (<writing>). <what the rite will do>"), the offerings
+  carried that count, the deeds not yet reflected on (by number, as `reflect` lists them) and the
+  open chance to atone ("A chance to atone is open: up to 3 toward Fury."), or "You have no
+  reflections waiting.", or the rite-not-ready sentence. `aura settle <offering>` dispatches
+  `PerformSettlingRiteAction` with the one carried item named (exact name, else a unique part of
+  one); a name that matches nothing, several things, or an item that does not count for what is
+  waiting is the command's own error, and nothing waiting is refused first. Nothing else settles:
+  `aura atone`, `aura decline` and `aura accept` are gone. Thin: rules live in
+  `world/magic/services/drift_correction.py` and `world/magic/services/settling_preview.py`.
 
 ### Magic-Adjacent Commands (`commands/`)
 - **`dramatic_moments.py`** (#2183, #2227): `CmdMoment` (`moment`) — the GM-facing

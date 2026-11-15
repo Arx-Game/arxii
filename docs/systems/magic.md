@@ -4550,52 +4550,68 @@ scene), not the scene the deed came from. A deed settled away
 from a scene, such as the weekly pose-endorsement settlement, therefore opens no offer. This is
 an accepted consequence, not an error. A finished scene cached on a room counts as no scene.
 
-One `DriftConversionOffer` exists per character and scene (unique constraint); it holds one
+One `DriftConversionOffer` exists per character (unique constraint, #5124); it holds one
 `DriftConversionCap` per target resonance. Each qualifying grant adds `amount x cap_percent
 // 100` to that cap and is linked in `cap.grants`, which stops a grant counting twice. Only the
 grant that creates the cap row is floored at 1, so a first small deed opens a usable cap while
 later small deeds can add 0; a cap never exceeds `cap_percent / 100` of its linked deed points
 plus that one point. A `cap_percent` of 0 opens no offer at all. `cap` is a snapshot: a later
 change to `cap_percent` does not rewrite it. The offer row is locked with `select_for_update`
-while a cap changes, and the cap is re-read from the table under that lock; if a decline or a
-lapse deleted the offer before the lock, the grant retries once and opens a fresh offer.
+while a cap changes, and the cap is re-read from the table under that lock; if the rite
+closed the offer before the lock, the grant retries once and opens a fresh offer.
 
 **Notices.** A new offer or a new cap row sends a telnet-only line on commit
-(`send_text_to_non_web`, after `transaction.on_commit`); web players learn from the polled
-pending endpoint. A cap bump says nothing. `lapse_conversion_offers(scene)` deletes the scene's
-offers and sends the lapse line; `Scene.finish_scene` calls it, so every finish route lapses
-them, and the rite refuses an offer whose scene has finished.
+(`send_text_to_non_web`, after `transaction.on_commit`); web players read the open chance on the
+sheet's aura card. A cap bump says nothing. A character holds one offer (#5124), open until the rite
+spends it: it does not lapse when the scene ends, and a later deed in any scene extends it, so caps
+merge per resonance (`DriftConversionOffer.scene` is where it first opened).
 
-**The rite.** `DriftCorrectionConfig` (singleton, pk 1, created lazily) designates the rite
-(`rite` FK to `Ritual`) and the roll (`check_type` FK to `CheckType`, `check_difficulty`), plus
-`cap_percent`. The check type is deliberately not a `RitualCheckConfig` sidecar, which needs a
-stat and a skill and looks up by ritual name. `DriftCorrectionOutcomeShare` (an
-`OutcomeTierAward`) maps each `CheckOutcome` to `converted_share`, the fraction of the
-requested amount that converts (not a fraction of the cap); `clean` keeps a better tier
-from converting less than a worse one. `perform_drift_correction_rite` (`drift_correction.py`),
-in one transaction: locks the offer; refuses unless `rite_is_ready(config)` (an unset rite or
-check type, or any `CheckOutcome` with no share row: `DriftCorrectionNotConfiguredError`,
-before anything is consumed); validates
-the amount (lifetime points) against the cap, the source's lifetime and its affinity's excess,
-and the source against `convertible_drift`;
-picks the offering with `resolve_ritual_components` (no writes) with the target as
-`resonance_context`; rolls the check with `focus_bonus` as extra modifiers; converts
-`floor(amount x share)` of the source through `convert_resonance_amount`: lifetime moves by the
-points (the Mire's excess first, so the Sineater's `mire_lifetime` shrinks first and is clamped to
+**The rite of settling (#5124).** `DriftCorrectionConfig` (singleton, pk 1, created lazily)
+designates the rite (`rite` FK to `Ritual`) and the roll (`check_type` FK to `CheckType`,
+`check_difficulty`), plus `cap_percent` and `disown_deed_percent` (75 to start; the share of a
+disowned deed a full roll converts). The check type is deliberately not a `RitualCheckConfig`
+sidecar, which needs a stat and a skill and looks up by ritual name. `DriftCorrectionOutcomeShare`
+(an `OutcomeTierAward`) maps each `CheckOutcome` to `converted_share`, the fraction of each
+reflection the rite carries out; `clean` keeps a better tier from carrying out less than a worse one.
+
+A character writes **reflections** (`record_reflection`: a pose or a journal entry that names a kindled
+deed, or the resonance unsettling them, and Embrace or Disown). Nothing settles without one:
+`perform_settling_rite(sheet, components=)` (`drift_correction.py`) takes every reflection no rite has
+taken, in one transaction. It refuses, before anything is rolled, consumed or written, with no waiting
+reflection (`NoWaitingReflectionError`), with the rite unready (`rite_is_ready(config)`: an unset rite
+or check type, or any `CheckOutcome` with no share row: `DriftCorrectionNotConfiguredError`) and with
+an offering that satisfies the rite for no resonance it moves (`rite_resonances`: each reflection's
+resonance, then the character's main-affinity resonances when anything is disowned). It picks the
+offering with `resolve_ritual_components` (no writes) against each of those resonances in order, rolls
+the check with `focus_bonus` toward the resonance the offering is tied to, writes a `SettlingRite`
+(outcome, share, the live scene if any), spends the offering with `consume_materials` whatever the
+roll, applies the share, then sets `rite` on every reflection, even at a share of 0:
+
+| Reflection | Effect at share s |
+|---|---|
+| Embrace a deed | `grant_resonance(deed resonance, amount x s, source=EMBRACED_DEED, settling_rite=, reflection=)` |
+| Disown a deed | convert `amount x disown_deed_percent x s` toward the main affinity; needs no open chance |
+| Embrace the unsettling resonance | `accept_aura_change(sheet, fraction=s)` |
+| Disown the unsettling resonance | convert up to the open cap x s, as atoning always did; the cap falls by what converted |
+
+Order: disowned deeds, the disowned unsettling resonance, embraced deeds, then accepting last so it
+settles on everything the rite did. Conversions go to the main-affinity resonance the offering is tied
+to, else the largest main-affinity resonance held, through `convert_resonance_amount`: lifetime moves by
+the points (the Mire's excess first, so the Sineater's `mire_lifetime` shrinks first and is clamped to
 the lifetime left) and the aura follows; balance moves only as far as it exists, and only that part
-is granted as `GainSource.DRIFT_CORRECTION` at `max(1, floor(moved x pair multiplier))` (an uphill
-pair never rounds to zero); and only then spends the offering with `consume_materials`. Every step
-that can raise runs before the first item write, so a refusal never leaves a cached item or
-balance ahead of the rolled-back table. The cap shrinks by what converted; an empty cap row is
-deleted, and the offer with it when no cap is left. A tier with no share row is refused up
-front by `rite_is_ready`; a tier whose share is 0.00 converts nothing, spends the
-offering and leaves the cap intact. The other exit, `accept_aura_change` (`services/drift.py`;
-`AcceptAuraChangeAction`), is refused unless unsettled, moves the Sineater's Mire lifetime into
-their own, sets every `settled_percent` to the resulting share through `settle_shares` (so `steps_past` is 0) and writes
-no corruption. Its line, "You become more abyssal.", names `AcceptAuraResult.grown_affinity`, the
-affinity of the resonance that made them unsettled (read before accepting), for web and telnet alike. The web reaches it at `POST /api/magic/character-auras/<id>/accept/`
-(`CharacterAuraViewSet.accept`, which dispatches `AcceptAuraChangeAction` for an aura of a
-character the requester plays; a refusal is a 400 `{detail}`). The aura payload
+is granted as `GainSource.DRIFT_CORRECTION` at `max(1, floor(moved x pair multiplier))`. Disowning the
+unsettling resonance is bounded by what stands past who she is; disowning a deed by the deed
+resonance's lifetime. After the roll nothing raises: an effect that cannot happen (no resonance to
+turn toward, nothing held, already settled) is a line saying so. Every step that can raise runs before
+the first item write, so a refusal never leaves a cached item or balance ahead of the rolled-back
+table. A tier whose share is 0.00 spends the offering, takes every reflection and moves nothing.
+`accept_aura_change` (`services/drift.py`) is the rite's internal step, no longer an action or an
+endpoint: refused unless unsettled, at a full fraction it moves the Sineater's Mire lifetime into
+their own and sets every `settled_percent` to the resulting share through `settle_shares` (so
+`steps_past` is 0), at a part fraction each settled share and the Mire part move that part of the way,
+and it writes no corruption. Its line, "You become more abyssal.", names
+`AcceptAuraResult.grown_affinity`, the affinity of the resonance that made them unsettled (read before
+accepting). The rite's result lines (`SettlingRiteResult.lines`) go to the performer alone. The aura payload
 (`CharacterAuraSerializer`) carries `unsettled`, `unsettled_line` (the same sentence as above,
 blank when settled), `unsettled_affinity_name` (the affinity accepting names, blank when settled), `mire_share_words` (`share_in_words`, `services/drift.py`, the scale the
 sheet's `shareInWords` uses) and a `settled_percent` on each share. A thread's payload lists
@@ -4627,36 +4643,37 @@ not offered again.
 modifier target + `touchstone_cast_bonus`. It adds to the check, not to the output.
 
 **Exceptions** (`exceptions.py`): `DriftCorrectionError` (base) with
-`DriftCorrectionNotConfiguredError`, `DriftOfferNotFoundError`, `DriftConversionInvalidError`;
-`ConversionMappingError` for an unauthored pair; `RitualComponentError` for the offering.
+`DriftCorrectionNotConfiguredError` and `NoWaitingReflectionError`; `NotUnsettledError` from
+`accept_aura_change`; `ConversionMappingError` for an unauthored pair; `RitualComponentError` for the
+offering.
 
-**Surfaces.** Actions `perform_drift_correction` and `decline_drift_correction`
-(`actions/definitions/drift_correction.py`); the rite's result line leads with the outcome tier
-("Partial Success: 4 Ruin became 2 Dawnlight.", or "The rite fails; nothing is converted." when
-nothing converts), and the web dialog composes the same words from the result; telnet `aura`, `aura atone <from>=<into>
-[<amount>] [with <item>]` (by default offers every carried item except those that count only
-as a facet or a keepsake, so a plain material is spent; `with <item>` names a faceted item or
-keepsake to spend instead), `aura decline`, `aura accept`; REST `GET /api/magic/drift-correction/pending/` (+ `{id}/`), `POST .../convert/`,
-`POST .../decline/`, all scoped to the caller's own characters. React:
-`DriftConversionOfferGate` polls the inbox and `SettleAuraDialog` ("Settle your aura": Atone with an open
-offer, Accept the changes to your Aura whenever unsettled) answers it; the character sheet's `AuraHalo`
-shows the aura in words with the settled line and the Mire share apart; the gate
-is mounted on `SceneDetailPage` and `GamePage`, keyed by scene id so each shows the offer of the
-scene it displays. See `frontend/src/magic/CLAUDE.md`.
+**Surfaces.** Action `perform_settling_rite` (`actions/definitions/drift_correction.py`); its result
+leads with the outcome tier ("Partial Success.") and then one line per reflection ("You disown your
+Ruin: 5 Ruin became 2 Dawnlight."). Telnet `aura` shows the aura in words, the waiting reflections,
+the carried offerings that count, the deeds not yet reflected on and the open chance to atone;
+`aura settle <offering>` names the one carried item to spend. REST: `GET
+/api/magic/settling-rite/?character_sheet=<id>` reads the waiting reflections, the offerings and
+readiness (`settling_rite_reading`, `services/settling_preview.py`), `POST /api/magic/settling-rite/
+{character_sheet_id, component_ids}` performs it, and `GET /api/magic/drift-correction/pending/` (+
+`{id}/`) lists the open chance; all are scoped to the caller's own characters. The click-to-settle,
+atone and decline paths (`AcceptAuraChangeAction`, `PerformDriftCorrectionAction`,
+`DeclineDriftCorrectionAction`, their endpoints and verbs, `DriftConversionOfferGate`, the scene-end
+lapse) are removed. React: the sheet's aura card (`AuraReflections`) lists the waiting reflections, the
+deeds not yet reflected on and the open chance, with "Settle your aura" only while a reflection waits;
+`SettleAuraDialog` is the rite; the feed's reflection toast offers the same button; `AuraHalo` shows the
+aura in words with the settled line and the Mire share apart. See `frontend/src/magic/CLAUDE.md`.
 
-**Authoring and tuning.** Staff author `DriftCorrectionConfig`, one
+**Authoring and tuning.** Staff author `DriftCorrectionConfig` (including `disown_deed_percent`), one
 `DriftCorrectionOutcomeShare` per outcome tier, the rite's `RitualComponentRequirement` rows and
 the Fall and Redemption pair multipliers in admin; offers and caps are read-only there. Until
 the rite and check type are set and every tier has a share, the rite refuses ("not set up yet")
 though offers still open; the `drift-correction-config` Required content probe reports it.
 While the rite, the check type or a tier's share is missing (`rite_is_ready()` false;
 the tiers come from `outcome_tiers_without_a_share()`, which the probe reads too), telnet
-`aura` and `aura atone` say the same sentence (`RITE_NOT_READY_MESSAGE`, the
-exception's `user_message`) instead of listing an offering, the rite refuses with it before
-checking the cap or the request, and the pending serializer carries `rite_ready: false` and
-`rite_not_ready_message`, which the dialog shows in place of the offering pills, with
-"Perform the rite" disabled. The pending view works readiness out once per request and
-hands it to the serializer as `context["rite_ready"]`.
+`aura` and `aura settle` say the same sentence (`RITE_NOT_READY_MESSAGE`, the
+exception's `user_message`) instead of listing an offering, the rite refuses with it, and the rite
+reading carries `rite_ready: false` and `not_ready_message`, which the dialog shows in place of the
+offering pills, with "Perform the rite" disabled.
 `max_yield_per_earned_point(config)` is the anti-farm estimator: `cap_percent / 100 x largest
 pair multiplier x largest share`, kept below 1 so correcting never out-earns the deed. It is
 the per-point rate; the one floored point a new cap row opens with sits on top of it, once per
@@ -4664,8 +4681,9 @@ offer and target resonance.
 
 **Tests.** `test_deed_classification.py`, `test_drift_models.py`, `test_drift_offer.py`,
 `test_drift_correction_rite.py`, `test_conversion_amount.py`,
-`test_ritual_components_target_mode.py`, `test_drift_correction_views.py`; journey
-`integration_tests/test_drift_correction_journeys.py` (telnet, web, lapse, negatives).
+`test_ritual_components_target_mode.py`, `test_drift_correction_views.py`, `test_atone_accept.py`;
+journey `integration_tests/test_drift_correction_journeys.py` (telnet, web, the chance staying open
+past the scene, refusals).
 
 ### Thread retune: moving part of a thread's investment to another resonance (#5123, ruling 31) [BUILT & WIRED]
 
@@ -5524,7 +5542,6 @@ client flow writes them directly.
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/character-auras/` | GET (POST/PATCH/DELETE staff only) | Character aura data: each share's `percent` and `settled_percent`, and the unsettled reading (`unsettled`, `unsettled_line`, `unsettled_affinity_name`, `mire_share_words`; #5123) |
-| `/character-auras/{id}/accept/` | POST | Accept the changes to your Aura (`AcceptAuraChangeAction`); 400 `{detail}` unless the character is unsettled (#5123) |
 | `/character-auras/{id}/set-glimpse-tags/`, `set-glimpse-prose/`, `link-glimpse-distinction/`, `unlink-glimpse-distinction/` | POST | The player's own Glimpse edits (the web client's aura writers) |
 | `/character-resonances/` | GET (POST/PATCH/DELETE staff only) | Character resonances (balance + lifetime_earned per Spec A §2.2; players change them through service functions, not REST mutations) |
 | `/character-gifts/` | GET (POST/PATCH/DELETE staff only) | Character's acquired gifts. Players gain gifts through `grant_gift_to_character`; a staff DELETE also takes the gift's natural weapon (#4898) |

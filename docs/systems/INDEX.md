@@ -87,23 +87,26 @@
   `NON_DEED_GAIN_SOURCES` in `constants.py`, a total classification of `GainSource`) that grows
   a resonance of the character's main affinity, made in a live scene by a character who is unsettled
   (#5123) and holds convertible resonance past who they are ("drift", not the older `AuraDrift`), opens a
-  `DriftConversionOffer` (one per sheet and scene) with a `DriftConversionCap` per target
-  resonance (`open_or_extend_conversion_offer`, called from `grant_resonance`;
-  `lapse_conversion_offers` from `Scene.finish_scene`). The player performs a configured rite:
-  `DriftCorrectionConfig` (singleton: `rite`, `check_type`, `check_difficulty`, `cap_percent`)
-  and `DriftCorrectionOutcomeShare` (share of the requested amount converted per `CheckOutcome`) feed
-  `perform_drift_correction_rite` (`services/drift_correction.py`), which converts lifetime
-  points (Mire excess first) through `convert_resonance_amount` (`services/conversion.py`) as `GainSource.DRIFT_CORRECTION` at the
-  `AffinityInteraction` pair rate. `RitualComponentRequirement.matches_target_resonance` +
+  `DriftConversionOffer` (one per sheet, open until the rite spends it, #5124) with a
+  `DriftConversionCap` per target resonance (`open_or_extend_conversion_offer`, called from
+  `grant_resonance`). Nothing settles without a reflection (`Reflection`, #5124): the one rite of
+  settling, `perform_settling_rite` (`services/drift_correction.py`), takes every waiting reflection
+  with one offering and one roll. `DriftCorrectionConfig` (singleton: `rite`, `check_type`,
+  `check_difficulty`, `cap_percent`, `disown_deed_percent`) and `DriftCorrectionOutcomeShare` (share of
+  each reflection carried out per `CheckOutcome`) feed it; it grows embraced deeds (`GainSource.EMBRACED_DEED`),
+  converts disowned resonance (Mire excess first) through `convert_resonance_amount`
+  (`services/conversion.py`) as `GainSource.DRIFT_CORRECTION` at the `AffinityInteraction` pair rate,
+  and accepts the aura's change (`accept_aura_change(sheet, fraction=)`, #5123, now only the rite's step).
+  `RitualComponentRequirement.matches_target_resonance` +
   `min_item_meaning` add a third component mode (`ComponentMode`: material, facet, keepsake;
-  `qualifying_components`). Helpers: `drift_holdings`, `convertible_drift`, `focus_bonus`,
-  `preview_conversion`, `offer_options`, `max_yield_per_earned_point`. Exceptions:
-  `DriftCorrectionError` with `DriftCorrectionNotConfiguredError`, `DriftOfferNotFoundError`,
-  `DriftConversionInvalidError`, `NotUnsettledError`. Actions `perform_drift_correction`,
-  `decline_drift_correction` and `accept_aura_change` (`accept_aura_change` service, #5123); telnet `aura` / `aura atone` / `aura decline` / `aura accept`; REST `/api/magic/drift-correction/`
-  (`pending/`, `convert/`, `decline/`); React `DriftConversionOfferGate` and
-  `SettleAuraDialog` on the scene page and game page, and `AuraHalo` on the sheet. One Required content row,
-  `drift-correction-config`. Details: [magic.md](magic.md) "Drift correction".
+  `qualifying_components_by_target`). Helpers: `drift_holdings`, `convertible_drift`, `focus_bonus`,
+  `rite_resonances`, `offerings_for`, `settling_rite_reading` (`services/settling_preview.py`),
+  `max_yield_per_earned_point`. Exceptions:
+  `DriftCorrectionError` with `DriftCorrectionNotConfiguredError` and `NoWaitingReflectionError`,
+  `NotUnsettledError`. Action `perform_settling_rite`; telnet `aura` / `aura settle <offering>`; REST
+  `/api/magic/settling-rite/` (GET reading, POST perform) and `/api/magic/drift-correction/pending/`;
+  React `SettleAuraDialog` and the sheet's `AuraReflections`, and `AuraHalo` on the sheet. One Required
+  content row, `drift-correction-config`. Details: [magic.md](magic.md) "Drift correction".
 
 - **Thread retune (slice 6 of #4672, reshaped by #5123):** `services/thread_resonance.py` moves
   part of one `ThreadResonance` row of a thread to another resonance's row through the SERVICE

@@ -15,7 +15,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   manifestation; the creation-personalization terms (#4099): Hold, Price, Early form,
   Personalized name; and Prepared Text (#4101); and Cosmetic Mage Scar (#4501); and Magical training points and Teaching fit (#4659,
   ADR-4659-B; replaced the #4457 Magic skill floor); and Thread level / level cap (#4585; one scale since #5091); and Drift, Drift correction, Conversion offer,
-  Conversion rite (#4733, slice 4 of #4672); and Thread retune (#4735, slice 6 of #4672, reshaped by #5123); and the several-resonances terms (#5123,
+  Rite of settling (#4733, #5124); and Thread retune (#4735, slice 6 of #4672, reshaped by #5123); and the several-resonances terms (#5123,
   ADR-5123-A and B): Unsettled, Settled share, Mire share, Leading resonance, Paying resonance; and Reflection (#5124)
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md) - also holds the #4581 vow added effect terms
   (ADR-4581-A): Vow added effect, Upgrade (of a vow added effect), Added-effect firing

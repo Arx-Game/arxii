@@ -47,16 +47,14 @@ They do not use the command system, dispatchers, or handlers.
   components and anima are spent, a thread retune (`check_thread_resonance_change`) and a
   Rite of Re-swearing (`world.covenants.focus_picks.check_reswear`, #4940) that would fail,
   and `_service_result_line` appends either result's `message`;
-  `drift_correction.py` (#4733): `PerformDriftCorrectionAction` (`"perform_drift_correction"`)
-  and `DeclineDriftCorrectionAction` (`"decline_drift_correction"`), REGISTRY, `target_type=SELF`,
-  `category="magic"`; each checks the offer belongs to the actor's sheet, and the rite also
-  that every offered item is held by it. Shared by telnet `CmdAura` and the web
-  `DriftCorrectionConvertView` / `DriftCorrectionDeclineView`;
-  `accept_aura.py` (#5123): `AcceptAuraChangeAction` (`"accept_aura_change"`, "Accept the
-  changes to your Aura"), REGISTRY, `target_type=SELF`, `category="magic"`, no kwargs; refuses
-  unless the character is unsettled (`NotUnsettledError`) and otherwise calls
-  `world.magic.services.drift.accept_aura_change`. Shared by telnet `aura accept` and the web
-  `CharacterAuraViewSet.accept`;
+  `drift_correction.py` (#4733, #5124): `PerformSettlingRiteAction` (`"perform_settling_rite"`,
+  "Settle your aura"), REGISTRY, `target_type=SELF`, `category="magic"`; kwarg `components_provided`
+  (the offered items, each held by the actor's own sheet); calls
+  `world.magic.services.drift_correction.perform_settling_rite` for every waiting reflection and
+  returns the outcome and one line per reflection, the actor's alone. Refuses, writing nothing, with
+  no waiting reflection or no qualifying offering. Shared by telnet `aura settle <offering>` and the
+  web `SettlingRiteView`. The older atone, decline and accept actions are gone (nothing settles
+  without a reflection);
   `cast.py` — `CastTechniqueAction`, key `"cast_technique"`, the SCENE_ADAPTIVE
   seam for standalone technique casts — see "SCENE_ADAPTIVE Backend" below;
   `combat_maneuvers.py` (#1453/#1452, Succor #1744, USE_ITEM/READY-pace #2120) — the
