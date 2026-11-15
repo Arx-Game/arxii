@@ -6,8 +6,10 @@ from typing import TYPE_CHECKING
 
 from world.combat.constants import ENTITY_TYPE_PC, CombatManeuver, OpponentStatus, ParticipantStatus
 from world.combat.models import CombatOpponent, CombatParticipant, CombatRoundAction
+from world.combat.services.techniques.kindled_deed import award_unrolled
 from world.combat.types import ActionOutcome
 from world.fatigue.constants import EffortLevel
+from world.magic.constants import KindlingActKind
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
@@ -137,5 +139,12 @@ def _resolve_use_item(
             UseItemAction().run(actor=character, item=item_object, target=target)
             # UseItemAction's effects (healing, conditions) are applied by the action
             # itself; the combat round just needs to know the maneuver resolved.
+            # #5124: an item rolls nothing of its own; on an ally it aids them.
+            award_unrolled(
+                participant,
+                action,
+                kind=KindlingActKind.OTHER,
+                aids=action.focused_ally_target is not None,
+            )
 
     return outcome

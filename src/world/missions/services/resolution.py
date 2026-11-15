@@ -63,6 +63,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import transaction
 from django.utils import timezone
 
 from evennia_extensions.models import RoomProfile
@@ -772,26 +773,36 @@ def resolve_option(  # noqa: PLR0913
         roll_report.invocation = invoked
         roll_report.check_result = result
 
-    # #5124: acting on a kindling situation earns that resonance, scaled by the roll.
-    from world.magic.services.kindling import award_kindled_deeds  # noqa: PLC0415
+    # #5124: acting on a kindling situation earns that resonance, scaled by the roll. An
+    # auto-succeeding approach rolls nothing and earns at the plainest success. The grant and
+    # the routing are one unit: a routing failure leaves nothing earned to earn again.
+    from world.magic.services.kindling import (  # noqa: PLC0415
+        award_kindled_deeds,
+        lowest_success_outcome,
+    )
     from world.magic.types.kindling import KindlingAct  # noqa: PLC0415
 
-    award_kindled_deeds(
-        actor.character,
-        act=KindlingAct(kind=KindlingActKind.MISSION_OPTION, mission_option=option),
-        outcome=result.outcome,
-        mission=instance,
+    auto = (
+        option.source_kind == OptionSource.CHALLENGE
+        and chosen_approach is not None
+        and chosen_approach.auto_succeeds
     )
-
-    return _route_graded_outcome(
-        instance,
-        node,
-        option,
-        character,
-        result.outcome,
-        chosen_approach=chosen_approach,
-        advance=advance,
-    )
+    with transaction.atomic():
+        award_kindled_deeds(
+            actor.character,
+            act=KindlingAct(kind=KindlingActKind.MISSION_OPTION, mission_option=option),
+            outcome=lowest_success_outcome() if auto else result.outcome,
+            mission=instance,
+        )
+        return _route_graded_outcome(
+            instance,
+            node,
+            option,
+            character,
+            result.outcome,
+            chosen_approach=chosen_approach,
+            advance=advance,
+        )
 
 
 def _roll_option_invocation(

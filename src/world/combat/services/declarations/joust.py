@@ -19,9 +19,11 @@ from world.combat.services.equipment.equipped_weapon import (
     _equipped_weapon_archetype,
     effective_weapon_profile,
 )
+from world.combat.services.techniques.kindled_deed import award_rolled
 from world.combat.services.techniques.technique_resolver import CombatTechniqueResolver
 from world.combat.types import ActionOutcome
 from world.fatigue.constants import EffortLevel
+from world.magic.constants import KindlingActKind
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
@@ -160,6 +162,21 @@ def _resolve_joust_pass(
     check_a = _joust_offense_check(participant, action)
     check_b = _joust_offense_check(other, other_action)
     gap = check_a.success_level - check_b.success_level
+    # #5124: each duelist's own roll earns what the pass feeds, aimed at the other duelist.
+    award_rolled(
+        participant,
+        action,
+        kind=KindlingActKind.ATTACK,
+        outcome=check_a.outcome,
+        target=other.character_sheet,
+    )
+    award_rolled(
+        other,
+        other_action,
+        kind=KindlingActKind.ATTACK,
+        outcome=check_b.outcome,
+        target=participant.character_sheet,
+    )
 
     if gap == 0:
         return  # tie — both jarred, no damage

@@ -271,7 +271,7 @@ def beat_for(instance: MissionInstance, character: ObjectDB) -> BeatView | None:
         template_name=instance.template.name,
         node_key=node.key,
         flavor_text=node.flavor_text,
-        options=tuple(_beat_option(p, instance, viewer=character) for p in presented),
+        options=_beat_options(instance, presented, character),
         is_paused=instance.is_paused,
         track=_track_view(instance, node),
     )
@@ -297,45 +297,77 @@ def _track_view(instance: MissionInstance, node: MissionNode) -> TrackView | Non
     )
 
 
-def _kindled_feeds(
-    instance: MissionInstance, presented: PresentedOption, viewer: ObjectDB
-) -> tuple[KindledFeed, ...]:
-    """The viewer's kindled resonances taking ``presented`` would earn (#5124).
+#: The option kinds that roll a check, so acting on one can earn a resonance.
+_EARNING_OPTION_KINDS = frozenset({OptionKind.CHECK, OptionKind.CONTEST})
 
-    The same read ``award_kindled_deeds`` makes after the roll, so the option never promises
-    what the act would not earn. An option that rolls no check earns nothing.
+
+def _beat_options(
+    instance: MissionInstance, presented: list[PresentedOption], viewer: ObjectDB | None
+) -> tuple[BeatOption, ...]:
+    """The beat's options flattened for ``viewer``, their kindled feeds read in one pass."""
+    feeds = _kindled_feeds(instance, presented, viewer)
+    return tuple(
+        _beat_option(option, viewer, feed) for option, feed in zip(presented, feeds, strict=True)
+    )
+
+
+def _kindled_feeds(
+    instance: MissionInstance, presented: list[PresentedOption], viewer: ObjectDB | None
+) -> list[tuple[KindledFeed, ...]]:
+    """What each of the viewer's own options would feed (#5124), aligned with ``presented``.
+
+    The read ``award_kindled_deeds`` makes after the roll, evaluated for every option in one
+    pass (the strengths, rows and Rally and GM kindlings are read once, then each option's
+    act is checked), so an option never promises what the act would not earn. Only the
+    authored situations an act fed are shown, with their reasons. An option that earns
+    nothing (a branch, an encounter, an external act) and another participant's option show
+    none.
     """
     from world.magic.constants import KindlingActKind  # noqa: PLC0415
-    from world.magic.services.kindling import kindled_resonances  # noqa: PLC0415
+    from world.magic.services.kindling import kindled_resonances_for_acts  # noqa: PLC0415
     from world.magic.types.kindling import KindlingAct  # noqa: PLC0415
 
-    sheet = viewer.character_sheet
-    if sheet is None or not option_rolls_check(presented):
-        return ()
-    entries = kindled_resonances(
-        sheet,
-        mission=instance,
-        act=KindlingAct(kind=KindlingActKind.MISSION_OPTION, mission_option=presented.option),
-    )
-    return tuple(
-        KindledFeed(
-            resonance_name=entry.resonance.name,
-            strength_name=entry.tier.name,
-            reason=entry.reasons[0] if entry.reasons else "",
+    sheet = viewer.character_sheet if viewer is not None else None
+    earning = [
+        index
+        for index, option in enumerate(presented)
+        if sheet is not None
+        and option.owner.pk == viewer.pk
+        and option.option.option_kind in _EARNING_OPTION_KINDS
+    ]
+    feeds: list[tuple[KindledFeed, ...]] = [() for _ in presented]
+    if not earning or sheet is None:
+        return feeds
+    acts = [
+        KindlingAct(kind=KindlingActKind.MISSION_OPTION, mission_option=presented[i].option)
+        for i in earning
+    ]
+    for index, entries in zip(
+        earning, kindled_resonances_for_acts(sheet, acts, mission=instance), strict=True
+    ):
+        feeds[index] = tuple(
+            KindledFeed(
+                resonance_name=entry.resonance.name,
+                strength_name=entry.fed_tier.name,
+                reason=entry.fed_reasons[0] if entry.fed_reasons else "",
+            )
+            for entry in entries
+            if entry.fed_tier is not None and entry.strongest_situation is not None
         )
-        for entry in entries
-        if entry.tier is not None and entry.strongest_situation is not None
-    )
+    return feeds
 
 
 def _beat_option(
-    presented: PresentedOption, instance: MissionInstance, viewer: ObjectDB | None = None
+    presented: PresentedOption,
+    viewer: ObjectDB | None = None,
+    feeds: tuple[KindledFeed, ...] = (),
 ) -> BeatOption:
     """Flatten ``presented`` for the player API.
 
     "Because" reasons and the kindled resonances the option feeds describe the owner's
     own traits, so they ride along only when ``viewer`` is that owner. A group union (no
-    viewer, or another participant's option) never carries them.
+    viewer, or another participant's option) never carries them; ``feeds`` comes from
+    ``_kindled_feeds`` already restricted to the viewer's own options.
     """
     own = viewer is not None and presented.owner.pk == viewer.pk
     return BeatOption(
@@ -347,7 +379,7 @@ def _beat_option(
         base_risk=presented.base_risk,
         reasons=presented.reasons if own else (),
         rolls_check=option_rolls_check(presented),
-        feeds=_kindled_feeds(instance, presented, viewer) if own and viewer is not None else (),
+        feeds=feeds if own else (),
     )
 
 
@@ -677,10 +709,7 @@ def _group_beat_view(
         flavor_text=node.flavor_text,
         conflict_mode=node.conflict_mode,
         phase=phase,
-        options=tuple(
-            _beat_option(presented_option, instance, viewer=character)
-            for presented_option in presented
-        ),
+        options=_beat_options(instance, presented, character),
         ballots=ballot_states,
         expires_at=deadline.isoformat() if deadline is not None else None,
         is_paused=instance.is_paused,

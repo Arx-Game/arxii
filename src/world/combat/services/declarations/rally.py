@@ -14,9 +14,11 @@ from world.combat.constants import (
 )
 from world.combat.models import CombatOpponent, CombatParticipant, CombatRoundAction
 from world.combat.services.declarations.social_check import roll_social_check
+from world.combat.services.techniques.kindled_deed import award_rolled
 from world.combat.surge_rolls import apply_rolled_surge, persona_name_of, surge_tuning_for
 from world.combat.types import ActionOutcome
 from world.fatigue.constants import EffortLevel
+from world.magic.constants import KindlingActKind
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
@@ -231,6 +233,8 @@ def _resolve_tuned_rally(
     )
     success_level = rally_result.success_level or 0
     ally = action.focused_ally_target
+    # #5124: the Rally's own roll earns what the act feeds (an ally encouraged).
+    award_rolled(participant, action, kind=KindlingActKind.SOCIAL, outcome=rally_result.outcome)
     # Read before this Rally writes anything: a resonance she kindles does not surge itself.
     named = action.rally_resonance if ally is not None else None
     kindled_tier = _kindled_tier_of(ally, named) if ally is not None and named else None

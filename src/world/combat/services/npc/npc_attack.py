@@ -36,6 +36,7 @@ from world.combat.services.reactions import (
     reaction_penalty,
     record_reaction,
 )
+from world.combat.services.techniques.kindled_deed import award_defense_deed
 from world.combat.types import DefenseResult, ParticipantDamageResult
 from world.conditions.services import spend_contributing_conditions
 from world.covenants.constants import DefenseStyle
@@ -333,6 +334,7 @@ def resolve_npc_attack(
         extra_traits=style_traits,
     )
     spend_contributing_conditions(breakdown)
+    award_defense_deed(participant, opponent_action.opponent, result.outcome)
     moved_out = dodge is not None and land_dodge(participant, dodge, result.success_level)
 
     multiplier = _damage_multiplier_for_success(result.success_level)

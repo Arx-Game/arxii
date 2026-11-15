@@ -681,10 +681,38 @@ def _evaluate(
     mission: MissionInstance | None,
     act: KindlingAct | None,
 ) -> list[KindledResonance]:
+    return _evaluate_acts(sheet, resonances, [act], resolution=resolution, mission=mission)[0]
+
+
+def kindled_resonances_for_acts(
+    sheet: CharacterSheet,
+    acts: list[KindlingAct],
+    *,
+    resolution: object | None = None,
+    mission: MissionInstance | None = None,
+) -> list[list[KindledResonance]]:
+    """``kindled_resonances`` once per act, reading the strengths, rows and Rally and GM
+    kindlings once for all of them (a beat with many options asks this once)."""
+    resonances = list(
+        Resonance.objects.filter(character_resonances__character_sheet=sheet).select_related(
+            "affinity", "feeling"
+        )
+    )
+    return _evaluate_acts(sheet, resonances, acts, resolution=resolution, mission=mission)
+
+
+def _evaluate_acts(
+    sheet: CharacterSheet,
+    resonances: list[Resonance],
+    acts: list[KindlingAct | None],
+    *,
+    resolution: object | None,
+    mission: MissionInstance | None,
+) -> list[list[KindledResonance]]:
     from django.db.models import Q  # noqa: PLC0415
 
     if not resonances:
-        return []
+        return [[] for _ in acts]
     tiers = list(KindledStrengthTier.objects.all())
     by_rank = {tier.rank: tier for tier in tiers}
     rows = list(
@@ -695,6 +723,37 @@ def _evaluate(
         .select_related("condition_property", "mission_theme", "affinity")
     )
     live = _live_kindlings(sheet)
+    wants_presence = any(row.situation in _PRESENCE_SITUATIONS for row in rows)
+    return [
+        _evaluate_act(
+            sheet,
+            resonances,
+            act,
+            rows=rows,
+            live=live,
+            tiers=tiers,
+            by_rank=by_rank,
+            wants_presence=wants_presence,
+            resolution=resolution,
+            mission=mission,
+        )
+        for act in acts
+    ]
+
+
+def _evaluate_act(  # noqa: PLR0913 - the shared reads and the one act's context
+    sheet: CharacterSheet,
+    resonances: list[Resonance],
+    act: KindlingAct | None,
+    *,
+    rows: list[KindlingSituation],
+    live: list[Kindling],
+    tiers: list[KindledStrengthTier],
+    by_rank: dict[int, KindledStrengthTier],
+    wants_presence: bool,
+    resolution: object | None,
+    mission: MissionInstance | None,
+) -> list[KindledResonance]:
     target = act.target if act is not None else None
     ctx = SituationContext(
         holder=sheet,
@@ -707,7 +766,6 @@ def _evaluate(
     check = SituationCheck(
         subject=sheet, target=target, resolution=resolution, mission=mission, act=act
     )
-    wants_presence = any(row.situation in _PRESENCE_SITUATIONS for row in rows)
     evaluation = _Evaluation(
         ctx=ctx,
         check=check,
@@ -743,9 +801,14 @@ def _result(
         return KindledResonance(resonance=resonance, tier=None, reasons=(), situations=())
     ordered = sorted(contributions, key=lambda c: -c.rank)  # stable: row order breaks ties
     reasons = tuple(dict.fromkeys(reason for c in ordered for reason in c.reasons))
-    situations = tuple(c.situation for c in ordered if c.situation is not None)
+    fed = [c for c in ordered if c.situation is not None]
     return KindledResonance(
-        resonance=resonance, tier=by_rank[ordered[0].rank], reasons=reasons, situations=situations
+        resonance=resonance,
+        tier=by_rank[ordered[0].rank],
+        reasons=reasons,
+        situations=tuple(c.situation for c in fed),
+        fed_tier=by_rank[fed[0].rank] if fed else None,
+        fed_reasons=tuple(dict.fromkeys(reason for c in fed for reason in c.reasons)),
     )
 
 
@@ -854,6 +917,18 @@ def kindle_by_gm(
 # --- Earning: a deed on a kindling situation --------------------------------------------
 
 
+def lowest_success_outcome() -> CheckOutcome | None:
+    """The plainest successful roll result: the ``CheckOutcome`` with the lowest positive
+    ``success_level`` (lowest pk on a tie), or None when none is authored.
+
+    An act with no roll of its own (covering an ally, an auto-succeeding approach) earns at
+    this tier's ``KindledDeedAward``.
+    """
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
+
+    return CheckOutcome.objects.filter(success_level__gt=0).order_by("success_level", "pk").first()
+
+
 def award_kindled_deeds(
     sheet: CharacterSheet,
     *,
@@ -864,20 +939,21 @@ def award_kindled_deeds(
 ) -> list[ResonanceGrant]:
     """Earn each resonance ``act`` feeds, scaled by the roll's ``outcome`` (#5124).
 
-    Called once after a player character's roll resolves, with the roll's result tier. A
-    resonance the act feeds (a row of its own, or of its affinity, held with this act in
-    context) earns ``KindledDeedAward(outcome).amount x earn_percent / 100`` of its strength,
-    rounded down, as one ``KINDLED_DEED`` grant naming the strongest row the act fed. A
-    resonance with no such amount (no award row for the tier, no strength tier, or a share of
-    0) earns nothing, and so does one kindled only by a Rally or a GM, which names no row.
-    Non-player characters earn nothing, and an outcome with no act never reaches here.
+    Called once after a player character's roll resolves, with the roll's result tier (an act
+    with no roll of its own passes ``lowest_success_outcome()``). A resonance an authored
+    situation fed with this act in context earns ``KindledDeedAward(outcome).amount x
+    earn_percent / 100`` of the strongest FED row's strength, rounded down, as one
+    ``KINDLED_DEED`` grant naming that row. A Rally or a GM raises a resonance's panel
+    strength but does not earn by itself and does not raise the share. No award row for the
+    tier, no strength tier or a share of 0 earns nothing. Non-player characters earn nothing.
 
-    Each grant is told to the actor alone ("You earned ..."), through a private narrative
-    message. Returns the grants written.
+    With neither ``resolution`` nor ``mission`` given the sheet's own live fight and mission
+    are read. Each grant is told to the actor alone ("You earned ...") once the surrounding
+    transaction commits, through a private narrative message. Returns the grants written.
     """
+    from django.db import transaction  # noqa: PLC0415
+
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
-    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
-    from world.narrative.services import send_narrative_message  # noqa: PLC0415
     from world.roster.services.activity import is_player_character  # noqa: PLC0415
 
     if outcome is None or not is_player_character(sheet):
@@ -885,12 +961,15 @@ def award_kindled_deeds(
     award = KindledDeedAward.objects.filter(outcome_tier=outcome).first()
     if award is None:
         return []
+    if resolution is None and mission is None:
+        context = kindling_context_for(sheet)
+        resolution, mission = context.resolution, context.mission
     grants: list[ResonanceGrant] = []
     for entry in kindled_resonances(sheet, resolution=resolution, mission=mission, act=act):
         situation = entry.strongest_situation
-        if entry.tier is None or situation is None:
+        if entry.fed_tier is None or situation is None:
             continue
-        amount = award.amount * entry.tier.earn_percent // 100
+        amount = award.amount * entry.fed_tier.earn_percent // 100
         if amount <= 0:
             continue
         grant_resonance(
@@ -899,22 +978,26 @@ def award_kindled_deeds(
             amount,
             source=GainSource.KINDLED_DEED,
             kindling_situation=situation,
+            ledger_out=grants,
         )
-        grant = (
-            ResonanceGrant.objects.filter(
-                character_sheet=sheet, resonance=entry.resonance, source=GainSource.KINDLED_DEED
-            )
-            .order_by("-pk")
-            .first()
-        )
-        grants.append(grant)
+        transaction.on_commit(_told_of_deed(sheet, f"You earned {amount} {entry.resonance.name}."))
+    return grants
+
+
+def _told_of_deed(sheet: CharacterSheet, line: str) -> Callable[[], None]:
+    """The after-commit send of one grant line to its actor alone."""
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    def _send() -> None:
         send_narrative_message(
             recipients=[sheet],
-            body=f"You earned {amount} {entry.resonance.name}.",
+            body=line,
             category=NarrativeCategory.SYSTEM,
             ooc_note="Kindled deed",
         )
-    return grants
+
+    return _send
 
 
 __all__ = [
@@ -925,6 +1008,8 @@ __all__ = [
     "kindle_by_gm",
     "kindled_for",
     "kindled_resonances",
+    "kindled_resonances_for_acts",
+    "lowest_success_outcome",
     "mission_theme_evidence",
     "own_feeling_evidence",
     "record_rally_kindling",

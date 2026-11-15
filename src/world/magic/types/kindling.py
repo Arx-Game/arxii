@@ -52,12 +52,19 @@ class KindledResonance:
     strongest first; ``reasons`` are the player-word lines, strongest first, with no numbers.
     A kindling that came from a Rally or a GM adds a reason and may set the tier but names no
     situation.
+
+    ``fed_tier`` and ``fed_reasons`` are the part authored situations account for: the
+    strength of the strongest row that held (with the act, when one was given) and the
+    reasons of the rows only. A Rally or GM raises ``tier`` but never these, so what an act
+    earns and what an option promises read them, never the Rally or GM strength.
     """
 
     resonance: Resonance
     tier: KindledStrengthTier | None
     reasons: tuple[str, ...]
     situations: tuple[KindlingSituation, ...]
+    fed_tier: KindledStrengthTier | None = None
+    fed_reasons: tuple[str, ...] = ()
 
     @property
     def is_kindled(self) -> bool:

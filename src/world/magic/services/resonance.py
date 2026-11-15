@@ -115,6 +115,7 @@ def grant_resonance(  # noqa: PLR0913
     worship_rite_performance: WorshipRitePerformance | None = None,
     kindling_situation: KindlingSituation | None = None,
     from_mire: bool = False,
+    ledger_out: list[ResonanceGrant] | None = None,
 ) -> CharacterResonance:
     """Atomically grant resonance AND write the ResonanceGrant ledger row.
 
@@ -147,6 +148,8 @@ def grant_resonance(  # noqa: PLR0913
             that held.
         from_mire: True when a Sineater takes the resonance from the Mire (#5123); the
             grant also counts toward the row's ``mire_lifetime``.
+        ledger_out: When given, the ``ResonanceGrant`` row this call writes is appended to it,
+            for a caller that needs the ledger row as well as the updated resonance.
 
     Returns:
         The updated CharacterResonance instance.
@@ -238,6 +241,8 @@ def grant_resonance(  # noqa: PLR0913
         source_worship_rite_performance=worship_rite_performance,
         source_kindling_situation=kindling_situation,
     )
+    ledger = [] if ledger_out is None else ledger_out
+    ledger.append(grant)
     # #4333 slice 2: a grant of a resonance the character's pledged being values
     # is a deed, and earns favor toward the open pledge.
     from world.worship.pledge_services import credit_pledge_deed  # noqa: PLC0415

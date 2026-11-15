@@ -113,7 +113,7 @@ def _social_verb_success_level(
     graded = _social_combat_difficulty(
         target, actor_sheet=participant.character_sheet, check_type=check_type
     )
-    return _resolve_social_check(
+    result = roll_social_check(
         participant,
         check_type,
         graded.difficulty,
@@ -122,6 +122,12 @@ def _social_verb_success_level(
         # A strained compulsion resist (#4802) lands its penalty on the verb's roll.
         extra_modifiers=-action.compulsion_penalty,
     )
+    from world.combat.services.techniques.kindled_deed import award_rolled  # noqa: PLC0415
+    from world.magic.constants import KindlingActKind  # noqa: PLC0415
+
+    # #5124: the verb's own roll earns what the act feeds (demoralize, taunt, parley).
+    award_rolled(participant, action, kind=KindlingActKind.SOCIAL, outcome=result.outcome)
+    return result.success_level or 0
 
 
 def _resolve_social_check(  # noqa: PLR0913 - mirrors roll_social_check's terms

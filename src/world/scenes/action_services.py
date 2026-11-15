@@ -163,6 +163,21 @@ def _resolve_treatment_request(
         mend_cap_fraction=None if is_magical_treatment(treatment) else FIRST_AID_MEND_FRACTION,
     )
 
+    # #5124: treating someone is an aid, scaled by the treatment's own roll.
+    from world.magic.constants import KindlingActKind  # noqa: PLC0415
+    from world.magic.services.kindling import award_kindled_deeds  # noqa: PLC0415
+    from world.magic.types.kindling import KindlingAct  # noqa: PLC0415
+
+    award_kindled_deeds(
+        action_request.initiator_persona.character_sheet,
+        act=KindlingAct(
+            kind=KindlingActKind.AID,
+            target=action_request.target_persona.character_sheet,
+            aids=True,
+        ),
+        outcome=outcome.outcome,
+    )
+
     content = _describe_treatment_outcome(
         action_request.initiator_persona,
         action_request.target_persona,
@@ -1519,11 +1534,6 @@ def _resolve_action_against_persona(
     # #1748: fire any pending decisive-check marker after a social check resolves.
     _maybe_fire_decisive(action_request, result)
 
-    # #5124: acting on a kindling situation earns that resonance, scaled by the roll. The
-    # initiator is the one who rolled (a PC resisting an NPC's action did not act).
-    if not pc_resists:
-        _award_kindled_deeds_for_action(action_request, target_persona, result)
-
     # Charge social fatigue once per target resolved. Multi-target casts charge
     # the initiator per-target — this is the intended per-target-independent model.
     apply_fatigue(
@@ -1563,26 +1573,35 @@ def _resolve_action_against_persona(
 
 
 def _award_kindled_deeds_for_action(
-    action_request: SceneActionRequest,
-    target_persona: Persona,
-    result: EnhancedSceneActionResult,
+    action_request: SceneActionRequest, result: EnhancedSceneActionResult
 ) -> None:
-    """Earn the initiator the resonances this act feeds (#5124), once the roll is final.
+    """Earn the initiator the resonances this act feeds (#5124), once, after its roll is final.
 
-    A technique-enhanced action is a TECHNIQUE act and any other is a SOCIAL act; the target
-    is the persona the action was aimed at. A paused or unrolled resolution earns nothing.
+    Called for the request's primary target only, so a multi-target action earns once per act,
+    not once per target. A technique-enhanced action is a TECHNIQUE act and any other is a
+    SOCIAL act; a beneficial technique on someone else aids them. A PC resisting an NPC's action
+    did not act, and a paused or unrolled resolution earns nothing.
     """
     from world.magic.constants import KindlingActKind  # noqa: PLC0415
+    from world.magic.services.hostility import is_technique_hostile  # noqa: PLC0415
     from world.magic.services.kindling import award_kindled_deeds  # noqa: PLC0415
     from world.magic.types.kindling import KindlingAct  # noqa: PLC0415
 
     main = result.action_resolution.main_result
-    if main is None:
+    if main is None or _pc_resists(action_request, action_request.target_persona):
         return
-    kind = KindlingActKind.TECHNIQUE if action_request.technique else KindlingActKind.SOCIAL
+    initiator = action_request.initiator_persona.character_sheet
+    target = action_request.target_persona.character_sheet
+    technique = action_request.technique
     award_kindled_deeds(
-        action_request.initiator_persona.character_sheet,
-        act=KindlingAct(kind=kind, target=target_persona.character_sheet),
+        initiator,
+        act=KindlingAct(
+            kind=KindlingActKind.TECHNIQUE if technique else KindlingActKind.SOCIAL,
+            target=target,
+            aids=technique is not None
+            and target != initiator
+            and not is_technique_hostile(technique),
+        ),
         outcome=main.check_result.outcome,
     )
 
@@ -1603,6 +1622,7 @@ def _resolve_standard_action(
             pull_flat_bonus=pull_flat_bonus,
             resist_effort=action_request.resist_effort_level,
         )
+        _award_kindled_deeds_for_action(action_request, result)
         action_request.status = ActionRequestStatus.RESOLVED
         action_request.resolved_at = timezone.now()
         action_request.resolved_difficulty = difficulty

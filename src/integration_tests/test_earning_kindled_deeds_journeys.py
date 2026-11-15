@@ -13,16 +13,21 @@ nothing. Only Mira is told "You earned ..."; Tomas is told nothing.
 from __future__ import annotations
 
 from integration_tests.harness import JourneyCase
+from integration_tests.test_kindled_dig_deep_and_rally_journeys import _KindledField
 from integration_tests.test_strike_journeys import _StrikeField
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
 from world.checks.test_helpers import force_check_outcome
+from world.combat.constants import SurgeTriggerKind
+from world.combat.factories import SocialManeuverConfigFactory
+from world.conditions.factories import ConditionTemplateFactory
 from world.covenants.perks.constants import Situation
-from world.magic.constants import GainSource
+from world.magic.constants import GainSource, KindlingSource
 from world.magic.factories import (
     CharacterAuraFactory,
     CharacterResonanceFactory,
     KindledDeedAwardFactory,
     KindledStrengthTierFactory,
+    KindlingFactory,
     KindlingSituationFactory,
     ResonanceFactory,
     ensure_conversion_pairs,
@@ -37,6 +42,7 @@ from world.magic.models import (
     KindlingSituation,
     ResonanceGrant,
 )
+from world.mechanics.factories import ChallengeApproachFactory, ChallengeTemplateFactory
 from world.missions.constants import OptionKind, OptionSource
 from world.missions.factories import (
     MissionNodeFactory,
@@ -45,11 +51,14 @@ from world.missions.factories import (
     MissionTemplateFactory,
     MissionThemeFactory,
 )
+from world.missions.services.play import _kindled_feeds, beat_for
+from world.missions.services.resolution import build_option_list, resolve_option
 from world.missions.services.run import staff_assign_mission
 from world.scenes.factories import SceneFactory
 from world.scenes.interaction_services import invalidate_active_scene_cache
 from world.traits.factories import CheckOutcomeFactory
 from world.traits.models import CheckOutcome
+from world.vitals.models import CharacterVitals
 
 SUCCESS_AWARD = 10
 
@@ -77,7 +86,10 @@ class _Gate(JourneyCase):
         self.entry = MissionNodeFactory(template=self.mission_template, key="entry", is_entry=True)
         self.done = MissionNodeFactory(template=self.mission_template, key="done")
 
-    def theme_row(self, theme, strength: int, resonance=None):
+    def theme_row(self, theme, strength: int, resonance=None, theme_text: str = ""):
+        if theme_text:
+            theme.player_text = theme_text
+            theme.save(update_fields=["player_text"])
         return KindlingSituationFactory(
             resonance=resonance or self.domination,
             situation=Situation.MISSION_THEME,
@@ -220,6 +232,19 @@ class EarningFromAMissionOption(_Gate):
         self.assertEqual(options[1].feeds, ())
 
 
+class TheTelnetBeat(_Gate):
+    def test_the_telnet_beat_lists_the_resonance_each_option_would_feed(self) -> None:
+        self.theme_row(self.captives, strength=2, theme_text="The captives are held here.")
+        self.check_option(self.captives, order=0)
+        self.check_option(order=1)
+        self.start()
+
+        told = self.telnet(self.mira, f"mission beat {self.mission.pk}")
+
+        self.assertIn("Your Domination is kindled: The captives are held here.", told)
+        self.assertEqual(told.count("is kindled"), 1)
+
+
 class ADeedOnTheMainAffinityOpensTheChanceToAtone(_Gate):
     def setUp(self) -> None:
         super().setUp()
@@ -276,3 +301,164 @@ class EarningFromACombatStrike(_StrikeField):
         self.assertEqual((grant.amount, grant.resonance), (5, self.wrath))
         self.assertEqual(grant.source_kindling_situation, self.row)
         self.assertTold(self.hobb, "You earned 5 Wrath.")
+
+
+class WhatEarnsAndWhatIsPromised(_Gate):
+    """Only authored situations earn, and an option promises what its act would pay."""
+
+    def kindle_by_a_gm(self, strength: int) -> None:
+        scene = SceneFactory(room=self.room)
+        invalidate_active_scene_cache(self.room)
+        KindlingFactory(
+            character_sheet=self.sheet,
+            resonance=self.domination,
+            strength=strength,
+            source=KindlingSource.GM,
+            encounter=None,
+            scene=scene,
+        )
+
+    def test_a_gm_kindling_alone_earns_nothing(self) -> None:
+        self.kindle_by_a_gm(2)
+        self.check_option(self.captives)
+        self.start()
+
+        self.take(1, self.success)
+
+        self.assertFalse(self.deeds().exists())
+
+    def test_a_gm_kindling_does_not_raise_the_share_or_the_promise(self) -> None:
+        self.theme_row(self.captives, strength=1, theme_text="The captives are held here.")
+        self.kindle_by_a_gm(2)
+        self.check_option(self.captives)
+        self.start()
+
+        (feed,) = beat_for(self.mission, self.mira).options[0].feeds
+        self.take(1, self.success)
+
+        self.assertEqual(
+            (feed.strength_name, feed.reason), ("Faint", "The captives are held here.")
+        )
+        self.assertEqual(self.deeds().get().amount, 5)  # the Faint share, not the GM's Strong
+
+    def test_an_auto_succeeding_approach_earns_at_the_plainest_success_and_says_so(self) -> None:
+        top = CheckOutcomeFactory(name="Critical", success_level=5)
+        KindledDeedAwardFactory(outcome_tier=top, amount=99)
+        self.theme_row(self.captives, strength=2)
+        challenge = ChallengeTemplateFactory(name="The barred door", severity=4)
+        approach = ChallengeApproachFactory(
+            challenge_template=challenge,
+            check_type=CheckTypeFactory(name="Walk through"),
+            auto_succeeds=True,
+            is_default=True,
+        )
+        option = MissionOptionFactory(
+            node=self.entry,
+            order=0,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.CHALLENGE,
+            challenge=challenge,
+        )
+        option.themes.add(self.captives)
+        MissionOptionRouteFactory(option=option, outcome_tier=top, target_node=self.done)
+        self.start()
+        participant = self.mission.participants.get(character=self.sheet)
+        presented = next(
+            p
+            for p in build_option_list(self.mission, self.entry, participant)
+            if p.approach == approach
+        )
+
+        (feed,) = _kindled_feeds(self.mission, [presented], self.mira)[0]
+        resolve_option(self.mission, self.entry, option, participant, chosen_approach=approach)
+
+        self.assertEqual((feed.resonance_name, feed.strength_name), ("Domination", "Strong"))
+        self.assertEqual(self.deeds().get().amount, SUCCESS_AWARD)  # not the top tier's 99
+
+
+class EarningFromAnAllyInTrouble(_KindledField):
+    """Mira is badly hurt; Tomas holds Mercy, kindled whenever someone is in trouble, and
+    Fury, kindled by a feeling he carries (any act feeds it)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.connect_telnet(self.mira)
+        self.connect_telnet(self.tomas)
+        great = CheckOutcomeFactory(name="Great Success", success_level=2)
+        KindledDeedAwardFactory(outcome_tier=self.success, amount=10)
+        KindledDeedAwardFactory(outcome_tier=great, amount=99)
+        sheet = self.tomas.sheet_data
+        mercy = ResonanceFactory(name="Mercy of Tomas")
+        CharacterResonanceFactory(character_sheet=sheet, resonance=mercy)
+        sheet.__dict__.pop("cached_resonances", None)
+        self.trouble = KindlingSituationFactory(
+            resonance=mercy, situation=Situation.SOMEONE_IN_TROUBLE, strength=1
+        )
+        self.mercy = mercy
+        vitals = CharacterVitals.objects.get(character_sheet=self.mira.sheet_data)
+        vitals.health = 10
+        vitals.save(update_fields=["health"])
+
+    def tomas_deeds(self):
+        return ResonanceGrant.objects.filter(
+            character_sheet=self.tomas.sheet_data, source=GainSource.KINDLED_DEED
+        )
+
+    def test_covering_an_ally_in_trouble_earns_at_the_plainest_success(self) -> None:
+        self.telnet(self.tomas, "combat cover Mira")
+
+        self.resolve(self.success)
+
+        grant = self.tomas_deeds().get()
+        # Cover rolls nothing: it pays the lowest successful tier (10), never the Great's 99.
+        self.assertEqual((grant.resonance, grant.amount), (self.mercy, 10))
+        self.assertEqual(grant.source_kindling_situation, self.trouble)
+        self.assertTold(self.tomas, "You earned 10 Mercy of Tomas.")
+        self.assertNotTold(self.mira, "You earned")
+
+    def test_a_rally_earns_a_resonance_kindled_by_a_feeling_he_carries(self) -> None:
+        SocialManeuverConfigFactory(
+            rally_success_condition=ConditionTemplateFactory(name="Heartened")
+        )
+        self.author_tuning(SurgeTriggerKind.RALLIED, "Rally", partial=1, success=4)
+        kindle_resonance(self.tomas.sheet_data, self.fury, self.faint)
+        self.telnet(self.tomas, "combat rally Mira")
+
+        self.resolve(self.success)
+
+        grant = self.tomas_deeds().get(resonance=self.fury)
+        self.assertEqual(grant.amount, 10)
+        self.assertTold(self.tomas, "You earned 10 Fury.")
+
+    def test_a_reaction_that_answers_for_an_ally_in_trouble_earns(self) -> None:
+        from world.checks.types import CheckResult
+        from world.mechanics.reactions import _award_reaction_deed
+        from world.mechanics.types import ChallengeResolutionResult
+
+        check = CheckResult(
+            check_type=CheckTypeFactory(name="Guard"),
+            outcome=self.success,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+        result = ChallengeResolutionResult(
+            challenge_instance_id=0,
+            challenge_name="Interpose",
+            approach_name="Step in",
+            check_result=check,
+            consequence=None,
+            applied_effects=[],
+            resolution_type="",
+            challenge_deactivated=False,
+            display_consequences=[],
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            _award_reaction_deed(self.tomas, self.mira, result)
+
+        self.assertEqual(self.tomas_deeds().get().resonance, self.mercy)
