@@ -4399,6 +4399,8 @@
 
 ## world.fatigue
 
+### FatigueConfig
+
 ### FatiguePool
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [OneToOne]
@@ -4418,6 +4420,7 @@
 - `get_full_status(character_sheet: 'CharacterSheet', *, pool: 'FatiguePool | None') -> 'dict' - Get fatigue status for all three categories in one pass.`
 - `get_or_create_fatigue_pool(character_sheet: 'CharacterSheet') -> 'FatiguePool' - Get or create a FatiguePool for a character sheet.`
 - `lever_total(sheet: 'CharacterSheet', category_name: 'str', target_name: 'str') -> 'int' - The character's total on one lever target, 0 when the target is not authored.`
+- `load_baselines(lane: 'str' = ModifierLane.CHECK) -> 'BaselineTable' - Load ``lane``'s ``ModifierLevelBaseline`` rows in one query.`
 - `perform_check_with_modifiers(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, scene: 'Scene | None' = None, extra_contributions: 'list[ModifierContribution] | None' = None, skip_fashion: bool = False, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> world.checks.types.CheckResult - Run a check with all character modifiers gathered automatically.`
 - `recover_fatigue(character_sheet: 'CharacterSheet', category: 'str', amount: 'int') -> 'int' - Reduce one fatigue pool by up to *amount*, floored at zero (#2852).`
 - `reset_fatigue(character_sheet: 'CharacterSheet') -> 'None' - Reset all fatigue pools to 0.`

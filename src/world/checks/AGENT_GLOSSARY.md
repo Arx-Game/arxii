@@ -243,8 +243,11 @@ stacking penalty, soft cap
 
 **Lane** (#4594, #4551 section 5.5):
 One kind of quantity a modifier can change (`ModifierLane`). The check lane and the stat lane
-(#4726, ADR-4726-A: a buff to a stat, in stored units, applied wherever the stat is read) exist;
-later lanes (cast power, damage, soak, healing and more) add a choice and rows to the same tables.
+(#4726, ADR-4726-A: a buff to a stat, in stored units, applied wherever the stat is read) exist,
+with the to-hit, damage and partial protection lanes (#4876). Six pool and cap lanes (#5093:
+anima pool, fatigue level bonus, soul tether scene cap, Hollow maximum, outfit trickle,
+techniques per gift) hold only per-level baseline rows in their own units. Later lanes (cast
+power, soak, healing and more) add a choice and rows to the same tables.
 _Avoid_: channel, track
 
 **Niche** (#4386):

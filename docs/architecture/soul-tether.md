@@ -791,9 +791,9 @@ Fields:
 | `anima_cost_per_unit` | 2 | Sineater anima cost per Sineating unit |
 | `fatigue_cost_per_unit` | 1 | Sineater fatigue cost per unit |
 | `per_scene_cap_hard_max` | 20 | Absolute ceiling on units accepted per scene |
-| `per_scene_cap_level_mult` | 2 | Per-Thread-level multiplier for per-scene cap |
+| `soul_tether_cap` lane (`ModifierLevelBaseline`) | 2 per rung | Per-scene cap added at the Sinner's thread rung (10 thread levels), replacing `per_scene_cap_level_mult` (#5093) |
 | `per_scene_cap_base` | 5 | Base per-scene cap before level scaling |
-| `hollow_max_level_mult` | 10 | Multiplier on Thread level for max Hollow capacity |
+| `hollow_max` lane (`ModifierLevelBaseline`) | 10 per rung | Max Hollow capacity at the Sinner's thread rung, replacing `hollow_max_level_mult` (#5093) |
 | `rescue_strain_stage3/4/5` | 5/10/18 | Strain thresholds for rescue at each Sinner stage |
 | `rescue_resonance_stage3/4/5` | 10/20/35 | Resonance cost for rescue at each Sinner stage |
 | `rescue_budget_base_stage3/4/5` | 60/120/250 | Base severity-reduction budget per stage |

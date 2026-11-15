@@ -253,7 +253,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - **Ritual anima pools / blood economy (#3001, ADR-0205):**
     `Ritual.anima_requirement`, `RitualAnimaContribution` (audit; outlives its
     session), `AnimaConfig` (flat `daily_regen_amount`, `level_zero_maximum` /
-    `maximum_per_level` = 10 / 100×level via `recompute_max_anima` on both
+    the `anima_pool` lane's baseline = 10 / 100×level (#5093) via `recompute_max_anima` on both
     level-write spines, `death_harvest_multiplier` ×20). Services
     (`services/ritual_pool.py`): `contribute_channel/prick/gash/sacrifice`,
     `pool_total`, `resolve_pool_gate` (deficit-bumped check; fizzle consumes the

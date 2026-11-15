@@ -88,6 +88,25 @@ other lane's baselines are set so its Large value lands within 1 of its old exam
 protection 5/8/10/13/16/20), so on those lanes a level's width varies. The check lane's Large no
 longer follows the stat lane's: the universality test now compares the stat lane to the to-hit lane.
 
+Six more lanes hold only `ModifierLevelBaseline` rows, in their own units, with no fractions and
+no taper (#5093): rules that were a coefficient times a level in code now read one row per level
+through `level_baseline(level, lane)`. `anima_pool` is the anima maximum at a character level
+(seeded 100 a level, replacing `AnimaConfig.maximum_per_level`); `soul_tether_cap` and
+`hollow_max` are the Sinner's thread rung (10 thread levels) to the per-scene Sineating cap
+before its base and to the Hollow's maximum (seeded 2 and 10 a rung, replacing the two
+`SoulTetherConfig` `*_level_mult` columns); `outfit_trickle` is the factor a facet thread's rung
+gives the daily outfit trickle (seeded as the rung, read at least at rung 1); `techniques_per_gift`
+is the techniques a gift allows at the gift thread's depth (seeded 3 a depth, replacing
+`GiftAcquisitionConfig.techniques_per_thread_level`); `fatigue_level_bonus` is the fatigue
+capacity a character level adds on top of the stat terms and is not seeded, so it adds nothing
+until staff author rows. Each strict lane raises `ModifierConfigError` with no row at or below
+the level, and the "Modifier level baselines (pool and cap lanes)" content sentinel reports a
+lane with a missing level. A level above the lane's top row reads the top row (seeded to 30).
+Fatigue capacity is `endurance stat x stat_multiplier + willpower x willpower_multiplier + the
+level bonus`, then times `well_rested_percent` / 100 when rested; the three multipliers are the
+`FatigueConfig` singleton (`world/fatigue/models.py`, defaults 10, 3 and 150, per 10 points of a
+stat), read without saving a row when a database has none.
+
 | Model | Purpose | Key fields |
 |-------|---------|------------|
 | `ModifierSizeFraction` | How much of one level's width a modifier of `size` is worth in a lane (#5093). A size with no row has no derived value | `lane`, `size` (`ModifierSize`), `fraction` (decimal, 3 places); unique (`lane`, `size`) |
