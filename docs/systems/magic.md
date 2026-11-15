@@ -2287,6 +2287,10 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
   declaration check: an unkindled resonance is refused in words ("Your Wrath is not kindled
   right now, so you cannot give in to it."), never clamped, and a tier deeper than the strength
   reaches is refused too, so a Berserk tier is offered only where the strength reaches it.
+  Giving in reads kindling with no act (it is declared before the act), so an act-scoped
+  situation never kindles a give-in; the panel and the picker agree. If the resonance stops being
+  kindled between declaring and the cast, the caster is told "Your Wrath is no longer kindled, so
+  you hold steady." and nothing is rolled or traded.
   Migration 0412 seeded the three rows from the old
   `FuryConfig` numbers and 0413 dropped them and `fury_anchor`.
 - **The trade.** `fury_intensity_for(tier, bonus_percent, outcome)` = floor(`control_surrendered` x

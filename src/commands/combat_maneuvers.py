@@ -705,7 +705,10 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         labels = [fury_tier_label(tier) for tier in FuryTier.objects.order_by("depth")]
         if not labels:
             return []
-        return ["Fury tiers: " + "; ".join(labels)]
+        return [
+            "Fury tiers: " + "; ".join(labels),
+            "Give in with givein=<resonance>:<tier>, writing _ for a space (lose_yourself).",
+        ]
 
     @staticmethod
     def _fury_line(action: Any) -> str:

@@ -1932,6 +1932,7 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
       id: 20,
       name: 'Wrath',
       strength_name: 'Strong',
+      control_check_name: 'Composure',
       provocation_cap: 2,
       tier_full_intensities: [],
     },
@@ -1939,6 +1940,7 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
       id: 21,
       name: 'Grief',
       strength_name: 'Blazing',
+      control_check_name: 'Composure',
       provocation_cap: 5,
       tier_full_intensities: [],
     },
@@ -2148,6 +2150,62 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
       fury_commitment_id: 10,
       fury_resonance_id: 20,
     });
+
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
+  });
+
+  it('drops a give-in back to holding steady when the resonance stops being kindled', async () => {
+    setupMocks();
+    const kindledCast = makeCastPlayerAction(9, 'Fury Cast', {
+      soulfray_warning: null,
+      available_fury_tiers: furyTiers,
+      eligible_fury_resonances: furyResonances,
+    });
+    const lapsedCast = makeCastPlayerAction(9, 'Fury Cast', {
+      soulfray_warning: null,
+      available_fury_tiers: furyTiers,
+      eligible_fury_resonances: [],
+    });
+
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange }) => {
+      const slot = actionContext.slot as string;
+      return (
+        <button
+          type="button"
+          data-testid={`card-select-technique-${slot}`}
+          onClick={() =>
+            onContextChange({ slot, effort: 'MEDIUM', strainCommitment: 0, techniqueId: 9 })
+          }
+        >
+          select technique
+        </button>
+      );
+    });
+
+    const { rerender } = render(
+      <YourTurn {...defaultProps({ availableActions: [kindledCast] })} />,
+      {
+        wrapper: createWrapper(),
+      }
+    );
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    await userEvent.click(screen.getByTestId('fury-resonance-select'));
+    await userEvent.click(await screen.findByText('Wrath (kindled, strong)'));
+    await userEvent.click(screen.getByTestId('fury-tier-10'));
+
+    rerender(<YourTurn {...defaultProps({ availableActions: [lapsedCast] })} />);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('fury-declaration')).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId('submit-declarations-btn')).toBeEnabled();
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+    const calls = mockMutateAsync.mock.calls as Array<[{ kwargs: Record<string, unknown> }]>;
+    expect(calls[0][0].kwargs).not.toHaveProperty('fury_commitment_id');
+    expect(calls[0][0].kwargs).not.toHaveProperty('fury_resonance_id');
 
     mockActionDeclarationCard.mockImplementation(defaultCardImpl);
   });

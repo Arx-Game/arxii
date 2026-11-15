@@ -61386,6 +61386,9 @@ components:
         strength_name:
           type: string
           readOnly: true
+        control_check_name:
+          type: string
+          readOnly: true
         provocation_cap:
           type: integer
           readOnly: true
@@ -61395,6 +61398,7 @@ components:
             $ref: '#/components/schemas/FuryResonanceTierIntensity'
           readOnly: true
       required:
+      - control_check_name
       - id
       - name
       - provocation_cap

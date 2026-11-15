@@ -35582,6 +35582,7 @@ export interface components {
       readonly id: number;
       readonly name: string;
       readonly strength_name: string;
+      readonly control_check_name: string;
       readonly provocation_cap: number;
       readonly tier_full_intensities: components['schemas']['FuryResonanceTierIntensity'][];
     };

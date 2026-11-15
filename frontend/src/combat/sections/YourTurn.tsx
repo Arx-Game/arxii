@@ -2412,6 +2412,25 @@ export function YourTurn({
   const furyResonances = focusedCastDescriptor?.eligible_fury_resonances ?? [];
   const furyOverCap = furySelectionOverCap(furyTiers, furyResonances, furyTierId, furyResonanceId);
 
+  // A resonance that stops being kindled while she declares (or a step its strength no longer
+  // reaches) drops back to holding steady, so the form is never left blocked with its buttons
+  // hidden.
+  useEffect(() => {
+    if (furyResonanceId === null) return;
+    const chosen = focusedCastDescriptor?.eligible_fury_resonances?.find(
+      (resonance) => resonance.id === furyResonanceId
+    );
+    if (chosen === undefined) {
+      setFuryResonanceId(null);
+      setFuryTierId(null);
+      return;
+    }
+    const heldDepth =
+      focusedCastDescriptor?.available_fury_tiers?.find((tier) => tier.id === furyTierId)?.depth ??
+      0;
+    if (furyTierId !== null && heldDepth > chosen.provocation_cap) setFuryTierId(null);
+  }, [focusedCastDescriptor, furyResonanceId, furyTierId, setFuryResonanceId, setFuryTierId]);
+
   // Current declared maneuver (from own round action).
   const declaredManeuver = ownRoundAction?.maneuver ?? null;
   const chosenCompulsionKey = chosenActionKey(compulsion, declaredManeuver, focusedNoTargetKey);
@@ -3013,7 +3032,7 @@ export function YourTurn({
             </span>
           </label>
         )}
-        {furyTiers.length > 0 && (
+        {furyTiers.length > 0 && furyResonances.length > 0 && (
           <FuryDeclaration
             tiers={furyTiers}
             resonances={furyResonances}

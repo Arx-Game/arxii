@@ -365,7 +365,7 @@ class OnlyACastThatGoesOffPays(_AtTheFord):
         self.assertToldItFaltered()
         self.assertTold(self.brannoc, "Something here stopped your cast before it left your hands.")
 
-    def test_a_resonance_no_longer_kindled_since_declaring_rolls_nothing(self) -> None:
+    def test_a_resonance_no_longer_kindled_since_declaring_rolls_nothing_and_says_so(self) -> None:
         self.declare_fury(self.seething)
         Kindling.objects.all().delete()
 
@@ -375,6 +375,8 @@ class OnlyACastThatGoesOffPays(_AtTheFord):
 
         control_roll.assert_not_called()
         self.assertNothingTraded()
+        self.assertTold(self.brannoc, "Your Wrath is no longer kindled, so you hold steady.")
+        self.assertNotTold(self.ilse, "no longer kindled")
 
 
 class SeeingTheTrade(_AtTheFord):
@@ -398,6 +400,7 @@ class SeeingTheTrade(_AtTheFord):
             "Fury tiers: Seething: surrender 6 control; Unbound: surrender 12 control (Berserk)",
             told,
         )
+        self.assertIn("Give in with givein=<resonance>:<tier>, writing _ for a space", told)
         self.assertIn("Fury declared: Seething: surrender 6 control, giving in to Wrath", told)
         self.assertIn("Pressure: intensity +0, control +0", told)
         self.assertNotIn("Fury: surrendered", told)
@@ -449,6 +452,7 @@ class SeeingTheTrade(_AtTheFord):
         self.assertEqual([r["name"] for r in cast["eligible_fury_resonances"]], ["Wrath"])
         wrath = cast["eligible_fury_resonances"][0]
         self.assertEqual(wrath["strength_name"], "Blazing")
+        self.assertEqual(wrath["control_check_name"], "Composure")
         self.assertEqual(
             {row["tier_id"]: row["full_intensity"] for row in wrath["tier_full_intensities"]},
             {self.seething.pk: 10, self.unbound.pk: 21},

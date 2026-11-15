@@ -623,6 +623,7 @@ def _eligible_fury_resonances(
     """
     from world.magic.services.fury import (  # noqa: PLC0415
         full_trade_intensities,
+        get_fury_config,
         provocation_bonus_percent,
         provocation_cap,
         top_share_percent,
@@ -630,6 +631,7 @@ def _eligible_fury_resonances(
     from world.magic.services.kindling import kindled_resonances_now  # noqa: PLC0415
 
     top_percent = top_share_percent()
+    check_name = get_fury_config().get_check_trait_display()
     options: list[FuryResonanceOption] = []
     for entry in kindled_resonances_now(sheet):
         strength = entry.tier
@@ -644,6 +646,7 @@ def _eligible_fury_resonances(
                 id=entry.resonance.pk,
                 name=entry.resonance.name,
                 strength_name=strength.name,
+                control_check_name=check_name,
                 provocation_cap=cap,
                 tier_full_intensities=tuple(
                     FuryResonanceTierIntensity(tier_id=tier.pk, full_intensity=full[tier.pk])

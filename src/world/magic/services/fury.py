@@ -270,6 +270,11 @@ def fury_tier_label(tier: FuryTier) -> str:
     return f"{label} (Berserk)" if tier.berserk_severity > 0 else label
 
 
+def fury_lapsed_message(resonance: Resonance) -> str:
+    """The caster's own line when the resonance stopped being kindled before the cast went off."""
+    return f"Your {resonance.name} is no longer kindled, so you hold steady."
+
+
 def fury_trade_message(fury_res: FuryResolution) -> str:
     """The caster's own line for a landed trade: ``You surrender 6 control: intensity +8.``"""
     return (
@@ -348,7 +353,8 @@ class FuryCast:
     - ``withdraw()`` takes the trade back off the engagement when the cast is then
       cancelled before it resolves (a ``TECHNIQUE_PRE_CAST`` cancel). The roll stands.
     - ``settle()`` runs when the cast proceeds: it tells her (on commit) and applies
-      Berserk for a Berserk tier.
+      Berserk for a Berserk tier, or tells her she holds steady when the resonance is no
+      longer kindled.
 
     A cast stopped before ``surrender`` changes nothing and tells her nothing.
     ``resolution`` is None until ``surrender`` runs.
@@ -368,6 +374,7 @@ class FuryCast:
         self.source_technique = source_technique
         self.resolution: FuryResolution | None = None
         self._engagement = None
+        self._lapsed = False
 
     @property
     def realized_tier(self) -> FuryTier | None:
@@ -386,6 +393,8 @@ class FuryCast:
         strength = give_in_strength(self.character, self.resonance)
         if clamp_tier(self.tier, provocation_cap(strength)) is None:
             self.resolution = FuryResolution(None, 0, 0, 0)
+            # Kindled when she declared, not now: she holds steady, and is told.
+            self._lapsed = strength is None
             return False
 
         from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
@@ -427,6 +436,11 @@ class FuryCast:
     def settle(self) -> None:
         """The cast proceeds: tell her what she traded (on commit) and apply Berserk."""
         res = self.resolution
+        if self._lapsed and self.resonance is not None:
+            character = self.character
+            lapsed = fury_lapsed_message(self.resonance)
+            transaction.on_commit(lambda: character.msg(lapsed))
+            return
         if res is None or res.realized_tier is None:
             return
         character = self.character

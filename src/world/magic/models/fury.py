@@ -86,8 +86,8 @@ class FuryDegreeShare(OutcomeTierAward):
     """Percent of the full Fury trade the control roll buys at one outcome tier (#4738).
 
     The full trade is ``control_surrendered x StrainConfig.intensity_per_control_surrendered``,
-    scaled up by the anchor's provocation cap. An outcome tier with no row buys nothing (0%);
-    the Required content dashboard lists the missing tiers.
+    grown by the kindled resonance's give-in bonus (``KindledStrengthTier``). An outcome tier
+    with no row buys nothing (0%); the Required content dashboard lists the missing tiers.
 
     A better outcome never buys a smaller percent than a worse one; ``clean`` enforces it.
     """

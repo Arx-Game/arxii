@@ -124,7 +124,9 @@ export function FuryDeclaration({
       {selectedTier !== null && selectedResonance !== null && (
         <p className="text-xs tabular-nums text-foreground" data-testid="fury-preview">
           Give up {selectedTier.control_surrendered} control · Gain up to{' '}
-          {fullIntensityFor(selectedTier, selectedResonance)} intensity, by your roll
+          {fullIntensityFor(selectedTier, selectedResonance)} intensity · Control roll:{' '}
+          {selectedResonance.control_check_name}, eased by your {strengthWord(selectedResonance)}{' '}
+          {selectedResonance.name}
         </p>
       )}
     </div>

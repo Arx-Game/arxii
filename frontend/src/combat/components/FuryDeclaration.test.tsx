@@ -26,6 +26,7 @@ const resonances = [
     id: 7,
     name: 'Rage',
     strength_name: 'Faint',
+    control_check_name: 'Composure',
     provocation_cap: 1,
     tier_full_intensities: [
       { tier_id: 1, full_intensity: 9 },
@@ -36,6 +37,7 @@ const resonances = [
     id: 8,
     name: 'Wrath',
     strength_name: 'Blazing',
+    control_check_name: 'Composure',
     provocation_cap: 3,
     tier_full_intensities: [
       { tier_id: 1, full_intensity: 10 },
@@ -100,7 +102,7 @@ describe('FuryDeclaration', () => {
   it("previews the trade with the chosen resonance's full-share intensity", () => {
     renderDeclaration(1, 8);
     expect(screen.getByTestId('fury-preview')).toHaveTextContent(
-      'Give up 6 control · Gain up to 10 intensity, by your roll'
+      'Give up 6 control · Gain up to 10 intensity · Control roll: Composure, eased by your blazing Wrath'
     );
   });
 
