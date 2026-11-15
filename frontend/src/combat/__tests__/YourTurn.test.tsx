@@ -324,6 +324,7 @@ function makeParticipant(
     dig_deep: null,
     call_up: null,
     strike_weapons: null,
+    rally_resonances: [],
   };
 }
 
@@ -2791,6 +2792,33 @@ describe('YourTurn — rally/succor maneuver pickers (#3381)', () => {
     expect(mockManeuverMutateAsync).toHaveBeenCalledWith({
       registryKey: 'combat_rally',
       kwargs: { ally_participant_id: 4 },
+    });
+  });
+
+  it('rally names one of the ally resonances, names only, and sends its id (#5124)', async () => {
+    setupMocks();
+    const ally = {
+      ...makeParticipant(4, 'Ally Four'),
+      rally_resonances: [
+        { id: 31, name: 'Fury' },
+        { id: 32, name: 'Mercy' },
+      ],
+    };
+    const encounter = makeEncounter({ status: 'declaring', participants: [ally] });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('rally-resonance-pick')).toBeNull();
+    await userEvent.click(screen.getByTestId('rally-ally-select'));
+    await userEvent.click(await screen.findByText('Ally Four'));
+    await userEvent.click(screen.getByTestId('rally-resonance-32'));
+
+    expect(screen.getByTestId('rally-resonance-note')).toHaveTextContent('Mercy');
+    await userEvent.click(screen.getByTestId('rally-confirm-btn'));
+
+    expect(mockManeuverMutateAsync).toHaveBeenCalledWith({
+      registryKey: 'combat_rally',
+      kwargs: { ally_participant_id: 4, resonance_id: 32 },
     });
   });
 

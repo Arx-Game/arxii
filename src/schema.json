@@ -6392,8 +6392,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this title.
+          type: string
         required: true
       tags:
       - character-creation
@@ -9449,8 +9448,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EncounterDetailRequest'
-        required: true
+              $ref: '#/components/schemas/DigDeepRequest'
       security:
       - cookieAuth: []
       responses:
@@ -9790,7 +9788,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EncounterDetailRequest'
+              $ref: '#/components/schemas/RallyRequest'
         required: true
       security:
       - cookieAuth: []
@@ -56795,6 +56793,14 @@ components:
       - fatigue_cost
       - free_dig_deeps
       - given_by
+    DigDeepRequest:
+      type: object
+      description: 'Write serializer for digging deep: optionally one of her own resonances
+        (#5124).'
+      properties:
+        resonance_id:
+          type: integer
+          minimum: 1
     DireStraitsEnum:
       enum:
       - soulfray
@@ -80606,6 +80612,11 @@ components:
           - $ref: '#/components/schemas/DigDeepOffer'
           nullable: true
           readOnly: true
+        rally_resonances:
+          type: array
+          items:
+            $ref: '#/components/schemas/RallyResonanceChoice'
+          readOnly: true
         call_up:
           allOf:
           - $ref: '#/components/schemas/CallUpFightOffer'
@@ -80640,6 +80651,7 @@ components:
       - intensity_modifier
       - max_health
       - persona_id
+      - rally_resonances
       - reactions_used
       - steady_plan
       - strike_weapons
@@ -87810,6 +87822,36 @@ components:
       - numeric_min
       - sort_order
       - stat_multiplier
+    RallyRequest:
+      type: object
+      description: |-
+        Write serializer for declaring a rally: the ally, and optionally one of their resonances.
+
+        ``resonance_id`` names a resonance the ALLY holds (#5124); a Rally that names one kindles
+        it for the fight, or surges more when it is already kindled.
+      properties:
+        ally_participant_id:
+          type: integer
+          minimum: 1
+        resonance_id:
+          type: integer
+          minimum: 1
+      required:
+      - ally_participant_id
+    RallyResonanceChoice:
+      type: object
+      description: 'One of an ally''s resonances a Rally may name: its name only,
+        never an amount (#5124).'
+      properties:
+        id:
+          type: integer
+          description: The resonance's id, sent back as resonance_id.
+        name:
+          type: string
+          description: The resonance's name.
+      required:
+      - id
+      - name
     RandomSceneTarget:
       type: object
       description: Read serializer for RandomSceneTarget instances.

@@ -76,4 +76,48 @@ describe('DigDeep', () => {
     render(<DigDeep offer={paid} isLocked dispatchAction={vi.fn()} />);
     expect(screen.getByTestId('dig-deep-button')).toBeDisabled();
   });
+
+  it('names the chosen resonance, and says a kindled one makes the surge larger', async () => {
+    const dispatchAction = vi
+      .fn()
+      .mockResolvedValue({ backend: 'registry', deferred: false, success: true, message: '' });
+    const resonances = [
+      {
+        id: 7,
+        name: 'Fury',
+        affinity_name: 'Primal',
+        kindled: true,
+        strength_name: 'Blazing',
+        reasons: [],
+      },
+      {
+        id: 8,
+        name: 'Wonder',
+        affinity_name: 'Primal',
+        kindled: false,
+        strength_name: null,
+        reasons: [],
+      },
+    ];
+    render(
+      <DigDeep
+        offer={paid}
+        resonances={resonances}
+        isLocked={false}
+        dispatchAction={dispatchAction}
+      />
+    );
+
+    expect(screen.queryByTestId('dig-deep-kindled-note')).toBeNull();
+    await userEvent.click(screen.getByTestId('dig-deep-resonance-7'));
+    expect(screen.getByTestId('dig-deep-kindled-note')).toHaveTextContent(
+      'Fury is kindled, so the surge is larger.'
+    );
+    await userEvent.click(screen.getByTestId('dig-deep-button'));
+
+    expect(dispatchAction).toHaveBeenCalledWith({
+      ref: { backend: 'registry', registry_key: 'combat_dig_deep' },
+      kwargs: { resonance_id: 7 },
+    });
+  });
 });

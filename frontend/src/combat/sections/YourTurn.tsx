@@ -40,6 +40,7 @@ import {
 } from '@/combat/components/CompulsionBanner';
 import { CallUpInFight } from '@/combat/components/CallUpInFight';
 import { DigDeep } from '@/combat/components/DigDeep';
+import { RallyResonancePick } from '@/combat/components/RallyResonancePick';
 import { KindledResonancesPanel } from '@/magic/components/KindledResonancesPanel';
 import { MovementActions } from '../components/MovementActions';
 import { availableActionsKeys } from '@/scenes/actionQueries';
@@ -58,7 +59,7 @@ import {
   type PullSelection,
   type ThreadPullDialogProps,
 } from '@/magic/components/threads/ThreadPullDialog';
-import { useCharacterAnima, usePullBurnPreview } from '@/magic/queries';
+import { useCharacterAnima, useKindledResonances, usePullBurnPreview } from '@/magic/queries';
 import { burnResonanceFor, effectiveBurn } from '@/magic/burn';
 import type { PullPreviewRequest } from '@/magic/types';
 import {
@@ -276,6 +277,8 @@ interface RoundScopedState {
   // from `maneuverError` since these render outside the Maneuvers cluster
   // (except rally/succor, which share it, mirroring Cover).
   rallyAllyId: string;
+  /** One of the rallied ally's resonances the Rally names (#5124); '' = none. */
+  rallyResonanceId: string;
   succorAllyId: string;
   useItemInstanceId: string;
   useItemTargetValue: string;
@@ -317,6 +320,7 @@ function initialRoundState(): RoundScopedState {
     guardDestination: GUARD_DESTINATION_AWAY,
     guardSoulfrayAccepted: false,
     rallyAllyId: '',
+    rallyResonanceId: '',
     succorAllyId: '',
     useItemInstanceId: '',
     useItemTargetValue: USE_ITEM_TARGET_SELF,
@@ -1660,6 +1664,7 @@ interface ManeuverDeclarationSectionProps {
   animaCurrent: number | null;
   coverAllyId: string;
   rallyAllyId: string;
+  rallyResonanceId: string;
   succorAllyId: string;
   guardPending: boolean;
   coverPending: boolean;
@@ -1675,6 +1680,7 @@ interface ManeuverDeclarationSectionProps {
   setGuardDestination: (value: string) => void;
   setGuardSoulfrayAccepted: (value: boolean) => void;
   setRallyAllyId: (value: string) => void;
+  setRallyResonanceId: (value: string) => void;
   setSuccorAllyId: (value: string) => void;
   handleFlee: () => void;
   handleCover: () => void;
@@ -1701,6 +1707,7 @@ function ManeuverDeclarationSection({
   animaCurrent,
   coverAllyId,
   rallyAllyId,
+  rallyResonanceId,
   succorAllyId,
   guardPending,
   coverPending,
@@ -1716,6 +1723,7 @@ function ManeuverDeclarationSection({
   setGuardDestination,
   setGuardSoulfrayAccepted,
   setRallyAllyId,
+  setRallyResonanceId,
   setSuccorAllyId,
   handleFlee,
   handleCover,
@@ -1723,6 +1731,8 @@ function ManeuverDeclarationSection({
   handleRally,
   handleSuccor,
 }: ManeuverDeclarationSectionProps) {
+  const rallyAlly = coverableAllies.find((ally) => String(ally.id) === rallyAllyId);
+  const rallyResonances = rallyAlly?.rally_resonances ?? [];
   return (
     <div className="space-y-2" data-testid="maneuver-declaration-section">
       <p
@@ -1810,7 +1820,10 @@ function ManeuverDeclarationSection({
         <div className="space-y-1.5" data-testid="rally-control">
           <Select
             value={rallyAllyId}
-            onValueChange={setRallyAllyId}
+            onValueChange={(value) => {
+              setRallyAllyId(value);
+              setRallyResonanceId('');
+            }}
             disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
           >
             <SelectTrigger data-testid="rally-ally-select" className="h-8 text-xs">
@@ -1829,6 +1842,15 @@ function ManeuverDeclarationSection({
               )}
             </SelectContent>
           </Select>
+          {rallyResonances.length > 0 && (
+            <RallyResonancePick
+              allyName={rallyAlly?.character_name ?? ''}
+              resonances={rallyResonances}
+              selectedId={rallyResonanceId}
+              onSelect={setRallyResonanceId}
+              disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
+            />
+          )}
           <button
             type="button"
             disabled={
@@ -2118,6 +2140,7 @@ export function YourTurn({
     guardDestination,
     guardSoulfrayAccepted,
     rallyAllyId,
+    rallyResonanceId,
     succorAllyId,
     useItemInstanceId,
     useItemTargetValue,
@@ -2182,6 +2205,7 @@ export function YourTurn({
   const setGuardDestination = useMemo(() => makeFieldSetter('guardDestination'), []);
   const setGuardSoulfrayAccepted = useMemo(() => makeFieldSetter('guardSoulfrayAccepted'), []);
   const setRallyAllyId = useMemo(() => makeFieldSetter('rallyAllyId'), []);
+  const setRallyResonanceId = useMemo(() => makeFieldSetter('rallyResonanceId'), []);
   const setSuccorAllyId = useMemo(() => makeFieldSetter('succorAllyId'), []);
   const setUseItemInstanceId = useMemo(() => makeFieldSetter('useItemInstanceId'), []);
   const setUseItemTargetValue = useMemo(() => makeFieldSetter('useItemTargetValue'), []);
@@ -2325,6 +2349,9 @@ export function YourTurn({
   const coverableAllies = participants.filter(
     (p) => p.status === 'active' && p.id !== myParticipantId
   );
+
+  // The resonances she holds, for Dig deep to name one (the panel above it reads the same query).
+  const { data: heldResonances = [] } = useKindledResonances(characterSheetId);
 
   // The viewer's own participant row — shared by actorPositionId below and the
   // Mounted-condition gate for the Charge/Joust mini-panel (#3381).
@@ -2744,7 +2771,10 @@ export function YourTurn({
     try {
       const result = await dispatchManeuver({
         registryKey: 'combat_rally',
-        kwargs: { ally_participant_id: allyId },
+        kwargs: {
+          ally_participant_id: allyId,
+          ...(rallyResonanceId !== '' ? { resonance_id: parseInt(rallyResonanceId, 10) } : {}),
+        },
       });
       if (isDispatchFailure(result)) {
         setManeuverError(result.message ?? 'Failed to declare rally.');
@@ -3143,6 +3173,7 @@ export function YourTurn({
       {myParticipantSelf?.dig_deep && (
         <DigDeep
           offer={myParticipantSelf.dig_deep}
+          resonances={heldResonances}
           isLocked={readOnly || !isDeclaringPhase}
           dispatchAction={dispatchAction}
           onDispatched={refreshEncounter}
@@ -3321,6 +3352,7 @@ export function YourTurn({
           animaCurrent={animaCurrent}
           coverAllyId={coverAllyId}
           rallyAllyId={rallyAllyId}
+          rallyResonanceId={rallyResonanceId}
           succorAllyId={succorAllyId}
           guardPending={guardPending}
           coverPending={coverPending}
@@ -3336,6 +3368,7 @@ export function YourTurn({
           setGuardDestination={setGuardDestination}
           setGuardSoulfrayAccepted={setGuardSoulfrayAccepted}
           setRallyAllyId={setRallyAllyId}
+          setRallyResonanceId={setRallyResonanceId}
           setSuccorAllyId={setSuccorAllyId}
           handleFlee={handleFlee}
           handleCover={handleCover}

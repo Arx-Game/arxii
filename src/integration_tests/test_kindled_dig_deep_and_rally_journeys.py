@@ -262,3 +262,30 @@ class AGmKindlingByHand(_KindledField):
 
         self.assertIn("They do not hold that resonance.", told)
         self.assertFalse(Kindling.objects.exists())
+
+    def test_the_web_stage_tab_lists_what_she_holds_and_kindles_by_id(self) -> None:
+        listed = self.web(self.gm, "gm_list_kindling", target_id=self.mira.pk)
+
+        self.assertEqual(
+            listed.detail.data["strengths"],
+            [{"rank": 1, "name": "Faint"}, {"rank": 2, "name": "Blazing"}],
+        )
+        self.assertEqual(
+            listed.detail.data["resonances"],
+            [{"id": self.fury.pk, "name": "Fury"}, {"id": self.mercy.pk, "name": "Mercy"}],
+        )
+
+        done = self.web(
+            self.gm,
+            "stage_kindle",
+            target_id=self.mira.pk,
+            resonance=str(self.mercy.pk),
+            strength="2",
+        )
+
+        self.assertTrue(done.detail.success, done.detail.message)
+        self.assertEqual(self.mira_strength(self.mercy), 2)
+        again = self.web(self.gm, "gm_list_kindling", target_id=self.mira.pk)
+        self.assertEqual(
+            again.detail.data["kindled"], [{"resonance_id": self.mercy.pk, "strength": 2}]
+        )

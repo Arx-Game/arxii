@@ -1057,7 +1057,7 @@ function GrantItemTab({
 // actor.location fallback when neither `target`/`target_id` is supplied).
 // ---------------------------------------------------------------------------
 
-type StageMode = 'prop' | 'property' | 'present';
+type StageMode = 'prop' | 'property' | 'present' | 'kindle';
 
 interface SubstanceEntry {
   gift_id: number;
@@ -1150,6 +1150,125 @@ function StagePresentHere({ characterId }: { characterId: number }) {
   );
 }
 
+interface KindleOptions {
+  strengths: { rank: number; name: string }[];
+  resonances: { id: number; name: string }[];
+  kindled: { resonance_id: number; strength: number }[];
+}
+
+// "Kindle" (#5124): the GM answers "is her Fury stirred?" with yes, for the rest of the scene.
+// The target is the panel's shared participant picker; the resonances it lists are the ones
+// that character holds, and the strengths are the words staff gave them.
+function StageKindle({
+  characterId,
+  targetCharacterId,
+}: {
+  characterId: number;
+  targetCharacterId: number | null;
+}) {
+  const dispatch = useDispatchPlayerAction(characterId);
+  const [options, setOptions] = useState<KindleOptions>({
+    strengths: [],
+    resonances: [],
+    kindled: [],
+  });
+  const [resonanceId, setResonanceId] = useState('');
+  const [strength, setStrength] = useState('');
+
+  function load() {
+    if (targetCharacterId === null) {
+      setOptions({ strengths: [], resonances: [], kindled: [] });
+      return;
+    }
+    dispatch
+      .mutateAsync({
+        ref: { backend: 'registry', registry_key: 'gm_list_kindling' },
+        kwargs: { target_id: targetCharacterId },
+      })
+      .then((result) => {
+        const data = (result.data ?? {}) as Partial<KindleOptions>;
+        setOptions({
+          strengths: data.strengths ?? [],
+          resonances: data.resonances ?? [],
+          kindled: data.kindled ?? [],
+        });
+        setStrength((current) => current || String(data.strengths?.[0]?.rank ?? ''));
+      })
+      .catch(() => toast.error('Could not load their resonances.'));
+  }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- reload when the target changes
+  useEffect(load, [characterId, targetCharacterId]);
+
+  function kindle() {
+    dispatch
+      .mutateAsync({
+        ref: { backend: 'registry', registry_key: 'stage_kindle' },
+        kwargs: {
+          target_id: targetCharacterId,
+          resonance: resonanceId,
+          ...(strength !== '' ? { strength } : {}),
+        },
+      })
+      .then((result) => {
+        reportResult(result, 'Kindled.');
+        load();
+      })
+      .catch(() => toast.error('Could not kindle it.'));
+  }
+
+  return (
+    <div className="space-y-2" data-testid="gm-stage-kindle">
+      {targetCharacterId === null && (
+        <p className="text-xs text-muted-foreground">Pick a character above.</p>
+      )}
+      <div className="space-y-1">
+        <Label htmlFor="gm-stage-kindle-resonance">Resonance</Label>
+        <select
+          id="gm-stage-kindle-resonance"
+          className={SELECT_CLASS}
+          value={resonanceId}
+          onChange={(e) => setResonanceId(e.target.value)}
+          data-testid="gm-stage-kindle-resonance"
+        >
+          <option value="">Select a resonance…</option>
+          {options.resonances.map((entry) => (
+            <option key={entry.id} value={entry.id}>
+              {entry.name}
+              {options.kindled.some((row) => row.resonance_id === entry.id)
+                ? ' (kindled by you)'
+                : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="gm-stage-kindle-strength">Strength</Label>
+        <select
+          id="gm-stage-kindle-strength"
+          className={SELECT_CLASS}
+          value={strength}
+          onChange={(e) => setStrength(e.target.value)}
+          data-testid="gm-stage-kindle-strength"
+        >
+          {options.strengths.map((entry) => (
+            <option key={entry.rank} value={entry.rank}>
+              {entry.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <Button
+        disabled={dispatch.isPending || targetCharacterId === null || resonanceId === ''}
+        onClick={kindle}
+        data-testid="gm-stage-kindle-submit"
+      >
+        Kindle
+      </Button>
+    </div>
+  );
+}
+
 function StageTab({ characterId, targetCharacterId }: TabProps) {
   const [mode, setMode] = useState<StageMode>('prop');
   const [search, setSearch] = useState('');
@@ -1207,9 +1326,13 @@ function StageTab({ characterId, targetCharacterId }: TabProps) {
           <option value="prop">Prop</option>
           <option value="property">Property</option>
           <option value="present">Present here</option>
+          <option value="kindle">Kindle</option>
         </select>
       </div>
       {mode === 'present' && <StagePresentHere characterId={characterId} />}
+      {mode === 'kindle' && (
+        <StageKindle characterId={characterId} targetCharacterId={targetCharacterId} />
+      )}
       {mode === 'prop' && (
         <div className="space-y-1">
           <Label htmlFor="gm-stage-search">Item template</Label>
@@ -1258,7 +1381,7 @@ function StageTab({ characterId, targetCharacterId }: TabProps) {
           </div>
         </>
       )}
-      {mode !== 'present' && (
+      {mode !== 'present' && mode !== 'kindle' && (
         <Button disabled={!canSubmit} onClick={handleSubmit} data-testid="gm-stage-submit">
           {renderDispatch2()}
         </Button>

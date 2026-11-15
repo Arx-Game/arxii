@@ -33399,6 +33399,10 @@ export interface components {
       /** @description Name of the ally whose encouragement gave her free dig deeps, if any. */
       given_by: string | null;
     };
+    /** @description Write serializer for digging deep: optionally one of her own resonances (#5124). */
+    DigDeepRequest: {
+      resonance_id?: number;
+    };
     /**
      * @description * `soulfray` - Soulfray active
      *     * `near_death` - Near death
@@ -45739,6 +45743,7 @@ export interface components {
       readonly compulsion: components['schemas']['Compulsion'] | null;
       readonly steady_plan: components['schemas']['SteadyPlan'] | null;
       readonly dig_deep: components['schemas']['DigDeepOffer'] | null;
+      readonly rally_resonances: components['schemas']['RallyResonanceChoice'][];
       readonly call_up: components['schemas']['CallUpFightOffer'] | null;
       readonly strike_weapons: components['schemas']['StrikeWeaponOption'][] | null;
     };
@@ -49508,6 +49513,23 @@ export interface components {
       readonly stat_multiplier: string;
       /** @description Display ordering (lower = worse quality). */
       readonly sort_order: number;
+    };
+    /**
+     * @description Write serializer for declaring a rally: the ally, and optionally one of their resonances.
+     *
+     *     ``resonance_id`` names a resonance the ALLY holds (#5124); a Rally that names one kindles
+     *     it for the fight, or surges more when it is already kindled.
+     */
+    RallyRequest: {
+      ally_participant_id: number;
+      resonance_id?: number;
+    };
+    /** @description One of an ally's resonances a Rally may name: its name only, never an amount (#5124). */
+    RallyResonanceChoice: {
+      /** @description The resonance's id, sent back as resonance_id. */
+      id: number;
+      /** @description The resonance's name. */
+      name: string;
     };
     /** @description Read serializer for RandomSceneTarget instances. */
     RandomSceneTarget: {
@@ -61961,8 +61983,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this title. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -64696,9 +64717,9 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody: {
+    requestBody?: {
       content: {
-        'application/json': components['schemas']['EncounterDetailRequest'];
+        'application/json': components['schemas']['DigDeepRequest'];
       };
     };
     responses: {
@@ -64974,7 +64995,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['EncounterDetailRequest'];
+        'application/json': components['schemas']['RallyRequest'];
       };
     };
     responses: {

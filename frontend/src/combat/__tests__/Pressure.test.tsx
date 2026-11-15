@@ -42,6 +42,7 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     dig_deep: null,
     call_up: null,
     strike_weapons: null,
+    rally_resonances: [],
     ...overrides,
   };
 }

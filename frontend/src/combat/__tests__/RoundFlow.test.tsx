@@ -62,6 +62,7 @@ function makeParticipant(id: number, name: string): Participant {
     dig_deep: null,
     call_up: null,
     strike_weapons: null,
+    rally_resonances: [],
   };
 }
 
