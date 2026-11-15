@@ -56,7 +56,7 @@ from world.combat import simulation
 from world.combat.constants import OpponentTier, RiskLevel
 from world.combat.simulation import SimulationParams, SimulationReport
 from world.covenants.models import CovenantRole
-from world.magic.constants import GiftKind
+from world.magic.constants import PATH_LEVEL_CAP_MULTIPLIER, GiftKind
 from world.magic.models.gifts import Gift, Tradition
 from world.magic.models.techniques import Technique
 from world.magic.services.technique_effects import technique_catalog_revision
@@ -255,6 +255,11 @@ def tuning_conditions_fragment(request: HttpRequest) -> HttpResponse:
         "power_provenance_summary": power_panel.provenance_summary,
     }
     return render(request, "admin/tuning/_conditions_panel.html", context)
+
+
+#: A thread's cap is its holder's path level times ``PATH_LEVEL_CAP_MULTIPLIER``, so the
+#: highest a panel's thread level can mean is path level 30's cap: 300.
+_THREAD_LEVEL_MAX = 30 * PATH_LEVEL_CAP_MULTIPLIER
 
 
 def _clamp(value: int, minimum: int, maximum: int) -> int:
@@ -457,7 +462,7 @@ class TechniqueAnalyticsForm(forms.Form):
         return _clamp(self.cleaned_data["level"], 1, 30)
 
     def clean_thread_level(self) -> int:
-        return _clamp(self.cleaned_data["thread_level"], 0, 30)
+        return _clamp(self.cleaned_data["thread_level"], 0, _THREAD_LEVEL_MAX)
 
 
 INTENT_EVALUATE = "evaluate"
@@ -784,7 +789,7 @@ class CapabilityAnalyticsForm(forms.Form):
         return _clamp(self.cleaned_data["level"], 1, 30)
 
     def clean_thread_level(self) -> int:
-        return _clamp(self.cleaned_data["thread_level"], 0, 30)
+        return _clamp(self.cleaned_data["thread_level"], 0, _THREAD_LEVEL_MAX)
 
 
 def _capability_form_defaults() -> dict[str, Any]:

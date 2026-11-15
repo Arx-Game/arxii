@@ -76,7 +76,7 @@ class EvalContext:
     """
 
     level: int = 10
-    thread_level: int = 3
+    thread_level: int = 30
     roller_points: int = 25
     target_difficulty: int = 25
     roll_modifier: int = 0

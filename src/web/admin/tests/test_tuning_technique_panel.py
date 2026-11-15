@@ -99,7 +99,7 @@ class TestTechniqueFragmentView(TestCase):
     def _post_data(self, **overrides: Any) -> dict[str, Any]:
         data: dict[str, Any] = {
             "level": 10,
-            "thread_level": 3,
+            "thread_level": 30,
             "roller_points": 25,
             "target_difficulty": 25,
             "roll_modifier": 0,
@@ -188,7 +188,7 @@ class TestTechniqueFragmentView(TestCase):
         called_params = mock_build.call_args.args[0]
         self.assertIsInstance(called_params, TechniqueAnalyticsParams)
         self.assertEqual(called_params.level, 10)
-        self.assertEqual(called_params.thread_level, 3)
+        self.assertEqual(called_params.thread_level, 30)
         self.assertEqual(called_params.roller_points, 25)
         self.assertEqual(called_params.target_difficulty, 25)
         self.assertEqual(called_params.roll_modifier, 0)
@@ -260,6 +260,25 @@ class TestTechniqueFragmentView(TestCase):
         self.assertEqual(called_params.thread_level, 0)
 
     @patch(_PATCH_TARGET)
+    def test_post_thread_level_clamps_to_the_highest_thread_cap(self, mock_build: Any) -> None:
+        """A thread caps at path level x 10, so path level 30 allows 300 and no more."""
+        mock_build.return_value = _canned_panel()
+        self.client.force_login(self.super)
+        self.client.post(reverse("admin_tuning_techniques"), self._post_data(thread_level=300))
+        self.assertEqual(mock_build.call_args.args[0].thread_level, 300)
+
+        mock_build.reset_mock()
+        self.client.post(reverse("admin_tuning_techniques"), self._post_data(thread_level=999))
+        self.assertEqual(mock_build.call_args.args[0].thread_level, 300)
+
+    def test_fresh_form_defaults_to_a_thread_level_with_a_rung(self) -> None:
+        """Rung 0 (thread level under 10) would price amplified power equal to baseline."""
+        self.client.force_login(self.super)
+        resp = self.client.get(reverse("admin_tuning_techniques"))
+        self.assertEqual(resp.context["form"].initial["thread_level"], 30)
+        self.assertIn("Thread level (0-300)", resp.content.decode())
+
+    @patch(_PATCH_TARGET)
     def test_post_invalid_sort_choice_rerenders_form_errors_without_building(
         self, mock_build: Any
     ) -> None:
@@ -325,7 +344,7 @@ class TestTechniquePanelCatalogRevision(TestCase):
     def _post_data(self) -> dict[str, Any]:
         return {
             "level": 10,
-            "thread_level": 3,
+            "thread_level": 30,
             "roller_points": 25,
             "target_difficulty": 25,
             "roll_modifier": 0,
@@ -623,7 +642,7 @@ class TestTechniquePanelStartingKits(TestCase):
         data = {
             "intent": "refresh",
             "level": 10,
-            "thread_level": 3,
+            "thread_level": 30,
             "roller_points": 25,
             "target_difficulty": 25,
             "roll_modifier": 0,
