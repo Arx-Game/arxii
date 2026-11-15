@@ -1058,6 +1058,8 @@ class LifePointsSeed:
 
 
 #: The life-points spec's own route, beat and the two cards on it.
+LIFE_POINTS_AREA = "Ledger Road"
+LIFE_POINTS_BEGINNING = "Road-born"
 LIFE_POINTS_ROUTE = "Raised on the ledger road"
 LIFE_POINTS_BEAT = "What the road taught you"
 LIFE_POINTS_COSTLY_CARD = "Counting-house clerk"
@@ -1075,6 +1077,7 @@ def seed_life_points_spec(*, username: str) -> LifePointsSeed:
     opens on the beat with nothing chosen.
     """
     from django.db import transaction  # noqa: PLC0415
+    from django.utils.text import slugify  # noqa: PLC0415
     from evennia.accounts.models import AccountDB  # noqa: PLC0415
 
     from world.character_creation.constants import (  # noqa: PLC0415
@@ -1085,26 +1088,41 @@ def seed_life_points_spec(*, username: str) -> LifePointsSeed:
         Stage,
     )
     from world.character_creation.factories import (  # noqa: PLC0415
+        BeginningsFactory,
         CharacterDraftFactory,
         DistinctionOfferFactory,
         LifeBeatExclusionFactory,
         LifeBeatFactory,
         OriginTemplateFactory,
+        RealmFactory,
+        StartingAreaFactory,
     )
     from world.character_creation.models import CharacterDraft, LifeBeat  # noqa: PLC0415
-    from world.distinctions.factories import DistinctionFactory  # noqa: PLC0415
+    from world.distinctions.factories import (  # noqa: PLC0415
+        DistinctionCategoryFactory,
+        DistinctionFactory,
+    )
 
     account = AccountDB.objects.get(username=username)
     with transaction.atomic():
         if not LifeBeat.objects.filter(name=LIFE_POINTS_BEAT).exists():
+            # Every row is named here. Each seed runs in its own process, so a factory's
+            # counter starts again at 0 and its default name is one another seed already
+            # used: an insert collides, and a get-or-create factory hands back the other
+            # seed's row with these arguments dropped.
+            area = StartingAreaFactory(
+                name=LIFE_POINTS_AREA, realm=RealmFactory(name=LIFE_POINTS_AREA)
+            )
+            beginning = BeginningsFactory(name=LIFE_POINTS_BEGINNING, starting_area=area)
             template = OriginTemplateFactory(
+                beginning=beginning,
                 name=LIFE_POINTS_ROUTE,
                 allows_claim_family=False,
                 allows_name_family=False,
                 allows_no_family=True,
                 parentage=Parentage.UNKNOWN,
             )
-            beginning = template.beginning
+            category = DistinctionCategoryFactory(name="Road life", slug="road-life")
             beat = LifeBeatFactory(
                 name=LIFE_POINTS_BEAT,
                 prompt="What did the road make of you.",
@@ -1121,13 +1139,19 @@ def seed_life_points_spec(*, username: str) -> LifePointsSeed:
                     beat=beat,
                     appearance_section=None,
                     prompt="",
-                    distinction=DistinctionFactory(name=name, cost_per_rank=price, max_rank=1),
+                    distinction=DistinctionFactory(
+                        name=name,
+                        slug=slugify(name),
+                        category=category,
+                        cost_per_rank=price,
+                        max_rank=1,
+                    ),
                 )
 
             draft = CharacterDraft.objects.filter(account=account).first()
             if draft is None:
-                draft = CharacterDraftFactory(account=account)
-            draft.selected_area = beginning.starting_area
+                draft = CharacterDraftFactory(account=account, selected_area=area)
+            draft.selected_area = area
             draft.selected_beginnings = beginning
             draft.selected_origin_template = template
             draft.current_stage = Stage.LINEAGE

@@ -16,15 +16,51 @@ from __future__ import annotations
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
-from integration_tests.live_seeds import LIFE_POINTS_BEAT, seed_life_points_spec
+from integration_tests.live_seeds import (
+    LIFE_POINTS_BEAT,
+    seed_family_seats_spec,
+    seed_life_points_spec,
+)
 from world.character_creation.constants import Stage
-from world.character_creation.factories import BeginningsFactory, CharacterDraftFactory
+from world.character_creation.factories import (
+    BeginningsFactory,
+    CharacterDraftFactory,
+    OriginTemplateFactory,
+    RealmFactory,
+    StartingAreaFactory,
+)
 from world.character_creation.models import CharacterDraft
+from world.distinctions.factories import DistinctionCategoryFactory, DistinctionFactory
 
 ACCOUNT = "e2e_life_points_account"
 
 
+def _as_a_fresh_process_after_another_seed() -> None:
+    """Leave the database as CI finds it when this seed runs, and the counters as it has them.
+
+    The real-test job runs each seed in a process of its own, after others. So rows with
+    the factories' default names already exist ("TestBeginnings0", "distinction-0", ...)
+    and every factory counts from 0 again. The first version of this seed met exactly
+    that in CI: its Beginnings insert collided with the seats seed's.
+    """
+    account = AccountFactory(username="e2e_family_seats_account")
+    seed_family_seats_spec(username=account.username)
+    DistinctionFactory(cost_per_rank=1)
+    for counted in (
+        BeginningsFactory,
+        DistinctionCategoryFactory,
+        DistinctionFactory,
+        OriginTemplateFactory,
+        RealmFactory,
+        StartingAreaFactory,
+    ):
+        counted.reset_sequence(0)
+
+
 class LifePointsLiveSeedTests(APITestCase):
+    def setUp(self) -> None:
+        _as_a_fresh_process_after_another_seed()
+
     def test_seed_is_idempotent_and_the_page_reads_one_beat_with_two_priced_cards(self) -> None:
         account = AccountFactory(username=ACCOUNT)
 
