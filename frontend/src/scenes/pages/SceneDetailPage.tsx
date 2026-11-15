@@ -20,6 +20,7 @@ import { PrecapturePanel } from '../components/PrecapturePanel';
 import { SceneLinesAndVeilsCard } from '@/boundaries/components/SceneLinesAndVeilsCard';
 import { SineatingInbox } from '@/magic/components/SineatingInbox';
 import { SoulTetherRescuePrompt } from '@/magic/components/SoulTetherRescuePrompt';
+import { KindledResonancesPanel } from '@/magic/components/KindledResonancesPanel';
 import { EntryFlourishOfferGate } from '@/magic/components/EntryFlourishOfferGate';
 import { DriftConversionOfferGate } from '@/magic/components/DriftConversionOfferGate';
 import { WitnessReactionOfferGate } from '@/justice/components/WitnessReactionOfferGate';
@@ -406,6 +407,12 @@ export function SceneDetailPage() {
       {isActive && (
         <div className="mt-2">
           <SelfCheckPanel />
+        </div>
+      )}
+      {/* #5124 Your resonances: what is kindled here, how strongly and why. */}
+      {isActive && characterSheetId > 0 && (
+        <div className="mt-2">
+          <KindledResonancesPanel characterSheetId={characterSheetId} />
         </div>
       )}
       {scene?.viewer_can_gm && (

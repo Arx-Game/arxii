@@ -15220,6 +15220,23 @@ export interface paths {
     patch: operations['magic_gifts_partial_update'];
     trace?: never;
   };
+  '/api/magic/kindled-resonances/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Each resonance a character holds, kindled or not, with the strength word and reasons. */
+    get: operations['magic_kindled_resonances_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/manifest-choices/': {
     parameters: {
       query?: never;
@@ -38188,6 +38205,15 @@ export interface components {
      * @enum {string}
      */
     KindF82Enum: 'profile_text' | 'distinction_change';
+    /** @description A ``KindledResonance`` as the panel reads it. */
+    KindledResonance: {
+      id: number;
+      name: string;
+      affinity_name: string;
+      kindled: boolean;
+      readonly strength_name: string | null;
+      reasons: string[];
+    };
     /** @description One visible node in a family tree payload. */
     KinspersonNode: {
       id: number;
@@ -43308,6 +43334,21 @@ export interface components {
       /** Format: uri */
       previous: string | null;
       results: components['schemas']['JournalEntry'][];
+    };
+    PaginatedKindledResonanceList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['KindledResonance'][];
     };
     PaginatedKnownSecretList: {
       /** @example 123 */
@@ -76392,6 +76433,30 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['GiftCreate'];
+        };
+      };
+    };
+  };
+  magic_kindled_resonances_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedKindledResonanceList'];
         };
       };
     };

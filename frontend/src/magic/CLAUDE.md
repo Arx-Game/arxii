@@ -415,6 +415,14 @@ read from `useCharacterAuras`); everyone else sees the halo and the words. Mount
 step in character creation (`character-creation/components/gift/ResonanceWeights.tsx`, with
 `auraSentence` of the weighted picks).
 
+### `components/KindledResonancesPanel.tsx` (#5124)
+
+"Your resonances" (demo Screen 1): each resonance she holds with its affinity, "Kindled,
+<strength word>" or "Not kindled" (dimmed), and the reasons in player words; no numbers. Reads
+`useKindledResonances(characterSheetId)` (`GET /api/magic/kindled-resonances/`, refetched every
+30 s). Mounted in the scene tools (`SceneDetailPage`) and in the combat rail beside Dig deep
+(`YourTurn`); renders nothing for a character with no resonance.
+
 ### `components/threads/ResonanceBalanceCard.tsx`
 
 HoverCard showing a single resonance balance (current balance + lifetime earned + flavor text).

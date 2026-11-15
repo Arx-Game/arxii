@@ -285,6 +285,7 @@ const mockUsePendingStageAdvanceOffers = vi.fn(() => ({
 }));
 
 vi.mock('@/magic/queries', () => ({
+  useKindledResonances: () => ({ data: [] }),
   usePendingSineatingOffers: () => mockUsePendingSineatingOffers(),
   usePendingStageAdvanceOffers: () => mockUsePendingStageAdvanceOffers(),
   useRespondToSineating: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),

@@ -109,6 +109,9 @@ export const magicKeys = {
   manifestChoices: (characterSheetId: number) =>
     [...magicKeys.all, 'manifest-choices', characterSheetId] as const,
 
+  kindledResonances: (characterSheetId: number) =>
+    [...magicKeys.all, 'kindled-resonances', characterSheetId] as const,
+
   audereUltimates: (characterSheetId: number) =>
     [...magicKeys.all, 'audere', 'ultimates', characterSheetId] as const,
 
@@ -1187,5 +1190,22 @@ export function useSetManifestChoice(characterSheetId: number) {
       );
       qc.invalidateQueries({ queryKey: ['character-sheets', characterSheetId] }).catch(() => {});
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Your resonances (#5124)
+// ---------------------------------------------------------------------------
+
+/** How often the panel re-reads what is kindled; it changes as a scene or a fight moves. */
+const KINDLED_RESONANCES_REFETCH_MS = 30_000;
+
+/** Each resonance the character holds, kindled or not, with the strength word and reasons. */
+export function useKindledResonances(characterSheetId: number) {
+  return useQuery({
+    queryKey: magicKeys.kindledResonances(characterSheetId),
+    queryFn: () => api.getKindledResonances(characterSheetId),
+    enabled: characterSheetId > 0,
+    refetchInterval: KINDLED_RESONANCES_REFETCH_MS,
   });
 }

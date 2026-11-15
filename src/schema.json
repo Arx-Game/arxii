@@ -23425,6 +23425,35 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/magic/kindled-resonances/:
+    get:
+      operationId: magic_kindled_resonances_list
+      description: Each resonance a character holds, kindled or not, with the strength
+        word and reasons.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedKindledResonanceList'
+          description: ''
   /api/magic/manifest-choices/:
     get:
       operationId: magic_manifest_choices_list
@@ -67117,6 +67146,33 @@ components:
       description: |-
         * `profile_text` - Profile Text
         * `distinction_change` - Distinction Change
+    KindledResonance:
+      type: object
+      description: A ``KindledResonance`` as the panel reads it.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        affinity_name:
+          type: string
+        kindled:
+          type: boolean
+        strength_name:
+          type: string
+          nullable: true
+          readOnly: true
+        reasons:
+          type: array
+          items:
+            type: string
+      required:
+      - affinity_name
+      - id
+      - kindled
+      - name
+      - reasons
+      - strength_name
     KinspersonNode:
       type: object
       description: One visible node in a family tree payload.
@@ -76792,6 +76848,29 @@ components:
       - next
       - previous
       - results
+    PaginatedKindledResonanceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/KindledResonance'
     PaginatedKnownSecretList:
       type: object
       required:

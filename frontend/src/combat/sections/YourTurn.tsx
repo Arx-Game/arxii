@@ -40,6 +40,7 @@ import {
 } from '@/combat/components/CompulsionBanner';
 import { CallUpInFight } from '@/combat/components/CallUpInFight';
 import { DigDeep } from '@/combat/components/DigDeep';
+import { KindledResonancesPanel } from '@/magic/components/KindledResonancesPanel';
 import { MovementActions } from '../components/MovementActions';
 import { availableActionsKeys } from '@/scenes/actionQueries';
 import { WaitingStrikeControl } from '../components/WaitingStrikeControl';
@@ -3108,6 +3109,9 @@ export function YourTurn({
           onDispatched={refreshEncounter}
         />
       )}
+
+      {/* #5124 Your resonances, beside Dig deep: what is kindled and why. */}
+      {characterSheetId > 0 && <KindledResonancesPanel characterSheetId={characterSheetId} />}
 
       {myParticipantSelf?.dig_deep && (
         <DigDeep

@@ -746,3 +746,10 @@ export interface TrainTechniqueResult {
 export type ManifestChoice = components['schemas']['ManifestChoice'];
 /** One option: label, whether its bond holds, and why not when it does not. */
 export type ManifestOptionChoice = components['schemas']['ManifestOptionChoice'];
+
+// ---------------------------------------------------------------------------
+// Your resonances (#5124): what is kindled, how strongly and why.
+// ---------------------------------------------------------------------------
+
+/** One resonance the character holds: kindled or not, the strength word, the reasons. */
+export type KindledResonance = components['schemas']['KindledResonance'];

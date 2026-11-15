@@ -17,6 +17,7 @@ import { dispatchCanvasAction, type DispatchResult } from '@/map-canvas/dispatch
 import { getRituals } from '@/rituals/api';
 import type { components } from '@/generated/api';
 import type {
+  KindledResonance,
   ManifestChoice,
   ThreadResonanceOptions,
   AcceptTeachingOfferRequest,
@@ -1432,4 +1433,22 @@ export function setManifestChoice(
     technique_id: techniqueId,
     option_id: optionId,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Your resonances (#5124)
+// ---------------------------------------------------------------------------
+
+const KINDLED_RESONANCES_URL = '/api/magic/kindled-resonances/';
+
+/**
+ * GET /api/magic/kindled-resonances/?character_sheet=<id> (#5124): each resonance the
+ * character holds, whether a situation kindles it now, the strength word and the reasons.
+ * Owner or staff only.
+ */
+export async function getKindledResonances(characterSheetId: number): Promise<KindledResonance[]> {
+  const res = await apiFetch(`${KINDLED_RESONANCES_URL}?character_sheet=${characterSheetId}`);
+  if (!res.ok) await readErrorDetail(res, 'Failed to load your resonances');
+  const page = (await res.json()) as { results: KindledResonance[] };
+  return page.results;
 }
