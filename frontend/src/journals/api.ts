@@ -220,6 +220,18 @@ function jsonHeaders(): HeadersInit {
   return { 'Content-Type': 'application/json' };
 }
 
+/**
+ * The acting character, sent as `X-Character-ID` (`web.api.mixins.CharacterContextMixin`).
+ *
+ * The journals view resolves the viewer and the author from this header alone, the way
+ * `goals/api.ts` and `magic/api.ts` do. With no header every write and every own-entries read
+ * answers "No character found.", and a public read cannot mark an entry as the viewer's own.
+ * `null` (no character chosen yet) sends no header.
+ */
+function characterHeaders(characterId: number | null): Record<string, string> {
+  return characterId === null ? {} : { 'X-Character-ID': String(characterId) };
+}
+
 function buildQuery(params: Record<string, string | number | undefined>): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -241,9 +253,12 @@ function buildQuery(params: Record<string, string | number | undefined>): string
  * visit, whatever filters were passed; `mark_visit=1` advances the mark after reading them.
  */
 export async function listJournalEntries(
+  characterId: number | null,
   filters: JournalEntryListFilters = {}
 ): Promise<PaginatedJournalEntries> {
-  const res = await apiFetch(`${ENTRIES_URL}/${buildQuery(filters)}`);
+  const res = await apiFetch(`${ENTRIES_URL}/${buildQuery(filters)}`, {
+    headers: characterHeaders(characterId),
+  });
   if (!res.ok) {
     await readErrorDetail(res, 'Failed to load journal entries');
   }
@@ -256,9 +271,12 @@ export async function listJournalEntries(
  * The requesting character's own entries, including private ones.
  */
 export async function listMyJournalEntries(
+  characterId: number | null,
   params: { page?: number; page_size?: number } = {}
 ): Promise<PaginatedJournalEntries> {
-  const res = await apiFetch(`${ENTRIES_URL}/mine/${buildQuery(params)}`);
+  const res = await apiFetch(`${ENTRIES_URL}/mine/${buildQuery(params)}`, {
+    headers: characterHeaders(characterId),
+  });
   if (!res.ok) {
     await readErrorDetail(res, 'Failed to load your journal entries');
   }
@@ -266,8 +284,11 @@ export async function listMyJournalEntries(
 }
 
 /** GET /api/journals/entries/{id}/ */
-export async function getJournalEntry(id: number): Promise<JournalEntryDetail> {
-  const res = await apiFetch(`${ENTRIES_URL}/${id}/`);
+export async function getJournalEntry(
+  characterId: number | null,
+  id: number
+): Promise<JournalEntryDetail> {
+  const res = await apiFetch(`${ENTRIES_URL}/${id}/`, { headers: characterHeaders(characterId) });
   if (!res.ok) {
     await readErrorDetail(res, 'Failed to load journal entry');
   }
@@ -276,11 +297,12 @@ export async function getJournalEntry(id: number): Promise<JournalEntryDetail> {
 
 /** POST /api/journals/entries/ */
 export async function createJournalEntry(
+  characterId: number | null,
   body: CreateJournalEntryRequest
 ): Promise<JournalEntryDetail> {
   const res = await apiFetch(`${ENTRIES_URL}/`, {
     method: 'POST',
-    headers: jsonHeaders(),
+    headers: { ...jsonHeaders(), ...characterHeaders(characterId) },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -291,12 +313,13 @@ export async function createJournalEntry(
 
 /** POST /api/journals/entries/{id}/respond/ */
 export async function respondToJournal(
+  characterId: number | null,
   id: number,
   body: RespondToJournalRequest
 ): Promise<JournalEntryDetail> {
   const res = await apiFetch(`${ENTRIES_URL}/${id}/respond/`, {
     method: 'POST',
-    headers: jsonHeaders(),
+    headers: { ...jsonHeaders(), ...characterHeaders(characterId) },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -307,12 +330,13 @@ export async function respondToJournal(
 
 /** PATCH /api/journals/entries/{id}/ */
 export async function editJournalEntry(
+  characterId: number | null,
   id: number,
   body: EditJournalEntryRequest
 ): Promise<JournalEntryDetail> {
   const res = await apiFetch(`${ENTRIES_URL}/${id}/`, {
     method: 'PATCH',
-    headers: jsonHeaders(),
+    headers: { ...jsonHeaders(), ...characterHeaders(characterId) },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -339,8 +363,10 @@ export interface PatchJournalSettingsRequest {
 }
 
 /** GET /api/journals/entries/disposition/ — the caller's journal settings (#3941, was #3287). */
-export async function getJournalSettings(): Promise<JournalSettings> {
-  const res = await apiFetch(`${ENTRIES_URL}/disposition/`);
+export async function getJournalSettings(characterId: number | null): Promise<JournalSettings> {
+  const res = await apiFetch(`${ENTRIES_URL}/disposition/`, {
+    headers: characterHeaders(characterId),
+  });
   if (!res.ok) {
     await readErrorDetail(res, 'Failed to load journal settings');
   }
@@ -353,11 +379,12 @@ export async function getJournalSettings(): Promise<JournalSettings> {
  * `retort_consent`) never clobbers the other setting.
  */
 export async function patchJournalSettings(
+  characterId: number | null,
   body: PatchJournalSettingsRequest
 ): Promise<JournalSettings> {
   const res = await apiFetch(`${ENTRIES_URL}/disposition/`, {
     method: 'PATCH',
-    headers: jsonHeaders(),
+    headers: { ...jsonHeaders(), ...characterHeaders(characterId) },
     body: JSON.stringify(body),
   });
   if (!res.ok) {

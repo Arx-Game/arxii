@@ -7,6 +7,7 @@
 import { useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { useActiveCharacterId } from '@/gm-adjudication/useActiveCharacterId';
 import { magicKeys } from '@/magic/queries';
 
 import * as api from './api';
@@ -18,13 +19,36 @@ import type {
   RespondToJournalRequest,
 } from './api';
 
+/**
+ * Every read is the acting character's (the viewer's own entries, retort rights and settings
+ * differ per character), so the keys that read as someone carry `characterId` last. The bare
+ * forms (no id) are the prefixes the mutations invalidate.
+ */
 export const journalsKeys = {
   all: ['journals'] as const,
   lists: () => [...journalsKeys.all, 'list'] as const,
-  list: (filters: JournalEntryListFilters = {}) => [...journalsKeys.lists(), filters] as const,
-  mine: (page = 1) => [...journalsKeys.all, 'mine', page] as const,
-  detail: (id: number) => [...journalsKeys.all, 'detail', id] as const,
-  settings: () => [...journalsKeys.all, 'settings'] as const,
+  list: (filters: JournalEntryListFilters = {}, characterId?: number | null) =>
+    [
+      ...journalsKeys.lists(),
+      filters,
+      ...(characterId === undefined ? [] : [characterId]),
+    ] as const,
+  mine: (page = 1, characterId?: number | null) =>
+    [
+      ...journalsKeys.all,
+      'mine',
+      page,
+      ...(characterId === undefined ? [] : [characterId]),
+    ] as const,
+  detail: (id: number, characterId?: number | null) =>
+    [
+      ...journalsKeys.all,
+      'detail',
+      id,
+      ...(characterId === undefined ? [] : [characterId]),
+    ] as const,
+  settings: (characterId?: number | null) =>
+    [...journalsKeys.all, 'settings', ...(characterId === undefined ? [] : [characterId])] as const,
 };
 
 /**
@@ -42,29 +66,33 @@ export const journalsKeys = {
  */
 export function useJournalEntries(filters: JournalEntryListFilters = {}, markVisitOnce = false) {
   const stamped = useRef(false);
+  const characterId = useActiveCharacterId();
   return useQuery({
-    queryKey: journalsKeys.list(filters),
+    queryKey: journalsKeys.list(filters, characterId),
     queryFn: () => {
       const stamp = markVisitOnce && !stamped.current;
       stamped.current = true;
-      return api.listJournalEntries(stamp ? { ...filters, mark_visit: 1 } : filters);
+      return api.listJournalEntries(characterId, stamp ? { ...filters, mark_visit: 1 } : filters);
     },
   });
 }
 
 /** GET /api/journals/entries/mine/ — the viewer's own entries, including private. */
 export function useMyJournalEntries(page = 1) {
+  const characterId = useActiveCharacterId();
   return useQuery({
-    queryKey: journalsKeys.mine(page),
-    queryFn: () => api.listMyJournalEntries({ page }),
+    queryKey: journalsKeys.mine(page, characterId),
+    queryFn: () => api.listMyJournalEntries(characterId, { page }),
+    enabled: characterId !== null,
   });
 }
 
 /** GET /api/journals/entries/{id}/ — a single entry with its responses. */
 export function useJournalEntry(id: number | null, enabled = true) {
+  const characterId = useActiveCharacterId();
   return useQuery({
-    queryKey: journalsKeys.detail(id ?? -1),
-    queryFn: () => api.getJournalEntry(id as number),
+    queryKey: journalsKeys.detail(id ?? -1, characterId),
+    queryFn: () => api.getJournalEntry(characterId, id as number),
     enabled: enabled && id != null,
   });
 }
@@ -76,8 +104,9 @@ export function useJournalEntry(id: number | null, enabled = true) {
  */
 export function useCreateJournalEntry() {
   const queryClient = useQueryClient();
+  const characterId = useActiveCharacterId();
   return useMutation({
-    mutationFn: (body: CreateJournalEntryRequest) => api.createJournalEntry(body),
+    mutationFn: (body: CreateJournalEntryRequest) => api.createJournalEntry(characterId, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: journalsKeys.lists() }).catch(() => {});
       queryClient.invalidateQueries({ queryKey: journalsKeys.all }).catch(() => {});
@@ -95,9 +124,10 @@ export function useCreateJournalEntry() {
  */
 export function useRespondToJournal() {
   const queryClient = useQueryClient();
+  const characterId = useActiveCharacterId();
   return useMutation({
     mutationFn: ({ entryId, body }: { entryId: number; body: RespondToJournalRequest }) =>
-      api.respondToJournal(entryId, body),
+      api.respondToJournal(characterId, entryId, body),
     onSuccess: (_data, { entryId }) => {
       queryClient.invalidateQueries({ queryKey: journalsKeys.detail(entryId) }).catch(() => {});
       queryClient.invalidateQueries({ queryKey: journalsKeys.lists() }).catch(() => {});
@@ -115,9 +145,10 @@ export function useRespondToJournal() {
  */
 export function useEditJournalEntry() {
   const queryClient = useQueryClient();
+  const characterId = useActiveCharacterId();
   return useMutation({
     mutationFn: ({ entryId, body }: { entryId: number; body: EditJournalEntryRequest }) =>
-      api.editJournalEntry(entryId, body),
+      api.editJournalEntry(characterId, entryId, body),
     onSuccess: (_data, { entryId }) => {
       queryClient.invalidateQueries({ queryKey: journalsKeys.detail(entryId) }).catch(() => {});
       queryClient.invalidateQueries({ queryKey: journalsKeys.lists() }).catch(() => {});
@@ -132,9 +163,11 @@ export function useEditJournalEntry() {
  * #3287): sheet-level posthumous default, retort consent, and weekly posting-XP tracker.
  */
 export function useJournalSettings() {
+  const characterId = useActiveCharacterId();
   return useQuery({
-    queryKey: journalsKeys.settings(),
-    queryFn: () => api.getJournalSettings(),
+    queryKey: journalsKeys.settings(characterId),
+    queryFn: () => api.getJournalSettings(characterId),
+    enabled: characterId !== null,
   });
 }
 
@@ -144,8 +177,9 @@ export function useJournalSettings() {
  */
 export function usePatchJournalSettings() {
   const queryClient = useQueryClient();
+  const characterId = useActiveCharacterId();
   return useMutation({
-    mutationFn: (body: PatchJournalSettingsRequest) => api.patchJournalSettings(body),
+    mutationFn: (body: PatchJournalSettingsRequest) => api.patchJournalSettings(characterId, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: journalsKeys.settings() }).catch(() => {});
     },
