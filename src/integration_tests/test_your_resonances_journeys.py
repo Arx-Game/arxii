@@ -1,0 +1,83 @@
+"""Journey for the "Your resonances" panel (#5124): what is kindled, how strongly and why.
+
+The scene sidebar and the combat rail read it through the API; telnet ``resonances`` prints
+the same list. A condition the character bears that matches a resonance's feeling kindles it.
+"""
+
+from __future__ import annotations
+
+from integration_tests.harness import JourneyCase
+from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
+from world.covenants.perks.constants import Situation
+from world.magic.factories import (
+    AffinityFactory,
+    CharacterResonanceFactory,
+    KindledStrengthTierFactory,
+    KindlingSituationFactory,
+    ResonanceFactory,
+)
+from world.magic.models import KindledStrengthTier
+from world.mechanics.factories import PropertyFactory
+
+URL = "/api/magic/kindled-resonances/"
+
+
+class SeeingWhatIsKindled(JourneyCase):
+    def setUp(self) -> None:
+        super().setUp()
+        KindledStrengthTier.objects.all().delete()
+        for rank, severity, name in ((1, 1, "Faint"), (2, 3, "Strong"), (3, 5, "Blazing")):
+            KindledStrengthTierFactory(rank=rank, name=name, min_severity=severity)
+        self.room = self.make_room("The Hollow")
+        self.mira = self.make_player("Mira", room=self.room)
+        self.sheet = self.mira.sheet_data
+        feeling = PropertyFactory()
+        self.fury = ResonanceFactory(
+            name="Fury", affinity=AffinityFactory(name="Primal"), feeling=feeling
+        )
+        self.wonder = ResonanceFactory(name="Wonder", affinity=self.fury.affinity)
+        for resonance in (self.fury, self.wonder):
+            CharacterResonanceFactory(character_sheet=self.sheet, resonance=resonance)
+        KindlingSituationFactory(
+            resonance=self.fury, situation=Situation.OWN_FEELING, strength=None
+        )
+        rage = ConditionTemplateFactory(name="Rage")
+        rage.properties.add(feeling)
+        ConditionInstanceFactory(target=self.mira, condition=rage, severity=5)
+
+    def test_the_api_lists_each_resonance_with_its_strength_word_and_reasons(self) -> None:
+        response = self.api(self.account_of(self.mira)).get(URL, {"character_sheet": self.sheet.pk})
+        self.assertEqual(response.status_code, 200)
+        rows = {row["name"]: row for row in response.json()["results"]}
+        self.assertEqual(set(rows), {"Fury", "Wonder"})
+        self.assertEqual(
+            rows["Fury"],
+            {
+                "id": self.fury.pk,
+                "name": "Fury",
+                "affinity_name": "Primal",
+                "kindled": True,
+                "strength_name": "Blazing",
+                "reasons": ["You carry Rage"],
+            },
+        )
+        self.assertFalse(rows["Wonder"]["kindled"])
+        self.assertIsNone(rows["Wonder"]["strength_name"])
+        self.assertEqual(rows["Wonder"]["reasons"], [])
+
+    def test_telnet_resonances_prints_the_same_list(self) -> None:
+        told = self.telnet(self.mira, "resonances")
+        self.assertEqual(
+            told.splitlines(),
+            [
+                "|wFury|n (Primal) - Kindled, blazing",
+                "  You carry Rage",
+                "|wWonder|n (Primal) - Not kindled",
+            ],
+        )
+
+    def test_the_api_shows_her_resonances_to_her_and_no_one_else(self) -> None:
+        other = self.make_player("Hobb", room=self.room)
+        response = self.api(self.account_of(other)).get(URL, {"character_sheet": self.sheet.pk})
+        self.assertEqual(response.json()["results"], [])
+        self.assertEqual(self.api(self.account_of(self.mira)).get(URL).status_code, 400)

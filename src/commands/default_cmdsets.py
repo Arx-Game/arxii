@@ -134,6 +134,7 @@ from commands.imbue import CmdImbue
 from commands.investigation import CmdSearch  # #1866
 from commands.journals import CmdJournal
 from commands.keepsakes import CmdKeepsake
+from commands.kindled_resonances import CmdKindledResonances  # #5124
 from commands.language import CmdSpeak, CmdTrainLanguage  # #2993
 from commands.locations import CmdRoom
 from commands.manifest import CmdManifest
@@ -612,6 +613,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdVault,
             # #2032 — spendable resonance balances + grant history (bare/history subverbs).
             CmdResonance,
+            # #5124 - which resonances are kindled, how strongly, and why.
+            CmdKindledResonances,
             # #2640 — the Sphinx of Black Quartz's vow-suitability verdict.
             CmdSphinx,
             # #4929 - a vow holder's focus picks: list them, choose one.

@@ -173,6 +173,11 @@ from world.magic.views_manifestation import ManifestChoiceViewSet  # noqa: E402
 
 router.register("manifest-choices", ManifestChoiceViewSet, basename="manifest-choice")
 
+# #5124 - the "Your resonances" panel: what is kindled, how strongly and why
+from world.magic.views_kindling import KindledResonanceViewSet  # noqa: E402
+
+router.register("kindled-resonances", KindledResonanceViewSet, basename="kindled-resonance")
+
 
 urlpatterns = [
     # Literal paths MUST come before *router.urls so that "rituals/perform/" is
