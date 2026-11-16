@@ -743,19 +743,30 @@ export function GameWindow({
       el.scrollTop = el.scrollHeight;
       pinnedRef.current = true;
     }
-    // Prune scroll offsets for conversations the rail no longer offers (#2165
-    // review fold-in) — otherwise a gone row's entry lingers in the map forever.
-    const liveKeys = new Set(['room', ...(conversationKeys ?? [])]);
-    for (const key of scrollPositionsRef.current.keys()) {
-      if (!liveKeys.has(key)) scrollPositionsRef.current.delete(key);
-    }
     // Deliberately NOT depending on the whole `sceneFeed` object -- GamePage.tsx
     // builds a fresh `sceneFeed` object every render (new interactions array
     // included), so that would re-run this effect (and its scrollTop writes)
     // on every unrelated re-render instead of only on an actual tab switch or
     // scene change. `sceneFeed?.sceneId` is stable across those.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeConvKey, conversationKeys, sceneFeed?.sceneId]);
+  }, [activeConvKey, sceneFeed?.sceneId]);
+
+  // Prune scroll offsets for conversations the rail no longer offers (#2165
+  // review fold-in) -- otherwise a gone row's entry lingers in the map forever.
+  // Its own effect, keyed on the keys' text: `conversationKeys` is a new array
+  // on every render, and as a dependency of the effect above it put the reader
+  // back at the last recorded offset each time a pose arrived, which unpinned
+  // the feed from its newest line.
+  const conversationKeyList = (conversationKeys ?? []).join('\n');
+  useEffect(() => {
+    const liveKeys = new Set([
+      'room',
+      ...(conversationKeyList ? conversationKeyList.split('\n') : []),
+    ]);
+    for (const key of scrollPositionsRef.current.keys()) {
+      if (!liveKeys.has(key)) scrollPositionsRef.current.delete(key);
+    }
+  }, [conversationKeyList]);
 
   const handleFeedScroll = () => {
     // Never record a position while browsing a historical reference (#3759
