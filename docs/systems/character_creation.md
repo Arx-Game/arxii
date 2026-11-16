@@ -1017,7 +1017,9 @@ open stage ends on Description (Optional) (`life_stage_description_label`,
 The per-beat line input is gone from the leaf (the model field stays for the sheet). The
 life block is `.leafwrap`: the life on the left as a size container (the grids two across,
 three at 46rem, four at 64rem by container query; prose at 68ch), the sticky `aside.ledger`
-beside it (Starting, Spent and Gained as the demo reads the net points, Remaining; every
+beside it (Starting and Remaining, the Spent and Gained lines dropped by owner ruling
+2026-11-15, #5141; both move with a card click, before the save answers, through
+`useShownPicks`; every
 pick under its stage with a signed price, "(secret)" and "(rank N)"; "Nothing chosen yet.").
 The life ends on the Recent History box, the footer and the `.testament` paragraph (every
 answered beat's answers in bold, "Nothing written yet."). The first name is asked on the

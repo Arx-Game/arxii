@@ -41,6 +41,7 @@ import {
   useStatDefinitions,
   useUpdateDraft,
 } from '../queries';
+import { useShownPicks } from '../useShownPicks';
 import type { CharacterDraft, ResonanceWeightPick, Tradition, VisibleOffer } from '../types';
 import { Stage } from '../types';
 import { AnimaCheckStep } from './gift/AnimaCheckStep';
@@ -284,6 +285,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
 
   // The same CG-points source HeritageStage's rail row reads.
   const startingCGPoints = cgBudget?.starting_points ?? 100;
+  const { spent } = useShownPicks(draft);
 
   // The Anima Check step's gloss and rail row need the names behind the two
   // ids the draft stores, so read the same two catalogs AnimaCheckStep picks
@@ -357,7 +359,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
           ...glimpseRows,
           {
             label: 'CG points',
-            value: `${draft.cg_points_spent} of ${startingCGPoints} spent`,
+            value: `${spent} of ${startingCGPoints} spent`,
           },
         ]}
         ledger={stageEyebrow(draft.current_stage)}

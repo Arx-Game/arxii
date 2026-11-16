@@ -35,7 +35,6 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useDraftDistinctions } from '@/hooks/useDistinctions';
 import {
   characterCreationKeys,
   useClearLife,
@@ -44,6 +43,7 @@ import {
   useLoadDefaultLife,
   useUpdateDraft,
 } from '../../queries';
+import { useShownPicks } from '../../useShownPicks';
 import {
   FIGURE_NAME_MAX_LENGTH,
   LIFE_GRID_LABELS,
@@ -103,7 +103,9 @@ function Signed({ cost }: { cost: number }) {
 export function LifeGrids({ draft, copy }: Props) {
   const { data: beats, isLoading } = useDraftBeats(draft.id);
   const { data: offersData } = useDraftOffers(draft.id, 'backgrounds');
-  const { data: draftDistinctions } = useDraftDistinctions(draft.id);
+  // The picks and the points on screen (#5141): a save in flight is laid over the saved
+  // list, so the ledger, its totals and the section summaries move with the click.
+  const shown = useShownPicks(draft);
   const updateDraft = useUpdateDraft();
   const queryClient = useQueryClient();
   // Fold state (#4874), never saved: `undefined` is the default (the first stage, its
@@ -139,12 +141,12 @@ export function LifeGrids({ draft, copy }: Props) {
 
   const rankByOffer = useMemo(() => {
     const ranks = new Map<number, number>();
-    for (const entry of draftDistinctions ?? []) {
-      if (entry.rank > 0)
-        for (const id of entry.offer_ids) if (typeof id === 'number') ranks.set(id, entry.rank);
+    for (const pick of shown.picks) {
+      if (pick.rank > 0)
+        for (const id of pick.offer_ids) if (typeof id === 'number') ranks.set(id, pick.rank);
     }
     return ranks;
-  }, [draftDistinctions]);
+  }, [shown.picks]);
 
   const offerById = useMemo(() => {
     const map = new Map<number, VisibleOffer>();
@@ -339,15 +341,12 @@ export function LifeGrids({ draft, copy }: Props) {
   };
 
   const takenCount = beats.filter((b) => b.taken || picksOf(b).length > 0).length;
-  const budget = draft.cg_points_spent + draft.cg_points_remaining;
-  // The demo's purse: the net points moved, read as Spent when positive and Gained when
-  // the world paid more than it took.
-  const net = draft.cg_points_spent;
-  const spent = Math.max(0, net);
-  const gained = Math.max(0, -net);
+  // The ledger's two totals (owner ruling 2026-11-15: "Just starting and remaining is
+  // fine, that's all that matters"; the Spent and Gained lines are gone).
+  const budget = shown.spent + shown.remaining;
   const foot = (copy?.beats_foot ?? '{taken} taken, {spent} of {budget} points spent')
     .replace('{taken}', String(takenCount))
-    .replace('{spent}', String(draft.cg_points_spent))
+    .replace('{spent}', String(shown.spent))
     .replace('{budget}', String(budget));
   const told = beats
     .filter((b) => !b.unknown)
@@ -637,16 +636,8 @@ export function LifeGrids({ draft, copy }: Props) {
           <b>{budget}</b>
         </div>
         <div className="tot">
-          <span>{copy?.life_ledger_spent ?? 'Spent'}</span>
-          <b>{spent}</b>
-        </div>
-        <div className="tot">
-          <span>{copy?.life_ledger_gained ?? 'Gained'}</span>
-          <b>{gained}</b>
-        </div>
-        <div className="tot">
           <span>{copy?.life_ledger_remaining ?? 'Remaining'}</span>
-          <b>{draft.cg_points_remaining}</b>
+          <b>{shown.remaining}</b>
         </div>
         {ledgerRows.every((s) => s.rows.length === 0) ? (
           <p className="empty">{copy?.life_ledger_empty ?? 'Nothing chosen yet.'}</p>

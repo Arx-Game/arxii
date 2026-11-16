@@ -283,8 +283,28 @@ the server answers; a card held some other way than by choice (bundled, carried)
 save and keeps its rank. Every grid's cards and the schooling stances are disabled until
 the save answers: a second save would be built from the list the first is replacing. The
 save's answer is put in the draft-distinctions cache as it stands, with no second request;
-the draft, the purse and the offers are still refetched. The ledger and the purse move
-when the server answers, not on the click.
+the draft, the purse and the offers are still refetched.
+
+## The points move with the click (#5141)
+
+On a page that has distinction cards, anything that prints the draft's CG points or lists
+its picks reads `useShownPicks(draft)` (`useShownPicks.ts`), never `draft.cg_points_spent`
+or the saved list directly: the life page's ledger and foot line, the Lineage record's "CG
+points" line, the Gift summary. It
+returns `picks`, `spent` and `remaining`. With no save in flight those are the saved list
+and the server's own totals. With one, `shownPicks` (`offers/syncHelpers.ts`) lays the
+save's rows over the saved list (a pick left out is let go, a changed rank is re-priced
+from the price the server charged per rank, a new pick is priced from its cached offer) and
+the totals are re-priced: the draft's total, less the prices in `draft_data.distinctions`
+(the list the server added its total up from, in the same response), plus the prices in
+the list shown. When the save answers, `useSyncDistinctions` writes its list and the
+re-priced totals into the cached draft at once; the draft fetch that follows replaces
+them with the server's figures. A failed save shows the old totals again. A test that
+mocks `@/hooks/useDistinctions` and renders one of these must give the mock a
+`usePendingSync`.
+
+The ledger prints two totals, Starting and Remaining (owner ruling 2026-11-15); the Spent
+and Gained lines are gone.
 
 ## Key Features
 

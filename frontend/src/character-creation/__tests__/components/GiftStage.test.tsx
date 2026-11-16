@@ -53,6 +53,7 @@ vi.mock('../../queries', async (importOriginal) => ({
 vi.mock('@/hooks/useDistinctions', () => ({
   useDraftDistinctions: () => ({ data: draftDistinctions }),
   useSyncDistinctions: () => ({ mutate: vi.fn() }),
+  usePendingSync: () => null,
 }));
 
 beforeEach(() => {
