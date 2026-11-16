@@ -297,6 +297,29 @@ class FootprintServiceTests(TestCase):
         assert county.seat == (2, 1)
         assert county.holder_org_id is None
 
+    def test_a_countys_seat_is_its_titles_capital_not_the_first_barony_found(self) -> None:
+        """#5157: the map marks a capital, so the seat is the barony the county's title
+        is seated in even when another barony of the county lies north of it."""
+        from world.character_creation.factories import RealmFactory
+        from world.societies.houses.almanach import plant_rung, rung_area_for_title
+        from world.societies.houses.constants import TitleTier
+        from world.societies.houses.models import Title
+
+        realm = RealmFactory(name="Seatland")
+        crown = plant_rung(realm=realm, tier=TitleTier.KINGDOM, name="Seat Crown")
+        county = plant_rung(realm=realm, tier=TitleTier.COUNTY, name="Shire", parent_title=crown)
+        capital = Title.objects.get(seat_domain=county.seat_domain, tier=TitleTier.BARONY)
+        north = plant_rung(realm=realm, tier=TitleTier.BARONY, name="North", parent_title=county)
+        set_footprint(area=rung_area_for_title(county), add=[(1, 1), (2, 2)])
+        set_footprint(area=rung_area_for_title(north), add=[(1, 1)])
+        set_footprint(area=rung_area_for_title(capital), add=[(2, 2)])
+        read = region_read(self.region)
+        seats = {f.name: f.seat for f in read.footprints}
+        assert seats["Shire"] == (2, 2)
+        # the crown's own capital holds no pip yet, so it falls back to the first barony
+        assert seats["Seat Crown"] == (1, 1)
+        assert seats["North"] == (1, 1)
+
     def test_region_read_carries_charters_and_landless_titles(self) -> None:
         from world.character_creation.factories import RealmFactory
         from world.societies.houses.almanach import (

@@ -717,13 +717,14 @@ def region_read(region: RegionMap) -> RegionRead:
                 areas[node.pk] = node
             node = node.parent
     titles = _title_by_area(areas.values())
-    seats = _seat_by_area(areas, by_area)
-    charters = _charters_by_title(set(titles.values()))
+    seats = _seat_by_area(areas, by_area, titles)
+    charters = _charters_by_title({title.pk for title in titles.values()})
     footprints = []
     for area_id, area_pips in by_area.items():
         area = areas[area_id]
         org = _holder_of(area)
-        title_id = titles.get(area.pk)
+        title = titles.get(area.pk)
+        title_id = title.pk if title is not None else None
         footprints.append(
             FootprintRead(
                 area_id=area.pk,
@@ -819,7 +820,7 @@ def _holder_of(area: Area) -> Organization | None:
     return house_holding_area(area)
 
 
-def _title_by_area(areas: Iterable[Area]) -> dict[int, int]:
+def _title_by_area(areas: Iterable[Area]) -> dict[int, Title]:
     """The Almanach title standing on each area, by the title's own rung level (the
     walk ``_rung_area`` does, done once for every title with a seat)."""
     from world.societies.houses.constants import TIER_TO_AREA_LEVEL  # noqa: PLC0415
@@ -828,7 +829,7 @@ def _title_by_area(areas: Iterable[Area]) -> dict[int, int]:
     wanted = {a.pk for a in areas}
     if not wanted:
         return {}
-    out: dict[int, int] = {}
+    out: dict[int, Title] = {}
     titles: Iterable[Title] = Title.objects.filter(seat_domain__isnull=False).select_related(
         "seat_domain__area"
     )
@@ -838,19 +839,31 @@ def _title_by_area(areas: Iterable[Area]) -> dict[int, int]:
         while area is not None and area.level != level:
             area = area.parent
         if area is not None and area.pk in wanted and area.pk not in out:
-            out[area.pk] = title.pk
+            out[area.pk] = title
     return out
 
 
-def _seat_by_area(areas: dict[int, Area], by_area: dict[int, list[Pip]]) -> dict[int, Pip]:
-    """A footprint's seat pip: the first pip of its seat barony's own footprint, for
-    every area the barony sits inside. A barony's seat is its own pip."""
+def _seat_by_area(
+    areas: dict[int, Area], by_area: dict[int, list[Pip]], titles: dict[int, Title]
+) -> dict[int, Pip]:
+    """A footprint's seat pip: the pip of its capital, the barony its title is seated in
+    (#5157: it was the northernmost barony inside the area, which is the capital only by
+    luck). An area no title stands on, or whose capital holds no pip yet, falls back to
+    the first barony found inside it. A barony's seat is its own pip."""
     seats: dict[int, Pip] = {}
+    for area_id, title in titles.items():
+        barony: Area | None = title.seat_domain.area
+        while barony is not None and barony.level != AreaLevel.BARONY:
+            barony = barony.parent
+        pips = by_area.get(barony.pk) if barony is not None else None
+        if pips:
+            seats[area_id] = pips[0]
     for barony_id, pips in by_area.items():
         barony = areas[barony_id]
         if barony.level != AreaLevel.BARONY or not pips:
             continue
-        node: Area | None = barony
+        seats[barony_id] = pips[0]
+        node: Area | None = barony.parent
         while node is not None:
             seats.setdefault(node.pk, pips[0])
             node = node.parent
