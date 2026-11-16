@@ -250,7 +250,9 @@ map is `almanach_plant_rung` then `atlas_carve_footprint`; nothing here mints a 
 **API** (`worldmap/views.py`, on the world-builder router, `IsAdminUser`):
 `GET /api/world-builder/region-maps/`, `GET .../<id>/`, `GET .../<id>/pips/` (the
 `region_read` payload: `pips` rows are `[x, y, terrain, river]`, `footprints` carry
-`holder_org_id`, `title_id` for the Almanach link, `seat`, and `charters`, the ids of the titles
+`holder_org_id`, `title_id` for the Almanach link, `seat` (the pip of the footprint's capital,
+the barony its title is seated in; the first barony found inside it when no title stands there
+or the capital holds no pip yet, #5157), and `charters`, the ids of the titles
 whose charters hold this footprint's title; `landless_titles` lists the realm rungs with no land
 on the map, titular and potential crowns, each with `station` and `fief_ids`, #4983),
 `POST .../<id>/upload/`
@@ -314,7 +316,26 @@ and never stack: Domain and Domain-Vassal name the anchor's direct children alwa
 anchor that has children (its name is the panel's heading); a childless anchor is named itself in
 Domain; Domain-Vassal names deeper tiers where they fit; All names what fits, top tiers placed first, a name whose box would cross a placed one
 skipped. "Fits" is the footprint's projected width against the measured name. A click selects
-through every footprint whatever the view, which is how the anchor is chosen. The pips query refetches whenever its tab regains focus, so a carve in another
+through every footprint whatever the view, which is how the anchor is chosen.
+
+**Tiers, capitals and baronies (#5157).** Under the view picker sit four toggles, any mix:
+**Kingdom**, **Duchy**, **County**, **Barony** (`mapViews.ts`: `MAP_TIERS`, matched on
+`RegionMapFootprint.level` 60, 56, 53, 40; remembered per account beside the view; not offered
+in Geography). The first three start on and Barony off, because 400 barony names at once would
+cover the map. A tier that is off draws no border, no name and no seat marker for its
+footprints; fills and click-to-select are untouched, and a level outside the four (Empire and
+above) always draws. Two things draw whatever the toggles say, because the selection asks for
+them: the anchor itself, and in Domain and Domain-Vassal a selected county's own baronies.
+`seatMarkers` gives one marker per seat pip with a `rank`: 0 for a plain barony and one step
+larger for each of county, duchy and kingdom whose capital the pip is, among the tiers that are
+on (`SEAT_MARKER_PX` 3, 4.5, 6, 7.5). A barony is one pip, so its name never fits its footprint;
+`placeNames` puts it under its marker instead (over it, beside it or a row further out when
+that place is taken), for every barony that is drawn. A capital is named the same way whatever
+the Barony toggle says, while its domain is named or is the anchor: Domain on a duchy names the
+duchy's capital and each county's and no other barony, and All from far away names none. A
+capital's name places after the domain names of its tier and before plain baronies. An
+undefined barony (its area still named "Undefined") is marked and never named. The viewport
+exposes `data-map-tiers`, `data-seat-markers` and `data-capital-markers`. The pips query refetches whenever its tab regains focus, so a carve in another
 tab shows on return. Undo stays per tab: an undo restores the holders it recorded, so it can
 overwrite a newer edit to the same pips from another tab.
 
@@ -334,17 +355,23 @@ with `STRIKE_COLOR` over the holder's colour, after every fill and before the ch
 event, "Blight over Vampa", with the tint's swatch.
 
 **Border tools (#4988, slice 3 of #4983).** `set_footprint(..., take_from_siblings=True)` is
-the map's **Adjust**: a pip held by a sibling rung under the same ladder parent, or by one of
-that sibling's counties, moves sideways into the carved area instead of being skipped, so a
-border is corrected in one stroke along a river; a barony's single pip is its seat and is
-never taken this way; the moves ride in `changed` like any carve, so undo puts them back on
+the map's **Adjust**: a pip held by any rung of the carved area's kingdom (#5157, ADR-5157;
+`_adjust_scope`) moves sideways into the carved area instead of being skipped, so a border is
+corrected in one stroke along a river, and a county reaches a coast another duchy held with
+both duchy lines following, since an ancestor's footprint is derived from its children's. A
+kingdom, or an area with no kingdom above it, takes only from beneath its own ladder parent.
+A barony's single pip is its seat and is never taken this way; the moves ride in `changed` like any carve, so undo puts them back on
 the sibling. `move_seat(*, area, pip)` moves a barony's seat onto another pip its own county
 holds (refused: not a barony, a pip another barony holds, open ground, a cousin's land, its
 own pip), in one transaction whose `changed` holds both moves. Actions: `atlas_carve_footprint`
 reads `take_from_siblings`; `atlas_move_seat` (`area_id` or `title_id`, `pip` `[x, y]`). In
 Carve mode the page has an **Adjust** toggle (`aria-pressed`, sends the kwarg while on) and a
-press on a barony's seat dot starts a seat drag whose drop dispatches `atlas_move_seat`; both
-land in the undo history.
+press on a barony's seat marker starts a seat drag whose drop dispatches `atlas_move_seat`; both
+land in the undo history. The handle is the marker as drawn plus `SEAT_GRAB_PAD_PX`, in screen
+space, and only a marker the view draws can be grabbed (#5157). While the drag is held the pips
+the barony's county holds itself are outlined as the drop targets (`seatDropTargets`; the
+viewport exposes `data-seat-drag` and `data-drop-targets`) and a ghost marker follows the
+pointer; a drop anywhere else dispatches nothing.
 
 The layout tool (#4986, `world/societies/houses/layout.py`, see `docs/systems/houses.md`
 "Laying out a realm") writes land only through `set_footprint`: it tiles a kingdom's
