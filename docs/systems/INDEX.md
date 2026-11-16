@@ -2372,6 +2372,12 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   (a barony's pip onto another pip its county holds), action `atlas_move_seat`, the carve
   action's `take_from_siblings` kwarg; the region map's Carve mode gains the Adjust toggle and
   the seat drag, both undoable. Details: [areas.md](areas.md).
+- **Region map tiers, capitals and Adjust across the kingdom (#5157, ADR-5157):** `mapViews.ts`
+  gains `MAP_TIERS`/`MapTiers`, `seatMarkers` and tier-aware `borderWidths`/`placeNames`
+  (four tier toggles under the view picker, sized capital markers, names under barony and
+  capital markers); `_adjust_scope` widens Adjust to the carved area's kingdom;
+  `FootprintRead.seat` is the title's capital barony; the seat drag grabs the drawn marker
+  and shows its drop targets. Details: [areas.md](areas.md).
 - **Laying out a realm (#4983 slice 2 / #4986, ADR-4983-B):** `houses/layout.py`
   (`parse_layout`, `preview_layout`, `lay_out_realm`, `LayoutError`, `LayoutRefused`,
   `LayoutReport`) and `houses/partition.py` (`partition`, `capital_seed`, `farthest_pips`,

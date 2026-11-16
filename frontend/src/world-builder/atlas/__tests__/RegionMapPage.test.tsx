@@ -815,12 +815,22 @@ describe('RegionMapPage', () => {
     renderWithProviders(<RegionMapPage regionId={1} />);
     await enterCarve(user);
     const viewport = screen.getByTestId('region-map-viewport');
-    // pip (2, 0) is the barony's seat: 6px a pip, so client (15, 3)
-    fireEvent.pointerDown(viewport, { clientX: 15, clientY: 3, button: 0 });
-    fireEvent.pointerMove(window, { clientX: 21, clientY: 3 });
-    fireEvent.pointerUp(window, { clientX: 21, clientY: 3 });
+    // pip (2, 0) is the barony's seat: 6px a pip, so client (15, 3). The press lands 5px
+    // off the marker's centre, inside its grab radius and outside the pip (#5157).
+    fireEvent.pointerDown(viewport, { clientX: 15, clientY: 8, button: 0 });
+    // the county's one pip with no barony on it is the drop target, and it is tinted
+    await waitFor(() => expect(viewport).toHaveAttribute('data-seat-drag', '11'));
+    expect(viewport).toHaveAttribute('data-drop-targets', '1');
+    fireEvent.pointerMove(window, { clientX: 9, clientY: 3 });
+    fireEvent.pointerUp(window, { clientX: 9, clientY: 3 });
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
-    expect(lastCall()).toEqual({ key: 'atlas_move_seat', kwargs: { area_id: 11, pip: [3, 0] } });
+    expect(lastCall()).toEqual({ key: 'atlas_move_seat', kwargs: { area_id: 11, pip: [1, 0] } });
+    expect(viewport).toHaveAttribute('data-seat-drag', '');
+    // a drop outside the county's own ground sends nothing
+    fireEvent.pointerDown(viewport, { clientX: 15, clientY: 3, button: 0 });
+    fireEvent.pointerUp(window, { clientX: 21, clientY: 3 });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
     // a drop on its own pip sends nothing
     fireEvent.pointerDown(viewport, { clientX: 15, clientY: 3, button: 0 });
     fireEvent.pointerUp(window, { clientX: 15, clientY: 3 });
@@ -852,13 +862,60 @@ describe('RegionMapPage', () => {
     const viewport = screen.getByTestId('region-map-viewport');
     fireEvent.pointerDown(viewport, { clientX: 15, clientY: 3, button: 0 });
     fireEvent.pointerCancel(window);
-    fireEvent.pointerUp(window, { clientX: 21, clientY: 3 });
+    fireEvent.pointerUp(window, { clientX: 9, clientY: 3 });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(mutateAsync).not.toHaveBeenCalled();
     fireEvent.pointerDown(viewport, { clientX: 15, clientY: 3, button: 0 });
-    fireEvent.pointerUp(window, { clientX: 21, clientY: 3 });
+    fireEvent.pointerUp(window, { clientX: 9, clientY: 3 });
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled());
+  });
+
+  it('offers four tier toggles under the view, Barony off, and remembers them (#5157)', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useRegionMapPipsQuery).mockReturnValue({
+      data: { ...payload, footprints: [...payload.footprints, SEAT_BARONY] },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useRegionMapPipsQuery>);
+    const { unmount } = renderWithProviders(<RegionMapPage regionId={1} />);
+    const tiers = within(screen.getByTestId('map-tier-picker'));
+    const pressed = () =>
+      tiers
+        .getAllByRole('button')
+        .filter((button) => button.getAttribute('aria-pressed') === 'true')
+        .map((button) => button.textContent);
+    expect(tiers.getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Kingdom',
+      'Duchy',
+      'County',
+      'Barony',
+    ]);
+    expect(pressed()).toEqual(['Kingdom', 'Duchy', 'County']);
+    const viewport = screen.getByTestId('region-map-viewport');
+    // All, Barony off: the county's capital is marked, the other barony is not
+    expect(viewport).toHaveAttribute('data-seat-markers', '1');
+    expect(viewport).toHaveAttribute('data-capital-markers', '1');
+    await user.click(tiers.getByRole('button', { name: 'Barony' }));
+    expect(viewport).toHaveAttribute('data-seat-markers', '2');
+    await user.click(tiers.getByRole('button', { name: 'County' }));
+    expect(pressed()).toEqual(['Kingdom', 'Duchy', 'Barony']);
+    expect(viewport).toHaveAttribute('data-capital-markers', '0');
+    expect(viewport).toHaveAttribute('data-map-tiers', 'kingdom,duchy,barony');
+    // Geography draws no domains, so it offers no tiers
+    await user.click(
+      within(screen.getByTestId('map-view-picker')).getByRole('button', { name: 'Geography' })
+    );
+    expect(screen.queryByTestId('map-tier-picker')).not.toBeInTheDocument();
+    unmount();
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    await user.click(
+      within(screen.getByTestId('map-view-picker')).getByRole('button', { name: 'All' })
+    );
+    expect(screen.getByTestId('region-map-viewport')).toHaveAttribute(
+      'data-map-tiers',
+      'kingdom,duchy,barony'
+    );
   });
 
   it('shows the loading and error states', () => {

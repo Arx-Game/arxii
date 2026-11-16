@@ -232,16 +232,22 @@ describe('region map drawing', () => {
     expect(context.restore).toHaveBeenCalledOnce();
   });
 
-  it('the names layer clears the viewport, dots the seats and writes the placed names (#5030)', () => {
+  it('the names layer clears the viewport, draws each marker at its size, writes the placed names and the drag ghost (#5030, #5157)', () => {
     const { ctx, context } = recordingCanvas();
     drawNamesLayer(
       ctx,
       { width: 300, height: 200 },
-      [[30, 40]],
-      [{ text: 'County', x: 50, y: 60, w: 50, h: 16, areaId: 10 }]
+      [
+        { x: 30, y: 40, r: 3 },
+        { x: 90, y: 40, r: 6 },
+      ],
+      [{ text: 'County', x: 50, y: 60, w: 50, h: 16, areaId: 10 }],
+      { x: 120, y: 80, r: 3 }
     );
     expect(context.clearRect).toHaveBeenCalledWith(0, 0, 300, 200);
     expect(context.arc).toHaveBeenCalledWith(30, 40, 3, 0, Math.PI * 2);
+    expect(context.arc).toHaveBeenCalledWith(90, 40, 6, 0, Math.PI * 2);
+    expect(context.arc).toHaveBeenCalledWith(120, 80, 3, 0, Math.PI * 2);
     expect(context.font).toContain('12px');
     expect(context.strokeText).toHaveBeenCalledWith('County', 50, 60);
     expect(context.fillText).toHaveBeenCalledWith('County', 50, 60);
