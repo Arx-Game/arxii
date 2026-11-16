@@ -82,11 +82,16 @@ test.describe('the CG points beside the life', () => {
       }
     }
 
-    const ledger = page.locator('aside.ledger');
-    const totals = () => ledger.locator('.tot').allTextContents();
+    // The right-hand panel is the one every stage shows (#5148): its "CG points" row is
+    // the page's total, and the life's choices are listed under it.
+    const panel = page.getByRole('complementary', { name: 'Marginalia' });
+    const ledger = panel.locator('section.ledger');
+    const total = () =>
+      panel.locator('.record-rail .row', { hasText: 'CG points' }).locator('dd').textContent();
     const start = await serverPoints(page, seed);
     const budget = start.starting_budget;
-    await expect.poll(totals).toEqual([`Starting${budget}`, `Remaining${start.remaining}`]);
+    const line = (remaining: number) => `${budget - remaining} of ${budget} spent`;
+    await expect.poll(total).toBe(line(start.remaining));
 
     // From here every save waits in the browser before it is sent.
     let sent = 0;
@@ -106,9 +111,7 @@ test.describe('the CG points beside the life', () => {
     );
     await costly.click();
     const afterCostly = start.remaining - seed.costly_price;
-    await expect
-      .poll(totals, { timeout: 1500 })
-      .toEqual([`Starting${budget}`, `Remaining${afterCostly}`]);
+    await expect.poll(total, { timeout: 1500 }).toBe(line(afterCostly));
     // The server has not been asked: the save is still waiting in the browser, and the
     // server's own sum is where it was.
     expect(sent).toBe(0);
@@ -118,10 +121,10 @@ test.describe('the CG points beside the life', () => {
     // The save lands. The server's sum is the figure the page was already showing.
     expect((await saved).status()).toBe(200);
     expect((await serverPoints(page, seed)).remaining).toBe(afterCostly);
-    expect(await totals()).toEqual([`Starting${budget}`, `Remaining${afterCostly}`]);
+    expect(await total()).toBe(line(afterCostly));
     // And it is still showing it once the page has fetched the draft again.
     expect((await refetched).status()).toBe(200);
-    await expect.poll(totals).toEqual([`Starting${budget}`, `Remaining${afterCostly}`]);
+    await expect.poll(total).toBe(line(afterCostly));
     await expect(
       page.getByText(`CG points: ${budget - afterCostly} of ${budget}`, { exact: true })
     ).toBeVisible();
@@ -134,9 +137,7 @@ test.describe('the CG points beside the life', () => {
     await expect(paying).toBeEnabled();
     await paying.click();
     const afterBoth = afterCostly + seed.paying_price;
-    await expect
-      .poll(totals, { timeout: 1500 })
-      .toEqual([`Starting${budget}`, `Remaining${afterBoth}`]);
+    await expect.poll(total, { timeout: 1500 }).toBe(line(afterBoth));
     expect(sent).toBe(1);
     expect((await serverPoints(page, seed)).remaining).toBe(afterCostly);
 
@@ -144,7 +145,7 @@ test.describe('the CG points beside the life', () => {
     const end = await serverPoints(page, seed);
     expect(end.remaining).toBe(afterBoth);
     expect((await refetched).status()).toBe(200);
-    await expect.poll(totals).toEqual([`Starting${budget}`, `Remaining${afterBoth}`]);
+    await expect.poll(total).toBe(line(afterBoth));
     await expect(ledger.locator('.row')).toHaveCount(2);
     await expect(
       page.getByText(`CG points: ${end.spent} of ${budget}`, { exact: true })
@@ -169,7 +170,7 @@ test.describe('the CG points beside the life', () => {
     expect((await cleared).status()).toBe(200);
     expect((await serverPoints(page, seed)).remaining).toBe(start.remaining);
     await expect(ledger.locator('.row')).toHaveCount(0);
-    await expect.poll(totals).toEqual([`Starting${budget}`, `Remaining${start.remaining}`]);
+    await expect.poll(total).toBe(line(start.remaining));
     await expect(costly).toHaveAttribute('aria-pressed', 'false');
     await expect(paying).toHaveAttribute('aria-pressed', 'false');
   });

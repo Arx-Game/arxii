@@ -1017,15 +1017,28 @@ open stage ends on Description (Optional) (`life_stage_description_label`,
 `STAGE_DESCRIPTION_MAX_LENGTH`), saved on blur to `draft_data.stage_descriptions` whole.
 The per-beat line input is gone from the leaf (the model field stays for the sheet). The
 life block is `.leafwrap`: the life as a size container (the grids two across, three at
-46rem, four at 64rem, five at 82rem, six at 100rem by container query; prose at 68ch). Its
-`aside.ledger` is the chapter's right-hand rail from 74rem of window (#5144): `LifeGrids`
-renders it into the element `useChapterRail()` returns, which `ChapterLeaf` keeps when
-given `railSlot` and the window is that wide, so it stands at the right edge of the spread
-beside the whole stage and follows the scroll; under 74rem it sits beside the life as
-before, and under 52rem below it (Starting and Remaining, the Spent and Gained lines dropped by owner ruling
-2026-11-15, #5141; both move with a card click, before the save answers, through
-`useShownPicks`; every
-pick under its stage with a signed price, "(secret)" and "(rank N)"; "Nothing chosen yet.").
+46rem, four at 64rem, five at 82rem, six at 100rem by container query; prose at 68ch).
+Lineage's right-hand panel is the one every stage shows (#5148, owner ruling 2026-11-16:
+"It should appear identical to the other stages, and then just have the choices under
+it"): `LineageStage` passes `ChapterLeaf` the same `RecordRail` as Heritage (Origin,
+Beginnings, Species, Gender, "CG points: N of M spent", the stage line), and `LifeGrids`
+renders the life's choices (`section.ledger`, headed with the life's own heading) into the
+slot `ChapterLeaf` keeps at the foot of that panel for a `railSlot` leaf, through
+`useChapterRail()`. The list is every pick under its life stage with a signed price,
+"(secret)" and "(rank N)", or "Nothing chosen yet."; it prints no totals (the ledger box
+with Starting and Remaining lines is gone). The points line and the list both read
+`useShownPicks`, so they move with a card click before the save answers (#5141). From
+74rem of window the panel stands at the right edge of the spread beside the whole stage
+and follows the scroll at any window height; under 74rem it stands under the stage, as on
+every other stage.
+A trait on a card's mechanics line shows its definition while the pointer or the keyboard
+focus is on it, and a click or tap pins it open (#5148); a trait whose description is
+blank prints as plain text with no underline. The definition box is rendered through a
+portal to `<body>`, so its rules in `cg.css` are written `.interview.popover` (both classes
+on the one element): as `.interview .popover` none of them applied, and from #4874 to
+#5148 the box was a blank page-high sheet in the wrong place.
+"View in Codex" in the codex overlay (`codex/components/CodexModal.tsx`, opened only from
+character creation) opens the entry in a new tab and leaves the overlay open (#5148).
 The life ends on the Recent History box, the footer and the `.testament` paragraph (every
 answered beat's answers in bold, "Nothing written yet."). The first name is asked on the
 Origin leaf (`OriginStage`, a `Field` saved on blur, listed first in the rail; copy

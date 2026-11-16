@@ -80,6 +80,24 @@ describe('CodexModal navigation', () => {
     vi.clearAllMocks();
   });
 
+  it('View in Codex opens the entry in a new tab and leaves the overlay as it was (#5148)', async () => {
+    vi.mocked(api.getEntry).mockResolvedValue(makeEntry(7, 'Tenebrum', 'A realm.', []));
+    const onOpenChange = vi.fn();
+    render(<CodexModal entryId={7} open={true} onOpenChange={onOpenChange} />, {
+      wrapper: createWrapper(),
+    });
+    const link = await screen.findByRole('link', { name: /view in codex/i });
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(link.getAttribute('href')).toMatch(/7/);
+    // The page under the overlay does not move: the click is the browser's, for a new
+    // tab, and the overlay is not closed.
+    link.addEventListener('click', (event) => event.preventDefault());
+    await userEvent.click(link);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.getByText('Tenebrum')).toBeInTheDocument();
+  });
+
   it('shows back button after navigating to a linked entry', async () => {
     const entry1 = makeEntry(1, 'First Entry', 'See [[Second Entry]].', [
       {

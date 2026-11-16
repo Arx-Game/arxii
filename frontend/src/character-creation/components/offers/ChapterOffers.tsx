@@ -135,7 +135,7 @@ interface ChapterOffersProps {
    * its corner, `-N` in ink when you pay and `+N` in green when the world pays you,
    * nothing at all for a free card (Unremarkable); the default keeps the words the
    * list layouts print. `terms` turns the mechanics line into `+10 sailing; -5 martial`
-   * built from `offer.effects`, each term a click that opens its definition.
+   * built from `offer.effects`, each term showing its definition on hover (#5148).
    * `interceptPick` runs before a card click changes a pick; returning true means the
    * caller handled it (the cover-story flow: the next click after a secret mark sets
    * the cover instead of swapping). `coverOfferId` draws that card dashed.
@@ -189,6 +189,16 @@ function SignedPrice({ cost, rank }: { cost: number; rank: number }) {
   );
 }
 
+/** Where a term's definition box goes: viewport coordinates under the term, clamped so
+ * the box stays on screen (the demo's rule). */
+function placeTerm(target: HTMLElement): { top: number; left: number } {
+  const rect = target.getBoundingClientRect();
+  const width = Math.min(352, window.innerWidth - 24);
+  const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
+  const top = rect.bottom + 180 > window.innerHeight ? rect.top - 180 : rect.bottom + 6;
+  return { top, left };
+}
+
 /** What stands before a term on the mechanics line: the signed magnitude, the
  * immunity's words, or nothing for an effect with no number. */
 function effectPrefix(effect: VisibleOffer['effects'][number]): string {
@@ -197,15 +207,24 @@ function effectPrefix(effect: VisibleOffer['effects'][number]): string {
   return `${effect.value < 0 ? '\u2212' : '+'}${Math.abs(effect.value)} `;
 }
 
-/** The mechanics line built from the effect rows (#4874): `+10 sailing; -5 martial`,
- * each term a button that opens its definition. An immunity reads as the list layouts
- * print it. */
+/** The mechanics line built from the effect rows (#4874): `+10 sailing; -5 martial`.
+ * A term with a definition is underlined and shows it while the pointer or the keyboard
+ * focus is on it (#5148); a click or tap pins it open, for a screen with no pointer. A
+ * term nobody has written a definition for is plain text: the underline promises an
+ * explanation. An immunity reads as the list layouts print it. */
 function EffectTerms({
   offer,
-  onTerm,
+  defined,
+  onPeek,
+  onLeave,
+  onPin,
 }: {
   offer: VisibleOffer;
-  onTerm: (target: HTMLElement, name: string) => void;
+  /** Whether a term has a definition to show. */
+  defined: (name: string) => boolean;
+  onPeek: (target: HTMLElement, name: string) => void;
+  onLeave: (name: string) => void;
+  onPin: (target: HTMLElement, name: string) => void;
 }) {
   if (offer.effects.length === 0) return null;
   return (
@@ -214,27 +233,38 @@ function EffectTerms({
         <span key={`${effect.target}-${i}`}>
           {i > 0 && '; '}
           {effectPrefix(effect)}
-          {/* A span with the button role: the card around it is already a button, and a
-              button may not nest one. */}
-          <span
-            role="button"
-            tabIndex={0}
-            className="term"
-            aria-label={`${effect.label}, definition`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onTerm(e.currentTarget, effect.target);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
+          {defined(effect.target) ? (
+            // A span with the button role: the card around it is already a button, and
+            // a button may not nest one.
+            <span
+              role="button"
+              tabIndex={0}
+              className="term"
+              aria-label={`${effect.label}, definition`}
+              onMouseEnter={(e) => onPeek(e.currentTarget, effect.target)}
+              // Scrolling closes the box, and a pointer that was already on the word
+              // gets no second enter: the next movement over the word shows it again.
+              onMouseMove={(e) => onPeek(e.currentTarget, effect.target)}
+              onMouseLeave={() => onLeave(effect.target)}
+              onFocus={(e) => onPeek(e.currentTarget, effect.target)}
+              onBlur={() => onLeave(effect.target)}
+              onClick={(e) => {
                 e.stopPropagation();
-                onTerm(e.currentTarget, effect.target);
-              }
-            }}
-          >
-            {effect.label}
-          </span>
+                onPin(e.currentTarget, effect.target);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onPin(e.currentTarget, effect.target);
+                }
+              }}
+            >
+              {effect.label}
+            </span>
+          ) : (
+            effect.label
+          )}
         </span>
       ))}
     </span>
@@ -372,17 +402,21 @@ export function ChapterOffers({
   const { data: offersData, isLoading } = useDraftOffers(draft.id, chapter);
   const { data: draftDistinctions } = useDraftDistinctions(draft.id);
   const syncDistinctions = useSyncDistinctions(draft.id);
-  // The one open term popover (#4874): which term, and where its button sits.
-  const [openTerm, setOpenTerm] = useState<{ name: string; top: number; left: number } | null>(
-    null
-  );
+  // The one open term popover (#4874): which term, where its button sits, and whether a
+  // click pinned it open (#5148: hovering shows it, and it goes when the pointer leaves
+  // unless it was pinned).
+  const [openTerm, setOpenTerm] = useState<{
+    name: string;
+    top: number;
+    left: number;
+    pinned: boolean;
+  } | null>(null);
   useEffect(() => {
     if (!openTerm) return;
     const close = () => setOpenTerm(null);
-    // A click inside the box keeps it; anything else closes it.
-    const onClick = (e: MouseEvent) => {
-      if (!(e.target instanceof Element && e.target.closest('.popover'))) close();
-    };
+    // Any click closes it: a click on a term stops before it reaches the document, and
+    // the box itself takes no pointer (cg.css).
+    const onClick = () => close();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close();
     };
@@ -395,19 +429,32 @@ export function ChapterOffers({
       window.removeEventListener('scroll', close);
     };
   }, [openTerm]);
-  const showTerm = useCallback((target: HTMLElement, name: string) => {
-    // Viewport coordinates, clamped so the box stays on screen (the demo's rule).
-    const rect = target.getBoundingClientRect();
-    const width = Math.min(352, window.innerWidth - 24);
-    const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
-    const top = rect.bottom + 180 > window.innerHeight ? rect.top - 180 : rect.bottom + 6;
-    setOpenTerm((current) => (current?.name === name ? null : { name, top, left }));
+  // The pointer or the focus is on a term: show it, unless this term is already open
+  // (hovered or pinned), which it stays as it is.
+  const peekTerm = useCallback((target: HTMLElement, name: string) => {
+    setOpenTerm((current) =>
+      current?.name === name ? current : { name, ...placeTerm(target), pinned: false }
+    );
+  }, []);
+  // The pointer or the focus leaves: a pinned box stays.
+  const leaveTerm = useCallback((name: string) => {
+    setOpenTerm((current) => (current?.name === name && !current.pinned ? null : current));
+  }, []);
+  // A click or tap: pin it open, or close the one this click had pinned.
+  const pinTerm = useCallback((target: HTMLElement, name: string) => {
+    setOpenTerm((current) =>
+      current?.name === name && current.pinned ? null : { name, ...placeTerm(target), pinned: true }
+    );
   }, []);
   const termDefinition = useMemo(() => {
     const map = new Map<string, OfferTerm>();
     for (const term of terms ?? []) map.set(term.name, term);
     return map;
   }, [terms]);
+  const termDefined = useCallback(
+    (name: string) => Boolean(termDefinition.get(name)?.definition.trim()),
+    [termDefinition]
+  );
   const priceWords: PriceWords = {
     perRank: wordPerRank ?? 'per rank',
     spent: wordSpent ?? 'spent',
@@ -562,7 +609,13 @@ export function ChapterOffers({
             {showOpener && offer.opener_label && <i> From {offer.opener_label}.</i>}
           </span>
           {terms ? (
-            <EffectTerms offer={offer} onTerm={showTerm} />
+            <EffectTerms
+              offer={offer}
+              defined={termDefined}
+              onPeek={peekTerm}
+              onLeave={leaveTerm}
+              onPin={pinTerm}
+            />
           ) : (
             offer.effect_line && <span className="fx">{offer.effect_line}</span>
           )}
