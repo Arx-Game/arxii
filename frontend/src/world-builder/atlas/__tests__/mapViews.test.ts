@@ -436,6 +436,36 @@ describe('mapViews: tiers, capitals and baronies (#5157)', () => {
     ]);
   });
 
+  it("a marker's name moves over or beside the marker when the place under it is taken", () => {
+    // two baronies one pip apart, north and south: the second cannot sit under its marker
+    // without crossing the first's name, so it sits over it
+    const upper = seatOf(30, 13, 'Upper', [8, 4]);
+    const lower = seatOf(31, 13, 'Lower', [8, 5]);
+    const labels = placeNames(
+      'all',
+      [aldmere, upper, lower],
+      [],
+      project(1),
+      measure,
+      tiersOf('barony')
+    );
+    expect(names(labels)).toEqual(['Lower', 'Upper']);
+    const [, upperY] = project(1)(8, 4);
+    const [, lowerY] = project(1)(8, 5);
+    const yOf = (text: string) => labels.find((l) => l.text === text)!.y;
+    expect(yOf('Upper')).toBeGreaterThan(upperY);
+    expect(yOf('Lower')).not.toBe(lowerY + markerRadius(0) + 8);
+  });
+
+  it('an undefined barony is marked and not named', () => {
+    const undefinedSeat = { ...lowfen, name: 'Undefined' };
+    const rows = ladder.map((f) => (f === lowfen ? undefinedSeat : f));
+    const on = tiersOf('barony');
+    expect(seatMarkers('all', rows, [], on)).toHaveLength(6);
+    expect(names(placeNames('all', rows, [], project(4), measure, on))).not.toContain('Undefined');
+    expect(names(placeNames('all', rows, [], project(4), measure, on))).toHaveLength(5);
+  });
+
   it('All from far away names no capital whose domain is too small to be named', () => {
     const far = names(placeNames('all', ladder, [], project(0.2), measure, DEFAULT));
     expect(far).toEqual([]);

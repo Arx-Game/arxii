@@ -56,7 +56,8 @@ function tierOfLevel(level: number): MapTier | null {
 /**
  * A seat marker (#5157), at a pip: `rank` is 0 for a plain barony and one step up for each
  * of county, duchy and kingdom whose capital the pip is, among the tiers that are on.
- * `baronyId` and `name` are the barony standing there, when one does.
+ * `baronyId` and `name` are the barony standing there, when one does; an undefined barony
+ * has no name to show.
  */
 export interface SeatMarker {
   x: number;
@@ -65,6 +66,12 @@ export interface SeatMarker {
   baronyId: number | null;
   name: string;
 }
+
+/**
+ * What an undefined rung's area is called (`almanach.UNDEFINED_AREA_NAME`). Nearly every
+ * barony starts that way, so it is marked and never named: 400 of the same word say nothing.
+ */
+const UNDEFINED_NAME = 'Undefined';
 
 /** Marker radius in screen pixels by `SeatMarker.rank`. */
 export const SEAT_MARKER_PX = [3, 4.5, 6, 7.5] as const;
@@ -225,7 +232,7 @@ export function seatMarkers(
       y: f.seat[1],
       rank,
       baronyId: barony?.area_id ?? null,
-      name: barony?.name ?? '',
+      name: barony && barony.name !== UNDEFINED_NAME ? barony.name : '',
     });
   }
   return [...out.values()];
@@ -292,7 +299,7 @@ function fitsWidth(
  * already placed. Top tiers place first, so a parent's name wins over a child's.
  *
  * A barony is one pip, so it is never wide enough; its name sits under its marker instead
- * (#5157), whenever the barony is drawn. A capital is named the same way whatever the Barony
+ * (#5157), or over it or beside it when that place is taken, whenever the barony is drawn. A capital is named the same way whatever the Barony
  * toggle says, while its domain is named or is the anchor, so Domain on a duchy names the
  * duchy's capital and each county's and no other barony, and All at a distance names none.
  * A capital's name places after the domain names of its tier and before plain baronies.
@@ -326,31 +333,46 @@ export function placeNames(
   const markers = new Map(
     seatMarkers(view, footprints, anchors, tiers).map((m) => [pipKey(m.x, m.y), m] as const)
   );
-  const underMarker = (marker: SeatMarker): Label | null => {
-    if (!marker.name || marker.baronyId == null) return null;
+  // where a marker's name may sit, best first: under it, over it, to either side, a row out
+  const byMarker = (marker: SeatMarker): Label[] => {
+    if (!marker.name || marker.baronyId == null) return [];
     const [x, y] = project(marker.x, marker.y);
-    return {
+    const w = boxOf(marker.name);
+    const r = markerRadius(marker.rank);
+    const at = (lx: number, ly: number): Label => ({
       text: marker.name,
-      x,
-      y: y + markerRadius(marker.rank) + h / 2,
-      w: boxOf(marker.name),
+      x: lx,
+      y: ly,
+      w,
       h,
-      areaId: marker.baronyId,
-    };
+      areaId: marker.baronyId!,
+    });
+    return [
+      at(x, y + r + h / 2),
+      at(x, y - r - h / 2),
+      at(x + r + w / 2, y),
+      at(x - r - w / 2, y),
+      // a capital at its domain's centre sits under the domain's own name: one row further
+      at(x, y + r + h * 1.5),
+      at(x, y - r - h * 1.5),
+    ];
   };
 
-  // [level, 0 for a domain's own name or 1 for a name under a marker, area id, the label]
-  const entries: [number, number, number, Label][] = [];
+  // [level, 0 for a domain's own name or 1 for a marker's, area id, the places it may sit]
+  const entries: [number, number, number, Label[]][] = [];
   const namedPips = new Set<string>();
   const byTier = [...drawn].sort((a, b) => b.level - a.level || a.area_id - b.area_id);
   for (const f of byTier) {
     const marker = f.seat ? markers.get(pipKey(f.seat[0], f.seat[1])) : undefined;
+    const markerKey = marker ? pipKey(marker.x, marker.y) : '';
+    const nameMarker = () => {
+      const spots = marker ? byMarker(marker) : [];
+      if (spots.length === 0 || namedPips.has(markerKey)) return;
+      namedPips.add(markerKey);
+      entries.push([f.level, 1, f.area_id, spots]);
+    };
     if (f.level === TIER_LEVELS.barony) {
-      const label = marker ? underMarker(marker) : null;
-      if (label && !namedPips.has(pipKey(marker!.x, marker!.y))) {
-        namedPips.add(pipKey(marker!.x, marker!.y));
-        entries.push([f.level, 1, f.area_id, label]);
-      }
+      nameMarker();
       continue;
     }
     if (!f.name || f.pips.length === 0) continue;
@@ -360,24 +382,16 @@ export function placeNames(
     if (ownName && fits) {
       const [cx, cy] = centroid(f.pips);
       const [x, y] = project(cx, cy);
-      entries.push([
-        f.level,
-        0,
-        f.area_id,
-        { text: f.name, x, y, w: boxOf(f.name), h, areaId: f.area_id },
-      ]);
+      const own = { text: f.name, x, y, w: boxOf(f.name), h, areaId: f.area_id };
+      entries.push([f.level, 0, f.area_id, [own]]);
     }
-    const capital = marker && (isAnchor || fits) ? underMarker(marker) : null;
-    if (capital && !namedPips.has(pipKey(marker!.x, marker!.y))) {
-      namedPips.add(pipKey(marker!.x, marker!.y));
-      entries.push([f.level, 1, f.area_id, capital]);
-    }
+    if (isAnchor || fits) nameMarker();
   }
   entries.sort((a, b) => b[0] - a[0] || a[1] - b[1] || a[2] - b[2]);
   const placed: Label[] = [];
-  for (const [, , , label] of entries) {
-    if (placed.some((p) => overlaps(p, label))) continue;
-    placed.push(label);
+  for (const [, , , spots] of entries) {
+    const free = spots.find((spot) => !placed.some((p) => overlaps(p, spot)));
+    if (free) placed.push(free);
   }
   return placed;
 }
