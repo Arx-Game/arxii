@@ -86,6 +86,7 @@ from world.conditions.services import (
     get_active_conditions,
     has_condition,
 )
+from world.fatigue.models import SINGLETON_PK as FATIGUE_SINGLETON_PK, FatigueConfig
 from world.forms.constants import AlternateSelfRevertKind
 from world.forms.factories import (
     AlternateSelfFactory,
@@ -144,7 +145,9 @@ def _berserk_of(character):
 # Two of these name the roster by persona (ruling 39), once for every participant.
 # One reads the attack check types behind the viewer's own Strike weapons (#4858).
 # One reads the applications about moving, for the viewer's own dodge plan (#5066).
-COMPELLED_READ_QUERIES = 30
+# Three read the check ladder (#5093): the fatigue level-bonus lane's baselines for the
+# viewer's capacity, and the CHECK baselines and the level tiers once for every option's cost.
+COMPELLED_READ_QUERIES = 33
 
 
 def knock_out_condition():
@@ -1943,6 +1946,9 @@ class TheDeclarePanelPayload(_SteadyingAllies):
 
     def test_the_encounter_read_for_a_compelled_viewer_costs_a_fixed_query_count(self) -> None:
         """The compulsion and every option's cost come from one read, not one per option."""
+        # A deployed database holds the fatigue row, which the identity map then serves; this
+        # one has none, so it would read the row's absence on every request.
+        FatigueConfig.objects.get_or_create(pk=FATIGUE_SINGLETON_PK)
         client = self.api(self.account_of(self.mira))
         url = f"/api/combat/{self.encounter.pk}/"
         client.get(url)  # warm the caches
