@@ -55,10 +55,42 @@ describe('ChapterLeaf', () => {
     );
     const panel = screen.getByRole('complementary', { name: 'CG points' });
     expect(panel.parentElement).toHaveClass('chapter-rail');
-    expect(panel.parentElement?.parentElement).toHaveClass('chapter', 'chapter-railed');
+    expect(panel.parentElement?.parentElement).toHaveClass(
+      'chapter',
+      'chapter-grids',
+      'chapter-railed'
+    );
     expect(screen.getByTestId('deep')).toBeEmptyDOMElement();
     expect(container.querySelector('.chapter-main')).not.toContainElement(panel);
     expect(screen.queryByRole('complementary', { name: /marginalia/i })).not.toBeInTheDocument();
+  });
+
+  it('under 74rem of window the rail is not kept and the panel stays where it is written', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: query !== '(min-width: 74rem)',
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }))
+    );
+    try {
+      const { container } = render(
+        <ChapterLeaf stage={Stage.LINEAGE} title="Lineage" railSlot>
+          <div data-testid="deep">
+            <Panel />
+          </div>
+        </ChapterLeaf>
+      );
+      expect(screen.getByTestId('deep')).toContainElement(
+        screen.getByRole('complementary', { name: 'CG points' })
+      );
+      expect(container.querySelector('.chapter-rail')).toBeNull();
+      expect(container.querySelector('.chapter')).toHaveClass('chapter-grids');
+      expect(container.querySelector('.chapter')).not.toHaveClass('chapter-railed');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('a leaf that keeps no such place leaves the panel where it is written', () => {

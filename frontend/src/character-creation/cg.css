@@ -323,7 +323,7 @@
 }
 /* A stage whose leaf is a reading column keeps that measure however wide the spread is,
    and stands midway between the two rails. */
-.interview .chapter:not(.chapter-railed) > .chapter-main {
+.interview .chapter:not(.chapter-grids) > .chapter-main {
   width: 100%;
   max-width: 38rem;
   justify-self: center;
@@ -340,8 +340,12 @@
   max-height: calc(100dvh - 3rem);
   overflow-y: auto;
 }
-/* A stage that sends its own panel to the rail (the life page's CG points ledger): the
-   leaf is grids, so it takes the whole room, and the rail is the panel's width. */
+/* A stage whose leaf is grids takes the whole room. From 74rem of window it sends its
+   own panel to the rail (the life page's CG points ledger; `ChapterLeaf` decides, since
+   the panel is rendered there), and the rail is the panel's width. */
+.interview .chapter.chapter-grids {
+  grid-template-columns: minmax(0, 1fr);
+}
 .interview .chapter.chapter-railed {
   grid-template-columns: minmax(0, 1fr) minmax(14rem, 17rem);
 }
@@ -380,7 +384,7 @@
   }
 }
 @media (max-width: 74rem) {
-  .interview .chapter:not(.chapter-railed) {
+  .interview .chapter:not(.chapter-grids) {
     grid-template-columns: minmax(0, 38rem);
   }
   .interview .chapter > aside {
@@ -1371,23 +1375,26 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-/* The life as an accordion (#4874, slice 9 of #4813), built against the demo: the life is
-   its own container, and the grids widen with it while the prose keeps reading width.
-   Its ledger is the chapter's rail (#5144), beside the whole stage down to 52rem and
-   under it below that. */
+/* The life as an accordion (#4874, slice 9 of #4813), built against the demo: the life on
+   the left is its own container, the ledger rail beside it; the grids widen with the
+   container while the prose keeps reading width. From 74rem of window the ledger is the
+   chapter's rail instead (#5144) and the life has the leaf to itself. */
+.interview .leafwrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 17rem);
+  gap: 1.25rem;
+  align-items: start;
+}
+.interview .chapter-railed .leafwrap {
+  display: block;
+}
 .interview .leafwrap > .life {
   container-type: inline-size;
   min-width: 0;
 }
 @media (max-width: 52rem) {
-  .interview .chapter.chapter-railed {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .interview .chapter > .chapter-rail {
-    position: static;
-    margin-top: 0;
-    max-height: none;
-    overflow: visible;
+  .interview .leafwrap {
+    grid-template-columns: 1fr;
   }
 }
 .interview .life .section-h.first {
@@ -1656,13 +1663,18 @@
   font-weight: 500;
   color: var(--cg-text);
 }
-/* The ledger rail: the purse, then every pick under its stage with its signed price. The
-   chapter's rail it stands in is what sticks. */
+/* The ledger rail: the purse, then every pick under its stage with its signed price. */
 .interview .ledger {
+  position: sticky;
+  top: 0.75rem;
   background: var(--cg-bg);
   color: var(--cg-text);
   border: 1px solid var(--cg-hairline);
   padding: 1rem 1.1rem;
+}
+/* In the chapter's rail, the rail is what sticks. */
+.interview .chapter-rail > .ledger {
+  position: static;
 }
 .interview .ledger h3 {
   font-family: 'Cinzel', serif;

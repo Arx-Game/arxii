@@ -1,3 +1,4 @@
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, type Page, type Route } from '@playwright/test';
@@ -12,6 +13,11 @@ import { BEGINNING, CRADLE, DRAFT_ID, mockCg } from './fixtures/cgLineage';
  * page's right-hand rail. On a reading stage (Heritage) the rails stand at the same two
  * edges and the leaf keeps its reading width between them. `EVIDENCE_OLD_BUILD=1` only
  * takes the pictures, for the build before #5144.
+ *
+ * The last block measures the narrow windows on both builds. Run with
+ * `EVIDENCE_OLD_BUILD=1` against the old bundle it writes `narrow-old.json`; run against
+ * this branch's bundle with `EVIDENCE_OLD_MEASURES` naming that file, it writes
+ * `narrow-new.json` and asserts which boxes are where they were and which moved.
  */
 const here = path.dirname(fileURLToPath(import.meta.url));
 const oldBuild = process.env.EVIDENCE_OLD_BUILD === '1';
@@ -198,6 +204,7 @@ const WIDTHS = [
   { name: 'desktop-1920', width: 1920, height: 1080, cards: 4 },
   { name: 'wide-2560', width: 2560, height: 1300, cards: 6 },
   { name: 'laptop-1366', width: 1366, height: 900, cards: 2 },
+  { name: 'narrow-1100', width: 1100, height: 900, cards: 2 },
   { name: 'phone-390', width: 390, height: 844, cards: 2 },
 ];
 
@@ -210,26 +217,34 @@ test.describe('character creation uses the width of the window (#5144)', () => {
       await lifePage(page);
       await page.screenshot({ path: shot(`${at.name}-top.png`) });
       const ledger = page.getByRole('complementary', { name: 'CG points' });
-      const phone = at.width < 52 * REM;
+      // From 74rem of window the ledger is the chapter's rail; under that it is beside
+      // the life as before, and under 52rem below it.
+      const railed = at.width >= 74 * REM;
+      const stacked = at.width < 52 * REM;
 
       if (!oldBuild) {
-        // One ledger, in the chapter's rail and not inside the life.
         await expect(ledger).toHaveCount(1);
-        await expect(page.locator('.interview .chapter > .chapter-rail > .ledger')).toHaveCount(1);
-        await expect(page.locator('.interview .leafwrap .ledger')).toHaveCount(0);
+        const inRail = page.locator('.interview .chapter > .chapter-rail > .ledger');
+        const inLife = page.locator('.interview .leafwrap > .ledger');
+        await expect(inRail).toHaveCount(railed ? 1 : 0);
+        await expect(inLife).toHaveCount(railed ? 0 : 1);
         const rail = await box(page, '.interview .ledger');
         const heading = await box(page, '.interview .chapter h1');
         const life = await box(page, '.interview .life');
-        if (phone) {
-          // Under the stage, the full width of the leaf.
-          expect(rail.y).toBeGreaterThan(life.y + life.height - 1);
-          expect(rail.x).toBeCloseTo(life.x, 0);
-        } else {
+        if (railed) {
           // At the right edge of the window, beside the stage from its heading down.
           const contents = await box(page, '.interview .toc-fold');
           expect(contents.x).toBeCloseTo(sideMargin(at.width), 0);
           expect(at.width - (rail.x + rail.width)).toBeCloseTo(sideMargin(at.width), 0);
           expect(rail.y).toBeLessThan(heading.y + heading.height + 2);
+          expect(life.x + life.width).toBeLessThan(rail.x);
+        } else if (stacked) {
+          // Under the life, the full width of the leaf.
+          expect(rail.y).toBeGreaterThan(life.y + life.height - 1);
+          expect(rail.x).toBeCloseTo(life.x, 0);
+        } else {
+          // Beside the life, level with it.
+          expect(rail.y).toBeCloseTo(life.y, 0);
           expect(life.x + life.width).toBeLessThan(rail.x);
         }
       }
@@ -241,7 +256,7 @@ test.describe('character creation uses the width of the window (#5144)', () => {
       if (oldBuild) return;
 
       expect(await cardsOnFirstRow(page)).toBe(at.cards);
-      if (!phone) {
+      if (!stacked) {
         // The ledger has followed the scroll: it is in the window beside the cards.
         await page.locator('.interview .stage-acc').last().scrollIntoViewIfNeeded();
         const rail = await box(page, '.interview .ledger');
@@ -289,4 +304,115 @@ test.describe('character creation uses the width of the window (#5144)', () => {
       expect(errors).toEqual([]);
     });
   }
+});
+
+interface Box {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+type Measures = Record<string, Box | number>;
+
+/** A box in page coordinates (scroll taken out), rounded to the pixel. */
+async function pageBox(page: Page, selector: string): Promise<Box> {
+  return page
+    .locator(selector)
+    .first()
+    .evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return {
+        x: Math.round(r.left + window.scrollX),
+        y: Math.round(r.top + window.scrollY),
+        width: Math.round(r.width),
+        height: Math.round(r.height),
+      };
+    });
+}
+
+/** Everything asked for has answered, the fonts are in, and the layout has stopped moving. */
+async function settled(page: Page) {
+  await page.waitForLoadState('networkidle');
+  await page.evaluate(() => document.fonts.ready);
+  let last = -1;
+  await expect
+    .poll(async () => {
+      const height = await page.evaluate(() => document.documentElement.scrollHeight);
+      const still = height === last;
+      last = height;
+      return still;
+    })
+    .toBe(true);
+}
+
+async function measureLife(page: Page): Promise<Measures> {
+  await lifePage(page);
+  await settled(page);
+  return {
+    contents: await pageBox(page, '.interview .toc-fold'),
+    heading: await pageBox(page, '.interview .chapter h1'),
+    lifeSoFar: await pageBox(page, '.interview .life .section-h.first'),
+    life: await pageBox(page, '.interview .life'),
+    firstCard: await pageBox(page, '.interview .life .stances.grid > *'),
+    ledger: await pageBox(page, '.interview .ledger'),
+    cardsOnFirstRow: await cardsOnFirstRow(page),
+  };
+}
+
+async function measureHeritage(page: Page): Promise<Measures> {
+  await heritagePage(page);
+  await settled(page);
+  return {
+    contents: await pageBox(page, '.interview .toc-fold'),
+    heading: await pageBox(page, '.interview .chapter h1'),
+    leaf: await pageBox(page, '.interview .chapter > .chapter-main'),
+    firstEntry: await pageBox(page, '.interview .entry-list > li'),
+    record: await pageBox(page, '.interview .chapter > aside'),
+  };
+}
+
+const NARROW = [
+  { key: 'life-1366', width: 1366, height: 900, measure: measureLife },
+  { key: 'life-1100', width: 1100, height: 900, measure: measureLife },
+  { key: 'life-390', width: 390, height: 844, measure: measureLife },
+  { key: 'heritage-1100', width: 1100, height: 900, measure: measureHeritage },
+  { key: 'heritage-390', width: 390, height: 844, measure: measureHeritage },
+];
+
+test('narrow windows, old build against new: what stayed and what moved', async ({ page }) => {
+  test.setTimeout(120_000);
+  const measures: Record<string, Measures> = {};
+  for (const at of NARROW) {
+    await page.setViewportSize({ width: at.width, height: at.height });
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    measures[at.key] = await at.measure(page);
+  }
+  mkdirSync(path.dirname(shot('x')), { recursive: true });
+  const out = path.join(path.dirname(shot('x')), oldBuild ? 'narrow-old.json' : 'narrow-new.json');
+  writeFileSync(out, JSON.stringify(measures, null, 2));
+  if (oldBuild || !process.env.EVIDENCE_OLD_MEASURES) return;
+  const old = JSON.parse(readFileSync(process.env.EVIDENCE_OLD_MEASURES, 'utf8')) as Record<
+    string,
+    Measures
+  >;
+  const box = (set: Record<string, Measures>, key: string, name: string) => set[key][name] as Box;
+
+  // Under 74rem of window nothing moved: a reading stage and the life page, at 1100px
+  // and on a phone, measure the same box for box.
+  for (const key of ['heritage-1100', 'heritage-390', 'life-1100', 'life-390']) {
+    expect(measures[key], key).toEqual(old[key]);
+  }
+
+  // The life page at 1366px is NOT where it was, and this is the change: the spread
+  // reaches the window's padding, and the ledger, which was level with "Life So Far",
+  // is level with the stage's heading. The cards are still two to a row.
+  const key = 'life-1366';
+  expect(measures[key].cardsOnFirstRow).toBe(2);
+  expect(old[key].cardsOnFirstRow).toBe(2);
+  expect(box(old, key, 'ledger').y).toBe(box(old, key, 'lifeSoFar').y);
+  expect(box(measures, key, 'ledger').y).toBeLessThan(
+    box(measures, key, 'heading').y + box(measures, key, 'heading').height + 2
+  );
+  expect(box(measures, key, 'contents').x).toBe(sidePadding(1366));
+  expect(box(old, key, 'contents').x).toBeGreaterThan(sidePadding(1366));
 });

@@ -317,15 +317,20 @@ two rails stand at the same two edges whatever the stage holds.
 - A stage's rail is its `aside` (the "CG selections" record), or, when `ChapterLeaf` is
   given `railSlot`, an empty `.chapter-rail` that the stage fills from deep inside itself:
   a component reads `useChapterRail()` and portals its panel into the element it returns
-  (null outside such a leaf, where the panel renders where it is written). The life page's
-  CG points ledger does this, so it is beside the whole stage and not a column of the life.
-- A railed leaf (`.chapter-railed`) takes all the room between the rails; its grids widen
-  by container query and its prose keeps 68ch. Every other leaf keeps a 38rem reading
-  column midway between the rails. To let a stage use the width, give it a layout that
-  does (columns of entries, statistics side by side) and lift its cap; do not stretch a
-  single column, which puts a row's name a screen-width from its controls.
-- Below 74rem a reading stage's rail drops under the leaf; a railed stage keeps its rail
-  beside it down to 52rem (the points stay in view while cards are picked).
+  (null where there is no rail, and the panel then renders where it is written). The life
+  page's CG points ledger does this, so it is beside the whole stage and not a column of
+  the life.
+- A `railSlot` leaf (`.chapter-grids`) takes all the room; its grids widen by container
+  query and its prose keeps 68ch. Every other leaf keeps a 38rem reading column midway
+  between the rails. To let a stage use the width, give it a layout that does (columns of
+  entries, statistics side by side) and lift its cap; do not stretch a single column,
+  which puts a row's name a screen-width from its controls.
+- The rail is kept only from 74rem of window (`useRailFits` in `chapterRail.ts`, a
+  `matchMedia` on the width cg.css folds at; the class is `.chapter-railed`). Under that
+  every stage is laid out as it was before #5144: a reading stage's record drops under the
+  leaf, and the life's ledger sits beside the life (`.leafwrap`), under it below 52rem.
+  The decision is made in the component and not in CSS because the ledger is rendered in
+  a different place, not only styled differently.
 
 ## Key Features
 

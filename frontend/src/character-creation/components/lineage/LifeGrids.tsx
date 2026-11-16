@@ -597,9 +597,9 @@ export function LifeGrids({ draft, copy }: Props) {
     return { stage, label, rows };
   });
 
-  // The ledger is the page's right-hand rail where the chapter keeps one (#5144), so it
-  // stands at the far edge of the window beside the whole stage; elsewhere it sits
-  // beside the life.
+  // The ledger is the page's right-hand rail where the chapter keeps one (#5144: from
+  // 74rem of window), so it stands at the far edge of the window beside the whole stage;
+  // elsewhere it sits beside the life, or under it on a phone.
   const ledger = (
     <aside className="ledger" aria-label={copy?.life_ledger_heading ?? 'CG points'}>
       <h3>{copy?.life_ledger_heading ?? 'CG points'}</h3>
@@ -634,7 +634,7 @@ export function LifeGrids({ draft, copy }: Props) {
   );
 
   return (
-    <div className={rail ? 'leafwrap railed' : 'leafwrap'}>
+    <div className="leafwrap">
       <div className="life">
         <h2 className="section-h first">{copy?.life_so_far_heading ?? 'Life So Far'}</h2>
         <p className="helper">

@@ -8,7 +8,7 @@ the contents rail stands at its left edge and every stage's rail at its right. O
 page the CG points ledger is that rail (it was a column inside the life), beside the whole
 stage from the heading down, and the card grids take the room between: four to a row at
 1920px, six at 2560px. The other nine stages keep their 38rem reading column, midway
-between the two rails. Not built: layouts that use the width on those nine stages (stretched
+between the two rails. Under 74rem of window every stage is laid out as it was. Not built: layouts that use the width on those nine stages (stretched
 as they are, a statistic's name lands a screen-width from its buttons).
 
 ## Built (2026-11-15, #5141: the CG points move with a card click)

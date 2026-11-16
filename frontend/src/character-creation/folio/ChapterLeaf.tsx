@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Stage } from '../types';
-import { ChapterRailContext } from './chapterRail';
+import { ChapterRailContext, useRailFits } from './chapterRail';
 import { stageEyebrow } from './ContentsRail';
 
 interface ChapterLeafProps {
@@ -10,9 +10,9 @@ interface ChapterLeafProps {
   intro?: string;
   aside?: ReactNode;
   /**
-   * The right-hand rail is left empty for a panel the stage builds deep inside itself
-   * and sends there with `useChapterRail` (the life page's CG points ledger). The rail
-   * then holds no marginalia.
+   * The leaf is grids and takes the whole room, and from 74rem of window the right-hand
+   * rail is kept for a panel the stage builds deep inside itself and sends there with
+   * `useChapterRail` (the life page's CG points ledger). The leaf holds no marginalia.
    */
   railSlot?: boolean;
   className?: string;
@@ -29,10 +29,13 @@ export function ChapterLeaf({
   children,
 }: ChapterLeafProps) {
   const [rail, setRail] = useState<HTMLElement | null>(null);
+  // The rail stands beside the whole stage only where the window has room for it; under
+  // that the stage's panel stays where the stage wrote it, as it was before #5144.
+  const fits = useRailFits();
+  const railed = Boolean(railSlot) && fits;
+  const kind = [railSlot ? 'chapter-grids' : '', railed ? 'chapter-railed' : ''];
   return (
-    <div
-      className={['chapter', railSlot ? 'chapter-railed' : '', className ?? ''].join(' ').trim()}
-    >
+    <div className={['chapter', ...kind, className ?? ''].filter(Boolean).join(' ')}>
       <div className="chapter-main">
         <span className="chapter-no">{stageEyebrow(stage)}</span>
         <h1>{title}</h1>
@@ -41,15 +44,12 @@ export function ChapterLeaf({
             <p>{intro}</p>
           </div>
         )}
-        <ChapterRailContext.Provider value={railSlot ? rail : null}>
+        <ChapterRailContext.Provider value={railed ? rail : null}>
           {children}
         </ChapterRailContext.Provider>
       </div>
-      {railSlot ? (
-        <div className="chapter-rail" ref={setRail} />
-      ) : (
-        aside && <aside aria-label="Marginalia">{aside}</aside>
-      )}
+      {railed && <div className="chapter-rail" ref={setRail} />}
+      {!railSlot && aside && <aside aria-label="Marginalia">{aside}</aside>}
     </div>
   );
 }
