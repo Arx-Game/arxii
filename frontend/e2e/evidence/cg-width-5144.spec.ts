@@ -1,4 +1,3 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, type Page, type Route } from '@playwright/test';
@@ -9,15 +8,15 @@ import { BEGINNING, CRADLE, DRAFT_ID, mockCg } from './fixtures/cgLineage';
  * answered by fixtures shaped like the serializers.
  *
  * Character creation at four window widths. On the life page (Lineage) the spread
- * follows the window, the card grids take the room, and the CG points ledger is the
- * page's right-hand rail. On a reading stage (Heritage) the rails stand at the same two
- * edges and the leaf keeps its reading width between them. `EVIDENCE_OLD_BUILD=1` only
- * takes the pictures, for the build before #5144.
+ * follows the window and the card grids take the room. On a reading stage (Heritage)
+ * the rails stand at the same two edges and the leaf keeps its reading width between
+ * them. `EVIDENCE_OLD_BUILD=1` only takes the pictures, for the build before #5144.
  *
- * The last block measures the narrow windows on both builds. Run with
- * `EVIDENCE_OLD_BUILD=1` against the old bundle it writes `narrow-old.json`; run against
- * this branch's bundle with `EVIDENCE_OLD_MEASURES` naming that file, it writes
- * `narrow-new.json` and asserts which boxes are where they were and which moved.
+ * Since #5148 the life page's right-hand panel is the one every stage shows ("CG
+ * selections", with the life's choices under it), not a ledger box of its own, and
+ * under 74rem it stands under the stage as on every other stage. The life page test
+ * measures that panel. The block that compared narrow windows box for box against the
+ * build before #5144 is gone with the layout it compared.
  */
 const here = path.dirname(fileURLToPath(import.meta.url));
 const oldBuild = process.env.EVIDENCE_OLD_BUILD === '1';
@@ -216,21 +215,19 @@ test.describe('character creation uses the width of the window (#5144)', () => {
       page.on('pageerror', (error) => errors.push(error.message));
       await lifePage(page);
       await page.screenshot({ path: shot(`${at.name}-top.png`) });
-      const ledger = page.getByRole('complementary', { name: 'CG points' });
-      // From 74rem of window the ledger is the chapter's rail; under that it is beside
-      // the life as before, and under 52rem below it.
+      // From 74rem of window the panel is the chapter's right-hand rail; under that it
+      // stands under the stage (#5148).
       const railed = at.width >= 74 * REM;
-      const stacked = at.width < 52 * REM;
+      const panel = '.interview .chapter > aside';
 
       if (!oldBuild) {
-        await expect(ledger).toHaveCount(1);
-        const inRail = page.locator('.interview .chapter > .chapter-rail > .ledger');
-        const inLife = page.locator('.interview .leafwrap > .ledger');
-        await expect(inRail).toHaveCount(railed ? 1 : 0);
-        await expect(inLife).toHaveCount(railed ? 0 : 1);
-        const rail = await box(page, '.interview .ledger');
+        await expect(page.locator(panel)).toHaveCount(1);
+        await expect(page.locator(`${panel} .ledger`)).toHaveCount(1);
+        await expect(page.locator('.interview .ledger')).toHaveCount(1);
+        const rail = await box(page, panel);
         const heading = await box(page, '.interview .chapter h1');
         const life = await box(page, '.interview .life');
+        const leaf = await box(page, '.interview .chapter > .chapter-main');
         if (railed) {
           // At the right edge of the window, beside the stage from its heading down.
           const contents = await box(page, '.interview .toc-fold');
@@ -238,14 +235,11 @@ test.describe('character creation uses the width of the window (#5144)', () => {
           expect(at.width - (rail.x + rail.width)).toBeCloseTo(sideMargin(at.width), 0);
           expect(rail.y).toBeLessThan(heading.y + heading.height + 2);
           expect(life.x + life.width).toBeLessThan(rail.x);
-        } else if (stacked) {
-          // Under the life, the full width of the leaf.
-          expect(rail.y).toBeGreaterThan(life.y + life.height - 1);
-          expect(rail.x).toBeCloseTo(life.x, 0);
         } else {
-          // Beside the life, level with it.
-          expect(rail.y).toBeCloseTo(life.y, 0);
-          expect(life.x + life.width).toBeLessThan(rail.x);
+          // Under the stage, the full width of the leaf.
+          expect(rail.y).toBeGreaterThan(leaf.y + leaf.height - 1);
+          expect(rail.x).toBeCloseTo(leaf.x, 0);
+          expect(rail.width).toBeCloseTo(leaf.width, 0);
         }
       }
 
@@ -256,17 +250,16 @@ test.describe('character creation uses the width of the window (#5144)', () => {
       if (oldBuild) return;
 
       expect(await cardsOnFirstRow(page)).toBe(at.cards);
-      if (!stacked) {
-        // The ledger has followed the scroll: it is in the window beside the cards.
+      if (railed) {
+        // The panel has followed the scroll: it is in the window beside the cards.
         await page.locator('.interview .stage-acc').last().scrollIntoViewIfNeeded();
-        const rail = await box(page, '.interview .ledger');
+        const rail = await box(page, panel);
         expect(rail.y).toBeGreaterThanOrEqual(0);
         expect(rail.y + rail.height).toBeLessThanOrEqual(at.height);
       }
-      expect(await ledger.locator('.tot').allTextContents()).toEqual([
-        'Starting100',
-        'Remaining95',
-      ]);
+      await expect(
+        page.locator('.interview .record-rail .row', { hasText: 'CG points' }).locator('dd')
+      ).toHaveText('5 of 100 spent');
       expect(errors).toEqual([]);
     });
   }
@@ -304,115 +297,4 @@ test.describe('character creation uses the width of the window (#5144)', () => {
       expect(errors).toEqual([]);
     });
   }
-});
-
-interface Box {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-type Measures = Record<string, Box | number>;
-
-/** A box in page coordinates (scroll taken out), rounded to the pixel. */
-async function pageBox(page: Page, selector: string): Promise<Box> {
-  return page
-    .locator(selector)
-    .first()
-    .evaluate((el) => {
-      const r = el.getBoundingClientRect();
-      return {
-        x: Math.round(r.left + window.scrollX),
-        y: Math.round(r.top + window.scrollY),
-        width: Math.round(r.width),
-        height: Math.round(r.height),
-      };
-    });
-}
-
-/** Everything asked for has answered, the fonts are in, and the layout has stopped moving. */
-async function settled(page: Page) {
-  await page.waitForLoadState('networkidle');
-  await page.evaluate(() => document.fonts.ready);
-  let last = -1;
-  await expect
-    .poll(async () => {
-      const height = await page.evaluate(() => document.documentElement.scrollHeight);
-      const still = height === last;
-      last = height;
-      return still;
-    })
-    .toBe(true);
-}
-
-async function measureLife(page: Page): Promise<Measures> {
-  await lifePage(page);
-  await settled(page);
-  return {
-    contents: await pageBox(page, '.interview .toc-fold'),
-    heading: await pageBox(page, '.interview .chapter h1'),
-    lifeSoFar: await pageBox(page, '.interview .life .section-h.first'),
-    life: await pageBox(page, '.interview .life'),
-    firstCard: await pageBox(page, '.interview .life .stances.grid > *'),
-    ledger: await pageBox(page, '.interview .ledger'),
-    cardsOnFirstRow: await cardsOnFirstRow(page),
-  };
-}
-
-async function measureHeritage(page: Page): Promise<Measures> {
-  await heritagePage(page);
-  await settled(page);
-  return {
-    contents: await pageBox(page, '.interview .toc-fold'),
-    heading: await pageBox(page, '.interview .chapter h1'),
-    leaf: await pageBox(page, '.interview .chapter > .chapter-main'),
-    firstEntry: await pageBox(page, '.interview .entry-list > li'),
-    record: await pageBox(page, '.interview .chapter > aside'),
-  };
-}
-
-const NARROW = [
-  { key: 'life-1366', width: 1366, height: 900, measure: measureLife },
-  { key: 'life-1100', width: 1100, height: 900, measure: measureLife },
-  { key: 'life-390', width: 390, height: 844, measure: measureLife },
-  { key: 'heritage-1100', width: 1100, height: 900, measure: measureHeritage },
-  { key: 'heritage-390', width: 390, height: 844, measure: measureHeritage },
-];
-
-test('narrow windows, old build against new: what stayed and what moved', async ({ page }) => {
-  test.setTimeout(120_000);
-  const measures: Record<string, Measures> = {};
-  for (const at of NARROW) {
-    await page.setViewportSize({ width: at.width, height: at.height });
-    await page.unrouteAll({ behavior: 'ignoreErrors' });
-    measures[at.key] = await at.measure(page);
-  }
-  mkdirSync(path.dirname(shot('x')), { recursive: true });
-  const out = path.join(path.dirname(shot('x')), oldBuild ? 'narrow-old.json' : 'narrow-new.json');
-  writeFileSync(out, JSON.stringify(measures, null, 2));
-  if (oldBuild || !process.env.EVIDENCE_OLD_MEASURES) return;
-  const old = JSON.parse(readFileSync(process.env.EVIDENCE_OLD_MEASURES, 'utf8')) as Record<
-    string,
-    Measures
-  >;
-  const box = (set: Record<string, Measures>, key: string, name: string) => set[key][name] as Box;
-
-  // Under 74rem of window nothing moved: a reading stage and the life page, at 1100px
-  // and on a phone, measure the same box for box.
-  for (const key of ['heritage-1100', 'heritage-390', 'life-1100', 'life-390']) {
-    expect(measures[key], key).toEqual(old[key]);
-  }
-
-  // The life page at 1366px is NOT where it was, and this is the change: the spread
-  // reaches the window's padding, and the ledger, which was level with "Life So Far",
-  // is level with the stage's heading. The cards are still two to a row.
-  const key = 'life-1366';
-  expect(measures[key].cardsOnFirstRow).toBe(2);
-  expect(old[key].cardsOnFirstRow).toBe(2);
-  expect(box(old, key, 'ledger').y).toBe(box(old, key, 'lifeSoFar').y);
-  expect(box(measures, key, 'ledger').y).toBeLessThan(
-    box(measures, key, 'heading').y + box(measures, key, 'heading').height + 2
-  );
-  expect(box(measures, key, 'contents').x).toBe(sidePadding(1366));
-  expect(box(old, key, 'contents').x).toBeGreaterThan(sidePadding(1366));
 });

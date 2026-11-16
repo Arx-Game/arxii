@@ -174,7 +174,11 @@ test.describe('the foot of a character creation stage (#5146)', () => {
     expect(boxes[1]!.y).toBe(boxes[0]!.y);
     expect(boxes[2]!.y).toBe(boxes[0]!.y);
 
-    const ledger = page.getByRole('complementary', { name: 'CG points' });
+    // The life's choices in the right-hand panel, and the panel's points line (#5148).
+    const ledger = page.locator('.interview .chapter > aside .ledger');
+    const points = page
+      .locator('.interview .record-rail .row', { hasText: 'CG points' })
+      .locator('dd');
     const rows = () => ledger.locator('.row').allTextContents();
     expect(await rows()).toEqual(['Bookish−15', 'Hard scrabble+10']);
 
@@ -205,7 +209,7 @@ test.describe('the foot of a character creation stage (#5146)', () => {
     await expect(dialog).toBeHidden();
     await expect(ledger.getByText('Nothing chosen yet.')).toBeVisible();
     expect(server.clears).toBe(1);
-    expect(await ledger.locator('.tot').allTextContents()).toEqual(['Starting100', 'Remaining100']);
+    await expect(points).toHaveText('0 of 100 spent');
     await expect(page.getByRole('button', { name: /^Bookish/ })).toHaveAttribute(
       'aria-pressed',
       'false'
