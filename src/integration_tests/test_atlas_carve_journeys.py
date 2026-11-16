@@ -141,3 +141,55 @@ class CarvingTheMapJourney(JourneyCase):
         assert holder_at(2, 2) == seat_area
         player = self.web(self.player, "atlas_move_seat", title_id=seat.pk, pip=[2, 1])
         assert not player.detail.success
+
+    def test_adjust_crosses_a_duchy_line_so_a_barony_can_move_to_the_new_land(self) -> None:
+        """#5157: a county takes a strip from a county of another duchy of its kingdom in
+        one Adjust stroke, its seat barony is dragged onto the strip, and two undos put
+        the barony and the strip back."""
+        from world.areas.worldmap.services import footprint_of
+        from world.societies.houses.models import Title
+
+        other_duchy = plant_rung(
+            realm=self.realm, tier=TitleTier.DUCHY, name="Fervor", parent_title=self.kingdom
+        )
+        coast = plant_rung(
+            realm=self.realm, tier=TitleTier.COUNTY, name="Coast", parent_title=other_duchy
+        )
+        inland_area = rung_area_for_title(self.county)
+        coast_area = rung_area_for_title(coast)
+        seat = Title.objects.get(seat_domain=self.county.seat_domain, tier=TitleTier.BARONY)
+        seat_area = rung_area_for_title(seat)
+        self.web(self.staff, "atlas_carve_footprint", title_id=self.county.pk, add=[[1, 1]])
+        self.web(self.staff, "atlas_carve_footprint", title_id=seat.pk, add=[[1, 1]])
+        self.web(self.staff, "atlas_carve_footprint", title_id=coast.pk, add=[[2, 1], [3, 1]])
+        refused = self.web(self.staff, "atlas_move_seat", title_id=seat.pk, pip=[3, 1])
+        assert not refused.detail.success
+        adjusted = self.web(
+            self.staff,
+            "atlas_carve_footprint",
+            title_id=self.county.pk,
+            add=[[2, 1], [3, 1]],
+            take_from_siblings=True,
+        )
+        assert adjusted.detail.success, adjusted.detail.message
+        assert adjusted.detail.data["changed"] == [
+            [2, 1, coast_area.pk, inland_area.pk],
+            [3, 1, coast_area.pk, inland_area.pk],
+        ]
+        # the duchy line moved with the county; no row names either duchy
+        assert footprint_of(rung_area_for_title(self.duchy)) == {(1, 1), (2, 1), (3, 1)}
+        assert footprint_of(rung_area_for_title(other_duchy)) == set()
+        moved = self.web(self.staff, "atlas_move_seat", title_id=seat.pk, pip=[3, 1])
+        assert moved.detail.success, moved.detail.message
+        assert holder_at(3, 1) == seat_area
+        assert holder_at(1, 1) == inland_area
+        for step in (moved, adjusted):
+            undone = self.web(
+                self.staff,
+                "atlas_restore_footprint",
+                pips=[[x, y, before] for x, y, before, _after in step.detail.data["changed"]],
+            )
+            assert undone.detail.success, undone.detail.message
+        assert holder_at(1, 1) == seat_area
+        assert holder_at(2, 1) == coast_area
+        assert holder_at(3, 1) == coast_area

@@ -337,11 +337,13 @@ def set_footprint(
     ancestor of ``area``); on remove, a pip a descendant stands on. Water is taken
     like land: a realm's footprint includes its waters (ApostateCD, 2026-10-12).
 
-    ``take_from_siblings`` is the map's Adjust (#4988): a pip held by a sibling rung
-    under the same ladder parent, or by one of that sibling's counties, moves sideways
-    into ``area`` instead of being skipped, so a border is corrected in one stroke. A
-    barony's single pip is its seat and is never taken this way; the seat drag
-    (``move_seat``) is how a barony moves."""
+    ``take_from_siblings`` is the map's Adjust (#4988, widened by #5157): a pip held by
+    any rung of the same kingdom moves sideways into ``area`` instead of being skipped,
+    so a county reaches a coast another duchy held in one stroke and both duchies'
+    borders follow, since an ancestor's footprint is derived from its children's. A
+    kingdom, or an area with no kingdom above it, takes only from beneath its own
+    ladder parent. A barony's single pip is its seat and is never taken this way; the
+    seat drag (``move_seat``) is how a barony moves."""
     to_add = _unique_pips(add, MAX_FOOTPRINT_PIPS_PER_CALL)
     to_remove = _unique_pips(remove, MAX_FOOTPRINT_PIPS_PER_CALL)
     if not to_add and not to_remove:
@@ -503,11 +505,11 @@ def _claim(
 ) -> int:
     """Give ``pips`` to ``area``: open ground is taken; an ancestor's pip moves
     down to this area; a pip held by this area or a descendant is already inside;
-    with ``take_from_siblings`` a sibling's (or a sibling's county's) pip moves
+    with ``take_from_siblings`` a pip held elsewhere in the same kingdom moves
     sideways; any other holder's pip is skipped and counted against that holder's name.
     Every row taken or moved is appended to ``changed`` with its prior holder."""
     held = _rows_at(pips)
-    parent = _ladder_parent(area) if take_from_siblings else None
+    parent = _adjust_scope(area) if take_from_siblings else None
     moving: list[AreaFootprintPip] = []
     for row in held.values():
         holder = row.area
@@ -533,9 +535,21 @@ def _claim(
     return len(fresh) + len(moving)
 
 
+def _adjust_scope(area: Area) -> Area | None:
+    """The area Adjust may take land beneath (#5157): the carved area's kingdom, so a
+    county's border can cross a duchy line; its ladder parent when no kingdom stands
+    above it, which keeps a kingdom to its sibling kingdoms' land."""
+    node = area.parent
+    while node is not None:
+        if node.level == AreaLevel.KINGDOM:
+            return node
+        node = node.parent
+    return _ladder_parent(area)
+
+
 def _is_sibling_side(holder: Area, parent: Area | None) -> bool:
-    """Whether ``holder`` lies beneath ``parent`` (a sibling of the carved area or one
-    of a sibling's counties) and is not a barony, whose one pip is its seat."""
+    """Whether ``holder`` lies beneath ``parent`` (Adjust's scope for the carved area)
+    and is not a barony, whose one pip is its seat."""
     if parent is None or holder.level <= AreaLevel.BARONY:
         return False
     return _is_ancestor(parent, holder)
