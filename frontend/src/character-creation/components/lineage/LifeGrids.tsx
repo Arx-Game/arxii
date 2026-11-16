@@ -7,7 +7,7 @@
  * stage shows its sections, one open at a time, each a beat whose answers are the
  * `backgrounds` chapter's offers through `ChapterOffers` as a grid of cards, grouped
  * under headings when the answers carry a group, priced as signed numbers, every term
- * on a card's mechanics line a click that opens its definition. A closed section shows
+ * on a card's mechanics line showing its definition on hover. A closed section shows
  * its answers, or the beat's own prompt in plain text when nothing is picked. Next
  * closes a section and opens the one below; the last Next opens the next stage.
  *
@@ -27,8 +27,8 @@
  * are refetched after, since an unknown mark is what closes a beat's answers. Fold state
  * is local and never saved.
  *
- * The ledger rail beside the life lists the purse and every pick under its stage with
- * its signed price. Every life ends on the Recent History box (#4830) and the life so far
+ * The life's choices are listed in the chapter's right-hand panel, under the "CG
+ * selections" every stage shows, each pick under its stage with its signed price (#5148). Every life ends on the Recent History box (#4830) and the life so far
  * in one paragraph. A beginning that strikes every stage (the Sleeper) has an empty pool;
  * its `struck_stages_text` stands where the stage rows would be, over that box.
  */
@@ -105,7 +105,8 @@ export function LifeGrids({ draft, copy }: Props) {
   const { data: beats, isLoading } = useDraftBeats(draft.id);
   const { data: offersData } = useDraftOffers(draft.id, 'backgrounds');
   // The picks and the points on screen (#5141): a save in flight is laid over the saved
-  // list, so the ledger, its totals and the section summaries move with the click.
+  // list, so the list of choices, the foot line and the section summaries move with the
+  // click.
   const shown = useShownPicks(draft);
   const rail = useChapterRail();
   const updateDraft = useUpdateDraft();
@@ -342,8 +343,6 @@ export function LifeGrids({ draft, copy }: Props) {
   };
 
   const takenCount = beats.filter((b) => b.taken || picksOf(b).length > 0).length;
-  // The ledger's two totals (owner ruling 2026-11-15: "Just starting and remaining is
-  // fine, that's all that matters"; the Spent and Gained lines are gone).
   const budget = shown.spent + shown.remaining;
   const foot = (copy?.beats_foot ?? '{taken} taken, {spent} of {budget} points spent')
     .replace('{taken}', String(takenCount))
@@ -595,20 +594,13 @@ export function LifeGrids({ draft, copy }: Props) {
     return { stage, label, rows };
   });
 
-  // The ledger is the page's right-hand rail where the chapter keeps one (#5144: from
-  // 74rem of window), so it stands at the far edge of the window beside the whole stage;
-  // elsewhere it sits beside the life, or under it on a phone.
+  // The life's choices, by life stage, each with its signed price. They stand in the
+  // chapter's right-hand panel under the "CG selections" every stage shows (#5148); the
+  // points line there is the panel's own, so this list prints no totals.
+  const life = copy?.life_so_far_heading ?? 'Life So Far';
   const ledger = (
-    <aside className="ledger" aria-label={copy?.life_ledger_heading ?? 'CG points'}>
-      <h3>{copy?.life_ledger_heading ?? 'CG points'}</h3>
-      <div className="tot">
-        <span>{copy?.life_ledger_starting ?? 'Starting'}</span>
-        <b>{budget}</b>
-      </div>
-      <div className="tot">
-        <span>{copy?.life_ledger_remaining ?? 'Remaining'}</span>
-        <b>{shown.remaining}</b>
-      </div>
+    <section className="ledger" aria-label={life}>
+      <h2 className="rail-label">{life}</h2>
       {ledgerRows.every((s) => s.rows.length === 0) ? (
         <p className="empty">{copy?.life_ledger_empty ?? 'Nothing chosen yet.'}</p>
       ) : (
@@ -628,7 +620,7 @@ export function LifeGrids({ draft, copy }: Props) {
             </div>
           ))
       )}
-    </aside>
+    </section>
   );
 
   return (

@@ -46,8 +46,9 @@ queue.
    (#3299), `e2e/missives.spec.ts` (#3289), `e2e/one-scale.spec.ts` (#5091), and `e2e/family-seats.spec.ts` (the seat picker
    in character creation, #5130), and `e2e/home-while-connected.spec.ts` (the site name
    opening the home page from inside the world, #5137; it reuses the channels spec's
-   account and runs after it), and `e2e/life-points.spec.ts` (the CG points beside the
-   life move with a card click and are what the server then holds, #5141; then
+   account and runs after it), and `e2e/life-points.spec.ts` (the "CG points" line of
+   the right-hand panel moves with a card click and is what the server then holds, #5141,
+   read from the panel every stage shows since #5148; then
    "Restart: Clear All Choices" asks first, leaves the server's life alone on Cancel and
    empties it on confirm, #5146).
    Every other spec mocks the API and runs against `vite preview` under

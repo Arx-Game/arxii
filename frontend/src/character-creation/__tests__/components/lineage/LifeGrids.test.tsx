@@ -3,11 +3,11 @@
  * others folded to a heading and a count; one section open inside it, the others reading
  * their answers or the beat's own prompt with the first name; Unknown a mark on the stage;
  * a secret pick with a cover story; Description (Optional) per stage; grouped answers;
- * signed prices; a term's definition; a figure's name on a person card; the ledger rail;
+ * signed prices; a term's definition; a figure's name on a person card; the choices list;
  * the life so far. Every life still ends on the Recent History box (#4830), and a
  * beginning that strikes every stage shows its text where the stage rows would be.
  */
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { LifeGrids } from '../../../components/lineage/LifeGrids';
@@ -192,7 +192,8 @@ describe('LifeGrids', () => {
     renderWithCharacterCreationProviders(
       <LifeGrids draft={createMockDraft({ draft_data: { first_name: 'Marisol' } })} copy={{}} />
     );
-    expect(screen.getByRole('heading', { name: 'Life So Far' })).toBeInTheDocument();
+    // The life's own heading; the list of choices carries the same words as its label.
+    expect(screen.getAllByRole('heading', { name: 'Life So Far' })[0]).toHaveClass('section-h');
     expect(screen.getByText(/best describes Marisol’s life up to now/)).toBeInTheDocument();
     expect(stage('Childhood')).toHaveAttribute('data-open', 'true');
     expect(section('Early Upbringing')).toHaveAttribute('data-open', 'true');
@@ -292,7 +293,7 @@ describe('LifeGrids', () => {
     expect(within(groups[1] as HTMLElement).getByRole('button', { name: /^Kept a shop/ }));
   });
 
-  it('a grid card wears a signed price, a free card none, and its terms open their definition', async () => {
+  it('a grid card wears a signed price, a free card none, and a term shows its definition on hover (#5148)', async () => {
     const user = userEvent.setup();
     renderWithCharacterCreationProviders(<LifeGrids draft={createMockDraft()} copy={{}} />);
     const early = section('Early Upbringing');
@@ -304,13 +305,67 @@ describe('LifeGrids', () => {
     const free = within(early).getByRole('button', { name: /Unremarkable/ });
     expect(free.querySelector('.price')?.textContent).toBe('');
     expect(within(patient).getByText('+10', { exact: false })).toBeInTheDocument();
-    await user.click(within(patient).getByRole('button', { name: 'sailing, definition' }));
-    const popover = screen.getByRole('dialog', { name: 'sailing' });
-    expect(popover).toHaveTextContent('Handling a ship at sea.');
+    const term = within(patient).getByRole('button', { name: 'sailing, definition' });
+    // Pointing at the term shows its definition; moving off hides it.
+    await user.hover(term);
+    expect(screen.getByRole('dialog', { name: 'sailing' })).toHaveTextContent(
+      'Handling a ship at sea.'
+    );
+    await user.unhover(term);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    // A click pins it open: it stays when the pointer leaves, and goes on Escape.
+    await user.click(term);
+    await user.unhover(term);
+    expect(screen.getByRole('dialog', { name: 'sailing' })).toBeInTheDocument();
     // The term click is not a pick.
     expect(syncMutate).not.toHaveBeenCalled();
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).toBeNull();
+    // A second click on a pinned term closes it.
+    await user.click(term);
+    expect(screen.getByRole('dialog', { name: 'sailing' })).toBeInTheDocument();
+    await user.click(term);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('a term shows its definition while the keyboard focus is on it', async () => {
+    const user = userEvent.setup();
+    renderWithCharacterCreationProviders(<LifeGrids draft={createMockDraft()} copy={{}} />);
+    const patient = within(section('Early Upbringing')).getByRole('button', { name: /^Patient/ });
+    const term = within(patient).getByRole('button', { name: 'sailing, definition' });
+    act(() => term.focus());
+    expect(screen.getByRole('dialog', { name: 'sailing' })).toBeInTheDocument();
+    await user.tab();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('a term nobody has written a definition for is plain text, not a promise of one', () => {
+    offersResponse = {
+      ...offersResponse,
+      offers: offersResponse.offers.map((o) =>
+        o.offer_id === 10
+          ? {
+              ...o,
+              effects: [
+                { target: 'sailing', label: 'sailing', value: 10, immune: false },
+                { target: 'poise', label: 'poise', value: 5, immune: false },
+                { target: 'menace', label: 'menace', value: -5, immune: false },
+              ],
+            }
+          : o
+      ),
+      terms: [
+        { name: 'sailing', label: 'sailing', definition: 'Handling a ship at sea.' },
+        { name: 'poise', label: 'poise', definition: '  ' },
+      ],
+    };
+    renderWithCharacterCreationProviders(<LifeGrids draft={createMockDraft()} copy={{}} />);
+    const patient = within(section('Early Upbringing')).getByRole('button', { name: /^Patient/ });
+    const line = patient.querySelector('.fx')!;
+    expect(line.textContent).toBe('+10 sailing; +5 poise; −5 menace');
+    expect(Array.from(line.querySelectorAll('.term')).map((el) => el.textContent)).toEqual([
+      'sailing',
+    ]);
   });
 
   it("a grid card reads its distinction's description, not the offer's line (#5099)", () => {
@@ -489,19 +544,19 @@ describe('LifeGrids', () => {
     expect(screen.queryByLabelText(/in your words/)).toBeNull();
   });
 
-  it('the ledger rail lists the purse and every pick under its stage, and the life so far', async () => {
+  it('the choices list every pick under its stage and print no totals, and the life so far (#5148)', async () => {
     draftDistinctions = [picked(101, 11), picked(300, 30)];
-    // The purse is two totals, Starting and Remaining (owner ruling 2026-11-15; the
-    // Spent and Gained lines the demo carried are gone).
     const draft = createMockDraft({
       cg_points_spent: -5,
       cg_points_remaining: 105,
       draft_data: { beats: { '3': { secret_offer_ids: [30] } } },
     });
     renderWithCharacterCreationProviders(<LifeGrids draft={draft} copy={{}} />);
-    const ledger = screen.getByRole('complementary', { name: 'CG points' });
-    const totals = Array.from(ledger.querySelectorAll('.tot')).map((el) => el.textContent);
-    expect(totals).toEqual(['Starting100', 'Remaining105']);
+    const ledger = screen.getByRole('region', { name: 'Life So Far' });
+    expect(within(ledger).getByRole('heading', { name: 'Life So Far' })).toHaveClass('rail-label');
+    // The points line is the panel's own, the same on every stage: no purse here.
+    expect(ledger.querySelector('.tot')).toBeNull();
+    expect(ledger).not.toHaveTextContent(/Starting|Remaining|Spent|Gained/);
     const rows = Array.from(ledger.querySelectorAll('.row')).map((el) => el.textContent);
     expect(rows).toEqual(['Spoiled+10', 'Spied for a house (secret)−10']);
     expect(Array.from(ledger.querySelectorAll('.st')).map((el) => el.textContent)).toEqual([
@@ -518,7 +573,7 @@ describe('LifeGrids', () => {
     ]);
   });
 
-  it('while a save is in flight the rail and its totals read the picks being saved (#5141)', () => {
+  it('while a save is in flight the choices and the foot line read the picks being saved (#5141)', () => {
     // Held: Spoiled (the world pays 10) and Spied for a house (10). The draft's totals
     // were added up from that list, so they net to nothing spent.
     const held = [
@@ -542,24 +597,24 @@ describe('LifeGrids', () => {
       offersResponse
     );
     renderWithCharacterCreationProviders(<LifeGrids draft={draft} copy={{}} />, { queryClient });
-    const ledger = screen.getByRole('complementary', { name: 'CG points' });
+    const ledger = screen.getByRole('region', { name: 'Life So Far' });
     const rows = Array.from(ledger.querySelectorAll('.row')).map((el) => el.textContent);
     expect(rows).toEqual(['Patient−10', 'Spied for a house−10']);
     // Spoiled's 10 is given back and Patient's 10 is paid: 20 spent of the 100.
-    const totals = Array.from(ledger.querySelectorAll('.tot')).map((el) => el.textContent);
-    expect(totals).toEqual(['Starting100', 'Remaining80']);
     expect(screen.getByText('2 taken, 20 of 100 points spent')).toBeInTheDocument();
   });
 
-  it('inside a chapter that keeps a rail, the ledger stands in it and not beside the life (#5144)', async () => {
+  it("inside a chapter the choices stand in its right-hand panel, under the stage's selections (#5148)", async () => {
     const { container } = renderWithCharacterCreationProviders(
-      <ChapterLeaf stage={Stage.LINEAGE} title="Lineage" railSlot>
+      <ChapterLeaf stage={Stage.LINEAGE} title="Lineage" railSlot aside={<p>selections</p>}>
         <LifeGrids draft={createMockDraft()} copy={{}} />
       </ChapterLeaf>
     );
-    const rail = await screen.findByRole('complementary', { name: 'CG points' });
-    expect(rail.parentElement).toHaveClass('chapter-rail');
-    expect(container.querySelector('.leafwrap')).not.toContainElement(rail);
+    const panel = screen.getByRole('complementary', { name: /marginalia/i });
+    const choices = await screen.findByRole('region', { name: 'Life So Far' });
+    expect(panel).toContainElement(choices);
+    expect(panel.firstElementChild).toHaveTextContent('selections');
+    expect(container.querySelector('.leafwrap')).not.toContainElement(choices);
     expect(container.querySelectorAll('.ledger')).toHaveLength(1);
   });
 

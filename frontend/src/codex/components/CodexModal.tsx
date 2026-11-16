@@ -131,8 +131,11 @@ export function CodexModal({ entryId, open, onOpenChange }: CodexModalProps) {
                 onNavigate={navigateToEntry}
               />
             )}
+            {/* A new tab (#5148): this overlay opens over character creation, which has
+                no way back from the codex but the browser's own button. The page it was
+                opened from stays as it was, overlay and all. */}
             <Button asChild variant="outline" size="sm">
-              <Link to={urls.codexEntry(entry.id)} onClick={() => onOpenChange(false)}>
+              <Link to={urls.codexEntry(entry.id)} target="_blank" rel="noopener noreferrer">
                 <ExternalLink className="mr-2 h-4 w-4" />
                 View in Codex
               </Link>

@@ -182,6 +182,41 @@ describe('LineageStage', () => {
     });
   });
 
+  describe('The right-hand panel (#5148)', () => {
+    it('is the same CG selections panel as every other stage, with the life listed under it', async () => {
+      const draft: CharacterDraft = {
+        ...mockDraftWithHeritageNoUpbringing,
+        current_stage: Stage.LINEAGE,
+        cg_points_spent: 20,
+        cg_points_remaining: 80,
+      };
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient: createTestQueryClient(),
+      });
+      const panel = screen.getByRole('complementary', { name: /marginalia/i });
+      expect(within(panel).getByRole('heading', { name: 'CG selections' })).toBeInTheDocument();
+      const rows = Array.from(panel.querySelectorAll('.record-rail .row')).map((row) => [
+        row.querySelector('dt')?.textContent,
+        row.querySelector('dd')?.textContent,
+      ]);
+      expect(rows).toEqual([
+        ['Origin', draft.selected_area!.name],
+        ['Beginnings', draft.selected_beginnings!.name],
+        ['Species', draft.selected_species?.name ?? 'not yet chosen'],
+        ['Gender', draft.selected_gender?.display_name ?? 'not yet chosen'],
+        ['CG points', '20 of 100 spent'],
+      ]);
+      expect(within(panel).getByText('Stage 3 of 10')).toHaveClass('rail-ledger');
+      // The life's choices come after it, in the same panel, and print no purse.
+      const choices = await within(panel).findByRole('region', { name: 'Life So Far' });
+      expect(panel.querySelector('.record-rail')!.compareDocumentPosition(choices)).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING
+      );
+      expect(panel).not.toHaveTextContent(/Starting|Remaining|Gained/);
+      expect(screen.getAllByRole('complementary')).toHaveLength(1);
+    });
+  });
+
   describe('Family path section', () => {
     it('auto-applies a single-path upbringing and shows the family-name input on the named path', async () => {
       const draft = createMockDraft({

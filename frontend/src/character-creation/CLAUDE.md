@@ -23,9 +23,11 @@ character-creation/
 │   │                        #   ruling 2026-11-16, #5146: Back is not an italic link);
 │   │                        #   `between` is a stage's own door drawn between the two
 │   ├── NightPlate.tsx       # Full-bleed night moment (arrival, submission)
-│   ├── ChapterLeaf.tsx      # Wraps a stage's old internals in the leaf frame; `railSlot`
-│   │                        #   keeps the right-hand rail for a panel the stage sends there
-│   ├── chapterRail.ts       # `useChapterRail()`: the rail element a panel portals into (#5144)
+│   ├── ChapterLeaf.tsx      # Wraps a stage's old internals in the leaf frame; `aside` is
+│   │                        #   the right-hand panel; `railSlot` lets the leaf take the
+│   │                        #   whole room and keeps a slot at the foot of that panel
+│   ├── chapterRail.ts       # `useChapterRail()`: the slot at the foot of the right-hand
+│   │                        #   panel that a stage's own list portals into (#5148)
 │   ├── RecordRail.tsx       # Marginalia: the "CG selections" rows + a Note aside
 │   ├── Entry.tsx            # EntryList/Entry/EntryDoors: choosable record entries (an
 │   │                        #   optional `tags` list prints extra `.tag`s beside `tag`). Since
@@ -188,8 +190,9 @@ character-creation/
         │                         #   clicking the real pick drops both)
         │                         #   and a cover select on an any row; a figure's name input
         │                         #   on a picked person card; Description (Optional) per stage
-        │                         #   (draft_data.stage_descriptions); the ledger, sent to
-        │                         #   the chapter's rail (#5144); the testament paragraph.
+        │                         #   (draft_data.stage_descriptions); the list of choices,
+        │                         #   sent to the slot under the chapter's "CG selections"
+        │                         #   (#5148); the testament paragraph.
         │                         #   Earlier shape, still true underneath: grids by stage
         │                         #   (#4395, the #4124 beats):
         │                         #   one block per stage the beginning offers (a struck
@@ -280,8 +283,10 @@ the distinction's description under its name, not the offer's `player_line` (#50
 ("Group (count)", the ungrouped cards last); `pricing="signed"` prints a grid card's price
 as a bare `−N`/`+N` in its bottom-left corner and nothing on a free card; `terms` builds the
 mechanics line from `offer.effects` with each term a `.term` role-button (the card is a
-button, so no nested button) whose click opens one `.popover` through a portal to `body`
-with the definition from the response's `terms`; `interceptPick` runs before a click
+button, so no nested button) that shows one `.popover` through a portal to `body` with the
+definition from the response's `terms`, while the pointer or the keyboard focus is on it;
+a click or tap pins it open, and Escape, a scroll or any other click closes it (#5148). A
+term whose definition is blank is plain text with no underline; `interceptPick` runs before a click
 changes a pick and `coverOfferId` draws that card dashed (the cover flow);
 `secretOfferIds`/`wordSecret`/`wordCover` label the secret pick and the cover on the cards.
 
@@ -316,8 +321,9 @@ them with the server's figures. A failed save shows the old totals again. A test
 mocks `@/hooks/useDistinctions` and renders one of these must give the mock a
 `usePendingSync`.
 
-The ledger prints two totals, Starting and Remaining (owner ruling 2026-11-15); the Spent
-and Gained lines are gone.
+The life page prints one points line, the "CG points: N of M spent" row of the panel
+every stage shows (#5148); the ledger box and its Starting, Spent, Gained and Remaining
+lines are gone.
 
 ## The spread follows the window (#5144)
 
@@ -325,23 +331,36 @@ and Gained lines are gone.
 column on every stage, and the chapter's own rail is the last column of `.chapter`, so the
 two rails stand at the same two edges whatever the stage holds.
 
-- A stage's rail is its `aside` (the "CG selections" record), or, when `ChapterLeaf` is
-  given `railSlot`, an empty `.chapter-rail` that the stage fills from deep inside itself:
-  a component reads `useChapterRail()` and portals its panel into the element it returns
-  (null where there is no rail, and the panel then renders where it is written). The life
-  page's CG points ledger does this, so it is beside the whole stage and not a column of
-  the life.
+- A stage's rail is its `aside`: the "CG selections" record (`RecordRail`) and the
+  stage's notes. Every stage shows the same record (owner ruling 2026-11-16, #5148:
+  stage 3 "should appear identical to the other stages, and then just have the choices
+  under it"). A stage that needs a list of its own in the panel does not replace the
+  record: it gives `ChapterLeaf` `railSlot`, which keeps an empty `.rail-slot` at the foot
+  of the `aside`, and a component deep inside the stage reads `useChapterRail()` and
+  portals its list into the element it returns (null where there is no slot, and the list
+  then renders where it is written). The life page's choices do this.
 - A `railSlot` leaf (`.chapter-grids`) takes all the room; its grids widen by container
   query and its prose keeps 68ch. Every other leaf keeps a 38rem reading column midway
   between the rails. To let a stage use the width, give it a layout that does (columns of
   entries, statistics side by side) and lift its cap; do not stretch a single column,
   which puts a row's name a screen-width from its controls.
-- The rail is kept only from 74rem of window (`useRailFits` in `chapterRail.ts`, a
-  `matchMedia` on the width cg.css folds at; the class is `.chapter-railed`). Under that
-  every stage is laid out as it was before #5144: a reading stage's record drops under the
-  leaf, and the life's ledger sits beside the life (`.leafwrap`), under it below 52rem.
-  The decision is made in the component and not in CSS because the ledger is rendered in
-  a different place, not only styled differently.
+- Under 74rem of window every stage's panel drops under the leaf, the life page's too.
+  From 74rem the panel is sticky; a reading stage lets it scroll away in a short window
+  (under 52rem tall), a `railSlot` stage keeps it in view at any height, because the
+  life page is long and its points line has to stay beside the cards being clicked.
+
+## An element drawn through a portal is outside `.interview` (#5148)
+
+Every rule in `cg.css` is written `.interview <selector>`, a descendant of the page's
+root. An element rendered with `createPortal(..., document.body)` is not a descendant of
+that root, so none of those rules reach it. The term definition box shipped that way in
+#4874 and was a blank page-high sheet in the wrong place until #5148: its markup and
+class names were right and no rule applied. Such an element carries the root class
+itself (`className="interview popover"`, for the inks) and its rules name both classes on
+the one element (`.interview.popover`), taking back what the root rule adds (the page's
+`min-height`). `__tests__/portaledStyles.test.ts` holds this for every such element, and
+the `portaled-style-reach-reviewer` agent reads a diff for the shape. Evidence for a
+styled element is its computed style and its box in a browser, never its class name.
 
 ## Key Features
 
