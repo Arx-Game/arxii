@@ -2521,6 +2521,44 @@ describe('GamePage', () => {
       expect(feed.scrollTop).toBe(300);
     });
 
+    it('keeps following when a pose arrives after the reader position was recorded (#5154)', () => {
+      const observer = stubResizeObserver();
+      dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      renderWithProviders(<GamePage />);
+      const feed = screen.getByTestId('feed-scroll-container');
+      growFeed(feed, observer, 2000);
+      // The follow's own scroll event records 2000 as this conversation's offset.
+      fireEvent.scroll(feed);
+
+      // A pose arrives: the page renders again and the content is taller. The
+      // rail's keys are a new array on that render; restoring the recorded
+      // offset then would leave the reader short of the new end and unpinned. (jsdom
+      // does not clamp scrollTop, so the growth has to exceed the container's
+      // height for the recorded offset to read as away from the bottom.)
+      Object.defineProperty(feed, 'scrollHeight', { value: 3000, configurable: true });
+      dispatch(
+        addSceneInteraction({
+          character: ACTIVE_NAME,
+          interaction: {
+            id: 2,
+            persona: { id: 9, name: 'Nyx', thumbnail_url: '' },
+            content: 'counts on.',
+            mode: 'pose',
+            timestamp: '2026-01-01T00:01:00Z',
+            scene_id: 100,
+            place_id: null,
+            place_name: null,
+            receiver_persona_ids: [],
+            target_persona_ids: [],
+          },
+        })
+      );
+      act(() => observer.resize());
+
+      expect(feed.scrollTop).toBe(3000);
+    });
+
     it('does not pull a reader off the reading position the room tab restores', () => {
       const observer = stubResizeObserver();
       dispatch(setAccount(mockAccount));

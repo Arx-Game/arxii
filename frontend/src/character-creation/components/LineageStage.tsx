@@ -38,7 +38,8 @@ import {
   useUpdateDraft,
 } from '../queries';
 import { Input } from '@/components/ui/input';
-import { ChapterLeaf, Paragraphs } from '../folio';
+import { ChapterLeaf, Paragraphs, RecordRail, stageEyebrow } from '../folio';
+import { useShownPicks } from '../useShownPicks';
 import { PARENT_FATES, resolveFamilyPath, Stage, STAGE_LABELS } from '../types';
 import type {
   CharacterDraft,
@@ -89,6 +90,8 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
     path === 'claimed'
   );
   const influence = path === 'claimed' ? (draft.family?.influence ?? 0) : 0;
+  // The points as the page shows them, so the panel's line moves with a card click (#5141).
+  const shown = useShownPicks(draft);
 
   // If no area selected, prompt user
   if (!draft.selected_area) {
@@ -118,11 +121,30 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
     );
   }
 
+  // The same panel as every other stage (#5148): the selections so far and the points
+  // line. The life's choices are listed under it by `LifeGrids`, through the leaf's slot.
+  const rail = (
+    <RecordRail
+      rows={[
+        { label: 'Origin', value: draft.selected_area.name },
+        { label: 'Beginnings', value: draft.selected_beginnings.name },
+        { label: 'Species', value: draft.selected_species?.name },
+        { label: 'Gender', value: draft.selected_gender?.display_name },
+        {
+          label: 'CG points',
+          value: `${shown.spent} of ${shown.spent + shown.remaining} spent`,
+        },
+      ]}
+      ledger={stageEyebrow(draft.current_stage)}
+    />
+  );
+
   return (
     <ChapterLeaf
       stage={Stage.LINEAGE}
       title={copy?.lineage_heading ?? STAGE_LABELS[Stage.LINEAGE]}
       intro={copy?.lineage_intro}
+      aside={rail}
       railSlot
     >
       <div className="space-y-8">

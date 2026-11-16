@@ -8,6 +8,21 @@ foot of the Lineage stage between Back and Next, and asks before it clears; the
 confirmation says what goes (every choice under Life So Far) and what stays. On every
 stage Back is now the same button as Next, where it was an italic underlined link.
 
+## Built (2026-11-16, #5148: the codex opens beside creation, traits explain themselves, stage 3's panel matches)
+
+Three things the owner found on production. "View in Codex" navigated away from character
+creation, which has no way back but the browser's own button; it now opens the codex in a
+new tab and leaves the page and its overlay as they were. The underlined traits on a
+life card (poise, menace) showed nothing on hover: the definition opened only on a click,
+and what it opened was a blank sheet, because the box is drawn outside the page's styled
+root and none of its style rules reached it (true since #4874). The rules now reach it,
+and the definition shows on hover and on keyboard focus; a click or tap pins it. A trait
+with no description written prints without an underline. Stage 3's right-hand panel was
+a ledger box of its own; it is now the same "CG selections" panel as every other stage
+(Origin, Beginnings, Species, Gender, "CG points: N of M spent", "Stage 3 of 10") with the
+life's choices listed under it, and under 74rem of window it stands under the stage like
+the others. The Starting and Remaining lines are gone with the box.
+
 ## Built (2026-11-16, #5144: character creation uses the width of the window)
 
 The spread stopped at 84rem, so a desktop window showed an empty margin on each side and
@@ -149,7 +164,7 @@ with the first name; Next walks down; Unknown is a mark on the stage; a secret p
 Cover story box with the no-cost card standing as the cover until another is chosen; a cover
 select on an any row; a figure's name on a person card; Description (Optional) per stage;
 group headings with counts; a bare signed price in each card's corner and none on a free
-card; every term on a mechanics line opens its definition; the ledger rail beside the life
+card; every term on a mechanics line opens its definition (on hover since #5148); the ledger rail beside the life (since #5148 the life's choices under the shared "CG selections" panel)
 with the grids widening by container width; the life so far in one paragraph; the first name
 asked on the Origin leaf and shown on Identity. This closes the nine slices of #4813.
 
