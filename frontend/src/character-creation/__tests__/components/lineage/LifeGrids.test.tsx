@@ -1,8 +1,8 @@
 /**
- * The life as an accordion (#4874, slice 9 of #4813): one stage open at a time, the
- * others folded to a heading and a count; one section open inside it, the others reading
- * their answers or the beat's own prompt with the first name; Unknown a mark on the stage;
- * a secret pick with a cover story; Description (Optional) per stage; grouped answers;
+ * The life as folds (#4874, slice 9 of #4813): every stage and every section open on
+ * arrival, each folding by itself (#5160); a folded stage a heading and a count, a folded
+ * section its answers or the beat's own prompt with the first name; Unknown a mark on the
+ * stage; a secret pick with a cover story; Background Notes per stage; grouped answers;
  * signed prices; a term's definition; a figure's name on a person card; the choices list;
  * the life so far. Every life still ends on the Recent History box (#4830), and a
  * beginning that strikes every stage shows its text where the stage rows would be.
@@ -187,17 +187,29 @@ describe('LifeGrids', () => {
     };
   });
 
-  it('opens on the first stage and its first section, the rest folded to a heading and a count', async () => {
-    const user = userEvent.setup();
+  it('opens with every stage and every section expanded (#5160)', () => {
     renderWithCharacterCreationProviders(
       <LifeGrids draft={createMockDraft({ draft_data: { first_name: 'Marisol' } })} copy={{}} />
     );
     // The life's own heading; the list of choices carries the same words as its label.
     expect(screen.getAllByRole('heading', { name: 'Life So Far' })[0]).toHaveClass('section-h');
     expect(screen.getByText(/best describes Marisol’s life up to now/)).toBeInTheDocument();
-    expect(stage('Childhood')).toHaveAttribute('data-open', 'true');
-    expect(section('Early Upbringing')).toHaveAttribute('data-open', 'true');
+    for (const name of ['Childhood', 'Youth', 'Before the Glimpse']) {
+      expect(stage(name)).toHaveAttribute('data-open', 'true');
+      expect(
+        within(stage(name)).getByRole('button', { name: new RegExp(`^${name}`) })
+      ).toHaveAttribute('aria-expanded', 'true');
+    }
+    for (const name of ['Early Upbringing', 'Influences', 'Known for', 'What marked it']) {
+      expect(section(name)).toHaveAttribute('data-open', 'true');
+      // An open section shows its grid and its own Next.
+      expect(within(section(name)).getByRole('button', { name: 'Next' })).toBeInTheDocument();
+    }
     expect(within(section('Early Upbringing')).getByRole('list')).toHaveClass('grid', 'oneof');
+    // Every section's cards are on the page without a click.
+    expect(screen.getByRole('button', { name: /^Patient/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Rival/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Kept a shop/ })).toBeInTheDocument();
     // A one-of row says no "pick one"; the open prompt reads the name.
     expect(screen.queryByText('pick one')).toBeNull();
     expect(
@@ -205,28 +217,50 @@ describe('LifeGrids', () => {
         selector: '.beat-prompt',
       })
     ).toBeInTheDocument();
+    expect(within(section('Known for')).getByText(/pick up to 2/)).toBeInTheDocument();
+    // An open section prints its prompt once, in its body, not again on its line.
+    expect(within(section('Known for')).getAllByText('What they said of Marisol.')).toHaveLength(1);
+    expect(screen.getByTestId('sec-3').querySelector('.ans')).toBeNull();
+    // Each stage still counts its answered sections beside its heading.
+    expect(within(stage('Youth')).getByText('0 of 1')).toBeInTheDocument();
+    expect(within(stage('Before the Glimpse')).getByText('0 of 2')).toBeInTheDocument();
+  });
+
+  it('a fold closes and opens by itself and moves no other fold (#5160)', async () => {
+    const user = userEvent.setup();
+    renderWithCharacterCreationProviders(<LifeGrids draft={createMockDraft()} copy={{}} />);
+    // A section folds on its own line: its prompt stands in for the grid, and the
+    // section beside it, the other stages and their sections stay as they were.
+    await user.click(screen.getByTestId('sec-3'));
+    expect(section('Known for')).toHaveAttribute('data-open', 'false');
+    expect(screen.getByTestId('sec-3')).toHaveAttribute('aria-expanded', 'false');
+    expect(within(section('Known for')).queryByRole('list')).toBeNull();
+    expect(within(section('Known for')).getByText('What they said of you.')).toHaveClass(
+      'ans',
+      'none'
+    );
+    expect(section('What marked it')).toHaveAttribute('data-open', 'true');
+    expect(section('Early Upbringing')).toHaveAttribute('data-open', 'true');
+    expect(section('Influences')).toHaveAttribute('data-open', 'true');
+    // A stage folds to its heading and count; the others keep their sections.
+    await user.click(screen.getByRole('button', { name: /^Youth/ }));
     const youth = stage('Youth');
     expect(youth).toHaveAttribute('data-open', 'false');
     expect(within(youth).getByText('0 of 1')).toBeInTheDocument();
     expect(within(youth).queryByRole('article')).toBeNull();
-    const before = stage('Before the Glimpse');
-    expect(within(before).getByText('0 of 2')).toBeInTheDocument();
-    await user.click(within(before).getByRole('button', { name: /Before the Glimpse/ }));
+    expect(stage('Childhood')).toHaveAttribute('data-open', 'true');
     expect(stage('Before the Glimpse')).toHaveAttribute('data-open', 'true');
-    expect(stage('Childhood')).toHaveAttribute('data-open', 'false');
-    expect(section('Known for')).toHaveAttribute('data-open', 'true');
-    expect(within(section('Known for')).getByText(/pick up to 2/)).toBeInTheDocument();
-    expect(section('What marked it')).toHaveAttribute('data-open', 'false');
-    expect(within(section('What marked it')).getByText('What marked those years.')).toHaveClass(
-      'ans',
-      'none'
-    );
-    // The open section folds on its own header; the open stage folds on its own too.
-    await user.click(screen.getByTestId('sec-3'));
     expect(section('Known for')).toHaveAttribute('data-open', 'false');
-    expect(section('What marked it')).toHaveAttribute('data-open', 'false');
-    await user.click(screen.getByRole('button', { name: /^Before the Glimpse/ }));
-    expect(stage('Before the Glimpse')).toHaveAttribute('data-open', 'false');
+    // Opening the stage again brings its section back as it was left: open.
+    await user.click(screen.getByRole('button', { name: /^Youth/ }));
+    expect(stage('Youth')).toHaveAttribute('data-open', 'true');
+    expect(section('Influences')).toHaveAttribute('data-open', 'true');
+    // And the folded section opens again on its own line.
+    await user.click(screen.getByTestId('sec-3'));
+    expect(section('Known for')).toHaveAttribute('data-open', 'true');
+    // Every fold can be shut at once.
+    for (const name of ['Childhood', 'Youth', 'Before the Glimpse'])
+      await user.click(screen.getByRole('button', { name: new RegExp(`^${name}`) }));
     expect(screen.queryAllByRole('article')).toHaveLength(0);
   });
 
@@ -235,28 +269,41 @@ describe('LifeGrids', () => {
     draftDistinctions = [picked(101, 11), picked(300, 30)];
     renderWithCharacterCreationProviders(<LifeGrids draft={createMockDraft()} copy={{}} />);
     expect(within(stage('Childhood')).getByText('1 of 1')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /^Before the Glimpse/ }));
-    // Next walks down: Known for closes to its answer and points, What marked it opens.
+    // Next folds Known for to its answer and points; What marked it stays open under it.
     await user.click(within(section('Known for')).getByRole('button', { name: 'Next' }));
     const known = section('Known for');
     expect(known).toHaveAttribute('data-open', 'false');
     expect(within(known).getByText('Spied for a house')).toHaveClass('ans');
     expect(within(known).getByText('\u221210')).toHaveClass('cost');
     expect(section('What marked it')).toHaveAttribute('data-open', 'true');
-    // Back on Childhood, Next on its only section opens Youth and folds Childhood.
-    await user.click(screen.getByRole('button', { name: /^Childhood/ }));
-    await user.click(within(section('Early Upbringing')).getByRole('button', { name: 'Next' }));
-    expect(stage('Youth')).toHaveAttribute('data-open', 'true');
-    expect(screen.queryByRole('article', { name: 'Early Upbringing' })).toBeNull();
+    // No other fold moved.
+    expect(section('Early Upbringing')).toHaveAttribute('data-open', 'true');
+    expect(stage('Childhood')).toHaveAttribute('data-open', 'true');
   });
 
-  it('Next on the last section of a stage opens the next stage', async () => {
+  it('Next opens the section below when the player had folded it, and the next stage after a stage’s last (#5160)', async () => {
     const user = userEvent.setup();
     renderWithCharacterCreationProviders(<LifeGrids draft={createMockDraft()} copy={{}} />);
+    // Inside a stage: What marked it was folded by hand, and Next on Known for opens it.
+    await user.click(screen.getByTestId('sec-4'));
+    expect(section('What marked it')).toHaveAttribute('data-open', 'false');
+    await user.click(within(section('Known for')).getByRole('button', { name: 'Next' }));
+    expect(section('Known for')).toHaveAttribute('data-open', 'false');
+    expect(section('What marked it')).toHaveAttribute('data-open', 'true');
+    // Across stages: Youth and its section were folded, and Next on Childhood's last
+    // section opens both. Childhood itself stays open, its section folded.
+    await user.click(screen.getByTestId('sec-2'));
+    await user.click(screen.getByRole('button', { name: /^Youth/ }));
+    expect(stage('Youth')).toHaveAttribute('data-open', 'false');
     await user.click(within(section('Early Upbringing')).getByRole('button', { name: 'Next' }));
     expect(stage('Youth')).toHaveAttribute('data-open', 'true');
     expect(section('Influences')).toHaveAttribute('data-open', 'true');
-    expect(stage('Childhood')).toHaveAttribute('data-open', 'false');
+    expect(stage('Childhood')).toHaveAttribute('data-open', 'true');
+    expect(section('Early Upbringing')).toHaveAttribute('data-open', 'false');
+    // The last section of the last stage has nothing below: Next only folds it.
+    await user.click(within(section('What marked it')).getByRole('button', { name: 'Next' }));
+    expect(section('What marked it')).toHaveAttribute('data-open', 'false');
+    expect(stage('Before the Glimpse')).toHaveAttribute('data-open', 'true');
   });
 
   it('a one-of pick drops the sibling already held on that beat', async () => {
@@ -270,10 +317,8 @@ describe('LifeGrids', () => {
   });
 
   it('at its allowance an age-scaled beat lets the rest wait', async () => {
-    const user = userEvent.setup();
     draftDistinctions = [picked(300, 30), picked(301, 31)];
     renderWithCharacterCreationProviders(<LifeGrids draft={createMockDraft()} copy={{}} />);
-    await user.click(screen.getByRole('button', { name: /^Before the Glimpse/ }));
     const known = section('Known for');
     expect(within(known).getByRole('button', { name: /^Kept a shop/ })).toBeDisabled();
     expect(within(known).getByRole('button', { name: /^Spied for a house/ })).toBeEnabled();
@@ -281,9 +326,7 @@ describe('LifeGrids', () => {
   });
 
   it('answers with a group read under headings with counts, the ungrouped last', async () => {
-    const user = userEvent.setup();
     renderWithCharacterCreationProviders(<LifeGrids draft={createMockDraft()} copy={{}} />);
-    await user.click(screen.getByRole('button', { name: /^Before the Glimpse/ }));
     const known = section('Known for');
     const groups = known.querySelectorAll('.offer-group');
     expect(groups).toHaveLength(2);
@@ -419,15 +462,15 @@ describe('LifeGrids', () => {
   });
 
   it('a stage whose every section is Amnesiac reads Unknown and still lists its sections', async () => {
-    const user = userEvent.setup();
     pool = pool.map((b) => (b.life_stage === 'adulthood' ? { ...b, unknown: true } : b));
     renderWithCharacterCreationProviders(<LifeGrids draft={createMockDraft()} copy={{}} />);
     const before = screen.getByRole('region', { name: 'Before the Glimpse' });
     expect(within(before).getByText('Unknown', { selector: '.prog' })).toBeInTheDocument();
-    await user.click(within(before).getByRole('button', { name: /^Before the Glimpse/ }));
     // The sections stay, so each Amnesiac card can be taken back.
     expect(within(before).getAllByRole('article')).toHaveLength(2);
-    expect(within(before).queryByLabelText('Description (Optional)')).toBeNull();
+    expect(within(before).queryByLabelText('Background Notes')).toBeNull();
+    // The stages that are not unknown keep the box.
+    expect(within(stage('Childhood')).getByLabelText('Background Notes')).toBeInTheDocument();
   });
 
   it('a secret pick on a one-of row opens the Cover story box and the next card becomes the cover', async () => {
@@ -492,7 +535,6 @@ describe('LifeGrids', () => {
       draft_data: { beats: { '3': { secret_offer_ids: [30] } } },
     });
     renderWithCharacterCreationProviders(<LifeGrids draft={draft} copy={{}} />);
-    await user.click(screen.getByRole('button', { name: /^Before the Glimpse/ }));
     const select = within(section('Known for')).getByLabelText('Cover story');
     expect(
       within(select)
@@ -511,7 +553,6 @@ describe('LifeGrids', () => {
     draftDistinctions = [picked(200, 20)];
     const draft = createMockDraft();
     renderWithCharacterCreationProviders(<LifeGrids draft={draft} copy={{}} />);
-    await user.click(screen.getByRole('button', { name: /^Youth/ }));
     const name = within(section('Influences')).getByLabelText('Rival: their name');
     expect(name).toHaveAttribute('maxlength', '60');
     await user.type(name, 'Ser Gaston');
@@ -522,12 +563,22 @@ describe('LifeGrids', () => {
     });
   });
 
-  it('each stage ends on Description (Optional), saved on blur with the other stages kept', async () => {
+  it('each stage ends on Background Notes, saved on blur with the other stages kept (#5160)', async () => {
     const user = userEvent.setup();
     const draft = createMockDraft({ draft_data: { stage_descriptions: { youth: 'Wild years.' } } });
     renderWithCharacterCreationProviders(<LifeGrids draft={draft} copy={{}} />);
-    const box = within(stage('Childhood')).getByLabelText('Description (Optional)');
+    // One box per stage, every one on the page at once.
+    expect(screen.getAllByLabelText('Background Notes')).toHaveLength(3);
+    expect(screen.queryByText(/Description \(Optional\)/)).toBeNull();
+    const box = within(stage('Childhood')).getByLabelText('Background Notes');
     expect(box).toHaveAttribute('maxlength', '1000');
+    // The owner's sentence, word for word, is the empty box's placeholder.
+    expect(box).toHaveAttribute(
+      'placeholder',
+      'You can write an optional description of what this stage of the character’s life was like, and it will be added to their listed Background on the character sheet.'
+    );
+    // A stage that has text shows the text.
+    expect(within(stage('Youth')).getByLabelText('Background Notes')).toHaveValue('Wild years.');
     await user.click(box);
     await user.tab();
     expect(mutateAsync).not.toHaveBeenCalled();
@@ -542,6 +593,22 @@ describe('LifeGrids', () => {
       },
     });
     expect(screen.queryByLabelText(/in your words/)).toBeNull();
+  });
+
+  it('the label and the placeholder are staff copy, and the retired label key is not read (#5160)', () => {
+    renderWithCharacterCreationProviders(
+      <LifeGrids
+        draft={createMockDraft()}
+        copy={{
+          life_stage_notes_label: 'Notes on these years',
+          life_stage_notes_placeholder: 'Staff placeholder.',
+          life_stage_description_label: 'Description (Optional)',
+        }}
+      />
+    );
+    const box = within(stage('Childhood')).getByLabelText('Notes on these years');
+    expect(box).toHaveAttribute('placeholder', 'Staff placeholder.');
+    expect(screen.queryByText('Description (Optional)')).toBeNull();
   });
 
   it('the choices list every pick under its stage and print no totals, and the life so far (#5148)', async () => {

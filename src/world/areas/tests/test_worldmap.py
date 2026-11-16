@@ -297,6 +297,29 @@ class FootprintServiceTests(TestCase):
         assert county.seat == (2, 1)
         assert county.holder_org_id is None
 
+    def test_a_countys_seat_is_its_titles_capital_not_the_first_barony_found(self) -> None:
+        """#5157: the map marks a capital, so the seat is the barony the county's title
+        is seated in even when another barony of the county lies north of it."""
+        from world.character_creation.factories import RealmFactory
+        from world.societies.houses.almanach import plant_rung, rung_area_for_title
+        from world.societies.houses.constants import TitleTier
+        from world.societies.houses.models import Title
+
+        realm = RealmFactory(name="Seatland")
+        crown = plant_rung(realm=realm, tier=TitleTier.KINGDOM, name="Seat Crown")
+        county = plant_rung(realm=realm, tier=TitleTier.COUNTY, name="Shire", parent_title=crown)
+        capital = Title.objects.get(seat_domain=county.seat_domain, tier=TitleTier.BARONY)
+        north = plant_rung(realm=realm, tier=TitleTier.BARONY, name="North", parent_title=county)
+        set_footprint(area=rung_area_for_title(county), add=[(1, 1), (2, 2)])
+        set_footprint(area=rung_area_for_title(north), add=[(1, 1)])
+        set_footprint(area=rung_area_for_title(capital), add=[(2, 2)])
+        read = region_read(self.region)
+        seats = {f.name: f.seat for f in read.footprints}
+        assert seats["Shire"] == (2, 2)
+        # the crown's own capital holds no pip yet, so it falls back to the first barony
+        assert seats["Seat Crown"] == (1, 1)
+        assert seats["North"] == (1, 1)
+
     def test_region_read_carries_charters_and_landless_titles(self) -> None:
         from world.character_creation.factories import RealmFactory
         from world.societies.houses.almanach import (
@@ -375,32 +398,59 @@ class FootprintServiceTests(TestCase):
         assert landless[old_crown.pk]["station"] == TitleStation.TITULAR
         assert landless[old_crown.pk]["fief_ids"] == [duchy.pk]
 
-    def test_adjust_takes_from_a_sibling_and_its_counties_but_not_a_barony_or_a_cousin(
+    def test_adjust_takes_from_anywhere_in_the_kingdom_but_not_a_barony_or_another_kingdom(
         self,
     ) -> None:
-        """#4988: Adjust moves a sibling's pips sideways in one stroke; a barony's seat and
-        a cousin's land stay skipped and named."""
+        """#4988, #5157: Adjust moves a sibling's pips and a cousin county's in another
+        duchy sideways in one stroke; a barony's seat and another kingdom's land stay
+        skipped and named."""
         duchy = AreaFactory(name="Duchy", level=AreaLevel.DUCHY, parent=self.kingdom)
         a = AreaFactory(name="Aldmere", level=AreaLevel.COUNTY, parent=duchy)
         b = AreaFactory(name="Brackmere", level=AreaLevel.COUNTY, parent=duchy)
         seat = AreaFactory(name="Seat", level=AreaLevel.BARONY, parent=b)
         other_duchy = AreaFactory(name="Other Duchy", level=AreaLevel.DUCHY, parent=self.kingdom)
         cousin = AreaFactory(name="Cousin", level=AreaLevel.COUNTY, parent=other_duchy)
+        cousin_seat = AreaFactory(name="Cousin Seat", level=AreaLevel.BARONY, parent=cousin)
+        abroad = AreaFactory(name="Abroad", level=AreaLevel.KINGDOM)
+        foreign = AreaFactory(name="Foreign", level=AreaLevel.COUNTY, parent=abroad)
         set_footprint(area=b, add=[(2, 2), (2, 3), (3, 3)])
         set_footprint(area=seat, add=[(3, 3)])
-        set_footprint(area=cousin, add=[(8, 8)])
-        plain = set_footprint(area=a, add=[(2, 2), (2, 3), (3, 3), (8, 8)])
+        set_footprint(area=cousin, add=[(8, 8), (8, 7)])
+        set_footprint(area=cousin_seat, add=[(8, 7)])
+        set_footprint(area=foreign, add=[(6, 6)])
+        stroke = [(2, 2), (2, 3), (3, 3), (8, 8), (8, 7), (6, 6)]
+        plain = set_footprint(area=a, add=stroke)
         assert plain.added == 0
-        assert plain.skipped == 4
-        adjusted = set_footprint(
-            area=a, add=[(2, 2), (2, 3), (3, 3), (8, 8)], take_from_siblings=True
-        )
-        assert adjusted.added == 2
-        assert adjusted.skipped == 2
-        assert adjusted.skipped_holders == ("Cousin", "Seat")
-        assert sorted(adjusted.changed) == [(2, 2, b.pk, a.pk), (2, 3, b.pk, a.pk)]
-        assert footprint_of(a) == {(2, 2), (2, 3)}
+        assert plain.skipped == 6
+        adjusted = set_footprint(area=a, add=stroke, take_from_siblings=True)
+        assert adjusted.added == 3
+        assert adjusted.skipped == 3
+        assert adjusted.skipped_holders == ("Cousin Seat", "Foreign", "Seat")
+        assert sorted(adjusted.changed) == [
+            (2, 2, b.pk, a.pk),
+            (2, 3, b.pk, a.pk),
+            (8, 8, cousin.pk, a.pk),
+        ]
+        assert footprint_of(a) == {(2, 2), (2, 3), (8, 8)}
         assert footprint_of(b) == {(3, 3)}  # the seat barony's pip, still inside Brackmere
+        # the duchy lines moved with the county: nothing was written for either duchy
+        assert footprint_of(duchy) == {(2, 2), (2, 3), (3, 3), (8, 8)}
+        assert footprint_of(other_duchy) == {(8, 7)}
+        assert holder_at(6, 6) == foreign
+
+    def test_adjust_on_a_kingdom_takes_only_from_beneath_its_own_parent(self) -> None:
+        """#5157: a kingdom has no kingdom above it, so its Adjust keeps the ladder-parent
+        scope: a sibling kingdom's land under the same empire, never land outside it."""
+        empire = AreaFactory(name="Empire", level=AreaLevel.EMPIRE)
+        north = AreaFactory(name="North", level=AreaLevel.KINGDOM, parent=empire)
+        south = AreaFactory(name="South", level=AreaLevel.KINGDOM, parent=empire)
+        set_footprint(area=south, add=[(4, 4)])
+        set_footprint(area=self.county, add=[(5, 5)])  # under a kingdom outside the empire
+        adjusted = set_footprint(area=north, add=[(4, 4), (5, 5)], take_from_siblings=True)
+        assert adjusted.added == 1
+        assert adjusted.skipped_holders == ("County",)
+        assert holder_at(4, 4) == north
+        assert holder_at(5, 5) == self.county
 
     def test_move_seat_moves_the_baronys_pip_inside_its_county_and_refuses_outside(
         self,

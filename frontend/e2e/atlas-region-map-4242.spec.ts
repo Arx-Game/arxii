@@ -92,6 +92,7 @@ const FOOTPRINTS = [
     title_id: COUNTY_TITLE_ID,
     seat: [12, 10],
     pips: COUNTY_PIPS,
+    charters: [],
   },
   {
     area_id: BARONY_AREA_ID,
@@ -105,6 +106,7 @@ const FOOTPRINTS = [
     title_id: 101,
     seat: [12, 10],
     pips: [[12, 10]],
+    charters: [],
   },
 ];
 
@@ -150,6 +152,7 @@ async function mockMapRoutes(page: Page): Promise<Fixture> {
           ],
           pips: pips(),
           footprints: FOOTPRINTS,
+          landless_titles: [],
         },
       });
     } else {
@@ -159,7 +162,10 @@ async function mockMapRoutes(page: Page): Promise<Fixture> {
 
   await page.route('**/api/almanach/**', async (route: Route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path === '/api/almanach/realms/') {
+    if (path === '/api/almanach/regional-events/') {
+      // #5080: the map reads the picked realm's open events
+      await route.fulfill({ json: { count: 0, next: null, previous: null, results: [] } });
+    } else if (path === '/api/almanach/realms/') {
       await route.fulfill({
         json: {
           count: 1,
