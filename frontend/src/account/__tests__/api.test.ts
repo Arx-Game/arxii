@@ -64,7 +64,9 @@ describe('account api', () => {
   it('posts the password change to the account route', async () => {
     const f = mockFetch(200, { status: 200, data: {}, meta: { is_authenticated: true } });
     await changePassword({ current_password: 'old', new_password: 'new' });
-    expect(f.mock.calls[0][0]).toBe('/api/auth/browser/v1/account/password/change');
+    expect(f.mock.calls[0][0]).toBe(
+      `${window.location.origin}/api/auth/browser/v1/account/password/change`
+    );
   });
 
   it('reads the TOTP setup from the 404 envelope meta', async () => {
@@ -88,12 +90,16 @@ describe('account api', () => {
   it('posts password reauthentication to the auth route, not account', async () => {
     const f = mockFetch(200, { status: 200, data: {}, meta: { is_authenticated: true } });
     await reauthenticateWithPassword('secret');
-    expect(f.mock.calls[0][0]).toBe('/api/auth/browser/v1/auth/reauthenticate');
+    expect(f.mock.calls[0][0]).toBe(
+      `${window.location.origin}/api/auth/browser/v1/auth/reauthenticate`
+    );
   });
 
   it('posts code reauthentication to the 2fa auth route, not account', async () => {
     const f = mockFetch(200, { status: 200, data: {}, meta: { is_authenticated: true } });
     await reauthenticateWithCode('123456');
-    expect(f.mock.calls[0][0]).toBe('/api/auth/browser/v1/auth/2fa/reauthenticate');
+    expect(f.mock.calls[0][0]).toBe(
+      `${window.location.origin}/api/auth/browser/v1/auth/2fa/reauthenticate`
+    );
   });
 });

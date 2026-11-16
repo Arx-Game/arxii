@@ -6,6 +6,12 @@ interface Paginated<T> {
   results: T[];
 }
 
+/** The path and query of a paginator's `next` link, to follow on this page's origin. */
+export function sameSitePath(next: string): string {
+  const link = new URL(next, window.location.origin);
+  return `${link.pathname}${link.search}`;
+}
+
 /** Backstop against a paginator whose `next` never terminates. */
 const MAX_PAGES = 40;
 
@@ -30,8 +36,10 @@ export async function fetchAllPages<T>(firstUrl: string, errorMessage: string): 
     }
     const data = (await res.json()) as Paginated<T>;
     all.push(...data.results);
-    // `next` is absolute from DRF; pass through as-is (same-origin).
-    url = data.next;
+    // DRF builds `next` on the host the API saw, which behind the dev proxy (or a public
+    // proxy that rewrites Host) is not the page's own. The link always names our API, so
+    // keep its path and query and follow it on this page's origin (#5140).
+    url = data.next === null ? null : sameSitePath(data.next);
     pages += 1;
   }
   return all;

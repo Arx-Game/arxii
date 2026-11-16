@@ -12,7 +12,29 @@ function getCSRFToken(): string {
   return getCookie('csrftoken') || '';
 }
 
-export function apiFetch(url: string, options: RequestInit = {}) {
+/**
+ * The site's own address for a request URL: a relative path, or an absolute URL on this
+ * origin (DRF's paginated `next` links are absolute). A URL on any other origin is refused,
+ * because every request carries the session cookie and the CSRF token (CodeQL alert #96).
+ */
+function sameOriginUrl(url: string): string {
+  const origin = window.location.origin;
+  const target = new URL(url, origin);
+  if (target.origin !== origin) {
+    throw new Error(`Refusing to send a request off this site: ${target.origin}`);
+  }
+  // The host comes from the page itself, never from the caller's string.
+  return `${origin}${target.pathname}${target.search}`;
+}
+
+export function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  let requestUrl: string;
+  try {
+    requestUrl = sameOriginUrl(url);
+  } catch (error) {
+    // A refusal rejects, as fetch itself would, so `.catch` and `allSettled` callers see it.
+    return Promise.reject(error);
+  }
   const method = options.method?.toUpperCase() ?? 'GET';
   const headers = new Headers(options.headers);
 
@@ -26,7 +48,7 @@ export function apiFetch(url: string, options: RequestInit = {}) {
     headers.set('X-CSRFToken', getCSRFToken());
   }
 
-  return fetch(url, {
+  return fetch(requestUrl, {
     credentials: 'include',
     ...options,
     headers,
