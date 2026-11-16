@@ -1234,7 +1234,7 @@ export function ThreadedNarrativeReader({
   // Chronological-view scroll handler: this view already owns its own scroll
   // container (`chronoParentRef`), so this is a plain onScroll prop rather
   // than a native listener -- no ancestor lookup needed.
-  const chronoScrollTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const chronoScrollTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
   const handleChronoScroll = () => {
     if (chronoScrollTimeout.current) clearTimeout(chronoScrollTimeout.current);
     chronoScrollTimeout.current = setTimeout(() => {

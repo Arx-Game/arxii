@@ -1332,7 +1332,7 @@ function CoverControl({
 interface GuardControlProps {
   declaredManeuver: string | null;
   encounter: EncounterDetail | null | undefined;
-  guardControlRef: React.RefObject<HTMLDivElement>;
+  guardControlRef: React.RefObject<HTMLDivElement | null>;
   coverableAllies: Participant[];
   protectiveTechniques: PlayerAction[];
   selectedGuardTechnique: PlayerAction | undefined;
@@ -1658,7 +1658,7 @@ interface ManeuverDeclarationSectionProps {
   coverableAllies: Participant[];
   protectiveTechniques: PlayerAction[];
   isRedirectGuardTechnique: boolean;
-  guardControlRef: React.RefObject<HTMLDivElement>;
+  guardControlRef: React.RefObject<HTMLDivElement | null>;
   guardAllyId: string;
   guardTechniqueId: string;
   guardDestination: string;
