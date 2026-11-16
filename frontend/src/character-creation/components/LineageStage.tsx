@@ -123,7 +123,7 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
       stage={Stage.LINEAGE}
       title={copy?.lineage_heading ?? STAGE_LABELS[Stage.LINEAGE]}
       intro={copy?.lineage_intro}
-      wide
+      railSlot
     >
       <div className="space-y-8">
         {!template && (

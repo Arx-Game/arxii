@@ -21,7 +21,9 @@ character-creation/
 │   ├── ContentsRail.tsx     # Chapter table of contents; replaces StageStepper
 │   ├── PageTurn.tsx         # Back/next doors between chapters
 │   ├── NightPlate.tsx       # Full-bleed night moment (arrival, submission)
-│   ├── ChapterLeaf.tsx      # Wraps a stage's old internals in the leaf frame
+│   ├── ChapterLeaf.tsx      # Wraps a stage's old internals in the leaf frame; `railSlot`
+│   │                        #   keeps the right-hand rail for a panel the stage sends there
+│   ├── chapterRail.ts       # `useChapterRail()`: the rail element a panel portals into (#5144)
 │   ├── RecordRail.tsx       # Marginalia: the "CG selections" rows + a Note aside
 │   ├── Entry.tsx            # EntryList/Entry/EntryDoors: choosable record entries (an
 │   │                        #   optional `tags` list prints extra `.tag`s beside `tag`). Since
@@ -184,8 +186,8 @@ character-creation/
         │                         #   clicking the real pick drops both)
         │                         #   and a cover select on an any row; a figure's name input
         │                         #   on a picked person card; Description (Optional) per stage
-        │                         #   (draft_data.stage_descriptions); the `.leafwrap` layout
-        │                         #   with the sticky ledger rail; the testament paragraph.
+        │                         #   (draft_data.stage_descriptions); the ledger, sent to
+        │                         #   the chapter's rail (#5144); the testament paragraph.
         │                         #   Earlier shape, still true underneath: grids by stage
         │                         #   (#4395, the #4124 beats):
         │                         #   one block per stage the beginning offers (a struck
@@ -305,6 +307,30 @@ mocks `@/hooks/useDistinctions` and renders one of these must give the mock a
 
 The ledger prints two totals, Starting and Remaining (owner ruling 2026-11-15); the Spent
 and Gained lines are gone.
+
+## The spread follows the window (#5144)
+
+`.interview-grid` runs the width of the window up to 150rem. The contents rail is its left
+column on every stage, and the chapter's own rail is the last column of `.chapter`, so the
+two rails stand at the same two edges whatever the stage holds.
+
+- A stage's rail is its `aside` (the "CG selections" record), or, when `ChapterLeaf` is
+  given `railSlot`, an empty `.chapter-rail` that the stage fills from deep inside itself:
+  a component reads `useChapterRail()` and portals its panel into the element it returns
+  (null where there is no rail, and the panel then renders where it is written). The life
+  page's CG points ledger does this, so it is beside the whole stage and not a column of
+  the life.
+- A `railSlot` leaf (`.chapter-grids`) takes all the room; its grids widen by container
+  query and its prose keeps 68ch. Every other leaf keeps a 38rem reading column midway
+  between the rails. To let a stage use the width, give it a layout that does (columns of
+  entries, statistics side by side) and lift its cap; do not stretch a single column,
+  which puts a row's name a screen-width from its controls.
+- The rail is kept only from 74rem of window (`useRailFits` in `chapterRail.ts`, a
+  `matchMedia` on the width cg.css folds at; the class is `.chapter-railed`). Under that
+  every stage is laid out as it was before #5144: a reading stage's record drops under the
+  leaf, and the life's ledger sits beside the life (`.leafwrap`), under it below 52rem.
+  The decision is made in the component and not in CSS because the ledger is rendered in
+  a different place, not only styled differently.
 
 ## Key Features
 

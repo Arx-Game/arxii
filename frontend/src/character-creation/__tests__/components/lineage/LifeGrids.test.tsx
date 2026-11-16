@@ -11,9 +11,10 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { LifeGrids } from '../../../components/lineage/LifeGrids';
+import { ChapterLeaf } from '../../../folio';
 import { createMockDraft, mockBeginnings, mockBeginningsUnknownFamily } from '../../fixtures';
 import { renderWithCharacterCreationProviders } from '../../testUtils';
-import type { BeatPoolEntry, OffersResponse, VisibleOffer } from '../../../types';
+import { Stage, type BeatPoolEntry, type OffersResponse, type VisibleOffer } from '../../../types';
 import { characterCreationKeys } from '../../../queries';
 import type { DraftDistinctionEntry, SyncDistinctionEntry } from '@/types/distinctions';
 import { QueryClient } from '@tanstack/react-query';
@@ -550,6 +551,18 @@ describe('LifeGrids', () => {
     const totals = Array.from(ledger.querySelectorAll('.tot')).map((el) => el.textContent);
     expect(totals).toEqual(['Starting100', 'Remaining80']);
     expect(screen.getByText('2 taken, 20 of 100 points spent')).toBeInTheDocument();
+  });
+
+  it('inside a chapter that keeps a rail, the ledger stands in it and not beside the life (#5144)', async () => {
+    const { container } = renderWithCharacterCreationProviders(
+      <ChapterLeaf stage={Stage.LINEAGE} title="Lineage" railSlot>
+        <LifeGrids draft={createMockDraft()} copy={{}} />
+      </ChapterLeaf>
+    );
+    const rail = await screen.findByRole('complementary', { name: 'CG points' });
+    expect(rail.parentElement).toHaveClass('chapter-rail');
+    expect(container.querySelector('.leafwrap')).not.toContainElement(rail);
+    expect(container.querySelectorAll('.ledger')).toHaveLength(1);
   });
 
   it('with nothing chosen the rail and the life so far say so', () => {
