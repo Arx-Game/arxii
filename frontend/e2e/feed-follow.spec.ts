@@ -126,7 +126,9 @@ test.describe('the feed follows its newest line', () => {
 
 test.describe('the text fills the story pane', () => {
   test.beforeEach(async ({ page }) => {
-    await page.setViewportSize({ width: 1600, height: 800 });
+    // Wide enough that the pane clears 1200px beside the conversation rail
+    // (#4129) and the sidebar, which take 520px between them by default.
+    await page.setViewportSize({ width: 1920, height: 800 });
     await mockRestRoutes(page);
   });
 
