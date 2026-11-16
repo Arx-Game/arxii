@@ -404,13 +404,19 @@ export function useDraftCGPoints(draftId: number | undefined) {
 /** The Backgrounds beat pool as the draft meets it (#4124). */
 /**
  * The suggested life (#4865): `useLoadDefaultLife` loads the beginning's starred pins as
- * picks (the server loads once per beginning), `useClearLife` is Start blank. Both answer
- * with the draft, which replaces the cache, and refetch what a changed life moves: the
- * draft's distinctions, its beats, the Backgrounds offers and the CG points.
+ * picks (the server loads once per beginning), `useClearLife` empties the life (the
+ * "Restart: Clear All Choices" door). Both answer with the draft, which replaces the
+ * cache, and refetch what a changed life moves: the draft's distinctions, its beats, the
+ * Backgrounds offers and the CG points. Both carry `lifeMutationKey`, so the door can
+ * tell that either is in flight.
  */
+export const lifeMutationKey = (draftId: number) =>
+  [...characterCreationKeys.all, 'life', draftId] as const;
+
 function useLifeMutation(draftId: number, call: (draftId: number) => Promise<CharacterDraft>) {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: lifeMutationKey(draftId),
     mutationFn: () => call(draftId),
     onSuccess: (draft) => {
       // The action answers with the draft; a test double may answer with nothing, and an

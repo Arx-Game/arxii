@@ -1,8 +1,15 @@
-/** The page-turn (#3540): a quiet way back, one primary door forward, and the reason a door is closed. */
+/**
+ * The page-turn (#3540): the way back, the door forward, and the reason a door is closed.
+ * Back and forward are the same button (owner ruling 2026-11-16, #5146), and a stage may
+ * put one door of its own between them.
+ */
 
 interface Door {
   label: string;
   onClick: () => void;
+}
+interface BetweenDoor extends Door {
+  disabled?: boolean;
 }
 interface NextDoor extends Door {
   disabled?: boolean;
@@ -11,19 +18,26 @@ interface NextDoor extends Door {
 }
 interface PageTurnProps {
   back?: Door;
+  /** A door of the stage's own, drawn between the way back and the way forward. */
+  between?: BetweenDoor;
   next?: NextDoor;
 }
 
-export function PageTurn({ back, next }: PageTurnProps) {
+export function PageTurn({ back, between, next }: PageTurnProps) {
   const reasonId = next?.reason ? 'page-turn-reason' : undefined;
   return (
     <div className="page-turn">
       {back ? (
-        <button type="button" className="btn-quiet" onClick={back.onClick}>
+        <button type="button" className="btn" onClick={back.onClick}>
           {back.label}
         </button>
       ) : (
         <span />
+      )}
+      {between && (
+        <button type="button" className="btn" disabled={between.disabled} onClick={between.onClick}>
+          {between.label}
+        </button>
       )}
       {next && (
         <span className="plate-door" style={{ margin: 0 }}>

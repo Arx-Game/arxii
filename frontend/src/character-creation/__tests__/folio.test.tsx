@@ -11,6 +11,7 @@ import {
   EntryList,
   InstrumentFrame,
   InstrumentGroup,
+  PageTurn,
   Paragraphs,
   RecordRail,
   StatRow,
@@ -104,6 +105,42 @@ describe('ChapterLeaf', () => {
     expect(screen.getByTestId('deep')).toContainElement(
       screen.getByRole('complementary', { name: 'CG points' })
     );
+  });
+});
+
+describe('PageTurn', () => {
+  it('draws the way back as the same button as the way forward (#5146)', () => {
+    render(
+      <PageTurn
+        back={{ label: 'Back: Heritage', onClick: vi.fn() }}
+        next={{ label: 'Next: Path', onClick: vi.fn() }}
+      />
+    );
+    const back = screen.getByRole('button', { name: 'Back: Heritage' });
+    const next = screen.getByRole('button', { name: 'Next: Path' });
+    expect(back.className).toBe(next.className);
+    expect(back).toHaveClass('btn');
+    expect(back).not.toHaveClass('btn-quiet');
+  });
+
+  it("puts a stage's own door between the two, as the same button", async () => {
+    const between = vi.fn();
+    render(
+      <PageTurn
+        back={{ label: 'Back: Heritage', onClick: vi.fn() }}
+        between={{ label: 'Restart: Clear All Choices', onClick: between }}
+        next={{ label: 'Next: Path', onClick: vi.fn() }}
+      />
+    );
+    const doors = screen.getAllByRole('button');
+    expect(doors.map((door) => door.textContent)).toEqual([
+      'Back: Heritage',
+      'Restart: Clear All Choices',
+      'Next: Path',
+    ]);
+    expect(new Set(doors.map((door) => door.className))).toEqual(new Set(['btn']));
+    await userEvent.click(doors[1]);
+    expect(between).toHaveBeenCalledTimes(1);
   });
 });
 

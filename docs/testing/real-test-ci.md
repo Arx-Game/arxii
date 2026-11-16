@@ -47,7 +47,9 @@ queue.
    in character creation, #5130), and `e2e/home-while-connected.spec.ts` (the site name
    opening the home page from inside the world, #5137; it reuses the channels spec's
    account and runs after it), and `e2e/life-points.spec.ts` (the CG points beside the
-   life move with a card click and are what the server then holds, #5141).
+   life move with a card click and are what the server then holds, #5141; then
+   "Restart: Clear All Choices" asks first, leaves the server's life alone on Cancel and
+   empties it on confirm, #5146).
    Every other spec mocks the API and runs against `vite preview` under
    `frontend/playwright.config.ts`. A new spec that talks
    to :4001 must be added to the spec list in the workflow, and its rows to

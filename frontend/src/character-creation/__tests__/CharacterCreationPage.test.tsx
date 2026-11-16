@@ -47,6 +47,8 @@ vi.mock('../api', () => ({
   submitDraftForReview: vi.fn(),
   addToRoster: vi.fn(),
   getCGExplanations: vi.fn(),
+  // The Lineage stage's foot (#5146) holds the clear-life mutation.
+  clearLife: vi.fn(),
   // GiftStage (#2426 Task 10) calls useResonances() unconditionally at the top
   // of its render (for the always-mounted Gift Resonance step), independent
   // of which funnel step is currently open.
@@ -235,6 +237,8 @@ describe('CharacterCreationPage', () => {
       });
 
       expect(screen.getByRole('button', { name: /^next:/i })).toBeInTheDocument();
+      // The Restart door between them is the Lineage stage's alone (#5146).
+      expect(screen.queryByRole('button', { name: /^restart: clear/i })).not.toBeInTheDocument();
     });
 
     // Origin and Review are the first and last chapters; the shell renders no

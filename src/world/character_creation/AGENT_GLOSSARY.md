@@ -131,6 +131,6 @@ card effect, grant prompt field (a grant's prompt is derived, never authored).
 The cards a beginning starts a newcomer with (ruled 2026-10-19; net zero per beginning, 2026-10-25): its first-look pins flagged `preselected`, loaded as ordinary priced picks by `offers.load_default_life` when the life first opens for that beginning, every card changeable. One starred card per one-of beat stands (the first by the grid's order); an age-scaled beat takes as many as the age's points buy. Authored on the Beginning admin's "Suggested life" inline or by the paste's leading star (`*Reavers`).
 _Avoid_: default life (the plan's working name; the player-facing word is "suggested"), preset, template life, starter pack.
 
-**Start blank** (`offers.clear_life`, the draft's `clear-life` action, #4865):
-The leaf's door out of the suggested life: drops the life's picks and beat states, keeps every other chapter's pick and the `life_loaded_for` stamp, so the suggested life does not return over an emptied one.
-_Avoid_: reset (the whole draft is not reset), clear all.
+**Clear the life** (`offers.clear_life`, the draft's `clear-life` action, #4865; called "Start blank" until #5146):
+The leaf's door out of the suggested life: drops the life's picks and beat states, keeps every other chapter's pick and the `life_loaded_for` stamp, so the suggested life does not return over an emptied one. On the page the door reads "Restart: Clear All Choices" (owner ruling 2026-11-16), stands between Back and Next at the foot of the Lineage stage, and asks before it clears.
+_Avoid_: Start blank (the owner could not tell from the words what it did), reset (the whole draft is not reset; "Restart character creation" in the contents rail does that).

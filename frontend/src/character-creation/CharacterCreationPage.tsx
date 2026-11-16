@@ -32,6 +32,7 @@ import {
   ReviewStage,
   StageErrorBoundary,
 } from './components';
+import { LineagePageTurn } from './components/lineage/LineagePageTurn';
 import { CHAPTERS, CodexWord, ContentsRail, NightPlate, PageTurn } from './folio';
 import {
   useCanCreateCharacter,
@@ -217,6 +218,15 @@ export function CharacterCreationPage() {
   const prev = CHAPTERS[currentIndex - 1]?.stage;
   const nextStage = CHAPTERS[currentIndex + 1]?.stage;
 
+  const backDoor =
+    prev !== undefined
+      ? { label: `Back: ${STAGE_LABELS[prev]}`, onClick: () => handleStageSelect(prev) }
+      : undefined;
+  const nextDoor =
+    nextStage !== undefined
+      ? { label: `Next: ${STAGE_LABELS[nextStage]}`, onClick: () => handleStageSelect(nextStage) }
+      : undefined;
+
   const restartDoor = (
     <button type="button" onClick={() => setRestartDialogOpen(true)}>
       Restart character creation
@@ -240,23 +250,13 @@ export function CharacterCreationPage() {
           >
             {renderStage()}
           </StageErrorBoundary>
-          {/* Stages that own their own PageTurn (Origin, Review) render nothing here. */}
-          {draft.current_stage !== Stage.ORIGIN && draft.current_stage !== Stage.REVIEW && (
-            <PageTurn
-              back={
-                prev !== undefined
-                  ? { label: `Back: ${STAGE_LABELS[prev]}`, onClick: () => handleStageSelect(prev) }
-                  : undefined
-              }
-              next={
-                nextStage !== undefined
-                  ? {
-                      label: `Next: ${STAGE_LABELS[nextStage]}`,
-                      onClick: () => handleStageSelect(nextStage),
-                    }
-                  : undefined
-              }
-            />
+          {/* Stages that own their own PageTurn (Origin, Review) render nothing here.
+              Lineage puts "Restart: Clear All Choices" between the two doors (#5146). */}
+          {draft.current_stage === Stage.LINEAGE ? (
+            <LineagePageTurn draft={draft} copy={copy} back={backDoor} next={nextDoor} />
+          ) : (
+            draft.current_stage !== Stage.ORIGIN &&
+            draft.current_stage !== Stage.REVIEW && <PageTurn back={backDoor} next={nextDoor} />
           )}
         </div>
       </div>

@@ -62,8 +62,8 @@ const isDraftFetch = (url: string) => new URL(url).pathname === '/api/character-
 
 test.describe('the CG points beside the life', () => {
   test('move with the click, and are what the server then holds', async ({ page }) => {
-    // Two saves, each held HOLD_MS, each followed by the page's heaviest fetch.
-    test.setTimeout(90_000);
+    // Two saves, each held HOLD_MS, each followed by the page's heaviest fetch, then a clear.
+    test.setTimeout(120_000);
     const seed = readSeed();
     await logIn(page);
     await page.goto('/characters/create');
@@ -149,5 +149,28 @@ test.describe('the CG points beside the life', () => {
     await expect(
       page.getByText(`CG points: ${end.spent} of ${budget}`, { exact: true })
     ).toBeVisible();
+
+    // Restart: Clear All Choices (#5146) asks first. Cancel leaves the server's life as
+    // it is; confirming empties it, and the page and the server agree again.
+    const restart = page.getByRole('button', { name: 'Restart: Clear All Choices' });
+    const dialog = page.getByRole('dialog');
+    await restart.click();
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toBeHidden();
+    expect((await serverPoints(page, seed)).remaining).toBe(afterBoth);
+    await expect(ledger.locator('.row')).toHaveCount(2);
+
+    await restart.click();
+    const cleared = page.waitForResponse(
+      (r) => new URL(r.url()).pathname.endsWith('/clear-life/') && r.request().method() === 'POST'
+    );
+    await dialog.getByRole('button', { name: 'Clear all choices' }).click();
+    expect((await cleared).status()).toBe(200);
+    expect((await serverPoints(page, seed)).remaining).toBe(start.remaining);
+    await expect(ledger.locator('.row')).toHaveCount(0);
+    await expect.poll(totals).toEqual([`Starting${budget}`, `Remaining${start.remaining}`]);
+    await expect(costly).toHaveAttribute('aria-pressed', 'false');
+    await expect(paying).toHaveAttribute('aria-pressed', 'false');
   });
 });

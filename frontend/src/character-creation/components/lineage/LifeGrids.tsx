@@ -38,7 +38,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   characterCreationKeys,
-  useClearLife,
   useDraftBeats,
   useDraftOffers,
   useLoadDefaultLife,
@@ -119,7 +118,6 @@ export function LifeGrids({ draft, copy }: Props) {
   // draft's stamp does not name. The server's stamp is the durable guard (a life the player
   // edited or cleared never reloads); the ref only stops a second call in one mount.
   const loadLife = useLoadDefaultLife(draft.id);
-  const clearLife = useClearLife(draft.id);
   const loadedForRef = useRef<number | null>(null);
   const beginningId = draft.selected_beginnings?.id ?? null;
   const loadedFor = draft.draft_data.life_loaded_for ?? null;
@@ -647,14 +645,6 @@ export function LifeGrids({ draft, copy }: Props) {
         {recentHistoryBox}
         <div className="life-foot">
           <span>{foot}</span>
-          <button
-            type="button"
-            className="btn-small"
-            disabled={loadLife.isPending || clearLife.isPending}
-            onClick={() => clearLife.mutate()}
-          >
-            {copy?.beats_start_blank ?? 'Start blank'}
-          </button>
         </div>
         <div className="testament">
           {testamentLines.length > 0

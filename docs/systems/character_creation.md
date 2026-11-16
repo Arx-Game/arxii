@@ -896,7 +896,8 @@ by one already taken left out; the draft's Backgrounds picks are replaced by tho
 kept, `reconcile_offer_picks` run, and `draft_data.life_loaded_for` stamped with the
 beginning's id. `POST drafts/<id>/load-default-life/` runs it once per beginning (the stamp
 guards a life the player edited or cleared; a changed beginning loads again);
-`POST drafts/<id>/clear-life/` ("Start blank") drops the Backgrounds picks and
+`POST drafts/<id>/clear-life/` (the "Restart: Clear All Choices" door at the foot of the
+Lineage stage, which asks first, #5146; "Start blank" before that) drops the Backgrounds picks and
 `draft_data.beats`, keeps the stamp and the other chapters' picks. The Distinction Builder's
 pin save is a diff (a kept pin keeps its flag; it used to `set()` the through rows). On the
 leaf (#4867) `LifeGrids` calls the load once the beats have loaded for a beginning the stamp
