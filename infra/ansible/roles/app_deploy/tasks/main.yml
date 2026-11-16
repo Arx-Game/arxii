@@ -395,11 +395,8 @@
   changed_when: false
   failed_when: false
 
-- name: Check whether the game service is running
-  ansible.builtin.command: systemctl is-active arxii.service
-  register: app_service_before_migration
-  changed_when: false
-  failed_when: app_service_before_migration.rc not in [0, 3, 4]
+- name: Read service state before migration
+  ansible.builtin.service_facts:
   when: app_migrate_check.rc != 0
 
 - name: Check for the last successfully reloaded release
@@ -423,7 +420,8 @@
   when:
     - app_migrate_check.rc != 0
     - >-
-      app_service_before_migration.stdout not in ['inactive', 'failed', 'unknown']
+      ('arxii.service' in ansible_facts.services and
+       ansible_facts.services['arxii.service'].state != 'stopped')
       or app_safety_current.stat.exists
 
 # The release checkout is deliberately shallow. An ancestry test must have the
