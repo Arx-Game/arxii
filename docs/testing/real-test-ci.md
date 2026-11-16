@@ -35,9 +35,10 @@ queue.
    title holder and two open seats, and a house with none; its identifiers go to
    `/tmp/family-seats-seed.json`.
    The life-points spec (#5141) uses its own `e2e_life_points_account` and
-   `seed_life_points_spec`: that account's creation draft at Lineage and one life
-   beat, offered to that draft's beginning alone, with a card that costs CG points and
-   a card the world pays for; its identifiers go to `/tmp/life-points-seed.json`.
+   `seed_life_points_spec`: that account's creation draft at Lineage and two life
+   beats offered to that draft's beginning alone, a childhood one with a card that costs
+   CG points and a card the world pays for, and a youth one with one card (#5160, so the
+   life has two stages); its identifiers go to `/tmp/life-points-seed.json`.
 5. Runs the Playwright specs that need a live server, with one worker, using
    `frontend/e2e.backend.config.ts`: `e2e/account-settings.spec.ts`,
    `e2e/user-journey.spec.ts`, `e2e/motif-facets.spec.ts` (the Spellbook Facets
@@ -50,7 +51,9 @@ queue.
    the right-hand panel moves with a card click and is what the server then holds, #5141,
    read from the panel every stage shows since #5148; then
    "Restart: Clear All Choices" asks first, leaves the server's life alone on Cancel and
-   empties it on confirm, #5146).
+   empties it on confirm, #5146; and the life opens with both stages and both sections
+   open, a stage's Background Notes are sent on leaving the box, held by the server and
+   shown again after a reload, #5160).
    Every other spec mocks the API and runs against `vite preview` under
    `frontend/playwright.config.ts`. A new spec that talks
    to :4001 must be added to the spec list in the workflow, and its rows to
