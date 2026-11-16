@@ -1,5 +1,13 @@
 # Character Creation & Identity
 
+## Built (2026-11-16, #5146: Restart: Clear All Choices, and Back matches Next)
+
+The life page's "Start blank" button is gone (the owner could not tell from the words what
+it did). The door that empties the life reads "Restart: Clear All Choices", stands at the
+foot of the Lineage stage between Back and Next, and asks before it clears; the
+confirmation says what goes (every choice under Life So Far) and what stays. On every
+stage Back is now the same button as Next, where it was an italic underlined link.
+
 ## Built (2026-11-16, #5144: character creation uses the width of the window)
 
 The spread stopped at 84rem, so a desktop window showed an empty margin on each side and

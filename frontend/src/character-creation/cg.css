@@ -1948,6 +1948,10 @@
   .interview .page-turn .btn {
     text-align: center;
   }
+  /* The way forward sits in a wrapper with its reason; it fills the row like the others. */
+  .interview .page-turn .plate-door .btn {
+    width: 100%;
+  }
 }
 
 /* in-world confirm */

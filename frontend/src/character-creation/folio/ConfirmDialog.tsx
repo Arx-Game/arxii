@@ -30,7 +30,11 @@ export function ConfirmDialog({
       if (typeof el.showModal === 'function') el.showModal();
       else el.setAttribute('open', '');
     }
-    if (!open && el.open) el.close();
+    if (!open && el.open) {
+      // The same fallback on the way out: without `close`, drop the attribute.
+      if (typeof el.close === 'function') el.close();
+      else el.removeAttribute('open');
+    }
   }, [open]);
   return (
     <dialog ref={ref} className="confirm" onCancel={onCancel}>

@@ -22,7 +22,6 @@ import { QueryClient } from '@tanstack/react-query';
 const mutateAsync = vi.fn().mockResolvedValue({});
 const syncMutate = vi.fn();
 const loadMutate = vi.fn();
-const clearMutate = vi.fn();
 let pool: BeatPoolEntry[] = [];
 let offersResponse: OffersResponse = { offers: [], terms: [] };
 let draftDistinctions: {
@@ -40,7 +39,6 @@ vi.mock('../../../queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../queries')>()),
   useUpdateDraft: () => ({ mutate: vi.fn(), mutateAsync }),
   useLoadDefaultLife: () => ({ mutate: loadMutate, isPending: false }),
-  useClearLife: () => ({ mutate: clearMutate, isPending: false }),
   useDraftBeats: () => ({ data: pool, isLoading: false }),
   useDraftOffers: () => ({ data: offersResponse, isLoading: false }),
 }));
@@ -648,7 +646,6 @@ describe('LifeGrids', () => {
 describe('LifeGrids (the suggested life, #4865)', () => {
   beforeEach(() => {
     loadMutate.mockClear();
-    clearMutate.mockClear();
     pool = [beat({ beat_id: 1, name: 'The household' })];
     offersResponse = { offers: [offer({ offer_id: 10, name: 'Spoiled' })], terms: [] };
     draftDistinctions = [];
@@ -683,18 +680,18 @@ describe('LifeGrids (the suggested life, #4865)', () => {
     expect(loadMutate).not.toHaveBeenCalled();
   });
 
-  it('Start blank clears the life', async () => {
-    const user = userEvent.setup();
-    renderWithCharacterCreationProviders(
+  it("the life's foot line carries no button: clearing is the stage's Restart door (#5146)", () => {
+    const { container } = renderWithCharacterCreationProviders(
       <LifeGrids
         draft={createMockDraft({
           selected_beginnings: mockBeginnings,
           draft_data: { life_loaded_for: mockBeginnings.id },
         })}
-        copy={{}}
+        copy={{ beats_start_blank: 'Start blank' }}
       />
     );
-    await user.click(screen.getByRole('button', { name: 'Start blank' }));
-    expect(clearMutate).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('.life-foot')).toHaveTextContent(/taken/);
+    expect(container.querySelector('.life-foot button')).toBeNull();
+    expect(screen.queryByText(/start blank/i)).toBeNull();
   });
 });

@@ -19,7 +19,9 @@ character-creation/
 ├── folio/                   # Folio chassis primitives (#3540), realm-agnostic
 │   ├── index.ts             # Barrel re-export
 │   ├── ContentsRail.tsx     # Chapter table of contents; replaces StageStepper
-│   ├── PageTurn.tsx         # Back/next doors between chapters
+│   ├── PageTurn.tsx         # Back/next doors between chapters, the same button (owner
+│   │                        #   ruling 2026-11-16, #5146: Back is not an italic link);
+│   │                        #   `between` is a stage's own door drawn between the two
 │   ├── NightPlate.tsx       # Full-bleed night moment (arrival, submission)
 │   ├── ChapterLeaf.tsx      # Wraps a stage's old internals in the leaf frame; `railSlot`
 │   │                        #   keeps the right-hand rail for a panel the stage sends there
@@ -209,10 +211,19 @@ character-creation/
         │                         #   effect calls useLoadDefaultLife when the draft has a
         │                         #   beginning its draft_data.life_loaded_for stamp does
         │                         #   not name (a ref stops a second call per mount; the
-        │                         #   server's stamp is the durable guard); a "Start blank"
-        │                         #   button in the footer calls useClearLife. Both hooks
-        │                         #   replace the draft cache and refetch the distinctions,
-        │                         #   beats, Backgrounds offers and CG points.
+        │                         #   server's stamp is the durable guard). Clearing the
+        │                         #   life is LineagePageTurn's door, not a button here
+        │                         #   (#5146). Both hooks replace the draft cache and
+        │                         #   refetch the distinctions, beats, Backgrounds offers
+        │                         #   and CG points.
+        ├── LineagePageTurn.tsx   # The foot of the Lineage stage (#5146): PageTurn with
+        │                         #   "Restart: Clear All Choices" between Back and Next
+        │                         #   (copy `life_restart_label`; the retired key
+        │                         #   `beats_start_blank` is not read). It opens a
+        │                         #   ConfirmDialog saying what goes and what stays, and
+        │                         #   calls useClearLife on confirm; the door is disabled
+        │                         #   while a load or a clear of the life is in flight
+        │                         #   (`lifeMutationKey`). Mounted by CharacterCreationPage
         ├── UpbringingPrompts.tsx # Route prompts; `scope: 'any'` renders the pick-lists
         │                         #   asked on every path (a general write-in never
         │                         #   renders, #4395), `scope: 'path'` renders below the
