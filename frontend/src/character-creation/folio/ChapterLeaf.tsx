@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Stage } from '../types';
+import { ChapterRailContext } from './chapterRail';
 import { stageEyebrow } from './ContentsRail';
 
 interface ChapterLeafProps {
@@ -8,8 +9,12 @@ interface ChapterLeafProps {
   /** Admin-editable intro copy; rendered as one paragraph, absent when empty (render-or-vanish). */
   intro?: string;
   aside?: ReactNode;
-  /** Single-column leaf with no rail (used while a stage keeps its old internals). */
-  wide?: boolean;
+  /**
+   * The right-hand rail is left empty for a panel the stage builds deep inside itself
+   * and sends there with `useChapterRail` (the life page's CG points ledger). The rail
+   * then holds no marginalia.
+   */
+  railSlot?: boolean;
   className?: string;
   children: ReactNode;
 }
@@ -19,12 +24,15 @@ export function ChapterLeaf({
   title,
   intro,
   aside,
-  wide,
+  railSlot,
   className,
   children,
 }: ChapterLeafProps) {
+  const [rail, setRail] = useState<HTMLElement | null>(null);
   return (
-    <div className={['chapter', wide ? 'chapter-wide' : '', className ?? ''].join(' ').trim()}>
+    <div
+      className={['chapter', railSlot ? 'chapter-railed' : '', className ?? ''].join(' ').trim()}
+    >
       <div className="chapter-main">
         <span className="chapter-no">{stageEyebrow(stage)}</span>
         <h1>{title}</h1>
@@ -33,9 +41,15 @@ export function ChapterLeaf({
             <p>{intro}</p>
           </div>
         )}
-        {children}
+        <ChapterRailContext.Provider value={railSlot ? rail : null}>
+          {children}
+        </ChapterRailContext.Provider>
       </div>
-      {!wide && aside && <aside aria-label="Marginalia">{aside}</aside>}
+      {railSlot ? (
+        <div className="chapter-rail" ref={setRail} />
+      ) : (
+        aside && <aside aria-label="Marginalia">{aside}</aside>
+      )}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
@@ -13,6 +14,7 @@ import {
   Paragraphs,
   RecordRail,
   StatRow,
+  useChapterRail,
 } from '../folio';
 import { ChoiceRow } from '../folio/ChoiceRow';
 import { Field } from '../folio/Field';
@@ -34,6 +36,42 @@ describe('ChapterLeaf', () => {
     expect(screen.getByText('Stage 1 of 10')).toHaveClass('chapter-no');
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getByRole('complementary', { name: /marginalia/i })).toHaveTextContent('note');
+  });
+
+  // A panel the stage builds deep inside itself and sends to the rail (#5144).
+  function Panel() {
+    const rail = useChapterRail();
+    const panel = <aside aria-label="CG points">purse</aside>;
+    return rail ? createPortal(panel, rail) : panel;
+  }
+
+  it('keeps the rail for a panel the stage sends there, and holds no marginalia then', () => {
+    const { container } = render(
+      <ChapterLeaf stage={Stage.LINEAGE} title="Lineage" railSlot aside={<p>note</p>}>
+        <div data-testid="deep">
+          <Panel />
+        </div>
+      </ChapterLeaf>
+    );
+    const panel = screen.getByRole('complementary', { name: 'CG points' });
+    expect(panel.parentElement).toHaveClass('chapter-rail');
+    expect(panel.parentElement?.parentElement).toHaveClass('chapter', 'chapter-railed');
+    expect(screen.getByTestId('deep')).toBeEmptyDOMElement();
+    expect(container.querySelector('.chapter-main')).not.toContainElement(panel);
+    expect(screen.queryByRole('complementary', { name: /marginalia/i })).not.toBeInTheDocument();
+  });
+
+  it('a leaf that keeps no such place leaves the panel where it is written', () => {
+    render(
+      <ChapterLeaf stage={Stage.ORIGIN} title="Origin" aside={<p>note</p>}>
+        <div data-testid="deep">
+          <Panel />
+        </div>
+      </ChapterLeaf>
+    );
+    expect(screen.getByTestId('deep')).toContainElement(
+      screen.getByRole('complementary', { name: 'CG points' })
+    );
   });
 });
 

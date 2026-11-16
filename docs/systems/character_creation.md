@@ -1015,9 +1015,12 @@ shown" first. A picked card with `asks_figure_name` shows a name input (copy
 open stage ends on Description (Optional) (`life_stage_description_label`,
 `STAGE_DESCRIPTION_MAX_LENGTH`), saved on blur to `draft_data.stage_descriptions` whole.
 The per-beat line input is gone from the leaf (the model field stays for the sheet). The
-life block is `.leafwrap`: the life on the left as a size container (the grids two across,
-three at 46rem, four at 64rem by container query; prose at 68ch), the sticky `aside.ledger`
-beside it (Starting and Remaining, the Spent and Gained lines dropped by owner ruling
+life block is `.leafwrap`: the life as a size container (the grids two across, three at
+46rem, four at 64rem, five at 82rem, six at 100rem by container query; prose at 68ch). Its
+`aside.ledger` is the chapter's right-hand rail (#5144): `LifeGrids` renders it into the
+element `useChapterRail()` returns, which `ChapterLeaf` keeps when given `railSlot`, so
+it stands at the right edge of the spread beside the whole stage and follows the scroll;
+under 52rem it sits below the stage (Starting and Remaining, the Spent and Gained lines dropped by owner ruling
 2026-11-15, #5141; both move with a card click, before the save answers, through
 `useShownPicks`; every
 pick under its stage with a signed price, "(secret)" and "(rank N)"; "Nothing chosen yet.").

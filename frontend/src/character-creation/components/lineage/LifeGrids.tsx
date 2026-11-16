@@ -35,6 +35,7 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   characterCreationKeys,
   useClearLife,
@@ -43,6 +44,7 @@ import {
   useLoadDefaultLife,
   useUpdateDraft,
 } from '../../queries';
+import { useChapterRail } from '../../folio';
 import { useShownPicks } from '../../useShownPicks';
 import {
   FIGURE_NAME_MAX_LENGTH,
@@ -106,6 +108,7 @@ export function LifeGrids({ draft, copy }: Props) {
   // The picks and the points on screen (#5141): a save in flight is laid over the saved
   // list, so the ledger, its totals and the section summaries move with the click.
   const shown = useShownPicks(draft);
+  const rail = useChapterRail();
   const updateDraft = useUpdateDraft();
   const queryClient = useQueryClient();
   // Fold state (#4874), never saved: `undefined` is the default (the first stage, its
@@ -594,8 +597,44 @@ export function LifeGrids({ draft, copy }: Props) {
     return { stage, label, rows };
   });
 
+  // The ledger is the page's right-hand rail where the chapter keeps one (#5144), so it
+  // stands at the far edge of the window beside the whole stage; elsewhere it sits
+  // beside the life.
+  const ledger = (
+    <aside className="ledger" aria-label={copy?.life_ledger_heading ?? 'CG points'}>
+      <h3>{copy?.life_ledger_heading ?? 'CG points'}</h3>
+      <div className="tot">
+        <span>{copy?.life_ledger_starting ?? 'Starting'}</span>
+        <b>{budget}</b>
+      </div>
+      <div className="tot">
+        <span>{copy?.life_ledger_remaining ?? 'Remaining'}</span>
+        <b>{shown.remaining}</b>
+      </div>
+      {ledgerRows.every((s) => s.rows.length === 0) ? (
+        <p className="empty">{copy?.life_ledger_empty ?? 'Nothing chosen yet.'}</p>
+      ) : (
+        ledgerRows
+          .filter((s) => s.rows.length > 0)
+          .map((s) => (
+            <div key={s.stage}>
+              <div className="st">{s.label}</div>
+              {s.rows.map((row) => (
+                <div key={row.key} className="row">
+                  <span>{row.text}</span>
+                  <span>
+                    <Signed cost={row.cost} />
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))
+      )}
+    </aside>
+  );
+
   return (
-    <div className="leafwrap">
+    <div className={rail ? 'leafwrap railed' : 'leafwrap'}>
       <div className="life">
         <h2 className="section-h first">{copy?.life_so_far_heading ?? 'Life So Far'}</h2>
         <p className="helper">
@@ -629,36 +668,7 @@ export function LifeGrids({ draft, copy }: Props) {
             : (copy?.life_testament_empty ?? 'Nothing written yet.')}
         </div>
       </div>
-      <aside className="ledger" aria-label={copy?.life_ledger_heading ?? 'CG points'}>
-        <h3>{copy?.life_ledger_heading ?? 'CG points'}</h3>
-        <div className="tot">
-          <span>{copy?.life_ledger_starting ?? 'Starting'}</span>
-          <b>{budget}</b>
-        </div>
-        <div className="tot">
-          <span>{copy?.life_ledger_remaining ?? 'Remaining'}</span>
-          <b>{shown.remaining}</b>
-        </div>
-        {ledgerRows.every((s) => s.rows.length === 0) ? (
-          <p className="empty">{copy?.life_ledger_empty ?? 'Nothing chosen yet.'}</p>
-        ) : (
-          ledgerRows
-            .filter((s) => s.rows.length > 0)
-            .map((s) => (
-              <div key={s.stage}>
-                <div className="st">{s.label}</div>
-                {s.rows.map((row) => (
-                  <div key={row.key} className="row">
-                    <span>{row.text}</span>
-                    <span>
-                      <Signed cost={row.cost} />
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ))
-        )}
-      </aside>
+      {rail ? createPortal(ledger, rail) : ledger}
     </div>
   );
 }

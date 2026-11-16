@@ -1,5 +1,16 @@
 # Character Creation & Identity
 
+## Built (2026-11-16, #5144: character creation uses the width of the window)
+
+The spread stopped at 84rem, so a desktop window showed an empty margin on each side and
+the life page's cards stayed two to a row. The spread now follows the window up to 150rem:
+the contents rail stands at its left edge and every stage's rail at its right. On the life
+page the CG points ledger is that rail (it was a column inside the life), beside the whole
+stage from the heading down, and the card grids take the room between: four to a row at
+1920px, six at 2560px. The other nine stages keep their 38rem reading column, midway
+between the two rails. Not built: layouts that use the width on those nine stages (stretched
+as they are, a statistic's name lands a screen-width from its buttons).
+
 ## Built (2026-11-15, #5141: the CG points move with a card click)
 
 After a clicked card began to show at once (#5134) the CG points beside the life still

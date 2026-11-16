@@ -2,6 +2,7 @@ export { ContentsRail, CHAPTERS, stageEyebrow } from './ContentsRail';
 export { PageTurn } from './PageTurn';
 export { NightPlate } from './NightPlate';
 export { ChapterLeaf } from './ChapterLeaf';
+export { useChapterRail } from './chapterRail';
 export { RecordRail, Marginalia, Note } from './RecordRail';
 export type { RecordRow } from './RecordRail';
 export { EntryList, Entry, EntryDoors } from './Entry';
