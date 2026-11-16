@@ -1,5 +1,17 @@
 # Character Creation & Identity
 
+## Built (2026-11-15, #5141: the CG points move with a card click)
+
+After a clicked card began to show at once (#5134) the CG points beside the life still
+waited for the save and then for a whole draft fetch, so the totals named a list the cards
+no longer showed. The page now re-prices them itself (`useShownPicks`): the draft's total,
+less the prices in the draft's own list, plus the prices in the list on screen, with a
+save in flight laid over the saved list. The ledger's rows, its totals, the foot line, the
+Lineage record's line and the Gift summary all move with the click; the save's answer is
+written into the cached draft at once and the draft fetch replaces it with the server's
+figures. The ledger's Spent and Gained lines are gone (owner ruling 2026-11-15): it prints
+Starting and Remaining.
+
 ## Built (2026-11-03, #4979: a closed card is absent; a blocked card says why)
 
 The test is whether the player could change what blocks a pick (owner ruling, ADR-4979).

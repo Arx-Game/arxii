@@ -15,6 +15,7 @@ export type { TechniqueEffectSummary } from '@/magic/types';
 // (charter_questions/features) already generated from the backend schema,
 // extended rather than duplicated (#3648).
 import type { components } from '@/generated/api';
+import type { DraftDistinctionEntry } from '@/types/distinctions';
 
 export interface StartingArea {
   id: number;
@@ -1070,6 +1071,12 @@ export interface EnemyOffer {
 }
 
 export interface DraftData {
+  /**
+   * The draft's distinctions as the server holds them (#5141), each with the price it was
+   * charged. `cg_points_spent` in the same response was added up from this list, which is
+   * what lets the page re-price a list it shows before the server has answered.
+   */
+  distinctions?: DraftDistinctionEntry[];
   first_name?: string;
   description?: string;
   background?: string;
