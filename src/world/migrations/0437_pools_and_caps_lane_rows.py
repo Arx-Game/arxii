@@ -1,7 +1,7 @@
 """Write each moved pool and cap rule's lane rows from the coefficient it replaces (#5093).
 
-Data-only, between ``0429_pools_and_caps_on_lanes_expand`` (the lanes and ``FatigueConfig``)
-and ``0431_pools_and_caps_drop_coefficients`` (the columns go). Five rules were a coefficient
+Data-only, between ``0436_pools_and_caps_on_lanes_expand`` (the lanes and ``FatigueConfig``)
+and ``0438_pools_and_caps_drop_coefficients`` (the columns go). Five rules were a coefficient
 times a level in code; each is now one ``ModifierLevelBaseline`` row per level 1-30 on its own
 lane, and this writes them, if missing, before the columns are dropped:
 
@@ -21,7 +21,7 @@ new code raises when a lane has no rows. A value staff edited on a config row is
 lane row staff already wrote is kept as it is.
 
 Data disposition (ADR-0237): restructure. The coefficients are authored tuning, and each is
-carried into its lane's rows before ``0431`` drops the column. Not reversible beyond leaving
+carried into its lane's rows before ``0438`` drops the column. Not reversible beyond leaving
 the rows: they are additive and harmless to the old schema.
 """
 

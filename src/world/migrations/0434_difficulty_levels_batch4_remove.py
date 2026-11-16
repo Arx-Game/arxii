@@ -3,7 +3,7 @@
 
 ADR-0237 data disposition: RESTRUCTURE. ``ChallengeTemplate.severity`` and
 ``ChallengeInstance.severity_adjustment`` were carried across by
-``0426_difficulty_levels_batch4_convert`` into ``severity_level`` and
+``0433_difficulty_levels_batch4_convert`` into ``severity_level`` and
 ``severity_adjustment_tenths``, so no authored value is lost. Schema-only. The instance's
 one-band and needs-a-reason constraints are re-pointed at the tenths column before the point
 column goes, and the reason's help text is refreshed.

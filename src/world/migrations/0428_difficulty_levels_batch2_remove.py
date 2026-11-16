@@ -2,7 +2,7 @@
 """Contract batch 2 of the authored point difficulties (#5093).
 
 ADR-0237 data disposition: RESTRUCTURE. Each dropped point column was carried across by
-``0420_difficulty_levels_batch2_convert`` into its ``*_level`` or ``*_tenths`` replacement
+``0427_difficulty_levels_batch2_convert`` into its ``*_level`` or ``*_tenths`` replacement
 (standalone difficulties become levels, increments become tenths of a level's width), so no
 authored value is lost. Schema-only.
 """

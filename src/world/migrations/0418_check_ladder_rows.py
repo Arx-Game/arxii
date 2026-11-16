@@ -1,6 +1,6 @@
 """Write the check ladder's baseline and rank rows where a database has ranks (#5093).
 
-Data-only, and the step before ``0412_checkrank_drop_min_points`` removes the stored
+Data-only, and the step before ``0419_checkrank_drop_min_points`` removes the stored
 thresholds. From here a rank's threshold is the CHECK lane's level-N ``ModifierLevelBaseline``
 and the check pipeline raises when a rank has no baseline at or below it, so a database that
 holds ranks must hold the rows that replace their thresholds before the column goes.
@@ -39,7 +39,7 @@ def write_ladder_rows(apps, schema_editor):
             defaults={"baseline": _BASELINE_AT_LEVEL_1 + _BASELINE_STEP * (level - 1)},
         )
     for rank in range(31):
-        # min_points still exists (NOT NULL, no default) until 0412 drops it, so a new row
+        # min_points still exists (NOT NULL, no default) until 0419 drops it, so a new row
         # fills it with the threshold the ladder now derives: 0 for rank 0, else baseline(rank).
         threshold = 0 if rank == 0 else _BASELINE_AT_LEVEL_1 + _BASELINE_STEP * (rank - 1)
         CheckRank.objects.get_or_create(

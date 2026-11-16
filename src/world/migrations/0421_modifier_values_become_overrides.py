@@ -1,6 +1,6 @@
 """Derive modifier values from size fractions and level widths, keeping edited rows (#5093).
 
-Data-only, after ``0413_modifier_size_fraction`` adds ``ModifierSizeFraction``. A modifier's
+Data-only, after ``0420_modifier_size_fraction`` adds ``ModifierSizeFraction``. A modifier's
 value is now its size's fraction times one level's width, and a ``ModifierValue`` row is an
 override of that at one exact level. A database that holds ``ModifierValue`` rows is touched
 lane by lane:

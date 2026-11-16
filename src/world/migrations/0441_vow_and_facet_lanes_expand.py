@@ -3,8 +3,8 @@
 
 Schema-only, the first of three: this widens the ``lane`` choices on the four modifier tables
 with the six rung lanes and renames the four authored per-rung columns to the tenths they now
-hold, then ``0435_vow_and_facet_lane_rows`` writes each lane's rows, and
-``0436_drop_rescue_thread_mult`` drops the one coefficient column a lane replaces. The lane
+hold, then ``0442_vow_and_facet_lane_rows`` writes each lane's rows, and
+``0443_drop_rescue_thread_mult`` drops the one coefficient column a lane replaces. The lane
 change is choices only, so it issues no DDL. A rename keeps every row's number: an authored
 ``severity_per_thread_level`` of 2 is a ``severity_tenths`` of 2, which the seeded lane (10 a
 rung) reads as 2 a rung, what it was. Data disposition (ADR-0237): not a loss, the values

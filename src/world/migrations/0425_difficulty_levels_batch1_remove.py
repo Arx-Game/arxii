@@ -2,7 +2,7 @@
 """Contract batch 1 of the authored point difficulties (#5093).
 
 ADR-0237 data disposition: RESTRUCTURE. Each dropped point column was carried across by
-``0417_difficulty_levels_batch1_convert`` into its ``*_level`` or ``*_tenths`` replacement
+``0424_difficulty_levels_batch1_convert`` into its ``*_level`` or ``*_tenths`` replacement
 (standalone difficulties become levels, increments become tenths of a level's width), so no
 authored value is lost. Schema-only. The control-loss trigger constraints are re-pointed at
 the replacement columns before the point columns go.

@@ -2,7 +2,7 @@
 """Contract batch 3 of the authored point difficulties (#5093).
 
 ADR-0237 data disposition: RESTRUCTURE. Each dropped point column was carried across by
-``0423_difficulty_levels_batch3_convert`` into its ``*_level`` replacement (the old point
+``0430_difficulty_levels_batch3_convert`` into its ``*_level`` replacement (the old point
 difficulty is mapped to a level), so no authored value is lost. Schema-only. It also refreshes the help text on
 ``NPCServiceOffer.check_type``, which named the dropped column.
 """

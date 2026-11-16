@@ -2,8 +2,8 @@
 """Add the FatigueConfig row and the six pool and cap lanes (#5093).
 
 Schema-only, the first of three: this adds ``FatigueConfig`` and widens the ``lane`` choices
-on the four modifier tables, then ``0430_pools_and_caps_lane_rows`` writes each moved rule's
-rows from the coefficient it replaces, and ``0431_pools_and_caps_drop_coefficients`` drops
+on the four modifier tables, then ``0437_pools_and_caps_lane_rows`` writes each moved rule's
+rows from the coefficient it replaces, and ``0438_pools_and_caps_drop_coefficients`` drops
 the coefficients. The lane change is choices only, so it issues no DDL.
 """
 

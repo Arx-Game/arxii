@@ -1,7 +1,7 @@
 """Write the rung lanes' rows (#5093).
 
-Data-only, between ``0434_vow_and_facet_lanes_expand`` (the lanes and the renamed per-rung
-columns) and ``0436_drop_rescue_thread_mult`` (the one coefficient column goes). Six rules read
+Data-only, between ``0441_vow_and_facet_lanes_expand`` (the lanes and the renamed per-rung
+columns) and ``0443_drop_rescue_thread_mult`` (the one coefficient column goes). Six rules read
 a thread's rung through a ``ModifierLevelBaseline`` row per level 1-30 on their own lane, and
 this writes the rows, if missing, before the column is dropped:
 
@@ -12,14 +12,14 @@ this writes the rows, if missing, before the column is dropped:
   (a code constant, so there is no column to carry).
 * ``facet_effect_bonus``, ``vow_effect_severity``, ``vow_effect_duration`` and
   ``vow_effect_damage``: 10 a rung. The authored per-rung columns were renamed to tenths by
-  ``0434`` with their numbers kept, so a lane that gains 10 a rung reads each as it did.
+  ``0441`` with their numbers kept, so a lane that gains 10 a rung reads each as it did.
 
 Every database is written to, not only one with a config row: the new code raises when a lane
 has no rows. A value staff edited on the config row is carried; a lane row staff already
 wrote is kept as it is.
 
 Data disposition (ADR-0237): restructure. The one coefficient is authored tuning, carried into
-its lane's rows before ``0436`` drops the column. Not reversible beyond leaving the rows: they
+its lane's rows before ``0443`` drops the column. Not reversible beyond leaving the rows: they
 are additive and harmless to the old schema.
 """
 

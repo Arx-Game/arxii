@@ -1,6 +1,6 @@
 """Write the tier jump rows on a database that already has check level baselines (#5093).
 
-Data-only, after ``0432_level_tier`` (the table). The tier jump is new behaviour: power jumps
+Data-only, after ``0439_level_tier`` (the table). The tier jump is new behaviour: power jumps
 sharply on crossing into a new tier, at levels 6, 11, 16, 21 and 26, each worth 24 points (three
 ranks at the 8-point level width the check baselines are seeded at). Level 3, the first path
 change, gets a row too, at 0 points: it changes no number, and staff who want a jump there edit a

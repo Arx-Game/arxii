@@ -1,13 +1,13 @@
 """Drop the per-level coefficient columns the pool and cap lanes replace (#5093).
 
-Schema-only, the last of three (``0429_pools_and_caps_on_lanes_expand`` then
-``0430_pools_and_caps_lane_rows``). Each column below was a coefficient multiplied by a level
+Schema-only, the last of three (``0436_pools_and_caps_on_lanes_expand`` then
+``0437_pools_and_caps_lane_rows``). Each column below was a coefficient multiplied by a level
 in code; the lane's ``ModifierLevelBaseline`` rows now hold the same numbers, written by the
 previous migration from each column's value before it goes.
 
 Data disposition (ADR-0237): restructure. The four columns hold authored tuning that was
 carried into lane rows (``anima_pool``, ``soul_tether_cap``, ``hollow_max``,
-``techniques_per_gift``) by ``0430``, so no value is lost. Not reversible beyond re-adding the
+``techniques_per_gift``) by ``0437``, so no value is lost. Not reversible beyond re-adding the
 columns at their defaults: the rows stay and the old values are not written back.
 """
 
