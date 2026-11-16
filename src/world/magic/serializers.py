@@ -1426,8 +1426,8 @@ class RitualCheckConfigSerializer(serializers.ModelSerializer):
             "resonance_id",
             "check_type_id",
             "check_type_name",
-            "target_difficulty",
-            "non_founder_target_difficulty",
+            "target_difficulty_level",
+            "non_founder_target_difficulty_level",
         ]
         read_only_fields = fields
 
@@ -1505,7 +1505,7 @@ class RitualCheckConfigPatchSerializer(serializers.Serializer):
     specialization_id = serializers.IntegerField(required=False, allow_null=True)
     resonance_id = serializers.IntegerField(required=False, allow_null=True)
     check_type_id = serializers.IntegerField(required=False, allow_null=True)
-    target_difficulty = serializers.IntegerField(min_value=1, required=False)
+    target_difficulty_level = serializers.IntegerField(min_value=0, required=False)
 
     @staticmethod
     def _resolve_nullable_fk(
@@ -1558,8 +1558,8 @@ class RitualCheckConfigPatchSerializer(serializers.Serializer):
         self._resolve_nullable_fk(attrs, "resonance_id", Resonance, "resonance", resolved)
         self._resolve_nullable_fk(attrs, "check_type_id", CheckType, "check_type", resolved)
 
-        if "target_difficulty" in attrs:  # noqa: STRING_LITERAL
-            resolved["target_difficulty"] = attrs["target_difficulty"]
+        if "target_difficulty_level" in attrs:  # noqa: STRING_LITERAL
+            resolved["target_difficulty_level"] = attrs["target_difficulty_level"]
         return resolved
 
 

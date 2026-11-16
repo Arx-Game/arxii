@@ -112,10 +112,12 @@ class FacetEffectBonus(NaturalKeyMixin, SharedMemoryModel):
         limit_choices_to={"category__name": MANEUVER_EFFECT_CATEGORY_NAME},
         help_text="The maneuver effect this facet boosts.",
     )
-    amount = models.IntegerField(
+    amount_tenths = models.IntegerField(
         help_text=(
-            "Added per 10 thread levels, times the item's and the attachment's quality "
-            "multipliers. Negative for a facet that hinders the effect."
+            "A share, in tenths, of the Facet effect bonus lane's baseline at the facet "
+            "thread's rung, times the item's and the attachment's quality multipliers. The "
+            "seeded baseline is 10 a rung (a rung is 10 thread levels), so 1 adds one point "
+            "per 10 thread levels. Negative for a facet that hinders the effect."
         ),
     )
 
@@ -136,13 +138,13 @@ class FacetEffectBonus(NaturalKeyMixin, SharedMemoryModel):
         dependencies = ["arxii.Facet", "arxii.ModifierTarget"]
 
     def __str__(self) -> str:
-        return f"{self.facet.name}: {self.amount:+d} {self.target.name}"
+        return f"{self.facet.name}: {self.amount_tenths:+d} {self.target.name}"
 
     def clean(self) -> None:
         super().clean()
         errors: dict[str, str] = {}
-        if self.amount == 0:
-            errors["amount"] = "A bonus of 0 adds nothing."
+        if self.amount_tenths == 0:
+            errors["amount_tenths"] = "A bonus of 0 adds nothing."
         if (
             self.target_id is not None
             and self.target.category.name != MANEUVER_EFFECT_CATEGORY_NAME

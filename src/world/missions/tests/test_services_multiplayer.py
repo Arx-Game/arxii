@@ -500,7 +500,7 @@ class GroupResolveJointTests(TestCase):
         instance = MissionInstanceFactory(template=self.template)
         holder, _p2 = self._setup_participants(instance)
         node = self._make_joint_node(JointCombine.ALL)
-        challenge = ChallengeTemplateFactory(name="JointChallenge", severity=2)
+        challenge = ChallengeTemplateFactory(name="JointChallenge", severity_level=0)
         ChallengeApproachFactory(
             challenge_template=challenge,
             check_type=self.sneak,

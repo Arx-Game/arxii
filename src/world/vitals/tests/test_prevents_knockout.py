@@ -14,7 +14,7 @@ from django.test import TestCase, override_settings
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from world.checks.constants import EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
-from world.checks.test_helpers import force_check_outcome
+from world.checks.test_helpers import SeededLevelLadderMixin, force_check_outcome
 from world.conditions.constants import DurationType
 from world.conditions.factories import (
     ConditionInstanceFactory,
@@ -28,7 +28,7 @@ from world.vitals.services import get_vitals_consequence_config, process_damage_
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # Endurance CheckType gates on #2698
-class PreventsKnockoutTests(TestCase):
+class PreventsKnockoutTests(SeededLevelLadderMixin, TestCase):
     """Every test mutates vitals or spends a grace, so the rows are rebuilt in setUp."""
 
     def setUp(self) -> None:

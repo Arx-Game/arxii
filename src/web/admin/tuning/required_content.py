@@ -338,6 +338,81 @@ def _probe_mfa_secrets_key() -> ProbeResult:
     return ProbeResult(present=True)
 
 
+def _probe_check_level_baselines() -> ProbeResult:
+    """The CHECK lane has a baseline row for every level the ladder reads (#5093).
+
+    The ladder and every bonus read ``ModifierLevelBaseline`` (``level_baseline``,
+    ``level_width``), and a lane with no row at or below a level raises. Levels 1 up to the
+    highest authored row, or the highest ``CheckRank`` when that is higher, must each have
+    a row: a gap reads as a repeated threshold, a rank that starts where the one below it
+    does.
+    """
+    from world.checks.constants import ModifierLane  # noqa: PLC0415
+    from world.checks.modifier_models import ModifierLevelBaseline  # noqa: PLC0415
+    from world.traits.models import CheckRank  # noqa: PLC0415
+
+    present = set(
+        ModifierLevelBaseline.objects.filter(lane=ModifierLane.CHECK).values_list(
+            "level", flat=True
+        )
+    )
+    top_rank = max(CheckRank.objects.values_list("rank", flat=True), default=0)
+    top = max([*present, top_rank])
+    if top == 0:
+        return ProbeResult(present=False, detail="No check-lane ModifierLevelBaseline rows exist.")
+    missing = tuple(f"level {level}" for level in range(1, top + 1) if level not in present)
+    detail = (
+        f"No check-lane ModifierLevelBaseline row for: {', '.join(missing)}." if missing else ""
+    )
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
+def _probe_pool_lane_baselines() -> ProbeResult:
+    """Each pool and cap lane has a baseline row for every level up to its highest (#5093).
+
+    The anima pool, the soul tether scene cap, the Hollow maximum, the outfit trickle, techniques
+    per gift and the six rung lanes (rescue budget, moon tuning, facet effect bonus and the three
+    vow effect lanes) read one ``ModifierLevelBaseline`` row per level of their own lane
+    (``level_baseline``), and a lane with no row at or below a level raises. A lane with no
+    row at all, or a gap below its highest row, is reported. The fatigue level bonus is not
+    checked: with no rows it adds nothing.
+    """
+    from world.checks.constants import ModifierLane  # noqa: PLC0415
+    from world.checks.modifier_models import ModifierLevelBaseline  # noqa: PLC0415
+
+    lanes = (
+        ModifierLane.ANIMA_POOL,
+        ModifierLane.SOUL_TETHER_SCENE_CAP,
+        ModifierLane.HOLLOW_MAX,
+        ModifierLane.OUTFIT_TRICKLE,
+        ModifierLane.TECHNIQUES_PER_GIFT,
+        ModifierLane.RESCUE_BUDGET_THREAD,
+        ModifierLane.MOON_TUNING,
+        ModifierLane.FACET_EFFECT_BONUS,
+        ModifierLane.VOW_EFFECT_SEVERITY,
+        ModifierLane.VOW_EFFECT_DURATION,
+        ModifierLane.VOW_EFFECT_DAMAGE,
+    )
+    levels_by_lane: dict[str, set[int]] = {lane: set() for lane in lanes}
+    for lane, level in ModifierLevelBaseline.objects.filter(lane__in=lanes).values_list(
+        "lane", "level"
+    ):
+        levels_by_lane[lane].add(level)
+    missing: list[str] = []
+    for lane in lanes:
+        present = levels_by_lane[lane]
+        if not present:
+            missing.append(f"{ModifierLane(lane).label}: no rows")
+            continue
+        gaps = [str(level) for level in range(1, max(present) + 1) if level not in present]
+        if gaps:
+            missing.append(f"{ModifierLane(lane).label}: level {', '.join(gaps)}")
+    detail = f"Pool and cap lane ModifierLevelBaseline rows missing: {'; '.join(missing)}."
+    return ProbeResult(
+        present=not missing, missing=tuple(missing), detail=detail if missing else ""
+    )
+
+
 def _technique_gap_link(gap: str) -> str | None:
     """The Technique changelist filtered to one authoring gap (#4545).
 
@@ -4245,11 +4320,12 @@ def _declarations() -> tuple[ContentDependency, ...]:
             probe=AnyRowProbe(label="StandoffReactionLine"),
         ),
         ContentDependency(
-            key="modifier-value-table",
-            label="Modifier value table (check lane)",
+            key="modifier-size-fraction",
+            label="Modifier size fractions (check lane)",
             tier=DependencyTier.TUNING,
             consumer=(
-                "world/checks/modifier_values.py load_value_table(), read by "
+                "world/checks/modifier_values.py load_value_table() (size fraction x level "
+                "width, with ModifierValue rows as per-level overrides), read by "
                 "world/conditions/services.py _check_modifier_for_target() (technique buffs), "
                 "world/checks/services.py _equipment_check_contributions() (worn items, "
                 "#4628) and _scene_check_contributions() (scene surroundings, #4638), and "
@@ -4259,31 +4335,97 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consequence=(
                 "A sized technique buff or debuff, worn item, distinction effect or scene "
                 "surroundings modifier keeps its flat authored check modifier instead of "
-                "the value its level and size are worth."
+                "the value its level and size are worth, and a vow's size step adds nothing."
             ),
             probe=FilteredRowProbe(
-                label="ModifierValue",
+                label="ModifierSizeFraction",
                 filters=(("lane", "check"),),
-                absent_detail="No check-lane ModifierValue rows exist.",
+                absent_detail="No check-lane ModifierSizeFraction rows exist.",
             ),
         ),
         ContentDependency(
             key="modifier-level-baseline",
             label="Modifier level baselines (check lane)",
-            tier=DependencyTier.TUNING,
+            tier=DependencyTier.REQUIRED,
             consumer=(
-                "world/checks/modifier_values.py level_baseline(): the value table admin "
-                "and the tuning dashboard's modifier pile"
+                "world/checks/modifier_values.py level_baseline() and level_width(): the "
+                "check rank ladder (world/checks/slide.py load_ranks()), the value table "
+                "admin and the tuning dashboard's modifier pile"
             ),
             consequence=(
-                "Staff cannot read a value-table row as a share of a typical total or a "
-                "rank band, and the modifier pile simulator shows nothing."
+                "A check cannot place anyone on the rank ladder and raises a configuration "
+                "error instead of rolling; a gap in the levels repeats a rank threshold."
             ),
-            probe=FilteredRowProbe(
-                label="ModifierLevelBaseline",
-                filters=(("lane", "check"),),
-                absent_detail="No check-lane ModifierLevelBaseline rows exist.",
+            probe=CustomProbe(fn=_probe_check_level_baselines),
+            admin_model="ModifierLevelBaseline",
+        ),
+        ContentDependency(
+            key="pool-lane-baselines",
+            label="Modifier level baselines (pool and cap lanes)",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/magic/services/anima.py recompute_max_anima(), soul_tether.py "
+                "_compute_per_scene_sineating_cap() and _compute_hollow_max(), gain.py "
+                "outfit_daily_trickle_for_character(), gift_acquisition.py "
+                "get_technique_cap_for_gift(), _compute_rescue_budget(), "
+                "world/species/moon_provisioning.py _thread_tuning(), "
+                "world/mechanics/services.py _facet_effect_bonus_total() and "
+                "world/covenants/added_effects.py vow_effect_bonuses()"
             ),
+            consequence=(
+                "A level advance, a Sineating offer or rescue, the daily outfit trickle, a "
+                "technique learned from a gift, a moon-bound character's battle form, a "
+                "worn facet's effect bonus or a vow's added effect on a cast raises a "
+                "configuration error where a lane has no row at or below the level."
+            ),
+            probe=CustomProbe(fn=_probe_pool_lane_baselines),
+            admin_model="ModifierLevelBaseline",
+        ),
+        ContentDependency(
+            key="development-cost-config",
+            label="Development cost config singleton",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/progression/models/dev_cost_config.py DevelopmentCostConfig."
+                "get_singleton(), read by dp_cost_for_level() for every skill, "
+                "specialization and thread development step (#5093)"
+            ),
+            consequence=(
+                "Development costs run on the shipped curve (100 points at level 1, growing "
+                "150 percent a level) until staff tune the row; the row is created from its "
+                "defaults on first read."
+            ),
+            probe=AnyRowProbe(label="DevelopmentCostConfig"),
+        ),
+        ContentDependency(
+            key="check-scale-config",
+            label="Check scale config singleton",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/checks/scale_config.py CheckScaleConfig.get_singleton(), read by "
+                "world/checks/services.py level_points() (#5093)"
+            ),
+            consequence=(
+                "A character's level adds the shipped share of its level's baseline to every "
+                "roll until staff tune the row; the row is created from its default on first "
+                "read."
+            ),
+            probe=AnyRowProbe(label="CheckScaleConfig"),
+        ),
+        ContentDependency(
+            key="level-tier",
+            label="Level tiers",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/checks/modifier_values.py load_tier_table() and tier_bonus(), added "
+                "in full to a character's level term, an NPC's opposition and every authored "
+                "difficulty level, and to the rank ladder past rank 30 (#5093)"
+            ),
+            consequence=(
+                "No level has a tier jump: a level-6 character is one rank above a level-5 "
+                "one, not four, and the rank ladder stops at level 30's baseline."
+            ),
+            probe=AnyRowProbe(label="LevelTier"),
         ),
         ContentDependency(
             key="modifier-taper",

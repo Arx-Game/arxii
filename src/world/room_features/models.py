@@ -382,13 +382,19 @@ class Trap(SharedMemoryModel):
         related_name="disarm_traps",
         help_text="Check rolled by the disarm action.",
     )
-    detect_difficulty = models.PositiveIntegerField(
+    detect_difficulty_level = models.PositiveSmallIntegerField(
         default=0,
-        help_text="Authored target difficulty for the on-entry detection check.",
+        help_text=(
+            "Authored target difficulty for the on-entry detection check. Authored as a "
+            "level (0 = no difficulty): the roll meets that level's baseline."
+        ),
     )
-    disarm_difficulty = models.PositiveIntegerField(
+    disarm_difficulty_level = models.PositiveSmallIntegerField(
         default=0,
-        help_text="Authored target difficulty for the disarm check.",
+        help_text=(
+            "Authored target difficulty for the disarm check. Authored as a level (0 = "
+            "no difficulty): the roll meets that level's baseline."
+        ),
     )
     # #3002: the help_text below predates the GM ``arm_trap`` action
     # (actions/definitions/traps.py). ``arm_trap`` CAN re-arm a disarmed trap - it

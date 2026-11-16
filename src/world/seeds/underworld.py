@@ -481,7 +481,7 @@ def _seed_route_task(template) -> None:
             ),
             "category": TaskCategory.CRIME,
             "check_type": check_type,
-            "check_difficulty": 20,
+            "check_difficulty_level": 1,
             "duration": timedelta(days=7),
             "target_kind": TaskTargetKind.NONE,
             "mission_template": template,

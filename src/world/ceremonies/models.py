@@ -356,8 +356,12 @@ class CeremonyConfig(SharedMemoryModel):
     quality_multiplier_percent_per_level = models.PositiveIntegerField(
         default=25, help_text="Tally multiplier % added per quality success level."
     )
-    leak_detect_difficulty = models.PositiveIntegerField(
-        default=30, help_text="Perception difficulty for sensing a twisted rite."
+    leak_detect_difficulty_level = models.PositiveSmallIntegerField(
+        default=2,
+        help_text=(
+            "Perception difficulty for sensing a twisted rite. Authored as a level (0 = "
+            "no difficulty): the roll meets that level's baseline."
+        ),
     )
     devotion_per_offering_point = models.PositiveIntegerField(
         default=5,

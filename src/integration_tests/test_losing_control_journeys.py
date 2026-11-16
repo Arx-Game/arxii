@@ -6,7 +6,8 @@ Three people each carry a vulnerability and meet its trigger:
 - Maren bears a curse with three stages; entering stage 3 fires its trigger.
 - Wynn is a lycan under a clear full moon (pull 10) at level 1 with a gift thread at
   level 2, so the seeded moon trigger's difficulty is hand-worked:
-  20 base + 5 x 10 pull - 10 x 1 level - min(30, 5 x 2 thread) = 50.
+  level 1's baseline (18) + 1.0 of a level's width (8) x 10 pull - 2.0 x 1 level - min(6.0, 1.0 x
+  2 thread) of a width = 18 + 80 - 16 - 16 = 66.
 Every roll is forced to the outcome a journey wants (``force_check_outcome``), which also
 records the difficulty the roll was made at. The trigger lines go out on commit, so each
 journey that reads them runs its trigger inside ``captureOnCommitCallbacks``.
@@ -85,6 +86,7 @@ from world.conditions.services import (
     get_active_conditions,
     has_condition,
 )
+from world.fatigue.models import SINGLETON_PK as FATIGUE_SINGLETON_PK, FatigueConfig
 from world.forms.constants import AlternateSelfRevertKind
 from world.forms.factories import (
     AlternateSelfFactory,
@@ -129,7 +131,7 @@ from world.species.moon_provisioning import (
     ensure_moon_control_loss_trigger,
 )
 from world.species.tasks import moon_reconcile_tick
-from world.traits.factories import CheckSystemSetupFactory
+from world.traits.factories import CheckSystemSetupFactory, ensure_level_ladder
 from world.traits.services import ensure_canonical_check_outcome
 from world.vitals.models import CharacterVitals
 from world.vitals.services import get_vitals_consequence_config
@@ -143,7 +145,9 @@ def _berserk_of(character):
 # Two of these name the roster by persona (ruling 39), once for every participant.
 # One reads the attack check types behind the viewer's own Strike weapons (#4858).
 # One reads the applications about moving, for the viewer's own dodge plan (#5066).
-COMPELLED_READ_QUERIES = 30
+# Three read the check ladder (#5093): the fatigue level-bonus lane's baselines for the
+# viewer's capacity, and the CHECK baselines and the level tiers once for every option's cost.
+COMPELLED_READ_QUERIES = 33
 
 
 def knock_out_condition():
@@ -198,6 +202,7 @@ class _ControlLossCase(JourneyCase):
     def setUp(self) -> None:
         super().setUp()
         CheckSystemSetupFactory.create()
+        ensure_level_ladder()
         ensure_berserk_content()
         self.berserk = get_berserk_template()
         self.failure = ensure_canonical_check_outcome("Failure")
@@ -231,7 +236,7 @@ class WoundTriggers(_ControlLossCase):
         apply_condition(self.garrick, self.rage)
         self.trigger = ControlLossTriggerFactory(
             vulnerability=self.rage, fires_on=ControlLossFiresOn.WOUND_THRESHOLD,
-            health_below_percent=50, base_difficulty=30,
+            health_below_percent=50, base_difficulty_level=2,
             check_type=CheckTypeFactory(name="Hold the rage"),
         )  # fmt: skip
         self.band(self.trigger, self.failure, applies=self.berserk)
@@ -308,11 +313,11 @@ class WoundTriggers(_ControlLossCase):
         berserk = _berserk_of(self.garrick)
         self.assertIsNotNone(berserk)
         self.assertEqual(berserk.severity, 3)
-        self.assertEqual(capture.target_difficulty, 30)
+        self.assertEqual(capture.target_difficulty, 26)
         # Ruling 35: cause, roll with its difficulty, then the onset, all from rows.
         self.assertTold(
             self.garrick,
-            "You fall below 50% health. You fight to keep control. Hold the rage vs 30: "
+            "You fall below 50% health. You fight to keep control. Hold the rage vs 26: "
             "Failure. You lose control: Berserk, severity 3, for 3 rounds.",
         )
 
@@ -325,7 +330,7 @@ class WoundTriggers(_ControlLossCase):
         self.assertTold(
             witness,
             "Garrick falls below 50% health. Garrick fights to keep control. Hold the rage "
-            "vs 30: Failure. Garrick loses control: Berserk, severity 3, for 3 rounds.",
+            "vs 26: Failure. Garrick loses control: Berserk, severity 3, for 3 rounds.",
         )
 
     def test_the_onset_names_the_bands_control_and_intensity_shift(self) -> None:
@@ -353,7 +358,7 @@ class WoundTriggers(_ControlLossCase):
 
         self.assertTold(
             self.garrick,
-            "You fall below 50% health. You fight to keep control. Hold the rage vs 30: "
+            "You fall below 50% health. You fight to keep control. Hold the rage vs 26: "
             "Partial Success. Control -2.",
         )
         self.assertNotTold(self.garrick, "lose control")
@@ -381,7 +386,7 @@ class WoundTriggers(_ControlLossCase):
         with force_check_outcome(self.failure) as capture:
             self.hit(45)
 
-        self.assertEqual(capture.target_difficulty, 30)
+        self.assertEqual(capture.target_difficulty, 26)
         self.assertIsNotNone(_berserk_of(self.garrick))
         self.assertTold(self.garrick, "You lose control: Berserk, severity 3, for 3 rounds.")
 
@@ -511,7 +516,7 @@ class WoundTriggers(_ControlLossCase):
         self.assertEqual(
             persisted.get().content,
             "a hooded man falls below 50% health. a hooded man fights to keep control. Hold "
-            "the rage vs 30: Failure. a hooded man loses control: Berserk, severity 3, for 3 "
+            "the rage vs 26: Failure. a hooded man loses control: Berserk, severity 3, for 3 "
             "rounds.",
         )
         self.assertShownRow(witness, line)
@@ -561,7 +566,7 @@ class WoundTriggers(_ControlLossCase):
         with force_check_outcome(self.success) as capture:
             self.hit(60)
 
-        self.assertEqual(capture.target_difficulty, 30)
+        self.assertEqual(capture.target_difficulty, 26)
         self.assertIsNone(_berserk_of(self.garrick))
         self.assertToldNothingOfControl(self.garrick, witness)
 
@@ -630,7 +635,7 @@ class StageTriggers(_ControlLossCase):
         )
         trigger = ControlLossTriggerFactory(
             vulnerability=curse, fires_on=ControlLossFiresOn.CONDITION_STAGE, stage=third,
-            base_difficulty=25, check_type=CheckTypeFactory(name="Hold fast"),
+            base_difficulty_level=2, check_type=CheckTypeFactory(name="Hold fast"),
         )  # fmt: skip
         self.band(trigger, self.failure, applies=self.berserk)
         instance = apply_condition(maren, curse).instance
@@ -647,11 +652,11 @@ class StageTriggers(_ControlLossCase):
             ):
                 advance_condition_severity(instance, 5)
 
-        self.assertEqual(capture.target_difficulty, 25)
+        self.assertEqual(capture.target_difficulty, 26)
         self.assertEqual(_berserk_of(maren).severity, 3)
         self.assertTold(
             maren,
-            "Hollow curse reaches the Hollowing. You fight to keep control. Hold fast vs 25: "
+            "Hollow curse reaches the Hollowing. You fight to keep control. Hold fast vs 26: "
             "Failure. You lose control: Berserk, severity 3, for 3 rounds.",
         )
 
@@ -662,7 +667,7 @@ class StageTriggers(_ControlLossCase):
         second = ConditionStageFactory(condition=curse, stage_order=2, rounds_to_next=None)
         trigger = ControlLossTriggerFactory(
             vulnerability=curse, fires_on=ControlLossFiresOn.CONDITION_STAGE, stage=second,
-            base_difficulty=25,
+            base_difficulty_level=2,
         )  # fmt: skip
         self.band(trigger, self.failure, applies=self.berserk)
         return curse
@@ -688,7 +693,7 @@ class StageTriggers(_ControlLossCase):
         ):
             resolve_round(encounter, offense_check_fn=_land_the_swing)
 
-        self.assertEqual(capture.target_difficulty, 25)
+        self.assertEqual(capture.target_difficulty, 26)
         self.assertIsNotNone(_berserk_of(maren))
         # Inside the round the line is one of the round's narration rows (R1).
         self.assertShownRow(maren, "Maren loses control: Berserk, severity 3, for 3 rounds.")
@@ -716,7 +721,7 @@ class StageTriggers(_ControlLossCase):
         ):
             resolve_round(encounter, offense_check_fn=_land_the_swing)
 
-        self.assertEqual(capture.target_difficulty, 25)
+        self.assertEqual(capture.target_difficulty, 26)
         berserk = _berserk_of(maren)
         self.assertIsNotNone(berserk)
         self.assertEqual(berserk.severity, 3)
@@ -810,13 +815,13 @@ class MoonTrigger(_ControlLossCase):
         ):
             moon_reconcile_tick()
 
-        # 20 + 5 x 10 - 10 x level 1 - min(30, 5 x thread level 2) = 50
-        self.assertEqual(capture.target_difficulty, 50)
+        # 18 + 8 x 10 - 16 x level 1 - min(48, 8 x thread level 2) = 66
+        self.assertEqual(capture.target_difficulty, 66)
         self.assertEqual(_berserk_of(self.wynn).severity, 3)
         check = self.trigger.check_type.name
         self.assertTold(
             self.wynn,
-            f"The moon pulls at you. You fight to keep control. {check} vs 50: Failure. "
+            f"The moon pulls at you. You fight to keep control. {check} vs 66: Failure. "
             "You lose control: Berserk, severity 3, for 3 rounds.",
         )
 
@@ -831,7 +836,7 @@ class MoonTrigger(_ControlLossCase):
         ):
             moon_reconcile_tick()
 
-        self.assertEqual(capture.target_difficulty, 50)
+        self.assertEqual(capture.target_difficulty, 66)
         self.assertIsNone(_berserk_of(self.wynn))
         self.assertToldNothingOfControl(self.wynn)
 
@@ -926,9 +931,9 @@ class MoonTrigger(_ControlLossCase):
 # -- a compulsion at combat resolution ------------------------------------------------
 #
 # Mira is Berserk at severity 3 in a fight with a Bandit Captain. The seeded Berserk
-# compulsion (base 25, +2 per severity; flee and parley +5) makes every hand-worked
-# difficulty: any action other than an attack rolls at 25 + 2 x 3 = 31, a flee or a
-# parley at 31 + 5 = 36. A Partial Success acts strained at -4; a Failure lets the rage
+# compulsion (level 2, 0.4 of a width per severity; flee and parley +1.0 of a width) makes
+# every hand-worked difficulty: any action other than an attack rolls at 26 + 10 = 36, a
+# flee or a parley at 36 + 8 = 44. A Partial Success acts strained at -4; a Failure lets the rage
 # act. She knows Claw, a damaging technique the rage swings with, and Mend, which harms
 # nobody.
 
@@ -1151,7 +1156,7 @@ class ACompelledFighterWhoFlees(_CompelledMira):
         with self.resist_rolls() as spy, force_check_outcome(self.partial):
             self.resolve()
 
-        roll = "Mira tries to flee against Berserk. Resist compulsion vs 36: Partial Success."
+        roll = "Mira tries to flee against Berserk. Resist compulsion vs 44: Partial Success."
         strain = "Berserk drags at Mira: -4 to this action, Control -2."
         rows = self.room_rows()
         at_roll = next(i for i, row in enumerate(rows) if roll in row)
@@ -1170,7 +1175,7 @@ class ACompelledFighterWhoFlees(_CompelledMira):
         with self.resist_rolls() as spy, force_check_outcome(self.failure):
             self.resolve()
 
-        self.assertRoomRow("Resist compulsion vs 36: Failure.")
+        self.assertRoomRow("Resist compulsion vs 44: Failure.")
         self.assertRoomRow("Berserk wins out: Mira attacks Bandit Captain.")
         self.assertEqual(self.rolled_on(spy, self.flee_check), [])
         action = self.declared()
@@ -1195,7 +1200,7 @@ class ACompelledFighterWhoFlees(_CompelledMira):
             self.assertTrue(found, f"no round line with {needle!r}. Rows:\n{rows}")
             return found[0]
 
-        roll = first("Mira tries to flee against Berserk. Resist compulsion vs 36: Failure.")
+        roll = first("Mira tries to flee against Berserk. Resist compulsion vs 44: Failure.")
         outcome = first("Berserk wins out: Mira attacks Bandit Captain.")
         attack = first("Claw")
         self.assertLess(roll, outcome, rows)
@@ -1244,9 +1249,9 @@ class ACompelledFighterWhoHeals(_CompelledMira):
         with force_check_outcome(self.success):
             self.resolve()
 
-        # 25 base + 2 per severity x 3, and Mend is not a forbidden action.
+        # 26 base + 0.4 of a width x 3, and Mend is not a forbidden action.
         self.assertRoomRow(
-            "Mira tries to use Mend against Berserk. Resist compulsion vs 31: Success."
+            "Mira tries to use Mend against Berserk. Resist compulsion vs 36: Success."
         )
         self.assertEqual(self.declared().focused_action, self.mend)
 
@@ -1257,7 +1262,7 @@ class ACompelledFighterWhoHeals(_CompelledMira):
         with force_check_outcome(self.partial):
             self.resolve(offense)
 
-        self.assertRoomRow("Resist compulsion vs 31: Partial Success.")
+        self.assertRoomRow("Resist compulsion vs 36: Partial Success.")
         self.assertRoomRow("Berserk drags at Mira: -4 to this action, Control -2.")
         # Kept as a modifier assertion: the strain penalty moves only the Mend roll's points,
         # not its difficulty or any line, so it has no visible effect on a pinned roll.
@@ -1280,7 +1285,7 @@ class ACompelledFighterWhoParleys(_CompelledMira):
             self.resolve()
 
         # 31 + 5: parley is forbidden.
-        self.assertRoomRow("Mira tries to parley against Berserk. Resist compulsion vs 36")
+        self.assertRoomRow("Mira tries to parley against Berserk. Resist compulsion vs 44")
         parley_rolls = self.rolled_on(spy, self.parley_check)
         self.assertEqual(len(parley_rolls), 1)
         # Kept as a modifier assertion: the strain penalty moves only the parley roll's
@@ -1294,8 +1299,8 @@ class TwoCompulsionsAtOnce(_CompelledMira):
         CompulsionFactory(
             condition=fever,
             check_type=self.berserk.compulsion.check_type,
-            base_difficulty=10,
-            difficulty_per_severity=0,
+            base_difficulty_level=1,
+            difficulty_per_severity_tenths=0,
         )
         apply_condition(self.mira, fever, severity=5, duration_rounds=3)
         self.telnet(self.mira, "combat flee")
@@ -1304,7 +1309,7 @@ class TwoCompulsionsAtOnce(_CompelledMira):
             self.resolve()
 
         self.assertRoomRow(
-            "Mira tries to flee against Battle fever. Resist compulsion vs 10: Success."
+            "Mira tries to flee against Battle fever. Resist compulsion vs 18: Success."
         )
         self.assertNoRoomRow("against Berserk")
 
@@ -1409,7 +1414,7 @@ class AnAllyWhoSteadies(_SteadyingAllies):
         # L2 and ruling 34: the steady line names the bonus the second roll carried, its
         # check and outcome, and the anima Brann's pool actually lost.
         self.assertRoomRow(
-            "Brann steadies Mira (+4). Resist compulsion vs 36: Success. "
+            "Brann steadies Mira (+4). Resist compulsion vs 44: Success. "
             "Brann spends 3 anima; their next reaction this round is harder."
         )
         self.assertNoRoomRow("Berserk wins out")
@@ -1443,7 +1448,7 @@ class AnAllyWhoSteadies(_SteadyingAllies):
 
         bonus = calls[1][1]["extra_modifiers"] - calls[0][1]["extra_modifiers"]
         self.assertEqual(bonus, 4 + STEADY_PER_DEPTH * 10)
-        self.assertRoomRow("Brann steadies Mira (+24). Resist compulsion vs 36: Success.")
+        self.assertRoomRow("Brann steadies Mira (+24). Resist compulsion vs 44: Success.")
         self.assertEqual(self.anima(brann), 20 - STEADY_ANIMA)
         self.assertEqual(self.anima(cade), 20)
 
@@ -1575,7 +1580,7 @@ class ACompelledFighterWhoWalksAway(_CompelledMira):
         self.assertTrue(result.detail.success, result.detail.message)
         self.assertTold(
             self.mira,
-            "Mira tries to leave the encounter against Berserk. Resist compulsion vs 41: Success.",
+            "Mira tries to leave the encounter against Berserk. Resist compulsion vs 52: Success.",
         )
         self.seat.refresh_from_db()
         self.assertEqual(self.seat.status, ParticipantStatus.REMOVED)
@@ -1584,7 +1589,7 @@ class ACompelledFighterWhoWalksAway(_CompelledMira):
         with force_check_outcome(self.failure):
             told = self.telnet(self.mira, "combat leave")
 
-        self.assertIn("Resist compulsion vs 41: Failure.", told)
+        self.assertIn("Resist compulsion vs 52: Failure.", told)
         self.assertIn("You cannot break away.", told)
         self.seat.refresh_from_db()
         self.assertEqual(self.seat.status, ParticipantStatus.ACTIVE)
@@ -1660,7 +1665,7 @@ class ACompelledFighterWhoChangesBack(_AltSelfMira):
             told = self.telnet(self.mira, "form revert")
 
         self.assertIn(
-            "the Beast tries to change back against Berserk. Resist compulsion vs 41", told
+            "the Beast tries to change back against Berserk. Resist compulsion vs 52", told
         )
         self.assertIn("Failure.", told)
         self.assertIn("You cannot change back.", told)
@@ -1720,7 +1725,7 @@ class ACompelledFighterWhoChangesBack(_AltSelfMira):
         self.assertEqual(response.status_code, 200, response.content[:400])
         worn = response.data["results"][0]["compulsion"]
         revert = next(c for c in worn["against"] if c["action_key"] == "revert_form")
-        self.assertEqual((revert["difficulty"], revert["forbidden"]), (41, True))
+        self.assertEqual((revert["difficulty"], revert["forbidden"]), (52, True))
 
     def test_charmed_pc_reverts_freely(self) -> None:
         charm = ConditionTemplateFactory(
@@ -1867,27 +1872,28 @@ class TheDeclarePanelPayload(_SteadyingAllies):
         self.assertEqual(own["wants_label"], "Attack an opponent")
         self.assertEqual(own["check_name"], "Resist compulsion")
         against = {row["action_key"]: row for row in own["against"]}
-        # 25 base + 2 per severity x 3; flee also carries Berserk's +5 for being forbidden.
+        # Level 2's baseline (26) + 0.4 of a level's width (8) per severity x 3, 10 points; flee
+        # also carries Berserk's 1.0 of a level's width (8) for being forbidden.
         self.assertEqual(
             against["flee"],
             {
                 "action_key": "flee",
                 "label": "Flee",
-                "difficulty": 36,
+                "difficulty": 44,
                 "forbidden": True,
-                "extra_difficulty": 5,
+                "extra_difficulty": 8,
             },
         )
         # Leaving and changing back roll too, though neither is declared in the round.
         self.assertIn("leave", against)
-        self.assertEqual(against["revert_form"]["difficulty"], 41)
+        self.assertEqual(against["revert_form"]["difficulty"], 52)
         self.assertTrue(against["revert_form"]["forbidden"])
         self.assertNotIn("engage", against)
         self.assertNotIn("yield", against)
         self.assertEqual(own["attack_target_name"], "Bandit Captain")
         self.assertIsNone(against["technique_no_target"]["label"])
         self.assertEqual(against["revert_form"]["label"], "Revert form")
-        self.assertEqual(against["technique_no_target"]["difficulty"], 31)
+        self.assertEqual(against["technique_no_target"]["difficulty"], 36)
         self.assertFalse(against["technique_no_target"]["forbidden"])
         self.assertNotIn("charge", against)
         self.assertIsNone(self.payload(brann, self.ally_seats["Brann"])["compulsion"])
@@ -1913,7 +1919,7 @@ class TheDeclarePanelPayload(_SteadyingAllies):
         told = self.telnet(self.mira, "combat flee")
 
         self.assertIn(
-            "Against Berserk: Resist compulsion check, difficulty 36. "
+            "Against Berserk: Resist compulsion check, difficulty 44. "
             "If it fails, you attack instead.",
             told,
         )
@@ -1940,6 +1946,9 @@ class TheDeclarePanelPayload(_SteadyingAllies):
 
     def test_the_encounter_read_for_a_compelled_viewer_costs_a_fixed_query_count(self) -> None:
         """The compulsion and every option's cost come from one read, not one per option."""
+        # A deployed database holds the fatigue row, which the identity map then serves; this
+        # one has none, so it would read the row's absence on every request.
+        FatigueConfig.objects.get_or_create(pk=FATIGUE_SINGLETON_PK)
         client = self.api(self.account_of(self.mira))
         url = f"/api/combat/{self.encounter.pk}/"
         client.get(url)  # warm the caches

@@ -50,7 +50,6 @@ BATTLE_FORM_STAT_SUITE = (
     ("stamina", 2),
 )
 TUNING_BASELINE = 10
-TUNING_PER_THREAD_LEVEL = 1
 
 
 def ensure_lycan_battle_form(sheet: CharacterSheet) -> AlternateSelf:
@@ -89,7 +88,7 @@ def ensure_lycan_battle_form(sheet: CharacterSheet) -> AlternateSelf:
             "display_name": BATTLE_FORM_NAME,
         },
     )
-    tuning = TUNING_BASELINE + _gift_thread_level(sheet) * TUNING_PER_THREAD_LEVEL
+    tuning = TUNING_BASELINE + _thread_tuning(_gift_thread_level(sheet))
     if alt.tuning_value != tuning or alt.combat_profile_id != profile.pk:
         alt.tuning_value = tuning
         alt.combat_profile = profile
@@ -122,6 +121,20 @@ def _stat_modifier_target(trait_name: str):
         target.target_trait = trait
         target.save(update_fields=["target_trait"])
     return target
+
+
+def _thread_tuning(thread_level: int) -> int:
+    """The tuning a gift thread adds: the MOON_TUNING lane's baseline at its rung (#5093).
+
+    0 below rung 1. The seeded rows give 10 a rung, what 1 a thread level gave at each whole
+    rung.
+    """
+    from world.checks.constants import ModifierLane  # noqa: PLC0415
+    from world.checks.modifier_values import level_baseline  # noqa: PLC0415
+    from world.magic.services.threads import thread_rung  # noqa: PLC0415
+
+    rung = thread_rung(thread_level)
+    return level_baseline(rung, ModifierLane.MOON_TUNING) if rung >= 1 else 0
 
 
 def _gift_thread_level(sheet: CharacterSheet) -> int:
@@ -206,12 +219,12 @@ def ensure_moon_control_loss_trigger() -> ControlLossTrigger | None:
         defaults={
             "min_moon_pull": 6,
             "check_type": _ensure_moon_control_check_type(),
-            "base_difficulty": 20,
-            "difficulty_per_pull": 5,
-            "relief_per_level": 10,
+            "base_difficulty_level": 1,
+            "difficulty_per_pull_tenths": 10,
+            "relief_per_level_tenths": 20,
             "relief_gift": grant.gift,
-            "relief_per_thread_level": 5,
-            "relief_cap": 30,
+            "relief_per_thread_level_tenths": 10,
+            "relief_cap_tenths": 60,
             "exempt_from_level": 6,
             "impaired_willpower_drop": 10,
         },

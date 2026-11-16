@@ -138,7 +138,7 @@ class SkillCourseOfferDetailsAdmin(admin.ModelAdmin):
         "session_ap_cost",
         "coin_cost",
         "check_type",
-        "check_difficulty",
+        "check_difficulty_level",
     ]
 
     @admin.display(description="Category")

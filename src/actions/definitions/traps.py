@@ -17,6 +17,7 @@ from world.checks.consequence_resolution import (
     resolve_pool_consequences,
     select_consequence,
 )
+from world.checks.services import difficulty_points
 from world.checks.types import ResolutionContext
 from world.gm.constants import GMLevel
 
@@ -62,7 +63,10 @@ class DisarmTrapAction(Action):
 
         consequences = resolve_pool_consequences(trap.consequence_pool)
         pending = select_consequence(
-            actor, trap.disarm_check_type, trap.disarm_difficulty, consequences
+            actor,
+            trap.disarm_check_type,
+            difficulty_points(trap.disarm_difficulty_level),
+            consequences,
         )
         outcome = pending.check_result.outcome
         disarmed = outcome is not None and outcome.success_level > 0

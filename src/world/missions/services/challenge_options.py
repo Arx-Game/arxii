@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from world.checks.services import difficulty_points
 from world.conditions.services import get_effective_capability_value
 from world.mechanics.models import ChallengeApproach, ChallengeTemplate
 from world.missions.types import ChallengeOption
@@ -59,6 +60,9 @@ def challenge_options_for_character(
         .select_related("application__capability", "check_type")
         .order_by("pk")
     )
+    # One difficulty for every approach (the challenge's own severity level), read once and
+    # only when an approach qualifies.
+    difficulty: int | None = None
     for approach in approaches:
         # approach.application.capability is the live CapabilityType
         # instance (select_related'd above) — call the underlying service
@@ -70,12 +74,14 @@ def challenge_options_for_character(
         )
         if not qualifies:
             continue
+        if difficulty is None:
+            difficulty = difficulty_points(challenge.severity_level)
         options.append(
             ChallengeOption(
                 approach=approach,
                 check_type=approach.check_type,
                 auto_succeeds=approach.auto_succeeds,
-                difficulty=challenge.severity,
+                difficulty=difficulty,
                 owner=character,
             )
         )

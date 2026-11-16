@@ -6,7 +6,7 @@ from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactor
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
-from world.checks.test_helpers import force_check_outcome
+from world.checks.test_helpers import SeededLevelLadderMixin, force_check_outcome
 from world.conditions.constants import (
     BLEED_OUT_SEED_TEMPLATE_NAME,
     POISON_DAMAGE_TYPE_NAME,
@@ -275,7 +275,7 @@ class PoisonStagingScalesDotTests(TestCase):
 
 @tag("postgres")
 @override_settings(SEED_SAMPLE_CONTENT=True)  # Mortal Resolve CheckType gates on #2698
-class AcutePoisonCrossesDeathThresholdTests(TestCase):
+class AcutePoisonCrossesDeathThresholdTests(SeededLevelLadderMixin, TestCase):
     """Test C — acute poison crossing the death threshold applies Bleeding-Out (#523).
 
     @tag("postgres") — applying the progressive Bleeding-Out condition hits the PG

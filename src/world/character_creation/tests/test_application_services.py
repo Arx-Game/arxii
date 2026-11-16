@@ -46,6 +46,7 @@ from world.magic.factories import (
 )
 from world.magic.seeds_cast import get_standalone_cast_template
 from world.roster.seeds import ensure_rosters
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.skills.factories import SkillFactory
 from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
@@ -636,6 +637,7 @@ class ApproveApplicationIntegrationTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        seed_pool_and_cap_lanes()
         ensure_canonical_affinities()
         from decimal import Decimal
 

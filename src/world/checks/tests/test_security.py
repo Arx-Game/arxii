@@ -13,11 +13,10 @@ from world.seeds.security_checks import seed_security_check_content
 from world.seeds.stealth_checks import seed_stealth_check_content
 from world.skills.factories import CharacterSpecializationValueFactory
 from world.skills.models import Specialization
-from world.traits.factories import CheckSystemSetupFactory
+from world.traits.factories import CheckSystemSetupFactory, ensure_check_rank
 from world.traits.models import (
     CharacterTraitValue,
     CheckOutcome,
-    CheckRank,
     PointConversionRange,
     Trait,
     TraitType,
@@ -41,9 +40,7 @@ class ResolveSecurityCheckTests(TestCase):
             (2, 25, "S2"),
             (3, 50, "S3"),
         ]:
-            CheckRank.objects.get_or_create(
-                rank=rank_val, defaults={"min_points": min_pts, "name": name}
-            )
+            ensure_check_rank(rank_val, min_pts, name)
         seed_check_resolution_tables()
         seed_stealth_check_content()
         seed_security_check_content()

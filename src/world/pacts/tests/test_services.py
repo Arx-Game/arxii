@@ -21,7 +21,7 @@ from django.utils import timezone
 from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
-from world.checks.test_helpers import force_check_outcome
+from world.checks.test_helpers import SeededLevelLadderMixin, force_check_outcome
 from world.conditions.services import advance_condition_severity
 from world.magic.constants import GainSource
 from world.magic.services.resonance import grant_resonance
@@ -65,9 +65,10 @@ _OUTCOMES = (
 # Signing applies a staged condition, whose first-stage lookup is a PostgreSQL
 # DISTINCT ON (ADR-0012), so every test here runs on the parity tier.
 @tag("postgres")
-class PactTestBase(TestCase):
+class PactTestBase(SeededLevelLadderMixin, TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
+        super().setUpTestData()
         cls.outcomes = {
             name: CheckOutcomeFactory(name=name, success_level=level) for name, level in _OUTCOMES
         }
@@ -75,7 +76,7 @@ class PactTestBase(TestCase):
         cls.offer = PactOfferFactory(
             being=cls.being,
             name="Hesk pact",
-            condition=make_pact_condition(resist_difficulty=40),
+            condition=make_pact_condition(resist_difficulty_level=2),
             onlooker_line="[onlooker line]",
         )
         cls.commitment = PactOfferCommitmentFactory(offer=cls.offer, amount=8)
@@ -138,8 +139,8 @@ class SigningTests(PactTestBase):
         journey can resist the condition at the close (#4341 review, idmapper-cache)."""
         condition = make_pact_condition(name="Resistible pact")
         condition.resist_check_type = CheckTypeFactory(name="Pact resist")
-        condition.resist_difficulty = 10
-        condition.save(update_fields=["resist_check_type", "resist_difficulty"])
+        condition.resist_difficulty_level = 1
+        condition.save(update_fields=["resist_check_type", "resist_difficulty_level"])
         offer = PactOfferFactory(being=self.being, name="Resistible", condition=condition)
         PactOfferCommitmentFactory(offer=offer, amount=8)
         standing = DevotionStanding.objects.create(character_sheet=self.sheet, being=self.being)
@@ -298,7 +299,8 @@ class PeriodCheckTests(PactTestBase):
                 with force_check_outcome(self.outcomes[forced]) as capture:
                     self._tick(pact, earned=3, severity=5)
 
-                self.assertEqual(capture.target_difficulty, 40 - config.favor_ease_low_points)
+                # Level 2 is 26 points on the seeded ladder, less the favor ease.
+                self.assertEqual(capture.target_difficulty, 26 - config.favor_ease_low_points)
                 graded = self._graded(pact)
                 self.assertEqual(graded.severity_change, after - 5)
                 self.assertEqual(graded.stage_after.name, stage)

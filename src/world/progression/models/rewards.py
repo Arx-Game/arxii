@@ -15,10 +15,6 @@ from django.db import models
 from evennia.accounts.models import AccountDB
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
-from world.progression.constants import (
-    DP_BASE_LEVEL,
-    DP_COST_MULTIPLIER,
-)
 from world.progression.types import DevelopmentSource, ProgressionReason
 from world.traits.models import (
     CharacterTraitChange,
@@ -31,21 +27,15 @@ CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 TRAIT_MODEL = "arxii.Trait"
 
 
-def cumulative_dp_for_level(level: int) -> int:
-    """Total dp needed to reach *level* from the base level of 10.
+def _cumulative_dp(value: int) -> int:
+    """Development points the shared cost curve charges to reach ``value`` from level 10.
 
-    Going from level N to N+1 costs ``(N - 9) * 100`` dp, so:
-
-    * Level 10: 0 dp (CG starting point)
-    * Level 11: 100 dp
-    * Level 12: 300 dp  (100 + 200)
-    * Level 13: 600 dp  (100 + 200 + 300)
+    The curve lives in ``world.progression.services.dev_cost``, whose package imports this one,
+    so the import waits until the first call.
     """
-    if level <= DP_BASE_LEVEL:
-        return 0
-    # Closed-form arithmetic series: sum of (1+2+...+steps) * DP_COST_MULTIPLIER
-    steps = level - DP_BASE_LEVEL
-    return (DP_COST_MULTIPLIER * steps * (steps + 1)) // 2
+    from world.progression.services.dev_cost import cumulative_dp_for_level  # noqa: PLC0415
+
+    return cumulative_dp_for_level(value)
 
 
 class ExperiencePointsData(SharedMemoryModel):
@@ -228,7 +218,7 @@ class DevelopmentPoints(SharedMemoryModel):
                 break
             if skill_cap is not None and next_level > skill_cap:
                 break
-            if self.total_earned < cumulative_dp_for_level(next_level):
+            if self.total_earned < _cumulative_dp(next_level):
                 break
             level_ups.append((current_level, next_level))
             current_level = next_level
@@ -323,13 +313,13 @@ class DevelopmentPoints(SharedMemoryModel):
         the Django admin, an NPC copy dropping a skill), so it drops back to what the
         rating cost, and the skill cannot climb straight back for free.
         """
-        floor = cumulative_dp_for_level(rating)
-        if self.total_earned < floor or self.total_earned >= cumulative_dp_for_level(rating + 1):
+        floor = _cumulative_dp(rating)
+        if self.total_earned < floor or self.total_earned >= _cumulative_dp(rating + 1):
             self.total_earned = floor
 
     def _dissipate_above(self, level: int) -> None:
         """Drop ``total_earned`` to what ``level`` cost, discarding any surplus."""
-        parked_total = cumulative_dp_for_level(level)
+        parked_total = _cumulative_dp(level)
         if self.total_earned > parked_total:
             self.total_earned = parked_total
             self.save(update_fields=["total_earned"])

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from world.checks.constants import ModifierSourceKind
+from world.checks.services import difficulty_points, difficulty_step_points
 from world.checks.types import ModifierContribution
 from world.combat import services as _svc
 from world.combat.constants import (
@@ -88,7 +89,7 @@ def _resolve_flee(
 ) -> ActionOutcome:
     """Resolve a declared flee as a graded check (#878).
 
-    Difficulty = FleeConfig.base_difficulty + max(FleeTierModifier over active
+    Difficulty = FleeConfig.base_difficulty_level's baseline + max(FleeTierModifier over active
     opponents' tiers); zero active opponents → tier term 0 (no auto-success).
     Each same-round COVER declaration by an ACTIVE participant whose
     focused_ally_target is this participant adds that coverer's Cover escape
@@ -120,11 +121,13 @@ def _resolve_flee(
     )
     tier_modifiers = dict(
         FleeTierModifier.objects.filter(tier__in=active_tiers).values_list(
-            "tier", "difficulty_modifier"
+            "tier", "difficulty_modifier_tenths"
         )
     )
     tier_term = max((tier_modifiers.get(tier, 0) for tier in active_tiers), default=0)
-    difficulty = config.base_difficulty + tier_term
+    difficulty = difficulty_points(config.base_difficulty_level) + difficulty_step_points(
+        tier_term, config.base_difficulty_level
+    )
 
     # Cover: each ally covering the fleer this round adds the Cover escape bonus the
     # catalog gives THAT coverer (base plus their own modifiers), labelled with their

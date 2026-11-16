@@ -56,8 +56,8 @@ from world.conditions.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ConditionTemplate` | Condition definition (e.g., Burning, Frozen) | `name`, `category`, `description`, `player_description`, `observer_description`, duration settings, stacking settings, progression flag, removal settings (`cure_check_type`/`cure_difficulty`), apply-time resist-check (`resist_check_type`/`resist_difficulty`, #1738), combat settings (`affects_turn_order`, `draws_aggro`, and the #4584 reactive fields `forces_attack_on_source`, `source_guards_bearer`, `prevents_knockout`, and #4759's `spares_source`: an NPC carrying it spares the condition's source and that source's wards, read by NPC targeting since #4811), reactive-effect settings (`reactive_anima_cost`, and the strike-back trio `retaliation_damage`, `retaliation_damage_type`, `retaliation_condition`, #4584), display settings, allegiance settings (`sets_allegiance`, `allegiance_break_check_type`, `settle_consequence_pool`, #4091, see below) |
-| `ConditionStage` | Stage in a progressive condition | `condition`, `stage_order`, `name`, `rounds_to_next`, `resist_check_type`, `resist_difficulty`, `severity_multiplier`, `settle_consequence_pool` (#4091, overrides the template's pool at this stage), `intensity_per_round` (#4739, intensity this stage adds to the bearer's combat engagement each round; default 0. `clean()` refuses a positive value when a `SurgeDegreeBand` with an outcome below success level 1 carries the template - emotional conditions come only from a success or a choice; the Required content row `emotional-condition-on-failure-band` lists stored violations, and `world.combat.surge_bands.validate_surge_bands` refuses the band side in the admin; combat feeds it at each round opening through `world.combat.condition_surges.apply_condition_intensity_surges`, one `CONDITION_FED` surge per player character for the plain sum over active, unsuppressed, unresolved instances, ADR-4737 amendment) |
+| `ConditionTemplate` | Condition definition (e.g., Burning, Frozen) | `name`, `category`, `description`, `player_description`, `observer_description`, duration settings, stacking settings, progression flag, removal settings (`cure_check_type`/`cure_difficulty_level`), apply-time resist-check (`resist_check_type`/`resist_difficulty_level`, #1738), combat settings (`affects_turn_order`, `draws_aggro`, and the #4584 reactive fields `forces_attack_on_source`, `source_guards_bearer`, `prevents_knockout`, and #4759's `spares_source`: an NPC carrying it spares the condition's source and that source's wards, read by NPC targeting since #4811), reactive-effect settings (`reactive_anima_cost`, and the strike-back trio `retaliation_damage`, `retaliation_damage_type`, `retaliation_condition`, #4584), display settings, allegiance settings (`sets_allegiance`, `allegiance_break_check_type`, `settle_consequence_pool`, #4091, see below) |
+| `ConditionStage` | Stage in a progressive condition | `condition`, `stage_order`, `name`, `rounds_to_next`, `resist_check_type`, `resist_difficulty_level`, `severity_multiplier`, `settle_consequence_pool` (#4091, overrides the template's pool at this stage), `intensity_per_round` (#4739, intensity this stage adds to the bearer's combat engagement each round; default 0. `clean()` refuses a positive value when a `SurgeDegreeBand` with an outcome below success level 1 carries the template - emotional conditions come only from a success or a choice; the Required content row `emotional-condition-on-failure-band` lists stored violations, and `world.combat.surge_bands.validate_surge_bands` refuses the band side in the admin; combat feeds it at each round opening through `world.combat.condition_surges.apply_condition_intensity_surges`, one `CONDITION_FED` surge per player character for the plain sum over active, unsuppressed, unresolved instances, ADR-4737 amendment) |
 
 **Charm / Calm content (#1590).** The `Charm` `ConditionCategory` (`alters_behavior=True`) and
 `Charmed` / `Calm` templates are seeded idempotently by `ensure_charm_content()` in
@@ -261,7 +261,7 @@ result = apply_condition(
 ### Resisting Application (#1738)
 
 When `condition.resist_check_type` is set, `apply_condition`/`bulk_apply_conditions`
-roll the *target's* check against `resist_difficulty` before creating the instance.
+roll the *target's* check against `resist_difficulty_level` before creating the instance.
 Success (SL > 0) means the target resisted — no instance is created, and the result
 carries `message="resisted"`. `resist_check_type=None` (the default) means
 unconditional application. Resistance strength comes from the existing check-modifier
@@ -624,8 +624,9 @@ caps = get_all_capability_values(character)  # {"movement": 5, "flight": 0}
 `ConditionCheckModifier` row on an instance carrying both `modifier_level` and `modifier_size`
 from the check lane's value table (`world.checks.modifier_values.load_value_table`, loaded once
 per call and only when some active instance is sized): the table's magnitude at that level and
-size, with the authored row's sign, and no severity or stage scaling. An unsized instance, a zero
-authored value, or a level below every value row keeps the flat authored path. Nothing about the
+size (the size's fraction times one level's width, or a `ModifierValue` override at exactly that
+level, #5093), with the authored row's sign, and no severity or stage scaling. An unsized instance,
+a zero authored value, or a size with no fraction and no override keeps the flat authored path. Nothing about the
 bearer is read. `condition_contributions` puts the level and size on each CONDITION
 `ModifierContribution`. `bulk_apply_conditions` stamps them through `_stamp_modifier_sizing`
 (after apply, before `CONDITION_APPLIED`); a re-application keeps the higher level and takes the
@@ -791,8 +792,8 @@ Berserk of ADR-0183. Everything below is a `ConditionTemplate`-hung model in
   Triggers hang off it. A character without it never rolls its triggers.
 - **`ControlLossTrigger`** (FK `vulnerability`; `fires_on` is `ControlLossFiresOn`:
   `MOON_PULL`, `WOUND_THRESHOLD`, `CONDITION_STAGE`). Shared fields: `check_type`,
-  `base_difficulty`, `relief_per_level`. Moon-only fields: `min_moon_pull`,
-  `difficulty_per_pull`, `relief_gift`, `relief_per_thread_level`, `relief_cap`,
+  `base_difficulty`, `relief_per_level_tenths`. Moon-only fields: `min_moon_pull`,
+  `difficulty_per_pull_tenths`, `relief_gift`, `relief_per_thread_level_tenths`, `relief_cap_tenths`,
   `exempt_from_level`, `impaired_willpower_drop` (the impaired threshold: condition-driven
   willpower at or below minus this value rolls even past the exempt level). Wound:
   `health_below_percent`.
@@ -849,9 +850,9 @@ Berserk of ADR-0183. Everything below is a `ConditionTemplate`-hung model in
   `alters_behavior`; `clean()` rejects any other): `wants` (`CompulsionWant`, today
   `ATTACK_OPPONENT`), `check_type` (the roll to go against it; distinct from
   `ConditionTemplate.resist_check_type`, which resists the condition being applied),
-  `base_difficulty`, `difficulty_per_severity`.
+  `base_difficulty`, `difficulty_per_severity_tenths`.
   - **`CompulsionForbiddenAction`**: FLEE, PARLEY, LEAVE or REVERT_FORM, each with an
-    `extra_difficulty`. Unique per compulsion and action.
+    `extra_difficulty_tenths`. Unique per compulsion and action.
   - **`CompulsionResistBand`**: per `CheckOutcome`, a `result` (`CompulsionResult`:
     `ACTS_FREELY`, `ACTS_STRAINED`, `COMPULSION_ACTS`), an `action_penalty` and a
     `control_change`, validated monotonic by `validate_compulsion_bands`. The penalty bites

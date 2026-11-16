@@ -15,24 +15,23 @@ from django.db import transaction
 
 from world.action_points.models import ActionPointPool
 from world.character_sheets.models import CharacterSheet
+from world.checks.constants import ModifierLane
 from world.checks.models import CheckCategory, CheckType, CheckTypeTrait
+from world.checks.modifier_values import load_baselines
 from world.checks.services import perform_check_with_modifiers
 from world.fatigue.constants import (
-    CAPACITY_STAT_MULTIPLIER,
-    CAPACITY_WILLPOWER_MULTIPLIER,
     COLLAPSE_RISK_ZONES,
     EFFORT_COST_MULTIPLIER,
     EXHAUSTION_DAMAGE_TYPE_NAME,
     FATIGUE_ENDURANCE_STAT,
     MIN_FATIGUE_COST,
     REST_AP_COST,
-    WELL_RESTED_MULTIPLIER,
     ZONE_PENALTIES,
     ZONE_THRESHOLDS,
     ActionCategory,
     FatigueZone,
 )
-from world.fatigue.models import FatiguePool
+from world.fatigue.models import FatigueConfig, FatiguePool
 from world.fatigue.types import FatigueCollapseResult, RestResult
 from world.mechanics.constants import FATIGUE_COST_CATEGORY_NAME, FATIGUE_COST_TARGET_NAME
 from world.mechanics.levers import lever_total, scale_by_percent
@@ -70,8 +69,11 @@ def get_fatigue_capacity(
 ) -> int:
     """Calculate max fatigue capacity for a category.
 
-    Formula: endurance_stat * CAPACITY_STAT_MULTIPLIER + willpower * CAPACITY_WILLPOWER_MULTIPLIER
-    If well_rested: multiply by WELL_RESTED_MULTIPLIER (1.5)
+    Formula, like health (stat terms plus a per-level row, #5093):
+    endurance_stat * stat_multiplier + willpower * willpower_multiplier
+    + the FATIGUE_LEVEL_BONUS lane's baseline at the character's level.
+    The multipliers are the ``FatigueConfig`` row. If well_rested: multiply by the row's
+    well-rested percent (150 = 1.5x, rounded down).
 
     Args:
         character_sheet: The character's sheet.
@@ -84,20 +86,58 @@ def get_fatigue_capacity(
     Returns:
         Integer fatigue capacity.
     """
-    endurance_stat_name = FATIGUE_ENDURANCE_STAT[category]
-    endurance_value = _get_stat_points(character_sheet, endurance_stat_name)
+    return get_fatigue_capacities(character_sheet, (category,), well_rested=well_rested)[category]
+
+
+def get_fatigue_capacities(
+    character_sheet: CharacterSheet,
+    categories: Iterable[str] = tuple(FATIGUE_ENDURANCE_STAT),
+    *,
+    well_rested: bool | None = None,
+) -> dict[str, int]:
+    """Max fatigue capacity for each of ``categories``, reading the shared terms once.
+
+    The ``FatigueConfig`` row, the character's level bonus and the well-rested flag are the
+    same for every category, so a caller that needs several (a status block, a serializer)
+    asks for them together instead of paying for each lookup per category. See
+    ``get_fatigue_capacity`` for the formula and ``well_rested``.
+    """
+    config = FatigueConfig.get_singleton()
+    level_bonus = _level_bonus(character_sheet)
     willpower_value = _get_stat_points(character_sheet, PrimaryStat.WILLPOWER.value)
-
-    base_capacity = (
-        endurance_value * CAPACITY_STAT_MULTIPLIER + willpower_value * CAPACITY_WILLPOWER_MULTIPLIER
-    )
-
     if well_rested is None:
         well_rested = get_or_create_fatigue_pool(character_sheet).well_rested
-    if well_rested:
-        return int(base_capacity * WELL_RESTED_MULTIPLIER)
 
-    return base_capacity
+    capacities: dict[str, int] = {}
+    for category in categories:
+        endurance_value = _get_stat_points(character_sheet, FATIGUE_ENDURANCE_STAT[category])
+        base_capacity = (
+            endurance_value * config.stat_multiplier
+            + willpower_value * config.willpower_multiplier
+            + level_bonus
+        )
+        if well_rested:
+            base_capacity = base_capacity * config.well_rested_percent // 100
+        capacities[category] = base_capacity
+    return capacities
+
+
+def _level_bonus(character_sheet: CharacterSheet) -> int:
+    """The capacity a character's level adds: the FATIGUE_LEVEL_BONUS lane's baseline (#5093).
+
+    Read at the character's effective combat level, the level health reads. 0 when staff have
+    authored no rows for the lane (a bonus nobody wrote adds nothing) or the level is below
+    the lane's first row.
+    """
+    from world.covenants.mentorship import effective_combat_level  # noqa: PLC0415
+
+    table = load_baselines(ModifierLane.FATIGUE_LEVEL_BONUS)
+    if not table.levels:
+        return 0
+    level = effective_combat_level(character_sheet)
+    if level < table.levels[0]:
+        return 0
+    return table.baseline(level)
 
 
 def get_fatigue_percentage(character_sheet: CharacterSheet, category: str) -> float:
@@ -576,7 +616,7 @@ def _tick_fatigue_collapse_for_target(
     try:
         # Probe fatigue capability once; targets without a traits handler
         # (NPCs / non-character objects in the round) are not fatigue-tracked.
-        capacities = {cat: get_fatigue_capacity(sheet, cat) for cat in FATIGUE_ENDURANCE_STAT}
+        capacities = get_fatigue_capacities(sheet)
     except AttributeError:
         return
     for category, capacity in capacities.items():
@@ -673,9 +713,10 @@ def get_full_status(character_sheet: CharacterSheet, *, pool: FatiguePool | None
     """
     well_rested = pool.well_rested if pool else False
     status: dict = {}
+    capacities = get_fatigue_capacities(character_sheet, well_rested=well_rested)
     for category in ActionCategory:
         cat = category.value
-        capacity = get_fatigue_capacity(character_sheet, cat, well_rested=well_rested)
+        capacity = capacities[cat]
         current = pool.get_current(cat) if pool else 0
         pct = _fatigue_percentage(current, capacity)
         zone = _zone_from_percentage(pct)

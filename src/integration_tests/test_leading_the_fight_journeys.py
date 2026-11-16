@@ -49,7 +49,7 @@ from world.magic.factories import (
 )
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneParticipationFactory
-from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
+from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory, ensure_level_ladder
 from world.traits.models import CheckOutcome
 from world.vitals.models import CharacterVitals
 
@@ -270,17 +270,18 @@ class AMarkPaysOff(JourneyCase):
     """Tomas's vow answers a target a covenant-mate marked, by its authored bonus.
 
     Mira and Tomas share a covenant; Ilse is in none. Tomas's engaged role carries a perk of
-    +10 tenths per thread level on his own checks when the target is marked by an ally, and his
-    thread is at level 30. The perk scales by the thread level, so
-    the authored bonus is 30 x 10 / 10 = +30 points. The captain has 500 health, so nobody ends
-    the fight.
+    10 tenths on his own checks when the target is marked by an ally, and his vow thread is at
+    level 30 (rung 3, where a level is 8 points wide on the example ladder). The perk is a share
+    of that width, so the authored bonus is 1.0 x 8 = +8 points. The captain has 500 health,
+    so nobody ends the fight.
     """
 
-    PAYOFF = 30
+    PAYOFF = 8
 
     def setUp(self) -> None:
         super().setUp()
         CheckSystemSetupFactory.create()
+        ensure_level_ladder()
         self.road = self.make_room("The Road")
         self.mira = self.make_player("Mira", room=self.road)
         self.tomas = self.make_player("Tomas", room=self.road)

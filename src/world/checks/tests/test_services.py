@@ -7,7 +7,6 @@ from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.checks.constants import LEVEL_POINTS_PER_LEVEL
 from world.checks.factories import (
     CheckCategoryFactory,
     CheckTypeAspectFactory,
@@ -33,10 +32,9 @@ from world.conditions.factories import CapabilityTypeFactory
 from world.fatigue.constants import EffortLevel
 from world.progression.models import CharacterPathHistory, DevelopmentPoints, WeeklySkillUsage
 from world.progression.services.skill_development import calculate_check_dev_points
-from world.traits.factories import CheckSystemSetupFactory
+from world.traits.factories import CheckSystemSetupFactory, ensure_check_rank, ensure_level_ladder
 from world.traits.models import (
     CharacterTraitValue,
-    CheckRank,
     PointConversionRange,
     ResultChart,
     Trait,
@@ -44,12 +42,17 @@ from world.traits.models import (
     TraitType,
 )
 
+# Half of level 1's 18-point baseline: the level term of a character with no class level row
+# on the standard ladder (``ensure_level_ladder``, level share 0.5).
+LEVEL_ONE_TERM = 9
+
 
 class CalculateAspectBonusTests(TestCase):
-    """Test aspect bonus calculation from path weights."""
+    """Test aspect bonus calculation from path weights, sized by a level's width (#5093)."""
 
     @classmethod
     def setUpTestData(cls):
+        ensure_level_ladder()
         cls.character = CharacterSheetFactory().character
         cls.path = PathFactory(name="TestSpyPath", stage=PathStage.PROSPECT, minimum_level=1)
         cls.intrigue = Aspect.objects.create(name="test_svc_intrigue")
@@ -60,7 +63,7 @@ class CalculateAspectBonusTests(TestCase):
         cls.check_type = CheckTypeFactory(name="TestSpyCheck")
 
     def test_aspect_bonus_with_matching_path(self):
-        """Aspect bonus = sum(check_weight * path_weight * level) truncated to int."""
+        """Aspect bonus = sum(check_weight * path_weight * level's width), rounded half up."""
         CheckTypeAspectFactory(
             check_type=self.check_type,
             aspect=self.intrigue,
@@ -71,9 +74,10 @@ class CalculateAspectBonusTests(TestCase):
             aspect=self.subterfuge,
             weight=Decimal("0.5"),
         )
-        # Level 3: intrigue = int(1.0 * 2 * 3) = 6, subterfuge = int(0.5 * 1 * 3) = 1
+        # Level 3 is 8 points wide on the standard ladder: intrigue = 1.0 * 2 * 8 = 16,
+        # subterfuge = 0.5 * 1 * 8 = 4
         bonus = _calculate_aspect_bonus(self.character, self.check_type, level=3)
-        assert bonus == 7
+        assert bonus == 20
 
     def test_aspect_bonus_zero_with_no_path(self):
         other_char = CharacterFactory()
@@ -94,16 +98,24 @@ class CalculateAspectBonusTests(TestCase):
         # but this test uses a different check_type)
         assert bonus == 0
 
-    def test_aspect_bonus_truncates_to_int(self):
-        check = CheckTypeFactory(name="TruncateCheck")
+    def test_aspect_bonus_rounds_half_up(self):
+        check = CheckTypeFactory(name="RoundingCheck")
         CheckTypeAspectFactory(
             check_type=check,
             aspect=self.subterfuge,
-            weight=Decimal("0.75"),
+            weight=Decimal("0.35"),
         )
-        # 0.75 * 1 * 3 = 2.25 -> int = 2
+        # 0.35 * 1 * 8 = 2.8 -> 3 (a truncating sum would read 2)
         bonus = _calculate_aspect_bonus(self.character, check, level=3)
-        assert bonus == 2
+        assert bonus == 3
+
+    def test_aspect_bonus_zero_below_level_one(self):
+        CheckTypeAspectFactory(
+            check_type=self.check_type,
+            aspect=self.intrigue,
+            weight=Decimal("1.0"),
+        )
+        assert _calculate_aspect_bonus(self.character, self.check_type, level=0) == 0
 
 
 class CalculateCapabilityPointsTests(TestCase):
@@ -111,6 +123,7 @@ class CalculateCapabilityPointsTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        ensure_level_ladder()
         cls.check_type = CheckTypeFactory(name="test_svc_capability_check")
         cls.capability = CapabilityTypeFactory(name="test_svc_fire_control", innate_baseline=5)
 
@@ -197,9 +210,9 @@ class CalculateCapabilityPointsTests(TestCase):
             specialization=None,
         )
         assert breakdown.capability_points == 10
-        # total = capability_points(10) + level_points(LEVEL_POINTS_PER_LEVEL * 1, the
-        # default level for a character with no CharacterClassLevel row) (#2707)
-        assert breakdown.total_points == 10 + LEVEL_POINTS_PER_LEVEL
+        # total = capability_points(10) + level_points(9: half of level 1's baseline, the
+        # default level for a character with no CharacterClassLevel row) (#2707, #5093)
+        assert breakdown.total_points == 10 + LEVEL_ONE_TERM
 
     def test_unimpaired_character_contributes_zero(self):
         """D3: value == innate_baseline contributes exactly 0 — no inflation."""
@@ -343,10 +356,7 @@ class PerformCheckTests(TestCase):
             (2, 25, "TestCompetent"),
             (3, 50, "TestExpert"),
         ]:
-            CheckRank.objects.get_or_create(
-                rank=rank_val,
-                defaults={"min_points": min_pts, "name": name},
-            )
+            ensure_check_rank(rank_val, min_pts, name)
         cls.character = CharacterSheetFactory().character
         cls.strength, _ = Trait.objects.get_or_create(
             name="check_test_strength",
@@ -378,6 +388,21 @@ class PerformCheckTests(TestCase):
         assert isinstance(result, CheckResult)
         assert result.check_type == self.check_type
         assert result.trait_points > 0
+
+    def test_a_matching_path_aspect_adds_its_share_of_one_levels_width(self):
+        """The acting side sizes the aspect match like the opposing side (#5093)."""
+        path = PathFactory(name="PerformCheckAspectPath", stage=PathStage.PROSPECT)
+        aspect = Aspect.objects.create(name="perform_check_aspect")
+        PathAspect.objects.create(character_path=path, aspect=aspect, weight=2)
+        CharacterPathHistory.objects.create(character=self.character.sheet_data, path=path)
+        CheckTypeAspectFactory(check_type=self.check_type, aspect=aspect, weight=Decimal("0.5"))
+
+        result = perform_check(self.character, self.check_type, target_difficulty=0)
+
+        # 0.5 x 2 = one whole width of level 1 (a character with no class level row acts at
+        # level 1). This class's ladder starts its ranks at 10, 25 and 50 points, so level 1's
+        # baseline is 10 and its width the 15 to level 2's.
+        assert result.aspect_bonus == 15
 
     @patch("world.checks.services.random.randint", return_value=50)
     def test_perform_check_with_fixed_roll(self, mock_randint):
@@ -420,10 +445,7 @@ class PerformCheckEffortFatigueTests(TestCase):
             (2, 25, "EffortCompetent"),
             (3, 50, "EffortExpert"),
         ]:
-            CheckRank.objects.get_or_create(
-                rank=rank_val,
-                defaults={"min_points": min_pts, "name": name},
-            )
+            ensure_check_rank(rank_val, min_pts, name)
         cls.character = CharacterSheetFactory().character
         cls.strength, _ = Trait.objects.get_or_create(
             name="effort_test_strength",
@@ -557,10 +579,7 @@ class PreviewCheckDifficultyTests(TestCase):
             (2, 25, "PrevCompetent"),
             (3, 50, "PrevExpert"),
         ]:
-            CheckRank.objects.get_or_create(
-                rank=rank_val,
-                defaults={"min_points": min_pts, "name": name},
-            )
+            ensure_check_rank(rank_val, min_pts, name)
         cls.character = CharacterSheetFactory().character
         cls.strength, _ = Trait.objects.get_or_create(
             name="preview_strength",
@@ -752,10 +771,7 @@ class PerformCheckDevelopmentAwardTests(TestCase):
             (2, 25, "DpEffortCompetent"),
             (3, 50, "DpEffortExpert"),
         ]:
-            CheckRank.objects.get_or_create(
-                rank=rank_val,
-                defaults={"min_points": min_pts, "name": name},
-            )
+            ensure_check_rank(rank_val, min_pts, name)
         cls.sheet = CharacterSheetFactory()
         cls.character = cls.sheet.character
         cls.trait, _ = Trait.objects.get_or_create(
@@ -919,6 +935,7 @@ class CapabilityCountedOnceTests(TestCase):
     def setUp(self):
         from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
 
+        ensure_level_ladder()
         self.character = CharacterFactory()
         self.sheet = CharacterSheetFactory(character=self.character)
         self.check_type = CheckTypeFactory(name="test_svc_capability_counted_once")
@@ -933,9 +950,9 @@ class CapabilityCountedOnceTests(TestCase):
     def test_wrapper_total_equals_perform_check_total(self):
         bare = perform_check(self.character, self.check_type)
         wrapped = perform_check_with_modifiers(self.character, self.check_type)
-        # Pinned: level 1 (LEVEL_POINTS_PER_LEVEL) + capability 10, counted once.
-        assert bare.total_points == LEVEL_POINTS_PER_LEVEL + 10
-        assert wrapped.total_points == LEVEL_POINTS_PER_LEVEL + 10
+        # Pinned: level 1's term (9) + capability 10, counted once.
+        assert bare.total_points == LEVEL_ONE_TERM + 10
+        assert wrapped.total_points == LEVEL_ONE_TERM + 10
 
     def test_impairment_is_counted_once(self):
         from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
@@ -950,8 +967,8 @@ class CapabilityCountedOnceTests(TestCase):
         # effective 0 vs baseline 5 -> deviation -5, weight 2.0 -> -10, once.
         bare = perform_check(self.character, impaired_check)
         wrapped = perform_check_with_modifiers(self.character, impaired_check)
-        assert bare.total_points == LEVEL_POINTS_PER_LEVEL - 10
-        assert wrapped.total_points == LEVEL_POINTS_PER_LEVEL - 10
+        assert bare.total_points == LEVEL_ONE_TERM - 10
+        assert wrapped.total_points == LEVEL_ONE_TERM - 10
 
     def test_wrapper_adds_only_kinds_the_roll_does_not_count(self):
         self.sheet.rollmod = 3

@@ -28,6 +28,8 @@ from django.utils import timezone
 from flows.constants import EventName
 from flows.emit import emit_event
 from world.character_sheets.models import CharacterSheet
+from world.checks.constants import ModifierLane
+from world.checks.modifier_values import level_baseline
 from world.conditions.models import ConditionInstance, ConditionTemplate
 from world.magic.constants import MagicActivity, SoulTetherRole, TargetKind
 from world.magic.exceptions import (
@@ -529,14 +531,16 @@ def _compute_per_scene_sineating_cap(
 ) -> int:
     """Compute how many units can be Sineated in one scene.
 
-    Formula (tunable via SoulTetherConfig singleton):
+    Formula (tunable via SoulTetherConfig singleton and the SOUL_TETHER_SCENE_CAP lane):
         cap = min(cfg.per_scene_cap_hard_max,
-                  rung * cfg.per_scene_cap_level_mult + cfg.per_scene_cap_base)
+                  baseline(rung) + cfg.per_scene_cap_base)
 
     ``rung`` is ``thread_rung(level)``, whole steps of 10 thread levels (an internal
-    step, #5091): the hard max of 20 is reached around thread level 80.
+    step, #5091), and ``baseline`` its ``ModifierLevelBaseline`` row on the
+    SOUL_TETHER_SCENE_CAP lane (#5093), 0 below rung 1: the hard max of 20 is reached around
+    thread level 80 on the seeded rows.
 
-    Defaults reproduce original behaviour (hard_max=20, level_mult=2, base=5).
+    The seeded rows reproduce original behaviour (hard_max=20, 2 per rung, base=5).
     When no Sinner Thread exists the bond has no Hollow; cap is 0.
     The ``relationship`` parameter is accepted for future formula tuning
     (e.g. capping on the tie's pair depth).
@@ -555,19 +559,22 @@ def _compute_per_scene_sineating_cap(
     cfg = get_soul_tether_config()
     return min(
         cfg.per_scene_cap_hard_max,
-        thread_rung(sinner_thread.level) * cfg.per_scene_cap_level_mult + cfg.per_scene_cap_base,
+        _rung_baseline(sinner_thread, ModifierLane.SOUL_TETHER_SCENE_CAP) + cfg.per_scene_cap_base,
     )
+
+
+def _rung_baseline(sinner_thread: Thread, lane: str) -> int:
+    """``lane``'s baseline at the Sinner's thread rung, 0 below rung 1 (#5093)."""
+    rung = thread_rung(sinner_thread.level)
+    return level_baseline(rung, lane) if rung >= 1 else 0
 
 
 def _compute_hollow_max(sinner_thread: Thread) -> int:
     """Compute the Hollow's theoretical maximum for a given Thread.
 
-    Formula (tunable via SoulTetherConfig singleton):
-        hollow_max = rung * cfg.hollow_max_level_mult
-
-    ``rung`` is ``thread_rung(level)``, whole steps of 10 thread levels (#5091).
-
-    Default multiplier is 10, reproducing the original behaviour.
+    The HOLLOW_MAX lane's baseline at the thread's rung (#5093): ``thread_rung(level)``,
+    whole steps of 10 thread levels (#5091), 0 below rung 1. The seeded rows are 10 per
+    rung, reproducing the original behaviour.
 
     Args:
         sinner_thread: The Sinner's RELATIONSHIP_CAPSTONE Thread.
@@ -575,8 +582,7 @@ def _compute_hollow_max(sinner_thread: Thread) -> int:
     Returns:
         The maximum number of units the Hollow can hold.
     """
-    cfg = get_soul_tether_config()
-    return max(0, thread_rung(sinner_thread.level) * cfg.hollow_max_level_mult)
+    return max(0, _rung_baseline(sinner_thread, ModifierLane.HOLLOW_MAX))
 
 
 def _increment_stat_safe(
@@ -1326,12 +1332,16 @@ def _compute_rescue_budget(
     All tuning knobs are read from the ``SoulTetherConfig`` singleton (pk=1).
     Default formula (reproduces original behaviour):
         base = {3: 60, 4: 120, 5: 250}[stage]
-        multiplier = 1.0 + success_level * 0.5 + thread_level * 0.05
+        multiplier = 1.0 + success_level * 0.5 + (RESCUE_BUDGET_THREAD baseline at rung) / 100
         budget = max(1, int(base * multiplier))
+
+    The thread term is the ``RESCUE_BUDGET_THREAD`` lane's baseline at the Sineater's thread
+    rung (``thread_rung(thread_level)``, #5093), in hundredths, and 0 below rung 1. The seeded
+    rows give 50 a rung, the 0.05 a thread level the old coefficient gave at each whole rung.
 
     The formula ensures:
     - Critical success significantly boosts budget.
-    - Higher thread level gives a small but meaningful bonus.
+    - A higher thread rung gives a small but meaningful bonus.
     - Failure still provides some minimum recovery (budget >= 1).
 
     Args:
@@ -1350,10 +1360,12 @@ def _compute_rescue_budget(
         base = cfg.rescue_budget_base_stage4
     else:
         base = cfg.rescue_budget_base_stage5
+    rung = thread_rung(thread_level)
+    thread_hundredths = level_baseline(rung, ModifierLane.RESCUE_BUDGET_THREAD) if rung >= 1 else 0
     multiplier = (
         cfg.rescue_budget_base_mult_tenths / 10
         + success_level * cfg.rescue_budget_success_mult_tenths / 10
-        + thread_level * cfg.rescue_budget_thread_mult_hundredths / 100
+        + thread_hundredths / 100
     )
     return max(1, int(base * multiplier))
 

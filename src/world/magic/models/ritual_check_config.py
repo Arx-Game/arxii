@@ -66,16 +66,20 @@ class RitualCheckConfig(SharedMemoryModel):
         related_name="+",
         help_text="CheckType used when rolling this ritual's check.",
     )
-    target_difficulty = models.PositiveSmallIntegerField(
-        default=3,
-        help_text="Target difficulty for the check.",
+    target_difficulty_level = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Target difficulty for the check. Authored as a level (0 = no difficulty): "
+            "the roll meets that level's baseline."
+        ),
     )
-    non_founder_target_difficulty = models.PositiveSmallIntegerField(
+    non_founder_target_difficulty_level = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
         help_text=(
-            "Authored difficulty when the actor lacks founder standing for the "
-            "target (e.g. a non-founder dissolving a Sanctum). NULL = no distinction."
+            "Authored difficulty when the actor lacks founder standing for the target "
+            "(e.g. a non-founder dissolving a Sanctum). NULL = no distinction. Authored "
+            "as a level (0 = no difficulty): the roll meets that level's baseline."
         ),
     )
     sustained_rounds = models.PositiveSmallIntegerField(

@@ -199,7 +199,7 @@ class ItemFacetViewTests(ItemViewTestCase):
         from world.traits.models import Trait
 
         # Wire enchanting crafting so the POST endpoint can roll the check.
-        wire_enchanting_crafting(base_difficulty=0)
+        wire_enchanting_crafting(base_difficulty_level=0)
         # Single wide-range quality tier so any score resolves.
         self.quality = QualityTierFactory(
             name="ItemFacetViewCommon", numeric_min=0, numeric_max=9999, sort_order=0

@@ -13,7 +13,7 @@ from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectType
 from world.checks.factories import CheckTypeFactory, ConsequenceEffectFactory, ConsequenceFactory
-from world.checks.test_helpers import force_check_outcome
+from world.checks.test_helpers import SeededLevelLadderMixin, force_check_outcome
 from world.combat.constants import ActionCategory, OpponentStatus, OpponentTier
 from world.combat.factories import (
     BossOpponentFactory,
@@ -338,7 +338,7 @@ class KnockoutDeathProcessingTest(TestCase):
             stage_order=1,
             name="Dying",
             resist_check_type=resist_check,
-            resist_difficulty=20,
+            resist_difficulty_level=1,
             rounds_to_next=None,
         )
         ConditionInstanceFactory(
@@ -464,7 +464,7 @@ class ApplyDamageToParticipantResistanceTests(EvenniaTestCase):
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # Endurance/Mortal Resolve CheckType gates on #2698
-class NpcActionInteractionLazyCreationTests(TestCase):
+class NpcActionInteractionLazyCreationTests(SeededLevelLadderMixin, TestCase):
     """Tests that the NPC-action Interaction is created lazily (only when a
     survivability tier fires) rather than eagerly before the per-target loop.
 
@@ -478,6 +478,7 @@ class NpcActionInteractionLazyCreationTests(TestCase):
     def setUpTestData(cls) -> None:
         from decimal import Decimal
 
+        super().setUpTestData()
         cls.effect_attack = EffectTypeFactory(name="LazyNPCAttack", base_power=20)
         cls.gift = GiftFactory()
         DamageSuccessLevelMultiplierFactory(

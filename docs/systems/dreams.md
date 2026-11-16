@@ -70,7 +70,7 @@ Deep dreaming uses real ObjectDB movement — standard exit traversal, scene rou
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `DreamReflection` | Links a physical room to its dream-layer reflection | `waking_room` (OneToOne `RoomProfile`), `dream_room` (OneToOne `RoomProfile`), `descent_target` (nullable FK `RoomProfile`), `is_active` — all three retargeted off ObjectDB in #2608 |
-| `DreamPerilConfig` | Singleton config for Dream Peril resist check | `resist_check_type` (FK CheckType), `resist_difficulty` (PositiveInt) |
+| `DreamPerilConfig` | Singleton config for Dream Peril resist check | `resist_check_type` (FK CheckType), `resist_difficulty_level` (PositiveSmallInt, a level) |
 | `DreamwalkPresence` | Persisted dreamwalk anchor (#3003) — replaces the process-local `ndb.dreamwalk_destination` stash | `dreamer` (OneToOne `CharacterSheet`), `host` (FK `CharacterSheet`, `related_name="dream_visitors"`), `created_at` |
 
 ## Actions

@@ -85,6 +85,7 @@ from world.magic.specialization.services import provision_latent_gift_thread
 from world.scenes.factories import SceneFactory
 from world.scenes.models import Scene
 from world.scenes.tests.cast_test_helpers import grant_technique, make_benign_castable_technique
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 from world.traits.factories import CheckSystemSetupFactory, TraitFactory
 from world.traits.models import CheckOutcome
@@ -106,7 +107,7 @@ def embrace_through_the_rite(test, character, resonance):
     config = get_drift_correction_config()
     config.rite = DriftCorrectionRiteFactory()
     config.check_type = CheckTypeFactory()
-    config.check_difficulty = 0
+    config.check_difficulty_level = 0
     config.save()
     outcomes = {name: ensure_canonical_check_outcome(name) for name in CANONICAL_OUTCOME_LEVELS}
     for outcome in outcomes.values():
@@ -363,8 +364,8 @@ class ImbuingWithAResonance(JourneyCase):
         row = ThreadResonance.objects.get(thread=self.thread, resonance=self.ember)
         self.assertEqual(row.amount, 3)
         self.thread.refresh_from_db()
-        # Three points at a point a level (stored level 0): the thread climbs three levels.
-        self.assertEqual(self.thread.level, 3)
+        # A level from stored level 0 costs ten points: three points bank toward it.
+        self.assertEqual((self.thread.level, self.thread.developed_points), (0, 3))
 
     def test_a_stray_word_after_the_amount_is_ignored_and_resonance_still_reads(self) -> None:
         told = self.imbue("amount=2 please resonance=ember")
@@ -512,6 +513,7 @@ class CreatingACharacterWithSeveralResonances(FinalizationTestMixin, JourneyCase
 
     @classmethod
     def setUpTestData(cls) -> None:
+        seed_pool_and_cap_lanes()
         cls._setup_finalization_base(cls, prefix="Several", height_min=700, height_max=800)
         cls.staff = AccountFactory(is_staff=True)
         cls.celestial, cls.primal, cls.abyssal = ensure_canonical_affinities()
@@ -793,8 +795,9 @@ class BecomingUnsettled(_Drifting):
     Abyssal (her Ruin), 15 past the line and its tolerance of 5.
 
     The sheet reads her aura payload: unsettled, in the sentence the dialog shows, naming her
-    Abyssal resonance. Her next cast rolls the focus check (difficulty 10 + 2 for each of the
-    three steps past the line = 16). A settled character reads none of this.
+    Abyssal resonance. Her next cast rolls the focus check (level 1's baseline of 18 plus
+    4 tenths of its width of 8 for each of the three steps past the line, 12 tenths = 10, so 28).
+    A settled character reads none of this.
     """
 
     def aura(self) -> dict:
@@ -812,7 +815,7 @@ class BecomingUnsettled(_Drifting):
 
         rec = self.cast(focus="Failure")
 
-        self.assertEqual(rec.focus_difficulties, [16])
+        self.assertEqual(rec.focus_difficulties, [28])
         self.assertIsNotNone(self.conflict())
         self.assertTold(
             self.ysmay,

@@ -223,7 +223,7 @@ class CodexEntryModelTests(TestCase):
         )
         assert entry.share_cost == 5
         assert entry.learn_cost == 5
-        assert entry.learn_difficulty == 10
+        assert entry.learn_difficulty_level == 1
         assert entry.learn_threshold == 10
 
     def test_quote_defaults_blank(self) -> None:

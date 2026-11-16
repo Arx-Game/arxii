@@ -1875,7 +1875,7 @@ def seed_magic_config() -> MagicConfigResult:
                 "severity_scale": 10,
                 "deficit_scale": 5,
                 "resilience_check_type": resilience_check_type,
-                "base_check_difficulty": 15,
+                "base_check_difficulty_level": 1,
                 "ritual_severity_cost_per_point": 1,
             },
         )

@@ -11,7 +11,8 @@ from world.gm.models import CatalogSuggestion
 from world.mechanics.constants import DiscoveryType
 from world.mechanics.factories import ChallengeTemplateFactory, SituationTemplateFactory
 from world.mechanics.models import ChallengeInstance, SituationInstance
-from world.scenes.action_constants import DIFFICULTY_BAND_STEP, DIFFICULTY_VALUES, DifficultyChoice
+from world.scenes.action_constants import DIFFICULTY_BAND_SHIFT_TENTHS
+from world.traits.factories import ensure_level_ladder
 
 
 class StagingASituation(JourneyCase):
@@ -20,6 +21,7 @@ class StagingASituation(JourneyCase):
 
     def setUp(self) -> None:
         super().setUp()
+        ensure_level_ladder()
         self.cellar = self.make_room("The Flooded Cellar")
         self.ysmay = self.make_player("Ysmay", room=self.cellar)
         self.hobb = self.make_player("Hobb", room=self.cellar)
@@ -31,9 +33,7 @@ class StagingASituation(JourneyCase):
         GMProfileFactory(account=self.account_of(self.ravenna), level=GMLevel.JUNIOR)
         GMProfileFactory(account=self.account_of(self.hobb), level=GMLevel.STARTING)
         self.rising_water = SituationTemplateFactory(name="Rising Water")
-        self.barred_gate = ChallengeTemplateFactory(
-            name="Barred Gate", severity=DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
-        )
+        self.barred_gate = ChallengeTemplateFactory(name="Barred Gate", severity_level=2)
 
     def test_a_junior_gm_sets_the_situation_and_staff_may_too(self) -> None:
         self.assertIn(
@@ -70,7 +70,7 @@ class StagingASituation(JourneyCase):
         self.assertIn(f"[{self.rising_water.pk}] Rising Water", told)
         told = self.telnet(self.ravenna, "setsituation find Gate")
         self.assertIn("No situation templates matched 'Gate'.", told)
-        self.assertIn(f"[{self.barred_gate.pk}] Barred Gate (Normal)", told)
+        self.assertIn(f"[{self.barred_gate.pk}] Barred Gate (level 2)", told)
 
         # A kind is found by name with its guidance; a bare find is the kind list, not the
         # templates; browsing never places anything.
@@ -107,33 +107,35 @@ class StagingASituation(JourneyCase):
         self.assertFalse(ChallengeInstance.objects.exists())
 
         told = self.telnet(self.ravenna, "setsituation challenge Barred Gate=the barred gate")
-        self.assertIn("Barred Gate placed on the barred gate (Normal).", told)
+        self.assertIn("Barred Gate placed on the barred gate (level 2).", told)
         placed = ChallengeInstance.objects.get(template=self.barred_gate)
         self.assertIsNone(placed.situation_instance)
         self.assertEqual(placed.location, self.cellar)
         self.assertEqual(placed.target_object.db_key, "the barred gate")
-        self.assertEqual((placed.severity_adjustment, placed.adjustment_reason), (0, ""))
+        self.assertEqual((placed.severity_adjustment_tenths, placed.adjustment_reason), (0, ""))
         self.assertTrue(placed.is_active)
 
         told = self.telnet(
             self.ravenna,
             "setsituation challenge Barred Gate=the far gate setback=they braced it",
         )
-        self.assertIn("Barred Gate placed on the far gate (Hard)", told)
+        self.assertIn("Barred Gate placed on the far gate (level 5)", told)
         self.assertIn("setback", told)
         braced = ChallengeInstance.objects.get(target_object__db_key="the far gate")
-        self.assertEqual(braced.severity_adjustment, DIFFICULTY_BAND_STEP)
+        self.assertEqual(braced.severity_adjustment_tenths, DIFFICULTY_BAND_SHIFT_TENTHS)
         self.assertEqual(braced.adjustment_reason, "they braced it")
-        self.assertEqual(braced.effective_severity, DIFFICULTY_VALUES[DifficultyChoice.HARD])
+        # level 2's 26 plus three levels' width (24): level 5's baseline
+        self.assertEqual(braced.effective_severity, 50)
 
         told = self.telnet(
             self.marrow,
             "setsituation challenge Barred Gate=the rusted gate edge=the hinges are half-rusted",
         )
-        self.assertIn("Barred Gate placed on the rusted gate (Easy)", told)
+        self.assertIn("Barred Gate placed on the rusted gate (level 0)", told)
         rusted = ChallengeInstance.objects.get(target_object__db_key="the rusted gate")
-        self.assertEqual(rusted.severity_adjustment, -DIFFICULTY_BAND_STEP)
-        self.assertEqual(rusted.effective_severity, DIFFICULTY_VALUES[DifficultyChoice.EASY])
+        self.assertEqual(rusted.severity_adjustment_tenths, -DIFFICULTY_BAND_SHIFT_TENTHS)
+        # 26 less 24: 2 points, nearest level 0
+        self.assertEqual(rusted.effective_severity, 2)
 
         self.assertIn(
             "Shift with edge or setback, not both.",
@@ -145,9 +147,8 @@ class StagingASituation(JourneyCase):
         self.assertEqual(ChallengeInstance.objects.count(), 3)
 
     def test_the_hardest_band_refuses_to_go_harder_and_a_hidden_seam_stays_hidden(self) -> None:
-        ChallengeTemplateFactory(
-            name="Sealed Vault", severity=DIFFICULTY_VALUES[DifficultyChoice.HARROWING]
-        )
+        # The top level's baseline cannot be shifted harder: the ladder ends there.
+        ChallengeTemplateFactory(name="Sealed Vault", severity_level=30)
         self.assertIn(
             "Already at the hardest band.",
             self.telnet(

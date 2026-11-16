@@ -1508,7 +1508,7 @@ class FacetEffectBonusInline(admin.TabularInline):
     model = FacetEffectBonus
     formset = OneRowPerFormSet
     extra = 0
-    fields = ["target", "amount"]
+    fields = ["target", "amount_tenths"]
     autocomplete_fields = ["target"]
 
 
@@ -1655,7 +1655,7 @@ class SoulfrayConfigAdmin(admin.ModelAdmin):
         "severity_scale",
         "deficit_scale",
         "resilience_check_type",
-        "base_check_difficulty",
+        "base_check_difficulty_level",
         "social_safety_bonus",
     ]
     list_select_related = ["condition", "resilience_check_type"]
@@ -1815,8 +1815,8 @@ class ResonanceEnvironmentConfigAdmin(admin.ModelAdmin):
         "base_coefficient",
         "caster_power_scalar",
         "balanced_band",
-        "backfire_base_difficulty",
-        "backfire_difficulty_per_magnitude",
+        "backfire_base_difficulty_level",
+        "backfire_difficulty_per_magnitude_tenths",
         "updated_at",
     )
 
@@ -2430,7 +2430,6 @@ class TechniqueTeachingOfferAdmin(admin.ModelAdmin):
 @admin.register(GiftAcquisitionConfig)
 class GiftAcquisitionConfigAdmin(admin.ModelAdmin):
     list_display = [
-        "techniques_per_thread_level",
         "first_technique_ap_multiplier",
         "major_gift_ap_multiplier",
         "imbue_ap_cost",
@@ -2785,7 +2784,7 @@ class FuryTierAdmin(admin.ModelAdmin):
         "name",
         "depth",
         "control_surrendered",
-        "base_check_difficulty",
+        "base_check_difficulty_level",
         "berserk_severity",
     ]
     search_fields = ["name"]
@@ -2953,7 +2952,6 @@ class AnimaConfigAdmin(admin.ModelAdmin):
     list_display = [
         "daily_regen_amount",
         "level_zero_maximum",
-        "maximum_per_level",
         "death_harvest_multiplier",
     ]
 
@@ -3251,7 +3249,7 @@ class DriftCorrectionConfigAdmin(admin.ModelAdmin):
         "id",
         "rite",
         "check_type",
-        "check_difficulty",
+        "check_difficulty_level",
         "cap_percent",
         "disown_deed_percent",
     )
@@ -3320,7 +3318,7 @@ class KindledStrengthTierForm(forms.ModelForm):
             "pull_levels": "Pull reads higher by",
             "give_in_max_depth": "Deepest give-in step",
             "give_in_bonus_percent": "Give-in bonus",
-            "give_in_ease": "Control roll eased by",
+            "give_in_ease_tenths": "Control roll eased by",
             "dig_deep_scale_percent": "Dig deep and Rally surge",
             "earn_percent": "Earned",
         }
@@ -3426,7 +3424,7 @@ class KindledStrengthTierInline(ConfigRowsInline):
         "pull_levels",
         "give_in_max_depth",
         "give_in_bonus_percent",
-        "give_in_ease",
+        "give_in_ease_tenths",
         "dig_deep_scale_percent",
         "earn_percent",
     ]

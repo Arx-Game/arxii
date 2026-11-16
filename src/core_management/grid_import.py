@@ -713,7 +713,7 @@ def _import_room_clue_rows(
             defaults={
                 "room_profile": room_profile,
                 "clue": clue,
-                "detect_difficulty": row_data["detect_difficulty"],
+                "detect_difficulty_level": row_data["detect_difficulty_level"],
                 "eligibility_rule": row_data["eligibility_rule"],
                 "is_active": row_data["is_active"],
             },

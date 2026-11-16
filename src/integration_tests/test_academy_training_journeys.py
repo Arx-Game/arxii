@@ -40,6 +40,7 @@ from world.npc_services.factories import (
     TrainOfferDetailsFactory,
 )
 from world.progression.factories import CharacterPathHistoryFactory
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.societies.factories import OrganizationFactory
 
 # What staff priced the training at: 2 gold and 5 silver, written in coppers.
@@ -51,6 +52,11 @@ MENU_LINE = "2g 5s · 1 Golden Hare · 5 points of training or more, paid in AP"
 
 class TrainingAtTheAcademy(JourneyCase):
     """Ysmay and Hobb each ask Master Orsolya to teach them a technique for 2g 5s and a Hare."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
 
     def setUp(self) -> None:
         super().setUp()

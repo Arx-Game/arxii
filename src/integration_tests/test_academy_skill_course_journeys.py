@@ -7,10 +7,11 @@ game week. A refusal charges nothing. Each journey stands a learner in front of 
 Academy's teacher, takes the course through the real ``hire`` command (or the web
 dispatch once), then reads back what she was told and what she still holds.
 
-The expected numbers come from the course the spec authors (1500 development, 300 a
+The expected numbers come from the course the spec authors (40 development, 10 a
 session, 6 AP a session, 2 silver), the authored outcome multipliers (botch and failure 0,
-partial 0.5, success 1.0, critical 1.5) and the skill rule that a level costs
-``(value - 9) x 100`` development. Names are invented.
+partial 0.5, success 1.0, critical 1.5) and the skill rule that a step costs a tenth of its
+level band on the shared curve: 10 development for each step from 10 to 19. Names are
+invented.
 """
 
 from __future__ import annotations
@@ -59,7 +60,8 @@ from world.npc_services.factories import (
 from world.npc_services.models import SkillCourseEnrollment
 from world.progression.factories import ExperiencePointsDataFactory
 from world.progression.models import TraitRatingUnlock, TraitXPCost, XPCostChart, XPCostEntry
-from world.progression.models.rewards import DevelopmentPoints, cumulative_dp_for_level
+from world.progression.models.rewards import DevelopmentPoints
+from world.progression.services.dev_cost import cumulative_dp_for_level
 from world.skills.factories import SkillFactory
 from world.societies.constants import ObligationState
 from world.societies.factories import OrganizationFactory, OrganizationObligationFactory
@@ -73,8 +75,8 @@ from world.traits.models import (
     TraitType,
 )
 
-TOTAL = 1500
-SESSION = 300
+TOTAL = 40
+SESSION = 10
 SESSION_AP = 6
 COIN = 20  # 2 silver, written in coppers
 STARTING_AP = 200
@@ -136,7 +138,7 @@ class _AcademyCourseCase(JourneyCase):
             session_ap_cost=SESSION_AP,
             coin_cost=COIN,
             check_type=CheckTypeFactory(),
-            check_difficulty=0,
+            check_difficulty_level=0,
         )
 
         self.ysmay = self.make_player("Ysmay", room=self.hall)
@@ -228,23 +230,23 @@ class EnrollingInACourse(_AcademyCourseCase):
     def test_enroll_charges_once_and_runs_first_session(self) -> None:
         told = self.take_course("success")
 
-        # 10 -> 11 costs 100 and 11 -> 12 costs 200: the 300 a session lands on 12.
+        # 10 -> 11 costs 10: the 10 a session lands on 11.
         self.assertIn(
-            f"Success. Occult rises from 10 to 12. The course has 1200 of {TOTAL} left.", told
+            f"Success. Occult rises from 10 to 11. The course has 30 of {TOTAL} left.", told
         )
         self.assertEqual(self.ap(), STARTING_AP - SESSION_AP)
         self.assertEqual(self.purse(), STARTING_COIN - COIN)
         self.assertEqual(get_or_create_treasury(self.academy).balance, COIN)
         self.assertEqual(self.hares(), 0)
         enrollment = self.open_enrollment()
-        self.assertEqual(enrollment.development_remaining, 1200)
+        self.assertEqual(enrollment.development_remaining, 30)
         self.assertIsNotNone(enrollment.last_session_week)
-        self.assertEqual(self.occult_rating(), 12)
+        self.assertEqual(self.occult_rating(), 11)
 
         # The next roll that adds Occult as a skill term is worth her new rating.
         roll = CheckTypeFactory(name="Read the wards", category=CheckCategoryFactory())
         CheckTypeTraitFactory(check_type=roll, trait=self.occult, weight=Decimal("1.0"))
-        self.assertEqual(perform_check(self.ysmay, roll).trait_points, 12)
+        self.assertEqual(perform_check(self.ysmay, roll).trait_points, 11)
 
     def test_web_path_enrolls_as_telnet_does(self) -> None:
         started = self.web(self.ysmay, "npc_start", role_id=self.role.pk)
@@ -258,10 +260,10 @@ class EnrollingInACourse(_AcademyCourseCase):
             )
 
         self.assertTrue(resolved.detail.success, resolved.detail.message)
-        self.assertIn("Success. Occult rises from 10 to 12.", resolved.detail.message)
+        self.assertIn("Success. Occult rises from 10 to 11.", resolved.detail.message)
         self.assertEqual(self.holdings(), (STARTING_AP - SESSION_AP, STARTING_COIN - COIN, 0, 1))
-        self.assertEqual(self.open_enrollment().development_remaining, 1200)
-        self.assertEqual(self.occult_rating(), 12)
+        self.assertEqual(self.open_enrollment().development_remaining, 30)
+        self.assertEqual(self.occult_rating(), 11)
 
     def test_free_course_charges_no_coin(self) -> None:
         self.course.coin_cost = 0
@@ -269,13 +271,13 @@ class EnrollingInACourse(_AcademyCourseCase):
 
         told = self.take_course("success")
 
-        self.assertIn("Success. Occult rises from 10 to 12.", told)
+        self.assertIn("Success. Occult rises from 10 to 11.", told)
         self.assertEqual(self.purse(), STARTING_COIN)
         self.assertEqual(get_or_create_treasury(self.academy).balance, 0)
         self.assertEqual(self.hares(), 0)
         self.assertEqual(self.ap(), STARTING_AP - SESSION_AP)
-        self.assertEqual(self.open_enrollment().development_remaining, 1200)
-        self.assertEqual(self.occult_rating(), 12)
+        self.assertEqual(self.open_enrollment().development_remaining, 30)
+        self.assertEqual(self.occult_rating(), 11)
 
 
 class RefusedEnrollments(_AcademyCourseCase):
@@ -341,7 +343,7 @@ class SessionsOfACourse(_AcademyCourseCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.take_course("success")  # enrolled, Occult 12, 1200 left
+        self.take_course("success")  # enrolled, Occult 11, 30 left
 
     def test_same_week_refused_charges_nothing(self) -> None:
         before = self.holdings()
@@ -350,8 +352,8 @@ class SessionsOfACourse(_AcademyCourseCase):
             "You have already trained in this course this week. Nothing was charged.", told
         )
         self.assertEqual(self.holdings(), before)
-        self.assertEqual(self.open_enrollment().development_remaining, 1200)
-        self.assertEqual(self.occult_rating(), 12)
+        self.assertEqual(self.open_enrollment().development_remaining, 30)
+        self.assertEqual(self.occult_rating(), 11)
 
     def test_next_week_session_charges_ap_only(self) -> None:
         advance_game_week()
@@ -359,88 +361,82 @@ class SessionsOfACourse(_AcademyCourseCase):
 
         self.assertIn(
             f"Failure. You learn nothing this session; {SESSION_AP} AP spent. "
-            f"The course has 1200 of {TOTAL} left.",
+            f"The course has 30 of {TOTAL} left.",
             told,
         )
         self.assertEqual(
             self.holdings(),
             (STARTING_AP - 2 * SESSION_AP, STARTING_COIN - COIN, 0, 1),
         )
-        self.assertEqual(self.open_enrollment().development_remaining, 1200)
-        self.assertEqual(self.occult_rating(), 12)
+        self.assertEqual(self.open_enrollment().development_remaining, 30)
+        self.assertEqual(self.occult_rating(), 11)
 
     def test_critical_and_completion(self) -> None:
         advance_game_week()
-        told = self.take_course("critical")  # 450: 12 -> 13 (300), 150 banked
+        told = self.take_course("critical")  # 15: 11 -> 12 (10), 5 banked
         self.assertIn(
-            f"Critical Success. Occult rises from 12 to 13. The course has 750 of {TOTAL} left.",
+            f"Critical Success. Occult rises from 11 to 12. The course has 15 of {TOTAL} left.",
             told,
         )
 
         advance_game_week()
-        told = self.take_course("success")  # 150 + 300 = 450: 13 -> 14 (400), 50 banked
+        told = self.take_course("success")  # 5 + 10 = 15: 12 -> 13 (10), 5 banked
         self.assertIn(
-            f"Success. Occult rises from 13 to 14. The course has 450 of {TOTAL} left.", told
+            f"Success. Occult rises from 12 to 13. The course has 5 of {TOTAL} left.", told
         )
 
         advance_game_week()
-        told = self.take_course("success")  # 50 + 300 = 350 of the 500 to 15
-        self.assertIn(
-            f"Success. Occult stays at 14, closer to 15. The course has 150 of {TOTAL} left.", told
-        )
-
-        advance_game_week()
-        told = self.take_course("success")  # the last 150: 500, 14 -> 15
-        self.assertIn("Success. Occult rises from 14 to 15. The course is complete.", told)
-        self.assertEqual(self.occult_rating(), 15)
+        told = self.take_course("success")  # the last 5: 5 + 5 = 10, 13 -> 14
+        self.assertIn("Success. Occult rises from 13 to 14. The course is complete.", told)
+        self.assertEqual(self.occult_rating(), 14)
         finished = SkillCourseEnrollment.objects.get(character_sheet=self.sheet)
         self.assertIsNotNone(finished.completed_at)
         self.assertEqual(finished.development_remaining, 0)
-        self.assertEqual(self.ap(), STARTING_AP - 5 * SESSION_AP)
+        self.assertEqual(self.ap(), STARTING_AP - 4 * SESSION_AP)
 
         # Taking it again is a new enrollment: a new Hare and the coin again.
         self.give_hare()
         advance_game_week()
         told = self.take_course("success")
-        self.assertIn(f"The course has 1200 of {TOTAL} left.", told)
+        self.assertIn(f"The course has 30 of {TOTAL} left.", told)
         self.assertEqual(self.hares(), 0)
         self.assertEqual(self.purse(), STARTING_COIN - 2 * COIN)
         self.assertEqual(self.enrollments(), 2)
-        self.assertEqual(self.open_enrollment().development_remaining, 1200)
+        self.assertEqual(self.open_enrollment().development_remaining, 30)
 
     def test_partial_applies_half(self) -> None:
         advance_game_week()
-        told = self.take_course("partial")  # 300 x 0.5 = 150 of the 300 to 13
+        told = self.take_course("partial")  # 10 x 0.5 = 5 of the 10 to 12
         self.assertIn(
-            f"Partial Success. Occult stays at 12, closer to 13. "
-            f"The course has 1050 of {TOTAL} left.",
+            f"Partial Success. Occult stays at 11, closer to 12. "
+            f"The course has 25 of {TOTAL} left.",
             told,
         )
         self.assertEqual(self.ap(), STARTING_AP - 2 * SESSION_AP)
-        self.assertEqual(self.open_enrollment().development_remaining, 1050)
-        self.assertEqual(self.occult_banked(), 150)
+        self.assertEqual(self.open_enrollment().development_remaining, 25)
+        self.assertEqual(self.occult_banked(), 5)
 
     def test_botch_spends_ap_and_teaches_nothing(self) -> None:
         advance_game_week()
         told = self.take_course("botch")
         self.assertIn(
             f"Botch. You learn nothing this session; {SESSION_AP} AP spent. "
-            f"The course has 1200 of {TOTAL} left.",
+            f"The course has 30 of {TOTAL} left.",
             told,
         )
         self.assertEqual(
             self.holdings(),
             (STARTING_AP - 2 * SESSION_AP, STARTING_COIN - COIN, 0, 1),
         )
-        self.assertEqual(self.open_enrollment().development_remaining, 1200)
-        self.assertEqual(self.occult_rating(), 12)
+        self.assertEqual(self.open_enrollment().development_remaining, 30)
+        self.assertEqual(self.occult_rating(), 11)
 
     def test_retaking_a_course_finished_this_week_waits_for_the_week(self) -> None:
         enrollment = self.open_enrollment()
-        enrollment.development_remaining = 100
+        enrollment.development_remaining = 5
         enrollment.save()
         advance_game_week()
-        told = self.take_course("success")  # the last 100: 12 -> 12 + 100 of 300
+        told = self.take_course("success")  # the last 5: 11 -> 11 + 5 of 10
         self.assertIn("The course is complete.", told)
 
         self.give_hare()
@@ -454,7 +450,7 @@ class SessionsOfACourse(_AcademyCourseCase):
 
         advance_game_week()
         told = self.take_course("success")
-        self.assertIn(f"The course has 1200 of {TOTAL} left.", told)
+        self.assertIn(f"The course has 30 of {TOTAL} left.", told)
         self.assertEqual(self.enrollments(), 2)
         self.assertEqual(self.hares(), 0)
 
@@ -467,9 +463,9 @@ class SessionsOfACourse(_AcademyCourseCase):
 
         self.set_ap(STARTING_AP)
         told = self.take_course("success")
-        self.assertIn("Success. Occult rises from 12 to 13.", told)
+        self.assertIn("Success. Occult rises from 11 to 12.", told)
         self.assertEqual(self.ap(), STARTING_AP - SESSION_AP)
-        self.assertEqual(self.open_enrollment().development_remaining, 900)
+        self.assertEqual(self.open_enrollment().development_remaining, 20)
 
     def test_missing_award_row_teaches_nothing(self) -> None:
         TrainingOutcomeAward.objects.filter(outcome_tier=self.outcomes["success"]).delete()
@@ -477,32 +473,32 @@ class SessionsOfACourse(_AcademyCourseCase):
         told = self.take_course("success")
         self.assertIn(f"Success. You learn nothing this session; {SESSION_AP} AP spent.", told)
         self.assertEqual(self.ap(), STARTING_AP - 2 * SESSION_AP)
-        self.assertEqual(self.open_enrollment().development_remaining, 1200)
-        self.assertEqual(self.occult_rating(), 12)
+        self.assertEqual(self.open_enrollment().development_remaining, 30)
+        self.assertEqual(self.occult_rating(), 11)
 
 
 class ACourseAtABoundary(_AcademyCourseCase):
     """Development past a boundary waits in the course until she breaks through."""
 
     def test_boundary_keeps_remainder(self) -> None:
-        # Enrolled, at 18 with 800 of the 900 to 19 banked, and 1200 of the course left.
+        # Enrolled, at 18 with 8 of the 10 to 19 banked, and 30 of the course left.
         self.made_with_occult(18)
         ledger = self.occult_ledger()
-        ledger.total_earned = cumulative_dp_for_level(18) + 800
+        ledger.total_earned = cumulative_dp_for_level(18) + 8
         ledger.save()
         SkillCourseEnrollmentFactory(
-            character_sheet=self.sheet, course=self.course, development_remaining=1200
+            character_sheet=self.sheet, course=self.course, development_remaining=30
         )
         purse_before, hares_before = self.purse(), self.hares()
 
         told = self.take_course("success")
         self.assertIn(
-            f"Success. Occult rises from 18 to 19. The course has 1100 of {TOTAL} left. "
+            f"Success. Occult rises from 18 to 19. The course has 28 of {TOTAL} left. "
             "Break through to continue the course.",
             told,
         )
         self.assertEqual(self.occult_rating(), 19)
-        self.assertEqual(self.open_enrollment().development_remaining, 1100)
+        self.assertEqual(self.open_enrollment().development_remaining, 28)
         self.assertEqual((self.purse(), self.hares()), (purse_before, hares_before))
 
         advance_game_week()
@@ -514,7 +510,7 @@ class ACourseAtABoundary(_AcademyCourseCase):
             told,
         )
         self.assertEqual(self.holdings(), before)
-        self.assertEqual(self.open_enrollment().development_remaining, 1100)
+        self.assertEqual(self.open_enrollment().development_remaining, 28)
 
         # She buys the breakthrough with XP.
         chart = XPCostChart.objects.create(name="Breakthroughs")
@@ -532,12 +528,12 @@ class ACourseAtABoundary(_AcademyCourseCase):
 
         advance_game_week()
         told = self.take_course("success")
-        # 20 -> 21 costs 1100, so the full 300 is banked toward it.
+        # 20 -> 21 costs 15, so the full 10 is banked toward it.
         self.assertIn(
-            f"Success. Occult stays at 20, closer to 21. The course has 800 of {TOTAL} left.",
+            f"Success. Occult stays at 20, closer to 21. The course has 18 of {TOTAL} left.",
             told,
         )
-        self.assertEqual(self.open_enrollment().development_remaining, 800)
+        self.assertEqual(self.open_enrollment().development_remaining, 18)
         self.assertEqual(self.occult_banked(), SESSION)
 
 
@@ -545,8 +541,8 @@ class TheTrainersMenu(_AcademyCourseCase):
     """The menu says what an offer costs before it is spent, in telnet and on the web."""
 
     ENROLL = "Enroll: 2s · 1 Golden Hare · 6 AP a session, the first one now"
-    NEXT = f"Next session · {SESSION_AP} AP · 1200 of {TOTAL} left"
-    NEXT_WEEK = f"Next session next week · {SESSION_AP} AP · 1200 of {TOTAL} left"
+    NEXT = f"Next session · {SESSION_AP} AP · 30 of {TOTAL} left"
+    NEXT_WEEK = f"Next session next week · {SESSION_AP} AP · 30 of {TOTAL} left"
 
     def menu(self) -> str:
         return strip_ansi(self.telnet(self.ysmay, "hire Magister Cadwen"))
@@ -681,6 +677,4 @@ class TheTrainersMenu(_AcademyCourseCase):
 
         self.assertEqual(price["display"], self.NEXT)
         self.assertEqual((price["coppers"], price["golden_hares"], price["ap"]), (0, 0, SESSION_AP))
-        self.assertEqual(
-            (price["development_remaining"], price["development_total"]), (1200, TOTAL)
-        )
+        self.assertEqual((price["development_remaining"], price["development_total"]), (30, TOTAL))

@@ -168,7 +168,7 @@ class DriftJourneyCase(JourneyCase):
         config = get_drift_correction_config()
         config.rite = DriftCorrectionRiteFactory()
         config.check_type = CheckTypeFactory()
-        config.check_difficulty = 0
+        config.check_difficulty_level = 0
         config.cap_percent = 50
         config.save()
         self.outcomes = {

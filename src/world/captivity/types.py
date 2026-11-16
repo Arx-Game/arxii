@@ -26,4 +26,4 @@ class CaptureSetup:
     cell_description: str
     clue_name: str
     clue_description: str
-    clue_detect_difficulty: int
+    clue_detect_difficulty_level: int

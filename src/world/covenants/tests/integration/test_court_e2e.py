@@ -273,7 +273,7 @@ class CourtJourneyEndToEndTests(TestCase):
         CharacterResonanceFactory(
             character_sheet=self.servant,
             resonance=self.resonance,
-            balance=20,
+            balance=120,
         )
         CharacterAnimaFactory(character=self.servant, current=10, maximum=20)
         # anima_per_thread=1 so a multi-thread pull actually debits anima
@@ -304,9 +304,9 @@ class CourtJourneyEndToEndTests(TestCase):
             "The Court-role thread's cap must be bounded by CourtPact.granted_pull_cap.",
         )
         # Imbuing greedily raises the thread up TO the cap (stored 10), no further.
-        # Levels 0-9 cost 1 dp each; the stored-10 XP boundary is already paid.
+        # Levels 0-9 cost 10 dp each (100 to the cap); the stored-10 XP boundary is already paid.
         ThreadLevelUnlock.objects.create(thread=thread, unlocked_level=10, xp_spent=0)
-        spend_resonance_for_imbuing(self.servant, thread, thread.resonance, 12)
+        spend_resonance_for_imbuing(self.servant, thread, thread.resonance, 105)
         thread.refresh_from_db()
         self.assertEqual(
             thread.level,

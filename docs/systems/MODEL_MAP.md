@@ -1283,7 +1283,7 @@
 - `escape_captivity(captive: 'CharacterSheet') -> 'bool' - Free a captive by their own hand (#931 Phase 4) — the escape loop's verb.`
 - `rescue_captive(captive: 'CharacterSheet') -> 'bool' - Free a captive via rescue (#931 Phase 4) — a rescue run's terminal verb.`
 - `resolve_captivity(captivity: 'Captivity', *, status: 'str') -> 'None' - End a captivity and free the captive.`
-- `resolve_capture_setup(*, captive_template: 'MissionTemplate | None' = None, rescue_template: 'MissionTemplate | None' = None, cell_name: 'str' = '', cell_description: 'str' = '', clue_name: 'str' = '', clue_description: 'str' = '', clue_detect_difficulty: 'int | None' = None) -> 'CaptureSetup' - Resolve one capture's loops + cell flavor: per-capture override, else default.`
+- `resolve_capture_setup(*, captive_template: 'MissionTemplate | None' = None, rescue_template: 'MissionTemplate | None' = None, cell_name: 'str' = '', cell_description: 'str' = '', clue_name: 'str' = '', clue_description: 'str' = '', clue_detect_difficulty_level: 'int | None' = None) -> 'CaptureSetup' - Resolve one capture's loops + cell flavor: per-capture override, else default.`
 - `spawn_instanced_room(name: str, description: str, owner: world.character_sheets.models.CharacterSheet | None, return_location: evennia.objects.models.ObjectDB | None, source_key: str = '', gm_owner: world.gm.models.GMProfile | None = None, anchor_room: evennia.objects.models.ObjectDB | None = None, area: world.areas.models.Area | None = None) -> evennia.objects.models.ObjectDB - Create a temporary instanced room, its RoomProfile, and lifecycle record.`
 
 
@@ -2052,6 +2052,8 @@
   - condition_check_modifiers <- conditions.ConditionCheckModifier
   - modifier_targets <- mechanics.ModifierTarget
 
+### CheckScaleConfig
+
 ### CheckType
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
@@ -2175,7 +2177,11 @@
 **Foreign Keys:**
   - outcome -> checks.ConsequenceOutcome [FK]
 
+### LevelTier
+
 ### ModifierLevelBaseline
+
+### ModifierSizeFraction
 
 ### ModifierTaper
 
@@ -2188,20 +2194,29 @@
 - `chart_has_success_outcomes(rank_difference: int) -> bool - Check if the ResultChart for this rank difference has any success outcomes.`
 - `collect_check_modifiers(character_sheet: 'CharacterSheet', check_type: 'CheckType', *, scene: 'Scene | None' = None, extra_contributions: list[world.checks.types.ModifierContribution] | None = None, skip_fashion: bool = False, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> world.checks.types.ModifierBreakdown - Aggregate all modifier contributions for a check into a ModifierBreakdown.`
 - `compute_check_rating(character: 'ObjectDB', check_type: 'CheckType', extra_modifiers: int = 0, *, level_override: int | None = None, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> int - Return *character*'s pre-roll rating (total points) for *check_type* — no dice roll.`
+- `compute_obstacle_rating(character: 'ObjectDB', check_type: 'CheckType', *, extra_modifiers: int = 0, level_override: int | None = None, stat_override: str | int | None = None) -> int - What a character who is the obstacle counts for on *check_type*, her full total (#5093).`
 - `compute_resist_increment(defender_character: 'ObjectDB', resist_effort_level: str, *, level_override: int | None = None, stat_override: str | int | None = None, award_development: bool = False) -> int - Compute how much a defender's active resistance raises difficulty.`
+- `difficulty_level_for_points(points: int) -> int - The level whose strength is nearest ``points``, ties to the lower level (#5093).`
+- `difficulty_points(level: int, tables: world.checks.services.DifficultyTables | None = None) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
+- `difficulty_step_points(tenths: int | decimal.Decimal, at_level: int, tables: world.checks.services.DifficultyTables | None = None) -> int - An authored difficulty increment in tenths of a level as points at ``at_level`` (#5093).`
 - `get_character_path_level(character: 'ObjectDB') -> 'int' - Return the character's primary class level (or highest, or 1).`
 - `get_rollmod(character: 'ObjectDB') -> int - Sum character.sheet_data.rollmod + character.account.player_data.rollmod.`
 - `is_botch_immune(character_sheet: 'CharacterSheet', check_type: 'CheckType') -> bool - Whether the character cannot botch at ``check_type`` (#4386).`
-- `level_opposition(check_type: 'CheckType', *, level: int, character: 'ObjectDB | None' = None) -> int - Difficulty an opposing entity of *level* adds to *check_type* (#2707).`
+- `level_opposition(check_type: 'CheckType', *, level: int, character: 'ObjectDB | None' = None) -> int - Difficulty an opposing NPC of *level* adds to *check_type* (#2707, #5093).`
+- `level_points(level: int, tables: world.checks.services.DifficultyTables | None = None, level_share: decimal.Decimal | None = None) -> int - The level term of a roll at ``level``: ``level_share`` of its baseline plus its tier jump.`
+- `load_baselines(lane: 'str' = ModifierLane.CHECK) -> 'BaselineTable' - Load ``lane``'s ``ModifierLevelBaseline`` rows in one query.`
+- `load_difficulty_tables() -> world.checks.services.DifficultyTables - Load the CHECK baselines and the level tiers, two queries.`
 - `load_taper_rules(lane: 'str' = ModifierLane.CHECK) -> 'dict[str, TaperRule]' - ``lane``'s taper rules by source kind, in one query. Empty means no taper.`
-- `load_value_table(lane: 'str' = ModifierLane.CHECK) -> 'ValueTable' - Load ``lane``'s ``ModifierValue`` rows in one query.`
+- `load_tier_table() -> 'TierTable' - Load every ``LevelTier`` row in one query.`
+- `load_value_table(lane: 'str' = ModifierLane.CHECK) -> 'ValueTable' - Load ``lane``'s overrides, size fractions and level baselines in three queries.`
 - `mirrored_outcome(outcome: 'CheckOutcome') -> 'CheckOutcome | None' - The outcome on the other side of a resisted roll (#4418).`
 - `modifier_target_contributions(character_sheet: 'CharacterSheet', target: 'ModifierTarget', *, lane: str, inputs: 'DerivedInputs | None' = None) -> list[world.checks.types.ModifierContribution] - A ModifierTarget's CHARACTER and EQUIPMENT contributions, priced from ``lane``.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> world.checks.types.CheckResult - Main check resolution function.`
 - `perform_check_with_modifiers(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, scene: 'Scene | None' = None, extra_contributions: 'list[ModifierContribution] | None' = None, skip_fashion: bool = False, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> world.checks.types.CheckResult - Run a check with all character modifiers gathered automatically.`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, *, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> int - Preview the rank difference for a check without rolling.`
 - `record_consequence_outcome(character_sheet: 'CharacterSheet', check_type: 'CheckType', pool, selected_consequence: 'Consequence | None', breakdown: world.checks.types.ModifierBreakdown, *, combat_interaction: 'Interaction | None' = None, challenge_record: 'CharacterChallengeRecord | None' = None, action_interaction: 'Interaction | None' = None, summary: str = '', skill_rating: int | None = None, snapshot: 'RollSnapshot | None' = None, combat_round: int | None = None, combat_roll_kind: str | None = None) -> world.checks.outcome_models.ConsequenceOutcome - Persist one consequence-resolution event as a ConsequenceOutcome + modifier rows.`
-- `resolve_standing(roller_points: 'int', target_points: 'int', *, ranks: 'Sequence[CheckRank] | None' = None) -> 'CheckStanding' - Band positions, the slide and the chart for one check, without rolling.`
+- `resolve_standing(roller_points: 'int', target_points: 'int', *, ranks: 'Sequence[RankStep] | None' = None) -> 'CheckStanding' - Band positions, the slide and the chart for one check, without rolling.`
+- `round_half_up(value: 'Decimal') -> 'int' - ``value`` to a whole number, halves away from zero (so -1.5 is -2, signed alike).`
 
 
 ## world.classes
@@ -2351,7 +2366,7 @@
 - `grant_clue_target(clue: 'Clue', roster_entry: 'RosterEntry') -> 'None' - AUTOMATIC resolution — grant a clue's target to the character on the spot.`
 - `maybe_grant_clue_triggers(character: 'ObjectDB', room: 'ObjectDB') -> 'list[Clue]' - Grant clues triggered passively by entering ``room`` (#1160).`
 - `maybe_grant_item_acquisition_clues(character: 'ObjectDB', item: 'ItemInstance') -> 'list[Clue]' - Grant clues triggered passively by ``character`` acquiring ``item`` (#1160).`
-- `plant_rescue_clue(captivity: 'Captivity', room_profile: 'RoomProfile', *, name: 'str', description: 'str', detect_difficulty: 'int' = 0) -> 'RoomClue' - Plant a discoverable rescue clue at a location for a held captive (#931 Phase 4).`
+- `plant_rescue_clue(captivity: 'Captivity', room_profile: 'RoomProfile', *, name: 'str', description: 'str', detect_difficulty_level: 'int' = 0) -> 'RoomClue' - Plant a discoverable rescue clue at a location for a held captive (#931 Phase 4).`
 - `search_room(character: 'ObjectDB', room_profile: 'RoomProfile', search_check_type: 'CheckType') -> 'list[Clue]' - Search a room: roll ``search_check_type`` against each hidden clue's difficulty.`
 - `target_already_known(clue: 'Clue', roster_entry: 'RosterEntry') -> 'bool' - Whether the character already has what this clue points at.`
 
@@ -3466,7 +3481,9 @@
 - `breath_hold_rounds(target: 'ObjectDB') -> int | None - Roll *target*'s breath check and return how many rounds she can hold it (#4741).`
 - `bulk_apply_conditions(applications: list[world.conditions.types.BulkConditionApplication], *, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '', soulfray_consented: bool = False) -> list[world.conditions.types.ApplyConditionResult] - Apply multiple conditions in a single transaction with batched queries.`
 - `can_perceive(actor: 'ObjectDB', target: 'ObjectDB') -> bool - Whether *actor* can perceive *target*.`
+- `caster_opposition(instance: world.conditions.models.ConditionInstance, check_type: world.checks.models.CheckType) -> int - What the caster adds to the difficulty of reading, rallying against or breaking a hold.`
 - `clear_all_conditions(target: 'ObjectDB', *, only_negative: bool = False, only_category: 'ConditionCategory | None' = None) -> int - Remove all conditions from a target.`
+- `compute_obstacle_rating(character: 'ObjectDB', check_type: 'CheckType', *, extra_modifiers: int = 0, level_override: int | None = None, stat_override: str | int | None = None) -> int - What a character who is the obstacle counts for on *check_type*, her full total (#5093).`
 - `condition_capability_contributions(character_sheet: 'CharacterSheet') -> list[world.conditions.types.ConditionCapabilityContribution] - What each active condition adds to each capability, with its marks (#5066).`
 - `condition_contributions(character_sheet: 'CharacterSheet', check_type: world.checks.models.CheckType) -> list[world.checks.types.ModifierContribution] - Adapt get_check_modifier's breakdown into a list of ModifierContribution.`
 - `condition_modifier_totals_by_sheet(sheet_ids: collections.abc.Iterable[int], modifier_target: 'ModifierTarget') -> dict[int, int] - Batched ``get_condition_modifier_total`` across many sheets (#4090).`
@@ -3475,6 +3492,8 @@
 - `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary - Scheduler entry point. Decays all opt-in conditions by one tick.`
 - `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult - Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
 - `derived_amount(sheet: 'CharacterSheet | None', row: 'DerivedAmountMixin', per_step: 'int', inputs: 'DerivedInputs | None' = None) -> 'int' - ``per_step`` times the input's whole steps for ``sheet``, held at the row's cap.`
+- `difficulty_points(level: int, tables: world.checks.services.DifficultyTables | None = None) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
+- `difficulty_step_points(tenths: int | decimal.Decimal, at_level: int, tables: world.checks.services.DifficultyTables | None = None) -> int - An authored difficulty increment in tenths of a level as points at ``at_level`` (#5093).`
 - `draws_aggro_target_ids(targets: collections.abc.Iterable['ObjectDB']) -> set[int] - ObjectDB pks among ``targets`` carrying an active draws_aggro condition (#4572).`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack - Dispatch ``event_name`` to every handler in ``location`` + contents.`
 - `ensure_conditions_content() -> None - Idempotently seed all core conditions content.`
@@ -3506,12 +3525,14 @@
 - `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool - Check if target has a specific condition.`
 - `has_death_deferred(character: 'ObjectDB') -> bool - Return True if the character has any active condition granting death_deferred.`
 - `held_breath_instances(target: 'ObjectDB') -> list[world.conditions.models.ConditionInstance] - The bearer's active conditions that last only while she holds her breath.`
+- `held_step_points(instance: world.conditions.models.ConditionInstance, tenths: int) -> int - A condition's authored difficulty in tenths of a level, as points, on top of the caster.`
 - `is_concealed(target: 'ObjectDB') -> bool - True if *target* holds any active perception-concealing condition.`
 - `is_intangible(target: 'ObjectDB') -> bool - True if *target* holds any active intangibility condition.`
 - `is_magical_treatment(treatment: world.conditions.models.TreatmentTemplate, *, technique_driven: bool = False) -> bool - Whether ``treatment`` is magical; otherwise it is mundane first aid (#4450, #4600).`
 - `knockout_preventing_instance(target: 'ObjectDB') -> world.conditions.models.ConditionInstance | None - The bearer's oldest active, unsuppressed ``prevents_knockout`` instance, or None (#4584).`
+- `level_opposition(check_type: 'CheckType', *, level: int, character: 'ObjectDB | None' = None) -> int - Difficulty an opposing NPC of *level* adds to *check_type* (#2707, #5093).`
 - `load_taper_rules(lane: 'str' = ModifierLane.CHECK) -> 'dict[str, TaperRule]' - ``lane``'s taper rules by source kind, in one query. Empty means no taper.`
-- `load_value_table(lane: 'str' = ModifierLane.CHECK) -> 'ValueTable' - Load ``lane``'s ``ModifierValue`` rows in one query.`
+- `load_value_table(lane: 'str' = ModifierLane.CHECK) -> 'ValueTable' - Load ``lane``'s overrides, size fractions and level baselines in three queries.`
 - `loss_of_self_terms(template: world.conditions.models.ConditionTemplate) -> 'tuple[ExtraTraitTerm, ...]' - The skills a resist or break-free roll adds for ``template``, usually none.`
 - `opponent_condition_opposition(objectdb: 'ObjectDB', check_type: world.checks.models.CheckType) -> int - Difficulty delta an opposing entity's active conditions contribute (#3384).`
 - `passes_concealment_check(actor: 'ObjectDB', target: 'ObjectDB') -> bool - Check concealment after the caller has established readable spatial scope.`
@@ -3533,7 +3554,6 @@
 - `resolve_damage_type_resistance(character: 'ObjectDB', damage_amount: int, damage_type: 'DamageType | None', *, resistance_shift: int = 0) -> int - Net damage-type resistance (condition + gift-thread) and return reduced damage (>=0).`
 - `resolved_damage_type(damage_type: 'DamageType | None') -> 'DamageType | None' - The damage type a hit really is: untyped damage is Physical (#4742).`
 - `retaliating_instances(target: 'ObjectDB') -> list[world.conditions.models.ConditionInstance] - The bearer's active strike-back instances, oldest first, in one query (#4584).`
-- `round_half_up(value: 'Decimal') -> 'int' - ``value`` to a whole number, halves away from zero (so -1.5 is -2, signed alike).`
 - `scaled_condition_effect_value(effect: world.conditions.models.ConditionModifierEffect, instance: world.conditions.models.ConditionInstance, inputs: world.mechanics.derived_amounts.DerivedInputs | None = None) -> int - One ConditionModifierEffect's contribution on one active instance (#4090).`
 - `scaled_damage_dealt_percent(modifier: 'ConditionDamageDealtModifier', instance: world.conditions.models.ConditionInstance) -> int - One ConditionDamageDealtModifier's percent on one active instance (#4742).`
 - `scaled_outgoing_damage(attacker: 'ObjectDB | None', amount: int, damage_type: 'DamageType | None') -> int - *amount* after the attacker's own ConditionDamageDealtModifier rows (#4742).`
@@ -4391,6 +4411,8 @@
 
 ## world.fatigue
 
+### FatigueConfig
+
 ### FatiguePool
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [OneToOne]
@@ -4402,6 +4424,7 @@
 - `attempt_endurance_check(character_sheet: 'CharacterSheet', category: 'str') -> 'bool' - Endurance check against fatigue via the unified check system.`
 - `attempt_power_through(character_sheet: 'CharacterSheet', category: 'str') -> 'tuple[bool, int]' - Willpower check to power through collapse via the unified check system.`
 - `ensure_stat_trait(name: 'str') -> 'Trait' - Ensure the named STAT Trait exists, creating it from STAT_TRAIT_DEFAULTS if not.`
+- `get_fatigue_capacities(character_sheet: 'CharacterSheet', categories: 'Iterable[str]' = (ActionCategory.PHYSICAL, ActionCategory.SOCIAL, ActionCategory.MENTAL), *, well_rested: 'bool | None' = None) -> 'dict[str, int]' - Max fatigue capacity for each of ``categories``, reading the shared terms once.`
 - `get_fatigue_capacity(character_sheet: 'CharacterSheet', category: 'str', *, well_rested: 'bool | None' = None) -> 'int' - Calculate max fatigue capacity for a category.`
 - `get_fatigue_penalty(character_sheet: 'CharacterSheet', category: 'str') -> 'int' - Return the check penalty for the current fatigue zone.`
 - `get_fatigue_percentage(character_sheet: 'CharacterSheet', category: 'str') -> 'float' - Return current fatigue as a percentage of capacity.`
@@ -4410,6 +4433,7 @@
 - `get_full_status(character_sheet: 'CharacterSheet', *, pool: 'FatiguePool | None') -> 'dict' - Get fatigue status for all three categories in one pass.`
 - `get_or_create_fatigue_pool(character_sheet: 'CharacterSheet') -> 'FatiguePool' - Get or create a FatiguePool for a character sheet.`
 - `lever_total(sheet: 'CharacterSheet', category_name: 'str', target_name: 'str') -> 'int' - The character's total on one lever target, 0 when the target is not authored.`
+- `load_baselines(lane: 'str' = ModifierLane.CHECK) -> 'BaselineTable' - Load ``lane``'s ``ModifierLevelBaseline`` rows in one query.`
 - `perform_check_with_modifiers(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, scene: 'Scene | None' = None, extra_contributions: 'list[ModifierContribution] | None' = None, skip_fashion: bool = False, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> world.checks.types.CheckResult - Run a check with all character modifiers gathered automatically.`
 - `recover_fatigue(character_sheet: 'CharacterSheet', category: 'str', amount: 'int') -> 'int' - Reduce one fatigue pool by up to *amount*, floored at zero (#2852).`
 - `reset_fatigue(character_sheet: 'CharacterSheet') -> 'None' - Reset all fatigue pools to 0.`
@@ -7663,6 +7687,7 @@
 - `delete_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'int' - Delete all modifier records for a distinction.`
 - `derived_amount(sheet: 'CharacterSheet | None', row: 'DerivedAmountMixin', per_step: 'int', inputs: 'DerivedInputs | None' = None) -> 'int' - ``per_step`` times the input's whole steps for ``sheet``, held at the row's cap.`
 - `difficulty_indicator_for_rank_difference(rank_diff: 'int') -> 'DifficultyIndicator' - Classify a check's rank difference.`
+- `difficulty_points(level: int, tables: world.checks.services.DifficultyTables | None = None) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
 - `end_engagement(character: 'ObjectDB', engagement_type: 'str', *, source: 'object') -> 'None' - Delete the character's engagement iff it matches type AND source.`
 - `ensure_aspect_target(aspect: 'Aspect') -> 'ModifierTarget | None' - The aspect-category ``ModifierTarget`` an Aspect's bonuses land on, made if missing (#4827).`
 - `ensure_skill_target(trait: 'Trait') -> 'ModifierTarget | None' - The stat-category ``ModifierTarget`` a skill's bonuses land on, created if missing (#4820).`
@@ -7676,7 +7701,9 @@
 - `get_modifier_breakdown(character, modifier_target: 'ModifierTarget', *, value_lane: 'str | None' = None, inputs: 'DerivedInputs | None' = None) -> 'ModifierBreakdown' - Get detailed breakdown of all modifiers for a target.`
 - `get_modifier_total(character, modifier_target: 'ModifierTarget', *, perceiving_society: 'object | None' = None, level_override: 'int | None' = None) -> 'int' - Get total modifier value for a target.`
 - `item_mundane_stat_for_target(item: 'ItemInstance', target: 'ModifierTarget') -> 'int' - Mundane combat stat an equipped item contributes to ``target`` (#985, §5.6).`
-- `load_value_table(lane: 'str' = ModifierLane.CHECK) -> 'ValueTable' - Load ``lane``'s ``ModifierValue`` rows in one query.`
+- `load_baselines(lane: 'str' = ModifierLane.CHECK) -> 'BaselineTable' - Load ``lane``'s ``ModifierLevelBaseline`` rows in one query.`
+- `load_difficulty_tables() -> world.checks.services.DifficultyTables - Load the CHECK baselines and the level tiers, two queries.`
+- `load_value_table(lane: 'str' = ModifierLane.CHECK) -> 'ValueTable' - Load ``lane``'s overrides, size fractions and level baselines in three queries.`
 - `motif_coherence_bonus(sheet: 'object', resonance_id: 'int') -> 'int' - Per-resonance fashion-coherence bonus from worn styles bound to the character's Motif.`
 - `passive_facet_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum tier-0 FLAT_BONUS contributions from equipped item facets (Spec D §5.2).`
 - `passive_facet_crossing_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum ConditionModifierEffect from FACET thread crossing choices (wear-gated).`
@@ -8362,6 +8389,7 @@
 - `adjust_npc_affection(pc_persona, npc_persona, *, delta: 'int') -> 'int' - Apply a disposition ``delta`` to the (pc_persona, npc_persona) standing.`
 - `available_offers(session: 'InteractionSession', *, pool_count: 'int | None' = None) -> 'list[NPCServiceOffer]' - Return offers the PC can currently see/select, in stable order.`
 - `complete_recorded_profile(profile: 'RecordedProfile', text: 'str') -> 'RecordedProfile' - Finalize a COMMISSIONED sitting: the write-up arrives (#2632).`
+- `difficulty_points(level: int, tables: world.checks.services.DifficultyTables | None = None) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' - Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' - Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' - Evaluate a predicate rule tree against an acting-character context.`
@@ -8614,6 +8642,8 @@
   - cohort -> progression.DuranceCohort [FK]
   - persona -> scenes.Persona [FK]
   - enrollment_scene -> scenes.Scene [FK] (nullable)
+
+### DevelopmentCostConfig
 
 ### DevelopmentPoints
 **Foreign Keys:**
@@ -10256,7 +10286,8 @@
 - `boundary_message(name: 'str', next_rating: 'int') -> 'str' - The XP-boundary plateau message for a skill named ``name`` (#2115, #5010).`
 - `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object>, _path_levels: 'dict[int, int] | None' = None) -> 'int' - Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' - Create a new training allocation for a character.`
-- `cumulative_dp_for_level(level: int) -> int - Total dp needed to reach *level* from the base level of 10.`
+- `cumulative_dp_for_level(value: 'int') -> 'int' - Total development points needed to reach ``value`` from the base level of 10.`
+- `dp_cost_for_step(value: 'int') -> 'int' - Development points the step from ``value`` to ``value + 1`` costs (minimum 1).`
 - `get_relationship_tier(character_a: 'CharacterSheet | ObjectDB', character_b: 'CharacterSheet | ObjectDB') -> 'int' - The lower claimed tier of a mutual Mentor/Student tie, else 0 (#3957).`
 - `get_specialization_value(character: 'ObjectDB', specialization: 'Specialization') -> 'int' - A character's raw value for a specialization, 0 if unowned (#1688).`
 - `has_specialization(character: 'ObjectDB', specialization: 'Specialization', *, minimum_value: 'int' = 10) -> 'bool' - Whether a character owns a specialization at ``minimum_value`` or better (#1688).`
@@ -11802,6 +11833,7 @@
 - `aptitude_band(persona, category: 'str') -> 'int' - The agent's band for a job family, minted lazily on first read.`
 - `assign_agent(task: 'OrgTask', npc_asset: 'NPCAsset', handler: 'Persona') -> 'TaskFulfillment' - Dispatch an owned, active agent on an OPEN task.`
 - `create_task(template: 'TaskTemplate', org: 'Organization', issued_by: 'Persona', *, target_room=None, target_org=None, target_domain=None, target_persona=None, target_crisis=None) -> 'OrgTask' - Create an OPEN task instance. Caller (view/action) gates leadership.`
+- `difficulty_points(level: int, tables: world.checks.services.DifficultyTables | None = None) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
 - `resolve_due_tasks() -> 'int' - Game-clock sweep: resolve every ASSIGNED task whose deadline has passed.`
 - `resolve_task(task: 'OrgTask') -> 'TaskFulfillment' - Resolve an ASSIGNED task now: agent check -> route payouts + risk pool.`
 - `resolve_task_for_mission(instance, route=None) -> 'None' - Terminal-completion seam (#2820 phase 5) — mirrors the crisis seam.`
@@ -12066,6 +12098,8 @@
 - `defer_or_apply_certain_death(character_sheet: 'CharacterSheet') -> 'bool' - Soulfray made this death certain (#4098 decision 9). True when deferred.`
 - `derive_base_max_health(character_sheet: 'CharacterSheet') -> 'int' - Derive base_max_health = class stage-rate sum + stamina term + covenant-role armor.`
 - `derive_character_status(character_sheet: 'CharacterSheet | None') -> 'str' - Derive a coarse, read-only life-status string for the wire/API.`
+- `difficulty_points(level: int, tables: world.checks.services.DifficultyTables | None = None) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
+- `difficulty_step_points(tenths: int | decimal.Decimal, at_level: int, tables: world.checks.services.DifficultyTables | None = None) -> int - An authored difficulty increment in tenths of a level as points at ``at_level`` (#5093).`
 - `frailty_floor_reached(character_sheet: 'CharacterSheet') -> 'bool' - True when age-bled max health has crossed the dying floor (#2756).`
 - `get_dream_room() -> 'ObjectDB | None' - Return the liminal dream room (seeded by the survivability cluster).`
 - `get_vitals_consequence_config() -> 'VitalsConsequenceConfig' - Return the VitalsConsequenceConfig singleton (pk=1), creating it lazily on first call.`

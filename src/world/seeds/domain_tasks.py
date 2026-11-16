@@ -146,7 +146,7 @@ def _seed_mission_template(check_type):
 def _seed_task_template(mission_template, check_type) -> None:
     """The TaskTemplate a domain steward issues; grades via ``mission_template``.
 
-    ``check_difficulty`` is a static authored value — the "steward's check
+    ``check_difficulty_level`` is a static authored value — the "steward's check
     sets difficulty" mechanic (#696 item 8) is deliberately unbuilt; this is
     a placeholder until a steward-competence input exists to shift it.
 
@@ -155,7 +155,6 @@ def _seed_task_template(mission_template, check_type) -> None:
     rather than an independent scale, so each authored tier lands exactly the
     band its name promises — see the per-route comments below.
     """
-    from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice  # noqa: PLC0415
     from world.tasking.constants import TaskCategory, TaskTargetKind  # noqa: PLC0415
     from world.tasking.models import TaskOutcomeRoute, TaskTemplate  # noqa: PLC0415
     from world.traits.models import CheckOutcome  # noqa: PLC0415
@@ -169,9 +168,8 @@ def _seed_task_template(mission_template, check_type) -> None:
             ),
             "category": TaskCategory.DOMAIN,
             "check_type": check_type,
-            "check_difficulty": DIFFICULTY_VALUES[
-                DifficultyChoice.NORMAL
-            ],  # PLACEHOLDER — issue #696 item 8: "steward's check sets difficulty"
+            # PLACEHOLDER — issue #696 item 8: "steward's check sets difficulty"
+            "check_difficulty_level": 2,
             # is deliberately unbuilt; static authored value until then.
             "duration": timedelta(days=3),  # PLACEHOLDER
             "target_kind": TaskTargetKind.DOMAIN,

@@ -283,7 +283,9 @@ function OfferCard({
     offer.rapport_delta_failure?.toString() ?? ''
   );
   const [checkType, setCheckType] = useState(offer.check_type?.toString() ?? '');
-  const [checkDifficulty, setCheckDifficulty] = useState(offer.check_difficulty?.toString() ?? '');
+  const [checkDifficulty, setCheckDifficulty] = useState(
+    offer.check_difficulty_level?.toString() ?? ''
+  );
   const [offerCooldown, setOfferCooldown] = useState(offer.cooldown ?? '');
 
   // Only validate/coerce once the predicate-leaf catalog has loaded — otherwise
@@ -303,7 +305,7 @@ function OfferCard({
         rapport_delta_success: numOrNull(rapportDeltaSuccess) ?? 0,
         rapport_delta_failure: numOrNull(rapportDeltaFailure) ?? 0,
         check_type: numOrNull(checkType),
-        check_difficulty: numOrNull(checkDifficulty) ?? 0,
+        check_difficulty_level: numOrNull(checkDifficulty) ?? 0,
         cooldown: offerCooldown.trim() || null,
         eligibility_rule: leavesQuery.isSuccess ? coercePredicate(rule, leaves) : rule,
       },
@@ -391,7 +393,7 @@ function OfferCard({
               placeholder="optional: gates a perform_check"
             />
           </Field>
-          <Field label="Check difficulty">
+          <Field label="Check difficulty level">
             <Input
               type="number"
               value={checkDifficulty}

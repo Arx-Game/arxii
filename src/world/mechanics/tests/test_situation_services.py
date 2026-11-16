@@ -43,8 +43,8 @@ class InstantiateSituationTest(TestCase):
         link = SituationTrapLinkFactory(
             situation_template=template,
             name="Spike Pit",
-            detect_difficulty=15,
-            disarm_difficulty=30,
+            detect_difficulty_level=1,
+            disarm_difficulty_level=2,
             is_hidden=False,
         )
         room_profile = RoomProfileFactory()
@@ -55,8 +55,8 @@ class InstantiateSituationTest(TestCase):
         assert trap.consequence_pool == link.consequence_pool
         assert trap.detect_check_type == link.detect_check_type
         assert trap.disarm_check_type == link.disarm_check_type
-        assert trap.detect_difficulty == 15
-        assert trap.disarm_difficulty == 30
+        assert trap.detect_difficulty_level == 1
+        assert trap.disarm_difficulty_level == 2
         assert trap.is_hidden is False
         assert trap.is_armed is True
         assert trap.detected_by.count() == 0

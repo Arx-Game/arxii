@@ -19,6 +19,12 @@ import contextvars
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from world.checks.services import (
+    DifficultyTables,
+    difficulty_points,
+    difficulty_step_points,
+    load_difficulty_tables,
+)
 from world.conditions.constants import ControlLossFiresOn
 from world.conditions.types import (
     CompulsionActionCost,
@@ -178,19 +184,42 @@ def compulsion_difficulty(
     forbidden: str | None,
     *,
     row: CompulsionForbiddenAction | None = None,
+    tables: DifficultyTables | None = None,
 ) -> int:
     """The resist roll's difficulty: base, plus per severity, plus a forbidden extra.
 
     ``forbidden`` is a ``CompulsionForbidden`` value; it adds that action's
     ``extra_difficulty`` only when the compulsion names it. A caller that already
-    fetched the row passes it as ``row`` and no query is made.
+    fetched the row passes it as ``row`` and no query is made. A caller costing many
+    actions passes one ``tables`` (``load_difficulty_tables``) so the ladder rows load once.
     """
     if row is None and forbidden is not None:
         row = forbidden_row(compulsion, forbidden)
-    extra = row.extra_difficulty if row is not None else 0
     return (
-        compulsion.base_difficulty + compulsion.difficulty_per_severity * instance.severity + extra
+        difficulty_points(compulsion.base_difficulty_level, tables)
+        + _forbidden_extra_points(compulsion, row, tables)
+        + _step_points(
+            compulsion.difficulty_per_severity_tenths * instance.severity, compulsion, tables
+        )
     )
+
+
+def _step_points(
+    tenths: int, compulsion: Compulsion, tables: DifficultyTables | None = None
+) -> int:
+    """A compulsion's tenths of a level as points at its base difficulty's level (#5093)."""
+    return difficulty_step_points(tenths, compulsion.base_difficulty_level, tables)
+
+
+def _forbidden_extra_points(
+    compulsion: Compulsion,
+    row: CompulsionForbiddenAction | None,
+    tables: DifficultyTables | None = None,
+) -> int:
+    """What a forbidden-action row adds to the resist difficulty, in points."""
+    if row is None:
+        return 0
+    return _step_points(row.extra_difficulty_tenths, compulsion, tables)
 
 
 def compulsion_summary_for(
@@ -215,6 +244,7 @@ def compulsion_summary_for(
         return None
     compulsion, instance = found
     rows = {row.action: row for row in compulsion.forbidden.all()}
+    tables = load_difficulty_tables() if options else None
     against = []
     for option in options:
         row = rows.get(option.forbidden_key) if option.forbidden_key is not None else None
@@ -222,9 +252,11 @@ def compulsion_summary_for(
             CompulsionActionCost(
                 action_key=option.action_key,
                 label=option.label,
-                difficulty=compulsion_difficulty(compulsion, instance, None, row=row),
+                difficulty=compulsion_difficulty(
+                    compulsion, instance, None, row=row, tables=tables
+                ),
                 forbidden=row is not None,
-                extra_difficulty=row.extra_difficulty if row is not None else 0,
+                extra_difficulty=_forbidden_extra_points(compulsion, row, tables),
             )
         )
     return CompulsionSummary(
@@ -400,10 +432,11 @@ def _difficulty(
     sheet: CharacterSheet, trigger: ControlLossTrigger, *, moon_pull: int, level: int
 ) -> int:
     """base + per-pull * pull - per-level * level - thread relief, floored at 0."""
+    anchor = trigger.base_difficulty_level
     total = (
-        trigger.base_difficulty
-        + (trigger.difficulty_per_pull or 0) * moon_pull
-        - trigger.relief_per_level * level
+        difficulty_points(anchor)
+        + difficulty_step_points((trigger.difficulty_per_pull_tenths or 0) * moon_pull, anchor)
+        - difficulty_step_points(trigger.relief_per_level_tenths * level, anchor)
         - _thread_relief(sheet, trigger)
     )
     return max(0, total)
@@ -413,7 +446,7 @@ def _thread_relief(sheet: CharacterSheet, trigger: ControlLossTrigger) -> int:
     """Relief from the character's thread on the trigger's relief gift, capped."""
     from world.magic.models import Thread  # noqa: PLC0415
 
-    if trigger.relief_gift_id is None or not trigger.relief_per_thread_level:
+    if trigger.relief_gift_id is None or not trigger.relief_per_thread_level_tenths:
         return 0
     thread = (
         Thread.objects.filter(
@@ -424,8 +457,11 @@ def _thread_relief(sheet: CharacterSheet, trigger: ControlLossTrigger) -> int:
     )
     if thread is None:
         return 0
-    relief = thread.level * trigger.relief_per_thread_level
-    return relief if trigger.relief_cap is None else min(trigger.relief_cap, relief)
+    anchor = trigger.base_difficulty_level
+    relief = difficulty_step_points(thread.level * trigger.relief_per_thread_level_tenths, anchor)
+    if trigger.relief_cap_tenths is None:
+        return relief
+    return min(difficulty_step_points(trigger.relief_cap_tenths, anchor), relief)
 
 
 def _is_impaired(sheet: CharacterSheet, trigger: ControlLossTrigger) -> bool:

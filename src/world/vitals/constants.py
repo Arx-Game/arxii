@@ -62,31 +62,32 @@ WOUND_DESCRIPTIONS: list[tuple[float, str]] = [
 # Survivability check difficulty scaling
 # ---------------------------------------------------------------------------
 
-# Base difficulty for knockout check at exactly 20% health
-KNOCKOUT_BASE_DIFFICULTY: int = 20
-# Additional difficulty per percentage point below 20% health
-KNOCKOUT_SCALING_PER_PERCENT: int = 3
+# Base difficulty (a level) for knockout check at exactly 20% health
+KNOCKOUT_BASE_DIFFICULTY_LEVEL: int = 1
+# Additional difficulty (tenths of a level's width) per percentage point below 20% health
+KNOCKOUT_SCALING_PER_PERCENT_TENTHS: int = 6
 
-# Base difficulty for death check at exactly 0% health
-DEATH_BASE_DIFFICULTY: int = 30
-# Additional difficulty per percentage point below 0%
-DEATH_SCALING_PER_PERCENT: int = 5
+# Base difficulty (a level) for death check at exactly 0% health
+DEATH_BASE_DIFFICULTY_LEVEL: int = 2
+# Additional difficulty (tenths of a level's width) per percentage point below 0%
+DEATH_SCALING_PER_PERCENT_TENTHS: int = 10
 
-# Base difficulty for permanent wound check at exactly 50% damage
-WOUND_BASE_DIFFICULTY: int = 15
-# Additional difficulty per percentage point of max_health over threshold
-WOUND_SCALING_PER_PERCENT: int = 2
+# Base difficulty (a level) for permanent wound check at exactly 50% damage
+WOUND_BASE_DIFFICULTY_LEVEL: int = 1
+# Additional difficulty (tenths of a level's width) per percentage point of max_health over
+# threshold
+WOUND_SCALING_PER_PERCENT_TENTHS: int = 4
 
 # ---------------------------------------------------------------------------
 # Wake arc (unconscious recovery) + death off-ramp tuning (#2287)
 # ---------------------------------------------------------------------------
 
-# Base difficulty of the per-round wake (Endurance) check at full health
-WAKE_BASE_DIFFICULTY: int = 20
-# Additional difficulty per percentage point of missing health
-WAKE_SCALING_PER_PERCENT: int = 1
-# Difficulty eased per round spent unconscious
-WAKE_EASE_PER_ROUND: int = 2
+# Base difficulty (a level) of the per-round wake (Endurance) check at full health
+WAKE_BASE_DIFFICULTY_LEVEL: int = 1
+# Additional difficulty (tenths of a level's width) per percentage point of missing health
+WAKE_SCALING_PER_PERCENT_TENTHS: int = 2
+# Difficulty (tenths of a level's width) eased per round spent unconscious
+WAKE_EASE_PER_ROUND_TENTHS: int = 4
 # PLACEHOLDER: rounds until guaranteed wake (~10 real minutes at 6s/round)
 WAKE_GUARANTEED_ROUNDS: int = 100
 # PLACEHOLDER: days after death before a dead character auto-retires
@@ -116,7 +117,7 @@ MAX_HEALTH_MODIFIER_TARGET: str = "max_health"
 # writer, folded in by recompute_max_health.
 FRAILTY_CONDITION_NAME: str = "Frailty"
 AGING_CHECK_TYPE_NAME: str = "Aging Resistance"
-AGING_DIFFICULTY_PER_YEAR: int = 7
+AGING_DIFFICULTY_PER_YEAR_TENTHS: int = 14
 FRAILTY_FAIL_SEVERITY: int = 2
 FRAILTY_PARTIAL_SEVERITY: int = 1
 AGING_FLOOR_FRACTION: str = "0.20"
@@ -141,15 +142,15 @@ POOL_DEFAULT_DEATH: str = "default_death"
 POOL_DEFAULT_WOUND: str = "default_wound"
 
 # ---------------------------------------------------------------------------
-# Bleeding Out stage authoring (#2287) — (stage_order, name, resist_difficulty,
+# Bleeding Out stage authoring (#2287) — (stage_order, name, resist_difficulty_level,
 # rounds_to_next). Terminal stage has rounds_to_next=None; its resolution goes
 # through the guarded bleed_out_terminal pool, never an unconditional death.
 # ---------------------------------------------------------------------------
 
 BLEED_OUT_STAGE_SPECS: list[tuple[int, str, int, int | None]] = [
-    (1, "Failing", 15, 2),
-    (2, "Slipping Away", 25, 2),
-    (3, "At Death's Door", 35, None),
+    (1, "Failing", 1, 2),
+    (2, "Slipping Away", 2, 2),
+    (3, "At Death's Door", 2, None),
 ]
 
 # ---------------------------------------------------------------------------

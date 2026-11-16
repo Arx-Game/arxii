@@ -33,11 +33,13 @@ Cascade math for the Low celestial room (magnitude=10):
   caster_alignment = the abyssal aura share / 100 = 100/100 = 1.0
   raw = 10 * 1.0 * 1.00 * base_coefficient(1.000) = 10.0
   magnitude = round(10.0) = 10
-  backfire_difficulty = 30 + round(10 * 0.500) = 35
+  backfire_difficulty = baseline(level 2) + 10 tenths of a level's width
+                      = 26 + round(10 * 8 / 10) = 34
 
 Cascade math for the High celestial room (magnitude=80):
   magnitude = 80 (same affinity/severity/alignment)
-  backfire_difficulty = 30 + round(80 * 0.500) = 70
+  backfire_difficulty = baseline(level 2) + 80 tenths of a level's width
+                      = 26 + round(80 * 8 / 10) = 90
 
 ALIGNED room (Abyssal/Dissolution, magnitude=60):
   60 >= HIGH band threshold (min_magnitude=40) → "Abyssal Resonance - Deep Attunement"
@@ -55,7 +57,8 @@ Seeded by seed_starter_magic_story() itself:
 - AffinityInteraction (Abyssal→Abyssal)  ALIGNED/AMPLIFY/severity=1.00  (pair #5)
 - AffinityInteraction (Abyssal→Primal)   OPPOSED/CORRUPT/aggressor=caster (pair #6)
 - ResonanceEnvironmentConfig (base_coefficient=1.000, caster_power_scalar=0.500,
-  backfire_base_difficulty=30, backfire_difficulty_per_magnitude=0.500, balanced_band=10)
+  backfire_base_difficulty_level=2, backfire_difficulty_per_magnitude_tenths=1.000,
+  balanced_band=10)
 - ConsequencePool for pair #4 with 4 Consequence rows keyed by CheckOutcome
 - CheckOutcomes "Critical Success", "Success", "Failure", "Critical Failure"
 
@@ -181,7 +184,7 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         )
 
         # Store PKs for Evennia ObjectDB rooms — re-fetched in setUp to avoid DbHolder deepcopy.
-        # Low room: Celestial cascade magnitude 10  → backfire_difficulty = 35
+        # Low room: Celestial cascade magnitude 10  → backfire_difficulty = 34
         cls.low_room_pk = (
             ObjectDB.objects.filter(
                 db_key="The Hallowed Threshold (Low)",
@@ -191,7 +194,7 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
             .first()
         )
 
-        # High room: Celestial cascade magnitude 80 → backfire_difficulty = 70
+        # High room: Celestial cascade magnitude 80 → backfire_difficulty = 90
         cls.high_room_pk = (
             ObjectDB.objects.filter(
                 db_key="The Hallowed Threshold (High)",
@@ -327,7 +330,7 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
                 "Tempered Against Light",
                 "Tempered Walk",
                 "Hallowed-Hardened",
-                70,
+                90,
             ),
             (
                 "high_success",
@@ -336,7 +339,7 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
                 "Singed",
                 "Marked Path",
                 "Touched by Light",
-                70,
+                90,
             ),
             (
                 "high_failure",
@@ -345,7 +348,7 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
                 "Burning",
                 "Marked Path",
                 None,
-                70,
+                90,
             ),
             (
                 "high_critical_failure",
@@ -354,7 +357,7 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
                 "Hallowed Burn",
                 "Cast Out",
                 "Cast Out by the Light",
-                70,
+                90,
             ),
         ]
     )
@@ -374,8 +377,11 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
 
         Parametrized across 4 CheckOutcomes × 2 intensity tiers = 8 subtests.
 
-        Low room (celestial mag 10):  backfire_difficulty = 30 + round(10 × 0.5) = 35
-        High room (celestial mag 80): backfire_difficulty = 30 + round(80 × 0.5) = 70
+        Backfire difficulty is baseline(level 2) = 18 + 8 = 26 plus magnitude tenths of a
+        level's width (8 points at level 2), so:
+
+        Low room (celestial mag 10):  26 + round(10 × 8 / 10) = 34
+        High room (celestial mag 80): 26 + round(80 × 8 / 10) = 90
 
         The caster has an Abyssal CharacterAura and an Abyssal Technique.
         use_technique orchestrator Step 10 calls resonance_environment_for_cast,
@@ -437,10 +443,11 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         #
         # caster_alignment = the abyssal aura share / 100 = 100/100 = 1.0
         # AffinityInteraction(Abyssal→Celestial): OPPOSED, severity=1.00
-        # base_coefficient=1.000; backfire_base=30; per_magnitude=0.500
+        # base_coefficient=1.000; backfire_base_level=2 (baseline 26 points);
+        # per_magnitude=1.000 tenths of a level's width (8 points at level 2)
         #
-        # Low room:  celestial magnitude 10 → 30 + round(10×0.5) = 35
-        # High room: celestial magnitude 80 → 30 + round(80×0.5) = 70
+        # Low room:  celestial magnitude 10 → 26 + round(10×8/10) = 34
+        # High room: celestial magnitude 80 → 26 + round(80×8/10) = 90
         # ------------------------------------------------------------------
         self.assertEqual(
             capture.target_difficulty,

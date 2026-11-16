@@ -760,7 +760,7 @@ class SituationDifficultyGuide(NaturalKeyMixin, CreditedContent, SharedMemoryMod
     """Authored difficulty recommendation for a ``SituationKind`` at a given risk.
 
     Targets the live ``DifficultyChoice`` band surface a GM actually picks
-    (#2118's ``InvokeCatalogCheckAction``), not ``ChallengeTemplate.severity``
+    (#2118's ``InvokeCatalogCheckAction``), not ``ChallengeTemplate.severity_level``
     (a raw int baked into pre-authored Challenge content at authoring time,
     never touched by a live GM -- Decision 6).
     """

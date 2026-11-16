@@ -92,7 +92,7 @@
   `grant_resonance`). Nothing settles without a reflection (`Reflection`, #5124): the one rite of
   settling, `perform_settling_rite` (`services/drift_correction.py`), takes every waiting reflection
   with one offering and one roll. `DriftCorrectionConfig` (singleton: `rite`, `check_type`,
-  `check_difficulty`, `cap_percent`, `disown_deed_percent`) and `DriftCorrectionOutcomeShare` (share of
+  `check_difficulty_level`, `cap_percent`, `disown_deed_percent`) and `DriftCorrectionOutcomeShare` (share of
   each reflection carried out per `CheckOutcome`) feed it; it grows embraced deeds (`GainSource.EMBRACED_DEED`),
   converts disowned resonance (Mire excess first) through `convert_resonance_amount`
   (`services/conversion.py`) as `GainSource.DRIFT_CORRECTION` at the `AffinityInteraction` pair rate,
@@ -112,7 +112,7 @@
   `KindlingSituation` rows holds (`models/kindling.py`: set on a `resonance` or once on an `affinity`;
   `strength` a rank; `reason_text`), or a Rally or a GM kindled it (`Kindling`, `source`
   RALLY/GM, ends with its fight or scene). Staff author `KindledStrengthTier` (rank, name, `min_bond_tier`,
-  `min_severity`, `pull_levels`, `give_in_max_depth`, `give_in_bonus_percent`, `give_in_ease`,
+  `min_severity`, `pull_levels`, `give_in_max_depth`, `give_in_bonus_percent`, `give_in_ease_tenths`,
   `dig_deep_scale_percent`, `earn_percent`), the singleton `KindlingConfig` (`harm_property`),
   `KindledDeedAward` and `RallyKindlingStrength` on one admin page; `Resonance.feeling` (Property FK)
   and `missions.MissionTheme` (`themes` on `MissionTemplate` and `MissionOption`) feed the
@@ -288,7 +288,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - **Ritual anima pools / blood economy (#3001, ADR-0205):**
     `Ritual.anima_requirement`, `RitualAnimaContribution` (audit; outlives its
     session), `AnimaConfig` (flat `daily_regen_amount`, `level_zero_maximum` /
-    `maximum_per_level` = 10 / 100×level via `recompute_max_anima` on both
+    the `anima_pool` lane's baseline = 10 / 100×level (#5093) via `recompute_max_anima` on both
     level-write spines, `death_harvest_multiplier` ×20). Services
     (`services/ritual_pool.py`): `contribute_channel/prick/gash/sacrifice`,
     `pool_total`, `resolve_pool_gate` (deficit-bumped check; fizzle consumes the
@@ -1268,13 +1268,13 @@ Check resolution engine — converts trait values to ranks and rolls against res
 - **Models:** `CheckCategory`, `CheckType`, `CheckTypeTrait`, `CheckTypeAspect`, `CheckTypeCapabilityModifier` (#2505 — curated authored `(check_type, capability)` weight, `related_name="capability_modifiers"`), `CheckCall`/`CheckCallTarget` (#3295 — a GM's room-visible request that named targets roll a catalog check; one `CheckCallTarget` row per target, `status` PENDING/ANSWERED/DECLINED)
 - **Scene check invocation (#3295, ADR-restating #2118's firewall):** every check anyone rolls in a scene is an authored `CheckType` at a `DifficultyChoice` band — never a freeform stat/skill/difficulty invention. `world.checks.catalog_invocation` is the shared resolve/find/band-validation core, consumed by the SENIOR ad-hoc `InvokeCatalogCheckAction` (#2118) and three new REGISTRY actions in `actions/definitions/scene_checks.py`: `SceneSelfCheckAction` (key `scene_self_check`, any player, SELF-only, rolls through `perform_check_with_modifiers` with the room's active scene so worn items, buffs, conditions and distinctions count (#4629), broadcasts to the room via `record_interaction`/`render_challenge_outcome_narration`), `CallForCheckAction` (key `call_for_check`, JUNIOR+ GM, creates a `CheckCall` + `CheckCallTarget` rows), `AnswerCheckCallAction`/`DeclineCheckCallAction` (keys `answer_check_call`/`decline_check_call` — a target's one-tap response; answering dispatches the same self-check core bound to the call's own check/band). None of these select, compose, or fire a `ConsequenceOutcome`/consequence pool. Telnet: `check`/`callcheck` (`commands/scene_checks.py`). Web: `SelfCheckPanel`/`CheckCallPromptCard` (`frontend/src/scenes/components/`) + a `CallForCheckTab` on `GMAdjudicationPanel`. When the catalog lacks a fitting check, `ProposeCheckAction` (key `propose_check_type`) routes a structured `CheckProposal` (`world.player_submissions.models`, `SubmissionCategory.CHECK_PROPOSAL`) to the staff inbox via `submit_check_proposal` — it never creates a live `CheckType` row; adoption is a separate manual staff act.
 - **Seeded check types:** `Composure` (willpower-weighted; resistance-specific — seeded via `create_resistance_check_types()` in `checks/factories.py`; used by `compute_resist_increment`)
-- **Key Functions:** `perform_check(character, check_type, target_difficulty, extra_modifiers) -> CheckResult`, `get_rollmod(character) -> int`, `compute_check_rating(character, check_type, extra_modifiers=0) -> int` (pre-roll total points, no dice roll — the one answer for "what does this character bring to this check"), `compute_resist_increment(defender_character, resist_effort_level, *, level_override=None, award_development=False) -> int` (#2707, ADR-0166: routes through `compute_check_rating` on the Composure CheckType, so it now carries the defender's full rating — trait, specialization, aspect, and capability points, but NOT perk points, since `compute_check_rating` takes no `situation_ctx` and `_situational_perk_check_bonus` short-circuits to 0 without one — plus the effort modifier, plus every modifier the defender carries on a Composure roll (#4720, ADR-4720: `collect_check_modifiers` with no scene, `extra_modifiers_total`; a `poise` modifier raises it, a condition's Composure penalty lowers it), clamped ≥ 0; the ACTIVE half of an opposed check. `level_override` SUBSTITUTES for the defender's resolved level so a `CombatOpponent`'s authored `level` reaches the resist path. `award_development=True` (#3066, opt-in, scene call sites only) awards the defender check-based dp for a player-declared resist effort via the same chokepoint `perform_check` uses internally), `level_opposition(check_type, *, level, character=None) -> int` (#2707, ADR-0166: the PASSIVE half — `LEVEL_POINTS_PER_LEVEL * level` plus, when `character` is given, the acting check's aspects scored against the defender's Path; deliberately exclusive with `compute_resist_increment` — a call site uses one or the other, never both, since an active rating already contains level points; combat's clash roll is the deliberate exception that opposes neither, staying at `target_difficulty=0` since a clash grades two rolls against each other instead)
+- **Key Functions:** `perform_check(character, check_type, target_difficulty, extra_modifiers) -> CheckResult`, `get_rollmod(character) -> int`, `compute_check_rating(character, check_type, extra_modifiers=0) -> int` (pre-roll total points, no dice roll — the one answer for "what does this character bring to this check"), `compute_resist_increment(defender_character, resist_effort_level, *, level_override=None, award_development=False) -> int` (#2707, ADR-0166: routes through `compute_check_rating` on the Composure CheckType, so it now carries the defender's full rating — trait, specialization, aspect, and capability points, but NOT perk points, since `compute_check_rating` takes no `situation_ctx` and `_situational_perk_check_bonus` short-circuits to 0 without one — plus the effort modifier, plus every modifier the defender carries on a Composure roll (#4720, ADR-4720: `collect_check_modifiers` with no scene, `extra_modifiers_total`; a `poise` modifier raises it, a condition's Composure penalty lowers it), clamped ≥ 0; the ACTIVE half of an opposed check. `level_override` SUBSTITUTES for the defender's resolved level so a `CombatOpponent`'s authored `level` reaches the resist path. `award_development=True` (#3066, opt-in, scene call sites only) awards the defender check-based dp for a player-declared resist effort via the same chokepoint `perform_check` uses internally), `level_opposition(check_type, *, level, character=None) -> int` (#2707, ADR-0166, #5093: the PASSIVE half — an NPC's difficulty is its level's CHECK baseline plus, when `character` is given, the acting check's aspects scored against the defender's Path (each match a share of one level's width) and the defender's active condition modifiers at their derived value, so a debuff lowers it; a player character (`is_player_character`) who is the obstacle counts as her full check total instead, `compute_obstacle_rating(character, check_type, *, extra_modifiers=0, level_override=None, stat_override=None)`, which `compute_resist_increment` is on Composure plus effort, and every other obstacle, sheeted NPC or not, counts as its level's baseline; `level_points(level)` is the character's level term, `CheckScaleConfig.level_share` x the baseline; deliberately exclusive with `compute_resist_increment` — a call site uses one or the other, never both, since an active rating already contains level points; combat's clash roll is the deliberate exception that opposes neither, staying at `target_difficulty=0` since a clash grades two rolls against each other instead)
 - **Result-chart shape (#4593, slice (a) of #4551):** fifteen charts, rank difference -8 to +6; every "at least X" chance is non-decreasing across differences (data migration `0284` repaired charts -4 and -2 of production), charts -6 and -5 keep 1% and 5% Success, chart -7 ("Failure -7": no Success, small Partial Success) and chart -8 ("Impossible": failures only) are the impossible zone, and a check graded there is listed to the player labelled Impossible instead of dropped from the available-actions lists. See `docs/systems/checks.md`, "Result charts".
 - **Result-chart direction (ADR-0165):** `rank_difference = roller_rank - target_rank`; positive means the roller is stronger and gets the easier chart — the convention `ResultChart.rank_difference`'s own `help_text` states and the engine computes; guarded by `world/checks/tests/test_chart_direction.py`.
 - **Niche botch immunity (#4386, ADR-4386, amends ADR-0152):** a `botch_immunity` `ModifierCategory` (`world.mechanics.constants.BOTCH_IMMUNITY_CATEGORY_NAME`) whose targets name one `CheckCategory` (`target_check_category`) or one `CheckType` (`target_scope_check_type`); any modifier source can grant it. `world/checks/services.py`: `is_botch_immune(sheet, check_type)` (positive `get_modifier_total` + `get_condition_modifier_total`), `botch_immunity_sources` (the named sources), `botch_floor_level(levels)` (the level a botch rises to, for the odds previews). `_apply_outcome_guarantees(..., check_type)` floors a raw botch at Failure on every rolled check, no situation context needed, unannounced; `collect_check_modifiers` adds a value-0 `ModifierSourceKind.BOTCH_IMMUNITY` "Cannot botch: <source>" line shown to the roller and staff only. `compute_matchup(botch_immune=)` and `EvalContext.botch_immune` price it in the tuning previews. See `docs/systems/checks.md`, "Niche botch immunity".
 - **The slide (#4601, slice (b) of #4551, ADR-4601-A; pin removed by #4723, ADR-4723-A):** `world/checks/slide.py` (`band_position`, `slide_chart`, `resolve_standing` -> `CheckStanding`, `CheckRoll`). Each total has a band position; the fractional difference picks chart `lo` and slides it toward `lo + 1` over its own outcomes only; one d100 face plus a fraction. Both totals count every point, modifiers included, so enough buffs lift a check off an impossible chart (#4723). Guarantees capped at the chart's best outcome. `CheckResult.standing` / `rank_text` / `standing_text`; tuning dashboard `compute_slide_table`. See `docs/systems/checks.md`, "The slide".
 - **Key Types:** `CheckResult` (outcome, chart, roller_rank, target_rank, rank_difference, trait_points, aspect_bonus, level_points, specialization_points, capability_points, standing)
-- **Pipeline:** trait points (weighted via CheckTypeTrait) + aspect bonus (path level) + level points (`LEVEL_POINTS_PER_LEVEL * class level`, guaranteed on EVERY check — #2707, ADR-0166) + capability points (weighted via authored `CheckTypeCapabilityModifier` as `weight x (effective value − innate_baseline)`, curated gate — #2505, deviation-scored per #2704/ADR-0164) + modifiers → CheckRank + band position (both sides) → the slid ResultChart, pinned on own standing when hopeless (#4601) → roll+rollmod plus a fraction inside the face → outcome
+- **Pipeline:** trait points (weighted via CheckTypeTrait) + aspect bonus (path level) + level points (`level_points(class level)` = `CheckScaleConfig.level_share` x the CHECK baseline at the level, guaranteed on EVERY check — #2707, ADR-0166, #5093) + capability points (weighted via authored `CheckTypeCapabilityModifier` as `weight x (effective value − innate_baseline)`, curated gate — #2505, deviation-scored per #2704/ADR-0164) + modifiers → CheckRank + band position (both sides) → the slid ResultChart, pinned on own standing when hopeless (#4601) → roll+rollmod plus a fraction inside the face → outcome
 - **Integrates with:** traits (lookup tables), skills (check bonuses), progression (`get_character_path_level` — sole source of a character's class level, #2707), conditions (check modifiers + `get_effective_capability_value` agency oracle for authored capability points), goals (bonuses), scenes (active resistance via `compute_resist_increment`), combat (opposed difficulty on offense/penetration/NPC-attack defense, and `CombatOpponent.level` fed into the resist path for social verbs), mechanics (`resolve_challenge()` gathers `collect_check_modifiers` once before the roll, adds `capability_source.value` and the gathered `extra_modifiers_total` to `extra_modifiers`, and stores that same breakdown on the `ConsequenceOutcome`, #4629)
 - **Resolution theater (#924, extended #3807 Part B):** `check_outcome_faces(check_result)` /
   `maybe_emit_resolution_theater` (`world/checks/theater.py`) push a dramatic-reveal wheel to a
@@ -1292,9 +1292,13 @@ Check resolution engine — converts trait values to ranks and rolls against res
   `CheckTypeTrait` row (a trait present twice scores twice), develops each trait once per roll,
   and adds the trait ids to the roll's `involved_traits` for capability and thread matching.
   Magic is the first user. See "extra_traits" in [checks.md](checks.md).
-- **Modifier level, size and taper (#4594, ADR-4594-A):** `ModifierValue` (the value table:
-  `lane`, `level`, `size`, `value`), `ModifierLevelBaseline`, `ModifierTaper` (`modifier_models.py`)
-  with readers `load_value_table`, `load_taper_rules`, `level_baseline`, `rank_band_share`
+- **Check scale config (#5093):** `CheckScaleConfig` (`world/checks/scale_config.py`), a pk-1 singleton with `level_share` (seed 0.5); `get_singleton()`; `world.checks.services.level_points(level)` = `level_share` x the CHECK baseline at the level, plus `tier_bonus(level)`. Admin: Check scale config.
+- **Tier jumps (#5093):** `LevelTier(start_level, bonus_points)` (`world/checks/modifier_models.py`, seeded 3 at 0 points and 6/11/16/21/26 at 24 points), `modifier_values.tier_bonus(level)` / `load_tier_table()`; the bonus is added in full to `level_points`, `level_opposition` and `difficulty_points`, and `slide.load_ranks()` runs the rank ladder past 30 (derived "Rank N" names). Admin: Level tiers.
+- **Modifier level, size and taper (#4594, ADR-4594-A, #5093):** `ModifierSizeFraction`
+  (`lane`, `size`, `fraction`: a modifier's value is fraction x one level's width), `ModifierValue`
+  (an override at one exact `level`, `size`), `ModifierLevelBaseline`, `ModifierTaper`
+  (`modifier_models.py`) with readers `load_value_table`, `load_taper_rules`, `level_baseline`,
+  `level_width`, `rank_band_share`
   (`modifier_values.py`); enums `ModifierLane`, `ModifierSize`. `ModifierContribution` carries
   `level`/`size`/`vow_part`; `ModifierBreakdown(contributions, tapers)` tapers each kind's bonus
   and penalty piles (7/8, floor 2/3 in the example seed) and `counted()` shows the per-item count.
@@ -2593,7 +2597,7 @@ resolve them automatically or through a collaborative **research project**.
   `NaturalKeyMixin` `slug`
   (#2451) and is a `CONTENT_MODELS` citizen — a `Clue` now exports/imports as
   lore-repo content, natural-keyed by slug), `CharacterClue` (held-clue, roster-scoped),
-  `RoomClue` (search-anchored placement + `detect_difficulty` + `eligibility_rule` +
+  `RoomClue` (search-anchored placement + `detect_difficulty_level` + `eligibility_rule` +
   `fixture_key`), `ClueTrigger` (passive on-entry placement + `eligibility_rule` +
   `fixture_key`), `ResearchProjectDetails`
   (the clue a `ProjectKind.RESEARCH` project researches toward)
@@ -3003,7 +3007,7 @@ so web and telnet converge on the same write path.
 ### Progression
 XP, kudos, development points, and unlock system. Contains the most explicit prerequisite framework.
 
-- **Models:** `ExperiencePointsData`, `XPTransaction`, `CharacterXP`, `DevelopmentPoints`, `DevelopmentTransaction`, `KudosPointsData`, `KudosTransaction`, `CharacterUnlock`, `XPCostChart`, `XPCostEntry`, `CharacterPathHistory`, `PathIntent` (player's declared next-path preference — one per character sheet; FK to `CharacterSheet` + `Path`), `KudosDifficultyWeight` (staff-tunable band→multiplier for good-sport kudos; one row per `DifficultyChoice`), `WeeklySocialEngagement` (per-account weekly pending-kudos accumulator; `pending_points`, `granted`, `game_week` FK; `distinct_initiators` is a derived property counting child rows), `WeeklyEngagementInitiator` (child row recording each unique initiator toward a ledger; `UniqueConstraint(ledger, initiator_account)`),
+- **Models:** `ExperiencePointsData`, `XPTransaction`, `CharacterXP`, `DevelopmentPoints`, `DevelopmentTransaction`, `DevelopmentCostConfig` (singleton: the one geometric development cost curve, `services/dev_cost.py` `dp_cost_for_step` / `dp_cost_for_band` / `cumulative_dp_for_level`, #5093), `KudosPointsData`, `KudosTransaction`, `CharacterUnlock`, `XPCostChart`, `XPCostEntry`, `CharacterPathHistory`, `PathIntent` (player's declared next-path preference — one per character sheet; FK to `CharacterSheet` + `Path`), `KudosDifficultyWeight` (staff-tunable band→multiplier for good-sport kudos; one row per `DifficultyChoice`), `WeeklySocialEngagement` (per-account weekly pending-kudos accumulator; `pending_points`, `granted`, `game_week` FK; `distinct_initiators` is a derived property counting child rows), `WeeklyEngagementInitiator` (child row recording each unique initiator toward a ledger; `UniqueConstraint(ledger, initiator_account)`),
   **Class-Level Advancement (#1352):** `AbstractClassLevelAdvancement` (abstract base shared by `ClassLevelAdvancement` and `AudereMajoraCrossing`; carries `scene`, `declaration_interaction`, `level_before`, `level_after`, `created_at`), `ClassLevelAdvancement` (within-tier Durance receipt — `character_sheet`, `character_class`, `officiant`, `ritual`, `witnesses` M2M → `scenes.Persona`),
   **Training Site (#1700):** `DuranceTrainingSite` (room + trainer-of-record pair; enables site-convened sessions — `room_profile` FK → `RoomProfile`, `officiant` FK → `CharacterSheet`, `training_path` FK → `Path` (nullable), `is_active`; unique `(room_profile, officiant)`),
   **Maturation Points (#2756, ADR-0172; milestones retuned by #3635 to `MATURATION_MILESTONES` = 24, 27, 30, 34, 38, 42, 47, 52, 58, 64, 75, none after; `next_milestone_year` null past 75; since #4124 milestones at or below `CharacterSheet.maturation_floor`, the creation age, never bank, so a new character arrives with none; starting under 21 costs `UNDERAGE_CG_POINT_COST` in the CG breakdown):** `MaturationStatCap` (admin "Band caps": authored per-`PathStage` stat cap, seeded 50/60/110/160/210/250 (stored units, restated x10 by #5091) per the #3001 ruling — `seed_maturation_stat_caps` in `progression/seeds.py`, previously never authored; plus the nullable `skill_cap` (#4585, stored units since #5091, blank = no cap, unseeded) read by `skill_cap_for` and enforced on every skill raise path, see skills.md "Band skill cap") + `MaturationSpend` (sheet FK, trait FK, `milestone_year`, `is_active` — active iff `milestone_year <= sheet.matured_years`; unique per (sheet, milestone_year)). Services in `progression/services/maturation.py`: `milestone_count` / `available_points` / `spend_maturation_point` (+1 stat point = +10 stored, `STAT_POINT_VALUE`, stage-capped; caps are authored in stored units and compared directly, ADR-5091) / `sync_maturation_spends` (reversal deactivates, re-aging reactivates — every `matured_years` writer outside the birthday tick must call it). Both writers also stamp a `traits.CharacterTraitChange` row (`source=MATURATION`, #3055) for each ±1 stat point they apply
@@ -4037,7 +4041,7 @@ GM at a given level may author (#2000, ADR-0097).
   `mechanics.ChallengeTemplate` against a GM-named target object, minting a
   standalone `ChallengeInstance` (`situation_instance=None`) through the pre-existing
   `instantiate_challenge`. The one adaptation permitted is a one-band shift with a
-  required reason, persisted as `ChallengeInstance.severity_adjustment` /
+  required reason, persisted as `ChallengeInstance.severity_adjustment_tenths` /
   `adjustment_reason` (two DB `CheckConstraint`s; GM-facing only, never in
   `ChallengeInstanceSerializer`) and read back through the new
   `ChallengeInstance.effective_severity`. Band-shift helpers are shared with
@@ -4054,9 +4058,8 @@ GM at a given level may author (#2000, ADR-0097).
   choosing a template or challenge card there dispatches the same
   `set_situation`/`place_challenge` one-click, with an empty challenge target
   refused server-side rather than client-validated. Two fold-ins:
-  `ChallengeTemplate.severity` is re-expressed in `DIFFICULTY_VALUES` points (default
-  `1` → `45`; it feeds `perform_check`'s `target_difficulty` directly, so the old
-  scale resolved every authored challenge at the bottom rank), and
+  `ChallengeTemplate.severity_level` is a level (default 2; its baseline feeds
+  `perform_check`'s `target_difficulty` directly, #5093), and
   `instantiate_challenge` now honours `discovery_type` instead of hardcoding
   `is_revealed=True`, which silently defeated `DiscoveryType.DISCOVERABLE`.
 - **Story areas & story rooms (#2450, epic #2436 slice 3, ADR-0141):** a GM's own
@@ -5236,7 +5239,7 @@ register as additional kinds.
   character's roster entry already holds the clue
   (`services._clue_reveal_not_yet_held`). Final offers skip the engine's own check
   application, so the handler (`run_clue_reveal_offer`) rolls `offer.check_type` /
-  `check_difficulty` itself when set (mirrors `raise_court_grant`); on success (or a null
+  `check_difficulty_level` itself when set (mirrors `raise_court_grant`); on success (or a null
   check_type — auto-success) it calls `acquire_clue` + `grant_clue_target` — the same
   chokepoint Search/Research use — voiced as reaction-line flavor + the clue's description.
   Fails closed with a plain message when the finder has no roster tenure. See
@@ -5291,7 +5294,7 @@ register as additional kinds.
   course in one skill (staff pick the skill on each offer; any skill, with one per Magic skill kept
   by a Required content row). `SkillCourseOfferDetails` (1:1 per offer: `skill`,
   `total_development`, `session_development`, `session_ap_cost`, `coin_cost`, `check_type`,
-  `check_difficulty`; `clean()` requires `NPCServiceOffer.ap_cost` 0) and `SkillCourseEnrollment`
+  `check_difficulty_level`; `clean()` requires `NPCServiceOffer.ap_cost` 0) and `SkillCourseEnrollment`
   (`character_sheet`, `course`, `development_remaining`, `last_session_week`, `completed_at`; one
   open enrollment per sheet and course). Handler `run_skill_course_offer`: `_academy_for` (the
   role's `faction_affiliation`, and the owed-obligation refusal; shared with TRAIN and
@@ -5299,7 +5302,7 @@ register as additional kinds.
   (already trained this course this game week, the skill at an XP boundary, short of AP, and when
   enrolling short of coin or of a Golden Hare). Enrolling pays the coin (skipped when 0) and one
   Hare once and runs the first session; each later acceptance is a session costing
-  `session_ap_cost`, rolled against `check_type` and `check_difficulty`, development =
+  `session_ap_cost`, rolled against `check_type` and `check_difficulty_level`, development =
   floor(`session_development` x the `TrainingOutcomeAward` multiplier) capped at what is left, applied
   by `skills.services.train_skill(..., stop_at_boundary=True)` so development past an XP boundary
   stays in the course. One session per course per game week across enrollments, recorded on the
@@ -6578,7 +6581,7 @@ Gift letting a PC bind a wild beast archetype as a persistent, room-present
 companion. Full detail: [companions.md](companions.md).
 
 - **Models:** `CompanionArchetype` (staff-authored catalog: `domain`, `name`,
-  `bind_difficulty`, `capacity_cost` — binding is archetype-selection, no
+  `bind_difficulty_level`, `capacity_cost` — binding is archetype-selection, no
   discrete in-room "wild creature" object), `Companion` (the bound instance:
   `owner` → `CharacterSheet`, `archetype`, `granting_gift` → `magic.Gift`,
   `name`, `objectdb` → live `CompanionObject`, `bonded_at`/`released_at`;
@@ -6600,7 +6603,7 @@ companion. Full detail: [companions.md](companions.md).
 - **Actions** (`actions/definitions/companions.py`, REGISTRY,
   `category="companions"`): `BindCompanionAction` (`bind_companion`) — gated
   by `HasCompanionCapacityPrerequisite`, executes via `perform_check` against
-  `CompanionArchetype.bind_difficulty`. `CompanionEmoteAction`
+  `CompanionArchetype.bind_difficulty_level`. `CompanionEmoteAction`
   (`companion_emote`, #3294) — pose *as* a bonded, present companion, gated
   by `CompanionPresentPrerequisite` (owned + active + co-located).
 - **Companion emote (#3294):** `world.scenes.models.Interaction
@@ -6793,7 +6796,7 @@ registering a service strategy + per-kind details model.
     identity map serving a stale `is_armed`.
   - **Player half** (#3011): detect in `search`, see what you detected, disarm it.
     `search_room_traps` (`trap_services.py`) is a sibling of `world.clues.services
-    .search_room` — traps carry their own per-trap `detect_check_type`/`detect_difficulty`
+    .search_room` — traps carry their own per-trap `detect_check_type`/`detect_difficulty_level`
     (clues share one Search `CheckType`), so it does not slot into the clue roll for free;
     `SearchAction` (`actions/definitions/investigation.py`) calls both and folds detected
     traps into the same result message. `Trap.is_hidden` gets its first readers here:
@@ -7342,8 +7345,7 @@ Unified modifier system — categories, types, sources, and per-character modifi
   - `delete_distinction_modifiers(char_distinction) -> int`
   - `passive_facet_bonuses(sheet, target) -> int` (Spec D §5.2) — sums tier-0 FACET
     `ThreadPullEffect` contributions per worn item, plus the worn facets' own
-    `FacetEffectBonus` rows on a maneuver-effect target (#4815, scaled per 10 thread levels,
-    `thread_rung`); called by `get_modifier_total`
+    `FacetEffectBonus` rows on a maneuver-effect target (#4815, `amount_tenths` of the FACET_EFFECT_BONUS lane at the facet thread's rung, #5093); called by `get_modifier_total`
   - `covenant_role_bonus(sheet, target) -> int` (Spec D §5.6, #985) — loops
     `currently_engaged_roles()` × equipped items; compatible slot adds `role_bonus`
     (stacks on combat's gear read); incompatible slot adds `max(0, role_bonus -
@@ -8407,7 +8409,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
 - **Vow added effects (#4581, ADR-4581-A) [BUILT & WIRED]:** staff-authored payload a
   covenant vow adds to a technique cast. Models: `VowAddedEffect` (header: `covenant_role`,
   `function`, optional `gift` / `technique`, `cast_context`, `situation`, `beneficiary`,
-  `frequency`, `unlock_thread_level`, the three `*_per_thread_level` scalers, `upgrades`
+  `frequency`, `unlock_thread_level`, the three `*_tenths` scalers (severity, duration, damage, each on its own lane), `upgrades`
   self-FK `RESTRICT`) and its four children `VowAddedEffectAppliedCondition`,
   `VowAddedEffectRemovedCondition`, `VowAddedEffectTreatment`,
   `VowAddedEffectDamageProfile`; the play-state ledger `VowAddedEffectFiring` lives in
@@ -10833,7 +10835,7 @@ combat, poison, spells, exhaustion, and any damage source.
   FK scenes.Scene — bounds the ghost emit window + death-kudos eligibility — and `retired_at`,
   the final puppet lock), `VitalsConsequenceConfig` (singleton pk=1; tunable difficulty scaling +
   pool FKs: `knockout_pool`, `default_wound_pool`, `default_death_pool`; #2287: wake-arc knobs
-  `wake_base_difficulty`/`wake_scaling_per_percent`/`wake_ease_per_round`/`wake_guaranteed_rounds`,
+  `wake_base_difficulty_level`/`wake_scaling_per_percent_tenths`/`wake_ease_per_round_tenths`/`wake_guaranteed_rounds`,
   `auto_retire_days`, admin-editable `death_condolence_body`), `WoundDetails` (#2644; OneToOne →
   `conditions.ConditionInstance`, CASCADE, `related_name="wound_details"` — FK direction
   specific→general per ADR-0010; `damage_taken` PositiveInt — the debit that caused the wound,
@@ -10847,7 +10849,7 @@ combat, poison, spells, exhaustion, and any damage source.
   that target's first writer, folded in by `recompute_max_health`). `world/vitals/aging.py`
   carries the three IC-cadence cron services — `run_birthday_tick` (AFK-safe window query
   advancing `matured_years`), `run_decline_checks` (Aging Resistance stamina check,
-  difficulty = `aging_difficulty_per_year` × years past `Species.decline_start_age`;
+  difficulty = `aging_difficulty_per_year_tenths` × years past `Species.decline_start_age`;
   Failure/Partial deepen Frailty by `frailty_fail_severity`/`frailty_partial_severity`),
   `run_death_sweep` (resolves `CharacterVitals.aging_death_ic_deadline` via `_mark_dead` →
   estates settlement). Config knobs live on `VitalsConsequenceConfig` (all PLACEHOLDER);
@@ -11543,6 +11545,7 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   resolution) across #3017-#3020.
 - **Permissions:** every view superuser-only (`web.admin.tuning.views.superuser_required`,
   mirroring `game_setup_views.py`'s gate).
+- **Scaling settings panel (#5093):** `_tuning/scaling/` (`admin_tuning_scaling`), `web/admin/tuning/scaling_settings.py` `build_scaling_settings_panel()` returns frozen dataclasses (strength table at the path-change levels, worked example, settings, development cost, pools and caps, buff sizes); read-only, one load per table.
 - **Source:** `src/web/admin/tuning/`, `src/web/admin/content_load_views.py`,
   `src/core_management/grid_export.py`, `src/core_management/grid_import.py`,
   `src/core_management/content_repo.py`, `src/world/combat/simulation.py`.

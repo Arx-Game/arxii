@@ -54,9 +54,11 @@ class TestCorruptionConditionTemplateFactory(TestCase):
         template = CorruptionConditionTemplateFactory(corruption_resonance=resonance)
 
         dcs = list(
-            template.stages.order_by("stage_order").values_list("resist_difficulty", flat=True)
+            template.stages.order_by("stage_order").values_list(
+                "resist_difficulty_level", flat=True
+            )
         )
-        self.assertEqual(dcs, [8, 12, 18, 22, 28])
+        self.assertEqual(dcs, [0, 1, 1, 1, 2])
 
     def test_abyssal_resist_difficulties_harder(self) -> None:
         affinity = AffinityFactory(name="Abyssal")
@@ -64,9 +66,11 @@ class TestCorruptionConditionTemplateFactory(TestCase):
         template = CorruptionConditionTemplateFactory(corruption_resonance=resonance)
 
         dcs = list(
-            template.stages.order_by("stage_order").values_list("resist_difficulty", flat=True)
+            template.stages.order_by("stage_order").values_list(
+                "resist_difficulty_level", flat=True
+            )
         )
-        self.assertEqual(dcs, [12, 18, 25, 30, 35])
+        self.assertEqual(dcs, [1, 1, 2, 2, 2])
 
     def test_all_stages_hold_overflow(self) -> None:
         from world.conditions.types import AdvancementResistFailureKind
@@ -272,7 +276,7 @@ class TestAuthorReferenceCorruptionContent(TestCase):
         abyssal_template = ConditionTemplate.objects.get(corruption_resonance=self.abyssal)
         dcs = list(
             abyssal_template.stages.order_by("stage_order").values_list(
-                "resist_difficulty", flat=True
+                "resist_difficulty_level", flat=True
             )
         )
-        self.assertEqual(dcs, [12, 18, 25, 30, 35])
+        self.assertEqual(dcs, [1, 1, 2, 2, 2])

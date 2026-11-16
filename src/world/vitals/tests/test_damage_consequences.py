@@ -7,6 +7,7 @@ from unittest import mock
 from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.test_helpers import SeededLevelLadderMixin
 from world.magic.constants import VitalBonusTarget
 from world.magic.factories import ResonanceFactory, ThreadFactory
 from world.magic.services import seed_thread_survivability_tuning, survivability_baseline
@@ -15,7 +16,7 @@ from world.vitals.services import process_damage_consequences
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # Endurance/Mortal Resolve CheckType gates on #2698
-class ThreadSavesWiringTests(TestCase):
+class ThreadSavesWiringTests(SeededLevelLadderMixin, TestCase):
     """Verify that thread survivability saves reach the damage-consequence tiers (#1250)."""
 
     def _character_with_threads(self):

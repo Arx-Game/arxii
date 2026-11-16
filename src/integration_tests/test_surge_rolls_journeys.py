@@ -35,7 +35,6 @@ from django.test import override_settings
 
 from evennia_extensions.factories import AccountFactory
 from integration_tests.harness import JourneyCase
-from world.checks.constants import LEVEL_POINTS_PER_LEVEL
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
 from world.checks.services import collect_check_modifiers
 from world.checks.test_helpers import force_check_outcome
@@ -92,10 +91,11 @@ HURT_POTENCY_BASE = 5
 HURT_POTENCY_PER_DEPTH = 1
 GOADED_PENALTY = -10
 # Mira's Taunt check is her "presence" stat alone, weight 1, at one point per stat level
-# (the conversion range below), so her rating is the stat value plus the level term: no
-# class level means level 1, LEVEL_POINTS_PER_LEVEL points. No aspects, capabilities or perks.
+# (the conversion range below), so her rating is the stat value plus the level term. This
+# scene authors no CHECK level baselines, so the level term is 0 (a level term is a share of
+# its level's baseline, #5093). No aspects, capabilities or perks.
 PRESENCE = 12
-TAUNT_RATING = PRESENCE + LEVEL_POINTS_PER_LEVEL * 1
+TAUNT_RATING = PRESENCE
 GENERIC_BEAT_KEYS = {"id", "narration"}
 OWNER_BEAT_KEYS = {"trigger_kind", "amount", "participant", "cause"}
 ROLL_BEAT_KEYS = {"outcome", "potency", "control_change", "condition", "roll"}

@@ -22,7 +22,7 @@ from world.checks.consequence_resolution import (
     apply_resolution,
     select_consequence_from_result,
 )
-from world.checks.services import perform_check_with_modifiers
+from world.checks.services import difficulty_points, perform_check_with_modifiers
 from world.checks.types import ResolutionContext
 from world.items.crafting.constants import CraftingRecipeKind
 from world.items.crafting.cost import StagedCost, consume_cost, stage_and_assert_affordable
@@ -933,7 +933,7 @@ def run_crafting_recipe(  # noqa: PLR0913
     )
     from world.items.crafting.constants import ACCENT_CRAFT_COST_BASE  # noqa: PLC0415
 
-    difficulty = recipe.base_difficulty
+    difficulty = difficulty_points(recipe.base_difficulty_level)
     ambition_count = len(accents_requested) + len(styles_requested)
     accent_cost_multiplier = ACCENT_CRAFT_COST_BASE**ambition_count
 

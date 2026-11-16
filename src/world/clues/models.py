@@ -274,7 +274,7 @@ class RoomClue(SharedMemoryModel):
     """A clue hidden in a room, found via a Search check (#1154).
 
     Mirrors ``room_features.Trap``: room-anchored, with an authored detect difficulty;
-    a room may hold several. The Search action rolls against ``detect_difficulty`` to
+    a room may hold several. The Search action rolls against ``detect_difficulty_level`` to
     surface it; which clues are placed where and how hard they are is staff-editable
     data (placeholder magnitudes deferred to a later author pass per #1143).
     """
@@ -289,9 +289,13 @@ class RoomClue(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="room_placements",
     )
-    detect_difficulty = models.PositiveIntegerField(
+    detect_difficulty_level = models.PositiveSmallIntegerField(
         default=0,
-        help_text="Search-check target difficulty to spot this clue here. Placeholder.",
+        help_text=(
+            "Search-check target difficulty to spot this clue here. Placeholder. "
+            "Authored as a level (0 = no difficulty): the roll meets that level's "
+            "baseline."
+        ),
     )
     is_active = models.BooleanField(
         default=True,

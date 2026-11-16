@@ -75,13 +75,13 @@ class RitualCheckConfigCreateTests(TestCase):
         self.assertIsNotNone(config.stat)
         self.assertIsNotNone(config.skill)
         self.assertIsNotNone(config.check_type)
-        self.assertEqual(config.target_difficulty, 3)
+        self.assertEqual(config.target_difficulty_level, 0)
 
     def test_config_optional_fields_default_null(self):
         config = RitualCheckConfigFactory()
         self.assertIsNone(config.specialization)
         self.assertIsNone(config.resonance)
-        self.assertIsNone(config.non_founder_target_difficulty)
+        self.assertIsNone(config.non_founder_target_difficulty_level)
 
     def test_one_to_one_constraint(self):
         """A ritual can only have one check config."""
@@ -99,9 +99,9 @@ class RitualCheckConfigCreateTests(TestCase):
         self.assertIn(str(config.ritual_id), str(config))
 
     def test_non_founder_target_difficulty_can_be_set(self):
-        """non_founder_target_difficulty is settable and stored."""
-        config = RitualCheckConfigFactory(non_founder_target_difficulty=5)
-        self.assertEqual(config.non_founder_target_difficulty, 5)
+        """non_founder_target_difficulty_level is settable and stored."""
+        config = RitualCheckConfigFactory(non_founder_target_difficulty_level=2)
+        self.assertEqual(config.non_founder_target_difficulty_level, 2)
 
     def test_service_ritual_may_carry_config(self):
         """SERVICE rituals are now permitted to carry a RitualCheckConfig."""

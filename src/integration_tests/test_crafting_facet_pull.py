@@ -42,7 +42,7 @@ class CraftedFacetPowersFacetPullTest(TestCase):
 
     def setUp(self) -> None:
         # Wire the Enchanting skill + CheckType + crafting config singleton.
-        wire_enchanting_crafting(base_difficulty=0)
+        wire_enchanting_crafting(base_difficulty_level=0)
 
         # requires_station defaults True (#1234) — put the crafter in a room
         # with a full Lab station so the craft step passes the station gate.

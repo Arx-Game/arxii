@@ -10,7 +10,7 @@ admin-hosted with vanilla `django-htmx` instead of `django-unfold` or a React st
 Read+preview only — sliders/forms re-render fragments via `hx-get`; nothing here writes
 game config except the Monte Carlo run (which itself writes nothing persistent, see
 below). Edits to the underlying config models still go through the normal admin change
-forms. Five panels, each its own HTMX fragment endpoint loaded with `hx-trigger="load"`
+forms. Seven panels, each its own HTMX fragment endpoint loaded with `hx-trigger="load"`
 from `src/web/templates/admin/tuning/dashboard.html`:
 
 | Panel | Fragment view | URL name | Analytics module |
@@ -20,6 +20,8 @@ from `src/web/templates/admin/tuning/dashboard.html`:
 | Conditions | `tuning_conditions_fragment` | `admin_tuning_conditions` | `condition_analytics.py` |
 | Simulation | `tuning_simulation_fragment` | `admin_tuning_simulation` | `world.combat.simulation` |
 | Techniques | `tuning_techniques_fragment` | `admin_tuning_techniques` | `technique_analytics.py` + `world.magic.services.technique_power_eval` |
+| Capabilities | `tuning_capabilities_fragment` | `admin_tuning_capabilities` | `capability_power_analytics.py` |
+| Scaling settings | `tuning_scaling_fragment` | `admin_tuning_scaling` | `scaling_settings.py` |
 
 All views live in `src/web/admin/tuning/views.py` and are wrapped in `superuser_required`
 (defined there), which mirrors `game_setup_views.py`'s gate: `@staff_member_required` plus
@@ -53,27 +55,30 @@ and looks up the same `ResultChartOutcome` row the engine would land in.
 
 - `compute_modifier_pile(*, character_level, modifier_level, size, count) -> ModifierPileReport | None`
   (#4594) — the check lane's piece of the simulator: `count` equal buffs valued by the
-  `ModifierValue` table, tapered as CONDITION contributions by the `ModifierTaper` rows, laid on a
+  derived modifier value (size fraction x level width, or a `ModifierValue` override), tapered as CONDITION contributions by the `ModifierTaper` rows, laid on a
   character whose own total is the `ModifierLevelBaseline` for `character_level`, against a target
   at that same baseline. Reports the one-buff value (and its share of the rank band at that
   total), the plain and tapered pile, the rank before and after, and the whole-rank Success odds
   unbuffed and buffed (the slide, #4551 slice b, replaces whole ranks later). `None` when no value
   or baseline row covers the inputs.
-- The stat lane (#4726, ADR-4726-A) has its own `ModifierValue` and `ModifierTaper` rows
-  (`lane=stat`), edited on the same admin pages as the check lane's. Its values are in stored
+- The stat lane (#4726, ADR-4726-A) has its own `ModifierSizeFraction`, `ModifierLevelBaseline`,
+  `ModifierValue` and `ModifierTaper` rows (`lane=stat`), edited on the same admin pages as the
+  check lane's. Its values are in stored
   stat units (the number the sheet shows) and apply wherever a stat is read
   (`TraitHandler._get_stat_modifier`). The rule staff tune it by is #4551 section 5.5's
   universality: a stat buff of a size and level should move a check, through the stat's
-  `PointConversionRange`, by about the check lane's value for that size and level. The seed
-  meets it exactly (1 check point per stored stat unit, so equal values), and
+  `PointConversionRange`, by about the to-hit lane's value for that size and level (#5093: the
+  check lane's own Large is half a level, no longer the stat ladder). The seed
+  meets it exactly (1 check point per stored stat unit, and the stat and to-hit lanes share a
+  ladder), and
   `world/seeds/tests/test_stat_lane_universality.py` holds the relation until the simulator's
   universality guard is built. The modifier pile above reads the check lane only.
 - A vowed caster's size step (#4747, ADR-4747-A) reads the same rows: a stepped buff adds
-  (value(L, size + 1) minus value(L, size)) x tenths / 10 at L, the rung of her vow thread
-  (`thread_rung`, whole steps of 10 thread levels),
-  rounded half up, untapered. Two knobs tune it, both data: the gap between adjacent sizes at
-  each level in the value table (the Paramount rows exist only for the step above
-  Exceptional), and each vow's `CovenantRoleTechniqueSpecialty.multiplier_tenths` on the
+  (fraction(size + 1) minus fraction(size)) x one level's width at L x tenths / 10, L the rung of
+  her vow thread (`thread_rung`, whole steps of 10 thread levels),
+  rounded half up, untapered (`ValueTable.vow_step`, #5093; an override row does not change it).
+  Two knobs tune it, both data: the gap between adjacent sizes' fractions
+  (the Paramount fraction exists only for the step above Exceptional), and each vow's `CovenantRoleTechniqueSpecialty.multiplier_tenths` on the
   covenant role admin (10 = one whole step; the same dial scales that specialty's cast power).
   A secondary vow's tenths are also scaled by `SecondaryVowConfig.potency_tenths`. Only the
   one-size-up shape is fixed in code. The modifier pile does not simulate the step.
@@ -81,7 +86,7 @@ and looks up the same `ResultChartOutcome` row the engine would land in.
 The panel template (`_checks_panel.html`) hosts the `roll_modifier` / `roller_points` /
 `target_difficulty` / `modifier_points` / `target_modifier_points` slider form itself,
 since each slider re-renders this same fragment. The matchup shows the standing with
-modifiers ("Grandmaster (rank 5), 62% toward Peerless (rank 6) against Mythic (rank 8)")
+modifiers ("Master (rank 10), 62% toward Rank 11 against Legendary (rank 24)")
 and the chart and how far it slides; a big enough pile lifts it off an impossible chart
 (#4723). Below it, "The slide" table. A second form, for the modifier pile
 (`pile_character_level`, `pile_modifier_level`, `pile_size`, `pile_count`), sits under that and
@@ -327,9 +332,9 @@ away from character creation holding." A kit is priced at level 1 and gift threa
   `OptionSource` (PATH, TRADITION, SPECIES).
 - `starting_stats_roller_points` turns the character's own twelve stats into the report's
   roller-points knob: the mean of the twelve stats converted through `PointConversionRange`,
-  plus `LEVEL_POINTS_PER_LEVEL`. An empty `PointConversionRange` table converts every stat to
+  plus `level_points(1)` (the level-one level term, `CheckScaleConfig.level_share` x the level-1 baseline). An empty `PointConversionRange` table converts every stat to
   0 points (matching the live check path, no raw-value fallback), so an unseeded server prices
-  every kit at the level-one floor alone. The required-content sentinel (below) carries a
+  every kit at the level-one term alone. The required-content sentinel (below) carries a
   `point-conversion-ranges-stat` REQUIRED entry for exactly this table.
 - The kit itself is the top `1 + extra_picks` options ranked by baseline DE. `extra_picks`
   lets staff model a distinction that grants a few extra starting picks, capped at
@@ -442,6 +447,41 @@ under an exact-param key with a `tuning-capability-power:last` pointer
 has a `<details>` drill-down showing every check-bridge valuation line. Below the
 table: the zero/unpriced bucket (today, the whole catalog per Decision 5) and
 provenance summary.
+
+### Scaling settings panel — every number that sets how strong a level is (#5093)
+
+A read-only panel (`web/admin/tuning/scaling_settings.py`, template `_scaling_panel.html`, rules
+in `_panel_css.html` under `.scaling-*`) that shows the rank-means-level rows together, each with
+a link to the admin page that edits it. It writes nothing, and a missing row or config reads
+"not set" or "no rows yet" rather than raising or being created (it reads the singletons with
+`filter(pk=1).first()`, never `get_singleton()`, which creates the row). In the order it shows
+them:
+
+1. **How strong each level is on a roll**, at the path-change levels 1, 3, 6, 11, 16, 21 and 26
+   (`PATH_CHANGE_LEVELS`): the check baseline, the tier bonus jump on reaching each level, a
+   character's level term (`level_points`), an NPC's opposition (`difficulty_points`, baseline
+   plus tier bonus) and one level's width.
+2. **The worked example**, computed live: a level 5 character against a level 4 NPC, level 6
+   against 5, level 11 against 5. Each side is `difficulty_points` of its level (a character
+   with ordinary skills totals her level's strength), read through `load_ranks` and
+   `band_position`, the subtraction `resolve_standing` makes; "at the edge of the chart" is a
+   difference at or past the highest authored `ResultChart`.
+3. **Settings**: level share, the tier rows, buff sizes on rolls, the value override count,
+   development cost, fatigue and backfire difficulty, each with its value, what it changes in
+   play and an edit link.
+4. **Development cost per step** by value band 0 to 59, with the Gift thread row multiplied by
+   the gift `ThreadPullCost.imbue_cost_multiplier` (`get_imbue_cost_multiplier`).
+5. **Pools and caps**: every pool, cap and rung lane at the path levels, saying when a lane has no
+   rows.
+6. **Buff sizes in points**: rolls (one "at any level" row while every level reads the same),
+   then a small table each for stats, to-hit, damage and protection.
+
+Every table loads once whatever the number of levels, sizes or lanes: the baselines, size
+fractions and value overrides of all lanes come in one query each, and `level_points` and
+`load_ranks` take the loaded tables (`tables=`, `level_share=`, `baselines=`, `tiers=`). The
+query count is pinned in `test_tuning_scaling_panel.py`, which also holds the reader tests
+against the seeded rows, the superuser gate and the styling test (every class the panel emits has
+a rule reaching the dashboard page).
 
 ## Game Ops — `/admin/_ops/` (`admin_ops`)
 
@@ -665,6 +705,7 @@ mirrors the gate `game_setup_views.py` and the seed views already use (ADR-0022)
 
 - `src/web/admin/tests/test_tuning_views.py` — the dashboard skeleton (routing,
   superuser gate, panel scaffolding).
+- `src/web/admin/tests/test_tuning_scaling_panel.py` - the Scaling settings panel (#5093).
 - `src/web/admin/tests/test_checks_analytics.py`,
   `test_consequence_analytics.py`, `test_condition_analytics.py` —
   the checks/consequences/conditions panels.

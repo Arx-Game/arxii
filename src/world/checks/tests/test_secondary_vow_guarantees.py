@@ -33,12 +33,14 @@ from world.traits.factories import (
     CheckOutcomeFactory,
     ResultChartFactory,
     ResultChartOutcomeFactory,
+    ensure_level_ladder,
 )
 from world.traits.models import ResultChart
 
 
 class SecondaryVowCheckBonusScalingTests(TestCase):
     def setUp(self) -> None:
+        ensure_level_ladder()
         self.character = CharacterFactory()
         self.sheet = CharacterSheetFactory(character=self.character)
         self.check_type = CheckTypeFactory(name="Secondary Vow Check")
@@ -51,9 +53,9 @@ class SecondaryVowCheckBonusScalingTests(TestCase):
             engaged=True,
             is_secondary=is_secondary,
         )
+        ThreadFactory(owner=self.sheet, level=110, as_covenant_role_thread=role)
 
     def test_secondary_check_bonus_scaled_primary_unscaled(self) -> None:
-        ThreadFactory(owner=self.sheet, level=10)  # total_threads = 10
         primary_role = CovenantRoleFactory()
         secondary_role = CovenantRoleFactory()
         self._engage(primary_role, is_secondary=False)
@@ -74,10 +76,10 @@ class SecondaryVowCheckBonusScalingTests(TestCase):
         )
         ctx = SituationContext(holder=self.sheet, subject=self.sheet, target=None, resolution=None)
 
-        # primary: 10*20/10=20.0; secondary: 10*20/10=20.0 * potency 0.6 = 12.0
-        # total = 32.0 -> int(32.0) = 32
+        # width(11)=8. primary: 8*20/10=16.0; secondary: 16.0 * potency 0.6 = 9.6
+        # total = 25.6 -> int(25.6) = 25
         total = _situational_perk_check_bonus(self.character, self.check_type, ctx)
-        self.assertEqual(total, 32)
+        self.assertEqual(total, 25)
 
 
 class SecondaryVowOutcomeGuaranteeWeakeningTests(TestCase):

@@ -3,8 +3,8 @@
 Two GM surfaces adapt an authored difficulty by exactly one band and must state
 why: ``InvokeCatalogCheckAction`` shifts a ``DifficultyChoice`` *band* it was
 handed (#2118), and ``PlaceChallengeAction`` shifts an authored
-``ChallengeTemplate.severity`` expressed in ``DIFFICULTY_VALUES`` *points*
-(#2865). Both live here so the bound checks, the mutual-exclusion rule, and the
+``ChallengeTemplate.severity_level`` by one band of tenths of a level
+(#2865, #5093). Both live here so the bound checks, the mutual-exclusion rule, and the
 refusal wording cannot drift apart.
 
 The invariant both share (ADR-0110): **at most one band, never an arbitrary
@@ -16,11 +16,15 @@ the authored table is refused, not squashed back to the edge — a GM asking for
 from __future__ import annotations
 
 from actions.types import ActionResult
+from world.checks.services import (
+    difficulty_level_for_points,
+    difficulty_points,
+    difficulty_step_points,
+)
 from world.scenes.action_constants import (
-    DIFFICULTY_BAND_STEP,
+    DIFFICULTY_BAND_SHIFT_TENTHS,
     DIFFICULTY_VALUES,
-    MAX_DIFFICULTY_POINTS,
-    MIN_DIFFICULTY_POINTS,
+    MAX_CHALLENGE_LEVEL,
     DifficultyChoice,
 )
 
@@ -94,16 +98,21 @@ def resolve_band_shift(
     return shifted, f" [{marker} -> {label}: {reason}]"
 
 
-def resolve_severity_shift(
-    severity: int, edge_reason: str, setback_reason: str
-) -> tuple[int, str, str] | ActionResult:
-    """Return ``(adjustment, reason, shift_note)`` for a points *severity*.
+def challenge_level_label(points: int) -> str:
+    """Label for a challenge's difficulty in points: the level whose baseline is nearest."""
+    return f"level {difficulty_level_for_points(points)}"
 
-    ``adjustment`` is the signed ``DIFFICULTY_BAND_STEP`` delta to persist on
-    ``ChallengeInstance.severity_adjustment`` (0 when no shift was asked for),
-    and ``reason`` is the GM's stated why (empty only when ``adjustment`` is 0) —
-    the pair the model's ``challenge_instance_adjustment_needs_reason``
-    constraint enforces together.
+
+def resolve_severity_shift(
+    severity_level: int, edge_reason: str, setback_reason: str
+) -> tuple[int, str, str] | ActionResult:
+    """Return ``(adjustment_tenths, reason, shift_note)`` for a challenge's severity level.
+
+    ``adjustment_tenths`` is the signed ``DIFFICULTY_BAND_SHIFT_TENTHS`` delta to persist on
+    ``ChallengeInstance.severity_adjustment_tenths`` (0 when no shift was asked for), and
+    ``reason`` is the GM's stated why (empty only when it is 0), the pair the model's
+    ``challenge_instance_adjustment_needs_reason`` constraint enforces together. A shift that
+    would leave the ladder (below 0 points or above the top level's baseline) is refused.
     """
     direction = _shift_direction(edge_reason, setback_reason)
     if isinstance(direction, ActionResult):
@@ -111,13 +120,13 @@ def resolve_severity_shift(
     if direction is None:
         return 0, "", ""
 
-    adjustment = -DIFFICULTY_BAND_STEP if direction else DIFFICULTY_BAND_STEP
-    shifted = severity + adjustment
-    if shifted < MIN_DIFFICULTY_POINTS or shifted > MAX_DIFFICULTY_POINTS:
+    adjustment = -DIFFICULTY_BAND_SHIFT_TENTHS if direction else DIFFICULTY_BAND_SHIFT_TENTHS
+    shifted = difficulty_points(severity_level) + difficulty_step_points(adjustment, severity_level)
+    if shifted < 0 or shifted > difficulty_points(MAX_CHALLENGE_LEVEL):
         return ActionResult(
             success=False,
             message=ERR_ALREADY_EASIEST if direction else ERR_ALREADY_HARDEST,
         )
     reason = edge_reason if direction else setback_reason
     marker = "edge" if direction else "setback"
-    return adjustment, reason, f" [{marker} -> {difficulty_label(shifted)}: {reason}]"
+    return adjustment, reason, f" [{marker} -> {challenge_level_label(shifted)}: {reason}]"

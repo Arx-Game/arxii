@@ -1125,7 +1125,7 @@ class BeatStagedTemplate(SharedMemoryModel):
     """An authored situation or challenge template to place when a SITUATION beat runs.
 
     Session prep (#3425). Exactly one of ``situation_template``/``challenge_template``
-    is set per row (DB-enforced XOR, mirroring the ``ChallengeInstance.severity_adjustment``
+    is set per row (DB-enforced XOR, mirroring the ``ChallengeInstance.severity_adjustment_tenths``
     style of a ``CheckConstraint`` over an authoring invariant) -- a situation-template row
     is placed via ``instantiate_situation``; a challenge-template row is placed via
     ``instantiate_challenge`` against a fresh target object, exactly as

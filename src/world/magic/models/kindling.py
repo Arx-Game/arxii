@@ -148,8 +148,12 @@ class KindledStrengthTier(NaturalKeyMixin, SharedMemoryModel):
     give_in_bonus_percent = models.PositiveSmallIntegerField(
         default=0, help_text="Percent the intensity Fury buys grows at this strength."
     )
-    give_in_ease = models.PositiveSmallIntegerField(
-        default=0, help_text="Check difficulty reduction on the control roll at this strength."
+    give_in_ease_tenths = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Check difficulty reduction on the control roll at this strength, in tenths of "
+            "one level's width at the Fury tier's base check level."
+        ),
     )
     dig_deep_scale_percent = models.PositiveSmallIntegerField(
         default=0, help_text="Percent a Dig deep surge grows when the named resonance is kindled."

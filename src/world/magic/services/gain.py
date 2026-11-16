@@ -80,6 +80,8 @@ from evennia.accounts.models import AccountDB
 from evennia_extensions.models import RoomProfile
 from world.areas.services import area_for_scene
 from world.character_sheets.models import CharacterSheet
+from world.checks.constants import ModifierLane
+from world.checks.modifier_values import load_baselines
 from world.locations.constants import RESONANCE_DEFAULT_MAGNITUDE, KeyType, LocationParentType
 from world.locations.models import LocationValueModifier
 from world.magic.exceptions import EndorsementValidationError
@@ -1255,6 +1257,7 @@ def outfit_daily_trickle_for_character(sheet: CharacterSheet) -> int:
     config = get_resonance_gain_config()
     base = config.outfit_daily_trickle_per_item_resonance
     grants_issued = 0
+    rung_factors = None  # the OUTFIT_TRICKLE lane, loaded once when a threaded facet needs it
 
     for item_facet in sheet.character.equipped_items.iter_item_facets():
         item = item_facet.item_instance
@@ -1265,8 +1268,11 @@ def outfit_daily_trickle_for_character(sheet: CharacterSheet) -> int:
         if thread is None:
             continue
 
-        # Per 10 thread levels (thread_rung, #5091): level 0-19 = ×1, level 50 = ×5.
-        level_factor = max(1, thread_rung(thread.level))
+        # The OUTFIT_TRICKLE lane's row at the thread's rung (thread_rung, #5091); a thread
+        # below rung 1 reads the rung 1 row (#5093). The seeded rows are the rung itself.
+        if rung_factors is None:
+            rung_factors = load_baselines(ModifierLane.OUTFIT_TRICKLE)
+        level_factor = rung_factors.baseline(max(1, thread_rung(thread.level)))
         amount = int(base * item_q_mult * attach_q_mult * level_factor)
         if amount <= 0:
             continue

@@ -414,7 +414,7 @@ class ChallengeTemplatePropertyInline(admin.TabularInline):
 
 @admin.register(ChallengeTemplate)
 class ChallengeTemplateAdmin(admin.ModelAdmin):
-    list_display = ["name", "category", "challenge_type", "severity", "discovery_type"]
+    list_display = ["name", "category", "challenge_type", "severity_level", "discovery_type"]
     list_filter = ["category", "challenge_type", "discovery_type"]
     search_fields = ["name"]
     inlines = [

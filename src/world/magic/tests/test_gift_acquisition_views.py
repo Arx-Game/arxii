@@ -32,6 +32,7 @@ from world.magic.factories import (
 from world.magic.models import CharacterGiftUnlock, CharacterTechnique
 from world.progression.models import ExperiencePointsData
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 
 
 def _link_account_to_sheet(account, character, sheet):
@@ -100,6 +101,7 @@ class PurchaseGiftUnlockViewTests(APITestCase):
 class AcceptTechniqueOfferViewTests(APITestCase):
     @classmethod
     def setUpTestData(cls):
+        seed_pool_and_cap_lanes()
         cls.account = AccountFactory(username="technique_offer_acceptor")
         cls.character = CharacterFactory(db_key="TechniqueAcceptor")
         cls.sheet = CharacterSheetFactory(character=cls.character)

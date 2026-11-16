@@ -94,7 +94,7 @@ class BreakFreeAction(Action):
 
         instance = max(
             instances,
-            key=lambda i: (i.severity, i.condition.break_free_difficulty),
+            key=lambda i: (i.severity, i.condition.break_free_difficulty_tenths),
         )
 
         result = attempt_break_free(instance, in_combat_tick=False)
@@ -161,13 +161,14 @@ class RevealConditionAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.checks.services import level_opposition, perform_check  # noqa: PLC0415
+        from world.checks.services import perform_check  # noqa: PLC0415
         from world.conditions.models import ConditionInstance  # noqa: PLC0415
+        from world.conditions.services import (  # noqa: PLC0415
+            caster_opposition,
+            held_step_points,
+        )
         from world.magic.constants import MagicActivity  # noqa: PLC0415
         from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
-        from world.progression.services.skill_development import (  # noqa: PLC0415
-            get_character_path_level,
-        )
 
         target = kwargs.get("target")
         if target is None:
@@ -196,11 +197,9 @@ class RevealConditionAction(Action):
         if check_type is None:
             return ActionResult(success=False, message="Cannot determine how to detect this.")
 
-        difficulty = template.subtlety
-        caster = instance.source_character
-        if caster is not None:
-            caster_level = get_character_path_level(caster)
-            difficulty += level_opposition(check_type, level=caster_level, character=caster)
+        difficulty = held_step_points(instance, template.subtlety_tenths) + caster_opposition(
+            instance, check_type
+        )
 
         # Spotting a loss of self (corruption, atavism, possession) is sensing magic.
         sensing = (
@@ -248,14 +247,13 @@ class RallyAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.checks.services import level_opposition, perform_check  # noqa: PLC0415
+        from world.checks.services import perform_check  # noqa: PLC0415
         from world.conditions.services import (  # noqa: PLC0415
             attempt_break_free,
+            caster_opposition,
+            held_step_points,
             rally_target_instance,
             record_rally_landed,
-        )
-        from world.progression.services.skill_development import (  # noqa: PLC0415
-            get_character_path_level,
         )
 
         target = kwargs.get("target")
@@ -275,11 +273,9 @@ class RallyAction(Action):
         if check_type is None:
             return ActionResult(success=False, message="Cannot determine how to rally them.")
 
-        difficulty = instance.condition.break_free_difficulty
-        caster = instance.source_character
-        if caster is not None:
-            caster_level = get_character_path_level(caster)
-            difficulty += level_opposition(check_type, level=caster_level, character=caster)
+        difficulty = held_step_points(
+            instance, instance.condition.break_free_difficulty_tenths
+        ) + caster_opposition(instance, check_type)
 
         result = perform_check(
             actor,

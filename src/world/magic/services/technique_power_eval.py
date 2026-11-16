@@ -54,6 +54,7 @@ from world.magic.services.technique_effects import (
     technique_is_not_castable_standalone,
     technique_is_underspecified,
 )
+from world.magic.services.threads import vow_thread_width
 from world.magic.types.technique_power import (
     FLAG_NOT_CASTABLE_STANDALONE,
     FLAG_NOT_COMBAT_POWER,
@@ -108,20 +109,16 @@ def amplified_power_delta(context: EvalContext) -> int:
     """Power gained going from baseline to the "fully matched anchor" (#3279).
 
     Sums the two role-band pure helpers (extracted from ``power_terms.py`` in
-    this same task) at ``context.thread_level``, each int-truncated separately
-    before summing — mirroring how ``_derive_power``'s TERM stage truncates
+    this same task) at one level's width at the rung of a vow thread stored at
+    ``context.thread_level`` (#5093, as the live terms read it), each int-truncated
+    separately before summing — mirroring how ``_derive_power``'s TERM stage truncates
     every provider's contribution independently before adding it to the
     ledger total.
     """
     config = get_covenant_role_blend_config()
-    blend = int(
-        blend_power_contribution(
-            context.thread_level, _ANCHOR_BLEND_WEIGHT, config.multiplier_tenths
-        )
-    )
-    specialty = int(
-        specialty_power_contribution(context.thread_level, _ANCHOR_SPECIALTY_MULTIPLIER_TENTHS)
-    )
+    width = vow_thread_width(context.thread_level)
+    blend = int(blend_power_contribution(width, _ANCHOR_BLEND_WEIGHT, config.multiplier_tenths))
+    specialty = int(specialty_power_contribution(width, _ANCHOR_SPECIALTY_MULTIPLIER_TENTHS))
     return blend + specialty
 
 
@@ -808,14 +805,19 @@ def _vow_effect_valuations(  # noqa: PLR0913 - cohesive per-technique valuation 
     Reads only the effects' cached payload lists, so prefetched rows cost no query for
     damage; a condition row costs the same per-row lookups a technique row does.
     """
-    from world.covenants.added_effects import vow_effect_bonuses  # noqa: PLC0415
+    from world.covenants.added_effects import (  # noqa: PLC0415
+        load_vow_effect_lanes,
+        vow_effect_bonuses,
+        vow_effects_scale,
+    )
 
     upgraded = {effect.upgrades_id for effect in vow_effects if effect.upgrades_id is not None}
+    lanes = load_vow_effect_lanes() if vow_effects_scale(vow_effects) else None
     valuations: list[PayloadValuation] = []
     for effect in vow_effects:
         if effect.pk in upgraded:
             continue
-        bonuses = vow_effect_bonuses(effect, thread_level)
+        bonuses = vow_effect_bonuses(effect, thread_level, lanes=lanes)
         valuations.extend(
             replace(
                 _damage_row_valuation(

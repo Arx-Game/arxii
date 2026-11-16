@@ -340,7 +340,7 @@ class TreatmentTemplateFactory(DjangoModelFactory):
     target_condition = factory.SubFactory(ConditionTemplateFactory)
     target_kind = TreatmentTargetKind.AFTERMATH
     check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
-    target_difficulty = 0
+    target_difficulty_level = 0
     requires_bond = False
     resonance_cost = 0
     anima_cost = 0
@@ -749,8 +749,8 @@ class CompulsionFactory(DjangoModelFactory):
     )
     wants = CompulsionWant.ATTACK_OPPONENT
     check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
-    base_difficulty = 10
-    difficulty_per_severity = 2
+    base_difficulty_level = 1
+    difficulty_per_severity_tenths = 4
 
 
 class CompulsionForbiddenActionFactory(DjangoModelFactory):
@@ -759,7 +759,7 @@ class CompulsionForbiddenActionFactory(DjangoModelFactory):
 
     compulsion = factory.SubFactory(CompulsionFactory)
     action = CompulsionForbidden.FLEE
-    extra_difficulty = 0
+    extra_difficulty_tenths = 0
 
 
 class CompulsionResistBandFactory(DjangoModelFactory):
@@ -782,8 +782,8 @@ class ControlLossTriggerFactory(DjangoModelFactory):
     vulnerability = factory.SubFactory(ConditionTemplateFactory)
     fires_on = ControlLossFiresOn.MOON_PULL
     check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
-    base_difficulty = 10
-    relief_per_level = 0
+    base_difficulty_level = 1
+    relief_per_level_tenths = 0
 
     class Params:
         wound = factory.Trait(fires_on=ControlLossFiresOn.WOUND_THRESHOLD, health_below_percent=50)

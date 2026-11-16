@@ -93,9 +93,12 @@ class DreamPerilConfig(SharedMemoryModel):
         related_name="dream_peril_configs",
         help_text="Check type rolled for Dream Peril resistance.",
     )
-    resist_difficulty = models.PositiveIntegerField(
-        default=20,
-        help_text="Target difficulty for the Dream Peril resist check.",
+    resist_difficulty_level = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            "Target difficulty for the Dream Peril resist check. Authored as a level (0 "
+            "= no difficulty): the roll meets that level's baseline."
+        ),
     )
 
     class Meta:

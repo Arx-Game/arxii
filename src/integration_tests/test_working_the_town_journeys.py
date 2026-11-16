@@ -349,7 +349,7 @@ class CraftingAtTheBench(JourneyCase):
         self.workshop = self.make_room("The Workshop")
         self.profile = RoomProfileFactory(objectdb=self.workshop)
         install_full_lab_station(self.profile)
-        wire_enchanting_crafting(base_difficulty=0)
+        wire_enchanting_crafting(base_difficulty_level=0)
         self.ysmay = self.make_player("Ysmay", room=self.workshop)
         self.sheet = self.ysmay.sheet_data
         CharacterTraitValueFactory(

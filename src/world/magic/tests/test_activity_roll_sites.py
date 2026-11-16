@@ -230,7 +230,7 @@ class MagicServiceRollSiteTests(ActivityTermTestCase):
 
         cure = CheckTypeFactory()
         condition = ConditionTemplateFactory(
-            can_be_dispelled=True, cure_check_type=cure, cure_difficulty=5
+            can_be_dispelled=True, cure_check_type=cure, cure_difficulty_level=0
         )
         target = CharacterSheetFactory().character
         ConditionInstanceFactory(target=target, condition=condition)
@@ -440,14 +440,14 @@ class ConditionRollSiteTests(ActivityTermTestCase):
             marked=True,
             break_free_mode=BreakFreeMode.SELF_INITIATED,
             break_free_check_type=CheckTypeFactory(),
-            break_free_difficulty=10,
+            break_free_difficulty_tenths=20,
         )
         instance = ConditionInstanceFactory(
             condition=template, target=CharacterSheetFactory().character, is_aware=True
         )
 
         self.assert_terms_reach(
-            "world.checks.services.perform_check_with_modifiers",
+            "world.conditions.services.perform_check_with_modifiers",
             MagicActivity.RESISTING_LOSS_OF_SELF,
             lambda: attempt_break_free(instance, in_combat_tick=True),
         )
@@ -460,14 +460,14 @@ class ConditionRollSiteTests(ActivityTermTestCase):
             marked=False,
             break_free_mode=BreakFreeMode.SELF_INITIATED,
             break_free_check_type=CheckTypeFactory(),
-            break_free_difficulty=10,
+            break_free_difficulty_tenths=20,
         )
         instance = ConditionInstanceFactory(
             condition=template, target=CharacterSheetFactory().character, is_aware=True
         )
 
         self.assert_no_terms(
-            "world.checks.services.perform_check_with_modifiers",
+            "world.conditions.services.perform_check_with_modifiers",
             MagicActivity.RESISTING_LOSS_OF_SELF,
             lambda: attempt_break_free(instance, in_combat_tick=True),
         )
@@ -516,7 +516,7 @@ class ConditionRollSiteTests(ActivityTermTestCase):
             marked=True,
             break_free_mode=BreakFreeMode.SELF_INITIATED,
             break_free_check_type=CheckTypeFactory(),
-            break_free_difficulty=10,
+            break_free_difficulty_tenths=20,
         )
         template.category.alters_behavior = True
         template.category.save(update_fields=["alters_behavior"])
@@ -535,7 +535,7 @@ class ConditionRollSiteTests(ActivityTermTestCase):
         """A peril instance on a stage that rolls a resist check, with a one-row pool."""
         template = self.template(marked=marked, has_progression=True)
         stage = ConditionStageFactory(
-            condition=template, resist_check_type=CheckTypeFactory(), resist_difficulty=5
+            condition=template, resist_check_type=CheckTypeFactory(), resist_difficulty_level=0
         )
         sheet = CharacterSheetFactory()
         instance = ConditionInstanceFactory(
@@ -578,7 +578,7 @@ class ConditionRollSiteTests(ActivityTermTestCase):
             condition=template,
             stage_order=1,
             resist_check_type=CheckTypeFactory(),
-            resist_difficulty=5,
+            resist_difficulty_level=0,
         )
         ConditionStageFactory(condition=template, stage_order=2)
         # Bleeding Out and Surrounded are found by designation (#4739), not by name.
@@ -992,7 +992,7 @@ class CompanionBindingRollSiteTests(ActivityTermTestCase):
         thread = Thread.objects.get(owner=sheet, target_kind=TargetKind.GIFT, target_gift=gift)
         thread.level = 10
         thread.save(update_fields=["level"])
-        archetype = CompanionArchetypeFactory(bind_difficulty=20, capacity_cost=5)
+        archetype = CompanionArchetypeFactory(bind_difficulty_level=1, capacity_cost=5)
         opponent = CombatOpponentFactory(
             encounter=CombatEncounterFactory(), threat_pool=ThreatPoolFactory()
         )

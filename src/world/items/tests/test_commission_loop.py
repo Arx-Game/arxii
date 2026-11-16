@@ -56,7 +56,7 @@ def _player(room_profile, name: str):
 
 class _CommissionCase(TestCase):
     def setUp(self) -> None:
-        wire_enchanting_crafting(base_difficulty=0)
+        wire_enchanting_crafting(base_difficulty_level=0)
         self.shop = RoomProfileFactory()
         install_full_lab_station(self.shop)
         self.corwen = _player(self.shop, "Corwen")

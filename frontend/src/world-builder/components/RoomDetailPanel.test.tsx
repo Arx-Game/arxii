@@ -146,7 +146,7 @@ describe('RoomDetailPanel', () => {
             id: 1,
             clue_name: 'Torn Letter',
             clue_slug: 'torn-letter',
-            detect_difficulty: 5,
+            detect_difficulty_level: 3,
             fixture_key: null,
           },
         ],
@@ -179,7 +179,7 @@ describe('RoomDetailPanel', () => {
     expect(runAction).toHaveBeenCalledWith('staff_place_clue', {
       room_id: 5,
       clue_slug: 'torn-letter',
-      detect_difficulty: 0,
+      detect_difficulty_level: 0,
     });
   });
 

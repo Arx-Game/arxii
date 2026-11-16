@@ -8,12 +8,13 @@ from django.test import TestCase
 from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
+from world.checks.test_helpers import SeededLevelLadderMixin
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.services import apply_condition, bulk_apply_conditions
 from world.conditions.types import BulkConditionApplication
 
 
-class ApplyConditionResistCheckTest(TestCase):
+class ApplyConditionResistCheckTest(SeededLevelLadderMixin, TestCase):
     """apply_condition consults ConditionTemplate.resist_check_type before applying."""
 
     def setUp(self) -> None:
@@ -28,7 +29,7 @@ class ApplyConditionResistCheckTest(TestCase):
         template = ConditionTemplateFactory(
             name="ResistibleCondition",
             resist_check_type=resist_check,
-            resist_difficulty=15,
+            resist_difficulty_level=1,
         )
         fake_result = SimpleNamespace(success_level=1)
         with patch(
@@ -39,7 +40,7 @@ class ApplyConditionResistCheckTest(TestCase):
         mock_check.assert_called_once_with(
             character=self.target,
             check_type=resist_check,
-            target_difficulty=15,
+            target_difficulty=18,  # level 1's baseline
             extra_traits=(),
         )
         self.assertFalse(result.success)
@@ -52,7 +53,7 @@ class ApplyConditionResistCheckTest(TestCase):
         template = ConditionTemplateFactory(
             name="ResistibleConditionFails",
             resist_check_type=resist_check,
-            resist_difficulty=15,
+            resist_difficulty_level=1,
         )
         fake_result = SimpleNamespace(success_level=0)
         with patch(
@@ -74,7 +75,7 @@ class ApplyConditionResistCheckTest(TestCase):
         self.assertIsNotNone(result.instance)
 
 
-class BulkApplyConditionsResistCheckTest(TestCase):
+class BulkApplyConditionsResistCheckTest(SeededLevelLadderMixin, TestCase):
     """bulk_apply_conditions applies the same resist-check gate per item."""
 
     def setUp(self) -> None:
@@ -89,7 +90,7 @@ class BulkApplyConditionsResistCheckTest(TestCase):
         template = ConditionTemplateFactory(
             name="BulkResistibleCondition",
             resist_check_type=resist_check,
-            resist_difficulty=15,
+            resist_difficulty_level=1,
         )
         # target_a resists (SL=1), target_b does not (SL=0) — SimpleNamespace side_effect
         # returns results in call order: target_a is processed first (insertion order).

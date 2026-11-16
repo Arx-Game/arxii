@@ -2,9 +2,12 @@
 
 Ysmay, a level-1 character, checks through the real check pipeline
 (``perform_check_with_modifiers``, which gathers her conditions), with the
-seeded rank ladder and result charts. Her own total is 5 points: Incompetent (rank 0),
-50% toward Novice (rank 1). Buffs are real conditions on her with check modifiers. The
-returned chart exposes the exact odds, without estimating them from repeated rolls.
+seeded rank ladder and result charts. Rank N starts at 18 + 8 x (N - 1) points (a level is 8
+points wide), rank 0 is below 18. Her own total is 9 points, her level term (half of level 1's
+18-point baseline): Incompetent (rank 0), 50% toward Novice (rank 1), because 9 of the 18
+points of rank 0's band. Buffs are real conditions on
+her with check modifiers. The returned chart exposes the exact odds, without estimating them
+from repeated rolls.
 """
 
 from __future__ import annotations
@@ -28,10 +31,11 @@ from world.mechanics.services import difficulty_indicator_for_rank_difference
 from world.seeds.checks import seed_check_resolution_tables
 from world.traits.models import ResultChart
 
-NOVICE = 10  # Novice (rank 1), 0% through its band
-EXPERT = 50  # Expert (rank 3)
-LEGENDARY = 200  # Legendary (rank 7)
-MYTHIC = 250  # Mythic (rank 8)
+NOVICE = 18  # Novice (rank 1), 0% through its band
+COMPETENT = 34  # Competent (rank 3)
+RANK_EIGHT = 74  # 18 + 8 x 7
+RANK_THIRTEEN = 114  # 18 + 8 x 12
+RANK_TWENTY = 170  # 18 + 8 x 19
 
 
 class EveryPointCounts(JourneyCase):
@@ -65,7 +69,7 @@ class EveryPointCounts(JourneyCase):
 
     def test_her_result_says_where_she_stood(self) -> None:
         result = perform_check_with_modifiers(self.ysmay, self.climbing, target_difficulty=NOVICE)
-        self.assertEqual(result.total_points, 5)
+        self.assertEqual(result.total_points, 9)
         self.assertEqual(
             result.standing_text,
             "Incompetent (rank 0), 50% toward Novice (rank 1) against Novice (rank 1)",
@@ -77,13 +81,13 @@ class EveryPointCounts(JourneyCase):
         told = self.telnet(self.ysmay, "check Climbing at trivial")
         self.assertIn(
             "Your standing: Incompetent (rank 0), 50% toward Novice (rank 1) against "
-            "Novice (rank 1), 33% toward Competent (rank 2).",
+            "Incompetent (rank 0), 83% toward Novice (rank 1).",
             told,
         )
 
     def test_halfway_through_a_band_she_gets_the_halfway_odds(self) -> None:
-        # Chart -1 (22% Success or better) slid 50% toward chart 0 (40% once its
-        # Critical Success counts as Success): 31%. Whole ranks would give 22%.
+        # Chart -1 (22% Success or better) slid 9/18 of the way toward chart 0 (40% once its
+        # Critical Success counts as Success): 22% + 9/18 x 18% = 31%. Whole ranks give 22%.
         result = perform_check_with_modifiers(self.ysmay, self.climbing, target_difficulty=NOVICE)
         self.assertAlmostEqual(result.standing.slid.at_least(1), 0.31)
         self.assertEqual(result.standing.slid.at_least(2), 0)
@@ -106,36 +110,41 @@ class EveryPointCounts(JourneyCase):
         # +3 keeps her in Incompetent (rank 0); whole ranks would ignore it.
         self.buff(3, "A word of encouragement")
         buffed = self.success_odds(NOVICE)
-        # 80% through the band: 22% + 0.8 x 18% = 36.4%.
-        self.assertAlmostEqual(buffed, 0.364)
+        # 12 of the 18 points of the band: 22% + 12/18 x 18% = 34%.
+        self.assertAlmostEqual(buffed, 0.34)
         self.assertGreater(buffed, plain + 0.02)
 
     def test_a_crowd_of_buffs_lifts_her_off_the_impossible_chart(self) -> None:
-        # Unbuffed: Incompetent (rank 0), 50% through, against Mythic (rank 8): -7.5,
-        # chart -8, which has no Success (1).
-        alone = perform_check_with_modifiers(self.ysmay, self.climbing, target_difficulty=MYTHIC)
+        # Unbuffed: rank 0 against rank 20 is chart -8, which has no Success (1).
+        alone = perform_check_with_modifiers(
+            self.ysmay, self.climbing, target_difficulty=RANK_TWENTY
+        )
         self.assertEqual(alone.rank_difference, -8)
         self.assertEqual(alone.standing.slid.at_least(1), 0)
         for index in range(10):
             self.buff(12, f"Admirer {index + 1}")
         self.buff(30, "A sworn blessing")
-        # +150 points: Peerless (rank 6) against Mythic (rank 8): chart -2, winnable.
-        result = perform_check_with_modifiers(self.ysmay, self.climbing, target_difficulty=MYTHIC)
-        self.assertEqual(result.total_points, 155)
+        # +150 points: 159 is rank 18 (starts at 154) against rank 20: -1.375, chart -2, winnable.
+        result = perform_check_with_modifiers(
+            self.ysmay, self.climbing, target_difficulty=RANK_TWENTY
+        )
+        self.assertEqual(result.total_points, 159)
         self.assertEqual(result.rank_difference, -2)
         self.assertEqual(result.standing.chart.rank_difference, -2)
         self.assertGreater(result.standing.slid.at_least(1), 0)
-        # The same odds as a character whose own total is 155 with no buffs at all.
+        # The same odds as a character whose own total is 159 with no buffs at all.
         self.assertEqual(
-            result.standing.slid.at_least(1), resolve_standing(155, MYTHIC).slid.at_least(1)
+            result.standing.slid.at_least(1), resolve_standing(159, RANK_TWENTY).slid.at_least(1)
         )
 
     def test_too_few_buffs_leave_her_on_the_impossible_chart(self) -> None:
-        # +3 points: 80% through Incompetent (rank 0), -7.2. Short of the next rank, so the
-        # roll stays on chart -8 and slides toward -7 over chart -8's own outcomes only.
+        # +3 points: 12 of rank 0's 18 points against rank 8, -7.33. Short of the next rank, so
+        # the roll stays on chart -8 and slides toward -7 over chart -8's own outcomes only.
         self.buff(3, "A word of encouragement")
-        result = perform_check_with_modifiers(self.ysmay, self.climbing, target_difficulty=MYTHIC)
-        self.assertEqual(result.total_points, 8)
+        result = perform_check_with_modifiers(
+            self.ysmay, self.climbing, target_difficulty=RANK_EIGHT
+        )
+        self.assertEqual(result.total_points, 12)
         self.assertEqual(result.rank_difference, -8)
         self.assertEqual(result.standing.chart.rank_difference, -8)
         self.assertFalse(
@@ -144,20 +153,22 @@ class EveryPointCounts(JourneyCase):
         self.assertEqual(result.standing.slid.at_least(1), 0)
 
     def test_at_a_three_rank_gap_the_buffs_count_in_full(self) -> None:
-        # Own standing against Expert (rank 3): chart -3 at 50%, 13.5% Success or better.
-        alone = self.success_odds(EXPERT)
-        self.buff(40, "A rousing speech")
-        buffed = self.success_odds(EXPERT)
-        # 45 points: Competent (rank 2), 80% toward Expert; chart -1 at 80%: 36.4%.
-        self.assertAlmostEqual(alone, 0.135)
-        self.assertAlmostEqual(buffed, 0.364)
+        # Own standing against Competent (rank 3): -2.5, chart -3 (12% Success or better)
+        # slid 9/18 toward chart -2 (15%): 12% + 9/18 x 3% = 13.5%.
+        alone = self.success_odds(COMPETENT)
+        self.buff(24, "A rousing speech")
+        buffed = self.success_odds(COMPETENT)
+        # 33 points: rank 2 (starts at 26), 7/8 through; -0.125, chart -1 (22%) slid 7/8
+        # toward chart 0 (40%): 22% + 7/8 x 18% = 37.75%.
+        self.assertAlmostEqual(alone, 0.12 + 9 / 18 * 0.03)
+        self.assertAlmostEqual(buffed, 0.3775)
 
     def test_the_preview_grades_on_her_full_total(self) -> None:
         """The grade the action lists and standoff cards show: Impossible at her total,
         and no longer Impossible once enough buffs lift her onto a winnable chart."""
         for modifiers, impossible in ((0, True), (3, True), (150, False)):
             difference = preview_check_difficulty(
-                self.ysmay, self.climbing, MYTHIC, extra_modifiers=modifiers
+                self.ysmay, self.climbing, RANK_TWENTY, extra_modifiers=modifiers
             )
             with self.subTest(modifiers=modifiers):
                 self.assertEqual(
@@ -178,13 +189,11 @@ class EveryPointCounts(JourneyCase):
         for index in range(10):
             self.buff(12, f"Admirer {index + 1}")
         result = perform_check_with_modifiers(
-            self.ysmay, self.climbing, target_difficulty=LEGENDARY
+            self.ysmay, self.climbing, target_difficulty=RANK_THIRTEEN
         )
         # 12 x (1 + 7/8 + (7/8)^2 + (7/8)^3 + 6 x 2/3) = 87.7 -> 88, not the plain 120.
-        self.assertEqual(result.total_points, 5 + 88)
-        # Master (rank 4) with the pile, against Legendary (rank 7): chart -3.
-        self.assertEqual(
-            result.standing.roller.text, "Master (rank 4), 37% toward Grandmaster (rank 5)"
-        )
+        self.assertEqual(result.total_points, 9 + 88)
+        # 97 points: Master (rank 10, starts at 90), 7/8 through, against rank 13: chart -3.
+        self.assertEqual(result.standing.roller.text, "Master (rank 10), 88% toward Rank 11")
         self.assertEqual(result.rank_difference, -3)
         self.assertGreater(result.standing.slid.at_least(1), 0)

@@ -57,11 +57,11 @@ class PlantRescueClueTests(TestCase):
             room,
             name="Signs of a struggle",
             description="PLACEHOLDER",
-            detect_difficulty=2,
+            detect_difficulty_level=2,
         )
 
         assert placement.room_profile == room
-        assert placement.detect_difficulty == 2
+        assert placement.detect_difficulty_level == 2
         clue = placement.clue
         assert clue.target_kind == ClueTargetKind.RESCUE
         assert clue.target_captivity == captivity
@@ -116,7 +116,7 @@ class SearchFindsRescueClueTests(TestCase):
         captivity.rescue_template = _rescue_template()
         captivity.save()
         room = RoomProfileFactory()
-        plant_rescue_clue(captivity, room, name="Signs", description="y", detect_difficulty=0)
+        plant_rescue_clue(captivity, room, name="Signs", description="y", detect_difficulty_level=0)
         _, character = _finder()
         search_check = CheckTypeFactory(name="Search")
 

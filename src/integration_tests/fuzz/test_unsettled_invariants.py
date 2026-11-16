@@ -28,8 +28,9 @@ levelling spent from it, so the rows' sum and ``developed_points`` diverge as so
 thread levels. What is true, and checked here:
 
 - imbuing alone: each row is exactly what was imbued with that resonance, the rows sum to
-  everything imbued, ``developed_points`` is that sum less one point per level climbed (below
-  level 10 a level costs one point), and so never exceeds the rows' sum;
+  everything imbued, ``developed_points`` is that sum less what the levels climbed cost (ten
+  points a level from 0 to 19 on the shared development curve), and so never exceeds the
+  rows' sum;
 - over any history of imbues, retunes and Falls: no row is ever below zero, the thread always
   holds a row, and ``Thread.resonance`` is the resonance of the leading row (the largest
   amount, the earliest created on a tie), which ``refresh_leading_resonance`` alone writes;
@@ -279,7 +280,7 @@ class AtoningTakesTheMireFirst(HypothesisTestCase):
         config = get_drift_correction_config()
         config.rite = DriftCorrectionRiteFactory()
         config.check_type = CheckTypeFactory()
-        config.check_difficulty = 0
+        config.check_difficulty_level = 0
         config.cap_percent = 50
         config.save()
         cls.outcomes = {
@@ -480,8 +481,8 @@ class ThreadRowInvariants(HypothesisTestCase):
             rows_after, {**rows_before, resonance.pk: rows_before.get(resonance.pk, 0) + amount}
         )
         _lead, level_after, points_after = self.stored(thread)
-        # Below level 10 a level costs one point of the bucket.
-        self.assertEqual(points_after, points_before + amount - (level_after - level_before))
+        # Every level from 0 to 19 costs ten points of the bucket on the shared curve.
+        self.assertEqual(points_after, points_before + amount - 10 * (level_after - level_before))
 
     def retune(self, sheet, thread, source, target, amount: int) -> None:
         rows_before = self.rows(thread)
@@ -574,6 +575,6 @@ class ThreadRowInvariants(HypothesisTestCase):
             # holds its creation row at zero when nothing of it has been imbued.
             self.assertEqual({pk: v for pk, v in rows.items() if v}, imbued)
             _lead, level, points = self.stored(thread)
-            self.assertEqual(points, sum(imbued.values()) - level)
+            self.assertEqual(points, sum(imbued.values()) - 10 * level)
             self.assertLessEqual(points, sum(rows.values()))
             self.assert_sound(thread)

@@ -59,7 +59,7 @@ from world.checks.factories import (
     ConsequenceFactory,
 )
 from world.checks.services import collect_check_modifiers
-from world.checks.test_helpers import force_check_outcome
+from world.checks.test_helpers import SeededLevelLadderMixin, force_check_outcome
 from world.checks.types import CheckResult
 from world.combat.constants import (
     ActionCategory,
@@ -281,7 +281,7 @@ class _TheYard(JourneyCase):
         return list(action.targets.all())
 
 
-class HoldingTheLine(_TheYard):
+class HoldingTheLine(SeededLevelLadderMixin, _TheYard):
     """A challenge, a thorn ward, a blessing and a grace, each through the combat round."""
 
     # -- a challenge ----------------------------------------------------------

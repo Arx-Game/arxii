@@ -34,8 +34,14 @@ from world.achievements.constants import ConditionEventType
 from world.checks.constants import ModifierLane, ModifierSourceKind
 from world.checks.models import CheckType
 from world.checks.modifier_values import ValueTable, load_taper_rules, load_value_table
-from world.checks.services import perform_check_with_modifiers
-from world.checks.types import ModifierBreakdown, ModifierContribution, round_half_up
+from world.checks.services import (
+    compute_obstacle_rating,
+    difficulty_points,
+    difficulty_step_points,
+    level_opposition,
+    perform_check_with_modifiers,
+)
+from world.checks.types import ModifierBreakdown, ModifierContribution
 from world.conditions.constants import (
     POISON_CATEGORY_NAME,
     POISON_DAMAGE_TYPE_NAME,
@@ -228,7 +234,7 @@ def breath_hold_rounds(target: "ObjectDB") -> int | None:  # noqa: OBJECTDB_PARA
     result = perform_check_with_modifiers(
         character=target,
         check_type=config.check_type,
-        target_difficulty=config.target_difficulty,
+        target_difficulty=difficulty_points(config.target_difficulty_level),
     )
     if result.outcome is None:
         return None
@@ -797,7 +803,7 @@ def _check_application_resist(
 ) -> bool:
     """Return True if *target* resists having *template* applied.
 
-    Rolls the target's own resist_check_type against resist_difficulty.
+    Rolls the target's own resist_check_type against resist_difficulty_level.
     success_level > 0 means the target's roll beat the difficulty — resisted.
     resist_check_type=None (the default) means unconditional application;
     this always returns False in that case, matching every existing
@@ -808,7 +814,7 @@ def _check_application_resist(
     result = perform_check_with_modifiers(
         character=target,
         check_type=template.resist_check_type,
-        target_difficulty=template.resist_difficulty,
+        target_difficulty=difficulty_points(template.resist_difficulty_level),
         extra_traits=loss_of_self_terms(template),
     )
     return int(result.success_level) > 0
@@ -3040,21 +3046,17 @@ def _vow_step_value(
 ) -> int:
     """The caster's vow size step on one of ``instance``'s sized modifiers, or 0 (#4747).
 
-    (value(L, size + 1) - value(L, size)) x tenths / 10 at the stored
-    ``modifier_vow_level`` L and ``modifier_vow_tenths``, rounded half up and signed
-    like the authored value, so a debuff's step is a further penalty. 0 when the
-    instance has no step or the table lacks either row. Read from stored columns only:
-    no query.
+    (fraction(size + 1) - fraction(size)) x width(L) x tenths / 10 at the stored
+    ``modifier_vow_level`` L and ``modifier_vow_tenths`` (``ValueTable.vow_step``), rounded
+    half up and signed like the authored value, so a debuff's step is a further penalty.
+    0 when the instance has no step or the lane lacks either size's fraction. Read from
+    stored columns and the loaded table only: no query.
     """
     vow_level = instance.modifier_vow_level
     tenths = instance.modifier_vow_tenths
     if not vow_level or not tenths or not _is_sized(instance):
         return 0
-    stepped = value_table.signed_value(authored_value, vow_level, instance.modifier_size + 1)
-    base = value_table.signed_value(authored_value, vow_level, instance.modifier_size)
-    if stepped is None or base is None:
-        return 0
-    return round_half_up(Decimal(stepped - base) * tenths / 10)
+    return value_table.vow_step(authored_value, vow_level, instance.modifier_size, tenths)
 
 
 def _priced_sized_modifier(
@@ -3161,6 +3163,45 @@ def get_check_modifier(
         CheckModifierResult with total and breakdown
     """
     return _check_modifier_for_target(character_sheet.character, check_type)
+
+
+def held_step_points(instance: ConditionInstance, tenths: int) -> int:
+    """A condition's authored difficulty in tenths of a level, as points, on top of the caster.
+
+    ``break_free_difficulty_tenths`` and ``subtlety_tenths`` ride on top of ``caster_opposition``
+    (#5093), so they are shares of one level's width: the width is read at the caster's level,
+    or the bearer's when nobody cast it.
+    """
+    from world.progression.services.skill_development import (  # noqa: PLC0415
+        get_character_path_level,
+    )
+
+    holder = instance.source_character or instance.target
+    return difficulty_step_points(tenths, get_character_path_level(holder))
+
+
+def caster_opposition(instance: ConditionInstance, check_type: CheckType) -> int:
+    """What the caster adds to the difficulty of reading, rallying against or breaking a hold.
+
+    The caster is the obstacle, so a caster with a sheet counts as her full check total on
+    ``check_type`` (#5093, ``compute_obstacle_rating``) and a sheet-less NPC caster as its
+    level's baseline. 0 when the hold has no ``source_character`` (the caster is gone). A hold
+    a character put on herself (moon sensitivity, intoxication, loss of control) has nobody
+    else to oppose it, and her own rating would cancel against the roll she makes to break it,
+    so it counts her level's baseline only (``level_opposition``).
+    """
+    caster = instance.source_character
+    if caster is None:
+        return 0
+    from world.progression.services.skill_development import (  # noqa: PLC0415
+        get_character_path_level,
+    )
+
+    if caster.pk == instance.target_id:
+        return level_opposition(
+            check_type, level=get_character_path_level(caster), character=caster
+        )
+    return compute_obstacle_rating(caster, check_type)
 
 
 def opponent_condition_opposition(
@@ -4099,7 +4140,7 @@ def _perform_advancement_resist_check(
     payload = ConditionStageAdvanceCheckPayload(
         instance=instance,
         target_stage=next_stage,
-        base_difficulty=next_stage.resist_difficulty,
+        base_difficulty=difficulty_points(next_stage.resist_difficulty_level),
     )
     location = instance.target.location
     if location is not None:
@@ -4441,14 +4482,7 @@ def attempt_break_free(
         BreakFreeResult with outcome label and severity delta.
     """
     from world.checks.constants import ModifierSourceKind  # noqa: PLC0415
-    from world.checks.services import (  # noqa: PLC0415
-        level_opposition,
-        perform_check_with_modifiers,
-    )
     from world.checks.types import ModifierContribution  # noqa: PLC0415
-    from world.progression.services.skill_development import (  # noqa: PLC0415
-        get_character_path_level,
-    )
 
     template = instance.condition
 
@@ -4476,11 +4510,9 @@ def attempt_break_free(
             message="This effect has no break-free check defined.",
         )
 
-    difficulty = template.break_free_difficulty
-    caster = instance.source_character
-    if caster is not None:
-        caster_level = get_character_path_level(caster)
-        difficulty += level_opposition(check_type, level=caster_level, character=caster)
+    difficulty = held_step_points(
+        instance, template.break_free_difficulty_tenths
+    ) + caster_opposition(instance, check_type)
 
     rally_bonus = instance.pending_rally_bonus
     if rally_bonus > 0:
@@ -4553,7 +4585,7 @@ def rally_target_instance(
     )
     return max(
         instances,
-        key=lambda inst: (inst.severity, inst.condition.break_free_difficulty),
+        key=lambda inst: (inst.severity, inst.condition.break_free_difficulty_tenths),
         default=None,
     )
 
@@ -5439,7 +5471,7 @@ def perform_treatment(  # noqa: PLR0913
     check_result = perform_check_with_modifiers(
         helper,
         check_type=treatment.check_type,
-        target_difficulty=treatment.target_difficulty,
+        target_difficulty=difficulty_points(treatment.target_difficulty_level),
         extra_traits=_treatment_skill_terms(treatment, technique_driven=technique_driven),
     )
 

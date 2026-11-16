@@ -938,12 +938,12 @@ class StaffPlaceClueActionTests(TestCase):
             self.staff,
             room_id=self.room_profile.objectdb_id,
             clue_slug="torn-letter",
-            detect_difficulty=5,
+            detect_difficulty_level=3,
         )
 
         assert result.success, result.message
         room_clue = RoomClue.objects.get(room_profile=self.room_profile, clue=self.clue)
-        assert room_clue.detect_difficulty == 5
+        assert room_clue.detect_difficulty_level == 3
         assert room_clue.fixture_key == f"room-{self.room_profile.objectdb_id}/torn-letter"
 
     def test_non_staff_rejected(self) -> None:
@@ -978,18 +978,18 @@ class StaffPlaceClueActionTests(TestCase):
             self.staff,
             room_id=self.room_profile.objectdb_id,
             clue_slug="torn-letter",
-            detect_difficulty=5,
+            detect_difficulty_level=0,
         )
         result = get_action("staff_place_clue").run(
             self.staff,
             room_id=self.room_profile.objectdb_id,
             clue_slug="torn-letter",
-            detect_difficulty=8,
+            detect_difficulty_level=4,
         )
         assert result.success, result.message
         assert RoomClue.objects.filter(room_profile=self.room_profile, clue=self.clue).count() == 1
         room_clue = RoomClue.objects.get(room_profile=self.room_profile, clue=self.clue)
-        assert room_clue.detect_difficulty == 8
+        assert room_clue.detect_difficulty_level == 4
 
 
 class StaffRemoveClueActionTests(TestCase):

@@ -26,7 +26,12 @@ class CaptivityAdmin(admin.ModelAdmin):
 class CaptivityConfigAdmin(admin.ModelAdmin):
     """#3831 - the singleton captivity-loop defaults (captive/rescue template, cell text)."""
 
-    list_display = ("cell_name", "captive_template", "rescue_template", "clue_detect_difficulty")
+    list_display = (
+        "cell_name",
+        "captive_template",
+        "rescue_template",
+        "clue_detect_difficulty_level",
+    )
     autocomplete_fields = ("captive_template", "rescue_template")
 
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002

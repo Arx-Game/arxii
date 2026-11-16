@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
+from world.checks.services import difficulty_points
 from world.tasking.constants import (
     LISTENER_BUZZ_BASE,
     LISTENER_BUZZ_PER_SCENE,
@@ -65,7 +66,7 @@ def create_listener_post(
     handler: Persona,
     *,
     check_type: CheckType | None = None,
-    check_difficulty: int = 0,
+    check_difficulty_level: int = 0,
 ) -> ListenerPost:
     """Post an agent as the room's listener (one active listener per room)."""
     from django.core.exceptions import ValidationError  # noqa: PLC0415
@@ -100,7 +101,7 @@ def create_listener_post(
         assignment=assignment,
         handler=handler,
         check_type=check_type,
-        check_difficulty=check_difficulty,
+        check_difficulty_level=check_difficulty_level,
         threshold=LISTENER_BUZZ_THRESHOLD,
     )
 
@@ -166,7 +167,7 @@ def _sweep_post(post: ListenerPost, now) -> None:
         result = perform_check(
             agent_character,
             post.check_type,
-            post.check_difficulty,
+            difficulty_points(post.check_difficulty_level),
             extra_modifiers=(
                 APTITUDE_STEP * aptitude_band(asset.asset_persona, TaskCategory.SPYCRAFT)
             ),

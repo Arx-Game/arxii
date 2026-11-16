@@ -5,11 +5,11 @@ A named, database-defined check (Stealth, Diplomacy, Composure, Penetration) com
 _Avoid_: skill check, roll type, test
 
 **CheckRank**:
-A lookup table mapping a point total to a discrete rank level by point thresholds (0/10/25/50/80/115/155/200/250 seeded; they widen with rank but are not exponential). Both the roller's points and the target difficulty are converted to ranks with band positions, and the fractional rank difference selects the chart and how far it slides. Shown with its number: Expert (rank 3).
+The level someone is acting at (#5093). A `CheckRank` row holds only the rank number and its name; rank N starts at the CHECK lane's level-N baseline total (`ModifierLevelBaseline`), and rank 0 starts at 0. Both the roller's points and the target difficulty are converted to ranks with band positions, and the fractional rank difference selects the chart and how far it slides. Shown with its number: Expert (rank 6). The ladder runs past the top baseline level, evenly spaced at one level's width, far enough to hold the top level's tier bonus; a rank with no `CheckRank` row is named "Rank N".
 _Avoid_: tier, grade, rank band
 
 **Band position** (#4601):
-How far a total sits through its check rank's band, as a share: 40 points is Competent (rank 2), 60% toward Expert (rank 3). 0 at the rank's own threshold; 0 at the top rank. Both the roller's total and the difficulty have one (`world.checks.slide.band_position`), and result text shows it ("Expert (rank 3), 67% toward Master (rank 4)").
+How far a total sits through its check rank's band, as a share: with the seeded baselines, 40 points is Competent (rank 3), 75% toward rank 4. 0 at the rank's own threshold; 0 at the top rank. Both the roller's total and the difficulty have one (`world.checks.slide.band_position`), and result text shows it ("Master (rank 10), 38% toward Rank 11").
 _Avoid_: progress, fraction of a rank, partial rank
 
 **Slide** (#4601):
@@ -33,11 +33,11 @@ The named result of a check (Success, Catastrophic Failure) with a numeric `succ
 _Avoid_: result, degree of success, outcome tier
 
 **Aspect**:
-A broad character archetype (Warfare, Subterfuge, Diplomacy, Scholarship) that grants bonuses to matching checks. Players see aspect names as flavor; the weights linking a CheckType to an aspect are staff-only mechanical values, scaled by the character's most recent path and level.
+A broad character archetype (Warfare, Subterfuge, Diplomacy, Scholarship) that grants bonuses to matching checks. Players see aspect names as flavor; the weights linking a CheckType to an aspect are staff-only mechanical values, sized by the character's most recent path and a share of one level's width at her level.
 _Avoid_: archetype tag, talent, domain, house aspect (a house's authored choice is a *charter question* and its answer a *facet*, #4532; "aspect" is this check-side archetype only)
 
 **Aspect lever** (#4827):
-A distinction's `+N` on an Aspect, an effect on the Aspect's own aspect-category `ModifierTarget` (`target_aspect`), added by the modifier seam to every check that weights the Aspect, times the check's aspect weight. Not the path aspect bonus (which is path weight x check weight x level); it needs no path and does not scale with level.
+A distinction's `+N` on an Aspect, an effect on the Aspect's own aspect-category `ModifierTarget` (`target_aspect`), added by the modifier seam to every check that weights the Aspect, times the check's aspect weight. Not the path aspect bonus (which is path weight x check weight x one level's width); it needs no path and does not scale with level.
 _Avoid_: aspect bonus (that is the path term), aspect modifier category as a stat
 
 **Composure**:
@@ -49,17 +49,30 @@ A flat per-character roll modifier summed from the character sheet's and the con
 _Avoid_: luck, roll bonus, fudge
 
 **Level points** (#2707, ADR-0166):
-`LEVEL_POINTS_PER_LEVEL * character level` (5 points/level) — a guaranteed term summed
+`CheckScaleConfig.level_share` (seed 0.5) times the CHECK baseline at the character's level
+(`level_points(level)`, #5093) plus the level's tier bonus — a guaranteed term summed
 into every `perform_check`'s `total_points`, sourced from
 `get_character_path_level`. Additive to the aspect bonus, never a replacement for it: a
 character whose Path matches the check's authored aspects still gets both. Unlike the
 aspect bonus, it never depends on an authored `CheckTypeAspect` existing.
 _Avoid_: level bonus, level modifier (both imply optional; level points are unconditional)
 
+**Authored difficulty level** (#5093):
+How staff author a difficulty: a level, never points. A standalone difficulty is a `*_level`
+column read as that level's CHECK baseline plus its tier bonus through `difficulty_points(level)`
+(a level-N lock is rolled at the strength a level-N NPC stands at; level 0 is no difficulty). An increment on
+top of another difficulty, or per step, is a `*_tenths` column read as tenths of one level's
+width through `difficulty_step_points(tenths, at_level)`.
+_Avoid_: difficulty points (authored), point difficulty
+
 **Level opposition** (#2707, ADR-0166):
 The PASSIVE half of an opposed check's difficulty, via `level_opposition(check_type, *,
-level, character=None)`: `LEVEL_POINTS_PER_LEVEL * level` always, plus — when a
-`character` is given — the acting check's aspects scored against the *defender's* Path.
+level, character=None)`: an NPC's difficulty is its level's CHECK baseline (the start of rank
+N, #5093) plus the level's tier bonus, plus — when a `character` is given — the acting check's aspects scored against the
+*defender's* Path (each match a share of one level's width) and the defender's active condition
+modifiers at their derived value, so a debuff lowers the NPC. A player character who is the
+obstacle (`is_player_character`) does not come through here: she counts as her full check total
+(`compute_obstacle_rating`).
 Used when the defender is not spending a check of their own (an authored lock, a ward, a
 combat attack against a `CombatOpponent`). Deliberately exclusive with resist increment
 (below) — a call site uses one or the other, never both, since resist increment already
@@ -193,17 +206,37 @@ Also authored on `ItemCheckModifier.modifier_size` for a worn item's check bonus
 size its `DistinctionEffectRankSize` row names, never a multiple, #4660) and `SceneCheckModifier.modifier_size` for scene surroundings (#4638).
 _Avoid_: magnitude, strength, small/big buff
 
-**Value table** (#4594, ADR-4594-A):
-The `ModifierValue` rows: what a modifier of each size is worth at each level, in its lane's units
-(check points for the check lane, stored stat units for the stat lane; damage points, check points
-and percentage points for the damage, to-hit and partial protection lanes, #4876). Sparse rows read as steps: a level reads the row at the highest
-authored level at or below it. The value is a magnitude; the authored modifier keeps its sign.
+**Value table** (#4594, ADR-4594-A, #5093):
+What a modifier of each size is worth at each level, in its lane's units (check points for the
+check lane, stored stat units for the stat lane; damage points, check points and percentage points
+for the damage, to-hit and partial protection lanes, #4876). It is derived: the size's **size
+fraction** times one level's width, with a `ModifierValue` row at exactly that level and size as
+an override. The value is a magnitude; the authored modifier keeps its sign.
 _Avoid_: buff table, modifier curve
+
+**Size fraction** (#5093):
+A `ModifierSizeFraction` row: how much of one level's width a modifier of a size is worth in a
+lane (Large 0.5 is half a level). A modifier's value is its size fraction times the level width,
+rounded half up and never below 1; a vow's size step is the gap between two sizes' fractions times
+the width. A size with no fraction has no derived value.
+_Avoid_: size share, size multiplier
+
+**Level width** (#5093):
+The gap between one level's baseline and the next: `level_width(level, lane)` in `world.checks.modifier_values`. At or above the top authored level it reuses the top row's width. It is the unit a bonus is sized in (a share of one level), and the width of a rank band on the check lane.
+_Avoid_: level step, rank size
+
+**Level tier** (#5093):
+A tier of levels that starts with a jump in power: a `LevelTier` row (start level, bonus in points). Seeded at level 3 (0 points, so no jump) and levels 6, 11, 16, 21 and 26 (24 points each). Staff set each row separately. Not the same as a rank or an outcome tier.
+_Avoid_: level band, power tier
+
+**Tier bonus** (#5093):
+The sum of the bonus points of every level tier a level has reached (`tier_bonus(level)`). Added in full, never multiplied by the level share, to a character's level term, an NPC's opposition and every staff-set difficulty level; it does not change a level's width. Level 6 against level 5 is therefore four ranks apart, and level 5 against level 4 one.
+_Avoid_: tier jump points, level bonus
 
 **Level baseline** (#4594):
 The `ModifierLevelBaseline` rows: the typical total a character of each level reaches in a lane.
-Staff read a value-table row against it, as a share and, on the check lane, as the share of the
-rank band that total sits in.
+Staff read a modifier value against it, as a share and, on the check lane, as the share of the
+rank band that total sits in. One level's width is the step between two rows.
 _Avoid_: expected total, par
 
 **Taper** (#4594, ADR-4594-A, #4551 decision 1):
@@ -218,8 +251,11 @@ stacking penalty, soft cap
 
 **Lane** (#4594, #4551 section 5.5):
 One kind of quantity a modifier can change (`ModifierLane`). The check lane and the stat lane
-(#4726, ADR-4726-A: a buff to a stat, in stored units, applied wherever the stat is read) exist;
-later lanes (cast power, damage, soak, healing and more) add a choice and rows to the same tables.
+(#4726, ADR-4726-A: a buff to a stat, in stored units, applied wherever the stat is read) exist,
+with the to-hit, damage and partial protection lanes (#4876). Six pool and cap lanes (#5093:
+anima pool, fatigue level bonus, soul tether scene cap, Hollow maximum, outfit trickle,
+techniques per gift) hold only per-level baseline rows in their own units. Later lanes (cast
+power, soak, healing and more) add a choice and rows to the same tables.
 _Avoid_: channel, track
 
 **Niche** (#4386):

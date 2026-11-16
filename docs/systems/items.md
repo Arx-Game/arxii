@@ -463,7 +463,7 @@ or ever being destroyed. An `ACTIVATED` `OwnershipEvent` is logged on each use.
 
 The `use_item` service (`world/items/services/usage.py`) dispatches both branches. Effects are
 authored as `checks.Consequence` → `ConsequenceEffect` grouped into an `actions.ConsequencePool`
-on `ItemTemplate.on_use_pool`; `on_use_check_type` and `on_use_difficulty` gate the optional
+on `ItemTemplate.on_use_pool`; `on_use_check_type` and `on_use_difficulty_level` gate the optional
 skill check. Both consumable and reusable items return a `UseItemResult` dataclass.
 
 ### on_use_target_kind — Validated Targeted Use

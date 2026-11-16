@@ -15,6 +15,7 @@ from django.test import TestCase
 
 from evennia_extensions.factories import AccountFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.services import difficulty_points
 from world.checks.test_helpers import force_check_outcome
 from world.items.crafting.constants import (
     ACCENT_CHECK_PENALTY,
@@ -107,7 +108,7 @@ class ResolveAccentsTests(TestCase):
         from world.traits.models import Trait
 
         _accent_ladder()
-        self.recipe = wire_enchanting_crafting(base_difficulty=0)
+        self.recipe = wire_enchanting_crafting(base_difficulty_level=0)
         self.sheet = CharacterSheetFactory()
         self.character = self.sheet.character
         # The −50 ambition penalty (#2886) eats an unskilled crafter's score
@@ -171,7 +172,7 @@ class RunWithAccentsTests(TestCase):
 
     def setUp(self) -> None:
         _accent_ladder()
-        self.recipe = wire_enchanting_crafting(base_difficulty=10)
+        self.recipe = wire_enchanting_crafting(base_difficulty_level=1)
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
         self.character = self.sheet.character
@@ -204,7 +205,9 @@ class RunWithAccentsTests(TestCase):
             )
         # Difficulty stays authored (#2886): ambition is a points penalty,
         # not the rank-quantized difficulty ladder.
-        self.assertEqual(capture.target_difficulty, self.recipe.base_difficulty)
+        self.assertEqual(
+            capture.target_difficulty, difficulty_points(self.recipe.base_difficulty_level)
+        )
         contribs = _accent_penalty_contributions(2)
         self.assertEqual(len(contribs), 1)
         self.assertEqual(contribs[0].value, -(2 * ACCENT_CHECK_PENALTY))

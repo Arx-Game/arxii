@@ -14,12 +14,12 @@ if TYPE_CHECKING:
     from actions.types import ActionContext
     from world.assets.models import NPCAsset
     from world.checks.models import CheckType, Consequence
-    from world.checks.slide import CheckStanding
+    from world.checks.slide import CheckStanding, RankStep
     from world.mechanics.models import ChallengeApproach, ChallengeInstance
     from world.missions.models import MissionInstance
     from world.scenes.models import Interaction, Persona, Scene
     from world.stories.models import Beat, Story
-    from world.traits.models import CheckOutcome, CheckRank, ResultChart, Trait
+    from world.traits.models import CheckOutcome, ResultChart, Trait
 
 
 @dataclass(frozen=True)
@@ -66,15 +66,16 @@ class CheckResult:
     check_type: CheckType
     outcome: CheckOutcome | None
     chart: ResultChart | None
-    roller_rank: CheckRank | None
-    target_rank: CheckRank | None
+    roller_rank: RankStep | None
+    target_rank: RankStep | None
     rank_difference: int
     trait_points: int
     aspect_bonus: int
     total_points: int
     specialization_points: int = 0  # #1688 — points from owned specializations (stat+skill+spec)
     capability_points: int = 0  # #2505 — weighted authored CheckTypeCapabilityModifier points
-    level_points: int = 0  # #2707 — LEVEL_POINTS_PER_LEVEL x class level, on every check
+    # #2707, #5093 — level_share x the level's baseline plus its tier bonus, on every check
+    level_points: int = 0
     effective_roll: int = 0  # #2886 — the clamped d100; 0 = no roll (forced/duck-typed)
     standing: CheckStanding | None = None  # #4601: band positions and the slide
 
@@ -89,7 +90,9 @@ class CheckResult:
         if self.standing is not None:
             return self.standing.roller.text
         if self.roller_rank is not None:
-            return f"{self.roller_rank.name} (rank {self.roller_rank.rank})"
+            from world.checks.slide import rank_label  # noqa: PLC0415
+
+            return rank_label(self.roller_rank)
         return ""
 
     @property
@@ -98,7 +101,9 @@ class CheckResult:
         if self.standing is not None:
             return self.standing.target.text
         if self.target_rank is not None:
-            return f"{self.target_rank.name} (rank {self.target_rank.rank})"
+            from world.checks.slide import rank_label  # noqa: PLC0415
+
+            return rank_label(self.target_rank)
         return ""
 
     @property

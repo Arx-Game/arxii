@@ -95,7 +95,7 @@ class SearchFindsPersonaLinkClueTests(TestCase):
             name="A signet ring",
             description="PLACEHOLDER",
         )
-        RoomClue.objects.create(room_profile=room, clue=clue, detect_difficulty=0)
+        RoomClue.objects.create(room_profile=room, clue=clue, detect_difficulty_level=0)
 
         discoverer = RosterEntryFactory()
         non_discoverer = RosterEntryFactory()

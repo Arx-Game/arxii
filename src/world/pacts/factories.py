@@ -28,12 +28,12 @@ PACT_STAGES = (("Sworn", 1), ("Strained", 11), ("Soured", 21), ("Breached", 31))
 
 
 def make_pact_condition(
-    *, name: str | None = None, resist_difficulty: int = 10
+    *, name: str | None = None, resist_difficulty_level: int = 1
 ) -> ConditionTemplate:
     """A staged pact condition: permanent, no passive decay, four severity stages.
 
     Every stage advances at its threshold (the pact handler rolls the resist itself);
-    stages 2 to 4 carry a resist check at ``resist_difficulty``.
+    stages 2 to 4 carry a resist check at ``resist_difficulty_level``.
     """
     kwargs = {"name": name} if name else {}
     condition = ConditionTemplateFactory(
@@ -53,7 +53,7 @@ def make_pact_condition(
             severity_threshold=threshold,
             advancement_resist_failure_kind=AdvancementResistFailureKind.ADVANCE_AT_THRESHOLD,
             resist_check_type=check_type if order > 1 else None,
-            resist_difficulty=resist_difficulty,
+            resist_difficulty_level=resist_difficulty_level,
         )
     return condition
 

@@ -16,8 +16,8 @@ from world.progression.models import TraitRatingUnlock, TraitXPCost, XPCostChart
 from world.progression.models.rewards import (
     DevelopmentPoints,
     ExperiencePointsData,
-    cumulative_dp_for_level,
 )
+from world.progression.services.dev_cost import cumulative_dp_for_level
 from world.roster.factories import grant_test_tenure
 from world.skills.factories import SkillFactory, SkillRatingFactory
 from world.skills.services import (
@@ -82,9 +82,9 @@ class BoundaryPlateauTests(TestCase):
 
     def test_not_at_boundary_unaffected(self) -> None:
         """Away from a boundary, dev points accumulate normally with no message."""
-        message, value = self._train(11, 80)
+        message, value = self._train(11, 5)
         self.assertEqual(value, 11)
-        self.assertEqual(self._tracker().total_earned, cumulative_dp_for_level(11) + 80)
+        self.assertEqual(self._tracker().total_earned, cumulative_dp_for_level(11) + 5)
         self.assertIsNone(message)
 
 

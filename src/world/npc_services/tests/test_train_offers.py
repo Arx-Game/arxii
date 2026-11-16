@@ -38,10 +38,16 @@ from world.npc_services.factories import (
 )
 from world.progression.factories import CharacterPathHistoryFactory
 from world.scenes.factories import PersonaFactory
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.societies.factories import OrganizationFactory, OrganizationObligationFactory
 
 
 class TrainOfferHappyPathTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
+
     def setUp(self) -> None:
         from world.action_points.models import ActionPointPool
 
@@ -160,6 +166,11 @@ class TrainOfferHappyPathTests(TestCase):
 
 class TrainOfferSignatureMembersOnlyTests(TestCase):
     """Signature-list techniques are teachable only to Tradition members (ruling 3, #2440)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
 
     def setUp(self) -> None:
         self.academy = OrganizationFactory(name="Shroudwatch Academy")
@@ -282,6 +293,11 @@ class TrainOfferAtomicChargeSequenceTests(TestCase):
     transaction.atomic() — a redeem_favor_token failure rolls back
     everything charge_and_learn already did.
     """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
 
     def setUp(self) -> None:
         from world.action_points.models import ActionPointPool
@@ -474,6 +490,11 @@ class TrainOfferUnboundSurchargeTests(TestCase):
     the surcharge's target only invents under SEED_SAMPLE_CONTENT — this test
     asserts on the real surcharge amount, so it opts in.
     """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
 
     def setUp(self) -> None:
         from world.action_points.models import ActionPointPool

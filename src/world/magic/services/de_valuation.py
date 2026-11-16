@@ -62,9 +62,9 @@ def matchup_bands(context: EvalContext) -> list[MatchupBand]:
     """Replicate ``checks_analytics.compute_matchup`` locally (#3279, extracted #3390).
 
     Derives the roller-minus-target rank difference exactly as
-    ``world.checks.services._compute_check_breakdown`` does (a missing rank —
-    below every ``CheckRank.min_points`` — contributes 0), selects the nearest
-    seeded ``ResultChart`` for that difference, then walks every possible roll
+    ``world.checks.services._compute_check_breakdown`` does (a missing rank,
+    a total below zero and so under rank 0 of the baseline ladder, contributes 0), selects the
+    nearest seeded ``ResultChart`` for that difference, then walks every possible roll
     1..100 applying the same clamp the check engine applies
     (``effective = max(1, min(100, roll + roll_modifier))``) and tallies which
     ``ResultChartOutcome`` row each lands in. Returns ``[]`` when no
@@ -79,10 +79,13 @@ def matchup_bands(context: EvalContext) -> list[MatchupBand]:
     least-bad non-botch level (``world.checks.services.botch_floor_level``), as the roll
     resolves for a character who cannot botch.
     """
-    from world.traits.models import CheckRank, ResultChart, ResultChartOutcome  # noqa: PLC0415
+    from world.checks.slide import band_position, load_ranks  # noqa: PLC0415
+    from world.traits.models import ResultChart, ResultChartOutcome  # noqa: PLC0415
 
-    roller_rank = CheckRank.get_rank_for_points(context.roller_points)
-    target_rank = CheckRank.get_rank_for_points(context.target_difficulty)
+    # One ladder load for both sides: each ``load_ranks`` reads the rank rows and the baselines.
+    ranks = load_ranks()
+    roller_rank = band_position(context.roller_points, ranks).rank
+    target_rank = band_position(context.target_difficulty, ranks).rank
     rank_difference = (roller_rank.rank if roller_rank else 0) - (
         target_rank.rank if target_rank else 0
     )

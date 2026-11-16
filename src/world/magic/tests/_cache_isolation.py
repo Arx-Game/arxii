@@ -35,6 +35,7 @@ from world.magic.models.resonance_environment import (
     AffinityInteraction,
     ResonanceAlignmentBoonTier,
 )
+from world.traits.factories import ensure_level_ladder
 
 
 class ResonanceCacheIsolationMixin:
@@ -49,4 +50,6 @@ class ResonanceCacheIsolationMixin:
         AffinityInteraction.objects.clear_cache()
         Affinity.objects.clear_cache()
         ResonanceAlignmentBoonTier.objects.clear_cache()
+        # A backfire's difficulty is a level read through the ladder's baselines (#5093).
+        ensure_level_ladder()
         super().setUp()  # type: ignore[misc]

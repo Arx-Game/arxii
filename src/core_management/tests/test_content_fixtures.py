@@ -983,7 +983,7 @@ class MarkdownProseDomainTests(TestCase):
         for admin_owned in (
             "share_cost",
             "learn_cost",
-            "learn_difficulty",
+            "learn_difficulty_level",
             "learn_threshold",
             "display_order",
             "is_public",

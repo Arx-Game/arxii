@@ -55,7 +55,7 @@ const challenge: DiscoveryChallenge = {
   name: 'Chase the courier',
   category: 1,
   category_name: 'Pursuit',
-  severity: 4,
+  severity_level: 4,
   description_template: '',
   goal: 'Catch him',
 };

@@ -279,21 +279,23 @@ class ResonanceEnvironmentConfig(SharedMemoryModel):
             "BALANCED direction. Default 10."
         ),
     )
-    backfire_base_difficulty = models.PositiveIntegerField(
-        default=30,
+    backfire_base_difficulty_level = models.PositiveSmallIntegerField(
+        default=2,
         help_text=(
-            "Base target_difficulty for OPPOSED perform_check backfire rolls. "
-            "Default 30 (moderate challenge)."
+            "The level an OPPOSED perform_check backfire roll is made against (0 = no "
+            "difficulty): the roll meets that level's baseline, plus the per-magnitude "
+            "increment below. Default level 2."
         ),
     )
-    backfire_difficulty_per_magnitude = models.DecimalField(
+    backfire_difficulty_per_magnitude_tenths = models.DecimalField(
         max_digits=6,
         decimal_places=3,
-        default=Decimal("0.500"),
+        default=Decimal("1.000"),
         help_text=(
-            "Added to backfire_base_difficulty: "
-            "difficulty = base + round(magnitude * this). "
-            "Default 0.500: magnitude 10 → +5 (total 35); magnitude 80 → +40 (total 70)."
+            "Tenths of one level's width added to the backfire base level's difficulty for "
+            "each point of magnitude: difficulty = base level's baseline + magnitude x this "
+            "tenths of the base level's width. Default 1.000: magnitude 10 adds 10 tenths, "
+            "one whole level's width; magnitude 80 adds 80 tenths, eight."
         ),
     )
     defile_degrade_per_cast = models.PositiveIntegerField(

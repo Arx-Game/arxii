@@ -2,13 +2,20 @@
 
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import ModifierLane, ModifierSize, ModifierSourceKind
 from world.checks.factories import CheckTypeFactory
-from world.checks.modifier_models import ModifierLevelBaseline, ModifierTaper, ModifierValue
+from world.checks.modifier_models import (
+    ModifierLevelBaseline,
+    ModifierSizeFraction,
+    ModifierTaper,
+    ModifierValue,
+)
 from world.checks.modifier_values import (
+    BaselineTable,
     ValueTable,
     level_baseline,
     load_taper_rules,
@@ -26,18 +33,20 @@ from world.traits.models import CheckRank
 
 
 class ValueTableLookupTests(SimpleTestCase):
-    TABLE = ValueTable(rows_by_size={ModifierSize.LARGE: [(1, 3), (6, 10), (11, 16)]})
+    TABLE = ValueTable(
+        overrides={(1, ModifierSize.LARGE): 3, (6, ModifierSize.LARGE): 10},
+        fractions={ModifierSize.LARGE: Decimal("0.5")},
+        baselines=BaselineTable(levels=(1, 2, 3, 4), baselines=(18, 26, 34, 42)),
+    )
 
-    def test_sparse_rows_read_as_steps(self) -> None:
+    def test_an_override_row_covers_only_its_own_level(self) -> None:
         self.assertEqual(self.TABLE.value(1, ModifierSize.LARGE), 3)
-        self.assertEqual(self.TABLE.value(5, ModifierSize.LARGE), 3)
         self.assertEqual(self.TABLE.value(6, ModifierSize.LARGE), 10)
-        self.assertEqual(self.TABLE.value(30, ModifierSize.LARGE), 16)
+        # Level 2 has no override: half of its width of 8.
+        self.assertEqual(self.TABLE.value(2, ModifierSize.LARGE), 4)
 
-    def test_no_row_for_the_size_or_below_the_first_level(self) -> None:
-        self.assertIsNone(self.TABLE.value(6, ModifierSize.MINOR))
-        table = ValueTable(rows_by_size={ModifierSize.LARGE: [(3, 7)]})
-        self.assertIsNone(table.value(2, ModifierSize.LARGE))
+    def test_no_fraction_for_the_size_means_no_value(self) -> None:
+        self.assertIsNone(self.TABLE.value(2, ModifierSize.MINOR))
 
 
 class ModifierRowReadersTests(TestCase):
@@ -46,24 +55,24 @@ class ModifierRowReadersTests(TestCase):
         ModifierValue.objects.create(
             lane=ModifierLane.CHECK, level=6, size=ModifierSize.LARGE, value=10
         )
-        ModifierLevelBaseline.objects.create(lane=ModifierLane.CHECK, level=1, baseline=18)
-        ModifierLevelBaseline.objects.create(lane=ModifierLane.CHECK, level=6, baseline=58)
+        for level in range(1, 7):
+            ModifierLevelBaseline.objects.create(
+                lane=ModifierLane.CHECK, level=level, baseline=18 + 8 * (level - 1)
+            )
         ModifierTaper.objects.create(
             lane=ModifierLane.CHECK,
             source_kind=ModifierSourceKind.CONDITION,
             ratio=Decimal("0.8750"),
             floor=Decimal("0.6667"),
         )
-        for rank, min_points, name in ((2, 25, "Competent"), (3, 50, "Expert"), (4, 80, "Master")):
-            CheckRank.objects.get_or_create(
-                rank=rank, defaults={"min_points": min_points, "name": name}
-            )
+        for rank in range(2, 7):
+            CheckRank.objects.create(rank=rank, name=f"Rank {rank}")
 
-    def test_the_value_table_loads_in_one_query(self) -> None:
-        with self.assertNumQueries(1):
+    def test_the_value_table_loads_in_three_queries(self) -> None:
+        with self.assertNumQueries(3):
             table = load_value_table()
 
-        self.assertEqual(table.value(7, ModifierSize.LARGE), 10)
+        self.assertEqual(table.value(6, ModifierSize.LARGE), 10)
 
     def test_taper_rules_by_kind(self) -> None:
         rules = load_taper_rules()
@@ -71,13 +80,13 @@ class ModifierRowReadersTests(TestCase):
         self.assertEqual(set(rules), {ModifierSourceKind.CONDITION})
         self.assertEqual(rules[ModifierSourceKind.CONDITION].ratio, Decimal("0.8750"))
 
-    def test_level_baseline_steps(self) -> None:
-        self.assertEqual(level_baseline(4), 18)
+    def test_level_baseline_reads_its_row_and_reuses_the_top_one_above_it(self) -> None:
+        self.assertEqual(level_baseline(4), 42)
         self.assertEqual(level_baseline(9), 58)
 
-    def test_rank_band_share_reads_a_value_in_ranks(self) -> None:
-        # 58 sits in Expert (50 to 80): a band of 30, so 10 points is a third of a rank.
-        self.assertEqual(rank_band_share(10, 58), Decimal("0.33"))
+    def test_rank_band_share_reads_a_value_in_level_widths(self) -> None:
+        # 58 is rank 6, whose level width is 8: 4 points is half a rank.
+        self.assertEqual(rank_band_share(4, 58), Decimal("0.50"))
 
 
 class PipelineTaperTests(TestCase):
@@ -123,3 +132,26 @@ class PipelineTaperTests(TestCase):
         )
 
         self.assertEqual(opponent_condition_opposition(self.sheet.character, self.check_type), 26)
+
+
+class SizedLaneOnlyTests(SimpleTestCase):
+    """U-keep: staff form validation on rows, no player seam."""
+
+    def test_a_lane_with_no_sizes_refuses_size_fractions_overrides_and_tapers(self) -> None:
+        rows = (
+            ModifierSizeFraction(lane=ModifierLane.ANIMA_POOL, size=3, fraction=Decimal("0.5")),
+            ModifierValue(lane=ModifierLane.MOON_TUNING, level=1, size=3, value=4),
+            ModifierTaper(
+                lane=ModifierLane.HOLLOW_MAX,
+                source_kind=ModifierSourceKind.CONDITION,
+                ratio=Decimal("0.5"),
+                floor=Decimal("0.5"),
+            ),
+        )
+        for row in rows:
+            with self.subTest(row=type(row).__name__), self.assertRaises(ValidationError) as caught:
+                row.clean()
+            self.assertIn("lane", caught.exception.message_dict)
+
+    def test_a_sized_lane_is_accepted(self) -> None:
+        ModifierSizeFraction(lane=ModifierLane.TO_HIT, size=3, fraction=Decimal("0.5")).clean()

@@ -29,7 +29,7 @@ class CraftAttachStyleTests(TestCase):
         from world.traits.models import Trait
 
         # wire_enchanting_crafting seeds the Common/Fine/Masterwork tier ladder.
-        wire_enchanting_crafting(base_difficulty=0)
+        wire_enchanting_crafting(base_difficulty_level=0)
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
         CharacterTraitValueFactory(
@@ -155,7 +155,7 @@ class ItemStyleCraftViewTests(TestCase):
         )
         from world.traits.models import Trait
 
-        wire_enchanting_crafting(base_difficulty=0)
+        wire_enchanting_crafting(base_difficulty_level=0)
         self.quality = QualityTierFactory(
             name="StyleViewCommon", numeric_min=0, numeric_max=9999, sort_order=0
         )

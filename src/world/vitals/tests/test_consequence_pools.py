@@ -6,7 +6,7 @@ from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactor
 from world.checks.constants import EffectType, ModifierSourceKind
 from world.checks.factories import CheckTypeFactory, ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.outcome_utils import build_outcome_display
-from world.checks.test_helpers import force_check_outcome
+from world.checks.test_helpers import SeededLevelLadderMixin, force_check_outcome
 from world.checks.types import CheckResult
 from world.conditions.factories import (
     BleedingOutConditionFactory,
@@ -18,14 +18,11 @@ from world.conditions.factories import (
     UnconsciousConditionFactory,
 )
 from world.conditions.services import get_active_conditions
+from world.seeds.modifier_values import seed_check_level_baselines
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.constants import (
-    DEATH_BASE_DIFFICULTY,
     DEATH_CHECK_NAME,
-    DEATH_SCALING_PER_PERCENT,
     ENDURANCE_CHECK_NAME,
-    KNOCKOUT_BASE_DIFFICULTY,
-    WOUND_BASE_DIFFICULTY,
     CharacterLifeState,
 )
 from world.vitals.factories import CharacterVitalsFactory
@@ -61,6 +58,10 @@ class DamageTypePoolFieldTests(TestCase):
 
 
 class VitalsConsequenceConfigTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_check_level_baselines()
+
     def test_singleton_lazy_created(self) -> None:
         from world.vitals.services import get_vitals_consequence_config
 
@@ -79,55 +80,52 @@ class VitalsConsequenceConfigTests(TestCase):
 
         cfg = get_vitals_consequence_config()
 
-        # --- Default values match the constant-derived results ---
-        # knockout at exactly 20% → pct_below = 0 → KNOCKOUT_BASE_DIFFICULTY
-        self.assertEqual(calculate_knockout_difficulty(health_pct=0.20), KNOCKOUT_BASE_DIFFICULTY)
-        # death at exactly 0% → pct_below = 0 → DEATH_BASE_DIFFICULTY
-        self.assertEqual(calculate_death_difficulty(health_pct=0.0), DEATH_BASE_DIFFICULTY)
-        # wound at exactly 50% damage of max → pct_over = 0 → WOUND_BASE_DIFFICULTY
+        # --- Default values are the seeded levels' baselines (level 1 = 18, level 2 = 26) ---
+        self.assertEqual(calculate_knockout_difficulty(health_pct=0.20), 18)
+        self.assertEqual(calculate_death_difficulty(health_pct=0.0), 26)
         wound_diff = calculate_wound_difficulty(damage=50, max_health=100)
-        self.assertEqual(wound_diff, WOUND_BASE_DIFFICULTY)
+        self.assertEqual(wound_diff, 18)
 
         # --- Authored override: bump knockout_base_difficulty and confirm new result ---
-        cfg.knockout_base_difficulty = KNOCKOUT_BASE_DIFFICULTY + 10
-        cfg.save(update_fields=["knockout_base_difficulty"])
+        cfg.knockout_base_difficulty_level = 3
+        cfg.save(update_fields=["knockout_base_difficulty_level"])
         # Flush the identity-map cache so get_vitals_consequence_config re-fetches from DB.
         cfg.flush_from_cache()
 
         self.assertEqual(
             calculate_knockout_difficulty(health_pct=0.20),
-            KNOCKOUT_BASE_DIFFICULTY + 10,
-            "calculate_knockout_difficulty must read knockout_base_difficulty from config",
+            34,  # level 3's baseline
+            "calculate_knockout_difficulty must read knockout_base_difficulty_level from config",
         )
 
         # --- Authored override: bump death_scaling_per_percent ---
         cfg = get_vitals_consequence_config()
-        cfg.death_scaling_per_percent = DEATH_SCALING_PER_PERCENT + 2
-        cfg.save(update_fields=["death_scaling_per_percent"])
+        cfg.death_scaling_per_percent_tenths = 5
+        cfg.save(update_fields=["death_scaling_per_percent_tenths"])
         cfg.flush_from_cache()
 
-        # 10% below 0 → pct_below=10 → base + (10 * new_scale)
-        expected = DEATH_BASE_DIFFICULTY + 10 * (DEATH_SCALING_PER_PERCENT + 2)
+        # 10 points below 0 x half a level's width (8) per point = 40 on level 2's 26
+        expected = 26 + 40
         self.assertEqual(
             calculate_death_difficulty(health_pct=-0.10),
             expected,
-            "calculate_death_difficulty must read death_scaling_per_percent from config",
+            "calculate_death_difficulty must read death_scaling_per_percent_tenths from config",
         )
 
         # --- Authored override: bump wound_base_difficulty ---
         cfg = get_vitals_consequence_config()
-        cfg.wound_base_difficulty = WOUND_BASE_DIFFICULTY + 5
-        cfg.save(update_fields=["wound_base_difficulty"])
+        cfg.wound_base_difficulty_level = 2
+        cfg.save(update_fields=["wound_base_difficulty_level"])
         cfg.flush_from_cache()
 
         self.assertEqual(
             calculate_wound_difficulty(damage=50, max_health=100),
-            WOUND_BASE_DIFFICULTY + 5,
-            "calculate_wound_difficulty must read wound_base_difficulty from config",
+            26,  # level 2's baseline
+            "calculate_wound_difficulty must read wound_base_difficulty_level from config",
         )
 
 
-class ResolveVitalsConsequenceTests(TestCase):
+class ResolveVitalsConsequenceTests(SeededLevelLadderMixin, TestCase):
     """Tests for resolve_vitals_consequence — the pool-pipeline wrapper."""
 
     def test_applies_condition_on_failure_outcome(self) -> None:
@@ -178,7 +176,7 @@ class ResolveVitalsConsequenceTests(TestCase):
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # Endurance/Mortal Resolve CheckType gates on #2698
-class ProcessDamageConsequencesPoolTests(TestCase):
+class ProcessDamageConsequencesPoolTests(SeededLevelLadderMixin, TestCase):
     """Tests for process_damage_consequences resolved through consequence pools."""
 
     def test_knockout_resolves_pool_applies_unconscious(self) -> None:
@@ -459,7 +457,7 @@ class ProcessDamageConsequencesPoolTests(TestCase):
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # Endurance/Mortal Resolve CheckType gates on #2698
-class ProcessDamageConsequencesRecordingTests(TestCase):
+class ProcessDamageConsequencesRecordingTests(SeededLevelLadderMixin, TestCase):
     """process_damage_consequences persists a ConsequenceOutcome when a combat_interaction
     is threaded in, and skips recording when none is available."""
 

@@ -81,6 +81,58 @@
     border-left: 3px solid var(--error-fg);
     padding-left: calc(0.5rem - 3px);
   }
+  /* Scaling settings panel (#5093). */
+  .scaling-lede {
+    margin: 0 0 1rem;
+    color: var(--body-quiet-color);
+    max-width: 75ch;
+  }
+  .scaling-section {
+    margin-bottom: 1.25rem;
+  }
+  .scaling-section h3 {
+    margin: 0 0 0.4rem;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--body-quiet-color);
+  }
+  .scaling-scroll {
+    overflow-x: auto;
+  }
+  .scaling-table {
+    font-variant-numeric: tabular-nums;
+  }
+  .scaling-table th {
+    font-size: 0.8rem;
+    background: var(--darkened-bg);
+  }
+  .scaling-num {
+    text-align: right !important;
+    white-space: nowrap;
+  }
+  .scaling-jump {
+    font-weight: 700;
+  }
+  .scaling-value {
+    font-family: var(--font-family-monospace, monospace);
+  }
+  .scaling-example {
+    border: 1px solid var(--hairline-color);
+    background: var(--darkened-bg);
+    padding: 0.6rem 0.9rem;
+    border-radius: 4px;
+    line-height: 1.6;
+    margin-bottom: 1.25rem;
+  }
+  .scaling-note {
+    color: var(--body-quiet-color);
+  }
+  .scaling-unit {
+    margin: 0 0 0.3rem;
+    font-size: 0.85rem;
+    color: var(--body-quiet-color);
+  }
   /* Screen-reader-only utility: keeps a <th> in the accessibility tree without
      duplicating an adjacent visible heading (standard clip-based hiding). */
   .visually-hidden {

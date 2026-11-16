@@ -333,9 +333,12 @@ class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="cures_conditions",
         help_text="Check type used to cure this condition, if any",
     )
-    cure_difficulty = models.PositiveIntegerField(
-        default=10,
-        help_text="Base difficulty to cure via check",
+    cure_difficulty_level = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            "Base difficulty to cure via check. Authored as a level (0 = no "
+            "difficulty): the roll meets that level's baseline."
+        ),
     )
     resist_check_type = models.ForeignKey(
         _CHECK_TYPE_FK,
@@ -346,9 +349,12 @@ class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text="Check type the target rolls to resist this condition being "
         "applied, if any. Null = unconditional application.",
     )
-    resist_difficulty = models.PositiveIntegerField(
-        default=10,
-        help_text="Base difficulty for the target's resist check.",
+    resist_difficulty_level = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            "Base difficulty for the target's resist check. Authored as a level (0 = no "
+            "difficulty): the roll meets that level's baseline."
+        ),
     )
 
     # === Held Breath (#4741) ===
@@ -402,16 +408,19 @@ class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "Check type the target rolls to break free. Falls back to resist_check_type when null."
         ),
     )
-    break_free_difficulty = models.PositiveIntegerField(
-        default=10,
-        help_text="Base difficulty for the break-free check (before caster level opposition).",
+    break_free_difficulty_tenths = models.PositiveIntegerField(
+        default=20,
+        help_text=(
+            "Base difficulty for the break-free check (before caster level opposition). "
+            "Authored in tenths of one level's width."
+        ),
     )
-    subtlety = models.PositiveSmallIntegerField(
+    subtlety_tenths = models.PositiveIntegerField(
         default=0,
         help_text=(
-            "How hard it is for an observer to detect this condition on a target "
-            "(0 = obvious, higher = harder to detect). Drives the reveal_condition "
-            "detection check difficulty."
+            "How hard it is for an observer to detect this condition on a target (0 = "
+            "obvious, higher = harder to detect). Drives the reveal_condition detection "
+            "check difficulty. Authored in tenths of one level's width."
         ),
     )
 
@@ -749,9 +758,12 @@ class ConditionStage(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         blank=True,
         help_text="Check type to resist progression",
     )
-    resist_difficulty = models.PositiveIntegerField(
-        default=10,
-        help_text="Difficulty to resist progression",
+    resist_difficulty_level = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            "Difficulty to resist progression. Authored as a level (0 = no difficulty): "
+            "the roll meets that level's baseline."
+        ),
     )
 
     # Stage-specific severity multiplier
@@ -1799,8 +1811,8 @@ class ConditionInstance(SharedMemoryModel):
             "The vow size step's share in tenths (#4747), fixed at cast: the matching "
             "technique specialty's multiplier_tenths (the larger when role and sub-role "
             "both match), times SecondaryVowConfig.potency_tenths / 10 for a secondary "
-            "vow. Each modifier adds (value(modifier_vow_level, size + 1) minus "
-            "value(modifier_vow_level, size)) x this / 10, rounded half up, never "
+            "vow. Each modifier adds (fraction(size + 1) minus fraction(size)) x the "
+            "lane's level width at modifier_vow_level x this / 10, rounded half up, never "
             "tapered. Null or 0 means no step."
         ),
     )
@@ -1972,7 +1984,12 @@ class TreatmentTemplate(SharedMemoryModel):
     )
 
     check_type = models.ForeignKey(_CHECK_TYPE_FK, on_delete=models.PROTECT)
-    target_difficulty = models.PositiveIntegerField(default=0)
+    target_difficulty_level = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Authored as a level (0 = no difficulty): the roll meets that level's baseline."
+        ),
+    )
     requires_bond = models.BooleanField(default=False)
 
     resonance_cost = models.PositiveIntegerField(default=0)
@@ -2300,9 +2317,12 @@ class BreathHoldConfig(SharedMemoryModel):
             "condition's own default rounds apply."
         ),
     )
-    target_difficulty = models.PositiveIntegerField(
-        default=10,
-        help_text="Difficulty of the breath check.",
+    target_difficulty_level = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            "Difficulty of the breath check. Authored as a level (0 = no difficulty): "
+            "the roll meets that level's baseline."
+        ),
     )
 
     def __str__(self) -> str:
@@ -2358,14 +2378,18 @@ class Compulsion(SharedMemoryModel):
             "pick it; combat resolution rolls it."
         ),
     )
-    base_difficulty = models.PositiveIntegerField(
-        help_text="Base difficulty of the resist roll. Staff set it; combat resolution reads it.",
+    base_difficulty_level = models.PositiveSmallIntegerField(
+        help_text=(
+            "Base difficulty of the resist roll. Staff set it; combat resolution reads "
+            "it. Authored as a level (0 = no difficulty): the roll meets that level's "
+            "baseline."
+        ),
     )
-    difficulty_per_severity = models.PositiveIntegerField(
+    difficulty_per_severity_tenths = models.PositiveIntegerField(
         default=0,
         help_text=(
-            "Difficulty added per point of the condition's severity. Staff set it; combat "
-            "resolution reads it."
+            "Difficulty added per point of the condition's severity. Staff set it; "
+            "combat resolution reads it. Authored in tenths of one level's width."
         ),
     )
     retry_wait_minutes = models.PositiveSmallIntegerField(
@@ -2414,11 +2438,12 @@ class CompulsionForbiddenAction(SharedMemoryModel):
         choices=CompulsionForbidden.choices,
         help_text="The action the bearer must roll to do. Staff pick it; combat reads it.",
     )
-    extra_difficulty = models.PositiveIntegerField(
+    extra_difficulty_tenths = models.PositiveIntegerField(
         default=0,
         help_text=(
             "Difficulty added to the resist roll when the bearer attempts this action. "
-            "Staff set it; combat resolution reads it."
+            "Staff set it; combat resolution reads it. Authored in tenths of one "
+            "level's width."
         ),
     )
 
@@ -2575,19 +2600,26 @@ class ControlLossTrigger(SharedMemoryModel):
         related_name="control_loss_triggers",
         help_text="The check the character rolls to keep control. Staff pick it.",
     )
-    base_difficulty = models.PositiveIntegerField(
-        help_text="Base difficulty of the roll. Staff set it; the engine reads it.",
+    base_difficulty_level = models.PositiveSmallIntegerField(
+        help_text=(
+            "Base difficulty of the roll. Staff set it; the engine reads it. Authored "
+            "as a level (0 = no difficulty): the roll meets that level's baseline."
+        ),
     )
-    difficulty_per_pull = models.PositiveIntegerField(
+    difficulty_per_pull_tenths = models.PositiveIntegerField(
         null=True,
         blank=True,
-        help_text="Moon pull only: difficulty added per point of pull. Staff set it.",
+        help_text=(
+            "Moon pull only: difficulty added per point of pull. Staff set it. Authored "
+            "in tenths of one level's width."
+        ),
     )
-    relief_per_level = models.PositiveIntegerField(
+    relief_per_level_tenths = models.PositiveIntegerField(
         default=0,
         help_text=(
-            "Difficulty removed per character level, as relief for the experienced. Staff "
-            "set it; the engine reads it."
+            "Difficulty removed per character level, as relief for the experienced. "
+            "Staff set it; the engine reads it. Authored in tenths of one level's "
+            "width."
         ),
     )
     relief_gift = models.ForeignKey(
@@ -2598,15 +2630,21 @@ class ControlLossTrigger(SharedMemoryModel):
         related_name="+",
         help_text="Moon pull only: a gift whose threads give relief. Staff pick it.",
     )
-    relief_per_thread_level = models.PositiveIntegerField(
+    relief_per_thread_level_tenths = models.PositiveIntegerField(
         null=True,
         blank=True,
-        help_text="Moon pull only: relief per level of thread in the relief gift. Staff set it.",
+        help_text=(
+            "Moon pull only: relief per level of thread in the relief gift. Staff set "
+            "it. Authored in tenths of one level's width."
+        ),
     )
-    relief_cap = models.PositiveIntegerField(
+    relief_cap_tenths = models.PositiveIntegerField(
         null=True,
         blank=True,
-        help_text="Moon pull only: the most relief the gift can give. Staff set it.",
+        help_text=(
+            "Moon pull only: the most relief the gift can give. Staff set it. Authored "
+            "in tenths of one level's width."
+        ),
     )
     exempt_from_level = models.PositiveSmallIntegerField(
         null=True,
@@ -2642,10 +2680,10 @@ class ControlLossTrigger(SharedMemoryModel):
                     health_below_percent__isnull=False,
                     stage__isnull=True,
                     min_moon_pull__isnull=True,
-                    difficulty_per_pull__isnull=True,
+                    difficulty_per_pull_tenths__isnull=True,
                     relief_gift__isnull=True,
-                    relief_per_thread_level__isnull=True,
-                    relief_cap__isnull=True,
+                    relief_per_thread_level_tenths__isnull=True,
+                    relief_cap_tenths__isnull=True,
                     exempt_from_level__isnull=True,
                     impaired_willpower_drop__isnull=True,
                 ),
@@ -2657,10 +2695,10 @@ class ControlLossTrigger(SharedMemoryModel):
                     stage__isnull=False,
                     health_below_percent__isnull=True,
                     min_moon_pull__isnull=True,
-                    difficulty_per_pull__isnull=True,
+                    difficulty_per_pull_tenths__isnull=True,
                     relief_gift__isnull=True,
-                    relief_per_thread_level__isnull=True,
-                    relief_cap__isnull=True,
+                    relief_per_thread_level_tenths__isnull=True,
+                    relief_cap_tenths__isnull=True,
                     exempt_from_level__isnull=True,
                     impaired_willpower_drop__isnull=True,
                 ),

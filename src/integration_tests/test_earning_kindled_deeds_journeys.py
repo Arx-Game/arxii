@@ -439,7 +439,7 @@ class WhatEarnsAndWhatIsPromised(_Gate):
         top = CheckOutcomeFactory(name="Critical", success_level=5)
         KindledDeedAwardFactory(outcome_tier=top, amount=99)
         self.theme_row(self.captives, strength=2)
-        challenge = ChallengeTemplateFactory(name="The barred door", severity=4)
+        challenge = ChallengeTemplateFactory(name="The barred door", severity_level=0)
         approach = ChallengeApproachFactory(
             challenge_template=challenge,
             check_type=CheckTypeFactory(name="Walk through"),

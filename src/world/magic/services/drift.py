@@ -229,7 +229,11 @@ def check_resonance_focus(
     applied at ``steps + (1 - success_level)`` severity, so a worse roll never costs
     less; if she already holds it, its severity advances by one instead.
     """
-    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+    from world.checks.services import (  # noqa: PLC0415
+        difficulty_points,
+        difficulty_step_points,
+        perform_check_with_modifiers,
+    )
     from world.conditions.services import (  # noqa: PLC0415
         advance_condition_severity,
         apply_condition,
@@ -250,7 +254,9 @@ def check_resonance_focus(
     if steps <= 0:
         return None
 
-    difficulty = cfg.focus_base_difficulty + steps * cfg.focus_difficulty_per_step
+    difficulty = difficulty_points(cfg.focus_base_difficulty_level) + difficulty_step_points(
+        steps * cfg.focus_difficulty_per_step_tenths, cfg.focus_base_difficulty_level
+    )
     lines: list[str] = []
     if reading.leading_excess_resonance is not None:
         lines.append(f"{unsettled_line(reading)} You must keep your focus.")

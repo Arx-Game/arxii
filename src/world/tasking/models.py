@@ -55,9 +55,12 @@ class TaskTemplate(NaturalKeyMixin, SharedMemoryModel):
         related_name="task_templates",
         help_text="Check both the handler (dispatch) and the agent (resolution) roll.",
     )
-    check_difficulty = models.IntegerField(
+    check_difficulty_level = models.PositiveSmallIntegerField(
         default=0,
-        help_text="Target difficulty for both dispatch and resolution rolls.",
+        help_text=(
+            "Target difficulty for both dispatch and resolution rolls. Authored as a "
+            "level (0 = no difficulty): the roll meets that level's baseline."
+        ),
     )
     duration = models.DurationField(
         help_text="Real time from assignment to resolution by the game clock.",
@@ -486,7 +489,12 @@ class ListenerPost(SharedMemoryModel):
         related_name="+",
         help_text="The listener's weekly tradecraft roll. NULL = flat accrual.",
     )
-    check_difficulty = models.IntegerField(default=0)
+    check_difficulty_level = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Authored as a level (0 = no difficulty): the roll meets that level's baseline."
+        ),
+    )
     buzz = models.IntegerField(
         default=0,
         help_text="Accrued intel pressure. Crossing the threshold yields a harvest.",

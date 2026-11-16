@@ -37,7 +37,7 @@ class ChallengeTemplateFilter(django_filters.FilterSet):
 
     class Meta:
         model = ChallengeTemplate
-        fields = ["category", "challenge_type", "severity", "discovery_type"]
+        fields = ["category", "challenge_type", "severity_level", "discovery_type"]
 
 
 class ChallengeInstanceFilter(django_filters.FilterSet):

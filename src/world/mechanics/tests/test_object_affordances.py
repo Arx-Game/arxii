@@ -60,7 +60,7 @@ class BareObjectAffordanceTests(TestCase):
         cls.capability = CapabilityTypeFactory(name="generation_oa")
         cls.prop_flammable = PropertyFactory(name="flammable_oa")
 
-        cls.template = ChallengeTemplateFactory(name="Ignite Torch", severity=3)
+        cls.template = ChallengeTemplateFactory(name="Ignite Torch", severity_level=0)
         cls.application = ApplicationFactory(
             name="Ignite",
             capability=cls.capability,
@@ -171,7 +171,7 @@ class BareObjectRoomAffordanceTests(TestCase):
         cls.capability = CapabilityTypeFactory(name="perception_oa")
         cls.prop_dark = PropertyFactory(name="dark_oa")
 
-        cls.template = ChallengeTemplateFactory(name="Illuminate Room", severity=2)
+        cls.template = ChallengeTemplateFactory(name="Illuminate Room", severity_level=0)
         cls.application = ApplicationFactory(
             name="Illuminate",
             capability=cls.capability,
@@ -216,7 +216,7 @@ class GMStagedPropAffordanceTests(TestCase):
         cls.capability = CapabilityTypeFactory(name="generation_stage_oa")
         cls.prop_flammable = PropertyFactory(name="flammable_stage_oa")
 
-        cls.template = ChallengeTemplateFactory(name="Ignite Staged Torch", severity=3)
+        cls.template = ChallengeTemplateFactory(name="Ignite Staged Torch", severity_level=0)
         cls.application = ApplicationFactory(
             name="Ignite Staged",
             capability=cls.capability,

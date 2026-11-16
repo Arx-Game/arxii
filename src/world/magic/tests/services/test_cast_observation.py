@@ -211,13 +211,13 @@ class ResolveCastAudienceTests(TestCase):
         self.assertNotIn(persona, audience.full)
         self.assertNotIn(persona, audience.vague)
 
-    def test_difficulty_includes_the_casters_level_opposition(self) -> None:
-        """Concealment is a floor; the caster's level is added on top (ADR-0166)."""
+    def test_difficulty_includes_the_casters_rating(self) -> None:
+        """Concealment is a floor; the caster's full check total is added on top (#5093)."""
         caster = _caster_on_path_with_style(cast_concealment=25, level=4)
         _observer_in_room_with(caster)
         with (
             patch("world.magic.services.cast_observation.perform_check_with_modifiers") as rolled,
-            patch("world.magic.services.cast_observation.level_opposition", return_value=20),
+            patch("world.magic.services.cast_observation.compute_obstacle_rating", return_value=20),
         ):
             rolled.return_value = _check_result_with_success_level(0)
             resolve_cast_audience(caster=caster, technique=_ranged_technique())
@@ -258,7 +258,7 @@ class ResolveCastAudienceTests(TestCase):
         technique = TechniqueFactory(reach=TechniqueReach.ANY, gift=GiftFactory(style=gift_style))
         with (
             patch("world.magic.services.cast_observation.perform_check_with_modifiers") as rolled,
-            patch("world.magic.services.cast_observation.level_opposition", return_value=0),
+            patch("world.magic.services.cast_observation.compute_obstacle_rating", return_value=0),
         ):
             rolled.return_value = _check_result_with_success_level(0)
             resolve_cast_audience(caster=caster, technique=technique)
@@ -282,7 +282,7 @@ class ResolveCastAudienceTests(TestCase):
         technique = _ranged_technique()  # gift.style is unset (None) by default
         with (
             patch("world.magic.services.cast_observation.perform_check_with_modifiers") as rolled,
-            patch("world.magic.services.cast_observation.level_opposition", return_value=0),
+            patch("world.magic.services.cast_observation.compute_obstacle_rating", return_value=0),
         ):
             rolled.return_value = _check_result_with_success_level(0)
             resolve_cast_audience(caster=caster, technique=technique)

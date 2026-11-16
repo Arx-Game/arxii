@@ -35,12 +35,14 @@ from world.magic.services.power_terms import (
     covenant_role_specialty_power_term,
     vow_situational_power_term,
 )
+from world.traits.factories import ensure_level_ladder
 
 
 class SecondaryVowBlendChassisIsolationTests(TestCase):
     """Layer 1: a secondary vow's blend weights never contribute (#2641)."""
 
     def setUp(self) -> None:
+        ensure_level_ladder()
         self.character = CharacterFactory()
         self.sheet = CharacterSheetFactory(character=self.character)
 
@@ -60,14 +62,15 @@ class SecondaryVowBlendChassisIsolationTests(TestCase):
             engaged=True,
             is_secondary=is_secondary,
         )
+        ThreadFactory(owner=self.sheet, level=110, as_covenant_role_thread=role)
         return role
 
     def test_secondary_blend_weight_never_contributes(self) -> None:
-        ThreadFactory(owner=self.sheet, level=10)
         self._engage(crown=Decimal("1.0"), is_secondary=False)
         technique = TechniqueFactory(archetype_alignment="crown")
         baseline = covenant_role_blend_power_term(self._ctx(technique))
-        self.assertEqual(baseline, 10)
+        # level_width(11) = 8 on the standard ladder, the one vow thread's rung.
+        self.assertEqual(baseline, 8)
 
         # A secondary vow with a big crown weight too — must not add anything.
         self._engage(crown=Decimal("1.0"), is_secondary=True)
@@ -75,7 +78,6 @@ class SecondaryVowBlendChassisIsolationTests(TestCase):
         self.assertEqual(with_secondary, baseline)
 
     def test_only_secondary_engaged_contributes_zero(self) -> None:
-        ThreadFactory(owner=self.sheet, level=10)
         self._engage(crown=Decimal("1.0"), is_secondary=True)
         technique = TechniqueFactory(archetype_alignment="crown")
         self.assertEqual(covenant_role_blend_power_term(self._ctx(technique)), 0)
@@ -85,6 +87,7 @@ class SecondaryVowSpecialtyScalingTests(TestCase):
     """Layer 2: a secondary vow's specialty contribution is potency-scaled (#2641)."""
 
     def setUp(self) -> None:
+        ensure_level_ladder()
         self.character = CharacterFactory()
         self.sheet = CharacterSheetFactory(character=self.character)
 
@@ -99,9 +102,9 @@ class SecondaryVowSpecialtyScalingTests(TestCase):
             engaged=True,
             is_secondary=is_secondary,
         )
+        ThreadFactory(owner=self.sheet, level=110, as_covenant_role_thread=role)
 
     def test_primary_unchanged_secondary_scaled_by_default_potency(self) -> None:
-        ThreadFactory(owner=self.sheet, level=10)  # total_threads = 10
         primary_role = CovenantRoleFactory()
         secondary_role = CovenantRoleFactory()
         self._engage(primary_role, is_secondary=False)
@@ -115,12 +118,11 @@ class SecondaryVowSpecialtyScalingTests(TestCase):
         technique = TechniqueFactory()
         TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.WEAKEN)
 
-        # primary: 10*10/10=10.0; secondary: 10*10/10=10.0 * potency 0.6 = 6.0
-        # total = 16.0 -> int(16.0) = 16
-        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 16)
+        # width(11)=8. primary: 8*10/10=8.0; secondary: 8.0 * potency 0.6 = 4.8
+        # total = 12.8 -> int(12.8) = 12
+        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 12)
 
     def test_secondary_alone_scaled_and_primary_alone_unscaled(self) -> None:
-        ThreadFactory(owner=self.sheet, level=10)
         role = CovenantRoleFactory()
         CovenantRoleTechniqueSpecialtyFactory(
             covenant_role=role, function=TechniqueFunction.WEAKEN, multiplier_tenths=10
@@ -129,7 +131,7 @@ class SecondaryVowSpecialtyScalingTests(TestCase):
         TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.WEAKEN)
 
         self._engage(role, is_secondary=False)
-        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 10)
+        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 8)
 
         # Swap: same role, but now engaged only as a secondary elsewhere.
         other_sheet_role = CovenantRoleFactory()
@@ -138,7 +140,7 @@ class SecondaryVowSpecialtyScalingTests(TestCase):
         )
         character2 = CharacterFactory()
         sheet2 = CharacterSheetFactory(character=character2)
-        ThreadFactory(owner=sheet2, level=10)
+        ThreadFactory(owner=sheet2, level=110, as_covenant_role_thread=other_sheet_role)
         CharacterCovenantRoleFactory(
             character_sheet=sheet2,
             covenant=CovenantFactory(),
@@ -147,11 +149,10 @@ class SecondaryVowSpecialtyScalingTests(TestCase):
             is_secondary=True,
         )
         ctx2 = PowerTermContext(sheet=sheet2, technique=technique, applicable_threads=[])
-        # 10*10/10=10.0 * potency 0.6 = 6.0 -> int(6.0) = 6
-        self.assertEqual(covenant_role_specialty_power_term(ctx2), 6)
+        # 8*10/10=8.0 * potency 0.6 = 4.8 -> int(4.8) = 4
+        self.assertEqual(covenant_role_specialty_power_term(ctx2), 4)
 
     def test_custom_potency_dial_scales_secondary_contribution(self) -> None:
-        ThreadFactory(owner=self.sheet, level=10)
         secondary_role = CovenantRoleFactory()
         self._engage(secondary_role, is_secondary=True)
         CovenantRoleTechniqueSpecialtyFactory(
@@ -164,8 +165,8 @@ class SecondaryVowSpecialtyScalingTests(TestCase):
         config.potency_tenths = 5
         config.save()
 
-        # 10*10/10=10.0 * potency 0.5 = 5.0 -> int(5.0) = 5
-        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 5)
+        # 8*10/10=8.0 * potency 0.5 = 4.0 -> int(4.0) = 4
+        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 4)
         self.assertEqual(SecondaryVowConfig.objects.get(pk=1).potency_tenths, 5)
 
 
@@ -173,6 +174,7 @@ class SecondaryVowSituationalPowerTermTests(TestCase):
     """Layer 4: a secondary vow's fired POWER_BONUS perk is potency-scaled (#2641)."""
 
     def setUp(self) -> None:
+        ensure_level_ladder()
         self.character = CharacterFactory()
         self.sheet = CharacterSheetFactory(character=self.character)
 
@@ -187,9 +189,9 @@ class SecondaryVowSituationalPowerTermTests(TestCase):
             engaged=True,
             is_secondary=is_secondary,
         )
+        ThreadFactory(owner=self.sheet, level=110, as_covenant_role_thread=role)
 
     def test_secondary_power_bonus_firing_scaled_by_potency(self) -> None:
-        ThreadFactory(owner=self.sheet, level=10)  # total_threads = 10
         primary_role = CovenantRoleFactory()
         secondary_role = CovenantRoleFactory()
         self._engage(primary_role, is_secondary=False)
@@ -208,12 +210,11 @@ class SecondaryVowSituationalPowerTermTests(TestCase):
         )
         technique = TechniqueFactory()
 
-        # primary: 10*20/10=20.0; secondary: 10*20/10=20.0 * potency 0.6 = 12.0
-        # total = 32.0 -> int(32.0) = 32
-        self.assertEqual(vow_situational_power_term(self._ctx(technique)), 32)
+        # width(11)=8. primary: 8*20/10=16.0; secondary: 16.0 * potency 0.6 = 9.6
+        # total = 25.6 -> int(25.6) = 25
+        self.assertEqual(vow_situational_power_term(self._ctx(technique)), 25)
 
     def test_primary_only_power_bonus_is_unscaled_baseline(self) -> None:
-        ThreadFactory(owner=self.sheet, level=10)
         primary_role = CovenantRoleFactory()
         self._engage(primary_role, is_secondary=False)
         VowSituationalPerkFactory(
@@ -224,4 +225,4 @@ class SecondaryVowSituationalPowerTermTests(TestCase):
         )
         technique = TechniqueFactory()
 
-        self.assertEqual(vow_situational_power_term(self._ctx(technique)), 20)
+        self.assertEqual(vow_situational_power_term(self._ctx(technique)), 16)

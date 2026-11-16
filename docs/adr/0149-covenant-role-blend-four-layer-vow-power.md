@@ -208,3 +208,15 @@ why `broadcast_action_outcome` alone was insufficient for telnet parity, the que
 the deferred situations/effect kinds) are substantial enough to need their own record. Slices 2
 (`TIER_FLOOR`/`BOTCH_IMMUNITY` outcome guarantees) and 3 (Court/Battle scoping + dormant-vow
 messaging) remain tracked against #2536.
+
+## Amendment 2026-11-15 (#5093): vow power reads the vow thread only
+
+Layers 1, 2 and 4 no longer multiply by `total_thread_level_across_all_kinds(sheet)` (deleted).
+Each term is a share of one CHECK level's width at `thread_rung` of the holder's COVENANT_ROLE
+thread on the role's anchor: a blend term reads each engaged role's own thread, a specialty row the
+thread on its role's anchor, and a situational perk the thread of `FiredPerk.holder`, so a covenant
+mate's perk is sized by the mate. A character's other threads add nothing to vow power, which was
+the ruling's point: extra threads no longer inflate a vow. Thread survivability keeps its own
+flattening sum over every thread (unchanged). The rejected alternative was keeping the all-thread
+sum and rescaling it, which would leave a Gift-heavy character with a stronger vow than a
+vow-focused one.

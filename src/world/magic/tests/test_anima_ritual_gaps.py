@@ -280,7 +280,7 @@ class RitualSerializerFieldTests(TestCase):
         self.assertIn("stat_name", config)
         self.assertIn("skill", config)
         self.assertIn("skill_name", config)
-        self.assertIn("target_difficulty", config)
+        self.assertIn("target_difficulty_level", config)
 
     def test_author_account_id_is_returned(self) -> None:
         """author_account_id is the FK PK of the author account."""
@@ -374,23 +374,23 @@ class RitualViewSetPatchTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_patch_nested_check_config_target_difficulty(self) -> None:
-        """Author can PATCH the nested check_config target_difficulty."""
+        """Author can PATCH the nested check_config target_difficulty_level."""
         self.client.force_authenticate(user=self.author_account)
         resp = self.client.patch(
             self._patch_url(self.scene_ritual.pk),
-            {"check_config": {"target_difficulty": 5}},
+            {"check_config": {"target_difficulty_level": 2}},
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.json())
         self.scene_config.refresh_from_db()
-        self.assertEqual(self.scene_config.target_difficulty, 5)
+        self.assertEqual(self.scene_config.target_difficulty_level, 2)
 
     def test_patch_without_config_preserves_top_level_update(self) -> None:
         """A missing check config does not prevent the ritual update."""
         self.client.force_authenticate(user=self.author_account)
         resp = self.client.patch(
             self._patch_url(self.ritual.pk),
-            {"name": "Updated without config", "check_config": {"target_difficulty": 5}},
+            {"name": "Updated without config", "check_config": {"target_difficulty_level": 2}},
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.json())

@@ -619,16 +619,17 @@ class NPCServiceOffer(NaturalKeyMixin, SharedMemoryModel):
         related_name="+",
         help_text=(
             "Optional: if set, non-final actions roll `perform_check` against "
-            "this check type and `check_difficulty`. Success → "
+            "this check type and `check_difficulty_level`. Success → "
             "`rapport_delta_success`; failure → `rapport_delta_failure`. "
             "Final actions ignore this — the effect IS the payoff."
         ),
     )
-    check_difficulty = models.IntegerField(
+    check_difficulty_level = models.PositiveSmallIntegerField(
         default=0,
         help_text=(
-            "Target difficulty passed to `perform_check` when `check_type` is "
-            "set. Meaningless when `check_type` is null."
+            "Target difficulty passed to `perform_check` when `check_type` is set. "
+            "Meaningless when `check_type` is null. Authored as a level (0 = no "
+            "difficulty): the roll meets that level's baseline."
         ),
     )
 
@@ -1056,7 +1057,7 @@ class SkillCourseOfferDetails(SharedMemoryModel):
     (``coin_cost`` coppers) and one Golden Hare are paid once, when enrolling.
     Each session (the ``run_skill_course_offer`` handler in ``effects.py``)
     costs ``session_ap_cost`` AP and rolls ``check_type`` at
-    ``check_difficulty``; the training roll's outcome scales
+    ``check_difficulty_level``; the training roll's outcome scales
     ``session_development`` (through ``TrainingOutcomeAward``) to the points the
     session adds. The session AP is charged by the handler, not by
     ``NPCServiceOffer.ap_cost`` (the generic pre-dispatch charge), so
@@ -1096,8 +1097,11 @@ class SkillCourseOfferDetails(SharedMemoryModel):
         related_name="+",
         help_text="The check rolled each session.",
     )
-    check_difficulty = models.IntegerField(
-        help_text="Target difficulty of the session check.",
+    check_difficulty_level = models.PositiveSmallIntegerField(
+        help_text=(
+            "Target difficulty of the session check. Authored as a level (0 = no "
+            "difficulty): the roll meets that level's baseline."
+        ),
     )
 
     class Meta:

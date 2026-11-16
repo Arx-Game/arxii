@@ -28,6 +28,6 @@ class CompanionArchetypeTests(TestCase):
             CompanionArchetype.objects.create(
                 name="Hawk",
                 domain=CompanionDomain.BEAST,
-                bind_difficulty=10,
+                bind_difficulty_level=1,
                 capacity_cost=5,
             )

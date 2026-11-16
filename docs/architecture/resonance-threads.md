@@ -235,8 +235,11 @@ permitted to cross a specific XP-locked level. Without this row, accumulating
 
 #### Thread development cost formula
 
-Identical structure to skills: between XP-locked boundaries, the resonance cost
-to advance from level N → N+1 is `(N - 9) × 100` developed_points. The
+Identical structure to skills (#5093): between XP-locked boundaries, the resonance cost
+to advance from level N → N+1 is `dp_cost_for_step(N)` developed_points, the shared
+geometric curve held in the `DevelopmentCostConfig` row (a step costs a tenth of its
+character-level band, `N // 10`: 10 for 0-19, 15 for 20-29, 22 for 30-39 with the defaults),
+times the thread kind's `ThreadPullCost.imbue_cost_multiplier` (2 for Gift threads). The
 `developed_points` bucket on `Thread` is filled by spending resonance via the
 Imbuing ritual (Imbuing converts pool resonance into developed_points at a
 1:1 ratio at launch — staff-tunable). When the bucket reaches the cost of
@@ -373,6 +376,18 @@ The baseline is injected at two existing call sites:
 The invariant from #566 is unaffected: encounter difficulty scales on party size + average
 level only. Thread-rich parties are simply stronger; they are not matched by tougher
 enemies.
+
+**Which threads a rule reads (#5093, ADR-5093).** Only thread survivability sums over every
+thread a character owns, because a broad investment should make her sturdier with diminishing
+returns. A vow perk, a covenant role's blend term and a specialty row read only the holder's vow
+thread (the COVENANT_ROLE thread on the role's anchor), as a share of one level's width at that
+thread's rung (`thread_rung`, `level // 10`), so a Gift-heavy character does not out-power a
+vow-focused one and a covenant mate's perk is sized by the mate who holds it. The per-rung pools
+and caps a thread feeds (the Sinner's Sineating cap and the Hollow's maximum, the outfit trickle,
+techniques per gift, the moon tuning, the rescue budget, the facet effect bonus and the vow
+added-effect scaling) are baseline rows on their own `ModifierLane`, read at the thread's rung
+through `level_baseline`; see `docs/systems/checks.md`. The cost to raise a thread is the shared
+development curve (see "Thread development cost formula").
 
 **Field-name note:** `target_kind` is used uniformly across `Thread`,
 `ThreadPullEffect`, and `ThreadWeavingUnlock`. Avoid the synonym `target_type` to
@@ -799,7 +814,7 @@ def spend_resonance_for_imbuing(
       - amount > 0
 
     Within the greedy advancement loop, for each candidate next level N+1:
-      cost = (N - 9) * 100        (skill-system formula; same shape)
+      cost = dp_cost_for_step(N) * imbue_cost_multiplier   (shared curve, #5093)
       if developed_points < cost:
           stop — bucket holds remainder
       if (N + 1) % 10 == 0:       # crossing an XP-locked boundary

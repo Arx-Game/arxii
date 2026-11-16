@@ -86,7 +86,7 @@ class EmergencyDrawNonCombatE2ETests(CastScenarioMixin):
         )
 
         cls.character_resonance = CharacterResonanceFactory(
-            character_sheet=cls.caster.character_sheet, resonance=cls.resonance, balance=20
+            character_sheet=cls.caster.character_sheet, resonance=cls.resonance, balance=110
         )
         ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=0)
 
@@ -96,8 +96,10 @@ class EmergencyDrawNonCombatE2ETests(CastScenarioMixin):
         # must actually be imbued to 10 for there to be an
         # applicable effect.
         ThreadLevelUnlock.objects.create(thread=cls.thread, unlocked_level=10, xp_spent=0)
+        # A level costs a tenth of a band on the shared development curve (10 points in the
+        # starting band), so levels 0 to 10 cost 100 points; 10 of the balance are left.
         spend_resonance_for_imbuing(
-            cls.caster.character_sheet, cls.thread, cls.thread.resonance, 10
+            cls.caster.character_sheet, cls.thread, cls.thread.resonance, 100
         )
         cls.thread.refresh_from_db()
         cls.starting_thread_level = cls.thread.level

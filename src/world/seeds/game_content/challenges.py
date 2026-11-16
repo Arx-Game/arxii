@@ -234,14 +234,14 @@ CHALLENGE_CATEGORIES: list[str] = [
     "Social",
 ]
 
-# 6 Starter challenges: (name, challenge_type, severity, category_name, props, approaches)
+# 6 Starter challenges: (name, challenge_type, severity_level, category_name, props, approaches)
 # approaches: [(display_name, application_name, check_type_name)]
 # For the Social challenge, check_type_name refers to Social CheckType names from Pass 1.
 CHALLENGE_DEFS: list[tuple[str, str, int, str, list[str], list[tuple[str, str, str]]]] = [
     (
         "Locked Door",
         "inhibitor",
-        2,
+        0,
         "Physical",
         ["locked", "solid", "breakable"],
         [
@@ -253,7 +253,7 @@ CHALLENGE_DEFS: list[tuple[str, str, int, str, list[str], list[tuple[str, str, s
     (
         "Magical Ward",
         "inhibitor",
-        3,
+        0,
         "Magical",
         ["arcane", "radiant"],
         [
@@ -265,7 +265,7 @@ CHALLENGE_DEFS: list[tuple[str, str, int, str, list[str], list[tuple[str, str, s
     (
         "Flooded Chamber",
         "threat",
-        2,
+        0,
         "Environmental",
         ["flooded", "hazardous", "enclosed"],
         [
@@ -278,7 +278,7 @@ CHALLENGE_DEFS: list[tuple[str, str, int, str, list[str], list[tuple[str, str, s
     (
         "Armored Guardian",
         "inhibitor",
-        4,
+        0,
         "Combat",
         ["armored", "breakable", "bestial"],
         [
@@ -290,7 +290,7 @@ CHALLENGE_DEFS: list[tuple[str, str, int, str, list[str], list[tuple[str, str, s
     (
         "Darkness",
         "inhibitor",
-        1,
+        0,
         "Environmental",
         ["dark"],
         [
@@ -302,7 +302,7 @@ CHALLENGE_DEFS: list[tuple[str, str, int, str, list[str], list[tuple[str, str, s
     (
         "Proud Noble",
         "inhibitor",
-        2,
+        0,
         "Social",
         ["proud", "reasonable"],
         [
@@ -684,7 +684,7 @@ class ChallengeContent:
         # --- Challenges ---
         challenges: dict[str, ChallengeTemplate] = {}
 
-        for ch_name, ch_type, severity, cat_name, prop_names, approaches in CHALLENGE_DEFS:
+        for ch_name, ch_type, severity_level, cat_name, prop_names, approaches in CHALLENGE_DEFS:
             challenge_type = (
                 ChallengeType.THREAT
                 if ch_type == "threat"  # noqa: STRING_LITERAL
@@ -692,7 +692,7 @@ class ChallengeContent:
             )
             template = ChallengeTemplateFactory(
                 name=ch_name,
-                severity=severity,
+                severity_level=severity_level,
                 category=categories[cat_name],
                 challenge_type=challenge_type,
                 goal=f"Overcome the {ch_name.lower()}.",

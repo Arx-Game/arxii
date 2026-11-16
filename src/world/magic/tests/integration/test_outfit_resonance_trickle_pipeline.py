@@ -11,6 +11,8 @@ from decimal import Decimal
 
 from django.test import TestCase
 
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
+
 
 def _make_tenure_backed_sheet():
     """Return a CharacterSheet anchored to a fresh RosterTenure (has an Account)."""
@@ -105,6 +107,7 @@ class OutfitResonanceTricklePipelineTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        seed_pool_and_cap_lanes()
         cls.sheet, cls.resonance, cls.facet, cls.item_facet, cls.thread = (
             _build_sheet_with_equipped_facet_item(
                 item_quality_multiplier="2.00",

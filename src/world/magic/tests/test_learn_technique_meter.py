@@ -18,9 +18,15 @@ from world.magic.models import (
     Thread,
 )
 from world.magic.services.technique_acquisition import learn_technique
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 
 
 class LearnTechniqueMeterTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
+
     def setUp(self):
         self.sheet = CharacterSheetFactory()
         self.pool = ActionPointPool.get_or_create_for_character(self.sheet.character)

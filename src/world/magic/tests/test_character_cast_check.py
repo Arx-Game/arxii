@@ -33,6 +33,7 @@ from world.magic.seeds_checks import (
 )
 from world.realms.models import Realm
 from world.roster.seeds import ensure_rosters
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.skills.factories import SkillFactory
 from world.species.models import Species
 from world.tarot.constants import ArcanaType
@@ -123,6 +124,7 @@ class ProvisionUsesPerCharacterCheckTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        seed_pool_and_cap_lanes()
         # finalize_character() looks up a seeded roster by roster_type (#2728).
         ensure_rosters()
         for stat_name in _PROVISION_STATS:
@@ -270,6 +272,7 @@ class GetCharacterCastCheckTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        seed_pool_and_cap_lanes()
         # finalize_character() looks up a seeded roster by roster_type (#2728).
         ensure_rosters()
         for stat_name in _PROVISION_STATS:

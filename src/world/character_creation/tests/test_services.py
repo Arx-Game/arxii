@@ -36,6 +36,7 @@ from world.magic.factories import (
     ensure_canonical_affinities,
 )
 from world.roster.seeds import ensure_rosters
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.skills.factories import SkillFactory
 from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
@@ -576,10 +577,8 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
 
     def test_finalize_creates_skill_values(self):
         """Finalization writes each skill's rating to its trait's CharacterTraitValue."""
-        from world.progression.models.rewards import (
-            DevelopmentPoints,
-            cumulative_dp_for_level,
-        )
+        from world.progression.models.rewards import DevelopmentPoints
+        from world.progression.services.dev_cost import cumulative_dp_for_level
 
         draft = self._create_complete_draft()
         draft.draft_data["skills"] = {str(self.melee_skill.pk): 30}
@@ -1863,6 +1862,7 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
 class FinalizeGMCharacterTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
+        seed_pool_and_cap_lanes()
         ensure_canonical_affinities()
         from world.gm.factories import GMProfileFactory, GMTableFactory
 
@@ -2002,6 +2002,7 @@ class FinalizeGMCharacterClaimAsNpcTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        seed_pool_and_cap_lanes()
         ensure_canonical_affinities()
         from world.gm.constants import GMLevel
         from world.gm.factories import GMProfileFactory, GMTableFactory, seed_default_gm_level_caps

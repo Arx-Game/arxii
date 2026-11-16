@@ -7,6 +7,7 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.test_helpers import force_check_outcome
 from world.magic.constants import AnimaContributionKind
 from world.magic.exceptions import RitualPoolError
 from world.magic.factories import RitualFactory, RitualSessionFactory
@@ -20,6 +21,7 @@ from world.magic.services.ritual_pool import (
     pool_total,
     resolve_pool_gate,
 )
+from world.traits.factories import CheckOutcomeFactory
 
 
 def _anima(sheet, *, current=10, maximum=10, glut=0):
@@ -232,20 +234,21 @@ class PoolGateTests(TestCase):
 
     def test_deficit_rolls_the_ritual_check_with_a_bump(self):
         from world.magic.factories import RitualCheckConfigFactory
+        from world.traits.factories import ensure_level_ladder
 
-        config = RitualCheckConfigFactory()
+        ensure_level_ladder()
+        config = RitualCheckConfigFactory(target_difficulty_level=1)
         ritual = config.ritual
         ritual.anima_requirement = 50
         ritual.save(update_fields=["anima_requirement"])
 
-        class _Result:
-            success_level = 1
-
-        with patch("world.checks.services.perform_check", return_value=_Result()) as check:
+        # The real roll, forced to a Success: what the gate decides comes from the real
+        # check, and the capture records the difficulty it was rolled against.
+        with force_check_outcome(CheckOutcomeFactory(name="Held", success_level=1)) as roll:
             gate = resolve_pool_gate(ritual=ritual, performer_sheet=self.sheet, pool=25)
         self.assertTrue(gate.proceeded)
-        # deficit 25 of 50 -> bump ceil(3 * 25/50) = 2 over base difficulty 3.
-        self.assertEqual(check.call_args.args[2], 5)
+        # deficit 25 of 50 -> bump ceil(3 * 25/50) = 2 over level 1's baseline of 18.
+        self.assertEqual(roll.target_difficulty, 20)
 
     def test_failed_deficit_check_fizzles(self):
         from world.magic.factories import RitualCheckConfigFactory

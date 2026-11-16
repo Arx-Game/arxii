@@ -2,7 +2,7 @@
  * PlaceClueDialog — place a RoomClue (active/search) or ClueTrigger
  * (passive/on-entry) in the selected room (#2451). A mode toggle switches
  * between the two placement kinds; they share the room + clue-slug fields,
- * only the active kind also carries a `detect_difficulty` (`ClueTrigger` has
+ * only the active kind also carries a `detect_difficulty_level` (`ClueTrigger` has
  * no such field, see `world.clues.models.ClueTrigger`).
  *
  * "New clue…" (#3432) opens `AuthorClueDialog` alongside the slug field —
@@ -62,7 +62,7 @@ export function PlaceClueDialog({ roomId, open, onOpenChange, runAction }: Place
       runAction('staff_place_clue', {
         room_id: roomId,
         clue_slug: clueSlug.trim(),
-        detect_difficulty: Number(detectDifficulty) || 0,
+        detect_difficulty_level: Number(detectDifficulty) || 0,
       });
     }
     onOpenChange(false);
@@ -102,7 +102,7 @@ export function PlaceClueDialog({ roomId, open, onOpenChange, runAction }: Place
           </div>
           {!isPassive && (
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="place-clue-difficulty">Detect difficulty</Label>
+              <Label htmlFor="place-clue-difficulty">Detect difficulty level</Label>
               <Input
                 id="place-clue-difficulty"
                 type="number"

@@ -8,8 +8,9 @@ at an XP wall, with a message naming the cap. A band with a blank cap, or no row
 all, caps nothing. Staff edit mode refuses a value above the cap.
 
 The expected numbers come from the rules the skills docs state: weekly training pays
-``5 x AP x path level`` development points, a skill level costs ``(value - 9) x 100``
-of them, and a high-effort roll earns 20.
+``5 x AP x path level`` development points, every step in a level band costs a tenth of
+the band's cost on the shared curve (22 for steps 30 to 39, 50 for steps 50 to 59), and a
+high-effort roll earns 20.
 """
 
 from __future__ import annotations
@@ -36,8 +37,8 @@ from world.progression.models import (
     XPCostChart,
     XPCostEntry,
 )
-from world.progression.models.rewards import cumulative_dp_for_level
 from world.progression.services.awards import award_development_points
+from world.progression.services.dev_cost import cumulative_dp_for_level
 from world.progression.types import DevelopmentSource
 from world.roster.services.staff_characters import mint_gm_character
 from world.skills.factories import SkillFactory
@@ -103,11 +104,11 @@ class _BandCapCase(JourneyCase):
         """Development banked toward the skill's next level (#5010)."""
         return self.ledger().total_earned - cumulative_dp_for_level(self.rolls_at())
 
-    def train_a_week(self) -> DevelopmentTransaction:
-        """She plans 80 AP of training (400 points at level 1) and the week ticks."""
+    def train_a_week(self, ap: int = 80) -> DevelopmentTransaction:
+        """She plans ``ap`` AP of training (5 points each at level 1) and the week ticks."""
         self.assertIn(
             f"Training allocation set for {self.skill.name}.",
-            self.telnet(self.ysmay, f"training add skill={self.skill.pk} ap=80"),
+            self.telnet(self.ysmay, f"training add skill={self.skill.pk} ap={ap}"),
         )
         run_weekly_skill_cron()
         return DevelopmentTransaction.objects.filter(
@@ -140,11 +141,11 @@ class TrainingStopsAtTheBandCap(_BandCapCase):
         self.assertIn(f"{self.skill.name} is at 30, {CAP_MESSAGE}", transaction.description)
 
     def test_development_that_reaches_the_cap_dissipates_the_rest(self) -> None:
-        """Cap 60, at 59 with 4,900 of 5,000 banked: 400 more buys 60 and 300 dissipates."""
+        """Cap 60, at 59 with 40 of 50 banked: 400 more buys 60 and 390 dissipates."""
         self.band_caps_skills_at(60)
         self.made_with(59)
         ledger = self.ledger()
-        ledger.total_earned = cumulative_dp_for_level(59) + 4900
+        ledger.total_earned = cumulative_dp_for_level(59) + 40
         ledger.save()
 
         transaction = self.train_a_week()
@@ -156,14 +157,14 @@ class TrainingStopsAtTheBandCap(_BandCapCase):
     def test_a_blank_cap_caps_nothing(self) -> None:
         self.band_caps_skills_at(None)
         self.made_with(30)
-        transaction = self.train_a_week()
-        self.assertEqual((self.skill_row().value, self.banked()), (30, 400))
+        transaction = self.train_a_week(ap=4)
+        self.assertEqual((self.skill_row().value, self.banked()), (30, 20))
         self.assertNotIn(CAP_MESSAGE, transaction.description)
 
     def test_a_band_with_no_row_caps_nothing(self) -> None:
         self.made_with(30)
-        transaction = self.train_a_week()
-        self.assertEqual(self.banked(), 400)
+        transaction = self.train_a_week(ap=4)
+        self.assertEqual(self.banked(), 20)
         self.assertNotIn(CAP_MESSAGE, transaction.description)
 
 
@@ -232,7 +233,7 @@ class UseAndAwardsStopAtTheCap(_BandCapCase):
         self._bank_toward(stat, 41, short_by=10)
 
         record = award_development_points(
-            self.sheet, stat, DevelopmentSource.SCENE, 50, description="Hauling stone"
+            self.sheet, stat, DevelopmentSource.SCENE, 20, description="Hauling stone"
         )
 
         self.assertEqual(

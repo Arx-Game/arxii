@@ -59,7 +59,7 @@ class BindCompanionAction(Action):
 
     def execute(self, actor, context=None, **kwargs) -> ActionResult:
         from world.checks.models import CheckType  # noqa: PLC0415
-        from world.checks.services import perform_check  # noqa: PLC0415
+        from world.checks.services import difficulty_points, perform_check  # noqa: PLC0415
         from world.companions.content import BIND_ATTEMPT_CHECK_NAME  # noqa: PLC0415
         from world.companions.models import CompanionArchetype  # noqa: PLC0415
         from world.companions.services import bind_companion  # noqa: PLC0415
@@ -76,7 +76,9 @@ class BindCompanionAction(Action):
         sheet = actor.sheet_data
         check_type = CheckType.objects.get(name=BIND_ATTEMPT_CHECK_NAME)
 
-        result = perform_check(actor, check_type, target_difficulty=archetype.bind_difficulty)
+        result = perform_check(
+            actor, check_type, target_difficulty=difficulty_points(archetype.bind_difficulty_level)
+        )
         if result.outcome is None or result.outcome.success_level < 0:
             return ActionResult(
                 success=False,

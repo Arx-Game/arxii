@@ -23,7 +23,7 @@ class CompanionArchetypeFactory(DjangoModelFactory):
     domain = CompanionDomain.BEAST
     name = factory.Sequence(lambda n: f"Archetype {n}")
     description = factory.Faker("sentence")
-    bind_difficulty = 20
+    bind_difficulty_level = 1
     capacity_cost = 10
 
 

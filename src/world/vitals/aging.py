@@ -21,7 +21,7 @@ from evennia.objects.models import ObjectDB
 
 from world.character_sheets.models import CharacterSheet
 from world.character_sheets.types import LifecycleState
-from world.checks.services import perform_check
+from world.checks.services import difficulty_step_points, perform_check
 from world.conditions.services import apply_condition, get_condition_instance
 from world.progression.services.maturation import (
     available_points,
@@ -205,7 +205,14 @@ def _process_decline_for_sheet(
     character = sheet.character
     if character is None:
         return False
-    difficulty = config.aging_difficulty_per_year * (sheet.biological_age - start)
+    from world.progression.services.skill_development import (  # noqa: PLC0415
+        get_character_path_level,
+    )
+
+    difficulty = difficulty_step_points(
+        config.aging_difficulty_per_year_tenths * (sheet.biological_age - start),
+        get_character_path_level(character),
+    )
     result = perform_check(character, check_type, target_difficulty=difficulty)
     outcome = result.outcome
     if outcome is not None:
@@ -226,7 +233,7 @@ def _process_decline_for_sheet(
 def run_decline_checks(*, ic_now: datetime) -> int:
     """Run the IC-monthly aging check for every declining character.
 
-    Difficulty = config.aging_difficulty_per_year x years past the species
+    Difficulty = config.aging_difficulty_per_year_tenths of a level's width x years past the species
     decline_start_age, computed from biological age. Failure deepens Frailty
     by ``frailty_fail_severity``, partial success by
     ``frailty_partial_severity``; the deepened Frailty is folded into max

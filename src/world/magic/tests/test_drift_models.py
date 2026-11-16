@@ -79,7 +79,7 @@ class DriftCorrectionConfigTests(TestCase):
         config.full_clean()
         self.assertIsNone(config.rite)
         self.assertIsNone(config.check_type)
-        self.assertEqual(config.check_difficulty, 0)
+        self.assertEqual(config.check_difficulty_level, 0)
         self.assertEqual(config.cap_percent, 50)
 
     def test_cap_percent_over_one_hundred_is_invalid(self):

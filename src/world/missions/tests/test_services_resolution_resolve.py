@@ -297,7 +297,7 @@ class ResolveChallengeOptionTests(TestCase):
         cls.top = CheckOutcomeFactory(name="ChResolveCritical", success_level=5)
         cls.failure = CheckOutcomeFactory(name="ChResolveFailure", success_level=-3)
 
-        cls.challenge = ChallengeTemplateFactory(name="ChResolve Pit", severity=7)
+        cls.challenge = ChallengeTemplateFactory(name="ChResolve Pit", severity_level=0)
         cls.normal_approach = ChallengeApproachFactory(
             challenge_template=cls.challenge,
             check_type=CheckTypeFactory(name="ChResolveClimb"),

@@ -122,7 +122,7 @@ entirely, though both converge on the same acquisition seam).
 skill, chosen by staff on each offer; the Required content dashboard keeps one
 per Magic skill). One `NPCServiceOffer`/`SkillCourseOfferDetails` row per
 course: `skill`, `total_development`, `session_development`,
-`session_ap_cost`, `coin_cost`, `check_type`, `check_difficulty`. A **Course
+`session_ap_cost`, `coin_cost`, `check_type`, `check_difficulty_level`. A **Course
 enrollment** (`SkillCourseEnrollment`) is a character's place in one course:
 `development_remaining` counts down, `last_session_week` holds the game week
 of the latest session, `completed_at` closes it, and a sheet holds at most one
@@ -170,7 +170,7 @@ _Avoid_: makeover request, salon job.
 **CLUE_REVEAL offer** (`ClueRevealOfferDetails`, #3428):
 An NPC role tells a finder a pre-authored `clues.Clue` on resolve. Role-anchored (every
 placement of the role can reveal it — a Story NPC's own persona-specific knowledge is a
-deliberately deferred later slice, not this). The offer's own `check_type`/`check_difficulty`
+deliberately deferred later slice, not this). The offer's own `check_type`/`check_difficulty_level`
 gates the reveal — the handler (`effects.run_clue_reveal_offer`) rolls it directly, because
 final offers skip the interaction engine's own check application (mirrors `raise_court_grant`).
 Success (or a null `check_type` — auto-success) grants through `clues.acquire_clue` +

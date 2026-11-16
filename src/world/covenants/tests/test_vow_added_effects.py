@@ -75,6 +75,7 @@ from world.magic.factories import (
 from world.magic.models import Technique
 from world.magic.models.techniques import ConditionTargetKind
 from world.scenes.factories import SceneFactory
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.traits.factories import CheckOutcomeFactory
 
 _IN_COMBAT = VowEffectContext.IN_COMBAT
@@ -84,6 +85,7 @@ class VowAddedEffectsTestBase(TestCase):
     """Ysmay holds ``self.role`` at thread level 5; Hobb holds another role in the covenant."""
 
     def setUp(self) -> None:
+        seed_pool_and_cap_lanes()
         self.covenant = CovenantFactory(covenant_type=CovenantType.DURANCE)
         self.role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
         self.hobb_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
@@ -147,9 +149,7 @@ def _technique_tagged(function: str) -> Technique:
 
 class OwnCastTests(VowAddedEffectsTestBase):
     def test_own_cast_scales_severity_per_level_above_unlock(self) -> None:
-        VowAddedEffectFactory(
-            covenant_role=self.role, unlock_thread_level=20, severity_per_thread_level=2
-        )
+        VowAddedEffectFactory(covenant_role=self.role, unlock_thread_level=20, severity_tenths=2)
         [fired] = self._cast(self.ysmay)
         self.assertEqual((fired.holder, fired.severity_bonus), (self.ysmay, 6))
         self.assertFalse(fired.is_secondary)
@@ -159,8 +159,8 @@ class OwnCastTests(VowAddedEffectsTestBase):
             covenant_role=self.role,
             cast_context=VowEffectContext.ANY,
             unlock_thread_level=30,
-            duration_per_thread_level=1,
-            damage_per_thread_level=4,
+            duration_tenths=1,
+            damage_tenths=4,
         )
         [fired] = self._cast(self.ysmay)
         self.assertEqual((fired.duration_bonus, fired.damage_bonus), (2, 8))
@@ -211,7 +211,7 @@ class OwnCastTests(VowAddedEffectsTestBase):
             is_secondary=True,
         )
         VowAddedEffectFactory(
-            covenant_role=secondary_role, unlock_thread_level=0, severity_per_thread_level=10
+            covenant_role=secondary_role, unlock_thread_level=0, severity_tenths=10
         )
         [fired] = self._cast(self.ysmay)
         self.assertTrue(fired.is_secondary)
@@ -460,7 +460,7 @@ class QueryDisciplineTests(VowAddedEffectsTestBase):
 class PayloadTests(VowAddedEffectsTestBase):
     def test_payloads_apply_with_the_bonus_and_self_means_the_caster(self) -> None:
         effect = VowAddedEffectFactory(
-            covenant_role=self.role, unlock_thread_level=20, severity_per_thread_level=2
+            covenant_role=self.role, unlock_thread_level=20, severity_tenths=2
         )
         condition = ConditionTemplateFactory()
         VowAddedEffectAppliedConditionFactory(
@@ -645,7 +645,7 @@ class PayloadTests(VowAddedEffectsTestBase):
             covenant_role=self.role,
             cast_context=_IN_COMBAT,
             unlock_thread_level=40,
-            damage_per_thread_level=3,
+            damage_tenths=3,
         )
         profile = VowAddedEffectDamageProfileFactory(effect=effect)
         _, participants = self._fight(self.ysmay)
@@ -667,7 +667,7 @@ class DedupeTests(VowAddedEffectsTestBase):
 
     def test_the_primary_candidate_wins_in_either_order(self) -> None:
         effect = VowAddedEffectFactory(
-            covenant_role=self.role, unlock_thread_level=0, severity_per_thread_level=10
+            covenant_role=self.role, unlock_thread_level=0, severity_tenths=10
         )
         primary, secondary = (
             _LiveRow(candidate=self._candidate(is_secondary=flag), effect=effect, thread_level=50)
@@ -683,12 +683,16 @@ class DedupeTests(VowAddedEffectsTestBase):
 class VowEffectBonusesTests(TestCase):
     """The one per-level rule the cast and the power evaluator share (#4930)."""
 
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_pool_and_cap_lanes()
+
     def _effect(self) -> VowAddedEffect:
         return VowAddedEffectFactory.build(
             unlock_thread_level=20,
-            severity_per_thread_level=3,
-            duration_per_thread_level=1,
-            damage_per_thread_level=4,
+            severity_tenths=3,
+            duration_tenths=1,
+            damage_tenths=4,
         )
 
     def test_each_level_above_the_unlock_adds_each_column(self) -> None:

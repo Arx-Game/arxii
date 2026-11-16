@@ -271,9 +271,14 @@ modules import combat/checks contexts at function level, never the reverse):
 (`vow_situational_power_term`, `world.magic.services.power_terms` — see `docs/systems/magic.md`);
 `CHECK_BONUS` (slice 1) rides `perform_check`'s optional `situation_ctx` parameter
 (`world.checks.services._situational_perk_check_bonus`, scoped by `perk.check_type`, null = any
-check). Both scale a fired perk's `magnitude_tenths` by
-`total_thread_level_across_all_kinds(sheet)`, the same thread-level axis Layers 1-2 use, and
-truncate the same way (`Decimal` sum, `int()` truncation). As of slice 3 (ADR-0153), both also
+check). Both size a fired perk as a buff (#5093, ADR-0149 amendment):
+`magnitude_tenths / 10 ×` one CHECK level's width at `thread_rung` of the **holder's** COVENANT_ROLE
+thread on the perk's role (`sum_potency_scaled_magnitudes(fired)`; the holder is `FiredPerk.holder`,
+so a covenant mate's perk helping someone else is sized by the mate). Only that vow thread counts:
+a holder's other threads and the helped character's threads add nothing, and a holder with no vow
+thread (or one under rung 1) adds 0 without raising. Layers 1-2 read the vow thread the same way.
+A 1.0 perk on a rung-11 vow thread adds one level's width at that rung (8 on the example ladder). The
+arithmetic truncates as before (`Decimal` sum, `int()` truncation). As of slice 3 (ADR-0153), both also
 filter their fired set through `perk_scope_matches` before scaling — a `mission_category`/
 `mission_template`/`battle_action_kind` scope column that doesn't match `situation_ctx` drops the
 firing even though its `Situation`s all held.
@@ -1057,8 +1062,8 @@ vow board, vow page and spellbook vow section are #4565 and do not exist yet.
   `OUT_OF_COMBAT`), `situation` (+ the mixin's four typed parameter columns, blank = none),
   `beneficiary` (`PerkBeneficiary`: `SELF` / `COVENANT_ALLIES` / `WHOLE_GROUP`),
   `frequency` (`VowEffectFrequency`: `EVERY_CAST` / `ONCE_PER_ROUND` / `ONCE_PER_FIGHT`),
-  `unlock_thread_level` plus `severity_per_thread_level`, `duration_per_thread_level`,
-  `damage_per_thread_level`, and `upgrades` (self-FK, `RESTRICT`, `related_name=
+  `unlock_thread_level` plus `severity_tenths`, `duration_tenths`,
+  `damage_tenths`, and `upgrades` (self-FK, `RESTRICT`, `related_name=
   "upgraded_by"`). Natural key is the nine scope fields; a `UniqueConstraint(nulls_distinct=
   False)` holds it, and a second one holds "one upgrade per base per role"
   (`covenant_role` + `upgrades`). `cached_effect_summary` (plain-words line, below) and four
@@ -1142,12 +1147,15 @@ list[FiredVowEffect]` runs these steps in order:
    one holder reaches a row through both a primary and a secondary candidate, the primary
    fires (no potency scaling), whatever order the candidates came in. Two different holders
    of the same vow each fire it once.
-8. **Scaling**: each 10 thread levels above `unlock_thread_level` (counted in
-   `thread_rung` steps, #5091) add the row's
-   `severity_per_thread_level`, `duration_per_thread_level` and `damage_per_thread_level`.
+8. **Scaling**: each of `severity_tenths`, `duration_tenths` and `damage_tenths` is that many
+   tenths of what its own lane's baseline (`VOW_EFFECT_SEVERITY`, `VOW_EFFECT_DURATION`,
+   `VOW_EFFECT_DAMAGE`) gains between the rung of `unlock_thread_level` and the holder's vow
+   thread's rung (`thread_rung` steps of 10 thread levels, #5091, #5093). The seeded lanes gain 10 a
+   rung, so a column of 2 adds 2 a rung above the unlock. `vow_effect_bonuses` takes the three
+   lanes once (`load_vow_effect_lanes`) when a loop prices many effects.
    A row from a SECONDARY vow has each bonus multiplied by
    `SecondaryVowConfig.potency_tenths` and floor-divided by 10 (ADR-0159). The rule is
-   `vow_effect_bonuses(effect, thread_level, *, potency_tenths=None) -> VowEffectBonuses`,
+   `vow_effect_bonuses(effect, thread_level, *, potency_tenths=None, lanes=None) -> VowEffectBonuses`,
    shared with the technique power evaluator's vow term (#4930).
 
 `FiredVowEffect` (`world.covenants.types`) carries `effect`, `holder`, `is_secondary` and the

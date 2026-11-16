@@ -74,7 +74,7 @@ class NPCServiceOfferSerializer(serializers.ModelSerializer):
             "rapport_delta_failure",
             "cooldown",
             "check_type",
-            "check_difficulty",
+            "check_difficulty_level",
         ]
         read_only_fields = ["id"]
 

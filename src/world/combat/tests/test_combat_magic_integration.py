@@ -757,6 +757,7 @@ class TargetKeyedSituationalPerkCombatTest(TestCase):
         from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
         from world.magic.factories import ThreadFactory
         from world.npc_services.factories import NPCStandingFactory
+        from world.traits.factories import ensure_level_ladder
 
         participant, action, _opponent, _anima, _technique, _room = _setup_pc_attacking_mook(
             technique_intensity=5,
@@ -797,7 +798,8 @@ class TargetKeyedSituationalPerkCombatTest(TestCase):
             npc_persona=target_persona,
             affection=1,
         )
-        ThreadFactory(owner=subject_sheet, level=5)
+        ensure_level_ladder()
+        ThreadFactory(owner=subject_sheet, level=110, as_covenant_role_thread=role)
 
         with patch("world.combat.services.perform_check") as mock_perform:
             mock_perform.return_value = MagicMock(success_level=2)
@@ -815,8 +817,8 @@ class TargetKeyedSituationalPerkCombatTest(TestCase):
             if entry.source_label == "vow situational power"
         ]
         self.assertEqual(len(vow_entries), 1)
-        # 5 * 20 / 10 = 10
-        self.assertEqual(vow_entries[0].amount, 10)
+        # level_width(11) = 8: 8 * 20 / 10 = 16
+        self.assertEqual(vow_entries[0].amount, 16)
 
     def test_target_favorably_disposed_perk_absent_against_bare_npc_opponent(self) -> None:
         """Same perk/thread/disposition setup, but the opponent is a bare

@@ -22,8 +22,8 @@ from world.checks.types import (
 | `check_type` | `CheckType` | The check type that was resolved |
 | `outcome` | `CheckOutcome \| None` | The resolved outcome |
 | `chart` | `ResultChart \| None` | The result chart used |
-| `roller_rank` | `CheckRank \| None` | Roller's rank |
-| `target_rank` | `CheckRank \| None` | Target's rank |
+| `roller_rank` | `RankStep \| None` | Roller's rank (a `CheckRank` name at its baseline threshold, #5093) |
+| `target_rank` | `RankStep \| None` | Target's rank |
 | `rank_difference` | `int` | Whole rank difference of the chart the roll used (#4601: the floor of the fractional difference) |
 | `trait_points` | `int` | Points from weighted traits |
 | `aspect_bonus` | `int` | Bonus from path aspects |
@@ -38,7 +38,7 @@ from world.checks.types import (
 result.outcome_name   # str: outcome name or "Unknown"
 result.success_level  # int: outcome success_level or 0
 result.chart_name     # str: chart name or "No Chart Found"
-result.rank_text      # str: "Expert (rank 3), 67% toward Master (rank 4)" (#4601)
+result.rank_text      # str: "Master (rank 10), 38% toward Rank 11" (#4601, #5093)
 result.target_rank_text  # str: the target's rank with number and band position
 result.standing_text  # str: "<roller> against <target>", each with band position
 ```
@@ -67,25 +67,79 @@ category makes those lookups raise `MultipleObjectsReturned` (or silently return
 wrong row for `get_or_create`) — treat every `CheckType.name` as globally unique in
 practice, even though the schema doesn't enforce it (#2501 content-pipeline audit).
 
-### Modifier value table, level baselines and the taper (#4594, ADR-4594-A)
+### Modifier values, size fractions, level baselines and the taper (#4594, ADR-4594-A, #5093)
 
 Staff-tuned rows, all keyed by a `ModifierLane` column (`check`, `stat` since #4726, and the
 maneuver effect lanes `damage`, `to_hit` and `partial_protection` since #4876, read by the effect
 readers in `world/mechanics/effect_targets.py`) so later lanes add rows, not models. The seed's
-to-hit rows copy the check lane's (a to-hit bonus is check points on the attack check). Models live in `modifier_models.py`, readers in `modifier_values.py`, admin
-pages in `admin.py`. Example values are in `world/seeds/modifier_values.py` (cluster
-`modifier_values`); an empty table leaves behavior unchanged.
+to-hit lane is seeded with the same example Large ladder the stat lane uses, not the check lane's (see below). Models live in `modifier_models.py`, readers in `modifier_values.py`, admin
+pages in `admin.py`. Example rows are in `world/seeds/modifier_values.py` (cluster
+`modifier_values`); with no fraction rows a sized modifier keeps its flat authored value.
+
+A modifier's value is derived (#5093): its size's `ModifierSizeFraction` times one level's width
+(`ModifierLevelBaseline` step) at the level it applies at, rounded half up, never below 1 while the
+fraction is nonzero. A `ModifierValue` row at exactly that level and size overrides the derived
+number. A Large check buff at fraction 0.5 is half a rank at any level (4 points on the seeded
+8-point ladder). The seed writes dense baselines (levels 1-30) and five fractions for each of the
+check, stat, to-hit, damage and partial protection lanes, and no `ModifierValue` rows. The check
+lane's fractions are Minor 0.125, Moderate 0.25, Large 0.5, Exceptional 0.75, Paramount 1.0; each
+other lane's baselines are set so its Large value lands within 1 of its old example ladder at levels
+1, 6, 11, 16, 21 and 26 (stat and to-hit 3/10/16/23/30/36, damage 2/4/6/8/10/12, partial
+protection 5/8/10/13/16/20), so on those lanes a level's width varies. The check lane's Large no
+longer follows the stat lane's: the universality test now compares the stat lane to the to-hit lane.
+
+Six more lanes hold only `ModifierLevelBaseline` rows, in their own units, with no fractions and
+no taper (#5093): rules that were a coefficient times a level in code now read one row per level
+through `level_baseline(level, lane)`. `anima_pool` is the anima maximum at a character level
+(seeded 100 a level, replacing `AnimaConfig.maximum_per_level`); `soul_tether_cap` and
+`hollow_max` are the Sinner's thread rung (10 thread levels) to the per-scene Sineating cap
+before its base and to the Hollow's maximum (seeded 2 and 10 a rung, replacing the two
+`SoulTetherConfig` `*_level_mult` columns); `outfit_trickle` is the factor a facet thread's rung
+gives the daily outfit trickle (seeded as the rung, read at least at rung 1); `techniques_per_gift`
+is the techniques a gift allows at the gift thread's depth (seeded 3 a depth, replacing
+`GiftAcquisitionConfig.techniques_per_thread_level`); six rung lanes are read at a thread's rung
+(`thread_rung`, 10 thread levels): `rescue_budget_thread` (hundredths of the rescue budget's
+multiplier, seeded 50 a rung, replacing `SoulTetherConfig.rescue_budget_thread_mult_hundredths`),
+`moon_tuning` (a moon-bound character's gift thread's tuning, seeded 10 a rung, replacing the
+`TUNING_PER_THREAD_LEVEL` constant), `facet_effect_bonus` (`FacetEffectBonus.amount_tenths` is
+tenths of this baseline at a facet thread's rung, seeded 10 a rung) and `vow_effect_severity`,
+`vow_effect_duration` and `vow_effect_damage` (a `VowAddedEffect`'s `severity_tenths`,
+`duration_tenths` and `damage_tenths` are tenths of what the lane's baseline gains between the
+effect's unlock rung and the holder's vow thread's rung, seeded 10 a rung). The seeded rows give
+the old per-rung numbers at every whole rung; a thread between rungs reads its whole rung, so
+the rescue budget and the moon tuning, which counted every thread level, now step at each
+rung. `fatigue_level_bonus` is the fatigue
+capacity a character level adds on top of the stat terms and is not seeded, so it adds nothing
+until staff author rows. Each strict lane raises `ModifierConfigError` with no row at or below
+the level, and the "Modifier level baselines (pool and cap lanes)" content sentinel reports a
+lane with a missing level. A level above the lane's top row reads the top row (seeded to 30).
+Fatigue capacity is `endurance stat x stat_multiplier + willpower x willpower_multiplier + the
+level bonus`, then times `well_rested_percent` / 100 when rested; the three multipliers are the
+`FatigueConfig` singleton (`world/fatigue/models.py`, defaults 10, 3 and 150, per 10 points of a
+stat), read without saving a row when a database has none.
 
 | Model | Purpose | Key fields |
 |-------|---------|------------|
-| `ModifierValue` | The value table: what a modifier of `size` is worth at `level`, in the lane's units. Sparse rows read as steps (highest authored level at or below the modifier's). A magnitude; the authored modifier keeps its sign | `lane`, `level`, `size` (`ModifierSize`), `value`; unique (`lane`, `level`, `size`) |
-| `ModifierLevelBaseline` | The typical total at each level in a lane; the value admin and the tuning dashboard read a value as a share of it and of its rank band | `lane`, `level`, `baseline`; unique (`lane`, `level`) |
+| `ModifierSizeFraction` | How much of one level's width a modifier of `size` is worth in a lane (#5093). A size with no row has no derived value | `lane`, `size` (`ModifierSize`), `fraction` (decimal, 3 places); unique (`lane`, `size`) |
+| `CheckScaleConfig` | Singleton (pk 1, `world/checks/scale_config.py`, #5093): `level_share`, the share of a level's CHECK baseline that a character's level adds to every roll (seed 0.5). Read by `level_points(level)`; staff edit the row | `level_share` |
+| `ModifierValue` | An override of the derived value: what a modifier of `size` is worth at exactly `level`, in the lane's units. It covers only its own level (the step lookup is gone). A magnitude; the authored modifier keeps its sign | `lane`, `level`, `size` (`ModifierSize`), `value`; unique (`lane`, `level`, `size`) |
+| `ModifierLevelBaseline` | The typical total at each level in a lane, one row per level (the seed writes levels 1-30). On the check lane these rows ARE the rank ladder (rank N starts at the level-N baseline) and the gap between two levels is one level's width (#5093) | `lane`, `level`, `baseline`; unique (`lane`, `level`) |
+| `LevelTier` | A tier jump (#5093): `bonus_points` added in full to every level from `start_level` up (a character's level term, an NPC's opposition, every staff-set difficulty level). Seeded at level 3 (0 points, no jump) and 6, 11, 16, 21 and 26 (24 points each) | `start_level` (unique), `bonus_points` |
 | `ModifierTaper` | Which source kinds taper in a lane: each further modifier of the kind counts `ratio` of the one before, never below `floor` | `lane`, `source_kind` (`ModifierSourceKind`), `ratio`, `floor`; unique (`lane`, `source_kind`) |
 
-Readers (`modifier_values.py`): `load_value_table(lane) -> ValueTable` (one query;
-`ValueTable.value(level, size) -> int | None`), `load_taper_rules(lane) -> dict[str, TaperRule]`
-(one query), `level_baseline(level, lane) -> int | None`, `rank_band_share(points, at_total) ->
-Decimal | None` (points as a share of the `CheckRank` band `at_total` sits in).
+Readers (`modifier_values.py`): `load_value_table(lane) -> ValueTable` (three queries: overrides,
+fractions and baselines; `ValueTable.value(level, size) -> int | None` is the override at exactly
+that level and size, else fraction x width, `None` with no fraction and no override, and raises
+`ModifierConfigError` when a fraction needs a width the baseline rows cannot give;
+`ValueTable.signed_value(authored, level, size)` signs it like the authored row;
+`ValueTable.vow_step(authored, level, size, tenths)` is a vow's size step, see below),
+`load_taper_rules(lane) -> dict[str, TaperRule]`
+(one query), `load_baselines(lane) -> BaselineTable` (one query; `.baseline(level)` is the level's
+row or the highest row below it, `.width(level)` is `baseline(level + 1) - baseline(level)`, and at or
+above the top row the top row's width; both raise `ModifierConfigError`, `world/checks/exceptions.py`,
+when no row sits at or below the level), `level_baseline(level, lane)` and `level_width(level, lane)`
+(thin wrappers), `rank_band_share(points, at_total) -> Decimal | None` (points as a share of one
+level's width at the rank `at_total` reaches). The required-content probe names a missing level.
 
 `ModifierContribution` carries `level`, `size` and `vow_part` (the untapered vow share: the
 equipment walk's vow terms, #4628, and a vowed caster's size step on a buff, #4747). `ModifierBreakdown(contributions, tapers)` counts each tapered kind's
@@ -214,7 +268,7 @@ target, takes `modifier_target_contributions(sheet, target, lane=CHECK)` (distin
 pieces, the equipment walk) with each value multiplied by the row's weight and truncated, labelled
 `"<source> (<Aspect>)"`, keeping its source kind so the check lane's taper treats a card's Aspect
 bonus as part of the same pile. It needs no path and does not scale with level: it is a different
-term from the path aspect bonus below (`check weight x path weight x level`), which is untouched;
+term from the path aspect bonus below (`check weight x path weight x one level's width`, #5093), which is untouched here;
 #4775's rule for that term does not apply here. The rate card prices an Aspect at a roll modifier's
 rate (1.5 per point), which is this shape. Reaches every roll through the seam (`perform_check_with_modifiers`,
 scene actions, combat, challenges); the breakdown-only paths (`compute_resist_increment`,
@@ -279,7 +333,7 @@ result.outcome_name    # "Success", "Catastrophic Failure", etc.
 result.success_level   # -10 to +10
 result.trait_points    # Points from character's traits
 result.aspect_bonus    # Bonus from path aspects
-result.level_points    # LEVEL_POINTS_PER_LEVEL x class level, on every check (#2707)
+result.level_points    # level_share x the level's baseline plus its tier bonus, on every check (#2707, #5093)
 result.total_points    # Final total
 ```
 
@@ -356,11 +410,24 @@ increment = compute_resist_increment(
     target.objectdb, effort_level, level_override=target.level
 )
 
-# PASSIVE: the defender contributes nothing beyond existing. LEVEL_POINTS_PER_LEVEL
-# * level always; plus, when a character is given, the acting check's aspects
-# scored against the DEFENDER's Path (their wheelhouse protects them). A
-# character=None (an ephemeral NPC with no sheet) contributes level alone.
+# PASSIVE: an NPC has a level and no points, so it opposes with its level's CHECK baseline
+# (the start of rank N, #5093); plus, when a character is given, the acting check's aspects
+# scored against the DEFENDER's Path, each match a share of one level's width at that level
+# (their wheelhouse protects them); plus the defender's active condition modifiers at their
+# derived value, so a debuff lowers the NPC. A character=None (an ephemeral NPC with no sheet)
+# contributes the baseline alone. 0 at level 0 and where no baseline rows exist.
 difficulty = level_opposition(check_type, level=defender_level, character=defender_character)
+
+# A PLAYER character who is the obstacle (concealment, a held condition, a resisted social
+# move) counts as her full check total, not her level (#5093): compute_check_rating plus the
+# modifiers she carries on the check, counted once. Player means a sheet for which
+# roster.services.activity.is_player_character holds. Every other obstacle, with a sheet or
+# without (a named or story NPC, a mission opposition sheet), is an NPC and counts as its
+# level's baseline through level_opposition.
+# compute_resist_increment is this on the Composure check plus the effort modifier.
+difficulty = compute_obstacle_rating(caster, check_type, level_override=None)
+# A hold's caster adds caster_opposition(instance, check_type) (world/conditions/services.py):
+# her full total, or her level's baseline when she put the hold on herself.
 ```
 
 `social_target_difficulty` (`world/checks/social_target.py`, #4145) is the one difficulty
@@ -412,6 +479,73 @@ term would double-count it. See ADR-0166.
 
 ---
 
+## Tier jumps (#5093)
+
+Power jumps sharply on crossing into a new tier of levels: going from level 5 to 6 is worth far
+more than 4 to 5, and 10 to 11 more than 9 to 10 (owner ruling 2026-11-15; spec decision 16).
+
+- **`LevelTier(start_level, bonus_points)`** (`world/checks/modifier_models.py`, admin "Level
+  tiers" with the bonus shown in ranks): one row per tier, `start_level` unique. The seed
+  (`seed_level_tiers`, only into an empty table) writes level 3 at 0 points (no jump, one edit away) and levels 6, 11, 16, 21 and 26 at 24 points each
+  (three ranks at the seeded 8-point width). Staff set every row separately. Migration
+  `0440_level_tier_rows` writes the same rows on a database that already has CHECK baselines and
+  no tier rows, so production gets them.
+- **`tier_bonus(level, table=None)`** (`modifier_values.py`): the sum of `bonus_points` over every
+  tier whose start level is at or below `level`; 0 with no rows. `load_tier_table()` loads the
+  rows in one query and the resulting `TierTable.bonus(level)` reads them in memory.
+- **Counted in full, once, wherever a level's strength is read:** `level_points` (a character's
+  level term: share x baseline, plus the bonus), `level_opposition` (an NPC), `difficulty_points`
+  (every staff-set difficulty level), and the tuning panels' example totals (the standoff profile's
+  same-level roller, the modifier pile's baseline) and the unmet-surroundings penalty's "typical
+  roll". A player character who is the obstacle gets it through her level term only, so it is
+  never added twice. `difficulty_level_for_points` inverts the strengths, so a level just across a
+  tier start sits the whole bonus above the one before it.
+- **Not changed:** `level_width`, `difficulty_step_points`, modifier sizes and the vow step, so
+  buff sizes stay the same inside a tier.
+- **Result with the seeded rows:** a level-6 character with ordinary skills (skills supply the
+  half of her baseline the level term leaves) is 4 ranks above a level-5 NPC, a level-5 character
+  1 rank above a level-4 NPC. The result charts still clamp outside -8 to +6; that is intended.
+
+## Authored difficulty as a level (#5093)
+
+Staff author a difficulty as a level, never as points. Three helpers in `world/checks/services.py`
+turn the stored number into the points a roll meets:
+
+- `level_strength(level)`: a level's CHECK baseline plus its tier bonus, the one place the two are
+  added (the admin, the analytics panels, the surroundings penalty and the Scaling panel read it).
+  `difficulty_points` is the same number read as an authored difficulty.
+- `difficulty_points(level)`: a standalone difficulty. The level's CHECK baseline plus its tier
+  bonus (see "Tier jumps"), so a level-N lock is rolled at the rank a level-N NPC stands at. Level 0 is no difficulty (0 points); a level above the top baseline
+  reads the top baseline; a database with no baseline rows reads 0.
+- `difficulty_step_points(tenths, at_level)`: a difficulty added on top of another one, or a
+  per-step increment, in tenths of one level's width at `at_level` (the base difficulty's level,
+  the opposing caster's level, or the character's own). Rounded half up; negative tenths keep
+  their sign; a level below 1 uses level 1's width.
+- `difficulty_level_for_points(points)`: the inverse, the level whose baseline is nearest
+  `points` (ties to the lower), for a difficulty a rule computes at runtime in points (a smear's counter-clue)
+  and has to store where staff author a level.
+
+`difficulty_points`, `difficulty_step_points` and `level_points` each take an optional `tables`
+(`load_difficulty_tables()`: the CHECK baselines and the level tiers, two queries), so a loop over
+many levels loads the rows once; `level_points` also takes a `level_share` read once by the
+caller.
+
+Columns named `*_level` are standalone (a lock's detect and disarm, a condition's cure and
+resist, a recipe, a task or offer, a mission support move, a ritual, the survivability checks).
+Columns named `*_tenths` are increments (a condition's break-free and subtlety on top of the
+caster, a compulsion's difficulty per severity, a flee tier's modifier, the vitals per-percent
+scaling, the escalation per-level step). The conversion that carried the old point values across
+(migrations 0416 to 0424, three expand, convert and contract triples) mapped a point difficulty to
+the old nine-rank ladder's rank (thresholds 0, 10, 25, 50, 80, 115, 155, 200, 250), then to the
+level whose new baseline is nearest that rank's old threshold (levels 0, 1, 2, 5, 9, 13, 18, 24,
+30), and an increment to tenths at two tenths a point (the old ladder spent five points a level).
+Not converted: `MovementConfig.reaction_difficulty_step` (its integer also scales fatigue and
+anima cost per reaction), the agriculture pool-size ramp (it adds to a `DifficultyChoice` band
+value), the recorded results `difficulty_points`, `resolved_difficulty` and
+`snapshot_target_difficulty`.
+
+---
+
 ## Resolution Pipeline
 
 ```
@@ -426,11 +560,17 @@ term would double-count it. See ADR-0166.
    For each CheckTypeAspect with matching PathAspect:
      bonus += int(check_aspect_weight * path_aspect_weight * character_level)
 
-2.4. Level points (#2707): LEVEL_POINTS_PER_LEVEL x character_level, on EVERY check.
+2.4. Level points (#2707, #5093): CheckScaleConfig.level_share x the CHECK baseline at
+   character_level (``level_points(level)``, rounded half up) plus the level's tier bonus
+   (``tier_bonus(level)``, added in full, never multiplied by the share), on EVERY check.
    Level was previously only reachable through the aspect bonus above, which is zero
    unless the CheckType has an authored CheckTypeAspect matching the character's Path
-   -- so on most checks level did nothing. This is a guaranteed floor, additive with
-   (not a replacement for) the aspect bonus.
+   -- so on most checks level did nothing. This is a guaranteed term, additive with
+   (not a replacement for) the aspect bonus. With share 0.5 and a level-11 baseline of 98
+   the term is 49; skills and stats supply the other half of the climb. 0 at level 0 and
+   where no CHECK baseline rows exist; above the top row it reuses the top baseline. At level 6
+   with the seeded tier the term is 29 + 24 = 53.
+   ``CheckScaleConfig`` is a pk-1 singleton (``get_check_scale_config``); the seed writes 0.5.
 
 2.5. Capability points from authored CheckTypeCapabilityModifier rows (#2505)
    No authored rows on check_type -> 0, capability oracle never called (curated gate).
@@ -462,7 +602,7 @@ term would double-count it. See ADR-0166.
    previous, never below 2/3, when ModifierTaper rows exist)
 
 4. Band positions and the slide (#4601, world/checks/slide.py resolve_standing):
-   each total -> its CheckRank and band position (rank number + share of the band)
+   each total -> its rank (from the CHECK baselines) and band position (rank number + share)
    difference = roller position - target position (fractional)
    chart = floor(difference), slid by the remainder toward the next chart
    (both totals count every point, modifiers included; #4723 removed the hopeless pin)
@@ -571,9 +711,18 @@ anything below -8 resolves to chart -8 (there is no clamp).
 `preview_check_difficulty`, the outcome wheel and the tuning dashboard all read it.
 
 - **Band position** (`band_position(points)`): the rank a total reaches and how far it is
-  through that rank's band, from the `CheckRank` rows. 40 points is "Competent (rank 2),
-  60% toward Expert (rank 3)". The top rank has no next rank (share 0); a total below
-  every threshold has no rank and counts as rank number 0, as before.
+  through that rank's band. `load_ranks()` builds the ladder (`RankStep(rank, name, min_points)`)
+  from the `CheckRank` names joined to the CHECK lane's baselines: rank N starts at
+  `baseline(N)`, rank 0 at 0 (#5093; `CheckRank.min_points` is gone). With the seeded baselines
+  (18 + 8 x (level - 1)), 40 points is "Competent (rank 3), 75% toward Rank 4". The top
+  rank has no next rank (share 0); 5 points is rank 0 with rank 1 next; a total below rank 0
+  (negative) has no rank and counts as rank number 0.
+  Tier jumps (#5093, below) put a character several ranks above where her level alone would, so
+  the ladder runs past the top baseline level: rank N above that level starts one level's width
+  (the top level's) further on per rank, until the ladder holds the top level's baseline plus
+  its tier bonus (rank 45, at 370 points, with the seeded rows). A rank above the highest
+  `CheckRank` row has no name row and is named by its number ("Rank 31"); staff may
+  author name rows for it. With no `LevelTier` rows the ladder ends at the highest authored rank.
 - **Fractional difference.** Roller position minus target position. The whole part picks
   the chart; the remainder is how far it slides toward the next.
 - **The slide** (`slide_chart`): each "at least X" chance of the chart's own outcomes moves
@@ -673,7 +822,9 @@ the FK.
 # Calculate weighted trait points from CheckTypeTrait entries
 _calculate_trait_points(handler, check_type, *, stat_override=None, extra_traits=()) -> int
 
-# Calculate aspect bonus from character's most recent path
+# Aspect bonus from character's most recent path: each matching check weight x path weight is a
+# share of one level's width at `level`, rounded half up (#5093). The acting side reads it at
+# the roller's level and `level_opposition` reads it at the NPC's: one sizing for both.
 _calculate_aspect_bonus(character, check_type, level) -> int
 
 # Calculate weighted capability points from authored CheckTypeCapabilityModifier rows (#2505)
@@ -891,13 +1042,13 @@ the consequences, and the discovery type are the template's own.
   prop comes from `create_challenge_target_object`, shared with
   `instantiate_situation` so the two paths cannot drift.
 - **Adaptation** is one band, with a required reason: `edge_reason` / `setback_reason`
-  (mutually exclusive) persist as `ChallengeInstance.severity_adjustment`
+  (mutually exclusive) persist as `ChallengeInstance.severity_adjustment_tenths`
   (±`DIFFICULTY_BAND_STEP`) and `adjustment_reason`. Two DB `CheckConstraint`s
   enforce the pair — an arbitrary offset or an unreasoned shift cannot be stored.
   Out of bounds refuses rather than clamping. `adjustment_reason` is GM-facing only
   and never reaches `ChallengeInstanceSerializer`.
 - **Difficulty** is read through `ChallengeInstance.effective_severity`
-  (`template.severity + severity_adjustment`) by every resolution path in
+  (`difficulty_points(template.severity_level) + the shift in tenths`) by every resolution path in
   `challenge_resolution.py`.
 - **Discovery** rides one service, `find_situations` (`world/gm/services.py`),
   behind two faces: telnet `setsituation find <term>` (`FindSituationAction`,
@@ -921,15 +1072,15 @@ the consequences, and the discovery type are the template's own.
   — it mints the same class of live row (ADR-0091). Telnet:
   `setsituation challenge <template>=<target name> [edge=<why>|setback=<why>]`.
 
-### `ChallengeTemplate.severity` is in difficulty points
+### `ChallengeTemplate.severity_level` is a level (#2865, #5093)
 
-`resolve_challenge` passes `severity` straight into `perform_check`'s
-`target_difficulty`, which every other caller feeds from `DIFFICULTY_VALUES` (15
-Trivial … 90 Harrowing). The field's default was `1`, so authored challenges
-resolved at the bottom rank and a ±15 band shift had no coherent unit against
-them. Since #2865 the default is `DIFFICULTY_VALUES[NORMAL]` and the field is
-documented as points, not a 1–5 rating. Authored rows in the lore repo are
-re-expressed on that scale as content work.
+`resolve_challenge` rolls against `ChallengeInstance.effective_severity`: the baseline of the
+template's `severity_level` (`difficulty_points`) plus the GM's shift. The shift is
+`severity_adjustment_tenths`, exactly one band either way (+-30 tenths of one level's width at the
+template's level, `DIFFICULTY_BAND_SHIFT_TENTHS`), and a shift that would leave the ladder is
+refused. The old `severity` points and the old +-15 point shift were converted by migrations 0425 to
+0427; the default level is 2. Authored rows in the lore repo are re-expressed on levels as content
+work.
 
 ---
 

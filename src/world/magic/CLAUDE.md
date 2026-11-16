@@ -408,7 +408,7 @@ Three independent gates per target, evaluated in order: (1) **cast-SL row gate**
 removes nothing); (2) **`can_be_dispelled` hard gate** — a condition whose template has
 `can_be_dispelled=False` is a no-op (never an error); (3) **opposed cure check** — when the
 condition's `cure_check_type` is set, `perform_check_with_modifiers(caster, cure_check_type,
-cure_difficulty, extra_modifiers=power_bonus)` is rolled, where `power_bonus =
+cure_difficulty_level, extra_modifiers=power_bonus)` is rolled, where `power_bonus =
 int(row.cure_power_multiplier * eff_intensity)` (#3391 — power leg); removal succeeds iff
 `check_result.success_level > 0`, else resisted (no-op for that target, cast continues). When
 `cure_check_type` is null, removal proceeds unconditionally (uncontested dispel) — power has
@@ -688,7 +688,7 @@ a character's Motif bindings buffs that resonance's magic through the modifier p
 - `Motif` - Character-level magical aesthetic (container for resonances + facets)
 - `MotifResonance` - Resonances in a motif (from gifts or optional)
 - `Facet` - Flat vocabulary of imagery/symbolism, name globally unique (2026-09-11 ruling, #3776 — no longer a Category > Subcategory > Specific tree)
-- `FacetEffectBonus` - A facet's always-on bonus to one maneuver effect (#4815): the facet names the effect, whatever its thread's resonance; `passive_facet_bonuses` counts it for a worn, threaded facet, scaled by item and attachment quality and the thread rung (`thread_rung`, per 10 thread levels). Inline on `FacetAdmin`; `merge_facets` moves it
+- `FacetEffectBonus` - A facet's always-on bonus to one maneuver effect (#4815): the facet names the effect, whatever its thread's resonance; `passive_facet_bonuses` counts it for a worn, threaded facet, scaled by item and attachment quality and, through `amount_tenths`, the `FACET_EFFECT_BONUS` lane at the thread rung (`thread_rung`, per 10 thread levels, #5093). Inline on `FacetAdmin`; `merge_facets` moves it
 - `MotifResonanceLink` - Abstract base for per-resonance attachments. Declares
   NO fields; each concrete subclass declares its own `motif_resonance` FK.
   Provides `clean()`/`save()` cap-enforcement logic (Python-layer count check
@@ -2189,7 +2189,7 @@ that part of the way (`settle_shares(sheet, fraction)`), at 0 nothing moves; wri
 `AcceptAuraResult.grown_affinity` is the affinity of the resonance that made them unsettled, read
 before accepting; it is what "You become more abyssal." names.
 - Models (`models/drift.py`): `DriftCorrectionConfig` (singleton; `rite`, `check_type` null until
-  staff author them; `check_difficulty`; `cap_percent`; `disown_deed_percent`, the share of a disowned
+  staff author them; `check_difficulty_level`; `cap_percent`; `disown_deed_percent`, the share of a disowned
   deed the rite converts at a full roll), `DriftCorrectionOutcomeShare` (an `OutcomeTierAward`;
   `converted_share` is the fraction of each reflection the rite carries out; `clean` keeps it
   monotonic by success level), `DriftConversionOffer` (one per sheet; `scene` is where it first
@@ -2275,7 +2275,7 @@ bond is one situation among many. Full tour: `docs/systems/magic.md` "Kindled re
   rank, blank reads it from the bond tier or condition severity and `clean` refuses blank where there
   is no source), `KindledStrengthTier` (natural key `rank`; the staff-named strength and every number
   that follows from it: `min_bond_tier`, `min_severity`, `pull_levels`, `give_in_max_depth`,
-  `give_in_bonus_percent`, `give_in_ease`, `dig_deep_scale_percent`, `earn_percent`),
+  `give_in_bonus_percent`, `give_in_ease_tenths`, `dig_deep_scale_percent`, `earn_percent`),
   `KindlingConfig` (singleton, `harm_property`), `KindledDeedAward` and `RallyKindlingStrength`
   (`OutcomeTierAward` tables), `Kindling` (Rally or GM only, `encounter` XOR `scene`).
   `Resonance.feeling` (Property FK) is what the feeling situations match; `missions.MissionTheme`

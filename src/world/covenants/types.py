@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.checks.modifier_values import BaselineTable
     from world.covenants.models import CovenantRole, VowAddedEffect
 
 
@@ -42,6 +43,15 @@ class VowEffectBonuses:
 
 
 @dataclass(frozen=True)
+class VowEffectLanes:
+    """The three vow effect lanes' baselines, loaded once for a loop of effects (#5093)."""
+
+    severity: BaselineTable
+    duration: BaselineTable
+    damage: BaselineTable
+
+
+@dataclass(frozen=True)
 class FiredVowEffect:
     """One ``VowAddedEffect`` that fires for a single cast, with its scaled bonuses (#4581).
 
@@ -51,12 +61,11 @@ class FiredVowEffect:
     is True when the row came from the holder's SECONDARY vow (#2641); its
     bonuses are then already scaled by ``SecondaryVowConfig.potency_tenths``.
 
-    Each bonus is the number of 10-level steps the thread is above
-    ``unlock_thread_level`` (``thread_rung``, #5091) times the
-    row's matching ``*_per_thread_level`` column, read off the holder's
-    COVENANT_ROLE thread on the vow's anchor role. ``severity_bonus`` and
-    ``duration_bonus`` add to every applied condition; ``damage_bonus`` adds to
-    every damage profile.
+    Each bonus is the row's matching ``*_tenths`` column as tenths of what its lane's
+    baseline gains from the rung of ``unlock_thread_level`` to the rung of the holder's
+    COVENANT_ROLE thread on the vow's anchor role (``thread_rung``, #5091, #5093).
+    ``severity_bonus`` and ``duration_bonus`` add to every applied condition;
+    ``damage_bonus`` adds to every damage profile.
     """
 
     effect: VowAddedEffect

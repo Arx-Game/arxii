@@ -30,7 +30,7 @@ def perform_ritual_check(
     """Roll the named ritual's authored check.
 
     Difficulty comes from the ritual's RitualCheckConfig:
-    ``non_founder_target_difficulty`` when present and the actor lacks
+    ``non_founder_target_difficulty_level`` when present and the actor lacks
     founder standing, else ``target_difficulty``.
 
     Raises RitualCheckConfigMissing when:
@@ -38,7 +38,7 @@ def perform_ritual_check(
       ensure_magic_check_content())
     - the ritual has no config row or the config has no check_type (seed gap)
     """
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import difficulty_points, perform_check  # noqa: PLC0415
     from world.magic.constants import MagicActivity  # noqa: PLC0415
     from world.magic.models import Ritual  # noqa: PLC0415
     from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
@@ -61,9 +61,10 @@ def perform_ritual_check(
         )
         raise RitualCheckConfigMissing(msg)
 
-    difficulty = config.target_difficulty
-    if not founder_standing and config.non_founder_target_difficulty is not None:
-        difficulty = config.non_founder_target_difficulty
+    level = config.target_difficulty_level
+    if not founder_standing and config.non_founder_target_difficulty_level is not None:
+        level = config.non_founder_target_difficulty_level
+    difficulty = difficulty_points(level)
 
     check_result = perform_check(
         character,

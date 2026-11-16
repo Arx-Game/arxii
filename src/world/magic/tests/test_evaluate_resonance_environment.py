@@ -60,6 +60,11 @@ def _set_room_resonance_value(room_profile, resonance, value: int) -> None:
     mod.save(update_fields=["value"])
 
 
+def _expected_backfire(magnitude: int) -> int:
+    """Level 2's baseline (26) plus one tenth of a level's width (8) per magnitude point."""
+    return 26 + int(Decimal(magnitude) * Decimal("0.8") + Decimal("0.5"))
+
+
 class AlignedPairTest(ResonanceCacheIsolationMixin, TestCase):
     """ALIGNED pair → valence ALIGNED, kind AMPLIFY, direction ENVIRONMENT_DOMINANT, magnitude>0."""
 
@@ -160,9 +165,7 @@ class OpposedRejectTest(ResonanceCacheIsolationMixin, TestCase):
         # T4: interaction is the resolved AffinityInteraction; OPPOSED → backfire_difficulty>0
         self.assertIsNotNone(result.interaction)
         self.assertEqual(result.interaction.kind, AffinityInteractionKind.REJECT)
-        expected_backfire = cfg.backfire_base_difficulty + round(
-            result.magnitude * float(cfg.backfire_difficulty_per_magnitude)
-        )
+        expected_backfire = _expected_backfire(result.magnitude)
         self.assertEqual(result.backfire_difficulty, expected_backfire)
 
 
@@ -299,9 +302,7 @@ class CorruptDirectionTest(ResonanceCacheIsolationMixin, TestCase):
         # T4: CORRUPT is OPPOSED valence → backfire_difficulty > 0; interaction is resolved
         self.assertIsNotNone(result.interaction)
         self.assertEqual(result.interaction.kind, AffinityInteractionKind.CORRUPT)
-        expected_backfire = cfg.backfire_base_difficulty + round(
-            result.magnitude * float(cfg.backfire_difficulty_per_magnitude)
-        )
+        expected_backfire = _expected_backfire(result.magnitude)
         self.assertEqual(result.backfire_difficulty, expected_backfire)
 
     def test_corrupt_weak_caster_vs_strong_place_is_environment_dominant(self) -> None:
@@ -336,9 +337,7 @@ class CorruptDirectionTest(ResonanceCacheIsolationMixin, TestCase):
         self.assertGreater(result.magnitude, 0)
         # T4: CORRUPT is OPPOSED valence → backfire_difficulty > 0; interaction is resolved
         self.assertIsNotNone(result.interaction)
-        expected_backfire = cfg.backfire_base_difficulty + round(
-            result.magnitude * float(cfg.backfire_difficulty_per_magnitude)
-        )
+        expected_backfire = _expected_backfire(result.magnitude)
         self.assertEqual(result.backfire_difficulty, expected_backfire)
 
     def test_corrupt_within_balanced_band_is_balanced(self) -> None:
@@ -377,9 +376,7 @@ class CorruptDirectionTest(ResonanceCacheIsolationMixin, TestCase):
         self.assertGreater(result.magnitude, 0)
         # T4: CORRUPT is OPPOSED valence → backfire_difficulty > 0; interaction is resolved
         self.assertIsNotNone(result.interaction)
-        expected_backfire = cfg.backfire_base_difficulty + round(
-            result.magnitude * float(cfg.backfire_difficulty_per_magnitude)
-        )
+        expected_backfire = _expected_backfire(result.magnitude)
         self.assertEqual(result.backfire_difficulty, expected_backfire)
 
 
@@ -494,9 +491,7 @@ class MultiAffinityGiftTest(ResonanceCacheIsolationMixin, TestCase):
         # T4: OPPOSED REJECT → interaction is resolved; backfire_difficulty > 0
         self.assertIsNotNone(result.interaction)
         self.assertEqual(result.interaction.kind, AffinityInteractionKind.REJECT)
-        expected_backfire = cfg.backfire_base_difficulty + round(
-            result.magnitude * float(cfg.backfire_difficulty_per_magnitude)
-        )
+        expected_backfire = _expected_backfire(result.magnitude)
         self.assertEqual(result.backfire_difficulty, expected_backfire)
 
     def test_equal_severity_tiebreak_by_affinity_name(self) -> None:
@@ -771,9 +766,7 @@ class PresenceTimeTest(ResonanceCacheIsolationMixin, TestCase):
         # T4: OPPOSED → interaction is resolved; backfire_difficulty uses formula
         self.assertIsNotNone(result.interaction)
         self.assertEqual(result.interaction.kind, AffinityInteractionKind.REJECT)
-        expected_backfire = cfg.backfire_base_difficulty + round(
-            result.magnitude * float(cfg.backfire_difficulty_per_magnitude)
-        )
+        expected_backfire = _expected_backfire(result.magnitude)
         self.assertEqual(result.backfire_difficulty, expected_backfire)
 
     def test_presence_time_missing_aura_returns_inert(self) -> None:

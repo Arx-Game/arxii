@@ -18,7 +18,8 @@ lifts a check off an impossible chart (one with no Success outcome) like any oth
 
 A difference below the lowest authored chart sits at 0% of that chart's band; one at or
 above the highest authored chart uses that chart as it is. Nothing here is a tuning
-number: every value comes from the ``CheckRank`` and ``ResultChart`` rows.
+number: every value comes from the ``CheckRank`` names, the CHECK lane's level baselines
+(rank N starts at ``baseline(N)``, #5093) and the ``ResultChart`` rows.
 
 The roll itself is one d100 plus a fraction inside the face (``CheckRoll``), so the
 continuous chance of each outcome equals exactly its share of the slid chart, and the
@@ -31,6 +32,12 @@ from dataclasses import dataclass
 import math
 from typing import TYPE_CHECKING
 
+from world.checks.modifier_values import (
+    BaselineTable,
+    TierTable,
+    load_baselines,
+    load_tier_table,
+)
 from world.traits.models import CheckRank, ResultChart, ResultChartOutcome
 
 if TYPE_CHECKING:
@@ -43,18 +50,33 @@ _PERCENT = 100
 
 
 @dataclass(frozen=True)
+class RankStep:
+    """One rung of the ladder: a ``CheckRank``'s name at its baseline threshold (#5093).
+
+    ``min_points`` is derived, not stored: rank N starts at the CHECK lane's level-N
+    baseline, and rank 0 starts at 0. Above the top baseline level the ladder keeps going,
+    one level's width a rank (see ``load_ranks``).
+    """
+
+    rank: int
+    name: str
+    min_points: int
+
+
+@dataclass(frozen=True)
 class BandPosition:
     """Where a total sits: its check rank and how far it is through that rank's band.
 
     ``share`` is 0 at the rank's own threshold and approaches 1 just below the next
     rank's. At the top rank there is no next rank and the share is 0. A total below every
     rank's threshold has no rank (``rank`` None, counted as rank number 0, as the whole-rank
-    pipeline always did) and ``next_rank`` names the lowest rank.
+    pipeline always did) and ``next_rank`` names the lowest rank. A total between rank 0's
+    threshold and rank 1's is rank 0, with rank 1 next.
     """
 
     points: int
-    rank: CheckRank | None
-    next_rank: CheckRank | None
+    rank: RankStep | None
+    next_rank: RankStep | None
     share: float
 
     @property
@@ -74,21 +96,92 @@ class BandPosition:
         """For example "Expert (rank 3), 67% toward Master (rank 4)"."""
         if self.rank is None:
             if self.next_rank is not None:
-                return f"Below {self.next_rank.name} (rank {self.next_rank.rank})"
+                return f"Below {rank_label(self.next_rank)}"
             return "No rank"
-        here = f"{self.rank.name} (rank {self.rank.rank})"
+        here = rank_label(self.rank)
         if self.next_rank is None or self.percent == 0:
             return here
-        return f"{here}, {self.percent}% toward {self.next_rank.name} (rank {self.next_rank.rank})"
+        return f"{here}, {self.percent}% toward {rank_label(self.next_rank)}"
 
 
-def load_ranks() -> list[CheckRank]:
-    """Every ``CheckRank`` row, lowest first: one query, shared by both sides of a check."""
-    return list(CheckRank.objects.order_by("min_points"))
+def rank_label(step: RankStep) -> str:
+    """A rank's name with its number, once: "Expert (rank 3)", but "Rank 17" for an unnamed one."""
+    if step.name == f"Rank {step.rank}":
+        return step.name
+    return f"{step.name} (rank {step.rank})"
 
 
-def band_position(points: int, ranks: Sequence[CheckRank] | None = None) -> BandPosition:
-    """The band position of ``points`` against the ``CheckRank`` rows."""
+# A level's width is the step between two baseline rows, so extending past the top needs two.
+_MIN_ROWS_FOR_WIDTH = 2
+
+
+def _rank_threshold(baselines: BaselineTable, rank: int) -> int:
+    """Where ``rank`` starts: its level baseline, then evenly spaced past the top level.
+
+    Rank 0 starts at 0. A rank up to the top baseline level starts at that level's baseline.
+    A higher rank starts one level's width (the top level's) further on for each rank above
+    the top level, so the ladder stays evenly spaced all the way up (#5093).
+    """
+    if rank <= 0:
+        return 0
+    top_level = baselines.levels[-1] if baselines.levels else 0
+    if rank <= top_level or len(baselines.levels) < _MIN_ROWS_FOR_WIDTH:
+        return baselines.baseline(rank)
+    return baselines.baseline(top_level) + (rank - top_level) * baselines.width(top_level)
+
+
+def _ladder_top_rank(baselines: BaselineTable, tiers: TierTable | None, authored_top: int) -> int:
+    """The highest rank the ladder must reach: past the top level far enough to hold its tier.
+
+    The top level's strength is its baseline plus its tier bonus (``LevelTier``), which sits
+    ``ceil(bonus / width)`` ranks above the top level's own rank. With no tier bonus, or no
+    width to measure it in, the ladder ends at its highest authored rank.
+    """
+    if len(baselines.levels) < _MIN_ROWS_FOR_WIDTH:
+        return authored_top
+    top_level = baselines.levels[-1]
+    bonus = (load_tier_table() if tiers is None else tiers).bonus(top_level)
+    if bonus <= 0:
+        return authored_top
+    width = baselines.width(top_level)
+    if width <= 0:
+        return authored_top
+    return max(authored_top, top_level + -(-bonus // width))
+
+
+def load_ranks(
+    baselines: BaselineTable | None = None, tiers: TierTable | None = None
+) -> list[RankStep]:
+    """The ladder, lowest first, shared by both sides of a check.
+
+    Each ``CheckRank`` row joined to the CHECK lane's baselines: rank N's threshold is
+    ``baseline(N)``, and rank 0's is 0. Tier jumps (``LevelTier``) put a character several
+    ranks above where her level alone would, so the ladder runs past the top baseline level,
+    evenly spaced at that level's width, until it holds the top level's baseline plus its tier
+    bonus (#5093). A rank above the highest ``CheckRank`` row has no authored name and reads
+    "Rank N". Three queries; one when no ranks are authored. A caller that already loaded the
+    baseline and tier rows (the tuning dashboard's Scaling settings panel) passes them so they
+    load once. Raises ``ModifierConfigError`` when ranks exist but no baseline row sits at or
+    below one.
+    """
+    rows = list(CheckRank.objects.order_by("rank").values_list("rank", "name"))
+    if not rows:
+        return []
+    baselines = load_baselines() if baselines is None else baselines
+    steps = [
+        RankStep(rank=rank, name=name, min_points=_rank_threshold(baselines, rank))
+        for rank, name in rows
+    ]
+    authored_top = rows[-1][0]
+    steps.extend(
+        RankStep(rank=rank, name=f"Rank {rank}", min_points=_rank_threshold(baselines, rank))
+        for rank in range(authored_top + 1, _ladder_top_rank(baselines, tiers, authored_top) + 1)
+    )
+    return steps
+
+
+def band_position(points: int, ranks: Sequence[RankStep] | None = None) -> BandPosition:
+    """The band position of ``points`` against the ladder."""
     ranks = load_ranks() if ranks is None else ranks
     if not ranks:
         return BandPosition(points=points, rank=None, next_rank=None, share=0.0)
@@ -272,7 +365,7 @@ def resolve_standing(
     roller_points: int,
     target_points: int,
     *,
-    ranks: Sequence[CheckRank] | None = None,
+    ranks: Sequence[RankStep] | None = None,
 ) -> CheckStanding:
     """Band positions, the slide and the chart for one check, without rolling.
 

@@ -79,7 +79,9 @@ class _AnAnimaRitual(JourneyCase):
             author_account=character.db_account,
         )
         RitualCheckConfigFactory(
-            ritual=ritual, check_type=CheckTypeFactory(name=f"{name} Check"), target_difficulty=0
+            ritual=ritual,
+            check_type=CheckTypeFactory(name=f"{name} Check"),
+            target_difficulty_level=0,
         )
         return ritual
 

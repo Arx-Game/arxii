@@ -125,8 +125,9 @@ class SlidChartFacesTests(TestCase):
         from world.traits.models import CheckOutcome, ResultChart
 
         ResultChart.clear_cache()
-        # Competent (rank 2), 48% toward Expert (rank 3), against Expert: chart -1 slid.
-        standing = resolve_standing(37, 50)
+        # Rank 2 starts at 26 points and rank 3 at 34: 30 points is half way from rank 2 to
+        # rank 3, against 34 points (rank 3): chart -1 slid half way toward chart 0.
+        standing = resolve_standing(30, 34)
         success = CheckOutcome.objects.get(name="Success")
         result = CheckResult(
             check_type=None,
@@ -137,15 +138,15 @@ class SlidChartFacesTests(TestCase):
             rank_difference=standing.chart_difference,
             trait_points=0,
             aspect_bonus=0,
-            total_points=37,
+            total_points=30,
             standing=standing,
         )
 
         faces, selected = check_outcome_faces(result)
 
         by_label = {f.label: f.weight for f in faces}
-        # Success 22% sliding 48% toward 40%: 30.64%, in tenths of a face.
-        assert by_label["Success"] == 306
+        # Success 22% sliding half way toward 40%: 31%, in tenths of a face.
+        assert by_label["Success"] == 310
         assert "Critical Success" not in by_label
         assert selected is not None
         assert selected.label == "Success"

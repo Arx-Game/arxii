@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from django.test import SimpleTestCase, TestCase, override_settings
 
+from world.checks.test_helpers import SeededLevelLadderMixin
 from world.locations.constants import HolderType, LocationParentType
 from world.locations.factories import LocationOwnershipFactory
 from world.magic.constants import GainSource, SanctumSlotKind, TargetKind
@@ -576,10 +577,10 @@ def _mock_check_result(success_level: int = 1):
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
-class PerformDissolutionDifficultyTests(TestCase):
+class PerformDissolutionDifficultyTests(SeededLevelLadderMixin, TestCase):
     """Dissolution uses authored RitualCheckConfig difficulty."""
 
-    def test_founder_rolls_difficulty_20(self) -> None:
+    def test_founder_rolls_level_one(self) -> None:
         from unittest.mock import patch
 
         sanctum, leader = _build_dissolution_sanctum(leader_is_founder=True)
@@ -590,9 +591,9 @@ class PerformDissolutionDifficultyTests(TestCase):
             mock_check.return_value = _mock_check_result(success_level=1)
             perform_dissolution(sanctum, leader)
             _args, kwargs = mock_check.call_args
-            self.assertEqual(kwargs["target_difficulty"], 20)
+            self.assertEqual(kwargs["target_difficulty"], 18)  # level 1's baseline
 
-    def test_non_founder_rolls_difficulty_40(self) -> None:
+    def test_non_founder_rolls_level_two(self) -> None:
         from unittest.mock import patch
 
         sanctum, leader = _build_dissolution_sanctum(leader_is_founder=False)
@@ -601,7 +602,7 @@ class PerformDissolutionDifficultyTests(TestCase):
             mock_check.return_value = _mock_check_result(success_level=1)
             perform_dissolution(sanctum, leader)
             _args, kwargs = mock_check.call_args
-            self.assertEqual(kwargs["target_difficulty"], 40)
+            self.assertEqual(kwargs["target_difficulty"], 26)  # level 2's baseline
 
     def test_missing_config_raises_ritual_check_config_missing(self) -> None:
         from world.magic.models import RitualCheckConfig

@@ -81,7 +81,7 @@ class TestCapabilityFragmentView(TestCase):
     def _post_data(self, **overrides: Any) -> dict[str, Any]:
         data: dict[str, Any] = {
             "level": 10,
-            "thread_level": 3,
+            "thread_level": 30,
             "roller_points": 25,
             "target_difficulty": 25,
             "roll_modifier": 0,
@@ -118,7 +118,7 @@ class TestCapabilityFragmentView(TestCase):
         called_params = mock_build.call_args.args[0]
         self.assertIsInstance(called_params, CapabilityPowerAnalyticsParams)
         self.assertEqual(called_params.level, 10)
-        self.assertEqual(called_params.thread_level, 3)
+        self.assertEqual(called_params.thread_level, 30)
 
         body = resp.content.decode()
         self.assertIn("Distinctive Grip Strength", body)
@@ -152,6 +152,14 @@ class TestCapabilityFragmentView(TestCase):
         called_params = mock_build.call_args.args[0]
         self.assertEqual(called_params.level, 30)
         self.assertEqual(called_params.thread_level, 0)
+
+    @patch(_PATCH_TARGET)
+    def test_post_thread_level_clamps_to_the_highest_thread_cap(self, mock_build: Any) -> None:
+        """A thread caps at path level x 10, so path level 30 allows 300 and no more."""
+        mock_build.return_value = _canned_panel()
+        self.client.force_login(self.super)
+        self.client.post(reverse("admin_tuning_capabilities"), self._post_data(thread_level=999))
+        self.assertEqual(mock_build.call_args.args[0].thread_level, 300)
 
     @patch(_PATCH_TARGET)
     def test_zero_bucket_and_provenance_summary_render(self, mock_build: Any) -> None:

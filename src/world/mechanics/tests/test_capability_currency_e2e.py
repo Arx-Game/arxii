@@ -123,7 +123,7 @@ class TechniqueToWorldToCurrencyE2ETests(TestCase):
 
         # Ignite: Application/ChallengeTemplate/Approach wired to the technique-sourced
         # capability + the template-materialized flammable property.
-        cls.template = ChallengeTemplateFactory(name="Ignite Torch Capstone", severity=3)
+        cls.template = ChallengeTemplateFactory(name="Ignite Torch Capstone", severity_level=0)
         cls.application = ApplicationFactory(
             name="Ignite Capstone",
             capability=cls.capability,

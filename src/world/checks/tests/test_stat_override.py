@@ -20,10 +20,9 @@ from world.checks.factories import (
     CheckTypeTraitFactory,
 )
 from world.checks.services import compute_check_rating, perform_check
-from world.traits.factories import CheckSystemSetupFactory
+from world.traits.factories import CheckSystemSetupFactory, ensure_check_rank
 from world.traits.models import (
     CharacterTraitValue,
-    CheckRank,
     PointConversionRange,
     ResultChart,
     Trait,
@@ -51,9 +50,7 @@ class StatOverrideTests(TestCase):
             (2, 25, "SO2"),
             (3, 50, "SO3"),
         ]:
-            CheckRank.objects.get_or_create(
-                rank=rank_val, defaults={"min_points": min_pts, "name": name}
-            )
+            ensure_check_rank(rank_val, min_pts, name)
 
         cls.character = CharacterSheetFactory().character
         cls.strength, _ = Trait.objects.get_or_create(

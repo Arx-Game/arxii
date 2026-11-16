@@ -11,6 +11,7 @@ from actions.factories import ActionTemplateFactory
 from actions.types import PendingActionResolution, StepResult
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.test_helpers import SeededLevelLadderMixin
 from world.consent.factories import SocialConsentCategoryFactory
 from world.consent.models import SocialConsentBlacklist
 from world.progression.factories import seed_kudos_difficulty_weights
@@ -498,6 +499,7 @@ class TestCreateActionRequestSnapshotFields(TestCase):
     def setUpTestData(cls) -> None:
         from world.magic.constants import RitualExecutionKind
         from world.magic.factories import RitualCheckConfigFactory, RitualFactory
+        from world.traits.factories import ensure_level_ladder
 
         cls.scene = SceneFactory()
         cls.initiator = PersonaFactory()
@@ -507,7 +509,8 @@ class TestCreateActionRequestSnapshotFields(TestCase):
             service_function_path="",
             flow=None,
         )
-        cls.config = RitualCheckConfigFactory(ritual=cls.ritual)
+        ensure_level_ladder()
+        cls.config = RitualCheckConfigFactory(ritual=cls.ritual, target_difficulty_level=2)
 
     def test_create_action_request_with_ritual_id_populates_snapshot(self) -> None:
         """When ritual_id is provided, all snapshot fields are populated from the ritual."""
@@ -525,7 +528,8 @@ class TestCreateActionRequestSnapshotFields(TestCase):
         assert request.snapshot_specialization == self.config.specialization
         assert request.snapshot_resonance == self.config.resonance
         assert request.snapshot_check_type == self.config.check_type
-        assert request.snapshot_target_difficulty == self.config.target_difficulty
+        # The snapshot keeps the points of the authored level: level 2's baseline.
+        assert request.snapshot_target_difficulty == 26
 
     def test_create_action_request_without_ritual_id_leaves_snapshot_null(self) -> None:
         """Without ritual_id, all snapshot fields remain None."""
@@ -1318,7 +1322,7 @@ class TestDefenderSetsPlausibilityBandAtConsent(TestCase):
         self.assertEqual(row.resist_effort_level, "low")
 
 
-class TestActiveResistanceRaisesDifficultyAndChargesFatigue(TestCase):
+class TestActiveResistanceRaisesDifficultyAndChargesFatigue(SeededLevelLadderMixin, TestCase):
     """Task 8 (C3): when a defender spends resist-effort, difficulty rises by the
     Composure increment AND the defender is charged social fatigue.
 
@@ -1328,6 +1332,7 @@ class TestActiveResistanceRaisesDifficultyAndChargesFatigue(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        super().setUpTestData()
         from world.checks.factories import create_resistance_check_types
         from world.traits.models import (
             CharacterTraitValue,

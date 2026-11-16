@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from world.character_sheets.models import CharacterSheet
+from world.checks.constants import ModifierLane
+from world.checks.modifier_values import level_baseline
 from world.magic.constants import AcquisitionOrigin, GiftKind, TargetKind
 from world.magic.exceptions import UltimateNotLearnable, XPInsufficient
 from world.magic.models import (
@@ -217,12 +219,14 @@ def _gift_thread_depth(sheet: CharacterSheet, gift: Gift) -> int:
 def get_technique_cap_for_gift(sheet: CharacterSheet, gift: Gift) -> int:
     """Max techniques a character can learn for ``gift`` at current thread level.
 
-    Returns ``config.techniques_per_thread_level × depth``. A character
-    with no GIFT thread (gift not yet acquired) has depth 0 → cap 0.
+    Returns the TECHNIQUES_PER_GIFT lane's baseline at the gift thread's depth (#5093; the
+    seeded rows are 3 per depth). A character with no GIFT thread (gift not yet acquired)
+    has depth 0 → cap 0.
     """
-    config = get_gift_acquisition_config()
     depth = _gift_thread_depth(sheet, gift)
-    return config.techniques_per_thread_level * depth
+    if depth < 1:
+        return 0
+    return level_baseline(depth, ModifierLane.TECHNIQUES_PER_GIFT)
 
 
 # ---------------------------------------------------------------------------

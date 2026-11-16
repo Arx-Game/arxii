@@ -154,31 +154,26 @@ def harm_pressure_points(damage: int, max_health: int) -> int:
 
 
 def _caster_level_opposition_points(instance: ConditionInstance, check_type: CheckType) -> int:
-    """The hold's own caster's level opposing an attempt to break it (#4091 fix round 2).
+    """The hold's own caster, as an obstacle, opposing an attempt to break it (#4091, #5093).
 
     Without this, the break difficulty only counted the TARGET's level (via
     resistance) and never the CASTER's -- one-sided, so a high-enough-level target
     zeroed the difficulty out regardless of how strong a hold its own (possibly
-    low-level) charmer cast. Reuses the identical pattern
-    ``attempt_break_free`` (``world/conditions/services.py``) already uses for
-    exactly this term -- ``level_opposition``/``get_character_path_level`` verbatim,
-    never a parallel formula.
+    low-level) charmer cast. Counts the caster as her full check total
+    (``compute_obstacle_rating``), the same term ``attempt_break_free``
+    (``world/conditions/services.py``) uses, never a parallel formula.
 
     0 when the hold has no ``source_character`` (a REAL case: the charmer left the
     game or was deleted, not a defensive guard) or when that character has no
-    ``CharacterSheet`` (sheetless) -- deliberately NOT the level-1 floor
-    ``get_character_path_level`` would otherwise return for an unresolvable
-    character, since an unknown/gone caster contributes no real opposition.
+    ``CharacterSheet`` (sheetless) -- an unknown/gone caster contributes no real
+    opposition.
     """
     caster = instance.source_character
     if caster is None or caster.character_sheet is None:  # type: ignore[attr-defined]
         return 0
-    from world.checks.services import level_opposition  # noqa: PLC0415
-    from world.progression.services.skill_development import (  # noqa: PLC0415
-        get_character_path_level,
-    )
+    from world.checks.services import compute_obstacle_rating  # noqa: PLC0415
 
-    return level_opposition(check_type, level=get_character_path_level(caster), character=caster)
+    return compute_obstacle_rating(caster, check_type)
 
 
 def attempt_allegiance_break(

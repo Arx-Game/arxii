@@ -113,18 +113,18 @@ _STAT_CATEGORIES: dict[str, str] = {
     "stability": "mental",
 }
 
-# (ritual_name, check_type_name, target_difficulty, non_founder_target_difficulty)
+# (ritual_name, check_type_name, target_difficulty_level, non_founder_target_difficulty_level)
 _RITUAL_CHECK_CONFIGS = [
-    (HOMECOMING_RITUAL_NAME, SANCTUM_CONSECRATION_CHECK_TYPE_NAME, 10, None),
-    (PURGING_RITUAL_NAME, SANCTUM_CONSECRATION_CHECK_TYPE_NAME, 15, None),
-    (SANCTIFICATION_PERSONAL_RITUAL_NAME, SANCTUM_CONSECRATION_CHECK_TYPE_NAME, 12, None),
+    (HOMECOMING_RITUAL_NAME, SANCTUM_CONSECRATION_CHECK_TYPE_NAME, 1, None),
+    (PURGING_RITUAL_NAME, SANCTUM_CONSECRATION_CHECK_TYPE_NAME, 1, None),
+    (SANCTIFICATION_PERSONAL_RITUAL_NAME, SANCTUM_CONSECRATION_CHECK_TYPE_NAME, 1, None),
     (
         SANCTIFICATION_COVENANT_RITUAL_NAME,
         SANCTUM_CONSECRATION_CHECK_TYPE_NAME,
-        12,
+        1,
         None,
     ),
-    (DISSOLUTION_RITUAL_NAME, SANCTUM_DISSOLUTION_CHECK_TYPE_NAME, 20, 40),
+    (DISSOLUTION_RITUAL_NAME, SANCTUM_DISSOLUTION_CHECK_TYPE_NAME, 1, 2),
 ]
 
 
@@ -328,8 +328,8 @@ def ensure_ritual_check_configs(
                 "stat": willpower,
                 "skill": skill,
                 "check_type": check_type,
-                "target_difficulty": difficulty,
-                "non_founder_target_difficulty": non_founder,
+                "target_difficulty_level": difficulty,
+                "non_founder_target_difficulty_level": non_founder,
             },
         )
         configs[ritual_name] = config

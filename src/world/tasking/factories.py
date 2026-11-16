@@ -20,7 +20,7 @@ class TaskTemplateFactory(DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Task Template {n}")
     description = "PLACEHOLDER task template."
     check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
-    check_difficulty = 0
+    check_difficulty_level = 0
     duration = timedelta(days=1)
     target_kind = TaskTargetKind.NONE
 

@@ -290,7 +290,7 @@ class ItemTemplateAdmin(ItemTemplateAdminBase):
                     "max_charges",
                     "on_use_pool",
                     "on_use_check_type",
-                    "on_use_difficulty",
+                    "on_use_difficulty_level",
                     "on_use_target_kind",
                     "requires_attunement",
                 ],

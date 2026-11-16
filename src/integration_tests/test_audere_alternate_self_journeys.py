@@ -385,7 +385,7 @@ class _ATalkedDownSelf(_AudereSelfJourney):
             category=behavior,
             break_free_mode=BreakFreeMode.SELF_INITIATED,
             break_free_check_type=CheckTypeFactory(),
-            break_free_difficulty=10,
+            break_free_difficulty_tenths=20,
         )
         self.alt = self._ashen(
             revert_kind=AlternateSelfRevertKind.TALKED_DOWN, emergence_condition=self.fury

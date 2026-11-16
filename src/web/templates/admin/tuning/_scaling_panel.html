@@ -1,0 +1,166 @@
+<h2>Scaling settings</h2>
+<p class="scaling-lede">Every number that sets how strong a level is. Each row links to the admin page that edits it.</p>
+
+<div class="scaling-section">
+  <h3>How strong each level is on a roll</h3>
+  <div class="scaling-scroll">
+    <table class="tuning-table scaling-table">
+      <thead>
+        <tr>
+          <th>Path change at level</th>
+          {% for level in panel.levels %}<th class="scaling-num">{{ level }}</th>{% endfor %}
+          <th>Edit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in panel.strength %}
+        <tr>
+          <td>{{ row.label }}</td>
+          {% for cell in row.cells %}
+          <td class="scaling-num{% if cell.highlighted %} scaling-jump{% endif %}">{{ cell.text }}</td>
+          {% endfor %}
+          <td>{% if row.edit %}<a href="{{ row.edit.url }}">{{ row.edit.label }}</a>{% else %}derived{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<p class="scaling-example"><strong>How the rows play out:</strong> {{ panel.example.text }}</p>
+
+<div class="scaling-section">
+  <h3>Settings</h3>
+  <div class="scaling-scroll">
+    <table class="tuning-table scaling-table">
+      <thead>
+        <tr><th>Setting</th><th>Value</th><th>What it changes in play</th><th>Edit</th></tr>
+      </thead>
+      <tbody>
+        {% for row in panel.settings %}
+        <tr>
+          <td>{{ row.name }}</td>
+          <td class="scaling-value">{{ row.value }}</td>
+          <td>{{ row.effect }}</td>
+          <td><a href="{{ row.edit.url }}">{{ row.edit.label }}</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="scaling-section">
+  <h3>Development cost per step</h3>
+  {% if panel.dev_cost.rows %}
+  <div class="scaling-scroll">
+    <table class="tuning-table scaling-table">
+      <thead>
+        <tr>
+          <th>Value band</th>
+          {% for label in panel.dev_cost.band_labels %}<th class="scaling-num">{{ label }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in panel.dev_cost.rows %}
+        <tr>
+          <td>{{ row.label }}</td>
+          {% for cost in row.costs %}<td class="scaling-num">{{ cost }}</td>{% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="scaling-note">Not set: there is no development cost row yet. <a href="{{ panel.dev_cost.edit.url }}">{{ panel.dev_cost.edit.label }}</a></p>
+  {% endif %}
+</div>
+
+<div class="scaling-section">
+  <h3>Pools and caps</h3>
+  <div class="scaling-scroll">
+    <table class="tuning-table scaling-table">
+      <thead>
+        <tr>
+          <th>Pool or cap</th>
+          <th>Grows with</th>
+          {% for level in panel.levels %}<th class="scaling-num">{{ level }}</th>{% endfor %}
+          <th>Edit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in panel.pools %}
+        <tr>
+          <td>{{ row.label }}</td>
+          <td>{{ row.grows_with }}</td>
+          {% if row.has_rows %}
+          {% for cell in row.cells %}<td class="scaling-num">{{ cell.text }}</td>{% endfor %}
+          {% else %}
+          <td class="scaling-num scaling-note" colspan="{{ panel.levels|length }}">{{ row.empty_note }}</td>
+          {% endif %}
+          <td><a href="{{ row.edit.url }}">{{ row.edit.label }}</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="scaling-section">
+  <h3>Buff sizes in points</h3>
+  {% with table=panel.rolls %}
+  <div class="scaling-scroll">
+    <table class="tuning-table scaling-table">
+      <thead>
+        <tr>
+          <th>What the buff adds to</th>
+          {% for name in table.size_names %}<th class="scaling-num">{{ name }}</th>{% endfor %}
+          <th>Edit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if table.has_sizes %}
+        {% for row in table.rows %}
+        <tr>
+          <td>Rolls, {{ row.label|lower }}</td>
+          {% for points in row.points %}<td class="scaling-num">{% if points is None %}not set{% else %}{{ points }}{% endif %}</td>{% endfor %}
+          <td><a href="{{ table.edit.url }}">{{ table.edit.label }}</a></td>
+        </tr>
+        {% endfor %}
+        {% else %}
+        <tr>
+          <td>Rolls</td>
+          <td class="scaling-note" colspan="{{ table.size_names|length }}">no size rows yet</td>
+          <td><a href="{{ table.edit.url }}">{{ table.edit.label }}</a></td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+  {% endwith %}
+  {% for table in panel.buff_tables %}
+  <p class="scaling-unit"><strong>{{ table.title }}</strong>, in {{ table.unit }}. <a href="{{ table.edit.url }}">{{ table.edit.label }}</a></p>
+  {% if table.has_sizes %}
+  <div class="scaling-scroll">
+    <table class="tuning-table scaling-table">
+      <thead>
+        <tr>
+          <th>At level</th>
+          {% for name in table.size_names %}<th class="scaling-num">{{ name }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in table.rows %}
+        <tr>
+          <td>{{ row.label }}</td>
+          {% for points in row.points %}<td class="scaling-num">{% if points is None %}not set{% else %}{{ points }}{% endif %}</td>{% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="scaling-note">No size rows yet for {{ table.title|lower }}.</p>
+  {% endif %}
+  {% endfor %}
+</div>

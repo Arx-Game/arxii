@@ -66,8 +66,9 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
    check's STAT row. A trait on the check type AND in a term, or in two terms, adds its points
    once per occurrence. A caller drops a term whose skill is inactive before passing it.
 2. Aspect bonus from PathAspect weights * CheckTypeAspect weights * character level
-3. Level points (#2707, ADR-0166): `LEVEL_POINTS_PER_LEVEL * character level`, on EVERY check —
-   a guaranteed floor, additive with (not a replacement for) the aspect bonus above, which is
+3. Level points (#2707, ADR-0166, #5093): `level_points(level)` = `CheckScaleConfig.level_share`
+   x the CHECK baseline at the character's level, on EVERY check —
+   a guaranteed term, additive with (not a replacement for) the aspect bonus above, which is
    zero unless the CheckType has an authored CheckTypeAspect matching the character's Path.
    `_compute_check_breakdown` reads the level from `world.progression.services
    .skill_development.get_character_path_level` — the single source both this term and the
@@ -168,9 +169,16 @@ exclusive** — a call site uses one or the other, never both:
   defender carries nothing; a staff roll modifier is not counted (it shifts dice, and
   there is no roll here).
 - `level_opposition(check_type, *, level, character=None) -> int` — the PASSIVE half:
-  `LEVEL_POINTS_PER_LEVEL * level` always, plus (when `character` is given) the acting
-  check's aspects scored against the DEFENDER's Path. `character=None` (an ephemeral
-  NPC with no sheet) contributes level alone.
+  the level's CHECK baseline (#5093), plus (when `character` is given) the acting check's
+  aspects scored against the DEFENDER's Path (each match a share of one level's width) and
+  the defender's active condition modifiers at their derived value. `character=None` (an
+  ephemeral NPC with no sheet) contributes the baseline alone.
+- `compute_obstacle_rating(character, check_type, *, extra_modifiers=0, level_override=None,
+  stat_override=None) -> int` — a PLAYER character (a sheet for whom
+  `roster.services.activity.is_player_character` holds) who is the obstacle counts as her full
+  check total (`compute_check_rating` plus carried modifiers counted once); every other
+  obstacle, sheeted NPC or not, counts as its level's baseline through `level_opposition`. `compute_resist_increment` is
+  this on Composure plus the effort modifier.
 
 Combining both at one call site would double-count the defender's level — see ADR-0166
 for the full rationale, and its recorded clash exception (`world/combat/clash.py:310`

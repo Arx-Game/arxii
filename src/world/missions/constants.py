@@ -138,8 +138,9 @@ class OptionKind(models.TextChoices):
     EncounterOutcomeMapping assigns to (encounter outcome, encounter_risk_level)
     (#3565).
 
-    CONTEST (#3568): a CHECK whose difficulty adds the opposition's passive
-    level term (`level_opposition`) for `opposition_sheet` at
+    CONTEST (#3568): a CHECK whose difficulty adds the opposition's
+    level baseline (`compute_obstacle_rating`: an NPC sheet is a level and never rolls, ADR-0265;
+    a player character's sheet counts as her full total) for `opposition_sheet` at
     `effective_combat_level`; tiers and routes are a CHECK's.
     """
 

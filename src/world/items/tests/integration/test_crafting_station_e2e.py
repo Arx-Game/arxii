@@ -30,7 +30,7 @@ class CraftingStationEconomyE2ETests(TestCase):
     """A player installs a Lab, wears it out crafting, gets blocked, then repairs it."""
 
     def setUp(self) -> None:
-        self.recipe = wire_enchanting_crafting(base_difficulty=0)
+        self.recipe = wire_enchanting_crafting(base_difficulty_level=0)
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
         self.character = self.sheet.character

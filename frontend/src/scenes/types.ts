@@ -254,7 +254,7 @@ export interface GMStoryRailProtectedSubject {
 export interface GMStoryRailCluePlacement {
   id: number;
   clue_name: string;
-  detect_difficulty: number;
+  detect_difficulty_level: number;
   is_active: boolean;
 }
 

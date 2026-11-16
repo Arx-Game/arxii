@@ -29,7 +29,7 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING
 
-from world.checks.services import level_opposition, perform_check_with_modifiers
+from world.checks.services import compute_obstacle_rating, perform_check_with_modifiers
 from world.magic.constants import (
     CAST_DETECTION_ATTRIBUTION_LEVEL,
     DETECT_CAST_CHECK_NAME,
@@ -193,7 +193,7 @@ def resolve_cast_audience(
       byte-identical to pre-#2710 behaviour.
 
     Otherwise each co-located character rolls the detection check against
-    ``cast_concealment`` plus the caster's level opposition (ADR-0166) and lands in
+    ``cast_concealment`` plus the caster's full check total (#5093, ADR-0166) and lands in
     ``full`` (``success_level >= CAST_DETECTION_ATTRIBUTION_LEVEL``), ``vague``
     (exactly 1), or ``effect_only``. The caster is always in ``full``.
     """
@@ -247,15 +247,9 @@ def _roll_cast_audience(
             effect_only.extend(_observer_personas(caster))
         return CastAudience(concealed=True, full=full, vague=vague, effect_only=effect_only)
 
-    from world.progression.services.skill_development import (  # noqa: PLC0415
-        get_character_path_level,
-    )
-
-    difficulty = concealment + level_opposition(
-        check_type,
-        level=get_character_path_level(caster),
-        character=caster,
-    )
+    # The caster is the obstacle: her full check total on the detection check, not her level
+    # (#5093).
+    difficulty = concealment + compute_obstacle_rating(caster, check_type)
 
     # Per-observer query-in-a-loop, by the letter of the standing rule (django_notes.md)
     # -- but each observer needs their OWN independent roll, so this can't collapse into

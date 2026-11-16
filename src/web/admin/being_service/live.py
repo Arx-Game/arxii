@@ -633,7 +633,7 @@ def pact_offer_context(offer: PactOffer) -> PactOfferContext:
             name=stage.name,
             threshold=stage.severity_threshold,
             resist=(
-                f"{stage.resist_check_type.name} at {stage.resist_difficulty}"
+                f"{stage.resist_check_type.name} at level {stage.resist_difficulty_level}"
                 if index and stage.resist_check_type_id is not None
                 else "none"
             ),

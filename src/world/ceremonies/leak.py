@@ -13,6 +13,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from world.ceremonies.models import Ceremony, get_ceremony_config
+from world.checks.services import difficulty_points
 from world.clues.constants import ClueResolution, ClueTargetKind
 from world.clues.models import Clue
 
@@ -98,7 +99,7 @@ def run_twisted_rite_leak(*, ceremony: Ceremony, officiant_sheet: "CharacterShee
             observer_sheet=observer_sheet,
             officiant_sheet=officiant_sheet,
             check_type=check_type,
-            difficulty=config.leak_detect_difficulty,
+            difficulty=difficulty_points(config.leak_detect_difficulty_level),
             worship_secret=worship_secret,
             sensing_terms=sensing_terms,
         ):

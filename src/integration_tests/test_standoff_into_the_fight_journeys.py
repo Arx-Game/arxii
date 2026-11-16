@@ -39,10 +39,10 @@ from world.standoffs.constants import StandoffGroupState
 from world.standoffs.factories import CreatureDriveFactory, StandoffApproachFactory
 from world.standoffs.models import StandoffConfig
 from world.standoffs.services.state import open_standoff
-from world.traits.factories import CheckOutcomeFactory
+from world.traits.factories import CheckOutcomeFactory, ensure_level_ladder
 
 SPY = "world.standoffs.services.verbs.perform_check"
-PERK_BONUS = 10  # magnitude_tenths 10 at thread level 10
+PERK_BONUS = 8  # magnitude_tenths 10 = 1.0 x one level's width (8) at the vow thread's rung
 
 
 class StandoffJourneyBase(JourneyCase):
@@ -129,6 +129,7 @@ class NegotiationPerkReachesTheRead(StandoffJourneyBase):
 
     def setUp(self) -> None:
         super().setUp()
+        ensure_level_ladder()
         role = CovenantRoleFactory()
         CharacterCovenantRoleFactory(
             character_sheet=self.sheet, covenant=CovenantFactory(), covenant_role=role, engaged=True
@@ -141,7 +142,7 @@ class NegotiationPerkReachesTheRead(StandoffJourneyBase):
             check_type=None,
         )
         VowSituationalPerkSituationFactory(perk=perk, situation=Situation.DURING_NEGOTIATION)
-        ThreadFactory(owner=self.sheet, level=10)
+        ThreadFactory(owner=self.sheet, level=100, as_covenant_role_thread=role)
 
     def _read_total(self) -> tuple[int, int]:
         """The read's rolled total, and the total the same roll has with no situation."""

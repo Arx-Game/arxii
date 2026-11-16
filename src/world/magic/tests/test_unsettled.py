@@ -14,6 +14,7 @@ from evennia.utils.test_resources import EvenniaTestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
+from world.checks.test_helpers import SeededLevelLadderMixin
 from world.conditions.factories import ConditionTemplateFactory
 from world.magic.constants import GainSource
 from world.magic.factories import (
@@ -224,7 +225,7 @@ class MireShareTests(_UnsettledCase):
         self.assertEqual(drift_for(sineater).steps_past, 0)
 
 
-class FocusCheckTests(_UnsettledCase):
+class FocusCheckTests(SeededLevelLadderMixin, _UnsettledCase):
     def setUp(self) -> None:
         super().setUp()
         cfg = get_drift_config()
@@ -261,8 +262,9 @@ class FocusCheckTests(_UnsettledCase):
             outcome = check_resonance_focus(self.character, Mock())
 
         self.assertEqual(outcome.steps, 3)
-        # Difficulty: 10 base + 3 steps of 2.
-        self.assertEqual(roll.call_args.args[2], 16)
+        # Difficulty: level 1 (18 points) plus 3 steps of 4 tenths of a level's 8-point width
+        # (12 tenths is 9.6 points, rounded half up to 10).
+        self.assertEqual(roll.call_args.args[2], 28)
         told = " ".join(call.args[0] for call in msg.call_args_list)
         self.assertIn("Your Unsettled Dread has grown strong enough to make you unsettled", told)
         self.assertNotIn("drift", told)

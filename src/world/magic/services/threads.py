@@ -51,6 +51,7 @@ from world.magic.models import (
 from world.magic.services.thread_rows import write_resonance_rows
 from world.magic.types import ThreadSurvivabilitySaves, ThreadXPLockProspect
 from world.magic.types.pull import pull_payer
+from world.progression.services.dev_cost import dp_cost_for_step
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -58,7 +59,9 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.checks.modifier_values import BaselineTable
     from world.conditions.models import DamageType
+    from world.covenants.models import CovenantRole
     from world.magic.models import (
         Resonance as ResonanceModel,
         ThreadWeavingTeachingOffer,
@@ -1005,7 +1008,7 @@ def near_xp_lock_threads(
             continue
         if (t.pk, next_boundary) in unlocked_pairs:
             continue
-        dp_needed = sum(max((n - 9) * 100, 1) for n in range(t.level, next_boundary))
+        dp_needed = sum(dp_cost_for_step(n) for n in range(t.level, next_boundary))
         dp_to_boundary = dp_needed - t.developed_points
         if dp_to_boundary <= within:
             out.append(
@@ -1223,15 +1226,43 @@ def survivability_baseline(character: ObjectDB, vital_target: str) -> int:
     return _soft_cap(scaled, tuning.cap, tuning.half_saturation)
 
 
-def total_thread_level_across_all_kinds(sheet: CharacterSheet) -> int:
-    """Sum raw ``thread.level`` across ALL of a character's non-retired threads (#2529).
+def vow_thread_level(sheet: CharacterSheet, role: CovenantRole) -> int:
+    """The stored level of ``sheet``'s live COVENANT_ROLE thread on ``role``'s anchor (#5093).
 
-    Formula B for the covenant-role blend baseline: total magical investment
-    across every thread kind (TECHNIQUE, GIFT, COVENANT_ROLE, SANCTUM, ...),
-    reading the cached ``character.threads`` handler. Raw levels, NOT the
-    ``thread_level_multiplier`` bucketing ``survivability_baseline`` uses.
+    The vow thread is the one thread vow perks and vow power read; a character's other
+    threads add nothing to them (ruling 2026-11-15). Threads anchor on the anchor role, so a
+    sub-role reads its parent's thread. 0 when she holds no live thread there, so a holder
+    with no vow thread contributes nothing and never raises. Reads the cached
+    ``character.threads`` handler, so it costs no query once the handler is warm.
     """
-    return sum(thread.level for thread in sheet.character.threads.all())
+    anchor_id = role.parent_role_id or role.pk
+    for thread in sheet.character.threads.threads_of_kind(TargetKind.COVENANT_ROLE):
+        if thread.target_covenant_role_id == anchor_id:
+            return thread.level
+    return 0
+
+
+def vow_thread_width(thread_level: int, table: BaselineTable | None = None) -> int:
+    """One CHECK level's width at the rung of a vow thread stored at ``thread_level`` (#5093).
+
+    The unit every vow perk and vow power term is a share of: ``thread_rung(thread_level)``
+    is the level the vow acts at, and its width is the points one level spans there. 0 for
+    a thread below rung 1 (no thread, or a thread still under 10), which is how a holder
+    with no vow thread adds nothing, and 0 on a database with no CHECK baseline rows at all
+    (nothing is authored to scale against, as ``level_points`` reads it). A caller summing
+    many terms passes one loaded ``table`` (``load_baselines``) so the baseline rows are read
+    once. Raises ``ModifierConfigError`` when the ladder has a single row and so no width.
+    """
+    rung = thread_rung(thread_level)
+    if rung <= 0:
+        return 0
+    if table is None:
+        from world.checks.modifier_values import load_baselines  # noqa: PLC0415
+
+        table = load_baselines()
+    if not table.levels:
+        return 0
+    return table.width(rung)
 
 
 def survivability_save_baselines(character: ObjectDB) -> ThreadSurvivabilitySaves:

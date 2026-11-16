@@ -358,10 +358,11 @@ def get_covenant_role_blend_config() -> CovenantRoleBlendConfig:
 
 
 def blend_power_contribution(
-    thread_level: int, blend_weight: Decimal, multiplier_tenths: int
+    level_width: int, blend_weight: Decimal, multiplier_tenths: int
 ) -> Decimal:
-    """Per-role blend arithmetic (#2529, extracted #3279): thread_level x
-    blend_weight x multiplier_tenths / 10.
+    """Per-role blend arithmetic (#2529, extracted #3279): level_width x
+    blend_weight x multiplier_tenths / 10, ``level_width`` being one CHECK level's width at
+    the rung of the vow thread (``vow_thread_width``, #5093).
 
     Pure helper shared by the live ``covenant_role_blend_power_term`` provider
     (summed over every engaged role, then int-truncated) and the technique
@@ -370,22 +371,26 @@ def blend_power_contribution(
     anchor" case — to compute the amplified-power comparison. Never
     duplicate this formula elsewhere; both callers must go through here.
     """
-    return Decimal(thread_level) * blend_weight * multiplier_tenths / 10
+    return Decimal(level_width) * blend_weight * multiplier_tenths / 10
 
 
 def covenant_role_blend_power_term(ctx: PowerTermContext) -> int:
     """Baseline blend boost for engaged covenant roles (#2529, Layer 1).
 
     Always-on floor: Σ over engaged roles of
-    ``total_thread_level × blend_weight[technique.archetype_alignment]
-    × multiplier``. Situational perks (Layer 4, #2536) layer on top; this
+    ``vow-thread level width × blend_weight[technique.archetype_alignment]
+    × multiplier``, the width being one level's width at the rung of that role's own vow
+    thread (#5093; a character's other threads add nothing). Situational perks
+    (Layer 4, #2536) layer on top; this
     term is the floor that keeps every engaged vow relevant, not the fantasy.
     Kept as its own provider so the contribution stays attributable
     (#2536's presentation contract). PRIMARY-only (#2641): a secondary vow
     never contributes to the combat-identity blend — this is the chassis.
     """
+    from world.checks.modifier_values import load_baselines  # noqa: PLC0415
     from world.magic.services.threads import (  # noqa: PLC0415
-        total_thread_level_across_all_kinds,
+        vow_thread_level,
+        vow_thread_width,
     )
 
     if ctx.technique is None:
@@ -396,17 +401,19 @@ def covenant_role_blend_power_term(ctx: PowerTermContext) -> int:
     engaged_roles = character.covenant_roles.currently_engaged_primary_roles()
     if not engaged_roles:
         return 0
-    total_threads = total_thread_level_across_all_kinds(ctx.sheet)
-    if total_threads == 0:
-        return 0
     config = get_covenant_role_blend_config()
     alignment = ctx.technique.archetype_alignment
+    baselines = None
     total = Decimal(0)
     for role in engaged_roles:
         weight = role.blend_weight_for(alignment)
-        if not weight:
+        thread_level = vow_thread_level(ctx.sheet, role) if weight else 0
+        if thread_level <= 0:
             continue
-        total += blend_power_contribution(total_threads, weight, config.multiplier_tenths)
+        if baselines is None:
+            baselines = load_baselines()
+        width = vow_thread_width(thread_level, baselines)
+        total += blend_power_contribution(width, weight, config.multiplier_tenths)
     return int(total)
 
 
@@ -440,9 +447,10 @@ def _scale_secondary_contribution(secondary_total: Decimal) -> Decimal:
     return secondary_total * Decimal(potency_tenths) / 10
 
 
-def specialty_power_contribution(thread_level: int, multiplier_tenths: int) -> Decimal:
-    """Per-row specialty arithmetic (#2443, extracted #3279): thread_level x
-    multiplier_tenths / 10.
+def specialty_power_contribution(level_width: int, multiplier_tenths: int) -> Decimal:
+    """Per-row specialty arithmetic (#2443, extracted #3279): level_width x
+    multiplier_tenths / 10, ``level_width`` being one CHECK level's width at the rung of
+    the vow thread (``vow_thread_width``, #5093).
 
     Pure helper shared by the live ``covenant_role_specialty_power_term``
     provider (summed over every matching specialty row, secondary-scaled,
@@ -452,7 +460,7 @@ def specialty_power_contribution(thread_level: int, multiplier_tenths: int) -> D
     comparison. Never duplicate this formula elsewhere; both callers must go
     through here.
     """
-    return Decimal(thread_level) * multiplier_tenths / 10
+    return Decimal(level_width) * multiplier_tenths / 10
 
 
 def covenant_role_specialty_power_term(ctx: PowerTermContext) -> int:
@@ -460,7 +468,8 @@ def covenant_role_specialty_power_term(ctx: PowerTermContext) -> int:
 
     Always-on flat bonus when the cast technique carries a TechniqueFunction
     the engaged vow specializes in: Σ over engaged roles, over matching
-    specialty rows, of total_thread_level × row.multiplier_tenths / 10.
+    specialty rows, of one level's width at the rung of the row's own vow thread ×
+    row.multiplier_tenths / 10 (#5093; a character's other threads add nothing).
 
     Row collection per engaged (resolved) role: the ANCHOR role's rows PLUS
     the resolved sub-role's own rows when it differs — sub-roles build upward
@@ -476,9 +485,11 @@ def covenant_role_specialty_power_term(ctx: PowerTermContext) -> int:
     BEFORE being added to the primary-side sum and int-truncated — a secondary
     vow's specialty reward is real but always situational, never raw.
     """
+    from world.checks.modifier_values import load_baselines  # noqa: PLC0415
     from world.covenants.models import CovenantRoleTechniqueSpecialty  # noqa: PLC0415
     from world.magic.services.threads import (  # noqa: PLC0415
-        total_thread_level_across_all_kinds,
+        vow_thread_level,
+        vow_thread_width,
     )
 
     if ctx.technique is None:
@@ -492,19 +503,23 @@ def covenant_role_specialty_power_term(ctx: PowerTermContext) -> int:
     functions = {tag.function for tag in ctx.technique.cached_function_tags}
     if not functions:
         return 0
-    total_threads = total_thread_level_across_all_kinds(ctx.sheet)
-    if total_threads == 0:
-        return 0
 
     primary_role_ids, secondary_role_ids = _partition_role_ids_by_secondary(engaged_pairs)
     rows = CovenantRoleTechniqueSpecialty.objects.filter(
         covenant_role_id__in=(primary_role_ids | secondary_role_ids),
         function__in=functions,
-    )
+    ).select_related("covenant_role")
+    baselines = None
     primary_total = Decimal(0)
     secondary_total = Decimal(0)
     for row in rows:
-        contribution = specialty_power_contribution(total_threads, row.multiplier_tenths)
+        thread_level = vow_thread_level(ctx.sheet, row.covenant_role)
+        if thread_level <= 0:
+            continue
+        if baselines is None:
+            baselines = load_baselines()
+        width = vow_thread_width(thread_level, baselines)
+        contribution = specialty_power_contribution(width, row.multiplier_tenths)
         if row.covenant_role_id in secondary_role_ids:
             secondary_total += contribution
         else:
@@ -518,10 +533,10 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
 
     Σ over every fired ``POWER_BONUS`` perk (self + co-present covenant-mate
     beneficiaries — see ``perks.services.applicable_perks``) of
-    ``total_thread_level_across_all_kinds(ctx.sheet) × magnitude_tenths /
-    10``, int-truncated — mirrors ``covenant_role_specialty_power_term``'s
-    arithmetic exactly (same thread-level scaling, same integer truncation
-    after summing in ``Decimal``).
+    ``magnitude_tenths / 10 × one level's width`` at the rung of the perk HOLDER's vow
+    thread (#5093; ``sum_potency_scaled_magnitudes``), int-truncated — mirrors
+    ``covenant_role_specialty_power_term``'s arithmetic (same vow-thread sizing, same
+    integer truncation after summing in ``Decimal``).
 
     Guards: no technique → 0 (perks are cast-scoped); no engaged role on the
     subject → 0 (cheap exit before the resolution query —
@@ -591,7 +606,7 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
     engaged role at all and is exactly the case this pass exists to catch.
 
     **Secondary-vow potency scaling (#2641):** each ``FiredPerk.is_secondary``
-    firing's contribution (after the usual thread-level scaling) is further
+    firing's contribution (after the usual vow-thread sizing) is further
     multiplied by ``SecondaryVowConfig.potency_tenths / 10`` before summing —
     a secondary vow's situational perks are real but always weaker than a
     primary's. See ``sum_potency_scaled_magnitudes``
@@ -608,9 +623,6 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
         dormant_perk_firings,
         mission_category_ids_for,
         perk_scope_matches,
-    )
-    from world.magic.services.threads import (  # noqa: PLC0415
-        total_thread_level_across_all_kinds,
     )
 
     if ctx.technique is None:
@@ -693,13 +705,9 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
     # a double-announce. See announce_fired_perks's docstring.
     announce_fired_perks(fired, subject=ctx.sheet, location=character.location)
 
-    total_threads = total_thread_level_across_all_kinds(ctx.sheet)
-    if total_threads == 0:
-        return 0
-
     from world.covenants.perks.services import sum_potency_scaled_magnitudes  # noqa: PLC0415
 
-    return sum_potency_scaled_magnitudes(fired, total_threads)
+    return sum_potency_scaled_magnitudes(fired)
 
 
 _PROVIDERS: list[PowerTermProvider] = [

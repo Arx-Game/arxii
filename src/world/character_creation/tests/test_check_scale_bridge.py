@@ -25,10 +25,9 @@ from world.checks.factories import (
 )
 from world.checks.services import perform_check
 from world.skills.factories import SkillFactory
-from world.traits.factories import CheckSystemSetupFactory
+from world.traits.factories import CheckSystemSetupFactory, ensure_check_rank
 from world.traits.models import (
     CharacterTraitValue,
-    CheckRank,
     PointConversionRange,
     Trait,
     TraitType,
@@ -58,9 +57,7 @@ class CgCheckScaleBridgeTests(FinalizationTestMixin, TestCase):
             (2, 25, "BridgeCompetent"),
             (3, 50, "BridgeExpert"),
         ]:
-            CheckRank.objects.get_or_create(
-                rank=rank_val, defaults={"min_points": min_pts, "name": name}
-            )
+            ensure_check_rank(rank_val, min_pts, name)
 
     def test_cg_character_matches_hand_seeded_check_points(self):
         skill = SkillFactory()

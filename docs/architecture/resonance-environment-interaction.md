@@ -180,8 +180,8 @@ class ResonanceEnvironmentConfig(SharedMemoryModel):
     base_coefficient = DecimalField(...)        # raw scaling
     caster_power_scalar = DecimalField(...)     # caster-strength proxy for defilement
     balanced_band = PositiveIntegerField(...)   # |caster-place| within this → BALANCED
-    backfire_base_difficulty = PositiveIntegerField(...)   # OPPOSED → perform_check base
-    backfire_difficulty_per_magnitude = DecimalField(...)  # + magnitude * this
+    backfire_base_difficulty_level = PositiveIntegerField(...)   # OPPOSED → perform_check base
+    backfire_difficulty_per_magnitude_tenths = DecimalField(...)  # + magnitude * this
 ```
 
 Access via `get_resonance_environment_config()` (lazy-create pk=1), the established pattern.

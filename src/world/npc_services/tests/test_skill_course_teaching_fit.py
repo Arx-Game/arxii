@@ -33,13 +33,16 @@ from world.npc_services.services import (
     _offer_price_payload,
     format_offer_price,
 )
+from world.traits.factories import ensure_level_ladder
 
-DIFFICULTY = 10
+DIFFICULTY_LEVEL = 1
+DIFFICULTY = 18  # level 1's baseline
 
 
 class SkillCourseTeachingFitTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
+        ensure_level_ladder()
         cls.gift = GiftFactory(name="Lantern Gift")
         cls.affinity = AffinityFactory(name="Dawn")
         cls.other_affinity = AffinityFactory(name="Dusk")
@@ -48,7 +51,7 @@ class SkillCourseTeachingFitTests(TestCase):
         TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
         cls.role = NPCRoleFactory(teaches_tradition=cls.tradition)
         cls.course = SkillCourseOfferDetailsFactory(
-            offer__role=cls.role, check_difficulty=DIFFICULTY
+            offer__role=cls.role, check_difficulty_level=DIFFICULTY_LEVEL
         )
         cls.week = get_current_game_week()
 
@@ -95,7 +98,8 @@ class SkillCourseTeachingFitTests(TestCase):
 
     def test_role_without_tradition_is_neutral(self) -> None:
         course = SkillCourseOfferDetailsFactory(
-            offer__role=NPCRoleFactory(teaches_tradition=None), check_difficulty=DIFFICULTY
+            offer__role=NPCRoleFactory(teaches_tradition=None),
+            check_difficulty_level=DIFFICULTY_LEVEL,
         )
         sheet = self._student(gift=self.gift, affinity=self.affinity)
         self.assertEqual(self._difficulty_rolled(sheet, course), DIFFICULTY)

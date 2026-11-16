@@ -25,7 +25,7 @@ class TaskTemplateSerializer(serializers.ModelSerializer):
             "description",
             "category",
             "check_type",
-            "check_difficulty",
+            "check_difficulty_level",
             "duration",
             "target_kind",
             "eligibility_rule",
@@ -192,7 +192,7 @@ class ListenerPostCreateSerializer(serializers.Serializer):
     npc_asset = serializers.IntegerField(min_value=1)
     room = serializers.IntegerField(min_value=1)
     check_type = serializers.IntegerField(min_value=1, required=False, allow_null=True)
-    check_difficulty = serializers.IntegerField(default=0)
+    check_difficulty_level = serializers.IntegerField(default=0)
 
 
 class PlantRedHerringSerializer(serializers.Serializer):

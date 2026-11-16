@@ -441,7 +441,10 @@ def _fire_stage_consequence_pool(
         select_consequence_from_result,
     )
     from world.checks.constants import ModifierSourceKind  # noqa: PLC0415
-    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+    from world.checks.services import (  # noqa: PLC0415
+        difficulty_points,
+        perform_check_with_modifiers,
+    )
     from world.checks.types import ModifierContribution, ResolutionContext  # noqa: PLC0415
     from world.conditions.models import ConditionCheckModifier  # noqa: PLC0415
     from world.magic.constants import MagicActivity  # noqa: PLC0415
@@ -505,7 +508,7 @@ def _fire_stage_consequence_pool(
     resilience_check = perform_check_with_modifiers(
         character=character,
         check_type=soulfray_config.resilience_check_type,
-        target_difficulty=soulfray_config.base_check_difficulty,
+        target_difficulty=difficulty_points(soulfray_config.base_check_difficulty_level),
         extra_contributions=soulfray_contributions or None,
         extra_traits=activity_skill_terms(MagicActivity.SOULFRAY_RESILIENCE),
     )

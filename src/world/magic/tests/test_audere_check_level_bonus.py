@@ -5,7 +5,6 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.checks.constants import LEVEL_POINTS_PER_LEVEL
 from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
 from world.checks.services import _compute_check_breakdown
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
@@ -13,7 +12,7 @@ from world.conditions.factories import ConditionInstanceFactory, ConditionTempla
 from world.magic.audere import audere_check_level_bonus
 from world.magic.constants import AUDERE_MAJORA_SEED_TEMPLATE_NAME, AUDERE_SEED_TEMPLATE_NAME
 from world.magic.factories import AudereMajoraThresholdFactory, AudereThresholdFactory
-from world.traits.factories import CheckSystemSetupFactory
+from world.traits.factories import CheckSystemSetupFactory, ensure_level_ladder
 from world.traits.models import ResultChart, Trait
 
 CHARACTER_LEVEL = 3
@@ -25,6 +24,7 @@ class AudereCheckLevelBonusTests(TestCase):
     def setUpTestData(cls):
         Trait.flush_instance_cache()
         CheckSystemSetupFactory.create()
+        ensure_level_ladder()
         sheet = CharacterSheetFactory()
         CharacterClassLevelFactory(
             character=sheet,
@@ -60,16 +60,19 @@ class AudereCheckLevelBonusTests(TestCase):
         ).level_points
 
     def test_no_audere_counts_own_level(self):
-        self.assertEqual(self._level_points(), LEVEL_POINTS_PER_LEVEL * CHARACTER_LEVEL)
+        # Half of level 3's baseline (34).
+        self.assertEqual(self._level_points(), 17)
 
     def test_audere_adds_levels(self):
         ConditionInstanceFactory(target=self.character, condition=self.audere_template)
-        self.assertEqual(self._level_points(), LEVEL_POINTS_PER_LEVEL * (CHARACTER_LEVEL + 4))
+        # Level 7: half of its baseline (66).
+        self.assertEqual(self._level_points(), 33)
 
     def test_majora_replaces_audere_bonus(self):
         ConditionInstanceFactory(target=self.character, condition=self.audere_template)
         ConditionInstanceFactory(target=self.character, condition=self.majora_template)
-        self.assertEqual(self._level_points(), LEVEL_POINTS_PER_LEVEL * (CHARACTER_LEVEL + 8))
+        # Level 11: half of its baseline (98).
+        self.assertEqual(self._level_points(), 49)
 
 
 class AudereMajoraThresholdChoiceTests(TestCase):

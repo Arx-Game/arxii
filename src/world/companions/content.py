@@ -21,9 +21,9 @@ BEASTLORD_GIFT_NAME = "Beastlord"
 BIND_ATTEMPT_CHECK_NAME = "Bind Attempt"
 
 _BEAST_ARCHETYPES = [
-    ("Hawk", "A keen-eyed aerial scout.", 20, 5),
-    ("Wolf", "A loyal pack-hunter.", 30, 10),
-    ("Direwolf", "A massive, fearsome hunter.", 50, 20),
+    ("Hawk", "A keen-eyed aerial scout.", 1, 5),
+    ("Wolf", "A loyal pack-hunter.", 2, 10),
+    ("Direwolf", "A massive, fearsome hunter.", 5, 20),
 ]
 
 # (min_thread_level, flat_bonus_amount). min_thread_level is a thread level as
@@ -74,13 +74,13 @@ def ensure_companion_content() -> Gift:
         },
     )
 
-    for name, description, bind_difficulty, capacity_cost in _BEAST_ARCHETYPES:
+    for name, description, bind_difficulty_level, capacity_cost in _BEAST_ARCHETYPES:
         CompanionArchetype.objects.get_or_create(
             name=name,
             defaults={
                 "domain": CompanionDomain.BEAST,
                 "description": description,
-                "bind_difficulty": bind_difficulty,
+                "bind_difficulty_level": bind_difficulty_level,
                 "capacity_cost": capacity_cost,
             },
         )

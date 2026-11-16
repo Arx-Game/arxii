@@ -978,23 +978,42 @@ def render_announce(firing: FiredPerk, *, holder_name: str, subject_name: str) -
         return firing.perk.announce_template.replace("{", "").replace("}", "")
 
 
-def sum_potency_scaled_magnitudes(fired: list[FiredPerk], total_threads: int) -> int:
-    """Σ over ``fired`` of ``total_threads × magnitude_tenths / 10`` (#2536), with
-    each SECONDARY-sourced firing's contribution additionally scaled by
-    ``SecondaryVowConfig.potency_tenths / 10`` (#2641) before the final
-    int-truncation. Shared by every magnitude seam that sums ``FiredPerk`` rows —
-    ``vow_situational_power_term`` (``world.magic.services.power_terms``) and
-    ``_situational_perk_check_bonus`` (``world.checks.services``) — one rule, one
-    place. The potency config is fetched at most once per call, lazily (only when
-    a secondary firing is actually present), so the common all-primary case costs
-    no extra query.
+def sum_potency_scaled_magnitudes(fired: list[FiredPerk]) -> int:
+    """Σ over ``fired`` of ``magnitude_tenths / 10 × one level's width`` (#2536, #5093),
+    int-truncated, with each SECONDARY-sourced firing's contribution additionally scaled
+    by ``SecondaryVowConfig.potency_tenths / 10`` (#2641) first.
+
+    A perk is sized like a buff: its authored tenths are a share of one CHECK level's
+    width, at the rung of the HOLDER's vow thread (``vow_thread_level`` on the perk's
+    role), so a covenant mate's perk helping someone else is sized by the mate's thread,
+    never the helped character's. Only that one thread counts; a holder's other threads
+    add nothing, and a holder with no vow thread (or one under rung 1) adds 0. Shared by
+    every magnitude seam that sums ``FiredPerk`` rows, ``vow_situational_power_term``
+    (``world.magic.services.power_terms``) and ``_situational_perk_check_bonus``
+    (``world.checks.services``): one rule, one place. The baseline rows load once, only
+    when a firing's holder has a vow thread, and the potency config at most once, lazily
+    (only when a secondary firing is actually present), so the common all-primary case
+    costs no extra query. A database with no CHECK baseline rows sizes every perk at 0.
     """
     from decimal import Decimal  # noqa: PLC0415
 
+    from world.checks.modifier_values import load_baselines  # noqa: PLC0415
+    from world.magic.services.threads import (  # noqa: PLC0415
+        vow_thread_level,
+        vow_thread_width,
+    )
+
+    baselines = None
     potency_tenths: int | None = None
     total = Decimal(0)
     for firing in fired:
-        contribution = Decimal(total_threads) * firing.magnitude_tenths / 10
+        thread_level = vow_thread_level(firing.holder, firing.perk.covenant_role)
+        if thread_level <= 0:
+            continue
+        if baselines is None:
+            baselines = load_baselines()
+        width = vow_thread_width(thread_level, baselines)
+        contribution = Decimal(width) * firing.magnitude_tenths / 10
         if firing.is_secondary:
             if potency_tenths is None:
                 from world.covenants.services import secondary_vow_config  # noqa: PLC0415

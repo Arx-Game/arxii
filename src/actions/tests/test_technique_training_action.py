@@ -28,6 +28,7 @@ from world.magic.models import (
     TrainingOutcomeAward,
 )
 from world.roster.factories import RosterTenureFactory
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.traits.models import CheckOutcome
 
 # Canonical outcome tiers (name -> success_level), matching seeds/checks.py.
@@ -49,6 +50,7 @@ def _ensure_outcome(name: str, success_level: int) -> CheckOutcome:
 
 class TrainTechniqueActionTestBase(TestCase):
     def setUp(self):
+        seed_pool_and_cap_lanes()
         self.room = ObjectDBFactory(
             db_key="TrainingRoom", db_typeclass_path="typeclasses.rooms.Room"
         )

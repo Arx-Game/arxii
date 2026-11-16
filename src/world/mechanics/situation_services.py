@@ -72,8 +72,8 @@ def instantiate_situation(
                     consequence_pool=trap_link.consequence_pool,
                     detect_check_type=trap_link.detect_check_type,
                     disarm_check_type=trap_link.disarm_check_type,
-                    detect_difficulty=trap_link.detect_difficulty,
-                    disarm_difficulty=trap_link.disarm_difficulty,
+                    detect_difficulty_level=trap_link.detect_difficulty_level,
+                    disarm_difficulty_level=trap_link.disarm_difficulty_level,
                     is_hidden=trap_link.is_hidden,
                     created_by_sheet=placed_by_sheet,
                 )

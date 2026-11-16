@@ -16,7 +16,12 @@ from django.db import DatabaseError, transaction
 from django.utils import timezone
 
 from world.checks.models import CheckCategory, CheckType
-from world.checks.services import collect_check_modifiers, perform_check_with_modifiers
+from world.checks.services import (
+    collect_check_modifiers,
+    difficulty_points,
+    difficulty_step_points,
+    perform_check_with_modifiers,
+)
 from world.conditions.services import (
     knockout_preventing_instance,
     spend_condition_use,
@@ -203,7 +208,9 @@ def calculate_knockout_difficulty(*, health_pct: float) -> int:
         return 0
     cfg = get_vitals_consequence_config()
     pct_below = int((KNOCKOUT_HEALTH_THRESHOLD - health_pct) * 100)
-    return cfg.knockout_base_difficulty + (pct_below * cfg.knockout_scaling_per_percent)
+    return difficulty_points(cfg.knockout_base_difficulty_level) + difficulty_step_points(
+        pct_below * cfg.knockout_scaling_per_percent_tenths, cfg.knockout_base_difficulty_level
+    )
 
 
 def calculate_death_difficulty(*, health_pct: float) -> int:
@@ -218,7 +225,9 @@ def calculate_death_difficulty(*, health_pct: float) -> int:
         return 0
     cfg = get_vitals_consequence_config()
     pct_below = int(abs(health_pct) * 100)
-    return cfg.death_base_difficulty + (pct_below * cfg.death_scaling_per_percent)
+    return difficulty_points(cfg.death_base_difficulty_level) + difficulty_step_points(
+        pct_below * cfg.death_scaling_per_percent_tenths, cfg.death_base_difficulty_level
+    )
 
 
 def calculate_wound_difficulty(*, damage: int, max_health: int) -> int:
@@ -236,7 +245,9 @@ def calculate_wound_difficulty(*, damage: int, max_health: int) -> int:
         return 0
     cfg = get_vitals_consequence_config()
     pct_over = int((damage_pct - PERMANENT_WOUND_THRESHOLD) * 100)
-    return cfg.wound_base_difficulty + (pct_over * cfg.wound_scaling_per_percent)
+    return difficulty_points(cfg.wound_base_difficulty_level) + difficulty_step_points(
+        pct_over * cfg.wound_scaling_per_percent_tenths, cfg.wound_base_difficulty_level
+    )
 
 
 def _ensure_survival_category() -> CheckCategory | None:
@@ -1389,7 +1400,7 @@ def _resolve_peril_via_pool(
     ``select_surrounded_terminal_pool`` routing instead.
 
     The roll uses the instance's current-stage authored ``resist_check_type`` +
-    ``resist_difficulty`` (ADR-0019 — no hardcoded difficulty). The gate is applied by
+    ``resist_difficulty_level`` (ADR-0019 — no hardcoded difficulty). The gate is applied by
     EXCLUDING every character-loss (``die``) candidate before selection when
     ``death_permitted`` is False, so a PC source, a death_deferred victim, or an absent
     source can never select death (ADR-0023). The selected outcome is dispatched on its
@@ -1423,7 +1434,7 @@ def _resolve_peril_via_pool(
     pending = select_consequence(
         character,
         stage.resist_check_type,
-        stage.resist_difficulty,
+        difficulty_points(stage.resist_difficulty_level),
         candidates,
         extra_traits=loss_of_self_terms(instance.condition),
     )
@@ -1484,7 +1495,7 @@ def resolve_abandonment(character_sheet: CharacterSheet | None) -> bool:
     (``select_abandonment_pool`` — enemy / pvp / environmental by the peril's
     ``source_character`` kind) and runs the SAME death-gated core as the terminal
     bleed-out path (``_resolve_peril_via_pool``). The roll uses the acute-peril
-    instance's current-stage authored ``resist_check_type`` + ``resist_difficulty``
+    instance's current-stage authored ``resist_check_type`` + ``resist_difficulty_level``
     (ADR-0019).
 
     No-op (returns False) when the victim no longer carries an acute-peril
@@ -1613,7 +1624,7 @@ def _advance_staged_peril_condition(
         result = perform_check_with_modifiers(
             character,
             stage.resist_check_type,
-            target_difficulty=stage.resist_difficulty,
+            target_difficulty=difficulty_points(stage.resist_difficulty_level),
             extra_traits=loss_of_self_terms(template),
         )
 
@@ -1714,10 +1725,11 @@ def calculate_wake_difficulty(*, health_pct: float, rounds_elapsed: int) -> int:
     """
     config = get_vitals_consequence_config()
     missing_pct = int((1.0 - max(0.0, min(1.0, health_pct))) * 100)
+    anchor = config.wake_base_difficulty_level
     difficulty = (
-        config.wake_base_difficulty
-        + missing_pct * config.wake_scaling_per_percent
-        - rounds_elapsed * config.wake_ease_per_round
+        difficulty_points(anchor)
+        + difficulty_step_points(missing_pct * config.wake_scaling_per_percent_tenths, anchor)
+        - difficulty_step_points(rounds_elapsed * config.wake_ease_per_round_tenths, anchor)
     )
     return max(0, difficulty)
 

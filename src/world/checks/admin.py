@@ -5,10 +5,13 @@ from django.core.exceptions import ValidationError
 from django.forms.models import BaseInlineFormSet
 
 from world.admin_utils import OneRowPerFormSet
+from world.checks.constants import ModifierLane
+from world.checks.exceptions import ModifierConfigError
 from world.checks.models import (
     CheckCall,
     CheckCallTarget,
     CheckCategory,
+    CheckScaleConfig,
     CheckType,
     CheckTypeAspect,
     CheckTypeCapabilityModifier,
@@ -16,12 +19,23 @@ from world.checks.models import (
     CheckTypeTrait,
     Consequence,
     ConsequenceEffect,
+    LevelTier,
     ModifierLevelBaseline,
+    ModifierSizeFraction,
     ModifierTaper,
     ModifierValue,
 )
-from world.checks.modifier_values import level_baseline, rank_band_share
+from world.checks.modifier_values import (
+    level_baseline,
+    level_width,
+    load_baselines,
+    rank_band_share,
+)
+from world.checks.types import round_half_up
 from world.societies.admin_inlines import ConsequenceNamedOrganizationInline
+
+# Levels the size fraction form shows its derived values at.
+_SAMPLE_LEVELS = (1, 6, 11, 16, 21, 26)
 
 
 class CheckTypeInline(admin.TabularInline):
@@ -217,9 +231,39 @@ class CheckTypeSpecializationAdmin(admin.ModelAdmin):
     autocomplete_fields = ["check_type", "specialization"]
 
 
+@admin.register(ModifierSizeFraction)
+class ModifierSizeFractionAdmin(admin.ModelAdmin):
+    """How much of one level's width each modifier size is worth in a lane (#5093).
+
+    A modifier's value is its size's fraction times the level width at its level. The
+    change form shows what that comes to at a few levels.
+    """
+
+    list_display = ["lane", "size", "fraction"]
+    list_editable = ["fraction"]
+    list_filter = ["lane"]
+    ordering = ["lane", "size"]
+    readonly_fields = ["derived_values"]
+
+    @admin.display(description="Derived values at levels 1, 6, 11, 16, 21 and 26")
+    def derived_values(self, obj: ModifierSizeFraction) -> str:
+        if obj.pk is None:
+            return "Save the row to see the values it derives."
+        baselines = load_baselines(obj.lane)
+        shown = []
+        for level in _SAMPLE_LEVELS:
+            try:
+                width = baselines.width(level)
+            except ModifierConfigError:
+                return f"No {obj.get_lane_display()} level baseline rows cover level {level} yet."
+            shown.append(f"level {level}: {max(1, round_half_up(obj.fraction * width))}")
+        return "; ".join(shown)
+
+
 @admin.register(ModifierValue)
 class ModifierValueAdmin(admin.ModelAdmin):
-    """The modifier value table (#4594): what each size is worth at each level.
+    """Overrides of the derived modifier value (#4594, #5093): a row sets what one size
+    is worth at one exact level, instead of its fraction times the level width.
 
     The change form reads the row against the level baseline: its share of that total
     and, on the check lane, the share of a rank band it spans there.
@@ -233,10 +277,21 @@ class ModifierValueAdmin(admin.ModelAdmin):
 
     @admin.display(description="Read against the level baseline")
     def read_against_baseline(self, obj: ModifierValue) -> str:
+        # Imported here: the services module's import chain reaches admin autodiscovery.
+        from world.checks.services import level_strength  # noqa: PLC0415
+
         if obj.pk is None:
             return "Save the row to read it against the level baseline."
-        baseline = level_baseline(obj.level, obj.lane)
-        if baseline is None:
+        try:
+            # A check total also carries the level's tier jump (#5093).
+            baseline = (
+                level_strength(obj.level)
+                if obj.lane == ModifierLane.CHECK
+                else level_baseline(obj.level, obj.lane)
+            )
+        except ModifierConfigError:
+            baseline = 0
+        if baseline == 0:
             return f"No level baseline row covers level {obj.level} yet."
         share = rank_band_share(obj.value, baseline)
         band = f"; {share} of a rank band at that total" if share is not None else ""
@@ -254,6 +309,47 @@ class ModifierLevelBaselineAdmin(admin.ModelAdmin):
     list_editable = ["baseline"]
     list_filter = ["lane"]
     ordering = ["lane", "level"]
+
+
+@admin.register(LevelTier)
+class LevelTierAdmin(admin.ModelAdmin):
+    """The jump in power at the start of each tier of levels (#5093).
+
+    A level's strength is its baseline plus the bonus of every tier that starts at or below
+    it, so each row sets how far a character jumps on crossing into its tier. Divide the bonus
+    by the check lane's level width to read it in ranks.
+    """
+
+    list_display = ["start_level", "bonus_points", "bonus_in_ranks"]
+    list_editable = ["bonus_points"]
+    ordering = ["start_level"]
+
+    @admin.display(description="Ranks at the level's width")
+    def bonus_in_ranks(self, obj: LevelTier) -> str:
+        """The bonus as a number of ranks at the width of the tier's start level."""
+        try:
+            width = level_width(obj.start_level)
+        except ModifierConfigError:
+            return "-"
+        return str(round(obj.bonus_points / width, 2)) if width > 0 else "-"
+
+
+@admin.register(CheckScaleConfig)
+class CheckScaleConfigAdmin(admin.ModelAdmin):
+    """The share of a level's baseline a character's level adds to every roll (#5093).
+
+    A singleton at pk 1: one row, never added or deleted.
+    """
+
+    list_display = ["level_share"]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not CheckScaleConfig.objects.exists()
+
+    def has_delete_permission(self, request: object, obj: object = None) -> bool:  # noqa: ARG002
+        """The singleton is never deleted."""
+        return False
 
 
 @admin.register(ModifierTaper)

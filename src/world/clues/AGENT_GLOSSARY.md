@@ -5,7 +5,7 @@ A pointer to exactly one discoverable target — a codex entry, a mission, a cap
 _Avoid_: hint, lead, red herring.
 
 **RoomClue**:
-A placement that hides a `Clue` in a room with an authored `detect_difficulty`, found via a Search check. The active-acquisition counterpart to a `ClueTrigger`, mirroring `room_features.Trap`. Carries a nullable-unique `fixture_key` (#2451) when placed from the staff world-builder canvas — see the areas glossary's "Fixture key" entry.
+A placement that hides a `Clue` in a room with an authored `detect_difficulty_level`, found via a Search check. The active-acquisition counterpart to a `ClueTrigger`, mirroring `room_features.Trap`. Carries a nullable-unique `fixture_key` (#2451) when placed from the staff world-builder canvas — see the areas glossary's "Fixture key" entry.
 _Avoid_: hidden clue, room placement.
 
 **ClueTrigger**:
@@ -13,7 +13,7 @@ A placement that grants a `Clue` passively on room entry to any eligible charact
 _Avoid_: passive clue, auto-grant.
 
 **Search**:
-The active acquisition path: the `SearchAction` charges AP plus mental fatigue and rolls the seeded Search CheckType (Perception + Investigation) against each hidden `RoomClue`'s `detect_difficulty`, acquiring the ones spotted.
+The active acquisition path: the `SearchAction` charges AP plus mental fatigue and rolls the seeded Search CheckType (Perception + Investigation) against each hidden `RoomClue`'s `detect_difficulty_level`, acquiring the ones spotted.
 _Avoid_: look, detect, perception roll.
 
 **CLUE_REVEAL** (#3428):

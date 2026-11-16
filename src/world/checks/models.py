@@ -18,13 +18,18 @@ from world.checks.constants import (
 
 # Modifier value table, level baselines and tapers (#4594).
 from world.checks.modifier_models import (  # noqa: F401
+    LevelTier,
     ModifierLevelBaseline,
+    ModifierSizeFraction,
     ModifierTaper,
     ModifierValue,
 )
 
 # Import outcome models so migrations and admin discover them.
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier  # noqa: F401
+
+# The level share of the check scale (#5093).
+from world.checks.scale_config import CheckScaleConfig  # noqa: F401
 from world.contributors.models import CreditedContent
 from world.scenes.action_constants import DifficultyChoice
 
@@ -595,10 +600,14 @@ class ConsequenceEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default="",
         help_text="Override rescue-clue description. Unset = the CaptivityConfig default.",
     )
-    capture_clue_detect_difficulty = models.PositiveIntegerField(
+    capture_clue_detect_difficulty_level = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
-        help_text="Override Search difficulty to spot the rescue clue. Unset = config default.",
+        help_text=(
+            "Override Search difficulty to spot the rescue clue. Unset = config "
+            "default. Authored as a level (0 = no difficulty): the roll meets that "
+            "level's baseline."
+        ),
     )
 
     # Trial effects (#4501). ``grants_known`` is read by GRANT_CODEX; the rest by

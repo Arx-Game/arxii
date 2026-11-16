@@ -97,8 +97,8 @@ class EnsureRitualCheckConfigsTests(TestCase):
         configs = ensure_ritual_check_configs()
         self.assertEqual(len(configs), 5)
         dissolution = configs[DISSOLUTION_RITUAL_NAME]
-        self.assertEqual(dissolution.target_difficulty, 20)
-        self.assertEqual(dissolution.non_founder_target_difficulty, 40)
+        self.assertEqual(dissolution.target_difficulty_level, 1)
+        self.assertEqual(dissolution.non_founder_target_difficulty_level, 2)
         self.assertEqual(dissolution.check_type.name, "Sanctum Dissolution")
         self.assertEqual(dissolution.stat.name, "willpower")
         self.assertEqual(dissolution.skill, mapped.skill)
@@ -123,10 +123,10 @@ class EnsureRitualCheckConfigsTests(TestCase):
         ensure_sanctum_rituals()
         configs = ensure_ritual_check_configs()
         dissolution = configs[DISSOLUTION_RITUAL_NAME]
-        dissolution.target_difficulty = 99
-        dissolution.save(update_fields=["target_difficulty"])
+        dissolution.target_difficulty_level = 9
+        dissolution.save(update_fields=["target_difficulty_level"])
         configs = ensure_ritual_check_configs()
-        self.assertEqual(configs[DISSOLUTION_RITUAL_NAME].target_difficulty, 99)
+        self.assertEqual(configs[DISSOLUTION_RITUAL_NAME].target_difficulty_level, 9)
 
     def test_skips_configs_if_rituals_not_seeded(self):
         """Ritual rows are content-repo-owned (#2698): a missing ritual is

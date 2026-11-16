@@ -44,13 +44,13 @@ describe('PlaceClueDialog', () => {
 
     await userEvent.type(screen.getByLabelText(/clue slug/i), 'torn-letter');
     await userEvent.clear(screen.getByLabelText(/detect difficulty/i));
-    await userEvent.type(screen.getByLabelText(/detect difficulty/i), '5');
+    await userEvent.type(screen.getByLabelText(/detect difficulty/i), '3');
     await userEvent.click(screen.getByTestId('place-clue-submit'));
 
     expect(runAction).toHaveBeenCalledWith('staff_place_clue', {
       room_id: 5,
       clue_slug: 'torn-letter',
-      detect_difficulty: 5,
+      detect_difficulty_level: 3,
     });
   });
 

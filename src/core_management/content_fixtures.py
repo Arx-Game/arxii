@@ -578,7 +578,7 @@ def _build_codex_entry_fixture(entry: ContentEntry) -> dict:
     ``## Mechanics`` -> ``mechanics_content``, at least one required.
 
     Deliberately carries ONLY author-owned fields. Every tuning and
-    publication column (``share_cost``, ``learn_cost``, ``learn_difficulty``,
+    publication column (``share_cost``, ``learn_cost``, ``learn_difficulty_level``,
     ``learn_threshold``, ``display_order``, ``is_public``, ``is_featured``,
     ``featured_order``) plus ``prerequisites``, ``modifier_target`` and ``art``
     is admin-owned and omitted, so a load never overwrites values tuned in the

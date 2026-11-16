@@ -22,6 +22,7 @@ from world.game_clock.factories import GameClockFactory
 from world.magic.constants import GiftKind
 from world.magic.factories import ensure_soulfray_config
 from world.magic.services.drift import get_drift_config
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 
 
 def _dep(key: str, probe: rc.ContentProbe, tier: rc.DependencyTier) -> rc.ContentDependency:
@@ -2309,3 +2310,66 @@ class TestNaturalWeaponTemplatesProbe(TestCase):
         GiftFactory(name="Probe Fanged", kind=GiftKind.MINOR, natural_weapon_template=template)
         result = _probe_for(self.KEY).resolve(None)
         self.assertEqual(result.missing, ("Probe Bite: it has no slots, so it is never equipped",))
+
+
+class TestPoolLaneBaselinesProbe(TestCase):
+    """The pool and cap lanes need a baseline row per level or their readers raise (#5093)."""
+
+    def test_a_database_with_no_rows_reports_every_lane(self) -> None:
+        result = rc._probe_pool_lane_baselines()
+        self.assertFalse(result.present)
+        self.assertEqual(len(result.missing), 11)
+
+    def test_the_seeded_rows_are_complete(self) -> None:
+        seed_pool_and_cap_lanes()
+        self.assertTrue(rc._probe_pool_lane_baselines().present)
+
+    def test_a_deleted_level_is_reported(self) -> None:
+        from world.checks.constants import ModifierLane
+        from world.checks.modifier_models import ModifierLevelBaseline
+
+        seed_pool_and_cap_lanes()
+        ModifierLevelBaseline.objects.get(lane=ModifierLane.HOLLOW_MAX, level=7).delete()
+        result = rc._probe_pool_lane_baselines()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("Hollow maximum: level 7",))
+
+    def test_a_rung_lane_with_no_rows_is_reported(self) -> None:
+        from world.checks.constants import ModifierLane
+        from world.checks.modifier_models import ModifierLevelBaseline
+
+        seed_pool_and_cap_lanes()
+        ModifierLevelBaseline.objects.filter(lane=ModifierLane.VOW_EFFECT_DAMAGE).delete()
+        result = rc._probe_pool_lane_baselines()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("Vow effect damage: no rows",))
+
+
+class TestScaleConfigProbes(TestCase):
+    """The development cost, check scale and level tier rows are tuning a database may lack."""
+
+    def _dependency(self, key: str):
+        return next(d for d in rc._declarations() if d.key == key)
+
+    def test_each_is_a_tuning_dependency_reporting_a_missing_row(self) -> None:
+        for key, label in (
+            ("development-cost-config", "DevelopmentCostConfig"),
+            ("check-scale-config", "CheckScaleConfig"),
+            ("level-tier", "LevelTier"),
+        ):
+            dependency = self._dependency(key)
+            self.assertEqual(dependency.tier, rc.DependencyTier.TUNING, key)
+            result = dependency.probe.resolve(None)
+            self.assertFalse(result.present, key)
+            self.assertEqual(result.detail, f"No {label} rows exist.", key)
+
+    def test_a_seeded_database_reports_them_present(self) -> None:
+        from world.checks.scale_config import CheckScaleConfig
+        from world.progression.models import DevelopmentCostConfig
+        from world.seeds.modifier_values import seed_level_tiers
+
+        DevelopmentCostConfig.get_singleton()
+        CheckScaleConfig.get_singleton()
+        seed_level_tiers()
+        for key in ("development-cost-config", "check-scale-config", "level-tier"):
+            self.assertTrue(self._dependency(key).probe.resolve(None).present, key)

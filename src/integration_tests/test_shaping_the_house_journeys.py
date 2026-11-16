@@ -214,7 +214,7 @@ class StagingAProp(JourneyCase):
             technique=technique, capability=capability, base_value=5, intensity_multiplier=0
         )
         CharacterTechniqueFactory(character=self.hobb.sheet_data, technique=technique)
-        template = ChallengeTemplateFactory(name="Ignite Torch", severity=3)
+        template = ChallengeTemplateFactory(name="Ignite Torch", severity_level=0)
         application = ApplicationFactory(
             name="Ignite",
             capability=capability,

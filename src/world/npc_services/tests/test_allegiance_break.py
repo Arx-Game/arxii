@@ -29,7 +29,7 @@ from actions.factories import (
 )
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
-from world.checks.test_helpers import force_check_outcome
+from world.checks.test_helpers import force_check_outcome, make_player_character
 from world.classes.factories import CharacterClassLevelFactory
 from world.combat.constants import ActionCategory
 from world.combat.factories import (
@@ -65,7 +65,7 @@ from world.magic.factories import (
 from world.mechanics.factories import CharacterEngagementFactory
 from world.npc_services.allegiance_outcomes import attempt_allegiance_break
 from world.scenes.constants import RoundStatus
-from world.traits.factories import CheckSystemSetupFactory
+from world.traits.factories import CheckSystemSetupFactory, ensure_level_ladder
 from world.vitals.models import CharacterVitals
 
 
@@ -74,6 +74,8 @@ class AttemptAllegianceBreakTests(TestCase):
 
     def setUp(self) -> None:
         self.outcomes = CheckSystemSetupFactory.create()["outcomes"]
+        # The standard ladder: a level's term is half its baseline (18 + 8 x (level - 1)).
+        ensure_level_ladder()
         self.break_check = CheckTypeFactory(name="Allegiance Break Harm 4091")
         self.charm = ConditionTemplateFactory(
             name="Charm Hold 4091",
@@ -159,26 +161,26 @@ class AttemptAllegianceBreakTests(TestCase):
             attempt_allegiance_break(striker=self.pc_sheet, opponent=self.opp, damage_dealt=5)
         self.assertLess(high_level_capture.target_difficulty, low_level_capture.target_difficulty)
 
-    def test_scale_level_twelve_zeroes_a_severity_six_hold_with_no_damage_pressure(self):
+    def test_scale_level_fifteen_zeroes_a_severity_six_hold_with_no_damage_pressure(self):
         """Fix round 2 note: this is the ABSENT-caster case, and stays 0 on
         purpose (the ruling's item 1: "the caster may be absent... that is a
         real case", the charmer left the game or was deleted). self.instance
         has no source_character, so _caster_level_opposition_points
         contributes 0 regardless of target level. Numbers
-        (CHARM_STRENGTH_POINTS_PER_SEVERITY=10, LEVEL_POINTS_PER_LEVEL=5,
-        EFFORT_CHECK_MODIFIER[MEDIUM]=0):
+        (CHARM_STRENGTH_POINTS_PER_SEVERITY=10, the ephemeral opponent resists as its
+        level's baseline, EFFORT_CHECK_MODIFIER[MEDIUM]=0):
 
-            strength   = 6 (severity) x 10 + 0 (no caster) = 60
-            resistance = 12 (level) x 5 + 0 (effort)       = 60
-            pressure   = harm_pressure_points(1, 100)      = 0
-            difficulty = max(0, 60 - 60 - 0)               = 0
+            strength   = 6 (severity) x 10 + 0 (no caster)    = 60
+            resistance = level 15's baseline + 0 (effort)       = 130
+            pressure   = harm_pressure_points(1, 100)         = 0
+            difficulty = max(0, 60 - 130 - 0)                 = 0
 
         See ``test_same_level_caster_and_target_no_longer_zeroes_the_hold``
         below for the general (caster present) case fix round 2 actually
         fixes: with a REAL same-level caster, this same level-12 target no
         longer zeroes the difficulty.
         """
-        self.opp.level = 12
+        self.opp.level = 15
         self.opp.save(update_fields=["level"])
         with force_check_outcome(self.outcomes["failure"]) as capture:
             attempt_allegiance_break(striker=self.pc_sheet, opponent=self.opp, damage_dealt=1)
@@ -188,16 +190,17 @@ class AttemptAllegianceBreakTests(TestCase):
         """Review (fix round 2) item 2, test 1: same-level caster and target,
         using the level-12 case from the round-1 scale finding. Numbers:
 
-            strength   = 6 (severity) x 10 + level_opposition(level=12) = 60 + 60 = 120
-            resistance = 12 (level) x 5 + 0 (effort)                    = 60
+            strength   = 6 (severity) x 10 + the caster's rating (level 12's term, 106 / 2)
+                       = 60 + 53 = 113
+            resistance = level 12's baseline (the ephemeral opponent) + 0 = 106
             pressure   = harm_pressure_points(1, 100)                   = 0
-            difficulty = max(0, 120 - 60 - 0)                           = 60
+            difficulty = max(0, 113 - 106 - 0)                          = 7
 
         No longer 0 -- the caster's own level now backs the hold's strength,
         so a level-12 target no longer voids a level-12 caster's severity-6
         hold for free.
         """
-        caster_sheet = CharacterSheetFactory()
+        caster_sheet = make_player_character(CharacterSheetFactory())
         CharacterClassLevelFactory(character=caster_sheet, level=12, is_primary=True)
         self.instance.source_character = caster_sheet.character
         self.instance.save(update_fields=["source_character"])
@@ -206,7 +209,7 @@ class AttemptAllegianceBreakTests(TestCase):
 
         with force_check_outcome(self.outcomes["failure"]) as capture:
             attempt_allegiance_break(striker=self.pc_sheet, opponent=self.opp, damage_dealt=1)
-        self.assertEqual(capture.target_difficulty, 60)
+        self.assertEqual(capture.target_difficulty, 7)
 
     def test_higher_level_caster_makes_the_hold_harder_to_break(self):
         """Review item 2, test 2: a higher-level caster raises strength (and

@@ -26,8 +26,12 @@ class FuryTier(NaturalKeyMixin, SharedMemoryModel):
     control_surrendered = models.PositiveSmallIntegerField(
         default=0, help_text="Control this tier gives up for the rest of the engagement."
     )
-    base_check_difficulty = models.IntegerField(
-        default=0, help_text="Base control-retention check difficulty before provocation ease."
+    base_check_difficulty_level = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Base control-retention check difficulty before provocation ease. Authored "
+            "as a level (0 = no difficulty): the roll meets that level's baseline."
+        ),
     )
     berserk_severity = models.PositiveSmallIntegerField(
         default=0,

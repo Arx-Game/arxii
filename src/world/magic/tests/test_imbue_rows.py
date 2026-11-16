@@ -61,14 +61,14 @@ class ImbueRowsTests(TestCase):
     def test_imbue_adds_to_named_row_and_developed_points(self) -> None:
         thread = self._thread()
 
-        spend_resonance_for_imbuing(self.sheet, thread, self.domination, 30)
+        spend_resonance_for_imbuing(self.sheet, thread, self.domination, 5)
 
         thread.refresh_from_db()
         row = ThreadResonance.objects.get(thread=thread, resonance=self.domination)
-        self.assertEqual(row.amount, 30)
-        self.assertEqual(thread.developed_points, 30)
+        self.assertEqual(row.amount, 5)
+        self.assertEqual(thread.developed_points, 5)
         balance = self.sheet.character.resonances.balance(self.domination)
-        self.assertEqual(balance, 970)
+        self.assertEqual(balance, 995)
 
     def test_imbue_new_resonance_creates_row(self) -> None:
         thread = self._thread()
@@ -82,14 +82,14 @@ class ImbueRowsTests(TestCase):
     def test_levelling_never_lowers_a_row(self) -> None:
         thread = self._thread()
 
-        spend_resonance_for_imbuing(self.sheet, thread, self.fury, 60)
-        spend_resonance_for_imbuing(self.sheet, thread, self.domination, 90)
+        spend_resonance_for_imbuing(self.sheet, thread, self.fury, 6)
+        spend_resonance_for_imbuing(self.sheet, thread, self.domination, 9)
 
         thread.refresh_from_db()
-        self.assertEqual(thread.level, 11)  # the 150 in the bucket paid 100 for level 11
-        self.assertEqual(thread.developed_points, 50)
+        self.assertEqual(thread.level, 11)  # the 15 in the bucket paid 10 for level 11
+        self.assertEqual(thread.developed_points, 5)
         rows = {r.resonance_id: r.amount for r in ThreadResonance.objects.filter(thread=thread)}
-        self.assertEqual(rows, {self.fury.pk: 60, self.domination.pk: 90})
+        self.assertEqual(rows, {self.fury.pk: 6, self.domination.pk: 9})
 
     def test_leading_flips_when_second_overtakes(self) -> None:
         thread = self._thread(level=9)  # Fury's 10 raises it to level 10 before Domination

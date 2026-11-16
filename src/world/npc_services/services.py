@@ -27,7 +27,7 @@ from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 
-from world.checks.services import perform_check_with_modifiers
+from world.checks.services import difficulty_points, perform_check_with_modifiers
 from world.missions.constants import MissionStatus
 from world.missions.models import MissionInstance
 from world.missions.services.visibility import template_visible_to
@@ -675,7 +675,7 @@ def _apply_check(
     result = perform_check_with_modifiers(
         character,
         offer.check_type,
-        target_difficulty=offer.check_difficulty,
+        target_difficulty=difficulty_points(offer.check_difficulty_level),
     )
     succeeded = bool(result.outcome and result.outcome.success_level > 0)
     delta = offer.rapport_delta_success if succeeded else offer.rapport_delta_failure

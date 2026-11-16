@@ -282,7 +282,7 @@ export function SituationFinder({ risk, actions, characterId }: SituationFinderP
               <div>
                 <p className="font-medium">{challenge.name}</p>
                 <p className="text-xs text-muted-foreground">
-                  {challenge.category_name} - severity {challenge.severity ?? 0}
+                  {challenge.category_name} - level {challenge.severity_level ?? 0}
                 </p>
                 {challenge.goal && <p className="text-sm">{challenge.goal}</p>}
               </div>

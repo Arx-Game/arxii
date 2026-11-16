@@ -628,7 +628,7 @@ def promote_summon_to_companion(
       (derived-on-read via derive_allegiance).
 
     On the charmed-enemy path, bind_difficulty is reduced by
-    archetype.charm_difficulty_reduction, and the charm condition is consumed
+    archetype.charm_difficulty_reduction_tenths, and the charm condition is consumed
     on successful bind.
 
     Does NOT transfer the CombatOpponent.objectdb — bind_companion creates a
@@ -655,7 +655,11 @@ def promote_summon_to_companion(
             capacity is exceeded, or the bind check fails.
     """
     from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import (  # noqa: PLC0415
+        difficulty_points,
+        difficulty_step_points,
+        perform_check,
+    )
     from world.combat.constants import CombatAllegiance, OpponentStatus  # noqa: PLC0415
     from world.combat.won_over import bind_window_open  # noqa: PLC0415
     from world.companions.content import BIND_ATTEMPT_CHECK_NAME  # noqa: PLC0415
@@ -697,10 +701,16 @@ def promote_summon_to_companion(
         raise PromoteSummonError(msg, msg)
 
     # --- Determine bind difficulty (charm modifier on charmed-enemy path) ---
-    bind_difficulty = archetype.bind_difficulty
-    charm_applied = is_charmed_enemy and archetype.charm_difficulty_reduction > 0
+    bind_difficulty = difficulty_points(archetype.bind_difficulty_level)
+    charm_applied = is_charmed_enemy and archetype.charm_difficulty_reduction_tenths > 0
     if charm_applied:
-        bind_difficulty = max(0, bind_difficulty - archetype.charm_difficulty_reduction)
+        bind_difficulty = max(
+            0,
+            bind_difficulty
+            - difficulty_step_points(
+                archetype.charm_difficulty_reduction_tenths, archetype.bind_difficulty_level
+            ),
+        )
 
     # --- Roll the bind check ---
     check_type = CheckType.objects.get(name=BIND_ATTEMPT_CHECK_NAME)

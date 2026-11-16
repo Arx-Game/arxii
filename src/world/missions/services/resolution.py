@@ -70,7 +70,7 @@ from evennia_extensions.models import RoomProfile
 from world.areas.services import area_subtree_pks
 from world.checks.models import Consequence
 from world.checks.outcome_utils import select_weighted
-from world.checks.services import level_opposition, perform_check
+from world.checks.services import compute_obstacle_rating, difficulty_points, perform_check
 from world.checks.theater import maybe_emit_resolution_theater
 from world.checks.types import CheckResult, ResolutionContext
 from world.covenants.mentorship import effective_combat_level
@@ -358,15 +358,17 @@ def _resolve_check_type(option: MissionOption) -> CheckType:
 def _contest_opposition(option: MissionOption) -> int:
     """The passive opposition term a CONTEST adds to the template's difficulty (#3568).
 
-    ``level_opposition`` at the opposition sheet's effective combat level; the
-    NPC never rolls (spec Decision 2). Every caller of ``level_opposition`` adds
-    it to an authored difficulty, as here.
+    An NPC opposition sheet (the usual case) counts as its level's baseline on the opposition
+    check type at its effective combat level (#5093, ``compute_obstacle_rating`` through
+    ``level_opposition``): a level and no points, and it never rolls (spec Decision 2,
+    ADR-0265). Only a player character's sheet would count as her full check total. Every
+    caller adds it to an authored difficulty, as here.
     """
     sheet = option.opposition_sheet
-    return level_opposition(
+    return compute_obstacle_rating(
+        sheet.character,
         option.opposition_check_type,
-        level=effective_combat_level(sheet),
-        character=sheet.character,
+        level_override=effective_combat_level(sheet),
     )
 
 
@@ -428,7 +430,7 @@ def _resolve_challenge_check(
     return perform_check(
         character,
         chosen_approach.check_type,
-        target_difficulty=challenge.severity,
+        target_difficulty=difficulty_points(challenge.severity_level),
         extra_modifiers=extra_modifiers,
         situation_ctx=mission_situation_ctx(character, instance),
     )

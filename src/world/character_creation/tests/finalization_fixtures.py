@@ -29,6 +29,7 @@ from world.magic.factories import (
 from world.magic.seeds_cast import get_standalone_cast_template
 from world.realms.models import Realm
 from world.roster.seeds import ensure_rosters
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.skills.factories import SkillFactory
 from world.species.models import Species
 from world.tarot.constants import ArcanaType
@@ -80,6 +81,9 @@ class FinalizationTestMixin:
         # CG finalize gives every new aura its starting split from the canonical
         # Celestial / Primal / Abyssal rows (#4681).
         ensure_canonical_affinities()
+        # CG finalize sets level 1 and recomputes the anima pool, which reads the ANIMA_POOL
+        # lane's per-level rows (#5093).
+        seed_pool_and_cap_lanes()
 
         target.realm = Realm.objects.create(name=f"{prefix} Realm", description="Test")
         target.area = StartingArea.objects.create(

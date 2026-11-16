@@ -30,10 +30,16 @@ from world.magic.models import CharacterAnima
 from world.magic.services.soulfray import soulfray_condition_id
 from world.magic.tests.majora_fixtures import build_crossing_world
 from world.mechanics.engagement import CharacterEngagement
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 
 
 class TestAudereTelnetE2E(TestCase):
     """Command → registry → handler → service for surge and path-crossing offers."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
 
     def setUp(self) -> None:
         # wire_audere_power_multipliers creates the AUDERE_MAJORA_SEED_TEMPLATE_NAME

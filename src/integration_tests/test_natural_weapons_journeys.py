@@ -42,6 +42,7 @@ from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME, ManeuverEff
 from world.mechanics.factories import ModifierTargetFactory
 from world.mechanics.maneuver_effects import get_maneuver_effect
 from world.mechanics.models import ModifierCategory
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.species.factories import SpeciesGiftGrantFactory
 
 CLAWS = "Khati Claws"
@@ -150,6 +151,7 @@ class GainingTheGiftInPlay(JourneyCase):
 
     def setUp(self) -> None:
         super().setUp()
+        seed_pool_and_cap_lanes()
         self.room = self.make_room("The Academy Yard")
         self.hobb = self.make_player("Hobb", room=self.room)
         self.sheet = self.hobb.sheet_data
@@ -461,7 +463,8 @@ class StrikingWithClaws(_ClawedField):
             name="Strike: base damage",
             scope_maneuver_effect=get_maneuver_effect(ManeuverEffectKey.STRIKE_BASE_DAMAGE),
         )
-        FacetEffectBonus.objects.create(facet=wolf, target=target, amount=2)
+        seed_pool_and_cap_lanes()
+        FacetEffectBonus.objects.create(facet=wolf, target=target, amount_tenths=2)
         self.hobb.equipped_items.invalidate()
 
         damage, _rolled = self.strike_and_resolve("Success", "Success", weapon_id=self.claws.pk)

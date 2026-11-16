@@ -1,8 +1,10 @@
 """Journeys for a vow perk that applies to attack rolls only (#5092).
 
 Hobb holds an engaged vow at thread level 30 whose role carries one check-bonus perk of 10
-tenths, with no situation, so it answers every roll its scope allows. The perk scales by the
-thread level, read on the one scale (#5091): 30 x 10 / 10 = +30 points on a roll it reaches.
+tenths, with no situation, so it answers every roll its scope allows. The perk is a share of
+one level's width at the rung of its holder's vow thread (#5093): the thread at 30 is rung 3,
+a level there is 8 points wide on the example ladder, so 10 tenths = 1.0 x 8 = +8 points on a
+roll it reaches.
 
 The perk's "Applies to" is set to "Attack rolls" (owner ruling, 2026-11-12): once per attack
 on an opponent. A plain Strike's hit roll takes it, an attack technique's roll takes it, and
@@ -88,7 +90,7 @@ from world.magic.models.modifier_level import CastPowerLevel
 from world.mechanics.factories import ModifierCategoryFactory, MovementApplicationFactory
 from world.mechanics.models import CharacterModifier, ModifierSource, ModifierTarget
 from world.scenes.constants import RoundStatus
-from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
+from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory, ensure_level_ladder
 from world.traits.models import CheckOutcome, Trait
 from world.vitals.models import CharacterVitals
 from world.vitals.seeds import ensure_foundational_capabilities
@@ -98,7 +100,7 @@ if TYPE_CHECKING:
 
     from world.checks.models import CheckType
 
-PAYOFF = 30
+PAYOFF = 8
 VOW_ANSWERS = "vow answers the attack!"
 
 
@@ -107,6 +109,7 @@ class _AttackRollPerkField(_ThrowingField):
 
     def setUp(self) -> None:
         super().setUp()
+        ensure_level_ladder()
         role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
         engage_vow_with_thread(
             self.sheet,
@@ -321,6 +324,7 @@ class TheAnnounceNamesTheAllyAndTheFoe(JourneyCase):
     def setUp(self) -> None:
         super().setUp()
         CheckSystemSetupFactory.create()
+        ensure_level_ladder()
         road = self.make_room("The Road")
         self.mira = self.make_player("Mira", room=road)
         self.tomas = self.make_player("Tomas", room=road)
@@ -493,7 +497,7 @@ class TheAnnounceNamesTheAllyAndTheFoe(JourneyCase):
         self.assertNotTold(self.ilse, "Press the Held Foe")
 
     def test_with_no_foe_to_name_the_line_says_the_foe(self) -> None:
-        """The control and the fallback: "Any roll" reaches the same cast (+30), and with
+        """The control and the fallback: "Any roll" reaches the same cast (+8), and with
         no foe in it the room hears "the foe", never a raw brace."""
         self.unconditional("{holder} braces against {target}!")
         before = self.cast_at_nobody()
@@ -501,7 +505,7 @@ class TheAnnounceNamesTheAllyAndTheFoe(JourneyCase):
 
         after = self.cast_at_nobody()
 
-        self.assertEqual(after - before, 30)
+        self.assertEqual(after - before, PAYOFF)
         self.assertTold(self.ilse, "Press the Held Foe: Tomas braces against the foe!")
 
 

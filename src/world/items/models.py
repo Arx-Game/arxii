@@ -434,11 +434,13 @@ class ItemTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="+",
         help_text="Null = deterministic apply; set = roll a check and select from the pool.",
     )
-    on_use_difficulty = models.PositiveIntegerField(
+    on_use_difficulty_level = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
         help_text=(
-            "Authored target difficulty for the on-use check. Required iff on_use_check_type set."
+            "Authored target difficulty for the on-use check. Required iff "
+            "on_use_check_type set. Authored as a level (0 = no difficulty): the roll "
+            "meets that level's baseline."
         ),
     )
     on_use_target_kind = models.CharField(
@@ -710,11 +712,13 @@ class ItemTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def clean(self) -> None:
         super().clean()
-        if self.on_use_check_type_id is not None and self.on_use_difficulty is None:
-            raise ValidationError({"on_use_difficulty": "Required when on_use_check_type is set."})
-        if self.on_use_check_type_id is None and self.on_use_difficulty is not None:
+        if self.on_use_check_type_id is not None and self.on_use_difficulty_level is None:
             raise ValidationError(
-                {"on_use_difficulty": "Only valid when on_use_check_type is set."}
+                {"on_use_difficulty_level": "Required when on_use_check_type is set."}
+            )
+        if self.on_use_check_type_id is None and self.on_use_difficulty_level is not None:
+            raise ValidationError(
+                {"on_use_difficulty_level": "Only valid when on_use_check_type is set."}
             )
         has_resonance = self.tied_resonance_id is not None
         has_tier = self.resonance_tier_id is not None

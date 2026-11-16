@@ -2,22 +2,22 @@
 
 Slice 9 of #4551. Selene (level 6) holds a Sword vow whose role carries a technique
 specialty for Defense Buff. When she casts a sized buff whose technique carries that
-function, the buff counts one size step stronger, valued at her vow thread's level
-in whole steps of 10 and scaled by the specialty row's ``multiplier_tenths`` (10 = one whole
-step), and that extra part is never tapered. Points only: no outcome floor or ceiling. Only the
+function, the buff counts one size step stronger: the gap between the two sizes' fractions
+times one level's width at her vow thread's level (in whole steps of 10), scaled by the
+specialty row's ``multiplier_tenths`` (10 = one whole step), and that extra part is never
+tapered. Points only: no outcome floor or ceiling. Only the
 one-size-up shape is code; every amount is staff-tuned rows.
 
 Every cast goes the way the web client sends it (``cast_technique`` through dispatch),
-or, for the fight, a declared combat action resolved by ``resolve_round``. The value and
-taper rows are the example seed (``world.seeds.modifier_values``), so every expected
-number below is worked by hand from it:
+or, for the fight, a declared combat action resolved by ``resolve_round``. The size
+fraction, level baseline and taper rows are the example seed (``world.seeds.modifier_values``),
+so every expected number below is worked by hand from it:
 
-* check and stat lane values: Large = 3 at level 1, 10 at level 6, 16 at level 11;
-  Exceptional = 1.5 x Large, rounded half to even: 4 at level 1 (4.5), 15 at level 6,
-  24 at level 11. A level reads the row at the highest seeded level at or below it, so
-  level 4 reads level 1's row.
-* a whole step at thread level 60 is 15 - 10 = 5; at thread level 40 it is 4 - 3 = 1. A
-  share of it rounds half away from zero.
+* check lane: a level is 8 points wide everywhere, so Large (0.5) is 4 at every level and
+  Exceptional (0.75) is 6. A whole step, Exceptional minus Large, is 0.25 x 8 = 2 at any
+  thread level; a share of it rounds half away from zero.
+* stat lane: widths differ by level (20 points at level 6), so Large is 10 at level 6 and
+  the whole step is 0.25 x 20 = 5.
 * the taper: the k-th largest of a pile counts (7/8)^(k-1), never below 2/3.
 
 The specialty's multiplier also adds cast power (#2443: total thread level x tenths /
@@ -254,25 +254,24 @@ class AVowedCastersBuffsStep(JourneyCase):
 
         selene = self.landed(self.warding_word)
         self.assertEqual((selene.modifier_vow_level, selene.modifier_vow_tenths), (6, 10))
-        # The pile: three Large at level 11 (16 each) and Selene's Large at level 6 (10),
-        # tapered together: 16 + 16 x 7/8 + 16 x (7/8)^2 + 10 x (7/8)^3
-        # = 16 + 14 + 12.25 + 6.69921875 = 48.94921875. Her step, Exceptional minus Large
-        # at level 6 = 15 - 10 = 5 at 10 tenths, counts whole: 53.94921875, which rounds
-        # to 54. Tapered as part of a 15 it would be 42.25 + 15 x (7/8)^3 = 52.30, so 52.
-        self.assertEqual(gain, 54)
+        # The pile: three Large at level 11 and Selene's Large at level 6, 4 each, tapered
+        # together: 4 x (1 + 7/8 + (7/8)^2 + (7/8)^3) = 13.2421875. Her step, Exceptional
+        # minus Large = (0.75 - 0.5) x 8 = 2 at 10 tenths, counts whole: 15.2421875, which
+        # rounds to 15.
+        self.assertEqual(gain, 15)
         breakdown = collect_check_modifiers(self.vesper.sheet_data, self.ward_reading)
         (contribution,) = [c for c in breakdown.contributions if c.vow_part]
-        self.assertEqual((contribution.value, contribution.vow_part), (15, 5))
+        self.assertEqual((contribution.value, contribution.vow_part), (6, 2))
 
-    def test_at_thread_four_the_step_is_smaller(self) -> None:
+    def test_at_thread_four_the_step_reads_that_levels_width(self) -> None:
         self.swear(thread_level=40)
 
         gain = self.buff_vesper_beside_others()
 
         self.assertEqual(self.landed(self.warding_word).modifier_vow_level, 4)
-        # Level 4 reads level 1's row: Exceptional 4 minus Large 3 = 1.
-        # 48.94921875 + 1 = 49.94921875, which rounds to 50.
-        self.assertEqual(gain, 50)
+        # The check lane is 8 points wide at level 4 too: the same step of 2, so
+        # 13.2421875 + 2 = 15.2421875, which rounds to 15.
+        self.assertEqual(gain, 15)
 
     def test_a_vow_without_the_functions_specialty_adds_nothing(self) -> None:
         self.swear(thread_level=60, function=TechniqueFunction.STRIKE)
@@ -281,8 +280,8 @@ class AVowedCastersBuffsStep(JourneyCase):
 
         selene = self.landed(self.warding_word)
         self.assertEqual((selene.modifier_vow_level, selene.modifier_vow_tenths), (None, None))
-        # The tapered pile alone: 48.94921875, which rounds to 49.
-        self.assertEqual(gain, 49)
+        # The tapered pile alone: 13.2421875, which rounds to 13.
+        self.assertEqual(gain, 13)
 
     def test_a_three_tenths_specialty_gives_a_small_step(self) -> None:
         self.swear(thread_level=60, tenths=3)
@@ -290,9 +289,9 @@ class AVowedCastersBuffsStep(JourneyCase):
         gain = self.buff_vesper_beside_others()
 
         self.assertEqual(self.landed(self.warding_word).modifier_vow_tenths, 3)
-        # The step: 5 x 3/10 = 1.5, rounded half up to 2. 48.94921875 + 2 = 50.94921875,
-        # which rounds to 51. (Unrounded, 50.45 would round to 50.)
-        self.assertEqual(gain, 51)
+        # The step: 2 x 3/10 = 0.6, rounded half up to 1. 13.2421875 + 1 = 14.2421875, which
+        # rounds to 14.
+        self.assertEqual(gain, 14)
 
     def test_a_secondary_vow_steps_at_the_secondary_potency(self) -> None:
         # Her only engaged vow is a secondary one. The default SecondaryVowConfig potency
@@ -303,10 +302,9 @@ class AVowedCastersBuffsStep(JourneyCase):
 
         selene = self.landed(self.warding_word)
         self.assertEqual((selene.modifier_vow_level, selene.modifier_vow_tenths), (6, 6))
-        # The step at the full thread level 6: 5 x 6/10 = 3. 48.94921875 + 3 = 51.95, so
-        # 52. (Scaling the level instead, 6 x 0.6 = 3 reads level 1's row: a step of 1,
-        # 50.)
-        self.assertEqual(gain, 52)
+        # The step at the full thread level 6: 2 x 6/10 = 1.2, rounded to 1.
+        # 13.2421875 + 1 = 14.2421875, which rounds to 14.
+        self.assertEqual(gain, 14)
 
     def test_a_weak_cast_from_a_deep_vow_still_steps_at_the_vows_level(self) -> None:
         self.swear(thread_level=60)
@@ -318,9 +316,9 @@ class AVowedCastersBuffsStep(JourneyCase):
         weak = self.landed(self.warding_word)
         # The buff lands at level 1; the step is valued at her thread's level 6.
         self.assertEqual((weak.modifier_level, weak.modifier_vow_level), (1, 6))
-        # Large at level 1 = 3, plus the level-6 step 15 - 10 = 5: 8.
-        # (Capped at the buff's level the step would be 4 - 3 = 1, for 4.)
-        self.assertEqual(self.ward_check().total_points - before, 8)
+        # Large at level 1 = 4, plus the level-6 step of 2: 6. The step reads the vow's level
+        # for its width, never the buff's.
+        self.assertEqual(self.ward_check().total_points - before, 6)
 
     def test_recasting_without_the_vow_keeps_the_step(self) -> None:
         self.swear(thread_level=60)
@@ -347,8 +345,8 @@ class AVowedCastersBuffsStep(JourneyCase):
 
         instance = ConditionInstance.objects.get(target=self.vesper, condition=condition)
         self.assertEqual((instance.modifier_level, instance.modifier_vow_level), (6, 6))
-        # The stat lane's seed equals the check lane's: Large at level 6 = 10, and the
-        # whole step 15 - 10 = 5, so strength gains 15 stored units.
+        # The stat lane at level 6 is 20 points wide: Large = 10, and the whole step
+        # (0.75 - 0.5) x 20 = 5, so strength gains 15 stored units.
         self.assertEqual(self.vesper.traits.get_trait_value(self.strength.name) - before, 15)
 
 
@@ -458,14 +456,14 @@ class AHexersDebuffStepsOnAnOpponent(JourneyCase):
     def test_the_hex_steps_the_penalty_untapered(self) -> None:
         drop = self.hex_the_opponent(specialty=TechniqueFunction.WEAKEN)
 
-        # The penalty pile: Bruised -20 leads, Sapped's Large at level 6 (-10) counts
-        # 7/8: -20 - 8.75 = -28.75. The step, -(15 - 10) = -5, counts whole: -33.75,
-        # which rounds half away from zero to -34.
-        # Tapered as part of a -15 it would be -20 - 13.125 = -33.125, so -33.
-        self.assertEqual(drop, 34)
+        # The penalty pile: Bruised -20 leads, Sapped's Large at level 6 (-4) counts 7/8:
+        # -20 - 3.5 = -23.5. The step, -(0.75 - 0.5) x 8 = -2, counts whole: -25.5, which
+        # rounds half away from zero to -26.
+        # Tapered as part of a -6 it would be -20 - 5.25 = -25.25, so -25.
+        self.assertEqual(drop, 26)
 
     def test_without_the_specialty_the_hex_does_not_step(self) -> None:
         drop = self.hex_the_opponent(specialty=TechniqueFunction.STRIKE)
 
-        # -20 - 8.75 = -28.75, which rounds to -29.
-        self.assertEqual(drop, 29)
+        # -20 - 3.5 = -23.5, which rounds half away from zero to -24.
+        self.assertEqual(drop, 24)

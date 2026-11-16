@@ -19,6 +19,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from world.assets.constants import AssetStatus
+from world.checks.services import difficulty_points
 from world.tasking.constants import (
     DIFFICULTY_STEP_PER_LEVEL,
     DISPATCH_MARGIN_STEP,
@@ -182,13 +183,13 @@ def task_difficulty(task: OrgTask) -> int:
     """The target difficulty every roll on ``task`` uses (#696 gap 8).
 
     The steward-set ``derived_difficulty`` when it exists, else the template's
-    static ``check_difficulty``: the handler's dispatch check, the agent's
+    static ``check_difficulty_level``: the handler's dispatch check, the agent's
     resolution check and a PC pickup's AUTHORED CHECKs all read this one
     number, so a well-briefed job is easier however it is run.
     """
     if task.derived_difficulty is not None:
         return task.derived_difficulty
-    return task.template.check_difficulty
+    return difficulty_points(task.template.check_difficulty_level)
 
 
 def _target_area(task: OrgTask) -> Area | None:

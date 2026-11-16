@@ -16,9 +16,9 @@
     {% endif %}
     {% include "admin/soulfray_builder/_form_row.html" with field=forms.stage.severity_threshold %}
     {% include "admin/soulfray_builder/_form_row.html" with field=forms.stage.advancement_resist_failure_kind %}
-    <div class="form-row">{{ forms.stage.resist_check_type.errors }}{{ forms.stage.resist_difficulty.errors }}
+    <div class="form-row">{{ forms.stage.resist_check_type.errors }}{{ forms.stage.resist_difficulty_level.errors }}
       <div>
-        <div class="flex-container">{{ forms.stage.resist_check_type.label_tag }}<div class="sf-field">{{ forms.stage.resist_check_type }} {{ forms.stage.resist_difficulty.label_tag }} {{ forms.stage.resist_difficulty }}</div></div>
+        <div class="flex-container">{{ forms.stage.resist_check_type.label_tag }}<div class="sf-field">{{ forms.stage.resist_check_type }} {{ forms.stage.resist_difficulty_level.label_tag }} {{ forms.stage.resist_difficulty_level }}</div></div>
         <div class="help">{{ forms.stage.resist_check_type.help_text }}</div>
       </div>
     </div>

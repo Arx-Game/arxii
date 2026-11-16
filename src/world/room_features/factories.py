@@ -88,7 +88,7 @@ class TrapFactory(DjangoModelFactory):
     consequence_pool = factory.SubFactory("actions.factories.ConsequencePoolFactory")
     detect_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
     disarm_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
-    detect_difficulty = 20
-    disarm_difficulty = 20
+    detect_difficulty_level = 1
+    disarm_difficulty_level = 1
     is_armed = True
     is_hidden = True

@@ -399,9 +399,9 @@ def ensure_surrounded_content() -> dict[str, object]:
     )
 
     stage_specs = [
-        (1, "Encircled", 15),
-        (2, "Overwhelmed", 25),
-        (3, "Being Cut Down", 35),
+        (1, "Encircled", 1),
+        (2, "Overwhelmed", 2),
+        (3, "Being Cut Down", 2),
     ]
     stages = []
     if condition is not None:
@@ -412,7 +412,7 @@ def ensure_surrounded_content() -> dict[str, object]:
                     "name": name,
                     "description": f"{name} — resisting being surrounded.",
                     "resist_check_type": check_type,
-                    "resist_difficulty": difficulty,
+                    "resist_difficulty_level": difficulty,
                     "rounds_to_next": 1,
                 },
                 condition=condition,

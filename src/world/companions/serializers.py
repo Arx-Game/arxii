@@ -10,7 +10,7 @@ from world.companions.models import Companion, CompanionArchetype
 class CompanionArchetypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = CompanionArchetype
-        fields = ["id", "domain", "name", "description", "bind_difficulty", "capacity_cost"]
+        fields = ["id", "domain", "name", "description", "bind_difficulty_level", "capacity_cost"]
         read_only_fields = fields
 
 

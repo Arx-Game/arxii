@@ -2,6 +2,8 @@
 
 from django.test import TestCase
 
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
+
 
 class ResidenceTrickleTickTests(TestCase):
     def test_no_residence_noop(self) -> None:
@@ -223,6 +225,11 @@ class ResonanceWeeklySettlementTickTests(TestCase):
 class OutfitDailyTrickleTests(TestCase):
     """Tests for outfit_daily_trickle_for_character (Spec D §5.1)."""
 
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
+
     def _build_sheet_with_equipped_facet_item(
         self,
         *,
@@ -294,6 +301,42 @@ class OutfitDailyTrickleTests(TestCase):
 
         cr = CharacterResonance.objects.get(character_sheet=sheet, resonance=resonance)
         self.assertEqual(cr.balance, 12)
+
+    def test_seeded_rung_factor_matches_the_old_rung_multiplier(self) -> None:
+        """Pinned from the old rule (max(1, rung)): rungs 0, 1, 11 and 26 give 1, 1, 11, 26."""
+        from world.magic.constants import GainSource
+        from world.magic.models import ResonanceGrant
+        from world.magic.services.gain import outfit_daily_trickle_for_character
+
+        for thread_level, expected in ((5, 1), (10, 1), (115, 11), (265, 26)):
+            sheet, *_rest = self._build_sheet_with_equipped_facet_item(
+                item_quality_multiplier="1.00",
+                attachment_quality_multiplier="1.00",
+                thread_level=thread_level,
+            )
+            outfit_daily_trickle_for_character(sheet)
+            grant = ResonanceGrant.objects.get(
+                character_sheet=sheet, source=GainSource.OUTFIT_TRICKLE
+            )
+            self.assertEqual(grant.amount, expected, f"thread level {thread_level}")
+
+    def test_a_retuned_lane_row_changes_the_trickle(self) -> None:
+        """Staff retune a rung's factor in the OUTFIT_TRICKLE lane's row."""
+        from world.checks.constants import ModifierLane
+        from world.checks.modifier_models import ModifierLevelBaseline
+        from world.magic.constants import GainSource
+        from world.magic.models import ResonanceGrant
+        from world.magic.services.gain import outfit_daily_trickle_for_character
+
+        row = ModifierLevelBaseline.objects.get(lane=ModifierLane.OUTFIT_TRICKLE, level=2)
+        row.baseline = 5
+        row.save()
+        sheet, *_rest = self._build_sheet_with_equipped_facet_item(
+            item_quality_multiplier="1.00", attachment_quality_multiplier="1.00", thread_level=20
+        )
+        outfit_daily_trickle_for_character(sheet)
+        grant = ResonanceGrant.objects.get(character_sheet=sheet, source=GainSource.OUTFIT_TRICKLE)
+        self.assertEqual(grant.amount, 5)
 
     def test_no_thread_means_no_grant(self) -> None:
         """Equipped item with facet but no Thread on that facet → no grants."""

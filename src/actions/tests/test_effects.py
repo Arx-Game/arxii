@@ -19,6 +19,7 @@ from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
 from world.checks.services import compute_check_rating
 from world.checks.types import CheckResult
 from world.conditions.factories import ConditionTemplateFactory
+from world.traits.factories import ensure_level_ladder
 
 
 class ModifyKwargsHandlerTests(TestCase):
@@ -256,17 +257,18 @@ class ConditionOnCheckHandlerTests(TestCase):
 class ResolveTargetDifficultyTests(TestCase):
     """fallback_difficulty is an authored floor, not just a missing-check-type fallback.
 
-    #2707 review: compute_check_rating now always returns at least
-    LEVEL_POINTS_PER_LEVEL (level floors at 1, nothing on this path goes negative), so
+    #2707 review: compute_check_rating now always carries a level term (level floors at 1,
+    nothing on this path goes negative), so
     the old `if total_points > 0: return total_points` made fallback_difficulty
     unreachable whenever resistance_check_type was set -- a statless synthetic NPC
     authored to resist at a fixed target_difficulty (e.g.
     ConditionOnCheckConfig(resistance_check_type=Composure, target_difficulty=60))
-    silently resisted at 5 instead of 60.
+    silently resisted at its level term instead of 60.
     """
 
     @classmethod
     def setUpTestData(cls) -> None:
+        ensure_level_ladder()
         cls.check_category = CheckCategoryFactory(name="ResolveTargetDifficulty")
         cls.check_type = CheckTypeFactory(
             name="resolve_target_difficulty_check",
@@ -275,11 +277,12 @@ class ResolveTargetDifficultyTests(TestCase):
         # No CheckTypeTrait/Aspect/Specialization/Capability rows authored on this
         # CheckType, and no CharacterClassLevel row -- get_character_path_level
         # floors at 1, so compute_check_rating(cls.statless_target, cls.check_type)
-        # is exactly LEVEL_POINTS_PER_LEVEL (5): a "statless NPC" stand-in.
+        # is exactly the level-1 term (9, half of level 1's baseline 18): a "statless NPC"
+        # stand-in.
         cls.statless_target = CharacterSheetFactory().character
 
     def test_authored_fallback_still_wins_over_the_guaranteed_level_floor(self) -> None:
-        """The regression: fallback_difficulty=60 must not be shadowed by rating=5."""
+        """The regression: fallback_difficulty=60 must not be shadowed by rating=9."""
         rating = compute_check_rating(self.statless_target, self.check_type)
         assert rating < 60  # sanity: the guaranteed level floor alone is small
 

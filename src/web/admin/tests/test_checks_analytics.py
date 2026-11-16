@@ -256,26 +256,26 @@ class SlideAnalyticsTests(TestCase):
         ResultChart.clear_cache()
 
     def test_matchup_halfway_through_a_band_gets_the_halfway_odds(self) -> None:
-        # Competent (rank 2) at 37.5 points is 50% toward Expert; 37 is 48%.
-        matchup = compute_matchup(roller_points=37, target_difficulty=50)
+        # Rank 2 starts at 26 and rank 3 at 34 (a level is 8 points wide): 30 is 50% toward 3.
+        matchup = compute_matchup(roller_points=30, target_difficulty=34)
         assert matchup is not None
         assert matchup.rank_difference == -1
-        assert round(matchup.success_probability, 4) == round(0.22 + 0.48 * 0.18, 4)
-        assert matchup.standing.roller.text == "Competent (rank 2), 48% toward Expert (rank 3)"
+        assert round(matchup.success_probability, 4) == round(0.22 + 0.5 * 0.18, 4)
+        assert matchup.standing.roller.text == "Rank 2, 50% toward Competent (rank 3)"
 
     def test_a_pile_of_modifiers_lifts_the_matchup_off_an_impossible_chart(self) -> None:
-        plain = compute_matchup(roller_points=20, target_difficulty=250)
+        plain = compute_matchup(roller_points=20, target_difficulty=74)
         assert plain is not None
         assert plain.rank_difference == -7
         assert plain.success_probability == 0
-        matchup = compute_matchup(roller_points=20, target_difficulty=250, modifier_points=120)
+        matchup = compute_matchup(roller_points=20, target_difficulty=74, modifier_points=34)
         assert matchup is not None
         assert matchup.rank_difference == -3
         assert matchup.success_probability > 0
 
     def test_matchup_tally_under_a_roll_modifier_matches_the_engine_clamp(self) -> None:
-        plain = compute_matchup(roller_points=37, target_difficulty=50)
-        shifted = compute_matchup(roller_points=37, target_difficulty=50, roll_modifier=10)
+        plain = compute_matchup(roller_points=30, target_difficulty=34)
+        shifted = compute_matchup(roller_points=30, target_difficulty=34, roll_modifier=10)
         assert shifted.success_probability > plain.success_probability
         assert abs(sum(b.probability for b in shifted.bands) - 1) < 1e-9
 
@@ -350,12 +350,12 @@ class SlideAnalyticsTests(TestCase):
         self.client.force_login(self.super)
         resp = self.client.get(
             reverse("admin_tuning_checks"),
-            {"roller_points": "20", "target_difficulty": "250", "modifier_points": "120"},
+            {"roller_points": "20", "target_difficulty": "74", "modifier_points": "34"},
         )
         self.assertEqual(resp.status_code, 200)
         body = resp.content.decode()
-        assert "Grandmaster (rank 5)" in body
-        assert "Mythic (rank 8)" in body
+        assert "Rank 5" in body
+        assert "Rank 8" in body
         assert "rank difference -3" in body
         assert "Pinned" not in body
         assert "Hopeless" not in body

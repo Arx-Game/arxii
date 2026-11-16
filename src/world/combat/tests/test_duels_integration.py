@@ -393,7 +393,7 @@ class PvpNonLethalCapSoulfrayTests(TestCase):
             severity_scale=10,
             deficit_scale=5,
             resilience_check_type=cls.resilience_check_type,
-            base_check_difficulty=15,
+            base_check_difficulty_level=1,
         )
 
         cls.soulfray_template = SoulfrayTemplateFactory(

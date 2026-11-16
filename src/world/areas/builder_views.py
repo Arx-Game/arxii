@@ -241,7 +241,7 @@ def _clue_and_anchor_sidecars(
                 "id": row.pk,
                 "clue_name": row.clue.name,
                 "clue_slug": row.clue.slug,
-                "detect_difficulty": row.detect_difficulty,
+                "detect_difficulty_level": row.detect_difficulty_level,
                 "fixture_key": row.fixture_key,
             }
         )

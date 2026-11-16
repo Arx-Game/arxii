@@ -269,7 +269,7 @@ describe('GMStoryRail', () => {
           },
         ],
         clue_placements: [
-          { id: 5, clue_name: 'Torn Letter', detect_difficulty: 10, is_active: true },
+          { id: 5, clue_name: 'Torn Letter', detect_difficulty_level: 1, is_active: true },
         ],
       }),
     });

@@ -88,6 +88,7 @@ from world.items.factories import (
 )
 from world.items.services.crafting import craft_attach_facet
 from world.magic.factories import FacetFactory
+from world.mechanics.models import ModifierTarget
 from world.traits.factories import CharacterTraitValueFactory, CheckOutcomeFactory
 
 
@@ -109,7 +110,7 @@ class CraftAttachFacetQueryCountTests(TestCase):
         from world.items.models import QualityTier
         from world.magic.models import CharacterAnima
 
-        self.recipe = wire_enchanting_crafting(base_difficulty=0)
+        self.recipe = wire_enchanting_crafting(base_difficulty_level=0)
         # wire_enchanting_crafting seeds 3 CraftingSkillCap rows + 2 consequence rows.
         # Add a 3rd consequence so the pool has ≥3 rows; per-row N+1 would be visible.
         extra_outcome = CheckOutcomeFactory(name="CQC_ExtraOutcome", success_level=1)
@@ -272,10 +273,12 @@ class CraftAttachFacetQueryCountTests(TestCase):
             # deduped) and the thread-ceiling probe. Band 79-81 → 81-83.
             # #4594: collect_check_modifiers reads the check lane's ModifierTaper rows once
             # (one constant query, never per row). Band 81-83 → 82-84.
+            # #5093: the LevelTier rows are read once per level strength (the difficulty and
+            # the level term), two constant queries. Band 82-84 → 84-86.
             self.assertTrue(
-                82 <= executed <= 84,
-                f"{executed} queries executed, expected 83 ±1 identity-map "
-                f"wobble (band 82-84). A jump of >=3 means a per-row N+1.",
+                84 <= executed <= 86,
+                f"{executed} queries executed, expected 85 ±1 identity-map "
+                f"wobble (band 84-86). A jump of >=3 means a per-row N+1.",
             )
 
         self.assertTrue(result.attached)
@@ -295,7 +298,7 @@ class BuildCraftingQuoteQueryCountTests(TestCase):
         from world.items.models import QualityTier
         from world.magic.models import CharacterAnima
 
-        self.recipe = wire_enchanting_crafting(base_difficulty=0)
+        self.recipe = wire_enchanting_crafting(base_difficulty_level=0)
         # Add a 3rd consequence to verify the consequence fetch is a single bulk query.
         extra_outcome = CheckOutcomeFactory(name="BCQ_ExtraOutcome", success_level=1)
         extra_cons = ConsequenceFactory(outcome_tier=extra_outcome, label="BCQ extra consequence")
@@ -359,6 +362,10 @@ class BuildCraftingQuoteQueryCountTests(TestCase):
           + CraftingSkillCap.for_skill (1) + consequence_rows select_related (1)
           = 11 queries.
 
+        The recipe's difficulty is level 0, which reads no baseline or tier row (#5093). The
+        trait-to-modifier-target map is a process-wide cache that a test running alone finds
+        cold (one more query), so the test warms it first and counts the same in any order.
+
         material_requirements: single SELECT — NOT one per requirement.
         CraftingSkillCap.for_skill: single SELECT — NOT one per cap row.
         consequence_rows: single SELECT — NOT one per consequence row.
@@ -368,6 +375,7 @@ class BuildCraftingQuoteQueryCountTests(TestCase):
         """
         from world.items.crafting.constants import CraftingRecipeKind
 
+        ModifierTarget.get_for_trait(_enchanting_trait())
         with self.assertNumQueries(11):
             quote = build_crafting_quote(
                 kind=CraftingRecipeKind.FACET_ATTACH,

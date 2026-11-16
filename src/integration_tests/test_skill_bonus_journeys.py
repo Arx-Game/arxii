@@ -8,7 +8,7 @@ handler folded modifiers for stats only, so the same card rolled 11 and showed 1
 
 The expected numbers come from the rules the skills docs state: one check point per
 rating point, weekly training pays ``5 x AP x path level`` development points, and a
-skill level costs ``(value - 9) x 100`` of them.
+skill step from 11 costs 10 of them (a tenth of level 1's band on the shared curve).
 """
 
 from __future__ import annotations
@@ -110,10 +110,10 @@ class ASkillBonusFromACard(JourneyCase):
         self.assertEqual((self.roll_points(), row["value"], row["modifier"]), (21, 21, 10))
         self.assertEqual(self.stored(), 11, "the rating the game trains is unmodified")
 
-        # 5 x 40 AP x path level 1 = 200 development points; 11 -> 12 costs 200.
+        # 5 x 2 AP x path level 1 = 10 development points; 11 -> 12 costs 10.
         self.assertIn(
             f"Training allocation set for {self.sailing.name}.",
-            self.telnet(self.rhoswen, f"training add skill={self.sailing.pk} ap=40"),
+            self.telnet(self.rhoswen, f"training add skill={self.sailing.pk} ap=2"),
         )
         run_weekly_skill_cron()
         row = self.sheet_row()

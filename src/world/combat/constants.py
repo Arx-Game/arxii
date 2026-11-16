@@ -526,13 +526,13 @@ PENETRATION_CHECK_TYPE_NAME: str = "penetration"
 # Flee-check wiring (#878)
 #
 # Name of the seeded CheckType rolled for flee attempts. Difficulty is
-# FleeConfig.base_difficulty plus the max FleeTierModifier over active
+# the baseline of FleeConfig.base_difficulty_level plus the max FleeTierModifier over active
 # opponents; each ally covering this round adds that ally's Cover escape bonus
 # (the maneuver effect catalog, #4783).
 # ---------------------------------------------------------------------------
 
 FLEE_CHECK_TYPE_NAME: str = "flee"
-FLEE_BASE_DIFFICULTY: int = 15
+FLEE_BASE_DIFFICULTY_LEVEL: int = 1
 
 # PARTIAL's authored success_level. At or above it the fleer escapes; at or
 # below it the selected pool consequence applies (PARTIAL = escape at a cost;

@@ -1,3 +1,4 @@
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from actions.constants import ActionCategory
@@ -52,4 +53,62 @@ class FatiguePool(SharedMemoryModel):
         return (
             f"Fatigue: {self.character_sheet}"
             f" (P:{self.physical_current} S:{self.social_current} M:{self.mental_current})"
+        )
+
+
+SINGLETON_PK = 1
+
+
+class FatigueConfig(SharedMemoryModel):
+    """Singleton: the stat terms of fatigue capacity and the well-rested bonus (#5093).
+
+    Capacity works like health: partly from stats, plus a per-level bonus. This row holds the
+    stat terms (a stamina-like endurance stat and willpower, each counted per 10 points of the
+    stat, #5091) and the well-rested bonus; the per-level bonus is the
+    ``FATIGUE_LEVEL_BONUS`` lane's ``ModifierLevelBaseline`` rows, which add nothing until
+    staff author them. One row at pk 1, read through ``get_singleton``, which falls back to the
+    field defaults (without saving them) on a database that has no row.
+    """
+
+    stat_multiplier = models.PositiveSmallIntegerField(
+        default=10,
+        help_text=(
+            "Fatigue capacity each 10 points of the category's endurance stat (stamina for "
+            "physical, composure for social, stability for mental) gives."
+        ),
+    )
+    willpower_multiplier = models.PositiveSmallIntegerField(
+        default=3,
+        help_text="Fatigue capacity each 10 points of willpower gives, in every category.",
+    )
+    well_rested_percent = models.PositiveSmallIntegerField(
+        default=150,
+        validators=[MinValueValidator(100)],
+        help_text=(
+            "A well-rested character's capacity as a percent of normal (150 means one and a "
+            "half times, rounded down)."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "Fatigue config"
+        verbose_name_plural = "Fatigue config"
+
+    @classmethod
+    def get_singleton(cls) -> "FatigueConfig":
+        """The row at pk 1, or an unsaved row of the field defaults when a database has none.
+
+        Never writes: capacity is read on paths that must create nothing (the read-only
+        fatigue zone behind movement inspection), and the defaults are the shipped terms, so
+        a database without the row reads the same numbers a seeded one does.
+        """
+        try:
+            return cls.objects.get(pk=SINGLETON_PK)
+        except cls.DoesNotExist:
+            return cls(pk=SINGLETON_PK)
+
+    def __str__(self) -> str:
+        return (
+            f"Fatigue config (stat x{self.stat_multiplier}, "
+            f"willpower x{self.willpower_multiplier}, well rested {self.well_rested_percent}%)"
         )

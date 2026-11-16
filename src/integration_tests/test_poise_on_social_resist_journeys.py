@@ -17,10 +17,13 @@ way but one:
 - Sella is Steeled, a once-only condition worth +6 on Composure checks.
 
 Each Persuade is sent to ``/api/action-requests/``, the request the browser sends, and the
-difficulty the roll was graded at is read off the check itself. A target resists with what
-they would bring to a Composure roll: Marta is 7 harder to persuade than Hobb, Tam 10
-easier, Oriel 3 harder, Sella 6 harder, Brann the same. Being persuaded is not Sella's
-roll, so she is still Steeled afterwards and just as hard to persuade a second time.
+difficulty the roll was graded at is read off the check itself. A major NPC is a level and no
+points (#5093): it resists as its level's baseline plus the conditions it carries, so a
+condition counts and anything else it would bring to a Composure roll does not. Tam is 10
+easier to persuade than Hobb, Sella 6 harder, and Marta (Poise), Oriel (the circlet) and
+Brann (a roll modifier) the same as Hobb. Being persuaded is not Sella's roll, so she is
+still Steeled afterwards and just as hard to persuade a second time. A player character's
+Poise and worn items count in full: see ``test_opposed_difficulty``.
 """
 
 from __future__ import annotations
@@ -50,6 +53,7 @@ from world.traits.factories import (
     CharacterTraitValueFactory,
     CheckOutcomeFactory,
     StatTraitFactory,
+    ensure_level_ladder,
 )
 from world.traits.models import PointConversionRange, TraitType
 
@@ -67,6 +71,7 @@ def persona_of(character: ObjectDB):
 class PoiseOnSocialResist(JourneyCase):
     def setUp(self) -> None:
         super().setUp()
+        ensure_level_ladder()
         self.room = self.make_room("The Lantern")
         self.ysmay = self.make_player("Ysmay", room=self.room)
         npcs = RosterFactory(roster_type=RosterType.NPC)
@@ -149,14 +154,15 @@ class PoiseOnSocialResist(JourneyCase):
         self.assertEqual(capture.check_type.name, "Persuasion")
         return capture.target_difficulty
 
-    def test_poise_makes_her_harder_to_persuade_by_its_value(self) -> None:
-        self.assertEqual(self.persuade(self.marta) - self.persuade(self.hobb), POISE)
+    def test_an_npcs_poise_changes_nothing(self) -> None:
+        """An NPC is a level and no points: Poise is part of what a player brings to a roll."""
+        self.assertEqual(self.persuade(self.marta), self.persuade(self.hobb))
 
     def test_a_flustered_target_is_easier_to_persuade_by_the_penalty(self) -> None:
         self.assertEqual(self.persuade(self.tam) - self.persuade(self.hobb), FLUSTERED)
 
-    def test_a_worn_item_with_a_composure_modifier_counts(self) -> None:
-        self.assertEqual(self.persuade(self.oriel) - self.persuade(self.hobb), CIRCLET)
+    def test_an_npcs_worn_item_changes_nothing(self) -> None:
+        self.assertEqual(self.persuade(self.oriel), self.persuade(self.hobb))
 
     def test_a_staff_roll_modifier_on_the_target_changes_nothing(self) -> None:
         """It shifts the dice of his own rolls; the resist is points and has no roll."""

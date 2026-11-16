@@ -11,7 +11,7 @@ from __future__ import annotations
 from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.checks.test_helpers import force_check_outcome
+from world.checks.test_helpers import SeededLevelLadderMixin, force_check_outcome
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.conditions.factories import ConditionInstanceFactory
 from world.conditions.models import ConditionTemplate
@@ -70,7 +70,7 @@ class WoundClockTests(TestCase):
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
-class WoundStampTests(TestCase):
+class WoundStampTests(SeededLevelLadderMixin, TestCase):
     """A wound that lands in a fight records the fight and its round."""
 
     def _wound(self, vitals) -> WoundDetails:

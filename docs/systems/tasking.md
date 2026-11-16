@@ -17,7 +17,7 @@ Deliberately NOT here: standing "stay here until recalled" postings — those ar
 
 - **`TaskTemplate`** — authored job: `name` (natural key), `category`
   (`TaskCategory`: SPYCRAFT/CRIME/DOMAIN/MILITARY/GENERAL), `check_type` FK +
-  `check_difficulty` (both the dispatch and resolution rolls), `duration`
+  `check_difficulty_level` (both the dispatch and resolution rolls), `duration`
   (real time to deadline), `target_kind` (`TaskTargetKind`), `eligibility_rule`
   predicate, nullable `mission_template` FK (set ⇒ PC-fulfillable, phase 5),
   nullable `consequence_pool` FK (ADR-0092 risk surface), `is_active`.
@@ -48,7 +48,7 @@ Deliberately NOT here: standing "stay here until recalled" postings — those ar
   `DIFFICULTY_STEP_PER_LEVEL` (constants.py, 5) per success level, easier on a
   good roll, clamped to the authored bands. Only the number survives; the roll is
   never stored. Every roll on the task then reads `task_difficulty(task)` (the
-  derived number, else the template's static `check_difficulty`): the handler's
+  derived number, else the template's static `check_difficulty_level`): the handler's
   dispatch check, the agent's resolution check, and a PC pickup's AUTHORED CHECKs
   (`missions.services.resolution._authored_check_difficulty`, replacing the
   mission template's `risk_tier` for that run).
@@ -259,7 +259,7 @@ revisit with the prose pass.
 
 **Worked example** (`world/seeds/domain_tasks.py`, `domain_tasks` seed
 cluster): "Collect the Levies" — a DOMAIN-target `TaskTemplate`
-(`check_type=Tax Collection`; `check_difficulty` is the static PLACEHOLDER fallback,
+(`check_type=Tax Collection`; `check_difficulty_level` is the static PLACEHOLDER fallback,
 overridden per task by the steward-set `OrgTask.derived_difficulty` for NPC and PC
 runs alike, #696 gap 8)
 linked to a single-node CHECK `MissionTemplate` of the same name (RESTRICTED

@@ -41,7 +41,7 @@ class RoomClueAdmin(admin.ModelAdmin):
 
     autocomplete_fields = ["room_profile"]  # rooms are searched, never scrolled
 
-    list_display = ["clue", "room_profile", "detect_difficulty", "is_active"]
+    list_display = ["clue", "room_profile", "detect_difficulty_level", "is_active"]
     list_filter = ["is_active", "clue__target_kind"]
     search_fields = ["clue__name"]
 

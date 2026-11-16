@@ -63,6 +63,7 @@ from world.roster.models import RosterTenure
 from world.roster.models.choices import ApplicationStatus
 from world.scenes.models import Interaction, Persona
 from world.secrets.factories import SecretFactory
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.skills.factories import SkillFactory, SpecializationFactory
 from world.skills.models import TrainingAllocation
 from world.societies.factories import (
@@ -711,6 +712,11 @@ class TrainingAndUnlocking(JourneyCase):
 
 class LearningAGift(JourneyCase):
     """Ysmay buys a gift's unlock, takes up Hobb's teaching and looks at her meters."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        seed_pool_and_cap_lanes()
 
     def setUp(self) -> None:
         super().setUp()

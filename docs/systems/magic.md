@@ -79,7 +79,7 @@ and the 5-axis Thread model no longer exist.
 | `Restriction` | Limitations that grant power bonuses (DESIGN kind) or a price a caster attaches to their own hold of a technique (PRICE kind, #4099, ADR-4099) | `name`, `description`, `power_bonus`, `kind` (`RestrictionKind`: DESIGN/PRICE), `creation_point_cost` (PRICE only, nullable; blank = not offered in creation), `cast_narration` (PRICE only; joins the cast narration) |
 | `Facet` | Flat imagery/symbolism vocabulary — every facet is a peer (Wolf, Silk, Scythe, Red). The Category > Subcategory > Specific hierarchy and its `parent` self-FK were removed by #3776 (ADR-0289): depth made a node's mechanical reach uneven, so a facet's reach is now the same whichever one you pick. Owner-agnostic — characters bind facets via `Motif`, a `WorshippedBeing` via `worship.BeingFacet`, an `ItemTemplate` via `inherent_facets`, all from this one shared pool. Typed by many hands, so it drifts; three guards share one spelling rule, `services.facets.facet_key` (#4197, ADR-4197): a picker shows the near-matches (`GET /api/magic/facets/near/`) before it offers to create, `POST /api/magic/facets/` (staff) answers a spelling that already resolves with `matched: true` instead of a near-duplicate, and the admin action **Merge into...** (`merge_facets`) repoints every binding to a survivor and retires the losers as aliases. | `name` (unique), `description` |
 | `FacetAlias` | Another spelling that routes to a facet (#4197): the names a merge retired, and any spelling staff add by hand. Resolved by the pickers' search and the create endpoint; never shown to a player. Content (`CONTENT_MODELS`, natural key `name`); cascades with its facet. | `name` (unique), `facet` FK |
-| `FacetEffectBonus` | A facet's always-on bonus to one maneuver effect (#4815, slice 4 of #4783): the facet names the effect, whatever its thread's resonance ("Wolf: +2 Charge: damage"). Counted by `passive_facet_bonuses` while the character wears an item carrying the facet and has a FACET thread on it: `amount x item quality x attachment quality x max(1, thread_rung(level))` (per 10 thread levels) per worn item facet. Authored in the Facet admin's inline; `merge_facets` moves the rows. Content (`CONTENT_MODELS`, natural key `(facet, target)`). | `facet` FK (CASCADE), `target` FK `ModifierTarget` ("maneuver_effect" category only), `amount` (non-zero); unique per `(facet, target)` |
+| `FacetEffectBonus` | A facet's always-on bonus to one maneuver effect (#4815, slice 4 of #4783): the facet names the effect, whatever its thread's resonance ("Wolf: +2 Charge: damage"). Counted by `passive_facet_bonuses` while the character wears an item carrying the facet and has a FACET thread on it: `amount_tenths / 10 x the FACET_EFFECT_BONUS lane's baseline at max(1, thread_rung(level)) x item quality x attachment quality` (seeded 10 a rung, so +1 a rung per 10 thread levels, #5093) per worn item facet. Authored in the Facet admin's inline; `merge_facets` moves the rows. Content (`CONTENT_MODELS`, natural key `(facet, target)`). | `facet` FK (CASCADE), `target` FK `ModifierTarget` ("maneuver_effect" category only), `amount_tenths` (non-zero); unique per `(facet, target)` |
 | `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance`; limits no Gift thread, only the default a grant naming no resonance reaches for (#5123), and not the cast-time value; the cast reads the character's GIFT-thread resonances, leading first, via `gift_resonances_for`, ADR-0052, ADR-5123-A), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050), `parent` (self-FK, PROTECT, `related_name="children"`: the umbrella gift this one hangs beneath; see "Gift lineage" below, #2891, ADR-0192), `natural_weapon_template` (nullable FK to an Unarmed `ItemTemplate`, PROTECT: claws or a bite the gift gives its holder, made and equipped by `grant_gift_to_character`, marked `ItemInstance.natural_weapon_gift`, and removed only when the gift is lost; #4898, see docs/systems/items.md "Natural weapons") |
 | `Affinity` | Celestial / Primal / Abyssal rows; `Affinity.objects.get_celestial_affinity()` / `get_primal_affinity()` / `get_abyssal_affinity()` are the canonical getters | `name`, `corruption_coefficient` (integer tenths of corruption per cast tick). `mechanics.ModifierTarget.target_affinity` is the OneToOne that points here (reverse accessor `modifier_target`). Listed read-only at `GET /api/magic/affinities/` (`AffinityViewSet`) |
 | `Resonance` | Identity resonance tags | `name`, `affinity` FK, `opposite` self-OneToOne. `mechanics.ModifierTarget.target_resonance` is the OneToOne that points here (reverse accessor `modifier_target`). Listed read-only, unpaginated, at `GET /api/magic/resonances/` (`ResonanceViewSet`, `ResonanceSerializer` with `affinity_name`; `?affinity=<pk>` filters): the CG Gift stage's Resonance picker reads it (#4665) |
@@ -866,7 +866,7 @@ gates TRAIN uses, and is not a TRAIN offer: TRAIN teaches a technique through th
 
 | Model / function | Location | Purpose |
 |------------------|----------|---------|
-| `SkillCourseOfferDetails` | `world/npc_services/models.py` | 1:1 with the offer: `skill`, `total_development`, `session_development` (check constraints `course_session_within_total`, `course_total_development_positive`, `course_session_development_positive`), `session_ap_cost`, `coin_cost` (coppers, 0 is a free course), `check_type`, `check_difficulty`. No field has a default. `clean()` requires `NPCServiceOffer.ap_cost == 0` |
+| `SkillCourseOfferDetails` | `world/npc_services/models.py` | 1:1 with the offer: `skill`, `total_development`, `session_development` (check constraints `course_session_within_total`, `course_total_development_positive`, `course_session_development_positive`), `session_ap_cost`, `coin_cost` (coppers, 0 is a free course), `check_type`, `check_difficulty_level`. No field has a default. `clean()` requires `NPCServiceOffer.ap_cost == 0` |
 | `SkillCourseEnrollment` | `world/npc_services/models.py` | A sheet's place in one course: `development_remaining`, `last_session_week` (FK `GameWeek`), `enrolled_at`, `completed_at`. At most one open enrollment per sheet and course (`one_open_enrollment_per_course`); a finished course may be taken again |
 | `run_skill_course_offer(offer, persona)` | `world/npc_services/effects.py` | The handler. Registered in `OFFER_EFFECT_HANDLERS` |
 | `_academy_for(offer, sheet, kind)` | `world/npc_services/effects.py` | Shared by TRAIN, the course and settle-obligation: the role's `faction_affiliation` (an authoring error message when none), and the owed-entrance-obligation refusal (skipped for settle-obligation, whose job is paying it) |
@@ -875,7 +875,7 @@ gates TRAIN uses, and is not a TRAIN offer: TRAIN teaches a technique through th
 *How acceptance works.* The first acceptance enrolls: it pays the coin (skipped when 0) to the
 Academy's treasury and redeems one Golden Hare, once for the course, then runs the first session.
 Each later acceptance of the same offer is a session costing `session_ap_cost` AP, rolled with
-`perform_check_with_modifiers` against the course's `check_type` and `check_difficulty`. The
+`perform_check_with_modifiers` against the course's `check_type` and `check_difficulty_level`. The
 development is `floor(session_development x multiplier)`, where the multiplier is the
 `TrainingOutcomeAward` row for the roll's outcome (the table technique training reads; no row or no
 outcome teaches nothing), capped at `development_remaining`. It is applied through
@@ -887,7 +887,7 @@ including a botch that teaches nothing.
 
 *Teaching fit (slice 2 of #4659).* When the offer's role has `teaches_tradition`, `_course_ease`
 (`effects.py`) resolves `student_fit(tradition, student_traits(sheet))` (the sheet's Major Gift and
-the affinity of the resonance on its active GIFT thread for that Gift, then `teaching_fit`) and subtracts `course_ease(config)` from `check_difficulty` before the roll, with no floor. The fit
+the affinity of the resonance on its active GIFT thread for that Gift, then `teaching_fit`) and subtracts `course_ease(config)` from `check_difficulty_level` before the roll, with no floor. The fit
 changes the check only: the roll's outcome still decides the development gained. A role with no
 Tradition is neutral. The menu price (`OfferPrice`) carries two lines for such a course:
 `teaching_line` ("Taught in the manner of <Tradition>") and, when the learner fits,
@@ -943,12 +943,16 @@ registered in `world.magic.services.power_terms._PROVIDERS`, each `(PowerTermCon
 int`. `covenant_role_blend_power_term` is the always-on **Layer 1** baseline for
 `covenants`' four-layer vow-power model (see `docs/systems/covenants.md`'s "Vow power,
 four-layer model" and ADR-0149): for every `character.covenant_roles.currently_engaged_roles()`
-row, it adds `total_thread_level_across_all_kinds(sheet) × role.blend_weight_for(technique.archetype_alignment)
+row, it adds `level_width × role.blend_weight_for(technique.archetype_alignment)
 × CovenantRoleBlendConfig.multiplier_tenths / 10`, floored at 0 when the technique or
-character has no engaged role. `total_thread_level_across_all_kinds(sheet)` (`world.magic.services.threads`)
-sums raw `thread.level` across **every** thread kind the character has (TECHNIQUE, GIFT,
-COVENANT_ROLE, SANCTUM, ...) — not the bucketed `thread_level_multiplier`
-`survivability_baseline` uses. `CovenantRoleBlendConfig` (pk=1 singleton,
+character has no engaged role. `level_width` is one CHECK level's width at the rung
+(`thread_rung`) of **that role's own vow thread** (#5093, ADR-0149 amendment):
+`vow_thread_level(sheet, role)` reads the character's live COVENANT_ROLE thread on the role's
+anchor from the cached `character.threads` handler (0 when she has none), and
+`vow_thread_width(thread_level, table=None)` (both in `world.magic.services.threads`) turns its
+stored level into the width (0 below rung 1, and 0 on a database with no CHECK baseline rows).
+Her other threads (TECHNIQUE, GIFT, SANCTUM, ...) add nothing to vow power; they still feed
+thread survivability through its own flattening sum, which is unchanged. `CovenantRoleBlendConfig` (pk=1 singleton,
 `get_covenant_role_blend_config()`, lazy-created) holds the tunable
 `multiplier_tenths` (default 10 = ×1.0). Kept as its own provider (not folded into an
 existing term) so the contribution stays attributable in cast breakdowns — Layer 4's
@@ -970,8 +974,9 @@ For each of `character.covenant_roles.currently_engaged_roles()`, the term colle
 `covenants.CovenantRoleTechniqueSpecialty` rows from the anchor role **plus** the
 resolved sub-role's own rows when it differs (both role ids go into one lookup), filtered
 to functions the cast technique carries (`technique.cached_function_tags`), and sums
-`total_thread_level_across_all_kinds(sheet) × row.multiplier_tenths / 10` per matching
-row. Returns 0 when the technique carries no `TechniqueFunctionTag`, no role is engaged,
+`level_width × row.multiplier_tenths / 10` per matching row, with `level_width` the CHECK
+width at the rung of the vow thread on that row's role anchor (#5093; a sub-role's row reads its
+parent's thread). Returns 0 when the technique carries no `TechniqueFunctionTag`, no role is engaged,
 or no specialty row matches. **Sub-role rows ADD to the anchor's — they are never
 normalized away** — the opposite of the anchor-only rule
 the blend weights use; a promoted (specialized) member reads as
@@ -1002,9 +1007,10 @@ Guards: no technique → 0 (perks are cast-scoped); no engaged covenant role on 
 0 (a cheap exit that never skips a case `applicable_perks` would otherwise have fired,
 since `applicable_perks`'s own ally-candidate path also requires the subject to hold at
 least one engaged role before a mate's group-beneficiary perk can reach them). When perks
-fire, the term sums, per firing, `total_thread_level_across_all_kinds(sheet) ×
-magnitude_tenths / 10` (int-truncated after summing in `Decimal` — the same arithmetic
-Layers 1-2 use) and calls `announce_fired_perks` (the presentation-contract seam, see
+fire, the term sums, per firing, `magnitude_tenths / 10 ×` one CHECK level's width at the rung of
+the **holder's** vow thread (`sum_potency_scaled_magnitudes`; int-truncated after summing in
+`Decimal`, the same arithmetic Layers 1-2 use). A covenant mate's perk helping the caster is
+sized by the mate's thread, never the caster's, and a holder with no vow thread adds 0 (#5093) and calls `announce_fired_perks` (the presentation-contract seam, see
 `docs/systems/covenants.md`) exactly once, since `_derive_power` calls this provider
 exactly once per real cast resolution (`use_technique`'s single orchestration call).
 
@@ -1150,8 +1156,8 @@ damage whenever that's wired.
 ### Sized technique buffs: a buff's level and size (#4594, ADR-4594-A) [BUILT & WIRED]
 
 A technique's buff or debuff carries a **level** (from its cast) and a **size** (authored), and its
-check modifiers read the check lane's value table (`docs/systems/checks.md`, "Modifier value
-table"). Only the check lane is wired; cast power, damage and the other lanes in #4551's
+check modifiers read the check lane's value table (`docs/systems/checks.md`, "Modifier values, size
+fractions, level baselines and the taper"). Only the check lane is wired; cast power, damage and the other lanes in #4551's
 inventory join later.
 
 - **Size** — `TechniqueAppliedCondition.modifier_size` (nullable `ModifierSize`; blank keeps the
@@ -1791,7 +1797,7 @@ All SharedMemoryModel lookups.
 |-------|---------|------------|
 | `ThreadPullCost` | Per-tier pull pricing knobs | `tier` (unique: 1/2/3), `resonance_cost`, `anima_per_thread`, `label`. Cost *shape* lives in `pull_cost_totals` (every thread pays `resonance_cost` and `anima_per_thread`, #5066); this table only holds the per-tier numbers |
 | `ThreadXPLockedLevel` | XP-locked-boundary price list | `level` (unique; 20/30/40 on the internal scale), `xp_cost` |
-| `SoulTetherConfig` | Singleton (pk=1) tuning surface for Soul Tether | sineating: `anima_cost_per_unit`, `fatigue_cost_per_unit`, `per_scene_cap_hard_max`, `per_scene_cap_level_mult`, `per_scene_cap_base`, `hollow_max_level_mult`. Rescue thresholds: `rescue_strain_stage3/4/5`. Rescue resonance costs: `rescue_resonance_stage3/4/5`. Rescue budget bases and multipliers (integer-encoded). Lazy-created via `get_soul_tether_config()`. |
+| `SoulTetherConfig` | Singleton (pk=1) tuning surface for Soul Tether | sineating: `anima_cost_per_unit`, `fatigue_cost_per_unit`, `per_scene_cap_hard_max`, `per_scene_cap_base` (the per-rung scene cap and the Hollow maximum are the `soul_tether_cap` and `hollow_max` lanes' baseline rows, #5093). Rescue thresholds: `rescue_strain_stage3/4/5`. Rescue resonance costs: `rescue_resonance_stage3/4/5`. Rescue budget bases and multipliers (integer-encoded). Lazy-created via `get_soul_tether_config()`. |
 | `ThreadPullEffect` | Authored pull-effect template | `target_kind`, `resonance` FK, `tier` (0..3), `min_thread_level`, `effect_kind`, + mutually-exclusive payload columns: `flat_bonus_amount`, `intensity_bump_amount`, `vital_bonus_amount` (+ `vital_target`), `capability_grant` FK to `CapabilityType`, `narrative_snippet`, `target_form` FK to `forms.CharacterForm` (nullable; set only for `ASSUME_ALTERNATE_SELF`, which names the form whose profiles to assume on cast), `resistance_amount` (+ `resistance_damage_type` FK to `conditions.DamageType`; null = all types — `RESISTANCE` effect kind, #1580). `target_gift` (nullable FK to `magic.Gift`) — when set, this pull-effect applies only to GIFT threads anchored to that specific gift (species-gift-specific tier-0 passives); null rows serve as the generic fallback for that kind. `regard_polarity` (`RegardPolarity`: OFFENSIVE / PROTECTIVE / NEUTRAL, default NEUTRAL, #1831) — how Court-role (COVENANT_ROLE) pull modulation responds to the Court leader's signed regard for the live target; ignored for every other `target_kind`. Tier 0 = passive always-on; tiers 1–3 = paid pulls. Unique per (target_kind, resonance, tier, min_thread_level) — with two partial `UniqueConstraint`s for GIFT kind (one with `target_gift` set, one without). CheckConstraints enforce payload/effect_kind alignment — `ASSUME_ALTERNATE_SELF` requires `target_form` set and all numeric/capability/snippet payload empty; `RESISTANCE` requires `resistance_amount` set and all other payload null; all other kinds require `target_form__isnull=True`. `get_pull_effects_for_thread(thread, payer, **filters)` (`world/magic/services/pull_effects.py`) resolves the correct rows for the PAYING resonance (#5123): for GIFT kind, tries `target_gift`-specific rows first, falls back to `target_gift IS NULL` |
 | `ImbuingProseTemplate` | Fallback narrative prose for Imbuing | `resonance` FK (nullable), `target_kind` (nullable), `prose`. Row with both NULL = universal fallback |
 | `Ritual` | Authored ritual procedure | `name`, `description`, `hedge_accessible`, `glimpse_eligible`, `narrative_prose`, `execution_kind` (SERVICE/FLOW), `service_function_path` (SERVICE), `flow` FK (FLOW), optional `site_property` FK. CheckConstraint: exactly one dispatch payload. Admin (`RitualAdminForm`): staff make a SERVICE ritual by choosing its service from the registry `world.magic.service_rituals.SERVICE_RITUAL_FUNCTIONS` (a select; `clean` refuses an unlisted path, a row already holding one may keep it unchanged); `execution_kind` and `flow` stay read-only, and a ritual made there is SERVICE. A new SERVICE function is added to the registry in the PR that adds it |
@@ -1835,7 +1841,8 @@ decision and the `client_hosted` dispatch discovery.
 
 Rituals are the home of generalized magic — there is deliberately **no Gifted-gate in the
 ritual framework**; the price is the gate. Anima itself is a level-scaled economy: maximum
-= `AnimaConfig.level_zero_maximum` (10) at level 0, else `maximum_per_level` (100) × level
+= `AnimaConfig.level_zero_maximum` (10) at level 0, else the `anima_pool` lane's level baseline
+(100 × level as seeded; #5093 moved `maximum_per_level` into `ModifierLevelBaseline` rows)
 (recomputed on both level-write spines — `apply_class_level_advance` and
 `set_primary_class_level` — plus CG finalize, via `recompute_max_anima`). Regen is a flat
 `AnimaConfig.daily_regen_amount` (1)/day; appetite holders never regen naturally (their
@@ -2152,7 +2159,7 @@ push the cast harder. The burn rides the pull: no pull, no burn (`ResonanceBurnN
   `StrainConfig.burn_per_intensity`, default 0.50). A request is capped by the ceiling and by
   the balance left once the pull's own cost is paid.
 - **Strain check and reach.** If anything is left to burn, `resolve_resonance_burn` rolls
-  `StrainConfig.strain_check_type` (target difficulty `StrainConfig.strain_check_difficulty`,
+  `StrainConfig.strain_check_type` (target difficulty `StrainConfig.strain_check_difficulty_level`,
   default 0) with the `MagicActivity.PUSHING_HARD` skill terms. The outcome tier selects a
   `StrainBurnReach` row (`world/combat/models.py`, an `OutcomeTierAward`): `reach_percent` of the
   capped request is what she **reaches** and the only amount debited. `clean()` enforces that a
@@ -2251,7 +2258,7 @@ push the cast harder. The burn rides the pull: no pull, no burn (`ResonanceBurnN
   when the pull or the technique changes. The demo's "intensity after" and "anima cost"
   projection rows are not built (they need a server projection of the spiral).
 - **Authored numbers.** `StrainConfig.burn_per_intensity`, `engagement_share_percent`,
-  `strain_check_type`, `strain_check_difficulty`; `StrainBurnReach` rows; `Affinity.burn_value`;
+  `strain_check_type`, `strain_check_difficulty_level`; `StrainBurnReach` rows; `Affinity.burn_value`;
   `CorruptionConfig.hasty_fall_multiplier`; and for digging deep (#4738)
   `dig_deep_fatigue_category`, `dig_deep_fatigue_cost`, `free_dig_deeps_per_encouragement`.
   Migrations 0314 (fields, `CombatPull` burn columns) and 0315 (`SceneActionPullDeclaration.burn`).
@@ -2280,7 +2287,7 @@ one situation among many: `docs/adr/adr-5124-furys-anchor-person-became-a-kindle
   source: the bond tier or the condition severity; `clean` refuses blank on a situation with no
   such source), `is_active`, `display_order`, `reason_text`. `KindledStrengthTier` (natural key
   `rank`; `name`, `min_bond_tier`, `min_severity`, `pull_levels`, `give_in_max_depth`,
-  `give_in_bonus_percent`, `give_in_ease`, `dig_deep_scale_percent`, `earn_percent`; 0 on a reach
+  `give_in_bonus_percent`, `give_in_ease_tenths`, `dig_deep_scale_percent`, `earn_percent`; 0 on a reach
   column means "not reached that way"). Code compares `rank` (1, 2, 3) and never a name.
   `KindlingConfig` (singleton: `harm_property`, the condition property that marks harm a holder
   laid, so a feeling that comes from their own harm does not count as shared),
@@ -2346,7 +2353,7 @@ she gives in to (#5124 replaced the anchor person) with a technique cast; the ti
 she surrenders for the rest of her engagement, and her control roll's outcome picks how much
 intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magic/models/fury.py`.
 
-- **Models.** `FuryTier`: `name`, `depth`, `control_surrendered`, `base_check_difficulty`,
+- **Models.** `FuryTier`: `name`, `depth`, `control_surrendered`, `base_check_difficulty_level`,
   `berserk_severity`. `FuryConfig` (singleton): `check_trait`, `default_berserk_duration_rounds`,
   `berserk_condition`. `FuryDegreeShare` (an `OutcomeTierAward`): `intensity_percent` per
   outcome tier; `clean()` enforces that a better outcome never buys a smaller percent.
@@ -2356,11 +2363,12 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
   `lucid_grade_floor` removed, empty in production).
 - **Cap.** The resonance's strength caps the depth (#5124). The depth cap, the bonus and the
   ease come from a `KindledStrengthTier` row (`give_in_max_depth`, `give_in_bonus_percent`,
-  `give_in_ease`); `clamp_tier` drops a deeper declaration to the deepest tier within the cap.
+  `give_in_ease_tenths`); `clamp_tier` drops a deeper declaration to the deepest tier within the cap.
   `give_in_strength(character, resonance)` reads the named resonance's own kindled strength in
   her live fight and mission (`kindled_for` with `kindling_context_for`); `provocation_cap`,
   `provocation_bonus_percent` and `provocation_ease` read that row, and 0 when the resonance is
-  not kindled or she does not hold it. `give_in_refusal(character, resonance, tier)` is the one
+  not kindled or she does not hold it. `give_in_ease_tenths` is tenths of one level's width,
+  read through `difficulty_step_points` at the Fury tier's `base_check_difficulty_level`. `give_in_refusal(character, resonance, tier)` is the one
   declaration check: an unkindled resonance is refused in words ("Your Wrath is not kindled
   right now, so you cannot give in to it."), never clamped, and a tier deeper than the strength
   reaches is refused too, so a Berserk tier is offered only where the strength reaches it.
@@ -2377,7 +2385,7 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
 - **Where it lands.** Each path builds a `FuryCast` (`fury_cast_for`) and hands it to
   `use_technique(fury=...)`, which drives it. Once the Soulfray gate has passed,
   `FuryCast.surrender()` rolls the control check (`FuryConfig.check_trait` plus the
-  `FURY_CONTROL` magic-skill terms, difficulty `base_check_difficulty` minus the ease) and writes
+  `FURY_CONTROL` magic-skill terms, difficulty of `base_check_difficulty_level` minus the ease) and writes
   her `CharacterEngagement` (any engagement type) under a row lock:
   `intensity_modifier += intensity_gained`, `control_modifier -= control_surrendered`,
   `fury_control_surrendered += control_surrendered`. `use_technique` then re-reads her runtime
@@ -3488,8 +3496,8 @@ of it lives in `world/magic/services/drift.py` and the `DriftConfig` singleton
 
 - `DriftConfig` fields for the reading: `unsettled_tolerance_percent` (5: points an affinity
   may stand over its settled share), `unsettled_step_percent` (5: points past that per severity
-  step), `mire_allowance_percent` (30), plus `focus_base_difficulty`,
-  `focus_difficulty_per_step`, and two designations by FK, `focus_check_type` and
+  step), `mire_allowance_percent` (30), plus `focus_base_difficulty_level`,
+  `focus_difficulty_per_step_tenths`, and two designations by FK, `focus_check_type` and
   `conflict_condition`. Either designation unset means the check does not run; the Required
   content dashboard probes list both, require the conflict condition's category to be
   `self_shakeable` and its `break_free_mode` not to be NONE (the field's default; breakfree,
@@ -3525,7 +3533,7 @@ of it lives in `world/magic/services/drift.py` and the `DriftConfig` singleton
   reads no condition modifiers at all (pre-existing), so the conflict reaches only her later
   non-battle rolls. The joust is not a cast and rolls nothing. The condition's own authored `ConditionCheckModifier` reaches the
   roll under its own label through `condition_contributions`. Difficulty is
-  `focus_base_difficulty + steps * focus_difficulty_per_step`; the roll is `focus_check_type` with
+  `focus_base_difficulty_level + steps * focus_difficulty_per_step_tenths`; the roll is `focus_check_type` with
   `MagicActivity.KEEPING_FOCUS` skill terms. Before the roll she is told "Your X has grown strong
   enough to make you unsettled", X being the resonance contributing most to the excess; a
   failure also tells her the condition took hold. A success level of 1 or more changes nothing.
@@ -4645,7 +4653,7 @@ merge per resonance (`DriftConversionOffer.scene` is where it first opened).
 
 **The rite of settling (#5124).** `DriftCorrectionConfig` (singleton, pk 1, created lazily)
 designates the rite (`rite` FK to `Ritual`) and the roll (`check_type` FK to `CheckType`,
-`check_difficulty`), plus `cap_percent` and `disown_deed_percent` (75 to start; the share of a
+`check_difficulty_level`), plus `cap_percent` and `disown_deed_percent` (75 to start; the share of a
 disowned deed a full roll converts). The check type is deliberately not a `RitualCheckConfig`
 sidecar, which needs a stat and a skill and looks up by ritual name. `DriftCorrectionOutcomeShare`
 (an `OutcomeTierAward`) maps each `CheckOutcome` to `converted_share`, the fraction of each
@@ -4896,7 +4904,7 @@ shares alone. Journeys and tests:
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `AffinityInteraction` | 9 directed (caster, place) affinity pairing rows; tuning table | `source_affinity` FK, `environment_affinity` FK, `valence` (ALIGNED/OPPOSED), `kind` (AMPLIFY/REJECT/REPEL/CORRUPT), `severity`, `consequence_pool` FK (nullable — OPPOSED backfire pool) |
-| `ResonanceEnvironmentConfig` | Singleton with scalar tuning coefficients | `backfire_base_difficulty`, `backfire_difficulty_per_magnitude`, the six gift-substance numbers (#5018) |
+| `ResonanceEnvironmentConfig` | Singleton with scalar tuning coefficients | `backfire_base_difficulty_level`, `backfire_difficulty_per_magnitude_tenths`, the six gift-substance numbers (#5018) |
 | `ResonanceAlignmentBoonTier` | Authored: which buff `ConditionTemplate` an ALIGNED pairing grants at or above a magnitude band | `affinity_interaction` FK (must be ALIGNED diagonal row), `min_magnitude`, `condition_template` FK. `UniqueConstraint(affinity_interaction, min_magnitude)`. `clean()` validates ALIGNED valence. Tier selection is Python `max()` over `interaction.cached_alignment_boon_tiers` — no `Meta.ordering` |
 
 `AffinityInteraction.consequence_pool` (added migration `magic/0064`) is a nullable FK to
@@ -5075,8 +5083,10 @@ you just cannot say who did it. The tiers are a ladder of attribution:
    attribution** (ADR-0033): nobody can name the caster, logged as a warning — but a
    perceptible working is still narrated to the room, since erasing every combat event
    from every participant's feed is a different failure, not a safe default.
-4. Difficulty = `cast_concealment + level_opposition(check_type, level=<caster's path
-   level>, character=caster)` (ADR-0166 — level is a two-sided check term).
+4. Difficulty = `cast_concealment + compute_obstacle_rating(caster, check_type)`: the caster is
+   a player character hiding something, so she counts as her full check total, not her level
+   (ADR-5093, which replaced the level-only `level_opposition` of ADR-0166 for a player
+   character who is the obstacle).
 5. Every character co-located with the caster (excluding the caster) rolls
    `perform_check(observer, check_type, target_difficulty=difficulty)`:
    `success_level >= CAST_DETECTION_ATTRIBUTION_LEVEL` (2) → `full` (sees who cast what);

@@ -52,6 +52,7 @@ from world.roster.seeds import ensure_rosters
 from world.scenes import cast_services
 from world.scenes.cast_services import castable_technique_links_for_sheet, request_technique_cast
 from world.scenes.factories import PersonaFactory, SceneFactory
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.skills.factories import SkillFactory
 from world.species.models import Species
 from world.tarot.constants import ArcanaType
@@ -80,6 +81,7 @@ class CastUsesPerCharacterCheckTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        seed_pool_and_cap_lanes()
         # finalize_character() looks up a seeded roster by roster_type (#2728).
         ensure_rosters()
         ensure_canonical_affinities()

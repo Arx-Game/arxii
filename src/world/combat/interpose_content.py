@@ -60,8 +60,8 @@ INTERPOSABLE_PROPERTY_NAME: str = "interposable"
 MELEE_DEFENSE_CHECK_TYPE_NAME: str = "Melee Combat"  # #2757: merged with Melee Attack
 
 # Authored difficulty of the interpose challenge. Lives on
-# ChallengeTemplate.severity — never as a literal target_difficulty in engine code.
-_INTERPOSE_SEVERITY: int = 3
+# ChallengeTemplate.severity_level — never as a literal target_difficulty in engine code.
+_INTERPOSE_SEVERITY_LEVEL: int = 0
 
 # Seed interpose capabilities. Each entry:
 #   (capability_name, application_name, display_name, fiction)
@@ -251,7 +251,7 @@ def ensure_interpose_content() -> None:
                 "{interposer} moves to shield {ally} — someone with the means may "
                 "attempt to turn the blow aside."
             ),
-            "severity": _INTERPOSE_SEVERITY,
+            "severity_level": _INTERPOSE_SEVERITY_LEVEL,
             "goal": "Turn aside the blow before it reaches the protected ally.",
             "category": challenge_category,
             "challenge_type": ChallengeType.THREAT,

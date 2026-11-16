@@ -42,6 +42,7 @@ from world.progression.models import CharacterPathHistory
 from world.roster.factories import FamilyFactory
 from world.roster.models import Kinsperson
 from world.roster.services.staff_characters import mint_gm_character
+from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.skills.factories import SkillFactory
 from world.species.factories import LanguageFactory
 from world.traits.factories import StatTraitFactory, TraitFactory
@@ -53,6 +54,7 @@ from world.worship.models import WorshipDeclaration
 
 class StaffBuildsACompleteSheetTests(TestCase):
     def setUp(self) -> None:
+        seed_pool_and_cap_lanes()
         ensure_canonical_affinities()
         self.stat = StatTraitFactory(name="completeness_focus")
         self.skill = SkillFactory()

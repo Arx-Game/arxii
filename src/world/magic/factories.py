@@ -1146,7 +1146,7 @@ class FacetEffectBonusFactory(factory.django.DjangoModelFactory):
         category=factory.SubFactory(ModifierCategoryFactory, name=MANEUVER_EFFECT_CATEGORY_NAME),
         scope_effect_kind=ManeuverKind.DAMAGE,
     )
-    amount = 1
+    amount_tenths = 1
 
 
 class MotifResonanceAssociationFactory(factory.django.DjangoModelFactory):
@@ -1288,7 +1288,7 @@ class SoulfrayConfigFactory(factory.django.DjangoModelFactory):
     severity_scale = 10
     deficit_scale = 5
     resilience_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
-    base_check_difficulty = 15
+    base_check_difficulty_level = 1
     ritual_severity_cost_per_point = 1
     social_safety_bonus = 10
     # The template made under the seed name by SoulfrayTemplateFactory or
@@ -1668,7 +1668,7 @@ class RitualCheckConfigFactory(factory.django.DjangoModelFactory):
     specialization = None
     resonance = None
     check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
-    target_difficulty = 3
+    target_difficulty_level = 0
 
 
 class AnimaRitualPerformanceFactory(factory.django.DjangoModelFactory):
@@ -1723,6 +1723,7 @@ class ThreadFactory(factory.django.DjangoModelFactory):
     - _class_level=<int>       → give thread.owner a primary class level, which sets
                                  the level cap (level × 10) on every thread (#4585)
     - as_covenant_role_thread=True → switch to COVENANT_ROLE kind; creates a CovenantRole
+                                 (or pass a CovenantRole to anchor on that role)
 
     NOTE: this factory intentionally does NOT call full_clean(). DB-level
     CheckConstraints catch shape errors at write time; clean() is opt-in via
@@ -1888,12 +1889,17 @@ class ThreadFactory(factory.django.DjangoModelFactory):
     def as_covenant_role_thread(
         self: Thread, create: bool, extracted: object, **kwargs: object
     ) -> None:
-        """Switch to COVENANT_ROLE kind: create a CovenantRole."""
+        """Switch to COVENANT_ROLE kind on a fresh CovenantRole, or on the one passed.
+
+        ``as_covenant_role_thread=True`` creates a role; passing a ``CovenantRole`` anchors
+        the thread on it (a vow thread for a perk or specialty authored on that role).
+        """
         if not create or not extracted:
             return
         from world.covenants.factories import CovenantRoleFactory
+        from world.covenants.models import CovenantRole
 
-        role = CovenantRoleFactory()
+        role = extracted if isinstance(extracted, CovenantRole) else CovenantRoleFactory()
         Thread.objects.filter(pk=self.pk).update_with_reason(
             reason="issue #3817: intentional atomic write",
             target_kind=TargetKind.COVENANT_ROLE,
@@ -2573,7 +2579,7 @@ class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
 
         thresholds = [50, 200, 500, 1000, 1500]
         is_abyssal = self.corruption_resonance.affinity_id == ensure_canonical_affinities()[2].pk
-        difficulties = [12, 18, 25, 30, 35] if is_abyssal else [8, 12, 18, 22, 28]
+        difficulties = [1, 1, 2, 2, 2] if is_abyssal else [0, 1, 1, 1, 2]
         check_type = _make_resist_corruption_check_type()
 
         for i, (threshold, dc) in enumerate(zip(thresholds, difficulties, strict=True), start=1):
@@ -2582,7 +2588,7 @@ class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
                 stage_order=i,
                 severity_threshold=threshold,
                 resist_check_type=check_type,
-                resist_difficulty=dc,
+                resist_difficulty_level=dc,
                 advancement_resist_failure_kind=AdvancementResistFailureKind.HOLD_OVERFLOW,
             )
 
@@ -4544,7 +4550,7 @@ class FuryTierFactory(factory.django.DjangoModelFactory):
     name = "Unleashed"
     depth = 2
     control_surrendered = 4
-    base_check_difficulty = 10
+    base_check_difficulty_level = 1
     berserk_severity = 0
 
 
@@ -5028,7 +5034,7 @@ class KindledStrengthTierFactory(factory.django.DjangoModelFactory):
     pull_levels = 0
     give_in_max_depth = 0
     give_in_bonus_percent = 0
-    give_in_ease = 0
+    give_in_ease_tenths = 0
     dig_deep_scale_percent = 0
     earn_percent = 100
 

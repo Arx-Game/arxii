@@ -163,10 +163,7 @@ class AnimaConfig(SharedMemoryModel):
         default=10,
         help_text="Maximum anima for a level-0 (quiescent/NPC) character.",
     )
-    maximum_per_level = models.PositiveIntegerField(
-        default=100,
-        help_text="Maximum anima per character level (level N >= 1 has N x this).",
-    )
+    # The maximum at level N >= 1 is the ANIMA_POOL lane's baseline row (#5093).
     death_harvest_multiplier = models.PositiveIntegerField(
         default=20,
         help_text=(

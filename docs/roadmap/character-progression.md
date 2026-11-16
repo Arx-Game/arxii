@@ -182,7 +182,7 @@ in `honor_deed` checks life-state.
 - Legend achievement definitions (Noteworthy, Legendary, Mythic, Bard's Favorite, etc.)
 
 ### Skill Development
-- Post-CG skill advancement mechanics — development point scaling (100 dp from 10→11, 200 from 11→12, etc.), XP thresholds at every 10 (10, 20, 30, 40, 50)
+- Post-CG skill advancement mechanics — development point scaling (one geometric curve in the `DevelopmentCostConfig` row, #5093: with the defaults 10 dp a step from 10→20, 15 from 20→30, 22 from 30→40, and so on), XP thresholds at every 10 (10, 20, 30, 40, 50)
 - Skill rust mechanics — debt accumulation (character_level + 5 per week, capped at current level's dev cost), must pay off before forward progress
 - Development point sources — all the ways dp are earned (scene participation, training, missions, combat, crafting, social, exploration). The primary source is a `perform_check` hook: every check that uses a trait flags that trait as "used this week." Weekly cron converts usage flags to development points and applies rust to unused skills. The hook MUST live on `perform_check`, not on downstream consumers (resolve_challenge, combat) so that social scene checks earn development too. See `docs/architecture/check-resolution-spectrum.md`
 - **Training system** — persistent TrainingAllocation model (skill + optional mentor guise + AP amount). Formula: `base_gain = 5 × AP × path_level`, `mentor_bonus = (AP + teaching) × (mentor_total / student_total) × (relationship_tier + 1)`. Overflow carries over across levels. See `docs/plans/2026-03-10-training-system-design.md`

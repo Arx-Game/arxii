@@ -269,7 +269,7 @@ class WorldBuilderAreaManagerTests(WorldBuilderApiBase):
 
         room_profile = self.private_room.room_profile
         clue = ClueFactory(name="Torn Letter", slug="torn-letter", target_kind=ClueTargetKind.CODEX)
-        room_clue = RoomClueFactory(room_profile=room_profile, clue=clue, detect_difficulty=5)
+        room_clue = RoomClueFactory(room_profile=room_profile, clue=clue, detect_difficulty_level=3)
         trigger = ClueTriggerFactory(room_profile=room_profile, clue=clue)
         kind = PortalAnchorKindFactory(name="Mirror")
         anchor = PortalAnchorFactory(room_profile=room_profile, kind=kind, name="a mirror")
@@ -285,7 +285,7 @@ class WorldBuilderAreaManagerTests(WorldBuilderApiBase):
                     "id": room_clue.pk,
                     "clue_name": "Torn Letter",
                     "clue_slug": "torn-letter",
-                    "detect_difficulty": 5,
+                    "detect_difficulty_level": 3,
                     "fixture_key": room_clue.fixture_key,
                 }
             ],

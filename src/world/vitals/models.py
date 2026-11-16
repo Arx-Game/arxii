@@ -8,22 +8,22 @@ from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.vitals.constants import (
     AGING_DEATH_WINDOW_IC_DAYS,
-    AGING_DIFFICULTY_PER_YEAR,
+    AGING_DIFFICULTY_PER_YEAR_TENTHS,
     AGING_FLOOR_FRACTION,
     AUTO_RETIRE_DAYS,
-    DEATH_BASE_DIFFICULTY,
-    DEATH_SCALING_PER_PERCENT,
+    DEATH_BASE_DIFFICULTY_LEVEL,
+    DEATH_SCALING_PER_PERCENT_TENTHS,
     FRAILTY_FAIL_SEVERITY,
     FRAILTY_PARTIAL_SEVERITY,
-    KNOCKOUT_BASE_DIFFICULTY,
-    KNOCKOUT_SCALING_PER_PERCENT,
-    WAKE_BASE_DIFFICULTY,
-    WAKE_EASE_PER_ROUND,
+    KNOCKOUT_BASE_DIFFICULTY_LEVEL,
+    KNOCKOUT_SCALING_PER_PERCENT_TENTHS,
+    WAKE_BASE_DIFFICULTY_LEVEL,
+    WAKE_EASE_PER_ROUND_TENTHS,
     WAKE_GUARANTEED_ROUNDS,
-    WAKE_SCALING_PER_PERCENT,
-    WOUND_BASE_DIFFICULTY,
+    WAKE_SCALING_PER_PERCENT_TENTHS,
+    WOUND_BASE_DIFFICULTY_LEVEL,
     WOUND_DESCRIPTIONS,
-    WOUND_SCALING_PER_PERCENT,
+    WOUND_SCALING_PER_PERCENT_TENTHS,
     CharacterLifeState,
 )
 
@@ -225,37 +225,48 @@ class VitalsConsequenceConfig(SharedMemoryModel):
     # Survivability difficulty tuning — authored here, read by services.py
     # ------------------------------------------------------------------
 
-    knockout_base_difficulty = models.PositiveIntegerField(
-        default=KNOCKOUT_BASE_DIFFICULTY,
+    knockout_base_difficulty_level = models.PositiveSmallIntegerField(
+        default=KNOCKOUT_BASE_DIFFICULTY_LEVEL,
         help_text=(
-            "Base difficulty for the knockout check when health is exactly at the 20% threshold."
+            "Base difficulty for the knockout check when health is exactly at the 20% "
+            "threshold. Authored as a level (0 = no difficulty): the roll meets that "
+            "level's baseline."
         ),
     )
-    knockout_scaling_per_percent = models.PositiveIntegerField(
-        default=KNOCKOUT_SCALING_PER_PERCENT,
+    knockout_scaling_per_percent_tenths = models.PositiveIntegerField(
+        default=KNOCKOUT_SCALING_PER_PERCENT_TENTHS,
         help_text=(
-            "Additional difficulty added per percentage point health falls below the 20% threshold."
+            "Additional difficulty added per percentage point health falls below the "
+            "20% threshold. Authored in tenths of one level's width."
         ),
     )
-    death_base_difficulty = models.PositiveIntegerField(
-        default=DEATH_BASE_DIFFICULTY,
-        help_text=("Base difficulty for the death check when health is exactly at 0%."),
-    )
-    death_scaling_per_percent = models.PositiveIntegerField(
-        default=DEATH_SCALING_PER_PERCENT,
-        help_text=("Additional difficulty added per percentage point health is below 0%."),
-    )
-    wound_base_difficulty = models.PositiveIntegerField(
-        default=WOUND_BASE_DIFFICULTY,
+    death_base_difficulty_level = models.PositiveSmallIntegerField(
+        default=DEATH_BASE_DIFFICULTY_LEVEL,
         help_text=(
-            "Base difficulty for the permanent-wound check when damage is exactly"
-            " at the 50% threshold."
+            "Base difficulty for the death check when health is exactly at 0%. Authored "
+            "as a level (0 = no difficulty): the roll meets that level's baseline."
         ),
     )
-    wound_scaling_per_percent = models.PositiveIntegerField(
-        default=WOUND_SCALING_PER_PERCENT,
+    death_scaling_per_percent_tenths = models.PositiveIntegerField(
+        default=DEATH_SCALING_PER_PERCENT_TENTHS,
         help_text=(
-            "Additional difficulty added per percentage point damage exceeds the 50% threshold."
+            "Additional difficulty added per percentage point health is below 0%. "
+            "Authored in tenths of one level's width."
+        ),
+    )
+    wound_base_difficulty_level = models.PositiveSmallIntegerField(
+        default=WOUND_BASE_DIFFICULTY_LEVEL,
+        help_text=(
+            "Base difficulty for the permanent-wound check when damage is exactly at "
+            "the 50% threshold. Authored as a level (0 = no difficulty): the roll meets "
+            "that level's baseline."
+        ),
+    )
+    wound_scaling_per_percent_tenths = models.PositiveIntegerField(
+        default=WOUND_SCALING_PER_PERCENT_TENTHS,
+        help_text=(
+            "Additional difficulty added per percentage point damage exceeds the 50% "
+            "threshold. Authored in tenths of one level's width."
         ),
     )
 
@@ -268,11 +279,11 @@ class VitalsConsequenceConfig(SharedMemoryModel):
     # Old-age decline tuning (#2756) — all PLACEHOLDER values
     # ------------------------------------------------------------------
 
-    aging_difficulty_per_year = models.PositiveSmallIntegerField(
-        default=AGING_DIFFICULTY_PER_YEAR,
+    aging_difficulty_per_year_tenths = models.PositiveIntegerField(
+        default=AGING_DIFFICULTY_PER_YEAR_TENTHS,
         help_text=(
-            "Aging-check difficulty points per year of biological age past the "
-            "species decline_start_age."
+            "Aging-check difficulty points per year of biological age past the species "
+            "decline_start_age. Authored in tenths of one level's width."
         ),
     )
     frailty_fail_severity = models.PositiveSmallIntegerField(
@@ -304,17 +315,27 @@ class VitalsConsequenceConfig(SharedMemoryModel):
     # Wake arc (unconscious recovery) tuning (#2287)
     # ------------------------------------------------------------------
 
-    wake_base_difficulty = models.PositiveIntegerField(
-        default=WAKE_BASE_DIFFICULTY,
-        help_text="Base difficulty of the per-round wake (Endurance) check at full health.",
+    wake_base_difficulty_level = models.PositiveSmallIntegerField(
+        default=WAKE_BASE_DIFFICULTY_LEVEL,
+        help_text=(
+            "Base difficulty of the per-round wake (Endurance) check at full health. "
+            "Authored as a level (0 = no difficulty): the roll meets that level's "
+            "baseline."
+        ),
     )
-    wake_scaling_per_percent = models.PositiveIntegerField(
-        default=WAKE_SCALING_PER_PERCENT,
-        help_text="Additional wake difficulty per percentage point of missing health.",
+    wake_scaling_per_percent_tenths = models.PositiveIntegerField(
+        default=WAKE_SCALING_PER_PERCENT_TENTHS,
+        help_text=(
+            "Additional wake difficulty per percentage point of missing health. "
+            "Authored in tenths of one level's width."
+        ),
     )
-    wake_ease_per_round = models.PositiveIntegerField(
-        default=WAKE_EASE_PER_ROUND,
-        help_text="Wake difficulty eased per round spent unconscious.",
+    wake_ease_per_round_tenths = models.PositiveIntegerField(
+        default=WAKE_EASE_PER_ROUND_TENTHS,
+        help_text=(
+            "Wake difficulty eased per round spent unconscious. Authored in tenths of "
+            "one level's width."
+        ),
     )
     wake_guaranteed_rounds = models.PositiveIntegerField(
         default=WAKE_GUARANTEED_ROUNDS,

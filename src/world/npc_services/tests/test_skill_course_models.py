@@ -95,7 +95,7 @@ class SkillCourseOfferDetailsAdminTests(TestCase):
             "Session AP cost",
             "Coin cost (coppers)",
             "Check type",
-            "Check difficulty",
+            "Check difficulty level",
         ]
         positions = [body.index(f"{label}:</label>") for label in labels]
         self.assertEqual(positions, sorted(positions))

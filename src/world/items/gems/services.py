@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.checks.services import perform_check_with_modifiers
+from world.checks.services import difficulty_points, perform_check_with_modifiers
 from world.items.exceptions import (
     AdornmentCapacityExceeded,
     CraftingCostUnaffordable,
@@ -221,7 +221,7 @@ def cut_gem(
             raise CraftingCostUnaffordable(msg)
 
     check_result = perform_check_with_modifiers(
-        crafter_character, recipe.check_type, recipe.base_difficulty
+        crafter_character, recipe.check_type, difficulty_points(recipe.base_difficulty_level)
     )
 
     if check_result.success_level < recipe.min_success_level:
@@ -283,7 +283,7 @@ def build_gem_cut_quote(*, crafter_character: ObjectDB) -> GemCutQuote:
     return GemCutQuote(
         ap_cost=recipe.action_point_cost,
         ap_have=ap_have,
-        base_difficulty=recipe.base_difficulty,
+        base_difficulty=difficulty_points(recipe.base_difficulty_level),
         min_success_level=recipe.min_success_level,
         affordable=ap_have >= recipe.action_point_cost,
         shatter_risk_message=GEM_CUT_SHATTER_RISK_MESSAGE,

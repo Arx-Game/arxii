@@ -8,8 +8,8 @@ from world.progression.models import MaturationStatCap
 from world.progression.models.rewards import (
     DevelopmentPoints,
     DevelopmentTransaction,
-    cumulative_dp_for_level,
 )
+from world.progression.services.dev_cost import cumulative_dp_for_level
 from world.progression.types import DevelopmentSource
 from world.skills.factories import SkillFactory, SkillRatingFactory
 from world.skills.services import points_to_next_boundary, train_skill
@@ -41,11 +41,13 @@ class PointsToNextBoundaryTests(TestCase):
 
     def test_points_to_next_boundary_from_ten(self) -> None:
         row = self._row(10)
-        self.assertEqual(points_to_next_boundary(row), 4500)
+        # Nine steps of 10 dp each, from 10 to 19.
+        self.assertEqual(points_to_next_boundary(row), 90)
 
     def test_points_to_next_boundary_counts_rust_and_banked(self) -> None:
-        row = self._row(15, rust=50, banked=120)
-        self.assertEqual(points_to_next_boundary(row), 50 + (600 - 120) + 700 + 800 + 900)
+        row = self._row(15, rust=50, banked=6)
+        # Rust first, then the 15->16 step less 6 banked, then 16->19 at 10 dp a step.
+        self.assertEqual(points_to_next_boundary(row), 50 + (10 - 6) + 10 + 10 + 10)
 
     def test_points_to_next_boundary_at_boundary_is_rust(self) -> None:
         self.assertEqual(points_to_next_boundary(self._row(19, rust=30)), 30)
@@ -55,9 +57,9 @@ class PointsToNextBoundaryTests(TestCase):
         self.assertIsNone(points_to_next_boundary(self._row(52)))
 
     def test_points_to_next_boundary_in_a_later_decade(self) -> None:
-        """From 20 the next boundary is 29: 1100 + 1200 + ... + 1900."""
+        """From 20 the next boundary is 29: nine steps of 15 dp each, level 2's band."""
         row = self._row(20)
-        self.assertEqual(points_to_next_boundary(row), sum(range(1100, 2000, 100)))
+        self.assertEqual(points_to_next_boundary(row), 9 * 15)
 
 
 class PointsToNextBoundaryAtABandCapTests(TestCase):
@@ -75,16 +77,16 @@ class PointsToNextBoundaryAtABandCapTests(TestCase):
         return _tracker(self.sheet, self.skill, value, **kwargs)
 
     def test_above_fifty_the_count_ends_at_the_cap(self) -> None:
-        """Cap 6 is stored 60: from 57, 4800 + 4900 + 5000 less 100 banked."""
-        row = self._row(57, banked=100)
-        self.assertEqual(points_to_next_boundary(row), 4800 + 4900 + 5000 - 100)
+        """Cap 6 is stored 60: from 57, three steps of 50 dp less 20 banked."""
+        row = self._row(57, banked=20)
+        self.assertEqual(points_to_next_boundary(row), 3 * 50 - 20)
 
     def test_at_the_cap_only_rust_is_taken(self) -> None:
         self.assertEqual(points_to_next_boundary(self._row(60, rust=12)), 12)
         self.assertEqual(points_to_next_boundary(self._row(64)), 0)
 
     def test_below_the_cap_the_boundary_still_comes_first(self) -> None:
-        self.assertEqual(points_to_next_boundary(self._row(10)), 4500)
+        self.assertEqual(points_to_next_boundary(self._row(10)), 90)
 
 
 class TrainSkillTests(TestCase):
@@ -95,14 +97,14 @@ class TrainSkillTests(TestCase):
         cls.skill = SkillFactory()
 
     def test_train_skill_creates_row_at_ten(self) -> None:
-        result = train_skill(self.sheet, self.skill, 300, description="x")
+        result = train_skill(self.sheet, self.skill, 20, description="x")
 
         self.assertEqual(result.old_value, 10)
         self.assertEqual(result.new_value, 12)
-        self.assertEqual(result.points_applied, 300)
+        self.assertEqual(result.points_applied, 20)
         self.assertIsNone(result.plateau_message)
         transaction = DevelopmentTransaction.objects.get(character_sheet=self.sheet)
-        self.assertEqual(transaction.amount, 300)
+        self.assertEqual(transaction.amount, 20)
         self.assertEqual(transaction.source, DevelopmentSource.TRAINING)
         self.assertEqual(transaction.trait, self.skill)
         self.assertIsNotNone(transaction.game_week)
@@ -114,12 +116,12 @@ class TrainSkillTests(TestCase):
     def test_train_skill_stop_at_boundary_keeps_excess(self) -> None:
         SkillRatingFactory(character=self.sheet, skill=self.skill, value=18)
 
-        result = train_skill(self.sheet, self.skill, 1500, description="x", stop_at_boundary=True)
+        result = train_skill(self.sheet, self.skill, 150, description="x", stop_at_boundary=True)
 
         self.assertEqual(result.new_value, 19)
-        self.assertEqual(result.points_applied, 900)
+        self.assertEqual(result.points_applied, 10)
         self.assertIsNone(result.plateau_message)
-        self.assertEqual(DevelopmentTransaction.objects.get().amount, 900)
+        self.assertEqual(DevelopmentTransaction.objects.get().amount, 10)
 
     def test_train_skill_without_stop_dissipates_at_boundary(self) -> None:
         SkillRatingFactory(character=self.sheet, skill=self.skill, value=18)

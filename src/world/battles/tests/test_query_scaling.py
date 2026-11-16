@@ -290,7 +290,8 @@ class ResolveBattleRoundQueryScalingTests(TestCase):
         # resolution paths (#1871).
         # +2: military_unit.save() per ROUT/RALLY; +1: Path lookup (#4450); +2 headroom:
         # the count reads 37.9 alone and 38.9 after other modules warmed the identity map.
-        per_declaration_budget = 40
+        # #5093: +2 for the LevelTier read behind each difficulty or opposition level.
+        per_declaration_budget = 42
         self.assertLess(
             marginal,
             per_declaration_budget,

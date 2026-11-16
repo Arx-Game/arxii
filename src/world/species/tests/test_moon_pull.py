@@ -208,10 +208,12 @@ class RenamedBerserkTest(TestCase):
 class LycanBattleFormProvisioningTest(TestCase):
     @classmethod
     def setUpTestData(cls):
+        from world.seeds.modifier_values import seed_pool_and_cap_lanes
         from world.species.moon_provisioning import BATTLE_FORM_STAT_SUITE
         from world.traits.factories import TraitFactory
         from world.traits.models import TraitType
 
+        seed_pool_and_cap_lanes()
         for trait_name, _value in BATTLE_FORM_STAT_SUITE:
             TraitFactory(name=trait_name, trait_type=TraitType.STAT)
 
@@ -242,9 +244,27 @@ class LycanBattleFormProvisioningTest(TestCase):
         )
 
         sheet = CharacterSheetFactory()
-        with patch("world.species.moon_provisioning._gift_thread_level", return_value=3):
+        # A gift thread at 30 is rung 3, and the seeded lane gives 10 tuning a rung: the 30
+        # the old one-a-thread-level rule gave at that level.
+        with patch("world.species.moon_provisioning._gift_thread_level", return_value=30):
             alt = ensure_lycan_battle_form(sheet)
-        self.assertEqual(alt.tuning_value, TUNING_BASELINE + 3)
+        self.assertEqual(alt.tuning_value, TUNING_BASELINE + 30)
+
+    def test_a_thread_between_rungs_reads_its_whole_rung_and_one_under_rung_one_adds_nothing(
+        self,
+    ):
+        from world.species.moon_provisioning import (
+            TUNING_BASELINE,
+            ensure_lycan_battle_form,
+        )
+
+        sheet = CharacterSheetFactory()
+        with patch("world.species.moon_provisioning._gift_thread_level", return_value=17):
+            alt = ensure_lycan_battle_form(sheet)
+        self.assertEqual(alt.tuning_value, TUNING_BASELINE + 10)
+        with patch("world.species.moon_provisioning._gift_thread_level", return_value=9):
+            alt = ensure_lycan_battle_form(sheet)
+        self.assertEqual(alt.tuning_value, TUNING_BASELINE)
 
 
 class CaniUneaseTest(TestCase):

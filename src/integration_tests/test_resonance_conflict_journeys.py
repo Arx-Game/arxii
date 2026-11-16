@@ -252,13 +252,14 @@ class AnUnsetConflictConditionRollsNothing(_Drifting):
 
 class UnsettledPastTheLine(_Drifting):
     """40 percent Abyssal against a line of 20 and a tolerance of 5: 15 past, three steps,
-    focus difficulty 16."""
+    focus difficulty 28: level 1's 18 points plus three steps of 4 tenths of an 8-point level
+    width (9.6, rounded to 10)."""
 
     def test_a_failed_focus_roll_penalises_the_same_cast(self) -> None:
         self.watch(self.ysmay)
         rec = self.cast(focus="Failure")
 
-        self.assertEqual(rec.focus_difficulties, [16])
+        self.assertEqual(rec.focus_difficulties, [28])
         self.assertTold(
             self.ysmay,
             f"Your {self.abyssal_resonance.name} has grown strong enough to make you unsettled",
@@ -272,7 +273,7 @@ class UnsettledPastTheLine(_Drifting):
     def test_a_kept_focus_applies_nothing(self) -> None:
         rec = self.cast(focus="Success")
 
-        self.assertEqual(rec.focus_difficulties, [16])
+        self.assertEqual(rec.focus_difficulties, [28])
         self.assertIsNone(self.conflict())
         self.assertNotIn(CONFLICT, _labels(rec.cast_breakdowns[0]))
 
@@ -296,9 +297,9 @@ class TheAlternateSelfDoesNotChangeWhoSheIs(_Drifting):
     change with the mask she wears, so her Celestial is no more unsettled than before."""
 
     def test_the_measure_stays_on_her_true_aura(self) -> None:
-        self.assertEqual(self.cast(focus="Success").focus_difficulties, [16])
+        self.assertEqual(self.cast(focus="Success").focus_difficulties, [28])
         self.shift(self.ysmay)
-        self.assertEqual(self.cast(focus="Success").focus_difficulties, [16])
+        self.assertEqual(self.cast(focus="Success").focus_difficulties, [28])
 
 
 class NoAuraNoContest(ResonanceCacheIsolationMixin, JourneyCase):
@@ -416,7 +417,7 @@ class ACombatCastRollsFocusOnce(_DriftingInCombat):
             self.assertEqual(self.encounter.round_number, 1, told)
             self.assertEqual(rec.focus_difficulties, [], "declaring rolls nothing")
             resolve_round(self.encounter)
-        self.assertEqual(rec.focus_difficulties, [16], told)
+        self.assertEqual(rec.focus_difficulties, [28], told)
         self.assertTold(self.ysmay, f"You lose your focus as you work Ember Lash: {CONFLICT}.")
         self.assertTrue(
             ConditionInstance.objects.filter(target=self.ysmay, condition=self.condition).exists()
@@ -453,7 +454,7 @@ class AClashContributionRollsFocus(_DriftingInCombat):
             told = self.telnet(self.ysmay, "clash Gristle with Ember Lash")
             self.assertEqual(rec.focus_difficulties, [], "committing rolls nothing")
             resolve_round(self.encounter)
-        self.assertEqual(rec.focus_difficulties, [16], told)
+        self.assertEqual(rec.focus_difficulties, [28], told)
         self.assertTold(self.ysmay, f"You lose your focus as you work Ember Lash: {CONFLICT}.")
         self.assertTrue(
             ClashContribution.objects.filter(
@@ -467,7 +468,7 @@ class AClashContributionRollsFocus(_DriftingInCombat):
 class AnEnchantedFlirtRollsFocusToo(ResonanceCacheIsolationMixin, JourneyCase):
     """A technique-enhanced social action is a cast: Ysmay, settled 80 Celestial / 20
     Abyssal and holding 40 Abyssal against 60 Celestial, flirts with Hobb through a
-    technique and rolls her focus at 16 when Hobb accepts."""
+    technique and rolls her focus at 28 when Hobb accepts."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -541,7 +542,7 @@ class AnEnchantedFlirtRollsFocusToo(ResonanceCacheIsolationMixin, JourneyCase):
                 headers={"X-Character-ID": str(self.hobb.pk)},
             )
         self.assertEqual(accepted.status_code, status.HTTP_200_OK, accepted.data)
-        self.assertEqual(rec.focus_difficulties, [16])
+        self.assertEqual(rec.focus_difficulties, [28])
         self.assertTold(
             self.ysmay, f"You lose your focus as you work Mesmerizing Gaze: {CONFLICT}."
         )

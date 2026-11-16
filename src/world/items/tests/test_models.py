@@ -441,7 +441,9 @@ class ItemTemplateUseFieldsTests(TestCase):
         from world.checks.factories import CheckTypeFactory
         from world.items.factories import ItemTemplateFactory
 
-        tmpl = ItemTemplateFactory(on_use_check_type=CheckTypeFactory(), on_use_difficulty=None)
+        tmpl = ItemTemplateFactory(
+            on_use_check_type=CheckTypeFactory(), on_use_difficulty_level=None
+        )
         with self.assertRaises(ValidationError):
             tmpl.full_clean()
 
@@ -450,7 +452,7 @@ class ItemTemplateUseFieldsTests(TestCase):
 
         from world.items.factories import ItemTemplateFactory
 
-        tmpl = ItemTemplateFactory(on_use_check_type=None, on_use_difficulty=5)
+        tmpl = ItemTemplateFactory(on_use_check_type=None, on_use_difficulty_level=0)
         with self.assertRaises(ValidationError):
             tmpl.full_clean()
 

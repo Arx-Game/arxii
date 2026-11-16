@@ -7,11 +7,30 @@ from django.contrib import admin
 from world.progression.models import (
     CharacterXP,
     CharacterXPTransaction,
+    DevelopmentCostConfig,
     DevelopmentPoints,
     DevelopmentTransaction,
     ExperiencePointsData,
     XPTransaction,
 )
+
+
+@admin.register(DevelopmentCostConfig)
+class DevelopmentCostConfigAdmin(admin.ModelAdmin):
+    """The one geometric development point cost curve every levelling trait shares (#5093).
+
+    A singleton at pk 1: one row, never added or deleted.
+    """
+
+    list_display = ["start_level", "base_cost", "growth_percent"]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not DevelopmentCostConfig.objects.exists()
+
+    def has_delete_permission(self, request: object, obj: object = None) -> bool:  # noqa: ARG002
+        """The singleton is never deleted."""
+        return False
 
 
 @admin.register(ExperiencePointsData)

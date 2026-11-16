@@ -217,7 +217,7 @@ def build_gm_story_rail_payload(scene: Scene, user: AccountDB) -> dict[str, Any]
             {
                 "id": room_clue.id,
                 "clue_name": room_clue.clue.name,
-                "detect_difficulty": room_clue.detect_difficulty,
+                "detect_difficulty_level": room_clue.detect_difficulty_level,
                 "is_active": room_clue.is_active,
             }
             for room_clue in RoomClue.objects.filter(

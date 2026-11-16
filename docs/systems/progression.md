@@ -87,6 +87,7 @@ from world.progression.types import (
 |-------|---------|------------|
 | `DevelopmentPoints` | Per-character, per-trait development tracker | `character`, `trait`, `total_earned` |
 | `DevelopmentTransaction` | Audit trail for all development point awards | `character`, `trait`, `source` (DevelopmentSource), `amount`, `reason`, `description`, `scene`, `gm`, `transaction_date` |
+| `DevelopmentCostConfig` | Singleton (pk 1, `get_singleton()` creates it from the defaults on first read; `seed_development_cost_config` writes the same values explicitly): the one geometric cost curve every levelling trait shares (#5093). A band (character level `value // 10`) costs `base_cost x (growth_percent / 100)^(band - start_level)`; each of its ten steps costs a tenth, minimum 1. `services/dev_cost.py` holds `dp_cost_for_band`, `dp_cost_for_step`, `cumulative_dp_for_level`; skills, specializations, thread imbue (times the kind's `ThreadPullCost.imbue_cost_multiplier`), the XP-lock prospect and the rust cap all read them | `start_level` (1), `base_cost` (100), `growth_percent` (150) |
 
 ### Kudos ("Good Sport" Currency)
 
@@ -292,7 +293,8 @@ rust ledger a skill has: use (`award_check_development`), GM awards
 (`award_development_points`) and training (`world.skills.services.train_skill`, weekly
 training and Academy courses) all come through `award_points`. For a SKILL trait:
 
-- `award_points` first raises `total_earned` to `cumulative_dp_for_level(current rating)`,
+- `award_points` first raises `total_earned` to `cumulative_dp_for_level(current rating)`
+  (`services/dev_cost.py`),
   so the ledger counts from the rating the character has, not from 10. Every writer that
   sets a skill rating directly (character creation, staff edit, the XP breakthrough, the NPC
   copy, a preset) aligns the ledger through

@@ -162,7 +162,11 @@ class EncounterRetrieveQueryCountTests(_SharedSetupMixin, TestCase):
         # only, so it does not scale with the participant count.
         # The roster's persona names (#4802) add two: the sheets' worn personas and the
         # persona rows, read once for every participant.
-        with self.assertNumQueries(22):
+        # The viewer's own fatigue capacities (#5093) add two, read once for all three
+        # categories: the fatigue level bonus lane's baselines, and the FatigueConfig row
+        # (a database that has no row re-reads it; a seeded one serves it from the
+        # idmapper cache). Own row only, so it does not scale with the participant count.
+        with self.assertNumQueries(24):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 

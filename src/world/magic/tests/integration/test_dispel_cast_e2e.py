@@ -215,7 +215,7 @@ class DispelCastE2ETests(CastScenarioMixin):
             name="PowerJourneyDispel3391",
             can_be_dispelled=True,
             cure_check_type=cure_check,
-            cure_difficulty=40,
+            cure_difficulty_level=2,
         )
 
         def _make_dispel_technique(intensity: int):

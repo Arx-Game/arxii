@@ -57,7 +57,7 @@ class CodexEntryFactory(DjangoModelFactory):
     lore_content = factory.Faker("paragraph")
     share_cost = 5
     learn_cost = 5
-    learn_difficulty = 10
+    learn_difficulty_level = 1
     learn_threshold = 10
     display_order = factory.Sequence(lambda n: n)
     is_public = False

@@ -8,6 +8,8 @@ test performance and maintainability.
 import factory
 import factory.django as factory_django
 
+from world.checks.constants import ModifierLane
+from world.checks.modifier_models import ModifierLevelBaseline
 from world.traits.models import (
     CharacterTraitValue,
     CheckOutcome,
@@ -72,8 +74,40 @@ class PointConversionRangeFactory(factory_django.DjangoModelFactory):
     points_per_level = 1
 
 
+def ensure_check_rank(rank: int, min_points: int, name: str) -> CheckRank:
+    """A ``CheckRank`` whose ladder threshold is ``min_points`` (#5093).
+
+    A rank's threshold is the CHECK lane's level-``rank`` baseline, so this writes that
+    baseline row too (rank 0 starts at 0 and needs none). Create-if-missing on both rows.
+    """
+    if rank > 0:
+        ModifierLevelBaseline.objects.get_or_create(
+            lane=ModifierLane.CHECK, level=rank, defaults={"baseline": min_points}
+        )
+    return CheckRank.objects.get_or_create(rank=rank, defaults={"name": name})[0]
+
+
+def ensure_level_ladder() -> None:
+    """The standard check ladder: CHECK baselines 18 + 8 x (level - 1) for levels 1-30 (#5093).
+
+    Each level is one 8-point step wide and the level-N baseline is where rank N starts, the
+    same example ladder the seeds write. Writes the baselines it needs (create-if-missing, so a
+    ladder a test already shaped keeps its rows) and the matching rank rows 0-30.
+    """
+    for level in range(1, 31):
+        ModifierLevelBaseline.objects.get_or_create(
+            lane=ModifierLane.CHECK, level=level, defaults={"baseline": 18 + 8 * (level - 1)}
+        )
+    for rank in range(31):
+        CheckRank.objects.get_or_create(rank=rank, defaults={"name": f"Rank {rank}"})
+
+
 class CheckRankFactory(factory_django.DjangoModelFactory):
-    """Factory for creating CheckRank instances."""
+    """Factory for creating CheckRank instances.
+
+    ``min_points`` is not a column: it is the rank's threshold, written as the CHECK lane's
+    level-``rank`` baseline (rank 0 needs none).
+    """
 
     class Meta:
         model = CheckRank
@@ -82,6 +116,15 @@ class CheckRankFactory(factory_django.DjangoModelFactory):
     min_points = factory.LazyAttribute(lambda obj: obj.rank * 15)
     name = factory.Sequence(lambda n: f"Rank_{n}")
     description = factory.Faker("sentence")
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        min_points = kwargs.pop("min_points")
+        if kwargs["rank"] > 0:
+            ModifierLevelBaseline.objects.update_or_create(
+                lane=ModifierLane.CHECK, level=kwargs["rank"], defaults={"baseline": min_points}
+            )
+        return super()._create(model_class, *args, **kwargs)
 
 
 class CheckOutcomeFactory(factory_django.DjangoModelFactory):

@@ -48,11 +48,10 @@ RS_PARTNER_XP = 5
 FIRST_IMPRESSION_AUTHOR_XP = 3
 FIRST_IMPRESSION_TARGET_XP = 5
 
-# Development point level-up formula constants
-# Cost from level N to N+1 = (N - DP_COST_OFFSET) * DP_COST_MULTIPLIER
+# Development point levelling. The cost curve is the DevelopmentCostConfig row
+# (world/progression/services/dev_cost.py); only the band width lives here.
 DP_BASE_LEVEL = 10  # CG starting level; no dp needed at or below this level
-DP_COST_OFFSET = 9  # Subtracted from level in cost formula
-DP_COST_MULTIPLIER = 100  # Multiplied by (level - offset) for per-level cost
+DP_STEPS_PER_BAND = 10  # Trait steps in one character level's band (value // 10)
 
 # Skill rust constants
 RUST_BASE_AMOUNT = 5  # Added to character_level for weekly rust

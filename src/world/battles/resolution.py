@@ -57,7 +57,7 @@ from world.battles.constants import (
 )
 from world.battles.exceptions import BattleError
 from world.battles.models import BattleParticipant, BattleRound
-from world.checks.services import perform_check
+from world.checks.services import difficulty_points, perform_check
 from world.scenes.constants import RoundStatus
 
 # BREACH_INTEGRITY_PER_LEVEL/FORTIFY_INTEGRITY_PER_LEVEL/BREACH_VP_PER_LEVEL/FORTIFY_VP
@@ -1227,7 +1227,7 @@ def _maybe_apply_surrounded(declaration: BattleActionDeclaration) -> bool:
     pending = select_consequence(
         character,
         entry_stage.resist_check_type,
-        entry_stage.resist_difficulty,
+        difficulty_points(entry_stage.resist_difficulty_level),
         candidates,
         extra_modifiers=extra_modifiers,
         extra_traits=loss_of_self_terms(template),

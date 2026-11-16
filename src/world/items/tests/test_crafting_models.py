@@ -29,7 +29,7 @@ class CraftingRecipeModelTests(TestCase):
         self.assertEqual(str(recipe), "Attach Facet")
         self.assertEqual(recipe.kind, CraftingRecipeKind.FACET_ATTACH)
         self.assertEqual(recipe.default_cost_consumption, CostConsumption.FULL)
-        self.assertEqual(recipe.base_difficulty, 0)
+        self.assertEqual(recipe.base_difficulty_level, 0)
         self.assertEqual(recipe.success_level_step, 10)
         self.assertEqual(recipe.min_success_level, 1)
         self.assertEqual(recipe.action_point_cost, 0)

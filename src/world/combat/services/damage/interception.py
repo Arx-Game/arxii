@@ -9,6 +9,7 @@ from django.db.models import Exists, OuterRef, Q
 
 from flows.constants import EventName
 from flows.events.payloads import DamagePreApplyPayload
+from world.checks.services import difficulty_points
 from world.combat import services as _svc
 from world.combat.constants import (
     ABSORPTION_CAP_PER_MOMENT,
@@ -745,7 +746,7 @@ def _try_technique_interpose(
        type plus the technique skill term), rolled
        against the same authored difficulty as the mundane Interpose challenge
        (:data:`~world.combat.interpose_content.INTERPOSE_CHALLENGE_NAME`'s
-       ``ChallengeTemplate.severity``) — a technique guardian's protection is
+       ``ChallengeTemplate.severity_level``) — a technique guardian's protection is
        spellcasting, not martial reflex, so it never touches
        :func:`dispatch_capability_reaction`.
     3. **Cost is anima, not fatigue.** On fire (any non-fizzle resolution) the
@@ -826,7 +827,7 @@ def _try_technique_interpose(
         # for the mundane path): fail safe like the resolved-is-None branch
         # above — no roll, no cost, damage proceeds unchanged.
         return False
-    severity = severity_template.severity
+    severity = difficulty_points(severity_template.severity_level)
     cast_check = resolve_cast_check(interposer, technique)
     if cast_check is None:
         # Unprovisioned caster + template-less technique (clash.py guards the

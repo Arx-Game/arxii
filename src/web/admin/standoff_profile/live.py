@@ -2,8 +2,9 @@
 
 Everything here is computed from the saved rows, never written. The grade preview runs
 the same ``social_target_difficulty`` the payload uses, for an example character of the
-chosen level with no trait points beyond its level, against one example opponent of the
-same level, with no faction rule matched.
+chosen level whose total is that level's typical baseline (#5093), against one example
+opponent of the same level, with no faction rule matched. With no CHECK baseline authored
+there is nothing to grade against and the grade is blank.
 """
 
 from __future__ import annotations
@@ -11,8 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from world.checks.constants import LEVEL_POINTS_PER_LEVEL
-from world.checks.services import level_opposition
+from world.checks.services import level_opposition, level_strength
 from world.checks.social_target import DriveHit, social_target_difficulty
 from world.combat.constants import CauseKind
 from world.combat.models import OpponentTierTemplate
@@ -106,7 +106,12 @@ def _grade(check_type: CheckType | None, level: int, hits: list[DriveHit], bands
         resist_increment=level_opposition(check_type, level=level),
         extra_bands=bands,
     ).difficulty
-    rank_difference = CheckRank.get_rank_difference(LEVEL_POINTS_PER_LEVEL * level, difficulty)
+    # A same-level character with ordinary skills: the level's strength, the one
+    # level_opposition gives an opponent of that level (#5093).
+    example_total = level_strength(level)
+    if example_total == 0:
+        return ""
+    rank_difference = CheckRank.get_rank_difference(example_total, difficulty)
     return difficulty_indicator_for_rank_difference(rank_difference).value
 
 

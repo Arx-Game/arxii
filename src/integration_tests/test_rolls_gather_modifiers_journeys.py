@@ -2,9 +2,10 @@
 
 Ysmay climbs at the Old Quarry. She wears Chalked Gloves (+5 to Climbing, an item check
 modifier) and Maren casts Sure Grip on her (+5 to Climbing, a technique buff that lands
-as a condition). Her own Climbing total is 5 points: Incompetent (rank 0), 50% toward
-Novice (rank 1), on the seeded rank ladder. With the gloves and the buff it is 15:
-Novice (rank 1), 33% toward Competent (rank 2).
+as a condition). Her own Climbing total is 9 points, her level term (half of level 1's 18-point
+baseline): Incompetent (rank 0), 50% toward Novice (rank 1), on the seeded rank ladder (rank N
+starts at 18 + 8 x (N - 1)). With the gloves and the buff it is 19: Novice (rank 1), 12% toward
+Rank 2.
 
 Every way she rolls Climbing counts both: her own ``check`` by telnet and from the web,
 answering a GM's call, a Senior GM's ``gm check`` on her, and a challenge she takes on
@@ -61,19 +62,21 @@ from world.mechanics.factories import (
     PropertyFactory,
 )
 from world.mechanics.models import ChallengeInstance
-from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
 from world.scenes.tests.cast_test_helpers import grant_technique
 from world.seeds.checks import seed_check_resolution_tables
 from world.traits.models import CheckOutcome, ResultChart
 from world.vitals.models import CharacterVitals
 
-# Her own total, and her total with the gloves and the buff (5 each).
-OWN = 5
-GEARED = 15
+# Her own total (her level term), and her total with the gloves and the buff (5 each).
+OWN = 9
+GEARED = 19
 OWN_STANDING = "Incompetent (rank 0), 50% toward Novice (rank 1)"
-GEARED_STANDING = "Novice (rank 1), 33% toward Competent (rank 2)"
-# Trivial is 15 points: Novice (rank 1), a third of its band.
-AGAINST_TRIVIAL = "against Novice (rank 1), 33% toward Competent (rank 2)"
+# 19 is Novice (rank 1, starts at 18), 1 of its 8 points: 12.5%, shown as 12%.
+GEARED_STANDING = "Novice (rank 1), 12% toward Rank 2"
+# Trivial is 15 points: 15 of rank 0's 18 points.
+AGAINST_TRIVIAL = "against Incompetent (rank 0), 83% toward Novice (rank 1)"
+# The quarry face challenge is authored at level 1: its baseline, 18 points, where rank 1 starts.
+AGAINST_QUARRY_FACE = "against Novice (rank 1)"
 # Her capability from the approach's technique, and the gloves and the buff.
 CAPABILITY = 5
 GLOVES = ("equipment", "Equipped: Chalked Gloves", 5)
@@ -248,9 +251,7 @@ class AChallengeCountsHerGear(_TheOldQuarry):
         super().setUp()
         self.scaling = CapabilityTypeFactory(name="Scaling")
         prop = PropertyFactory(name="sheer")
-        template = ChallengeTemplateFactory(
-            name="The Quarry Face", severity=DIFFICULTY_VALUES[DifficultyChoice.TRIVIAL]
-        )
+        template = ChallengeTemplateFactory(name="The Quarry Face", severity_level=1)
         template.properties.add(prop)
         self.approach = ChallengeApproachFactory(
             challenge_template=template,
@@ -311,12 +312,12 @@ class AChallengeCountsHerGear(_TheOldQuarry):
 
         roll = self.climb()
 
-        # Her own 5, the gloves' 5, the buff's 5 and her capability's 5, each once.
+        # Her own 9, the gloves' 5, the buff's 5 and her capability's 5, each once.
         self.assertEqual(roll.total_points, GEARED + CAPABILITY)
-        # 20 points: Novice (rank 1), two thirds of its band.
+        # 24 points: Novice (rank 1, starts at 18), 6 of its 8 points.
         self.assertEqual(
             roll.standing_text,
-            "Novice (rank 1), 67% toward Competent (rank 2) " + AGAINST_TRIVIAL,
+            "Novice (rank 1), 75% toward Rank 2 " + AGAINST_QUARRY_FACE,
         )
         outcome = self.stored()
         self.assertEqual(

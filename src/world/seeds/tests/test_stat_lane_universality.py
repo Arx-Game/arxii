@@ -1,17 +1,18 @@
-"""The seeded stat lane obeys #4551 section 5.5's universality rule (#4726).
+"""The seeded stat lane obeys #4551 section 5.5's universality rule (#4726, #5093).
 
 A stat buff of a size and level, read through the seeded STAT point conversion, moves a
-check by about the check lane's value for that size and level. The simulator's
-universality guard is not built yet; until it is, this checks the one relation against
-the seeded rows.
+check by the same points the to-hit lane (check points added to a roll) gives that size
+and level. The simulator's universality guard is not built yet; until it is, this checks the
+one relation against the seeded rows. Values are derived (size fraction x level width), so
+the two lanes agree because their seeded baselines and fractions do.
 """
 
 from __future__ import annotations
 
 from django.test import TestCase
 
-from world.checks.constants import ModifierLane
-from world.checks.modifier_models import ModifierValue
+from world.checks.constants import ModifierLane, ModifierSize
+from world.checks.modifier_values import load_value_table
 from world.seeds.checks import seed_check_resolution_tables
 from world.seeds.modifier_values import seed_modifier_value_tables
 from world.traits.models import PointConversionRange, TraitType
@@ -26,18 +27,16 @@ class StatLaneUniversalityTests(TestCase):
         seed_check_resolution_tables()
         seed_modifier_value_tables()
 
-    def test_a_stat_buff_moves_a_check_by_the_check_lanes_value(self) -> None:
-        check_values = {
-            (row.level, row.size): row.value
-            for row in ModifierValue.objects.filter(lane=ModifierLane.CHECK)
-        }
-        stat_rows = list(ModifierValue.objects.filter(lane=ModifierLane.STAT))
-        self.assertEqual(len(stat_rows), len(check_values))
+    def test_a_stat_buff_moves_a_check_by_the_to_hit_lanes_value(self) -> None:
+        to_hit = load_value_table(ModifierLane.TO_HIT)
+        stat = load_value_table(ModifierLane.STAT)
         base_points = PointConversionRange.calculate_points(TraitType.STAT, BASE_STAT)
-        for row in stat_rows:
-            moved = (
-                PointConversionRange.calculate_points(TraitType.STAT, BASE_STAT + row.value)
-                - base_points
-            )
-            with self.subTest(level=row.level, size=row.size):
-                self.assertEqual(moved, check_values[(row.level, row.size)])
+        for level in range(1, 31):
+            for size in ModifierSize.values:
+                units = stat.value(level, size)
+                moved = (
+                    PointConversionRange.calculate_points(TraitType.STAT, BASE_STAT + units)
+                    - base_points
+                )
+                with self.subTest(level=level, size=size):
+                    self.assertEqual(moved, to_hit.value(level, size))

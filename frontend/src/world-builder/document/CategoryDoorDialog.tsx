@@ -54,7 +54,7 @@ function SecretsDoor({
       {room.clues.map((placed) => (
         <div key={`clue-${placed.id}`} className="flex items-center gap-2 text-sm">
           <span className="flex-1">
-            {placed.clue_name} · search vs {placed.detect_difficulty}
+            {placed.clue_name} · search vs level {placed.detect_difficulty_level}
           </span>
           <Button
             size="sm"

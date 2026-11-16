@@ -230,9 +230,12 @@ class CodexEntry(NaturalKeyMixin, CreditedContent, DiscoverableContent, SharedMe
         default=5,
         help_text="AP cost for learner to accept an offer.",
     )
-    learn_difficulty = models.PositiveIntegerField(
-        default=10,
-        help_text="Base difficulty for learning progress checks.",
+    learn_difficulty_level = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            "Base difficulty for learning progress checks. Authored as a level (0 = no "
+            "difficulty): the roll meets that level's baseline."
+        ),
     )
     learn_threshold = models.PositiveIntegerField(
         default=10,

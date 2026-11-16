@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
+from world.checks.services import difficulty_points
 from world.npc_services.constants import OfferKind
 
 if TYPE_CHECKING:
@@ -352,7 +353,7 @@ OFFER_EFFECT_HANDLERS[OfferKind.LOAN.value] = grant_loan
 def raise_court_grant(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     """COURT_GRANT effect handler (#1718): petition the master for a permanent raise.
 
-    Rolls offer.check_type/check_difficulty (eased by the master's affection
+    Rolls offer.check_type/check_difficulty_level (eased by the master's affection
     toward the servant), and on success raises the servant's CourtPact.granted_pull_cap
     up to court_grant_ceiling(...). Every attempt (success or failure) records the
     petition outcome on the servant<->master NPCStanding row; crossing the
@@ -398,7 +399,7 @@ def raise_court_grant(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     check_result = perform_check(
         persona.character_sheet.character,
         offer.check_type,
-        target_difficulty=offer.check_difficulty,
+        target_difficulty=difficulty_points(offer.check_difficulty_level),
         extra_modifiers=ease,
     )
     # CheckResult.success_level (world.checks.types) safely returns 0 when
@@ -1055,7 +1056,8 @@ def _run_course_session(  # noqa: PLR0913 - one session's inputs, all already re
     check_result = perform_check_with_modifiers(
         sheet.character,
         course.check_type,
-        target_difficulty=course.check_difficulty - _course_ease(offer, sheet),
+        target_difficulty=difficulty_points(course.check_difficulty_level)
+        - _course_ease(offer, sheet),
     )
     award = (
         TrainingOutcomeAward.objects.filter(outcome_tier=check_result.outcome).first()
@@ -1310,7 +1312,7 @@ def run_clue_reveal_offer(offer: NPCServiceOffer, persona: Persona) -> EffectRes
         check_result = perform_check(
             character,
             offer.check_type,
-            target_difficulty=offer.check_difficulty,
+            target_difficulty=difficulty_points(offer.check_difficulty_level),
         )
         succeeded = check_result.success_level > 0
     else:

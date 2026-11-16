@@ -965,7 +965,7 @@ class TestGetPlayerActionsWorldInteractionBackend(django.test.TestCase):
         # Shares cls.capability so the same technique grant qualifies both.
         cls.torch = ObjectDBFactory(db_key="Torch", location=cls.room)
         cls.prop_flammable = PropertyFactory(name="flammable_wi")
-        cls.wi_template = ChallengeTemplateFactory(name="Ignite Torch WI", severity=3)
+        cls.wi_template = ChallengeTemplateFactory(name="Ignite Torch WI", severity_level=0)
         cls.wi_application = ApplicationFactory(
             name="Ignite WI",
             capability=cls.capability,
@@ -1036,7 +1036,7 @@ class TestDispatchPlayerActionWorldInteraction(django.test.TestCase):
         cls.torch = ObjectDBFactory(db_key="DispatchTorch", location=cls.room)
         cls.prop_flammable = PropertyFactory(name="flammable_wi_dispatch")
         cls.prop_lit = PropertyFactory(name="lit_wi_dispatch")
-        cls.template = ChallengeTemplateFactory(name="Ignite Torch WI Dispatch", severity=3)
+        cls.template = ChallengeTemplateFactory(name="Ignite Torch WI Dispatch", severity_level=0)
         cls.application = ApplicationFactory(
             name="Ignite WI Dispatch",
             capability=cls.capability,

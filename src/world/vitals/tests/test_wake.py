@@ -21,6 +21,7 @@ from world.conditions.factories import (
 )
 from world.conditions.models import ConditionInstance
 from world.conditions.services import SECONDS_PER_ROUND
+from world.seeds.modifier_values import seed_check_level_baselines
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.factories import CharacterVitalsFactory
 from world.vitals.models import VitalsConsequenceConfig
@@ -33,24 +34,26 @@ from world.vitals.services import (
 
 
 class CalculateWakeDifficultyTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_check_level_baselines()
+
     """The wake difficulty formula: injury scales up, elapsed rounds ease."""
 
     def test_full_health_no_elapsed_is_base(self) -> None:
-        config, _ = VitalsConsequenceConfig.objects.get_or_create(pk=1)
         difficulty = calculate_wake_difficulty(health_pct=1.0, rounds_elapsed=0)
-        self.assertEqual(difficulty, config.wake_base_difficulty)
+        self.assertEqual(difficulty, 18)  # level 1's baseline
 
     def test_injury_raises_difficulty(self) -> None:
-        config, _ = VitalsConsequenceConfig.objects.get_or_create(pk=1)
         difficulty = calculate_wake_difficulty(health_pct=0.1, rounds_elapsed=0)
-        expected = config.wake_base_difficulty + 90 * config.wake_scaling_per_percent
-        self.assertEqual(difficulty, expected)
+        # 90 missing points x 0.2 of a level's width (8) per point = 144 more
+        self.assertEqual(difficulty, 18 + 144)
 
     def test_elapsed_rounds_ease_difficulty(self) -> None:
-        config, _ = VitalsConsequenceConfig.objects.get_or_create(pk=1)
         at_zero = calculate_wake_difficulty(health_pct=0.5, rounds_elapsed=0)
         at_ten = calculate_wake_difficulty(health_pct=0.5, rounds_elapsed=10)
-        self.assertEqual(at_zero - at_ten, 10 * config.wake_ease_per_round)
+        # 10 rounds x 0.4 of a level's width (8) per round = 32
+        self.assertEqual(at_zero - at_ten, 32)
 
     def test_difficulty_floors_at_zero(self) -> None:
         difficulty = calculate_wake_difficulty(health_pct=1.0, rounds_elapsed=10_000)

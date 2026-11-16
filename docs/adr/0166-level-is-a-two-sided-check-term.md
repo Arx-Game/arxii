@@ -1,5 +1,11 @@
 # Level is a guaranteed, additive term on both sides of every check
 
+> **Superseded by [ADR-5093](adr-5093-rank-means-level.md) (2026-11-15).** The five-points-a-level
+> constant is gone, and a check rank now means the level someone is acting at. The acting side's
+> level term is `CheckScaleConfig.level_share` times the level's baseline, plus its tier bonus,
+> and a passive NPC opposes with the level's baseline and tier bonus. The two-sided,
+> unconditional, additive shape below stands; the numbers it quotes are the old ones.
+
 #2707 (level both sides of check) closes two gaps found once ADR-0165's chart-direction
 fix landed and made rank comparisons trustworthy again: a level-30 veteran and a level-1
 recruit rolled identically on any check whose `CheckType` had no authored aspect
@@ -136,4 +142,4 @@ site.
 
 > Status: accepted · Source: issue #2707 (level both sides of check) · relates to
 > ADR-0165 (chart-direction convention; landed alongside this); extends ADR-0019; extends
-> ADR-0145; supersedes nothing.
+> ADR-0145; superseded by ADR-5093 (the numbers; the two-sided shape stands).

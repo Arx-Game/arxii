@@ -2519,7 +2519,7 @@ def _set_clue_target(clue: Clue, field_name: str | None, target_id: Any) -> str 
 @dataclass
 class StaffPlaceClueAction(_WorldBuilderAction):
     """Place a ``RoomClue`` in a room. Kwargs: ``room_id``, ``clue_slug``, optional
-    ``detect_difficulty`` (int, default 0), optional ``fixture_key`` (auto-suggested
+    ``detect_difficulty_level`` (int, default 0), optional ``fixture_key`` (auto-suggested
     from ``room-<id>/<clue_slug>`` when omitted).
     """
 
@@ -2543,14 +2543,17 @@ class StaffPlaceClueAction(_WorldBuilderAction):
         if clue is None:
             return ActionResult(success=False, message="No such clue.")
         try:
-            detect_difficulty = int(kwargs.get("detect_difficulty") or 0)
+            detect_difficulty_level = int(kwargs.get("detect_difficulty_level") or 0)
         except (TypeError, ValueError):
             return ActionResult(success=False, message="Detect difficulty must be a number.")
         fixture_key = kwargs.get("fixture_key") or f"room-{room_profile.objectdb_id}/{clue_slug}"
         _room_clue, _ = RoomClue.objects.update_or_create(
             room_profile=room_profile,
             clue=clue,
-            defaults={"detect_difficulty": detect_difficulty, "fixture_key": fixture_key},
+            defaults={
+                "detect_difficulty_level": detect_difficulty_level,
+                "fixture_key": fixture_key,
+            },
         )
         return ActionResult(
             success=True, message=f"{clue.name} placed in {room_profile.objectdb.db_key}."

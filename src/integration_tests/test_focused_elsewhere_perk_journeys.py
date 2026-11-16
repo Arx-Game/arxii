@@ -2,9 +2,10 @@
 
 Mira and Tomas are played fighters in one declaring round-1 encounter on "The Road", against
 a Bandit Captain and a Bandit Guard. Ilse fights beside them but is in no covenant. Mira's
-engaged vow carries a power perk of +10 tenths per thread level, scaled by the STRIKER's own
-thread total. Mira and Tomas (her covenant-mate, with his own engaged vow) each hold one thread
-at level 30, so a firing adds 30 x 10 / 10 = 30 power to the
+engaged vow carries a power perk of 10 tenths, a share of one level's width at the rung of
+the HOLDER's vow thread (#5093). Mira and Tomas (her covenant-mate, with his own engaged vow)
+each hold one vow thread at level 30, rung 3, where a level is 8 points wide on the example
+ladder, so a firing adds 1.0 x 8 = 8 power to the
 striker's technique (the "vow situational power" line of the round's power breakdown) and
 announces itself.
 
@@ -60,7 +61,7 @@ from world.magic.factories import (
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import PersonaFactory
 from world.scenes.models import InteractionPowerLedgerEntry
-from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
+from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory, ensure_level_ladder
 from world.traits.models import CheckOutcome
 from world.vitals.models import CharacterVitals
 
@@ -71,7 +72,7 @@ if TYPE_CHECKING:
 
     from world.combat.models import CombatOpponent, CombatParticipant
 
-PAYOFF = 30
+PAYOFF = 8
 VOW_LABEL = "vow situational power"
 
 
@@ -98,6 +99,7 @@ class _BanditFight(JourneyCase):
     def setUp(self) -> None:
         super().setUp()
         CheckSystemSetupFactory.create()
+        ensure_level_ladder()
         self.road = self.make_room("The Road")
         check_type = CheckTypeFactory()
         CheckTypeTraitFactory(check_type=check_type, trait=StatTraitFactory(), weight=1)

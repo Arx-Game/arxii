@@ -14,7 +14,7 @@ from django.test import TestCase, override_settings
 
 from world.checks.models import CheckTypeTrait
 from world.combat.constants import (
-    FLEE_BASE_DIFFICULTY,
+    FLEE_BASE_DIFFICULTY_LEVEL,
     FLEE_CHECK_TYPE_NAME,
     FLEE_PARTIAL_SUCCESS_LEVEL,
 )
@@ -117,25 +117,25 @@ class WireFleeConfigTests(TestCase):
         wire_flee_config()
         config = FleeConfig.objects.get(pk=1)
         self.assertEqual(config.check_type.name, FLEE_CHECK_TYPE_NAME)
-        self.assertEqual(config.base_difficulty, FLEE_BASE_DIFFICULTY)
+        self.assertEqual(config.base_difficulty_level, FLEE_BASE_DIFFICULTY_LEVEL)
         self.assertIsNotNone(config.consequence_pool)
 
     def test_seeds_five_tier_modifiers(self) -> None:
         wire_flee_config()
         expected = {
-            OpponentTier.SWARM: -5,
+            OpponentTier.SWARM: -10,
             OpponentTier.MOOK: 0,
-            OpponentTier.ELITE: 5,
-            OpponentTier.BOSS: 10,
-            OpponentTier.HERO_KILLER: 20,
+            OpponentTier.ELITE: 10,
+            OpponentTier.BOSS: 20,
+            OpponentTier.HERO_KILLER: 40,
         }
         self.assertEqual(FleeTierModifier.objects.count(), 5)
         for tier, modifier in expected.items():
             row = FleeTierModifier.objects.get(tier=tier)
             self.assertEqual(
-                row.difficulty_modifier,
+                row.difficulty_modifier_tenths,
                 modifier,
-                f"tier {tier}: expected {modifier}, got {row.difficulty_modifier}",
+                f"tier {tier}: expected {modifier}, got {row.difficulty_modifier_tenths}",
             )
 
     def test_starter_pool_has_three_consequences(self) -> None:
@@ -174,7 +174,7 @@ class WireFleeConfigTests(TestCase):
         # Staff raises the base difficulty; re-running must not reset it.
         FleeConfig.objects.filter(pk=1).update_with_reason(
             reason="test fixture: simulate stale row",
-            base_difficulty=25,
+            base_difficulty_level=2,
         )
         # .filter().update() bypasses the identity map; flush so the next get()
         # reads from DB instead of returning the stale cached instance.
@@ -184,7 +184,7 @@ class WireFleeConfigTests(TestCase):
 
         idmapper_models.flush_cache()
         config = FleeConfig.objects.get(pk=1)
-        self.assertEqual(config.base_difficulty, 25)
+        self.assertEqual(config.base_difficulty_level, 2)
         self.assertEqual(FleeConfig.objects.count(), 1)
 
     def test_idempotent_no_duplicate_tiers(self) -> None:

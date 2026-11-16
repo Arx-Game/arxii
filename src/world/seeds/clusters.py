@@ -241,6 +241,7 @@ def _seed_tutorial() -> None:
 def _seed_progression() -> None:
     from world.classes.services import ensure_class_stage_health_rates  # noqa: PLC0415
     from world.progression.seeds import (  # noqa: PLC0415
+        seed_development_cost_config,
         seed_durance_officiants,
         seed_major_gift_technique_level_requirement,
         seed_maturation_stat_caps,
@@ -249,6 +250,7 @@ def _seed_progression() -> None:
     seed_durance_officiants()
     seed_major_gift_technique_level_requirement()
     seed_maturation_stat_caps()
+    seed_development_cost_config()
     # #3001: after officiants exist so every CharacterClass gets its rate rows.
     ensure_class_stage_health_rates()
 
@@ -896,7 +898,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         CGExplanation,
         StartingArea,
     )
-    from world.checks.models import CheckType, ModifierValue  # noqa: PLC0415
+    from world.checks.models import CheckType, ModifierSizeFraction  # noqa: PLC0415
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
     from world.gm.models import GMLevelCap, GMRewardConfig, SituationKind  # noqa: PLC0415
@@ -963,8 +965,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
 
     return {
         "checks": [CheckType, ResultChart],
-        # Example modifier value table, baselines, tapers and cast-level rows (#4594).
-        "modifier_values": [ModifierValue, CastPowerLevel],
+        # Example size fractions, level baselines, tapers and cast-level rows (#4594, #5093).
+        "modifier_values": [ModifierSizeFraction, CastPowerLevel],
         # Combat checks: the Melee Combat skill + weapon-class specializations + the
         # Melee Attack CheckType (stat + skill + spec) (#1706). Shared spine/skill rows
         # counted under "checks"; appears as a seeded cluster.

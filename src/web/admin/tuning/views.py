@@ -43,6 +43,7 @@ from web.admin.tuning.checks_analytics import (
 )
 from web.admin.tuning.condition_analytics import compute_condition_danger
 from web.admin.tuning.consequence_analytics import inspect_pool, list_pools
+from web.admin.tuning.scaling_settings import build_scaling_settings_panel
 from world.character_creation.constants import (
     REQUIRED_STATS,
     STAT_DEFAULT_VALUE,
@@ -56,7 +57,7 @@ from world.combat import simulation
 from world.combat.constants import OpponentTier, RiskLevel
 from world.combat.simulation import SimulationParams, SimulationReport
 from world.covenants.models import CovenantRole
-from world.magic.constants import GiftKind
+from world.magic.constants import PATH_LEVEL_CAP_MULTIPLIER, GiftKind
 from world.magic.models.gifts import Gift, Tradition
 from world.magic.models.techniques import Technique
 from world.magic.services.technique_effects import technique_catalog_revision
@@ -255,6 +256,11 @@ def tuning_conditions_fragment(request: HttpRequest) -> HttpResponse:
         "power_provenance_summary": power_panel.provenance_summary,
     }
     return render(request, "admin/tuning/_conditions_panel.html", context)
+
+
+#: A thread's cap is its holder's path level times ``PATH_LEVEL_CAP_MULTIPLIER``, so the
+#: highest a panel's thread level can mean is path level 30's cap: 300.
+_THREAD_LEVEL_MAX = 30 * PATH_LEVEL_CAP_MULTIPLIER
 
 
 def _clamp(value: int, minimum: int, maximum: int) -> int:
@@ -457,7 +463,7 @@ class TechniqueAnalyticsForm(forms.Form):
         return _clamp(self.cleaned_data["level"], 1, 30)
 
     def clean_thread_level(self) -> int:
-        return _clamp(self.cleaned_data["thread_level"], 0, 30)
+        return _clamp(self.cleaned_data["thread_level"], 0, _THREAD_LEVEL_MAX)
 
 
 INTENT_EVALUATE = "evaluate"
@@ -784,7 +790,7 @@ class CapabilityAnalyticsForm(forms.Form):
         return _clamp(self.cleaned_data["level"], 1, 30)
 
     def clean_thread_level(self) -> int:
-        return _clamp(self.cleaned_data["thread_level"], 0, 30)
+        return _clamp(self.cleaned_data["thread_level"], 0, _THREAD_LEVEL_MAX)
 
 
 def _capability_form_defaults() -> dict[str, Any]:
@@ -848,3 +854,17 @@ def tuning_capabilities_fragment(request: HttpRequest) -> HttpResponse:
 
     context = {"form": form, "panel": panel}
     return render(request, "admin/tuning/_capabilities_panel.html", context)
+
+
+@superuser_required
+def tuning_scaling_fragment(request: HttpRequest) -> HttpResponse:
+    """Scaling settings panel: every number that sets how strong a level is (#5093).
+
+    Read-only: it shows the baseline, tier, share, size, development cost, fatigue and pool
+    rows together, each with a link to the admin page that edits it, and writes nothing.
+    """
+    return render(
+        request,
+        "admin/tuning/_scaling_panel.html",
+        {"panel": build_scaling_settings_panel()},
+    )

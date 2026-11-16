@@ -196,7 +196,7 @@ class MissionRenownAwardAdmin(admin.ModelAdmin):
 class MissionAssistPatternAdmin(admin.ModelAdmin):
     """#3831 - catalog row auto-offering support moves wherever context + qualifier match."""
 
-    list_display = ["name", "support_check_type", "difficulty", "easing", "is_active"]
+    list_display = ["name", "support_check_type", "difficulty_level", "easing", "is_active"]
     list_filter = ["is_active"]
     search_fields = ["name"]
     list_select_related = ["capability", "support_check_type"]
@@ -208,7 +208,7 @@ class MissionAssistPatternAdmin(admin.ModelAdmin):
 class MissionNodeSupportOptionAdmin(admin.ModelAdmin):
     """#3831 - authored gem: a per-node support move adding to or suppressing patterns."""
 
-    list_display = ["node", "flavor_template", "difficulty", "easing", "suppress_patterns"]
+    list_display = ["node", "flavor_template", "difficulty_level", "easing", "suppress_patterns"]
     list_filter = ["suppress_patterns"]
     search_fields = ["node__key", "flavor_template"]
     list_select_related = ["node", "capability", "support_check_type"]

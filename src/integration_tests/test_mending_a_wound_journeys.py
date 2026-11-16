@@ -95,7 +95,7 @@ class TwoHealersTendOneWound(JourneyCase):
             target_kind=TreatmentTargetKind.PRIMARY,
             target_condition=wound_condition,
             check_type=CheckTypeFactory(),
-            target_difficulty=0,
+            target_difficulty_level=0,
             scene_required=False,
             once_per_scene_per_helper=False,
             reduction_on_crit=0,

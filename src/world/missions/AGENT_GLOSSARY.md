@@ -73,10 +73,11 @@ layer - one grades a beat directly, the other grades one option inside a scenari
 **CONTEST Option**:
 A `MissionOption` with `option_kind=OptionKind.CONTEST` (#3568, ADR-0265). The party rolls
 `authored_check_type` against `instance.template.risk_tier` plus `_contest_opposition(option)`
-- `level_opposition(opposition_check_type, level=effective_combat_level(opposition_sheet),
-character=opposition_sheet.character)`, the same passive-level-term function every other
-`level_opposition` caller uses. `opposition_sheet` is an authored `CharacterSheet` (usually an
-NPC's) whose combat level sets the difficulty add-on; that sheet never rolls, never acts, and
+- `compute_obstacle_rating(opposition_sheet.character, opposition_check_type,
+level_override=effective_combat_level(opposition_sheet))` (#5093): an NPC sheet (the usual case)
+counts as its level's baseline through `level_opposition`, a level and no points, and only a
+player character's sheet counts as her full total on the opposition check. `opposition_sheet` is
+an authored `CharacterSheet` (usually an NPC's) whose combat level sets the difficulty add-on; that sheet never rolls, never acts, and
 carries no state of its own - it is authored data, exactly like an ENCOUNTER option's opponent
 lines. `clean()`'s `_contest_errors` requires AUTHORED source, both `authored_check_type` and
 `opposition_check_type`, and `opposition_sheet`, and forbids `branch_target` - a CONTEST always

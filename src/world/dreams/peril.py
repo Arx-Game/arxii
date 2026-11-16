@@ -4,7 +4,7 @@ When a dreamer's mental fatigue collapses while dreamside, this module
 resolves the outcome through the Dream Peril consequence pool.
 
 Unlike ``_resolve_peril_via_pool`` (which requires a staged ConditionInstance
-with ``resist_check_type``/``resist_difficulty``), this resolver calls
+with ``resist_check_type``/``resist_difficulty_level``), this resolver calls
 ``select_consequence`` directly using the ``DreamPerilConfig`` singleton for
 the check type and difficulty.
 """
@@ -57,6 +57,7 @@ def resolve_dream_peril_collapse(
         resolve_pool_consequences,
         select_consequence,
     )
+    from world.checks.services import difficulty_points  # noqa: PLC0415
     from world.checks.types import ResolutionContext  # noqa: PLC0415
     from world.magic.constants import MagicActivity  # noqa: PLC0415
     from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
@@ -99,7 +100,7 @@ def resolve_dream_peril_collapse(
     pending = select_consequence(
         character,
         config.resist_check_type,
-        config.resist_difficulty,
+        difficulty_points(config.resist_difficulty_level),
         candidates,
         extra_traits=activity_skill_terms(MagicActivity.DREAM_PERIL),
     )

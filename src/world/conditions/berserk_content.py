@@ -215,21 +215,21 @@ def ensure_berserk_compulsion(template: ConditionTemplate) -> Compulsion:
         defaults={
             "wants": CompulsionWant.ATTACK_OPPONENT,
             "check_type": ensure_compulsion_resist_check_type(),
-            "base_difficulty": 25,
-            "difficulty_per_severity": 2,
+            "base_difficulty_level": 2,
+            "difficulty_per_severity_tenths": 4,
             "retry_wait_minutes": 5,
         },
     )
     if not created:
         return compulsion
     for action, extra in (
-        (CompulsionForbidden.FLEE, 5),
-        (CompulsionForbidden.PARLEY, 5),
-        (CompulsionForbidden.LEAVE, 10),
-        (CompulsionForbidden.REVERT_FORM, 10),
+        (CompulsionForbidden.FLEE, 10),
+        (CompulsionForbidden.PARLEY, 10),
+        (CompulsionForbidden.LEAVE, 20),
+        (CompulsionForbidden.REVERT_FORM, 20),
     ):
         CompulsionForbiddenAction.objects.get_or_create(
-            compulsion=compulsion, action=action, defaults={"extra_difficulty": extra}
+            compulsion=compulsion, action=action, defaults={"extra_difficulty_tenths": extra}
         )
     # (success_level, result, action_penalty, control_change). The failures carry the
     # strained penalty too: a better outcome may never be worse for the bearer, and the

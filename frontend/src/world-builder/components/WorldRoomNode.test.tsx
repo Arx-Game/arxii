@@ -75,7 +75,7 @@ describe('WorldRoomNode', () => {
           id: 1,
           clue_name: 'Torn Letter',
           clue_slug: 'torn-letter',
-          detect_difficulty: 5,
+          detect_difficulty_level: 3,
           fixture_key: null,
         },
       ],

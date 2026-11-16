@@ -15,7 +15,7 @@ from world.combat.factories import (
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
 from world.mechanics.services import begin_engagement
-from world.traits.factories import CheckOutcomeFactory
+from world.traits.factories import CheckOutcomeFactory, ensure_level_ladder
 
 
 def _fake_check(success_level):
@@ -34,6 +34,7 @@ def _fake_check(success_level):
 @override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory's pace_check_type gates
 class EscalationTickTests(TestCase):
     def setUp(self):
+        ensure_level_ladder()
         self.curve = EscalationCurveFactory(
             start_round=2,
             intensity_step=2,
@@ -109,13 +110,16 @@ class EscalationTickTests(TestCase):
             result.outcome = outcome
             return result
 
-        self.curve.pace_difficulty_base = 10
-        self.curve.pace_difficulty_per_level = 5
-        self.curve.save(update_fields=["pace_difficulty_base", "pace_difficulty_per_level"])
+        self.curve.pace_difficulty_base_level = 1
+        self.curve.pace_difficulty_per_level_tenths = 10
+        self.curve.save(
+            update_fields=["pace_difficulty_base_level", "pace_difficulty_per_level_tenths"]
+        )
         apply_escalation_tick(self.encounter, check_fn=spy_check)
         apply_escalation_tick(self.encounter, check_fn=spy_check)
-        # level increments before the check: difficulty = base + per_level * level
-        self.assertEqual(captured, [15, 20])
+        # level increments before the check: level 1's baseline (18) plus one level's width (8)
+        # per escalation level
+        self.assertEqual(captured, [26, 34])
 
     def test_missing_engagement_recreated(self):
         CharacterEngagement.objects.filter(character=self.character.sheet_data).delete()
@@ -133,9 +137,11 @@ class EscalationTickTests(TestCase):
 
     def test_default_check_arm_uses_perform_check(self):
         """Default arm (no check_fn) delegates to real perform_check via force_check_outcome."""
-        self.curve.pace_difficulty_base = 10
-        self.curve.pace_difficulty_per_level = 5
-        self.curve.save(update_fields=["pace_difficulty_base", "pace_difficulty_per_level"])
+        self.curve.pace_difficulty_base_level = 1
+        self.curve.pace_difficulty_per_level_tenths = 10
+        self.curve.save(
+            update_fields=["pace_difficulty_base_level", "pace_difficulty_per_level_tenths"]
+        )
 
         forced_outcome = CheckOutcomeFactory(name="EscSuccess", success_level=1)
         with force_check_outcome(forced_outcome) as capture:
@@ -146,8 +152,9 @@ class EscalationTickTests(TestCase):
         self.assertEqual(eng.escalation_level, 1)
         # control_modifier stepped by control_step_on_success (2) for success_level==1
         self.assertEqual(eng.control_modifier, self.curve.control_step_on_success)
-        # capture recorded the curve's check_type and computed difficulty (base + per_level*1 = 15)
+        # capture recorded the curve's check_type and computed difficulty (level 1's 18 plus
+        # one level's width of 8 per escalation level)
         self.assertEqual(capture.check_type, self.curve.pace_check_type)
-        self.assertEqual(capture.target_difficulty, 15)
+        self.assertEqual(capture.target_difficulty, 26)
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].escalation_level, 1)

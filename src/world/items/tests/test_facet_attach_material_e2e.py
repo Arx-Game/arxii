@@ -33,7 +33,7 @@ class FacetAttachMaterialE2ETests(TestCase):
         # wire_enchanting_crafting seeds the Common/Fine/Masterwork tier ladder
         # and requires_station defaults True (#1234) — a Lab station + location
         # is required below for craft_attach_facet to get past the station gate.
-        self.recipe = wire_enchanting_crafting(base_difficulty=0)
+        self.recipe = wire_enchanting_crafting(base_difficulty_level=0)
         self.reagent_template = ensure_facet_attach_reagent_requirement(self.recipe)
 
         self.sheet = CharacterSheetFactory()

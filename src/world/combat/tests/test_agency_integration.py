@@ -265,7 +265,7 @@ class BleedOutProgressionTests(TestCase):
             name="Critical Bleed",
             rounds_to_next=None,
             resist_check_type=self.resist_check,
-            resist_difficulty=10,
+            resist_difficulty_level=1,
         )
         return bleed_out
 
@@ -334,7 +334,7 @@ class BleedOutProgressionTests(TestCase):
             name="Bleeding",
             rounds_to_next=2,
             resist_check_type=self.resist_check,
-            resist_difficulty=10,
+            resist_difficulty_level=1,
         )
         stage2 = ConditionStageFactory(
             condition=bleed_out,
@@ -342,7 +342,7 @@ class BleedOutProgressionTests(TestCase):
             name="Critical",
             rounds_to_next=None,
             resist_check_type=self.resist_check,
-            resist_difficulty=15,
+            resist_difficulty_level=1,
         )
 
         sheet = CharacterSheetFactory()

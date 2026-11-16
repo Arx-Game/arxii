@@ -27,14 +27,14 @@ from typing import TYPE_CHECKING
 from django.db.models import Prefetch
 
 from world.checks.constants import BOTCH_SUCCESS_LEVEL_MAX, ModifierSourceKind
+from world.checks.exceptions import ModifierConfigError
 from world.checks.modifier_values import (
-    level_baseline,
     load_taper_rules,
     load_value_table,
     rank_band_share,
 )
-from world.checks.services import botch_floor_level
-from world.checks.slide import load_ranks, resolve_standing, slide_chart
+from world.checks.services import botch_floor_level, level_strength
+from world.checks.slide import load_ranks, rank_label, resolve_standing, slide_chart
 from world.checks.types import ModifierBreakdown, ModifierContribution
 from world.traits.models import CheckRank, ResultChart, ResultChartOutcome
 
@@ -310,7 +310,7 @@ def compute_slide_table(*, roll_modifier: int = 0) -> list[SlideRow]:
 
 def rank_ladder() -> list[str]:
     """Every check rank with its number and threshold, for the panel's key."""
-    return [f"{rank.name} (rank {rank.rank}): {rank.min_points}+" for rank in load_ranks()]
+    return [f"{rank_label(rank)}: {rank.min_points}+" for rank in load_ranks()]
 
 
 @dataclass(frozen=True)
@@ -395,7 +395,7 @@ class ModifierPileReport:
 
 def _rank_name(points: int) -> str:
     rank = CheckRank.get_rank_for_points(points)
-    return f"{rank.name} (rank {rank.rank})" if rank else "below every rank"
+    return rank_label(rank) if rank else "below every rank"
 
 
 def compute_modifier_pile(
@@ -403,12 +403,17 @@ def compute_modifier_pile(
 ) -> ModifierPileReport | None:
     """Simulate ``count`` modifiers of (``modifier_level``, ``size``) on one character.
 
-    None when the value table or level baseline has no row covering the inputs; the
+    None when the size fractions or level baselines have no row covering the inputs; the
     panel says which rows to author.
     """
-    baseline = level_baseline(character_level)
-    value = load_value_table().value(modifier_level, size)
-    if baseline is None or value is None:
+    baseline = level_strength(character_level)
+    if baseline == 0:
+        return None
+    try:
+        value = load_value_table().value(modifier_level, size)
+    except ModifierConfigError:
+        return None
+    if value is None:
         return None
     tapers = load_taper_rules()
     breakdown = ModifierBreakdown(

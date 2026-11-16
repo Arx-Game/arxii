@@ -18,7 +18,7 @@ root `AGENT_GLOSSARY_MAP.md`.
   through `task_difficulty(task)`), set once when the steward issues it (local
   order at the target's area shifted by the steward's own check, #696 gap 8).
   Only the number is stored, never the roll; the template's static
-  `check_difficulty` is the fallback when it is null. _Avoid_: "briefing roll"
+  `check_difficulty_level` is the fallback when it is null. _Avoid_: "briefing roll"
   (that is the Dispatch check, rolled later by the handler).
 - **Resolution check** — the agent's own offscreen roll at deadline; the
   tradecraft. Its outcome tier selects the payout route and grades the risk

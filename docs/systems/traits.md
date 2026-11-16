@@ -49,7 +49,7 @@ from world.traits.models import (
 | `Trait` | Trait definition template with case-insensitive caching; `skills.Skill` is its proxy for SKILL traits | `name`, `trait_type` (TraitType), `category` (TraitCategory), `description`, `is_public`, `tooltip`, `display_order`, `is_active` |
 | `TraitRankDescription` | Descriptive labels for trait values during CG | `trait` (FK Trait), `value`, `label`, `description` |
 | `PointConversionRange` | Converts trait values to weighted points (exponential curves) | `trait_type` (TraitType), `min_value`, `max_value`, `points_per_level` |
-| `CheckRank` | Maps point totals to rank levels for check resolution | `rank`, `min_points`, `name`, `description` |
+| `CheckRank` | Names a rank of the check ladder; rank N starts at the CHECK lane's level-N `ModifierLevelBaseline` (#5093) | `rank`, `name`, `description` |
 | `CheckOutcome` | Defines possible check outcomes (success, failure, etc.) | `name`, `success_level` (-10 to +10), `description`, `display_template` |
 | `ResultChart` | Result charts for different rank differences | `rank_difference`, `name` |
 | `ResultChartOutcome` | Outcome ranges (1-100) within a result chart | `chart` (FK ResultChart), `min_roll`, `max_roll`, `outcome` (FK CheckOutcome) |

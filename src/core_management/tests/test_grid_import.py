@@ -331,7 +331,7 @@ class GridImportTests(TestCase):
 
         self.assertEqual(result.errors, [])
         restored_clue = RoomClue.objects.get(fixture_key="arx-city/golden-hart-taproom/torn-letter")
-        self.assertEqual(restored_clue.detect_difficulty, 5)
+        self.assertEqual(restored_clue.detect_difficulty_level, 3)
         self.assertTrue(
             ClueTrigger.objects.filter(fixture_key="arx-city/golden-hart-taproom/whisper").exists()
         )

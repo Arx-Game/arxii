@@ -46,15 +46,22 @@ A skill's progress and its rust live in one place, the skill trait's
 `progression.DevelopmentPoints` row (`total_earned`, `rust_debt`). Every source of
 development writes it through `DevelopmentPoints.award_points`: use (checks with effort),
 GM awards, weekly training and Academy courses (both through `train_skill`). So training
-and use share one cost curve, `cumulative_dp_for_level`, where level N to N+1 costs
-`(N - 9) x 100`.
+and use share one cost curve, `cumulative_dp_for_level`
+(`world/progression/services/dev_cost.py`, #5093). A trait value `v` sits in character
+level `v // 10` (its band); a band costs `base_cost x (growth_percent / 100)^(band - start_level)`
+from the `DevelopmentCostConfig` singleton (defaults 100, 150, start level 1), and every one
+of a band's ten steps costs a tenth of that (minimum 1), so 39 to 40 costs what 30 to 31 does
+and 40 to 41 costs one growth step more. With the defaults a step costs 10 for 10-19, 15 for
+20-29, 22 for 30-39, 33 for 40-49 and 50 for 50-59. `dp_cost_for_step(value)` is one step,
+`dp_cost_for_band(band)` one band, `cumulative_dp_for_level(value)` the sum of the steps from
+10 to `value`. Staff tune the row in the Django admin; no cost number is in code.
 
 - **The ledger counts from the current rating.** For a skill trait `award_points` first
   raises `total_earned` to what the current rating cost, and every writer that sets a
   rating directly (character creation and staff edit through `set_skill_values`, the XP
   breakthrough, the NPC copy, a staff character's preset) aligns the ledger to it through
-  `progression.services.skill_development.align_development_floors`. A skill made at 30 needs
-  2,100 points to reach 31. A rating set lower brings the ledger down with it, so use does not
+  `progression.services.skill_development.align_development_floors`. A skill made at 30 starts
+  with a ledger of 250 points and needs 22 more to reach 31. A rating set lower brings the ledger down with it, so use does not
   walk it straight back up.
 - **Rust** is debt on the same row: incoming points pay it off before they count toward a
   level. It only affects parent skills; specializations are immune.

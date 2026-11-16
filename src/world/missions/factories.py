@@ -351,7 +351,7 @@ class MissionAssistPatternFactory(DjangoModelFactory):
     capability = factory.SubFactory("world.conditions.factories.CapabilityTypeFactory")
     qualifier_rule = {}
     support_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
-    difficulty = 5
+    difficulty_level = 0
     easing = 2
     complication_consequence = None
     flavor_template = ""
@@ -369,7 +369,7 @@ class MissionNodeSupportOptionFactory(DjangoModelFactory):
     capability = factory.SubFactory("world.conditions.factories.CapabilityTypeFactory")
     qualifier_rule = {}
     support_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
-    difficulty = 5
+    difficulty_level = 0
     easing = 2
     complication_consequence = None
     flavor_template = ""

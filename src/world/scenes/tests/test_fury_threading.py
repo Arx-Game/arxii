@@ -121,7 +121,7 @@ def _setup_fury_fixture(*, tier_depth: int = 2):
         name=f"Tier_{tier_depth}",
         depth=tier_depth,
         control_surrendered=4,
-        base_check_difficulty=10,
+        base_check_difficulty_level=1,
         berserk_severity=3,
     )
     # Fury needs something at stake (#4738): the initiator is engaged.
