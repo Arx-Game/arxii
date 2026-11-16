@@ -4,12 +4,21 @@ import type { RegionMapFootprint } from '../../types';
 import { PIP_PX } from '../regionMapCanvas';
 import {
   borderWidths,
+  DEFAULT_MAP_TIERS,
+  MAP_TIER_LABELS,
+  MAP_TIERS,
   MAP_VIEW_LABELS,
   MAP_VIEWS,
+  markerRadius,
   placeNames,
   rootsOf,
+  seatMarkers,
   visibleFootprints,
+  type MapTier,
 } from '../mapViews';
+
+const DEFAULT = new Set<MapTier>(DEFAULT_MAP_TIERS);
+const tiersOf = (...tiers: MapTier[]) => new Set<MapTier>(tiers);
 
 function footprint(
   overrides: Partial<RegionMapFootprint> & Pick<RegionMapFootprint, 'area_id' | 'level'>
@@ -142,16 +151,16 @@ describe('mapViews: the four views (#5030)', () => {
   });
 
   it('Domain draws a border on the tier below; Domain-Vassal on every tier, lighter as it goes down (#5056)', () => {
-    expect(borderWidths('domain', all, [west])).toEqual(new Map([[duchy.area_id, 2]]));
-    expect(borderWidths('domain-vassal', all, [west])).toEqual(
+    expect(borderWidths('domain', all, [west], DEFAULT)).toEqual(new Map([[duchy.area_id, 2]]));
+    expect(borderWidths('domain-vassal', all, [west], tiersOf(...MAP_TIERS))).toEqual(
       new Map([
         [duchy.area_id, 2],
         [county.area_id, 1],
         [barony.area_id, 0.5],
       ])
     );
-    expect(borderWidths('all', all, [west])).toEqual(new Map());
-    expect(borderWidths('geography', all, [west])).toEqual(new Map());
+    expect(borderWidths('all', all, [west], DEFAULT)).toEqual(new Map());
+    expect(borderWidths('geography', all, [west], DEFAULT)).toEqual(new Map());
   });
 
   it('Domain-Vassal shows the anchor and everything beneath it, at every tier', () => {
@@ -186,12 +195,12 @@ describe('mapViews: names that do not stack (#5030)', () => {
     // at zoom 1 the empire's name (127 px wide, centred at x 120) covers both kingdoms'
     // centres, so the parent wins; the short-named county "Aberwen" (57 px) fits its 60 px
     // footprint and sits clear of the empire's row, so it is named while "Carradyn" is not
-    const close = placeNames('all', all, [], project(1), measure).map((l) => l.text);
+    const close = placeNames('all', all, [], project(1), measure, DEFAULT).map((l) => l.text);
     expect(close).toEqual(['The Umbral Empire', 'Luxen', 'Aberwen']);
     // at zoom 2 the empire (480 px wide) and the kingdoms (240 px) fit side by side; the
     // 10-pip duchy (120 px) does not fit "Carradyn" (56 + padding) over its parent's name;
     // the seat never fits
-    const labels = placeNames('all', all, [], project(2), measure);
+    const labels = placeNames('all', all, [], project(2), measure, DEFAULT);
     const names = labels.map((l) => l.text);
     expect(names).toContain('The Umbral Empire');
     expect(names).toContain('Vestyr');
@@ -209,8 +218,8 @@ describe('mapViews: names that do not stack (#5030)', () => {
   });
 
   it('zooming in lets the lower tiers fit', () => {
-    const far = placeNames('all', all, [], project(0.2), measure).map((l) => l.text);
-    const near = placeNames('all', all, [], project(4), measure).map((l) => l.text);
+    const far = placeNames('all', all, [], project(0.2), measure, DEFAULT).map((l) => l.text);
+    const near = placeNames('all', all, [], project(4), measure, DEFAULT).map((l) => l.text);
     expect(far).not.toContain('Carradyn');
     expect(near).toContain('Carradyn');
     expect(near).toContain('Aberwen');
@@ -218,11 +227,13 @@ describe('mapViews: names that do not stack (#5030)', () => {
 
   it('Domain names the tier below the anchor whatever its size, and the anchor only when nothing is beneath it; Domain-Vassal names the children, not the anchor', () => {
     expect(
-      placeNames('domain', [barony], [barony], project(0.2), measure).map((l) => l.text)
+      placeNames('domain', [barony], [barony], project(0.2), measure, DEFAULT).map((l) => l.text)
     ).toEqual(['Seat']);
-    const domain = placeNames('domain', all, [west], project(0.2), measure).map((l) => l.text);
+    const domain = placeNames('domain', all, [west], project(0.2), measure, DEFAULT).map(
+      (l) => l.text
+    );
     expect(domain).toEqual(['Carradyn']);
-    const vassal = placeNames('domain-vassal', all, [west], project(0.2), measure).map(
+    const vassal = placeNames('domain-vassal', all, [west], project(0.2), measure, DEFAULT).map(
       (l) => l.text
     );
     expect(vassal).not.toContain('Vestyr');
@@ -235,12 +246,199 @@ describe('mapViews: names that do not stack (#5030)', () => {
       ...west,
       pips: Array.from({ length: 150000 }, (_, x) => [x, 0] as [number, number]),
     };
-    expect(placeNames('all', [large], [], project(1), measure).map((label) => label.text)).toEqual([
-      west.name,
-    ]);
+    expect(
+      placeNames('all', [large], [], project(1), measure, DEFAULT).map((label) => label.text)
+    ).toEqual([west.name]);
   });
 
   it('Geography names nothing', () => {
-    expect(placeNames('geography', all, [west], project(1), measure)).toEqual([]);
+    expect(placeNames('geography', all, [west], project(1), measure, DEFAULT)).toEqual([]);
+  });
+});
+
+// a kingdom of two duchies on the real ladder levels; every domain's seat is its capital
+// barony's pip, and each county holds one more barony that is nobody's capital
+const crown = footprint({
+  area_id: 10,
+  level: 60,
+  name: 'Vestyr',
+  pips: block(0, 0, 40, 20),
+  seat: [5, 5],
+});
+const northDuchy = footprint({
+  area_id: 11,
+  level: 56,
+  parent_id: 10,
+  name: 'Carradyn',
+  pips: block(0, 0, 20, 20),
+  seat: [5, 5],
+});
+const southDuchy = footprint({
+  area_id: 12,
+  level: 56,
+  parent_id: 10,
+  name: 'Hollin',
+  pips: block(20, 0, 20, 20),
+  seat: [30, 5],
+});
+const aldmere = footprint({
+  area_id: 13,
+  level: 53,
+  parent_id: 11,
+  name: 'Aldmere',
+  pips: block(0, 0, 20, 10),
+  seat: [5, 5],
+});
+const brack = footprint({
+  area_id: 14,
+  level: 53,
+  parent_id: 11,
+  name: 'Brack',
+  pips: block(0, 10, 20, 10),
+  seat: [5, 15],
+});
+const corwen = footprint({
+  area_id: 15,
+  level: 53,
+  parent_id: 12,
+  name: 'Corwen',
+  pips: block(20, 0, 20, 20),
+  seat: [30, 5],
+});
+const seatOf = (area_id: number, parent_id: number, name: string, pip: [number, number]) =>
+  footprint({ area_id, level: 40, parent_id, name, pips: [pip], seat: pip });
+const kingsport = seatOf(20, 13, 'Kingsport', [5, 5]);
+const lowfen = seatOf(21, 13, 'Lowfen', [15, 3]);
+const marrow = seatOf(22, 14, 'Marrow', [5, 15]);
+const nettle = seatOf(23, 14, 'Nettle', [15, 17]);
+const oxgate = seatOf(24, 15, 'Oxgate', [30, 5]);
+const pell = seatOf(25, 15, 'Pell', [35, 15]);
+const ladder = [
+  crown,
+  northDuchy,
+  southDuchy,
+  aldmere,
+  brack,
+  corwen,
+  kingsport,
+  lowfen,
+  marrow,
+  nettle,
+  oxgate,
+  pell,
+];
+
+describe('mapViews: tiers, capitals and baronies (#5157)', () => {
+  const project =
+    (zoom: number) =>
+    (x: number, y: number): [number, number] => [
+      (x + 0.5) * PIP_PX * zoom,
+      (y + 0.5) * PIP_PX * zoom,
+    ];
+  const measure = (text: string) => text.length * 7;
+  const ranks = (markers: ReturnType<typeof seatMarkers>) =>
+    Object.fromEntries(markers.map((m) => [m.name, m.rank]));
+  const names = (labels: ReturnType<typeof placeNames>) => labels.map((l) => l.text).sort();
+
+  it('offers four tiers, top first, with Barony off to start', () => {
+    expect(MAP_TIERS.map((t) => MAP_TIER_LABELS[t])).toEqual([
+      'Kingdom',
+      'Duchy',
+      'County',
+      'Barony',
+    ]);
+    expect(DEFAULT_MAP_TIERS).toEqual(['kingdom', 'duchy', 'county']);
+  });
+
+  it('marks a capital by the highest tier seated there that is on, and a plain barony only with Barony on', () => {
+    expect(ranks(seatMarkers('all', ladder, [], DEFAULT))).toEqual({
+      Kingsport: 3,
+      Oxgate: 2,
+      Marrow: 1,
+    });
+    expect(ranks(seatMarkers('all', ladder, [], tiersOf('county', 'barony')))).toEqual({
+      Kingsport: 1,
+      Oxgate: 1,
+      Marrow: 1,
+      Lowfen: 0,
+      Nettle: 0,
+      Pell: 0,
+    });
+    const onlyBaronies = seatMarkers('all', ladder, [], tiersOf('barony'));
+    expect(onlyBaronies).toHaveLength(6);
+    expect(onlyBaronies.every((m) => m.rank === 0)).toBe(true);
+    expect(seatMarkers('all', ladder, [], tiersOf())).toEqual([]);
+    expect(seatMarkers('geography', ladder, [], DEFAULT)).toEqual([]);
+    expect(markerRadius(3)).toBeGreaterThan(markerRadius(2));
+    expect(markerRadius(1)).toBeGreaterThan(markerRadius(0));
+  });
+
+  it("Domain on a duchy names the duchy's capital and each county's, with Barony off, and no other barony", () => {
+    const labels = placeNames('domain', ladder, [northDuchy], project(4), measure, DEFAULT);
+    expect(names(labels)).toEqual(['Aldmere', 'Brack', 'Kingsport', 'Marrow']);
+    expect(ranks(seatMarkers('domain', ladder, [northDuchy], DEFAULT))).toEqual({
+      Kingsport: 2,
+      Marrow: 1,
+    });
+    // a capital's name sits under its marker, never on it
+    const capital = labels.find((l) => l.text === 'Kingsport')!;
+    const [x, y] = project(4)(5, 5);
+    expect(capital.x).toBe(x);
+    expect(capital.y).toBe(y + markerRadius(2) + capital.h / 2);
+    expect(capital.areaId).toBe(kingsport.area_id);
+  });
+
+  it('a selected county shows every barony in it whatever the Barony toggle says', () => {
+    for (const view of ['domain', 'domain-vassal'] as const) {
+      expect(names(placeNames(view, ladder, [aldmere], project(4), measure, DEFAULT))).toEqual([
+        'Kingsport',
+        'Lowfen',
+      ]);
+      expect(ranks(seatMarkers(view, ladder, [aldmere], DEFAULT))).toEqual({
+        Kingsport: 1,
+        Lowfen: 0,
+      });
+      expect([...borderWidths(view, ladder, [aldmere], DEFAULT).keys()].sort()).toEqual([20, 21]);
+    }
+    // a duchy's baronies are not its own children, so they wait for the toggle
+    const vassal = placeNames('domain-vassal', ladder, [northDuchy], project(4), measure, DEFAULT);
+    expect(names(vassal)).not.toContain('Lowfen');
+  });
+
+  it('a tier that is off draws no border, name or marker for its footprints', () => {
+    const noCounty = tiersOf('kingdom', 'duchy');
+    expect(borderWidths('domain', ladder, [northDuchy], noCounty)).toEqual(new Map());
+    // the selected duchy's own capital is still named; the county capital is gone
+    expect(
+      names(placeNames('domain', ladder, [northDuchy], project(4), measure, noCounty))
+    ).toEqual(['Kingsport']);
+    expect(ranks(seatMarkers('domain', ladder, [northDuchy], noCounty))).toEqual({ Kingsport: 2 });
+    const onlyCounty = tiersOf('county');
+    expect([...borderWidths('domain-vassal', ladder, [crown], onlyCounty).keys()].sort()).toEqual([
+      13, 14, 15,
+    ]);
+  });
+
+  it('Barony on names every barony in scope and nobody else, with no width rule', () => {
+    const on = tiersOf('kingdom', 'duchy', 'county', 'barony');
+    const vassal = names(
+      placeNames('domain-vassal', ladder, [northDuchy], project(4), measure, on)
+    );
+    expect(vassal).toEqual(['Aldmere', 'Brack', 'Kingsport', 'Lowfen', 'Marrow', 'Nettle']);
+    // only baronies: the whole canvas is theirs, in All too
+    expect(names(placeNames('all', ladder, [], project(4), measure, tiersOf('barony')))).toEqual([
+      'Kingsport',
+      'Lowfen',
+      'Marrow',
+      'Nettle',
+      'Oxgate',
+      'Pell',
+    ]);
+  });
+
+  it('All from far away names no capital whose domain is too small to be named', () => {
+    const far = names(placeNames('all', ladder, [], project(0.2), measure, DEFAULT));
+    expect(far).toEqual([]);
+    expect(seatMarkers('all', ladder, [], DEFAULT)).toHaveLength(3);
   });
 });

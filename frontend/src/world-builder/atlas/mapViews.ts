@@ -5,10 +5,12 @@
  * whatever domain is selected (or being carved), and with none a realm's roots stand in.
  * Domain is the anchor and the tier below it, each child with a border line, since the
  * lines between a duchy's counties are what the owner reads the map for (#5056);
- * Domain-Vassal borders every tier beneath, lighter as it goes down.
+ * Domain-Vassal borders every tier beneath, lighter as it goes down. Beneath the view sit
+ * four tier toggles (#5157): a tier that is off draws no border, name or seat marker, and
+ * its fill and click-to-select are untouched.
  */
 import type { RegionMapFootprint } from '../types';
-import { centroid } from './regionMapCanvas';
+import { centroid, pipKey } from './regionMapCanvas';
 
 export type MapView = 'geography' | 'domain' | 'domain-vassal' | 'all';
 
@@ -22,6 +24,61 @@ export const MAP_VIEW_LABELS: Record<MapView, string> = {
 };
 
 export const DEFAULT_MAP_VIEW: MapView = 'all';
+
+/** The tiers the map can draw or leave out (#5157), top first. */
+export type MapTier = 'kingdom' | 'duchy' | 'county' | 'barony';
+
+export const MAP_TIERS: readonly MapTier[] = ['kingdom', 'duchy', 'county', 'barony'];
+
+export const MAP_TIER_LABELS: Record<MapTier, string> = {
+  kingdom: 'Kingdom',
+  duchy: 'Duchy',
+  county: 'County',
+  barony: 'Barony',
+};
+
+/** `AreaLevel` for each tier; a level outside these four is always drawn. */
+const TIER_LEVELS: Record<MapTier, number> = { kingdom: 60, duchy: 56, county: 53, barony: 40 };
+
+/** Barony starts off: 400 barony names at once would cover the map. */
+export const DEFAULT_MAP_TIERS: readonly MapTier[] = ['kingdom', 'duchy', 'county'];
+
+export type MapTiers = ReadonlySet<MapTier>;
+
+export function isMapTier(value: unknown): value is MapTier {
+  return typeof value === 'string' && (MAP_TIERS as readonly string[]).includes(value);
+}
+
+function tierOfLevel(level: number): MapTier | null {
+  return MAP_TIERS.find((tier) => TIER_LEVELS[tier] === level) ?? null;
+}
+
+/**
+ * A seat marker (#5157), at a pip: `rank` is 0 for a plain barony and one step up for each
+ * of county, duchy and kingdom whose capital the pip is, among the tiers that are on.
+ * `baronyId` and `name` are the barony standing there, when one does.
+ */
+export interface SeatMarker {
+  x: number;
+  y: number;
+  rank: number;
+  baronyId: number | null;
+  name: string;
+}
+
+/** Marker radius in screen pixels by `SeatMarker.rank`. */
+export const SEAT_MARKER_PX = [3, 4.5, 6, 7.5] as const;
+
+export function markerRadius(rank: number): number {
+  return SEAT_MARKER_PX[Math.min(rank, SEAT_MARKER_PX.length - 1)];
+}
+
+function rankOfLevel(level: number): number {
+  if (level >= TIER_LEVELS.kingdom) return 3;
+  if (level >= TIER_LEVELS.duchy) return 2;
+  if (level >= TIER_LEVELS.county) return 1;
+  return 0;
+}
 
 /** A placed name on the names layer, in screen pixels, centred on (x, y). */
 export interface Label {
@@ -119,6 +176,61 @@ export function visibleFootprints(
   }
 }
 
+/**
+ * Whether a footprint's border, name and marker are drawn (#5157): its tier is on, or it is
+ * what the selection asks for whatever the toggles say, which is the anchor itself and, in
+ * the two Domain views, a selected county's own baronies.
+ */
+function drawsTier(
+  f: RegionMapFootprint,
+  tiers: MapTiers,
+  view: MapView,
+  anchorIds: Set<number>
+): boolean {
+  const tier = tierOfLevel(f.level);
+  if (tier == null || tiers.has(tier)) return true;
+  if (view !== 'domain' && view !== 'domain-vassal') return false;
+  if (anchorIds.has(f.area_id)) return true;
+  return tier === 'barony' && f.parent_id != null && anchorIds.has(f.parent_id);
+}
+
+/**
+ * The seat markers a view draws (#5157), one per pip: every drawn footprint with a seat
+ * marks it, and a pip that is the capital of several drawn tiers takes the highest.
+ */
+export function seatMarkers(
+  view: MapView,
+  footprints: RegionMapFootprint[],
+  anchors: RegionMapFootprint[],
+  tiers: MapTiers
+): SeatMarker[] {
+  if (view === 'geography') return [];
+  const anchorIds = new Set(anchors.map((a) => a.area_id));
+  const baronyAt = new Map<string, RegionMapFootprint>();
+  for (const f of footprints) {
+    if (f.level === TIER_LEVELS.barony && f.seat != null) {
+      baronyAt.set(pipKey(f.seat[0], f.seat[1]), f);
+    }
+  }
+  const out = new Map<string, SeatMarker>();
+  for (const f of visibleFootprints(view, footprints, anchors)) {
+    if (f.seat == null || !drawsTier(f, tiers, view, anchorIds)) continue;
+    const key = pipKey(f.seat[0], f.seat[1]);
+    const rank = rankOfLevel(f.level);
+    const prior = out.get(key);
+    if (prior && prior.rank >= rank) continue;
+    const barony = baronyAt.get(key) ?? null;
+    out.set(key, {
+      x: f.seat[0],
+      y: f.seat[1],
+      rank,
+      baronyId: barony?.area_id ?? null,
+      name: barony?.name ?? '',
+    });
+  }
+  return [...out.values()];
+}
+
 /** Border line widths by depth beneath the anchor: its children, their children, and deeper. */
 export const BORDER_WIDTHS = [2, 1, 0.5] as const;
 
@@ -131,16 +243,18 @@ export const BORDER_WIDTHS = [2, 1, 0.5] as const;
 export function borderWidths(
   view: MapView,
   footprints: RegionMapFootprint[],
-  anchors: RegionMapFootprint[]
+  anchors: RegionMapFootprint[],
+  tiers: MapTiers
 ): Map<number, number> {
   const out = new Map<number, number>();
   if (view !== 'domain' && view !== 'domain-vassal') return out;
+  const anchorIds = new Set(anchors.map((a) => a.area_id));
   const children = childrenByParent(footprints);
   const deepest = view === 'domain' ? 1 : Infinity;
   const frontier: [RegionMapFootprint, number][] = anchors.map((a) => [a, 0]);
   while (frontier.length > 0) {
     const [f, depth] = frontier.pop()!;
-    if (depth > 0 && !out.has(f.area_id)) {
+    if (depth > 0 && !out.has(f.area_id) && drawsTier(f, tiers, view, anchorIds)) {
       out.set(f.area_id, BORDER_WIDTHS[Math.min(depth, BORDER_WIDTHS.length) - 1]);
     }
     if (depth >= deepest) continue;
@@ -173,22 +287,30 @@ function fitsWidth(
  * The names a view draws, placed in screen space. Domain and Domain-Vassal name the anchors'
  * direct children always, never an anchor that has children (its name is the panel's heading
  * and would sit inside a child's); an anchor with nothing beneath it is named itself in
- * Domain; Domain-Vassal names the deeper tiers where they fit; All names what fits. "Fits": the footprint's projected width carries the name,
- * and the name's box crosses no name already placed. Top tiers place first, so a parent's
- * name wins over a child's. `project` maps a pip centre to the screen; `measure` is the
- * text width at `LABEL_PX`.
+ * Domain; Domain-Vassal names the deeper tiers where they fit; All names what fits. "Fits":
+ * the footprint's projected width carries the name, and the name's box crosses no name
+ * already placed. Top tiers place first, so a parent's name wins over a child's.
+ *
+ * A barony is one pip, so it is never wide enough; its name sits under its marker instead
+ * (#5157), whenever the barony is drawn. A capital is named the same way whatever the Barony
+ * toggle says, while its domain is named or is the anchor, so Domain on a duchy names the
+ * duchy's capital and each county's and no other barony, and All at a distance names none.
+ * A capital's name places after the domain names of its tier and before plain baronies.
+ * `project` maps a pip centre to the screen; `measure` is the text width at `LABEL_PX`.
  */
 export function placeNames(
   view: MapView,
   footprints: RegionMapFootprint[],
   anchors: RegionMapFootprint[],
   project: (x: number, y: number) => [number, number],
-  measure: (text: string) => number
+  measure: (text: string) => number,
+  tiers: MapTiers
 ): Label[] {
   if (view === 'geography') return [];
   const anchorIds = new Set(anchors.map((a) => a.area_id));
   const visible = visibleFootprints(view, footprints, anchors);
   const anchored = view === 'domain' || view === 'domain-vassal';
+  const drawn = visible.filter((f) => drawsTier(f, tiers, view, anchorIds));
   const withChild = new Set(
     anchored
       ? visible
@@ -196,30 +318,64 @@ export function placeNames(
           .map((f) => f.parent_id!)
       : []
   );
-  const candidates = anchored
-    ? visible.filter(
-        (f) => !anchorIds.has(f.area_id) || (view === 'domain' && !withChild.has(f.area_id))
-      )
-    : visible;
   // named whatever their size: the tier below an anchor, and a childless anchor in Domain
-  const exempt = new Set<number>();
-  if (anchored) {
-    for (const f of candidates) {
-      if (anchorIds.has(f.area_id) || (f.parent_id != null && anchorIds.has(f.parent_id))) {
-        exempt.add(f.area_id);
+  const exempt = (f: RegionMapFootprint) =>
+    anchored && (anchorIds.has(f.area_id) || (f.parent_id != null && anchorIds.has(f.parent_id)));
+  const h = LABEL_PX + 4;
+  const boxOf = (text: string) => measure(text) + LABEL_PAD_PX;
+  const markers = new Map(
+    seatMarkers(view, footprints, anchors, tiers).map((m) => [pipKey(m.x, m.y), m] as const)
+  );
+  const underMarker = (marker: SeatMarker): Label | null => {
+    if (!marker.name || marker.baronyId == null) return null;
+    const [x, y] = project(marker.x, marker.y);
+    return {
+      text: marker.name,
+      x,
+      y: y + markerRadius(marker.rank) + h / 2,
+      w: boxOf(marker.name),
+      h,
+      areaId: marker.baronyId,
+    };
+  };
+
+  // [level, 0 for a domain's own name or 1 for a name under a marker, area id, the label]
+  const entries: [number, number, number, Label][] = [];
+  const namedPips = new Set<string>();
+  const byTier = [...drawn].sort((a, b) => b.level - a.level || a.area_id - b.area_id);
+  for (const f of byTier) {
+    const marker = f.seat ? markers.get(pipKey(f.seat[0], f.seat[1])) : undefined;
+    if (f.level === TIER_LEVELS.barony) {
+      const label = marker ? underMarker(marker) : null;
+      if (label && !namedPips.has(pipKey(marker!.x, marker!.y))) {
+        namedPips.add(pipKey(marker!.x, marker!.y));
+        entries.push([f.level, 1, f.area_id, label]);
       }
+      continue;
+    }
+    if (!f.name || f.pips.length === 0) continue;
+    const isAnchor = anchored && anchorIds.has(f.area_id);
+    const fits = exempt(f) || fitsWidth(f.pips, boxOf(f.name), project);
+    const ownName = !isAnchor || (view === 'domain' && !withChild.has(f.area_id));
+    if (ownName && fits) {
+      const [cx, cy] = centroid(f.pips);
+      const [x, y] = project(cx, cy);
+      entries.push([
+        f.level,
+        0,
+        f.area_id,
+        { text: f.name, x, y, w: boxOf(f.name), h, areaId: f.area_id },
+      ]);
+    }
+    const capital = marker && (isAnchor || fits) ? underMarker(marker) : null;
+    if (capital && !namedPips.has(pipKey(marker!.x, marker!.y))) {
+      namedPips.add(pipKey(marker!.x, marker!.y));
+      entries.push([f.level, 1, f.area_id, capital]);
     }
   }
-  const ordered = [...candidates].sort((a, b) => b.level - a.level || a.area_id - b.area_id);
+  entries.sort((a, b) => b[0] - a[0] || a[1] - b[1] || a[2] - b[2]);
   const placed: Label[] = [];
-  for (const f of ordered) {
-    if (!f.name || f.pips.length === 0) continue;
-    const w = measure(f.name) + LABEL_PAD_PX;
-    const h = LABEL_PX + 4;
-    if (!exempt.has(f.area_id) && !fitsWidth(f.pips, w, project)) continue;
-    const [cx, cy] = centroid(f.pips);
-    const [x, y] = project(cx, cy);
-    const label: Label = { text: f.name, x, y, w, h, areaId: f.area_id };
+  for (const [, , , label] of entries) {
     if (placed.some((p) => overlaps(p, label))) continue;
     placed.push(label);
   }

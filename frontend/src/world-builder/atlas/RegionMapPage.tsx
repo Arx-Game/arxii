@@ -72,6 +72,8 @@ import {
   pipAt,
   pipKey,
   regionBounds,
+  type RegionBounds,
+  type ScreenMarker,
 } from './regionMapCanvas';
 import {
   BRUSH_WIDTHS,
@@ -82,15 +84,18 @@ import {
   type BrushWidth,
   type Pip,
 } from './regionMapFill';
-import { BARONY_LEVEL, regionMapTabUrl } from './constants';
+import { regionMapTabUrl } from './constants';
 import { clearMapFocus, peekMapFocus } from './mapFocus';
 import {
   borderWidths,
+  markerRadius,
   placeNames,
   rootsOf,
+  seatMarkers,
   struckFootprints,
   visibleFootprints,
   type MapView,
+  type SeatMarker,
 } from './mapViews';
 import { FoldToggle, RegionMapPanel } from './RegionMapPanel';
 import { CarvePickers, SelectPickers } from './SelectPickers';
@@ -102,14 +107,55 @@ const MODE_LABELS: Record<MapMode, string> = { select: 'Select', carve: 'Carve',
 type CarveTool = 'brush' | 'fill' | 'loop';
 const TOOL_LABELS: Record<CarveTool, string> = { brush: 'Brush', fill: 'Fill', loop: 'Loop' };
 
-/** The barony whose seat dot sits on `pip`, if any (#4988): the handle of the seat drag. */
-function seatBaronyAt(footprints: RegionMapFootprint[], pip: Pip): RegionMapFootprint | null {
-  return (
-    footprints.find(
-      (f) =>
-        f.level === BARONY_LEVEL && f.seat != null && f.seat[0] === pip[0] && f.seat[1] === pip[1]
-    ) ?? null
-  );
+/** How far outside a seat marker's edge a press still grabs it (#5157), in screen pixels. */
+const SEAT_GRAB_PAD_PX = 4;
+
+/** Maps a pip's centre to the viewport, at the current zoom and pan. */
+function projector(bounds: RegionBounds, view: LatticeView) {
+  return (x: number, y: number): [number, number] => [
+    (x - bounds.x0 + 0.5) * PIP_PX * view.zoom + view.panX,
+    (y - bounds.y0 + 0.5) * PIP_PX * view.zoom + view.panY,
+  ];
+}
+
+/** The barony marker under a press at viewport (px, py), the nearest when several are close. */
+function seatMarkerAt(
+  markers: SeatMarker[],
+  project: (x: number, y: number) => [number, number],
+  px: number,
+  py: number
+): SeatMarker | null {
+  let best: SeatMarker | null = null;
+  let bestDistance = Infinity;
+  for (const marker of markers) {
+    if (marker.baronyId == null) continue;
+    const [sx, sy] = project(marker.x, marker.y);
+    const distance = Math.hypot(sx - px, sy - py);
+    if (distance <= markerRadius(marker.rank) + SEAT_GRAB_PAD_PX && distance < bestDistance) {
+      best = marker;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+/**
+ * Where a barony's seat may be dropped (#5157): the pips its county holds itself, which is
+ * the county's footprint less every pip a child of the county stands on.
+ */
+function seatDropTargets(
+  footprints: RegionMapFootprint[],
+  barony: RegionMapFootprint
+): Set<string> {
+  const county = footprints.find((f) => f.area_id === barony.parent_id);
+  const targets = new Set<string>();
+  if (!county) return targets;
+  for (const [x, y] of county.pips) targets.add(pipKey(x, y));
+  for (const child of footprints) {
+    if (child.parent_id !== county.area_id) continue;
+    for (const [x, y] of child.pips) targets.delete(pipKey(x, y));
+  }
+  return targets;
 }
 
 /** What the folded pickers still say: the domain being carved, or the selected one. */
@@ -160,6 +206,8 @@ export function RegionMapPage({
     togglePickers,
     view: homeView,
     setView: setHomeView,
+    tiers,
+    toggleTier,
   } = useRegionMapLayout(accountId);
 
   const [mode, setMode] = useState<MapMode>('select');
@@ -345,9 +393,17 @@ export function RegionMapPage({
 
   // The lines between the tier below the anchor (#5056): the view's borders.
   const borders = useMemo(
-    () => borderWidths(mapView, data?.footprints ?? [], anchors),
-    [anchors, data, mapView]
+    () => borderWidths(mapView, data?.footprints ?? [], anchors, tiers),
+    [anchors, data, mapView, tiers]
   );
+  // The seat markers the view draws (#5157): the handles of the seat drag too.
+  const markers = useMemo(
+    () => seatMarkers(mapView, data?.footprints ?? [], anchors, tiers),
+    [anchors, data, mapView, tiers]
+  );
+  // A seat drag in progress: the barony, and the pips it may be dropped on, tinted.
+  const [seatDrag, setSeatDrag] = useState<{ baronyId: number; targets: Set<string> } | null>(null);
+  const [seatGhost, setSeatGhost] = useState<ScreenMarker | null>(null);
 
   // The one footprint that draws an edge: the domain being carved, or the selected one.
   const outlineAreaIds = useMemo(() => {
@@ -369,8 +425,8 @@ export function RegionMapPage({
       ctx,
       { ...data, footprints: visible },
       {
-        pending,
-        pendingRemove,
+        pending: seatDrag ? seatDrag.targets : pending,
+        pendingRemove: seatDrag ? false : pendingRemove,
         selectedAreaId,
         outlineAreaIds,
         borderWidths: borders,
@@ -388,6 +444,7 @@ export function RegionMapPage({
     outlineAreaIds,
     pending,
     pendingRemove,
+    seatDrag,
     selectedAreaId,
     struck,
     visible,
@@ -419,21 +476,22 @@ export function RegionMapPage({
     canvas.height = size.height;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    const project = (x: number, y: number): [number, number] => [
-      (x - bounds.x0 + 0.5) * PIP_PX * view.zoom + view.panX,
-      (y - bounds.y0 + 0.5) * PIP_PX * view.zoom + view.panY,
-    ];
+    const project = projector(bounds, view);
     ctx.font = '12px "Cormorant Garamond", Georgia, serif';
     const labels = placeNames(
       mapView,
       data.footprints,
       anchors,
       project,
-      (text) => ctx.measureText(text).width
+      (text) => ctx.measureText(text).width,
+      tiers
     );
-    const seats = visible.filter((f) => f.seat != null).map((f) => project(f.seat![0], f.seat![1]));
-    drawNamesLayer(ctx, size, seats, labels);
-  }, [anchors, bounds, data, mapView, view, viewportSize, visible]);
+    const dots = markers.map((marker) => {
+      const [x, y] = project(marker.x, marker.y);
+      return { x, y, r: markerRadius(marker.rank) };
+    });
+    drawNamesLayer(ctx, size, dots, labels, seatGhost);
+  }, [anchors, bounds, data, mapView, markers, seatGhost, tiers, view, viewportSize]);
 
   // ---- pointer handling: pan, select, or drag pips ----
   const [panning, setPanning] = useState(false);
@@ -450,25 +508,42 @@ export function RegionMapPage({
     const origin = view;
     const panMode = mode === 'select' || event.altKey;
     if (!panMode && mode === 'carve' && !event.shiftKey) {
-      // #4988: a press on a barony's seat dot starts a seat drag, not a carve
-      const startPip = pipAt(data.region, view, rect, startX, startY);
-      const seatOf = startPip ? seatBaronyAt(data.footprints, startPip) : null;
-      if (seatOf) {
+      // #4988: a press on a barony's seat marker starts a seat drag, not a carve. The
+      // handle is the marker as drawn plus a few pixels (#5157), never one exact pip.
+      const project = projector(regionBounds(data.region), view);
+      const grabbed = seatMarkerAt(markers, project, startX - rect.left, startY - rect.top);
+      const seatOf = grabbed ? data.footprints.find((f) => f.area_id === grabbed.baronyId) : null;
+      if (grabbed && seatOf) {
         seatDragCleanup.current?.();
+        const targets = seatDropTargets(data.footprints, seatOf);
+        const radius = markerRadius(grabbed.rank);
         const stop = () => {
+          window.removeEventListener('pointermove', onSeatMove);
           window.removeEventListener('pointerup', onSeatUp);
           window.removeEventListener('pointercancel', stop);
           seatDragCleanup.current = null;
+          setSeatDrag(null);
+          setSeatGhost(null);
+        };
+        const onSeatMove = (moveEvent: PointerEvent) => {
+          setSeatGhost({
+            x: moveEvent.clientX - rect.left,
+            y: moveEvent.clientY - rect.top,
+            r: radius,
+          });
         };
         const onSeatUp = (upEvent: PointerEvent) => {
           stop();
           const drop = pipAt(data.region, view, rect, upEvent.clientX, upEvent.clientY);
-          if (!drop || (drop[0] === startPip![0] && drop[1] === startPip![1])) return;
+          // a drop anywhere but the county's own ground does nothing
+          if (!drop || !targets.has(pipKey(drop[0], drop[1]))) return;
           void moveSeat(seatOf, drop);
         };
+        window.addEventListener('pointermove', onSeatMove);
         window.addEventListener('pointerup', onSeatUp);
         window.addEventListener('pointercancel', stop);
         seatDragCleanup.current = stop;
+        setSeatDrag({ baronyId: seatOf.area_id, targets });
         return;
       }
     }
@@ -1012,6 +1087,11 @@ export function RegionMapPage({
           data-visible={visible.length}
           data-bordered={borders.size}
           data-ghost-pips={ghostPips.size}
+          data-map-tiers={[...tiers].join(',')}
+          data-seat-markers={markers.length}
+          data-capital-markers={markers.filter((marker) => marker.rank > 0).length}
+          data-seat-drag={seatDrag?.baronyId ?? ''}
+          data-drop-targets={seatDrag?.targets.size ?? 0}
           onPointerDown={handlePointerDown}
         >
           <canvas
@@ -1037,6 +1117,8 @@ export function RegionMapPage({
           onToggle={togglePanel}
           view={mapView}
           onView={setMapView}
+          tiers={tiers}
+          onToggleTier={toggleTier}
           anchorCaption={anchorCaption}
           selection={{ selected, selectedLandless, selectedLadderRow, stationWord, focusTitleId }}
           charterOn={charterOn}
