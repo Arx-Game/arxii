@@ -1,5 +1,20 @@
 # Character Creation & Identity
 
+## Built (2026-11-16, #5160: the life page opens expanded, and a stage ends on Background Notes)
+
+The life page opens with every life stage and every section in it expanded (owner ruling:
+"everything should start as expanded"). It used to open on the first stage's first section
+with the rest folded, and opening one fold shut the one that was open. Each fold now opens
+and closes by itself. Next folds its own section, opens the one below if the player had
+folded it, and brings the folded section's line back into the window so the one below reads
+from its top. An open section prints its prompt once, in its body, not again on its line.
+The box at the end of a stage is labelled "Background Notes" (it was "Description
+(Optional)", which the owner expected to confuse people) and, while empty, shows in italics
+the owner's sentence saying the text joins the Background on the character sheet. The box is
+taller at a phone's width so the whole sentence shows. The label and the placeholder are copy
+keys `life_stage_notes_label` and `life_stage_notes_placeholder`; `life_stage_description_label`
+is no longer read.
+
 ## Built (2026-11-16, #5146: Restart: Clear All Choices, and Back matches Next)
 
 The life page's "Start blank" button is gone (the owner could not tell from the words what
@@ -159,10 +174,11 @@ section.
 
 The accordion on the real leaf, demo-fidelity reviewed against
 https://claude.ai/artifact/D7gFL3Cm8wL52jK94SAj28: stages fold to a heading and a count with
-one open at a time; sections fold to their answers with signed points or the beat's prompt
+one open at a time (since #5160 everything opens expanded and each fold moves by itself);
+sections fold to their answers with signed points or the beat's prompt
 with the first name; Next walks down; Unknown is a mark on the stage; a secret pick opens the
 Cover story box with the no-cost card standing as the cover until another is chosen; a cover
-select on an any row; a figure's name on a person card; Description (Optional) per stage;
+select on an any row; a figure's name on a person card; Description (Optional) per stage (Background Notes since #5160);
 group headings with counts; a bare signed price in each card's corner and none on a free
 card; every term on a mechanics line opens its definition (on hover since #5148); the ledger rail beside the life (since #5148 the life's choices under the shared "CG selections" panel)
 with the grids widening by container width; the life so far in one paragraph; the first name

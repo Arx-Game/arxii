@@ -988,12 +988,17 @@ query. *The first name first:* `get_origin_errors` asks for `draft_data.first_na
 `integration_tests/test_life_page_journeys.py`.
 
 **The life page, leaf (#4874, slice 9 of #4813; demo-fidelity reviewed against the
-accordion demo).** `LifeGrids` is the accordion: one `.stage-acc` per stage the beginning
-offers, folded to its heading and "N of M" (copy `life_stage_progress`) or Unknown, one
-open at a time (a click on the open one folds it); inside it one `.sec` per beat, one open
-at a time, a closed one reading its answers with their signed points or the beat's prompt
-in plain text with `{name}` read from `draft_data.first_name`; Next closes a section and
-opens the next, the last Next the next stage. Fold state is local. Every section's grid
+accordion demo).** `LifeGrids` is the life in folds: one `.stage-acc` per stage the
+beginning offers, and inside it one `.sec` per beat. Every stage and every section is open
+on arrival and each fold opens and closes by itself (#5160, owner ruling 2026-11-16:
+"everything should start as expanded"; the demo's one-open-at-a-time accordion is gone).
+A folded stage reads its heading and "N of M" (copy `life_stage_progress`) or Unknown; a
+folded section reads its answers with their signed points or the beat's prompt in plain
+text with `{name}` read from `draft_data.first_name`; an open section with nothing picked
+prints the prompt in its body only. Next folds its own section, opens the one below (or
+the next stage and its first section) if the player had folded it, and scrolls the folded
+section's line into the window. Fold state is local: the sets of folded stages and folded
+beats, both empty on arrival, never saved. Every section's grid
 ends on an **Amnesiac** card (#5102, ADR-5102-B; `ChapterOffers`' `trailing` slot): no
 cost and not a distinction, named by copy `life_amnesiac_name` and read by
 `life_amnesiac_text` (default: the line Dan wrote for the stage-wide Unknown mark it
@@ -1013,8 +1018,13 @@ dashed, until the next click on another card sets it (`cover_offer_id`); clickin
 pick again drops the secret and the cover; on an any row the cover is a select with "Nothing
 shown" first. A picked card with `asks_figure_name` shows a name input (copy
 `life_figure_label`, `FIGURE_NAME_MAX_LENGTH`) saved into the beat's `figures`. Every
-open stage ends on Description (Optional) (`life_stage_description_label`,
-`STAGE_DESCRIPTION_MAX_LENGTH`), saved on blur to `draft_data.stage_descriptions` whole.
+open stage ends on Background Notes (#5160; copy `life_stage_notes_label`, and
+`life_stage_notes_placeholder` for the italic placeholder that says the text joins the
+Background on the character sheet, the owner's sentence; `STAGE_DESCRIPTION_MAX_LENGTH`),
+saved on blur to `draft_data.stage_descriptions` whole. The retired key
+`life_stage_description_label` ("Description (Optional)") is not read. The box is 12rem
+tall under 40rem of window, because a placeholder cannot be scrolled and the sentence
+runs to six lines on a phone.
 The per-beat line input is gone from the leaf (the model field stays for the sheet). The
 life block is `.leafwrap`: the life as a size container (the grids two across, three at
 46rem, four at 64rem, five at 82rem, six at 100rem by container query; prose at 68ch).
