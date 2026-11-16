@@ -10,8 +10,8 @@ import { test, expect, type Page } from '@playwright/test';
  * Needs the rows `integration_tests.live_seeds.seed_life_points_spec` writes for its own
  * account, e2e_life_points_account (the real-test workflow seeds it after the server
  * starts and writes the ids to the JSON file named by LIFE_POINTS_SEED): a creation
- * draft at Lineage whose beginning meets one life beat with two cards, one that costs
- * CG points and one the world pays for.
+ * draft at Lineage whose beginning meets a childhood beat with two cards, one that costs
+ * CG points and one the world pays for, and a youth beat with one card (#5160).
  *
  * The page works its total out before the server has answered, from prices the server
  * sent earlier. This is the check that the figure it shows is the figure the server
@@ -28,6 +28,7 @@ interface Seed {
   costly_price: number;
   paying_card: string;
   paying_price: number;
+  later_card: string;
 }
 
 interface Points {
@@ -173,5 +174,63 @@ test.describe('the CG points beside the life', () => {
     await expect.poll(total).toBe(line(start.remaining));
     await expect(costly).toHaveAttribute('aria-pressed', 'false');
     await expect(paying).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test('the life opens with every fold open, and Background Notes are kept by the server (#5160)', async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    const seed = readSeed();
+    await logIn(page);
+    await page.goto('/characters/create');
+
+    // Two life stages, one section in each, and nothing has been clicked: both stages
+    // and both sections are open, and the later stage's card is on the page.
+    const costly = page.getByRole('button', { name: new RegExp(`^${seed.costly_card}`) });
+    const later = page.getByRole('button', { name: new RegExp(`^${seed.later_card}`) });
+    await expect(costly).toBeVisible({ timeout: 20000 });
+    await expect(later).toBeVisible();
+    await expect(page.locator('.interview .stage-acc')).toHaveCount(2);
+    await expect(page.locator('.interview .stage-acc[data-open="true"]')).toHaveCount(2);
+    await expect(page.locator('.interview .sec')).toHaveCount(2);
+    await expect(page.locator('.interview .sec[data-open="true"]')).toHaveCount(2);
+
+    // Each stage ends on Background Notes, with the placeholder saying where the text goes.
+    await expect(page.getByLabel('Background Notes')).toHaveCount(2);
+    await expect(page.getByText('Description (Optional)')).toHaveCount(0);
+    const childhood = page.locator('#stage-desc-childhood');
+    const youth = page.locator('#stage-desc-youth');
+    await expect(childhood).toHaveAttribute(
+      'placeholder',
+      /^You can write an optional description .* added to their listed Background on the character sheet\.$/
+    );
+
+    // Text typed in the box is sent when the box is left, and the server keeps it: the
+    // draft read straight from the server holds it, and so does the page after a reload.
+    const draftUrl = `/api/character-creation/drafts/${seed.draft_id}/`;
+    const isDraftSave = (url: string, method: string) =>
+      new URL(url).pathname === draftUrl && method === 'PATCH';
+    const text = `Kept the ledgers for a season (${Date.now()}).`;
+    let saved = page.waitForResponse((r) => isDraftSave(r.url(), r.request().method()));
+    await childhood.fill(text);
+    await youth.focus();
+    expect((await saved).status()).toBe(200);
+    const held = await page.request.get(draftUrl);
+    expect(held.ok(), await held.text()).toBe(true);
+    expect((await held.json()).draft_data.stage_descriptions).toMatchObject({ childhood: text });
+
+    await page.reload();
+    await expect(page.locator('#stage-desc-childhood')).toHaveValue(text, { timeout: 20000 });
+    await expect(page.locator('#stage-desc-youth')).toHaveValue('');
+    // The reload starts expanded again: fold state is never saved.
+    await expect(page.locator('.interview .sec[data-open="true"]')).toHaveCount(2);
+
+    // A second run on the same database starts from the same place: the box emptied.
+    saved = page.waitForResponse((r) => isDraftSave(r.url(), r.request().method()));
+    await page.locator('#stage-desc-childhood').fill('');
+    await page.locator('#stage-desc-youth').focus();
+    expect((await saved).status()).toBe(200);
+    const after = await page.request.get(draftUrl);
+    expect((await after.json()).draft_data.stage_descriptions).toMatchObject({ childhood: '' });
   });
 });
