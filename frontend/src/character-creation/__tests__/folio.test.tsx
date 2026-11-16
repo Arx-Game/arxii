@@ -39,72 +39,46 @@ describe('ChapterLeaf', () => {
     expect(screen.getByRole('complementary', { name: /marginalia/i })).toHaveTextContent('note');
   });
 
-  // A panel the stage builds deep inside itself and sends to the rail (#5144).
-  function Panel() {
-    const rail = useChapterRail();
-    const panel = <aside aria-label="CG points">purse</aside>;
-    return rail ? createPortal(panel, rail) : panel;
+  // A list the stage builds deep inside itself and sends to the panel's slot (#5148).
+  function Choices() {
+    const slot = useChapterRail();
+    const list = <section aria-label="Life So Far">picks</section>;
+    return slot ? createPortal(list, slot) : list;
   }
 
-  it('keeps the rail for a panel the stage sends there, and holds no marginalia then', () => {
+  it("a railSlot leaf keeps the same panel as every stage and puts the stage's own list under it (#5148)", () => {
     const { container } = render(
       <ChapterLeaf stage={Stage.LINEAGE} title="Lineage" railSlot aside={<p>note</p>}>
         <div data-testid="deep">
-          <Panel />
+          <Choices />
         </div>
       </ChapterLeaf>
     );
-    const panel = screen.getByRole('complementary', { name: 'CG points' });
-    expect(panel.parentElement).toHaveClass('chapter-rail');
-    expect(panel.parentElement?.parentElement).toHaveClass(
-      'chapter',
-      'chapter-grids',
-      'chapter-railed'
-    );
+    const panel = screen.getByRole('complementary', { name: /marginalia/i });
+    const list = screen.getByRole('region', { name: 'Life So Far' });
+    expect(panel).toContainElement(list);
+    expect(list.parentElement).toHaveClass('rail-slot');
+    // The stage's own list comes after what every stage shows.
+    expect(panel.firstElementChild).toHaveTextContent('note');
+    expect(panel.lastElementChild).toBe(list.parentElement);
     expect(screen.getByTestId('deep')).toBeEmptyDOMElement();
-    expect(container.querySelector('.chapter-main')).not.toContainElement(panel);
-    expect(screen.queryByRole('complementary', { name: /marginalia/i })).not.toBeInTheDocument();
+    expect(container.querySelector('.chapter')).toHaveClass('chapter-grids');
+    expect(screen.getAllByRole('complementary')).toHaveLength(1);
   });
 
-  it('under 74rem of window the rail is not kept and the panel stays where it is written', () => {
-    vi.stubGlobal(
-      'matchMedia',
-      vi.fn((query: string) => ({
-        matches: query !== '(min-width: 74rem)',
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      }))
-    );
-    try {
-      const { container } = render(
-        <ChapterLeaf stage={Stage.LINEAGE} title="Lineage" railSlot>
-          <div data-testid="deep">
-            <Panel />
-          </div>
-        </ChapterLeaf>
-      );
-      expect(screen.getByTestId('deep')).toContainElement(
-        screen.getByRole('complementary', { name: 'CG points' })
-      );
-      expect(container.querySelector('.chapter-rail')).toBeNull();
-      expect(container.querySelector('.chapter')).toHaveClass('chapter-grids');
-      expect(container.querySelector('.chapter')).not.toHaveClass('chapter-railed');
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-
-  it('a leaf that keeps no such place leaves the panel where it is written', () => {
-    render(
+  it('a leaf that keeps no slot leaves the list where it is written', () => {
+    const { container } = render(
       <ChapterLeaf stage={Stage.ORIGIN} title="Origin" aside={<p>note</p>}>
         <div data-testid="deep">
-          <Panel />
+          <Choices />
         </div>
       </ChapterLeaf>
     );
     expect(screen.getByTestId('deep')).toContainElement(
-      screen.getByRole('complementary', { name: 'CG points' })
+      screen.getByRole('region', { name: 'Life So Far' })
     );
+    expect(container.querySelector('.rail-slot')).toBeNull();
+    expect(container.querySelector('.chapter')).not.toHaveClass('chapter-grids');
   });
 });
 
