@@ -100,6 +100,47 @@ export function picksCost(picks: { cost?: number }[] | undefined): number {
   return (picks ?? []).reduce((sum, pick) => sum + (pick.cost ?? 0), 0);
 }
 
+/** A saved pick as a save in flight leaves it, or null when the save lets it go. */
+function underSave(
+  entry: DraftDistinctionEntry,
+  pending: SyncDistinctionEntry[],
+  used: Set<number>,
+  costPerRank: (offerId: number) => number | undefined
+): ShownPick | null {
+  const pick = asShown(entry);
+  const chosen = choiceOfferId(entry);
+  // Held some other way than by choice: no save carries it.
+  if (chosen === undefined) return pick;
+  const at = pending.findIndex(
+    (row, i) => !used.has(i) && row.offer_id === chosen && sameFeature(row, entry)
+  );
+  if (at !== -1) used.add(at);
+  const rank = at === -1 ? 0 : pending[at].rank;
+  if (rank <= 0) {
+    const others = pick.offer_ids.filter((id) => id !== chosen);
+    return others.length > 0 ? { ...pick, offer_ids: others } : null;
+  }
+  if (rank === entry.rank) return pick;
+  const perRank = entry.rank > 0 ? pick.cost / entry.rank : (costPerRank(chosen) ?? 0);
+  return { ...pick, rank, cost: perRank * rank };
+}
+
+/** A row of the save for a pick the draft does not hold yet, priced from its offer. */
+function newPick(
+  row: SyncDistinctionEntry,
+  costPerRank: (offerId: number) => number | undefined
+): ShownPick {
+  const [feature_trait, feature_marking] = featureKey(row);
+  return {
+    distinction_id: row.id,
+    offer_ids: [row.offer_id],
+    rank: row.rank,
+    cost: (costPerRank(row.offer_id) ?? 0) * row.rank,
+    feature_trait,
+    feature_marking,
+  };
+}
+
 /**
  * The picks to show (#5141): the saved list, with a save in flight laid over it.
  *
@@ -121,43 +162,15 @@ export function shownPicks(
   const used = new Set<number>();
   const shown: ShownPick[] = [];
   for (const entry of saved ?? []) {
-    const pick = asShown(entry);
-    const chosen = choiceOfferId(entry);
-    if (chosen === undefined) {
-      shown.push(pick);
-      continue;
-    }
-    const at = pending.findIndex(
-      (row, i) => !used.has(i) && row.offer_id === chosen && sameFeature(row, entry)
-    );
-    if (at === -1 || pending[at].rank <= 0) {
-      if (at !== -1) used.add(at);
-      const others = pick.offer_ids.filter((id) => id !== chosen);
-      if (others.length > 0) shown.push({ ...pick, offer_ids: others });
-      continue;
-    }
-    used.add(at);
-    const rank = pending[at].rank;
-    const perRank = entry.rank > 0 ? pick.cost / entry.rank : (costPerRank(chosen) ?? 0);
-    shown.push({ ...pick, rank, cost: rank === entry.rank ? pick.cost : perRank * rank });
+    const pick = underSave(entry, pending, used, costPerRank);
+    if (pick) shown.push(pick);
   }
   pending.forEach((row, i) => {
     if (used.has(i) || row.rank <= 0) return;
     const held = shown.find((pick) => pick.distinction_id === row.id && sameFeature(pick, row));
-    if (held) {
-      // Already held for nothing by another offer: choosing it as well changes no price.
-      held.offer_ids = [...held.offer_ids, row.offer_id];
-      return;
-    }
-    const [feature_trait, feature_marking] = featureKey(row);
-    shown.push({
-      distinction_id: row.id,
-      offer_ids: [row.offer_id],
-      rank: row.rank,
-      cost: (costPerRank(row.offer_id) ?? 0) * row.rank,
-      feature_trait,
-      feature_marking,
-    });
+    // Already held for nothing by another offer: choosing it as well changes no price.
+    if (held) held.offer_ids = [...held.offer_ids, row.offer_id];
+    else shown.push(newPick(row, costPerRank));
   });
   return shown;
 }
