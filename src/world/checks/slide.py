@@ -96,15 +96,15 @@ class BandPosition:
         """For example "Expert (rank 3), 67% toward Master (rank 4)"."""
         if self.rank is None:
             if self.next_rank is not None:
-                return f"Below {_rank_label(self.next_rank)}"
+                return f"Below {rank_label(self.next_rank)}"
             return "No rank"
-        here = _rank_label(self.rank)
+        here = rank_label(self.rank)
         if self.next_rank is None or self.percent == 0:
             return here
-        return f"{here}, {self.percent}% toward {_rank_label(self.next_rank)}"
+        return f"{here}, {self.percent}% toward {rank_label(self.next_rank)}"
 
 
-def _rank_label(step: RankStep) -> str:
+def rank_label(step: RankStep) -> str:
     """A rank's name with its number, once: "Expert (rank 3)", but "Rank 17" for an unnamed one."""
     if step.name == f"Rank {step.rank}":
         return step.name

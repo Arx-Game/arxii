@@ -39,6 +39,7 @@ import logging
 import math
 from typing import TYPE_CHECKING
 
+from world.checks.services import DifficultyTables, load_difficulty_tables
 from world.combat.constants import COMPULSION_PENALISED_MANEUVERS, CombatManeuver
 from world.combat.types import CompulsionAttempt, CompulsionCost, CompulsionRoll, SteadyResult
 from world.conditions.constants import CompulsionForbidden, CompulsionResult
@@ -274,6 +275,7 @@ def _cost(
     instance: ConditionInstance,
     action: CombatRoundAction,
     forbidden: Mapping[str, CompulsionForbiddenAction],
+    tables: DifficultyTables | None = None,
 ) -> CompulsionCost | None:
     """What *action* costs under this compulsion; None when it is what the compulsion wants.
 
@@ -284,7 +286,7 @@ def _cost(
     key = _forbidden_key(action)
     row = forbidden.get(key) if key is not None else None
     return CompulsionCost(
-        difficulty=compulsion_difficulty(compulsion, instance, key, row=row),
+        difficulty=compulsion_difficulty(compulsion, instance, key, row=row, tables=tables),
         forbidden=row is not None,
     )
 
@@ -414,6 +416,7 @@ def resolve_compulsions(encounter: CombatEncounter) -> list[CompulsionRoll]:
     compulsions = list({c.pk: c for c, _ in found_by_character.values()}.values())
     forbidden = forbidden_rows_for(compulsions)
     bands = bands_by_outcome(compulsions)
+    tables: DifficultyTables | None = None
     rolls: list[CompulsionRoll] = []
     for action in actions:
         participant = action.participant
@@ -422,7 +425,10 @@ def resolve_compulsions(encounter: CombatEncounter) -> list[CompulsionRoll]:
         if found is None or not is_player_character(participant.character_sheet):
             continue
         compulsion, instance = found
-        cost = _cost(compulsion, instance, action, forbidden[compulsion.pk])
+        if tables is None:
+            # Loaded on the first action that rolls, then shared by the rest of the round.
+            tables = load_difficulty_tables()
+        cost = _cost(compulsion, instance, action, forbidden[compulsion.pk], tables)
         if cost is None:
             continue
         rolls.append(

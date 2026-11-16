@@ -34,7 +34,7 @@ from world.checks.modifier_values import (
     rank_band_share,
 )
 from world.checks.services import botch_floor_level, level_strength
-from world.checks.slide import load_ranks, resolve_standing, slide_chart
+from world.checks.slide import load_ranks, rank_label, resolve_standing, slide_chart
 from world.checks.types import ModifierBreakdown, ModifierContribution
 from world.traits.models import CheckRank, ResultChart, ResultChartOutcome
 
@@ -310,7 +310,7 @@ def compute_slide_table(*, roll_modifier: int = 0) -> list[SlideRow]:
 
 def rank_ladder() -> list[str]:
     """Every check rank with its number and threshold, for the panel's key."""
-    return [f"{rank.name} (rank {rank.rank}): {rank.min_points}+" for rank in load_ranks()]
+    return [f"{rank_label(rank)}: {rank.min_points}+" for rank in load_ranks()]
 
 
 @dataclass(frozen=True)
@@ -395,7 +395,7 @@ class ModifierPileReport:
 
 def _rank_name(points: int) -> str:
     rank = CheckRank.get_rank_for_points(points)
-    return f"{rank.name} (rank {rank.rank})" if rank else "below every rank"
+    return rank_label(rank) if rank else "below every rank"
 
 
 def compute_modifier_pile(

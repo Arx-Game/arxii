@@ -90,7 +90,9 @@ class CheckResult:
         if self.standing is not None:
             return self.standing.roller.text
         if self.roller_rank is not None:
-            return f"{self.roller_rank.name} (rank {self.roller_rank.rank})"
+            from world.checks.slide import rank_label  # noqa: PLC0415
+
+            return rank_label(self.roller_rank)
         return ""
 
     @property
@@ -99,7 +101,9 @@ class CheckResult:
         if self.standing is not None:
             return self.standing.target.text
         if self.target_rank is not None:
-            return f"{self.target_rank.name} (rank {self.target_rank.rank})"
+            from world.checks.slide import rank_label  # noqa: PLC0415
+
+            return rank_label(self.target_rank)
         return ""
 
     @property

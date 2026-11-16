@@ -19,7 +19,12 @@ import contextvars
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from world.checks.services import difficulty_points, difficulty_step_points
+from world.checks.services import (
+    DifficultyTables,
+    difficulty_points,
+    difficulty_step_points,
+    load_difficulty_tables,
+)
 from world.conditions.constants import ControlLossFiresOn
 from world.conditions.types import (
     CompulsionActionCost,
@@ -179,32 +184,42 @@ def compulsion_difficulty(
     forbidden: str | None,
     *,
     row: CompulsionForbiddenAction | None = None,
+    tables: DifficultyTables | None = None,
 ) -> int:
     """The resist roll's difficulty: base, plus per severity, plus a forbidden extra.
 
     ``forbidden`` is a ``CompulsionForbidden`` value; it adds that action's
     ``extra_difficulty`` only when the compulsion names it. A caller that already
-    fetched the row passes it as ``row`` and no query is made.
+    fetched the row passes it as ``row`` and no query is made. A caller costing many
+    actions passes one ``tables`` (``load_difficulty_tables``) so the ladder rows load once.
     """
     if row is None and forbidden is not None:
         row = forbidden_row(compulsion, forbidden)
     return (
-        difficulty_points(compulsion.base_difficulty_level)
-        + _forbidden_extra_points(compulsion, row)
-        + _step_points(compulsion.difficulty_per_severity_tenths * instance.severity, compulsion)
+        difficulty_points(compulsion.base_difficulty_level, tables)
+        + _forbidden_extra_points(compulsion, row, tables)
+        + _step_points(
+            compulsion.difficulty_per_severity_tenths * instance.severity, compulsion, tables
+        )
     )
 
 
-def _step_points(tenths: int, compulsion: Compulsion) -> int:
+def _step_points(
+    tenths: int, compulsion: Compulsion, tables: DifficultyTables | None = None
+) -> int:
     """A compulsion's tenths of a level as points at its base difficulty's level (#5093)."""
-    return difficulty_step_points(tenths, compulsion.base_difficulty_level)
+    return difficulty_step_points(tenths, compulsion.base_difficulty_level, tables)
 
 
-def _forbidden_extra_points(compulsion: Compulsion, row: CompulsionForbiddenAction | None) -> int:
+def _forbidden_extra_points(
+    compulsion: Compulsion,
+    row: CompulsionForbiddenAction | None,
+    tables: DifficultyTables | None = None,
+) -> int:
     """What a forbidden-action row adds to the resist difficulty, in points."""
     if row is None:
         return 0
-    return _step_points(row.extra_difficulty_tenths, compulsion)
+    return _step_points(row.extra_difficulty_tenths, compulsion, tables)
 
 
 def compulsion_summary_for(
@@ -229,6 +244,7 @@ def compulsion_summary_for(
         return None
     compulsion, instance = found
     rows = {row.action: row for row in compulsion.forbidden.all()}
+    tables = load_difficulty_tables() if options else None
     against = []
     for option in options:
         row = rows.get(option.forbidden_key) if option.forbidden_key is not None else None
@@ -236,9 +252,11 @@ def compulsion_summary_for(
             CompulsionActionCost(
                 action_key=option.action_key,
                 label=option.label,
-                difficulty=compulsion_difficulty(compulsion, instance, None, row=row),
+                difficulty=compulsion_difficulty(
+                    compulsion, instance, None, row=row, tables=tables
+                ),
                 forbidden=row is not None,
-                extra_difficulty=_forbidden_extra_points(compulsion, row),
+                extra_difficulty=_forbidden_extra_points(compulsion, row, tables),
             )
         )
     return CompulsionSummary(
