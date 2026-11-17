@@ -744,8 +744,8 @@ export function PersonaMenu({
               <Fragment key={`group-${group.key}`}>
                 <kit.Separator />
                 {itemsForGroup(group.key).map((item) => renderMenuItem(kit, item))}
-                {group.key === 'scene' && renderAnimaRitual(kit)}
                 {group.key === 'scene' && renderSceneActionSubmenus(kit)}
+                {group.key === 'scene' && renderAnimaRitual(kit)}
                 {group.key === 'scene' && renderAttachToPose(kit)}
               </Fragment>
             ))}

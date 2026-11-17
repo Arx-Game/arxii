@@ -216,9 +216,14 @@ const getReflectionOptionsMock = vi.fn((): Promise<unknown[]> =>
 // #5177 — the pleas a pose can carry; the "Sineating" row reads it. Shaped like the generated
 // `SineatingOption` rows.
 const getSineatingOptionsMock = vi.fn((): Promise<unknown[]> => Promise.resolve([]));
+// #5181 — what the character has waiting to claim; the "Claim" row reads it.
+const getKindledResonancesMock = vi.fn((): Promise<unknown> =>
+  Promise.resolve({ results: [], impulses: [] })
+);
 vi.mock('@/magic/api', () => ({
   getReflectionOptions: () => getReflectionOptionsMock(),
   getSineatingOptions: () => getSineatingOptionsMock(),
+  getKindledResonances: () => getKindledResonancesMock(),
 }));
 
 // A scene pose goes out over REST and the composer clears when it lands. Wait
@@ -2630,5 +2635,91 @@ describe('the "Sineating" row on a pose (#5177)', () => {
     renderComposer();
     await waitFor(() => expect(getSineatingOptionsMock).toHaveBeenCalled());
     expect(screen.queryByTestId('sineating-row')).toBeNull();
+  });
+});
+
+describe('the "Claim" row on a pose (#5181)', () => {
+  const pose: ComposerMode = { command: 'pose', targets: [], label: 'Pose \u2192 Room' };
+  const waiting = (id: number, name: string, unclaimed: number) => ({
+    id,
+    name,
+    affinity_name: 'Abyssal',
+    kindled: true,
+    strength_name: 'Blazing',
+    reasons: [],
+    unclaimed,
+    claim_verb: 'gloat',
+  });
+
+  beforeEach(() => {
+    submitPoseMock.mockClear();
+    dispatchMock.mockClear();
+    getSineatingOptionsMock.mockResolvedValue([]);
+    getKindledResonancesMock.mockResolvedValue({
+      results: [waiting(1, 'Ruin', 5), waiting(2, 'Mercy', 3)],
+      impulses: [],
+    });
+    mockRoomCharacters = [{ name: 'Bob', thumbnail_url: null, dbref: '#501' }];
+    queryClient.clear();
+    sessionStorage.clear();
+  });
+
+  function write(text: string) {
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: text } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+  }
+
+  it('sends the ticked resonances with the scene pose and shows the writer each line', async () => {
+    submitPoseMock.mockImplementation(() =>
+      Promise.resolve({ id: 1, claim_lines: ['You gloat. Your Ruin grows by 7.'] })
+    );
+    render(
+      <CommandInput
+        character="Alice"
+        characterSheetId={7}
+        composerMode={pose}
+        sceneId="5"
+        personaId={9}
+      />
+    );
+    fireEvent.click(await screen.findByTestId('claim-toggle'));
+    fireEvent.click(screen.getByTestId('claim-resonance-2'));
+    write('Mara laughs as the captain falters.');
+
+    expect(submitPoseMock).toHaveBeenCalledWith(
+      expect.objectContaining({ claim: true, claim_resonance_ids: [1] })
+    );
+    await poseLands();
+    expect(dispatchMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          note: expect.objectContaining({ content: 'You gloat. Your Ruin grows by 7.' }),
+        }),
+      })
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('claim-toggle')).toHaveAttribute('aria-pressed', 'false')
+    );
+  });
+
+  it('sends no claim fields while the switch is off', async () => {
+    submitPoseMock.mockImplementation(() => Promise.resolve({ id: 1 }));
+    render(
+      <CommandInput
+        character="Alice"
+        characterSheetId={7}
+        composerMode={pose}
+        sceneId="5"
+        personaId={9}
+      />
+    );
+    await screen.findByTestId('claim-toggle');
+    write('Mara laughs.');
+
+    expect(submitPoseMock).toHaveBeenCalledWith(
+      expect.not.objectContaining({ claim: expect.anything() })
+    );
+    await poseLands();
   });
 });
