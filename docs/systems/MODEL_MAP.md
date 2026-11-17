@@ -222,9 +222,6 @@
   - durance_training_sites <- progression.DuranceTrainingSite
   - resonance_grants <- magic.ResonanceGrant
   - portal_anchors <- magic.PortalAnchor
-  - primum <- magic.PlacePrimum
-  - primum_call_ups <- magic.PrimumCallUp
-  - primum_sightings <- magic.PrimumSighting
   - income_streams <- currency.OrgIncomeStream
   - dream_reflection <- dreams.DreamReflection
   - reflection_of <- dreams.DreamReflection
@@ -1705,7 +1702,6 @@
 - `select_origin_template(draft: 'CharacterDraft', template: 'OriginTemplate') -> 'None' - Choose the draft's Upbringing; a change resets everything downstream of it (#3617).`
 - `set_family_path(draft: 'CharacterDraft', path: 'str') -> 'None' - Pick the family path when the Upbringing allows more than one (#3617).`
 - `set_origin_slot(sheet: 'CharacterSheet', slot: 'OriginTemplateSlot', value: 'str', choice: 'OriginTemplateSlotChoice | None' = None, *, organization: 'Organization | None | _Keep' = <world.character_creation.services._Keep object>, figure_name: 'str | _Keep' = <world.character_creation.services._Keep object>) -> 'None' - Upsert a character's answer (text, picked choice, anchor, person), then refresh state.`
-- `stage_descriptions(draft: 'CharacterDraft') -> 'dict[str, str]' - Life stage value -> the paragraph the player wrote for it (#4872), blanks dropped.`
 - `submit_draft_for_review(draft: 'CharacterDraft', *, submission_notes: 'str' = '') -> 'DraftApplication' - Submit a character draft for staff review.`
 - `unsubmit_draft(application: 'DraftApplication') -> 'None' - Un-submit a draft application, returning it to editable state.`
 - `withdraw_draft(application: 'DraftApplication') -> 'None' - Withdraw a draft application.`
@@ -1819,6 +1815,7 @@
   - ghost_tutelages <- magic.GhostTutelage
   - gift_unlocks <- magic.CharacterGiftUnlock
   - resonance_grants <- magic.ResonanceGrant
+  - impulses_shown <- magic.ImpulseShown
   - led_courts <- covenants.Covenant
   - covenant_role_assignments <- covenants.CharacterCovenantRole
   - covenant_rite_instances <- covenants.CovenantRiteInstance
@@ -1830,8 +1827,6 @@
   - motif <- magic.Motif
   - prepared_crossing_texts <- magic.CharacterCrossingText
   - prepared_surge_text <- magic.CharacterSurgeText
-  - primum_call_ups <- magic.PrimumCallUp
-  - primum_sightings <- magic.PrimumSighting
   - settling_rites <- magic.SettlingRite
   - reflections <- magic.Reflection
   - reincarnations <- magic.Reincarnation
@@ -2781,7 +2776,6 @@
   - language -> species.Language [FK] (nullable)
 **Pointed to by:**
   - weakness_pool_entries <- covenants.WeaknessPoolEntry
-  - primum <- magic.CreaturePrimum
   - spawned_opponents <- combat.CombatOpponent
   - bossphase_set <- combat.BossPhase
   - creaturephasetemplate_set <- combat.CreaturePhaseTemplate
@@ -5011,7 +5005,6 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
-  - primum_substance -> magic.Substance [FK] (nullable)
   - material_category -> items.MaterialCategory [FK] (nullable)
   - on_use_pool -> actions.ConsequencePool [FK] (nullable)
   - on_use_check_type -> checks.CheckType [FK] (nullable)
@@ -5275,7 +5268,6 @@
   - vault_holding <- items.VaultHolding
   - vault_transit <- items.VaultTransit
   - org_vault_events <- items.OrgVaultEvent
-  - item_substances <- items.ItemSubstance
   - trade_stakes <- items.TradeItemStake
   - reclamation_claims <- items.ReclamationClaim
   - crime_evidence <- justice.CrimeEvidence
@@ -5301,17 +5293,10 @@
   - item_instance -> items.ItemInstance [FK]
   - style -> items.Style [FK]
 
-### ItemSubstance
-**Foreign Keys:**
-  - item_instance -> items.ItemInstance [FK]
-  - substance -> magic.Substance [FK]
-  - step -> magic.PrimumStep [FK]
-
 ### ItemTemplate
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
-  - primum_substance -> magic.Substance [FK] (nullable)
   - material_category -> items.MaterialCategory [FK] (nullable)
   - on_use_pool -> actions.ConsequencePool [FK] (nullable)
   - on_use_check_type -> checks.CheckType [FK] (nullable)
@@ -5492,7 +5477,6 @@
 
 ### QualityTier
 **Pointed to by:**
-  - primum_step <- magic.PrimumStep
   - minimum_for_templates <- items.ItemTemplate
   - item_instances <- items.ItemInstance
   - itemfacet_attachments <- items.ItemFacet
@@ -5525,7 +5509,6 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
-  - primum_substance -> magic.Substance [FK] (nullable)
   - material_category -> items.MaterialCategory [FK] (nullable)
   - on_use_pool -> actions.ConsequencePool [FK] (nullable)
   - on_use_check_type -> checks.CheckType [FK] (nullable)
@@ -5667,7 +5650,6 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
-  - primum_substance -> magic.Substance [FK] (nullable)
   - material_category -> items.MaterialCategory [FK] (nullable)
   - on_use_pool -> actions.ConsequencePool [FK] (nullable)
   - on_use_check_type -> checks.CheckType [FK] (nullable)
@@ -5712,7 +5694,6 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
-  - primum_substance -> magic.Substance [FK] (nullable)
   - material_category -> items.MaterialCategory [FK] (nullable)
   - on_use_pool -> actions.ConsequencePool [FK] (nullable)
   - on_use_check_type -> checks.CheckType [FK] (nullable)
@@ -6242,14 +6223,10 @@
 
 ### CorruptionConfig
 **Foreign Keys:**
+  - compulsion_condition -> conditions.ConditionTemplate [FK] (nullable)
   - updated_by -> evennia.AccountDB [FK] (nullable)
 
 ### CovenantRoleBlendConfig
-
-### CreaturePrimum
-**Foreign Keys:**
-  - creature_template -> combat.CreatureTemplate [FK]
-  - substance -> magic.Substance [FK]
 
 ### CrossingChoice
 **Foreign Keys:**
@@ -6418,13 +6395,13 @@
   - codex_entry -> codex.CodexEntry [FK] (nullable)
   - style -> magic.TechniqueStyle [FK] (nullable)
   - natural_weapon_template -> items.ItemTemplate [FK] (nullable)
-  - substance -> magic.Substance [FK] (nullable)
   - resonances -> magic.Resonance [M2M]
   - ultimate_techniques -> magic.Technique [M2M]
 **Pointed to by:**
   - effect_modifier_targets <- mechanics.ModifierTarget
   - organization_grants <- societies.OrganizationGiftGrant
   - children <- magic.Gift
+  - substance <- magic.GiftSubstance
   - character_grants <- magic.CharacterGift
   - techniques <- magic.Technique
   - major_gift_technique_requirements <- progression.MajorGiftTechniqueRequirement
@@ -6447,6 +6424,13 @@
 
 ### GiftAcquisitionConfig
 
+### GiftSubstance
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - gift -> magic.Gift [OneToOne]
+  - property -> mechanics.Property [FK] (nullable)
+
 ### GiftUnlock
 **Foreign Keys:**
   - gift -> magic.Gift [FK]
@@ -6464,14 +6448,15 @@
   - distinction_offers <- character_creation.DistinctionOffer
   - character_rows <- magic.CharacterGlimpseTag
 
-### HarvestOutcome
-**Foreign Keys:**
-  - outcome_tier -> traits.CheckOutcome [OneToOne]
-  - quality_tier -> items.QualityTier [FK]
-
 ### ImbuingProseTemplate
 **Foreign Keys:**
   - resonance -> magic.Resonance [FK] (nullable)
+
+### ImpulseShown
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - resonance -> magic.Resonance [FK]
+  - scene -> scenes.Scene [FK]
 
 ### IntensityTier
 **Foreign Keys:**
@@ -6545,6 +6530,11 @@
   - variants <- magic.MagicalAlterationTemplate
   - resolved_pending <- magic.PendingAlteration
   - application_events <- magic.MagicalAlterationEvent
+
+### MireHolding
+**Foreign Keys:**
+  - relationship -> relationships.CharacterRelationship [FK]
+  - resonance -> magic.Resonance [FK]
 
 ### MishapPoolTier
 **Foreign Keys:**
@@ -6632,11 +6622,6 @@
   - scene -> scenes.Scene [FK]
   - resonance -> magic.Resonance [FK]
 
-### PlacePrimum
-**Foreign Keys:**
-  - room_profile -> evennia_extensions.RoomProfile [FK]
-  - substance -> magic.Substance [FK]
-
 ### PortalAnchor
 **Foreign Keys:**
   - room_profile -> evennia_extensions.RoomProfile [FK]
@@ -6674,25 +6659,6 @@
   - item_template -> items.ItemTemplate [FK]
   - min_quality_tier -> items.QualityTier [FK] (nullable)
 
-### PrimumCallUp
-**Foreign Keys:**
-  - room_profile -> evennia_extensions.RoomProfile [FK]
-  - substance -> magic.Substance [FK]
-  - caster -> character_sheets.CharacterSheet [FK] (nullable)
-  - scene -> scenes.Scene [FK] (nullable)
-
-### PrimumSighting
-**Foreign Keys:**
-  - character_sheet -> character_sheets.CharacterSheet [FK]
-  - room_profile -> evennia_extensions.RoomProfile [FK]
-  - substance -> magic.Substance [FK]
-
-### PrimumStep
-**Foreign Keys:**
-  - item_quality -> items.QualityTier [OneToOne] (nullable)
-**Pointed to by:**
-  - item_rows <- items.ItemSubstance
-
 ### RallyKindlingStrength
 **Foreign Keys:**
   - outcome_tier -> traits.CheckOutcome [OneToOne]
@@ -6702,6 +6668,7 @@
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - grant -> magic.ResonanceGrant [FK] (nullable)
   - resonance -> magic.Resonance [FK] (nullable)
+  - tether -> relationships.CharacterRelationship [FK] (nullable)
   - interaction -> scenes.Interaction [FK] (nullable)
   - journal_entry -> journals.JournalEntry [FK] (nullable)
   - rite -> magic.SettlingRite [FK] (nullable)
@@ -6748,6 +6715,7 @@
   - resonancegrant_set <- magic.ResonanceGrant
   - distinction_grants <- magic.DistinctionResonanceGrant
   - distinction_rank_thresholds <- magic.DistinctionResonanceRankThreshold
+  - impulses_shown <- magic.ImpulseShown
   - techniquevariant_subrole <- magic.TechniqueVariant
   - covenantrole_subrole <- covenants.CovenantRole
   - kindling_situations <- magic.KindlingSituation
@@ -6761,6 +6729,7 @@
   - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
   - sineatings <- magic.Sineating
   - rescues <- magic.SoulTetherRescue
+  - mire_holdings <- magic.MireHolding
   - pull_effects <- magic.ThreadPullEffect
   - threads <- magic.Thread
   - thread_rows <- magic.ThreadResonance
@@ -6789,8 +6758,6 @@
 
 ### ResonanceEnvironmentConfig
 **Foreign Keys:**
-  - harvest_check_type -> checks.CheckType [FK] (nullable)
-  - harvest_skill -> skills.Skill [FK] (nullable)
   - updated_by -> evennia.AccountDB [FK] (nullable)
 
 ### ResonanceGainConfig
@@ -6983,6 +6950,11 @@
   - relationship -> relationships.CharacterRelationship [FK]
   - scene -> scenes.Scene [FK] (nullable)
   - resonance -> magic.Resonance [FK]
+  - outcome -> traits.CheckOutcome [FK] (nullable)
+
+### SineatingOutcomeAward
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
 
 ### SineatingPendingOffer
 **Foreign Keys:**
@@ -6994,6 +6966,7 @@
 
 ### SoulTetherConfig
 **Foreign Keys:**
+  - sineating_check_type -> checks.CheckType [FK] (nullable)
   - updated_by -> evennia.AccountDB [FK] (nullable)
 
 ### SoulTetherRescue
@@ -7027,27 +7000,6 @@
   - resonance -> magic.Resonance [FK]
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
-
-### Substance
-**Foreign Keys:**
-  - written_by -> contributors.ContentContributor [FK] (nullable)
-  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
-  - property -> mechanics.Property [FK] (nullable)
-**Pointed to by:**
-  - gifts <- magic.Gift
-  - places <- magic.PlacePrimum
-  - creatures <- magic.CreaturePrimum
-  - call_ups <- magic.PrimumCallUp
-  - sightings <- magic.PrimumSighting
-  - primum_templates <- items.ItemTemplate
-  - item_rows <- items.ItemSubstance
-
-### SubstancePowerStep
-
-### SubstanceRelation
-**Foreign Keys:**
-  - substance_a -> magic.Substance [FK]
-  - substance_b -> magic.Substance [FK]
 
 ### Technique
 **Foreign Keys:**
@@ -7428,7 +7380,7 @@
 - `get_soulfray_warning(character: 'ObjectDB') -> 'SoulfrayWarning | None' - Return the current Soulfray stage warning for the safety checkpoint.`
 - `get_thread_survivability_tuning(vital_target: 'str') -> "'ThreadSurvivabilityTuning | None'" - Return the tuning row for a target, or None if unseeded (baseline 0).`
 - `gift_thread_resistance(character: 'ObjectDB', damage_type: 'DamageType') -> 'int' - Total damage-type-specific resistance from gift threads (#1580).`
-- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None, style_presentation_endorsement: 'StylePresentationEndorsement | None' = None, mission_deed_reward_line: 'MissionDeedRewardLine | None' = None, source_character_distinction: 'CharacterDistinction | None' = None, worship_rite_performance: 'WorshipRitePerformance | None' = None, kindling_situation: 'KindlingSituation | None' = None, settling_rite: 'SettlingRite | None' = None, reflection: 'Reflection | None' = None, from_mire: 'bool' = False, deed_label: 'str | None' = None, ledger_out: 'list[ResonanceGrant] | None' = None) -> 'CharacterResonance' - Atomically grant resonance AND write the ResonanceGrant ledger row.`
+- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None, style_presentation_endorsement: 'StylePresentationEndorsement | None' = None, mission_deed_reward_line: 'MissionDeedRewardLine | None' = None, source_character_distinction: 'CharacterDistinction | None' = None, worship_rite_performance: 'WorshipRitePerformance | None' = None, kindling_situation: 'KindlingSituation | None' = None, settling_rite: 'SettlingRite | None' = None, reflection: 'Reflection | None' = None, deed_label: 'str | None' = None, ledger_out: 'list[ResonanceGrant] | None' = None) -> 'CharacterResonance' - Atomically grant resonance AND write the ResonanceGrant ledger row.`
 - `has_pending_alterations(character: 'CharacterSheet') -> 'bool' - Check if this character has any unresolved Mage Scar that holds back advancement.`
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' - Return threads that any resonance the character holds can imbue (#5123).`
 - `involved_trait_ids(check_type: 'CheckType', extra_traits: 'Sequence[ExtraTraitTerm]') -> 'tuple[int, ...]' - Trait ids a roll involves: the check type's traits, then the terms', once each.`
@@ -7678,9 +7630,9 @@
   - battle_weather_effects <- battles.WeatherTypePropertyEffect
   - feeling_of_resonances <- magic.Resonance
   - resonances <- magic.Resonance
+  - gift_substances <- magic.GiftSubstance
   - techniques <- magic.Technique
   - ritual_sites <- magic.Ritual
-  - substances <- magic.Substance
   - threat_pool_entries <- combat.ThreatPoolEntry
   - granted_by_companion_abilities <- companions.CompanionAbility
   - companion_abilities <- companions.CompanionAbility
@@ -9108,10 +9060,12 @@
   - target_companion -> companions.Companion [FK] (nullable)
   - conditions -> relationships.RelationshipCondition [M2M]
 **Pointed to by:**
+  - burden_reflections <- magic.Reflection
   - sineating_pending_offers <- magic.SineatingPendingOffer
   - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
   - sineatings <- magic.Sineating
   - rescues <- magic.SoulTetherRescue
+  - mire_holdings <- magic.MireHolding
   - anchored_threads <- magic.Thread
   - keepsakes <- items.Keepsake
   - labels <- relationships.RelationshipLabel
@@ -9955,9 +9909,9 @@
   - style_presentation_endorsements <- magic.StylePresentationEndorsement
   - entry_flourish_records <- magic.EntryFlourishRecord
   - fall_redemption_records <- magic.FallRedemptionRecord
+  - impulses_shown <- magic.ImpulseShown
   - covenant_rite_instances <- covenants.CovenantRiteInstance
   - kindlings <- magic.Kindling
-  - primum_call_ups <- magic.PrimumCallUp
   - ritual_sessions <- magic.RitualSession
   - sineating_pending_offers <- magic.SineatingPendingOffer
   - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
@@ -11995,8 +11949,8 @@
   - arxii_sanctumhomecominggainaward <- magic.SanctumHomecomingGainAward
   - arxii_sanctumpurgingretentionaward <- magic.SanctumPurgingRetentionAward
   - arxii_sanctumdissolutionrecoveryaward <- magic.SanctumDissolutionRecoveryAward
+  - arxii_sineatingoutcomeaward <- magic.SineatingOutcomeAward
   - arxii_animaritualbudgetaward <- magic.AnimaRitualBudgetAward
-  - arxii_harvestoutcome <- magic.HarvestOutcome
   - arxii_trainingoutcomeaward <- magic.TrainingOutcomeAward
   - arxii_strainburnreach <- combat.StrainBurnReach
   - encounter_outcome_mappings <- combat.EncounterOutcomeMapping
