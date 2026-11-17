@@ -349,6 +349,15 @@ class GainSource(models.TextChoices):
     # reflection). Embraced deeds are not deeds: they re-count one already done.
     KINDLED_DEED = "KINDLED_DEED", "Kindled deed"
     EMBRACED_DEED = "EMBRACED_DEED", "Embraced deed"
+    # #5177: settling the Mire. The Sineater's reward for purifying (no typed source FK); the
+    # Sinner's resonance arriving in a Sineater's own aura when they succumb (typed sources:
+    # the rite and the burden reflection, like EMBRACED_DEED; it IS a deed, so it can be
+    # reflected on and atoned for); the Sinner's payout when a Sineater succumbs; and the
+    # Sinners' payout when a Sineater falls to the Abyss (the last two: no typed source FK).
+    MIRE_PURIFIED = "MIRE_PURIFIED", "Mire purified"
+    SUCCUMBED = "SUCCUMBED", "Succumbed to the Mire"
+    SUCCUMB_BONUS = "SUCCUMB_BONUS", "Sineater succumbed bonus"
+    SINEATER_FALL = "SINEATER_FALL", "Sineater fell"
 
 
 # ADR-0041 total classification of GainSource: which sources are eligible for the
@@ -399,6 +408,13 @@ NON_ACCELERATED_GAIN_SOURCES: frozenset[str] = frozenset(
         # embraced deed re-counts a deed already counted; neither takes the distinction rate.
         GainSource.KINDLED_DEED,
         GainSource.EMBRACED_DEED,
+        # #5177: Sineating and settling the Mire pay off rolls and authored percentages of
+        # what was moved; none of it is perceived or witnessed, so none takes the distinction
+        # rate (SINEATING above is the precedent). Succumbing re-counts Mire already carried.
+        GainSource.MIRE_PURIFIED,
+        GainSource.SUCCUMBED,
+        GainSource.SUCCUMB_BONUS,
+        GainSource.SINEATER_FALL,
     }
 )
 
@@ -421,6 +437,8 @@ DEED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.COMBO_DISCOVERY,
         GainSource.WORSHIP_RITE,
         GainSource.KINDLED_DEED,
+        # #5177: the Sineater chose to succumb, and the player can reflect on it and atone.
+        GainSource.SUCCUMBED,
     }
 )
 
@@ -440,6 +458,10 @@ NON_DEED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.CORRUPTION_CLEANSING,
         GainSource.CHARACTER_CREATION,
         GainSource.EMBRACED_DEED,
+        # #5177: payouts from a Sineater's settling are not the receiver's own deed.
+        GainSource.MIRE_PURIFIED,
+        GainSource.SUCCUMB_BONUS,
+        GainSource.SINEATER_FALL,
     }
 )
 
@@ -627,13 +649,32 @@ class ReflectionChoice(models.TextChoices):
 
     EMBRACE = "EMBRACE", "Embrace"
     DISOWN = "DISOWN", "Disown"
+    # #5177: what a Sineater does with the Mire they carry for one Sinner. These fit only a
+    # burden; Embrace and Disown fit only a deed or the unsettling resonance.
+    ABSOLVE = "ABSOLVE", "Absolve"
+    CONDEMN = "CONDEMN", "Condemn"
+    SUCCUMB = "SUCCUMB", "Succumb"
+
+
+# The choices a burden takes, and the two a deed or the unsettling resonance takes (#5177).
+BURDEN_REFLECTION_CHOICES: tuple[str, ...] = (
+    ReflectionChoice.ABSOLVE,
+    ReflectionChoice.CONDEMN,
+    ReflectionChoice.SUCCUMB,
+)
+DEED_REFLECTION_CHOICES: tuple[str, ...] = (
+    ReflectionChoice.EMBRACE,
+    ReflectionChoice.DISOWN,
+)
 
 
 class ReflectionTargetKind(models.TextChoices):
-    """What a "Reflecting on" row can name (#5124): one deed, or the unsettling resonance."""
+    """What a "Reflecting on" row can name (#5124, #5177): one deed, the unsettling resonance,
+    or the Mire a Sineater carries for one Sinner (a burden)."""
 
     DEED = "deed", "Deed"
     RESONANCE = "resonance", "Resonance"
+    BURDEN = "burden", "Burden"
 
 
 class KindlingSource(models.TextChoices):

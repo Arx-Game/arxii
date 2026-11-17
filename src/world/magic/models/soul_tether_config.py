@@ -28,6 +28,18 @@ class SoulTetherConfig(NaturalKeyMixin, SharedMemoryModel):
     ``SOUL_TETHER_SCENE_CAP`` and ``HOLLOW_MAX`` lanes' ``ModifierLevelBaseline`` rows, one per
     rung (10 thread levels), seeded at 2 and 10 per rung (#5093).
 
+    Settling the Mire (#5177), all percents or integers:
+    - ``purify_reward_percent``: of the corruption an absolve or condemn clears, what the
+      Sineater earns (default 50).
+    - ``absolve_affection`` / ``condemn_conflict`` / ``succumb_affection`` /
+      ``succumb_conflict``: how far the tie moves at a full share (default 5 each).
+    - ``succumb_bonus_percent`` / ``jackpot_percent``: what the Sinner earns when the Sineater
+      succumbs, of the amount succumbed and of what the Sineater purified since the last
+      payout (default 200 and 25).
+    - ``fall_payout_percent`` / ``fall_breaker_bonus_percent``: what each Sinner earns when
+      the Sineater falls, of what was succumbed to them, and the extra for the most recent
+      (default 300 and 50).
+
     Sineater resistance:
     - ``resistance_full_at``: lifetime Sineating (``lifetime_helped``) at which a Sineater's
       resistance to corruption reaches its 90% cap (default 1000).
@@ -85,6 +97,71 @@ class SoulTetherConfig(NaturalKeyMixin, SharedMemoryModel):
     )
     per_scene_cap_hard_max = models.PositiveSmallIntegerField(default=20)
     per_scene_cap_base = models.PositiveSmallIntegerField(default=5)
+
+    # --- Settling the Mire (#5177) ---
+    purify_reward_percent = models.PositiveIntegerField(
+        default=50,
+        help_text=(
+            "When a Sineater absolves or condemns the Mire they carry, the percent of the "
+            "corruption cleared that they earn as resonance in their own thread's resonance."
+        ),
+    )
+    absolve_affection = models.PositiveIntegerField(
+        default=5,
+        help_text=(
+            "Affection the Sineater gains toward the Sinner when they absolve, at a full "
+            "share of the settling rite."
+        ),
+    )
+    condemn_conflict = models.PositiveIntegerField(
+        default=5,
+        help_text=(
+            "Conflict the Sineater gains toward the Sinner when they condemn, at a full "
+            "share of the settling rite."
+        ),
+    )
+    succumb_affection = models.PositiveIntegerField(
+        default=5,
+        help_text=(
+            "Affection the Sineater gains toward the Sinner when they succumb, at a full "
+            "share of the settling rite."
+        ),
+    )
+    succumb_conflict = models.PositiveIntegerField(
+        default=5,
+        help_text=(
+            "Conflict the Sineater gains toward the Sinner when they succumb, at a full "
+            "share of the settling rite."
+        ),
+    )
+    succumb_bonus_percent = models.PositiveIntegerField(
+        default=200,
+        help_text=(
+            "When a Sineater succumbs, the percent of the amount succumbed that the Sinner "
+            "earns as resonance in their own thread's resonance (200 pays twice the amount)."
+        ),
+    )
+    jackpot_percent = models.PositiveIntegerField(
+        default=25,
+        help_text=(
+            "When a Sineater succumbs, the percent of everything they purified for this "
+            "Sinner since the last payout that the Sinner also earns."
+        ),
+    )
+    fall_payout_percent = models.PositiveIntegerField(
+        default=300,
+        help_text=(
+            "When a Sineater falls to the Abyss, the percent of what they succumbed to each "
+            "Sinner since their last fall that this Sinner earns."
+        ),
+    )
+    fall_breaker_bonus_percent = models.PositiveIntegerField(
+        default=50,
+        help_text=(
+            "Extra percent on top of the fall's payout for the Sinner of the most recent "
+            "succumbing, who tipped the Sineater over (50 pays half as much again)."
+        ),
+    )
 
     # --- Sineater resistance ---
     resistance_full_at = models.PositiveIntegerField(

@@ -179,12 +179,16 @@ class ResonanceGrant(SharedMemoryModel):
         "arxii.SettlingRite",
         null=True,
         blank=True,
-        # RESTRICT, never SET_NULL: res_grant_embraced_deed_shape requires this FK on every
-        # EMBRACED_DEED grant. RESTRICT (not PROTECT) so deleting a character, whose grants
-        # and rites go together, still works.
+        # RESTRICT, never SET_NULL: res_grant_embraced_deed_shape and
+        # res_grant_succumbed_shape require this FK on every EMBRACED_DEED / SUCCUMBED grant.
+        # RESTRICT (not PROTECT) so deleting a character, whose grants and rites go together,
+        # still works.
         on_delete=models.RESTRICT,
         related_name="resonance_grants",
-        help_text="Set when source=EMBRACED_DEED (#5124); the rite that grew the deed.",
+        help_text=(
+            "Set when source is EMBRACED_DEED (#5124) or SUCCUMBED (#5177); the rite that "
+            "applied the reflection."
+        ),
     )
     source_reflection = models.ForeignKey(
         "arxii.Reflection",
@@ -192,7 +196,10 @@ class ResonanceGrant(SharedMemoryModel):
         blank=True,
         on_delete=models.RESTRICT,
         related_name="resonance_grants",
-        help_text="Set when source=EMBRACED_DEED (#5124); the reflection the rite applied.",
+        help_text=(
+            "Set when source is EMBRACED_DEED (#5124) or SUCCUMBED (#5177); the reflection "
+            "the rite applied."
+        ),
     )
 
     class Meta:
@@ -772,6 +779,31 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_kindling_situation__isnull=True)
                 )
                 | ~Q(source="EMBRACED_DEED"),
+            ),
+            # SUCCUMBED (#5177): the rite and the burden reflection it applied are the source,
+            # exactly as for EMBRACED_DEED.
+            models.CheckConstraint(
+                name="res_grant_succumbed_shape",
+                check=(
+                    Q(source="SUCCUMBED")
+                    & Q(source_settling_rite__isnull=False)
+                    & Q(source_reflection__isnull=False)
+                    & Q(source_room_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
+                    & Q(source_sanctum_details__isnull=True)
+                    & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
+                    & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
+                    & Q(source_kindling_situation__isnull=True)
+                )
+                | ~Q(source="SUCCUMBED"),
             ),
         ]
 
