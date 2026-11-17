@@ -6398,8 +6398,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this title.
+          type: string
         required: true
       tags:
       - character-creation
@@ -24090,6 +24089,7 @@ paths:
           - ENTRY_FLOURISH
           - FALL_CONVERSION
           - KINDLED_DEED
+          - MIRE_PURIFIED
           - MISSION_REPORT
           - MISSION_REWARD
           - OUTFIT_TRICKLE
@@ -24100,10 +24100,13 @@ paths:
           - SANCTUM_OWNER_BONUS
           - SANCTUM_WEAVING
           - SCENE_ENTRY
+          - SINEATER_FALL
           - SINEATING
           - STAFF_GRANT
           - STAKE_REWARD
           - STYLE_PRESENTATION
+          - SUCCUMBED
+          - SUCCUMB_BONUS
           - WORSHIP_RITE
         description: |-
           Discriminator. Identifies which source_* FK is populated.
@@ -24134,6 +24137,10 @@ paths:
           * `CHARACTER_CREATION` - Character creation
           * `KINDLED_DEED` - Kindled deed
           * `EMBRACED_DEED` - Embraced deed
+          * `MIRE_PURIFIED` - Mire purified
+          * `SUCCUMBED` - Succumbed to the Mire
+          * `SUCCUMB_BONUS` - Sineater succumbed bonus
+          * `SINEATER_FALL` - Sineater fell
       tags:
       - magic
       security:
@@ -52239,10 +52246,6 @@ components:
 
             The one embracing it ("You become more ...", ``accept_aura_change``) names.
           readOnly: true
-        mire_share_words:
-          type: string
-          description: The Mire's share of everything they have gained, in words.
-          readOnly: true
         glimpse_state:
           allOf:
           - $ref: '#/components/schemas/GlimpseStateEnum'
@@ -52263,7 +52266,6 @@ components:
       - dominant_affinity_display
       - glimpse_state
       - id
-      - mire_share_words
       - shares
       - unsettled
       - unsettled_affinity_name
@@ -68663,6 +68665,42 @@ components:
       - narrative_text
       - resonance_pool_cost
       - sort_order
+    MireForSinner:
+      type: object
+      description: What the viewing Sineater carries for one Sinner (#5177). Never
+        shown to the Sinner.
+      properties:
+        sinner_sheet_id:
+          type: integer
+        sinner_name:
+          type: string
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/MireRow'
+        total:
+          type: integer
+      required:
+      - rows
+      - sinner_name
+      - sinner_sheet_id
+      - total
+    MireRow:
+      type: object
+      description: One resonance a Sineater carries corruption in for a Sinner.
+      properties:
+        resonance_name:
+          type: string
+        amount:
+          type: integer
+        label:
+          type: string
+          description: The name shown for the Sineater's corruption in this resonance
+            at its stage.
+      required:
+      - amount
+      - label
+      - resonance_name
     MissionAbandonResult:
       type: object
       description: 'Result of the #1023 abandon endpoint — the run''s id and new status.'
@@ -88371,10 +88409,12 @@ components:
       enum:
       - deed
       - resonance
+      - burden
       type: string
       description: |-
         * `deed` - Deed
         * `resonance` - Resonance
+        * `burden` - Burden
     RegardRequest:
       type: object
       description: '``{target_type, target_id, value, reason}``: the NPC''s opinion
@@ -89266,6 +89306,10 @@ components:
             * `CHARACTER_CREATION` - Character creation
             * `KINDLED_DEED` - Kindled deed
             * `EMBRACED_DEED` - Embraced deed
+            * `MIRE_PURIFIED` - Mire purified
+            * `SUCCUMBED` - Succumbed to the Mire
+            * `SUCCUMB_BONUS` - Sineater succumbed bonus
+            * `SINEATER_FALL` - Sineater fell
         granted_at:
           type: string
           format: date-time
@@ -89325,6 +89369,10 @@ components:
       - CHARACTER_CREATION
       - KINDLED_DEED
       - EMBRACED_DEED
+      - MIRE_PURIFIED
+      - SUCCUMBED
+      - SUCCUMB_BONUS
+      - SINEATER_FALL
       type: string
       description: |-
         * `POSE_ENDORSEMENT` - Pose endorsement
@@ -89353,6 +89401,10 @@ components:
         * `CHARACTER_CREATION` - Character creation
         * `KINDLED_DEED` - Kindled deed
         * `EMBRACED_DEED` - Embraced deed
+        * `MIRE_PURIFIED` - Mire purified
+        * `SUCCUMBED` - Succumbed to the Mire
+        * `SUCCUMB_BONUS` - Sineater succumbed bonus
+        * `SINEATER_FALL` - Sineater fell
     ResonanceLine:
       type: object
       properties:
@@ -92815,10 +92867,16 @@ components:
           description: Return the Sineater's current Tether Strain severity (or 0
             if none).
           readOnly: true
+        mire:
+          type: array
+          items:
+            $ref: '#/components/schemas/MireForSinner'
+          readOnly: true
       required:
       - hollow_current
       - hollow_max
       - is_soul_tether
+      - mire
       - relationship_id
       - sineater_lifetime_helped
       - sineater_sheet_id

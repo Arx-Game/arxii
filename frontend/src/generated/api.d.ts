@@ -31303,8 +31303,6 @@ export interface components {
        *     The one embracing it ("You become more ...", ``accept_aura_change``) names.
        */
       readonly unsettled_affinity_name: string;
-      /** @description The Mire's share of everything they have gained, in words. */
-      readonly mire_share_words: string;
       /**
        * @description Deferral/progress state of the Glimpse (#2427). Cache of prose+tag truth — maintained by world.magic.services.glimpse, never written directly.
        *
@@ -38881,6 +38879,20 @@ export interface components {
       readonly narrative_text: string;
       readonly is_active: boolean;
       readonly sort_order: number;
+    };
+    /** @description What the viewing Sineater carries for one Sinner (#5177). Never shown to the Sinner. */
+    MireForSinner: {
+      sinner_sheet_id: number;
+      sinner_name: string;
+      rows: components['schemas']['MireRow'][];
+      total: number;
+    };
+    /** @description One resonance a Sineater carries corruption in for a Sinner. */
+    MireRow: {
+      resonance_name: string;
+      amount: number;
+      /** @description The name shown for the Sineater's corruption in this resonance at its stage. */
+      label: string;
     };
     /** @description Result of the #1023 abandon endpoint — the run's id and new status. */
     MissionAbandonResult: {
@@ -49757,9 +49769,10 @@ export interface components {
     /**
      * @description * `deed` - Deed
      *     * `resonance` - Resonance
+     *     * `burden` - Burden
      * @enum {string}
      */
-    ReflectionOptionKindEnum: 'deed' | 'resonance';
+    ReflectionOptionKindEnum: 'deed' | 'resonance' | 'burden';
     /** @description ``{target_type, target_id, value, reason}``: the NPC's opinion of one target. */
     RegardRequest: {
       target_type: components['schemas']['TargetTypeFedEnum'];
@@ -50143,6 +50156,10 @@ export interface components {
        *     * `CHARACTER_CREATION` - Character creation
        *     * `KINDLED_DEED` - Kindled deed
        *     * `EMBRACED_DEED` - Embraced deed
+       *     * `MIRE_PURIFIED` - Mire purified
+       *     * `SUCCUMBED` - Succumbed to the Mire
+       *     * `SUCCUMB_BONUS` - Sineater succumbed bonus
+       *     * `SINEATER_FALL` - Sineater fell
        */
       readonly source: components['schemas']['ResonanceGrantSourceEnum'];
       /** Format: date-time */
@@ -50179,6 +50196,10 @@ export interface components {
      *     * `CHARACTER_CREATION` - Character creation
      *     * `KINDLED_DEED` - Kindled deed
      *     * `EMBRACED_DEED` - Embraced deed
+     *     * `MIRE_PURIFIED` - Mire purified
+     *     * `SUCCUMBED` - Succumbed to the Mire
+     *     * `SUCCUMB_BONUS` - Sineater succumbed bonus
+     *     * `SINEATER_FALL` - Sineater fell
      * @enum {string}
      */
     ResonanceGrantSourceEnum:
@@ -50207,7 +50228,11 @@ export interface components {
       | 'SINEATING'
       | 'CHARACTER_CREATION'
       | 'KINDLED_DEED'
-      | 'EMBRACED_DEED';
+      | 'EMBRACED_DEED'
+      | 'MIRE_PURIFIED'
+      | 'SUCCUMBED'
+      | 'SUCCUMB_BONUS'
+      | 'SINEATER_FALL';
     ResonanceLine: {
       resonance: number;
       tier: components['schemas']['ResonanceLineTierEnum'];
@@ -51818,6 +51843,7 @@ export interface components {
       readonly sinner_corruption_stage: number;
       /** @description Return the Sineater's current Tether Strain severity (or 0 if none). */
       readonly sineater_strain_stage: number;
+      readonly mire: components['schemas']['MireForSinner'][];
     };
     /**
      * @description Write serializer for the rescue ritual (Spec B §9).
@@ -61998,8 +62024,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this title. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -77016,6 +77041,10 @@ export interface operations {
          *     * `CHARACTER_CREATION` - Character creation
          *     * `KINDLED_DEED` - Kindled deed
          *     * `EMBRACED_DEED` - Embraced deed
+         *     * `MIRE_PURIFIED` - Mire purified
+         *     * `SUCCUMBED` - Succumbed to the Mire
+         *     * `SUCCUMB_BONUS` - Sineater succumbed bonus
+         *     * `SINEATER_FALL` - Sineater fell
          */
         source?:
           | 'CHARACTER_CREATION'
@@ -77029,6 +77058,7 @@ export interface operations {
           | 'ENTRY_FLOURISH'
           | 'FALL_CONVERSION'
           | 'KINDLED_DEED'
+          | 'MIRE_PURIFIED'
           | 'MISSION_REPORT'
           | 'MISSION_REWARD'
           | 'OUTFIT_TRICKLE'
@@ -77039,10 +77069,13 @@ export interface operations {
           | 'SANCTUM_OWNER_BONUS'
           | 'SANCTUM_WEAVING'
           | 'SCENE_ENTRY'
+          | 'SINEATER_FALL'
           | 'SINEATING'
           | 'STAFF_GRANT'
           | 'STAKE_REWARD'
           | 'STYLE_PRESENTATION'
+          | 'SUCCUMBED'
+          | 'SUCCUMB_BONUS'
           | 'WORSHIP_RITE';
       };
       header?: never;
