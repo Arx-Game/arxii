@@ -93,6 +93,22 @@ class SineatingLines:
 
 
 @dataclass(frozen=True, slots=True)
+class SineatingOption:
+    """One thing a character can attach to a pose now: a plea to make or a plea to answer.
+
+    ``role`` is the ``SineatingPoseRole`` the writer would play. ``max_units`` is the most
+    units the writer can name: the scene's cap for a plea, the plea's offer for the ritual.
+    ``resonance_name`` is the tether's resonance.
+    """
+
+    role: str
+    partner_sheet_id: int
+    partner_name: str
+    max_units: int
+    resonance_name: str
+
+
+@dataclass(frozen=True, slots=True)
 class PendingSineating:
     """The Sineating a pose asked for, checked and not yet carried out (#5177).
 

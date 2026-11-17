@@ -579,6 +579,11 @@ from actions.definitions.signature import (
     SignatureListAction,
     SignatureSetAction,
 )
+from actions.definitions.sineating import (
+    DeclineSineatingAction,
+    EntreatSineatingAction,
+    PerformSineatingAction,
+)
 from actions.definitions.situations import PlaceChallengeAction, SetSituationAction
 from actions.definitions.social import (
     blackmail,
@@ -884,6 +889,9 @@ _ALL_ACTIONS: list[Action] = [
     PlaceChallengeAction(),
     PerformRitualAction(),
     PerformSettlingRiteAction(),
+    EntreatSineatingAction(),
+    PerformSineatingAction(),
+    DeclineSineatingAction(),
     # #3292 - tavern games: coin-stakes dice gambling open/join/roll/leave.
     OpenGameAction(),
     JoinGameAction(),

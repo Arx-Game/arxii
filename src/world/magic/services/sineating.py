@@ -21,7 +21,13 @@ from django.db.models import QuerySet
 
 from world.character_sheets.models import CharacterSheet
 from world.checks.services import difficulty_points, perform_check_with_modifiers
-from world.magic.constants import GainSource, MagicActivity, SineatingPoseRole, TargetKind
+from world.magic.constants import (
+    GainSource,
+    MagicActivity,
+    SineatingPoseRole,
+    SoulTetherRole,
+    TargetKind,
+)
 from world.magic.exceptions import SineatingValidationError, SoulTetherError
 from world.magic.models.affinity import Resonance
 from world.magic.models.soul_tether import Sineating, SineatingPendingOffer
@@ -46,6 +52,7 @@ from world.magic.types.soul_tether import (
     PendingSineating,
     SineatingLines,
     SineatingOffer,
+    SineatingOption,
     SineatingResult,
 )
 from world.relationships.models import CharacterRelationship
@@ -62,7 +69,7 @@ _MSG_CARRY_TOO_MUCH = "You carry too much of the Mire to take on more. Settle so
 _MSG_NO_TETHER_THREAD = "The Soul Tether is missing its resonance thread."
 _MSG_PARTNER_NOT_FOUND = "That character cannot be found."
 _MSG_POSE_FIELDS_INCOMPLETE = "Sineating needs a role, a partner and a number of units."
-_MSG_BOTH_REFLECTION_AND_SINEATING = "A pose can carry a reflection or a Sineating, not both."
+BOTH_REFLECTION_AND_SINEATING = "A pose can carry a reflection or a Sineating, not both."
 
 _NO_SINEATER_RESONANCE_LINE = (
     "You hold no resonance for your side of the bond to channel, so you earn none."
@@ -550,6 +557,54 @@ def record_pending_sineating(pending: PendingSineating) -> tuple[str, ...]:
     for line in lines.sinner:
         pending.sinner_sheet.character.msg(line)
     return lines.sineater
+
+
+def sineating_options_for(sheet: CharacterSheet) -> list[SineatingOption]:
+    """What ``sheet`` can attach to a pose right now (#5177), for the composer's picker.
+
+    A plea to make to each Sineater bonded to them who is here, and a plea to answer for each
+    one waiting for them. Each is listed only when the pose could be posted: the pair share
+    the active scene, the Sineater has not fallen, and they have not performed it there yet.
+    """
+    options: list[SineatingOption] = []
+    tethers = CharacterRelationship.objects.filter(
+        source=sheet, is_soul_tether=True, soul_tether_role=SoulTetherRole.SINNER
+    ).select_related("target")
+    for relationship in tethers:
+        try:
+            _, thread, _, cap = _checked_plea(sheet, relationship.target, 1_000_000)
+        except SoulTetherError:
+            continue
+        options.append(
+            SineatingOption(
+                SineatingPoseRole.ENTREAT,
+                relationship.target.pk,
+                _name(relationship.target),
+                cap,
+                thread.resonance.name,
+            )
+        )
+    pleas = SineatingPendingOffer.objects.filter(sineater_sheet=sheet).select_related(
+        "sinner_sheet", "resonance", "scene"
+    )
+    for plea in pleas:
+        # A plea gone stale is skipped here, not cleaned up: a read writes nothing.
+        if not _in_scene_together(plea.sinner_sheet, sheet, plea.scene):
+            continue
+        try:
+            _checked_performance(plea.sinner_sheet, sheet, plea.units_offered)
+        except SoulTetherError:
+            continue
+        options.append(
+            SineatingOption(
+                SineatingPoseRole.PERFORM,
+                plea.sinner_sheet.pk,
+                _name(plea.sinner_sheet),
+                plea.units_offered,
+                plea.resonance.name,
+            )
+        )
+    return options
 
 
 def pose_failure_line(exc: SoulTetherError) -> str:

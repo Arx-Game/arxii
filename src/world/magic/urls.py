@@ -48,8 +48,6 @@ from world.magic.views import (
     SceneEntryEndorsementViewSet,
     SettlingRiteView,
     SineatingPendingOfferViewSet,
-    SineatingRequestView,
-    SineatingRespondView,
     SoulTetherAcceptView,
     SoulTetherDetailView,
     SoulTetherDissolveView,
@@ -182,6 +180,11 @@ from world.magic.views_reflection import ReflectableViewSet  # noqa: E402
 
 router.register("reflectables", ReflectableViewSet, basename="reflectable")
 
+# #5177 - the Sineating row: the pleas a writer can make or answer with a pose
+from world.magic.views_sineating import SineatingOptionViewSet  # noqa: E402
+
+router.register("sineating-options", SineatingOptionViewSet, basename="sineating-option")
+
 
 urlpatterns = [
     # Literal paths MUST come before *router.urls so that "rituals/perform/" is
@@ -249,16 +252,6 @@ urlpatterns = [
         "soul-tether/dissolve/",
         SoulTetherDissolveView.as_view(),
         name="soul-tether-dissolve",
-    ),
-    path(
-        "soul-tether/sineating/request/",
-        SineatingRequestView.as_view(),
-        name="soul-tether-sineating-request",
-    ),
-    path(
-        "soul-tether/sineating/respond/",
-        SineatingRespondView.as_view(),
-        name="soul-tether-sineating-respond",
     ),
     path(
         "soul-tether/rescue/",

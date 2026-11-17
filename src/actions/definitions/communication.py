@@ -10,6 +10,7 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from actions.base import Action
 from actions.constants import ActionCategory, TargetKind
+from actions.definitions.sineating import run_pose_sineating
 from actions.prerequisites import (
     GhostWindowPrerequisite,
     MinimumGMLevelPrerequisite,
@@ -46,6 +47,7 @@ if TYPE_CHECKING:
     from flows.object_states.base_state import BaseState
     from world.gm.models import GMPrompt
     from world.magic.types.reflection import PendingReflection
+    from world.magic.types.soul_tether import PendingSineating
     from world.scenes.models import Interaction, Persona, Scene
     from world.scenes.place_models import Place
     from world.species.language_constants import Fluency
@@ -706,6 +708,12 @@ class OOCSayAction(Action):
 class PoseAction(Action):
     """Pose/emote to the room.
 
+    An optional Sineating (#5177) rides with the pose instead: ``sineating_role`` (``entreat``
+    or ``perform``), ``sineating_partner_id`` (the other character's sheet id) and
+    ``sineating_units``. It is checked before the pose posts and carried out once it has; the
+    two parties are told privately and the room sees only the pose. A pose carries a
+    reflection or a Sineating, not both.
+
     An optional reflection (#5124) rides with the pose: ``reflect_choice`` (``EMBRACE`` or
     ``DISOWN``) with one of ``reflect_grant_id`` (a kindled deed) or ``reflect_resonance_id``
     (the resonance unsettling the poser). It is checked before anything is posted, recorded
@@ -739,18 +747,18 @@ class PoseAction(Action):
             return place_error
         if not text:
             return ActionResult(success=False, message="Pose what?")
-        pending, reflection_error = _pending_pose_reflection(actor, kwargs)
-        if reflection_error is not None:
-            return reflection_error
+        pending, sineating, attachment_error = _pending_pose_attachment(actor, kwargs)
+        if attachment_error is not None:
+            return attachment_error
         sdm = context.scene_data if context else SceneDataManager()
         caller_state = sdm.initialize_state_for_object(actor)
         target_personas = _characters_to_active_personas(targets) if targets else None
 
         told: list[tuple[str, bool]] = []
+        sineated: list[tuple[str, bool]] = []
 
         def _reflect(interaction: Interaction | None) -> None:
-            if pending is not None:
-                told.append(_record_pose_reflection(actor, pending, interaction))
+            _carry_attachments(actor, pending, sineating, interaction, told, sineated)
 
         client_request_id = kwargs.get("client_request_id")
         if client_request_id is not None:
@@ -779,15 +787,21 @@ class PoseAction(Action):
             _reflect(interaction)
         if targets:
             _flag_blocked_contact_for_targets(actor, targets, scene=_active_scene_for(actor))
-        return _pose_result(told)
+        return _pose_result(told, sineated)
 
 
-def _pose_result(told: list[tuple[str, bool]]) -> ActionResult:
-    """The pose's result: bare when it carried no reflection, else the line the poser reads.
+def _pose_result(
+    told: list[tuple[str, bool]], sineated: list[tuple[str, bool]] | None = None
+) -> ActionResult:
+    """The pose's result: bare when it carried no reflection or Sineating, else the line the
+    poser reads.
 
-    The pose posted either way; ``reflection_recorded`` tells a client whether to show the
-    line as a success or as the error it is.
+    The pose posted either way; ``reflection_recorded`` (or ``sineating_recorded``) tells a
+    client whether to show the line as a success or as the error it is.
     """
+    if sineated:
+        line, happened = sineated[0]
+        return ActionResult(success=True, message=line, data={"sineating_recorded": happened})
     if not told:
         return ActionResult(success=True)
     line, recorded = told[0]
@@ -830,6 +844,65 @@ def _pending_pose_reflection(
         return pending_reflection_from(actor.character_sheet, kwargs), None
     except ReflectionError as exc:
         return None, ActionResult(success=False, message=exc.user_message)
+
+
+def _carry_attachments(  # noqa: PLR0913 - the actor, both attachments, the row, both result lists
+    actor: ObjectDB,
+    reflection: PendingReflection | None,
+    sineating: PendingSineating | None,
+    interaction: Interaction | None,
+    told: list[tuple[str, bool]],
+    sineated: list[tuple[str, bool]],
+) -> None:
+    """Carry out whatever a posted pose carried, collecting the line the poser reads."""
+    if reflection is not None:
+        told.append(_record_pose_reflection(actor, reflection, interaction))
+    if sineating is not None:
+        sineated.append(run_pose_sineating(actor, sineating))
+
+
+def _pending_pose_attachment(
+    actor: ObjectDB, kwargs: dict[str, Any]
+) -> tuple[PendingReflection | None, PendingSineating | None, ActionResult | None]:
+    """The checked reflection or Sineating a pose carries, or the refusal that stops the pose."""
+    reflection, refusal = _pending_pose_reflection(actor, kwargs)
+    if refusal is not None:
+        return None, None, refusal
+    sineating, refusal = _pending_pose_sineating(actor, kwargs, reflection)
+    if refusal is not None:
+        return None, None, refusal
+    return reflection, sineating, None
+
+
+def _pending_pose_sineating(
+    actor: ObjectDB, kwargs: dict[str, Any], reflection: PendingReflection | None
+) -> tuple[PendingSineating | None, ActionResult | None]:
+    """The checked Sineating a pose asked for, or the refusal that stops the pose (#5177).
+
+    Checked before anything is posted, as a reflection is: a plea or a ritual that cannot
+    happen costs the writer nothing. A pose carries a reflection or a Sineating, not both.
+    A replayed ``client_request_id`` asks for no check; what the first send did stands.
+    """
+    from world.magic.exceptions import SoulTetherError  # noqa: PLC0415
+    from world.magic.services.sineating import (  # noqa: PLC0415
+        BOTH_REFLECTION_AND_SINEATING,
+        pending_sineating_from,
+    )
+    from world.scenes.interaction_services import pose_already_submitted  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    request_id = kwargs.get("client_request_id")
+    if request_id is not None and actor.character_sheet is not None:
+        persona = active_persona_for_sheet(actor.character_sheet)
+        if persona is not None and pose_already_submitted(persona, request_id):
+            return None, None
+    try:
+        pending = pending_sineating_from(actor.character_sheet, kwargs)
+    except SoulTetherError as exc:
+        return None, ActionResult(success=False, message=exc.user_message)
+    if pending is not None and reflection is not None:
+        return None, ActionResult(success=False, message=BOTH_REFLECTION_AND_SINEATING)
+    return pending, None
 
 
 def _record_pose_reflection(

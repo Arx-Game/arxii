@@ -15,14 +15,19 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
+from actions.definitions.sineating import run_pose_sineating
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location
-from world.magic.exceptions import ReflectionError
+from world.magic.exceptions import ReflectionError, SoulTetherError
 from world.magic.models import CharacterResonance, PoseEndorsement
 from world.magic.services.reflection import (
     pending_reflection_from,
     record_pending_reflection,
     recorded_line,
+)
+from world.magic.services.sineating import (
+    BOTH_REFLECTION_AND_SINEATING,
+    pending_sineating_from,
 )
 from world.relationships.reads import resolve_viewer_sheet
 from world.scenes.block_services import flag_blocked_contact_attempt, hidden_persona_ids_for_viewer
@@ -82,6 +87,7 @@ from world.scenes.thread_services import InteractionThreadError, ReplyTarget
 
 if TYPE_CHECKING:
     from world.magic.types.reflection import PendingReflection
+    from world.magic.types.soul_tether import PendingSineating
 
 
 def _duplicate_entrance(pose_kind: str, scene: Scene | None, persona: Persona) -> bool:
@@ -234,11 +240,14 @@ def _record_submitted_pose(  # noqa: PLR0913
     on_created: Callable[[Interaction], None] | None,
     serializer_context: dict[str, object],
     reflection: PendingReflection | None = None,
+    sineating: PendingSineating | None = None,
 ) -> Response:
     """Record, broadcast, and serialize a submitted pose.
 
     ``reflection`` (#5124) is recorded against the new row on first acceptance only. It is
     never broadcast: the room gets the pose text and the writer's response carries the line.
+    ``sineating`` (#5177) is carried out once the pose is down, on first acceptance only; the
+    response carries ``sineating_line`` and ``sineating_recorded``.
     """
     target_pks = frozenset(p.pk for p in target_personas) if target_personas else frozenset()
     try:
@@ -306,6 +315,13 @@ def _record_submitted_pose(  # noqa: PLR0913
         if reflection_line
         else {}
     )
+    if sineating is not None and not result.replayed:
+        sineating_line, sineating_recorded = run_pose_sineating(character, sineating)
+        extra = {
+            **extra,
+            "sineating_line": sineating_line,
+            "sineating_recorded": sineating_recorded,
+        }
     if interaction is None:
         return Response(
             {"ephemeral": True, "replayed": result.replayed, **extra}, status=response_status
@@ -619,6 +635,17 @@ class InteractionViewSet(
                 reflection = pending_reflection_from(persona.character_sheet, data)
             except ReflectionError as exc:
                 return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        # A Sineating (#5177) is checked the same way: nothing posts if it cannot happen.
+        sineating = None
+        if not pose_already_submitted(persona, data["client_request_id"]):
+            try:
+                sineating = pending_sineating_from(persona.character_sheet, data)
+            except SoulTetherError as exc:
+                return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        if sineating is not None and reflection is not None:
+            return Response(
+                {"detail": BOTH_REFLECTION_AND_SINEATING}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         target_names: list[str] = data.get("target_names") or []
         target_characters = (
@@ -675,6 +702,7 @@ class InteractionViewSet(
             on_created=_on_created,
             serializer_context=self.get_serializer_context(),
             reflection=reflection,
+            sineating=sineating,
         )
 
 

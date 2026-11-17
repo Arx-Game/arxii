@@ -170,10 +170,6 @@ from world.magic.serializers import (
     SettlingRiteReadingSerializer,
     SettlingRiteReadQuerySerializer,
     SettlingRiteResultSerializer,
-    SineatingOfferSerializer,
-    SineatingRequestSerializer,
-    SineatingRespondSerializer,
-    SineatingResultSerializer,
     SoulTetherDetailSerializer,
     SoulTetherRescueSerializer,
     StageAdvanceBonusResultSerializer,
@@ -2018,66 +2014,6 @@ class SoulTetherDetailView(APIView):
         rel = get_object_or_404(CharacterRelationship, pk=relationship_id, is_soul_tether=True)
         serializer = SoulTetherDetailSerializer(rel, context={"request": request})
         return Response(serializer.data)
-
-
-class SineatingRequestView(APIView):
-    """Sinner-initiated Sineating request (Spec B §7).
-
-    POST /api/magic/soul-tether/sineating/request/
-
-    Accepts ``{actor_sheet_id, sineater_sheet_id, resonance_id, max_units, scene_id}``.
-    Returns a ``SineatingOffer`` payload for the Sineater to accept or decline via
-    the respond endpoint.
-    """
-
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        request=SineatingRequestSerializer,
-        responses={200: SineatingOfferSerializer},
-    )
-    def post(self, request: Request) -> Response:
-        """Validate and dispatch request_sineating; return offer payload."""
-        serializer = SineatingRequestSerializer(
-            data=request.data,
-            context={"request": request},
-        )
-        serializer.is_valid(raise_exception=True)
-        offer = serializer.save()
-        return Response(
-            SineatingOfferSerializer(offer).data,
-            status=status.HTTP_200_OK,
-        )
-
-
-class SineatingRespondView(APIView):
-    """Sineater accepts or declines a Sineating offer (Spec B §7).
-
-    POST /api/magic/soul-tether/sineating/respond/
-
-    Accepts ``{sinner_sheet_id, sineater_sheet_id, resonance_id, max_units,
-    scene_id, units_accepted}``. Re-validates the offer server-side (Option B
-    synchronous path) then calls ``resolve_sineating``. Returns the result.
-    """
-
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        request=SineatingRespondSerializer,
-        responses={200: SineatingResultSerializer},
-    )
-    def post(self, request: Request) -> Response:
-        """Re-validate offer + dispatch resolve_sineating; return result payload."""
-        serializer = SineatingRespondSerializer(
-            data=request.data,
-            context={"request": request},
-        )
-        serializer.is_valid(raise_exception=True)
-        result = serializer.save()
-        return Response(
-            SineatingResultSerializer(result).data,
-            status=status.HTTP_200_OK,
-        )
 
 
 class SoulTetherRescueView(APIView):
