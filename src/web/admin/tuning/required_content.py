@@ -1735,6 +1735,78 @@ def _probe_drift_conflict_condition_check_modifier() -> ProbeResult:
     )
 
 
+def _corruption_config():
+    """The corruption configuration row, or None when none exists (never creates one)."""
+    from world.magic.models import CorruptionConfig  # noqa: PLC0415
+
+    return CorruptionConfig.objects.cached_singleton()
+
+
+def _probe_compulsion_condition() -> ProbeResult:
+    """`CorruptionConfig.compulsion_condition` names the condition a Compulsion lays (#5177)."""
+    config = _corruption_config()
+    if config is None:
+        return ProbeResult(present=False, detail="No corruption configuration row exists.")
+    if config.compulsion_condition_id is None:
+        return ProbeResult(
+            present=False,
+            detail="The corruption configuration's Compulsion condition field is empty.",
+        )
+    return ProbeResult(present=True)
+
+
+def _probe_compulsion_condition_scene_duration() -> ProbeResult:
+    """The Compulsion condition lasts the scene (#5177).
+
+    A character at the Compulsion stage has it laid on them while something their resonance
+    cares about is present, and it ends when the scene does (`finish_scene_full`). Any other
+    duration would outlast the scene or end before it. A missing config or unset condition is
+    the other probe's gap, so it is not reported twice here.
+    """
+    from world.conditions.constants import DurationType  # noqa: PLC0415
+
+    config = _corruption_config()
+    if config is None or config.compulsion_condition_id is None:
+        return ProbeResult(present=True)
+    condition = config.compulsion_condition
+    if condition.default_duration_type == DurationType.SCENE:
+        return ProbeResult(present=True)
+    return ProbeResult(
+        present=False,
+        detail=(
+            f"The Compulsion condition ({condition.name}) does not have a scene duration, "
+            "so it does not end when the scene does."
+        ),
+    )
+
+
+def _probe_compulsion_condition_check_modifier() -> ProbeResult:
+    """The Compulsion condition carries at least one check modifier (#5177).
+
+    Its penalty is the authored `ConditionCheckModifier`, on the condition or one of its
+    stages. With none, it lands and changes no roll.
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.conditions.models import ConditionCheckModifier  # noqa: PLC0415
+
+    config = _corruption_config()
+    if config is None or config.compulsion_condition_id is None:
+        return ProbeResult(present=True)
+    condition_id = config.compulsion_condition_id
+    if ConditionCheckModifier.objects.filter(
+        Q(condition_id=condition_id) | Q(stage__condition_id=condition_id)
+    ).exists():
+        return ProbeResult(present=True)
+    return ProbeResult(
+        present=False,
+        detail=(
+            f"The Compulsion condition ({config.compulsion_condition.name}) has no check "
+            "modifier, on itself or on any stage."
+        ),
+    )
+
+
 def _designation_result(
     config_exists: bool,
     designated_id: int | None,
@@ -4006,6 +4078,42 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_drift_conflict_condition_check_modifier),
             admin_model="DriftConfig",
+        ),
+        ContentDependency(
+            key="compulsion-condition",
+            label="Compulsion condition set on the corruption configuration",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/impulses.py refresh_impulses()",
+            consequence=(
+                "A character at the Compulsion stage is shown the pull and nothing is laid "
+                "on them, so carrying corruption never costs their rolls anything."
+            ),
+            probe=CustomProbe(fn=_probe_compulsion_condition),
+            admin_model="CorruptionConfig",
+        ),
+        ContentDependency(
+            key="compulsion-condition-scene-duration",
+            label="Compulsion condition lasts the scene",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/impulses.py refresh_impulses()",
+            consequence=(
+                "The Compulsion does not end when the scene does: it outlasts it, or it "
+                "runs out before the scene is over."
+            ),
+            probe=CustomProbe(fn=_probe_compulsion_condition_scene_duration),
+            admin_model="CorruptionConfig",
+        ),
+        ContentDependency(
+            key="compulsion-condition-check-modifier",
+            label="Compulsion condition carries a check modifier",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/impulses.py refresh_impulses()",
+            consequence=(
+                "The Compulsion is laid on a character and changes no roll, so giving in "
+                "to it never matters."
+            ),
+            probe=CustomProbe(fn=_probe_compulsion_condition_check_modifier),
+            admin_model="CorruptionConfig",
         ),
         ContentDependency(
             key="soulfray-stage-pools",
