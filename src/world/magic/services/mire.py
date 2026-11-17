@@ -8,8 +8,10 @@ for any other reason, ``reduce_corruption`` keeps the holdings within it.
 from __future__ import annotations
 
 from django.db import transaction
+from django.db.models import OuterRef, Subquery
 
 from world.character_sheets.models import CharacterSheet
+from world.conditions.models import ConditionInstance
 from world.magic.models.affinity import Resonance
 from world.magic.models.aura import CharacterResonance
 from world.magic.models.soul_tether import MireHolding
@@ -19,8 +21,10 @@ from world.magic.services.corruption import (
     reduce_corruption,
 )
 from world.magic.types.corruption import CorruptionRecoverySource, CorruptionSource
-from world.magic.types.soul_tether import MireTransfer
+from world.magic.types.soul_tether import MireCarried, MireForSinner, MireTransfer
 from world.relationships.models import CharacterRelationship
+from world.scenes.constants import PersonaType
+from world.scenes.models import Persona
 
 
 def corruption_ceiling(resonance: Resonance, max_stage: int | None) -> int | None:
@@ -196,3 +200,71 @@ def add_to_largest_holding(sheet: CharacterSheet, resonance: Resonance, amount: 
     holding.amount += amount
     holding.save(update_fields=["amount"])
     return True
+
+
+def mire_carried_by(sineater_sheet: CharacterSheet) -> list[MireCarried]:
+    """Every holding the Sineater carries, one row per Sinner and resonance, with its stage.
+
+    One query for the holdings, with each Sinner's primary persona name read alongside, and one
+    for the Sineater's corruption conditions, which say what stage their corruption in each
+    resonance has reached and what to call it, however many Sinners they carry for (naming it
+    reads the corruption config, a cached singleton). Largest holding first.
+    A holding of nothing is not carried and is left out. The stage and label are the
+    Sineater's own corruption in the resonance, not the holding's share of it.
+    """
+    from world.magic.services.impulses import corruption_display_name  # noqa: PLC0415
+
+    primary_name = Persona.objects.filter(
+        character_sheet=OuterRef("relationship__target"), persona_type=PersonaType.PRIMARY
+    ).values("name")[:1]
+    holdings = list(
+        MireHolding.objects.filter(relationship__source=sineater_sheet, amount__gt=0)
+        .select_related("resonance")
+        .annotate(sinner_name=Subquery(primary_name))
+        .order_by("-amount", "relationship__target_id", "resonance_id")
+    )
+    if not holdings:
+        return []
+    instances = {
+        instance.condition.corruption_resonance_id: instance
+        for instance in ConditionInstance.objects.filter(
+            target_id=sineater_sheet.pk,
+            condition__corruption_resonance__in={holding.resonance_id for holding in holdings},
+            current_stage__isnull=False,
+        ).select_related("condition", "current_stage")
+    }
+    carried = []
+    for holding in holdings:
+        instance = instances.get(holding.resonance_id)
+        stage_order = instance.current_stage.stage_order if instance is not None else 0
+        label = (
+            corruption_display_name(instance, stage_order, holding.resonance)
+            if instance is not None
+            else holding.resonance.name
+        )
+        carried.append(
+            MireCarried(
+                sinner_sheet_id=holding.relationship.target_id,
+                sinner_name=holding.sinner_name or "",
+                resonance_name=holding.resonance.name,
+                amount=holding.amount,
+                stage_order=stage_order,
+                label=label,
+            )
+        )
+    return carried
+
+
+def mire_for_sinner(sineater_sheet: CharacterSheet, sinner_sheet_id: int) -> MireForSinner | None:
+    """What the Sineater carries for one Sinner, or None when they carry nothing for them."""
+    rows = tuple(
+        row for row in mire_carried_by(sineater_sheet) if row.sinner_sheet_id == sinner_sheet_id
+    )
+    if not rows:
+        return None
+    return MireForSinner(
+        sinner_sheet_id=sinner_sheet_id,
+        sinner_name=rows[0].sinner_name,
+        rows=rows,
+        total=sum(row.amount for row in rows),
+    )

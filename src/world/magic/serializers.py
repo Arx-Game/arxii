@@ -86,6 +86,7 @@ from world.magic.models.dramatic_moment import (
 from world.magic.models.fall_redemption import ConversionType
 from world.magic.models.sessions import RitualSession
 from world.magic.models.techniques import ConditionTargetKind
+from world.magic.serializers_sineating import MireForSinnerSerializer
 from world.roster.models import RosterEntry
 from world.vitals.constants import NEVER_TO_FULL_FRACTION
 
@@ -2287,6 +2288,7 @@ class SoulTetherDetailSerializer(serializers.Serializer):
     sineater_lifetime_helped = serializers.SerializerMethodField()
     sinner_corruption_stage = serializers.SerializerMethodField()
     sineater_strain_stage = serializers.SerializerMethodField()
+    mire = serializers.SerializerMethodField()
 
     def _resolve_directions(self, obj: object) -> tuple[object, object]:
         """Return (sinner_relationship, sineater_relationship) for this tether.
@@ -2414,6 +2416,30 @@ class SoulTetherDetailSerializer(serializers.Serializer):
             condition__name="Tether Strain",
         ).first()
         return strain.severity if strain is not None else 0
+
+    @extend_schema_field(MireForSinnerSerializer(many=True))
+    def get_mire(self, obj: object) -> list[dict]:
+        """The Mire the viewing Sineater carries for this bond's Sinner (#5177).
+
+        Empty unless the requester plays the Sineater: the Sinner is never told how much their
+        Sineater carries for them. At most one entry, the bond's own Sinner.
+        """
+        from world.magic.services.mire import mire_for_sinner  # noqa: PLC0415
+
+        outgoing, _ = self._resolve_directions(obj)
+        request = self.context.get("request")
+        if outgoing is None or request is None:
+            return []
+        plays_sineater = any(
+            entry.character_sheet_id == outgoing.target_id
+            for entry in request.user.cached_roster_entries
+        )
+        if not plays_sineater:
+            return []
+        carried = mire_for_sinner(outgoing.target, outgoing.source_id)
+        if carried is None:
+            return []
+        return MireForSinnerSerializer([carried], many=True).data
 
 
 class SoulTetherRescueSerializer(serializers.Serializer):

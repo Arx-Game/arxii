@@ -38,6 +38,33 @@ class MireTransfer:
 
 
 @dataclass(frozen=True, slots=True)
+class MireCarried:
+    """What a Sineater carries for one Sinner in one resonance (#5177).
+
+    ``stage_order`` and ``label`` describe the Sineater's own corruption in the resonance:
+    the stage it has reached and the name a player is shown for it ("Intrusive Thoughts:
+    <resonance>" and so on), not a stage of the holding alone.
+    """
+
+    sinner_sheet_id: int
+    sinner_name: str
+    resonance_name: str
+    amount: int
+    stage_order: int
+    label: str
+
+
+@dataclass(frozen=True, slots=True)
+class MireForSinner:
+    """Everything a Sineater carries for one Sinner, with the total across resonances (#5177)."""
+
+    sinner_sheet_id: int
+    sinner_name: str
+    rows: tuple[MireCarried, ...]
+    total: int
+
+
+@dataclass(frozen=True, slots=True)
 class SineatingOffer:
     """A Sinner's plea for Sineating, as recorded (#5177)."""
 
