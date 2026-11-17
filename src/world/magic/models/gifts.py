@@ -146,16 +146,39 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         ),
     )
 
+    substance = models.ForeignKey(
+        "arxii.Substance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="gifts",
+        help_text=(
+            "What this gift works through, such as fire or shadow (#5125). Every major gift "
+            "has one; a minor gift has none. A caster of the gift is stronger where Primum of "
+            "this substance is held."
+        ),
+    )
+
     objects = GiftManager()
 
     class NaturalKeyConfig:
         fields = ["name"]
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(substance__isnull=True) | models.Q(kind=GiftKind.MAJOR),
+                name="magic_gift_substance_major_only",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name
 
     def clean(self) -> None:
         super().clean()
+        if self.kind == GiftKind.MINOR and self.substance_id is not None:
+            raise ValidationError({"substance": "A minor gift has no substance; clear it."})
         if self.kind == GiftKind.MAJOR and self.pk and self.ultimate_techniques.exists():
             raise ValidationError(
                 {
@@ -264,7 +287,9 @@ class GiftSubstance(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         Gift,
         on_delete=models.CASCADE,
         primary_key=True,
-        related_name="substance",
+        # Not "substance": Gift.substance is now the FK to Substance (#5125), and the two would
+        # clash. This model is deleted once its rows move onto Substance and Gift.substance.
+        related_name="legacy_substance",
         help_text="The gift this is the substance of.",
     )
     label = models.CharField(

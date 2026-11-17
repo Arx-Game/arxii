@@ -26,6 +26,8 @@ from world.magic.constants import (
     AUDERE_MAJORA_SEED_TEMPLATE_NAME,
     AUDERE_SEED_TEMPLATE_NAME,
     SOULFRAY_SEED_TEMPLATE_NAME,
+    STARTER_POWER_CURVE,
+    STARTER_PRIMUM_STEPS,
     AffinityInteractionAggressor,
     AffinityInteractionKind,
     AlterationKind,
@@ -40,6 +42,7 @@ from world.magic.constants import (
     ResonanceValence,
     RestrictionKind,
     RitualExecutionKind,
+    SubstanceRelationKind,
     TargetKind,
     TechniqueFunction,
     VitalBonusTarget,
@@ -83,6 +86,7 @@ from world.magic.models import (
     PendingAlteration,
     PortalAnchor,
     PortalAnchorKind,
+    PrimumStep,
     Resonance,
     Restriction,
     Ritual,
@@ -92,6 +96,7 @@ from world.magic.models import (
     SoulfrayConfig,
     StandingCapBand,
     StyleCapabilityRequirement,
+    SubstancePowerStep,
     Technique,
     TechniqueAppliedCondition,
     TechniqueBudgetConfig,
@@ -5172,3 +5177,146 @@ class ReflectionFactory(factory.django.DjangoModelFactory):
         author=factory.SelfAttribute("..character_sheet"),
     )
     rite = None
+
+
+# --- Substances and Primum (#5125) ---
+
+
+class SubstanceFactory(factory.django.DjangoModelFactory):
+    """A substance with no room condition: a caster is only stronger where Primum is held."""
+
+    class Meta:
+        model = "arxii.Substance"
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Substance {n}")
+    stat_key = ""
+    direction = ""
+    property = None
+
+
+class SubstanceRelationFactory(factory.django.DjangoModelFactory):
+    """A relation between two substances; ``save`` puts the pair in id order."""
+
+    class Meta:
+        model = "arxii.SubstanceRelation"
+
+    substance_a = factory.SubFactory(SubstanceFactory)
+    substance_b = factory.SubFactory(SubstanceFactory)
+    kind = SubstanceRelationKind.RELATED
+
+
+class PrimumStepFactory(factory.django.DjangoModelFactory):
+    """One Primum step, keyed on its rank. Defaults rise with rank so the order holds."""
+
+    class Meta:
+        model = "arxii.PrimumStep"
+
+    rank = factory.Sequence(lambda n: n + 1)
+    name = factory.LazyAttribute(lambda o: f"Step {o.rank}")
+    starts_at = factory.LazyAttribute(lambda o: o.rank * 10)
+    points = factory.LazyAttribute(lambda o: o.rank * 2)
+    item_quality = None
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        """Update-or-create on rank so passed fields land on a row that already exists."""
+        rank = kwargs.pop("rank")
+        instance, _ = model_class.objects.update_or_create(rank=rank, defaults=kwargs)
+        return instance
+
+
+class SubstancePowerStepFactory(factory.django.DjangoModelFactory):
+    """One point of the Primum power curve, keyed on the points it is reached at."""
+
+    class Meta:
+        model = "arxii.SubstancePowerStep"
+
+    points_reached = factory.Sequence(lambda n: (n + 1) * 2)
+    power = factory.LazyAttribute(lambda o: o.points_reached)
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        """Update-or-create on points_reached so passed fields land on an existing row."""
+        points_reached = kwargs.pop("points_reached")
+        instance, _ = model_class.objects.update_or_create(
+            points_reached=points_reached, defaults=kwargs
+        )
+        return instance
+
+
+class HarvestOutcomeFactory(factory.django.DjangoModelFactory):
+    """What one rolled outcome of a harvest yields."""
+
+    class Meta:
+        model = "arxii.HarvestOutcome"
+
+    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    amount_taken = 5
+    quantity = 1
+    quality_tier = factory.SubFactory("world.items.factories.QualityTierFactory")
+
+
+class PlacePrimumFactory(factory.django.DjangoModelFactory):
+    """A lair's Primum of one substance: full, never refilling, stamped now."""
+
+    class Meta:
+        model = "arxii.PlacePrimum"
+
+    room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
+    substance = factory.SubFactory(SubstanceFactory)
+    capacity = 10
+    stored_amount = 10
+    refill_per_day = 0
+    is_finite = False
+
+
+class CreaturePrimumFactory(factory.django.DjangoModelFactory):
+    """The Primum a kind of creature carries of one substance."""
+
+    class Meta:
+        model = "arxii.CreaturePrimum"
+
+    creature_template = factory.SubFactory("world.combat.factories.CreatureTemplateFactory")
+    substance = factory.SubFactory(SubstanceFactory)
+    amount = 10
+
+
+class PrimumCallUpFactory(factory.django.DjangoModelFactory):
+    """A call-up owned by a caster. Pass ``caster=None, scene=<Scene>`` for a scene's."""
+
+    class Meta:
+        model = "arxii.PrimumCallUp"
+
+    room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
+    substance = factory.SubFactory(SubstanceFactory)
+    amount_added = 10
+    caster = factory.SubFactory(CharacterSheetFactory)
+    scene = None
+
+
+class PrimumSightingFactory(factory.django.DjangoModelFactory):
+    """A character having perceived a substance's Primum in a place."""
+
+    class Meta:
+        model = "arxii.PrimumSighting"
+
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
+    room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
+    substance = factory.SubFactory(SubstanceFactory)
+
+
+def seed_primum_tuning() -> None:
+    """Get-or-create the starter Primum steps and power curve rows (#5125).
+
+    Rows that already exist keep their staff-edited values. Written from the constants'
+    explicit values, never through a factory.
+    """
+    for rank, name, starts_at, points in STARTER_PRIMUM_STEPS:
+        PrimumStep.objects.get_or_create(
+            rank=rank, defaults={"name": name, "starts_at": starts_at, "points": points}
+        )
+    for points_reached, power in STARTER_POWER_CURVE:
+        SubstancePowerStep.objects.get_or_create(
+            points_reached=points_reached, defaults={"power": power}
+        )

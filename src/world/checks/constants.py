@@ -65,6 +65,7 @@ class EffectType(models.TextChoices):
     RESTORE_ANIMA = "restore_anima", "Restore Anima"
     INTOXICATE = "intoxicate", "Intoxicate"
     TECHNIQUE_TRAINING = "technique_training", "Technique Training"
+    REVEAL_PRIMUM = "reveal_primum", "Reveal Primum"
 
 
 class PositionDestination(models.TextChoices):

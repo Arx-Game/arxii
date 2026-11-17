@@ -237,6 +237,14 @@ class CraftingMaterialRequirement(NaturalKeyMixin, SharedMemoryModel):
             "material_category; when set, quantity is ignored."
         ),
     )
+    is_optional = models.BooleanField(
+        default=False,
+        help_text=(
+            "An optional ingredient (#5125): the craft goes ahead without it, and when it is "
+            "staged and consumed it adds to the result, such as a Primum item that gives the "
+            "made item a substance."
+        ),
+    )
 
     objects = NaturalKeyManager()
 

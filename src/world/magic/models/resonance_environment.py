@@ -27,6 +27,11 @@ from world.magic.constants import (
     ResonanceValence,
 )
 from world.magic.models.fall_redemption import ConversionType
+from world.magic.skill_choices import (
+    MAGIC_PICKER_SKILL_CHOICES,
+    MAGIC_PICKER_SKILL_ERROR_MESSAGES,
+    MAGIC_PICKER_SKILL_HELP,
+)
 
 if TYPE_CHECKING:
     from world.conditions.models import ConditionTemplate
@@ -366,6 +371,64 @@ class ResonanceEnvironmentConfig(SharedMemoryModel):
         help_text=(
             "A technique's unmet surroundings restriction costs this percent of a typical "
             "roll at the caster's level."
+        ),
+    )
+
+    # --- Substances and Primum (#5125) ---
+    substance_related_share_pct = models.PositiveSmallIntegerField(
+        verbose_name="Related substance gives (% of full benefit)",
+        default=50,
+        validators=[MaxValueValidator(100)],
+        help_text=(
+            "How much of a Primum source's benefit a caster gets from a substance related to "
+            "her gift's own, as a percent. A matching substance gives full benefit. 0 to 100."
+        ),
+    )
+    substance_power_cap = models.PositiveSmallIntegerField(
+        verbose_name="Most power Primum can add",
+        default=12,
+        help_text=(
+            "The most power all of a caster's Primum sources add together, before her gift "
+            "thread scales it."
+        ),
+    )
+    substance_call_up_anima = models.PositiveSmallIntegerField(
+        verbose_name="Anima to call up Primum",
+        default=3,
+        help_text=(
+            "Anima one call-up costs, raising the place's Primum by one step. Shared by every "
+            "caster who calls it up together; never refused for lack of anima."
+        ),
+    )
+    harvest_check_type = models.ForeignKey(
+        "arxii.CheckType",
+        verbose_name="Check rolled to harvest Primum",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The check a harvester rolls to take Primum. Unset: nothing can be harvested.",
+    )
+    harvest_skill = models.ForeignKey(
+        "arxii.Skill",
+        verbose_name="Skill added to the harvest roll",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        limit_choices_to=MAGIC_PICKER_SKILL_CHOICES,
+        error_messages=MAGIC_PICKER_SKILL_ERROR_MESSAGES,
+        help_text=(
+            "The magical skill a harvester adds to the harvest roll. "
+            f"{MAGIC_PICKER_SKILL_HELP} Unset: nothing can be harvested."
+        ),
+    )
+    harvest_thread_bonus = models.PositiveSmallIntegerField(
+        verbose_name="Harvest bonus from the gift thread",
+        default=5,
+        help_text=(
+            "Bonus a harvester gets on the roll for a gift thread of the substance, scaled by "
+            "her thread level."
         ),
     )
 

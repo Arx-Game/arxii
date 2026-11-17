@@ -949,6 +949,54 @@ class SubstanceDirection(models.TextChoices):
     FALLING = "falling", "Lower (darker, e.g. shadow)"
 
 
+class SubstanceRelationKind(models.TextChoices):
+    """How two substances stand to one another (#5125).
+
+    Related: a caster of one gets a share of the other's benefit. Opposed: the other works
+    against the caster's own. A pair with no row has no standing at all, and relations never
+    chain (A related to B and B related to C gives A nothing from C).
+    """
+
+    RELATED = "related", "Related"
+    OPPOSED = "opposed", "Opposed"
+
+
+class PrimumRevealScope(models.TextChoices):
+    """How much of the Primum in a place a consequence lets the character perceive (#5125)."""
+
+    STRONGEST = "strongest", "The strongest substance"
+    ALL = "all", "Every substance"
+
+
+class PrimumLineKind(models.TextChoices):
+    """Where a Primum power line comes from: the place the cast is made in or a carried item."""
+
+    PLACE = "place", "A place"
+    ITEM = "item", "A carried item"
+
+
+#: The starter Primum steps as ``(rank, name, starts_at, points)`` (#5125): how much Primum a
+#: place or creature holds before it reads as that step, and the power points that step is
+#: worth. Staff own the real rows; ``seed_primum_tuning`` writes these where none exist.
+STARTER_PRIMUM_STEPS: tuple[tuple[int, str, int, int], ...] = (
+    (1, "Trace", 1, 2),
+    (2, "Some", 10, 4),
+    (3, "Rich", 30, 7),
+    (4, "Massive", 100, 10),
+)
+
+#: The starter power curve as ``(points_reached, power)`` (#5125): the power a caster's summed
+#: Primum points reach. Each extra point buys less than the one before.
+STARTER_POWER_CURVE: tuple[tuple[int, int], ...] = (
+    (2, 2),
+    (4, 4),
+    (7, 6),
+    (10, 8),
+    (15, 10),
+    (20, 11),
+)
+
+
 #: The power-ledger label of a place's resonance reaction (#639). Narration reads it to say
 #: "the place's resonance swells the working"; a gift's substance line (#5018) shares the
 #: ENVIRONMENT stage but is not the place's resonance, so narration must tell them apart.

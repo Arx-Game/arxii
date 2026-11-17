@@ -783,6 +783,14 @@ class CombatOpponent(EncounterPayloadRowMixin, SharedMemoryModel):
             "rider can look up the boss's WeaknessPoolEntry rows."
         ),
     )
+    primum_harvested_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When this slain creature's Primum was harvested (#5125). A slain creature is "
+            "harvested once; null means it has not been."
+        ),
+    )
     status = models.CharField(
         max_length=20,
         choices=OpponentStatus.choices,
