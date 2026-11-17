@@ -12,6 +12,7 @@ import {
   PIP_PX,
   pipAt,
   regionBounds,
+  riverSegments,
   STRIKE_COLOR,
 } from '../regionMapCanvas';
 
@@ -142,6 +143,63 @@ const drawingData: RegionMapPips = {
   landless_titles: [],
 };
 
+describe('riverSegments (#5189)', () => {
+  it('joins a straight run into one unbroken line', () => {
+    expect(
+      riverSegments([
+        [2, 5],
+        [3, 5],
+        [4, 5],
+      ])
+    ).toEqual([
+      [2.5, 5.5, 3.5, 5.5],
+      [3.5, 5.5, 4.5, 5.5],
+    ]);
+  });
+
+  it('draws a bend as a corner, with no line across it', () => {
+    // (2,5) -> (3,5) -> (3,6): the diagonal (2,5)-(3,6) would close a triangle
+    const segments = riverSegments([
+      [2, 5],
+      [3, 5],
+      [3, 6],
+    ]);
+    expect(segments).toEqual([
+      [2.5, 5.5, 3.5, 5.5],
+      [3.5, 5.5, 3.5, 6.5],
+    ]);
+  });
+
+  it('joins a diagonal step either way when nothing lies between', () => {
+    expect(
+      riverSegments([
+        [2, 5],
+        [3, 6],
+      ])
+    ).toEqual([[2.5, 5.5, 3.5, 6.5]]);
+    expect(
+      riverSegments([
+        [3, 5],
+        [2, 6],
+      ])
+    ).toEqual([[3.5, 5.5, 2.5, 6.5]]);
+  });
+
+  it('gives a river pip with no river neighbour a short dash', () => {
+    const [[x1, y1, x2, y2]] = riverSegments([[2, 5]]);
+    expect([y1, y2]).toEqual([5.5, 5.5]);
+    expect(x1).toBeCloseTo(2.2);
+    expect(x2).toBeCloseTo(2.8);
+    // and none to a pip that has one
+    expect(
+      riverSegments([
+        [2, 5],
+        [2, 6],
+      ])
+    ).toEqual([[2.5, 5.5, 2.5, 6.5]]);
+  });
+});
+
 describe('region map drawing', () => {
   it('paints terrain, rivers, parent holdings and selected child holdings in order', () => {
     const { ctx, context, paints } = recordingCanvas();
@@ -150,13 +208,19 @@ describe('region map drawing', () => {
     expect(paints[0]).toEqual({ style: TERRAIN_COLORS.water, rect: [0, 0, 120, 120] });
     expect(paints[1]).toEqual({ style: TERRAIN_COLORS.plain, rect: [6, 6, 6, 6] });
     expect(paints[2].style).toBe(TERRAIN_COLORS.water);
-    expect(paints[3]).toEqual({ style: '#3f6ea8', rect: [8, 8, 2, 2] });
-    expect(paints.slice(4, 7).map((paint) => paint.style)).toEqual([
+    // #5189: the river is a stroked line, never a filled mark; this lone river pip at
+    // region pip (1, 1) is a short dash through its centre, 9px in at 6px a pip
+    expect(paints.some((paint) => paint.style === '#3f6ea8')).toBe(false);
+    expect(context.moveTo.mock.calls[0][0]).toBeCloseTo(7.2);
+    expect(context.moveTo.mock.calls[0][1]).toBeCloseTo(9);
+    expect(context.lineTo.mock.calls[0][0]).toBeCloseTo(10.8);
+    expect(context.lineTo.mock.calls[0][1]).toBeCloseTo(9);
+    expect(paints.slice(3, 6).map((paint) => paint.style)).toEqual([
       holderColor(4),
       holderColor(4),
       holderColor(4),
     ]);
-    expect(paints[7]).toEqual({ style: holderColor(4, 0.65), rect: [12, 6, 6, 6] });
+    expect(paints[6]).toEqual({ style: holderColor(4, 0.65), rect: [12, 6, 6, 6] });
     // seats and names live on the screen-space names layer now (#5030)
     expect(context.arc).not.toHaveBeenCalled();
     expect(context.fillText).not.toHaveBeenCalled();
@@ -165,22 +229,23 @@ describe('region map drawing', () => {
   it('hides the cell lines when asked (#5009)', () => {
     const lined = recordingCanvas();
     drawRegionMap(lined.ctx, drawingData, {});
-    expect(lined.context.stroke).toHaveBeenCalledTimes(2);
+    // the river, the coast and the cell lines
+    expect(lined.context.stroke).toHaveBeenCalledTimes(3);
     const bare = recordingCanvas();
     drawRegionMap(bare.ctx, drawingData, { cellLines: false });
-    expect(bare.context.stroke).toHaveBeenCalledTimes(1);
+    expect(bare.context.stroke).toHaveBeenCalledTimes(2);
   });
 
   it('outlines only the footprints asked for', () => {
-    // the coast and the cell lines are the two strokes every map draws
+    // the river, the coast and the cell lines are the strokes this map always draws
     const plain = recordingCanvas();
     drawRegionMap(plain.ctx, drawingData, { selectedAreaId: 11 });
-    expect(plain.context.stroke).toHaveBeenCalledTimes(2);
+    expect(plain.context.stroke).toHaveBeenCalledTimes(3);
     const outlined = recordingCanvas();
     drawRegionMap(outlined.ctx, drawingData, { outlineAreaIds: new Set([10]) });
-    expect(outlined.context.stroke).toHaveBeenCalledTimes(3);
+    expect(outlined.context.stroke).toHaveBeenCalledTimes(4);
     // an outlined footprint fills at the emphasised alpha, like a selected one
-    expect(outlined.paints[4]).toEqual({ style: holderColor(4, 0.65), rect: [6, 6, 6, 6] });
+    expect(outlined.paints[3]).toEqual({ style: holderColor(4, 0.65), rect: [6, 6, 6, 6] });
   });
 
   it('draws border lines around the footprints asked for, at their widths, after the fills (#5056)', () => {
@@ -188,10 +253,10 @@ describe('region map drawing', () => {
     const widths: number[] = [];
     bordered.context.stroke.mockImplementation(() => widths.push(bordered.context.lineWidth));
     drawRegionMap(bordered.ctx, drawingData, { borderWidths: new Map([[11, 0.5]]) });
-    // the coast, the cell lines, then the border
-    expect(widths).toEqual([1, 1, 0.5]);
+    // the river, the coast, the cell lines, then the border
+    expect(widths).toEqual([2, 1, 1, 0.5]);
     // a bordered footprint is not emphasised: it fills at the plain alpha
-    expect(bordered.paints[4]).toEqual({ style: holderColor(4, 0.45), rect: [6, 6, 6, 6] });
+    expect(bordered.paints[3]).toEqual({ style: holderColor(4, 0.45), rect: [6, 6, 6, 6] });
   });
 
   it('draws a charter ghost as a dashed outline over the union, with no fill', () => {
@@ -199,8 +264,8 @@ describe('region map drawing', () => {
     drawRegionMap(plain.ctx, drawingData, {});
     const { ctx, context, paints } = recordingCanvas();
     drawRegionMap(ctx, drawingData, { ghostPips: new Set(['51,31', '52,31']) });
-    // coast, cell lines, then the ghost
-    expect(context.stroke).toHaveBeenCalledTimes(3);
+    // river, coast, cell lines, then the ghost
+    expect(context.stroke).toHaveBeenCalledTimes(4);
     expect(context.setLineDash).toHaveBeenCalledWith([4, 3]);
     // the ghost is an outline only: every fill is the one the plain draw made
     expect(paints).toEqual(plain.paints);
@@ -222,14 +287,15 @@ describe('region map drawing', () => {
   it('draws a removal preview after the holdings', () => {
     const { ctx, context } = recordingCanvas();
     drawRegionMap(ctx, drawingData, { pending: new Set(['51,31']), pendingRemove: true });
-    expect(context.save).toHaveBeenCalledOnce();
+    // once for the river's line, once for the preview
+    expect(context.save).toHaveBeenCalledTimes(2);
     expect(context.setLineDash).toHaveBeenCalledWith([3, 2]);
     expect(context.strokeStyle).toBe('#a0121b');
     expect(context.strokeRect).toHaveBeenCalledWith(7, 7, 4, 4);
     expect(context.strokeRect.mock.invocationCallOrder[0]).toBeGreaterThan(
       context.fillRect.mock.invocationCallOrder[0]
     );
-    expect(context.restore).toHaveBeenCalledOnce();
+    expect(context.restore).toHaveBeenCalledTimes(2);
   });
 
   it('the names layer clears the viewport, draws each marker at its size, writes the placed names and the drag ghost (#5030, #5157)', () => {

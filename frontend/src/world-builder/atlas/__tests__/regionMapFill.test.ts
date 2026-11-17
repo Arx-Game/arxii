@@ -4,6 +4,7 @@ import type { RegionMapFootprint, RegionMapPips, RegionMapSummary } from '../../
 import {
   ancestorTitleIds,
   brushPips,
+  linePips,
   floodHeld,
   floodLand,
   isTakeable,
@@ -66,6 +67,28 @@ function rightHalf(): Pip[] {
 }
 
 const keys = (pips: Pip[]) => new Set(pips.map(([x, y]) => `${x},${y}`));
+
+describe('linePips (#5189)', () => {
+  it('walks from one pip to another with every step touching the last', () => {
+    expect(linePips([2, 2], [2, 2])).toEqual([[2, 2]]);
+    expect(linePips([2, 2], [5, 2])).toEqual([
+      [2, 2],
+      [3, 2],
+      [4, 2],
+      [5, 2],
+    ]);
+    const slope = linePips([0, 0], [6, -3]);
+    expect(slope[0]).toEqual([0, 0]);
+    expect(slope.at(-1)).toEqual([6, -3]);
+    for (let i = 1; i < slope.length; i += 1) {
+      const step = Math.max(
+        Math.abs(slope[i][0] - slope[i - 1][0]),
+        Math.abs(slope[i][1] - slope[i - 1][1])
+      );
+      expect(step).toBe(1);
+    }
+  });
+});
 
 describe('brushPips', () => {
   it('is the pip itself at width 1 and a square around it otherwise', () => {

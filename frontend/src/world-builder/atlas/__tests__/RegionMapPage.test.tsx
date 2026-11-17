@@ -530,6 +530,63 @@ describe('RegionMapPage', () => {
     expect(add).toContainEqual([6, 6]);
   });
 
+  it('draws a river as a joined one-pip line and leaves the terrain alone (#5189)', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    await user.click(screen.getByRole('button', { name: 'Paint' }));
+    expect(screen.getByTestId('brush-width')).toBeInTheDocument();
+    expect(screen.queryByTestId('reset-rivers')).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByTestId('paint-terrain'), 'River');
+    // a river is always one pip wide, so the width control goes
+    expect(screen.queryByTestId('brush-width')).not.toBeInTheDocument();
+    const viewport = screen.getByTestId('region-map-viewport');
+    // a pip is 6px: press on pip (1, 1), and the next pointer sample is at pip (3, 2);
+    // the pips between are filled in so the line has no gap
+    fireEvent.pointerDown(viewport, { clientX: 9, clientY: 9, button: 0 });
+    fireEvent.pointerMove(window, { clientX: 21, clientY: 15 });
+    fireEvent.pointerUp(window, { clientX: 21, clientY: 15 });
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    const { key, kwargs } = mutateAsync.mock.calls[0][0];
+    expect(key).toBe('atlas_paint_river');
+    expect(kwargs.region_id).toBe(1);
+    expect(kwargs.river).toBe(true);
+    const pips = (kwargs.pips as [number, number][]).map(([x, y]) => `${x},${y}`);
+    expect(pips).toHaveLength(3);
+    expect(pips[0]).toBe('1,1');
+    expect(pips[2]).toBe('3,2');
+  });
+
+  it('erases a river with the Erase river entry (#5189)', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    await user.click(screen.getByRole('button', { name: 'Paint' }));
+    await user.selectOptions(screen.getByTestId('paint-terrain'), 'Erase river');
+    const viewport = screen.getByTestId('region-map-viewport');
+    fireEvent.pointerDown(viewport, { clientX: 9, clientY: 3, button: 0 });
+    fireEvent.pointerUp(window, { clientX: 9, clientY: 3 });
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    expect(mutateAsync.mock.calls[0][0]).toEqual({
+      key: 'atlas_paint_river',
+      kwargs: { region_id: 1, pips: [[1, 0]], river: false },
+    });
+  });
+
+  it('resets the rivers only after a confirm (#5189)', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    await user.click(screen.getByRole('button', { name: 'Paint' }));
+    await user.selectOptions(screen.getByTestId('paint-terrain'), 'River');
+    await user.click(screen.getByTestId('reset-rivers'));
+    expect(mutateAsync).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Reset rivers' }));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    expect(mutateAsync.mock.calls[0][0]).toEqual({
+      key: 'atlas_reset_rivers',
+      kwargs: { region_id: 1 },
+    });
+  });
+
   async function enterCarve(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole('button', { name: 'Carve' }));
     await user.selectOptions(screen.getByTestId('carve-realm'), '1');

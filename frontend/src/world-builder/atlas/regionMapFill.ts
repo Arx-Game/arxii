@@ -32,6 +32,23 @@ export function brushPips(center: Pip, width: BrushWidth): Pip[] {
   return out;
 }
 
+/**
+ * The pips on the straight line from `from` to `to`, both ends included, each one
+ * touching the last. A river stroke uses it between pointer samples so that a fast
+ * drag leaves no gap in the line (#5189).
+ */
+export function linePips(from: Pip, to: Pip): Pip[] {
+  const dx = to[0] - from[0];
+  const dy = to[1] - from[1];
+  const steps = Math.max(Math.abs(dx), Math.abs(dy));
+  if (steps === 0) return [from];
+  const out: Pip[] = [];
+  for (let k = 0; k <= steps; k += 1) {
+    out.push([from[0] + Math.round((dx * k) / steps), from[1] + Math.round((dy * k) / steps)]);
+  }
+  return out;
+}
+
 /** Every title above `titleId` on the ladder, walked by `parent_title_id`. */
 export function ancestorTitleIds(rows: readonly LadderLink[], titleId: number): Set<number> {
   const parents = new Map(rows.map((row) => [row.title_id, row.parent_title_id]));
