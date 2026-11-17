@@ -18,6 +18,22 @@ class Migration(migrations.Migration):
                 help_text="How much Sineating a Sineater has done in a resonance before they resist 90% of the corruption they take on in it, the most resistance they can reach. They resist a proportional share before that: half this much resists 50%.",
             ),
         ),
+        migrations.AddField(
+            model_name="characterrelationship",
+            name="mire_purified_since_payout",
+            field=models.PositiveIntegerField(
+                default=0,
+                help_text="Soul Tether, on the Sineater's side: corruption the Sineater has purified for this Sinner, in any resonance, since the last payout. It is the base the Sinner's jackpot is paid on when the Sineater succumbs.",
+            ),
+        ),
+        migrations.AddField(
+            model_name="characterrelationship",
+            name="mire_succumbed_since_fall",
+            field=models.PositiveIntegerField(
+                default=0,
+                help_text="Soul Tether, on the Sineater's side: corruption the Sineater has succumbed to for this Sinner, in any resonance, since their last fall. It sizes this Sinner's share of the fall's payout.",
+            ),
+        ),
         migrations.CreateModel(
             name="MireHolding",
             fields=[
@@ -35,20 +51,6 @@ class Migration(migrations.Migration):
                     models.PositiveIntegerField(
                         default=0,
                         help_text="Corruption held from this Sinner in this resonance.",
-                    ),
-                ),
-                (
-                    "purified_since_payout",
-                    models.PositiveIntegerField(
-                        default=0,
-                        help_text="Corruption the Sineater has purified for this Sinner since the last payout. It is the base the Sinner's jackpot is paid on when the Sineater succumbs.",
-                    ),
-                ),
-                (
-                    "succumbed_since_fall",
-                    models.PositiveIntegerField(
-                        default=0,
-                        help_text="Corruption the Sineater has succumbed to for this Sinner since their last fall. It sizes this Sinner's share of the fall's payout.",
                     ),
                 ),
                 (

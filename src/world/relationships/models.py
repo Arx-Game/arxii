@@ -216,6 +216,22 @@ class CharacterRelationship(SharedMemoryModel):
     is_soul_tether = models.BooleanField(default=False)
     soul_tether_role = models.CharField(max_length=16, choices=SoulTetherRole.choices, blank=True)
     magical_flavor = models.TextField(blank=True)
+    mire_purified_since_payout = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Soul Tether, on the Sineater's side: corruption the Sineater has purified for this "
+            "Sinner, in any resonance, since the last payout. It is the base the Sinner's "
+            "jackpot is paid on when the Sineater succumbs."
+        ),
+    )
+    mire_succumbed_since_fall = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Soul Tether, on the Sineater's side: corruption the Sineater has succumbed to for "
+            "this Sinner, in any resonance, since their last fall. It sizes this Sinner's share "
+            "of the fall's payout."
+        ),
+    )
 
     class Meta:
         ordering = ["-updated_at"]

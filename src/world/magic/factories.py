@@ -2682,8 +2682,6 @@ class MireHoldingFactory(factory.django.DjangoModelFactory):
     relationship = factory.SubFactory("world.relationships.factories.CharacterRelationshipFactory")
     resonance = factory.SubFactory(ResonanceFactory)
     amount = 0
-    purified_since_payout = 0
-    succumbed_since_fall = 0
 
 
 class SoulTetherRescueFactory(factory.django.DjangoModelFactory):

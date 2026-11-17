@@ -1,7 +1,8 @@
 # Burden reflections and the settling of the Mire, part one (#5177). Schema-only: the
 # reflection's tether column, the new SoulTetherConfig sizes, the new gain sources and the
-# shape of a SUCCUMBED grant. Part two (0454) adds the reflection constraints that pair the
-# new column with old ones, so the constraint meets a column that already exists.
+# shape of a SUCCUMBED grant. Part two, the reflect-on-the-mire constraints migration, adds the
+# reflection constraints that pair the new column with old ones, so the constraint meets a
+# column that already exists.
 # Data disposition (ADR-0237): nothing is dropped; every new column is nullable or defaulted.
 
 from django.db import migrations, models

@@ -293,7 +293,9 @@ class MireHolding(SharedMemoryModel):
     ``reduce_corruption`` shrinks it when corruption falls for any other reason.
 
     ``relationship`` is the Sineater's own side toward the Sinner, which is unique per pair
-    and outlives a tether being dissolved and formed again.
+    and outlives a tether being dissolved and formed again. The jackpot and fall counters are
+    per tether, not per resonance, so they live on that side
+    (``CharacterRelationship.mire_purified_since_payout`` / ``mire_succumbed_since_fall``).
     """
 
     relationship = models.ForeignKey(
@@ -310,20 +312,6 @@ class MireHolding(SharedMemoryModel):
     amount = models.PositiveIntegerField(
         default=0,
         help_text="Corruption held from this Sinner in this resonance.",
-    )
-    purified_since_payout = models.PositiveIntegerField(
-        default=0,
-        help_text=(
-            "Corruption the Sineater has purified for this Sinner since the last payout. "
-            "It is the base the Sinner's jackpot is paid on when the Sineater succumbs."
-        ),
-    )
-    succumbed_since_fall = models.PositiveIntegerField(
-        default=0,
-        help_text=(
-            "Corruption the Sineater has succumbed to for this Sinner since their last fall. "
-            "It sizes this Sinner's share of the fall's payout."
-        ),
     )
 
     class Meta:

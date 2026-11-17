@@ -629,8 +629,8 @@ def _shrink_holdings_to(
     """Keep the sheet's Mire holdings in ``resonance`` within its corruption (#5177).
 
     Corruption that is not held comes off first, so nothing changes while the holdings still
-    fit; past that they shrink in proportion. ``purified_since_payout`` and
-    ``succumbed_since_fall`` are not touched.
+    fit; past that they shrink in proportion. The tether's jackpot and fall counters (on the
+    Sineater's ``CharacterRelationship`` side) are not touched.
     """
     holdings = list(
         MireHolding.objects.select_for_update()

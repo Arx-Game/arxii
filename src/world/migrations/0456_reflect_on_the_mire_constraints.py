@@ -1,8 +1,9 @@
 # Burden reflections and the settling of the Mire, part two (#5177). Schema-only: swaps the
 # reflection's two-way "grant or resonance" check for "exactly one of grant, resonance or
 # tether", and adds the check that a burden takes only Absolve, Condemn or Succumb while every
-# other reflection takes only Embrace or Disown. 0453 added the tether column; every existing
-# reflection has it null and one of Embrace or Disown, so each satisfies both checks.
+# other reflection takes only Embrace or Disown. The migration before this one added the tether
+# column; every existing reflection has it null and one of Embrace or Disown, so each satisfies
+# both checks.
 # Data disposition (ADR-0237): nothing is dropped.
 
 from django.db import migrations, models

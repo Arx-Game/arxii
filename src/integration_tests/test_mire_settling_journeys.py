@@ -83,16 +83,18 @@ class MireJourneyCase(SineatingJourneyCase):
             defaults={"converted_share": Decimal(share)},
         )
 
-    def carry_for(self, side, amount: int, **counters: int) -> MireHolding:
-        """The Sineater behind ``side`` carries ``amount`` Ruin for the Sinner it points at."""
+    def carry_for(self, side, amount: int, succumbed_since_fall: int = 0) -> MireHolding:
+        """The Sineater behind ``side`` carries ``amount`` Ruin for the Sinner it points at.
+
+        ``succumbed_since_fall`` is the tether's own counter, so it is set on ``side``."""
         row, _ = CharacterResonance.objects.get_or_create(
             character_sheet=side.source, resonance=self.ruin
         )
         row.corruption_current += amount
         row.save(update_fields=["corruption_current"])
-        return MireHolding.objects.create(
-            relationship=side, resonance=self.ruin, amount=amount, **counters
-        )
+        side.mire_succumbed_since_fall = succumbed_since_fall
+        side.save(update_fields=["mire_succumbed_since_fall"])
+        return MireHolding.objects.create(relationship=side, resonance=self.ruin, amount=amount)
 
     def offering(self, character, name: str) -> str:
         """Put a Tide-tied item, which pays for the Sineater's rite, in their hands."""
@@ -113,6 +115,10 @@ class MireJourneyCase(SineatingJourneyCase):
 
     def holding(self) -> MireHolding:
         return MireHolding.objects.get(relationship=self.ysmay_side)
+
+    def jackpot(self) -> int:
+        """What Corvin has purified for Ysmay since the last payout, counted on the tether."""
+        return CharacterRelationship.objects.get(pk=self.ysmay_side.pk).mire_purified_since_payout
 
 
 class AbsolvingByJournalEntry(MireJourneyCase):
@@ -141,7 +147,7 @@ class AbsolvingByJournalEntry(MireJourneyCase):
         self.assertIn("You absolve the Mire you carry for Ysmay: 81 of it clears.", told)
         self.assertIn("Your Tide grows by 40.", told)
         self.assertEqual(self.holding().amount, 27)
-        self.assertEqual(self.holding().purified_since_payout, 81)
+        self.assertEqual(self.jackpot(), 81)
         self.assertEqual(corruption(self.corvin, self.ruin), 27)
         self.assertEqual(balance(self.corvin, self.primal) - tide, 40)
         self.assertEqual(self.gauges(self.ysmay_side)[0] - affection, 4)
@@ -189,8 +195,9 @@ class SuccumbingAndAtoningForIt(MireJourneyCase):
     def test_succumbing_pays_ysmay_and_becomes_a_deed_corvin_disowns(self) -> None:
         holding = self.holding()
         holding.amount = 100
-        holding.purified_since_payout = 400
-        holding.save(update_fields=["amount", "purified_since_payout"])
+        holding.save(update_fields=["amount"])
+        self.ysmay_side.mire_purified_since_payout = 400
+        self.ysmay_side.save(update_fields=["mire_purified_since_payout"])
         row = CharacterResonance.objects.get(
             character_sheet=self.corvin.sheet_data, resonance=self.ruin
         )
@@ -211,7 +218,7 @@ class SuccumbingAndAtoningForIt(MireJourneyCase):
             "You succumb to the Mire you carry for Ysmay: 100 Ruin becomes part of you.", told
         )
         self.assertEqual(self.holding().amount, 0)
-        self.assertEqual(self.holding().purified_since_payout, 0)
+        self.assertEqual(self.jackpot(), 0)
         self.assertEqual(corruption(self.corvin, self.ruin), 0)
         self.assertEqual(balance(self.ysmay, self.ruin) - ysmay_ruin, 300)
         after = self.gauges(self.ysmay_side)
@@ -242,7 +249,7 @@ class SuccumbingAndAtoningForIt(MireJourneyCase):
         self.assertEqual(balance(self.corvin, self.primal) - tide, 39)
         # Ysmay keeps the payout: nothing was taken back from her.
         self.assertEqual(balance(self.ysmay, self.ruin) - ysmay_ruin, 300)
-        self.assertEqual(self.holding().purified_since_payout, 0)
+        self.assertEqual(self.jackpot(), 0)
 
 
 class TheFall(MireJourneyCase):
@@ -266,14 +273,15 @@ class TheFall(MireJourneyCase):
         tide_row.save(update_fields=["lifetime_earned"])
         ysmay_holding = self.holding()
         ysmay_holding.amount = 0
-        ysmay_holding.succumbed_since_fall = 300
-        ysmay_holding.save(update_fields=["amount", "succumbed_since_fall"])
+        ysmay_holding.save(update_fields=["amount"])
+        self.ysmay_side.mire_succumbed_since_fall = 300
+        self.ysmay_side.save(update_fields=["mire_succumbed_since_fall"])
         row = CharacterResonance.objects.get(
             character_sheet=self.corvin.sheet_data, resonance=self.ruin
         )
         row.corruption_current = 0
         row.save(update_fields=["corruption_current"])
-        brindle_holding = self.carry_for(brindle_side, 100, succumbed_since_fall=100)
+        self.carry_for(brindle_side, 100, succumbed_since_fall=100)
         self.share("Success", "1.00")
         ysmay_ruin = balance(self.ysmay, self.ruin)
         brindle_ruin = balance(brindle, self.ruin)
@@ -290,9 +298,9 @@ class TheFall(MireJourneyCase):
         self.assertEqual(balance(brindle, self.ruin) - brindle_ruin, 200 + 900)
         self.assertTold(self.ysmay, "Corvin has fallen to the Abyss. Your Ruin grows by 900.")
         self.assertTold(brindle, "Corvin has fallen to the Abyss. Your Ruin grows by 900.")
-        for holding in (ysmay_holding, brindle_holding):
-            holding.refresh_from_db()
-            self.assertEqual(holding.succumbed_since_fall, 0)
+        for side in (self.ysmay_side, brindle_side):
+            side.refresh_from_db()
+            self.assertEqual(side.mire_succumbed_since_fall, 0)
 
         told = self.entreat()
         self.assertIn("Corvin has fallen too far into the Abyss to carry anyone's sins.", told)
@@ -322,5 +330,6 @@ class AnNpcSineaterSettlesTheMire(MireJourneyCase):
         # The same numbers as for a player's Sineater: 81 clears and 40 Tide is earned.
         self.assertIn("You absolve the Mire you carry for Ysmay: 81 of it clears.", told)
         holding.refresh_from_db()
-        self.assertEqual((holding.amount, holding.purified_since_payout), (27, 81))
+        side.refresh_from_db()
+        self.assertEqual((holding.amount, side.mire_purified_since_payout), (27, 81))
         self.assertEqual(balance(marrow, self.primal) - tide, 40)

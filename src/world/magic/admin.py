@@ -2317,7 +2317,7 @@ class SineatingOutcomeAwardAdmin(admin.ModelAdmin):
 class MireHoldingAdmin(admin.ModelAdmin):
     """What each Sineater carries for each Sinner. Written only by the Sineating services."""
 
-    list_display = ("relationship", "resonance", "amount", "purified_since_payout")
+    list_display = ("relationship", "resonance", "amount")
     list_select_related = ("relationship__source", "relationship__target", "resonance")
     list_filter = ("resonance",)
     search_fields = (
@@ -2328,8 +2328,6 @@ class MireHoldingAdmin(admin.ModelAdmin):
         "relationship",
         "resonance",
         "amount",
-        "purified_since_payout",
-        "succumbed_since_fall",
     )
 
     def has_add_permission(self, request) -> bool:  # noqa: ARG002

@@ -42,12 +42,12 @@ from world.magic.services.soul_tether import (
     sinner_thread_resonance,
 )
 from world.magic.types.drift import RiteNotice
+from world.relationships.models import CharacterRelationship
 from world.relationships.services import move_gauges
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.magic.models.reflection import Reflection, SettlingRite
-    from world.relationships.models import CharacterRelationship
 
 _NO_RESONANCE_LINE = "You hold no resonance for your side of the bond to channel, so you earn none."
 _FALL_LINE = (
@@ -94,8 +94,15 @@ def _grant(
     return amount
 
 
+def _locked(tether: CharacterRelationship) -> CharacterRelationship:
+    """The tether's Sineater side, locked for the rite so two rites cannot both pay a counter."""
+    from world.relationships.models import CharacterRelationship  # noqa: PLC0415
+
+    return CharacterRelationship.objects.select_for_update().get(pk=tether.pk)
+
+
 def _held_rows(tether: CharacterRelationship) -> list[MireHolding]:
-    """Every holding of this tether (locked), including emptied ones that keep a jackpot."""
+    """Every holding of this tether (locked)."""
     return list(
         MireHolding.objects.select_for_update()
         .select_related("resonance")
@@ -133,8 +140,10 @@ def _purify(sheet: CharacterSheet, reflection: Reflection, share: Decimal) -> Bu
             continue
         cleared += part
         reward += part * cfg.purify_reward_percent // 100
-        holding.purified_since_payout += part
-        holding.save(update_fields=["purified_since_payout"])
+    if cleared > 0:
+        tether = _locked(tether)
+        tether.mire_purified_since_payout += cleared
+        tether.save(update_fields=["mire_purified_since_payout"])
     if cleared == 0:
         return BurdenOutcome(f"You {verb} {on}, but the rite carries none of it through.")
     steps = _gauge_steps(cfg.absolve_affection if absolving else cfg.condemn_conflict, share)
@@ -183,19 +192,18 @@ def _succumb(
             settling_rite=rite,
             reflection=reflection,
         )
-        holding.succumbed_since_fall += taken
-        holding.save(update_fields=["succumbed_since_fall"])
         taken_by.append((holding.resonance, taken))
         bonus += taken * cfg.succumb_bonus_percent // 100
     total = sum(amount for _, amount in taken_by)
     if total == 0:
         return BurdenOutcome(f"You succumb to {on}, but the rite carries none of it through.")
-    # The jackpot is the tether's, however many resonances it is held in: paid once, then reset.
-    bonus += sum(row.purified_since_payout for row in rows) * cfg.jackpot_percent // 100
-    for row in rows:
-        if row.purified_since_payout:
-            row.purified_since_payout = 0
-            row.save(update_fields=["purified_since_payout"])
+    # The counters are the tether's, however many resonances it is held in. The jackpot is paid
+    # once, then reset.
+    tether = _locked(tether)
+    bonus += tether.mire_purified_since_payout * cfg.jackpot_percent // 100
+    tether.mire_purified_since_payout = 0
+    tether.mire_succumbed_since_fall += total
+    tether.save(update_fields=["mire_purified_since_payout", "mire_succumbed_since_fall"])
     for steps, sign in (
         (_gauge_steps(cfg.succumb_affection, share), 1),
         (_gauge_steps(cfg.succumb_conflict, share), -1),
@@ -223,34 +231,32 @@ def apply_fall(sheet: CharacterSheet, last: CharacterRelationship) -> FallOutcom
     """Pay the Sinners when the Sineater has fallen, or None when they have not (or no one is
     owed). ``last`` is the tether of the Mire succumbed to last in this rite.
 
-    Each Sinner with ``succumbed_since_fall`` above 0 earns ``fall_payout_percent`` of it in their
-    own thread's resonance; ``last``'s Sinner earns ``fall_breaker_bonus_percent`` more on top.
-    Every counter resets, which is what stops a second payout for the same fall. The Sinner's
-    ``sineater.broken`` stat rises when they are paid.
+    Each Sinner whose tether has ``mire_succumbed_since_fall`` above 0 earns
+    ``fall_payout_percent`` of it in their own thread's resonance; ``last``'s Sinner earns
+    ``fall_breaker_bonus_percent`` more on top. Every counter resets, which is what stops a
+    second payout for the same fall. The Sinner's ``sineater.broken`` stat rises when they are
+    paid.
     """
     if not sineater_has_fallen(sheet):
         return None
-    rows = list(
-        MireHolding.objects.select_for_update()
-        .select_related("relationship__target")
-        .filter(relationship__source=sheet, succumbed_since_fall__gt=0)
-        .order_by("relationship_id", "resonance_id")
+    tethers = list(
+        CharacterRelationship.objects.select_for_update()
+        .select_related("target")
+        .filter(source=sheet, mire_succumbed_since_fall__gt=0)
+        .order_by("pk")
     )
-    if not rows:
+    if not tethers:
         return None
     cfg = get_soul_tether_config()
     totals: dict[int, int] = {}
-    tethers: dict[int, CharacterRelationship] = {}
-    for row in rows:
-        totals[row.relationship_id] = totals.get(row.relationship_id, 0) + row.succumbed_since_fall
-        tethers[row.relationship_id] = row.relationship
-        row.succumbed_since_fall = 0
-        row.save(update_fields=["succumbed_since_fall"])
+    for tether in tethers:
+        totals[tether.pk] = tether.mire_succumbed_since_fall
+        tether.mire_succumbed_since_fall = 0
+        tether.save(update_fields=["mire_succumbed_since_fall"])
     notices: list[RiteNotice] = []
-    for tether_id, total in totals.items():
-        tether = tethers[tether_id]
-        payout = total * cfg.fall_payout_percent // 100
-        if tether_id == last.pk:
+    for tether in tethers:
+        payout = totals[tether.pk] * cfg.fall_payout_percent // 100
+        if tether.pk == last.pk:
             payout += payout * cfg.fall_breaker_bonus_percent // 100
         resonance = sinner_thread_resonance(tether)
         if _grant(tether.target, resonance, payout, GainSource.SINEATER_FALL) <= 0:

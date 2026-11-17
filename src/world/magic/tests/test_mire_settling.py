@@ -140,16 +140,20 @@ class MireSettlingCase(TestCase):
             outcome_tier=self.outcomes[tier], defaults={"converted_share": Decimal(share)}
         )
 
-    def carry(self, side, amount: int, **counters: int) -> MireHolding:
-        """Corvin carries ``amount`` Ruin for the Sinner behind ``side``."""
+    def carry(
+        self, side, amount: int, *, purified_since_payout: int = 0, succumbed_since_fall: int = 0
+    ) -> MireHolding:
+        """Corvin carries ``amount`` Ruin for the Sinner behind ``side``, with the tether's
+        jackpot and fall counters (which live on the side, not on the holding) set."""
         row, _ = CharacterResonance.objects.get_or_create(
             character_sheet=self.sineater, resonance=self.ruin
         )
         row.corruption_current += amount
         row.save(update_fields=["corruption_current"])
-        return MireHolding.objects.create(
-            relationship=side, resonance=self.ruin, amount=amount, **counters
-        )
+        side.mire_purified_since_payout = purified_since_payout
+        side.mire_succumbed_since_fall = succumbed_since_fall
+        side.save(update_fields=["mire_purified_since_payout", "mire_succumbed_since_fall"])
+        return MireHolding.objects.create(relationship=side, resonance=self.ruin, amount=amount)
 
     def reflect(self, side, choice: str):
         entry = JournalEntryFactory(author=self.sineater)
@@ -211,7 +215,7 @@ class AbsolvingAndCondemningTheMire(MireSettlingCase):
         # Corvin's own thread's resonance (Tide), the tie gains round(5 x 0.75) = 4 affection,
         # and 81 is now the jackpot for this tether.
         holding.refresh_from_db()
-        self.assertEqual((holding.amount, holding.purified_since_payout), (27, 81))
+        self.assertEqual((holding.amount, self.side().mire_purified_since_payout), (27, 81))
         self.assertEqual(_row(self.sineater, self.ruin).corruption_current, 27)
         self.assertEqual(_balance(self.sineater, self.tide), 40)
         self.assertEqual(self.side().affection - affection_before, 4)
@@ -230,7 +234,7 @@ class AbsolvingAndCondemningTheMire(MireSettlingCase):
         self.reflect(self.ysmay_side, ReflectionChoice.ABSOLVE)
         self.settle()
         holding.refresh_from_db()
-        self.assertEqual((holding.amount, holding.purified_since_payout), (7, 101))
+        self.assertEqual((holding.amount, self.side().mire_purified_since_payout), (7, 101))
         self.assertEqual(_balance(self.sineater, self.tide), 50)
 
     def test_condemning_raises_conflict_not_affection(self) -> None:
@@ -257,7 +261,7 @@ class AbsolvingAndCondemningTheMire(MireSettlingCase):
         result = self.settle()
 
         holding.refresh_from_db()
-        self.assertEqual((holding.amount, holding.purified_since_payout), (100, 0))
+        self.assertEqual((holding.amount, self.side().mire_purified_since_payout), (100, 0))
         self.assertEqual(_balance(self.sineater, self.tide), 0)
         self.assertIn("but the rite carries none of it through.", result.lines[0])
         self.assertEqual(Reflection.objects.filter(rite__isnull=True).count(), 0)
@@ -294,8 +298,9 @@ class SuccumbingToTheMire(MireSettlingCase):
         # 100 x 200 / 100 + 400 x 25 / 100 = 300 in Ruin (her thread's), the jackpot resets,
         # and both gauges rise by 5.
         holding.refresh_from_db()
+        side = self.side()
         self.assertEqual(
-            (holding.amount, holding.purified_since_payout, holding.succumbed_since_fall),
+            (holding.amount, side.mire_purified_since_payout, side.mire_succumbed_since_fall),
             (0, 0, 100),
         )
         self.assertEqual(_row(self.sineater, self.ruin).lifetime_earned - ruin_lifetime, 100)
@@ -402,10 +407,9 @@ class AFallingSineater(MireSettlingCase):
         tide_row = _row(self.sineater, self.tide)
         tide_row.lifetime_earned = 50
         tide_row.save(update_fields=["lifetime_earned"])
-        ysmay_holding = MireHolding.objects.create(
-            relationship=self.ysmay_side, resonance=self.ruin, amount=0, succumbed_since_fall=300
-        )
-        brindle_holding = self.carry(brindle_side, 100, succumbed_since_fall=100)
+        self.ysmay_side.mire_succumbed_since_fall = 300
+        self.ysmay_side.save(update_fields=["mire_succumbed_since_fall"])
+        self.carry(brindle_side, 100, succumbed_since_fall=100)
         self.set_share("Success", "1.00")
         self.reflect(brindle_side, ReflectionChoice.SUCCUMB)
 
@@ -416,9 +420,9 @@ class AFallingSineater(MireSettlingCase):
         # 100 x 200 / 100 = 200 earlier in the same rite.
         self.assertEqual(_balance(self.ysmay, self.ruin), 900)
         self.assertEqual(_balance(brindle, self.ruin), 200 + 900)
-        for holding in (ysmay_holding, brindle_holding):
-            holding.refresh_from_db()
-            self.assertEqual(holding.succumbed_since_fall, 0)
+        for side in (self.ysmay_side, brindle_side):
+            side.refresh_from_db()
+            self.assertEqual(side.mire_succumbed_since_fall, 0)
         lines = {n.sheet.pk: n.line for n in result.notices}
         self.assertEqual(
             lines[self.ysmay.pk],
