@@ -354,12 +354,18 @@ def reset_rivers(*, region: RegionMap) -> int:
     coast was repainted, or the generator's lake is too small to be a pip) is
     carried straight on to the water, so it reads as reaching it.
     """
-    upload = RegionMapUpload.objects.filter(region=region).order_by("-uploaded_at").first()
-    if upload is None:
+    # the bytes alone, never the row: a loaded upload would carry its file into the identity map
+    file_bytes = (
+        RegionMapUpload.objects.filter(region=region)
+        .order_by("-uploaded_at")
+        .values_list("file_bytes", flat=True)
+        .first()
+    )
+    if file_bytes is None:
         msg = "This region has no map file to read rivers from."
         raise WorldMapServiceError(msg)
     try:
-        gmap = parse_map(upload_text(upload))
+        gmap = parse_map(gzip.decompress(bytes(file_bytes)).decode("utf-8"))
     except MapFileError as exc:
         raise WorldMapServiceError(str(exc), user_message=exc.user_message) from exc
     width = region.width_cells * PIPS_PER_CELL
