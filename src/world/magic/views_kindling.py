@@ -14,16 +14,28 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from world.character_sheets.models import CharacterSheet
-from world.magic.serializers_kindling import KindledResonanceSerializer
+from world.magic.serializers_kindling import ImpulseSerializer, KindledResonanceSerializer
+from world.magic.services.impulses import impulses_now, refresh_impulses_for_character
 from world.magic.services.kindling import kindled_resonances_now
 from world.roster.models import RosterEntry
 from world.stories.pagination import StandardResultsSetPagination
 
 
 class KindledResonancePagination(StandardResultsSetPagination):
-    """One page holds every resonance a character can hold; the panel reads only page one."""
+    """One page holds every resonance a character can hold; the panel reads only page one.
+
+    The response carries an ``impulses`` list beside ``results`` (#5177)."""
 
     page_size = 100
+
+    def get_paginated_response_schema(self, schema: dict) -> dict:
+        """Document the ``impulses`` list the list view adds beside the page."""
+        base = super().get_paginated_response_schema(schema)
+        base["properties"]["impulses"] = {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/Impulse"},
+        }
+        return base
 
 
 class KindledResonanceFilter(filters.FilterSet):
@@ -54,10 +66,26 @@ class KindledResonanceViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         )
         return qs.filter(pk__in=list(own))
 
+    def _impulses(self, sheet: CharacterSheet | None) -> list:
+        """The character's impulses. Their own view applies what they call for (the
+        Compulsion's condition, the once-per-scene words); staff reading another's sheet only
+        reads."""
+        if sheet is None:
+            return []
+        own = RosterEntry.objects.for_account(self.request.user).filter(character_sheet_id=sheet.pk)
+        if own.exists():
+            refreshed = refresh_impulses_for_character(sheet.character)
+            return list(refreshed.impulses) if refreshed is not None else []
+        return impulses_now(sheet)
+
     def list(self, request, *args, **kwargs):
         sheet = self.filter_queryset(self.get_queryset()).first()
         rows = kindled_resonances_now(sheet) if sheet is not None else []
+        impulses = ImpulseSerializer(self._impulses(sheet), many=True).data
         page = self.paginate_queryset(rows)
         if page is not None:
-            return self.get_paginated_response(KindledResonanceSerializer(page, many=True).data)
-        return Response(KindledResonanceSerializer(rows, many=True).data)
+            response = self.get_paginated_response(KindledResonanceSerializer(page, many=True).data)
+        else:
+            response = Response({"results": KindledResonanceSerializer(rows, many=True).data})
+        response.data = {**dict(response.data), "impulses": impulses}
+        return response

@@ -518,6 +518,12 @@ def _record_pose_submission(  # noqa: PLR0913
         broadcast()
         if after_first_acceptance is not None:
             after_first_acceptance(result.interaction)
+        # #5177: a pose in a scene is when what the character carries pulls at them.
+        from world.magic.services.impulses import (  # noqa: PLC0415
+            refresh_impulses_for_character,
+        )
+
+        refresh_impulses_for_character(actor)
     return None
 
 

@@ -227,6 +227,19 @@ class InteractionCursorPagination(CursorPagination):
     cursor_query_description = "The pagination cursor value."
 
 
+def _refresh_impulses_after_pose(persona: Persona, character: Any, scene: Scene | None) -> None:
+    """A pose in a scene is when what the character carries pulls at them (#5177)."""
+    from world.magic.services.impulses import (  # noqa: PLC0415
+        refresh_impulses,
+        refresh_impulses_for_character,
+    )
+
+    if scene is None:
+        refresh_impulses_for_character(character)
+    else:
+        refresh_impulses(persona.character_sheet, scene)
+
+
 def _record_submitted_pose(  # noqa: PLR0913
     *,
     persona: Persona,
@@ -307,6 +320,9 @@ def _record_submitted_pose(  # noqa: PLR0913
             reflection_line = (
                 f"Your pose was posted, but your reflection was not recorded: {exc.user_message}"
             )
+
+    if not result.replayed:
+        _refresh_impulses_after_pose(persona, character, scene)
 
     response_status = status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
     interaction = result.interaction

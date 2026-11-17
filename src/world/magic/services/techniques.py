@@ -1648,7 +1648,10 @@ def _complete_technique_cast(  # noqa: PLR0913
     # Unsettled (#4732, #5123): one focus roll per cast, on every cast path, before
     # resolve_fn gathers the cast's modifiers so a conflict it applies reaches this roll.
     from world.magic.services.drift import check_resonance_focus  # noqa: PLC0415
+    from world.magic.services.impulses import refresh_impulses_for_character  # noqa: PLC0415
 
+    # #5177: the Compulsion's condition goes on before this cast's modifiers are gathered.
+    refresh_impulses_for_character(character)
     focus_outcome = check_resonance_focus(character, technique)
     resolution_result, price_payment = _resolve_and_settle_price(
         character=character,
