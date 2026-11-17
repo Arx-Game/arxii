@@ -114,6 +114,21 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    // The build is served from two places: `vite preview` (Playwright) serves it at
+    // `/`, and Django serves it at `/static/dist/` (FrontendAppView rewrites the
+    // paths in index.html). A URL a script or stylesheet builds at runtime never
+    // passes through that rewrite, so with the default absolute base a lazy page's
+    // own stylesheet was requested from `/assets/...`, where Django answers with the
+    // app shell, and the page died with "Unable to preload CSS". Every URL written
+    // into a script or a stylesheet is therefore relative to the file that holds it,
+    // which is right wherever the build is mounted. index.html keeps the default
+    // root paths, because a relative path there would resolve against the route.
+    // scripts/check-built-urls.mjs fails the build if this stops holding.
+    experimental: {
+      renderBuiltUrl(_filename: string, { hostType }: { hostType: 'js' | 'css' | 'html' }) {
+        return hostType === 'html' ? undefined : { relative: true };
+      },
+    },
     // Ensure source maps are enabled in development
     css: {
       devSourcemap: true,

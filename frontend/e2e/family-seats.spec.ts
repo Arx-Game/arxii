@@ -71,6 +71,36 @@ function draftSaved(page: Page) {
 const lineageErrors = (draft: Draft) => draft.stage_errors['3'] ?? [];
 
 test.describe('joining an established family', () => {
+  // The family page is a lazy page with a stylesheet of its own. The server serves the
+  // build from /static/dist/, and a build that asked for that stylesheet at /assets/
+  // got the app shell back and showed "Something went wrong: Unable to preload CSS".
+  // `vite preview` serves the build at the root and cannot show this; a live server can.
+  test("the house's card opens the house's page, styled", async ({ page, context }) => {
+    const seed = readSeed();
+    await logIn(page);
+    await page.goto('/characters/create');
+    await expect(page.getByText(seed.family_name, { exact: true }).first()).toBeVisible({
+      timeout: 20000,
+    });
+
+    const opened = context.waitForEvent('page');
+    await page.getByRole('link', { name: 'House page', exact: true }).click();
+    const housePage = await opened;
+
+    await expect(
+      housePage.getByRole('heading', { level: 1, name: `House ${seed.family_name}`, exact: true })
+    ).toBeVisible({ timeout: 20000 });
+    await expect(housePage.getByText('Something went wrong')).toHaveCount(0);
+    expect(new URL(housePage.url()).pathname).toBe(`/families/${seed.family_id}`);
+    // A rule of the page's own stylesheet reaches it: an <article> is a block box
+    // until family.css lays `.family-page` out as a column.
+    const display = await housePage
+      .locator('.family-page')
+      .evaluate((element) => getComputedStyle(element).display);
+    expect(display).toBe('flex');
+    await housePage.screenshot({ path: 'test-results/house-page-from-creation.png' });
+  });
+
   test('the house is entered through its open seat, and the server keeps the pick', async ({
     page,
   }) => {
