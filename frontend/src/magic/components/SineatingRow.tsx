@@ -119,7 +119,7 @@ export function SineatingRow({ characterSheetId, inScene, value, onChange, class
           <span className="text-xs text-muted-foreground">optional</span>
         )}
       </div>
-      <div className="flex flex-col gap-1.5" role="group" aria-label="Sineating">
+      <fieldset className="flex flex-col gap-1.5" aria-label="Sineating">
         {options.map((option) => {
           const pressed = picked !== null && sameSineatingOption(picked, option);
           return (
@@ -149,9 +149,9 @@ export function SineatingRow({ characterSheetId, inScene, value, onChange, class
             </div>
           );
         })}
-      </div>
+      </fieldset>
       {picked !== null ? (
-        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Units">
+        <fieldset className="flex flex-wrap items-center gap-1.5" aria-label="Units">
           <span className="text-xs">Units</span>
           {Array.from({ length: picked.max_units }, (_, index) => index + 1).map((units) => (
             <Pill
@@ -163,7 +163,7 @@ export function SineatingRow({ characterSheetId, inScene, value, onChange, class
               {units}
             </Pill>
           ))}
-        </div>
+        </fieldset>
       ) : null}
     </div>
   );

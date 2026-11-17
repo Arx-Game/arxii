@@ -697,6 +697,20 @@ def kindled_for(
     return _evaluate(sheet, [resonance], resolution=resolution, mission=mission, act=act)[0]
 
 
+def kindled_for_each(
+    sheet: CharacterSheet,
+    resonances: list[Resonance],
+    *,
+    resolution: object | None = None,
+    mission: MissionInstance | None = None,
+) -> list[KindledResonance]:
+    """``kindled_for`` for many resonances at once, one answer per resonance in order.
+
+    The strengths, rows and Rally and GM kindlings are read once for the whole list.
+    """
+    return _evaluate(sheet, resonances, resolution=resolution, mission=mission, act=None)
+
+
 def _evaluate(
     sheet: CharacterSheet,
     resonances: list[Resonance],

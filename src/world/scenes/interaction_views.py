@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from http import HTTPMethod
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
@@ -240,6 +240,52 @@ def _refresh_impulses_after_pose(persona: Persona, character: Any, scene: Scene 
         safe_refresh_impulses(persona.character_sheet, scene)
 
 
+def _pose_deed_fields(  # noqa: PLR0913
+    persona: Persona,
+    character: Any,
+    *,
+    replayed: bool,
+    reflection: PendingReflection | None,
+    sineating: PendingSineating | None,
+    writing: Interaction | None,
+) -> dict[str, object]:
+    """The reflection and Sineating lines a new pose answers with (#5124, #5177).
+
+    Both are carried out once the pose is down, on first acceptance only. A reflection that
+    cannot be recorded does not undo the pose: the writer is told why.
+    """
+    if replayed:
+        return {}
+    fields: dict[str, object] = {}
+    if reflection is not None:
+        reflection_line = None
+        reflection_recorded = True
+        try:
+            reflection_line = recorded_line(
+                record_pending_reflection(persona.character_sheet, reflection, writing=writing)
+            )
+        except ReflectionError as exc:
+            # The pose cannot be un-posted, so it stands and the writer is told why the
+            # reflection was not recorded.
+            reflection_recorded = False
+            reflection_line = (
+                f"Your pose was posted, but your reflection was not recorded: {exc.user_message}"
+            )
+        if reflection_line:
+            fields = {
+                "reflection_line": reflection_line,
+                "reflection_recorded": reflection_recorded,
+            }
+    if sineating is not None:
+        sineating_line, sineating_recorded = run_pose_sineating(character, sineating)
+        fields = {
+            **fields,
+            "sineating_line": sineating_line,
+            "sineating_recorded": sineating_recorded,
+        }
+    return fields
+
+
 def _record_submitted_pose(  # noqa: PLR0913
     *,
     persona: Persona,
@@ -304,37 +350,16 @@ def _record_submitted_pose(  # noqa: PLR0913
         # client drops it because the Interaction pushed above is the render.
         # Untagged, every web viewer in the room got the pose twice.
         message_location(caller_state, content, echo_of=InteractionMode.POSE)
-    reflection_line = None
-    reflection_recorded = True
-    if reflection is not None and not result.replayed:
-        try:
-            reflection_line = recorded_line(
-                record_pending_reflection(
-                    persona.character_sheet, reflection, writing=result.interaction
-                )
-            )
-        except ReflectionError as exc:
-            # The pose cannot be un-posted, so it stands and the writer is told why the
-            # reflection was not recorded.
-            reflection_recorded = False
-            reflection_line = (
-                f"Your pose was posted, but your reflection was not recorded: {exc.user_message}"
-            )
-
     response_status = status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
     interaction = result.interaction
-    extra = (
-        {"reflection_line": reflection_line, "reflection_recorded": reflection_recorded}
-        if reflection_line
-        else {}
+    extra = _pose_deed_fields(
+        persona,
+        character,
+        replayed=result.replayed,
+        reflection=reflection,
+        sineating=sineating,
+        writing=interaction,
     )
-    if sineating is not None and not result.replayed:
-        sineating_line, sineating_recorded = run_pose_sineating(character, sineating)
-        extra = {
-            **extra,
-            "sineating_line": sineating_line,
-            "sineating_recorded": sineating_recorded,
-        }
     if not result.replayed:
         # Last, so a failure here can never skip the reflection or the Sineating above it.
         _refresh_impulses_after_pose(persona, character, scene)
@@ -345,6 +370,42 @@ def _record_submitted_pose(  # noqa: PLR0913
     _seed_fresh_pose_caches(interaction, target_personas=target_personas, replayed=result.replayed)
     output = InteractionListSerializer(interaction, context=serializer_context)
     return Response({**output.data, "replayed": result.replayed, **extra}, status=response_status)
+
+
+def _checked_pose_deeds(
+    persona: Persona, data: Mapping[str, Any]
+) -> tuple[PendingReflection | None, PendingSineating | None, Response | None]:
+    """Check a pose's reflection and Sineating before anything posts (#5124, #5177).
+
+    A refused one costs the writer nothing: the refusal is returned as the response. A retry
+    of a pose that already landed is the replay it is, and its deeds were carried out the
+    first time, so nothing is checked again.
+    """
+    if pose_already_submitted(persona, data["client_request_id"]):
+        return None, None, None
+    try:
+        reflection = pending_reflection_from(persona.character_sheet, data)
+    except ReflectionError as exc:
+        return (
+            None,
+            None,
+            Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST),
+        )
+    try:
+        sineating = pending_sineating_from(persona.character_sheet, data)
+    except SoulTetherError as exc:
+        return (
+            None,
+            None,
+            Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST),
+        )
+    if sineating is not None and reflection is not None:
+        return (
+            None,
+            None,
+            Response({"detail": BOTH_REFLECTION_AND_SINEATING}, status=status.HTTP_400_BAD_REQUEST),
+        )
+    return reflection, sineating, None
 
 
 class InteractionViewSet(
@@ -645,23 +706,9 @@ class InteractionViewSet(
         # the writer nothing.
         # A retry of a pose that already landed is the replay it is, and its reflection was
         # recorded the first time: it is not checked again (the deed it names is now taken).
-        reflection = None
-        if not pose_already_submitted(persona, data["client_request_id"]):
-            try:
-                reflection = pending_reflection_from(persona.character_sheet, data)
-            except ReflectionError as exc:
-                return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        # A Sineating (#5177) is checked the same way: nothing posts if it cannot happen.
-        sineating = None
-        if not pose_already_submitted(persona, data["client_request_id"]):
-            try:
-                sineating = pending_sineating_from(persona.character_sheet, data)
-            except SoulTetherError as exc:
-                return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        if sineating is not None and reflection is not None:
-            return Response(
-                {"detail": BOTH_REFLECTION_AND_SINEATING}, status=status.HTTP_400_BAD_REQUEST
-            )
+        reflection, sineating, refusal = _checked_pose_deeds(persona, data)
+        if refusal is not None:
+            return refusal
 
         target_names: list[str] = data.get("target_names") or []
         target_characters = (

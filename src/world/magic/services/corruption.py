@@ -652,6 +652,23 @@ def _shrink_holdings_to(
             holding.save(update_fields=["amount"])
 
 
+def _grant_cleansing_resonance(
+    character_sheet: CharacterSheet, resonance: Resonance, amount: int, *, grant: bool
+) -> None:
+    """Grant the resonance a cleansing returns, when the reduction is one that grants it."""
+    if not grant:
+        return
+    from world.magic.constants import GainSource  # noqa: PLC0415
+    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+
+    grant_resonance(
+        character_sheet,
+        resonance,
+        amount,
+        source=GainSource.CORRUPTION_CLEANSING,
+    )
+
+
 @transaction.atomic
 def reduce_corruption(  # noqa: PLR0913 - cohesive recovery-context params
     *,
@@ -694,16 +711,12 @@ def reduce_corruption(  # noqa: PLR0913 - cohesive recovery-context params
     if actual_reduction > 0 and shrink_holdings:
         _shrink_holdings_to(character_sheet, resonance, char_resonance.corruption_current)
 
-    if actual_reduction > 0 and not _from_decay and grant_resonance_back:
-        from world.magic.constants import GainSource  # noqa: PLC0415
-        from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
-
-        grant_resonance(
-            character_sheet,
-            resonance,
-            actual_reduction,
-            source=GainSource.CORRUPTION_CLEANSING,
-        )
+    _grant_cleansing_resonance(
+        character_sheet,
+        resonance,
+        actual_reduction,
+        grant=actual_reduction > 0 and not _from_decay and grant_resonance_back,
+    )
 
     character = _resolve_character(character_sheet)
     instance = ConditionInstance.objects.filter(

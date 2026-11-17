@@ -165,35 +165,42 @@ def _corruption_instances(
 def _impulses_from(
     sheet: CharacterSheet, corruption: list[ConditionInstance], cfg: CorruptionConfig
 ) -> list[Impulse]:
-    from world.magic.services.kindling import kindled_for, kindling_context_for  # noqa: PLC0415
+    from world.magic.services.kindling import (  # noqa: PLC0415
+        kindled_for_each,
+        kindling_context_for,
+    )
 
     stages = {
         row.condition.corruption_resonance: row.current_stage.stage_order for row in corruption
     }
-    felt = {
-        resonance: stage
-        for resonance, stage in stages.items()
-        if stage >= cfg.intrusive_thoughts_stage
-    }
+    felt = sorted(
+        (
+            (resonance, stage)
+            for resonance, stage in stages.items()
+            if stage >= cfg.intrusive_thoughts_stage
+        ),
+        key=lambda item: item[0].name,
+    )
     if not felt:
         return []
     context = kindling_context_for(sheet)
-    impulses: list[Impulse] = []
-    for resonance, stage in sorted(felt.items(), key=lambda item: item[0].name):
-        kindled = kindled_for(
-            sheet, resonance, resolution=context.resolution, mission=context.mission
+    answers = kindled_for_each(
+        sheet,
+        [resonance for resonance, _ in felt],
+        resolution=context.resolution,
+        mission=context.mission,
+    )
+    return [
+        Impulse(
+            resonance=resonance,
+            stage_order=stage,
+            is_compulsion=stage >= cfg.compulsion_stage,
+            present=kindled.fed_tier is not None,
+            reasons=tuple(kindled.fed_reasons),
+            text=resonance.impulse_text,
         )
-        impulses.append(
-            Impulse(
-                resonance=resonance,
-                stage_order=stage,
-                is_compulsion=stage >= cfg.compulsion_stage,
-                present=kindled.fed_tier is not None,
-                reasons=tuple(kindled.fed_reasons),
-                text=resonance.impulse_text,
-            )
-        )
-    return impulses
+        for (resonance, stage), kindled in zip(felt, answers, strict=True)
+    ]
 
 
 def impulses_now(sheet: CharacterSheet) -> list[Impulse]:

@@ -79,7 +79,7 @@ export function isReflecting(draft: ReflectionDraft): boolean {
 /** What the row says while a pick is half made, in words that fit what is picked. */
 export function reflectionIncompleteLine(draft: ReflectionDraft): string {
   const names = choicesFor(draft.option).map((choice) => choice.label);
-  const last = names[names.length - 1];
+  const last = names.at(-1) ?? '';
   const list =
     names.length > 2 ? `${names.slice(0, -1).join(', ')} or ${last}` : names.join(' or ');
   return draft.option === null
