@@ -1816,6 +1816,7 @@
   - ghost_tutelages <- magic.GhostTutelage
   - gift_unlocks <- magic.CharacterGiftUnlock
   - resonance_grants <- magic.ResonanceGrant
+  - impulses_shown <- magic.ImpulseShown
   - led_courts <- covenants.Covenant
   - covenant_role_assignments <- covenants.CharacterCovenantRole
   - covenant_rite_instances <- covenants.CovenantRiteInstance
@@ -6223,6 +6224,7 @@
 
 ### CorruptionConfig
 **Foreign Keys:**
+  - compulsion_condition -> conditions.ConditionTemplate [FK] (nullable)
   - updated_by -> evennia.AccountDB [FK] (nullable)
 
 ### CovenantRoleBlendConfig
@@ -6451,6 +6453,12 @@
 **Foreign Keys:**
   - resonance -> magic.Resonance [FK] (nullable)
 
+### ImpulseShown
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - resonance -> magic.Resonance [FK]
+  - scene -> scenes.Scene [FK]
+
 ### IntensityTier
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
@@ -6523,6 +6531,11 @@
   - variants <- magic.MagicalAlterationTemplate
   - resolved_pending <- magic.PendingAlteration
   - application_events <- magic.MagicalAlterationEvent
+
+### MireHolding
+**Foreign Keys:**
+  - relationship -> relationships.CharacterRelationship [FK]
+  - resonance -> magic.Resonance [FK]
 
 ### MishapPoolTier
 **Foreign Keys:**
@@ -6656,6 +6669,7 @@
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - grant -> magic.ResonanceGrant [FK] (nullable)
   - resonance -> magic.Resonance [FK] (nullable)
+  - tether -> relationships.CharacterRelationship [FK] (nullable)
   - interaction -> scenes.Interaction [FK] (nullable)
   - journal_entry -> journals.JournalEntry [FK] (nullable)
   - rite -> magic.SettlingRite [FK] (nullable)
@@ -6702,6 +6716,7 @@
   - resonancegrant_set <- magic.ResonanceGrant
   - distinction_grants <- magic.DistinctionResonanceGrant
   - distinction_rank_thresholds <- magic.DistinctionResonanceRankThreshold
+  - impulses_shown <- magic.ImpulseShown
   - techniquevariant_subrole <- magic.TechniqueVariant
   - covenantrole_subrole <- covenants.CovenantRole
   - kindling_situations <- magic.KindlingSituation
@@ -6715,6 +6730,7 @@
   - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
   - sineatings <- magic.Sineating
   - rescues <- magic.SoulTetherRescue
+  - mire_holdings <- magic.MireHolding
   - pull_effects <- magic.ThreadPullEffect
   - threads <- magic.Thread
   - thread_rows <- magic.ThreadResonance
@@ -6935,6 +6951,11 @@
   - relationship -> relationships.CharacterRelationship [FK]
   - scene -> scenes.Scene [FK] (nullable)
   - resonance -> magic.Resonance [FK]
+  - outcome -> traits.CheckOutcome [FK] (nullable)
+
+### SineatingOutcomeAward
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
 
 ### SineatingPendingOffer
 **Foreign Keys:**
@@ -6946,6 +6967,7 @@
 
 ### SoulTetherConfig
 **Foreign Keys:**
+  - sineating_check_type -> checks.CheckType [FK] (nullable)
   - updated_by -> evennia.AccountDB [FK] (nullable)
 
 ### SoulTetherRescue
@@ -7359,7 +7381,7 @@
 - `get_soulfray_warning(character: 'ObjectDB') -> 'SoulfrayWarning | None' - Return the current Soulfray stage warning for the safety checkpoint.`
 - `get_thread_survivability_tuning(vital_target: 'str') -> "'ThreadSurvivabilityTuning | None'" - Return the tuning row for a target, or None if unseeded (baseline 0).`
 - `gift_thread_resistance(character: 'ObjectDB', damage_type: 'DamageType') -> 'int' - Total damage-type-specific resistance from gift threads (#1580).`
-- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None, style_presentation_endorsement: 'StylePresentationEndorsement | None' = None, mission_deed_reward_line: 'MissionDeedRewardLine | None' = None, source_character_distinction: 'CharacterDistinction | None' = None, worship_rite_performance: 'WorshipRitePerformance | None' = None, kindling_situation: 'KindlingSituation | None' = None, settling_rite: 'SettlingRite | None' = None, reflection: 'Reflection | None' = None, from_mire: 'bool' = False, deed_label: 'str | None' = None, ledger_out: 'list[ResonanceGrant] | None' = None) -> 'CharacterResonance' - Atomically grant resonance AND write the ResonanceGrant ledger row.`
+- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None, style_presentation_endorsement: 'StylePresentationEndorsement | None' = None, mission_deed_reward_line: 'MissionDeedRewardLine | None' = None, source_character_distinction: 'CharacterDistinction | None' = None, worship_rite_performance: 'WorshipRitePerformance | None' = None, kindling_situation: 'KindlingSituation | None' = None, settling_rite: 'SettlingRite | None' = None, reflection: 'Reflection | None' = None, deed_label: 'str | None' = None, ledger_out: 'list[ResonanceGrant] | None' = None) -> 'CharacterResonance' - Atomically grant resonance AND write the ResonanceGrant ledger row.`
 - `has_pending_alterations(character: 'CharacterSheet') -> 'bool' - Check if this character has any unresolved Mage Scar that holds back advancement.`
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' - Return threads that any resonance the character holds can imbue (#5123).`
 - `involved_trait_ids(check_type: 'CheckType', extra_traits: 'Sequence[ExtraTraitTerm]') -> 'tuple[int, ...]' - Trait ids a roll involves: the check type's traits, then the terms', once each.`
@@ -9039,10 +9061,12 @@
   - target_companion -> companions.Companion [FK] (nullable)
   - conditions -> relationships.RelationshipCondition [M2M]
 **Pointed to by:**
+  - burden_reflections <- magic.Reflection
   - sineating_pending_offers <- magic.SineatingPendingOffer
   - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
   - sineatings <- magic.Sineating
   - rescues <- magic.SoulTetherRescue
+  - mire_holdings <- magic.MireHolding
   - anchored_threads <- magic.Thread
   - keepsakes <- items.Keepsake
   - labels <- relationships.RelationshipLabel
@@ -9886,6 +9910,7 @@
   - style_presentation_endorsements <- magic.StylePresentationEndorsement
   - entry_flourish_records <- magic.EntryFlourishRecord
   - fall_redemption_records <- magic.FallRedemptionRecord
+  - impulses_shown <- magic.ImpulseShown
   - covenant_rite_instances <- covenants.CovenantRiteInstance
   - kindlings <- magic.Kindling
   - ritual_sessions <- magic.RitualSession
@@ -11925,6 +11950,7 @@
   - arxii_sanctumhomecominggainaward <- magic.SanctumHomecomingGainAward
   - arxii_sanctumpurgingretentionaward <- magic.SanctumPurgingRetentionAward
   - arxii_sanctumdissolutionrecoveryaward <- magic.SanctumDissolutionRecoveryAward
+  - arxii_sineatingoutcomeaward <- magic.SineatingOutcomeAward
   - arxii_animaritualbudgetaward <- magic.AnimaRitualBudgetAward
   - arxii_trainingoutcomeaward <- magic.TrainingOutcomeAward
   - arxii_strainburnreach <- combat.StrainBurnReach
