@@ -2647,13 +2647,21 @@ def place_in_active_scene(*sheets: Any) -> Any:
     happen in by where the two characters stand, so a test that needs one puts them here
     rather than patching the presence check.
     """
+    from evennia.objects.models import ObjectDB
+
     from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
     from world.scenes.factories import SceneFactory
+    from world.scenes.interaction_services import invalidate_active_scene_cache
 
     room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
     scene = SceneFactory(location=RoomProfileFactory(objectdb=room))
+    # A rolled-back test's room can come back under the same pk with its old cached scene.
+    invalidate_active_scene_cache(room)
     for sheet in sheets:
-        sheet.character.location = room
+        # A sheet the test built earlier can hold a character instance the identity map no
+        # longer serves, so stand the identity map's own instance in the room too.
+        for character in (sheet.character, ObjectDB.objects.get(pk=sheet.pk)):
+            character.location = room
     return scene
 
 
