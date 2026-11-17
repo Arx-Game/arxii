@@ -174,9 +174,15 @@ def credit_technique_progress(progress: TechniqueProgress, points: int):
     trial's own cost) paid for the points. Whether trial points count toward the weekly
     training cap is Apostate's call (#4343, "For Apostate" item 2); today they do not.
 
+    ``points`` are scaled once here by the learn rate of the learner's main affinity (#5181),
+    the single place any training progress is written; the weekly cap and action point cost
+    above ``contribute_to_technique_progress`` keep counting the unscaled points.
+
     Returns the minted ``CharacterTechnique`` if the meter filled, else None.
     """
+    from world.magic.services.drift import learn_rate_percent  # noqa: PLC0415
+
     progress = TechniqueProgress.objects.select_for_update().get(pk=progress.pk)
-    progress.points_accumulated += points
+    progress.points_accumulated += points * learn_rate_percent(progress.character_sheet) // 100
     progress.save(update_fields=["points_accumulated", "updated_at"])
     return _mint_if_full(progress.character_sheet, progress)

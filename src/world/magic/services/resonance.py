@@ -10,7 +10,13 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.magic.constants import ACCELERATED_GAIN_SOURCES, EffectKind, GainSource, TargetKind
+from world.magic.constants import (
+    ACCELERATED_GAIN_SOURCES,
+    AFFINITY_RATE_EXEMPT_SOURCES,
+    EffectKind,
+    GainSource,
+    TargetKind,
+)
 from world.magic.exceptions import (
     CovenantRoleNotEngagedError,
     InvalidImbueAmount,
@@ -129,7 +135,10 @@ def grant_resonance(  # noqa: PLR0913
     perception/presence gain sources), ``amount`` is scaled up by the
     character's summed distinction earn-rate bonus for ``resonance`` before
     it is written; authored/system sources (including DISTINCTION itself)
-    are never accelerated.
+    are never accelerated. After that, unless ``source`` is in
+    ``AFFINITY_RATE_EXEMPT_SOURCES``, ``amount`` is scaled by the earn rate of the
+    character's main affinity (#5181), to at least 1. The ``ResonanceGrant`` row records the
+    scaled amount.
 
     Args:
         character_sheet: The character receiving resonance.
@@ -197,6 +206,14 @@ def grant_resonance(  # noqa: PLR0913
         earn_rate_bonus = distinction_earn_rate_for(character_sheet, resonance)
         if earn_rate_bonus > 0:
             amount = int(amount * (1 + earn_rate_bonus / Decimal(100)))
+
+    if source not in AFFINITY_RATE_EXEMPT_SOURCES:
+        from world.magic.services.drift import earn_rate_percent  # noqa: PLC0415
+
+        # The character's main affinity sets how fast they earn (#5181). A deed worth at least 1
+        # is never scaled down to nothing, so its ledger row always exists.
+        scaled = amount * earn_rate_percent(character_sheet) // 100
+        amount = max(scaled, 1)
 
     # Peek, don't read: character_sheet.cached_resonances would force a query
     # when cold (the common case for a grant -- unlike Task 2's interaction
