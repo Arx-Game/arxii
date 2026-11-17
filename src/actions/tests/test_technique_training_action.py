@@ -19,8 +19,9 @@ from world.action_points.models import ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
 from world.magic.constants import TargetKind
-from world.magic.factories import ResonanceFactory, TechniqueFactory
+from world.magic.factories import CharacterAuraFactory, ResonanceFactory, TechniqueFactory
 from world.magic.models import (
+    Affinity,
     CharacterGift,
     CharacterTechnique,
     TechniqueProgress,
@@ -153,6 +154,21 @@ class TrainTechniqueActionHappyPathTests(TrainTechniqueActionTestBase):
         progress.refresh_from_db()
         self.assertEqual(progress.points_accumulated, 20)
         self.assertFalse(result.data["technique_acquired"])
+
+    def test_message_and_data_report_the_meter_as_stored_under_a_learn_rate(self):
+        # A 150% learn rate stores 30 for 20 unscaled dev points; the player is told 30.
+        CharacterAuraFactory(character=self.learner, celestial=0, primal=20, abyssal=80)
+        affinity = Affinity.objects.get(name="Abyssal")
+        affinity.learn_rate_percent = 150
+        affinity.save()
+        progress = self._make_progress(total_required=500)
+        with force_check_outcome(self.outcomes["Success"]):
+            result = self._run(technique_id=self.technique.pk, ap_to_invest=20)
+        self.assertTrue(result.success, result.message)
+        progress.refresh_from_db()
+        self.assertEqual(progress.points_accumulated, 30)
+        self.assertEqual(result.data["points_after"], 30)
+        self.assertIn("30/500", result.message)
 
     def test_completion_mints_character_technique(self):
         progress = self._make_progress(total_required=20)

@@ -217,6 +217,51 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             raise DRFValidationError({"target_persona_ids": "This action targets the caster only."})
 
     @staticmethod
+    def _worn_ritual_partner(action_key: str, target_persona: Persona | None) -> Persona | None:
+        """The persona an Anima ritual's partner is wearing now (#5181).
+
+        The submitted persona only selects the partner's character. The request records the
+        face they present, as telnet does, so the private lines never print a masked
+        character's true name. Every other action key keeps the persona as given.
+        """
+        from world.magic.services.anima_ritual_action import (  # noqa: PLC0415
+            ANIMA_RITUAL_ACTION_KEY,
+        )
+
+        if action_key != ANIMA_RITUAL_ACTION_KEY or target_persona is None:
+            return target_persona
+        return active_persona_for_sheet(target_persona.character_sheet)
+
+    @staticmethod
+    def _ritual_kwargs(
+        action_key: str,
+        *,
+        scene: Scene,
+        initiator_persona: Persona,
+        target_persona: Persona | None,
+    ) -> dict[str, Any]:
+        """The initiator's own Anima ritual for an ``anima_ritual`` request (#5181); raises the
+        400 naming why they cannot ask a partner now.
+
+        The ritual is never named by the client: it is the initiator's own, found server-side,
+        and its check is snapshotted onto the request. Every other action key adds nothing.
+        """
+        from world.magic.services.anima_ritual_action import (  # noqa: PLC0415
+            ANIMA_RITUAL_ACTION_KEY,
+            check_partner_ritual,
+        )
+
+        if action_key != ANIMA_RITUAL_ACTION_KEY:
+            return {}
+        try:
+            ritual = check_partner_ritual(
+                initiator_persona=initiator_persona, target_persona=target_persona, scene=scene
+            )
+        except DjangoValidationError as exc:
+            raise DRFValidationError({"detail": exc.messages}) from exc
+        return {"ritual_id": ritual.pk}
+
+    @staticmethod
     def _resolve_delivery_receivers(receiver_ids: list[int]) -> tuple[list[Persona], bool]:
         """Return (resolved_personas, all_found). ``all_found`` is False if any id is missing."""
         if not receiver_ids:
@@ -434,6 +479,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             get_object_or_404(Persona, pk=primary_id) if primary_id is not None else None
         )
         additional = [get_object_or_404(Persona, pk=pk) for pk in target_ids[1:]]
+        target_persona = self._worn_ritual_partner(action_key, target_persona)
 
         technique = None
         if technique_id is not None:
@@ -465,6 +511,12 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             matched_candidate=matched_candidate,
             target_effect=target_effect,
             target_effect_type=target_effect_type,
+        )
+        treat_condition_kwargs |= self._ritual_kwargs(
+            action_key,
+            scene=scene,
+            initiator_persona=initiator_persona,
+            target_persona=target_persona,
         )
 
         action_request_or_error = self._create_action_request_or_error(

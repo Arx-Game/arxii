@@ -999,6 +999,17 @@ class ReflectionError(MagicError):
             self.user_message = user_message
 
 
+class ClaimError(MagicError):
+    """A claim of set-aside kindled resonance cannot be made (#5181); the raise site says why."""
+
+    user_message = "You cannot claim that."
+
+    def __init__(self, user_message: str | None = None) -> None:
+        super().__init__(user_message)
+        if user_message:
+            self.user_message = user_message
+
+
 class DeedAlreadyReflectedError(ReflectionError):
     """A deed can be reflected on only once (#5124)."""
 

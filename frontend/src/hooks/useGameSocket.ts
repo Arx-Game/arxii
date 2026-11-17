@@ -64,7 +64,7 @@ import {
 } from './handleInteractionChangedPayload';
 import { sceneFeedAllKey, sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
 import { channelKeys } from '@/channels/queries';
-import { refreshReflectableDeeds } from '@/magic/queries';
+import { refreshKindledResonances, refreshReflectableDeeds } from '@/magic/queries';
 
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -600,7 +600,10 @@ function dispatchLegacyText(
       return true;
     }
     // A kindled deed's "You earned ..." line (#5124): the row a reflection names grew.
-    if (kwargs?.earned_resonance === true) refreshReflectableDeeds(queryClient);
+    if (kwargs?.earned_resonance === true) {
+      refreshReflectableDeeds(queryClient);
+      refreshKindledResonances(queryClient);
+    }
     dispatch(addFeedNote({ character, note: legacyFeedNote(message, kwargs) }));
   } else {
     dispatch(addSessionMessage({ character, message }));

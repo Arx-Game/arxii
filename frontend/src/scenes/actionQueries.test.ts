@@ -167,13 +167,15 @@ describe('actionQueries', () => {
   });
 
   describe('fetchPendingRequests', () => {
-    it('calls correct URL with scene and status filters', async () => {
+    it('asks only for requests addressed to the viewer (role=incoming)', async () => {
       const mockData = { results: [] };
       vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(mockData));
 
       const result = await fetchPendingRequests('42');
 
-      expect(apiFetch).toHaveBeenCalledWith('/api/action-requests/?scene=42&status=pending');
+      expect(apiFetch).toHaveBeenCalledWith(
+        '/api/action-requests/?scene=42&status=pending&role=incoming'
+      );
       expect(result).toEqual(mockData);
     });
 

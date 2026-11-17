@@ -218,6 +218,16 @@ class CharacterResonance(RelatedCacheClearingMixin, SharedMemoryModel):
         ),
     )
 
+    kindled_unclaimed = models.PositiveIntegerField(
+        default=0,
+        db_default=0,
+        help_text=(
+            "Resonance set aside from kindled deeds that the character has not claimed yet "
+            "(#5181). A claiming pose or journal entry collects it into the balance. It "
+            "never expires."
+        ),
+    )
+
     class Meta:
         unique_together = (("character_sheet", "resonance"),)
         verbose_name = "Character Resonance"

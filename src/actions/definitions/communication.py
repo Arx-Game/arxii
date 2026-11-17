@@ -46,6 +46,7 @@ if TYPE_CHECKING:
 
     from flows.object_states.base_state import BaseState
     from world.gm.models import GMPrompt
+    from world.magic.types.kindling import PendingClaim
     from world.magic.types.reflection import PendingReflection
     from world.magic.types.soul_tether import PendingSineating
     from world.scenes.models import Interaction, Persona, Scene
@@ -714,6 +715,11 @@ class PoseAction(Action):
     two parties are told privately and the room sees only the pose. A pose carries a
     reflection or a Sineating, not both.
 
+    A claim (#5181) may ride on the same pose as either: ``claim`` (a flag) and
+    ``claim_resonance_ids`` (the resonances to collect; none or empty means everything waiting).
+    It is checked before the pose posts and collected once it has, and the claimer alone is told
+    what they gained, in the claiming verb of each resonance's affinity.
+
     An optional reflection (#5124) rides with the pose: ``reflect_choice`` (``EMBRACE`` or
     ``DISOWN``, or ``ABSOLVE``, ``CONDEMN`` or ``SUCCUMB`` for a burden) with one of
     ``reflect_grant_id`` (a kindled or succumbed-to-the-Mire deed), ``reflect_resonance_id``
@@ -749,7 +755,7 @@ class PoseAction(Action):
             return place_error
         if not text:
             return ActionResult(success=False, message="Pose what?")
-        pending, sineating, attachment_error = _pending_pose_attachment(actor, kwargs)
+        pending, sineating, claim, attachment_error = _pending_pose_attachment(actor, kwargs)
         if attachment_error is not None:
             return attachment_error
         sdm = context.scene_data if context else SceneDataManager()
@@ -758,6 +764,7 @@ class PoseAction(Action):
 
         told: list[tuple[str, bool]] = []
         sineated: list[tuple[str, bool]] = []
+        claimed: list[str] = []
 
         first_pose: list[bool] = []
 
@@ -765,6 +772,7 @@ class PoseAction(Action):
             # Both ways of posting (with and without a request id) end here, once, and a
             # replayed request never gets here.
             _carry_attachments(actor, pending, sineating, interaction, told, sineated)
+            claimed.extend(_collect_pose_claim(actor, claim))
             first_pose.append(True)
 
         client_request_id = kwargs.get("client_request_id")
@@ -802,25 +810,37 @@ class PoseAction(Action):
             )
 
             safe_refresh_impulses_for_character(actor)
-        return _pose_result(told, sineated)
+        return _pose_result(told, sineated, claimed)
 
 
 def _pose_result(
-    told: list[tuple[str, bool]], sineated: list[tuple[str, bool]] | None = None
+    told: list[tuple[str, bool]],
+    sineated: list[tuple[str, bool]] | None = None,
+    claimed: list[str] | None = None,
 ) -> ActionResult:
-    """The pose's result: bare when it carried no reflection or Sineating, else the line the
-    poser reads.
+    """The pose's result: bare when it carried no reflection, Sineating or claim, else the
+    lines the poser reads.
 
     The pose posted either way; ``reflection_recorded`` (or ``sineating_recorded``) tells a
-    client whether to show the line as a success or as the error it is.
+    client whether to show the line as a success or as the error it is. A claim's lines (#5181)
+    follow, one per resonance, and ``claim_lines`` carries them for a client.
     """
+    lines: list[str] = []
+    data: dict[str, Any] = {}
     if sineated:
         line, happened = sineated[0]
-        return ActionResult(success=True, message=line, data={"sineating_recorded": happened})
-    if not told:
+        lines.append(line)
+        data["sineating_recorded"] = happened
+    elif told:
+        line, recorded = told[0]
+        lines.append(line)
+        data["reflection_recorded"] = recorded
+    if claimed:
+        lines.extend(claimed)
+        data["claim_lines"] = list(claimed)
+    if not lines:
         return ActionResult(success=True)
-    line, recorded = told[0]
-    return ActionResult(success=True, message=line, data={"reflection_recorded": recorded})
+    return ActionResult(success=True, message="\n".join(lines), data=data)
 
 
 def _pose_targets(actor: ObjectDB, kwargs: dict[str, Any]) -> list[ObjectDB]:
@@ -869,7 +889,11 @@ def _carry_attachments(  # noqa: PLR0913 - the actor, both attachments, the row,
     told: list[tuple[str, bool]],
     sineated: list[tuple[str, bool]],
 ) -> None:
-    """Carry out whatever a posted pose carried, collecting the line the poser reads."""
+    """Carry out whatever a posted pose carried, collecting the line the poser reads.
+
+    A claim (#5181) is collected separately by ``_collect_pose_claim``: its lines are a list
+    of their own.
+    """
     if reflection is not None:
         told.append(_record_pose_reflection(actor, reflection, interaction))
     if sineating is not None:
@@ -878,15 +902,58 @@ def _carry_attachments(  # noqa: PLR0913 - the actor, both attachments, the row,
 
 def _pending_pose_attachment(
     actor: ObjectDB, kwargs: dict[str, Any]
-) -> tuple[PendingReflection | None, PendingSineating | None, ActionResult | None]:
-    """The checked reflection or Sineating a pose carries, or the refusal that stops the pose."""
+) -> tuple[
+    PendingReflection | None, PendingSineating | None, PendingClaim | None, ActionResult | None
+]:
+    """The checked reflection or Sineating, and the claim (#5181), a pose carries, or the
+    refusal that stops the pose."""
     reflection, refusal = _pending_pose_reflection(actor, kwargs)
     if refusal is not None:
-        return None, None, refusal
+        return None, None, None, refusal
     sineating, refusal = _pending_pose_sineating(actor, kwargs, reflection)
     if refusal is not None:
-        return None, None, refusal
-    return reflection, sineating, None
+        return None, None, None, refusal
+    claim, refusal = _pending_pose_claim(actor, kwargs)
+    if refusal is not None:
+        return None, None, None, refusal
+    return reflection, sineating, claim, None
+
+
+def _pending_pose_claim(
+    actor: ObjectDB, kwargs: dict[str, Any]
+) -> tuple[PendingClaim | None, ActionResult | None]:
+    """The checked claim a pose asked for, or the refusal that stops the pose (#5181).
+
+    A claim may ride with a reflection or a Sineating. A named resonance with nothing waiting
+    is refused before the pose posts. A replayed ``client_request_id`` asks for no check: what
+    the first send did stands.
+    """
+    from world.magic.exceptions import ClaimError  # noqa: PLC0415
+    from world.magic.services.claiming import pending_claim_from  # noqa: PLC0415
+    from world.scenes.interaction_services import pose_already_submitted  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    sheet = actor.character_sheet
+    if sheet is None:
+        return None, None
+    request_id = kwargs.get("client_request_id")
+    if request_id is not None:
+        persona = active_persona_for_sheet(sheet)
+        if persona is not None and pose_already_submitted(persona, request_id):
+            return None, None
+    try:
+        return pending_claim_from(sheet, kwargs), None
+    except ClaimError as exc:
+        return None, ActionResult(success=False, message=exc.user_message)
+
+
+def _collect_pose_claim(actor: ObjectDB, claim: PendingClaim | None) -> list[str]:
+    """Collect the claim a posted pose carried; returns the lines the poser reads (#5181)."""
+    from world.magic.services.claiming import record_pending_claim  # noqa: PLC0415
+
+    if claim is None:
+        return []
+    return list(record_pending_claim(actor.character_sheet, claim))
 
 
 def _pending_pose_sineating(

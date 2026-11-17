@@ -1522,6 +1522,25 @@ class RitualCheckConfigPatchSerializer(serializers.Serializer):
         except model.DoesNotExist as exc:
             raise serializers.ValidationError({key: f"{model.__name__} not found."}) from exc
 
+    def _refuse_unheld_resonance(self, resonance: Resonance | None) -> None:
+        """A ritual can only name a resonance its owner holds (#5181).
+
+        The ritual's resonance is what an Anima ritual with a partner earns, so naming one the
+        character never held would earn it from nothing. The ritual belongs to the account that
+        authored it (the ritual being patched, ``self.parent.instance``), so the check asks
+        whether that account plays a character who holds the resonance, never which character
+        the requester has selected. Staff may set any resonance.
+        """
+        from world.magic.services.ritual_bond import account_plays_holder  # noqa: PLC0415
+
+        request = self.context.get("request")
+        if resonance is None or request is None or request.user.is_staff:
+            return
+        author_id = self.parent.instance.author_account_id
+        if author_id is None or not account_plays_holder(author_id, resonance):
+            msg = "You can only name a resonance your character already holds."
+            raise serializers.ValidationError({"resonance_id": msg})
+
     def validate(self, attrs: dict) -> dict:
         """Resolve integer PK fields to model instances."""
         from world.checks.models import CheckType  # noqa: PLC0415
@@ -1547,6 +1566,7 @@ class RitualCheckConfigPatchSerializer(serializers.Serializer):
             attrs, "specialization_id", Specialization, "specialization", resolved
         )
         self._resolve_nullable_fk(attrs, "resonance_id", Resonance, "resonance", resolved)
+        self._refuse_unheld_resonance(resolved.get("resonance"))
         self._resolve_nullable_fk(attrs, "check_type_id", CheckType, "check_type", resolved)
 
         if "target_difficulty_level" in attrs:  # noqa: STRING_LITERAL

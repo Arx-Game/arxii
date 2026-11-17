@@ -33,6 +33,7 @@ from world.covenants.perks.context import SituationContext, SituationParams
 from world.covenants.perks.services import SituationCheck
 from world.magic.constants import GainSource, KindlingActKind, KindlingSource, TargetKind
 from world.magic.models import (
+    CharacterResonance,
     KindledDeedAward,
     KindledStrengthTier,
     Kindling,
@@ -1025,6 +1026,29 @@ def award_scene_act(
     )
 
 
+def get_kindling_config() -> KindlingConfig:
+    """Get-or-create the kindling config singleton (pk=1), so the defaults apply with no row."""
+    config = KindlingConfig.objects.cached_singleton()
+    if config is None:
+        config, _ = KindlingConfig.objects.get_or_create(pk=1)
+    return config
+
+
+def _set_aside_for_claim(row: CharacterResonance, amount: int) -> None:
+    """Add ``amount`` to what the character has waiting to claim on ``row`` (#5181).
+
+    An ``F()`` increment, so two deeds landing together both count. The idmapper hands back this
+    same instance on any fetch, so ``refresh_from_db`` would copy the ``F()`` onto itself; the
+    stored total is read with ``values_list`` (which builds no model) and put back on the
+    instance for the next reader.
+    """
+    row.kindled_unclaimed = F("kindled_unclaimed") + amount
+    row.save(update_fields=["kindled_unclaimed"])
+    row.kindled_unclaimed = CharacterResonance.objects.filter(pk=row.pk).values_list(
+        "kindled_unclaimed", flat=True
+    )[0]
+
+
 def award_kindled_deeds(
     sheet: CharacterSheet,
     *,
@@ -1038,14 +1062,18 @@ def award_kindled_deeds(
     Called once after a player character's roll resolves, with the roll's result tier (an act
     with no roll of its own passes ``lowest_success_outcome()``). A resonance an authored
     situation fed with this act in context earns ``KindledDeedAward(outcome).amount x
-    earn_percent / 100`` of the strongest FED row's strength, rounded down, as one
-    ``KINDLED_DEED`` grant naming that row. A Rally or a GM raises a resonance's panel
-    strength but does not earn by itself and does not raise the share. No award row for the
-    tier, no strength tier or a share of 0 earns nothing. Non-player characters earn nothing.
+    earn_percent / 100`` of the strongest FED row's strength, rounded down. That amount is split
+    by ``KindlingConfig`` (#5181): ``max(1, amount x instant_percent / 100)`` arrives at once as
+    one ``KINDLED_DEED`` grant naming the row, and ``amount x claim_percent / 100`` is set aside
+    in ``CharacterResonance.kindled_unclaimed`` for the character to claim. A Rally or a GM
+    raises a resonance's panel strength but does not earn by itself and does not raise the
+    share. No award row for the tier, no strength tier or a share of 0 earns nothing.
+    Non-player characters earn nothing.
 
     With neither ``resolution`` nor ``mission`` given the sheet's own live fight and mission
     are read. Each grant is told to the actor alone ("You earned ...") once the surrounding
-    transaction commits, through a private narrative message. Returns the grants written.
+    transaction commits, through a private narrative message that reports the amount the ledger
+    recorded after the earn rate and how much was set aside. Returns the grants written.
     """
     from django.db import transaction  # noqa: PLC0415
 
@@ -1061,6 +1089,7 @@ def award_kindled_deeds(
     if resolution is None and mission is None:
         context = kindling_context_for(sheet)
         resolution, mission = context.resolution, context.mission
+    config = get_kindling_config()
     grants: list[ResonanceGrant] = []
     for entry in kindled_resonances(sheet, resolution=resolution, mission=mission, act=act):
         situation = entry.strongest_situation
@@ -1069,16 +1098,22 @@ def award_kindled_deeds(
         amount = award.amount * entry.fed_tier.earn_percent // 100
         if amount <= 0:
             continue
-        grant_resonance(
+        row = grant_resonance(
             sheet,
             entry.resonance,
-            amount,
+            max(1, amount * config.instant_percent // 100),
             source=GainSource.KINDLED_DEED,
             kindling_situation=situation,
             deed_label=act.label or None,
             ledger_out=grants,
         )
-        transaction.on_commit(_told_of_deed(sheet, f"You earned {amount} {entry.resonance.name}."))
+        set_aside = amount * config.claim_percent // 100
+        if set_aside > 0:
+            _set_aside_for_claim(row, set_aside)
+        line = f"You earned {grants[-1].amount} {entry.resonance.name}."
+        if set_aside > 0:
+            line += f" {set_aside} more is waiting to be claimed."
+        transaction.on_commit(_told_of_deed(sheet, line))
     return grants
 
 
@@ -1104,6 +1139,7 @@ __all__ = [
     "act_label",
     "award_kindled_deeds",
     "award_scene_act",
+    "get_kindling_config",
     "held_resonance_names",
     "holds_resonance",
     "kindle_by_gm",

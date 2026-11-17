@@ -5278,6 +5278,16 @@ class KindledDeedAwardFactory(factory.django.DjangoModelFactory):
     amount = 10
 
 
+class AnimaRitualResonanceAwardFactory(factory.django.DjangoModelFactory):
+    """What an Anima ritual with a partner earns at one roll result."""
+
+    class Meta:
+        model = "arxii.AnimaRitualResonanceAward"
+
+    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    amount = 10
+
+
 class RallyKindlingStrengthFactory(factory.django.DjangoModelFactory):
     """The strength a Rally kindles at one roll result."""
 

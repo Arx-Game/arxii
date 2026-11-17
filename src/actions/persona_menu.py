@@ -73,6 +73,7 @@ def build_persona_menu(actor: ObjectDB, persona: Persona) -> PersonaMenu:
         )
 
     scene = _shared_scene(actor, target)
+    anima_ritual_available = scene is not None and _anima_ritual_open(actor, scene)
     items = [
         look,
         # #4030 fix wave (demo-order controller ruling): Identify sits with Challenge
@@ -154,6 +155,7 @@ def build_persona_menu(actor: ObjectDB, persona: Persona) -> PersonaMenu:
         items=items,
         groups=groups,
         scene_actions=scene_actions,
+        anima_ritual_available=anima_ritual_available,
     )
 
 
@@ -202,6 +204,12 @@ def _shared_scene(actor: ObjectDB, target: ObjectDB) -> Scene | None:
     if room is None or target.db_location != room:
         return None
     return get_active_scene(room)
+
+
+def _anima_ritual_open(actor: ObjectDB, scene: Scene) -> bool:
+    from world.magic.services.anima import anima_ritual_open_in_scene  # noqa: PLC0415
+
+    return anima_ritual_open_in_scene(actor, scene)
 
 
 def _treat_item(actor: ObjectDB, persona: Persona, scene: Scene) -> PersonaMenuItem:

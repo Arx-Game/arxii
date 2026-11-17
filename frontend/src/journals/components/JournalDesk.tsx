@@ -11,6 +11,9 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+import { useActiveCharacterId } from '@/gm-adjudication/useActiveCharacterId';
+import { claimFields } from '@/magic/claiming';
+import { useRefreshClaims, useWaitingClaims } from '@/magic/queries';
 import { reflectionFields } from '@/magic/reflection';
 
 import type { CreateJournalEntryRequest } from '../api';
@@ -32,6 +35,8 @@ export interface JournalDeskProps {
 export function JournalDesk({ onPosted, onDiscard }: JournalDeskProps) {
   const [value, setValue] = useState<JournalEntryFieldsValue>(EMPTY_ENTRY_FIELDS);
   const createEntry = useCreateJournalEntry();
+  const waitingClaims = useWaitingClaims(useActiveCharacterId());
+  const refreshClaims = useRefreshClaims();
   const { data: settings } = useJournalSettings();
 
   // A name typed into About that has not resolved to anybody holds the button:
@@ -57,6 +62,7 @@ export function JournalDesk({ onPosted, onDiscard }: JournalDeskProps) {
       tags: value.tags,
       about: value.about?.id ?? null,
       ...reflectionFields(value.reflection),
+      ...claimFields(value.claim, waitingClaims),
     };
     // Never send a no-op override: INHERIT is what the backend already does.
     if (value.posthumousOverride !== 'inherit') {
@@ -66,6 +72,8 @@ export function JournalDesk({ onPosted, onDiscard }: JournalDeskProps) {
       onSuccess: (entry) => {
         toast.success('Journal entry recorded.');
         if (entry.reflection_line) toast.success(entry.reflection_line);
+        for (const line of entry.claim_lines ?? []) toast.success(line);
+        refreshClaims();
         setValue(EMPTY_ENTRY_FIELDS);
         onPosted();
       },

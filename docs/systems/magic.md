@@ -81,7 +81,7 @@ and the 5-axis Thread model no longer exist.
 | `FacetAlias` | Another spelling that routes to a facet (#4197): the names a merge retired, and any spelling staff add by hand. Resolved by the pickers' search and the create endpoint; never shown to a player. Content (`CONTENT_MODELS`, natural key `name`); cascades with its facet. | `name` (unique), `facet` FK |
 | `FacetEffectBonus` | A facet's always-on bonus to one maneuver effect (#4815, slice 4 of #4783): the facet names the effect, whatever its thread's resonance ("Wolf: +2 Charge: damage"). Counted by `passive_facet_bonuses` while the character wears an item carrying the facet and has a FACET thread on it: `amount_tenths / 10 x the FACET_EFFECT_BONUS lane's baseline at max(1, thread_rung(level)) x item quality x attachment quality` (seeded 10 a rung, so +1 a rung per 10 thread levels, #5093) per worn item facet. Authored in the Facet admin's inline; `merge_facets` moves the rows. Content (`CONTENT_MODELS`, natural key `(facet, target)`). | `facet` FK (CASCADE), `target` FK `ModifierTarget` ("maneuver_effect" category only), `amount_tenths` (non-zero); unique per `(facet, target)` |
 | `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance`; limits no Gift thread, only the default a grant naming no resonance reaches for (#5123), and not the cast-time value; the cast reads the character's GIFT-thread resonances, leading first, via `gift_resonances_for`, ADR-0052, ADR-5123-A), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050), `parent` (self-FK, PROTECT, `related_name="children"`: the umbrella gift this one hangs beneath; see "Gift lineage" below, #2891, ADR-0192), `natural_weapon_template` (nullable FK to an Unarmed `ItemTemplate`, PROTECT: claws or a bite the gift gives its holder, made and equipped by `grant_gift_to_character`, marked `ItemInstance.natural_weapon_gift`, and removed only when the gift is lost; #4898, see docs/systems/items.md "Natural weapons") |
-| `Affinity` | Celestial / Primal / Abyssal rows; `Affinity.objects.get_celestial_affinity()` / `get_primal_affinity()` / `get_abyssal_affinity()` are the canonical getters | `name`, `corruption_coefficient` (integer tenths of corruption per cast tick; the canonical seed and test values are Celestial 0, Primal 0, Abyssal 10, so only Abyssal casts corrupt, #4751), `unsettled_tolerance_percent` and `unsettled_step_percent` (nullable: this affinity's own range before Unsettled and step width for characters it leads, null uses `DriftConfig`, #4751). `mechanics.ModifierTarget.target_affinity` is the OneToOne that points here (reverse accessor `modifier_target`). Listed read-only at `GET /api/magic/affinities/` (`AffinityViewSet`) |
+| `Affinity` | Celestial / Primal / Abyssal rows; `Affinity.objects.get_celestial_affinity()` / `get_primal_affinity()` / `get_abyssal_affinity()` are the canonical getters | `name`, `corruption_coefficient` (integer tenths of corruption per cast tick; the canonical seed and test values are Celestial 0, Primal 0, Abyssal 10, so only Abyssal casts corrupt, #4751), `unsettled_tolerance_percent` and `unsettled_step_percent` (nullable: this affinity's own range before Unsettled and step width for characters it leads, null uses `DriftConfig`, #4751), and, since #5181, four staff-authored numbers: `claim_verb` (the word a player reads when they claim what a kindled deed set aside, such as gloat, inspire or relish; blank reads "You claim what was waiting."), `earn_rate_percent` and `learn_rate_percent` (both default 100; see "Earn rate and learn rate" below) and `ritual_partner_fatigue` (default 0; positive takes that much fatigue from an Anima ritual's partner, negative eases it, zero does nothing). None is seeded, so staff set them (#5179). `mechanics.ModifierTarget.target_affinity` is the OneToOne that points here (reverse accessor `modifier_target`). Listed read-only at `GET /api/magic/affinities/` (`AffinityViewSet`) |
 | `Resonance` | Identity resonance tags | `name`, `affinity` FK, `opposite` self-OneToOne. `mechanics.ModifierTarget.target_resonance` is the OneToOne that points here (reverse accessor `modifier_target`). Listed read-only, unpaginated, at `GET /api/magic/resonances/` (`ResonanceViewSet`, `ResonanceSerializer` with `affinity_name`; `?affinity=<pk>` filters): the CG Gift stage's Resonance picker reads it (#4665) |
 
 **Note:** `Affinity` and `Resonance` are proper first-class domain models in
@@ -96,7 +96,7 @@ part of the Resonance Pivot — relationship flavor is now carried by
 | Model | Purpose | Key Fields | Relationship |
 |-------|---------|------------|--------------|
 | `CharacterAura` | A character's aura. The percentages live in `CharacterAuraShare` rows (one per aura and affinity, `percent` 0-100, summing to 100, from lifetime resonance; `settled_percent` 0-100 is who the character IS, summing to 100 once set, #5123; see `cached_shares`, `percent_for(affinity)`, `dominant_affinity`). A share row survives at `percent` 0 while its `settled_percent` is above 0 | `character`, `glimpse_story`, `glimpse_state` | OneToOne via `character.aura` |
-| `CharacterResonance` | Per-character per-resonance identity + currency (Spec A §2.2) | `character_sheet` FK, `resonance` FK, `balance`, `lifetime_earned`, `claimed_at`, `flavor_text` | FK via `character_sheet.resonances` (unique_together: (character_sheet, resonance)) |
+| `CharacterResonance` | Per-character per-resonance identity + currency (Spec A §2.2) | `character_sheet` FK, `resonance` FK, `balance`, `lifetime_earned`, `claimed_at`, `flavor_text`, `kindled_unclaimed` (#5181: the share of kindled deeds set aside for the character to claim, never negative, never expires) | FK via `character_sheet.resonances` (unique_together: (character_sheet, resonance)) |
 | `CharacterGift` | Acquired gifts | `gift`, `acquired_at` | FK via `character.character_gifts` |
 | `CharacterTechnique` | Known techniques; the character's hold carries their own personalization of it (#4099, ADR-4099) | `technique`, `acquired_at`, `source` (FK mechanics.ModifierSource, nullable — set for granted techniques), `custom_name` (display only, never a lookup key; blank = the catalog name), `custom_description` (blank = the catalog description), `price` (FK `Restriction`, PRICE kind only, nullable), `early_form` (FK `TechniqueVariant`, nullable; bought in creation before the gift thread reaches its level) | FK via `character.character_techniques` |
 | `CharacterAnima` | Magical energy pool | `current`, `maximum`, `last_recovery` | OneToOne via `character.anima` |
@@ -580,6 +580,47 @@ this kind. Telnet: `ritual anima` (or `ritual <the ritual's name>`; a SCENE_ACTI
 resolves only for its author). The scene-action-request resolver
 (`anima_ritual_action.py`) is a second path to the same `apply_anima_ritual_outcome`.
 Journey: `src/integration_tests/test_performing_the_anima_ritual_journeys.py`.
+
+**The Anima ritual with a partner (#5181) [BUILT & WIRED].** The solo ritual above still restores anima
+and earns no resonance. With a partner it also earns the resonance the ritual names
+(`RitualCheckConfig.resonance`) and moves the partner's fatigue. A player asks a partner with
+`start_partner_ritual(scene=, initiator_persona=, target_persona=)` (`services/anima_ritual_action.py`),
+which `check_partner_ritual` guards (no ritual or one not set up, no partner or yourself, a partner who
+is not in the scene and the same place as the performer (`shared_active_scene`, the rule Sineating
+uses; `resolve_ritual_request` checks it again at resolve time and resolves a request whose partner has
+left with no effect), a partner the same account plays ("You cannot perform your ritual with another
+character you play.", `played_by_one_account`), already performed in this scene, or already asked of
+someone and waiting) and which opens the ordinary
+`SceneActionRequest` consent request with `action_key` `anima_ritual` and the ritual's check snapshotted
+on it. The ritual is always the initiator's own, found on the server: the client never names it. Web:
+`POST /api/action-requests/` (`SceneActionRequestViewSet._ritual_kwargs`) and the persona menu's "Anima
+ritual" item, which `PersonaMenu.anima_ritual_available` (one query, `anima_ritual_open_in_scene`) shows
+only when the viewer's ritual is set up and not yet performed in the scene. Telnet: `ritual anima
+<partner>` (a bare `ritual anima` is still the solo ritual), which tells the partner what is asked, what
+it does to their fatigue and how to `accept`. A partner who is an NPC answers at once. The partner reads
+`ritual_partner_effect` (on the request and pending-target serializers; "It will add to your fatigue.",
+"It will ease your fatigue." or blank) before agreeing. On accept `resolve_ritual_request` rolls the
+snapshotted check, `apply_anima_ritual_outcome` restores anima, and `apply_ritual_bond(performer_sheet,
+partner_sheet, ritual, outcome, resonance)` (`services/ritual_bond.py`) pays
+`AnimaRitualResonanceAward` for the roll's tier (no row, no pay) plus that amount times the kindled
+strength's `earn_percent` when the ritual's resonance is kindled at that moment, in full at once through
+`grant_resonance(source=GainSource.ANIMA_RITUAL)`, so the earn rate applies. Both the earning and the
+partner effect apply only when the performer already holds the ritual's resonance (a `CharacterResonance`
+row, `performer_holds`); a ritual naming one they do not hold restores anima and does nothing else, the
+partner's consent sentence is blank, and `RitualCheckConfigPatchSerializer` refuses a resonance a
+non-staff player's character does not hold. Once per scene holds under concurrency: after
+`apply_anima_ritual_outcome` locks the `CharacterAnima` row it re-reads the scene's performances and
+raises `RitualAlreadyPerformedThisScene`, which `resolve_ritual_request` turns into a request resolved
+with no effect and no payment. The web request records the partner's worn persona
+(`_worn_ritual_partner`), and telnet tells the partner through `send_stored_notice`, so an offline
+partner reads it at login. The partner's fatigue
+follows `ritual_partner_fatigue` of the affinity of the ritual's resonance (not the performer's leading
+affinity): positive calls `apply_fatigue` in the social category, negative `recover_fatigue`. The
+performer reads "Your ritual feeds on Tobin. Your Ruin grows by 13." (lifts, or "is done" when the
+affinity does nothing) and the partner "<Name>'s ritual leaves you wearier." or "lighter" when their
+fatigue moved. `AnimaRitualPerformance.target_character` now records the partner. The function takes the
+partner as an argument so a later group ritual can call it per member. Journey:
+`src/integration_tests/test_anima_ritual_partner_journeys.py`.
 
 **Anima ritual name collisions are resolved silently, not surfaced (#2724).**
 `provision_player_anima_ritual` defaults a player's anima ritual name to
@@ -2293,8 +2334,12 @@ one situation among many: `docs/adr/adr-5124-furys-anchor-person-became-a-kindle
   `give_in_bonus_percent`, `give_in_ease_tenths`, `dig_deep_scale_percent`, `earn_percent`; 0 on a reach
   column means "not reached that way"). Code compares `rank` (1, 2, 3) and never a name.
   `KindlingConfig` (singleton: `harm_property`, the condition property that marks harm a holder
-  laid, so a feeling that comes from their own harm does not count as shared),
-  `KindledDeedAward` (an `OutcomeTierAward`: `amount` earned per outcome) and
+  laid, so a feeling that comes from their own harm does not count as shared; and, since #5181,
+  `instant_percent` (default 100, at least 1) and `claim_percent` (default 50), read through
+  `get_kindling_config()`, which creates the row when none exists),
+  `KindledDeedAward` (an `OutcomeTierAward`: `amount` earned per outcome),
+  `AnimaRitualResonanceAward` (#5181, an `OutcomeTierAward`: `amount` an Anima ritual with a partner earns per
+  outcome; a tier with no row earns nothing) and
   `RallyKindlingStrength` (an `OutcomeTierAward`: the strength a Rally kindles at per outcome; a
   failed Rally has no row and kindles nothing). `Resonance.feeling` is a Property FK: the feeling
   that `OWN_FEELING`, `SHARED_FEELING` and `TARGET_IN_STATE_THEY_CAUSED` look for on a condition.
@@ -2328,7 +2373,8 @@ one situation among many: `docs/adr/adr-5124-furys-anchor-person-became-a-kindle
   `kindled_resonances_for_acts` evaluates many acts in one pass (the mission beat's promised feeds).
   Names in reasons go through the persona display map, so an undiscovered mask stays a mask.
 - **Panel.** `GET /api/magic/kindled-resonances/?character_sheet=<id>` (owner or staff) lists each
-  held resonance as `{id, name, affinity_name, kindled, strength_name, reasons}`;
+  held resonance as `{id, name, affinity_name, kindled, strength_name, reasons}` plus, since #5181,
+  `unclaimed` (what a kindled deed set aside there, kindled or not) and `claim_verb` (the affinity's);
   telnet `resonances`. See the "Your resonances" row in the table below.
 - **Two ways to use it.** Drawing strength: a kindled payer reads the thread higher (below under the
   pull section); the character gives up no control. Giving in: Fury for any kindled resonance (the
@@ -2338,7 +2384,49 @@ one situation among many: `docs/adr/adr-5124-furys-anchor-person-became-a-kindle
   below). The amount follows the roll; nothing is earned for an outcome alone, so an accidental
   death (an outcome with no act aimed at it) earns nothing. Taking the action never asks how the
   character feels; the option shows which kindled resonance it would feed, and only the actor reads
-  the grant line.
+  the grant line. Since #5181 a deed does not pay in full on the roll: `KindlingConfig.instant_percent`
+  of it arrives at once (never less than 1, so a Compulsion still lifts when the deed is done) and
+  `claim_percent` of it is set aside in `CharacterResonance.kindled_unclaimed`. The two may sum past
+  100. Every kindled deed splits this way, in fights, missions and social scenes alike
+  (`docs/adr/adr-5181-a-kindled-deed-pays-part-at-once-and-sets-a-share-aside-to-claim.md`).
+- **Claiming** (#5181; `services/claiming.py`). What is set aside never expires. The character
+  collects it with a claiming pose or a journal entry, any or all of it in one pose, across every
+  affinity: `claim_kindled(sheet, resonances=None) -> list[ClaimedResonance]` locks the rows with
+  something waiting, grants each one's `kindled_unclaimed` through
+  `grant_resonance(source=GainSource.KINDLED_CLAIM)` (so the earn rate applies) and zeroes the
+  counter; nothing waiting grants nothing and the writing still posts. `pending_claim_from` checks
+  the request before anything posts and `record_pending_claim` carries it out after; the writer alone
+  reads one private line per resonance, "You <verb>. Your Ruin grows by 7.", with the verb the
+  affinity's `claim_verb`, and the room reads only the pose. `PoseAction` takes `claim` and
+  `claim_resonance_ids` (empty means everything waiting); the REST pose
+  (`POST /api/interactions/submit-pose/`, `PoseSubmitSerializer`) and the journal
+  (`POST /api/journals/entries/`, `JournalEntryCreateSerializer`) take them through
+  `ClaimFieldsMixin` and answer `claim_lines`; a named resonance with nothing waiting is refused with
+  a 400 before anything posts. A claim rides on the same pose as a reflection or a Sineating (those two
+  stay exclusive of each other). Telnet: `pose/claim <text>` claims everything waiting;
+  `pose/claim <resonance>[,<resonance>...]=<text>` claims only those named; with another switch it is
+  `pose/claim/reflect` and so on, claiming everything. The claimed share is a deed for worship favor
+  and for the offer to settle an aura (`KINDLED_CLAIM` is in `DEED_GAIN_SOURCES`) but is not itself
+  reflectable and does not lift a Compulsion (it is in neither `_REFLECTABLE_DEED_SOURCES` nor
+  `COMPULSION_INDULGING_SOURCES`), so only the part that arrived at once can be embraced or disowned.
+  The web client reads the waiting amounts from the panel endpoint and shows a claim row under the
+  pose box and in the journal form.
+- **Earn rate and learn rate** (#5181). `Affinity.earn_rate_percent` scales what a character earns:
+  `grant_resonance` multiplies the amount by the rate of the character's main affinity
+  (`earn_rate_percent(sheet)` in `services/drift.py`, through `own_affinity`), to at least 1, after the
+  distinction rate, unless the source is in `AFFINITY_RATE_EXEMPT_SOURCES` (`STAFF_GRANT`,
+  `CHARACTER_CREATION`, `DRIFT_CORRECTION`, `FALL_CONVERSION`, `EMBRACED_DEED`, `CORRUPTION_CLEANSING`,
+  `SANCTUM_DISSOLUTION_RECOVERY`, `SUCCUMBED`: resonance that is moved, converted or granted, not newly
+  earned; and `DISTINCTION`, because `distinction_resonance` reconciles the seed against the sum of its
+  ledger rows). Every other source is listed in `AFFINITY_RATE_SCALED_SOURCES`, and
+  `test_deed_classification` fails when a `GainSource` is in neither set. Every caller that reports or
+  stores a granted amount reads it back from the ledger row (`ledger_out`): Sineating's result and
+  audit row, the mire-settling lines, the weekly pot's `granted_amount` (the pot itself is a budget of
+  unscaled shares, the earn rate is the character's bonus on top), scene entry, style presentation,
+  entry flourish and a worship rite's `resonance_granted`. A character with no aura earns at 100. `Affinity.learn_rate_percent` scales technique
+  training: `credit_technique_progress`, the one writer of `points_accumulated`, multiplies the points
+  it is handed by `learn_rate_percent(sheet)` once (a positive award is never scaled below 1); the weekly limit and the action point cost keep
+  counting unscaled points.
 - **Reflecting and settling.** A `KINDLED_DEED` grant is a deed a character can reflect on once,
   Embrace or Disown, in a pose or journal entry; the rite of settling carries every waiting
   reflection out. See "Drift correction" below.
@@ -3797,7 +3885,9 @@ technique is a limited form, a high-tier option on an ultimate is the full arriv
 | The technique picker (`services/manifestation.py`, #4341) | [BUILT & WIRED] | `manifest_choices_for(sheet)` lists each manifesting technique she knows with every option and her current pick; an option whose bond does not hold is listed unavailable, with the reason. `set_character_manifestation(sheet, technique, option, companion=None)` writes the row (one per character and technique) or raises `ManifestChoiceError`; for an archetype option with no companion named, her first unreleased companion of that archetype goes. Action `manifest_set`; telnet `manifest` (list) and `manifest <technique>=<option>`; `GET /api/magic/manifest-choices/?character_sheet=<id>` (owner or staff); the Spellbook's `ManifestPickerPanel`. A being option holds for any active patronage, so a being pact's patron can be chosen. |
 | The "Your resonances" panel (`views_kindling.py`, `serializers_kindling.py`, #5124) | [BUILT & WIRED] | `GET /api/magic/kindled-resonances/?character_sheet=<id>` (owner or staff) runs `kindled_resonances(sheet)` once and lists each held resonance as `{id, name, affinity_name, kindled, strength_name, reasons}`: the strength is the tier's own word, the reasons are player words, no numbers. Read by the frontend `KindledResonancesPanel` (scene tools in the scene sidebar; combat rail beside Dig deep) and by telnet `resonances` (`commands/kindled_resonances.py`, the same list as lines). |
 | Dig deep, Rally and the GM name a resonance (`combat/dig_deep.py`, `combat/services/declarations/rally.py`, `services/kindling.py`, `actions/definitions/gm_props.py`, #5124) | [BUILT & WIRED] | `dig_deep(participant, resonance=None)` refuses a resonance she does not hold; a kindled one adds its tier's `dig_deep_scale_percent` to the surge's `intensity_scale` and is named in the surge cause, an unkindled one or none works as before. `declare_rally(participant, ally, resonance=None)` stores `CombatRoundAction.rally_resonance` (the ALLY must hold it; the rallier's picker reads `GET /api/combat/<id>/rally-resonances/?ally=<participant id>`, which runs `rally_resonance_choices` for the one picked ally and returns each `{id, name, kindled}`, never a strength; an active fighter may ask about another active fighter, and a PvP duel returns none; the polled encounter payload carries no kindling evaluation). `_resolve_tuned_rally` reads the ally's kindled tier before writing anything: a kindled resonance adds the same percent to the Rally surge's scale; `record_rally_kindling` then writes one `Kindling(source=RALLY, encounter=, kindled_by=rallier)` at the `RallyKindlingStrength` for the roll outcome (no row for that outcome writes nothing; a repeat Rally on the same ally, resonance and fight raises the one row's strength and never lowers it; an already-kindled resonance gets no new row). The row cascades with its encounter and stops counting when `completed_at` is set. A GM kindles by hand with the `stage_kindle` action (`KindleResonanceAction`, GM/owner/staff of the room's active scene; web Stage tab "Kindle" mode lists via `gm_list_kindling`, which reads only a character in the GM's room; telnet `stage kindle <character>=<resonance>[:<strength name or rank>]`), which writes `kindle_by_gm`'s one `Kindling(source=GM, scene=)` per character, resonance and scene. Web: `combat_dig_deep` / `combat_rally` take `resonance_id` (also on the REST `dig-deep` and `rally` posts); telnet `combat digdeep [<resonance>]`, `combat rally <ally>[=<resonance>]`. |
-| Acting on a kindling situation earns the resonance (`services/kindling.py` `award_kindled_deeds`, `combat/services/techniques/kindled_deed.py`, #5124) | [BUILT & WIRED] | `award_kindled_deeds(sheet, *, act, outcome, resolution=None, mission=None)` (every act builder fills `KindlingAct.label` with the act in player words: the mission option's title, the technique's name "on <target>", "Struck <opponent>", the challenge a reaction answered; the grant stores it as `ResonanceGrant.deed_label` and `reflection.deed_what` reads it, falling back to `situation_reason(row)`, the row's `reason_text` or its theme's player text, never the situation's type name) runs `kindled_resonances` with the act in context (the sheet's own live fight and mission when neither is given) and, for each resonance an authored situation fed, writes one `GainSource.KINDLED_DEED` grant through `grant_resonance(kindling_situation=<strongest fed row>, ledger_out=)` for `KindledDeedAward(outcome).amount x earn_percent // 100` of the strongest FED row's strength (`KindledResonance.fed_tier`; a Rally or GM raises the panel strength but never what an act earns, and a resonance kindled only by one earns nothing). A missing award row, tier or a 0 share earns nothing; only player characters earn. The actor alone is told "You earned N <resonance>." after commit (a private `SYSTEM` narrative message). An act with no roll of its own (Cover, a taunt of a player character, using an item, an auto-succeeding mission approach) passes `lowest_success_outcome()`: the `CheckOutcome` with the lowest positive `success_level` (lowest pk on a tie). Wired after a PC's roll in: the scene action-request seam (`_resolve_standard_action` in `world/scenes/action_services.py` calls `_award_kindled_deeds_for_action` after `_resolve_action_against_persona` rolls the primary target, so a multi-target action earns once; `resolve_scene_action` in `actions/services.py` has no production caller), a treatment request (`_resolve_treatment_request`), and a standalone scene technique cast (`_resolve_and_pose_cast` in `world/scenes/cast_services.py`, covering the immediate and the consent-accepted cast); the scene acts share `kindling.award_scene_act` (TECHNIQUE with a technique, else SOCIAL, and a beneficial technique on someone else aids); combat through `award_rolled` / `award_unrolled` (cast, Strike, Cover, Rally, Taunt, Demoralize, Parley, Joust, flee, use item (only when the item use succeeded), the PC's defense roll, technique Interpose, a lock-clash contribution that frees someone) and the shared reaction spine `mechanics/reactions.dispatch_capability_reaction` (Succor, mundane Interpose, scene Cover, catching a faller, all AID acts on the one answered for, with `aids` false when it is not a character); and a mission option that rolls a check (`missions/services/resolution.resolve_option`, grant and routing in one transaction, group and joint picks earn per roller). A pure outcome (a death, a condition tick) and a no-roll branch option earn nothing. `KINDLED_DEED` is in `DEED_GAIN_SOURCES`, so a main-affinity kindled deed in a live scene opens the chance to atone. A mission option shows what it would feed: `BeatOption.feeds` (`KindledFeed{resonance_name, strength_name, reason}`, the viewer's own check options only, authored situations only, read once per beat by `kindled_resonances_for_acts`) renders "Your Domination is kindled: <reason>" in the web `OptionLabel` and the telnet `mission beat` list. |
+| Acting on a kindling situation earns the resonance (`services/kindling.py` `award_kindled_deeds`, `combat/services/techniques/kindled_deed.py`, #5124) | [BUILT & WIRED] | `award_kindled_deeds(sheet, *, act, outcome, resolution=None, mission=None)` (every act builder fills `KindlingAct.label` with the act in player words: the mission option's title, the technique's name "on <target>", "Struck <opponent>", the challenge a reaction answered; the grant stores it as `ResonanceGrant.deed_label` and `reflection.deed_what` reads it, falling back to `situation_reason(row)`, the row's `reason_text` or its theme's player text, never the situation's type name) runs `kindled_resonances` with the act in context (the sheet's own live fight and mission when neither is given) and, for each resonance an authored situation fed, takes `KindledDeedAward(outcome).amount x earn_percent // 100` of the strongest FED row's strength and splits it by `KindlingConfig` (#5181): one `GainSource.KINDLED_DEED` grant through `grant_resonance(kindling_situation=<strongest fed row>, ledger_out=)` for `max(1, amount x instant_percent // 100)`, and `amount x claim_percent // 100` added to `CharacterResonance.kindled_unclaimed` (an `F()` increment) for the character to claim (`KindledResonance.fed_tier`; a Rally or GM raises the panel strength but never what an act earns, and a resonance kindled only by one earns nothing). A missing award row, tier or a 0 share earns nothing; only player characters earn. The actor alone is told "You earned N <resonance>." (N is what the ledger recorded after the earn rate; "M more is waiting to be claimed." follows when something was set aside) after commit (a private `SYSTEM` narrative message). An act with no roll of its own (Cover, a taunt of a player character, using an item, an auto-succeeding mission approach) passes `lowest_success_outcome()`: the `CheckOutcome` with the lowest positive `success_level` (lowest pk on a tie). Wired after a PC's roll in: the scene action-request seam (`_resolve_standard_action` in `world/scenes/action_services.py` calls `_award_kindled_deeds_for_action` after `_resolve_action_against_persona` rolls the primary target, so a multi-target action earns once; `resolve_scene_action` in `actions/services.py` has no production caller), a treatment request (`_resolve_treatment_request`), and a standalone scene technique cast (`_resolve_and_pose_cast` in `world/scenes/cast_services.py`, covering the immediate and the consent-accepted cast); the scene acts share `kindling.award_scene_act` (TECHNIQUE with a technique, else SOCIAL, and a beneficial technique on someone else aids); combat through `award_rolled` / `award_unrolled` (cast, Strike, Cover, Rally, Taunt, Demoralize, Parley, Joust, flee, use item (only when the item use succeeded), the PC's defense roll, technique Interpose, a lock-clash contribution that frees someone) and the shared reaction spine `mechanics/reactions.dispatch_capability_reaction` (Succor, mundane Interpose, scene Cover, catching a faller, all AID acts on the one answered for, with `aids` false when it is not a character); and a mission option that rolls a check (`missions/services/resolution.resolve_option`, grant and routing in one transaction, group and joint picks earn per roller). A pure outcome (a death, a condition tick) and a no-roll branch option earn nothing. `KINDLED_DEED` is in `DEED_GAIN_SOURCES`, so a main-affinity kindled deed in a live scene opens the chance to atone. A mission option shows what it would feed: `BeatOption.feeds` (`KindledFeed{resonance_name, strength_name, reason}`, the viewer's own check options only, authored situations only, read once per beat by `kindled_resonances_for_acts`) renders "Your Domination is kindled: <reason>" in the web `OptionLabel` and the telnet `mission beat` list. |
+| Claiming what a kindled deed set aside (`services/claiming.py`, `serializers_reflection.py` `ClaimFieldsMixin`, `commands/claim.py`, #5181) | [BUILT & WIRED] | `claim_kindled`, `pending_claim_from`, `record_pending_claim`, `waiting_resonances`, `unclaimed_by_resonance`, `resolve_waiting_names`; `GainSource.KINDLED_CLAIM`. The "Earning" and "Claiming" bullets under "Kindled resonances" carry the rules. Web: the pose composer's `ClaimRow` and the journal form read `unclaimed` and `claim_verb` from `GET /api/magic/kindled-resonances/`; the `earned_resonance` frame refreshes the waiting amounts. Telnet: `pose/claim`, `pose/claim <resonance>,...=<text>`. Journeys: `src/integration_tests/test_claiming_kindled_journeys.py`. |
+| The Anima ritual with a partner (`services/anima_ritual_action.py`, `services/ritual_bond.py`, `commands/ritual.py`, #5181) | [BUILT & WIRED] | `start_partner_ritual`, `check_partner_ritual`, `resolve_ritual_request`, `apply_ritual_bond`, `ritual_partner_effect_sentence`, `anima_ritual_open_in_scene`; `GainSource.ANIMA_RITUAL`; `AnimaRitualResonanceAward`; `Affinity.ritual_partner_fatigue`. See "The Anima ritual with a partner" under "Performing the anima ritual". Telnet `ritual anima <partner>`; web persona menu "Anima ritual". |
 | Reflections: the "Reflecting on" row (`services/reflection.py`, `views_reflection.py`, `serializers_reflection.py`, `types/reflection.py`, `commands/reflection.py`, #5124) | [BUILT & WIRED] | A pose or a journal entry (White or Black) can name one thing it reflects on and Embrace or Disown. `reflectable_for(sheet)` returns a `Reflectable` (the unreflected `KINDLED_DEED` grants with their lines, newest first, and `unsettling_resonance(sheet)`, which is `drift_for(sheet).leading_excess_resonance` while `steps_past > 0`, plus whether a reflection on it already waits); its `options` are the "Reflecting on" row, the deeds (newest first) then the unsettling resonance. `validate_reflection` refuses a deed that is not a kindled deed of this sheet (`ReflectionError`), a deed already reflected on (`DeedAlreadyReflectedError`) and a resonance that is not the unsettling one (`ResonanceNotUnsettlingError`); `record_reflection(sheet, *, writing, grant=None, resonance=None, choice)` re-checks, deletes any older WAITING reflection on the same resonance (a newer one replaces it) and writes the `Reflection`; `writing` is None only for a pose in an ephemeral scene, which keeps no row. A reflection is checked BEFORE the writing is posted (`pending_reflection_from(sheet, params)` reads `reflect_choice` plus one of `reflect_grant_id` or `reflect_resonance_id`) and recorded after it, so a refused one costs the writer nothing. A retry of a pose that already landed (its `client_request_id` is on the `PoseSubmission` ledger, `pose_already_submitted`) skips the check and is answered as the replay it is, in both `submit_pose` and `PoseAction`. A reflection that fails AFTER the pose posted (a race) leaves the pose standing and tells the writer "Your pose was posted, but your reflection was not recorded: <reason>" (`reflection_recorded: false` on the submit-pose response); a journal entry and its reflection are one transaction, so a late failure rolls the entry back and refuses it plainly. `PoseAction` also takes `target_names`, resolved like the REST pose. `PoseAction` and `CreateJournalEntryAction` take the three kwargs; so do the REST `POST /api/interactions/submit-pose/` (`PoseSubmitSerializer`, answers `reflection_line`) and `POST /api/journals/entries/` (`JournalEntryCreateSerializer`) through `ReflectionFieldsMixin`. The room is sent only the pose text; the writer alone is told "Your reflection on <deed or your resonance> is recorded. It waits with your other reflections for the rite of settling." `GET /api/magic/reflectables/?character_sheet=<id>` (owner only, no staff widening, paginated) lists `{kind, id, label, replaces_waiting}`; the web `ReflectingOnRow` (pose composer `CommandInput`, journal `JournalEntryFields`) reads it and warns before a reflection replaces a waiting one. Telnet: `reflect` lists the unsettling resonance (by name) and each deed (by its `#number`); `pose/reflect <deed number or resonance>=<embrace|disown> <text>`; `journal/reflect <deed number or resonance>=<embrace|disown> title=<text> body=<text> [public] [tags=] [about=]`. The rite that carries waiting reflections out is task 10 of the same PR. |
 | `CharacterManifestation.bond_is_active()` | [BUILT & WIRED] | A being option holds while `active_patronage_for(character)` includes that being. An archetype option holds while the companion is the character's own, matches the archetype, and has no `released_at`. |
 | `CharacterManifestation.clean()` | [BUILT & WIRED] | The option must belong to the technique; a being option takes no companion; an archetype option needs one; the bond must be active. |
@@ -4195,7 +4285,8 @@ look shipped.
 
 | Model | Purpose |
 |-------|---------|
-| `AnimaRitualPerformance` | Historical record of ritual performances |
+| `AnimaRitualPerformance` | Historical record of ritual performances; `target_character` names the partner of a ritual with a partner (#5181) |
+| `AnimaRitualResonanceAward` | Resonance an Anima ritual with a partner earns per roll outcome (`OutcomeTierAward`, #5181) |
 | `Reincarnation` | Tracks character reincarnation events |
 
 ### Technique Treatment (#2668) [BUILT & WIRED]
@@ -4569,7 +4660,8 @@ perception/presence-driven sources a character actively performs to be seen (`PO
 `ROOM_RESIDENCE`) are scaled up by `distinction_earn_rate_for` (a character's summed
 `DistinctionResonanceGrant.earn_rate_bonus_per_rank`) in `grant_resonance` before the amount is
 written; authored/system sources (`STAFF_GRANT`, `MISSION_REWARD`, `MISSION_REPORT`,
-`STAKE_REWARD`, `PROJECT_CONTRIBUTION`, the three `SANCTUM_*` sources, and `DISTINCTION`
+`STAKE_REWARD`, `PROJECT_CONTRIBUTION`, the three `SANCTUM_*` sources, `KINDLED_CLAIM`, `ANIMA_RITUAL`
+(#5181: neither is witnessed) and `DISTINCTION`
 itself — accelerating a distinction's own seed grant would be circular) are never accelerated.
 
 The same `ACCELERATED_GAIN_SOURCES` gate also drives the reverse distinction link (#2037):
@@ -4625,7 +4717,9 @@ affinity. Drift correction reuses their pair rates (`AffinityInteraction.convers
 partition every `GainSource`; `test_deed_classification.py` fails when a member is in neither or
 both. Deeds are the poses and scene entries others endorsed, entry flourishes, dramatic
 moments, style presentations, mission rewards and reports, stake rewards, project
-contributions, combo discoveries, worship rites, kindled deeds and `SUCCUMBED` (a Sineater
+contributions, combo discoveries, worship rites, kindled deeds, `KINDLED_CLAIM` (the share of a kindled
+deed a claiming pose or journal entry collected), `ANIMA_RITUAL` (what an Anima ritual with a partner
+earned; both #5181) and `SUCCUMBED` (a Sineater
 chose to succumb to the Mire, and the player may reflect on it and atone). Passive trickles
 (room residence, outfit), staff grants, sanctum sources, distinction seeds, compromise, both
 conversions (`FALL_CONVERSION`, `DRIFT_CORRECTION`) and the payouts of settling the Mire
@@ -4835,7 +4929,7 @@ full design is `docs/architecture/soul-tether.md`; the corruption side is `docs/
   something the resonance cares about present, the first sends `Resonance.impulse_text` once per scene
   (`ImpulseShown`) and the second lays `CorruptionConfig.compulsion_condition` (scene-scoped, a check
   penalty scaled by severity) until the character earns the resonance there by a kindled deed of their own (`COMPULSION_INDULGING_SOURCES`;
-  never a grant from another player, a GM or a cron, nor succumbing), which adds
+  never a grant from another player, a GM or a cron, nor succumbing, and not a claim of the share a deed set aside, since the instant part of every kindled deed is at least 1 and lifts it when the deed is done, #5181), which adds
   `compulsion_indulge_corruption` (`CorruptionSource.INDULGED`). `services/impulses.py`; shown on
   `GET /api/magic/kindled-resonances/` (`impulses`) and telnet `resonances`.
 - **Not changed:** the rescue, except presence by character, the fallen-Sineater refusal, its scene being

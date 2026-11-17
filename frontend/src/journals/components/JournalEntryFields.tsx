@@ -25,6 +25,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { useActiveCharacterId } from '@/gm-adjudication/useActiveCharacterId';
+import { ClaimRow } from '@/magic/components/ClaimRow';
 import { ReflectingOnRow } from '@/magic/components/ReflectingOnRow';
 import { usePersonaSearch } from '@/roster/usePersonaSearch';
 import { cn } from '@/lib/utils';
@@ -135,6 +136,12 @@ export function JournalEntryFields({ value, onChange, showAfterDeath }: JournalE
         characterSheetId={characterSheetId}
         value={value.reflection}
         onChange={(reflection) => onChange({ ...value, reflection })}
+      />
+
+      <ClaimRow
+        characterSheetId={characterSheetId}
+        value={value.claim}
+        onChange={(claim) => onChange({ ...value, claim })}
       />
 
       <div className="grid gap-5 sm:grid-cols-2 sm:gap-x-10">

@@ -209,13 +209,20 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
             favor_granted=favor_amount,
         )
         if resonance_amount > 0:
+            ledger: list = []
             grant_resonance(
                 character_sheet,
                 rite.resonance.resonance,
                 resonance_amount,
                 source=GainSource.WORSHIP_RITE,
                 worship_rite_performance=performance,
+                ledger_out=ledger,
             )
+            # What the ledger recorded: the award scaled by the character's earn rate (#5181).
+            resonance_amount = ledger[-1].amount
+            if resonance_amount != performance.resonance_granted:
+                performance.resonance_granted = resonance_amount
+                performance.save(update_fields=["resonance_granted"])
         if favor_amount > 0:
             # #4333: the earning rate scales the award; record what was credited.
             favor_amount = bump_devotion(

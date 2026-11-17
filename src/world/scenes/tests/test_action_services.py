@@ -504,6 +504,12 @@ class TestCreateActionRequestSnapshotFields(TestCase):
         cls.scene = SceneFactory()
         cls.initiator = PersonaFactory()
         cls.target = PersonaFactory()
+        # A played character is asked and the request waits; an NPC partner answers at once
+        # (#5181), which would roll the ritual.
+        RosterTenureFactory(
+            roster_entry=RosterEntryFactory(character_sheet=cls.target.character_sheet),
+            end_date=None,
+        )
         cls.ritual = RitualFactory(
             execution_kind=RitualExecutionKind.SCENE_ACTION,
             service_function_path="",

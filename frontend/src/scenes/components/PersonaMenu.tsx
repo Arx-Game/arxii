@@ -85,7 +85,7 @@ import {
 import { usePersonaCard } from '@/game/persona-menu/PersonaCardContext';
 import { LookDialog } from '@/game/persona-menu/LookDialog';
 import type { VisibleWornItem } from '@/inventory/api';
-import { createActionRequest } from '../actionQueries';
+import { ANIMA_RITUAL_ACTION_KEY, createActionRequest } from '../actionQueries';
 import type { ActionAttachmentInfo, PlayerAction } from '../actionTypes';
 import type { SceneDetail } from '../types';
 import { WhisperReceiverPicker } from './WhisperReceiverPicker';
@@ -616,6 +616,28 @@ export function PersonaMenu({
     });
   }
 
+  // The character's own Anima ritual with this persona as partner (#5181). The server says whether
+  // the character has one set up and has not yet performed it in this scene
+  // (`anima_ritual_available`); a race still shows as the toast `performAction` raises.
+  function renderAnimaRitual(kit: MenuKit) {
+    if (sceneId === null || data?.is_self || !data?.anima_ritual_available) return null;
+    return (
+      <kit.Item
+        key="anima-ritual"
+        disabled={performAction.isPending}
+        onClick={() =>
+          performAction.mutate({
+            action_key: ANIMA_RITUAL_ACTION_KEY,
+            target_persona_id: personaId,
+          })
+        }
+      >
+        <Zap className="mr-2 h-4 w-4" />
+        Anima ritual
+      </kit.Item>
+    );
+  }
+
   // Attach to Pose: stores the action in the composer so it is submitted
   // alongside the next pose. Unchanged from the pre-#4030 component.
   function renderAttachToPose(kit: MenuKit) {
@@ -723,6 +745,7 @@ export function PersonaMenu({
                 <kit.Separator />
                 {itemsForGroup(group.key).map((item) => renderMenuItem(kit, item))}
                 {group.key === 'scene' && renderSceneActionSubmenus(kit)}
+                {group.key === 'scene' && renderAnimaRitual(kit)}
                 {group.key === 'scene' && renderAttachToPose(kit)}
               </Fragment>
             ))}

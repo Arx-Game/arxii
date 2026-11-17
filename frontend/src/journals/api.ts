@@ -18,6 +18,7 @@
 
 import { apiFetch } from '@/evennia_replacements/api';
 import { readErrorDetail } from '@/lib/errors';
+import type { ClaimFields } from '@/magic/claiming';
 import type { ReflectionFields } from '@/magic/reflection';
 
 const ENTRIES_URL = '/api/journals/entries';
@@ -103,6 +104,8 @@ export interface JournalEntrySummary {
 export interface JournalEntryDetail {
   /** Told to the writer alone when the entry carried a reflection that was recorded (#5124). */
   reflection_line?: string;
+  /** Told to the writer alone when the entry carried a claim: one line per resonance (#5181). */
+  claim_lines?: string[];
   id: number;
   author: number;
   author_name: string;
@@ -186,7 +189,7 @@ export type JournalEntryListFilters = {
   page_size?: number;
 };
 
-export interface CreateJournalEntryRequest extends ReflectionFields {
+export interface CreateJournalEntryRequest extends ReflectionFields, ClaimFields {
   title: string;
   body: string;
   is_public: boolean;

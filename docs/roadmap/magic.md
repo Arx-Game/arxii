@@ -1349,7 +1349,8 @@ Built as one PR (spec in the issue body; #5129's settling rite folded in):
   strength), Dig deep and Rally naming a resonance (a Rally kindles an unkindled one until the
   fight ends), and a GM kindling by hand (`stage kindle`).
 - **Earning.** Acting on a kindling situation earns the resonance as `KINDLED_DEED`, scaled by the
-  roll; an outcome with no act aimed at it earns nothing; a mission option shows which kindled
+  roll (since #5181 only part of it arrives at once and the rest waits to be claimed, see below); an
+  outcome with no act aimed at it earns nothing; a mission option shows which kindled
   resonance it feeds. Taking an action never asks how the character feels.
 - **Reflecting and settling.** A pose or journal entry carries an optional "Reflecting on" row
   (a deed or the unsettling resonance, then Embrace or Disown; since #5177 also the Mire a Sineater
@@ -1397,6 +1398,40 @@ listed in #5179; earning resonance through poses and the Anima ritual is #5181).
   built so scars can reuse them); removing `CorruptionSource.SPEC_B_REDIRECT` and `redirect_origin`, a
   decision for the maintainer. Staff must author the Sineating check, its outcome tiers' shares (seeded),
   the Compulsion condition, each resonance's impulse words, and tune the sizes (#5179).
+
+## Earning resonance by claiming kindled deeds and through the Anima ritual, with per-affinity rates (#5181, ADR-5181, BUILT 2026-11-17)
+
+The third of four pieces agreed in the design session for #4751 (after #5176 and #5177; staff
+authoring it leaves is listed in #5179). Built as one PR:
+
+- **A kindled deed pays part at once and sets a share aside.** Every kindled deed, in fights, missions
+  and social scenes, pays `KindlingConfig.instant_percent` at once (at least 1, so a Compulsion still
+  lifts when the deed is done) and adds `claim_percent` to `CharacterResonance.kindled_unclaimed`. The
+  two may sum past 100. The deed line reads "You earned N Ruin. M more is waiting to be claimed."
+- **Claiming.** What is set aside never expires. A claiming pose or a journal entry collects any or all
+  of it across every affinity (`claim_kindled`); the writer alone reads "You gloat. Your Ruin grows by
+  7.", with the verb staff wrote on the Affinity (`claim_verb`). The room sees only the pose. A claim
+  can ride on the same pose as a reflection or a Sineating. Telnet `pose/claim`, `pose/claim
+  <resonance>,...=<text>`; the web pose box and journal form have a claim row, the resonances panel
+  shows what is waiting. The claimed share is a deed for worship favor and the settling offer, is not
+  separately reflectable and does not lift a Compulsion.
+- **The Anima ritual with a partner.** A player can finally start it (web persona menu, telnet `ritual
+  anima <partner>`; the code that resolved it existed but nothing created the request). It earns the
+  resonance the ritual names in full at once (`AnimaRitualResonanceAward` by roll, plus the kindled share
+  when that resonance is kindled) and moves the partner's fatigue by the affinity of that resonance
+  (`Affinity.ritual_partner_fatigue`: positive takes, negative eases, zero does nothing); the partner
+  reads which before agreeing. The solo ritual still earns nothing.
+- **Earn rate and learn rate.** `Affinity.earn_rate_percent` scales what a character earns and
+  `Affinity.learn_rate_percent` scales technique training, applied by the character's main affinity;
+  staff grants, character creation and resonance that is only moved or converted are exempt
+  (`AFFINITY_RATE_EXEMPT_SOURCES`). This is how Abyssal magic can be faster than Celestial.
+- **Journeys:** `integration_tests/test_claiming_kindled_journeys.py`,
+  `test_anima_ritual_partner_journeys.py`.
+- **Not built (by design).** A ritual that takes in a whole scene (`apply_ritual_bond` takes the partner
+  as an argument so it can be called per member), perks that change what a ritual takes or gives, and
+  whether an entrance flourish lifts a Compulsion. Staff must author each Affinity's claiming verb,
+  earn rate, learn rate and ritual partner fatigue, the instant and claim percentages and the ritual's
+  award table; none is seeded (#5179).
 
 ## Audere earlier with control; Soulfray's anima-0 stage (#4740, slice 4 of #4727, BUILT 2026-10-27)
 

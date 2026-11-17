@@ -191,6 +191,25 @@ class KindlingConfig(SharedMemoryModel):
         ),
     )
 
+    instant_percent = models.PositiveSmallIntegerField(
+        default=100,
+        db_default=100,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "The share of a kindled deed's resonance that arrives at once, as a percentage. "
+            "At least 1 always arrives, so the deed always leaves a record."
+        ),
+    )
+    claim_percent = models.PositiveSmallIntegerField(
+        default=50,
+        db_default=50,
+        help_text=(
+            "The share of a kindled deed's resonance set aside for the character to claim "
+            "with a pose or a journal entry, as a percentage. It may be added to the instant "
+            "share, so 100 and 100 pays a deed twice. 0 sets nothing aside."
+        ),
+    )
+
     class Meta:
         verbose_name = "Kindling config"
         verbose_name_plural = "Kindling config"
@@ -211,6 +230,24 @@ class KindledDeedAward(OutcomeTierAward):
 
     class Meta(OutcomeTierAward.Meta):
         verbose_name = "Kindled deed award"
+
+    def __str__(self) -> str:
+        return f"{self.outcome_tier.name}: {self.amount}"
+
+
+class AnimaRitualResonanceAward(OutcomeTierAward):
+    """How much resonance an Anima ritual with a partner earns at one roll result (#5181).
+
+    A tier with no row earns nothing. The kindled strength's earn_percent adds to it when the
+    ritual's resonance is kindled at that moment.
+    """
+
+    amount = models.PositiveIntegerField(
+        help_text="Resonance an Anima ritual with a partner earns at this roll result."
+    )
+
+    class Meta(OutcomeTierAward.Meta):
+        verbose_name = "Anima ritual resonance award"
 
     def __str__(self) -> str:
         return f"{self.outcome_tier.name}: {self.amount}"

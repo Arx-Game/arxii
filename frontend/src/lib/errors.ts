@@ -49,11 +49,15 @@ export class ApiError extends Error {
  * with a plain string (no field key) — not a real field named "non field
  * errors" — so it is never prefixed; its messages are joined on their own
  * (#4101 Task 10 fix round 1: a GM saw the raw "non_field_errors: ..." text).
+ * A `detail` list (a `ValidationError({"detail": [...]})`, as the Anima ritual request's
+ * refusals raise, #5181) reads the same way: the sentence, with no "detail:" in front.
  */
 function flattenFieldErrors(fieldErrors: Record<string, string[]>): string {
   return Object.entries(fieldErrors)
     .map(([field, messages]) =>
-      field === 'non_field_errors' ? messages.join(' ') : `${field}: ${messages.join(' ')}`
+      field === 'non_field_errors' || field === 'detail'
+        ? messages.join(' ')
+        : `${field}: ${messages.join(' ')}`
     )
     .join('; ');
 }

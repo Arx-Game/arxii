@@ -160,6 +160,40 @@ describe('ConsentPrompt', () => {
     expect(screen.getByText(/Mind Whisper/)).toBeInTheDocument();
   });
 
+  it('asks to take part in their ritual and says what it will do to your fatigue (#5181)', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({
+      results: [
+        {
+          ...MOCK_REQUEST,
+          initiator_name: 'Mara',
+          action_key: 'anima_ritual',
+          ritual_partner_effect: 'It will add to your fatigue.',
+        },
+      ],
+    });
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    expect(
+      await screen.findByText(
+        /asks you to take part in their ritual\. It will add to your fatigue\./
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText('Mara')).toBeInTheDocument();
+    expect(screen.queryByText(/wants to use/)).not.toBeInTheDocument();
+  });
+
+  it('reads the ritual line alone when it does nothing to the partner (#5181)', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({
+      results: [{ ...MOCK_REQUEST, action_key: 'anima_ritual', ritual_partner_effect: '' }],
+    });
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    const line = await screen.findByText(/asks you to take part in their ritual\./);
+    expect(line.textContent).toMatch(/ritual\.$/);
+  });
+
   it('clicking Deny calls respondToRequest with accept: false', async () => {
     vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [MOCK_REQUEST] });
     vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });

@@ -453,6 +453,23 @@ to `submit-pose`, an out-of-scene one dispatches the registry `pose` action) and
 (the desk and the composer dialog). A succumbing is a deed in the list, labelled by where it happened.
 `AuraReflections` lists deeds and burdens with no reflection waiting under "Not yet reflected on".
 
+### `components/ClaimRow.tsx`, `claiming.ts` (#5181)
+
+The optional "Claim" row of a pose and of a journal entry, in the `CommandInput` footer beside
+"Reflecting on" and in `JournalEntryFields`. A kindled deed sets some resonance aside; the row's
+"Claim" pill switches the claim on and shows one tick per resonance with something waiting, labelled
+"<amount> <resonance>", all ticked to begin with. It renders nothing while nothing waits. It reads
+`useWaitingClaims(characterSheetId)` (the `unclaimed` count on `GET /api/magic/kindled-resonances/`
+rows, kindled or not). State is a `ClaimDraft` (`{ on, left }`, `left` the unticked ids,
+`NO_CLAIM` while idle); `claimFields(draft, waiting)` gives the request fields: nothing while off
+or with nothing ticked, `claim: true` with an empty `claim_resonance_ids` when all are ticked, the
+ticked ids otherwise. A claim rides with a reflection or a Sineating on the same pose. The pose
+response (REST) and the pose action result `data` (socket) carry `claim_lines`, shown to the
+writer alone as feed notes; the journal's 201 carries the same, shown as toasts. A claim-only pose
+outside a scene goes through the socket `pose` action like a reflection does. `refreshKindledResonances`
+re-reads the panel's amounts after a claim and on the `earned_resonance` frame. The panel shows
+"N waiting" on a row with something set aside.
+
 ### `components/SineatingRow.tsx` (#5177)
 
 The optional "Sineating" row of a pose, beside "Reflecting on" in the `CommandInput` footer (pose mode

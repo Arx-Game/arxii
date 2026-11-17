@@ -189,6 +189,7 @@ def apply_anima_ritual_outcome(
     outcome: object,
     scene: Scene,
     character_sheet: CharacterSheet,
+    partner_sheet: CharacterSheet | None = None,
 ) -> RitualOutcome:
     """Apply a pre-computed check outcome to anima/soulfray + create audit row.
 
@@ -200,12 +201,15 @@ def apply_anima_ritual_outcome(
         outcome: The check outcome / result object (must have success_level).
         scene: The scene in which the ritual is performed.
         character_sheet: The character performing the ritual.
+        partner_sheet: The character who took part (#5181), recorded on the performance row;
+            None for the solo ritual.
 
     Returns:
         RitualOutcome describing what was recovered and reduced.
     """
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
     from world.conditions.services import decay_condition_severity  # noqa: PLC0415
+    from world.magic.exceptions import RitualAlreadyPerformedThisScene  # noqa: PLC0415
     from world.magic.models.anima import AnimaRitualPerformance  # noqa: PLC0415
     from world.magic.models.soulfray import SoulfrayConfig  # noqa: PLC0415
     from world.magic.services.soulfray import soulfray_condition_id  # noqa: PLC0415
@@ -216,6 +220,11 @@ def apply_anima_ritual_outcome(
     budget = _budget_for_outcome(outcome)
 
     anima = CharacterAnima.objects.select_for_update().get(character=character_sheet)
+
+    # Once per scene must hold when two requests resolve at once: the lock above makes the second
+    # wait for the first to commit, and only then does this read, so it sees the first's row.
+    if has_performed_anima_ritual_in_scene(ritual=ritual, scene=scene):
+        raise RitualAlreadyPerformedThisScene
 
     soulfray_inst = (
         ConditionInstance.objects.select_for_update()
@@ -275,7 +284,7 @@ def apply_anima_ritual_outcome(
         anima_recovered=anima_recovered,
         outcome=outcome,
         severity_reduced=severity_reduced,
-        target_character=None,
+        target_character=partner_sheet,
     )
 
     return RitualOutcome(
@@ -489,6 +498,29 @@ def has_performed_anima_ritual_in_scene(
     from world.magic.models.anima import AnimaRitualPerformance  # noqa: PLC0415
 
     return AnimaRitualPerformance.objects.filter(ritual=ritual, scene=scene).exists()
+
+
+def anima_ritual_open_in_scene(
+    character,  # noqa: OBJECTDB_PARAM — Evennia character
+    scene: Scene,
+) -> bool:
+    """True when the character has an Anima ritual set up and not yet performed in ``scene``.
+
+    One query, so the persona menu can tell the web client whether to offer the ritual (#5181).
+    The ritual and the once-per-scene cap are the same ones ``check_partner_ritual`` enforces.
+    """
+    from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
+    from world.magic.models.rituals import Ritual  # noqa: PLC0415
+
+    return (
+        Ritual.objects.filter(
+            author_account=character.db_account,
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+            check_config__check_type__isnull=False,
+        )
+        .exclude(performances__scene=scene)
+        .exists()
+    )
 
 
 def _budget_for_outcome(outcome: object) -> int:

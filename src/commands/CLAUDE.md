@@ -936,6 +936,20 @@ actions, backends, and service functions.
   forms the bond and `tether dissolve` ends it. `tether entreat` and `sineater consume` are gone. Typed in
   `integration_tests/test_sineating_journeys.py`; formation, brace, rescue and dissolve by hand in
   `commands/tests/test_soul_tether_e2e.py`.
+- **Claiming** (#5181; `claim.py`, `evennia_overrides/communication.py`). `pose/claim <text>` poses and collects
+  what kindled deeds set aside (`CharacterResonance.kindled_unclaimed`): everything waiting, or with
+  `pose/claim ruin,mercy=<text>` only the resonances named (matched without regard to case among the ones
+  with something waiting; a name that is not one is the command's own error and nothing posts). Once `=`
+  is present the text before it is read as names. It combines as `pose/claim/reflect`, `pose/claim/entreat`
+  and `pose/claim/sineat`, where it claims everything (the `=` belongs to the other part). `claim_kwargs_and_rest`
+  builds the pose action's `claim` and `claim_resonance_ids` kwargs; `PoseAction` checks them before the pose
+  posts (`pending_claim_from`) and collects them after (`claim_kindled`), and the claimer alone reads one
+  line per resonance in the affinity's `claim_verb`. Typed in `integration_tests/test_claiming_kindled_journeys.py`.
+- **The Anima ritual with a partner** (#5181; `ritual.py`). `ritual anima <partner>` asks someone in the scene to
+  take part in the caller's own anima ritual (`start_partner_ritual`, the same consent request the web
+  scene-action create opens), tells the partner what is asked, the sentence about their fatigue and `accept` /
+  `deny`, and an NPC partner answers at once. A bare `ritual anima` is still the solo ritual. Typed in
+  `integration_tests/test_anima_ritual_partner_journeys.py`.
 - **Combat and the GM** (#5124): `combat digdeep [<resonance>]` and `combat rally <ally>[=<resonance>]`
   (`combat_maneuvers.py`) name the resonance; `stage kindle <character>=<resonance>[:<strength>]`
   (`gm_props.py`, action `stage_kindle`) kindles a resonance for the scene, gated like the other

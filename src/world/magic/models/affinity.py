@@ -116,6 +116,44 @@ class Affinity(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "from the drift configuration."
         ),
     )
+    claim_verb = models.CharField(
+        max_length=30,
+        blank=True,
+        db_default="",
+        help_text=(
+            "The word a player reads when they claim resonance set aside from a kindled deed "
+            "in this affinity, in the present tense, such as 'gloat', 'inspire' or 'relish'. "
+            "The line reads 'You <verb>. Your <resonance> grows by N.'"
+        ),
+    )
+    earn_rate_percent = models.PositiveSmallIntegerField(
+        default=100,
+        db_default=100,
+        help_text=(
+            "How much of the resonance they earn a character whose main affinity is this one "
+            "actually gets, as a percentage. 100 is as authored, 150 is half as much again. "
+            "Staff grants, character creation and resonance that is only being moved or "
+            "converted are never scaled."
+        ),
+    )
+    learn_rate_percent = models.PositiveSmallIntegerField(
+        default=100,
+        db_default=100,
+        help_text=(
+            "How much technique training progress a character whose main affinity is this "
+            "one gets from the same training, as a percentage. 100 is as authored. The weekly "
+            "training limit and the action point cost still count the unscaled points."
+        ),
+    )
+    ritual_partner_fatigue = models.SmallIntegerField(
+        default=0,
+        db_default=0,
+        help_text=(
+            "What an Anima ritual of this affinity's resonance does to the partner who joins "
+            "in. A positive number adds that much fatigue to the partner, a negative number "
+            "eases that much, and zero does nothing."
+        ),
+    )
     objects = AffinityManager()
 
     class NaturalKeyConfig:

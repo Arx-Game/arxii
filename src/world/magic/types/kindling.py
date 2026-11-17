@@ -77,3 +77,32 @@ class KindledResonance:
     def strongest_situation(self) -> KindlingSituation | None:
         """The authored row that kindled it most strongly, or None (a Rally or a GM only)."""
         return self.situations[0] if self.situations else None
+
+
+@dataclass(frozen=True)
+class ClaimedResonance:
+    """One resonance a claim collected (#5181): what the ledger recorded after the earn rate,
+    and the claiming verb of the resonance's affinity (blank when staff wrote none)."""
+
+    resonance: Resonance
+    amount: int
+    verb: str
+
+
+@dataclass(frozen=True)
+class WaitingResonance:
+    """A resonance with something set aside to claim, for the picker and the panel (#5181)."""
+
+    resonance: Resonance
+    unclaimed: int
+    verb: str
+
+
+@dataclass(frozen=True)
+class PendingClaim:
+    """A checked claim a pose or journal entry carries, waiting for the writing to post.
+
+    ``resonance_ids`` empty means everything waiting.
+    """
+
+    resonance_ids: tuple[int, ...] = ()

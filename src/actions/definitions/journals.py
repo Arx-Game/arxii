@@ -73,7 +73,11 @@ class CreateJournalEntryAction(_BaseJournalAction):
     ) -> ActionResult:
         from world.journals.constants import PosthumousOverride  # noqa: PLC0415
         from world.journals.services import create_journal_entry  # noqa: PLC0415
-        from world.magic.exceptions import ReflectionError  # noqa: PLC0415
+        from world.magic.exceptions import ClaimError, ReflectionError  # noqa: PLC0415
+        from world.magic.services.claiming import (  # noqa: PLC0415
+            pending_claim_from,
+            record_pending_claim,
+        )
         from world.magic.services.reflection import (  # noqa: PLC0415
             pending_reflection_from,
             record_pending_reflection,
@@ -98,6 +102,12 @@ class CreateJournalEntryAction(_BaseJournalAction):
             pending = pending_reflection_from(sheet, kwargs)
         except ReflectionError as exc:
             return ActionResult(success=False, message=exc.user_message)
+        # A claim (#5181) is checked the same way: a named resonance with nothing waiting is
+        # refused before the entry is written.
+        try:
+            claim = pending_claim_from(sheet, kwargs)
+        except ClaimError as exc:
+            return ActionResult(success=False, message=exc.user_message)
 
         # Entry and reflection are one transaction: a reflection that fails late (a race on
         # the same deed) takes the entry back with it, and the writer is told why.
@@ -117,6 +127,7 @@ class CreateJournalEntryAction(_BaseJournalAction):
                     if pending is not None
                     else None
                 )
+                claim_lines = record_pending_claim(sheet, claim) if claim is not None else ()
         except ReflectionError as exc:
             return ActionResult(success=False, message=exc.user_message)
         return ActionResult(
@@ -124,9 +135,11 @@ class CreateJournalEntryAction(_BaseJournalAction):
             message=(
                 f"You write a new journal entry: {entry.title}."
                 + (f" {recorded_line(reflection)}" if reflection is not None else "")
+                + "".join(f" {line}" for line in claim_lines)
             ),
             data={"entry_id": entry.pk}
-            | ({"reflection_line": recorded_line(reflection)} if reflection is not None else {}),
+            | ({"reflection_line": recorded_line(reflection)} if reflection is not None else {})
+            | ({"claim_lines": list(claim_lines)} if claim_lines else {}),
         )
 
 

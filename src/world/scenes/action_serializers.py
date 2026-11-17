@@ -521,9 +521,20 @@ class SceneActionRequestSerializer(_CombatStakesCacheMixin, serializers.ModelSer
     # Resist-only is decided once per row by the mixin's ``_resist`` (#4418).
     resist_only = serializers.SerializerMethodField()
     resist_check_name = serializers.SerializerMethodField()
+    ritual_partner_effect = serializers.SerializerMethodField()
 
     def _resist_subject(self, obj: SceneActionRequest) -> tuple[SceneActionRequest, None]:
         return obj, None
+
+    def get_ritual_partner_effect(self, obj: SceneActionRequest) -> str:
+        """What an Anima ritual will do to the partner's fatigue, in one sentence the consent
+        prompt shows before they agree (#5181); blank for any other request, and for a ritual
+        that does nothing to the partner."""
+        from world.magic.services.anima_ritual_action import (  # noqa: PLC0415
+            ritual_consent_sentence,
+        )
+
+        return ritual_consent_sentence(obj)
 
     def get_technique_name(self, obj: SceneActionRequest) -> str | None:
         """Human label for the enhancing technique (#892 — ConsentPrompt display)."""
@@ -607,6 +618,7 @@ class SceneActionRequestSerializer(_CombatStakesCacheMixin, serializers.ModelSer
             "boon",
             "resist_only",
             "resist_check_name",
+            "ritual_partner_effect",
             "created_at",
             "resolved_at",
         ]
@@ -967,6 +979,15 @@ class SceneActionTargetSerializer(_CombatStakesCacheMixin, serializers.ModelSeri
     # Resist-only is decided once per row by the mixin's ``_resist`` (#4418).
     resist_only = serializers.SerializerMethodField()
     resist_check_name = serializers.SerializerMethodField()
+    ritual_partner_effect = serializers.SerializerMethodField()
+
+    def get_ritual_partner_effect(self, obj: SceneActionTarget) -> str:
+        """The consent sentence about the partner's fatigue (#5181); see the request serializer."""
+        from world.magic.services.anima_ritual_action import (  # noqa: PLC0415
+            ritual_consent_sentence,
+        )
+
+        return ritual_consent_sentence(obj.action_request)
 
     def _resist_subject(self, obj: SceneActionTarget) -> tuple[SceneActionRequest, Persona | None]:
         return obj.action_request, obj.target_persona
@@ -1027,6 +1048,7 @@ class SceneActionTargetSerializer(_CombatStakesCacheMixin, serializers.ModelSeri
             "created_at",
             "resist_only",
             "resist_check_name",
+            "ritual_partner_effect",
         ]
         read_only_fields = [
             "action_target_id",

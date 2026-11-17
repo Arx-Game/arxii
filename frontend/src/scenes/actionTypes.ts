@@ -364,6 +364,8 @@ export interface ActionRequest {
   resist_only: boolean;
   /** Name of the check the target rolls to resist; null when not resist-only (#4418). */
   resist_check_name: string | null;
+  /** What an Anima ritual will do to the partner's fatigue; blank for anything else (#5181). */
+  ritual_partner_effect?: string;
   created_at: string;
 }
 
@@ -698,5 +700,7 @@ export interface PendingActionTarget {
   /** True when an NPC-started contested action leaves only a resist roll (#4418). */
   resist_only: boolean;
   resist_check_name: string | null;
+  /** What an Anima ritual will do to the partner's fatigue; blank for anything else (#5181). */
+  ritual_partner_effect?: string;
   created_at: string;
 }

@@ -131,8 +131,8 @@
   `strength` a rank; `reason_text`), or a Rally or a GM kindled it (`Kindling`, `source`
   RALLY/GM, ends with its fight or scene). Staff author `KindledStrengthTier` (rank, name, `min_bond_tier`,
   `min_severity`, `pull_levels`, `give_in_max_depth`, `give_in_bonus_percent`, `give_in_ease_tenths`,
-  `dig_deep_scale_percent`, `earn_percent`), the singleton `KindlingConfig` (`harm_property`),
-  `KindledDeedAward` and `RallyKindlingStrength` on one admin page; `Resonance.feeling` (Property FK)
+  `dig_deep_scale_percent`, `earn_percent`), the singleton `KindlingConfig` (`harm_property`, and since #5181 `instant_percent` and `claim_percent`),
+  `KindledDeedAward`, `AnimaRitualResonanceAward` and `RallyKindlingStrength` on one admin page; `Resonance.feeling` (Property FK)
   and `missions.MissionTheme` (`themes` on `MissionTemplate` and `MissionOption`) feed the
   situations. Six new covenants `Situation` members (`THREAD_ANCHOR_PRESENT`, `OWN_FEELING`,
   `SHARED_FEELING`, `TARGET_IN_STATE_THEY_CAUSED`, `SOMEONE_IN_TROUBLE`, `MISSION_THEME`; `Situation`
@@ -145,8 +145,15 @@
   replaced `fury_anchor`), Dig deep and Rally by resonance (`dig_deep(participant, resonance=)`,
   `declare_rally(..., resonance=)`, `CombatRoundAction.rally_resonance`, `record_rally_kindling`), GM
   `kindle_by_gm` (action `stage_kindle`, `gm_list_kindling`; telnet `stage kindle`). Earning:
-  `award_kindled_deeds` writes `GainSource.KINDLED_DEED` grants (`ResonanceGrant.source_kindling_situation`, and `deed_label`, what the character did in her own words, from `KindlingAct.label`),
-  and a mission option's `feeds` shows what it would earn. Reflections: `Reflection` and
+  `award_kindled_deeds` writes `GainSource.KINDLED_DEED` grants (`ResonanceGrant.source_kindling_situation`, and `deed_label`, what the character did in her own words, from `KindlingAct.label`; since #5181 only `instant_percent` of a deed arrives at once, and
+  `claim_percent` is added to `CharacterResonance.kindled_unclaimed`), and a mission option's `feeds` shows what it would earn.
+  Claiming (#5181, `services/claiming.py`): `claim_kindled`, `pending_claim_from`, `record_pending_claim`,
+  `waiting_resonances`, `GainSource.KINDLED_CLAIM`, `ClaimFieldsMixin` on the pose and journal serializers
+  (`claim`, `claim_resonance_ids`; answers `claim_lines`), `ClaimedResonance`; `GET /api/magic/kindled-resonances/`
+  lists `unclaimed` and `claim_verb`; telnet `pose/claim`, `pose/claim <resonance>,...=<text>`; React `ClaimRow`.
+  Rates (#5181): `Affinity.earn_rate_percent` scales what `grant_resonance` records except for
+  `AFFINITY_RATE_EXEMPT_SOURCES`, `Affinity.learn_rate_percent` scales `credit_technique_progress`, and
+  `Affinity.claim_verb` is the claiming word. Reflections: `Reflection` and
   `SettlingRite` (`models/reflection.py`), `GainSource.EMBRACED_DEED`, `reflectable_for`,
   `record_reflection`, `unsettling_resonance`; pose and journal actions take `reflect_*` kwargs.
   Endpoints: `GET /api/magic/kindled-resonances/`, `GET /api/magic/reflectables/`,
@@ -155,8 +162,9 @@
   `givein=<resonance>:<tier>`. React: `KindledResonancesPanel`, `ReflectingOnRow`. Journeys:
   `test_your_resonances_journeys`, `test_kindled_dig_deep_and_rally_journeys`,
   `test_surrendering_control_to_fury_journeys`, `test_earning_kindled_deeds_journeys`,
-  `test_reflection_journeys`, `test_drift_correction_journeys`. Details: [magic.md](magic.md)
-  "Kindled resonances"; why Fury's anchor became a resonance: `docs/adr/adr-5124-furys-anchor-person-became-a-kindled-resonance.md`.
+  `test_reflection_journeys`, `test_drift_correction_journeys`, `test_claiming_kindled_journeys`. Details: [magic.md](magic.md)
+  "Kindled resonances"; why a deed pays part at once and sets a share aside:
+  `docs/adr/adr-5181-a-kindled-deed-pays-part-at-once-and-sets-a-share-aside-to-claim.md`; why Fury's anchor became a resonance: `docs/adr/adr-5124-furys-anchor-person-became-a-kindled-resonance.md`.
 
 - **Thread retune (slice 6 of #4672, reshaped by #5123):** `services/thread_resonance.py` moves
   part of one `ThreadResonance` row of a thread to another resonance's row through the SERVICE
@@ -300,7 +308,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     resonances in row order, #5123).
   - **Anima / rituals:** `CharacterAnima`, the personal anima ritual (a SCENE_ACTION
     `Ritual`; performed through `PerformRitualAction`, web Perform button and
-    telnet `ritual anima`, #4451), `AnimaRitualPerformance`, `SoulfrayConfig`, `MishapPoolTier`,
+    telnet `ritual anima`, #4451), the ritual with a partner (#5181: `start_partner_ritual`, `resolve_ritual_request`,
+    `apply_ritual_bond`, `AnimaRitualResonanceAward`, `GainSource.ANIMA_RITUAL`, `Affinity.ritual_partner_fatigue`; telnet
+    `ritual anima <partner>`; `PersonaMenu.anima_ritual_available`; journey `test_anima_ritual_partner_journeys`),
+    `AnimaRitualPerformance`, `SoulfrayConfig`, `MishapPoolTier`,
     `TechniqueOutcomeModifier`. `ANIMA_BANDS` + `anima_band_for(current, maximum)`
     (`constants.py`, PLACEHOLDER labels pending Apostate rewrite) derive the
     qualitative band word; `CharacterAnimaSerializer.band` surfaces it for the

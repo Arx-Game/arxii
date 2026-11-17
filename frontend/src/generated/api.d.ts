@@ -38204,6 +38204,13 @@ export interface components {
       kindled: boolean;
       readonly strength_name: string | null;
       reasons: string[];
+      claim_verb: string;
+      /**
+       * @description What a kindled deed set aside for the character in this resonance and they have not
+       *     claimed (#5181). Kindled or not: it waits however long it takes. The view puts the
+       *     character's amounts in ``context["unclaimed"]`` (resonance id to amount).
+       */
+      readonly unclaimed: number;
     };
     /** @description One visible node in a family tree payload. */
     KinspersonNode: {
@@ -48375,6 +48382,7 @@ export interface components {
       items: components['schemas']['PersonaMenuItem'][];
       groups: components['schemas']['PersonaMenuGroup'][];
       scene_actions: components['schemas']['PlayerAction'][];
+      anima_ritual_available: boolean;
     };
     PersonaMenuGroup: {
       key: components['schemas']['KeyB77Enum'];
@@ -50216,6 +50224,8 @@ export interface components {
        *     * `SUCCUMBED` - Succumbed to the Mire
        *     * `SUCCUMB_BONUS` - Sineater succumbed bonus
        *     * `SINEATER_FALL` - Sineater fell
+       *     * `KINDLED_CLAIM` - Kindled deed claimed
+       *     * `ANIMA_RITUAL` - Anima ritual
        */
       readonly source: components['schemas']['ResonanceGrantSourceEnum'];
       /** Format: date-time */
@@ -50256,6 +50266,8 @@ export interface components {
      *     * `SUCCUMBED` - Succumbed to the Mire
      *     * `SUCCUMB_BONUS` - Sineater succumbed bonus
      *     * `SINEATER_FALL` - Sineater fell
+     *     * `KINDLED_CLAIM` - Kindled deed claimed
+     *     * `ANIMA_RITUAL` - Anima ritual
      * @enum {string}
      */
     ResonanceGrantSourceEnum:
@@ -50288,7 +50300,9 @@ export interface components {
       | 'MIRE_PURIFIED'
       | 'SUCCUMBED'
       | 'SUCCUMB_BONUS'
-      | 'SINEATER_FALL';
+      | 'SINEATER_FALL'
+      | 'KINDLED_CLAIM'
+      | 'ANIMA_RITUAL';
     ResonanceLine: {
       resonance: number;
       tier: components['schemas']['ResonanceLineTierEnum'];
@@ -50989,6 +51003,12 @@ export interface components {
       } | null;
       readonly resist_only: boolean;
       readonly resist_check_name: string | null;
+      /**
+       * @description What an Anima ritual will do to the partner's fatigue, in one sentence the consent
+       *     prompt shows before they agree (#5181); blank for any other request, and for a ritual
+       *     that does nothing to the partner.
+       */
+      readonly ritual_partner_effect: string;
       /** Format: date-time */
       readonly created_at: string;
       /**
@@ -51063,6 +51083,8 @@ export interface components {
       readonly created_at: string;
       readonly resist_only: boolean;
       readonly resist_check_name: string | null;
+      /** @description The consent sentence about the partner's fatigue (#5181); see the request serializer. */
+      readonly ritual_partner_effect: string;
     };
     /** @description A scene room's current activity band (shown before a teller commits). */
     SceneActivity: {
@@ -77109,8 +77131,11 @@ export interface operations {
          *     * `SUCCUMBED` - Succumbed to the Mire
          *     * `SUCCUMB_BONUS` - Sineater succumbed bonus
          *     * `SINEATER_FALL` - Sineater fell
+         *     * `KINDLED_CLAIM` - Kindled deed claimed
+         *     * `ANIMA_RITUAL` - Anima ritual
          */
         source?:
+          | 'ANIMA_RITUAL'
           | 'CHARACTER_CREATION'
           | 'COMBO_DISCOVERY'
           | 'COMPROMISE'
@@ -77121,6 +77146,7 @@ export interface operations {
           | 'EMBRACED_DEED'
           | 'ENTRY_FLOURISH'
           | 'FALL_CONVERSION'
+          | 'KINDLED_CLAIM'
           | 'KINDLED_DEED'
           | 'MIRE_PURIFIED'
           | 'MISSION_REPORT'

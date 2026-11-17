@@ -89,6 +89,8 @@ describe('DigDeep', () => {
         kindled: true,
         strength_name: 'Blazing',
         reasons: [],
+        unclaimed: 0,
+        claim_verb: '',
       },
       {
         id: 8,
@@ -97,6 +99,8 @@ describe('DigDeep', () => {
         kindled: false,
         strength_name: null,
         reasons: [],
+        unclaimed: 0,
+        claim_verb: '',
       },
     ];
     render(

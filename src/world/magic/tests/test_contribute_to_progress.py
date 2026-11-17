@@ -6,8 +6,9 @@ from django.test import TestCase
 
 from world.action_points.models import ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.factories import TechniqueFactory
+from world.magic.factories import CharacterAuraFactory, TechniqueFactory
 from world.magic.models import (
+    Affinity,
     CharacterTechnique,
     TechniqueProgress,
     TechniqueProgressWeekly,
@@ -54,6 +55,44 @@ class ContributeToProgressTest(TestCase):
         self.progress.refresh_from_db()
         self.assertEqual(self.progress.points_accumulated, 20)
         self.assertIsNone(result)
+
+    def test_the_learn_rate_scales_the_meter_once_and_not_the_cap_or_the_cost(self):
+        CharacterAuraFactory(character=self.sheet, celestial=0, primal=20, abyssal=80)
+        affinity = Affinity.objects.get(name="Abyssal")
+        affinity.learn_rate_percent = 150
+        affinity.save()
+        contribute_to_technique_progress(self.sheet, self.progress, dev_points=20)
+        self.progress.refresh_from_db()
+        self.assertEqual(self.progress.points_accumulated, 30)
+        weekly = TechniqueProgressWeekly.objects.get(
+            character_sheet=self.sheet, technique=self.technique
+        )
+        self.assertEqual(weekly.points_contributed, 20)
+        self.pool.refresh_from_db()
+        self.assertEqual(self.pool.current, 480)
+
+    def test_a_trial_award_is_never_scaled_down_to_nothing_by_a_slow_learn_rate(self):
+        from world.checks.constants import EffectType
+        from world.checks.factories import ConsequenceEffectFactory
+        from world.checks.types import ResolutionContext
+        from world.mechanics.effect_handlers import _technique_training
+
+        CharacterAuraFactory(character=self.sheet, celestial=0, primal=20, abyssal=80)
+        affinity = Affinity.objects.get(name="Abyssal")
+        affinity.learn_rate_percent = 50
+        affinity.save()
+        effect = ConsequenceEffectFactory(
+            effect_type=EffectType.TECHNIQUE_TRAINING,
+            technique=self.technique,
+            training_points=1,
+            training_meter_size=10,
+        )
+
+        _technique_training(effect, ResolutionContext(character=self.sheet.character))
+
+        # 1 point at 50% is 0 by integer arithmetic; the learner still gets 1.
+        self.progress.refresh_from_db()
+        self.assertEqual(self.progress.points_accumulated, 1)
 
     def test_contribution_spends_ap(self):
         contribute_to_technique_progress(self.sheet, self.progress, dev_points=20)

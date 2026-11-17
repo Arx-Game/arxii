@@ -24079,6 +24079,7 @@ paths:
         schema:
           type: string
           enum:
+          - ANIMA_RITUAL
           - CHARACTER_CREATION
           - COMBO_DISCOVERY
           - COMPROMISE
@@ -24089,6 +24090,7 @@ paths:
           - EMBRACED_DEED
           - ENTRY_FLOURISH
           - FALL_CONVERSION
+          - KINDLED_CLAIM
           - KINDLED_DEED
           - MIRE_PURIFIED
           - MISSION_REPORT
@@ -24142,6 +24144,8 @@ paths:
           * `SUCCUMBED` - Succumbed to the Mire
           * `SUCCUMB_BONUS` - Sineater succumbed bonus
           * `SINEATER_FALL` - Sineater fell
+          * `KINDLED_CLAIM` - Kindled deed claimed
+          * `ANIMA_RITUAL` - Anima ritual
       tags:
       - magic
       security:
@@ -67173,13 +67177,24 @@ components:
           type: array
           items:
             type: string
+        claim_verb:
+          type: string
+        unclaimed:
+          type: integer
+          description: |-
+            What a kindled deed set aside for the character in this resonance and they have not
+            claimed (#5181). Kindled or not: it waits however long it takes. The view puts the
+            character's amounts in ``context["unclaimed"]`` (resonance id to amount).
+          readOnly: true
       required:
       - affinity_name
+      - claim_verb
       - id
       - kindled
       - name
       - reasons
       - strength_name
+      - unclaimed
     KinspersonNode:
       type: object
       description: One visible node in a family tree payload.
@@ -85401,7 +85416,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlayerAction'
+        anima_ritual_available:
+          type: boolean
       required:
+      - anima_ritual_available
       - groups
       - is_self
       - items
@@ -89433,6 +89451,8 @@ components:
             * `SUCCUMBED` - Succumbed to the Mire
             * `SUCCUMB_BONUS` - Sineater succumbed bonus
             * `SINEATER_FALL` - Sineater fell
+            * `KINDLED_CLAIM` - Kindled deed claimed
+            * `ANIMA_RITUAL` - Anima ritual
         granted_at:
           type: string
           format: date-time
@@ -89496,6 +89516,8 @@ components:
       - SUCCUMBED
       - SUCCUMB_BONUS
       - SINEATER_FALL
+      - KINDLED_CLAIM
+      - ANIMA_RITUAL
       type: string
       description: |-
         * `POSE_ENDORSEMENT` - Pose endorsement
@@ -89528,6 +89550,8 @@ components:
         * `SUCCUMBED` - Succumbed to the Mire
         * `SUCCUMB_BONUS` - Sineater succumbed bonus
         * `SINEATER_FALL` - Sineater fell
+        * `KINDLED_CLAIM` - Kindled deed claimed
+        * `ANIMA_RITUAL` - Anima ritual
     ResonanceLine:
       type: object
       properties:
@@ -90972,6 +90996,13 @@ components:
           type: string
           nullable: true
           readOnly: true
+        ritual_partner_effect:
+          type: string
+          description: |-
+            What an Anima ritual will do to the partner's fatigue, in one sentence the consent
+            prompt shows before they agree (#5181); blank for any other request, and for a ritual
+            that does nothing to the partner.
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -90996,6 +91027,7 @@ components:
       - resolved_at
       - resolved_difficulty
       - result_interaction
+      - ritual_partner_effect
       - scene
       - status
       - target_name
@@ -91159,6 +91191,11 @@ components:
           type: string
           nullable: true
           readOnly: true
+        ritual_partner_effect:
+          type: string
+          description: The consent sentence about the partner's fatigue (#5181); see
+            the request serializer.
+          readOnly: true
       required:
       - action_key
       - action_request_id
@@ -91172,6 +91209,7 @@ components:
       - pose_text
       - resist_check_name
       - resist_only
+      - ritual_partner_effect
       - scene
       - status
       - strain_commitment
