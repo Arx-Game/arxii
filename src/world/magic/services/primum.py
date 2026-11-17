@@ -317,23 +317,19 @@ def _place_lines(  # noqa: PLR0913 - the cast's own values, read once by cast_po
         step = _step_in(steps, amounts[substance_id])
         hidden = substance_id != own.pk and substance_id not in perceived
         label = _place_label(own, name, points, hidden=hidden)
+        card_label = label
+        if not hidden:
+            step_name = step.name if step is not None else ""
+            card_label = _place_card_label(
+                place_name, step_name, name, own, relations.get(substance_id)
+            )
         lines.append(
             SourcePoints(
                 kind=PrimumLineKind.PLACE,
                 label=label,
                 points=points,
                 substance_id=substance_id,
-                card_label=(
-                    label
-                    if hidden
-                    else _place_card_label(
-                        place_name,
-                        step.name if step is not None else "",
-                        name,
-                        own,
-                        relations.get(substance_id),
-                    )
-                ),
+                card_label=card_label,
                 relation=_relation_of(own, substance_id, relations),
                 hidden=hidden,
             )
