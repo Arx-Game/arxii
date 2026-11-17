@@ -283,7 +283,6 @@ class FallConvertsRowsTests(RetuneRowsCase):
             source_affinity=self.celestial,
             target_affinity=self.primal,
             multiplier=Decimal("1.20"),
-            partial=False,
         )
 
     def test_fall_converts_rows_in_affinity(self) -> None:
@@ -355,7 +354,6 @@ class FallConvertsRowsTests(RetuneRowsCase):
             source_affinity=self.abyssal,
             target_affinity=self.celestial,
             multiplier=Decimal("0.50"),
-            partial=False,
         )
 
     def test_a_redemption_lossy_enough_to_empty_a_row_deletes_it(self) -> None:

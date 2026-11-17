@@ -1,7 +1,7 @@
 """Resonance conversion service for Fall / Redemption (#1583).
 
-Shared conversion engine for both the extended Rite of Atonement (partial,
-lossy) and the full Fall/Redemption ceremony (full, asymmetric).
+The full Fall/Redemption conversion (``convert_resonance``, asymmetric) and the
+single-resonance primitive the settling rite uses (``convert_resonance_amount``).
 
 Key invariants:
 - ``lifetime_earned`` is *transferred* (not decremented) so that
@@ -9,9 +9,9 @@ Key invariants:
   correctly. The total lifetime_earned across both resonances is preserved
   (modulo the multiplier). See the spec's "Monotonicity invariant — revised
   after reviewer finding" section.
-- ``balance`` is zeroed (full) or reduced (partial) on the source resonance.
-- Each thread's ``ThreadResonance`` rows in the source affinity are converted (full
-  conversion only), and its leading resonance refreshed.
+- ``balance`` is zeroed on the source resonance by the full conversion.
+- Each thread's ``ThreadResonance`` rows in the source affinity are converted, and its
+  leading resonance refreshed.
 - ``ResonanceGrant`` audit rows are written for the target-side grant.
 """
 
@@ -49,9 +49,9 @@ class ConvertedResonance:
     source_resonance_id: int
     target_resonance_id: int
     balance_before: int
-    balance_after: int  # 0 for full, reduced for partial
+    balance_after: int  # 0 after a full conversion
     lifetime_earned_before: int
-    lifetime_earned_after: int  # 0 for full, reduced for partial
+    lifetime_earned_after: int  # 0 after a full conversion
     granted_balance: int  # amount granted to target (after multiplier)
     granted_lifetime: int  # lifetime_earned transferred to target
 
@@ -108,89 +108,6 @@ def _resolve_target_resonance(
         )
         raise ConversionMappingError(msg) from exc
     return mapping.target_resonance
-
-
-@transaction.atomic
-def _move_partial(  # noqa: PLR0913
-    cr: CharacterResonance,
-    character_sheet: CharacterSheet,
-    target_resonance: Resonance,
-    *,
-    amount_to_convert: int,
-    granted_balance: int,
-    gain_source: str,
-) -> tuple[int, int]:
-    """Move ``amount_to_convert`` of ``cr``'s balance, with its share of lifetime, across.
-
-    The lifetime share is proportional to the fraction of balance moved, and the
-    source's Mire part of lifetime shrinks in the same proportion (never past its
-    remaining lifetime), so what is left stays exact (#5123). The target receives
-    ``granted_balance`` through ``grant_resonance`` (which writes the audit row under
-    ``gain_source``), then its lifetime is corrected to the transferred share. Returns
-    ``(granted_balance, granted_lifetime)``.
-    """
-    if cr.balance > 0:
-        # Integer arithmetic: exact when the ratio is whole (4 of a 30 balance with 30
-        # lifetime moves 4), rounded down on a true fraction. Dividing first in Decimal
-        # gave 3.999... and truncated to 3.
-        lifetime_fraction = amount_to_convert * cr.lifetime_earned // cr.balance
-    else:
-        lifetime_fraction = 0
-
-    granted_lifetime = lifetime_fraction
-    mire_fraction = (
-        lifetime_fraction * cr.mire_lifetime // cr.lifetime_earned if cr.lifetime_earned else 0
-    )
-
-    cr.balance -= amount_to_convert
-    cr.lifetime_earned -= lifetime_fraction
-    cr.mire_lifetime = min(cr.mire_lifetime - mire_fraction, cr.lifetime_earned)
-    cr.save(update_fields=["balance", "lifetime_earned", "mire_lifetime"])
-
-    if granted_balance > 0:
-        grant_resonance(
-            character_sheet,
-            target_resonance,
-            granted_balance,
-            source=gain_source,
-        )
-        # grant_resonance added granted_balance to lifetime_earned;
-        # we want the transferred fraction instead.
-        target_cr = CharacterResonance.objects.get(
-            character_sheet=character_sheet,
-            resonance=target_resonance,
-        )
-        if granted_lifetime != granted_balance:
-            target_cr.lifetime_earned += granted_lifetime - granted_balance
-            target_cr.save(update_fields=["lifetime_earned"])
-
-    return granted_balance, granted_lifetime
-
-
-def _convert_partial(  # noqa: PLR0913
-    cr: CharacterResonance,
-    character_sheet: CharacterSheet,
-    target_resonance: Resonance,
-    multiplier: Decimal,
-    penance_amount: int | None,
-    gain_source: str = GainSource.PENANCE,
-) -> tuple[int, int] | None:
-    """Partial conversion: convert a portion of balance back (Atonement)."""
-    amount_to_convert = min(
-        penance_amount if penance_amount is not None else cr.balance,
-        cr.balance,
-    )
-    if amount_to_convert <= 0:
-        return None
-
-    return _move_partial(
-        cr,
-        character_sheet,
-        target_resonance,
-        amount_to_convert=amount_to_convert,
-        granted_balance=int(Decimal(amount_to_convert) * multiplier),
-        gain_source=gain_source,
-    )
 
 
 @transaction.atomic
@@ -305,14 +222,12 @@ def _convert_full(
     return granted_balance, granted_lifetime
 
 
-def convert_resonance(  # noqa: PLR0913
+def convert_resonance(
     character_sheet: CharacterSheet,
     *,
     source_affinity: Affinity,
     target_affinity: Affinity,
     multiplier: Decimal,
-    partial: bool = False,
-    penance_amount: int | None = None,
 ) -> ConversionResult:
     """Convert resonance balances and lifetime_earned between affinities.
 
@@ -322,19 +237,16 @@ def convert_resonance(  # noqa: PLR0913
     1. Look up the target resonance via ResonanceConversion mapping.
     2. Apply multiplier to balance (gain or loss).
     3. Transfer a proportional fraction of lifetime_earned to the target.
-    4. Zero the source balance (full) or reduce by penance_amount (partial).
+    4. Zero the source balance.
     5. Grant the converted amount to the target via grant_resonance.
     6. Convert every thread's resonance rows in the source affinity to the target
-       resonances, scaling amounts and developed points (full conversion only).
+       resonances, scaling amounts and developed points.
 
     Args:
         character_sheet: The character undergoing conversion.
         source_affinity: The affinity being converted away from.
         target_affinity: The destination affinity.
-        multiplier: >1.0 for Fall (gain), <1.0 for Redemption/Atonement (loss).
-        partial: True for Atonement (only converts non-native → Celestial,
-            does not touch threads).
-        penance_amount: For partial: how much balance to convert. None = all.
+        multiplier: >1.0 for Fall (gain), <1.0 for Redemption (loss).
 
     Returns:
         ConversionResult with per-resonance details.
@@ -356,12 +268,7 @@ def convert_resonance(  # noqa: PLR0913
         balance_before = cr.balance
         lifetime_before = cr.lifetime_earned
 
-        if partial:
-            conv = _convert_partial(
-                cr, character_sheet, target_resonance, multiplier, penance_amount
-            )
-        else:
-            conv = _convert_full(cr, character_sheet, target_resonance, multiplier)
+        conv = _convert_full(cr, character_sheet, target_resonance, multiplier)
 
         if conv is not None:
             converted.append(
@@ -377,9 +284,9 @@ def convert_resonance(  # noqa: PLR0913
                 )
             )
 
-    # Thread re-anchoring (full conversion only)
+    # Thread re-anchoring
     threads_reanchored = 0
-    if not partial and converted:
+    if converted:
         threads_reanchored = _reanchor_threads(
             character_sheet, converted, multiplier, source_affinity, target_affinity
         )

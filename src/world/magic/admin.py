@@ -2604,7 +2604,7 @@ class ResonanceConversionAdmin(admin.ModelAdmin):
 class FallRedemptionConfigAdmin(admin.ModelAdmin):
     """Admin for the Fall/Redemption tuning singleton."""
 
-    list_display = ("id", "penance_exchange_rate", "fall_threshold_percent")
+    list_display = ("id", "fall_threshold_percent")
 
 
 @admin.register(FallRedemptionRecord)

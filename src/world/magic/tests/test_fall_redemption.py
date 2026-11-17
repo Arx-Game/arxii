@@ -2,12 +2,10 @@
 
 Covers:
 - ``grant_compromise_resonance`` — grants non-native resonance, drifts aura.
-- ``convert_resonance`` — full and partial conversion, lifetime_earned transfer,
+- ``convert_resonance`` — full conversion, lifetime_earned transfer,
   thread re-anchoring, monotonicity.
 - ``perform_fall`` — the full Fall/Redemption ceremony (eligibility, multipliers,
   irreversibility, record creation).
-- Extended ``perform_atonement_rite`` — resonance conversion alongside corruption
-  reduction.
 """
 
 from decimal import Decimal
@@ -22,7 +20,6 @@ from world.magic.factories import (
     ResonanceFactory,
     ensure_canonical_affinities,
     ensure_conversion_pairs,
-    with_corruption_at_stage,
 )
 from world.magic.models import (
     AffinityInteraction,
@@ -36,15 +33,10 @@ from world.magic.models.fall_redemption import (
     CompromiseActType,
     ConversionType,
 )
-from world.magic.services.atonement import (
-    AtonementNothingToAtone,
-    perform_atonement_rite,
-)
 from world.magic.services.aura import set_aura_shares
 from world.magic.services.conversion import (
     conversion_pair,
     convert_resonance,
-    get_fall_redemption_config,
 )
 from world.magic.services.fall_redemption import (
     grant_compromise_resonance,
@@ -174,7 +166,6 @@ class TestConvertResonanceFull(TestCase):
             source_affinity=cele_aff,
             target_affinity=primal_aff,
             multiplier=multiplier,
-            partial=False,
         )
 
         self.assertEqual(len(result.converted_resonances), 1)
@@ -215,48 +206,12 @@ class TestConvertResonanceFull(TestCase):
             source_affinity=abyssal_aff,
             target_affinity=primal_aff,
             multiplier=multiplier,
-            partial=False,
         )
 
         conv = result.converted_resonances[0]
         self.assertEqual(conv.balance_before, 100)
         self.assertEqual(conv.granted_balance, 70)
         self.assertEqual(conv.granted_lifetime, 70)
-
-
-class TestConvertResonancePartial(TestCase):
-    """Partial conversion (Atonement) — lossy, no threads."""
-
-    def test_partial_conversion_reduces_balance(self):
-        """Atonement converts some Primal balance back to Celestial at 0.5×."""
-        sheet = CharacterSheetFactory()
-        cele_aff, primal_aff, _, cele_res, primal_res, abyssal_res = (
-            _setup_affinities_and_resonances()
-        )
-        _setup_conversion_mappings(cele_res, primal_res, abyssal_res)
-
-        # Grant Celestial + Primal resonance
-        grant_resonance(sheet, cele_res, 100, source=GainSource.STAFF_GRANT)
-        grant_resonance(sheet, primal_res, 100, source=GainSource.STAFF_GRANT)
-        _set_aura(sheet, celestial=50, primal=50, abyssal=0)
-
-        config = get_fall_redemption_config()
-
-        result = convert_resonance(
-            sheet,
-            source_affinity=primal_aff,
-            target_affinity=cele_aff,
-            multiplier=config.penance_exchange_rate,  # 0.5
-            partial=True,
-            penance_amount=40,
-        )
-
-        self.assertEqual(len(result.converted_resonances), 1)
-        conv = result.converted_resonances[0]
-        self.assertEqual(conv.balance_before, 100)
-        self.assertEqual(conv.balance_after, 60)  # 100 - 40
-        # 40 * 0.5 = 20
-        self.assertEqual(conv.granted_balance, 20)
 
 
 class TestConversionPair(TestCase):
@@ -454,115 +409,3 @@ class TestPerformFall(TestCase):
             perform_fall(sheet, target_affinity=primal_aff)
         self.assertIn("No conversion is authored", ctx.exception.user_message)
         self.assertFalse(FallRedemptionRecord.objects.filter(character_sheet=sheet).exists())
-
-
-class TestExtendedAtonement(TestCase):
-    """The extended Atonement Rite does both corruption reduction and resonance conversion."""
-
-    def test_atonement_resonance_conversion_only(self):
-        """Celestial with drift but no corruption gets resonance conversion."""
-        sheet = CharacterSheetFactory()
-        _, _, _, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
-        _setup_conversion_mappings(cele_res, primal_res, abyssal_res)
-
-        # Grant some Primal drift
-        grant_resonance(sheet, cele_res, 100, source=GainSource.STAFF_GRANT)
-        grant_resonance(sheet, primal_res, 50, source=GainSource.STAFF_GRANT)
-        _set_aura(sheet, celestial=67, primal=33, abyssal=0)
-
-        # No corruption (stage 0)
-        result = perform_atonement_rite(
-            performer_sheet=sheet,
-            target_sheet=sheet,
-            resonance=primal_res,  # the resonance being atoned for
-        )
-
-        # Corruption effect didn't fire (stage 0)
-        self.assertEqual(result.amount_reduced, 0)
-        # Resonance conversion did fire
-        self.assertIsNotNone(result.resonance_conversion)
-
-    def test_atonement_moves_the_whole_lifetime_share_of_a_partial_penance(self):
-        """4 of a 30 Primal balance with 30 lifetime moves 4 lifetime, not 3 (exact ratio)."""
-        sheet = CharacterSheetFactory()
-        _, _, _, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
-        _setup_conversion_mappings(cele_res, primal_res, abyssal_res)
-        grant_resonance(sheet, cele_res, 100, source=GainSource.STAFF_GRANT)
-        grant_resonance(sheet, primal_res, 30, source=GainSource.STAFF_GRANT)
-        _set_aura(sheet, celestial=77, primal=23, abyssal=0)
-
-        result = perform_atonement_rite(
-            performer_sheet=sheet,
-            target_sheet=sheet,
-            resonance=primal_res,
-            penance_amount=4,
-        )
-
-        (conv,) = result.resonance_conversion.converted_resonances
-        self.assertEqual((conv.balance_before, conv.balance_after), (30, 26))
-        self.assertEqual((conv.lifetime_earned_before, conv.lifetime_earned_after), (30, 26))
-        # 4 x 0.5 penance rate = 2 balance; the lifetime share is 4 x 30 // 30 = 4.
-        self.assertEqual((conv.granted_balance, conv.granted_lifetime), (2, 4))
-        celestial = CharacterResonance.objects.get(character_sheet=sheet, resonance=cele_res)
-        self.assertEqual(celestial.lifetime_earned, 104)
-
-    def test_atonement_both_effects_fire(self):
-        """Celestial with corruption AND drift gets both effects."""
-        sheet = CharacterSheetFactory()
-        _, _, _, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
-        _setup_conversion_mappings(cele_res, primal_res, abyssal_res)
-
-        grant_resonance(sheet, cele_res, 100, source=GainSource.STAFF_GRANT)
-        grant_resonance(sheet, primal_res, 50, source=GainSource.STAFF_GRANT)
-        _set_aura(sheet, celestial=67, primal=33, abyssal=0)
-
-        # Set up corruption at stage 1
-        with_corruption_at_stage(sheet, primal_res, stage=1)
-
-        result = perform_atonement_rite(
-            performer_sheet=sheet,
-            target_sheet=sheet,
-            resonance=primal_res,
-        )
-
-        # Both effects fired
-        self.assertGreater(result.amount_reduced, 0)
-        self.assertIsNotNone(result.resonance_conversion)
-
-    def test_atonement_nothing_to_atone(self):
-        """Celestial with no corruption and no drift raises NothingToAtone."""
-        sheet = CharacterSheetFactory()
-        _, _, _, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
-        _setup_conversion_mappings(cele_res, primal_res, abyssal_res)
-
-        grant_resonance(sheet, cele_res, 100, source=GainSource.STAFF_GRANT)
-        _set_aura(sheet, celestial=100, primal=0, abyssal=0)
-
-        with self.assertRaises(AtonementNothingToAtone):
-            perform_atonement_rite(
-                performer_sheet=sheet,
-                target_sheet=sheet,
-                resonance=cele_res,
-            )
-
-    def test_primal_atonement_corruption_only(self):
-        """Primal performer gets corruption reduction only (no resonance conversion)."""
-        sheet = CharacterSheetFactory()
-        _, _, _, cele_res, primal_res, abyssal_res = _setup_affinities_and_resonances()
-        _setup_conversion_mappings(cele_res, primal_res, abyssal_res)
-
-        grant_resonance(sheet, primal_res, 50, source=GainSource.STAFF_GRANT)
-        _set_aura(sheet, celestial=10, primal=80, abyssal=10)
-
-        with_corruption_at_stage(sheet, primal_res, stage=1)
-
-        result = perform_atonement_rite(
-            performer_sheet=sheet,
-            target_sheet=sheet,
-            resonance=primal_res,
-        )
-
-        # Corruption reduction fired
-        self.assertGreater(result.amount_reduced, 0)
-        # No resonance conversion (Primal performers don't convert to Celestial)
-        self.assertIsNone(result.resonance_conversion)

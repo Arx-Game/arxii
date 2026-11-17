@@ -50125,7 +50125,6 @@ export interface components {
        *     * `DISTINCTION` - Distinction
        *     * `COMBO_DISCOVERY` - Combo discovery
        *     * `COMPROMISE` - Moral compromise
-       *     * `PENANCE` - Atonement resonance conversion
        *     * `FALL_CONVERSION` - Fall/Redemption conversion
        *     * `WORSHIP_RITE` - Worship rite
        *     * `DRIFT_CORRECTION` - Drift correction
@@ -50162,7 +50161,6 @@ export interface components {
      *     * `DISTINCTION` - Distinction
      *     * `COMBO_DISCOVERY` - Combo discovery
      *     * `COMPROMISE` - Moral compromise
-     *     * `PENANCE` - Atonement resonance conversion
      *     * `FALL_CONVERSION` - Fall/Redemption conversion
      *     * `WORSHIP_RITE` - Worship rite
      *     * `DRIFT_CORRECTION` - Drift correction
@@ -50192,7 +50190,6 @@ export interface components {
       | 'DISTINCTION'
       | 'COMBO_DISCOVERY'
       | 'COMPROMISE'
-      | 'PENANCE'
       | 'FALL_CONVERSION'
       | 'WORSHIP_RITE'
       | 'DRIFT_CORRECTION'
@@ -77037,7 +77034,6 @@ export interface operations {
          *     * `DISTINCTION` - Distinction
          *     * `COMBO_DISCOVERY` - Combo discovery
          *     * `COMPROMISE` - Moral compromise
-         *     * `PENANCE` - Atonement resonance conversion
          *     * `FALL_CONVERSION` - Fall/Redemption conversion
          *     * `WORSHIP_RITE` - Worship rite
          *     * `DRIFT_CORRECTION` - Drift correction
@@ -77062,7 +77058,6 @@ export interface operations {
           | 'MISSION_REPORT'
           | 'MISSION_REWARD'
           | 'OUTFIT_TRICKLE'
-          | 'PENANCE'
           | 'POSE_ENDORSEMENT'
           | 'PROJECT_CONTRIBUTION'
           | 'ROOM_RESIDENCE'
