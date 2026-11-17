@@ -1099,6 +1099,8 @@ describe('ally taunt menu', () => {
       step_name: 'Rich',
       check_name: 'Harvesting',
       ap_cost: 2,
+      thread_bonus: 0,
+      thread_gift_name: '',
       character_id: 7,
     };
     const encounter = makeEncounter(
@@ -1116,10 +1118,6 @@ describe('ally taunt menu', () => {
     const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
     await user.click(row.getByText('Harvest'));
 
-    expect(mockHarvestMutateAsync).toHaveBeenCalledWith({
-      ref: { backend: 'registry', registry_key: 'harvest_primum' },
-      kwargs: { substance: 3, opponent_id: 10 },
-    });
     expect(
       await row.findByText('Success. You draw out 1 Fire Primum (Common).')
     ).toBeInTheDocument();

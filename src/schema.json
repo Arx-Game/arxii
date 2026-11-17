@@ -72904,6 +72904,14 @@ components:
           type: integer
           readOnly: true
           description: Action points one attempt costs, good roll or bad.
+        thread_bonus:
+          type: integer
+          readOnly: true
+          description: What her thread on a Gift of this substance adds; 0 if none.
+        thread_gift_name:
+          type: string
+          readOnly: true
+          description: The Gift whose thread adds the bonus; empty if none.
         character_id:
           type: integer
           readOnly: true
@@ -72918,6 +72926,8 @@ components:
       - step_name
       - substance_id
       - substance_name
+      - thread_bonus
+      - thread_gift_name
     OpponentLineDrive:
       type: object
       description: 'One drive edit on a placement: a strength, or null to remove the

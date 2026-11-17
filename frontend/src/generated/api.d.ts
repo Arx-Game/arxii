@@ -41088,6 +41088,10 @@ export interface components {
       readonly check_name: string;
       /** @description Action points one attempt costs, good roll or bad. */
       readonly ap_cost: number;
+      /** @description What her thread on a Gift of this substance adds; 0 if none. */
+      readonly thread_bonus: number;
+      /** @description The Gift whose thread adds the bonus; empty if none. */
+      readonly thread_gift_name: string;
       /** @description The played character this offer belongs to. */
       readonly character_id: number;
     };

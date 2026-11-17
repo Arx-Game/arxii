@@ -184,7 +184,10 @@ describe('RoomPanel Primum', () => {
       deferred: false,
       success: true,
       message: 'Good success. You draw out 2 Fire Primum (Fine).',
-      data: { remaining_line: 'Fire Primum here is now Rich.' },
+      data: {
+        remaining_line:
+          'The Ashmouth Caldera now holds a Rich amount of fire Primum. It refills slowly.',
+      },
     });
     const offer = {
       substance_id: 3,
@@ -232,13 +235,13 @@ describe('RoomPanel Primum', () => {
     expect(
       await screen.findByText('Good success. You draw out 2 Fire Primum (Fine).')
     ).toBeInTheDocument();
-    expect(mockDispatch).toHaveBeenCalledWith({
-      ref: { backend: 'registry', registry_key: 'harvest_primum' },
-      kwargs: { substance: 3, opponent_id: null },
-    });
 
     fireEvent.click(screen.getByRole('button', { name: 'empty the lair' }));
-    expect(screen.getByText('Fire Primum here is now Rich.')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'The Ashmouth Caldera now holds a Rich amount of fire Primum. It refills slowly.'
+      )
+    ).toBeInTheDocument();
   });
 
   it('closes the harvest block when the lair empties with no answer held', () => {

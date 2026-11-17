@@ -5134,7 +5134,13 @@ costs time, good roll or bad: before the roll `_pay_for_attempt` spends `harvest
 action points from her `ActionPointPool` (without them she is refused in plain words and
 nothing is rolled or charged) and adds `harvest_fatigue_cost` physical fatigue through
 `apply_fatigue`. Each offer carries `ap_cost`, shown as "Costs N AP" on the web Harvest panel
-and the slain-foe row and as one line under bare telnet `extract`. A rolled outcome with no
+and the slain-foe row and as one line under bare telnet `extract`. Each offer also carries
+`thread_bonus` and `thread_gift_name`, and the check line reads "Check: <check> · +N from your
+thread on <Gift>" (`check_line`) when she has a matching thread, on the web and under each
+offer of bare `extract`. A lair harvest answers with a second line, `remaining_line`: "<Room>
+now holds a <Step> amount of <name> Primum." then "It refills slowly." (not finite, a refill
+above zero) or "It will not refill.", or "Nothing is left." once empty; a slain foe's is
+"Nothing more can be drawn from <foe>." Telnet `extract` prints it after the answer. A rolled outcome with no
 `HarvestOutcome` row, or with a row that takes nothing, leaves a lair or a creature untouched
 alike. The rolled outcome picks a `HarvestOutcome`; `_take_from_place` and `_take_from_creature` cap it by what the
 source holds under `select_for_update`, and `mint_primum_items` gives her the items. A slain

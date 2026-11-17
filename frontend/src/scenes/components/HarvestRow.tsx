@@ -7,7 +7,7 @@
 import { Button } from '@/components/ui/button';
 import { useDispatchPlayerAction } from '@/combat/queries';
 import type { HarvestOffer } from '@/hooks/types';
-import { primumName, runHarvest, type HarvestAnswer } from '../harvestAnswer';
+import { checkLine, primumName, runHarvest, type HarvestAnswer } from '../harvestAnswer';
 import { HarvestAnswerLines } from './HarvestAnswerLines';
 
 interface HarvestRowProps {
@@ -25,7 +25,7 @@ export function HarvestRow({ offers, characterId, answer = null, onAnswer }: Har
     return null;
   }
 
-  const checkName = offers.find((offer) => offer.check_name)?.check_name;
+  const check = checkLine(offers.find((offer) => offer.check_name));
   const apCost = offers.find((offer) => offer.ap_cost > 0)?.ap_cost;
   const names = [...new Set(offers.map((offer) => offer.substance_name))];
 
@@ -36,7 +36,7 @@ export function HarvestRow({ offers, characterId, answer = null, onAnswer }: Har
           You sense {name} Primum in its remains.
         </p>
       ))}
-      {checkName && <p className="text-xs text-muted-foreground">Check: {checkName}</p>}
+      {check && <p className="text-xs text-muted-foreground">{check}</p>}
       {apCost && <p className="text-xs text-muted-foreground">Costs {apCost} AP</p>}
       {offers.map((offer) => (
         <Button

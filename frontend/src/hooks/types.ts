@@ -280,6 +280,10 @@ export interface HarvestOffer {
   check_name: string;
   /** Action points one attempt costs, good roll or bad; 0 when free. */
   ap_cost: number;
+  /** What her thread on a Gift of this substance adds to the check; 0 without one. */
+  thread_bonus?: number;
+  /** The Gift whose thread adds the bonus; empty without one. */
+  thread_gift_name?: string;
   /** The played character the offer belongs to; set on a slain foe's offers only. */
   character_id?: number;
 }

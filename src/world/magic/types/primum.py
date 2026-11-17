@@ -43,7 +43,8 @@ class HarvestOffer:
     offer names the foe in ``opponent_id`` and ``opponent_name``; a place offer leaves them
     empty. ``step_name`` is the step the source reads at now. ``check_name`` is the name of
     the harvest check she rolls ("" while none is set). ``ap_cost`` is the action points one
-    attempt costs her, good roll or bad.
+    attempt costs her, good roll or bad. ``thread_bonus`` is what her thread on a Gift of this
+    substance adds to the check (0 without one), and ``thread_gift_name`` names that Gift.
     """
 
     substance_id: int
@@ -54,6 +55,8 @@ class HarvestOffer:
     step_name: str
     check_name: str = ""
     ap_cost: int = 0
+    thread_bonus: int = 0
+    thread_gift_name: str = ""
 
 
 @dataclass(frozen=True)

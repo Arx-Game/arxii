@@ -160,11 +160,46 @@ def harvest_offers(
     config = get_resonance_environment_config()
     check = config.harvest_check_type
     check_name = check.name if check is not None else ""
+    offers = _place_offers(profile, perceived, steps) + _creature_offers(room, perceived, steps)
+    bonuses: dict[int, tuple[int, str]] = {}
+    for offer in offers:
+        if offer.substance_id not in bonuses:
+            bonuses[offer.substance_id] = _thread_bonus_for_offer(
+                character, offer.substance_id, config
+            )
     return [
-        replace(offer, check_name=check_name, ap_cost=config.harvest_ap_cost)
-        for offer in _place_offers(profile, perceived, steps)
-        + _creature_offers(room, perceived, steps)
+        replace(
+            offer,
+            check_name=check_name,
+            ap_cost=config.harvest_ap_cost,
+            thread_bonus=bonuses[offer.substance_id][0],
+            thread_gift_name=bonuses[offer.substance_id][1],
+        )
+        for offer in offers
     ]
+
+
+def check_line(offer: HarvestOffer) -> str:
+    """``Check: <check> · +N from your thread on <Gift>`` (the thread half only when she has
+    one); empty while no harvest check is set."""
+    if not offer.check_name:
+        return ""
+    line = f"Check: {offer.check_name}"
+    if offer.thread_bonus > 0:
+        line += f" · +{offer.thread_bonus} from your thread on {offer.thread_gift_name}"
+    return line
+
+
+def _thread_bonus_for_offer(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - a character
+    substance_id: int,
+    config: ResonanceEnvironmentConfig,
+) -> tuple[int, str]:
+    """The bonus her matching Gift thread adds to the check, and that Gift's name; (0, "")."""
+    value, thread = _thread_bonus_value(character, Substance.objects.get(pk=substance_id), config)
+    if thread is None or value <= 0:
+        return 0, ""
+    return value, thread.target_gift.name
 
 
 def _gift_thread(character: ObjectDB, substance: Substance) -> Thread | None:  # noqa: OBJECTDB_PARAM - a character
@@ -180,22 +215,32 @@ def _gift_thread(character: ObjectDB, substance: Substance) -> Thread | None:  #
     return max(matching, key=lambda thread: thread.level, default=None)
 
 
+def _thread_bonus_value(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - a character
+    substance: Substance,
+    config: ResonanceEnvironmentConfig,
+) -> tuple[int, Thread | None]:
+    """What her deepest matching Gift thread adds to the harvest check, and that thread."""
+    thread = _gift_thread(character, substance)
+    if thread is None:
+        return 0, None
+    value = config.harvest_thread_bonus * thread_level_multiplier(max(thread_rung(thread.level), 1))
+    return int(value), thread
+
+
 def _thread_bonus(
     character: ObjectDB,  # noqa: OBJECTDB_PARAM - a character
     substance: Substance,
     config: ResonanceEnvironmentConfig,
 ) -> list[ModifierContribution]:
-    thread = _gift_thread(character, substance)
-    if thread is None:
-        return []
-    value = config.harvest_thread_bonus * thread_level_multiplier(max(thread_rung(thread.level), 1))
-    if value <= 0:
+    value, thread = _thread_bonus_value(character, substance, config)
+    if thread is None or value <= 0:
         return []
     return [
         ModifierContribution(
             source_kind=ModifierSourceKind.CHARACTER,
             source_label=f"Your {thread.target_gift.name} thread",
-            value=int(value),
+            value=value,
         )
     ]
 
@@ -219,11 +264,12 @@ def _scaled_quantity(outcome: HarvestOutcome, taken: int) -> int:
 
 def _take_from_place(
     sheet: CharacterSheet, profile: RoomProfile, substance: Substance, outcome: HarvestOutcome
-) -> tuple[int, int, int] | None:
+) -> tuple[int, int, int, bool] | None:
     """Lock the lair's row, take what it holds up to the outcome, mint.
 
-    ``(taken, quantity, left)``, ``left`` being what the lair holds now. A harvest restamps
-    ``stamped_at``, so the lair's refill count starts again from now.
+    ``(taken, quantity, left, refills)``, ``left`` being what the lair holds now and
+    ``refills`` whether it fills again (not finite, with a refill above zero). A harvest
+    restamps ``stamped_at``, so the lair's refill count starts again from now.
 
     None when the lair holds nothing now (it was drained between the offer and the lock).
     """
@@ -251,14 +297,15 @@ def _take_from_place(
             row.stored_amount = held - taken
             row.stamped_at = now
             row.save(update_fields=["stored_amount", "stamped_at"])
-    return taken, quantity, held - taken
+    refills = not values["is_finite"] and values["refill_per_day"] > 0
+    return taken, quantity, held - taken, refills
 
 
 def _take_from_creature(
     sheet: CharacterSheet, foe: CombatOpponent, substance: Substance, outcome: HarvestOutcome
-) -> tuple[int, int, int] | None:
-    """Lock the slain foe, harvest it once, mint. ``(taken, quantity, 0)``: a creature is
-    harvested once, so nothing is left. None when it was already harvested."""
+) -> tuple[int, int, int, bool] | None:
+    """Lock the slain foe, harvest it once, mint. ``(taken, quantity, 0, False)``: a creature
+    is harvested once, so nothing is left. None when it was already harvested."""
     with transaction.atomic():
         state = (
             CombatOpponent.objects.select_for_update()
@@ -278,14 +325,14 @@ def _take_from_creature(
         taken = min(outcome.amount_taken, held)
         if taken <= 0:
             # Nothing taken leaves the foe as it was, as a lair is left: she may try again.
-            return 0, 0, 0
+            return 0, 0, 0, False
         quantity = _scaled_quantity(outcome, taken)
         # Mint first: a failed mint rolls back and leaves the cached row untouched.
         mint_primum_items(sheet, substance, quantity, outcome.quality_tier)
         row = CombatOpponent.objects.get(pk=foe.pk)
         row.primum_harvested_at = timezone.now()
         row.save(update_fields=["primum_harvested_at"])
-    return taken, quantity, 0
+    return taken, quantity, 0, False
 
 
 def _pay_for_attempt(
@@ -384,7 +431,7 @@ def harvest(
         taken_quantity = _take_from_creature(sheet, opponent, substance, outcome)
     if taken_quantity is None:
         return _failure(substance, NOTHING_LEFT_MESSAGE, outcome_name)
-    taken, quantity, left = taken_quantity
+    taken, quantity, left, refills = taken_quantity
     if taken <= 0:
         return _failure(substance, EMPTY_HANDED_MESSAGE, outcome_name)
     name = f"{substance.name[:1].upper()}{substance.name[1:]} Primum"
@@ -397,15 +444,24 @@ def harvest(
         quantity=quantity,
         outcome_name=outcome_name,
         message=f"{lead}You draw out {quantity} {name}{quality}.",
-        remaining_line=_remaining_line(name, opponent, left),
+        remaining_line=(
+            f"Nothing more can be drawn from {opponent.name}."
+            if opponent is not None
+            else _place_remaining_line(character.location.key, substance, left, refills=refills)
+        ),
     )
 
 
-def _remaining_line(name: str, opponent: CombatOpponent | None, left: int) -> str:
-    """One sentence on what the source holds after a harvest."""
-    if opponent is not None:
-        return f"Nothing more can be drawn from {opponent.name}."
+def _place_remaining_line(room_name: str, substance: Substance, left: int, *, refills: bool) -> str:
+    """What the lair holds after a harvest, and whether it fills again (the approved demo).
+
+    ``The Ashmouth Caldera now holds a Rich amount of fire Primum. It refills slowly.``; a
+    finite lair says ``It will not refill.``; an emptied one says ``Nothing is left.``.
+    """
+    refill = "It refills slowly." if refills else "It will not refill."
+    if left <= 0:
+        return f"Nothing is left. {refill}" if refills else "Nothing is left."
     step = step_for(left)
     if step is None:
-        return f"No {name} is left here."
-    return f"{name} here is now {step.name}."
+        return f"{room_name} now holds too little {substance.name} Primum to sense. {refill}"
+    return f"{room_name} now holds a {step.name} amount of {substance.name} Primum. {refill}"

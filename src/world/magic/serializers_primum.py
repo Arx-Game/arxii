@@ -53,6 +53,12 @@ class HarvestOfferSerializer(serializers.Serializer):
     ap_cost = serializers.IntegerField(
         read_only=True, help_text="Action points one attempt costs, good roll or bad."
     )
+    thread_bonus = serializers.IntegerField(
+        read_only=True, help_text="What her thread on a Gift of this substance adds; 0 if none."
+    )
+    thread_gift_name = serializers.CharField(
+        read_only=True, help_text="The Gift whose thread adds the bonus; empty if none."
+    )
 
 
 class OpponentHarvestOfferSerializer(HarvestOfferSerializer):

@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useDispatchPlayerAction } from '@/combat/queries';
 import type { HarvestOffer } from '@/hooks/types';
-import { offerLabel, runHarvest, type HarvestAnswer } from '../harvestAnswer';
+import { checkLine, offerLabel, runHarvest, type HarvestAnswer } from '../harvestAnswer';
 import { HarvestAnswerLines } from './HarvestAnswerLines';
 
 interface HarvestPanelProps {
@@ -34,7 +34,7 @@ export function HarvestPanel({
   const dispatch = useDispatchPlayerAction(characterId);
   const [picked, setPicked] = useState(0);
   const offer = offers[Math.min(picked, offers.length - 1)];
-  const checkName = offers.find((row) => row.check_name)?.check_name;
+  const check = checkLine(offer);
   const apCost = offers.find((row) => row.ap_cost > 0)?.ap_cost;
 
   return (
@@ -61,7 +61,7 @@ export function HarvestPanel({
               </label>
             ))}
           </fieldset>
-          {checkName && <p className="text-xs text-muted-foreground">Check: {checkName}</p>}
+          {check && <p className="text-xs text-muted-foreground">{check}</p>}
           {apCost && <p className="text-xs text-muted-foreground">Costs {apCost} AP</p>}
         </>
       )}

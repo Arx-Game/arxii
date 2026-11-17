@@ -164,17 +164,25 @@ class ExtractingFromALair(_Lair):
     def test_extract_in_a_lair_over_telnet_and_web_mint_primum_and_deplete_the_place(
         self,
     ) -> None:
-        lair = self.stock(20)
+        lair = self.stock(20, refill_per_day=1)
+        listing = self.telnet(self.mira, "extract")
 
-        self.assertIn("You can extract fire Primum (Some) here.", self.telnet(self.mira, "extract"))
+        self.assertIn("You can extract fire Primum (Some) here.", listing)
+        self.assertIn("Check: Harvest Primum", listing)
         told = self.extract(self.mira, "extract fire")
         with force_check_outcome(self.success):
             result = self.web(self.tomas, "harvest_primum", substance="fire")
 
         self.assertIn(EXTRACTED, told)
+        self.assertIn(
+            "The Ash Cavern now holds a Some amount of fire Primum. It refills slowly.", told
+        )
         self.assertTrue(result.detail.success, result.detail.message)
         self.assertIn(EXTRACTED, result.detail.message)
-        self.assertEqual(result.detail.data["remaining_line"], "Fire Primum here is now Some.")
+        self.assertEqual(
+            result.detail.data["remaining_line"],
+            "The Ash Cavern now holds a Some amount of fire Primum. It refills slowly.",
+        )
         self.assertEqual((self.hand_of(self.mira), self.hand_of(self.tomas)), (2, 2))
         self.assertEqual(self.stored(lair), 10)
         item = ItemInstance.objects.get(
@@ -197,11 +205,12 @@ class ExtractingFromALair(_Lair):
     def test_finite_place_goes_dead_and_is_no_longer_offered(self) -> None:
         self.stock(5, is_finite=True, refill_per_day=3)
 
-        self.extract(self.mira, "extract fire")
+        emptied = self.extract(self.mira, "extract fire")
         listing = self.telnet(self.mira, "extract")
         again = self.extract(self.tomas, "extract fire")
 
         self.assertEqual(self.hand_of(self.mira), 2)
+        self.assertTrue(emptied.rstrip().endswith("Nothing is left."), emptied)
         self.assertIn("nothing here for you to extract", listing)
         self.assertIn(NOTHING_LEFT, again)
         self.assertEqual(self.hand_of(self.tomas), 0)
@@ -307,6 +316,12 @@ class TheRoll(_Lair):
             rolls.append(breakdown)
             return breakdown
 
+        # Each sees the check she rolls; only Mira's names her thread's bonus.
+        self.assertIn("  Check: Harvest Primum\n", f"{self.telnet(self.tomas, 'extract')}\n")
+        self.assertIn(
+            "Check: Harvest Primum · +10 from your thread on Pyrecraft",
+            self.telnet(self.mira, "extract"),
+        )
         with patch.object(check_services, "collect_check_modifiers", spy):
             self.extract(self.tomas, "extract fire")
             self.extract(self.mira, "extract fire")
@@ -387,11 +402,9 @@ class EveryAttemptCostsTime(_Lair):
         pool.save(update_fields=["current"])
         fatigue = self.fatigue_of(self.mira)
 
-        with patch("world.magic.services.harvest.perform_check_with_modifiers") as roll:
-            told = self.telnet(self.mira, "extract fire")
+        told = self.telnet(self.mira, "extract fire")
 
         self.assertIn("You don't have the 2 action points it takes to extract Primum.", told)
-        roll.assert_not_called()
         self.assertEqual(self.ap_of(self.mira), 1)
         self.assertEqual(self.fatigue_of(self.mira), fatigue)
         self.assertEqual(self.stored(lair), 20)

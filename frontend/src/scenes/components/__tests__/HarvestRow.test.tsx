@@ -58,6 +58,18 @@ describe('HarvestRow', () => {
     });
   });
 
+  it('names the bonus her thread on the matching Gift adds to the check', () => {
+    render(
+      <HarvestRow
+        offers={[{ ...elemental, thread_bonus: 2, thread_gift_name: 'Pyromancy' }]}
+        characterId={9}
+      />
+    );
+    expect(
+      screen.getByText('Check: Harvesting · +2 from your thread on Pyromancy')
+    ).toBeInTheDocument();
+  });
+
   it('keeps the answer on screen once nothing is offered', () => {
     render(
       <HarvestRow

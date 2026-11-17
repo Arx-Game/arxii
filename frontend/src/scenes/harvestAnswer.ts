@@ -46,3 +46,17 @@ export function offerLabel(offer: HarvestOffer): string {
   const name = primumName(offer.substance_name);
   return offer.step_name ? `${name} · ${offer.step_name}` : name;
 }
+
+/**
+ * "Check: Harvest Primum · +2 from your thread on Pyromancy": the check she rolls, with the
+ * bonus her thread on the matching Gift adds when she has one. Empty while no check is set.
+ */
+export function checkLine(offer: HarvestOffer | undefined): string {
+  if (!offer?.check_name) {
+    return '';
+  }
+  const bonus = offer.thread_bonus ?? 0;
+  return bonus > 0
+    ? `Check: ${offer.check_name} · +${bonus} from your thread on ${offer.thread_gift_name}`
+    : `Check: ${offer.check_name}`;
+}

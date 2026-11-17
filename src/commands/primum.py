@@ -12,11 +12,12 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from actions.constants import ActionBackend
+from actions.types import ActionResult
 from commands.command import DispatchCommand
 from commands.exceptions import CommandError
 
 if TYPE_CHECKING:
-    from actions.types import ActionRef
+    from actions.types import ActionRef, DispatchResult
 
 _FROM = re.compile(r"\s+from\s+", re.IGNORECASE)
 
@@ -44,8 +45,17 @@ class CmdExtract(DispatchCommand):
             return
         super().func()
 
+    def _report_dispatch_result(self, result: DispatchResult) -> None:
+        """The harvest answer, then what the source holds now, as the web answer shows it."""
+        super()._report_dispatch_result(result)
+        detail = result.detail
+        if isinstance(detail, ActionResult) and detail.success and detail.data:
+            remaining = detail.data.get("remaining_line", "")
+            if remaining:
+                self.msg(remaining)
+
     def _list_offers(self) -> None:
-        from world.magic.services.harvest import harvest_offers  # noqa: PLC0415
+        from world.magic.services.harvest import check_line, harvest_offers  # noqa: PLC0415
 
         offers = harvest_offers(self.caller)
         if not offers:
@@ -60,6 +70,8 @@ class CmdExtract(DispatchCommand):
                     f"You can extract {offer.substance_name} Primum{step} "
                     f"from {offer.opponent_name}."
                 )
+            if offer.check_name:
+                self.msg(f"  {check_line(offer)}")
         if offers[0].ap_cost:
             self.msg(f"Each attempt costs {offers[0].ap_cost} AP, whatever you roll.")
 
