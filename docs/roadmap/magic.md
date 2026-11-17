@@ -1315,8 +1315,8 @@ A mixed character is the normal case. Built, as one PR:
 - **Journeys and fuzz:** `integration_tests/test_several_resonances_journeys.py` and the unsettled
   fuzz invariants (`integration_tests/fuzz/test_unsettled_invariants.py`).
 
-Not built here: what causes a resonance gain (#5124; built later) and substances and Primum (#5125; built later, see "Substances and Primum" above). Staff
-still author the per-resonance pull perks and the `DriftConfig` numbers in admin.
+#5123 did not build what causes a resonance gain (#5124 built that later) or substances and
+Primum (#5125 built those later; see "Substances and Primum" above). Staff still author the per-resonance pull perks and the `DriftConfig` numbers in admin.
 
 ## Kindled resonances, reflections and the rite of settling (#5124, ADR-5124, BUILT 2026-11-15)
 

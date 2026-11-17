@@ -4958,9 +4958,12 @@ Tuning is staff-owned. `PrimumStep` rows (`rank`, `name`, `starts_at`, `points`,
 Massive) say how much Primum reads as which step. `SubstancePowerStep` rows
 (`points_reached`, `power`) are the curve that turns summed points into power.
 `HarvestOutcome` rows (one per rolled `CheckOutcome`) say what a harvest takes and yields.
-All three are inlines on the resonance-environment config admin. The migration inserted four
-starter steps and six curve points so no gift casts at zero before staff tune them
-(`STARTER_PRIMUM_STEPS`, `STARTER_POWER_CURVE`, `seed_primum_tuning`). Missing tuning never
+All three are inlines on the resonance-environment config admin. Migration 0449
+inserted four starter steps and six curve points so no gift casts at zero before staff tune
+them; it holds its own local copies of the numbers and does not import
+`STARTER_PRIMUM_STEPS` or `STARTER_POWER_CURVE` from `constants.py`. `seed_primum_tuning` in
+`world/magic/factories.py` is a separate get-or-create path that writes those constants, used
+by tests and `integration_tests/live_seeds.py`. Missing tuning never
 crashes a cast or a harvest: with no steps or curve a cast adds no power line, and an unset
 harvest check, skill or Primum item template answers in one plain sentence.
 
