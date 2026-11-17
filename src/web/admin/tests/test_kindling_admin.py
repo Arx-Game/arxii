@@ -17,6 +17,7 @@ from world.magic.factories import (
     SettlingRiteFactory,
 )
 from world.magic.models import (
+    AnimaRitualResonanceAward,
     KindledDeedAward,
     KindledStrengthTier,
     KindlingConfig,
@@ -165,13 +166,13 @@ class KindlingAdminPagesTests(TestCase):
         # on the page itself.
         self.assertIn(".kindling-config-inline td.original p { display: none; }", page)
         self.assertIn("table-layout: fixed", page)
-        self.assertEqual(page.count('class="kindling-config-inline"'), 3)
+        self.assertEqual(page.count('class="kindling-config-inline"'), 4)
 
     def test_the_config_page_saves_all_its_tables_in_one_submit(self) -> None:
         self.client.force_login(self.staff)
         url = reverse("admin:arxii_kindlingconfig_change", args=[self.config.pk])
         response = self.client.get(url)
-        self.assertEqual(len(response.context["inline_admin_formsets"]), 3)
+        self.assertEqual(len(response.context["inline_admin_formsets"]), 4)
         tiers = response.context["inline_admin_formsets"][0].formset
         self.assertNotIn("rank", tiers.forms[0].fields)
         self.assertEqual(len(tiers.forms), 3)
@@ -184,6 +185,9 @@ class KindlingAdminPagesTests(TestCase):
         ]
         self.assertEqual(positions, sorted(positions))
         self.assertLess(page.index("Rally kindles at"), page.index("Earned per result"))
+        self.assertLess(page.index("Earned per result"), page.index("Anima ritual earns"))
+        self.assertIn("Instant percent", page)
+        self.assertIn("Claim percent", page)
         data = form_data(response)
         harm = PropertyFactory()
         success, good = CheckOutcomeFactory(), CheckOutcomeFactory()
@@ -197,12 +201,20 @@ class KindlingAdminPagesTests(TestCase):
         earned = "kindleddeedaward"
         data[f"{earned}-0-outcome_tier"] = str(good.pk)
         data[f"{earned}-0-amount"] = "5"
+        data["instant_percent"] = "80"
+        data["claim_percent"] = "60"
+        ritual = "animaritualresonanceaward"
+        data[f"{ritual}-0-outcome_tier"] = str(success.pk)
+        data[f"{ritual}-0-amount"] = "7"
         data["_save"] = "Save"
         response = self.client.post(url, data)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(KindlingConfig.objects.get(pk=self.config.pk).harm_property, harm)
+        config = KindlingConfig.objects.get(pk=self.config.pk)
+        self.assertEqual((config.instant_percent, config.claim_percent), (80, 60))
+        self.assertEqual(config.harm_property, harm)
         tier = KindledStrengthTier.objects.get(rank=1)
         self.assertEqual((tier.name, tier.pull_levels), ("Glimmer", 4))
         self.assertFalse(KindledStrengthTier.objects.filter(rank=9).exists())
         self.assertEqual(RallyKindlingStrength.objects.get(outcome_tier=success).strength, 2)
         self.assertEqual(KindledDeedAward.objects.get(outcome_tier=good).amount, 5)
+        self.assertEqual(AnimaRitualResonanceAward.objects.get(outcome_tier=success).amount, 7)
