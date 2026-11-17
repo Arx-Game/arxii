@@ -10,7 +10,7 @@ Hand-worked numbers used below (StrainConfig curve 10 per point for the first 5 
 then 9): 4 strain units give 40 power, 6 give 59, 10 give 95. The technique channels 20
 intensity before strain, so a scene cast's "channeled intensity" is 20 plus that. A pull
 costs 1 resonance. Corruption
-(tier 1 coefficient 10, Abyssal coefficient 10, Primal 2, Celestial 0):
+(tier 1 coefficient 10, Abyssal coefficient 10, Primal 0, Celestial 0):
 - a hasty fall of 4 Celestial points at the 1.50 Fall rate is valued 6 Abyssal; the
   tick is ceil(6 x 1.0 x 1.0 x 2.0 hasty) = 12 on the burned Celestial resonance;
 - a Celestial caster burning 4 Abyssal raw beside a 1-point pull: ceil(5 x 1.0) = 5.

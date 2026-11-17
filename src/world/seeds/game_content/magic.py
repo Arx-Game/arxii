@@ -1702,7 +1702,7 @@ _AFFINITY_INTERACTION_ROWS: list[_AffinityRow] = [
 ]
 
 #: Integer tenths of corruption per cast tick, by canonical affinity name.
-_CORRUPTION_COEFFICIENTS: dict[str, int] = {"Celestial": 0, "Primal": 2, "Abyssal": 10}
+_CORRUPTION_COEFFICIENTS: dict[str, int] = {"Celestial": 0, "Primal": 0, "Abyssal": 10}
 
 
 def _seed_affinity_interactions() -> None:

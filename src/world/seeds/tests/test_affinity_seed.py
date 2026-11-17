@@ -36,7 +36,7 @@ class SeedAffinityConversionsTests(TestCase):
         _seed_affinity_interactions()
 
         coefficients = dict(Affinity.objects.values_list("name", "corruption_coefficient"))
-        self.assertEqual(coefficients, {"Celestial": 0, "Primal": 2, "Abyssal": 10})
+        self.assertEqual(coefficients, {"Celestial": 0, "Primal": 0, "Abyssal": 10})
 
         converting = {
             (p.source_affinity.name, p.environment_affinity.name): (

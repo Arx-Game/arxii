@@ -271,7 +271,7 @@ def ensure_canonical_affinities() -> tuple[Affinity, Affinity, Affinity]:
 
 
 #: Corruption tenths per cast tick for (Celestial, Primal, Abyssal), as production authors them.
-_CANONICAL_CORRUPTION_COEFFICIENTS = (0, 2, 10)
+_CANONICAL_CORRUPTION_COEFFICIENTS = (0, 0, 10)
 
 
 def ensure_conversion_pairs() -> tuple[Affinity, Affinity, Affinity]:
