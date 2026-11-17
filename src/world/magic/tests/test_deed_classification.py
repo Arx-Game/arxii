@@ -3,6 +3,8 @@
 from django.test import TestCase
 
 from world.magic.constants import (
+    AFFINITY_RATE_EXEMPT_SOURCES,
+    AFFINITY_RATE_SCALED_SOURCES,
     DEED_GAIN_SOURCES,
     NON_ACCELERATED_GAIN_SOURCES,
     NON_DEED_GAIN_SOURCES,
@@ -43,3 +45,14 @@ class DeedClassificationTests(TestCase):
 
     def test_drift_correction_is_never_accelerated(self) -> None:
         self.assertIn(GainSource.DRIFT_CORRECTION, NON_ACCELERATED_GAIN_SOURCES)
+
+
+class AffinityRateClassificationTests(TestCase):
+    def test_every_gain_source_is_either_exempt_from_the_earn_rate_or_scaled_by_it(self) -> None:
+        exempt = {GainSource(v) for v in AFFINITY_RATE_EXEMPT_SOURCES}
+        scaled = {GainSource(v) for v in AFFINITY_RATE_SCALED_SOURCES}
+        self.assertEqual(set(GainSource), exempt | scaled)
+        self.assertEqual(exempt & scaled, set())
+
+    def test_distinction_is_exempt_because_it_reconciles_against_its_ledger_rows(self) -> None:
+        self.assertIn(GainSource.DISTINCTION, AFFINITY_RATE_EXEMPT_SOURCES)

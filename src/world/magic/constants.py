@@ -457,6 +457,8 @@ DEED_GAIN_SOURCES: frozenset[str] = frozenset(
 # #5181: the sources the per-affinity earn rate never scales. Each is a grant staff or the system
 # makes, or resonance only being moved, converted or re-counted (settling an aura, embracing a
 # deed, a fall, cleansing, succumbing, a dissolved sanctum), not resonance newly earned.
+# DISTINCTION is here too: ``distinction_resonance`` reconciles the distinction's seed against the
+# sum of its ledger rows, so a scaled row would make it over- or under-grant on the next pass.
 AFFINITY_RATE_EXEMPT_SOURCES: frozenset[str] = frozenset(
     {
         GainSource.STAFF_GRANT,
@@ -467,6 +469,38 @@ AFFINITY_RATE_EXEMPT_SOURCES: frozenset[str] = frozenset(
         GainSource.CORRUPTION_CLEANSING,
         GainSource.SANCTUM_DISSOLUTION_RECOVERY,
         GainSource.SUCCUMBED,
+        GainSource.DISTINCTION,
+    }
+)
+
+# #5181: every other source, each one resonance newly earned. ``grant_resonance`` reads only the
+# exempt set above; this one is written out so a test can insist that a new ``GainSource`` member
+# is classified as one or the other, and cannot be scaled (or left unscaled) by accident.
+AFFINITY_RATE_SCALED_SOURCES: frozenset[str] = frozenset(
+    {
+        GainSource.POSE_ENDORSEMENT,
+        GainSource.SCENE_ENTRY,
+        GainSource.ROOM_RESIDENCE,
+        GainSource.OUTFIT_TRICKLE,
+        GainSource.SANCTUM_WEAVING,
+        GainSource.SANCTUM_OWNER_BONUS,
+        GainSource.PROJECT_CONTRIBUTION,
+        GainSource.ENTRY_FLOURISH,
+        GainSource.DRAMATIC_MOMENT,
+        GainSource.STYLE_PRESENTATION,
+        GainSource.MISSION_REWARD,
+        GainSource.MISSION_REPORT,
+        GainSource.STAKE_REWARD,
+        GainSource.COMBO_DISCOVERY,
+        GainSource.COMPROMISE,
+        GainSource.WORSHIP_RITE,
+        GainSource.SINEATING,
+        GainSource.KINDLED_DEED,
+        GainSource.MIRE_PURIFIED,
+        GainSource.SUCCUMB_BONUS,
+        GainSource.SINEATER_FALL,
+        GainSource.KINDLED_CLAIM,
+        GainSource.ANIMA_RITUAL,
     }
 )
 
@@ -474,7 +508,8 @@ AFFINITY_RATE_EXEMPT_SOURCES: frozenset[str] = frozenset(
 # scene once the character EARNS the compelled resonance there by a deed they did themselves: a
 # kindled deed. A grant that lands from another player (a pose endorsement settled weekly, a scene
 # entry), a GM, a mission or a cron is not the character giving in, and neither is succumbing to
-# the Mire. The pose that claims a resonance (a later issue) adds its own source to this set.
+# the Mire. The instant share of a kindled deed lifts a Compulsion; a claim (KINDLED_CLAIM) and an
+# Anima ritual (ANIMA_RITUAL) do not, since a Compulsion lifts when the deed is done.
 COMPULSION_INDULGING_SOURCES: frozenset[str] = frozenset({GainSource.KINDLED_DEED})
 
 NON_DEED_GAIN_SOURCES: frozenset[str] = frozenset(
