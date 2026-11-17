@@ -141,8 +141,8 @@ export const STRIKE_COLOR = 'rgba(70, 20, 20, 0.45)';
 
 /**
  * Draw the whole map at zoom 1 onto a canvas sized to the region. Terrain first,
- * then rivers, the coast, cell lines, footprints by holder, the charter ghost and the
- * drag preview. Seats and names are drawn by `drawNamesLayer` on a screen-space canvas
+ * then the coast, cell lines, footprints by holder, rivers over them, the charter ghost
+ * and the drag preview. Seats and names are drawn by `drawNamesLayer` on a screen-space canvas
  * over the viewport (#5030), so they stay crisp and legible at every zoom.
  */
 export function drawRegionMap(
@@ -158,11 +158,12 @@ export function drawRegionMap(
   ctx.fillRect(0, 0, W, H);
 
   const terrainAt = drawTerrain(ctx, data, b);
-  drawRivers(ctx, data, b);
   drawCoast(ctx, data, b, terrainAt);
   if (options.cellLines !== false) drawCellLines(ctx, b);
   const footprints = [...data.footprints].sort((a, c) => c.level - a.level);
   drawFootprints(ctx, footprints, b, options);
+  // #5189: over the holders' fills, or a river through held land is washed out
+  drawRivers(ctx, data, b);
   drawStruck(ctx, footprints, b, options);
   drawGhost(ctx, b, options);
   drawPendingPips(ctx, b, options);

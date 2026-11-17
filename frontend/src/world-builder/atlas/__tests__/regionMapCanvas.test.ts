@@ -211,10 +211,16 @@ describe('region map drawing', () => {
     // #5189: the river is a stroked line, never a filled mark; this lone river pip at
     // region pip (1, 1) is a short dash through its centre, 9px in at 6px a pip
     expect(paints.some((paint) => paint.style === '#3f6ea8')).toBe(false);
-    expect(context.moveTo.mock.calls[0][0]).toBeCloseTo(7.2);
-    expect(context.moveTo.mock.calls[0][1]).toBeCloseTo(9);
-    expect(context.lineTo.mock.calls[0][0]).toBeCloseTo(10.8);
-    expect(context.lineTo.mock.calls[0][1]).toBeCloseTo(9);
+    // and it is the last line drawn, over the holders' fills
+    const from = context.moveTo.mock.calls.at(-1) as number[];
+    const to = context.lineTo.mock.calls.at(-1) as number[];
+    expect(from[0]).toBeCloseTo(7.2);
+    expect(from[1]).toBeCloseTo(9);
+    expect(to[0]).toBeCloseTo(10.8);
+    expect(to[1]).toBeCloseTo(9);
+    expect(context.stroke.mock.invocationCallOrder.at(-1)).toBeGreaterThan(
+      context.fillRect.mock.invocationCallOrder.at(-1) as number
+    );
     expect(paints.slice(3, 6).map((paint) => paint.style)).toEqual([
       holderColor(4),
       holderColor(4),
@@ -253,8 +259,8 @@ describe('region map drawing', () => {
     const widths: number[] = [];
     bordered.context.stroke.mockImplementation(() => widths.push(bordered.context.lineWidth));
     drawRegionMap(bordered.ctx, drawingData, { borderWidths: new Map([[11, 0.5]]) });
-    // the river, the coast, the cell lines, then the border
-    expect(widths).toEqual([2, 1, 1, 0.5]);
+    // the coast, the cell lines, the border, then the river over all of it
+    expect(widths).toEqual([1, 1, 0.5, 2]);
     // a bordered footprint is not emphasised: it fills at the plain alpha
     expect(bordered.paints[3]).toEqual({ style: holderColor(4, 0.45), rect: [6, 6, 6, 6] });
   });
@@ -264,7 +270,7 @@ describe('region map drawing', () => {
     drawRegionMap(plain.ctx, drawingData, {});
     const { ctx, context, paints } = recordingCanvas();
     drawRegionMap(ctx, drawingData, { ghostPips: new Set(['51,31', '52,31']) });
-    // river, coast, cell lines, then the ghost
+    // coast, cell lines, river, then the ghost
     expect(context.stroke).toHaveBeenCalledTimes(4);
     expect(context.setLineDash).toHaveBeenCalledWith([4, 3]);
     // the ghost is an outline only: every fill is the one the plain draw made
