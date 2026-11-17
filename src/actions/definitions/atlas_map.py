@@ -1,6 +1,6 @@
 """Staff world-map actions (#4242): the Atlas's region maps, footprints and paint.
 
-Five REGISTRY actions, ``category="almanach"`` like the ladder verbs they sit
+Eight REGISTRY actions, ``category="almanach"`` like the ladder verbs they sit
 beside, ``target_type=SELF``, gated by ``StaffOnlyPrerequisite`` — the shared
 ``action.run()`` seam the Atlas's region-map view dispatches through. Each is a
 thin wrapper over ``world.areas.worldmap.services``; every refusal is a plain
@@ -11,7 +11,9 @@ travel in action kwargs). Create Domain from the map is ``almanach_plant_rung``
 followed by ``atlas_carve_footprint``; nothing here mints a rung. A carve and a
 clear report every pip's holder before and after (``changed``), and
 ``atlas_restore_footprint`` writes one of those columns back: that pair is the
-page's undo and redo (#4905, ADR-4905).
+page's undo and redo (#4905, ADR-4905). ``atlas_paint_river`` draws or erases a
+river by hand and ``atlas_reset_rivers`` puts back the ones the map file gives
+(#5189); neither is on the undo stack, erasing is the way back.
 """
 
 from __future__ import annotations
@@ -368,4 +370,85 @@ class AtlasPaintTerrainAction(_AtlasMapAction):
             success=True,
             message=f"{count} pips painted {kwargs.get('terrain')}.",
             data={"region_id": region.pk, "painted": count},
+        )
+
+
+@dataclass
+class AtlasPaintRiverAction(_AtlasMapAction):
+    """Draw a river through pips, or erase it (#5189). The ground under it is unchanged.
+
+    Kwargs: ``region_id``, ``pips`` as a list of ``[x, y]`` world pips, ``river``
+    (true draws, false erases; true when left out).
+    """
+
+    key: str = "atlas_paint_river"
+    name: str = "Paint River"
+    icon: str = "map"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.areas.worldmap.models import RegionMap  # noqa: PLC0415
+        from world.areas.worldmap.services import (  # noqa: PLC0415
+            WorldMapServiceError,
+            paint_river,
+        )
+
+        region = RegionMap.objects.filter(pk=kwargs.get("region_id")).first()
+        if region is None:
+            return ActionResult(success=False, message=_NO_SUCH_REGION)
+        pips = _pip_list(kwargs.get("pips"))
+        if pips is None:
+            return ActionResult(success=False, message="Pips are lists of [x, y] pairs.")
+        river = truthy_kwarg(kwargs.get("river", True))
+        try:
+            count = paint_river(region=region, pips=pips, river=river)
+        except WorldMapServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        verb = "drawn through" if river else "erased from"
+        return ActionResult(
+            success=True,
+            message=f"River {verb} {count} pips.",
+            data={"region_id": region.pk, "changed": count, "river": river},
+        )
+
+
+@dataclass
+class AtlasResetRiversAction(_AtlasMapAction):
+    """Replace every river on a region with the map file's major rivers and the
+    river beside each inland kingdom capital (#5189).
+
+    Kwargs: ``region_id``.
+    """
+
+    key: str = "atlas_reset_rivers"
+    name: str = "Reset Rivers"
+    icon: str = "map"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.areas.worldmap.models import RegionMap  # noqa: PLC0415
+        from world.areas.worldmap.services import (  # noqa: PLC0415
+            WorldMapServiceError,
+            reset_rivers,
+        )
+
+        region = RegionMap.objects.filter(pk=kwargs.get("region_id")).first()
+        if region is None:
+            return ActionResult(success=False, message=_NO_SUCH_REGION)
+        try:
+            count = reset_rivers(region=region)
+        except WorldMapServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"Rivers reset: {count} pips carry one.",
+            data={"region_id": region.pk, "rivers": count},
         )

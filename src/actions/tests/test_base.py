@@ -757,6 +757,8 @@ class ActionRegistryTests(TestCase):
             "atlas_restore_footprint",
             "atlas_move_seat",
             "atlas_paint_terrain",
+            "atlas_paint_river",
+            "atlas_reset_rivers",
             "almanach_plant_rung",
             "almanach_batch_unclaimed",
             "almanach_name_rung",

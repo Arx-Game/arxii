@@ -108,6 +108,8 @@ const REGION_MAP_KEYS: ReadonlySet<WorldBuilderActionKey> = new Set([
   'atlas_restore_footprint',
   'atlas_move_seat',
   'atlas_paint_terrain',
+  'atlas_paint_river',
+  'atlas_reset_rivers',
 ]);
 
 const AREA_TREE_KEYS: ReadonlySet<WorldBuilderActionKey> = new Set([

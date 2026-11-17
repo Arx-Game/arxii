@@ -62,7 +62,9 @@ from actions.definitions.atlas_map import (
     AtlasClearFootprintAction,
     AtlasCreateRegionMapAction,
     AtlasMoveSeatAction,
+    AtlasPaintRiverAction,
     AtlasPaintTerrainAction,
+    AtlasResetRiversAction,
     AtlasRestoreFootprintAction,
 )
 from actions.definitions.battles import (
@@ -1385,6 +1387,8 @@ _ALL_ACTIONS: list[Action] = [
     AtlasRestoreFootprintAction(),
     AtlasMoveSeatAction(),
     AtlasPaintTerrainAction(),
+    AtlasPaintRiverAction(),
+    AtlasResetRiversAction(),
     AlmanachPlantRungAction(),
     AlmanachBatchUnclaimedAction(),
     AlmanachNameRungAction(),
