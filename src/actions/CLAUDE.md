@@ -72,7 +72,7 @@ They do not use the command system, dispatchers, or handlers.
   before the pose posts; the room sees only the pose; the result `data` carries
   `reflection_recorded`); `PoseAction` also takes `sineating_role` (`entreat` or `perform`),
   `sineating_partner_id` and `sineating_units` (#5177), refuses a pose that carries both a reflection and a
-  Sineating, and refreshes the writer's impulses once the pose posts (`refresh_impulses_for_character`); `CastTechniqueAction` carries `fury_resonance_id` into the combat
+  Sineating, takes `claim` and `claim_resonance_ids` (#5181: collects the resonance kindled deeds set aside once the pose has posted; checked before, rides with either of the others; the result `message` and `data.claim_lines` carry one private line per resonance), and refreshes the writer's impulses once the pose posts (`refresh_impulses_for_character`); `CastTechniqueAction` carries `fury_resonance_id` into the combat
   declaration kwargs;
   `cast.py` — `CastTechniqueAction`, key `"cast_technique"`, the SCENE_ADAPTIVE
   seam for standalone technique casts — see "SCENE_ADAPTIVE Backend" below;
