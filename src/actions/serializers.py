@@ -243,6 +243,7 @@ class PersonaMenuSerializer(serializers.Serializer):
     items = PersonaMenuItemSerializer(many=True)
     groups = PersonaMenuGroupSerializer(many=True)
     scene_actions = PlayerActionSerializer(many=True)
+    anima_ritual_available = serializers.BooleanField()
 
     @extend_schema_field(serializers.IntegerField(allow_null=True))
     def get_scene_id(self, obj: PersonaMenu) -> int | None:

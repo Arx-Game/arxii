@@ -616,11 +616,11 @@ export function PersonaMenu({
     });
   }
 
-  // The character's own Anima ritual with this persona as partner (#5181). The server finds the
-  // ritual and refuses, with its own sentence, when there is none, it was already performed in this
-  // scene, or this is yourself; the refusal shows as the toast `performAction` raises.
+  // The character's own Anima ritual with this persona as partner (#5181). The server says whether
+  // the character has one set up and has not yet performed it in this scene
+  // (`anima_ritual_available`); a race still shows as the toast `performAction` raises.
   function renderAnimaRitual(kit: MenuKit) {
-    if (sceneId === null || data?.is_self) return null;
+    if (sceneId === null || data?.is_self || !data?.anima_ritual_available) return null;
     return (
       <kit.Item
         key="anima-ritual"

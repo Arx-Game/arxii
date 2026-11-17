@@ -19,13 +19,17 @@ from actions.persona_menu import (
     build_persona_menu,
 )
 from evennia_extensions.factories import AccountFactory, RoomProfileFactory
-from world.checks.factories import CheckTypeFactory
+from world.checks.factories import CheckOutcomeFactory, CheckTypeFactory
 from world.conditions.constants import Allegiance
 from world.conditions.factories import (
     ConditionCategoryFactory,
     ConditionInstanceFactory,
     ConditionTemplateFactory,
 )
+from world.magic.constants import RitualExecutionKind
+from world.magic.factories import RitualCheckConfigFactory, RitualFactory
+from world.magic.models import AnimaRitualPerformance
+from world.magic.services.anima import anima_ritual_open_in_scene
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.services import create_mask
@@ -134,6 +138,29 @@ class PersonaMenuServiceTests(django.test.TestCase):
         assert keys[:3] == ["look", "challenge", "identify"]
         assert {"scene_succor", "scene_interpose", "treat"} <= set(keys)
         assert "give_mission" not in keys
+
+    def test_the_anima_ritual_is_offered_only_with_a_ritual_set_up_and_not_yet_performed(
+        self,
+    ) -> None:
+        """#5181: the viewer's own flag; no ritual, no scene, or one already performed is false."""
+        scene = SceneFactory(room=self.room, is_active=True)
+        assert build_persona_menu(self.viewer, self.persona).anima_ritual_available is False
+
+        ritual = RitualFactory(
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+            service_function_path="",
+            flow=None,
+            author_account=self.viewer_account,
+        )
+        RitualCheckConfigFactory(ritual=ritual, check_type=CheckTypeFactory())
+        with self.assertNumQueries(1):
+            assert anima_ritual_open_in_scene(self.viewer, scene) is True
+        assert build_persona_menu(self.viewer, self.persona).anima_ritual_available is True
+
+        AnimaRitualPerformance.objects.create(
+            ritual=ritual, scene=scene, was_successful=True, outcome=CheckOutcomeFactory()
+        )
+        assert build_persona_menu(self.viewer, self.persona).anima_ritual_available is False
 
     def test_no_reason_names_a_masked_targets_real_key(self) -> None:
         mask = create_mask(self.target_sheet, name="stag mask")
@@ -244,6 +271,7 @@ class PersonaMenuViewTests(django.test.TestCase):
             "items",
             "groups",
             "scene_actions",
+            "anima_ritual_available",
         ):
             assert key in response.data
 

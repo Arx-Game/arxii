@@ -133,6 +133,9 @@ class PersonaMenu:
     groups: list[PersonaMenuGroup]
     scene_actions: list[PlayerAction]
     notice: str = ""
+    # Owner-only (#5181): the viewer has an Anima ritual set up and has not performed it in
+    # this scene, so the menu offers "Anima ritual" against this persona.
+    anima_ritual_available: bool = False
 
 
 @dataclass(frozen=True)

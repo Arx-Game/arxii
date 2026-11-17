@@ -494,6 +494,29 @@ def has_performed_anima_ritual_in_scene(
     return AnimaRitualPerformance.objects.filter(ritual=ritual, scene=scene).exists()
 
 
+def anima_ritual_open_in_scene(
+    character,  # noqa: OBJECTDB_PARAM — Evennia character
+    scene: Scene,
+) -> bool:
+    """True when the character has an Anima ritual set up and not yet performed in ``scene``.
+
+    One query, so the persona menu can tell the web client whether to offer the ritual (#5181).
+    The ritual and the once-per-scene cap are the same ones ``check_partner_ritual`` enforces.
+    """
+    from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
+    from world.magic.models.rituals import Ritual  # noqa: PLC0415
+
+    return (
+        Ritual.objects.filter(
+            author_account=character.db_account,
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+            check_config__check_type__isnull=False,
+        )
+        .exclude(performances__scene=scene)
+        .exists()
+    )
+
+
 def _budget_for_outcome(outcome: object) -> int:
     """Return the anima/severity budget for an outcome row.
 

@@ -48348,6 +48348,7 @@ export interface components {
       items: components['schemas']['PersonaMenuItem'][];
       groups: components['schemas']['PersonaMenuGroup'][];
       scene_actions: components['schemas']['PlayerAction'][];
+      anima_ritual_available: boolean;
     };
     PersonaMenuGroup: {
       key: components['schemas']['KeyB77Enum'];

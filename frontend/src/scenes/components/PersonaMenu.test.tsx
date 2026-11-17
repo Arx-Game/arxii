@@ -58,6 +58,7 @@ vi.mock('sonner', () => ({
 }));
 
 vi.mock('../actionQueries', () => ({
+  ANIMA_RITUAL_ACTION_KEY: 'anima_ritual',
   createActionRequest: vi.fn(() => Promise.resolve({ status: 'resolved' })),
 }));
 
@@ -154,6 +155,7 @@ function menuFixture(overrides: Partial<PersonaMenuData> = {}): PersonaMenuData 
     items: [item('look')],
     groups: groups(),
     scene_actions: [],
+    anima_ritual_available: false,
     ...overrides,
   };
 }
@@ -655,6 +657,30 @@ describe('PersonaMenu', () => {
           target_persona_id: 10,
           initiator_persona: 33,
         })
+      );
+    });
+  });
+
+  it('offers the Anima ritual only when the server says the viewer has one to perform', async () => {
+    mockMenu({ scene_id: 7, anima_ritual_available: false });
+    renderMenu({ personaId: 10 });
+    fireEvent.contextMenu(screen.getByText('Cassia Vell'));
+    const closed = await screen.findByRole('menu');
+    expect(within(closed).queryByText('Anima ritual')).not.toBeInTheDocument();
+  });
+
+  it('shows the Anima ritual and asks the server to start it against this persona', async () => {
+    const user = userEvent.setup();
+    mockMenu({ scene_id: 7, anima_ritual_available: true });
+    renderMenu({ personaId: 10 });
+    fireEvent.contextMenu(screen.getByText('Cassia Vell'));
+    const menu = await screen.findByRole('menu');
+    await user.click(within(menu).getByText('Anima ritual'));
+
+    await waitFor(() => {
+      expect(createActionRequest).toHaveBeenCalledWith(
+        '7',
+        expect.objectContaining({ action_key: 'anima_ritual', target_persona_id: 10 })
       );
     });
   });
