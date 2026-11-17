@@ -1,0 +1,13 @@
+signed in as staff via session cookie, url http://localhost:4011/admin/ title
+carried field text: "Property carried from its gift's substance: fiery Every technique of this gift carries it. It is not stored here and cannot be unticked."
+stored properties chosen (before): ["fiery","smoky"]
+stored properties chosen (after unticking fiery in the widget): ["smoky"]
+after save messages: ["The Technique “Kindle (Pyrecraft)” was changed successfully. You may edit it again below."]
+stored properties chosen (reloaded page): ["smoky"]
+carried field text after reload: "Property carried from its gift's substance: fiery Every technique of this gift carries it. It is not stored here and cannot be unticked."
+power builder techniques text: " any gift TECHNIQUE GIFT · PATH ITS PROPERTIES GRANTS TRAVERSAL STRENGTH AT REFERENCE EACH USE Kindle Pyrecraft · no path fiery carried from the gift's substance smoky base per power remove grant 9; 13 one level better a cast: 4 anima, its own roll edit all"
+carried box count 1 checked true disabled true
+footnote present: true
+power builder save url http://localhost:4011/admin/_power_builder/1/ messages ["Saved and credited to you."]
+after save: carried box count 1 checked true disabled true
+after save: carried text present true
