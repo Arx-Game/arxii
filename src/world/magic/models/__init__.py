@@ -224,6 +224,7 @@ from world.magic.models.signature import (
     SignatureMotifBonusDamageProfile,
 )
 from world.magic.models.soul_tether import (
+    MireHolding,
     PendingStageAdvanceOffer,
     Sineating,
     SineatingPendingOffer,
@@ -419,6 +420,8 @@ __all__ = [
     # alterations
     "MagicalAlterationEvent",
     "MagicalAlterationTemplate",
+    # soul tether Mire (#5177)
+    "MireHolding",
     # soulfray
     "MishapPoolTier",
     "Motif",

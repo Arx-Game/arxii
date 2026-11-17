@@ -44,13 +44,16 @@ from world.magic.factories import (
     CharacterAuraFactory,
     CharacterResonanceFactory,
     CharacterThreadWeavingUnlockFactory,
+    MireHoldingFactory,
     ResonanceFactory,
     ThreadWeavingUnlockFactory,
     wire_soul_tether_content,
+    with_corruption_at_stage,
 )
-from world.magic.models import CharacterAura, Thread
+from world.magic.models import CharacterAura, CharacterResonance, MireHolding, Thread
 from world.magic.models.soul_tether import Sineating
-from world.magic.services.corruption import accrue_corruption
+from world.magic.services.corruption import accrue_corruption, reduce_corruption
+from world.magic.services.mire import release_mire, take_on_corruption
 from world.magic.services.soul_tether import (
     _compute_per_scene_sineating_cap,
     accept_soul_tether,
@@ -58,7 +61,7 @@ from world.magic.services.soul_tether import (
     request_sineating,
     resolve_sineating,
 )
-from world.magic.types.corruption import CorruptionSource
+from world.magic.types.corruption import CorruptionRecoverySource, CorruptionSource
 from world.magic.types.soul_tether import SineatingOffer, SoulTetherRole as SoulTetherRoleEnum
 from world.relationships.factories import (
     CharacterRelationshipFactory,
@@ -492,6 +495,123 @@ class SineaterHalfOfBondTests(TestCase):
             ritual_components=[],
         )
         self.assertFalse(CharacterAura.objects.get(character=npc_sineater).cached_shares)
+
+
+# ---------------------------------------------------------------------------
+# 4.3c  The Mire: what a Sineater carries for a Sinner (#5177)
+# ---------------------------------------------------------------------------
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)
+class MireServicesTests(TestCase):
+    """take_on_corruption and release_mire move corruption and the holding together."""
+
+    def setUp(self) -> None:
+        wire_soul_tether_content()
+        self.abyssal = ResonanceFactory(affinity=AffinityFactory(name="Abyssal"))
+        primal = ResonanceFactory(affinity=AffinityFactory(name="Primal"))
+        self.sinner, self.sineater = _make_eligible_pair()
+        _make_active_relationship(self.sinner, self.sineater)
+        # Their lifetime Sineating in the Sinner's resonance gives them 10% resistance.
+        CharacterResonanceFactory(
+            character_sheet=self.sineater, resonance=self.abyssal, lifetime_helped=100
+        )
+        CharacterResonanceFactory(character_sheet=self.sineater, resonance=primal)
+        accept_soul_tether(
+            initiator_sheet=self.sinner,
+            partner_sheet=self.sineater,
+            sinner_role=SoulTetherRoleEnum.SINNER,
+            resonance=self.abyssal,
+            ritual_components=[],
+            sineater_resonance=primal,
+        )
+        with_corruption_at_stage(self.sinner, self.abyssal, stage=3)  # 500
+
+    def _corruption(self, sheet: object) -> int:
+        row = CharacterResonance.objects.get(character_sheet=sheet, resonance=self.abyssal)
+        return row.corruption_current
+
+    def test_the_sinner_sheds_the_sineater_carries_it_softened_and_the_ceiling_holds(self) -> None:
+        first = take_on_corruption(
+            sineater_sheet=self.sineater,
+            sinner_sheet=self.sinner,
+            resonance=self.abyssal,
+            amount=100,
+        )
+        self.assertEqual((first.left_sinner, first.arrived, first.held), (100, 90, 90))
+        self.assertEqual(self._corruption(self.sinner), 400)
+        self.assertEqual(self._corruption(self.sineater), 90)
+        # The Sinner earns nothing back from the corruption leaving: the roll decides that.
+        sinner_row = CharacterResonance.objects.get(
+            character_sheet=self.sinner, resonance=self.abyssal
+        )
+        self.assertEqual(sinner_row.lifetime_earned, 0)
+
+        # Past stage 1 the Sineater cannot go: stage 2 starts at 200, so 199 is the most they
+        # hold, and the Sinner sheds only what they can take.
+        second = take_on_corruption(
+            sineater_sheet=self.sineater,
+            sinner_sheet=self.sinner,
+            resonance=self.abyssal,
+            amount=400,
+            max_stage=1,
+        )
+        self.assertEqual((second.left_sinner, second.arrived, second.held), (121, 109, 199))
+        self.assertEqual(self._corruption(self.sinner), 279)
+        self.assertEqual(self._corruption(self.sineater), 199)
+
+        holding = MireHolding.objects.get(
+            relationship__source=self.sineater, resonance=self.abyssal
+        )
+        self.assertEqual(release_mire(holding=holding, amount=99), 99)
+        self.assertEqual((holding.amount, self._corruption(self.sineater)), (100, 100))
+
+    def test_nothing_moves_when_the_ceiling_leaves_no_space(self) -> None:
+        row = CharacterResonance.objects.get(character_sheet=self.sineater, resonance=self.abyssal)
+        row.corruption_current = 199
+        row.save(update_fields=["corruption_current"])
+        result = take_on_corruption(
+            sineater_sheet=self.sineater,
+            sinner_sheet=self.sinner,
+            resonance=self.abyssal,
+            amount=50,
+            max_stage=1,
+        )
+        self.assertEqual((result.left_sinner, result.arrived), (0, 0))
+        self.assertEqual(self._corruption(self.sinner), 500)
+
+
+class MireHoldingsFollowCorruptionTests(TestCase):
+    """Decay takes unheld corruption first, then shrinks holdings in proportion."""
+
+    def test_holdings_shrink_only_once_unheld_corruption_is_gone(self) -> None:
+        resonance = ResonanceFactory()
+        sineater = CharacterSheetFactory()
+        holdings = [
+            MireHoldingFactory(
+                relationship=CharacterRelationshipFactory(source=sineater),
+                resonance=resonance,
+                amount=30,
+            )
+            for _ in range(3)
+        ]
+        row = CharacterResonanceFactory(character_sheet=sineater, resonance=resonance)
+        row.corruption_current = 100  # 90 held, 10 not
+        row.save(update_fields=["corruption_current"])
+
+        def decay(amount: int) -> list[int]:
+            reduce_corruption(
+                character_sheet=sineater,
+                resonance=resonance,
+                amount=amount,
+                source=CorruptionRecoverySource.PASSIVE_DECAY,
+                _from_decay=True,
+            )
+            return [holding.amount for holding in holdings]
+
+        self.assertEqual(decay(10), [30, 30, 30])
+        # 40 left: three thirties shrink to 14, 13 and 13, which sum to exactly 40.
+        self.assertEqual(decay(50), [14, 13, 13])
 
 
 # ---------------------------------------------------------------------------

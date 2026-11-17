@@ -24,6 +24,20 @@ class SoulTetherRole(str, Enum):
 
 
 @dataclass(frozen=True, slots=True)
+class MireTransfer:
+    """What one ``take_on_corruption`` moved (#5177).
+
+    ``left_sinner`` is what the Sinner shed. ``arrived`` is what reached the Sineater after
+    their resistance, which is what the holding grew by. ``held`` is the holding's amount
+    afterwards (0 when nothing moved and no holding exists yet).
+    """
+
+    left_sinner: int
+    arrived: int
+    held: int
+
+
+@dataclass(frozen=True, slots=True)
 class SineatingOffer:
     """Payload sent to the Sineater in the PROMPT_PLAYER prompt (Spec B §7.2)."""
 

@@ -89,6 +89,7 @@ from world.magic.models import (
     LevelPowerConfig,
     MagicActivitySkill,
     MagicProgressionMilestone,
+    MireHolding,
     MishapPoolTier,
     Motif,
     MotifResonance,
@@ -2286,6 +2287,7 @@ class SoulTetherConfigAdmin(admin.ModelAdmin):
         "anima_cost_per_unit",
         "fatigue_cost_per_unit",
         "per_scene_cap_hard_max",
+        "resistance_full_at",
         "rescue_strain_stage3",
         "rescue_strain_stage4",
         "rescue_strain_stage5",
@@ -2296,6 +2298,29 @@ class SoulTetherConfigAdmin(admin.ModelAdmin):
         return not SoulTetherConfig.objects.exists()
 
     def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+
+@admin.register(MireHolding)
+class MireHoldingAdmin(admin.ModelAdmin):
+    """What each Sineater carries for each Sinner. Written only by the Sineating services."""
+
+    list_display = ("relationship", "resonance", "amount", "purified_since_payout")
+    list_select_related = ("relationship__source", "relationship__target", "resonance")
+    list_filter = ("resonance",)
+    search_fields = (
+        "relationship__source__character__db_key",
+        "relationship__target__character__db_key",
+    )
+    readonly_fields = (
+        "relationship",
+        "resonance",
+        "amount",
+        "purified_since_payout",
+        "succumbed_since_fall",
+    )
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
         return False
 
 

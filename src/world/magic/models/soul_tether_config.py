@@ -23,6 +23,10 @@ class SoulTetherConfig(NaturalKeyMixin, SharedMemoryModel):
     ``SOUL_TETHER_SCENE_CAP`` and ``HOLLOW_MAX`` lanes' ``ModifierLevelBaseline`` rows, one per
     rung (10 thread levels), seeded at 2 and 10 per rung (#5093).
 
+    Sineater resistance:
+    - ``resistance_full_at``: lifetime Sineating (``lifetime_helped``) at which a Sineater's
+      resistance to corruption reaches its 90% cap (default 1000).
+
     Rescue thresholds (minimum Hollow strain to trigger each stage):
     - ``rescue_strain_stage3`` / ``_stage4`` / ``_stage5``: strain thresholds (5/10/18).
 
@@ -49,6 +53,16 @@ class SoulTetherConfig(NaturalKeyMixin, SharedMemoryModel):
     fatigue_cost_per_unit = models.PositiveSmallIntegerField(default=1)
     per_scene_cap_hard_max = models.PositiveSmallIntegerField(default=20)
     per_scene_cap_base = models.PositiveSmallIntegerField(default=5)
+
+    # --- Sineater resistance ---
+    resistance_full_at = models.PositiveIntegerField(
+        default=1000,
+        help_text=(
+            "How much Sineating a Sineater has done in a resonance before they resist 90% of "
+            "the corruption they take on in it, the most resistance they can reach. They "
+            "resist a proportional share before that: half this much resists 50%."
+        ),
+    )
 
     # --- Rescue strain thresholds ---
     rescue_strain_stage3 = models.PositiveSmallIntegerField(default=5)

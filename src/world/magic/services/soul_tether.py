@@ -45,6 +45,7 @@ from world.magic.models.affinity import Affinity, Resonance
 from world.magic.models.soul_tether_config import SoulTetherConfig
 from world.magic.services.aura import ensure_aura
 from world.magic.services.threads import thread_rung, weave_tether_bond_thread, weave_thread
+from world.magic.types.corruption import CorruptionSource
 from world.magic.types.soul_tether import (
     RescueOutcome,
     SineatingOffer,
@@ -1622,6 +1623,11 @@ def soul_tether_redirect_handler(*, payload: Any) -> None:
 
     # Recursion guard: overflow accrual from this handler must not re-enter.
     if payload.redirect_origin is not None:
+        return
+
+    # Corruption a Sineater carries for a Sinner arrives whole; the carrier's own Hollow
+    # (if they are a Sinner too) does not absorb it (#5177).
+    if payload.source == CorruptionSource.SINEATING_CARRIED:
         return
 
     sinner_sheet: CharacterSheet = payload.character_sheet

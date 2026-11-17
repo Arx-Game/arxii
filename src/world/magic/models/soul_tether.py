@@ -261,3 +261,62 @@ class SoulTetherRescue(SharedMemoryModel):
             f"SoulTetherRescue({self.sineater_sheet} pulled {self.sinner_sheet} "
             f"from stage {self.sinner_stage_at_start} to {self.sinner_stage_at_end})"
         )
+
+
+class MireHolding(SharedMemoryModel):
+    """How much corruption a Sineater carries for one Sinner in one resonance (#5177).
+
+    The corruption itself lives where all corruption lives, on the Sineater's
+    ``CharacterResonance.corruption_current`` for the resonance. ``amount`` says how much of
+    it came from this Sinner, so the holdings in a resonance never sum to more than that
+    corruption. Only ``take_on_corruption`` and ``release_mire`` write ``amount``, and
+    ``reduce_corruption`` shrinks it when corruption falls for any other reason.
+
+    ``relationship`` is the Sineater's own side toward the Sinner, which is unique per pair
+    and outlives a tether being dissolved and formed again.
+    """
+
+    relationship = models.ForeignKey(
+        CHARACTER_RELATIONSHIP_MODEL,
+        on_delete=models.CASCADE,
+        related_name="mire_holdings",
+        help_text="The Sineater's own relationship side toward the Sinner they carry for.",
+    )
+    resonance = models.ForeignKey(
+        RESONANCE_MODEL,
+        on_delete=models.PROTECT,
+        related_name="mire_holdings",
+    )
+    amount = models.PositiveIntegerField(
+        default=0,
+        help_text="Corruption held from this Sinner in this resonance.",
+    )
+    purified_since_payout = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Corruption the Sineater has purified for this Sinner since the last payout. "
+            "It is the base the Sinner's jackpot is paid on when the Sineater succumbs."
+        ),
+    )
+    succumbed_since_fall = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Corruption the Sineater has succumbed to for this Sinner since their last fall. "
+            "It sizes this Sinner's share of the fall's payout."
+        ),
+    )
+
+    class Meta:
+        ordering = ["relationship", "resonance"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["relationship", "resonance"],
+                name="one_mire_holding_per_relationship_resonance",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"MireHolding({self.relationship.source} carries {self.amount} "
+            f"{self.resonance} for {self.relationship.target})"
+        )

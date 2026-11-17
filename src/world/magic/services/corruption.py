@@ -16,6 +16,7 @@ from world.magic.constants import SoulTetherRole, TargetKind
 from world.magic.models.affinity import Affinity, Resonance
 from world.magic.models.aura import CharacterResonance
 from world.magic.models.corruption_config import CorruptionConfig
+from world.magic.models.soul_tether import MireHolding
 from world.magic.types.corruption import (
     CorruptionAccrualResult,
     CorruptionAccrualSummary,
@@ -35,12 +36,6 @@ from world.magic.types.techniques import TechniqueUseResult
 # Stage constants — spec §2.1 terminal stage
 _TERMINAL_STAGE = 5
 _WARNING_STAGES = (3, 4)
-
-# Spec B §10: Sineater CORRUPTION_RESISTANCE tuning threshold.
-# The multiplier formula is: max(0.1, 1 - lifetime_helped / threshold).
-# At threshold units of lifetime_helped, resistance reaches 90% (the cap).
-# Staff can surface this via a config model in a future phase; hardcoded for now.
-_CORRUPTION_RESISTANCE_THRESHOLD = 1000
 
 # Lookup for tier coefficient attribute names
 _TIER_COEF_ATTRS = {
@@ -282,26 +277,17 @@ def _emit_risk_transparency_events(
             emit_event(EventName.PROTAGONISM_LOCKED, lock_payload, location=location)
 
 
-def _get_sineater_threads_for(
-    sheet: CharacterSheet,
-    resonance: Resonance,
-) -> list[object]:
-    """Return active Sineater-side RELATIONSHIP_CAPSTONE Threads owned by *sheet* for *resonance*.
+def _get_sineater_threads_for(sheet: CharacterSheet) -> list[object]:
+    """Return the active Sineater-side RELATIONSHIP_CAPSTONE Threads owned by *sheet*.
 
-    "Sineater-side" means the Thread's target_capstone belongs to a
-    CharacterRelationship where ``sheet`` is the source AND
-    ``soul_tether_role == SINEATER``.
+    "Sineater-side" means the Thread sits on a ritual capstone of a CharacterRelationship
+    where ``sheet`` is the source AND ``soul_tether_role == SINEATER``: the thread Soul Tether
+    formation weaves for the Sineater (#5177).  Its own resonance is the Sineater's earning
+    resonance, not the resonance of the corruption they carry, so any live thread qualifies;
+    how much they resist in a resonance comes from their ``lifetime_helped`` in it.
 
     Used by ``_apply_sineater_corruption_resistance`` to determine whether a
-    CORRUPTION_RESISTANCE multiplier applies.  Returns the matching Thread
-    instances (may be empty — caller treats an empty list as "no resistance").
-
-    Args:
-        sheet: The CharacterSheet whose Threads to search.
-        resonance: The resonance to filter on.
-
-    Returns:
-        List of Thread instances (may be empty).
+    CORRUPTION_RESISTANCE multiplier applies.  An empty list means "no resistance".
     """
     from world.magic.models import Thread  # noqa: PLC0415
 
@@ -309,8 +295,8 @@ def _get_sineater_threads_for(
         Thread.objects.filter(
             owner=sheet,
             target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
-            resonance=resonance,
             retired_at__isnull=True,
+            target_capstone__is_ritual_capstone=True,
             # Sineater relationship: sheet is the SOURCE and role is SINEATER.
             target_capstone__relationship__source=sheet,
             target_capstone__relationship__is_soul_tether=True,
@@ -329,16 +315,16 @@ def _apply_sineater_corruption_resistance(
 
     Spec B §10.2.  Only reduces when all of the following hold:
     - ``redirect_origin`` is None (this is NOT overflow from a redirect call).
-    - The character owns an active Sineater-side RELATIONSHIP_CAPSTONE Thread
-      in this resonance.
+    - The character owns an active Sineater-side RELATIONSHIP_CAPSTONE Thread.
     - CharacterResonance.lifetime_helped > 0 for this sheet+resonance.
 
     Multiplier formula (§10.2):
-        multiplier = max(0.1, 1.0 - lifetime_helped / _CORRUPTION_RESISTANCE_THRESHOLD)
+        multiplier = max(0.1, 1.0 - lifetime_helped / SoulTetherConfig.resistance_full_at)
         effective_amount = ceil(amount * multiplier)
 
-    Floor of 0.1 caps resistance at 90%.  The threshold is tunable via
-    _CORRUPTION_RESISTANCE_THRESHOLD (a future staff-editable config surface).
+    Floor of 0.1 caps resistance at 90%.  The threshold is ``resistance_full_at`` on the
+    Soul Tether config (#5177).  Soul Tether formation weaves the Sineater's thread, so the
+    thread check is met by every Sineater with a tether.
 
     Recursion guard: ``redirect_origin is not None`` means this accrual is an
     overflow re-call from the Soul Tether redirect handler (Phase 6).  The
@@ -361,7 +347,7 @@ def _apply_sineater_corruption_resistance(
     if redirect_origin is not None:
         return amount
 
-    sineater_threads = _get_sineater_threads_for(sheet, resonance)
+    sineater_threads = _get_sineater_threads_for(sheet)
     if not sineater_threads:
         return amount
 
@@ -375,7 +361,10 @@ def _apply_sineater_corruption_resistance(
     if lifetime_helped == 0:
         return amount
 
-    multiplier = max(0.1, 1.0 - lifetime_helped / _CORRUPTION_RESISTANCE_THRESHOLD)
+    from world.magic.services.soul_tether import get_soul_tether_config  # noqa: PLC0415
+
+    full_at = max(1, get_soul_tether_config().resistance_full_at)
+    multiplier = max(0.1, 1.0 - lifetime_helped / full_at)
     return math.ceil(amount * multiplier)
 
 
@@ -615,8 +604,47 @@ def accrue_corruption(  # noqa: PLR0913 - cohesive accrual-context params
     return result
 
 
+def _proportional_shares(held: list[int], total: int) -> list[int]:
+    """Split ``total`` across ``held`` in proportion (largest remainder), each at most its own.
+
+    ``total`` is below ``sum(held)``. The result sums to ``total`` exactly; a remainder goes
+    to the larger fractions first, a tie to the larger holding, then the earlier position.
+    """
+    whole = sum(held)
+    floors = [amount * total // whole for amount in held]
+    remainders = [amount * total % whole for amount in held]
+    leftover = total - sum(floors)
+    order = sorted(range(len(held)), key=lambda i: (-remainders[i], -held[i], i))
+    for i in order[:leftover]:
+        floors[i] += 1
+    return floors
+
+
+def _shrink_holdings_to(
+    character_sheet: CharacterSheet, resonance: Resonance, corruption_now: int
+) -> None:
+    """Keep the sheet's Mire holdings in ``resonance`` within its corruption (#5177).
+
+    Corruption that is not held comes off first, so nothing changes while the holdings still
+    fit; past that they shrink in proportion. ``purified_since_payout`` and
+    ``succumbed_since_fall`` are not touched.
+    """
+    holdings = list(
+        MireHolding.objects.select_for_update()
+        .filter(relationship__source=character_sheet, resonance=resonance, amount__gt=0)
+        .order_by("pk")
+    )
+    if sum(holding.amount for holding in holdings) <= corruption_now:
+        return
+    shares = _proportional_shares([holding.amount for holding in holdings], corruption_now)
+    for holding, new_amount in zip(holdings, shares, strict=True):
+        if new_amount != holding.amount:
+            holding.amount = new_amount
+            holding.save(update_fields=["amount"])
+
+
 @transaction.atomic
-def reduce_corruption(
+def reduce_corruption(  # noqa: PLR0913 - cohesive recovery-context params
     *,
     character_sheet: CharacterSheet,
     resonance: Resonance,
@@ -624,11 +652,19 @@ def reduce_corruption(
     source: CorruptionRecoverySource,  # noqa: ARG001
     ritual: object = None,  # noqa: ARG001
     _from_decay: bool = False,
+    grant_resonance_back: bool = True,
+    shrink_holdings: bool = True,
 ) -> CorruptionRecoveryResult:
     """Reduce corruption_current on (sheet, resonance), sync the condition.
 
     ``_from_decay=True`` skips the call to decay_condition_severity to prevent
     infinite recursion when Scope 6 decay invokes this service.
+
+    ``grant_resonance_back=False`` skips the resonance cleansing normally grants (Sineating
+    pays by its own roll). ``shrink_holdings=False`` is for the Mire's own writer,
+    ``release_mire``, which lowers the holding itself. Every other reduction (decay, rescue,
+    staff, a Sinner taken on) takes unheld corruption first, then shrinks the sheet's Mire
+    holdings in proportion, so the holdings never exceed the corruption (#5177).
 
     Note: lifetime totals are intentionally NOT reduced — they are monotonic
     per spec §2.2.
@@ -646,7 +682,10 @@ def reduce_corruption(
     char_resonance.save(update_fields=["corruption_current"])
     actual_reduction = current_before - char_resonance.corruption_current
 
-    if actual_reduction > 0 and not _from_decay:
+    if actual_reduction > 0 and shrink_holdings:
+        _shrink_holdings_to(character_sheet, resonance, char_resonance.corruption_current)
+
+    if actual_reduction > 0 and not _from_decay and grant_resonance_back:
         from world.magic.constants import GainSource  # noqa: PLC0415
         from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
 

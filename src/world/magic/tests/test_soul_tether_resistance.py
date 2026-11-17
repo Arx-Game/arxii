@@ -3,7 +3,7 @@
 Tests cover:
     9.1  No Thread → no resistance (lifetime_helped accumulates but is dormant)
     9.2  Sineater Thread woven + lifetime_helped → accrual reduced by formula
-    9.3  Per-resonance independence (Abyssal lifetime_helped doesn't reduce Primal accrual)
+    9.3  Per-resonance independence (lifetime_helped in one resonance doesn't reduce another's)
     9.4  Redirect path NOT affected by resistance (overflow is not the Sineater's own cast)
     9.5  resolve_pull_effects: CORRUPTION_RESISTANCE rows produce scaled_value=None (not 0)
 """
@@ -24,8 +24,8 @@ from world.magic.factories import (
 )
 from world.magic.models import Thread
 from world.magic.models.aura import CharacterResonance
+from world.magic.models.soul_tether_config import SoulTetherConfig
 from world.magic.services.corruption import (
-    _CORRUPTION_RESISTANCE_THRESHOLD,
     _apply_sineater_corruption_resistance,
     accrue_corruption,
 )
@@ -35,6 +35,9 @@ from world.relationships.factories import (
     CharacterRelationshipFactory,
     RelationshipCapstoneFactory,
 )
+
+# The seeded default of SoulTetherConfig.resistance_full_at.
+_CORRUPTION_RESISTANCE_THRESHOLD = SoulTetherConfig._meta.get_field("resistance_full_at").default
 
 
 def _make_sineater_thread_for(
@@ -244,8 +247,9 @@ class CorruptionResistanceAppliedTests(TestCase):
 class CorruptionResistancePerResonanceTests(TestCase):
     """9.3: Sineater resistance is per-resonance — Abyssal lifetime_helped doesn't reduce Primal.
 
-    The Sineater's Thread and lifetime_helped are keyed on a specific resonance.
-    Accruing in a DIFFERENT resonance should see no reduction.
+    A live Sineater Thread gates the resistance (whatever resonance it channels); how much
+    they resist is their lifetime_helped in the resonance being accrued. Accruing in a
+    resonance they have helped in no further sees no reduction.
     """
 
     def setUp(self) -> None:
@@ -257,7 +261,7 @@ class CorruptionResistancePerResonanceTests(TestCase):
         self.sineater = CharacterSheetFactory()
 
     def test_abyssal_thread_does_not_reduce_primal_accrual(self) -> None:
-        """Sineater Thread in Abyssal resonance gives no resistance to Primal accrual."""
+        """Helping in Abyssal gives no resistance to Primal accrual."""
         # Set up a Sineater Thread for Abyssal with high lifetime_helped.
         _make_sineater_thread_for(self.sineater, self.abyssal_resonance, lifetime_helped=500)
 
@@ -268,7 +272,7 @@ class CorruptionResistancePerResonanceTests(TestCase):
         self.assertEqual(result, 10)
 
     def test_primal_thread_does_not_reduce_abyssal_accrual(self) -> None:
-        """Sineater Thread in Primal resonance gives no resistance to Abyssal accrual."""
+        """Helping in Primal gives no resistance to Abyssal accrual."""
         _make_sineater_thread_for(self.sineater, self.primal_resonance, lifetime_helped=500)
 
         result = _apply_sineater_corruption_resistance(
@@ -277,7 +281,7 @@ class CorruptionResistancePerResonanceTests(TestCase):
         self.assertEqual(result, 10)
 
     def test_matching_resonance_thread_reduces_matching_accrual(self) -> None:
-        """Resistance applies only to the matching resonance."""
+        """Resistance applies only to the resonance they have helped in."""
         _make_sineater_thread_for(self.sineater, self.abyssal_resonance, lifetime_helped=500)
 
         abyssal_result = _apply_sineater_corruption_resistance(

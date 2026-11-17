@@ -2640,6 +2640,19 @@ class SineatingFactory(factory.django.DjangoModelFactory):
     fatigue_cost = 5
 
 
+class MireHoldingFactory(factory.django.DjangoModelFactory):
+    """A Sineater's holding for one Sinner (#5177). ``relationship`` is the Sineater's side."""
+
+    class Meta:
+        model = "arxii.MireHolding"
+
+    relationship = factory.SubFactory("world.relationships.factories.CharacterRelationshipFactory")
+    resonance = factory.SubFactory(ResonanceFactory)
+    amount = 0
+    purified_since_payout = 0
+    succumbed_since_fall = 0
+
+
 class SoulTetherRescueFactory(factory.django.DjangoModelFactory):
     """Audit-row factory for a stage-3+ rescue ritual (Spec B §9)."""
 
