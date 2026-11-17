@@ -362,8 +362,12 @@ def _add_techniques(page: PowerPage, ref: Reference) -> None:
             if (substance := gift_substance(gift)) is not None
             and substance.property_id == required.pk
         ]
+        # Membership by subquery, not a join: a join returns a technique once per stored mark.
+        ticked = Technique.properties.through.objects.filter(property_id=required.pk).values(
+            "technique_id"
+        )
         not_granting = list(
-            Technique.objects.filter(Q(properties=required) | Q(gift__in=carrying_gifts))
+            Technique.objects.filter(Q(pk__in=ticked) | Q(gift__in=carrying_gifts))
             .exclude(capability_grants__capability_id=capability.pk)
             .select_related("gift")
             .order_by("gift__name", "name")

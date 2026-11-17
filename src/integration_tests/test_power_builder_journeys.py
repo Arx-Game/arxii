@@ -345,6 +345,32 @@ class PowerBuilder(JourneyCase):
         self.assertNotIn("Shadow Walk", body)
         self.assertEqual(Technique.objects.get(pk=self.step.pk).written_by, self.writer)
 
+    def _flare_page(self) -> str:
+        flare = MovementApplicationFactory(
+            name="Flare",
+            capability=self.traversal,
+            required_effect_property=self.flame,
+            way_of_moving=CreatureTraversal.LEAPS,
+        )
+        response = self.client.get(reverse("admin_power_builder", args=[flare.pk]))
+        self.assertEqual(response.status_code, 200)
+        return _module(response.content.decode(), "near-module")
+
+    def test_a_technique_that_carries_the_property_from_its_gift_but_lacks_the_grant(self) -> None:
+        self._technique("Bare Flame", self.flame_gift, [])
+
+        near = self._flare_page()
+
+        # The flame gift's substance gives every technique of it the flame property.
+        self.assertIn("<td>Bare Flame</td>", near[near.index("but do not grant") :])
+
+    def test_a_technique_with_two_stored_marks_is_listed_once(self) -> None:
+        self._technique("Flare Step", self.flame_gift, [self.teleport, self.shadow])
+
+        near = self._flare_page()
+
+        self.assertEqual(near.count("<td>Flare Step</td>"), 1)
+
     def test_adding_a_technique_on_a_gift_and_path(self) -> None:
         response = self._post(
             {

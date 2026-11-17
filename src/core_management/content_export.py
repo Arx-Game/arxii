@@ -248,6 +248,13 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.resonanceconversion",
         "magic.ritual",
         "magic.stylecapabilityrequirement",
+        # #5125: what a gift works through, how two substances stand, and the Primum a kind
+        # of creature carries. PlacePrimum is left out: it is play state on a RoomProfile (a
+        # lair's stock), not authored content. PrimumStep, SubstancePowerStep and
+        # HarvestOutcome are tuning config, which never belongs here.
+        "magic.substance",
+        "magic.substancerelation",
+        "magic.creatureprimum",
         "magic.technique",
         "magic.techniqueappliedcondition",
         "magic.techniquecapabilitygrant",

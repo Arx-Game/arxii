@@ -69,15 +69,14 @@ class Substance(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     )
     property = models.ForeignKey(
         "arxii.Property",
-        verbose_name="Property new techniques start with",
+        verbose_name="Property added to every technique of this gift",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="substances",
         help_text=(
-            "The property a new technique on a gift of this substance starts with ticked, "
-            "such as 'shadow'. Only a convenience: untick it on any technique where it does "
-            "not belong, and nothing reads it in play."
+            "A property every technique of a gift of this substance carries, such as "
+            "'shadow'. It cannot be unticked on a technique. Leave blank for none."
         ),
     )
 
@@ -85,6 +84,7 @@ class Substance(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["name"]
+        dependencies = ["arxii.Property"]
 
     class Meta:
         ordering = ["name"]

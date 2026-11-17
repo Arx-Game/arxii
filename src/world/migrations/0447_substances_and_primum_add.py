@@ -407,12 +407,12 @@ class Migration(migrations.Migration):
                     "property",
                     models.ForeignKey(
                         blank=True,
-                        help_text="The property a new technique on a gift of this substance starts with ticked, such as 'shadow'. Only a convenience: untick it on any technique where it does not belong, and nothing reads it in play.",
+                        help_text="A property every technique of a gift of this substance carries, such as 'shadow'. It cannot be unticked on a technique. Leave blank for none.",
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
                         related_name="substances",
                         to="arxii.property",
-                        verbose_name="Property new techniques start with",
+                        verbose_name="Property added to every technique of this gift",
                     ),
                 ),
                 (

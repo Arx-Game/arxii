@@ -162,6 +162,7 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["name"]
+        dependencies = ["arxii.Substance"]
 
     class Meta:
         constraints = [

@@ -9,7 +9,8 @@ a deliberate discard (owner rulings 19 to 21 on #5125): a place is rich in a sub
 holding its Primum, an opposed substance is a relation row, and the call-up line is fixed.
 0449 prints each old row's three values in the migrate log, so the staff-written text is kept
 there. The four ``ResonanceEnvironmentConfig`` columns (power at full, present percent, anima
-and resonance per measure) are tuning numbers the Primum steps and power curve replaced.
+and resonance per measure) are tuning numbers the Primum steps and power curve replaced; 0449
+prints their values in the same log.
 """
 
 from django.db import migrations

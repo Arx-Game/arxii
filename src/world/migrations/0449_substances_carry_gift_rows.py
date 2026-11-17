@@ -19,7 +19,9 @@ condition it works through) is replaced by ``Substance`` (one shared row per sub
   the spec replaced them (a place is rich in a substance by holding its Primum, an opposed
   substance is a relation row, and the call-up line is fixed), so there is nothing to carry.
   The summary prints each old row's gift name and those three values, so the migrate log keeps
-  the staff-written arrival text after the table is dropped.
+  the staff-written arrival text after the table is dropped. It also prints the four
+  ``ResonanceEnvironmentConfig`` values the next migration drops (power at full, present
+  percent, anima and resonance per measure).
 * Call-up and scene-mark rows on the location cascade (source ``substance:<n>`` and
   ``scene_mark:<n>:<m>``) were transient and are deleted.
 * The starter Primum steps and power curve are written only where a table holds no row at all,
@@ -184,6 +186,24 @@ def _insert_starter_tuning(apps):
     return written
 
 
+#: The tuning columns migration 0450 drops from ``ResonanceEnvironmentConfig``.
+RETIRED_CONFIG_FIELDS = (
+    "substance_power_at_full",
+    "substance_present_pct",
+    "substance_anima_per_measure",
+    "substance_resonance_per_measure",
+)
+
+
+def _retired_config_lines(apps):
+    """One line per config row naming the four values 0450 drops, for the migrate log."""
+    Config = apps.get_model("arxii", "ResonanceEnvironmentConfig")
+    return [
+        f"    {', '.join(f'{name}={row[name]}' for name in RETIRED_CONFIG_FIELDS)}"
+        for row in Config.objects.values(*RETIRED_CONFIG_FIELDS)
+    ]
+
+
 def carry_gift_substances(apps, schema_editor) -> None:
     """Carry every ``GiftSubstance`` row onto ``Substance`` and ``Gift.substance``."""
     GiftSubstance = apps.get_model("arxii", "GiftSubstance")
@@ -210,6 +230,8 @@ def carry_gift_substances(apps, schema_editor) -> None:
             f"    {row.gift.name!r}, {row.full_at}, {str(row.opposed_by)!r}, {row.arrival_line!r}"
             for row in rows
         ],
+        "  tuning values dropped from the resonance environment config by 0450:",
+        *(_retired_config_lines(apps) or ["    (no config row)"]),
     ]
     sys.stdout.write("\n".join(lines) + "\n")
 
