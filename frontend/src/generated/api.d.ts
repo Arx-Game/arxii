@@ -32871,6 +32871,8 @@ export interface components {
       max_quality_tier: components['schemas']['QualityTier'] | null;
       failure_risk: components['schemas']['CraftingQuoteRisk'][];
       station_status: components['schemas']['StationStatus'] | null;
+      /** @description The recipe's check, such as Tailoring; empty when it has none. */
+      check_name: string;
     };
     /** @description Resource cost breakdown within a crafting quote. */
     CraftingQuoteCost: {
@@ -32889,6 +32891,8 @@ export interface components {
       quantity_required: number;
       have: number;
       is_optional: boolean;
+      /** @description The lowest quality that counts, such as Common; empty for any. */
+      min_quality_name: string;
     };
     /** @description A single failure-risk row within a crafting quote. */
     CraftingQuoteRisk: {

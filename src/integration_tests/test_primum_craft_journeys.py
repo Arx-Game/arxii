@@ -126,6 +126,8 @@ class CraftingWithPrimum(_PrimumCraft):
 
         self.assertTrue(result.detail.success, result.detail.message)
         coat = self.newest_coat()
+        self.assertTrue(result.detail.message.startswith("You craft Ember Coat"))
+        self.assertEqual(self.inventory_row(coat)["carries"], ["fire"])
         self.assertEqual(self.primum_held(), 0)
         # Fine is tied to no step, so the coat carries the lowest one.
         self.assertEqual(self.carried_step(coat), "Trace")
@@ -166,14 +168,14 @@ class CraftingWithPrimum(_PrimumCraft):
         # Naming an ingredient she does not hold is refused.
         refused = self.craft_coat(optional=[self.primum_req.pk])
         self.assertFalse(refused.detail.success)
+        self.assertEqual(refused.detail.message, "You do not have the required materials.")
 
         self.give_primum(self.master)
         result = self.craft_coat(optional=[])
 
-        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertTrue(result.detail.message.startswith("You craft Ember Coat"))
         coat = self.newest_coat()
         self.assertEqual(self.primum_held(), 1)
-        self.assertFalse(ItemSubstance.objects.filter(item_instance=coat).exists())
         self.assertEqual(self.inventory_row(coat)["carries"], [])
 
     def test_naming_another_recipes_or_a_required_ingredient_changes_nothing(self) -> None:
@@ -255,8 +257,11 @@ class CraftingWithPrimum(_PrimumCraft):
         botch_row.save(update_fields=["cost_consumption"])
         self.give_primum(self.master)
 
-        self.craft_coat(optional=[self.primum_req.pk], outcome="Enchanting Botch")
+        result = self.craft_coat(optional=[self.primum_req.pk], outcome="Enchanting Botch")
 
+        # The botch still makes a coat (at the floor tier), but used up no Primum.
+        self.assertTrue(result.detail.message.startswith("You craft Ember Coat"))
+        self.assertEqual(self.inventory_row(self.newest_coat())["carries"], [])
         self.assertEqual(self.primum_held(), 1)
         self.assertFalse(ItemSubstance.objects.exists())
 
@@ -288,14 +293,52 @@ class CraftingWithPrimum(_PrimumCraft):
                 "quantity_required": 2,
                 "have": 2,
                 "is_optional": False,
+                "min_quality_name": "",
             },
         )
         self.assertTrue(rows["Fire Primum"]["is_optional"])
         self.assertEqual(rows["Fire Primum"]["have"], 0)
         # The optional Primum she does not hold never makes the recipe unaffordable.
         self.assertTrue(covered["affordable"])
+        # The quote names the recipe's check.
+        self.assertEqual(covered["check_name"], self.coat_recipe.check_type.name)
 
         held.quantity = 0
         held.save(update_fields=["quantity"])
 
         self.assertFalse(quote()["affordable"])
+
+
+class RequiringPrimumOfAQuality(_PrimumCraft):
+    def test_a_required_primum_with_a_floor_takes_only_primum_that_good(self) -> None:
+        """A recipe that requires Fire Primum, Common or better: a quote row that says so, an
+        unqualified Primum that does not count, and a Common one that makes the coat carry
+        fire."""
+        self.primum_req.is_optional = False
+        self.primum_req.min_quality_tier = self.common
+        self.primum_req.save(update_fields=["is_optional", "min_quality_tier"])
+        self.give_primum(None)  # a mission's Primum: no quality, so below the floor
+
+        def primum_row() -> tuple[dict, bool]:
+            response = self.api(self.account_of(self.mira)).get(
+                reverse("item-craft-create-quote"), {"template": self.coat_template.pk}
+            )
+            self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+            body = response.json()
+            (row,) = [r for r in body["costs"]["materials"] if r["name"] == "Fire Primum"]
+            return row, body["affordable"]
+
+        row, affordable = primum_row()
+        self.assertEqual((row["min_quality_name"], row["have"], affordable), ("Common", 0, False))
+        refused = self.craft_coat(optional=[])
+        self.assertEqual(refused.detail.message, "You do not have the required materials.")
+        self.assertEqual(self.primum_held(), 1)
+
+        self.give_primum(self.common)
+        self.assertEqual(primum_row()[0]["have"], 1)
+        result = self.craft_coat(optional=[])
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        coat = self.newest_coat()
+        self.assertEqual(self.primum_held(), 1)  # the unqualified one is left
+        self.assertEqual(self.inventory_row(coat)["carries"], ["fire"])

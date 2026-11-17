@@ -158,6 +158,8 @@ class CraftingQuote:
     # tuple (not list) so the frozen snapshot is genuinely immutable (#1243).
     failure_risk: tuple[CraftingQuoteRisk, ...] = ()
     station_status: StationStatus | None = None
+    #: The recipe's check, as the quote names it ("" when the recipe has none).
+    check_name: str = ""
 
 
 def _station_status_snapshot(station: object | None) -> tuple[StationStatus, bool]:
@@ -211,7 +213,8 @@ def _quote_material_rows(
     """The quote's material rows, and whether every non-optional row is covered.
 
     A row names a template or a material category (``name`` is the template's or the
-    category's), how many are required, and how many the crafter holds that count: in
+    category's), the lowest quality that counts (``min_quality_name``, "" for any), how many
+    are required, and how many the crafter holds that count: in
     bulk mode (``required_value``) the required value and the value in her bucket. An
     optional row is quoted but never holds ``affordable`` back (#5125).
     """
@@ -259,6 +262,9 @@ def _quote_material_rows(
                 "quantity_required": required,
                 "have": have,
                 "is_optional": req.is_optional,
+                "min_quality_name": (
+                    req.min_quality_tier.name if req.min_quality_tier is not None else ""
+                ),
             }
         )
         if have < required and not req.is_optional:
@@ -371,6 +377,7 @@ def build_crafting_quote(
         max_quality_tier=max_quality_tier,
         failure_risk=tuple(failure_risk),
         station_status=station_status,
+        check_name=recipe.check_type.name if recipe.check_type_id else "",
     )
 
 

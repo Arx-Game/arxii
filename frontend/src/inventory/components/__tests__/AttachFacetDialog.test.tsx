@@ -370,7 +370,17 @@ describe('AttachFacetDialog', () => {
           action_points_have: 5,
           anima: 10,
           anima_have: 8,
-          materials: [{ item_template_id: 1, name: 'Spider Silk', quantity_required: 3, have: 5 }],
+          materials: [
+            {
+              requirement_id: 11,
+              item_template_id: 1,
+              name: 'Spider Silk',
+              quantity_required: 3,
+              have: 5,
+              is_optional: false,
+              min_quality_name: 'Common',
+            },
+          ],
         },
         max_quality_tier: { id: 3, name: 'Excellent', color_hex: '#gold', sort_order: 3 },
         failure_risk: [{ outcome_name: 'Botch', cost_consumption: 'partial', label: null }],
@@ -468,10 +478,21 @@ describe('AttachFacetDialog', () => {
           action_points_have: 5,
           anima: 10,
           anima_have: 8,
-          materials: [{ item_template_id: 1, name: 'Spider Silk', quantity_required: 3, have: 5 }],
+          materials: [
+            {
+              requirement_id: 11,
+              item_template_id: 1,
+              name: 'Spider Silk',
+              quantity_required: 3,
+              have: 5,
+              is_optional: false,
+              min_quality_name: 'Common',
+            },
+          ],
         },
         max_quality_tier: { id: 3, name: 'Excellent', color_hex: '#gold', sort_order: 3 },
         failure_risk: [{ outcome_name: 'Botch', cost_consumption: 'partial', label: null }],
+        check_name: 'Tailoring',
       },
       isLoading: false,
       isError: false,
@@ -491,9 +512,11 @@ describe('AttachFacetDialog', () => {
     // Cost line
     expect(panel).toHaveTextContent('5/2 AP');
     expect(panel).toHaveTextContent('8/10 Anima');
-    expect(panel).toHaveTextContent('5/3 Spider Silk');
+    expect(panel).toHaveTextContent('Spider Silk · 3, Common or better');
+    expect(panel).toHaveTextContent('have 5');
 
-    // Cap line
+    // Check and cap lines
+    expect(panel).toHaveTextContent('Check: Tailoring');
     expect(panel).toHaveTextContent('Excellent');
 
     // Risk line — 'partial' maps to 'some materials/effort lost'

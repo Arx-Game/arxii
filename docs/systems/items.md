@@ -958,7 +958,11 @@ and a missing or unmapped quality counts as the lowest step. A craft whose consu
 everyone. A worn or held item adds to a cast only for a caster whose gift works that substance
 (`item_substance_rows`). `build_crafting_quote` quotes template, category and bulk-value rows
 (`requirement_id`, `material_category_id`, `item_template_id`, `name`, `quantity_required`,
-`have`, `is_optional`).
+`have`, `is_optional`, `min_quality_name`: the requirement's `min_quality_tier` name, "" for
+any), and names the recipe's check (`check_name`). A required Primum row with a
+`min_quality_tier` counts only Primum of that quality or better (`meets_quality_tier`; an item
+with no quality never counts). `CraftingQuotePanel` draws each material as a row ("Fire Primum ·
+1, Common or better", then "have N") and a "Check: <name>" line.
 
 ### Handler Registry (`crafting/registry.py`, `crafting/handlers.py`)
 

@@ -297,6 +297,9 @@ class CraftingQuoteMaterialSerializer(serializers.Serializer):
     quantity_required = serializers.IntegerField()
     have = serializers.IntegerField()
     is_optional = serializers.BooleanField()
+    min_quality_name = serializers.CharField(
+        help_text="The lowest quality that counts, such as Common; empty for any."
+    )
 
 
 class CraftingQuoteCostSerializer(serializers.Serializer):
@@ -335,6 +338,9 @@ class CraftingQuoteSerializer(serializers.Serializer):
     max_quality_tier = QualityTierSerializer(allow_null=True)
     failure_risk = CraftingQuoteRiskSerializer(many=True)
     station_status = StationStatusSerializer(allow_null=True)
+    check_name = serializers.CharField(
+        help_text="The recipe's check, such as Tailoring; empty when it has none."
+    )
 
 
 class ItemMeaningLineSerializer(serializers.Serializer):

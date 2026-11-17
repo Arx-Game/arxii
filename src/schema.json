@@ -55757,8 +55757,12 @@ components:
           allOf:
           - $ref: '#/components/schemas/StationStatus'
           nullable: true
+        check_name:
+          type: string
+          description: The recipe's check, such as Tailoring; empty when it has none.
       required:
       - affordable
+      - check_name
       - costs
       - failure_risk
       - max_quality_tier
@@ -55805,11 +55809,15 @@ components:
           type: integer
         is_optional:
           type: boolean
+        min_quality_name:
+          type: string
+          description: The lowest quality that counts, such as Common; empty for any.
       required:
       - have
       - is_optional
       - item_template_id
       - material_category_id
+      - min_quality_name
       - name
       - quantity_required
       - requirement_id
