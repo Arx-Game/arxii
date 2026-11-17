@@ -1301,8 +1301,8 @@ corruption is the Sineater's own: it sits on their `CharacterResonance.corruptio
 Sinner's resonance, with that resonance's `ConditionInstance` and stages, so it climbs the same
 stages as a Sinner's own. **The Mire** is the name for exactly this corruption, and for nothing else.
 
-- **Whose it is.** `MireHolding` (per Sineater-side `CharacterRelationship` and resonance: `amount`,
-  `purified_since_payout`, `succumbed_since_fall`) partitions `corruption_current` by Sinner.
+- **Whose it is.** `MireHolding` (per Sineater-side `CharacterRelationship` and resonance: `amount`)
+  partitions `corruption_current` by Sinner.
   **Invariant: the holdings in a resonance never sum to more than the Sineater's corruption in it.**
   Only `take_on_corruption` and `release_mire` (`world/magic/services/mire.py`) write `amount`. When
   corruption falls for any other reason (daily decay, a rescue, staff), `reduce_corruption` takes
@@ -1341,21 +1341,26 @@ tether (`world/magic/services/impulses.py`).
   `Resonance.impulse_text` (or a plain line when staff wrote none), once per resonance per scene
   (`ImpulseShown`). Nothing else happens, and the player always chooses what the character does.
 - **Compulsion.** At the Compulsion stage, when that is present and the character has not earned
-  the resonance by a deed since the scene began (`earned_in_scene`, any `DEED_GAIN_SOURCES` grant),
+  the resonance by a deed of their own since the scene began (`earned_in_scene`: a grant from
+  `COMPULSION_INDULGING_SOURCES`, today only a kindled deed),
   `CorruptionConfig.compulsion_condition` is laid on them at severity `stage - compulsion_stage + 1`.
   Staff author that condition with a scene duration and a check modifier that scales with severity, so
   the penalty rides their rolls for the rest of the scene. Unset, nothing is laid and the Required
   content page lists it. The condition is named by `compulsion_condition`; it is a `ConditionTemplate`,
   not the control-loss `Compulsion` model in `world/conditions/models.py`.
-- **Giving in.** When a deed grows the resonance in a live scene (`grant_resonance` calls
-  `give_in_to_compulsion`), the first such deed lifts the Compulsion for the scene, tells the
-  character, and adds `compulsion_indulge_corruption` of corruption in the resonance (source
+- **Giving in.** When a kindled deed (a `COMPULSION_INDULGING_SOURCES` grant) grows the resonance in a
+  live scene (`grant_resonance` calls `give_in_to_compulsion`), the first such deed lifts the Compulsion
+  for the scene, tells the character (after the transaction commits), and adds `compulsion_indulge_corruption` of corruption in the resonance (source
   `INDULGED`: exactly the configured amount, no resistance, and the Hollow absorbs none of it). A
-  Sineater's addition is carried for the Sinner with the largest holding. Succumbing to the Mire is a
-  settling, not a giving in, and never counts.
+  Sineater's addition is carried for the Sinner with the largest holding. A grant from another player, a
+  GM or a cron (a settled pose endorsement, a scene entry, a mission reward) is not the character giving
+  in and never counts, and neither is succumbing to the Mire, which is a settling. A failure in the give-in
+  is logged and never rolls back the grant.
 - **Lifting.** Settling below the Compulsion stage, the situation passing, or giving in lifts the
   condition the next time impulses are refreshed. `refresh_impulses` runs when a pose is posted (web and
   telnet), before a cast's modifiers are gathered, and when the kindled resonances panel and telnet
-  `resonances` are shown; `impulses_now` only reads.
+  `resonances` are shown; `impulses_now` only reads. Every call goes through `safe_refresh_impulses`, which
+  logs and swallows a failure so the pose, cast or panel proceeds, and a line is not spent while the
+  character has no live session.
 - **Scars.** The conditions are built so that magical scars can reuse them later; nothing here
   prevents it.

@@ -40,7 +40,7 @@
   the controls. Details: [Combat Defense Composition](COMBAT_DEFENSES.md#authored-defense-piercing-4575).
 
 - **Magical skills (#4450, ADR-4450):** every magical roll adds skills staff choose in admin;
-  no skill is named in code. `MagicActivity` (18 kinds of roll) plus `MagicActivitySkill`
+  no skill is named in code. `MagicActivity` (23 kinds of roll) plus `MagicActivitySkill`
   (`activity`, `skill`, `weight`) map a roll to skills; `TechniqueStyle.skill` (the casting
   style's skill: a Gift's own style, else the caster's Path style, via
   `world/magic/services/casting_style.py`, #5002) and `Technique.skill` (override) set a cast's
@@ -333,7 +333,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `CharacterThreadWeavingUnlock`, `ThreadWeavingTeachingOffer`,
     `SoulTetherConfig` (singleton pk=1: Sineating check and sizes, settling the Mire, resistance, rescue
     tuning knobs), `SineatingOutcomeAward` (share of full resonance per outcome tier, #5177),
-    `MireHolding` (corruption a Sineater carries per Sinner and resonance, with the jackpot base, #5177),
+    `MireHolding` (corruption a Sineater carries per Sinner and resonance, #5177; the jackpot and fall counters are `CharacterRelationship.mire_purified_since_payout` / `mire_succumbed_since_fall`),
     `ImpulseShown` (an impulse a character was told of in a scene, #5177),
     `SoulfrayReveal` (the #924 outcome wheel for a dramatic Soulfray stage draw, #4089 -
     `title`, `stage_label`, `faces` built from the drawn tier's UNFILTERED effective

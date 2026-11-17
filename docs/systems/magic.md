@@ -45,7 +45,7 @@ from world.magic.constants import (
                              # passive_vital_bonuses returns 0 for them.
     RitualExecutionKind,     # SERVICE, FLOW
     PendingAlterationStatus, # OPEN, RESOLVED, STAFF_CLEARED
-    MagicActivity,           # 20 kinds of magical roll that add staff-mapped
+    MagicActivity,           # 23 kinds of magical roll that add staff-mapped
                              # skills (#4450): ANIMA_RITUAL, TECHNIQUE_LEARNING,
                              # RITUAL_WORKING, SUSTAINING_MAGIC, DISPELLING,
                              # MAGICAL_TREATMENT, SOULFRAY_RESILIENCE,
@@ -667,7 +667,7 @@ configs take their skill from the `RITUAL_WORKING` mapping, writing none while i
 
 | Surface | Location | Purpose |
 |---------|----------|---------|
-| `MagicActivity` | `constants.py` | 20 `TextChoices` kinds of magical roll (see Enums) |
+| `MagicActivity` | `constants.py` | 23 `TextChoices` kinds of magical roll (see Enums) |
 | `MagicActivitySkill` | `models/magic_activity.py` | `activity`, `skill` (FK Skill, PROTECT, Magic skills only), `weight` (default 1.00); unique on (activity, skill). One row adds one skill to every roll of that activity; an activity may map several |
 | `TechniqueStyle.skill` | `models/techniques.py` | Nullable FK Skill (SET_NULL, Magic skills only, `related_name="technique_styles"`): the skill every cast worked in this style adds (#5002, ADR-5002). It replaced `Path.technique_skill` and `Gift.technique_skill` |
 | `Technique.skill` | `models/techniques.py` | Nullable FK Skill (SET_NULL, Magic skills only): overrides the casting style's skill for this one technique |
@@ -4615,7 +4615,7 @@ before `CharacterAura`'s stored-percentage mechanism existed — were removed in
 **Vocabulary.** "Drift" here is resonance a character holds in a non-main affinity that has
 grown past who they are (#5123): `drift_holdings` (`world/magic/services/drift.py`) reads
 lifetime, not balance, so a streak whose points were already spent still counts, and
-`DriftReading.convertible_points` is the lifetime points of excess atoning may convert. `AuraDrift` / `recompute_aura` (the section above) is the older, different sense:
+`DriftReading.excess_points` is the lifetime points of excess per affinity that atoning may convert. `AuraDrift` / `recompute_aura` (the section above) is the older, different sense:
 the shift in the aura's stored percentages. Drift correction converts held drift into the
 character's own resonances through deeds; it is separate from Fall and Redemption, which change
 affinity. Drift correction reuses their pair rates (`AffinityInteraction.conversion_multiplier`).
@@ -4624,10 +4624,19 @@ affinity. Drift correction reuses their pair rates (`AffinityInteraction.convers
 partition every `GainSource`; `test_deed_classification.py` fails when a member is in neither or
 both. Deeds are the poses and scene entries others endorsed, entry flourishes, dramatic
 moments, style presentations, mission rewards and reports, stake rewards, project
-contributions, combo discoveries and worship rites. Passive trickles (room residence, outfit),
-staff grants, sanctum sources, distinction seeds, compromise and both conversions
-(`FALL_CONVERSION`, `DRIFT_CORRECTION`) are not deeds. Casting never counts. A new `GainSource`
-member must be placed in one set.
+contributions, combo discoveries, worship rites, kindled deeds and `SUCCUMBED` (a Sineater
+chose to succumb to the Mire, and the player may reflect on it and atone). Passive trickles
+(room residence, outfit), staff grants, sanctum sources, distinction seeds, compromise, both
+conversions (`FALL_CONVERSION`, `DRIFT_CORRECTION`) and the payouts of settling the Mire
+(`MIRE_PURIFIED`, `SUCCUMB_BONUS`, `SINEATER_FALL`) are not deeds. Casting never counts. A new
+`GainSource` member must be placed in one set.
+
+Giving in to a Compulsion is narrower than a deed (#5177). The Compulsion lifts for the scene,
+a little corruption is added and the give-in line is sent only for a grant whose source is in
+`COMPULSION_INDULGING_SOURCES` (`constants.py`): today `KINDLED_DEED`, a resonance the character
+earned by their own act. A grant that lands from another player, a GM or a cron (a settled
+pose endorsement, a scene entry, a mission reward) and `SUCCUMBED` do not lift it. The pose that
+claims a resonance, a later issue, adds its source to that set.
 
 **When an offer opens.** `grant_resonance` calls `open_or_extend_conversion_offer(grant)` after
 the aura recompute. It does nothing unless all of these hold: the source is a deed; the
@@ -4782,11 +4791,12 @@ full design is `docs/architecture/soul-tether.md`; the corruption side is `docs/
 §13; the app guide is `src/world/magic/CLAUDE.md`.
 
 - **The Sineater's half of the bond.** Forming a tether weaves a `RELATIONSHIP_CAPSTONE` thread for the
-  Sineater too, on a ritual capstone of their own side (`weave_tether_bond_thread`; `ensure_sineater_thread`
+  Sineater too, on a fresh ritual capstone of their OWN side each formation (`weave_tether_bond_thread`; `ensure_sineater_thread`
   for a tether from before, `default_sineater_resonance` when none is named; a sheet with no aura gets one,
   `ensure_aura`). Its resonance is what the Sineater earns; its presence turns on their resistance.
 - **Presence is by character** (`shared_active_scene`: both in one room with a live scene), so a GM-puppeted
-  NPC can be a Sineater. A Sineater whose aura is predominantly Abyssal has fallen and is refused for Sineating
+  NPC can be a Sineater; but no tether forms, and no plea or ritual runs, between two characters one account
+  plays (`played_by_one_account`, loan-aware), and a plea needs the asker to hold the tether's SINNER side. A Sineater whose aura is predominantly Abyssal has fallen and is refused for Sineating
   and the rescue (`sineater_has_fallen`, `SineaterFallenError`).
 - **Sineating** is a ritual with a roll, asked for by the Sinner's pose (`entreat_sineating`, a
   `SineatingPendingOffer`) and performed by the Sineater's pose (`perform_sineating`, or `decline_sineating`),
@@ -4800,8 +4810,10 @@ full design is `docs/architecture/soul-tether.md`; the corruption side is `docs/
   every outcome tier has an award, it refuses ("Sineating has not been set up yet.") and the Required content
   page lists it (`sineating-config`).
 - **The Mire** is the corruption a Sineater carries for their Sinners, and only that. `MireHolding` (per
-  Sineater-side relationship and resonance: `amount`, `purified_since_payout`, `succumbed_since_fall`)
-  partitions the Sineater's `corruption_current`; the holdings never exceed it. Its stage is the Sineater's own
+  Sineater-side relationship and resonance: `amount`) partitions the Sineater's `corruption_current`; the
+  holdings never exceed it. The jackpot and fall counters are per tether, on the Sineater's
+  `CharacterRelationship` side (`mire_purified_since_payout`, `mire_succumbed_since_fall`). A Sinner sheds
+  only their own corruption (what they carry less what they hold as a Sineater for someone else). Its stage is the Sineater's own
   corruption stage in the resonance, and it stops at `CorruptionConfig.sineater_max_stage` (the Compulsion
   stage): the ritual takes on only what fits and refuses when nothing does. `services/mire.py`:
   `take_on_corruption`, `release_mire`, `corruption_ceiling`, `corruption_that_can_move`,
@@ -4814,12 +4826,15 @@ full design is `docs/architecture/soul-tether.md`; the corruption side is `docs/
   (`MIRE_PURIFIED`) and move the tie; Succumb turns it into the Sinner's resonance in the Sineater's aura
   (`SUCCUMBED`, a deed they can later reflect on and atone for) and pays the Sinner
   `succumb_bonus_percent` plus the jackpot (`SUCCUMB_BONUS`); the fall pays every Sinner
-  (`SINEATER_FALL`). `services/mire_settling.py`.
+  (`SINEATER_FALL`). `services/mire_settling.py`. The Sinner's payout notices and a Sineating's result lines
+  are stored narrative messages (`send_stored_notice`), so an offline Sinner reads them at login; the two
+  payouts earn no pledge favor (`PASSIVE_DEED_SOURCES`).
 - **Impulses.** Corruption a character carries is shown from the first stage as "Intrusive Thoughts:
   <resonance>" and from the second as "Compulsion: <resonance>" (display only; no template renamed). With
   something the resonance cares about present, the first sends `Resonance.impulse_text` once per scene
   (`ImpulseShown`) and the second lays `CorruptionConfig.compulsion_condition` (scene-scoped, a check
-  penalty scaled by severity) until the character earns the resonance there, which adds
+  penalty scaled by severity) until the character earns the resonance there by a kindled deed of their own (`COMPULSION_INDULGING_SOURCES`;
+  never a grant from another player, a GM or a cron, nor succumbing), which adds
   `compulsion_indulge_corruption` (`CorruptionSource.INDULGED`). `services/impulses.py`; shown on
   `GET /api/magic/kindled-resonances/` (`impulses`) and telnet `resonances`.
 - **Not changed:** the rescue, except presence by character, the fallen-Sineater refusal, its scene being

@@ -980,7 +980,7 @@ caster's personal Anima Check.
 - Check engine: `ExtraTraitTerm` and a keyword-only `extra_traits` on the roll functions
   (`docs/systems/checks.md`). Terms score like extra check type rows, develop once per trait per
   roll, and join the roll's involved traits.
-- Models: `MagicActivity` (18 kinds of roll), `MagicActivitySkill`, `Path.technique_skill`,
+- Models: `MagicActivity` (23 kinds of roll), `MagicActivitySkill`, `Path.technique_skill`,
   `Gift.technique_skill` (Minor Gifts only, DB constraint), `Technique.skill`,
   `ConditionCategory.adds_loss_of_self_skills`. Schema-only migrations, no placeholder rows.
 - `world/magic/services/magic_skills.py`: the technique skill order (technique override, then the
