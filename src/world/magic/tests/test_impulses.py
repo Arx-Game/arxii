@@ -21,7 +21,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from django.test import override_settings
+from django.core.exceptions import ValidationError
+from django.test import TestCase, override_settings
 
 from world.checks.factories import CheckTypeFactory
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
@@ -41,6 +42,7 @@ from world.magic.factories import (
 )
 from world.magic.models import ImpulseShown, MireHolding
 from world.magic.models.aura import CharacterResonance
+from world.magic.models.corruption_config import CorruptionConfig
 from world.magic.services.impulses import corruption_display_name, impulses_now, refresh_impulses
 from world.magic.services.resonance import grant_resonance
 from world.magic.services.sineating import request_sineating
@@ -389,3 +391,20 @@ class SineaterCapTests(SineatingCase):
         )
         self.assertEqual(self.corruption(self.sinner), 500)
         self.assertEqual(self.corruption(self.sineater), 499)
+
+
+class CorruptionConfigCleanTests(TestCase):
+    def test_the_compulsion_cannot_begin_before_intrusive_thoughts(self) -> None:
+        config = CorruptionConfig(
+            intrusive_thoughts_stage=3, compulsion_stage=2, sineater_max_stage=3
+        )
+
+        with self.assertRaises(ValidationError) as ctx:
+            config.clean()
+
+        self.assertEqual(list(ctx.exception.message_dict), ["compulsion_stage"])
+
+    def test_the_starting_stages_are_valid(self) -> None:
+        CorruptionConfig(
+            intrusive_thoughts_stage=1, compulsion_stage=2, sineater_max_stage=2
+        ).clean()

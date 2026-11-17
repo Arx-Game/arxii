@@ -107,12 +107,16 @@ class CorruptionConfig(SharedMemoryModel):
         return f"CorruptionConfig(pk={self.pk})"
 
     def clean(self) -> None:
-        """A Sineater's cap cannot sit below the stage where impulses begin."""
+        """A Sineater's cap and the Compulsion cannot sit below the stage where impulses begin."""
         super().clean()
+        errors = {}
         if self.sineater_max_stage < self.intrusive_thoughts_stage:
-            msg = {
-                "sineater_max_stage": (
-                    "A Sineater's cap cannot be below the stage where Intrusive Thoughts begin."
-                )
-            }
-            raise ValidationError(msg)
+            errors["sineater_max_stage"] = (
+                "A Sineater's cap cannot be below the stage where Intrusive Thoughts begin."
+            )
+        if self.compulsion_stage < self.intrusive_thoughts_stage:
+            errors["compulsion_stage"] = (
+                "Compulsion cannot begin before the stage where Intrusive Thoughts begin."
+            )
+        if errors:
+            raise ValidationError(errors)
