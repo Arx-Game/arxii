@@ -461,9 +461,23 @@
   become: true
   become_user: "{{ app_user }}"
   changed_when: false
+  register: app_release_safety
+  # Alpha (#5183): the check always runs and its findings are printed below,
+  # but it refuses the deploy only when app_release_safety_enforce is on.
+  failed_when:
+    - app_release_safety_enforce | bool
+    - app_release_safety.rc != 0
   when:
     - app_migrate_check.rc != 0
     - app_safety_reload_stamp.stat.exists
+
+- name: Report migrations the compatibility check flagged (not enforced)
+  ansible.builtin.debug:
+    msg: "{{ app_release_safety.stderr_lines }}"
+  when:
+    - app_release_safety.rc is defined
+    - app_release_safety.rc != 0
+    - not (app_release_safety_enforce | bool)
 
 # NOT `failed_when: false`. This task failing must abort the play with the
 # migration unapplied — that is the entire point. A deploy that cannot prove it

@@ -92,6 +92,14 @@ app_web_backend: "127.0.0.1:4001"
 # check. Compared on every converge, so a run that died mid-reload gets the
 # reload re-fired by the next button press instead of silently skipped.
 app_reload_stamp: /opt/arxii/reloaded_sha
+# Whether tools/check_release_safety.py refuses a deploy (#5159, #5183,
+# ADR-5183). Off during alpha: play state is resettable, a dump is taken before
+# every migration, and a column drop ships in the same release as the code that
+# stopped using it. The check still runs and its findings are printed. Turn
+# this on when production holds play state that cannot be reset; from then on
+# a drop ships one release after its code change, with a `# release-safety:`
+# comment in the migration.
+app_release_safety_enforce: false
 
 # The Server's own web port, behind the Portal's proxy on app_web_backend.
 # arxii-reload probes this one, because the proxy can answer with no Server behind

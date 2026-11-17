@@ -102,6 +102,18 @@ In-process exporter exposing Prometheus metrics on `/metrics`. Lives in Arx II s
   misleading marker just to pass. The check fails closed if history or the
   stamp cannot be read. Existing unmarked pending migrations also require review.
 
+  **During alpha the gate reports and does not refuse (#5183, ADR-5183).**
+  `app_release_safety_enforce` in the `app_deploy` role defaults is `false`.
+  The check still runs before every migration and the deploy log lists each
+  migration it flagged, but the deploy carries on. The maintainer ruled on
+  2026-11-17 that shipping a drop one release after its code change is the
+  right rule for a production that holds play state it cannot reset, and is
+  superfluous before then: alpha play state is resettable (ADR-0237) and a
+  dump is taken before every migration. Until the setting is turned on, a
+  migration needs no `# release-safety:` comment, and a drop may ship in the
+  same release as the code that stopped using the column. Turn the setting on
+  when the game leaves alpha; the rules above then apply as written.
+
   This is a deploy-time declaration and ancestry gate, not the planned CI
   classifier or the restore-against-production-data rehearsal. Those remain
   separate safeguards. The pre-migration dump remains the data-recovery net.
