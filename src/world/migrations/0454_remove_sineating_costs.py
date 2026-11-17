@@ -7,7 +7,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0451_sineating_ritual_adds"),
+        ("arxii", "0453_sineating_ritual_adds"),
     ]
 
     operations = [

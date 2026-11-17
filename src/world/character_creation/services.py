@@ -27,6 +27,7 @@ from world.character_creation.constants import (
     AGE_MAX,
     AGE_MAX_ETERNAL_YOUTH,
     AGE_MIN,
+    BACKGROUND_KEY,
     FALLBACK_STARTING_ROOM_FIXTURE_KEY,
     FALLBACK_STARTING_ROOM_KEY,
     FALLBACK_STARTING_ROOM_TYPECLASS,
@@ -60,7 +61,6 @@ from world.character_creation.offers import (
     opened_feature_traits,
     picked_offer_ids,
     reconcile_offer_picks,
-    stage_descriptions,
 )
 from world.character_creation.sheet_writers import SheetWriteError
 from world.character_sheets.services import create_character_with_sheet
@@ -1364,8 +1364,8 @@ def _finalize_origin_slots(
     sheet: CharacterSheet,
     draft: CharacterDraft,
     visible_slot_ids: set[int],
-) -> str:
-    """Upsert every visible answered question and assemble prose (#2478, #3617, #3660).
+) -> None:
+    """Upsert every visible answered question (#2478, #3617, #3660).
 
     Called from ``_apply_sheet_demographics`` whenever the draft carries any
     Upbringing answer (text, pick, anchor, or named figure). ``visible_slot_ids``
@@ -1375,10 +1375,9 @@ def _finalize_origin_slots(
     answer is resolved through ``anchor_for`` rather than read straight off
     ``answers.anchors``, so an OWN_FAMILY/SERVED_HOUSE GROUP question (which
     stores no anchor at all) and a PERSON question naming someone inside an
-    earlier group both land on the right ``Organization`` (#3660). Returns the
-    assembled prose for ``Profile.background``. State refresh is deferred to
-    the caller (after ``profile.save()``) so ``refresh_origin_story_state`` sees
-    the final prose value.
+    earlier group both land on the right ``Organization`` (#3660). State refresh
+    is deferred to the caller (after ``profile.save()``) so
+    ``refresh_origin_story_state`` sees the Background the player wrote.
     """
     from world.character_creation.questionnaire import DraftAnswers, anchor_for  # noqa: PLC0415
     from world.societies.models import Organization  # noqa: PLC0415
@@ -1414,19 +1413,15 @@ def _finalize_origin_slots(
         if not value and choice is None and organization is None and not figure:
             continue
         set_origin_slot(sheet, slot, value, choice, organization=organization, figure_name=figure)
-    return assemble_origin_prose(sheet)
 
 
 def _finalize_beats(sheet: CharacterSheet, draft: CharacterDraft) -> int:
-    """Write one ``CharacterOriginSlot`` row per beat the draft took (#4124), and one
-    stage row per stage the player described (#4872).
+    """Write one ``CharacterOriginSlot`` row per beat the draft took (#4124).
 
     Called from ``_apply_sheet_demographics``. A taken beat becomes a beat row
     carrying its unknown state and the optional line; its answers are ordinary
     distinctions, written by ``_create_distinctions`` with the beat as their
-    source. A stage's paragraph becomes a row with no slot and no beat, read by
-    ``assemble_origin_prose`` as that stage's own paragraph. Returns how many rows
-    were written.
+    source. Returns how many rows were written.
     """
     from world.character_creation.offers import beats_for  # noqa: PLC0415
 
@@ -1438,13 +1433,6 @@ def _finalize_beats(sheet: CharacterSheet, draft: CharacterDraft) -> int:
             sheet=sheet,
             beat_id=entry.beat_id,
             defaults={"slot": None, "unknown": entry.unknown, "value": entry.line},
-        )
-        written += 1
-    for stage, text in stage_descriptions(draft).items():
-        CharacterOriginSlot.objects.update_or_create(
-            sheet=sheet,
-            life_stage=stage,
-            defaults={"slot": None, "beat": None, "value": text},
         )
         written += 1
     return written
@@ -1656,11 +1644,13 @@ def _set_descriptive_text(sheet: CharacterSheet, draft: CharacterDraft) -> bool:
     """Apply descriptive/profile text fields from the draft's draft_data.
 
     additional_desc is appearance text (stays on the sheet); the narrative bio
-    lives on true_profile now (#1270). Origin story: assemble prose from
-    structured slots, picked choices, group anchors, and named figures
-    (#2478, #3617, #3660), filtered to the slots visible on the resolved
-    family path. Returns whether any Upbringing answer was present, so the
-    caller can refresh state.
+    lives on true_profile now (#1270). The Background is the one free text the
+    player wrote at Final Touches, word for word (#5178, ruled 2026-11-17): nothing
+    the game composes from the answers or the picks is added to it, and a player
+    who wrote nothing has an empty Background. The Upbringing answers and the
+    beats are still written as rows (#2478, #3617, #3660, #4124), the answers
+    filtered to the slots visible on the resolved family path. Returns whether any
+    Upbringing answer was present, so the caller can refresh state.
     """
     draft_data = draft.draft_data
     if draft_data.get("description"):
@@ -1673,16 +1663,10 @@ def _set_descriptive_text(sheet: CharacterSheet, draft: CharacterDraft) -> bool:
     )
     if answers_present:
         _finalize_origin_slots(sheet, draft, draft.visible_origin_slot_ids())
-    beats_taken = _finalize_beats(sheet, draft)
-    from world.character_creation.offers import RECENT_HISTORY_KEY  # noqa: PLC0415
-
-    recent_history = str(draft_data.get(RECENT_HISTORY_KEY) or "").strip()
-    if answers_present or beats_taken or recent_history:
-        # The told background starts as a draft from the answers and the beats
-        # (#4124); the player edits it on the sheet from there. Recent History, when
-        # written, opens it as the lead-in paragraph (#4830, ruled 2026-10-31).
-        told = assemble_origin_prose(sheet)
-        profile.background = "\n\n".join(part for part in (recent_history, told) if part)
+    _finalize_beats(sheet, draft)
+    background = draft_data.get(BACKGROUND_KEY)
+    if isinstance(background, str) and background.strip():
+        profile.background = background.strip()
     # The Actor's Sheet answers (#3621), like concept and quote: set directly at CG; the
     # versioned write path takes over on the first post-CG edit.
     for key, _copy_key in ACTOR_SHEET_QUESTIONS:
@@ -3569,9 +3553,10 @@ def clear_origin_slot(sheet: CharacterSheet, slot: OriginTemplateSlot) -> None:
 def assemble_origin_prose(sheet: CharacterSheet) -> str:
     """Compose the frame narrative + slot answers into prose.
 
-    Pure template concatenation — no LLM. Called at finalize and on
-    sheet-editor save. Returns empty string when the sheet has no slots
-    filled.
+    Pure template concatenation, no LLM. Read by the Durance testament
+    (``progression.services.durance_registration``); since #5178 it is no longer
+    written into ``Profile.background``, which is the player's own text. Returns
+    an empty string when the sheet has no answers and no beats.
     """
     rows = list(
         sheet.origin_slots.select_related("slot__template", "choice", "beat").order_by(
@@ -3580,8 +3565,7 @@ def assemble_origin_prose(sheet: CharacterSheet) -> str:
     )
     slots = [row for row in rows if row.slot_id is not None]
     beats = [row for row in rows if row.beat_id is not None]
-    stages = {row.life_stage: row.value for row in rows if row.life_stage}
-    if not slots and not beats and not stages:
+    if not slots and not beats:
         return ""
 
     lines: list[str] = []
@@ -3589,7 +3573,7 @@ def assemble_origin_prose(sheet: CharacterSheet) -> str:
     if template is not None:
         lines += [template.frame_narrative, ""]
     lines.extend(_origin_slot_lines(slots))
-    lines.extend(_origin_beat_lines(beats, stages))
+    lines.extend(_origin_beat_lines(beats))
     return "\n".join(lines).strip()
 
 
@@ -3605,11 +3589,11 @@ def _origin_slot_lines(slots: list[CharacterOriginSlot]) -> list[str]:
     return lines
 
 
-def _origin_stage_lines(label: str, rows: list[CharacterOriginSlot], paragraph: str) -> list[str]:
+def _origin_stage_lines(label: str, rows: list[CharacterOriginSlot]) -> list[str]:
     """Render one stage and its known beats."""
-    if rows and all(row.unknown for row in rows):
+    if all(row.unknown for row in rows):
         return [f"{label}: unknown", ""]
-    lines = [label, paragraph, ""] if paragraph else []
+    lines: list[str] = []
     for row in rows:
         if row.unknown:
             continue
@@ -3620,28 +3604,24 @@ def _origin_stage_lines(label: str, rows: list[CharacterOriginSlot], paragraph: 
     return lines
 
 
-def _origin_beat_lines(
-    beats: list[CharacterOriginSlot], stages: dict[str, str] | None = None
-) -> list[str]:
+def _origin_beat_lines(beats: list[CharacterOriginSlot]) -> list[str]:
     """Render the life by stage, in chronological order.
 
     The beats in the order of a life (#4124): the stage, the beat, the line the player
-    wrote under it. The life page (#4872) adds the stage's own paragraph before its
-    beats, and a stage every one of whose beats is unknown reads "<Stage>: unknown"
-    and nothing more; an unknown beat under a stage otherwise told says nothing.
+    wrote under it. A stage every one of whose beats is unknown reads
+    "<Stage>: unknown" and nothing more; an unknown beat under a stage otherwise told
+    says nothing.
     """
     from world.character_creation.offers import LIFE_STAGE_ORDER  # noqa: PLC0415
 
-    stages = stages or {}
     beats.sort(key=lambda r: (LIFE_STAGE_ORDER.get(r.beat.life_stage, 99), r.beat.sort_order))
     by_stage: dict[str, list[CharacterOriginSlot]] = defaultdict(list)
     for row in beats:
         by_stage[row.beat.life_stage].append(row)
     lines: list[str] = []
-    for stage in sorted(set(by_stage) | set(stages), key=lambda v: LIFE_STAGE_ORDER.get(v, 99)):
-        rows = by_stage.get(stage, [])
+    for stage in sorted(by_stage, key=lambda v: LIFE_STAGE_ORDER.get(v, 99)):
         label = LifeStage(stage).label if stage in LifeStage.values else stage
-        lines.extend(_origin_stage_lines(label, rows, stages.get(stage, "")))
+        lines.extend(_origin_stage_lines(label, by_stage[stage]))
     return lines
 
 

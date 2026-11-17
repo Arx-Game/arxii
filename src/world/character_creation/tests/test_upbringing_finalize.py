@@ -10,7 +10,11 @@ from world.character_creation.factories import (
     OriginTemplateSlotFactory,
 )
 from world.character_creation.models import CharacterOriginSlot
-from world.character_creation.services import finalize_character, set_family_path
+from world.character_creation.services import (
+    assemble_origin_prose,
+    finalize_character,
+    set_family_path,
+)
 from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
 from world.roster.constants import COMMONER_KIND_NAME, CRIME_KIND_NAME
 from world.roster.factories import FamilyFactory, FamilyKindFactory, KinSlotPoolFactory
@@ -49,7 +53,10 @@ class NamedFamilyFinalizeTest(FinalizationTestMixin, TestCase):
         row = CharacterOriginSlot.objects.get(sheet=sheet, slot=slot)
         assert row.value == "We kept the cisterns."
         assert row.choice is None
-        assert "We kept the cisterns." in sheet.background
+        # The answer is a row and a line of the composed prose; the Background is the
+        # player's own text (#5178), and none was written here.
+        assert "We kept the cisterns." in assemble_origin_prose(sheet)
+        assert sheet.background == ""
 
     def test_named_family_surname_used_in_character_name(self) -> None:
         """The family is created (and its name used) before the character name (#3617).
@@ -109,8 +116,10 @@ class ClaimedFamilyFinalizeTest(FinalizationTestMixin, TestCase):
 
         row = CharacterOriginSlot.objects.get(sheet=sheet, slot=slot)
         assert row.choice == head
-        assert "Your place in it?" in sheet.background
-        assert "Head of the family" in sheet.background
+        told = assemble_origin_prose(sheet)
+        assert "Your place in it?" in told
+        assert "Head of the family" in told
+        assert sheet.background == ""
         assert sheet.family == family
 
 

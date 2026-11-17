@@ -10,7 +10,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0452_remove_sineating_costs"),
+        ("arxii", "0454_remove_sineating_costs"),
     ]
 
     operations = [

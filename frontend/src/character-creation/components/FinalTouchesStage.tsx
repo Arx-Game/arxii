@@ -55,7 +55,12 @@ import type {
   GoalHorizon,
   TieKind,
 } from '../types';
-import { CRIME_LINE_MAX_LENGTH, PRESTIGE_STORY_MAX_LENGTH, Stage } from '../types';
+import {
+  BACKGROUND_MAX_LENGTH,
+  CRIME_LINE_MAX_LENGTH,
+  PRESTIGE_STORY_MAX_LENGTH,
+  Stage,
+} from '../types';
 
 interface FinalTouchesStageProps {
   draft: CharacterDraft;
@@ -376,6 +381,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
     protect: draftData.protect ?? '',
     fear: draftData.fear ?? '',
   });
+  const [background, setBackground] = useState(draftData.background ?? '');
   const keyCounterRef = useRef(0);
   const [keyedGoals, setKeyedGoals] = useState<KeyedGoal[]>(() =>
     (draftData.goals ?? []).map((goal) => ({
@@ -437,6 +443,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
   // --- save on leave -------------------------------------------------------------
   const payloadRef = useRef({
     answers,
+    background,
     goals,
     enemy,
     intros,
@@ -449,6 +456,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
   });
   payloadRef.current = {
     answers,
+    background,
     goals,
     enemy,
     intros,
@@ -471,6 +479,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
         protect: draftData.protect ?? '',
         fear: draftData.fear ?? '',
       },
+      background: draftData.background ?? '',
       goals: (draftData.goals ?? []).map((g) => ({ ...g, horizon: g.horizon ?? 'short_term' })),
       enemy: draftData.enemy ?? null,
       intros: { ...EMPTY_INTRODUCTIONS, ...(draftData.introductions ?? {}) },
@@ -482,12 +491,26 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
       ties: draftData.ties ?? {},
     });
     hasChangesRef.current = current !== server;
-  }, [answers, goals, enemy, intros, face, crime, stories, orgPicks, alterEgo, ties, draftData]);
+  }, [
+    answers,
+    background,
+    goals,
+    enemy,
+    intros,
+    face,
+    crime,
+    stories,
+    orgPicks,
+    alterEgo,
+    ties,
+    draftData,
+  ]);
 
   const save = useCallback(async () => {
     if (!hasChangesRef.current) return true;
     const {
       answers: a,
+      background: b,
       goals: g,
       enemy: e,
       intros: i,
@@ -504,6 +527,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
         data: {
           draft_data: {
             ...a,
+            background: b,
             goals: g,
             enemy: e,
             introductions: i,
@@ -1160,6 +1184,27 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
           </Field>
         </>
       )}
+
+      {/* The character's Background (#5178, owner ruling 2026-11-17): one box, the only
+          free text about the life; a second face writes its own inside its door below. */}
+      <h2 className="section-h" id="background-heading">
+        {copy?.finaltouches_background_heading ?? 'Background'}
+      </h2>
+      <div className="field">
+        <textarea
+          id="background"
+          className="background-text"
+          aria-labelledby="background-heading"
+          rows={8}
+          maxLength={BACKGROUND_MAX_LENGTH}
+          placeholder={
+            copy?.finaltouches_background_placeholder ??
+            'You can write an optional description of the character’s background, and it will be listed as their Background on the character sheet.'
+          }
+          value={background}
+          onChange={(e) => setBackground(e.target.value)}
+        />
+      </div>
 
       {prompts.includes('officially_dead') && (
         <IntroductionBlock

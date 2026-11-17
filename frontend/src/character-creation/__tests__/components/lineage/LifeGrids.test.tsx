@@ -2,10 +2,10 @@
  * The life as folds (#4874, slice 9 of #4813): every stage and every section open on
  * arrival, each folding by itself (#5160); a folded stage a heading and a count, a folded
  * section its answers or the beat's own prompt with the first name; Unknown a mark on the
- * stage; a secret pick with a cover story; Background Notes per stage; grouped answers;
- * signed prices; a term's definition; a figure's name on a person card; the choices list;
- * the life so far. Every life still ends on the Recent History box (#4830), and a
- * beginning that strikes every stage shows its text where the stage rows would be.
+ * stage; a secret pick with a cover story; grouped answers; signed prices; a term's
+ * definition; a figure's name on a person card; the choices list; the life so far. The
+ * page holds no free-text box about the life (#5178: the Background is one box on Final
+ * Touches), and a beginning that strikes every stage shows its text and nothing else.
  */
 import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -468,9 +468,6 @@ describe('LifeGrids', () => {
     expect(within(before).getByText('Unknown', { selector: '.prog' })).toBeInTheDocument();
     // The sections stay, so each Amnesiac card can be taken back.
     expect(within(before).getAllByRole('article')).toHaveLength(2);
-    expect(within(before).queryByLabelText('Background Notes')).toBeNull();
-    // The stages that are not unknown keep the box.
-    expect(within(stage('Childhood')).getByLabelText('Background Notes')).toBeInTheDocument();
   });
 
   it('a secret pick on a one-of row opens the Cover story box and the next card becomes the cover', async () => {
@@ -563,52 +560,29 @@ describe('LifeGrids', () => {
     });
   });
 
-  it('each stage ends on Background Notes, saved on blur with the other stages kept (#5160)', async () => {
-    const user = userEvent.setup();
-    const draft = createMockDraft({ draft_data: { stage_descriptions: { youth: 'Wild years.' } } });
-    renderWithCharacterCreationProviders(<LifeGrids draft={draft} copy={{}} />);
-    // One box per stage, every one on the page at once.
-    expect(screen.getAllByLabelText('Background Notes')).toHaveLength(3);
-    expect(screen.queryByText(/Description \(Optional\)/)).toBeNull();
-    const box = within(stage('Childhood')).getByLabelText('Background Notes');
-    expect(box).toHaveAttribute('maxlength', '1000');
-    // The owner's sentence, word for word, is the empty box's placeholder.
-    expect(box).toHaveAttribute(
-      'placeholder',
-      'You can write an optional description of what this stage of the character’s life was like, and it will be added to their listed Background on the character sheet.'
-    );
-    // A stage that has text shows the text.
-    expect(within(stage('Youth')).getByLabelText('Background Notes')).toHaveValue('Wild years.');
-    await user.click(box);
-    await user.tab();
-    expect(mutateAsync).not.toHaveBeenCalled();
-    await user.type(box, 'Soft hands, hard lessons.');
-    await user.tab();
-    expect(mutateAsync).toHaveBeenLastCalledWith({
-      draftId: draft.id,
-      data: {
-        draft_data: {
-          stage_descriptions: { youth: 'Wild years.', childhood: 'Soft hands, hard lessons.' },
-        },
-      },
+  it('the page has no free-text box about the life: no stage notes and no Recent History (#5178)', () => {
+    // A draft saved before the change still holds the retired texts; none is shown.
+    const draft = createMockDraft({
+      draft_data: {
+        stage_descriptions: { youth: 'Wild years.' },
+        recent_history: 'A debt in Umbros.',
+      } as Record<string, unknown>,
     });
-    expect(screen.queryByLabelText(/in your words/)).toBeNull();
-  });
-
-  it('the label and the placeholder are staff copy, and the retired label key is not read (#5160)', () => {
     renderWithCharacterCreationProviders(
       <LifeGrids
-        draft={createMockDraft()}
+        draft={draft}
         copy={{
-          life_stage_notes_label: 'Notes on these years',
-          life_stage_notes_placeholder: 'Staff placeholder.',
-          life_stage_description_label: 'Description (Optional)',
+          life_stage_notes_label: 'Background Notes',
+          life_recent_history_label: 'Recent History (Optional)',
         }}
       />
     );
-    const box = within(stage('Childhood')).getByLabelText('Notes on these years');
-    expect(box).toHaveAttribute('placeholder', 'Staff placeholder.');
-    expect(screen.queryByText('Description (Optional)')).toBeNull();
+    expect(screen.getAllByRole('region').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Background Notes')).toBeNull();
+    expect(screen.queryByText(/Recent History/)).toBeNull();
+    expect(screen.queryByDisplayValue('Wild years.')).toBeNull();
+    expect(screen.queryByDisplayValue('A debt in Umbros.')).toBeNull();
+    expect(document.querySelector('.life textarea')).toBeNull();
   });
 
   it('the choices list every pick under its stage and print no totals, and the life so far (#5148)', async () => {
@@ -692,33 +666,7 @@ describe('LifeGrids', () => {
     expect(screen.getByText(/^0 taken, \d+ of \d+ points spent$/)).toBeInTheDocument();
   });
 
-  it('every life ends on the Recent History box, under the last stage, saved on blur', async () => {
-    const user = userEvent.setup();
-    const draft = createMockDraft({ draft_data: { recent_history: 'A debt in Umbros.' } });
-    renderWithCharacterCreationProviders(<LifeGrids draft={draft} copy={{}} />);
-    const box = screen.getByLabelText('Recent History (Optional)');
-    expect(box).toHaveValue('A debt in Umbros.');
-    expect(box).toHaveAttribute('maxlength', '2000');
-    expect(
-      screen.getByText('What you want a GM or another player to pick up.')
-    ).toBeInTheDocument();
-    const order = Array.from(box.closest('.life')!.children).map((el) => el.className);
-    const at = order.indexOf('field recent-history');
-    expect(at).toBeGreaterThan(order.lastIndexOf('stage-acc'));
-    expect(at).toBeLessThan(order.indexOf('life-foot'));
-    await user.click(box);
-    await user.tab();
-    expect(mutateAsync).not.toHaveBeenCalled();
-    await user.clear(box);
-    await user.type(box, 'Someone is looking for a man with my name.');
-    await user.tab();
-    expect(mutateAsync).toHaveBeenLastCalledWith({
-      draftId: draft.id,
-      data: { draft_data: { recent_history: 'Someone is looking for a man with my name.' } },
-    });
-  });
-
-  it('a beginning that strikes every stage shows its text where the stages were, then the box', () => {
+  it('a beginning that strikes every stage shows its text where the stages were, and nothing to fill in', () => {
     pool = [];
     const sleeper = {
       ...mockBeginningsUnknownFamily,
@@ -733,8 +681,8 @@ describe('LifeGrids', () => {
     expect(text).toHaveClass('absent');
     expect(screen.queryAllByRole('region')).toHaveLength(0);
     expect(screen.queryByText(/points spent$/)).toBeNull();
-    const box = screen.getByLabelText('Recent History (Optional)');
-    expect(text.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(document.querySelector('.life textarea')).toBeNull();
+    expect(screen.queryByText(/Recent History/)).toBeNull();
   });
 
   it('a struck beginning with no text authored yet shows the fallback line', () => {
@@ -749,18 +697,15 @@ describe('LifeGrids', () => {
     renderWithCharacterCreationProviders(
       <LifeGrids draft={createMockDraft({ selected_beginnings: sleeper })} copy={{}} />
     );
-    expect(
-      screen.getByText('Every stage of this life is struck. What there is to say begins below.')
-    ).toHaveClass('absent');
+    expect(screen.getByText('Every stage of this life is struck.')).toHaveClass('absent');
   });
 
-  it('an empty pool on a beginning that keeps its stages shows the box alone', () => {
+  it('an empty pool on a beginning that keeps its stages shows nothing', () => {
     pool = [];
-    renderWithCharacterCreationProviders(
+    const { container } = renderWithCharacterCreationProviders(
       <LifeGrids draft={createMockDraft({ selected_beginnings: mockBeginnings })} copy={{}} />
     );
-    expect(screen.getByLabelText('Recent History (Optional)')).toBeInTheDocument();
-    expect(document.querySelector('.absent')).toBeNull();
+    expect(container.querySelector('.life')).toBeNull();
     expect(screen.queryByText(/points spent$/)).toBeNull();
   });
 });

@@ -96,17 +96,17 @@ class LifePointsLiveSeedTests(APITestCase):
             sorted([by_name[first.costly_card], by_name[first.paying_card]]),
         )
         self.assertEqual(beats[1]["answer_offer_ids"], [by_name[first.later_card]])
-        # A stage's paragraph is kept as sent, and an emptied one is accepted (the
-        # browser spec writes one, reads it back after a reload, and empties it).
+        # The Background is kept as sent, and an emptied one is accepted (the browser
+        # spec writes one at Final Touches, reads it back after a reload, and empties it).
         for text in ("Kept the ledgers.", ""):
             saved = self.client.patch(
                 f"{base}/",
-                {"draft_data": {"stage_descriptions": {"childhood": text}}},
+                {"draft_data": {"background": text}},
                 format="json",
             )
             self.assertEqual(saved.status_code, 200, saved.content)
-            held = self.client.get(f"{base}/").json()["draft_data"]["stage_descriptions"]
-            self.assertEqual(held, {"childhood": text})
+            held = self.client.get(f"{base}/").json()["draft_data"]["background"]
+            self.assertEqual(held, text)
         # Another account's draft, on another beginning, never meets the beat.
         other = AccountFactory(username="someone_else")
         elsewhere = CharacterDraftFactory(account=other, selected_beginnings=BeginningsFactory())

@@ -1,8 +1,9 @@
 /**
  * Stage 9: Identity (#3630).
  *
- * Name, concept, quote and background as writing fields on the hairline;
- * worship stays a native select (the catalog is long). The record rail lists
+ * Name, concept and quote as writing fields on the hairline; worship stays a
+ * native select (the catalog is long). The Background is written on Final
+ * Touches (#5178), and this stage neither reads nor saves it. The record rail lists
  * the choices made so far, including the full-name preview this stage
  * computes; the one mechanically-loaded explanation (a secret worship mints
  * a Secret others might uncover) lives in the margin rather than under a
@@ -25,7 +26,6 @@ interface IdentityStageProps {
 interface IdentityFormValues {
   concept: string;
   quote: string;
-  background: string;
 }
 
 export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStageProps) {
@@ -48,7 +48,6 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
     defaultValues: {
       concept: draftData.concept ?? '',
       quote: draftData.quote ?? '',
-      background: draftData.background ?? '',
     },
   });
 

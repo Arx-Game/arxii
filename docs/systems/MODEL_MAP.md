@@ -1702,7 +1702,6 @@
 - `select_origin_template(draft: 'CharacterDraft', template: 'OriginTemplate') -> 'None' - Choose the draft's Upbringing; a change resets everything downstream of it (#3617).`
 - `set_family_path(draft: 'CharacterDraft', path: 'str') -> 'None' - Pick the family path when the Upbringing allows more than one (#3617).`
 - `set_origin_slot(sheet: 'CharacterSheet', slot: 'OriginTemplateSlot', value: 'str', choice: 'OriginTemplateSlotChoice | None' = None, *, organization: 'Organization | None | _Keep' = <world.character_creation.services._Keep object>, figure_name: 'str | _Keep' = <world.character_creation.services._Keep object>) -> 'None' - Upsert a character's answer (text, picked choice, anchor, person), then refresh state.`
-- `stage_descriptions(draft: 'CharacterDraft') -> 'dict[str, str]' - Life stage value -> the paragraph the player wrote for it (#4872), blanks dropped.`
 - `submit_draft_for_review(draft: 'CharacterDraft', *, submission_notes: 'str' = '') -> 'DraftApplication' - Submit a character draft for staff review.`
 - `unsubmit_draft(application: 'DraftApplication') -> 'None' - Un-submit a draft application, returning it to editable state.`
 - `withdraw_draft(application: 'DraftApplication') -> 'None' - Withdraw a draft application.`

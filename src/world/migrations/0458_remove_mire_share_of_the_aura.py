@@ -19,7 +19,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0455_impulses_config_and_shown"),
+        ("arxii", "0457_impulses_config_and_shown"),
     ]
 
     operations = [

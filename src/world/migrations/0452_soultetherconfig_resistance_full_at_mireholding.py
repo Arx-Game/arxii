@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0449_delete_atonement_rite_ritual"),
+        ("arxii", "0451_drop_origin_slot_life_stage"),
     ]
 
     operations = [

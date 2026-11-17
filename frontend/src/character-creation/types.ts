@@ -1110,17 +1110,11 @@ export interface DraftData {
   // The beats of the life (#4124): beat id -> taken / unknown / the optional line.
   // The whole map is sent on every save; a beat absent from it is not taken.
   beats?: Record<string, DraftBeatState>;
-  // The optional text a life ends on (#4830), up to RECENT_HISTORY_MAX_LENGTH characters;
-  // finalize writes it as the lead-in paragraph of the background.
-  recent_history?: string;
   /**
    * The beginning whose suggested life was last loaded into this draft (#4865): the leaf
    * loads the life once per beginning and never over one the player edited or cleared.
    */
   life_loaded_for?: number;
-  // One paragraph per life stage (#4874), up to STAGE_DESCRIPTION_MAX_LENGTH characters
-  // each; finalize prints it under the stage's name in the told background.
-  stage_descriptions?: Record<string, string>;
   // The name given to a newly founded family on the 'named' family path (#3617)
   new_family_name?: string;
   concept?: string;
@@ -1692,9 +1686,9 @@ export interface BeatPoolEntry {
   allowance_is_points: boolean;
 }
 
-/** The most a Recent History may run (#4830); mirrors the backend's
- * `RECENT_HISTORY_MAX_LENGTH`, which refuses a longer one naming this number. */
-export const RECENT_HISTORY_MAX_LENGTH = 2000;
+/** The most the Background may run (#5178); mirrors the backend's
+ * `BACKGROUND_MAX_LENGTH`, which refuses a longer one naming this number. */
+export const BACKGROUND_MAX_LENGTH = 4000;
 
 /** The draft's own state on one beat, under `draft_data.beats[<beat_id>]` (#4124). */
 export interface DraftBeatState {
@@ -1711,8 +1705,6 @@ export interface DraftBeatState {
   figures?: Record<string, string>;
 }
 
-/** The server's `STAGE_DESCRIPTION_MAX_LENGTH` (#4874): one paragraph per stage. */
-export const STAGE_DESCRIPTION_MAX_LENGTH = 1000;
 /** The server's `FIGURE_NAME_MAX_LENGTH` (#4874): a figure's name on a person card. */
 export const FIGURE_NAME_MAX_LENGTH = 60;
 

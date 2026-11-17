@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0450_soultetherconfig_resistance_full_at_mireholding"),
+        ("arxii", "0452_soultetherconfig_resistance_full_at_mireholding"),
     ]
 
     operations = [
