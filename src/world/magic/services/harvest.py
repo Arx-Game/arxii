@@ -206,11 +206,12 @@ def _take_from_place(
         taken = min(outcome.amount_taken, held)
         quantity = _scaled_quantity(outcome, taken)
         if taken > 0:
+            # Mint first: a failed mint rolls back and leaves the cached row untouched.
+            mint_primum_items(sheet, substance, quantity, outcome.quality_tier)
             row = PlacePrimum.objects.get(pk=pk)
             row.stored_amount = held - taken
             row.stamped_at = now
             row.save(update_fields=["stored_amount", "stamped_at"])
-            mint_primum_items(sheet, substance, quantity, outcome.quality_tier)
     return taken, quantity
 
 
@@ -236,11 +237,12 @@ def _take_from_creature(
         ) or 0
         taken = min(outcome.amount_taken, held)
         quantity = _scaled_quantity(outcome, taken)
+        if taken > 0:
+            # Mint first: a failed mint rolls back and leaves the cached row untouched.
+            mint_primum_items(sheet, substance, quantity, outcome.quality_tier)
         row = CombatOpponent.objects.get(pk=foe.pk)
         row.primum_harvested_at = timezone.now()
         row.save(update_fields=["primum_harvested_at"])
-        if taken > 0:
-            mint_primum_items(sheet, substance, quantity, outcome.quality_tier)
     return taken, quantity
 
 

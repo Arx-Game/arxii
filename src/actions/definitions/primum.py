@@ -24,16 +24,22 @@ if TYPE_CHECKING:
     from world.magic.models import Substance
 
 
-def _find_substance(wanted: object) -> Substance | None:
-    """The substance named by its name (any case) or its pk, or None."""
-    from world.magic.models import Substance  # noqa: PLC0415
+def _offered_substance(actor: ObjectDB, wanted: object) -> Substance | None:  # noqa: OBJECTDB_PARAM - the acting character
+    """The substance named by name (any case) or pk, only among what the actor is offered.
 
-    text = str(wanted or "").strip()
+    A substance she does not perceive is not among her offers, so a pk or a name for it
+    behaves like an unknown one.
+    """
+    from world.magic.models import Substance  # noqa: PLC0415
+    from world.magic.services.harvest import harvest_offers  # noqa: PLC0415
+
+    text = str(wanted or "").strip().lower()
     if not text:
         return None
-    if text.isdigit():
-        return Substance.objects.filter(pk=int(text)).first()
-    return Substance.objects.filter(name__iexact=text).first()
+    for offer in harvest_offers(actor):
+        if text == str(offer.substance_id) or text == offer.substance_name.lower():
+            return Substance.objects.get(pk=offer.substance_id)
+    return None
 
 
 def _find_foe(actor: ObjectDB, opponent_id: object) -> CombatOpponent | None:  # noqa: OBJECTDB_PARAM - the acting character
@@ -70,7 +76,7 @@ class HarvestPrimumAction(Action):
     ) -> ActionResult:
         from world.magic.services.harvest import NOTHING_LEFT_MESSAGE, harvest  # noqa: PLC0415
 
-        found = _find_substance(substance)
+        found = _offered_substance(actor, substance)
         foe = _find_foe(actor, opponent_id) if opponent_id not in (None, "") else None
         if found is None or (opponent_id not in (None, "") and foe is None):
             return ActionResult(success=False, message=NOTHING_LEFT_MESSAGE)
@@ -78,8 +84,10 @@ class HarvestPrimumAction(Action):
             result = harvest(actor, substance=found, opponent=foe)
         except HarvestNotConfigured as err:
             return ActionResult(success=False, message=err.user_message)
+        if not result.harvested:
+            return ActionResult(success=False, message=result.message)
         return ActionResult(
-            success=result.harvested,
+            success=True,
             message=result.message,
             data={
                 "substance": result.substance_name,

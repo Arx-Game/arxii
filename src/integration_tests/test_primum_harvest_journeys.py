@@ -25,6 +25,7 @@ from world.combat.factories import (
     CombatOpponentFactory,
     CreatureTemplateFactory,
 )
+from world.combat.models import CombatOpponent
 from world.items.factories import ItemTemplateFactory, QualityTierFactory
 from world.items.models import ItemInstance
 from world.locations.constants import StatKey
@@ -119,6 +120,29 @@ class _Lair(ResonanceCacheIsolationMixin, JourneyCase):
             status=OpponentStatus.DEFEATED,
         )
 
+    @staticmethod
+    def stored(lair: PlacePrimum) -> int:
+        """The lair's stored Primum as the database holds it, not the cached instance."""
+        return PlacePrimum.objects.filter(pk=lair.pk).values_list("stored_amount", flat=True).get()
+
+    @staticmethod
+    def held(lair: PlacePrimum) -> int:
+        """The Primum the lair holds now, from the database row."""
+        values = (
+            PlacePrimum.objects.filter(pk=lair.pk)
+            .values("stored_amount", "stamped_at", "refill_per_day", "capacity", "is_finite")
+            .get()
+        )
+        return PlacePrimum.amount_at(**values)
+
+    @staticmethod
+    def harvested_at(foe):
+        return (
+            CombatOpponent.objects.filter(pk=foe.pk)
+            .values_list("primum_harvested_at", flat=True)
+            .get()
+        )
+
     def hand_of(self, who) -> int:
         """The Primum items ``who`` carries."""
         return sum(
@@ -148,7 +172,7 @@ class ExtractingFromALair(_Lair):
         self.assertTrue(result.detail.success, result.detail.message)
         self.assertEqual(result.detail.message, EXTRACTED)
         self.assertEqual((self.hand_of(self.mira), self.hand_of(self.tomas)), (2, 2))
-        self.assertEqual(PlacePrimum.objects.get(pk=lair.pk).stored_amount, 10)
+        self.assertEqual(self.stored(lair), 10)
         item = ItemInstance.objects.get(
             template=self.primum, holder_character_sheet=self.mira.sheet_data
         )
@@ -163,7 +187,7 @@ class ExtractingFromALair(_Lair):
         third = self.extract(self.mira, "extract fire")
 
         self.assertEqual(self.hand_of(self.mira), 3)
-        self.assertEqual(PlacePrimum.objects.get(pk=lair.pk).stored_amount, 0)
+        self.assertEqual(self.stored(lair), 0)
         self.assertIn(NOTHING_LEFT, third)
 
     def test_finite_place_goes_dead_and_is_no_longer_offered(self) -> None:
@@ -181,15 +205,15 @@ class ExtractingFromALair(_Lair):
     def test_slow_refill_gives_stock_back_over_days(self) -> None:
         lair = self.stock(10, refill_per_day=2)
         self.extract(self.mira, "extract fire")  # 10 -> 5, stamped now
-        drained = PlacePrimum.objects.get(pk=lair.pk)
-        self.assertEqual(drained.current_amount(), 5)
+        self.assertEqual(self.held(lair), 5)
 
+        drained = PlacePrimum.objects.get(pk=lair.pk)
         drained.stamped_at = timezone.now() - timedelta(days=2)
         drained.save(update_fields=["stamped_at"])
-        self.assertEqual(drained.current_amount(), 9)
+        self.assertEqual(self.held(lair), 9)
         self.extract(self.mira, "extract fire")
 
-        self.assertEqual(PlacePrimum.objects.get(pk=lair.pk).stored_amount, 4)
+        self.assertEqual(self.stored(lair), 4)
         self.assertEqual(self.hand_of(self.mira), 4)
 
 
@@ -207,8 +231,7 @@ class ExtractingFromASlainCreature(_Lair):
         self.assertIn(EXTRACTED, first)
         self.assertIn(NOTHING_LEFT, second)
         self.assertEqual((self.hand_of(self.mira), self.hand_of(self.tomas)), (2, 0))
-        foe.refresh_from_db()
-        self.assertIsNotNone(foe.primum_harvested_at)
+        self.assertIsNotNone(self.harvested_at(foe))
 
     def test_a_creature_gives_up_no_more_than_it_carries(self) -> None:
         self.slain_elemental(carries=3)
@@ -244,6 +267,16 @@ class WhatIsOffered(_Lair):
         )
         self.assertEqual(self.hand_of(stranger), 0)
         self.assertEqual(self.hand_of(self.mira), 0)
+
+    def test_an_unperceived_substance_asked_for_by_pk_is_refused_without_naming_it(self) -> None:
+        ice = SubstanceFactory(name="ice")
+        PlacePrimumFactory(room_profile=self.profile, substance=ice, capacity=20, stored_amount=20)
+
+        result = self.web(self.mira, "harvest_primum", substance=ice.pk)
+
+        self.assertFalse(result.detail.success)
+        self.assertEqual(result.detail.message, NOTHING_LEFT)
+        self.assertNotIn("ice", str(result.detail.data).lower())
 
 
 class TheRoll(_Lair):
@@ -295,7 +328,7 @@ class WhenTheTuningIsIncomplete(_Lair):
 
         self.assertIn("Primum cannot be extracted yet.", unset_check)
         self.assertIn("Primum cannot be extracted yet.", no_item)
-        self.assertEqual(PlacePrimum.objects.get(pk=lair.pk).stored_amount, 20)
+        self.assertEqual(self.stored(lair), 20)
         self.assertEqual(ItemInstance.objects.filter(template=self.primum).count(), 0)
 
     def test_a_roll_with_no_outcome_row_takes_nothing_and_can_be_tried_again(self) -> None:
@@ -307,8 +340,7 @@ class WhenTheTuningIsIncomplete(_Lair):
 
         self.assertIn("You draw out no Primum.", failed)
         self.assertIn(EXTRACTED, retried)
-        foe.refresh_from_db()
-        self.assertIsNotNone(foe.primum_harvested_at)
+        self.assertIsNotNone(self.harvested_at(foe))
 
 
 class APrimumItemFromAMission(_Lair):

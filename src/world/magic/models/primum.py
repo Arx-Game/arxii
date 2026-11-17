@@ -51,7 +51,10 @@ class PlacePrimum(NaturalKeyMixin, SharedMemoryModel):
         help_text="The most Primum the place can hold of this substance.",
     )
     stored_amount = models.PositiveIntegerField(
-        help_text="The Primum held when the place was last stamped.",
+        help_text=(
+            "How much Primum this place holds. Refill days add to it; "
+            "changing it here starts the refill count again."
+        ),
     )
     stamped_at = models.DateTimeField(
         default=timezone.now,
