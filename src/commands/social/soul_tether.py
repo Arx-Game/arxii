@@ -23,11 +23,8 @@ from world.magic.constants import SoulTetherRole as _SoulTetherRoleDB, TargetKin
 from world.magic.exceptions import SoulTetherError
 from world.magic.models import Thread
 from world.magic.models.affinity import Resonance
-from world.magic.models.soul_tether import (
-    MireHolding,
-    PendingStageAdvanceOffer,
-    SineatingPendingOffer,
-)
+from world.magic.models.soul_tether import PendingStageAdvanceOffer, SineatingPendingOffer
+from world.magic.services.mire import mire_carried_by
 from world.magic.services.soul_tether import (
     accept_soul_tether,
     dissolve_soul_tether,
@@ -438,9 +435,7 @@ class CmdSineater(ArxCommand):
         offers = SineatingPendingOffer.objects.filter(
             sineater_sheet=caller_sheet,
         ).select_related("sinner_sheet__character", "resonance")
-        holdings = MireHolding.objects.filter(
-            relationship__source=caller_sheet, amount__gt=0
-        ).select_related("relationship__target__character", "resonance")
+        carried = mire_carried_by(caller_sheet)
 
         lines = []
         if offers:
@@ -450,11 +445,11 @@ class CmdSineater(ArxCommand):
                 f"{offer.resonance.name}."
                 for offer in offers
             )
-        if holdings:
+        if carried:
             lines.append("You carry:")
             lines.extend(
-                f"  {holding.amount} of {holding.relationship.target.character.key}'s "
-                f"corruption in {holding.resonance.name}."
-                for holding in holdings
+                f"  {row.amount} of {row.sinner_name}'s corruption in {row.resonance_name} "
+                f"({row.label})."
+                for row in carried
             )
         self.msg("\n".join(lines) if lines else "No pleas await you, and you carry nothing.")
