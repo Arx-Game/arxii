@@ -68,6 +68,7 @@ from world.relationships.factories import (
     RelationshipTypeFactory,
 )
 from world.relationships.models import CharacterRelationship
+from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.seeds.modifier_values import seed_pool_and_cap_lanes
 
 # ---------------------------------------------------------------------------
@@ -739,6 +740,47 @@ class AcceptSoulTetherIdempotencyTests(TestCase):
                 ritual_components=[],
             )
         self.assertIn("already exists", ctx.exception.user_message)
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)
+class AcceptSoulTetherOnePlayerTests(TestCase):
+    """One account that plays both characters cannot bond them: it would ask as one and
+    perform as the other (#5177)."""
+
+    def setUp(self) -> None:
+        self.resonance = ResonanceFactory()
+        self.sinner, self.sineater = _make_eligible_pair()
+
+    def _form(self) -> None:
+        accept_soul_tether(
+            initiator_sheet=self.sinner,
+            partner_sheet=self.sineater,
+            sinner_role=SoulTetherRoleEnum.SINNER,
+            resonance=self.resonance,
+            ritual_components=[],
+        )
+
+    def test_one_account_playing_both_sides_is_refused(self) -> None:
+        player = PlayerDataFactory()
+        for sheet in (self.sinner, self.sineater):
+            RosterTenureFactory(
+                player_data=player, roster_entry=RosterEntryFactory(character_sheet=sheet)
+            )
+
+        with self.assertRaises(SoulTetherFormationError) as ctx:
+            self._form()
+
+        self.assertEqual(
+            ctx.exception.user_message,
+            "You cannot form a Soul Tether between two characters you play.",
+        )
+        self.assertFalse(CharacterRelationship.objects.filter(is_soul_tether=True).exists())
+
+    def test_two_players_are_fine_and_so_is_a_character_nobody_plays(self) -> None:
+        RosterTenureFactory(roster_entry=RosterEntryFactory(character_sheet=self.sinner))
+        # The Sineater has no roster entry at all: nobody plays them, so no shared account.
+        self._form()
+        self.assertTrue(CharacterRelationship.objects.filter(is_soul_tether=True).exists())
 
 
 # ---------------------------------------------------------------------------

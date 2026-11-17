@@ -310,6 +310,7 @@ class SoulTetherFormationError(SoulTetherError):
             "Soul Tether formation failed.",
             "Both characters must consent to forming a Soul Tether.",
             "An active Soul Tether already exists between these characters.",
+            "You cannot form a Soul Tether between two characters you play.",
         },
     )
 
@@ -333,6 +334,7 @@ class SineatingValidationError(SoulTetherError):
             "That character cannot be found.",
             "Sineating needs a role, a partner and a number of units.",
             "A pose can carry a reflection or a Sineating, not both.",
+            "You cannot perform Sineating between two characters you play.",
         },
     )
 

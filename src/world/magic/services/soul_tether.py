@@ -53,6 +53,7 @@ from world.magic.types.soul_tether import (
     StageAdvanceBonusResult,
 )
 from world.relationships.models import CharacterRelationship, RelationshipCapstone
+from world.roster.services.npc_lending import played_by_one_account
 
 if TYPE_CHECKING:
     from world.magic.models import Thread
@@ -81,6 +82,7 @@ _MSG_SINEATER_GATE = "Sineater must be Celestial- or Primal-affinity primary."
 _MSG_SINNER_GATE = "Sinner cannot be Celestial-affinity primary."
 _MSG_DUPLICATE_TETHER = "An active Soul Tether already exists between these characters."
 _MSG_NO_ACTIVE_TETHER = "No active Soul Tether exists between these characters."
+_MSG_ONE_PLAYER_TETHER = "You cannot form a Soul Tether between two characters you play."
 _MSG_NOT_IN_SAME_SCENE = "Both characters must be in the same scene to perform Sineating."
 _MSG_RESONANCE_NOT_ACCRUED = "Resonance specified is not one the Sinner accrues."
 _MSG_PER_SCENE_CAP_REACHED = "Per-scene Sineating cap reached for this bond."
@@ -219,6 +221,10 @@ def accept_soul_tether(  # noqa: PLR0913 - the pair, the role, two resonances an
         sinner_sheet, sineater_sheet = initiator_sheet, partner_sheet
     else:
         sinner_sheet, sineater_sheet = partner_sheet, initiator_sheet
+
+    # 1b. One person on both sides could ask as one and perform as the other.
+    if played_by_one_account(sinner_sheet, sineater_sheet):
+        raise SoulTetherFormationError(_MSG_ONE_PLAYER_TETHER)
 
     # 2. Validate affinity gates (§3). A sheet with no aura (a minted story NPC) gets an
     #    empty one first; an aura with no shares passes both gates.

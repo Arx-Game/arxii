@@ -57,6 +57,7 @@ from world.magic.types.soul_tether import (
     SineatingResult,
 )
 from world.relationships.models import CharacterRelationship
+from world.roster.services.npc_lending import played_by_one_account
 from world.traits.models import CheckOutcome
 
 if TYPE_CHECKING:
@@ -69,6 +70,7 @@ _MSG_NOT_SET_UP = "Sineating has not been set up yet."
 _MSG_CARRY_TOO_MUCH = "You carry too much of the Mire to take on more. Settle some of it first."
 _MSG_NO_TETHER_THREAD = "The Soul Tether is missing its resonance thread."
 _MSG_PARTNER_NOT_FOUND = "That character cannot be found."
+_MSG_ONE_PLAYER_SINEATING = "You cannot perform Sineating between two characters you play."
 _MSG_POSE_FIELDS_INCOMPLETE = "Sineating needs a role, a partner and a number of units."
 BOTH_REFLECTION_AND_SINEATING = "A pose can carry a reflection or a Sineating, not both."
 
@@ -133,7 +135,10 @@ def _tether_relationship(
     sinner_sheet: CharacterSheet, sineater_sheet: CharacterSheet
 ) -> CharacterRelationship:
     relationship = CharacterRelationship.objects.filter(
-        source=sinner_sheet, target=sineater_sheet, is_soul_tether=True
+        source=sinner_sheet,
+        target=sineater_sheet,
+        is_soul_tether=True,
+        soul_tether_role=SoulTetherRole.SINNER,
     ).first()
     if relationship is None:
         raise SineatingValidationError(_MSG_NO_ACTIVE_TETHER)
@@ -160,6 +165,14 @@ def _tether_thread(sinner_sheet: CharacterSheet, relationship: CharacterRelation
     return thread
 
 
+def _refuse_one_player_on_both_sides(
+    sinner_sheet: CharacterSheet, sineater_sheet: CharacterSheet
+) -> None:
+    """One account that plays both characters could ask as one and perform as the other."""
+    if played_by_one_account(sinner_sheet, sineater_sheet):
+        raise SineatingValidationError(_MSG_ONE_PLAYER_SINEATING)
+
+
 def _refuse_if_performed(
     sinner_sheet: CharacterSheet, sineater_sheet: CharacterSheet, scene: Scene, partner: str
 ) -> None:
@@ -181,6 +194,7 @@ def _checked_plea(
     from world.magic.models.aura import CharacterResonance  # noqa: PLC0415
 
     relationship = _tether_relationship(sinner_sheet, sineater_sheet)
+    _refuse_one_player_on_both_sides(sinner_sheet, sineater_sheet)
     _refuse_fallen_sineater(sineater_sheet)
     scene = shared_active_scene(sinner_sheet, sineater_sheet)
     if scene is None:
@@ -257,6 +271,7 @@ def _checked_performance(
     if not _in_scene_together(sinner_sheet, sineater_sheet, pending.scene):
         SineatingPendingOffer.objects.filter(pk=pending.pk).delete()
         raise SineatingValidationError(_MSG_OFFER_STALE)
+    _refuse_one_player_on_both_sides(sinner_sheet, sineater_sheet)
     _refuse_fallen_sineater(sineater_sheet)
     _refuse_if_performed(sinner_sheet, sineater_sheet, pending.scene, _name(sinner_sheet))
     cfg = get_soul_tether_config()

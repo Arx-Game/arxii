@@ -51,6 +51,7 @@ from world.relationships.factories import (
 )
 from world.relationships.models import CharacterRelationship
 from world.roster.factories import RosterTenureFactory
+from world.roster.models import RosterTenure
 from world.scenes.factories import SceneFactory
 from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
@@ -220,6 +221,38 @@ class SineatingPleaTests(SineatingCase):
         self.assertEqual(offer.max_units_offered, 11)
         plea = SineatingPendingOffer.objects.get(sinner_sheet=self.sinner)
         self.assertEqual((plea.units_offered, plea.scene_id), (11, self.scene.pk))
+
+    def test_a_sineater_cannot_entreat_their_own_sinner_by_reversing_the_pair(self) -> None:
+        # Both directional rows carry the tether flag; only the Sinner's own side may plead.
+        with self.assertRaises(SineatingValidationError) as ctx:
+            request_sineating(self.sineater, self.sinner, 2)
+        self.assertEqual(
+            ctx.exception.user_message, "No active Soul Tether exists between these characters."
+        )
+        self.assertFalse(SineatingPendingOffer.objects.exists())
+
+    def test_one_account_playing_both_sides_can_neither_plead_nor_perform(self) -> None:
+        request_sineating(self.sinner, self.sineater, 2)
+        # The same account takes over the Sineater's character (as an alt of the Sinner's).
+        tenure = RosterTenure.objects.get(
+            roster_entry__character_sheet=self.sineater, end_date__isnull=True
+        )
+        sinner_player = RosterTenure.objects.get(
+            roster_entry__character_sheet=self.sinner, end_date__isnull=True
+        ).player_data
+        tenure.player_data = sinner_player
+        tenure.save()
+        tenure.roster_entry.invalidate_tenure_cache()
+        message = "You cannot perform Sineating between two characters you play."
+
+        with self.assertRaises(SineatingValidationError) as ctx:
+            request_sineating(self.sinner, self.sineater, 2)
+        self.assertEqual(ctx.exception.user_message, message)
+        with self.assertRaises(SineatingValidationError) as ctx:
+            self.perform(2)
+        self.assertEqual(ctx.exception.user_message, message)
+        self.assertEqual(self.corruption(self.sinner), 500)
+        self.assertFalse(Sineating.objects.exists())
 
     def test_a_pair_that_already_performed_in_this_scene_cannot_plead_again(self) -> None:
         request_sineating(self.sinner, self.sineater, 2)
