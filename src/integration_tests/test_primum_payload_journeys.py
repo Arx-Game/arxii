@@ -282,6 +282,30 @@ class AfterAHarvest(_Caldera):
         # Odo perceives nothing, so his fresh frame carries no Primum at all.
         self.assertEqual(self.room_frames(self.odo)[-1]["primum"], NO_PRIMUM)
 
+    def test_extracting_a_slain_foe_tells_every_open_fight_panel_to_refetch(self) -> None:
+        foe = self.slain_elemental()
+        self.sense(self.tomas)
+        self.tune_harvest()
+        self.connect_telnet(self.tomas)
+        self.assertEqual(self.opponents_seen_by(self.tomas, foe.encounter), {"elemental": True})
+
+        with (
+            patch.object(type(self.tomas), "has_account", new_callable=PropertyMock) as has,
+            force_check_outcome(self.success),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            has.return_value = True
+            told = self.telnet(self.mira, "extract fire from elemental")
+
+        self.assertIn("You draw out", told)
+        pings = [
+            kwargs["combat_encounter_state"][1]
+            for _args, kwargs in self.mailbox(self.tomas).calls
+            if "combat_encounter_state" in kwargs
+        ]
+        self.assertEqual([ping["encounter_id"] for ping in pings], [foe.encounter_id])
+        self.assertEqual(self.opponents_seen_by(self.tomas, foe.encounter), {"elemental": False})
+
     def tune_harvest(self) -> None:
         """Staff set up harvesting: a check type, a skill, an item and one outcome."""
         self.success = CheckOutcomeFactory(name="Success", success_level=1)

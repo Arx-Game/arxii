@@ -101,6 +101,14 @@ class HarvestPrimumAction(Action):
         if not result.harvested:
             return ActionResult(success=False, message=result.message)
         _refresh_room_panels(actor)
+        if foe is not None:
+            # The fight panel's offers come from the REST encounter; the same ping a round
+            # sends makes every open panel refetch, so the harvested foe stops offering.
+            from world.combat.services.encounter.state_ping import (  # noqa: PLC0415
+                notify_encounter_changed_on_commit,
+            )
+
+            notify_encounter_changed_on_commit(foe.encounter)
         return ActionResult(
             success=True,
             message=result.message,

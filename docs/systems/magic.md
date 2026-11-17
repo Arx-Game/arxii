@@ -5057,7 +5057,7 @@ two people pressing Extract at once yield one harvest. `HarvestPrimumAction` (ke
 `harvest_primum`, `actions/definitions/primum.py`) is the one seam: the web Harvest buttons
 (room panel, slain-foe row) and the telnet `CmdExtract` (`extract fire` in a lair, `extract fire
 from elemental` on a slain foe; bare `extract` lists offers) both dispatch it. The field-food
-`harvest` command is a different command and is unchanged. The `primum` block of `room_state`
+`harvest` command is a different command and is unchanged. A creature harvest also sends the fight's `combat_encounter_state` ping on commit, so every open fight panel refetches the REST encounter (whose opponents carry each viewer's `harvest_offers`) and the harvested foe stops offering; a foe slain in a round is covered by the round's own ping. The `primum` block of `room_state`
 and the combat opponent's `harvest_offers` carry the offers; the Harvest button appears only
 where the character perceives Primum.
 
