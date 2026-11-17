@@ -49,6 +49,7 @@ from world.magic.services.drift_correction import (
     max_yield_per_earned_point,
     perform_settling_rite,
 )
+from world.magic.services.reflection import deed_what
 from world.magic.services.resonance import grant_resonance
 from world.magic.services.settling_preview import settling_rite_reading
 from world.magic.tests.test_drift_offer import DriftOfferTestBase, _author_pair, _hold
@@ -253,6 +254,33 @@ class EmbraceDirectionRateTests(DriftRiteTestBase):
         grant = ResonanceGrantFactory(character_sheet=self.sheet, resonance=self.dread, amount=20)
 
         self.assertEqual(embraced_amount(self.sheet, grant, Decimal("0.75")), 15)
+
+
+class MissingPairTests(DriftRiteTestBase):
+    """A disown that converts nothing because no pair is authored says so."""
+
+    def test_a_disowned_deed_with_no_conversion_pair_names_the_missing_pair(self) -> None:
+        grant = ResonanceGrantFactory(character_sheet=self.sheet, resonance=self.dread, amount=20)
+        reflection = ReflectionFactory(
+            character_sheet=self.sheet,
+            grant=grant,
+            resonance=None,
+            choice=ReflectionChoice.DISOWN,
+        )
+        _author_pair(self.abyssal, self.celestial, None, "")
+
+        result = self.perform()
+
+        deed = deed_what(grant) or "your Drift Dread"
+        self.assertEqual(
+            result.lines,
+            (
+                f"You disown {deed}, but no conversion from Abyssal to Celestial has been "
+                "set, so the rite turns nothing of it away.",
+            ),
+        )
+        self.assertEqual(_balance(self.sheet, self.dread), 30)
+        self.assertIsNotNone(Reflection.objects.get(pk=reflection.pk).rite)
 
 
 class FallbackConversionTargetTests(DriftRiteTestBase):
