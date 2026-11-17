@@ -156,13 +156,30 @@ class PowerCurveTests(TestCase):
         self.assertEqual(points_to_power(5, [], cap=12), 0)
 
     def test_apportion_sums_exactly_and_is_zero_safe(self) -> None:
-        lines = _lines(7, 4, 4)
-        shares = apportion_power(lines, 10)
+        shares = apportion_power(_lines(7, 4, 4), 10, positive_power=10)
         self.assertEqual(sum(shares), 10)
         self.assertEqual(len(shares), 3)
-        self.assertEqual(apportion_power(_lines(0, 0), 5), [0, 0])
-        self.assertEqual(apportion_power([], 5), [])
+        self.assertEqual(apportion_power(_lines(0, 0), 0, positive_power=0), [0, 0])
+        self.assertEqual(apportion_power([], 0, positive_power=0), [])
         self.assertEqual(total_points(_lines(7, -2)), 5)
+
+    def test_apportion_keeps_each_lines_sign_when_one_opposes(self) -> None:
+        curve = list(STARTER_POWER_CURVE)
+        lines = _lines(8, -4)
+        positive = points_to_power(8, curve, cap=12)
+        total = points_to_power(total_points(lines), curve, cap=12)
+        self.assertEqual(apportion_power(lines, total, positive_power=positive), [6, -2])
+
+    def test_apportion_net_negative_keeps_signs_and_sums_exactly(self) -> None:
+        curve = list(STARTER_POWER_CURVE)
+        lines = _lines(2, -8)
+        positive = points_to_power(2, curve, cap=12)
+        total = points_to_power(total_points(lines), curve, cap=12)
+        self.assertEqual(total, -5)
+        shares = apportion_power(lines, total, positive_power=positive)
+        self.assertEqual(sum(shares), total)
+        self.assertGreaterEqual(shares[0], 0)
+        self.assertLessEqual(shares[1], 0)
 
 
 class GiftSubstanceAndCastPointsTests(TestCase):

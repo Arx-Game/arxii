@@ -43,15 +43,27 @@ class PointsToPowerHoldsItsContract(unittest.TestCase):
 
 
 class ApportionPowerHoldsItsContract(unittest.TestCase):
-    @given(st.lists(points, max_size=8), st.integers(-60, 60))
-    def test_split_adds_up(self, line_points, total) -> None:
+    @given(
+        st.lists(points, max_size=8),
+        st.integers(0, 60),
+        st.integers(0, 60),
+    )
+    def test_split_keeps_signs_and_adds_up(self, line_points, gained, lost) -> None:
         lines = [
             SourcePoints(kind=PrimumLineKind.PLACE, label=str(i), points=p, substance_id=i)
             for i, p in enumerate(line_points)
         ]
-        shares = apportion_power(lines, total)
+        # The caller's powers always agree with the lines: no positive line, no positive power.
+        positive_power = gained if any(p > 0 for p in line_points) else 0
+        negative_power = lost if any(p < 0 for p in line_points) else 0
+        total = positive_power - negative_power
+        shares = apportion_power(lines, total, positive_power=positive_power)
         self.assertEqual(len(shares), len(lines))
-        if any(line_points):
-            self.assertEqual(sum(shares), total)
-        else:
-            self.assertEqual(shares, [0] * len(lines))
+        self.assertEqual(sum(shares), total)
+        for line, share in zip(lines, shares, strict=True):
+            if line.points > 0:
+                self.assertGreaterEqual(share, 0)
+            elif line.points < 0:
+                self.assertLessEqual(share, 0)
+            else:
+                self.assertEqual(share, 0)

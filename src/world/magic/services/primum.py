@@ -302,23 +302,38 @@ def power_for_points(total: int) -> int:
     return points_to_power(total, curve, cap=get_resonance_environment_config().substance_power_cap)
 
 
-def apportion_power(lines: Sequence[SourcePoints], total_power: int) -> list[int]:
-    """Split ``total_power`` across ``lines`` by how many points each is worth.
+def _largest_remainder(weights: Sequence[int], amount: int) -> list[int]:
+    """Split ``amount`` over ``weights`` by the largest remainder, earlier entries first on a tie.
 
-    The largest remainder gets the leftover, earlier lines first on a tie, so the shares add up
-    to exactly ``total_power``. Every share takes the sign of ``total_power``. Lines worth no
-    points at all share nothing.
+    Entries with weight 0 get 0, and so does everyone when no weight is above 0.
     """
-    weights = [abs(line.points) for line in lines]
     weight_sum = sum(weights)
-    if weight_sum == 0:
-        return [0] * len(lines)
-    magnitude = abs(total_power)
-    shares = [magnitude * weight // weight_sum for weight in weights]
-    leftover = magnitude - sum(shares)
+    if weight_sum == 0 or amount <= 0:
+        return [0] * len(weights)
+    shares = [amount * weight // weight_sum for weight in weights]
     by_remainder = sorted(
-        range(len(lines)), key=lambda i: (-(magnitude * weights[i] % weight_sum), i)
+        (i for i, weight in enumerate(weights) if weight),
+        key=lambda i: (-(amount * weights[i] % weight_sum), i),
     )
-    for index in by_remainder[:leftover]:
+    for index in by_remainder[: amount - sum(shares)]:
         shares[index] += 1
-    return shares if total_power >= 0 else [-share for share in shares]
+    return shares
+
+
+def apportion_power(
+    lines: Sequence[SourcePoints], total_power: int, *, positive_power: int
+) -> list[int]:
+    """Split ``total_power`` across ``lines``, each line keeping the sign of its points.
+
+    ``positive_power`` is the power the positive lines would give on their own (callers pass
+    ``power_for_points`` of the positive points). Lines with positive points split it by their
+    points; lines with negative points split what they take away, ``positive_power -
+    total_power``, by their points, and each share is negated; a line worth no points gets 0.
+    The shares add up to ``total_power`` when the lines hold both signs as the amounts imply.
+    The total is never the divisor, so near-cancelling lines cannot blow a share up.
+    """
+    gained = _largest_remainder([max(line.points, 0) for line in lines], positive_power)
+    lost = _largest_remainder(
+        [max(-line.points, 0) for line in lines], positive_power - total_power
+    )
+    return [up - down for up, down in zip(gained, lost, strict=True)]
