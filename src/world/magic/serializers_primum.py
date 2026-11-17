@@ -43,6 +43,17 @@ class HarvestOfferSerializer(serializers.Serializer):
     )
     opponent_name = serializers.CharField(read_only=True)
     step_name = serializers.CharField(read_only=True)
+    check_name = serializers.CharField(
+        read_only=True, help_text="The harvest check she rolls; empty while none is set."
+    )
+
+
+class OpponentHarvestOfferSerializer(HarvestOfferSerializer):
+    """A slain foe's offer to one character: which character presses Harvest."""
+
+    character_id = serializers.IntegerField(
+        read_only=True, help_text="The played character this offer belongs to."
+    )
 
 
 class PrimumBlockSerializer(serializers.Serializer):

@@ -109,5 +109,6 @@ class HarvestPrimumAction(Action):
                 "amount_taken": result.amount_taken,
                 "quantity": result.quantity,
                 "outcome": result.outcome_name,
+                "remaining_line": result.remaining_line,
             },
         )

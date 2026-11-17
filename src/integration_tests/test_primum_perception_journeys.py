@@ -218,7 +218,10 @@ class WhatSheSensesLastsWhileSheStays(_Magesight):
 
         self.cast_magesight("Critical Success")
 
-        self.assertIn("Fire here works against your ice", self.frost_card_texts())
+        self.assertTrue(
+            any(t.endswith("Some fire, opposed to ice") for t in self.frost_card_texts()),
+            self.frost_card_texts(),
+        )
         self.assertNotIn(UNPERCEIVED, self.frost_card_texts())
 
         self.mira.move_to(self.make_room("The Yard"), quiet=True)

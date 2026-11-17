@@ -60,6 +60,7 @@ from world.conditions.services import get_active_conditions
 from world.fatigue.services import get_fatigue_capacities
 from world.magic.constants import AudereCeremony
 from world.magic.models import CharacterTechnique, Technique
+from world.magic.serializers_primum import OpponentHarvestOfferSerializer
 from world.magic.serializers_substance import CallUpOfferSerializer
 from world.scenes.constants import RoundStatus
 from world.standoffs.serializers import (
@@ -90,10 +91,10 @@ if TYPE_CHECKING:
 # idmapper-shared ObjectDB would outlive the request and go stale (ADR-0263).
 ACTIVE_CONDITIONS_CONTEXT_KEY = "active_conditions_by_object_id"
 
-# Serializer-context key holding the pks of the slain opponents the viewer can harvest
-# Primum from (#5125). The viewset computes it once per request from the viewer's own
-# character; a serializer built without it (websocket push, tests) reports False.
-HARVESTABLE_OPPONENTS_CONTEXT_KEY = "harvestable_opponent_ids"
+# Serializer-context key holding, per slain opponent pk, the Primum offers the viewer's played
+# characters have on it (#5125). The viewset computes it once per request; a serializer built
+# without it (websocket push, tests) reports no offers.
+HARVEST_OFFERS_CONTEXT_KEY = "harvest_offers_by_opponent_id"
 
 
 def _context_active_conditions(target: ObjectDB, context: dict[str, Any]) -> list | None:
@@ -236,9 +237,9 @@ class OpponentSerializer(serializers.ModelSerializer):
     active_conditions = serializers.SerializerMethodField()
     thumbnail_url = serializers.SerializerMethodField()
     thumbnail_media_url = serializers.SerializerMethodField()
-    # Viewer-relative (#5125): True only when this slain foe holds Primum the viewer perceives
-    # and has not yet been harvested.
-    harvestable = serializers.SerializerMethodField()
+    # Viewer-relative (#5125): the Primum this slain foe holds that the viewer's characters
+    # perceive and nobody has harvested yet, one row per character who can take it.
+    harvest_offers = serializers.SerializerMethodField()
     current_position = PositionSummarySerializer(read_only=True, allow_null=True)
     current_square = serializers.SerializerMethodField()
     # The in-world ObjectDB pk, distinct from this opponent's own pk (``id``).
@@ -286,7 +287,7 @@ class OpponentSerializer(serializers.ModelSerializer):
             "active_conditions",
             "thumbnail_url",
             "thumbnail_media_url",
-            "harvestable",
+            "harvest_offers",
             "current_position",
             "current_square",
             "mirrors_participant_id",
@@ -296,9 +297,11 @@ class OpponentSerializer(serializers.ModelSerializer):
     def get_current_square(self, obj: CombatOpponent) -> dict[str, int] | None:
         return _square_payload(obj.objectdb)
 
-    def get_harvestable(self, obj: CombatOpponent) -> bool:
-        """Whether the viewer can extract Primum from this slain foe (#5125)."""
-        return obj.pk in self.context.get(HARVESTABLE_OPPONENTS_CONTEXT_KEY, frozenset())
+    @extend_schema_field(OpponentHarvestOfferSerializer(many=True))
+    def get_harvest_offers(self, obj: CombatOpponent) -> list[dict[str, Any]]:
+        """The Primum the viewer's characters can extract from this slain foe (#5125)."""
+        offers = self.context.get(HARVEST_OFFERS_CONTEXT_KEY, {}).get(obj.pk, [])
+        return OpponentHarvestOfferSerializer(offers, many=True).data
 
     def _is_gm_or_staff(self) -> bool:
         request = self.context.get("request")

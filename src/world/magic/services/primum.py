@@ -231,12 +231,16 @@ def cast_points(
         if any(points < 0 for _, points in place_rows)
         else frozenset()
     )
+    place_name = room.key if room is not None else "Here"
     lines: list[SourcePoints] = []
     for substance_id, points in place_rows:
         name = names[substance_id]
+        step = _step_in(steps, amounts[substance_id])
+        step_name = step.name if step is not None else ""
+        hidden = points < 0 and substance_id not in perceived
         if points < 0 and substance_id in perceived:
             label = f"{_capitalised(name)} here works against your {own.name}"
-        elif points < 0:
+        elif hidden:
             label = f"Something here works against your {own.name}"
         else:
             label = f"Surroundings: {name}"
@@ -246,10 +250,35 @@ def cast_points(
                 label=label,
                 points=points,
                 substance_id=substance_id,
+                card_label=(
+                    label
+                    if hidden
+                    else _place_card_label(
+                        place_name, step_name, name, own, relations.get(substance_id)
+                    )
+                ),
+                relation=_relation_of(own, substance_id, relations),
+                hidden=hidden,
             )
         )
     lines.extend(item_rows)
     return lines
+
+
+def _relation_of(own: Substance, other_id: int, relations: Mapping[int, str]) -> str:
+    """ "" for the caster's own substance, else the relation kind (related or opposed)."""
+    return "" if other_id == own.pk else relations.get(other_id, "")
+
+
+def _place_card_label(
+    place_name: str, step_name: str, name: str, own: Substance, kind: str | None
+) -> str:
+    """The card line for a place source: "The forge · Trace", or with the other substance
+    named and how it relates to hers ("The flooded cistern · Rich water, related to ice")."""
+    if name == own.name:
+        return f"{place_name} · {step_name}".rstrip(" ·")
+    word = "related to" if kind == SubstanceRelationKind.RELATED else "opposed to"
+    return f"{place_name} · {step_name} {name}, {word} {own.name}"
 
 
 def _signed_points(
@@ -292,6 +321,10 @@ def _item_rows(
                     points=points,
                     substance_id=row.substance_id,
                     item_id=row.item_instance_id,
+                    card_label=(
+                        f"{row.item_instance.display_name}, worn · carries {row.substance.name}"
+                    ),
+                    relation=_relation_of(own, row.substance_id, relations),
                 )
             )
     return lines

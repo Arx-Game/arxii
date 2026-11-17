@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.magic.constants import ResonanceValence
+from world.magic.constants import ResonanceValence, SubstanceRelationKind
 from world.magic.models import PrimumCallUp, PrimumStep, Substance
 from world.magic.services.primum import (
     apportion_power,
@@ -328,8 +328,10 @@ def scene_substance_marks(scene: Scene) -> list[Substance]:
 def surroundings_lines(plan: SubstancePlan) -> list[SurroundingsLine]:
     """The lines a cast card shows for its plan, under its cost (#5125).
 
-    A call-up line when the cast calls her substance up, then one power line per source with
-    its share of the power. A source working against her reads its already-redacted label.
+    A call-up line when the cast calls her substance up, then a heading ("Fire around you"),
+    one line per source with its points, and one total line with the power. A lone source she
+    has not perceived working against her shows its power directly, with no heading or total.
+    A source working against her reads its already-redacted label.
     """
     if plan.is_empty:
         return []
@@ -344,10 +346,38 @@ def surroundings_lines(plan: SubstancePlan) -> list[SurroundingsLine]:
                 detail="free, your control covers it" if uncovered == 0 else f"{uncovered} anima",
             )
         )
+    lines.extend(_source_lines(plan))
+    return lines
+
+
+def _source_lines(plan: SubstancePlan) -> list[SurroundingsLine]:
+    """The heading, a points line per source, and the total power line (empty with no source)."""
+    sources = plan.lines
+    if not sources:
+        return []
+    power = substance_power(plan)
+    if len(sources) == 1 and sources[0].hidden:
+        return [
+            SurroundingsLine(kind=SurroundingsKind.POWER, text=sources[0].card_label, amount=power)
+        ]
+    name = plan.label[:1].upper() + plan.label[1:]
+    own_here = any(source.relation == "" for source in sources)
+    if all(source.relation == "" for source in sources):
+        total_text = f"{name} adds"
+    elif all(source.relation == SubstanceRelationKind.RELATED for source in sources):
+        total_text = "Related substances add"
+    else:
+        total_text = "Around you adds"
+    lines = [
+        SurroundingsLine(
+            kind=SurroundingsKind.HEADING, text=f"{name} around you" if own_here else "Around you"
+        )
+    ]
     lines.extend(
-        SurroundingsLine(kind=SurroundingsKind.POWER, text=source.label, amount=power)
-        for source, power in source_power_lines(plan)
+        SurroundingsLine(kind=SurroundingsKind.SOURCE, text=source.card_label, amount=source.points)
+        for source in sources
     )
+    lines.append(SurroundingsLine(kind=SurroundingsKind.POWER, text=total_text, amount=power))
     return lines
 
 

@@ -72725,9 +72725,10 @@ components:
             For persona-less (generic/ephemeral) NPCs, falls back to the opponent's
             own ``portrait`` FK via ``fallback_media``.
           readOnly: true
-        harvestable:
-          type: boolean
-          description: Whether the viewer can extract Primum from this slain foe (#5125).
+        harvest_offers:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpponentHarvestOffer'
           readOnly: true
         current_position:
           allOf:
@@ -72750,7 +72751,7 @@ components:
       - current_position
       - current_square
       - damage_multiplier
-      - harvestable
+      - harvest_offers
       - health
       - id
       - is_enraged
@@ -72817,6 +72818,49 @@ components:
       - stakes_message
       - stakes_ok
       - swarm_count
+    OpponentHarvestOffer:
+      type: object
+      description: 'A slain foe''s offer to one character: which character presses
+        Harvest.'
+      properties:
+        substance_id:
+          type: integer
+          readOnly: true
+        substance_name:
+          type: string
+          readOnly: true
+        source:
+          type: string
+          readOnly: true
+          description: place | creature.
+        opponent_id:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The slain foe's pk; null for a lair.
+        opponent_name:
+          type: string
+          readOnly: true
+        step_name:
+          type: string
+          readOnly: true
+        check_name:
+          type: string
+          readOnly: true
+          description: The harvest check she rolls; empty while none is set.
+        character_id:
+          type: integer
+          readOnly: true
+          description: The played character this offer belongs to.
+      required:
+      - character_id
+      - check_name
+      - opponent_id
+      - opponent_name
+      - source
+      - step_name
+      - substance_id
+      - substance_name
     OpponentLineDrive:
       type: object
       description: 'One drive edit on a placement: a strength, or null to remove the
@@ -97006,14 +97050,16 @@ components:
         kind:
           type: string
           readOnly: true
-          description: power | call_up | blocked | needs (an unmet restriction).
+          description: heading | source | power | call_up | blocked | needs (an unmet
+            restriction).
         text:
           type: string
           readOnly: true
         amount:
           type: integer
           readOnly: true
-          description: Signed power, or the penalty.
+          description: Signed points for a source line, signed power for a power line,
+            or the penalty.
         anima:
           type: integer
           readOnly: true

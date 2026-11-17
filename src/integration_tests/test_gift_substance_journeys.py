@@ -302,6 +302,18 @@ class AnOpposedSubstanceWorksAgainstHer(_IceField):
         lines = self.primum_lines(self.cast())
 
         self.assertEqual(lines["Surroundings: steam"], 2)
+        card = [
+            (line["kind"], line["text"], line["amount"]) for line in self.card()["surroundings"]
+        ]
+        self.assertEqual(
+            card,
+            [
+                ("heading", "Ice around you", 0),
+                ("source", "The Long Hall · Trace", 2),
+                ("source", "The Long Hall · Some steam, related to ice", 2),
+                ("power", "Around you adds", 4),
+            ],
+        )
         self.assertEqual([offer["label"] for offer in self.offers()], ["ice"])
         refused = self.telnet(self.mira, "callup steam")
         self.assertIn("Which gift's substance?", refused)
@@ -321,7 +333,9 @@ class AnOpposedSubstanceWorksAgainstHer(_IceField):
         )
 
         texts = [line["text"] for line in self.card()["surroundings"]]
-        self.assertIn("Fire here works against your ice", texts)
+        self.assertIn("Ice around you", texts)
+        self.assertTrue(any(text.endswith("Rich fire, opposed to ice") for text in texts), texts)
+        self.assertIn("Around you adds", texts)
 
 
 class CallingUp(_FireField):
@@ -417,7 +431,11 @@ class TheGMMarksItPresent(_FireField):
         card = self.card()
         self.assertEqual(
             [(line["kind"], line["text"], line["amount"]) for line in card["surroundings"]],
-            [("power", "Surroundings: fire", 2)],
+            [
+                ("heading", "Fire around you", 0),
+                ("source", "The Long Hall · Trace", 2),
+                ("power", "Fire adds", 2),
+            ],
         )
 
         self.scene.finish_scene()

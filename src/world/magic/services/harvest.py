@@ -14,6 +14,7 @@ An unset check, skill or Primum item raises ``HarvestNotConfigured``; a rolled o
 
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -31,7 +32,12 @@ from world.items.services.primum_items import mint_primum_items
 from world.magic.constants import TargetKind
 from world.magic.exceptions import HarvestNotConfigured
 from world.magic.models import CreaturePrimum, HarvestOutcome, PlacePrimum, Substance
-from world.magic.services.primum import gift_substance, primum_steps, step_names_for
+from world.magic.services.primum import (
+    gift_substance,
+    primum_steps,
+    step_for,
+    step_names_for,
+)
 from world.magic.services.primum_perception import perceived_substance_ids
 from world.magic.services.resonance_environment import get_resonance_environment_config
 from world.magic.services.threads import thread_level_multiplier, thread_rung
@@ -145,7 +151,13 @@ def harvest_offers(
         return []
     if steps is None:
         steps = primum_steps()
-    return _place_offers(profile, perceived, steps) + _creature_offers(room, perceived, steps)
+    check = get_resonance_environment_config().harvest_check_type
+    check_name = check.name if check is not None else ""
+    return [
+        replace(offer, check_name=check_name)
+        for offer in _place_offers(profile, perceived, steps)
+        + _creature_offers(room, perceived, steps)
+    ]
 
 
 def _gift_thread(character: ObjectDB, substance: Substance) -> Thread | None:  # noqa: OBJECTDB_PARAM - a character
@@ -200,8 +212,10 @@ def _scaled_quantity(outcome: HarvestOutcome, taken: int) -> int:
 
 def _take_from_place(
     sheet: CharacterSheet, profile: RoomProfile, substance: Substance, outcome: HarvestOutcome
-) -> tuple[int, int] | None:
-    """Lock the lair's row, take what it holds up to the outcome, mint. ``(taken, quantity)``.
+) -> tuple[int, int, int] | None:
+    """Lock the lair's row, take what it holds up to the outcome, mint.
+
+    ``(taken, quantity, left)``, ``left`` being what the lair holds now.
 
     None when the lair holds nothing now (it was drained between the offer and the lock).
     """
@@ -229,13 +243,14 @@ def _take_from_place(
             row.stored_amount = held - taken
             row.stamped_at = now
             row.save(update_fields=["stored_amount", "stamped_at"])
-    return taken, quantity
+    return taken, quantity, held - taken
 
 
 def _take_from_creature(
     sheet: CharacterSheet, foe: CombatOpponent, substance: Substance, outcome: HarvestOutcome
-) -> tuple[int, int] | None:
-    """Lock the slain foe, harvest it once, mint. None when it was already harvested."""
+) -> tuple[int, int, int] | None:
+    """Lock the slain foe, harvest it once, mint. ``(taken, quantity, 0)``: a creature is
+    harvested once, so nothing is left. None when it was already harvested."""
     with transaction.atomic():
         state = (
             CombatOpponent.objects.select_for_update()
@@ -260,7 +275,7 @@ def _take_from_creature(
         row = CombatOpponent.objects.get(pk=foe.pk)
         row.primum_harvested_at = timezone.now()
         row.save(update_fields=["primum_harvested_at"])
-    return taken, quantity
+    return taken, quantity, 0
 
 
 def _failure(substance: Substance, message: str, outcome_name: str = "") -> HarvestResult:
@@ -329,14 +344,28 @@ def harvest(
         taken_quantity = _take_from_creature(sheet, opponent, substance, outcome)
     if taken_quantity is None:
         return _failure(substance, NOTHING_LEFT_MESSAGE, outcome_name)
-    taken, quantity = taken_quantity
+    taken, quantity, left = taken_quantity
     if taken <= 0:
         return _failure(substance, EMPTY_HANDED_MESSAGE, outcome_name)
+    name = f"{substance.name[:1].upper()}{substance.name[1:]} Primum"
+    quality = f" ({outcome.quality_tier.name})" if outcome.quality_tier is not None else ""
+    lead = f"{outcome_name}. " if outcome_name else ""
     return HarvestResult(
         harvested=True,
         substance_name=substance.name,
         amount_taken=taken,
         quantity=quantity,
         outcome_name=outcome_name,
-        message=f"You extract {quantity} {substance.name} Primum.",
+        message=f"{lead}You draw out {quantity} {name}{quality}.",
+        remaining_line=_remaining_line(name, opponent, left),
     )
+
+
+def _remaining_line(name: str, opponent: CombatOpponent | None, left: int) -> str:
+    """One sentence on what the source holds after a harvest."""
+    if opponent is not None:
+        return f"Nothing more can be drawn from {opponent.name}."
+    step = step_for(left)
+    if step is None:
+        return f"No {name} is left here."
+    return f"{name} here is now {step.name}."

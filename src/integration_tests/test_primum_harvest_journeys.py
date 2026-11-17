@@ -55,7 +55,7 @@ from world.skills.factories import MagicSkillFactory
 from world.traits.factories import CheckOutcomeFactory, CheckSystemSetupFactory
 
 NOTHING_LEFT = "There is nothing left to extract."
-EXTRACTED = "You extract 2 fire Primum."
+EXTRACTED = "You draw out 2 Fire Primum"
 
 
 class _Lair(ResonanceCacheIsolationMixin, JourneyCase):
@@ -170,7 +170,8 @@ class ExtractingFromALair(_Lair):
 
         self.assertIn(EXTRACTED, told)
         self.assertTrue(result.detail.success, result.detail.message)
-        self.assertEqual(result.detail.message, EXTRACTED)
+        self.assertIn(EXTRACTED, result.detail.message)
+        self.assertEqual(result.detail.data["remaining_line"], "Fire Primum here is now Some.")
         self.assertEqual((self.hand_of(self.mira), self.hand_of(self.tomas)), (2, 2))
         self.assertEqual(self.stored(lair), 10)
         item = ItemInstance.objects.get(

@@ -887,7 +887,12 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
             return []
         lines = [f"Cost here: {preview.effective_anima_cost} anima"]
         for line in preview.surroundings:
-            amount = f" {line.amount:+d} power" if line.kind == SurroundingsKind.POWER else ""
+            if line.kind == SurroundingsKind.SOURCE:
+                amount = f" {line.amount}"
+            elif line.kind == SurroundingsKind.POWER:
+                amount = f" {line.amount:+d} power"
+            else:
+                amount = ""
             detail = f": {line.detail}" if line.detail else ""
             lines.append(f"{line.text}{detail}{amount}")
         return lines

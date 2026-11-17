@@ -104,10 +104,14 @@ class _Caldera(ResonanceCacheIsolationMixin, JourneyCase):
         )
 
     def opponents_seen_by(self, who, encounter) -> dict[str, bool]:
-        """Opponent name to its ``harvestable`` flag in the encounter ``who`` reads over REST."""
+        """Opponent name to whether it carries harvest offers, as ``who`` reads over REST."""
+        return {name: bool(offers) for name, offers in self.offers_seen_by(who, encounter).items()}
+
+    def offers_seen_by(self, who, encounter) -> dict[str, list[dict]]:
+        """Opponent name to its ``harvest_offers`` in the encounter ``who`` reads over REST."""
         response = self.api(self.account_of(who)).get(f"/api/combat/{encounter.pk}/")
         self.assertEqual(response.status_code, 200, response.content)
-        return {row["name"]: row["harvestable"] for row in response.json()["opponents"]}
+        return {row["name"]: row["harvest_offers"] for row in response.json()["opponents"]}
 
 
 class TheRoomFrame(_Caldera):
@@ -195,6 +199,11 @@ class TheFightPanel(_Caldera):
         self.assertEqual(self.opponents_seen_by(self.mira, foe.encounter), {"elemental": True})
         self.assertEqual(self.opponents_seen_by(self.tomas, foe.encounter), {"elemental": True})
         self.assertEqual(self.opponents_seen_by(self.odo, foe.encounter), {"elemental": False})
+        (offer,) = self.offers_seen_by(self.tomas, foe.encounter)["elemental"]
+        self.assertEqual(
+            (offer["substance_name"], offer["opponent_id"], offer["character_id"]),
+            ("fire", foe.pk, self.tomas.pk),
+        )
 
     def test_a_foe_still_standing_or_already_harvested_is_not_offered(self) -> None:
         foe = self.slain_elemental()
@@ -235,7 +244,7 @@ class AfterAHarvest(_Caldera):
             has.return_value = True
             told = self.telnet(self.mira, "extract fire")
 
-        self.assertIn("You extract", told)
+        self.assertIn("You draw out", told)
         frames = self.room_frames(self.tomas)
         self.assertEqual(len(frames), before + 1)
         self.assertEqual(frames[-1]["primum"]["line"], "You sense fire Primum: Some.")

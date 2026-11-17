@@ -9,10 +9,14 @@ class SurroundingsLineSerializer(serializers.Serializer):
     """One line the cast card shows under its cost about where she stands (#5018)."""
 
     kind = serializers.CharField(
-        read_only=True, help_text="power | call_up | blocked | needs (an unmet restriction)."
+        read_only=True,
+        help_text="heading | source | power | call_up | blocked | needs (an unmet restriction).",
     )
     text = serializers.CharField(read_only=True)
-    amount = serializers.IntegerField(read_only=True, help_text="Signed power, or the penalty.")
+    amount = serializers.IntegerField(
+        read_only=True,
+        help_text="Signed points for a source line, signed power for a power line, or the penalty.",
+    )
     anima = serializers.IntegerField(read_only=True)
     detail = serializers.CharField(
         read_only=True, help_text="A call-up line's right-hand cost; blank otherwise."

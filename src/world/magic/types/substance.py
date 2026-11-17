@@ -31,6 +31,10 @@ class SurroundingsKind:
     """The kinds of line a cast card shows about where she stands (``SurroundingsLine``)."""
 
     POWER = "power"
+    #: "Fire around you" above the source lines (text only).
+    HEADING = "heading"
+    #: One source of Primum with its signed points in ``amount``.
+    SOURCE = "source"
     CALL_UP = "call_up"
     BLOCKED = "blocked"
     NEEDS = "needs"
@@ -110,8 +114,10 @@ class SubstanceCallUp:
 class SurroundingsLine:
     """One line the cast card shows under its cost (#5018, #5125).
 
-    ``kind``: ``power`` (signed ``amount``), ``call_up`` (``anima``; 0 means control covers
-    it), ``blocked``, or ``needs`` (a technique's unmet surroundings restriction).
+    ``kind``: ``heading`` (text only), ``source`` (signed points in ``amount``), ``power``
+    (signed power in ``amount``: the total, or a lone unperceived opposing source),
+    ``call_up`` (``anima``; 0 means control covers it), ``blocked``, or ``needs`` (a
+    technique's unmet surroundings restriction).
     """
 
     kind: str
