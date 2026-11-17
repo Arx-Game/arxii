@@ -83,7 +83,7 @@ class PendingStageAdvanceOffer(SharedMemoryModel):
     poll a real endpoint. Created by ``soul_tether_stage_advance_prompt`` and
     consumed (then deleted) by ``resolve_stage_advance_prompt_from_db``.
 
-    The row is only written when ``_find_shared_active_scene`` finds a shared
+    The row is only written when ``shared_active_scene`` finds a shared
     active scene for the pair — guaranteeing ``scene`` is always non-null and
     that the co-location check at resolve time has a real scene to validate.
 

@@ -2640,6 +2640,23 @@ class SineatingFactory(factory.django.DjangoModelFactory):
     fatigue_cost = 5
 
 
+def place_in_active_scene(*sheets: Any) -> Any:
+    """Test helper: stand each sheet's character in one new room that has an active scene.
+
+    Returns the scene. Sineating, the rescue and the stage-advance offer find the scene they
+    happen in by where the two characters stand, so a test that needs one puts them here
+    rather than patching the presence check.
+    """
+    from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
+    from world.scenes.factories import SceneFactory
+
+    room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+    scene = SceneFactory(location=RoomProfileFactory(objectdb=room))
+    for sheet in sheets:
+        sheet.character.location = room
+    return scene
+
+
 class MireHoldingFactory(factory.django.DjangoModelFactory):
     """A Sineater's holding for one Sinner (#5177). ``relationship`` is the Sineater's side."""
 

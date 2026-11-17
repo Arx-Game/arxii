@@ -36,6 +36,7 @@ from world.magic.exceptions import (
     AffinityGateError,
     NoSoulTetherUnlockError,
     RescueValidationError,
+    SineaterFallenError,
     SineatingValidationError,
     SoulTetherFormationError,
     StageAdvanceBonusError,
@@ -123,6 +124,24 @@ def _validate_affinity_gates(sinner_sheet: CharacterSheet, sineater_sheet: Chara
         Affinity.objects.get_celestial_affinity().pk
     ):
         raise AffinityGateError(_MSG_SINNER_GATE)
+
+
+def sineater_has_fallen(sineater_sheet: CharacterSheet) -> bool:
+    """True when the Sineater's aura is predominantly Abyssal (#5177).
+
+    A fallen Sineater can carry no one's sins until they are predominantly something else.
+    A sheet with no aura, or an aura with no shares yet, has not fallen.
+    """
+    aura = sineater_sheet.aura_or_none
+    if aura is None or not aura.cached_shares:
+        return False
+    return aura.dominant_affinity.pk == Affinity.objects.get_abyssal_affinity().pk
+
+
+def _refuse_fallen_sineater(sineater_sheet: CharacterSheet) -> None:
+    """Raise ``SineaterFallenError`` when the Sineater has fallen."""
+    if sineater_has_fallen(sineater_sheet):
+        raise SineaterFallenError(sineater_sheet.primary_persona.name)
 
 
 def _validate_unlock(sinner_sheet: CharacterSheet) -> None:
@@ -785,14 +804,15 @@ def request_sineating(
     ).first()
     if relationship is None:
         raise SineatingValidationError(_MSG_NO_ACTIVE_TETHER)
+    _refuse_fallen_sineater(sineater_sheet)
 
     # 2. Both characters must be in the same scene.
     #    Scene is optional in the data model (audit row allows null) but mandatory
     #    for the Sineating action itself. ``None`` means "no active scene".
     if scene is None:
         raise SineatingValidationError(_MSG_NOT_IN_SAME_SCENE)
-    # Both must have a SceneParticipation row in the same scene.
-    if not _both_in_scene(sinner_sheet, sineater_sheet, scene):
+    # Both must be standing in that scene's room.
+    if not _in_scene_together(sinner_sheet, sineater_sheet, scene):
         raise SineatingValidationError(_MSG_NOT_IN_SAME_SCENE)
 
     # 3. Resonance must be one the Sinner has a CharacterResonance row for.
@@ -856,102 +876,42 @@ def request_sineating(
     )
 
 
-def _both_in_scene(
-    sinner_sheet: CharacterSheet,
-    sineater_sheet: CharacterSheet,
-    scene: Any,
-) -> bool:
-    """Return True when both character sheets have active SceneParticipation rows in *scene*.
-
-    Bridges CharacterSheet → RosterEntry → current RosterTenure → PlayerData → AccountDB.
-    Returns False if either sheet has no active roster tenure (e.g., NPC without account).
-    """
-    from world.roster.models import RosterEntry  # noqa: PLC0415
-    from world.scenes.models import SceneParticipation  # noqa: PLC0415
-
-    def _account_id_for_sheet(sheet: CharacterSheet) -> int | None:
-        try:
-            entry = RosterEntry.objects.get(character_sheet_id=sheet.pk)
-        except RosterEntry.DoesNotExist:
-            return None
-        tenure = entry.tenures.filter(end_date__isnull=True).first()
-        if tenure is None:
-            return None
-        return tenure.player_data.account_id
-
-    sinner_account_id = _account_id_for_sheet(sinner_sheet)
-    sineater_account_id = _account_id_for_sheet(sineater_sheet)
-    if sinner_account_id is None or sineater_account_id is None:
-        return False
-    # Both accounts must have a participation row — count equals the number of
-    # participants we are checking (2 characters = 2 expected rows).
-    _expected_participants = 2
-    return (
-        SceneParticipation.objects.filter(
-            scene=scene, account_id__in=[sinner_account_id, sineater_account_id]
-        ).count()
-        == _expected_participants
-    )
-
-
-def _find_shared_active_scene(
-    sinner_sheet: CharacterSheet,
-    sineater_sheet: CharacterSheet,
+def shared_active_scene(
+    first_sheet: CharacterSheet,
+    second_sheet: CharacterSheet,
 ) -> Any | None:
-    """Return the active Scene both characters currently participate in, or None.
+    """The active scene two characters are both in, or None (#5177).
 
-    Used by ``soul_tether_stage_advance_prompt`` to record a Scene FK on the
-    pending offer row without requiring the subscriber to receive a scene arg.
-    Returns None when either character has no active tenure or when there is no
-    shared active scene.
+    Answers by character, not by pairing the players' accounts: both characters stand in the
+    same place and that place has a live scene. A character with no player tenure (an NPC a
+    GM runs under their own account) therefore takes part when it is physically there.
 
-    Args:
-        sinner_sheet: The Sinner's CharacterSheet.
-        sineater_sheet: The Sineater's CharacterSheet.
-
-    Returns:
-        A Scene instance or None.
+    Used by Sineating, the rescue and the stage-advance offer.
     """
-    from world.roster.models import RosterEntry  # noqa: PLC0415
-    from world.scenes.models import SceneParticipation  # noqa: PLC0415
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
-    def _account_id(sheet: CharacterSheet) -> int | None:
-        try:
-            entry = RosterEntry.objects.get(character_sheet_id=sheet.pk)
-        except RosterEntry.DoesNotExist:
-            return None
-        tenure = entry.tenures.filter(end_date__isnull=True).first()
-        if tenure is None:
-            return None
-        return tenure.player_data.account_id
-
-    sinner_account_id = _account_id(sinner_sheet)
-    sineater_account_id = _account_id(sineater_sheet)
-    if sinner_account_id is None or sineater_account_id is None:
+    first_location = first_sheet.character.location
+    second_location = second_sheet.character.location
+    if first_location is None or second_location is None:
         return None
-
-    # Find scene IDs where the sinner has active participation.
-    sinner_scene_ids = set(
-        SceneParticipation.objects.filter(account_id=sinner_account_id).values_list(
-            "scene_id", flat=True
-        )
-    )
-    if not sinner_scene_ids:
+    if first_location.pk != second_location.pk:
         return None
-
-    # Find a scene where the sineater also participates, that is active.
-    shared = (
-        SceneParticipation.objects.filter(
-            account_id=sineater_account_id,
-            scene_id__in=sinner_scene_ids,
-            scene__is_active=True,
-        )
-        .select_related("scene")
-        .first()
-    )
-    if shared is None:
+    scene = get_active_scene(first_location)
+    if scene is None or not scene.is_active or scene.is_finished:
         return None
-    return shared.scene
+    return scene
+
+
+def _in_scene_together(
+    first_sheet: CharacterSheet,
+    second_sheet: CharacterSheet,
+    scene: Any | None,
+) -> bool:
+    """True when ``scene`` is given and is the active scene both characters are in."""
+    if scene is None:
+        return False
+    shared = shared_active_scene(first_sheet, second_sheet)
+    return shared is not None and shared.pk == scene.pk
 
 
 # =============================================================================
@@ -1158,7 +1118,7 @@ def resolve_sineating_from_db(
     # commits without needing a wrapping transaction), then raise.
     # We must NOT do this inside transaction.atomic() because the exception
     # would roll back the DELETE, leaving a ghost row in the inbox.
-    if not _both_in_scene(pending.sinner_sheet, pending.sineater_sheet, pending.scene):
+    if not _in_scene_together(pending.sinner_sheet, pending.sineater_sheet, pending.scene):
         SineatingPendingOffer.objects.filter(pk=pending.pk).delete()
         raise SineatingValidationError(_MSG_OFFER_STALE)
 
@@ -1282,12 +1242,12 @@ def perform_soul_tether_rescue(
             msg = "No active Soul Tether exists between these characters."
             raise RescueValidationError(msg)
 
-        # 3. Gate: Both characters must be in the same scene.
-        #    ``_both_in_scene`` returns False when scene is None or either character
-        #    has no active roster tenure — both cases produce the same user message.
-        if not _both_in_scene(sinner_sheet, sineater_sheet, scene):
-            msg = "Both characters must be in the same scene for the rescue ritual."
-            raise RescueValidationError(msg)
+        # 2b. Gate: a fallen Sineater carries no one's sins (#5177).
+        _refuse_fallen_sineater(sineater_sheet)
+
+        # 3. Gate: Both characters must be in the same active scene, found by the
+        #    characters themselves (an NPC a GM runs counts) (#5177).
+        scene = _rescue_scene(sinner_sheet, sineater_sheet, scene)
 
         # 4. Gate: Sineater must not be in active engagement.
         if CharacterEngagement.objects.filter(character=sineater_sheet).exists():
@@ -1403,6 +1363,22 @@ _RESCUE_TERMINAL_STAGE: int = 5
 _RESCUE_CRIT_SUCCESS_LEVEL = 2
 _RESCUE_SUCCESS_LEVEL = 1
 _RESCUE_PARTIAL_LEVEL = 0
+
+
+def _rescue_scene(
+    sinner_sheet: CharacterSheet,
+    sineater_sheet: CharacterSheet,
+    scene: Any | None,
+) -> Any:
+    """The active scene the rescue happens in, or ``RescueValidationError``.
+
+    A scene passed in must be the one both characters are in; none passed means that one.
+    """
+    shared = shared_active_scene(sinner_sheet, sineater_sheet)
+    if shared is None or (scene is not None and scene.pk != shared.pk):
+        msg = "Both characters must be in the same scene for the rescue ritual."
+        raise RescueValidationError(msg)
+    return shared
 
 
 def _compute_strain_cost(sinner_stage: int) -> int:
@@ -1894,7 +1870,7 @@ def soul_tether_stage_advance_prompt(*, payload: Any) -> None:
     from world.magic.models.soul_tether import PendingStageAdvanceOffer  # noqa: PLC0415
 
     relationship = tethers[0]  # First active tether (matches _find_sineater_in_location logic).
-    shared_scene = _find_shared_active_scene(sinner_sheet, sineater_sheet)
+    shared_scene = shared_active_scene(sinner_sheet, sineater_sheet)
     if shared_scene is not None:
         current_stage_obj = instance.current_stage
         current_stage_number = current_stage_obj.stage_order if current_stage_obj is not None else 0
@@ -2075,9 +2051,9 @@ def resolve_stage_advance_prompt_from_db(
         raise StageAdvanceBonusError(_MSG_STAGE_ADVANCE_OFFER_EXPIRED)
 
     # Step 3: Co-location check (autocommit). Scene is guaranteed non-null on persisted rows
-    # (soul_tether_stage_advance_prompt only writes a row when _find_shared_active_scene
+    # (soul_tether_stage_advance_prompt only writes a row when shared_active_scene
     # returned a valid scene), so no null-check is needed here.
-    if not _both_in_scene(pending.sinner_sheet, pending.sineater_sheet, pending.scene):
+    if not _in_scene_together(pending.sinner_sheet, pending.sineater_sheet, pending.scene):
         PendingStageAdvanceOffer.objects.filter(pk=pending.pk).delete()
         raise StageAdvanceBonusError(_MSG_STAGE_ADVANCE_OFFER_STALE)
 

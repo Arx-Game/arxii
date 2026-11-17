@@ -9,7 +9,8 @@ Three sub-tasks per plan Phase 13:
 Pattern mirrors src/world/magic/tests/integration/test_corruption_flow.py and
 test_soulfray_recovery_flow.py:
   - Use real service functions; patch only network/session-adjacent surfaces
-    (_both_in_scene, perform_check) that can't run without a live process.
+    (perform_check) that can't run without a live process; the characters stand in one room
+    with an active scene.
   - Assertions against the DB, not against mocks.
   - No freezegun — dormancy is simulated by counting corrupt-decay ticks
     directly rather than wall-clock time.
@@ -37,6 +38,7 @@ from world.magic.factories import (
     CharacterThreadWeavingUnlockFactory,
     ResonanceFactory,
     ThreadWeavingUnlockFactory,
+    place_in_active_scene,
     wire_soul_tether_content,
     with_corruption_at_stage,
 )
@@ -66,7 +68,6 @@ from world.seeds.modifier_values import seed_pool_and_cap_lanes
 # ---------------------------------------------------------------------------
 
 _PERFORM_CHECK_PATH = "world.checks.services.perform_check"
-_BOTH_IN_SCENE_PATH = "world.magic.services.soul_tether._both_in_scene"
 
 # Counter for unique room keys (avoid DB unique constraint collisions).
 _room_counter = 0
@@ -352,7 +353,7 @@ class SoulTetherFullPipelineTests(TestCase):
     # -----------------------------------------------------------------------
 
     @tag("postgres")
-    def test_04_full_lifecycle(self) -> None:
+    def test_04_full_lifecycle(self) -> None:  # noqa: PLR0915 - one test walks the lifecycle
         """Steps 2–6: Sineating → redirect → rescue → dissolution → persistence."""
         rel_out = CharacterRelationship.objects.get(source=self.sinner, target=self.sineater)
         sinner_thread = _get_sinner_thread(self.sinner, self.capstone, self.resonance)
@@ -426,16 +427,14 @@ class SoulTetherFullPipelineTests(TestCase):
         sineater_cr.save(update_fields=["balance"])
 
         mock_check = _make_mock_check(success_level=1)
-        with (
-            patch(_BOTH_IN_SCENE_PATH, return_value=True),
-            patch(_PERFORM_CHECK_PATH, return_value=mock_check),
-        ):
+        place_in_active_scene(self.sinner, self.sineater)
+        with patch(_PERFORM_CHECK_PATH, return_value=mock_check):
             rescue_outcome = perform_soul_tether_rescue(
                 sineater_sheet=self.sineater,
                 sinner_sheet=self.sinner,
                 resonance=self.resonance,
                 components=[],
-                scene=None,  # scene-participation patched above
+                scene=None,  # the scene is found where the two characters stand
             )
 
         self.assertGreater(rescue_outcome.severity_reduced, 0)
@@ -789,10 +788,8 @@ class ManyToManyIndependenceTests(TestCase):
         sineater_cr_a.save(update_fields=["balance"])
 
         mock_check = _make_mock_check(success_level=1)
-        with (
-            patch(_BOTH_IN_SCENE_PATH, return_value=True),
-            patch(_PERFORM_CHECK_PATH, return_value=mock_check),
-        ):
+        place_in_active_scene(self.sinner_a, self.sineater)
+        with patch(_PERFORM_CHECK_PATH, return_value=mock_check):
             rescue_outcome = perform_soul_tether_rescue(
                 sineater_sheet=self.sineater,
                 sinner_sheet=self.sinner_a,
@@ -889,10 +886,8 @@ class ManyToManyIndependenceTests(TestCase):
         sineater_cr_a.save(update_fields=["balance"])
 
         mock_check = _make_mock_check(success_level=1)
-        with (
-            patch(_BOTH_IN_SCENE_PATH, return_value=True),
-            patch(_PERFORM_CHECK_PATH, return_value=mock_check),
-        ):
+        place_in_active_scene(self.sinner_a, self.sineater)
+        with patch(_PERFORM_CHECK_PATH, return_value=mock_check):
             perform_soul_tether_rescue(
                 sineater_sheet=self.sineater,
                 sinner_sheet=self.sinner_a,

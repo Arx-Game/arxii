@@ -18,9 +18,9 @@ Journey:
   6. Sinner runs ``tether dissolve Sineater``
      → is_soul_tether=False
 
-``_both_in_scene``, ``perform_check``, and ``emit_event`` are patched — same
-boundary as ``test_soul_tether_flow.py`` — so the test is reproducible without
-a running Twisted reactor or real scene participation rows.
+``perform_check`` and ``emit_event`` are patched — same boundary as
+``test_soul_tether_flow.py`` — so the test is reproducible without a running Twisted
+reactor. Both characters stand in one room that holds an active scene.
 
 Tagged ``@tag("postgres")`` because step 5's rescue calls ``apply_condition``
 which uses ``DISTINCT ON`` (unsupported on SQLite).
@@ -56,7 +56,6 @@ from world.relationships.factories import CharacterRelationshipFactory, Relation
 from world.relationships.models import CharacterRelationship
 from world.scenes.factories import SceneFactory
 
-_BOTH_IN_SCENE_PATH = "world.magic.services.soul_tether._both_in_scene"
 _PERFORM_CHECK_PATH = "world.checks.services.perform_check"
 _EMIT_EVENT_PATH = "world.magic.services.soul_tether.emit_event"
 
@@ -177,10 +176,8 @@ class SoulTetherJourneyTests(TestCase):
         if hasattr(self.room, "_active_scene_cache"):
             del self.room._active_scene_cache
 
-        # Patch _both_in_scene — no live SceneParticipation rows needed.
-        both_patcher = patch(_BOTH_IN_SCENE_PATH, return_value=True)
-        both_patcher.start()
-        self.addCleanup(both_patcher.stop)
+        # Both characters stand in self.room, which now has an active scene, so the real
+        # presence check (shared_active_scene) finds it.
 
         # Patch perform_check — no real check infrastructure needed for rescue.
         check_patcher = patch(_PERFORM_CHECK_PATH, return_value=_mock_check_result(2))

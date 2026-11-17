@@ -35,6 +35,7 @@ from world.magic.constants import SoulTetherRole, TargetKind
 from world.magic.exceptions import (
     AffinityGateError,
     NoSoulTetherUnlockError,
+    SineaterFallenError,
     SineatingValidationError,
     SoulTetherFormationError,
 )
@@ -47,6 +48,7 @@ from world.magic.factories import (
     MireHoldingFactory,
     ResonanceFactory,
     ThreadWeavingUnlockFactory,
+    place_in_active_scene,
     wire_soul_tether_content,
     with_corruption_at_stage,
 )
@@ -60,6 +62,8 @@ from world.magic.services.soul_tether import (
     ensure_sineater_thread,
     request_sineating,
     resolve_sineating,
+    shared_active_scene,
+    sineater_has_fallen,
 )
 from world.magic.types.corruption import CorruptionRecoverySource, CorruptionSource
 from world.magic.types.soul_tether import SineatingOffer, SoulTetherRole as SoulTetherRoleEnum
@@ -615,6 +619,76 @@ class MireHoldingsFollowCorruptionTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# 4.3d  Presence by character, and the fallen Sineater (#5177)
+# ---------------------------------------------------------------------------
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)
+class PresenceAndFallenSineaterTests(TestCase):
+    """Both characters in one place with a live scene is enough; a fallen Sineater refuses."""
+
+    def setUp(self) -> None:
+        wire_soul_tether_content()
+        self.resonance = ResonanceFactory(affinity=AffinityFactory(name="Abyssal"))
+        # Neither sheet has a roster tenure: the Sineater is an NPC a GM runs.
+        self.sinner, self.sineater = _make_eligible_pair()
+        _make_active_relationship(self.sinner, self.sineater)
+        accept_soul_tether(
+            initiator_sheet=self.sinner,
+            partner_sheet=self.sineater,
+            sinner_role=SoulTetherRoleEnum.SINNER,
+            resonance=self.resonance,
+            ritual_components=[],
+        )
+        CharacterResonanceFactory(character_sheet=self.sinner, resonance=self.resonance)
+
+    def _request(self, scene: object) -> object:
+        return request_sineating(
+            sinner_sheet=self.sinner,
+            sineater_sheet=self.sineater,
+            resonance=self.resonance,
+            max_units=5,
+            scene=scene,
+        )
+
+    def test_an_npc_without_a_player_tenure_takes_part_when_it_is_there(self) -> None:
+        scene = place_in_active_scene(self.sinner, self.sineater)
+        self.assertEqual(shared_active_scene(self.sinner, self.sineater), scene)
+        self.assertEqual(self._request(scene).scene, scene)
+
+        # Standing in different places, they share no scene.
+        elsewhere = place_in_active_scene(self.sineater)
+        self.assertIsNone(shared_active_scene(self.sinner, self.sineater))
+        with self.assertRaises(SineatingValidationError) as ctx:
+            self._request(elsewhere)
+        self.assertIn("same scene", ctx.exception.user_message)
+
+    def test_a_fallen_sineater_refuses_a_sineating_and_a_rescue(self) -> None:
+        from world.magic.services.soul_tether import perform_soul_tether_rescue
+
+        scene = place_in_active_scene(self.sinner, self.sineater)
+        with_corruption_at_stage(self.sinner, self.resonance, stage=3)
+        self.assertFalse(sineater_has_fallen(self.sineater))
+        _set_primary_affinity_abyssal(self.sineater)
+        self.assertTrue(sineater_has_fallen(self.sineater))
+
+        name = self.sineater.primary_persona.name
+        expected = f"{name} has fallen too far into the Abyss to carry anyone's sins."
+        with self.assertRaises(SineaterFallenError) as ctx:
+            self._request(scene)
+        self.assertEqual(ctx.exception.user_message, expected)
+        with self.assertRaises(SineaterFallenError) as ctx:
+            perform_soul_tether_rescue(
+                sineater_sheet=self.sineater,
+                sinner_sheet=self.sinner,
+                resonance=self.resonance,
+                components=[],
+                scene=scene,
+            )
+        self.assertEqual(ctx.exception.user_message, expected)
+
+
+# ---------------------------------------------------------------------------
 # 4.4  Idempotency — duplicate formation raises
 # ---------------------------------------------------------------------------
 
@@ -880,27 +954,19 @@ class RequestSineatingValidationTests(TestCase):
         # Use a *different* resonance that Sinner has no CharacterResonance for.
         other_resonance = ResonanceFactory()
 
-        # Patch scene check so we get past it and hit the resonance gate.
-        with (
-            patch(
-                "world.magic.services.soul_tether._both_in_scene",
-                return_value=True,
-            ),
-            self.assertRaises(SineatingValidationError) as ctx,
-        ):
+        scene = place_in_active_scene(self.sinner, self.sineater)
+        with self.assertRaises(SineatingValidationError) as ctx:
             request_sineating(
                 sinner_sheet=self.sinner,
                 sineater_sheet=self.sineater,
                 resonance=other_resonance,
                 max_units=5,
-                scene=object(),  # non-None sentinel
+                scene=scene,
             )
         self.assertIn("not one the Sinner accrues", ctx.exception.user_message)
 
     def test_offer_carries_scene(self) -> None:
         """Phase 7: the returned SineatingOffer.scene must equal the scene passed in."""
-        from world.scenes.factories import SceneFactory
-
         # Form tether so the tether check passes.
         accept_soul_tether(
             initiator_sheet=self.sinner,
@@ -912,18 +978,14 @@ class RequestSineatingValidationTests(TestCase):
         # Seed a CharacterResonance so the resonance gate passes.
         CharacterResonanceFactory(character_sheet=self.sinner, resonance=self.resonance)
 
-        scene = SceneFactory()
-        with patch(
-            "world.magic.services.soul_tether._both_in_scene",
-            return_value=True,
-        ):
-            offer = request_sineating(
-                sinner_sheet=self.sinner,
-                sineater_sheet=self.sineater,
-                resonance=self.resonance,
-                max_units=5,
-                scene=scene,
-            )
+        scene = place_in_active_scene(self.sinner, self.sineater)
+        offer = request_sineating(
+            sinner_sheet=self.sinner,
+            sineater_sheet=self.sineater,
+            resonance=self.resonance,
+            max_units=5,
+            scene=scene,
+        )
         self.assertEqual(offer.scene, scene)
 
 
@@ -1205,8 +1267,6 @@ class PerSceneCapTests(TestCase):
 
     def test_request_sineating_clamps_max_units_to_cap(self) -> None:
         """Offering more units than the cap returns offer with max_units_offered == cap."""
-        from world.scenes.factories import SceneFactory
-
         sinner, sineater = _make_eligible_pair(track=self.track)
         _make_active_relationship(sinner, sineater)
         accept_soul_tether(
@@ -1219,20 +1279,15 @@ class PerSceneCapTests(TestCase):
         # Seed CharacterResonance for the Sinner so the resonance gate passes.
         CharacterResonanceFactory(character_sheet=sinner, resonance=self.resonance)
 
-        # Use a real Scene so the pending offer FK can be saved (Task 1.6).
-        # Patch _both_in_scene so the test focuses on cap clamping, not co-location.
-        scene = SceneFactory()
-        with patch(
-            "world.magic.services.soul_tether._both_in_scene",
-            return_value=True,
-        ):
-            offer = request_sineating(
-                sinner_sheet=sinner,
-                sineater_sheet=sineater,
-                resonance=self.resonance,
-                max_units=9999,  # far above any cap
-                scene=scene,
-            )
+        # A real Scene both characters stand in, so the pending offer FK can be saved.
+        scene = place_in_active_scene(sinner, sineater)
+        offer = request_sineating(
+            sinner_sheet=sinner,
+            sineater_sheet=sineater,
+            resonance=self.resonance,
+            max_units=9999,  # far above any cap
+            scene=scene,
+        )
 
         # Level-0 thread → cap = 5; max_units_offered should be clamped.
         self.assertLessEqual(offer.max_units_offered, 20)  # hard-max guard
@@ -1368,10 +1423,8 @@ class PerformSoulTetherRescueStage3Tests(TestCase):
         from world.magic.services.soul_tether import perform_soul_tether_rescue
 
         mock_check = _make_mock_check_result(success_level=1)
-        with (
-            patch("world.magic.services.soul_tether._both_in_scene", return_value=True),
-            patch(_PERFORM_CHECK_PATH, return_value=mock_check),
-        ):
+        place_in_active_scene(self.sinner, self.sineater)
+        with patch(_PERFORM_CHECK_PATH, return_value=mock_check):
             return perform_soul_tether_rescue(
                 sineater_sheet=self.sineater,
                 sinner_sheet=self.sinner,
@@ -1468,10 +1521,8 @@ class PerformSoulTetherRescueStage5Tests(TestCase):
         from world.magic.services.soul_tether import perform_soul_tether_rescue
 
         mock_check = _make_mock_check_result(success_level=success_level)
-        with (
-            patch("world.magic.services.soul_tether._both_in_scene", return_value=True),
-            patch(_PERFORM_CHECK_PATH, return_value=mock_check),
-        ):
+        place_in_active_scene(self.sinner, self.sineater)
+        with patch(_PERFORM_CHECK_PATH, return_value=mock_check):
             return perform_soul_tether_rescue(
                 sineater_sheet=self.sineater,
                 sinner_sheet=self.sinner,
@@ -1544,16 +1595,14 @@ class PerformSoulTetherRescueGateTests(TestCase):
         )
         with_corruption_at_stage(sinner, self.resonance, stage=2)
 
-        with (
-            patch("world.magic.services.soul_tether._both_in_scene", return_value=True),
-            self.assertRaises(RescueValidationError) as ctx,
-        ):
+        place_in_active_scene(sinner, sineater)
+        with self.assertRaises(RescueValidationError) as ctx:
             perform_soul_tether_rescue(
                 sineater_sheet=sineater,
                 sinner_sheet=sinner,
                 resonance=self.resonance,
                 components=[],
-                scene=object(),
+                scene=None,
             )
         self.assertIn("stage 3 or higher", ctx.exception.user_message)
 
@@ -1575,10 +1624,8 @@ class PerformSoulTetherRescueGateTests(TestCase):
             character_sheet=sineater, resonance=self.resonance, defaults={"balance": 500}
         )
 
-        with (
-            patch("world.magic.services.soul_tether._both_in_scene", return_value=True),
-            self.assertRaises(RescueValidationError),
-        ):
+        place_in_active_scene(sinner, sineater)
+        with self.assertRaises(RescueValidationError):
             perform_soul_tether_rescue(
                 sineater_sheet=sineater,
                 sinner_sheet=sinner,
@@ -1588,7 +1635,7 @@ class PerformSoulTetherRescueGateTests(TestCase):
             )
 
     def test_not_in_scene_raises(self) -> None:
-        """When _both_in_scene returns False, raises RescueValidationError."""
+        """Characters not standing in one place raise RescueValidationError."""
         from world.magic.exceptions import RescueValidationError
         from world.magic.factories import with_corruption_at_stage
         from world.magic.services.soul_tether import perform_soul_tether_rescue
@@ -1604,11 +1651,8 @@ class PerformSoulTetherRescueGateTests(TestCase):
         )
         with_corruption_at_stage(sinner, self.resonance, stage=3)
 
-        # Patch _both_in_scene to return False (characters not in same scene).
-        with (
-            patch("world.magic.services.soul_tether._both_in_scene", return_value=False),
-            self.assertRaises(RescueValidationError) as ctx,
-        ):
+        # The two characters stand in different places, so there is no shared scene.
+        with self.assertRaises(RescueValidationError) as ctx:
             perform_soul_tether_rescue(
                 sineater_sheet=sineater,
                 sinner_sheet=sinner,
@@ -1639,10 +1683,8 @@ class PerformSoulTetherRescueGateTests(TestCase):
         # Put Sineater in engagement.
         CharacterEngagementFactory(character=sineater)
 
-        with (
-            patch("world.magic.services.soul_tether._both_in_scene", return_value=True),
-            self.assertRaises(RescueValidationError),
-        ):
+        place_in_active_scene(sinner, sineater)
+        with self.assertRaises(RescueValidationError):
             perform_soul_tether_rescue(
                 sineater_sheet=sineater,
                 sinner_sheet=sinner,
@@ -1676,10 +1718,8 @@ class PerformSoulTetherRescueGateTests(TestCase):
         cr.balance = 0
         cr.save(update_fields=["balance"])
 
-        with (
-            patch("world.magic.services.soul_tether._both_in_scene", return_value=True),
-            self.assertRaises(RescueValidationError) as ctx,
-        ):
+        place_in_active_scene(sinner, sineater)
+        with self.assertRaises(RescueValidationError) as ctx:
             perform_soul_tether_rescue(
                 sineater_sheet=sineater,
                 sinner_sheet=sinner,
@@ -1718,15 +1758,11 @@ class PerformSoulTetherRescueGateTests(TestCase):
         cr.balance = 500
         cr.save(update_fields=["balance"])
 
-        # Use scene=None for both rescues. The repeat gate queries
-        # filter(sineater_sheet=..., sinner_sheet=..., scene=None) which matches
-        # any scene-null rescue between this pair — sufficient for this test.
+        # Both rescues happen in the scene the two characters share.
         # success_level=0: budget = int(250 * 1.0) = 250; sinner drops to stage 4.
         mock_check = _make_mock_check_result(success_level=0)
-        with (
-            patch("world.magic.services.soul_tether._both_in_scene", return_value=True),
-            patch(_PERFORM_CHECK_PATH, return_value=mock_check),
-        ):
+        place_in_active_scene(sinner, sineater)
+        with patch(_PERFORM_CHECK_PATH, return_value=mock_check):
             # First rescue — should succeed.
             perform_soul_tether_rescue(
                 sineater_sheet=sineater,
@@ -1736,7 +1772,7 @@ class PerformSoulTetherRescueGateTests(TestCase):
                 scene=None,
             )
 
-            # Second rescue "same scene" (both None) — should raise.
+            # Second rescue in the same scene — should raise.
             with self.assertRaises(RescueValidationError) as ctx:
                 perform_soul_tether_rescue(
                     sineater_sheet=sineater,

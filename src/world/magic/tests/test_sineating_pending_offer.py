@@ -28,6 +28,7 @@ from world.magic.factories import (
     CharacterThreadWeavingUnlockFactory,
     ResonanceFactory,
     ThreadWeavingUnlockFactory,
+    place_in_active_scene,
     wire_soul_tether_content,
 )
 from world.magic.models.soul_tether import Sineating, SineatingPendingOffer
@@ -139,12 +140,12 @@ def _make_tethered_pair_with_tenures(track=None):
 def _fire_request_sineating_in_scene(sinner_sheet, sineater_sheet, resonance, scene) -> object:
     """Call request_sineating with co-location patched to True.
 
-    Used by tests that want to seed a SineatingPendingOffer without needing
-    actual SceneParticipation rows for the sinner/sineater (avoids roster
-    tenure setup complexity in model-only tests).
+    Used by tests that want to seed a SineatingPendingOffer without standing the
+    sinner and sineater in one room (the co-location check, ``_in_scene_together``, is
+    patched; the resolve-time checks below run it for real).
     """
     with patch(
-        "world.magic.services.soul_tether._both_in_scene",
+        "world.magic.services.soul_tether._in_scene_together",
         return_value=True,
     ):
         return request_sineating(
@@ -310,9 +311,9 @@ class ResolveSineatingFromDbHappyPathTests(TestCase):
             maximum=20,
         )
 
-        cls.scene = SceneFactory()
-        SceneParticipationFactory(scene=cls.scene, account=cls.sinner_account)
-        SceneParticipationFactory(scene=cls.scene, account=cls.sineater_account)
+    def setUp(self) -> None:
+        # Both characters stand in one room that has an active scene.
+        self.scene = place_in_active_scene(self.sinner_sheet, self.sineater_sheet)
 
     def test_happy_path_audit_row_written(self) -> None:
         """resolve_sineating_from_db writes a Sineating audit row and clears the pending row."""

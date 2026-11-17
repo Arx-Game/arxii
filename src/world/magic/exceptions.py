@@ -346,6 +346,22 @@ class RescueValidationError(SoulTetherError):
     )
 
 
+class SineaterFallenError(SineatingValidationError, RescueValidationError):
+    """Raised when a fallen Sineater (predominantly Abyssal) is asked to carry a Sinner (#5177).
+
+    Both a Sineating and a rescue refuse a fallen Sineater, so callers that catch either
+    validation error catch this one. The message names the Sineater, so it is not a fixed
+    string and ``SAFE_MESSAGES`` stays empty.
+    """
+
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset()
+
+    def __init__(self, sineater_name: str) -> None:
+        super().__init__(
+            f"{sineater_name} has fallen too far into the Abyss to carry anyone's sins."
+        )
+
+
 class StageAdvanceBonusError(SoulTetherError):
     """Raised when a stage-advance bonus offer resolution fails (Spec B §8.1)."""
 

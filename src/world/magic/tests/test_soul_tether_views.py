@@ -389,10 +389,10 @@ class SineatingRequestViewTests(APITestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        from world.magic.factories import place_in_active_scene
         from world.magic.services.soul_tether import accept_soul_tether
         from world.magic.types.soul_tether import SoulTetherRole
         from world.relationships.factories import RelationshipTypeFactory
-        from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
         cls.track = RelationshipTypeFactory()
         cls.sinner_tenure, cls.sineater_tenure, cls.resonance = _make_eligible_pair_with_accounts(
@@ -417,10 +417,8 @@ class SineatingRequestViewTests(APITestCase):
             character_sheet=cls.sinner_sheet,
             resonance=cls.resonance,
         )
-        # Scene with both characters participating
-        cls.scene = SceneFactory()
-        SceneParticipationFactory(scene=cls.scene, account=cls.sinner_account)
-        SceneParticipationFactory(scene=cls.scene, account=cls.sineater_account)
+        # An active scene with both characters standing in its room
+        cls.scene = place_in_active_scene(cls.sinner_sheet, cls.sineater_sheet)
 
     def _post(self, data):
         return self.client.post("/api/magic/soul-tether/sineating/request/", data, format="json")
@@ -484,11 +482,10 @@ class SineatingRespondViewTests(APITestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from world.magic.factories import CharacterResonanceFactory
+        from world.magic.factories import CharacterResonanceFactory, place_in_active_scene
         from world.magic.services.soul_tether import accept_soul_tether
         from world.magic.types.soul_tether import SoulTetherRole
         from world.relationships.factories import RelationshipTypeFactory
-        from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
         cls.track = RelationshipTypeFactory()
         cls.sinner_tenure, cls.sineater_tenure, cls.resonance = _make_eligible_pair_with_accounts(
@@ -510,9 +507,7 @@ class SineatingRespondViewTests(APITestCase):
             character_sheet=cls.sinner_sheet,
             resonance=cls.resonance,
         )
-        cls.scene = SceneFactory()
-        SceneParticipationFactory(scene=cls.scene, account=cls.sinner_account)
-        SceneParticipationFactory(scene=cls.scene, account=cls.sineater_account)
+        cls.scene = place_in_active_scene(cls.sinner_sheet, cls.sineater_sheet)
 
     def _seed_pending_offer(self) -> None:
         """Create a SineatingPendingOffer row for the test pair via request_sineating.
@@ -521,21 +516,15 @@ class SineatingRespondViewTests(APITestCase):
         requires a pending row in the database. Each test that exercises the
         respond path must seed this row first.
         """
-        from unittest.mock import patch
-
         from world.magic.services.soul_tether import request_sineating
 
-        with patch(
-            "world.magic.services.soul_tether._both_in_scene",
-            return_value=True,
-        ):
-            request_sineating(
-                sinner_sheet=self.sinner_sheet,
-                sineater_sheet=self.sineater_sheet,
-                resonance=self.resonance,
-                max_units=5,
-                scene=self.scene,
-            )
+        request_sineating(
+            sinner_sheet=self.sinner_sheet,
+            sineater_sheet=self.sineater_sheet,
+            resonance=self.resonance,
+            max_units=5,
+            scene=self.scene,
+        )
 
     def _post(self, data):
         return self.client.post("/api/magic/soul-tether/sineating/respond/", data, format="json")
@@ -598,11 +587,10 @@ class SoulTetherRescueViewTests(APITestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from world.magic.factories import CharacterResonanceFactory
+        from world.magic.factories import CharacterResonanceFactory, place_in_active_scene
         from world.magic.services.soul_tether import accept_soul_tether
         from world.magic.types.soul_tether import SoulTetherRole
         from world.relationships.factories import RelationshipTypeFactory
-        from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
         cls.track = RelationshipTypeFactory()
         cls.sinner_tenure, cls.sineater_tenure, cls.resonance = _make_eligible_pair_with_accounts(
@@ -629,9 +617,7 @@ class SoulTetherRescueViewTests(APITestCase):
             resonance=cls.resonance,
             balance=1000,
         )
-        cls.scene = SceneFactory()
-        SceneParticipationFactory(scene=cls.scene, account=cls.sinner_account)
-        SceneParticipationFactory(scene=cls.scene, account=cls.sineater_account)
+        cls.scene = place_in_active_scene(cls.sinner_sheet, cls.sineater_sheet)
 
     def _post(self, data):
         return self.client.post("/api/magic/soul-tether/rescue/", data, format="json")
