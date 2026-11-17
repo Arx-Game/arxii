@@ -374,6 +374,8 @@ Full reference: `docs/systems/magic.md` "Substances and Primum". `Substance` is 
   `points_to_power` runs the staff curve, `plan_substance_call_up` is the one pure plan the card,
   the charge and the ledger read. Missing tuning (no steps, no curve, no harvest check) adds no
   line or answers in one plain sentence; it never raises out of a cast.
+- **Creatures never feed a cast.** `cast_points` reads the place and her equipped items only; a
+  creature's Primum (`creature_substance_amounts`) counts for sensing and harvesting alone.
 - **Never name Primum the caster has not perceived.** A source of another substance that is not
   in `perceived_substance_ids` reads "Something here works against your <own>" or "Something
   here strengthens your <own>" on the card and the ledger (`SourcePoints.hidden`).

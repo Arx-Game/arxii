@@ -4973,8 +4973,11 @@ condition leans the substance's way (`ordinary_leans`; a reading on the other si
 nothing). `step_for(amount)` names the step. `cast_points(character, gift, room)` returns one
 `SourcePoints` per source: the place's substances that count (own in full, related at
 `substance_related_share_pct`, opposed negative, others none) and each equipped item (worn or
-held in hand; an item in a bag does not count). Several creatures of one substance in a room add
-up; a place against a creature takes the larger. `points_to_power(total, curve, cap=)`
+held in hand; an item in a bag does not count). Creatures in the room never feed a cast: a
+living or slain creature's Primum matters only for sensing and harvesting (see Perceiving
+Primum). `room_substance_amounts` reads the room's conditions for every substance at once
+(`locations.services.felt_readings`), and `plan_substance_call_up(lines_cache=)` lets a caller
+pricing a whole technique list read one gift's lines once. `points_to_power(total, curve, cap=)`
 interpolates the curve, mirrors it for a negative total and caps at `substance_power_cap`. Only
 a caster with a GIFT thread covering the gift is affected (`gift_thread_for`). The bonus still
 grows with that thread: `substance_power` is `power_for_points(total) x
@@ -4990,7 +4993,7 @@ ice" and a related one "Something here strengthens your ice" (`SourcePoints.hidd
 always perceives her own gift's substance.
 
 **Calling up** (`services/substance.py`). `plan_substance_call_up(character=, gift=, room=,
-control_surplus=, to_trace_only=, with_lines=)` is the pure plan the card, the charge and the
+control_surplus=, to_trace_only=, with_lines=, lines_cache=)` is the pure plan the card, the charge and the
 power lines read. A call-up raises the place by one `PrimumStep` for one shared anima cost
 (`substance_call_up_anima`, shifted by the place's affinity up to `substance_place_cap_pct`),
 with no resonance charge and no resonance refusal. A cast in a place with none of her substance
@@ -5028,7 +5031,11 @@ success names every one (`ALL`), and she keeps sensing it until she leaves. `rev
 substance of each gift she holds; `sensed_primum` and `sense_line` build what the web "You
 sense" block lists ("<Name> Primum: <Step>" per substance, the `primum` block of the
 `room_state` frame) and the sentence `look` ends with ("You sense fire Primum: Massive."). It
-never names a substance she has not perceived.
+never names a substance she has not perceived. What a check can name (`candidate_substances`)
+is the place's amounts and the creatures' amounts, the larger of the two per substance:
+several creatures of one substance in a room add up (a pack of fire elementals reads richer),
+and a place against a creature takes the larger. This is the only place a creature's Primum
+counts besides harvesting it; it never feeds a cast.
 
 **Harvesting Primum** (`services/harvest.py`). `harvest_offers(character)` lists what she can
 extract where she stands: only Primum she perceives, only real sources (a lair that still holds

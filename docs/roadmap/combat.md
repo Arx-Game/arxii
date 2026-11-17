@@ -531,8 +531,9 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   characters perceive, one row per character who can take it, built once per request by
   `CombatEncounterViewSet._harvest_offers_by_opponent`); the web combat opponent row shows a
   Harvest button on a slain foe, and telnet reaches the same action as `extract fire from
-  elemental`. Several creatures of one substance in a room add up when a cast reads the room's
-  Primum; a lair against a creature takes the larger. Calling up in a fight is unchanged (an
+  elemental`. Several creatures of one substance in a room add up when a Magesight check reads the
+  room's Primum; a lair against a creature takes the larger. A creature's Primum never feeds a
+  cast: it matters only for sensing and harvesting. Calling up in a fight is unchanged (an
   immediate act once a round). Detail: `docs/systems/magic.md` "Substances and Primum".
 - **Combat offense standalone-cast flavor catalog (#1995).** A PHYSICAL technique's
   standalone cast (not a combat round) can pick a curated consequence-pool flavor

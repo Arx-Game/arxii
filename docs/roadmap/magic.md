@@ -420,7 +420,8 @@ Design record #5121. Built in one PR, in this order:
 2. **Primum in places and creatures.** `PlacePrimum` (a lair: capacity, stock, slow refill,
    finite), `CreaturePrimum`, and staff-edited `PrimumStep`, `SubstancePowerStep` rows. A room
    whose ordinary condition leans a substance's way reads Trace; lairs and creatures hold the
-   large amounts. Matching gives full benefit, related `substance_related_share_pct`, opposed
+   large amounts. A cast draws on the place and her equipped items, never on creatures: a
+   creature's Primum matters only for sensing and harvesting. Matching gives full benefit, related `substance_related_share_pct`, opposed
    works against the caster; sources add with a taper up to `substance_power_cap`; the bonus
    still grows with her GIFT thread.
 3. **Perceiving it.** `EffectType.REVEAL_PRIMUM` (a perception technique's check): a plain
