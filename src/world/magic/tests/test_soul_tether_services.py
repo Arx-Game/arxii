@@ -48,14 +48,17 @@ from world.magic.factories import (
     ThreadWeavingUnlockFactory,
     wire_soul_tether_content,
 )
-from world.magic.models import Thread
+from world.magic.models import CharacterAura, Thread
 from world.magic.models.soul_tether import Sineating
+from world.magic.services.corruption import accrue_corruption
 from world.magic.services.soul_tether import (
     _compute_per_scene_sineating_cap,
     accept_soul_tether,
+    ensure_sineater_thread,
     request_sineating,
     resolve_sineating,
 )
+from world.magic.types.corruption import CorruptionSource
 from world.magic.types.soul_tether import SineatingOffer, SoulTetherRole as SoulTetherRoleEnum
 from world.relationships.factories import (
     CharacterRelationshipFactory,
@@ -383,6 +386,112 @@ class AcceptSoulTetherHappyPathTests(TestCase):
         )
         self.assertIn("soul_tether_redirect", trigger_def_names)
         self.assertIn("soul_tether_stage_advance_prompt", trigger_def_names)
+
+
+# ---------------------------------------------------------------------------
+# 4.3b  The Sineater's half of the bond (#5177)
+# ---------------------------------------------------------------------------
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)
+class SineaterHalfOfBondTests(TestCase):
+    """A formed tether gives the Sineater a thread, and their resistance then applies."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        wire_soul_tether_content()
+        cls.sinner, cls.sineater = _make_eligible_pair()
+        _make_active_relationship(cls.sinner, cls.sineater)
+        cls.abyssal = ResonanceFactory(affinity=AffinityFactory(name="Abyssal"))
+        cls.primal = ResonanceFactory(affinity=AffinityFactory(name="Primal"))
+        cls.minor_primal = ResonanceFactory(affinity=cls.primal.affinity)
+        CharacterResonanceFactory(
+            character_sheet=cls.sineater, resonance=cls.primal, lifetime_earned=40
+        )
+        CharacterResonanceFactory(
+            character_sheet=cls.sineater, resonance=cls.minor_primal, lifetime_earned=5
+        )
+        cls.capstone = accept_soul_tether(
+            initiator_sheet=cls.sinner,
+            partner_sheet=cls.sineater,
+            sinner_role=SoulTetherRoleEnum.SINNER,
+            resonance=cls.abyssal,
+            ritual_components=[],
+        )
+
+    def test_both_sides_hold_a_thread_and_the_default_resonance_is_their_strongest(self) -> None:
+        sinner_thread = Thread.objects.get(owner=self.sinner, target_capstone=self.capstone)
+        sineater_thread = Thread.objects.get(
+            owner=self.sineater, target_kind=TargetKind.RELATIONSHIP_CAPSTONE
+        )
+        self.assertEqual(sinner_thread.resonance, self.abyssal)
+        self.assertEqual(sineater_thread.resonance, self.primal)
+        # The Sineater's thread sits on a ritual capstone of their own side.
+        self.assertEqual(sineater_thread.target_capstone.relationship.source, self.sineater)
+        self.assertTrue(sineater_thread.target_capstone.is_ritual_capstone)
+
+    def _fresh_tether(self) -> tuple:
+        """A new tethered (sinner, sineater) pair; the Sineater holds no resonance yet."""
+        sinner, sineater = CharacterSheetFactory(), CharacterSheetFactory()
+        _set_primary_affinity_abyssal(sinner)
+        _set_primary_affinity_primal(sineater)
+        _grant_relationship_track_unlock(sinner, RelationshipTypeFactory())
+        _make_active_relationship(sinner, sineater)
+        return sinner, sineater
+
+    def test_their_resistance_softens_what_they_carry(self) -> None:
+        sinner, sineater = self._fresh_tether()
+        CharacterResonanceFactory(
+            character_sheet=sineater, resonance=self.primal, lifetime_helped=500
+        )
+        accept_soul_tether(
+            initiator_sheet=sinner,
+            partner_sheet=sineater,
+            sinner_role=SoulTetherRoleEnum.SINNER,
+            resonance=self.abyssal,
+            ritual_components=[],
+        )
+        result = accrue_corruption(
+            character_sheet=sineater,
+            resonance=self.primal,
+            amount=10,
+            source=CorruptionSource.TECHNIQUE_USE,
+        )
+        self.assertEqual(result.amount_applied, 5)
+
+    def test_ensure_sineater_thread_weaves_for_a_tether_formed_without_one(self) -> None:
+        sinner, sineater = self._fresh_tether()
+        accept_soul_tether(
+            initiator_sheet=sinner,
+            partner_sheet=sineater,
+            sinner_role=SoulTetherRoleEnum.SINNER,
+            resonance=self.abyssal,
+            ritual_components=[],
+        )
+        # The Sineater held no resonance, so nothing is invented.
+        self.assertIsNone(ensure_sineater_thread(sineater, sinner))
+        self.assertFalse(Thread.objects.filter(owner=sineater).exists())
+
+        woven = ensure_sineater_thread(sineater, sinner, resonance=self.primal)
+        self.assertEqual(woven.resonance, self.primal)
+        self.assertEqual(ensure_sineater_thread(sineater, sinner), woven)
+
+    def test_a_sheet_without_an_aura_gets_an_empty_one_when_it_joins_a_tether(self) -> None:
+        sinner = CharacterSheetFactory()
+        npc_sineater = CharacterSheetFactory()
+        _set_primary_affinity_abyssal(sinner)
+        _grant_relationship_track_unlock(sinner, RelationshipTypeFactory())
+        _make_active_relationship(sinner, npc_sineater)
+        self.assertFalse(CharacterAura.objects.filter(character=npc_sineater).exists())
+
+        accept_soul_tether(
+            initiator_sheet=sinner,
+            partner_sheet=npc_sineater,
+            sinner_role=SoulTetherRoleEnum.SINNER,
+            resonance=self.abyssal,
+            ritual_components=[],
+        )
+        self.assertFalse(CharacterAura.objects.get(character=npc_sineater).cached_shares)
 
 
 # ---------------------------------------------------------------------------

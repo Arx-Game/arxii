@@ -33,6 +33,7 @@ from world.relationships.models import CharacterRelationship
 from world.scenes.interaction_services import get_active_scene
 
 _RESONANCE_KWARG = "resonance"
+_SINEATER_RESONANCE_KWARG = "sineater_resonance"
 _SINS_KWARG = "sins"
 
 
@@ -160,7 +161,7 @@ class CmdTether(ArxCommand):
         self._form_tether(
             args,
             verb="burden",
-            usage="  tether burden <partner> resonance=<name>",
+            usage="  tether burden <partner> resonance=<name> [sineater_resonance=<name>]",
             sinner_role=_SoulTetherRoleEnum.SINNER,
             success_fmt="The burden is bound. A Soul Tether forms between you and {partner}.",
         )
@@ -170,7 +171,7 @@ class CmdTether(ArxCommand):
         self._form_tether(
             args,
             verb="bear",
-            usage="  tether bear <partner> resonance=<name>",
+            usage="  tether bear <partner> resonance=<name> [sineater_resonance=<name>]",
             sinner_role=_SoulTetherRoleEnum.SINEATER,
             success_fmt="You bear the burden. A Soul Tether forms between you and {partner}.",
         )
@@ -205,6 +206,16 @@ class CmdTether(ArxCommand):
             msg = f"No resonance named '{resonance_name}'."
             raise CommandError(msg)
 
+        sineater_resonance = None
+        sineater_resonance_name = kwargs.get(_SINEATER_RESONANCE_KWARG, "").strip()
+        if sineater_resonance_name:
+            sineater_resonance = Resonance.objects.filter(
+                name__iexact=sineater_resonance_name
+            ).first()
+            if sineater_resonance is None:
+                msg = f"No resonance named '{sineater_resonance_name}'."
+                raise CommandError(msg)
+
         try:
             accept_soul_tether(
                 initiator_sheet=caller_sheet,
@@ -212,6 +223,7 @@ class CmdTether(ArxCommand):
                 sinner_role=sinner_role,
                 resonance=resonance,
                 ritual_components=[],
+                sineater_resonance=sineater_resonance,
             )
         except SoulTetherError as exc:
             raise CommandError(exc.user_message) from exc

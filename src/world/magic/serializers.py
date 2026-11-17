@@ -2220,12 +2220,15 @@ class AcceptSoulTetherSerializer(serializers.Serializer):
     ``partner_sheet_id`` identifies the partner's character sheet.
     ``sinner_role`` determines which side (SINNER or SINEATER) the initiator holds.
     ``resonance_id`` selects the resonance for the Sinner's Thread.
+    ``sineater_resonance_id`` optionally selects the resonance for the Sineater's own Thread
+    (#5177); without it the Sineater's strongest resonance of their main affinity is used.
     """
 
     actor_sheet_id = serializers.IntegerField()
     partner_sheet_id = serializers.IntegerField()
     sinner_role = serializers.ChoiceField(choices=["SINNER", "SINEATER"])
     resonance_id = serializers.IntegerField()
+    sineater_resonance_id = serializers.IntegerField(required=False)
 
     def validate_actor_sheet_id(self, value: int) -> CharacterSheet:
         """Resolve actor sheet with ownership check."""
@@ -2238,6 +2241,10 @@ class AcceptSoulTetherSerializer(serializers.Serializer):
 
     def validate_resonance_id(self, value: int) -> "Resonance":
         """Resolve resonance by PK."""
+        return _resolve_resonance_pk(value)
+
+    def validate_sineater_resonance_id(self, value: int) -> "Resonance":
+        """Resolve the Sineater's resonance by PK."""
         return _resolve_resonance_pk(value)
 
     def validate(self, attrs: dict) -> dict:
@@ -2265,6 +2272,7 @@ class AcceptSoulTetherSerializer(serializers.Serializer):
                 sinner_role=sinner_role,
                 resonance=resonance,
                 ritual_components=[],
+                sineater_resonance=validated_data.get("sineater_resonance_id"),
             )
         except SoulTetherError as exc:
             raise serializers.ValidationError(exc.user_message) from exc

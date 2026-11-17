@@ -43,7 +43,8 @@ from world.magic.exceptions import (
 from world.magic.models import CharacterThreadWeavingUnlock, Ritual
 from world.magic.models.affinity import Affinity, Resonance
 from world.magic.models.soul_tether_config import SoulTetherConfig
-from world.magic.services.threads import thread_rung, weave_thread
+from world.magic.services.aura import ensure_aura
+from world.magic.services.threads import thread_rung, weave_tether_bond_thread, weave_thread
 from world.magic.types.soul_tether import (
     RescueOutcome,
     SineatingOffer,
@@ -163,12 +164,13 @@ def _get_or_create_relationship(
 # =============================================================================
 
 
-def accept_soul_tether(
+def accept_soul_tether(  # noqa: PLR0913 - the pair, the role, two resonances and components
     initiator_sheet: CharacterSheet,
     partner_sheet: CharacterSheet,
     sinner_role: SoulTetherRoleEnum,
     resonance: Resonance,
     ritual_components: list[Any],  # noqa: ARG001
+    sineater_resonance: Resonance | None = None,
 ) -> RelationshipCapstone:
     """Form a Soul Tether bond (Spec B §12.4).
 
@@ -183,9 +185,13 @@ def accept_soul_tether(
             Sinner. If SINEATER, initiator is the Sineater (partner is Sinner).
         resonance: The Resonance the Sinner's Thread will channel.
         ritual_components: Items consumed by the ritual (validated by caller).
+        sineater_resonance: The Resonance the Sineater's own Thread will channel (#5177).
+            Defaults to the Sineater's strongest resonance of their main affinity (see
+            ``default_sineater_resonance``); when they hold none the thread is left unwoven.
 
     Returns:
-        The RelationshipCapstone created for this ritual formation event.
+        The RelationshipCapstone created for this ritual formation event (the Sinner's
+        side; the Sineater's thread sits on a capstone of their own side).
 
     Raises:
         AffinityGateError: Sineater is Abyssal-primary or Sinner is Celestial-primary.
@@ -198,7 +204,10 @@ def accept_soul_tether(
     else:
         sinner_sheet, sineater_sheet = partner_sheet, initiator_sheet
 
-    # 2. Validate affinity gates (§3).
+    # 2. Validate affinity gates (§3). A sheet with no aura (a minted story NPC) gets an
+    #    empty one first; an aura with no shares passes both gates.
+    ensure_aura(sinner_sheet)
+    ensure_aura(sineater_sheet)
     _validate_affinity_gates(sinner_sheet, sineater_sheet)
 
     # 3. Validate Sinner has a RELATIONSHIP_TRACK ThreadWeavingUnlock (§12.4).
@@ -257,6 +266,14 @@ def accept_soul_tether(
             ),
         )
 
+        # 9b. Weave the Sineater's half of the bond (#5177). It sits on a ritual capstone of
+        #     the Sineater's own side, the only anchor their weave can own.
+        _weave_sineater_thread(
+            rel_incoming,
+            resonance=sineater_resonance or default_sineater_resonance(sineater_sheet),
+            ritual=ritual,
+        )
+
         # 10. Install the SoulTetherActive ConditionInstance on the Sinner if absent.
         #     Multiple tethers reuse the single ConditionInstance (no duplicate).
         active_template = ConditionTemplate.get_by_name("Soul Tether Active")
@@ -280,6 +297,111 @@ def accept_soul_tether(
         _increment_stat_safe(sinner_sheet, "tether.formed", 1)
 
     return capstone
+
+
+def default_sineater_resonance(sineater_sheet: CharacterSheet) -> Resonance | None:
+    """The resonance a Sineater's thread channels when they name none (#5177).
+
+    Their strongest resonance of their main affinity (the most lifetime earned), else the
+    strongest they hold of any affinity, else None. A resonance is never invented.
+    """
+    from world.magic.models.aura import CharacterResonance  # noqa: PLC0415
+    from world.magic.services.drift_correction import main_affinity_rows  # noqa: PLC0415
+
+    main_rows = main_affinity_rows(sineater_sheet)
+    if main_rows:
+        return main_rows[0].resonance
+    row = (
+        CharacterResonance.objects.filter(character_sheet=sineater_sheet)
+        .select_related("resonance")
+        .order_by("-lifetime_earned", "resonance_id")
+        .first()
+    )
+    return row.resonance if row is not None else None
+
+
+def _live_sineater_thread(rel_incoming: CharacterRelationship) -> Thread | None:
+    """The Sineater's live RELATIONSHIP_CAPSTONE thread on their own side of a tether."""
+    from world.magic.models import Thread  # noqa: PLC0415
+
+    return Thread.objects.filter(
+        owner_id=rel_incoming.source_id,
+        target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+        target_capstone__relationship=rel_incoming,
+        target_capstone__is_ritual_capstone=True,
+        retired_at__isnull=True,
+    ).first()
+
+
+def _weave_sineater_thread(
+    rel_incoming: CharacterRelationship,
+    *,
+    resonance: Resonance | None,
+    ritual: Ritual | None,
+) -> Thread | None:
+    """Weave the Sineater's thread on a ritual capstone of their own side.
+
+    None when there is no resonance to channel.
+    """
+    if resonance is None:
+        return None
+    capstone = rel_incoming.capstones.filter(is_ritual_capstone=True).first()
+    if capstone is None:
+        capstone = RelationshipCapstone.objects.create(
+            relationship=rel_incoming,
+            tier_claimed=rel_incoming.tier,
+            xp_spent=0,
+            is_ritual_capstone=True,
+            ritual=ritual,
+        )
+    return weave_tether_bond_thread(
+        rel_incoming.source,
+        capstone,
+        resonance,
+        name="Soul Tether Burden",
+        description=(
+            f"The burden {rel_incoming.source} carries for {rel_incoming.target}. "
+            "Softens the corruption a Sineater takes on."
+        ),
+    )
+
+
+def ensure_sineater_thread(
+    sineater_sheet: CharacterSheet,
+    sinner_sheet: CharacterSheet,
+    resonance: Resonance | None = None,
+) -> Thread | None:
+    """The Sineater's live thread on their tether with this Sinner, weaving it when absent.
+
+    Tethers formed before #5177 have none. The thread channels ``resonance`` when given,
+    else ``default_sineater_resonance``; with neither (the Sineater holds no resonance)
+    nothing is woven and None comes back. An existing thread is returned as it is.
+
+    Raises:
+        SoulTetherFormationError: no active tether runs from this Sineater to this Sinner.
+    """
+    with transaction.atomic():
+        rel_incoming = (
+            CharacterRelationship.objects.select_for_update()
+            .select_related("source", "target")
+            .filter(
+                source=sineater_sheet,
+                target=sinner_sheet,
+                is_soul_tether=True,
+                soul_tether_role=SoulTetherRole.SINEATER,
+            )
+            .first()
+        )
+        if rel_incoming is None:
+            raise SoulTetherFormationError(_MSG_NO_ACTIVE_TETHER)
+        existing = _live_sineater_thread(rel_incoming)
+        if existing is not None:
+            return existing
+        return _weave_sineater_thread(
+            rel_incoming,
+            resonance=resonance or default_sineater_resonance(sineater_sheet),
+            ritual=Ritual.objects.filter(name="accept_soul_tether").first(),
+        )
 
 
 def _install_soul_tether_triggers(
@@ -2015,6 +2137,9 @@ def accept_soul_tether_via_session(*, session: Any) -> Any:
             or invalid.
         "ritual_components" (list): Component items (validated by caller).
             Optional; defaults to [].
+        "sineater_resonance_id" (int): PK of the Resonance the Sineater's own Thread
+            will channel (#5177). Optional; defaults to the Sineater's strongest
+            resonance of their main affinity.
 
     NOTE (Slice B scope): resonance comes from session_kwargs as a scalar ID
     value. The frontend draft dialog (Phase 9) will populate it via the session
@@ -2063,6 +2188,15 @@ def accept_soul_tether_via_session(*, session: Any) -> Any:
 
     ritual_components: list[Any] = session.session_kwargs.get("ritual_components", [])
 
+    # The Sineater's own thread resonance is optional; absent falls back to their default.
+    sineater_resonance: Resonance | None = None
+    sineater_resonance_id: int | None = session.session_kwargs.get("sineater_resonance_id")
+    if sineater_resonance_id is not None:
+        try:
+            sineater_resonance = Resonance.objects.get(pk=sineater_resonance_id)
+        except Resonance.DoesNotExist as exc:
+            raise RequiredReferenceMissingError from exc
+
     # 4. Build the accept_soul_tether call using its initiator/partner + sinner_role shape.
     #    We treat the sinner as the "initiator" (arbitrary — the function uses sinner_role
     #    to resolve which sheet is which, not the argument name).
@@ -2072,4 +2206,5 @@ def accept_soul_tether_via_session(*, session: Any) -> Any:
         sinner_role=SoulTetherRoleEnum.SINNER,
         resonance=resonance,
         ritual_components=ritual_components,
+        sineater_resonance=sineater_resonance,
     )
