@@ -5201,3 +5201,36 @@ class ReflectionFactory(factory.django.DjangoModelFactory):
         author=factory.SelfAttribute("..character_sheet"),
     )
     rite = None
+
+
+def author_compulsion_condition(check_type: object, *, penalty: int = -3) -> object:
+    """The Compulsion condition staff author, designated on the corruption configuration.
+
+    A scene-duration condition with one check modifier on ``check_type`` of ``penalty`` per
+    point of severity (it scales with severity), named on ``CorruptionConfig.compulsion_condition``
+    (#5177). For tests and dev setups only: the live game's condition is authored in admin,
+    and no seeder writes it. Returns the condition template.
+    """
+    from world.conditions.constants import DurationType
+    from world.conditions.factories import (
+        ConditionCategoryFactory,
+        ConditionCheckModifierFactory,
+        ConditionTemplateFactory,
+    )
+    from world.magic.services.corruption import get_corruption_config
+
+    condition = ConditionTemplateFactory(
+        name="Clouded by a Compulsion",
+        category=ConditionCategoryFactory(self_shakeable=True),
+        default_duration_type=DurationType.SCENE,
+    )
+    ConditionCheckModifierFactory(
+        condition=condition,
+        check_type=check_type,
+        modifier_value=penalty,
+        scales_with_severity=True,
+    )
+    cfg = get_corruption_config()
+    cfg.compulsion_condition = condition
+    cfg.save()
+    return condition

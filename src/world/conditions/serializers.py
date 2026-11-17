@@ -186,6 +186,21 @@ class ConditionTemplateDetailSerializer(ConditionTemplateSerializer):
 # =============================================================================
 
 
+def condition_display_name(instance: ConditionInstance) -> str:
+    """The name a player is shown for ``instance``: its template's, except that a corruption
+    condition reads "Intrusive Thoughts: <resonance>" or "Compulsion: <resonance>" from the
+    configured stages (#5177). ``world.magic`` sits above this app, so it is imported here."""
+    condition = instance.condition
+    if condition.corruption_resonance_id is None:
+        return condition.name
+    from world.magic.services.impulses import corruption_display_name  # noqa: PLC0415
+
+    stage = instance.current_stage
+    return corruption_display_name(
+        instance, stage.stage_order if stage is not None else 0, condition.corruption_resonance
+    )
+
+
 class ConditionInstanceSerializer(serializers.ModelSerializer):
     """
     Serializer for active condition instances.
@@ -193,8 +208,9 @@ class ConditionInstanceSerializer(serializers.ModelSerializer):
     Used for displaying conditions on a character's condition tab.
     """
 
-    # Condition template info for display
-    name = serializers.CharField(source="condition.name", read_only=True)
+    # Condition template info for display. A corruption condition reads "Intrusive Thoughts:
+    # <resonance>" or "Compulsion: <resonance>" at its later stages (#5177).
+    name = serializers.SerializerMethodField()
     description = serializers.CharField(source="condition.player_description", read_only=True)
     icon = serializers.CharField(source="condition.icon", read_only=True)
     color_hex = serializers.CharField(source="condition.color_hex", read_only=True)
@@ -268,6 +284,9 @@ class ConditionInstanceSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    def get_name(self, obj: ConditionInstance) -> str:
+        return condition_display_name(obj)
+
     def get_total_stages(self, obj: ConditionInstance) -> int | None:
         """Get total number of stages for progressive conditions."""
         if obj.condition.has_progression:
@@ -305,7 +324,7 @@ class ConditionInstanceObserverSerializer(serializers.ModelSerializer):
     Only shows visible conditions with observer-appropriate descriptions.
     """
 
-    name = serializers.CharField(source="condition.name", read_only=True)
+    name = serializers.SerializerMethodField()
     description = serializers.CharField(source="condition.observer_description", read_only=True)
     icon = serializers.CharField(source="condition.icon", read_only=True)
     color_hex = serializers.CharField(source="condition.color_hex", read_only=True)
@@ -329,6 +348,9 @@ class ConditionInstanceObserverSerializer(serializers.ModelSerializer):
             "stage_name",
         ]
         read_only_fields = fields
+
+    def get_name(self, obj: ConditionInstance) -> str:
+        return condition_display_name(obj)
 
 
 # =============================================================================

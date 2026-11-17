@@ -172,3 +172,27 @@ def release_mire(*, holding: MireHolding, amount: int) -> int:
     holding.amount -= result.amount_reduced
     holding.save(update_fields=["amount"])
     return result.amount_reduced
+
+
+@transaction.atomic
+def add_to_largest_holding(sheet: CharacterSheet, resonance: Resonance, amount: int) -> bool:
+    """Add ``amount`` to the Sineater's largest holding in ``resonance``; True when one grew.
+
+    Corruption a Sineater adds to themselves by giving in to a Compulsion (#5177) is more of
+    the Mire they carry, so the Sinner with the most held for them carries it. The corruption
+    itself was already accrued; this only says whose it is, so holdings stay within it. Does
+    nothing when the character holds nothing for anyone in this resonance.
+    """
+    if amount <= 0:
+        return False
+    holding = (
+        MireHolding.objects.select_for_update()
+        .filter(relationship__source=sheet, resonance=resonance, amount__gt=0)
+        .order_by("-amount", "pk")
+        .first()
+    )
+    if holding is None:
+        return False
+    holding.amount += amount
+    holding.save(update_fields=["amount"])
+    return True

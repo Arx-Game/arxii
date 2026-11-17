@@ -283,6 +283,12 @@ def grant_resonance(  # noqa: PLR0913
 
     open_or_extend_conversion_offer(grant)
 
+    # #5177: a deed that grew a resonance the character is compelled by is giving in to it.
+    # It returns at once, with no query, for a row carrying no corruption.
+    from world.magic.services.impulses import give_in_to_compulsion  # noqa: PLC0415
+
+    give_in_to_compulsion(grant, cr)
+
     # Endorsement/resonance-threshold distinction rank-up (#2037 Decision 8) — only
     # for the "sustained endorsements" identity-reinforcing-play sources. Gating on
     # ACCELERATED_GAIN_SOURCES also prevents a feedback loop: the DISTINCTION source
