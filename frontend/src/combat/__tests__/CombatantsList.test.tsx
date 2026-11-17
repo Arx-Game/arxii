@@ -12,6 +12,7 @@ import type { ReactNode } from 'react';
 
 import { deepLinkModalSlice } from '@/store/deepLinkModalSlice';
 import type { components } from '@/generated/api';
+import { combatKeys } from '../queries';
 
 type ConditionInstance = components['schemas']['ConditionInstance'];
 
@@ -1110,6 +1111,7 @@ describe('ally taunt menu', () => {
     expect(row.getByText('You sense fire Primum in its remains.')).toBeInTheDocument();
     expect(row.getByText('Check: Harvesting')).toBeInTheDocument();
     expect(within(screen.getByTestId('opponent-row-11')).queryByText('Harvest')).toBeNull();
+    const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
     await user.click(row.getByText('Harvest'));
 
     expect(mockHarvestMutateAsync).toHaveBeenCalledWith({
@@ -1120,5 +1122,7 @@ describe('ally taunt menu', () => {
       await row.findByText('Success. You draw out 1 Fire Primum (Common).')
     ).toBeInTheDocument();
     expect(row.getByText('Nothing more can be drawn from Mire Knight.')).toBeInTheDocument();
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: combatKeys.encounter(1) });
+    invalidate.mockRestore();
   });
 });

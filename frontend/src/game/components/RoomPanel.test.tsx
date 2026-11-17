@@ -206,4 +206,43 @@ describe('RoomPanel Primum', () => {
     fireEvent.click(screen.getByRole('button', { name: 'empty the lair' }));
     expect(screen.getByText('Fire Primum here is now Rich.')).toBeInTheDocument();
   });
+
+  it('closes the harvest block when the lair empties with no answer held', () => {
+    const offer = {
+      substance_id: 3,
+      substance_name: 'fire',
+      source: 'place',
+      opponent_id: null,
+      opponent_name: '',
+      step_name: 'Massive',
+      check_name: 'Harvesting',
+    };
+    function Harness() {
+      const [emptied, setEmptied] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setEmptied(true)}>
+            empty the lair
+          </button>
+          <RoomPanel
+            character="Aria"
+            characterId={9}
+            room={{
+              ...room,
+              primum: { sensed: [], line: '', harvestable: emptied ? [] : [offer] },
+            }}
+            scene={null}
+          />
+        </>
+      );
+    }
+    renderWithProviders(<Harness />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Harvest Primum' }));
+    expect(screen.getByText('Draw out')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'empty the lair' }));
+
+    expect(screen.queryByText('Draw out')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+  });
 });

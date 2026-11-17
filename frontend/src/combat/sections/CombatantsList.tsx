@@ -59,6 +59,7 @@ import {
 } from '@/combat/components/CompulsionBanner';
 import { MoraleStateChip } from '@/combat/standoff/MoraleStateChip';
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { MoreVertical } from 'lucide-react';
 import { toast } from 'sonner';
 import { HarvestRow } from '@/scenes/components/HarvestRow';
@@ -72,7 +73,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { ConditionBadge } from '../components/ConditionBadge';
-import { useRegistryDispatch } from '../queries';
+import { combatKeys, useRegistryDispatch } from '../queries';
 import { isDispatchFailure } from '../types';
 import type { EncounterDetail, Participant, Opponent } from '../types';
 import type { components } from '@/generated/api';
@@ -378,6 +379,7 @@ function OpponentRow({
   const { mutateAsync, isPending } = useRegistryDispatch(encounterId, characterId ?? 0);
   // The answer is held here so it stays once the foe is no longer offered (#5125).
   const [harvestAnswer, setHarvestAnswer] = useState<HarvestAnswer | null>(null);
+  const queryClient = useQueryClient();
   // Offers come one row per character who can take them; this viewer's own when she can.
   const actingCharacterId =
     opponent.harvest_offers.find((offer) => offer.character_id === characterId)?.character_id ??
@@ -501,7 +503,10 @@ function OpponentRow({
               offers={harvestOffers}
               characterId={actingCharacterId}
               answer={harvestAnswer}
-              onAnswer={setHarvestAnswer}
+              onAnswer={(answer) => {
+                setHarvestAnswer(answer);
+                void queryClient.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) });
+              }}
             />
           </div>
         )}

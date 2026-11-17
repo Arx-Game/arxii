@@ -19,6 +19,10 @@ export function PrimumPanel({ primum, characterId }: PrimumPanelProps) {
   const [open, setOpen] = useState(false);
   const [answer, setAnswer] = useState<HarvestAnswer | null>(null);
   const offers = characterId ? primum.harvestable : [];
+  // The lair emptied under an open block with nothing to show: close it.
+  if (open && offers.length === 0 && answer === null) {
+    setOpen(false);
+  }
   const showHarvest = Boolean(characterId) && (open || answer !== null);
 
   if (primum.sensed.length === 0 && offers.length === 0 && !answer) {
