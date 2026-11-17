@@ -387,7 +387,7 @@ What was built, in one PR (seven parts):
 
 1. **Stronger and weaker.** Staff name a gift's substance once (`GiftSubstance`, the Gift
    admin's Substance inline); every cast of that gift by a caster with a GIFT thread on it
-   gains or loses up to 10 power ("Surroundings: shadow"), scaled by her thread level.
+   gains or loses up to 10 power ("Shadow around you", then one line per source and "Shadow adds"), scaled by her thread level.
 2. **Her cast calls it up.** Where the substance is missing (an ordinary room counts), the
    cast calls it up: its anima rides the cast's own cost before control, so social-scene
    casts usually stay free; the uncovered share spends gift resonance; a matching place is
