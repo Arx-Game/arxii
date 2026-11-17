@@ -1754,10 +1754,12 @@ symmetric.
   generator/staff) and `AreaFootprintPip` (one row per pip naming its lowest holder; every
   ancestor's footprint is derived by walking `Area.parent`, so containment holds by construction). `worldmap/azgaar.py` rasterizes the file's
   grid arrays and river paths; `worldmap/services.py` carries `create_region_map`,
-  `import_region_map_file`, `paint_terrain`, `set_footprint` (reports each pip's holder before
+  `import_region_map_file`, `paint_terrain`, `paint_river` and `reset_rivers` (rivers are
+  drawn by staff and only seeded by the file's major rivers, #5189, ADR-5189), `set_footprint` (reports each pip's holder before
   and after), `clear_footprint`, `restore_pips` (the staff undo's write, #4905, ADR-4905),
   `holder_at`, `region_read`; actions `atlas_create_region_map`/`atlas_carve_footprint`/
-  `atlas_clear_footprint`/`atlas_restore_footprint`/`atlas_paint_terrain`; the staff
+  `atlas_clear_footprint`/`atlas_restore_footprint`/`atlas_paint_terrain`/
+  `atlas_paint_river`/`atlas_reset_rivers`; the staff
   `region-maps` API (upload, pips, file) on the world-builder router; the Atlas's region-map
   view with its Brush, Fill and Loop tools, undo and redo, and Clear (#4905). See
   `docs/systems/areas.md` "World map".

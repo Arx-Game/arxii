@@ -23,12 +23,16 @@ from world.areas.constants import AreaLevel, GridOrigin
 from world.areas.models import Area
 from world.areas.worldmap.azgaar import (
     MapFileError,
+    capital_river_chains,
     height_cells_for,
+    major_river_chains,
     parse_map,
     rasterize,
 )
 from world.areas.worldmap.constants import (
+    CAPITAL_RIVER_REACH,
     PIPS_PER_CELL,
+    WATER_TERRAINS,
     PipSource,
     Terrain,
 )
@@ -217,7 +221,17 @@ def upload_text(upload: RegionMapUpload) -> str:
 
 
 def _write_generator_pips(region: RegionMap, raster: Iterable) -> int:
-    """Replace the region's generator pips; a staff-painted pip keeps its square."""
+    """Replace the region's generator pips; a staff-painted pip keeps its square.
+
+    Rivers belong to staff once a region has pips (#5189): only a region's first
+    upload takes its rivers from the file. Every later one carries each pip's
+    river over by coordinate, so a river drawn or erased by hand survives; a pip
+    that is water in the new file loses its river.
+    """
+    first_upload = not TerrainPip.objects.filter(region=region).exists()
+    kept_rivers = set(
+        TerrainPip.objects.filter(region=region, has_river=True).values_list("x", "y")
+    )
     TerrainPip.objects.filter(region=region, source=PipSource.GENERATOR).delete()
     staff = set(
         TerrainPip.objects.filter(region=region, source=PipSource.STAFF).values_list("x", "y")
@@ -230,7 +244,11 @@ def _write_generator_pips(region: RegionMap, raster: Iterable) -> int:
             y=y0 + p.y,
             terrain=p.terrain,
             height=p.height,
-            has_river=p.has_river,
+            has_river=(
+                p.has_river
+                if first_upload
+                else (x0 + p.x, y0 + p.y) in kept_rivers and p.terrain not in WATER_TERRAINS
+            ),
             source=PipSource.GENERATOR,
         )
         for p in raster
@@ -271,9 +289,11 @@ def paint_terrain(
         for row in existing.values():
             row.terrain = terrain
             row.source = PipSource.STAFF
+            if terrain in WATER_TERRAINS:
+                row.has_river = False  # a river does not run through open water
         TerrainPip.objects.bulk_update_with_reason(
             list(existing.values()),
-            ["terrain", "source"],
+            ["terrain", "source", "has_river"],
             batch_size=5000,
             reason="staff paint rewrites rows loaded in this transaction",
         )
@@ -286,6 +306,161 @@ def paint_terrain(
             batch_size=5000,
         )
     return len(wanted)
+
+
+# --------------------------------------------------------------------------- rivers
+
+
+def paint_river(*, region: RegionMap, pips: Iterable[Pip], river: bool) -> int:
+    """Draw a river through ``pips``, or erase it when ``river`` is false (#5189).
+
+    A river is a line across land, so a water or lake pip in the stroke is passed
+    over, and so is a pip with no ground yet. The pip's terrain and source are
+    left alone: drawing a river does not make the ground staff-painted. Pips
+    outside the region are refused. Returns how many pips changed.
+    """
+    wanted = _unique_pips(pips, MAX_PAINT_PIPS)
+    if any(not _inside_region(region, p) for p in wanted):
+        msg = "Some of those pips are outside this region."
+        raise WorldMapServiceError(msg)
+    with transaction.atomic():
+        rows = [
+            row
+            for row in TerrainPip.objects.filter(
+                region=region, x__in={p[0] for p in wanted}, y__in={p[1] for p in wanted}
+            )
+            if (row.x, row.y) in wanted
+            and row.has_river != river
+            and row.terrain not in WATER_TERRAINS
+        ]
+        for row in rows:
+            row.has_river = river
+        TerrainPip.objects.bulk_update_with_reason(
+            rows,
+            ["has_river"],
+            batch_size=5000,
+            reason="a staff river stroke rewrites rows loaded in this transaction",
+        )
+    return len(rows)
+
+
+def reset_rivers(*, region: RegionMap) -> int:
+    """Replace every river on ``region`` with the ones its map file gives it
+    (#5189): the major rivers, and for each inland capital of a kingdom or above
+    the river beside it, followed down to its mouth. Staff-drawn rivers go too;
+    that is what a reset is. Returns how many pips carry a river afterwards.
+
+    A kept river whose mouth stops a few pips short of the map's water (the
+    coast was repainted, or the generator's lake is too small to be a pip) is
+    carried straight on to the water, so it reads as reaching it.
+    """
+    # the bytes alone, never the row: a loaded upload would carry its file into the identity map
+    file_bytes = (
+        RegionMapUpload.objects.filter(region=region)
+        .order_by("-uploaded_at")
+        .values_list("file_bytes", flat=True)
+        .first()
+    )
+    if file_bytes is None:
+        msg = "This region has no map file to read rivers from."
+        raise WorldMapServiceError(msg)
+    try:
+        gmap = parse_map(gzip.decompress(bytes(file_bytes)).decode("utf-8"))
+    except MapFileError as exc:
+        raise WorldMapServiceError(str(exc), user_message=exc.user_message) from exc
+    width = region.width_cells * PIPS_PER_CELL
+    height = region.height_cells * PIPS_PER_CELL
+    scale = gmap.width_px / width
+    x0, y0 = region.pip_x0, region.pip_y0
+    terrain: dict[Pip, str] = {
+        (x, y): kind
+        for x, y, kind in TerrainPip.objects.filter(region=region).values_list("x", "y", "terrain")
+    }
+    capitals = [
+        (x - x0, y - y0) for x, y in _capital_pips(region) if not _beside_water((x, y), terrain)
+    ]
+    courses = major_river_chains(gmap, scale, width, height) + capital_river_chains(
+        gmap, scale, width, height, capitals, CAPITAL_RIVER_REACH
+    )
+    wanted: set[Pip] = set()
+    for course in courses:
+        if not course:
+            continue
+        on_map = [(x + x0, y + y0) for x, y in course]
+        wanted.update(on_map)
+        wanted.update(_on_to_water(on_map[-1], terrain))
+    wanted = {p for p in wanted if p in terrain and terrain[p] not in WATER_TERRAINS}
+    with transaction.atomic():
+        rows = [
+            row
+            for row in TerrainPip.objects.filter(region=region).filter(
+                Q(has_river=True) | Q(x__in={p[0] for p in wanted}, y__in={p[1] for p in wanted})
+            )
+            if row.has_river != ((row.x, row.y) in wanted)
+        ]
+        for row in rows:
+            row.has_river = (row.x, row.y) in wanted
+        TerrainPip.objects.bulk_update_with_reason(
+            rows,
+            ["has_river"],
+            batch_size=5000,
+            reason="a river reset rewrites rows loaded in this transaction",
+        )
+    return len(wanted)
+
+
+def _capital_pips(region: RegionMap) -> list[Pip]:
+    """The pip of each capital of a kingdom or an empire that stands on ``region``:
+    the barony its title is seated in."""
+    from world.societies.houses.constants import TitleTier  # noqa: PLC0415
+    from world.societies.houses.models import Title  # noqa: PLC0415
+
+    barony_ids: set[int] = set()
+    titles: Iterable[Title] = Title.objects.filter(
+        tier__in=(TitleTier.KINGDOM, TitleTier.EMPIRE), seat_domain__isnull=False
+    ).select_related("seat_domain__area")
+    for title in titles:
+        barony: Area | None = title.seat_domain.area
+        while barony is not None and barony.level != AreaLevel.BARONY:
+            barony = barony.parent
+        if barony is not None:
+            barony_ids.add(barony.pk)
+    return [
+        pip
+        for pip in AreaFootprintPip.objects.filter(area_id__in=barony_ids).values_list("x", "y")
+        if _inside_region(region, pip)
+    ]
+
+
+def _beside_water(pip: Pip, terrain: dict[Pip, str]) -> bool:
+    """Whether the pip is water or touches it, diagonals included."""
+    return any(
+        terrain.get((pip[0] + dx, pip[1] + dy)) in WATER_TERRAINS
+        for dx in (-1, 0, 1)
+        for dy in (-1, 0, 1)
+    )
+
+
+def _on_to_water(mouth: Pip, terrain: dict[Pip, str]) -> list[Pip]:
+    """The pips in a straight line from a river's mouth to the nearest water within
+    ``CAPITAL_RIVER_REACH`` pips; none when the mouth is at the water already or
+    no water is that near."""
+    if _beside_water(mouth, terrain):
+        return []
+    reach = range(-CAPITAL_RIVER_REACH, CAPITAL_RIVER_REACH + 1)
+    water = [
+        (max(abs(dx), abs(dy)), abs(dx) + abs(dy), dx, dy)
+        for dx in reach
+        for dy in reach
+        if terrain.get((mouth[0] + dx, mouth[1] + dy)) in WATER_TERRAINS
+    ]
+    if not water:
+        return []
+    steps, _, dx, dy = min(water)
+    return [
+        (mouth[0] + round(dx * k / steps), mouth[1] + round(dy * k / steps))
+        for k in range(1, steps)
+    ]
 
 
 # --------------------------------------------------------------------------- footprints

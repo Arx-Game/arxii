@@ -11,7 +11,9 @@ from actions.definitions.atlas_map import (
     AtlasClearFootprintAction,
     AtlasCreateRegionMapAction,
     AtlasMoveSeatAction,
+    AtlasPaintRiverAction,
     AtlasPaintTerrainAction,
+    AtlasResetRiversAction,
     AtlasRestoreFootprintAction,
 )
 from evennia_extensions.factories import AccountFactory, CharacterFactory
@@ -179,6 +181,22 @@ class AtlasMapActionTests(TestCase):
             self.staff, region_id=self.region.pk, pips=[[3, 3]], terrain="lava"
         )
         assert not refused.success
+
+    def test_paint_river_and_reset(self) -> None:
+        """#5189: a river is drawn and erased on land; a reset needs the map file."""
+        drawn = AtlasPaintRiverAction().run(self.staff, region_id=self.region.pk, pips=[[3, 3]])
+        assert drawn.success, drawn.message
+        assert drawn.data == {"region_id": self.region.pk, "changed": 1, "river": True}
+        assert TerrainPip.objects.get(x=3, y=3).has_river
+        erased = AtlasPaintRiverAction().run(
+            self.staff, region_id=self.region.pk, pips=[[3, 3]], river=False
+        )
+        assert erased.success, erased.message
+        assert not TerrainPip.objects.get(x=3, y=3).has_river
+        assert not AtlasPaintRiverAction().run(self.player, region_id=self.region.pk).success
+        assert not AtlasPaintRiverAction().run(self.staff, region_id=999999, pips=[]).success
+        assert not AtlasResetRiversAction().run(self.player, region_id=self.region.pk).success
+        assert not AtlasResetRiversAction().run(self.staff, region_id=999999).success
 
     def test_carve_by_title_walks_to_the_rungs_own_area(self) -> None:
         realm = RealmFactory(name="Luxen")

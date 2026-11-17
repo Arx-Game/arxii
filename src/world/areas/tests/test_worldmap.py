@@ -9,9 +9,11 @@ services are exercised on a two-cell region.
 from __future__ import annotations
 
 import gzip
+from itertools import pairwise
 import json
 import os
 from pathlib import Path
+from unittest import mock
 
 from django.test import TestCase, tag
 from django.urls import reverse
@@ -22,10 +24,12 @@ from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.areas.models import Area
 from world.areas.worldmap.azgaar import (
+    GeneratorRiver,
     MapFileError,
     flatten_path,
     parse_map,
     rasterize,
+    river_chain,
     terrain_for,
 )
 from world.areas.worldmap.constants import PipSource, Terrain
@@ -44,8 +48,10 @@ from world.areas.worldmap.services import (
     footprint_of,
     holder_at,
     import_region_map_file,
+    paint_river,
     paint_terrain,
     region_read,
+    reset_rivers,
     restore_pips,
     set_footprint,
 )
@@ -53,16 +59,28 @@ from world.areas.worldmap.services import (
 CATENYS_MAP = Path(os.environ.get("ARXII_CATENYS_MAP", "/home/vscode/catenys-maps/round3/C1.map"))
 
 
-def tiny_map(
+def tiny_map(  # noqa: PLR0913 - a fixture file's knobs
     *,
     width_px: int = 40,
     height_px: int = 40,
     spacing: float = 10.0,
     heights: list[int] | None = None,
     river: str = "",
+    rivers: list[tuple[int, str, float, int]] | None = None,
+    records: bool = True,
+    precipitation: int = 2,
 ) -> str:
     """A generator file of a 4 by 4 grid: the left half land, the right half sea,
-    a lake in one land cell, a river down the second column when asked."""
+    a lake in one land cell, a river down the second column when asked.
+
+    ``river`` is one main stem's outline; ``rivers`` is any number as ``(id,
+    outline, length, parent id)``. An outline runs from the mouth up one bank and
+    back down the other, the way the generator writes it. ``records=False``
+    leaves out the river records, as an older generator's file would.
+    """
+    if river:
+        rivers = [(1, river, 50.0, 0)]
+    rivers = rivers or []
     cells_x = cells_y = 4
     n = cells_x * cells_y
     if heights is None:
@@ -74,11 +92,11 @@ def tiny_map(
         {"i": 2, "type": "lake", "land": False},
     ]
     feature_ids = [2 if i == 5 else (1 if h < 20 else 0) for i, h in enumerate(heights)]
-    prec = [2] * n  # moisture 6: grassland, so land reads as plain
+    prec = [precipitation] * n  # 2 is moisture 6: grassland, so land reads as plain
     temp = [12] * n
     svg = (
         '<svg id="map" width="40" height="40">\n<g id="rivers" fill="#5d97bb">'
-        + (f'<path id="river1" d="{river}"/>' if river else "")
+        + "".join(f'<path id="river{i}" d="{d}"/>' for i, d, _length, _parent in rivers)
         + "</g>\n</svg>"
     )
     grid = json.dumps(
@@ -101,12 +119,33 @@ def tiny_map(
         json.dumps(features),
         "[]",
     ]
+    if rivers and records:
+        fields.append(
+            json.dumps(
+                [
+                    {"i": i, "mouth": 0, "length": length, "parent": parent}
+                    for i, _d, length, parent in rivers
+                ]
+            )
+        )
     return "\r\n".join(fields)
+
+
+# Outlines for the river tests, on the tiny map's land half (pips 0-9 across; the
+# lake is pips 5-9 across and down). Each runs mouth, source, mouth.
+LONG_RIVER = "M15,40 L15,0 L15,40"  # pip column 7, top to bottom
+SHORT_RIVER = "M3,38 L3,22 L3,38"  # pip column 1, rows 11 to 19
+STREAM_INTO_SHORT = "M3,25 L9,25 L3,25"  # pip row 12, from column 4 west to column 1
+THREE_RIVERS = [
+    (1, LONG_RIVER, 50.0, 0),
+    (2, SHORT_RIVER, 10.0, 0),
+    (3, STREAM_INTO_SHORT, 5.0, 2),
+]
 
 
 class RasterizerTests(TestCase):
     def test_parses_a_tiny_map_and_rasterizes_land_sea_lake_and_river(self) -> None:
-        gmap = parse_map(tiny_map(river="M15,0 L15,40"))
+        gmap = parse_map(tiny_map(river=LONG_RIVER))
         assert gmap.cells_x == 4
         assert gmap.width_px == 40
         assert gmap.lake_feature_ids == frozenset({2})
@@ -119,6 +158,53 @@ class RasterizerTests(TestCase):
         assert by[(7, 7)].terrain == Terrain.LAKE  # grid cell 5 = column 1, row 1
         assert by[(7, 2)].has_river  # the river runs down x=15px -> pip column 7
         assert not by[(2, 2)].has_river
+        assert not by[(7, 7)].has_river  # it crosses the lake; water carries no river
+
+    def test_only_the_longest_main_stems_become_river_pips(self) -> None:
+        """#5189: a tributary and a short stem are streams the map does not draw,
+        however long the tributary is."""
+        streams = [
+            (1, LONG_RIVER, 50.0, 0),
+            (2, SHORT_RIVER, 10.0, 0),
+            (3, STREAM_INTO_SHORT, 99.0, 2),
+        ]
+        gmap = parse_map(tiny_map(rivers=streams))
+        with mock.patch("world.areas.worldmap.azgaar.MAJOR_RIVER_COUNT", 1):
+            by = {(p.x, p.y): p for p in rasterize(gmap, width_cells=2, height_cells=2)}
+        assert by[(7, 2)].has_river
+        assert not by[(1, 15)].has_river  # the short stem
+        assert not by[(3, 12)].has_river  # the tributary
+
+    def test_a_stream_that_is_not_drawn_still_wets_the_ground(self) -> None:
+        """#5189 changes which rivers are drawn, never the terrain: with enough rain
+        that a river's moisture turns plain to forest, the ground under a stream
+        the map does not draw is forest all the same."""
+        gmap = parse_map(tiny_map(rivers=THREE_RIVERS, precipitation=4))
+        with mock.patch("world.areas.worldmap.azgaar.MAJOR_RIVER_COUNT", 1):
+            by = {(p.x, p.y): p for p in rasterize(gmap, width_cells=2, height_cells=2)}
+        assert not by[(1, 15)].has_river
+        assert by[(1, 15)].terrain == Terrain.FOREST
+        assert by[(3, 3)].terrain == Terrain.PLAIN  # off every river
+
+    def test_a_file_without_river_records_draws_no_river(self) -> None:
+        gmap = parse_map(tiny_map(river=LONG_RIVER, records=False, precipitation=4))
+        by = {(p.x, p.y): p for p in rasterize(gmap, width_cells=2, height_cells=2)}
+        assert gmap.rivers == ()
+        assert not any(p.has_river for p in by.values())
+        assert by[(7, 2)].terrain == Terrain.FOREST  # the path still wets the ground
+
+    def test_a_rivers_course_is_one_pip_wide_from_source_to_mouth(self) -> None:
+        """The outline's two banks are four pixels apart, two pips; the course is
+        the line between them, and no pip of it sits beside a pip two steps on."""
+        river = GeneratorRiver(river_id=1, length=40.0, parent_id=0, path="M10,38 L3,2 L7,2 L14,38")
+        chain = river_chain(river, 2.0, 20, 20)
+        assert chain[0] == (2, 1)  # midway between the banks at the source
+        assert chain[-1] == (6, 19)
+        assert len(set(chain)) == len(chain)
+        for before, after in pairwise(chain):
+            assert max(abs(before[0] - after[0]), abs(before[1] - after[1])) == 1
+        for before, after in zip(chain, chain[2:], strict=False):
+            assert max(abs(before[0] - after[0]), abs(before[1] - after[1])) > 1
 
     def test_terrain_bands(self) -> None:
         assert terrain_for(10, 12, 9, is_lake=False) == Terrain.WATER
@@ -151,7 +237,7 @@ class RasterizerTests(TestCase):
         water = sum(p.terrain in (Terrain.WATER, Terrain.LAKE) for p in pips)
         rivers = sum(p.has_river for p in pips)
         assert 15000 < water < 22000
-        assert rivers > 3000
+        assert 300 < rivers < 1200  # the twenty longest, not every stream (#5189)
         # the Radiant's mouth on the Chain, from the map's own site list: pip (102, 103)
         by = {(p.x, p.y): p for p in pips}
         assert any(by[(x, y)].has_river for x in range(100, 104) for y in range(102, 106))
@@ -232,6 +318,108 @@ class RegionServiceTests(TestCase):
             paint_terrain(region=self.region, pips=[(0, 0)], terrain="marsh")
         with self.assertRaises(WorldMapServiceError):
             paint_terrain(region=self.region, pips=[(52, 32)], terrain="lava")
+
+
+class RiverServiceTests(TestCase):
+    """#5189: rivers are drawn by hand, kept across uploads, and reset from the file.
+    The region sits at cell (5, 3), so a file pip (x, y) is world pip (50 + x, 30 + y)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.region = create_region_map(name="Riverland", anchor_x=5, anchor_y=3, width_cells=2)
+
+    def _upload(self) -> None:
+        with mock.patch("world.areas.worldmap.azgaar.MAJOR_RIVER_COUNT", 1):
+            import_region_map_file(
+                region=self.region, file_name="t.map", data=tiny_map(rivers=THREE_RIVERS).encode()
+            )
+
+    def _reset(self) -> int:
+        with mock.patch("world.areas.worldmap.azgaar.MAJOR_RIVER_COUNT", 1):
+            return reset_rivers(region=self.region)
+
+    def _has_river(self, x: int, y: int) -> bool:
+        return TerrainPip.objects.get(x=50 + x, y=30 + y).has_river
+
+    def test_a_river_is_drawn_and_erased_without_touching_the_ground(self) -> None:
+        self._upload()
+        # two land pips and one sea pip: the sea pip is passed over
+        drawn = paint_river(region=self.region, pips=[(52, 32), (53, 32), (65, 45)], river=True)
+        assert drawn == 2
+        pip = TerrainPip.objects.get(x=52, y=32)
+        assert pip.has_river
+        assert pip.terrain == Terrain.PLAIN
+        assert pip.source == PipSource.GENERATOR
+        assert not TerrainPip.objects.get(x=65, y=45).has_river
+        assert paint_river(region=self.region, pips=[(52, 32)], river=True) == 0
+        assert paint_river(region=self.region, pips=[(52, 32), (53, 32)], river=False) == 2
+        assert not TerrainPip.objects.get(x=52, y=32).has_river
+        with self.assertRaises(WorldMapServiceError):
+            paint_river(region=self.region, pips=[(0, 0)], river=True)
+
+    def test_a_second_upload_keeps_rivers_as_staff_left_them(self) -> None:
+        self._upload()
+        assert self._has_river(7, 2)
+        paint_river(region=self.region, pips=[(57, 32)], river=False)
+        paint_river(region=self.region, pips=[(52, 33)], river=True)
+        self._upload()
+        assert not self._has_river(7, 2)  # erased by hand, and the file does not put it back
+        assert self._has_river(2, 3)  # drawn by hand
+        assert self._has_river(7, 3)  # untouched
+
+    def test_painting_water_over_a_river_ends_it_there(self) -> None:
+        self._upload()
+        paint_terrain(region=self.region, pips=[(57, 32)], terrain="water")
+        assert not self._has_river(7, 2)
+
+    def test_reset_puts_back_the_files_rivers_over_staff_paint_and_strokes(self) -> None:
+        self._upload()
+        paint_terrain(region=self.region, pips=[(57, 33)], terrain="marsh")
+        paint_river(region=self.region, pips=[(57, 33)], river=False)
+        paint_river(region=self.region, pips=[(52, 33)], river=True)
+        count = self._reset()
+        assert self._has_river(7, 3)  # a staff-painted pip gets its river back
+        assert not self._has_river(2, 3)  # a hand-drawn river goes
+        assert TerrainPip.objects.get(x=57, y=33).terrain == Terrain.MARSH
+        assert count == TerrainPip.objects.filter(region=self.region, has_river=True).count()
+        # the long river stops three pips short of the sea and is carried on to it
+        assert self._has_river(8, 19)
+        assert self._has_river(9, 19)
+
+    def test_reset_without_a_map_file_is_refused(self) -> None:
+        with self.assertRaises(WorldMapServiceError):
+            reset_rivers(region=self.region)
+
+    def _seat_a_kingdom_at(self, x: int, y: int) -> None:
+        from world.character_creation.factories import RealmFactory
+        from world.societies.houses.almanach import plant_rung, rung_area_for_title
+        from world.societies.houses.constants import TitleTier
+        from world.societies.houses.models import Title
+
+        crown = plant_rung(
+            realm=RealmFactory(name="Riverrealm"), tier=TitleTier.KINGDOM, name="Crown"
+        )
+        capital = Title.objects.get(seat_domain=crown.seat_domain, tier=TitleTier.BARONY)
+        set_footprint(area=rung_area_for_title(capital), add=[(50 + x, 30 + y)])
+
+    def test_reset_keeps_the_river_beside_an_inland_kingdom_capital_down_to_its_mouth(self) -> None:
+        """The capital is two pips from a stream that joins the short river. Neither
+        is a major river; both are kept, the short one only below where they meet."""
+        self._upload()
+        self._seat_a_kingdom_at(4, 14)
+        assert not self._has_river(3, 12)
+        self._reset()
+        assert self._has_river(4, 12)  # the stream, whole
+        assert self._has_river(1, 12)  # where it meets the short river
+        assert self._has_river(1, 19)  # the short river's mouth
+        assert not self._has_river(1, 11)  # the short river above the meeting
+
+    def test_reset_adds_no_river_for_a_capital_on_the_water(self) -> None:
+        self._upload()
+        self._seat_a_kingdom_at(4, 10)  # touches the lake's corner at (5, 9)
+        self._reset()
+        assert not self._has_river(4, 12)
+        assert not self._has_river(1, 15)
 
 
 class FootprintServiceTests(TestCase):

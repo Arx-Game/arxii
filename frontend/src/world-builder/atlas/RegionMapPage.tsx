@@ -78,6 +78,7 @@ import {
 import {
   BRUSH_WIDTHS,
   brushPips,
+  linePips,
   floodHeld,
   floodLand,
   loopInterior,
@@ -104,6 +105,10 @@ import { useRegionMapLayout } from './useRegionMapLayout';
 
 type MapMode = 'select' | 'carve' | 'paint';
 const MODE_LABELS: Record<MapMode, string> = { select: 'Select', carve: 'Carve', paint: 'Paint' };
+// #5189: Paint's two river entries, listed after the terrains. They are not terrains:
+// a river is a line across the ground and leaves the ground as it is.
+const PAINT_RIVER = '+river';
+const PAINT_ERASE_RIVER = '-river';
 type CarveTool = 'brush' | 'fill' | 'loop';
 const TOOL_LABELS: Record<CarveTool, string> = { brush: 'Brush', fill: 'Fill', loop: 'Loop' };
 
@@ -238,6 +243,8 @@ export function RegionMapPage({
   const [brushWidth, setBrushWidth] = useState<BrushWidth>(1);
   const [history, setHistory] = useState<CarveHistory>(EMPTY_HISTORY);
   const [clearOpen, setClearOpen] = useState(false);
+  const [resetRiversOpen, setResetRiversOpen] = useState(false);
+  const paintsRiver = paintTerrain === PAINT_RIVER || paintTerrain === PAINT_ERASE_RIVER;
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [pendingRemove, setPendingRemove] = useState(false);
   const [plantOpen, setPlantOpen] = useState(false);
@@ -553,15 +560,22 @@ export function RegionMapPage({
       toast.error(NO_DOMAIN_MESSAGE);
       return;
     }
-    const remove = event.shiftKey;
+    // #5189: a river stroke is one pip wide and joined between pointer samples; Shift
+    // or the Erase river entry erases
+    const riverStroke = mode === 'paint' && paintsRiver;
+    const remove = event.shiftKey || (riverStroke && paintTerrain === PAINT_ERASE_RIVER);
     let moved = false;
     const dragged = new Set<string>();
     const path: Pip[] = [];
     const carveTool: CarveTool = mode === 'paint' ? 'brush' : tool;
+    const stroke = (pip: Pip): Pip[] => {
+      if (riverStroke) return linePips(path.at(-1) ?? pip, pip);
+      return carveTool === 'brush' ? brushPips(pip, brushWidth).filter(insideRegion) : [pip];
+    };
     const addPip = (clientX: number, clientY: number) => {
       const pip = pipAt(data.region, view, rect, clientX, clientY);
       if (!pip) return;
-      const pips = carveTool === 'brush' ? brushPips(pip, brushWidth).filter(insideRegion) : [pip];
+      const pips = stroke(pip);
       for (const [x, y] of pips) dragged.add(pipKey(x, y));
       path.push(pip);
       setPending(new Set(dragged));
@@ -651,12 +665,27 @@ export function RegionMapPage({
           return;
         }
         await commitCarve(pips, remove, carveTitleId);
+      } else if (mode === 'paint' && paintsRiver) {
+        await runAction({
+          key: 'atlas_paint_river',
+          kwargs: { region_id: regionId, pips, river: !remove },
+        });
       } else if (mode === 'paint') {
         await runAction({
           key: 'atlas_paint_terrain',
           kwargs: { region_id: regionId, pips, terrain: paintTerrain },
         });
       }
+    } catch {
+      // the mutation already toasted
+    }
+  };
+
+  // #5189: every river on the region goes back to what its map file gives
+  const resetRivers = async () => {
+    if (characterId == null) return;
+    try {
+      await runAction({ key: 'atlas_reset_rivers', kwargs: { region_id: regionId } });
     } catch {
       // the mutation already toasted
     }
@@ -919,8 +948,20 @@ export function RegionMapPage({
                   {terrain}
                 </option>
               ))}
+              <option value={PAINT_RIVER}>River</option>
+              <option value={PAINT_ERASE_RIVER}>Erase river</option>
             </select>
-            {brushWidthSelect}
+            {!paintsRiver && brushWidthSelect}
+            {paintsRiver && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setResetRiversOpen(true)}
+                data-testid="reset-rivers"
+              >
+                Reset rivers
+              </Button>
+            )}
           </>
         )}
         {mode !== 'paint' && (
@@ -1156,6 +1197,22 @@ export function RegionMapPage({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => void clearTarget()}>Clear</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={resetRiversOpen} onOpenChange={setResetRiversOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset rivers</AlertDialogTitle>
+            <AlertDialogDescription>
+              Every river on this map is replaced, the ones drawn by hand included, with the map
+              file's longest rivers and the river beside each inland kingdom capital. This cannot be
+              undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void resetRivers()}>Reset rivers</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

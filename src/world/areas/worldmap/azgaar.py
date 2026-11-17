@@ -18,6 +18,13 @@ paths are flattened and sampled onto the pips. Moisture follows the
 generator's own rule (``biomes-generator.ts``): four plus the mean
 precipitation of a cell and its land neighbours, plus two on a river.
 
+Every river counts for moisture, but only a few become river pips (#5189): the
+file's river records (a JSON list whose rows carry ``i``, ``length`` and
+``parent``) say which rivers are main stems and how long each is. The longest
+main stems are the major rivers; the rest are streams the map does not draw. A
+river's path in the SVG is its outline, down one bank and back up the other, so
+its course is the line midway between the two.
+
 Pure Python, no dependency. Coordinates: pip ``x`` grows east, ``y`` south, the
 same way the generator's pixels do.
 """
@@ -34,6 +41,7 @@ from world.areas.worldmap.constants import (
     GENERATOR_HILL_HEIGHT,
     GENERATOR_MOUNTAIN_HEIGHT,
     GENERATOR_SEA_LEVEL,
+    MAJOR_RIVER_COUNT,
     PIPS_PER_CELL,
     Terrain,
 )
@@ -83,6 +91,10 @@ _PARAMS_HEIGHT = 5
 _FIELDS_AFTER_GRID = 6
 _RIVER_GROUP = re.compile(r'<g id="rivers"[^>]*>(.*?)</g>', re.DOTALL)
 _PATH_D = re.compile(r'<path [^>]*?\bd="([^"]+)"')
+_RIVER_PATH = re.compile(r'<path [^>]*?\bid="river(\d+)"[^>]*?\bd="([^"]+)"')
+_RIVER_RECORDS_PREFIX = "[{"
+_RIVER_RECORDS_KEY = '"mouth"'
+_RIVER_RECORDS_PEEK = 400
 _PATH_TOKENS = re.compile(r"[MLCZmlcz]|-?\d*\.?\d+(?:e-?\d+)?")
 _CURVE_STEPS = 8
 _NEIGHBOUR_OFFSETS = ((-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1))
@@ -94,6 +106,25 @@ class MapFileError(ValueError):
     def __init__(self, user_message: str) -> None:
         super().__init__(user_message)
         self.user_message = user_message
+
+
+Pip = tuple[int, int]
+Point = tuple[float, float]
+
+
+@dataclass(frozen=True)
+class GeneratorRiver:
+    """One river of the file: its record's length and parent, and its outline path."""
+
+    river_id: int
+    length: float
+    parent_id: int
+    path: str
+
+    @property
+    def is_main_stem(self) -> bool:
+        """A river that flows into no other; the generator writes 0 or its own id."""
+        return self.parent_id in (0, self.river_id)
 
 
 @dataclass(frozen=True)
@@ -113,6 +144,7 @@ class GeneratorMap:
     temperatures: list[int]
     lake_feature_ids: frozenset[int]
     river_paths: tuple[str, ...]
+    rivers: tuple[GeneratorRiver, ...] = ()
 
     def grid_index(self, px: float, py: float) -> int:
         """The grid cell under a pixel, the generator's own ``findGridCell`` arithmetic."""
@@ -195,6 +227,41 @@ def _river_paths(fields: list[str], grid_at: int) -> tuple[str, ...]:
     return tuple(_PATH_D.findall(group.group(1)))
 
 
+def _rivers(fields: list[str], grid_at: int) -> tuple[GeneratorRiver, ...]:
+    """The rivers that have both a record and a path. A file without river records
+    (an older generator) yields none, so nothing is drawn from a guess."""
+    records = next(
+        (
+            f
+            for f in fields
+            if f.startswith(_RIVER_RECORDS_PREFIX) and _RIVER_RECORDS_KEY in f[:_RIVER_RECORDS_PEEK]
+        ),
+        None,
+    )
+    if records is None:
+        return ()
+    try:
+        rows = json.loads(records)
+    except ValueError:
+        return ()
+    group = _RIVER_GROUP.search("\n".join(fields[1:grid_at]))
+    paths = {int(i): d for i, d in _RIVER_PATH.findall(group.group(1))} if group else {}
+    out = []
+    for row in rows:
+        try:
+            river_id = int(row["i"])
+            river = GeneratorRiver(
+                river_id=river_id,
+                length=float(row.get("length") or 0),
+                parent_id=int(row.get("parent") or 0),
+                path=paths[river_id],
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
+        out.append(river)
+    return tuple(out)
+
+
 def parse_map(text: str) -> GeneratorMap:
     """Parse the file's text. Raises ``MapFileError`` for anything that is not a map."""
     fields = _split_fields(text)
@@ -239,6 +306,7 @@ def parse_map(text: str) -> GeneratorMap:
         temperatures=temperatures,
         lake_feature_ids=lakes,
         river_paths=_river_paths(fields, grid_at),
+        rivers=_rivers(fields, grid_at),
     )
 
 
@@ -314,7 +382,8 @@ def flatten_path(d: str) -> list[tuple[float, float]]:
 
 
 def river_pips(gmap: GeneratorMap, scale: float, width: int, height: int) -> set[tuple[int, int]]:
-    """The pips any river path crosses; paths are sampled every half pip."""
+    """The pips any river path crosses; paths are sampled every half pip. This is
+    every river and stream, and feeds moisture only (#5189)."""
     step = scale / 2
     hit: set[tuple[int, int]] = set()
     for d in gmap.river_paths:
@@ -328,11 +397,129 @@ def river_pips(gmap: GeneratorMap, scale: float, width: int, height: int) -> set
     return hit
 
 
+def major_rivers(gmap: GeneratorMap) -> tuple[GeneratorRiver, ...]:
+    """The longest main stems, the only rivers an upload draws (#5189)."""
+    stems = sorted(
+        (r for r in gmap.rivers if r.is_main_stem), key=lambda r: (-r.length, r.river_id)
+    )
+    return tuple(stems[:MAJOR_RIVER_COUNT])
+
+
+def river_course(river: GeneratorRiver) -> list[Point]:
+    """The river's middle line from source to mouth: the point midway between
+    each bank point and its opposite number on the way back. The generator draws
+    the outline from the mouth up one bank and back down the other (checked
+    against the Catenys file: the first point of each long river is at the sea),
+    so the middle line is turned round."""
+    outline = flatten_path(river.path)
+    last = len(outline) - 1
+    upstream = [
+        ((outline[k][0] + outline[last - k][0]) / 2, (outline[k][1] + outline[last - k][1]) / 2)
+        for k in range((len(outline) + 1) // 2)
+    ]
+    return upstream[::-1]
+
+
+def _touching(a: Pip, b: Pip) -> bool:
+    return abs(a[0] - b[0]) <= 1 and abs(a[1] - b[1]) <= 1
+
+
+def _thin(chain: list[Pip]) -> list[Pip]:
+    """A chain one pip wide: a pip visited twice cuts out the loop between the
+    visits, and a pip whose two neighbours in the chain already touch is dropped."""
+    walked: list[Pip] = []
+    for pip in chain:
+        if pip in walked:
+            del walked[walked.index(pip) + 1 :]
+            continue
+        walked.append(pip)
+    out: list[Pip] = []
+    for pip in walked:
+        while len(out) > 1 and _touching(out[-2], pip):
+            out.pop()
+        out.append(pip)
+    return out
+
+
+def river_chain(river: GeneratorRiver, scale: float, width: int, height: int) -> list[Pip]:
+    """The pips the river's course crosses, in order from source to mouth, one
+    pip wide. The course is sampled every half pip."""
+    step = scale / 2
+    chain: list[Pip] = []
+    for (ax, ay), (bx, by) in pairwise(river_course(river)):
+        n = max(1, int(math.hypot(bx - ax, by - ay) / step))
+        for k in range(n + 1):
+            t = k / n
+            pip = (int((ax + (bx - ax) * t) // scale), int((ay + (by - ay) * t) // scale))
+            if 0 <= pip[0] < width and 0 <= pip[1] < height and (not chain or chain[-1] != pip):
+                chain.append(pip)
+    return _thin(chain)
+
+
+def major_river_chains(
+    gmap: GeneratorMap, scale: float, width: int, height: int
+) -> list[list[Pip]]:
+    """Each major river's course as pips, source to mouth."""
+    return [river_chain(river, scale, width, height) for river in major_rivers(gmap)]
+
+
+def _gap(pip: Pip, chain: list[Pip]) -> int:
+    """How many pips from ``pip`` to the nearest pip of ``chain``, diagonals as one."""
+    return min(max(abs(pip[0] - x), abs(pip[1] - y)) for x, y in chain)
+
+
+def _nearest_index(chain: list[Pip], pip: Pip) -> int:
+    """The index of the pip of ``chain`` nearest ``pip``, diagonals as one; the first on a tie."""
+    gaps = [max(abs(x - pip[0]), abs(y - pip[1])) for x, y in chain]
+    return gaps.index(min(gaps))
+
+
+def capital_river_chains(  # noqa: PLR0913 - a raster's geometry plus the capitals
+    gmap: GeneratorMap,
+    scale: float,
+    width: int,
+    height: int,
+    capitals: list[Pip],
+    reach: int,
+) -> list[list[Pip]]:
+    """For each capital, one course from source to mouth: the river nearest it
+    within ``reach`` pips, whole, then each river that one flows into from where
+    they meet down to the mouth (#5189). A capital with no river that near adds
+    nothing."""
+    chains = {r.river_id: river_chain(r, scale, width, height) for r in gmap.rivers}
+    by_id = {r.river_id: r for r in gmap.rivers}
+    courses: list[list[Pip]] = []
+    for capital in capitals:
+        near = [
+            (_gap(capital, chain), -by_id[river_id].length, river_id)
+            for river_id, chain in chains.items()
+            if chain
+        ]
+        if not near or min(near)[0] > reach:
+            continue
+        river = by_id[min(near)[2]]
+        course = list(chains[river.river_id])
+        seen = {river.river_id}
+        while not river.is_main_stem and river.parent_id in by_id:
+            mouth = chains[river.river_id][-1]
+            river = by_id[river.parent_id]
+            if river.river_id in seen or not chains[river.river_id]:
+                break
+            seen.add(river.river_id)
+            downstream = chains[river.river_id]
+            meeting = _nearest_index(downstream, mouth)
+            course.extend(downstream[meeting:])
+        courses.append(course)
+    return courses
+
+
 def rasterize(gmap: GeneratorMap, width_cells: int, height_cells: int) -> list[RasterPip]:
-    """Every pip of a ``width_cells`` by ``height_cells`` raster of the map."""
+    """Every pip of a ``width_cells`` by ``height_cells`` raster of the map. Every
+    river wets the ground it crosses; only the major rivers are river pips."""
     width, height = width_cells * PIPS_PER_CELL, height_cells * PIPS_PER_CELL
     scale = gmap.width_px / width
-    rivers = river_pips(gmap, scale, width, height)
+    wet = river_pips(gmap, scale, width, height)
+    rivers = {pip for chain in major_river_chains(gmap, scale, width, height) for pip in chain}
     moisture = gmap.moisture()
     out: list[RasterPip] = []
     for y in range(height):
@@ -340,11 +527,12 @@ def rasterize(gmap: GeneratorMap, width_cells: int, height_cells: int) -> list[R
         for x in range(width):
             idx = gmap.grid_index((x + 0.5) * scale, cy)
             h = gmap.heights[idx]
-            has_river = (x, y) in rivers and h >= GENERATOR_SEA_LEVEL
+            land = h >= GENERATOR_SEA_LEVEL
+            has_river = (x, y) in rivers and land
             terrain = terrain_for(
                 h,
                 gmap.temperatures[idx],
-                moisture[idx] + (_RIVER_MOISTURE if has_river else 0),
+                moisture[idx] + (_RIVER_MOISTURE if (x, y) in wet and land else 0),
                 is_lake=gmap.feature_ids[idx] in gmap.lake_feature_ids,
             )
             out.append(

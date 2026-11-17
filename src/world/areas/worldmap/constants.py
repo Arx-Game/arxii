@@ -16,6 +16,11 @@ GENERATOR_SEA_LEVEL = 20
 GENERATOR_HILL_HEIGHT = 50
 GENERATOR_MOUNTAIN_HEIGHT = 71
 
+# Rivers (#5189). An upload draws only the longest rivers that reach the sea; a
+# reset also keeps the river beside each inland capital of a kingdom or above.
+MAJOR_RIVER_COUNT = 20
+CAPITAL_RIVER_REACH = 3
+
 
 class Terrain(models.TextChoices):
     """What one pip of ground is. Geography, not combat terrain: the battles app's

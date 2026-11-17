@@ -27,6 +27,10 @@ export const TERRAIN_COLORS: Record<string, string> = {
   glacier: '#e9f0f4',
 };
 const RIVER_COLOR = '#3f6ea8';
+/** A river's line width on the canvas at zoom 1: a third of a pip. */
+const RIVER_LINE_PX = 2;
+/** Half the length of the dash a river pip with no river neighbour draws, in pips. */
+const RIVER_DASH_HALF = 0.3;
 const CELL_LINE_COLOR = 'rgba(40, 32, 20, 0.22)';
 const COAST_COLOR = 'rgba(30, 50, 80, 0.45)';
 const WATER_TERRAINS = new Set(['water', 'lake']);
@@ -137,8 +141,8 @@ export const STRIKE_COLOR = 'rgba(70, 20, 20, 0.45)';
 
 /**
  * Draw the whole map at zoom 1 onto a canvas sized to the region. Terrain first,
- * then rivers, the coast, cell lines, footprints by holder, the charter ghost and the
- * drag preview. Seats and names are drawn by `drawNamesLayer` on a screen-space canvas
+ * then the coast, cell lines, footprints by holder, rivers over them, the charter ghost
+ * and the drag preview. Seats and names are drawn by `drawNamesLayer` on a screen-space canvas
  * over the viewport (#5030), so they stay crisp and legible at every zoom.
  */
 export function drawRegionMap(
@@ -154,11 +158,12 @@ export function drawRegionMap(
   ctx.fillRect(0, 0, W, H);
 
   const terrainAt = drawTerrain(ctx, data, b);
-  drawRivers(ctx, data, b);
   drawCoast(ctx, data, b, terrainAt);
   if (options.cellLines !== false) drawCellLines(ctx, b);
   const footprints = [...data.footprints].sort((a, c) => c.level - a.level);
   drawFootprints(ctx, footprints, b, options);
+  // #5189: over the holders' fills, or a river through held land is washed out
+  drawRivers(ctx, data, b);
   drawStruck(ctx, footprints, b, options);
   drawGhost(ctx, b, options);
   drawPendingPips(ctx, b, options);
@@ -258,18 +263,57 @@ function drawTerrain(ctx: CanvasRenderingContext2D, data: RegionMapPips, b: Regi
   return terrainAt;
 }
 
-function drawRivers(ctx: CanvasRenderingContext2D, data: RegionMapPips, b: RegionBounds) {
-  // rivers: a stroke across the pip
-  ctx.fillStyle = RIVER_COLOR;
-  for (const [x, y, , river] of data.pips) {
-    if (!river) continue;
-    ctx.fillRect(
-      (x - b.x0) * PIP_PX + PIP_PX / 3,
-      (y - b.y0) * PIP_PX + PIP_PX / 3,
-      PIP_PX / 3,
-      PIP_PX / 3
-    );
+/** One piece of a river's line, between two pip centres: `[x1, y1, x2, y2]` in pips. */
+export type RiverSegment = [number, number, number, number];
+
+/**
+ * The line that joins the river pips (#5189): a river is one unbroken line through the
+ * middle of its pips, never a mark per pip. Each river pip joins the river pip to its
+ * right and the one below it. It joins a diagonal neighbour only when neither pip
+ * between the two is a river, so a bend draws as a corner and not as a filled triangle.
+ * A river pip with no river neighbour draws a short dash, so it can still be seen and
+ * erased.
+ */
+export function riverSegments(pips: readonly (readonly [number, number])[]): RiverSegment[] {
+  const river = new Set(pips.map(([x, y]) => pipKey(x, y)));
+  const has = (x: number, y: number) => river.has(pipKey(x, y));
+  const out: RiverSegment[] = [];
+  for (const [x, y] of pips) {
+    const cx = x + 0.5;
+    const cy = y + 0.5;
+    const right = has(x + 1, y);
+    const below = has(x, y + 1);
+    const left = has(x - 1, y);
+    if (right) out.push([cx, cy, cx + 1, cy]);
+    if (below) out.push([cx, cy, cx, cy + 1]);
+    const downRight = has(x + 1, y + 1) && !right && !below;
+    const downLeft = has(x - 1, y + 1) && !left && !below;
+    if (downRight) out.push([cx, cy, cx + 1, cy + 1]);
+    if (downLeft) out.push([cx, cy, cx - 1, cy + 1]);
+    const above = has(x, y - 1) || has(x - 1, y - 1) || has(x + 1, y - 1);
+    const alone = !right && !below && !left && !above && !has(x + 1, y + 1) && !has(x - 1, y + 1);
+    if (alone) out.push([cx - RIVER_DASH_HALF, cy, cx + RIVER_DASH_HALF, cy]);
   }
+  return out;
+}
+
+function drawRivers(ctx: CanvasRenderingContext2D, data: RegionMapPips, b: RegionBounds) {
+  const rivers = data.pips
+    .filter(([, , , river]) => river)
+    .map(([x, y]) => [x, y] as [number, number]);
+  if (rivers.length === 0) return;
+  ctx.save();
+  ctx.strokeStyle = RIVER_COLOR;
+  ctx.lineWidth = RIVER_LINE_PX;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (const [x1, y1, x2, y2] of riverSegments(rivers)) {
+    ctx.moveTo((x1 - b.x0) * PIP_PX, (y1 - b.y0) * PIP_PX);
+    ctx.lineTo((x2 - b.x0) * PIP_PX, (y2 - b.y0) * PIP_PX);
+  }
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawCoast(

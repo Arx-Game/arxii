@@ -208,13 +208,25 @@ and moisture (its own rule: four plus the mean precipitation of the cell and its
 neighbours, plus two on a river). Only the grid arrays are read; the generator's states,
 provinces and burgs are ignored by ruling.
 
+**Rivers** (#5189, ADR-5189). Every river path in the file wets the ground it crosses, but
+only the **major rivers** become river pips: the `MAJOR_RIVER_COUNT` (20) longest main stems,
+read from the file's river records (`GeneratorRiver`: id, length, parent; a main stem has no
+parent). `river_chain` turns a river's outline into its course, the line midway between the
+banks, as pips one wide from source to mouth. A file with no river records draws no river.
+The file only seeds rivers: a region's first upload takes them from the file, and every later
+upload carries each pip's river over by coordinate, so rivers staff drew or erased stay.
+`reset_rivers` is the deliberate way back to the file. Rivers do not use `PipSource`: drawing
+one does not make the ground staff-painted.
+
 **Services** (`worldmap/services.py`), each refusing with `WorldMapServiceError.user_message`:
 
 ```python
 create_region_map(*, name, anchor_x, anchor_y, width_cells, area=None, new_continent=False, actor=None)  # refuses overlap; new_continent links the CONTINENT rung by the region's name, creating an authored one when there is none
 import_region_map_file(*, region, file_name, data, actor=None)  # parse, keep, rasterize
 rasterize_upload(upload)  # re-run the rasterize step from a kept file
-paint_terrain(*, region, pips, terrain)  # staff pips, survive every upload
+paint_terrain(*, region, pips, terrain)  # staff pips, survive every upload; painting water ends a river there
+paint_river(*, region, pips, river) -> int  # draw (or erase) a river through land pips; water pips in the stroke are passed over; terrain and source untouched (#5189)
+reset_rivers(*, region) -> int  # every river replaced by the latest file's major rivers plus the river within CAPITAL_RIVER_REACH (3) pips of each inland capital of a kingdom or above, down to its mouth; a mouth a few pips short of water is carried on to it (#5189)
 set_footprint(*, area, add=(), remove=()) -> FootprintChange  # takes what it may and skips the rest: carving inside an ancestor moves its row down, shrinking hands it back up; another domain's pip and a descendant's pip are skipped and counted by holder name; water is taken like land; `changed` names every pip moved as (x, y, holder before, holder after)
 clear_footprint(*, area) -> FootprintChange  # every row the area itself holds, on every region map, to its ladder parent or open ground; descendants' rows stay (#4905)
 restore_pips(*, pips) -> int  # give each (x, y, area_id | None) its named holder: the staff undo and redo write one column of a `changed` list back (#4905)
@@ -224,7 +236,8 @@ region_read(region)  # the pips payload: terrain rows + footprints with holder, 
 ```
 
 A re-rasterize deletes the region's generator pips and writes the new raster, skipping
-any square a staff pip holds (ruling 5 on #4242). A footprint below BARONY is refused. A pip has one row naming its lowest holder: a barony
+any square a staff pip holds (ruling 5 on #4242); the new pips keep the rivers the old ones
+had (#5189). A footprint below BARONY is refused. A pip has one row naming its lowest holder: a barony
 carved inside a county takes the county's row, and the county's footprint still contains the pip
 because ancestors are derived from the holders; a barony claiming open ground grows every
 ancestor with it. A carve is a drag, and a drag takes what it may (#4317): a pip another domain
@@ -244,7 +257,8 @@ duchy.
 as `[x, y]` lists; its result `data.changed` is `[[x, y, before, after], ...]`),
 `atlas_clear_footprint` (`area_id` or `title_id`; same `changed` shape, #4905),
 `atlas_restore_footprint` (`pips` as `[[x, y, area_id | null], ...]`, #4905),
-`atlas_paint_terrain` (`region_id`, `pips`, `terrain`). Create Domain from the
+`atlas_paint_terrain` (`region_id`, `pips`, `terrain`), `atlas_paint_river` (`region_id`,
+`pips`, `river`: false erases, #5189), `atlas_reset_rivers` (`region_id`, #5189). Create Domain from the
 map is `almanach_plant_rung` then `atlas_carve_footprint`; nothing here mints a rung.
 
 **API** (`worldmap/views.py`, on the world-builder router, `IsAdminUser`):
@@ -264,8 +278,15 @@ view kind `regionmap`, reached from the index rail's Maps section; the header's 
 button opens the same page in its own tab at `/staff/world-builder/map/:regionId`,
 `RegionMapTabPage.tsx`, with `?focus=<area id>` carrying the selection and `Layout` dropping the
 site chrome, #4993): pips on one canvas
-in flat colour, cell lines every ten pips, footprints as holder-coloured fills, the seat
-as a dot; modes select, carve and paint; writes dispatch through `runAction`. Carve mode
+in flat colour, a river as one unbroken 2px line joining the centres of neighbouring river
+pips (`riverSegments` in `regionMapCanvas.ts`, pure: right and down neighbours join, a diagonal
+joins only when no river pip lies between, a lone pip is a dash, #5189), cell lines every ten
+pips, footprints as holder-coloured fills, the seat
+as a dot; modes select, carve and paint; writes dispatch through `runAction`. Paint mode's
+dropdown lists the terrains and then **River** and **Erase river** (#5189): a stroke one pip
+wide whatever the width control says (it is hidden), joined between pointer samples by
+`linePips` so a fast drag leaves no gap; Shift erases too. **Reset rivers** shows beside them,
+behind a confirm. River strokes are not on the undo stack; erasing is the way back. Carve mode
 has three tools (#4905, `regionMapFill.ts`, pure), disabled until a domain is picked (a gesture
 on the map without one is refused with "Pick a domain to carve." before any drag starts,
 #4935): **Brush** drags a 1, 3 or 7-pip square

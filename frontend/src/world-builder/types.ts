@@ -61,7 +61,9 @@ export type WorldBuilderActionKey =
   | 'atlas_clear_footprint'
   | 'atlas_restore_footprint'
   | 'atlas_move_seat'
-  | 'atlas_paint_terrain';
+  | 'atlas_paint_terrain'
+  | 'atlas_paint_river'
+  | 'atlas_reset_rivers';
 
 /** Selection-time room detail (#3269) — mirrors WorldBuilderRoomDetailSerializer. */
 export type WorldBuilderBreadcrumbEntry = components['schemas']['WorldBuilderBreadcrumb'];
