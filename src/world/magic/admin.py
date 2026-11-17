@@ -5,6 +5,7 @@ from django.contrib import admin, messages
 from django.contrib.admin import helpers
 from django.contrib.admin.checks import InlineModelAdminChecks
 from django.contrib.admin.utils import flatten_fieldsets
+from django.contrib.admin.widgets import FilteredSelectMultiple
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Count, Prefetch
 from django.forms.models import BaseInlineFormSet, BaseModelFormSet, modelformset_factory
@@ -27,7 +28,7 @@ from world.magic.audere_majora import (
     AudereMajoraFaithVariantAppliedCondition,
     AudereMajoraThreshold,
 )
-from world.magic.constants import GiftKind, RitualExecutionKind
+from world.magic.constants import GiftKind, RitualExecutionKind, SubstanceRelationKind
 from world.magic.models import (
     Affinity,
     AffinityInteraction,
@@ -75,9 +76,9 @@ from world.magic.models import (
     FuryTier,
     Gift,
     GiftAcquisitionConfig,
-    GiftSubstance,
     GiftUnlock,
     GlimpseTag,
+    HarvestOutcome,
     ImbuingProseTemplate,
     IntensityTier,
     KindledDeedAward,
@@ -99,6 +100,7 @@ from world.magic.models import (
     PortalAnchorKind,
     PoseEndorsement,
     PriceComponentRequirement,
+    PrimumStep,
     RallyKindlingStrength,
     Reflection,
     Reincarnation,
@@ -126,6 +128,8 @@ from world.magic.models import (
     SoulTetherConfig,
     StandingCapBand,
     StyleCapabilityRequirement,
+    Substance,
+    SubstancePowerStep,
     Technique,
     TechniqueAppliedCondition,
     TechniqueBudgetConfig,
@@ -172,6 +176,10 @@ from world.magic.models.resonance_environment import ResonanceAlignmentBoonTier
 from world.magic.services.facets import merge_facets
 from world.magic.services.glimpse import refresh_glimpse_state
 from world.magic.services.modifier_sizing import applied_condition_size_warnings
+from world.magic.services.substance_relations import (
+    relation_kinds_for,
+    set_substance_relations,
+)
 from world.magic.services.technique_effects import (
     invalidate_technique_payload_caches,
     technique_effect_authoring_gaps,
@@ -1106,6 +1114,7 @@ class GiftAdminForm(forms.ModelForm):
             "codex_entry",
             "style",
             "natural_weapon_template",
+            "substance",
             "resonances",
             "ultimate_techniques",
             "written_by",
@@ -1113,9 +1122,17 @@ class GiftAdminForm(forms.ModelForm):
             "reviewed_by",
             "reviewed_on",
         ]
+        help_texts = {
+            "substance": (
+                "The one substance this gift works through, such as fire or shadow. Every "
+                "major gift has one and a minor gift has none."
+            ),
+        }
 
     def clean(self) -> dict:
         cleaned = super().clean()
+        if cleaned.get("substance") is not None and cleaned.get("kind") == GiftKind.MINOR:
+            self.add_error("substance", "A minor gift has no substance; clear it.")
         ultimates = list(cleaned.get("ultimate_techniques") or [])
         if not ultimates:
             return cleaned
@@ -1130,37 +1147,16 @@ class GiftAdminForm(forms.ModelForm):
         return cleaned
 
 
-class GiftSubstanceInline(admin.StackedInline):
-    """What the gift is made of (#5018): the room condition every cast of it draws on."""
-
-    model = GiftSubstance
-    extra = 0
-    max_num = 1
-    can_delete = True
-    verbose_name = "Substance"
-    verbose_name_plural = "Substance"
-    fields = [
-        "label",
-        "stat_key",
-        "direction",
-        "full_at",
-        "opposed_by",
-        "arrival_line",
-        "property",
-    ]
-    autocomplete_fields = ["property"]
-
-
 @admin.register(Gift)
 class GiftAdmin(admin.ModelAdmin):
     form = GiftAdminForm
-    autocomplete_fields = ["creator", "parent"]
+    autocomplete_fields = ["creator", "parent", "substance"]
     list_display = ["name", "kind", "parent", "get_technique_count"]
     list_filter = ["kind"]
     search_fields = ["name", "description"]
     filter_horizontal = ["resonances", "ultimate_techniques"]
     readonly_fields = ["get_grant_sources"]
-    inlines = [GiftSubstanceInline, GiftChildInline]
+    inlines = [GiftChildInline]
 
     @admin.display(description="Techniques")
     def get_technique_count(self, obj):
@@ -1193,6 +1189,105 @@ class GiftAdmin(admin.ModelAdmin):
                 "reachable only via a Path/Tradition/Species grant above."
             )
         return "; ".join(parts) or "No authored grant sources found."
+
+
+class SubstanceAdminForm(forms.ModelForm):
+    """One substance, with its relationships picked from both sides (#5125).
+
+    A relation is stored once, lower substance id first, so a one-sided inline would show it
+    under the wrong substance. These two lists read the pair from whichever side it is stored
+    on, and ``SubstanceAdmin.save_related`` writes them through ``set_substance_relations``.
+    """
+
+    related_to = forms.ModelMultipleChoiceField(
+        queryset=Substance.objects.all(),
+        required=False,
+        label="Related to",
+        widget=FilteredSelectMultiple("substances", is_stacked=False),
+        help_text=(
+            "A caster of one of these gets a share of this substance's benefit, and the other "
+            "way round. Relationships never chain: a substance related to a related one is not "
+            "related to this one."
+        ),
+    )
+    opposed_to = forms.ModelMultipleChoiceField(
+        queryset=Substance.objects.all(),
+        required=False,
+        label="Opposed to",
+        widget=FilteredSelectMultiple("substances", is_stacked=False),
+        help_text=(
+            "Each of these works against a caster of this substance, and the other way round."
+        ),
+    )
+
+    class Meta:
+        model = Substance
+        fields = [
+            "name",
+            "stat_key",
+            "direction",
+            "property",
+            "written_by",
+            "written_on",
+            "reviewed_by",
+            "reviewed_on",
+        ]
+        labels = {
+            "name": "Name",
+            "stat_key": "Which room condition feeds it",
+            "direction": "Stronger when it is",
+            "property": "Property added to every technique of this gift",
+        }
+        help_texts = {
+            "name": "What the cast card and the roll breakdown call it.",
+            "stat_key": "Picked from the room conditions the game already tracks.",
+            "property": (
+                "Every technique of a major gift that works this substance carries this "
+                "property, and anything that affects the property affects the technique. "
+                "Minor gifts have no substance, so their techniques carry none."
+            ),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            others = Substance.objects.exclude(pk=self.instance.pk)
+            self.fields["related_to"].queryset = others
+            self.fields["opposed_to"].queryset = others
+            kinds = relation_kinds_for(self.instance)
+            self.initial["related_to"] = [
+                pk for pk, kind in kinds.items() if kind == SubstanceRelationKind.RELATED
+            ]
+            self.initial["opposed_to"] = [
+                pk for pk, kind in kinds.items() if kind == SubstanceRelationKind.OPPOSED
+            ]
+
+    def clean(self) -> dict:
+        cleaned = super().clean()
+        both = set(cleaned.get("related_to") or []) & set(cleaned.get("opposed_to") or [])
+        if both:
+            names = ", ".join(sorted(substance.name for substance in both))
+            self.add_error("opposed_to", f"Cannot be both related and opposed: {names}.")
+        return cleaned
+
+
+@admin.register(Substance)
+class SubstanceAdmin(admin.ModelAdmin):
+    """The shared list of substances a major gift can work through (#5125)."""
+
+    form = SubstanceAdminForm
+    list_display = ["name", "stat_key", "direction", "property"]
+    list_filter = ["stat_key"]
+    search_fields = ["name"]
+    autocomplete_fields = ["property"]
+
+    def save_related(self, request, form, formsets, change) -> None:
+        super().save_related(request, form, formsets, change)
+        set_substance_relations(
+            form.instance,
+            related=form.cleaned_data["related_to"],
+            opposed=form.cleaned_data["opposed_to"],
+        )
 
 
 @admin.register(CharacterGift)
@@ -1799,46 +1894,6 @@ class ResonanceGainConfigAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request) -> bool:  # noqa: ARG002
         return not ResonanceGainConfig.objects.exists()
-
-    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
-        return False
-
-
-@admin.register(ResonanceEnvironmentConfig)
-class ResonanceEnvironmentConfigAdmin(admin.ModelAdmin):
-    """Singleton tuning config for the resonance-environment primitive."""
-
-    autocomplete_fields = ["updated_by"]
-
-    list_display = (
-        "pk",
-        "base_coefficient",
-        "caster_power_scalar",
-        "balanced_band",
-        "backfire_base_difficulty_level",
-        "backfire_difficulty_per_magnitude_tenths",
-        "updated_at",
-    )
-
-    _SUBSTANCE_FIELDS = (
-        "substance_power_at_full",
-        "substance_present_pct",
-        "substance_anima_per_measure",
-        "substance_resonance_per_measure",
-        "substance_place_cap_pct",
-        "unmet_surroundings_penalty_pct",
-    )
-
-    def get_fieldsets(self, request, obj=None):
-        """The existing settings, then the #5018 gift-substance numbers in their own group."""
-        fields = [f for f in self.get_fields(request, obj) if f not in self._SUBSTANCE_FIELDS]
-        return [
-            (None, {"fields": fields}),
-            ("Gift substance", {"fields": list(self._SUBSTANCE_FIELDS)}),
-        ]
-
-    def has_add_permission(self, request) -> bool:  # noqa: ARG002
-        return not ResonanceEnvironmentConfig.objects.exists()
 
     def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
@@ -3513,6 +3568,153 @@ class PlayRowAdmin(admin.ModelAdmin):
         return False
 
     def has_delete_permission(self, request: HttpRequest, obj: object = None) -> bool:  # noqa: ARG002
+        return False
+
+
+class PrimumStepForm(forms.ModelForm):
+    """The step row's form: staff-facing column names (#5125)."""
+
+    class Meta:
+        model = PrimumStep
+        fields = ["rank", "name", "starts_at", "points", "item_quality"]
+        labels = {
+            "rank": "Order",
+            "name": "Name",
+            "starts_at": "Starts at",
+            "points": "Points",
+            "item_quality": "Crafted item quality",
+        }
+        help_texts = {
+            "rank": "1 is the least Primum. The game knows only this order.",
+            "starts_at": "The least Primum a place or creature holds to read as this step.",
+            "points": "What a source at this step is worth toward a caster's power.",
+            "item_quality": "The quality a crafted Primum item has at this step. Can be blank.",
+        }
+
+
+class SubstancePowerStepForm(forms.ModelForm):
+    """The power curve row's form (#5125)."""
+
+    class Meta:
+        model = SubstancePowerStep
+        fields = ["points_reached", "power"]
+        labels = {"points_reached": "Points", "power": "Power"}
+        help_texts = {
+            "points_reached": "The summed Primum points a caster must reach.",
+            "power": "The power a caster who reaches those points gains.",
+        }
+
+
+class HarvestOutcomeForm(forms.ModelForm):
+    """The harvest result row's form (#5125)."""
+
+    class Meta:
+        model = HarvestOutcome
+        fields = ["outcome_tier", "amount_taken", "quantity", "quality_tier"]
+        labels = {
+            "outcome_tier": "Check result",
+            "amount_taken": "Primum drawn out",
+            "quantity": "Items received",
+            "quality_tier": "Quality",
+        }
+        help_texts = {
+            "amount_taken": (
+                "Primum taken out of the place or creature. It gives up only what it has."
+            ),
+            "quality_tier": "The quality of the Primum items received.",
+        }
+
+
+class PrimumStepInline(ConfigRowsInline):
+    """How much Primum a place or creature holds, in named steps, and what each is worth."""
+
+    model = PrimumStep
+    form = PrimumStepForm
+    extra = 1
+    verbose_name_plural = "Primum steps"
+    fields = ["rank", "name", "starts_at", "points", "item_quality"]
+    note = (
+        "A place or creature reads as the highest step whose Starts at it reaches. Points are "
+        "what a source at that step is worth to a caster. Staff can rename a step; the game "
+        "knows only their order."
+    )
+
+
+class SubstancePowerStepInline(ConfigRowsInline):
+    """The power a caster's summed Primum points reach, so each extra source adds less."""
+
+    model = SubstancePowerStep
+    form = SubstancePowerStepForm
+    extra = 1
+    verbose_name_plural = "Power curve"
+    fields = ["points_reached", "power"]
+    note = (
+        "A caster gets the power of the highest row her points reach. A caster below every "
+        "row gets none. Raise Points faster than Power so each extra source adds less."
+    )
+
+
+class HarvestOutcomeInline(ConfigRowsInline):
+    """What each result of a harvest check yields."""
+
+    model = HarvestOutcome
+    form = HarvestOutcomeForm
+    extra = 1
+    verbose_name_plural = "What a harvest gives"
+    fields = ["outcome_tier", "amount_taken", "quantity", "quality_tier"]
+    note = "A check result with no row yields nothing."
+
+
+@admin.register(ResonanceEnvironmentConfig)
+class ResonanceEnvironmentConfigAdmin(admin.ModelAdmin):
+    """Singleton tuning config for the resonance-environment primitive."""
+
+    autocomplete_fields = ["updated_by"]
+
+    list_display = (
+        "pk",
+        "base_coefficient",
+        "caster_power_scalar",
+        "balanced_band",
+        "backfire_base_difficulty_level",
+        "backfire_difficulty_per_magnitude_tenths",
+        "updated_at",
+    )
+
+    inlines = [PrimumStepInline, SubstancePowerStepInline, HarvestOutcomeInline]
+
+    _SUBSTANCE_FIELDS = (
+        "substance_power_at_full",
+        "substance_present_pct",
+        "substance_anima_per_measure",
+        "substance_resonance_per_measure",
+        "substance_place_cap_pct",
+        "unmet_surroundings_penalty_pct",
+    )
+
+    _PRIMUM_FIELDS = (
+        "substance_related_share_pct",
+        "substance_power_cap",
+        "substance_call_up_anima",
+        "harvest_check_type",
+        "harvest_skill",
+        "harvest_thread_bonus",
+    )
+
+    def get_fieldsets(self, request, obj=None):
+        """The existing settings, the #5018 gift-substance numbers, then the Primum numbers."""
+        grouped = {*self._SUBSTANCE_FIELDS, *self._PRIMUM_FIELDS}
+        fields = [f for f in self.get_fields(request, obj) if f not in grouped]
+        return [
+            (None, {"fields": fields}),
+            ("Gift substance", {"fields": list(self._SUBSTANCE_FIELDS)}),
+            ("Substances and Primum", {"fields": list(self._PRIMUM_FIELDS)}),
+        ]
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return not ResonanceEnvironmentConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
 
 
