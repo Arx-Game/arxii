@@ -344,9 +344,10 @@ class CmdSineater(ArxCommand):
         result = DeclineSineatingAction().run(
             self.caller, partner_sheet_id=_get_sheet(sinner_char).pk
         )
+        message = result.message or ""
         if not result.success:
-            raise CommandError(result.message)
-        self.msg(result.message)
+            raise CommandError(message)
+        self.msg(message)
 
     def _do_brace(self, args: str) -> None:
         """Respond to a stage-advance bonus offer."""
