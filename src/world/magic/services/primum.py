@@ -228,7 +228,7 @@ def cast_points(
     }
     perceived = (
         perceived_substance_ids(character, room)
-        if any(points < 0 for _, points in place_rows)
+        if any(substance_id != own.pk for substance_id, _ in place_rows)
         else frozenset()
     )
     place_name = room.key if room is not None else "Here"
@@ -237,11 +237,13 @@ def cast_points(
         name = names[substance_id]
         step = _step_in(steps, amounts[substance_id])
         step_name = step.name if step is not None else ""
-        hidden = points < 0 and substance_id not in perceived
-        if points < 0 and substance_id in perceived:
-            label = f"{_capitalised(name)} here works against your {own.name}"
+        hidden = substance_id != own.pk and substance_id not in perceived
+        if hidden and points > 0:
+            label = f"Something here strengthens your {own.name}"
         elif hidden:
             label = f"Something here works against your {own.name}"
+        elif points < 0:
+            label = f"{_capitalised(name)} here works against your {own.name}"
         else:
             label = f"Surroundings: {name}"
         lines.append(

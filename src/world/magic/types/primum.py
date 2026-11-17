@@ -19,8 +19,8 @@ class SourcePoints:
     ``item_id`` is set only for an item source. ``label`` is the power ledger's line;
     ``card_label`` is the cast card's line for the same source (the room and step, or the
     item), already redacted the same way. ``relation`` is a ``SubstanceRelationKind`` value, or
-    ``""`` when the source is the caster's own substance. ``hidden`` marks an opposing source
-    she has not perceived, which the card shows only as power.
+    ``""`` when the source is the caster's own substance. ``hidden`` marks a source of another
+    substance she has not perceived (related or opposed), which the card shows only as power.
     """
 
     kind: str

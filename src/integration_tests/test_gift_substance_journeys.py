@@ -188,6 +188,11 @@ class _FireField(ResonanceCacheIsolationMixin, JourneyCase):
         (row,) = [r for r in response.json() if r["id"] == self.technique.pk]
         return row["cast_preview"]
 
+    def card_rows(self) -> list[tuple[str, str, int]]:
+        return [
+            (line["kind"], line["text"], line["amount"]) for line in self.card()["surroundings"]
+        ]
+
     def offers(self) -> list[dict]:
         return (
             self.api(self.account_of(self.mira))
@@ -301,12 +306,25 @@ class AnOpposedSubstanceWorksAgainstHer(_IceField):
 
         lines = self.primum_lines(self.cast())
 
-        self.assertEqual(lines["Surroundings: steam"], 2)
-        card = [
-            (line["kind"], line["text"], line["amount"]) for line in self.card()["surroundings"]
-        ]
+        # Steam is not hers and she has not sensed it, so it is never named.
+        self.assertEqual(lines["Something here strengthens your ice"], 2)
+        self.assertFalse(any("steam" in label for label in lines))
         self.assertEqual(
-            card,
+            self.card_rows(),
+            [
+                ("heading", "Ice around you", 0),
+                ("source", "The Long Hall · Trace", 2),
+                ("source", "Something here strengthens your ice", 2),
+                ("power", "Around you adds", 4),
+            ],
+        )
+
+        PrimumSightingFactory(
+            character_sheet=self.sheet, room_profile=self.profile, substance=steam
+        )
+
+        self.assertEqual(
+            self.card_rows(),
             [
                 ("heading", "Ice around you", 0),
                 ("source", "The Long Hall · Trace", 2),

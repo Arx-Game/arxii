@@ -232,7 +232,9 @@ class GiftSubstanceReadAndCastPointsTests(TestCase):
         lines = cast_points(self.character, self.child, self.room)
         by_label = {line.label: line for line in lines}
         self.assertEqual(by_label["Surroundings: fire"].points, SOME_POINTS)
-        self.assertEqual(by_label["Surroundings: ember"].points, TRACE_POINTS // 2)  # 50% share
+        self.assertEqual(
+            by_label["Something here strengthens your fire"].points, TRACE_POINTS // 2
+        )  # 50% share, unsensed so not named
         self.assertEqual(
             by_label["Something here works against your fire"].points, -STARTER_PRIMUM_STEPS[2][3]
         )
@@ -246,6 +248,12 @@ class GiftSubstanceReadAndCastPointsTests(TestCase):
         self.assertIn(self.ice.pk, perceived_substance_ids(self.character, self.room))
         labels = {line.label for line in cast_points(self.character, self.child, self.room)}
         self.assertIn("Ice here works against your fire", labels)
+        self.assertIn("Something here strengthens your fire", labels)
+        PrimumSightingFactory(
+            character_sheet=self.sheet, room_profile=self.profile, substance=self.ember
+        )
+        labels = {line.label for line in cast_points(self.character, self.child, self.room)}
+        self.assertIn("Surroundings: ember", labels)
         extra = cast_points(self.character, self.gift, None, extra_place_amount=TRACE_STARTS_AT)
         self.assertEqual([line.points for line in extra if line.kind == PrimumLineKind.PLACE], [2])
         self.assertEqual(cast_points(self.character, self.minor, self.room), [])

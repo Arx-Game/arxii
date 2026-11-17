@@ -330,8 +330,8 @@ def surroundings_lines(plan: SubstancePlan) -> list[SurroundingsLine]:
 
     A call-up line when the cast calls her substance up, then a heading ("Fire around you"),
     one line per source with its points, and one total line with the power. A lone source she
-    has not perceived working against her shows its power directly, with no heading or total.
-    A source working against her reads its already-redacted label.
+    has not perceived (opposed or related) shows its power directly under "Around you", with no
+    total. A substance she has not perceived is never named: its line reads "Something here ...".
     """
     if plan.is_empty:
         return []
@@ -358,7 +358,8 @@ def _source_lines(plan: SubstancePlan) -> list[SurroundingsLine]:
     power = substance_power(plan)
     if len(sources) == 1 and sources[0].hidden:
         return [
-            SurroundingsLine(kind=SurroundingsKind.POWER, text=sources[0].card_label, amount=power)
+            SurroundingsLine(kind=SurroundingsKind.HEADING, text="Around you"),
+            SurroundingsLine(kind=SurroundingsKind.POWER, text=sources[0].card_label, amount=power),
         ]
     name = plan.label[:1].upper() + plan.label[1:]
     own_here = any(source.relation == "" for source in sources)
