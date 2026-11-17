@@ -1855,6 +1855,50 @@ class TestDriftConfigProbes(TestCase):
         self.assertTrue(self._present()["drift-conflict-condition-check-modifier"])
 
 
+class TestCompulsionConditionProbes(TestCase):
+    """The corruption configuration's Compulsion condition and its shape (#5177).
+
+    U-keep: the dashboard probe has no player path.
+    """
+
+    _KEYS = (
+        "compulsion-condition",
+        "compulsion-condition-scene-duration",
+        "compulsion-condition-check-modifier",
+    )
+
+    def _present(self) -> dict[str, bool]:
+        return {key: _probe_for(key).resolve(None).present for key in self._KEYS}
+
+    def test_an_unset_condition_is_reported_once_and_its_shape_is_checked_when_set(self) -> None:
+        from world.conditions.constants import DurationType
+        from world.magic.services.corruption import get_corruption_config
+
+        # Unset: only the field probe reports; the shape probes leave that gap to it.
+        config = get_corruption_config()
+        self.assertEqual(
+            self._present(),
+            {
+                "compulsion-condition": False,
+                "compulsion-condition-scene-duration": True,
+                "compulsion-condition-check-modifier": True,
+            },
+        )
+
+        condition = ConditionTemplateFactory(default_duration_type=DurationType.ROUNDS)
+        config.compulsion_condition = condition
+        config.save()
+        present = self._present()
+        self.assertTrue(present["compulsion-condition"])
+        self.assertFalse(present["compulsion-condition-scene-duration"])
+        self.assertFalse(present["compulsion-condition-check-modifier"])
+
+        condition.default_duration_type = DurationType.SCENE
+        condition.save()
+        ConditionCheckModifierFactory(condition=condition)
+        self.assertEqual(self._present(), dict.fromkeys(self._KEYS, True))
+
+
 class TestDriftCorrectionConfigProbe(TestCase):
     """`drift-correction-config` needs the rite, the check type and a share per tier (#4733)."""
 
