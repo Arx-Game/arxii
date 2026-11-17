@@ -32,7 +32,7 @@ against.
 | Axis | Mechanic | Source | Recovery |
 |---|---|---|---|
 | Anima ↔ Soulfray | Magical exhaustion injury | Overburn during cast | Anima ritual, Treatment, decay (Scope 6) |
-| Resonance ↔ Corruption | Magical identity-twist drift | Casting non-Celestial techniques over time | Atonement Rite (this scope), Soul Tether mediation (Spec B), decay |
+| Resonance ↔ Corruption | Magical identity-twist drift | Casting Abyssal techniques over time (Primal casts stopped corrupting in #4751) | Soul Tether mediation (Spec B, a Sineater's rescue), daily decay. The Rite of Atonement was removed in #4751 (ADR-4751) |
 
 These run in parallel. A character can carry Soulfray and Corruption simultaneously,
 recover from one without the other, and reach character-loss-class consequences
@@ -87,7 +87,7 @@ values are applied, so tuning is a config change rather than a code change.
   advancement / `on_entry_conditions` / passive decay (Scopes 3 + 6) —
   per-resonance corruption staging rides this.
 - `Ritual` / `RitualComponentRequirement` SERVICE/FLOW dispatch (Spec A) —
-  Atonement Rite is a FLOW-dispatched Ritual.
+  Spec B's rescue rituals ride it. (The Rite of Atonement was once planned here; it was removed, #4751.)
 - `Resonance` / `Affinity` / `CharacterResonance` (Spec A) — counter fields live
   on `CharacterResonance`; affinity coefficient reads through `Resonance.affinity`.
 - `get_runtime_technique_stats` (Scope 2) — used to measure resonance stat
@@ -169,8 +169,9 @@ Singleton-by-convention (pk=1, lazy-create), matching `SoulfrayConfig` and
 `ResonanceGainConfig`. All accrual-formula coefficients staff-tunable via Django
 admin. Coefficients stored as integer-tenths (× 0.1 in formula) to avoid float
 precision — project pattern. The per-affinity coefficient is not on this config: it is
-`Affinity.corruption_coefficient` (Celestial 0, Primal 2, Abyssal 10 as of #4681, in
-tenths), edited on the Affinity admin.
+`Affinity.corruption_coefficient` (Celestial 0, Primal 0, Abyssal 10 in the canonical
+values, in tenths: only Abyssal casts corrupt since #4751, when Primal went from 2 to 0), edited on
+the Affinity admin.
 
 ```
 tier_1_coefficient       PositiveSmallIntegerField  default=10   (× 0.1 → 1.0)
@@ -619,7 +620,7 @@ authoring.
 
 ### 3.3 `reduce_corruption` — canonical recovery entry point
 
-Called by recovery rituals (Atonement Rite §4, Spec B's tether-mediated rescue
+Called by recovery rituals (Spec B's tether-mediated rescue
 rituals, future Mission rituals). Decrement the field, sync the condition,
 fire stage-decrement events.
 
@@ -717,91 +718,29 @@ accrue_corruption_for_cast(...)    Per-cast orchestrator. Hook from techniques.p
 accrue_corruption(...)             Atomic single-resonance accrual + stage resolution.
                                    Spec B intercepts here.
 reduce_corruption(...)             Atomic single-resonance decrement + stage retreat.
-                                   Atonement Rite + Spec B + future Missions all call.
+                                   Spec B + future Missions call.
 get_corruption_config()            Lazy-create singleton (pk=1).
 ```
 
-No public ritual-specific service in §3 — the Atonement Rite is content (§4)
-that uses these primitives via its FlowDefinition's effect step.
+No public ritual-specific service in §3: recovery rituals are content that uses these
+primitives via a FlowDefinition's effect step.
 
 ---
 
-## 4. Atonement Rite (Authored Content)
+## 4. Atonement Rite (removed in #4751)
 
-The foundation's only authored cleansing ritual. Self-targeting; effective for
-stages 1–2 of the performer's own corruption. Spec B and future Mission specs
-author the heavier paths.
+This section once described a self-targeted cleansing rite for stages 1 and 2 of the performer's own
+corruption. It was built as a SERVICE ritual (`perform_atonement_rite`) rather than the FLOW shape
+sketched here, and it never ran: ritual dispatch called it with arguments it did not accept. #4751
+removed it with its Ritual row, its conversion rate and `CorruptionRecoverySource.ATONEMENT_RITE`
+(ADR-4751). Corruption a character carries now falls only by daily decay (Scope 6) and a Sineater's
+rescue (Spec B); stage 1 and 2 characters have only decay until the Sineating work lands. The
+settling rite (`docs/systems/magic.md`, "Drift correction") is the one rite for a changing aura and
+writes no corruption. "Atonement" survives only as the plain word for a settling-rite reflection that
+turns away from something.
 
-### 4.1 Ritual row
-
-One `Ritual` row authored at scope landing using the Spec A `Ritual` model — no
-new model.
-
-```
-name                    "Rite of Atonement"
-slug                    "rite_of_atonement"
-execution_kind          FLOW
-flow                    FK FlowDefinition (authored alongside)
-service_function_path   "" (FLOW dispatch)
-site_property           FK Property "consecrated_ground"
-hedge_accessible        False
-glimpse_eligible        False
-narrative_prose         (authored)
-```
-
-`RitualComponentRequirement` rows author component costs. The "asks a lot of
-participants" weight is expressed via multi-component requirements + multi-step
-flow content (§4.2), not via a single resource cost. Specific components are
-content authoring; spec ships placeholder requirements that staff retune.
-
-### 4.2 FlowDefinition shape
-
-The flow's eligibility gates are standard flow check steps reading from existing
-surfaces. Sketch (actual flow content is authored, not code):
-
-1. **Verify performer affinity** — check step against
-   `performer.character.aura.primary_affinity`. Allowed: Celestial or Primal.
-   Failure → flow aborts via the existing ritual-abort path.
-2. **Verify self-targeting** — check step that target == performer.
-3. **Verify corruption stage in range** — check step that
-   `target.get_corruption_stage(resonance) in (1, 2)`.
-4. **Consume ritual components** — standard Spec A `RitualComponentRequirement`
-   consumption.
-5. **Narrative steps** — multi-step flow content (witness presence, recitations,
-   prompts) authored per design intent.
-6. **Effect step** — call
-   `reduce_corruption(character_sheet=performer_sheet, resonance=target_resonance, amount=<authored>, source=CorruptionRecoverySource.ATONEMENT_RITE)`.
-   Amount is a flow step parameter, authored on the FlowDefinition.
-
-The flow-check abort path uses whatever signaling the flow system already emits
-— same shape as any other ritual that fails preconditions. No new error
-vocabulary.
-
-### 4.3 Foundation primitives the flow uses
-
-Already shipped in §3 — no atonement-specific code:
-
-- `reduce_corruption` (§3.3) — the only mechanical effect call
-- `CharacterSheet.get_corruption_stage(resonance)` (§2.5) — eligibility query
-- `CharacterAura.primary_affinity` and `Resonance.affinity` — existing surfaces
-
-If the flow system cannot natively express "check target's corruption stage on
-a resonance," the fix is a generic flow check step type (a flow primitive), not
-an atonement-specific helper. The foundation does NOT ship per-ritual
-validators.
-
-### 4.4 What the foundation does NOT ship
-
-- **Other-targeting variants** (Celestial cleansing of a Primal/Abyssal ally) —
-  Spec B / future Mission specs.
-- **Stage 3+ recovery rituals** — Spec B authors via additional `Ritual` rows +
-  FlowDefinitions reusing the same primitives.
-- **Subsumption rescue ritual** — Spec B's Soul Tether rescue path is the
-  canonical authored answer.
-- **Bulk atonement** — one rite per resonance is the design intent; matches the
-  "narrative weight per resonance" framing.
-- **Cooldowns / per-scene limits** — content tuning, not foundation
-  infrastructure.
+The foundation primitives (`reduce_corruption`, `get_corruption_stage`) are unchanged and are what
+Spec B's rescue rituals call.
 
 ---
 
@@ -1062,13 +1001,9 @@ Scope 6's `test_soulfray_recovery_flow.py` pattern:
 6. **Consumer-system gates.** Subsumed character: blocked from XP spend,
    resonance currency spend, scene initiation; resonance gain hooks skip them;
    AP regen pauses.
-7. **Atonement Rite full path.** Celestial performer with stage 1 corruption
-   on a Primal resonance; performs Rite of Atonement; FlowDefinition consumes
-   components; effect step calls `reduce_corruption`; severity drops below
-   stage 1 threshold; condition resolved.
-8. **Atonement refused.** Abyssal performer attempts Atonement → flow check
-   step fails on affinity gate. Performer with stage 3 corruption attempts
-   Atonement → flow check step fails on stage gate.
+7. **(Removed, #4751.)** The Atonement Rite full path no longer exists; stage 1
+   corruption falls only by decay or a Sineater's rescue.
+8. **(Removed, #4751.)** The Atonement refusal scenarios went with the rite.
 9. **Decay over time.** Corruption ConditionInstance at stage 1 decays per
    Scope 6 daily tick; severity drops; condition auto-resolves when below
    stage 1 threshold; counter on CharacterResonance decrements per the §3.4
@@ -1120,8 +1055,6 @@ Explicitly NOT in this scope:
 - Abyssal-affinity character creation gating (existing CG flows)
 - Public corruption leaderboards (CharacterResonance.corruption_lifetime
   enables this in the future, but no public surface ships now)
-- Atonement other-targeting (Celestial cleansing of an ally) — Spec B / future
-- Atonement cooldowns / per-scene limits — content tuning, not infrastructure
 - Generic protagonism-lock UI surface (per-system UI authoring)
 
 ---
@@ -1207,7 +1140,7 @@ Sineater's counter low.
 ### 11.2 `reduce_corruption` primitive
 
 Spec B's tether-mediated rescue rituals (FLOW-dispatched `Ritual` rows
-authored in Spec B, mirroring §4's Atonement shape but with Soul Tether
+authored in Spec B, with Soul Tether
 eligibility gates and stage 3+ effect ranges) call `reduce_corruption` as
 their effect step. Foundation primitive, Spec B content.
 
@@ -1231,10 +1164,8 @@ what Scope 6 already ships.
 Per §11.1, Spec B's redirect calls `accrue_corruption` on the Sineater with a
 small trace amount. The Sineater's `corruption_current` and
 `corruption_lifetime` rise as if the Sineater had cast on that resonance
-themselves. Self-recovery via Atonement Rite (§4) is available to the Sineater
-for any Primal-resonance corruption they accumulate, since Atonement supports
-self-targeted cleansing of stages 1-2 — closing the recovery loop without
-requiring a Celestial third party.
+themselves. Corruption the Sineater accumulates falls by daily decay and by another
+Sineater's rescue; the Rite of Atonement that once offered self-cleansing was removed in #4751.
 
 ---
 
@@ -1270,8 +1201,7 @@ For implementation reference, the names introduced or finalized:
 - `AlterationKind.MAGE_SCAR`, `AlterationKind.CORRUPTION_TWIST`
 - `CorruptionSource.TECHNIQUE_USE`, `CorruptionSource.SPEC_B_REDIRECT`,
   `CorruptionSource.STAFF_GRANT`
-- `CorruptionRecoverySource.ATONEMENT_RITE`,
-  `CorruptionRecoverySource.SPEC_B_RESCUE`,
+- `CorruptionRecoverySource.SPEC_B_RESCUE`,
   `CorruptionRecoverySource.PASSIVE_DECAY`,
   `CorruptionRecoverySource.STAFF_GRANT`
 - `CorruptionCause.STAGE_5_SUBSUMPTION`, `CorruptionCause.STAGE_5_RECOVERED`
@@ -1311,7 +1241,6 @@ For implementation reference, the names introduced or finalized:
 - `ProtagonismLockedError`
 
 **Authored content shipped:**
-- `Ritual` row: "Rite of Atonement" + its FlowDefinition
 - 1–2 per-resonance Corruption ConditionTemplates per non-Celestial affinity
   (with 5 ConditionStages + 2–4 CORRUPTION_TWIST MagicalAlterationTemplates each)
 - Soulfray ConditionStage retrofit (data migration only)

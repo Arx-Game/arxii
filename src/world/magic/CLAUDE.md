@@ -1840,7 +1840,7 @@ Tether and the sheet display keep the true `CharacterAura`. See `docs/systems/ma
 
 **Unsettled and Resonance Conflict (#4732, #5123):** `services/drift.py` holds `drift_for(sheet)`
 (whether the character is unsettled: on the TRUE aura, each non-main affinity's own share of
-lifetime resonance against its `CharacterAuraShare.settled_percent` plus the tolerance, and a
+lifetime resonance against its `CharacterAuraShare.settled_percent` plus the range before Unsettled, and a
 Sineater's `mire_lifetime` share against its allowance) and `check_resonance_focus(character,
 technique)`, called once per cast from `_complete_technique_cast` inside
 `use_technique` (after anima, before `resolve_fn` runs), so every cast path rolls it; a pull is
@@ -1851,11 +1851,18 @@ actions gather modifiers before `use_technique`, so the penalty counts from her 
 battles roll focus but their roll reads no condition modifiers (pre-existing,
 `BattleTechniqueResolver`); the joust is not a cast. Every number and both designations
 (focus check type, conflict condition) are on the `DriftConfig` singleton
-(`get_drift_config()`): `unsettled_tolerance_percent` (5) and `unsettled_step_percent` (5, one
-step of severity per band past it), `mire_allowance_percent` (30, the Sineater's wider room),
+(`get_drift_config()`): `unsettled_tolerance_percent` (5, the general range before Unsettled) and
+`unsettled_step_percent` (5, one step of severity per band past it), `mire_allowance_percent` (30,
+the Sineater's wider allowance),
 `creation_points` (10) and `creation_seed_per_point` (10) for character creation,
 `second_resonance_level_step` (10) for pull perks, plus the focus check's base difficulty and
-per-step difficulty. The reading `drift_for` returns is a `DriftReading` (`types/drift.py`):
+per-step difficulty. **The range before Unsettled and the step are per main affinity (#4751):**
+`Affinity.unsettled_tolerance_percent` (0 to 100) and `Affinity.unsettled_step_percent` (1 to 100) are
+nullable, and `_unsettled_numbers(main, cfg)` in `services/drift.py` returns the main affinity's own
+values when set, else the `DriftConfig` ones. Staff set them on the Affinity admin page: Celestial's range
+is small (a Celestial-led character unsettles early by her own Abyssal acts), Primal and Abyssal keep the
+general value. Never call the range "room" or "headroom" (the glossary's term is "range before Unsettled").
+The reading `drift_for` returns is a `DriftReading` (`types/drift.py`):
 `steps_past`, `main_affinity`, `leading_excess_resonance` (the resonance named in "Your X has
 grown strong enough to make you unsettled"), `own_shares`, `settled_shares`, `mire_share_percent`
 and the excess in lifetime points (what atoning may convert). A character with nothing settled
@@ -2134,7 +2141,7 @@ becomes available when the target affinity crosses
 - `ResonanceConversion` — authored mapping (source_resonance,
   target_affinity FK to `Affinity`) → target_resonance. One row per path.
 - `FallRedemptionConfig` — singleton (pk=1, `ArxSharedMemoryManager`) with
-  the penance exchange rate + fall threshold. The per-path multipliers and
+  the fall threshold (the old penance exchange rate was removed, #4751). The per-path multipliers and
   Fall/Redemption type are `AffinityInteraction.conversion_multiplier` /
   `conversion_type` on the directed (source, environment) pair; a database
   check keeps the two both set or both unset. `from_affinity`/`to_affinity`
@@ -2143,15 +2150,15 @@ becomes available when the target affinity crosses
   or Redemption. `ConversionType` TextChoices: FALL / REDEMPTION.
 
 **Services:**
-- `services/conversion.py` — `convert_resonance()` shared engine for both
-  partial (Atonement) and full (Fall) conversion. Transfers `balance` and
+- `services/conversion.py` — `convert_resonance()` is the full (Fall / Redemption)
+  conversion engine; `convert_resonance_amount()` is the single-resonance primitive the
+  settling rite uses. `convert_resonance` transfers `balance` and
   `lifetime_earned` (scaled by multiplier) from source to target resonance.
   `lifetime_earned` is transferred, not decremented — the total is preserved
   modulo the multiplier, so `recompute_aura` shifts correctly. Full
   conversion converts each live thread's `ThreadResonance` rows in the affinity (scaling
   amounts and points, merging rows that land on one resonance, then
-  `refresh_leading_resonance`). Partial
-  conversion (Atonement) does NOT touch threads.
+  `refresh_leading_resonance`).
 - `services/fall_redemption.py` — `grant_compromise_resonance()` (thin
   wrapper over `grant_resonance`), `perform_fall()` (the full ceremony,
   gated by aura threshold + irreversibility; after the conversion it calls
@@ -2159,19 +2166,18 @@ becomes available when the target affinity crosses
   Redemption also moves who she is: her `settled_percent` follows her new own shares and
   `steps_past` reads 0, #5123), `get_fall_redemption_config()`.
 
-**Extended Rite of Atonement (`services/atonement.py`):**
-The existing Rite of Atonement is extended to do BOTH:
-1. **Corruption reduction** (existing) — `reduce_corruption` for stages 1–2.
-   Stage 3+ still raises; stage 0 skips this effect.
-2. **Resonance conversion** (new) — if the performer is Celestial-dominant
-   with non-native `balance > 0`, converts it back to Celestial at the lossy
-  `penance_exchange_rate` (default 0.5 = 2:1). No typed FK needed.
-At least one effect must fire, or `AtonementNothingToAtone` is raised.
-Repeatable (not a Fall); each conversion loses half the value.
+**The old Rite of Atonement is gone (#4751).** The settling rite (below) is the only rite for a
+changing aura; "atonement" is the plain word for the reflections that turn away from something
+(disowning). Corruption a character carries falls only by daily decay and a Sineater's rescue: the
+old rite's cut to corruption at stages 1 and 2 was not carried over. Only Abyssal casts corrupt (Primal's
+canonical `corruption_coefficient` is 0). Removed with it: `services/atonement.py`,
+`FallRedemptionConfig.penance_exchange_rate`, `GainSource.PENANCE` and its grant constraint,
+`CorruptionRecoverySource.ATONEMENT_RITE`, `PenanceError`, the partial path of `convert_resonance`, and
+the Ritual row (migrations 0448 and 0449). ADR-4751.
 
 **New `GainSource` values** (all `NON_ACCELERATED_GAIN_SOURCES`):
-`COMPROMISE`, `PENANCE`, `FALL_CONVERSION`. No typed source FK
-(MISSION_REPORT shape). Three new `ResonanceGrant` CheckConstraints.
+`COMPROMISE`, `FALL_CONVERSION`. No typed source FK
+(MISSION_REPORT shape). Two `ResonanceGrant` CheckConstraints.
 `DRIFT_CORRECTION` (#4733) joins them with `res_grant_drift_correction_shape`.
 
 **Drift correction and the rite of settling (#4733, slice 4 of #4672; #5124).** Atoning (#5123) reads
@@ -2211,9 +2217,14 @@ before accepting; it is what "You become more abyssal." names.
   offering is tied to, writes a `SettlingRite` (outcome, share, scene), spends the offering whatever
   the roll, applies the share and sets `rite` on every reflection, even at a share of 0. Order:
   disowned deeds, the disowned unsettling resonance, embraced deeds, accepting last. Embrace a deed
-  grows `grant.amount x s` as `EMBRACED_DEED` (`grant_resonance(settling_rite=, reflection=)`);
+  grows `embraced_amount(sheet, grant, s)` as `EMBRACED_DEED` (`grant_resonance(settling_rite=, reflection=)`):
+  `grant.amount x s`, and for a deed of an affinity other than her main one also x the direction rate
+  `conversion_pair(main, deed affinity).conversion_multiplier` (a fall toward the Abyss pays more than the
+  deed was worth, a climb pays less; no authored pair leaves the rate at 1). The preview reads the same
+  helper (#4751);
   disown a deed converts `amount x disown_deed_percent x s` (no open chance needed, up to the
-  deed's resonance lifetime); embrace the unsettling resonance calls `accept_aura_change(fraction=s)`;
+  deed's resonance lifetime); when no usable conversion is authored for the pair, `_convert` returns a
+  `_Conversion` carrying `missing_pair` and the line says "no conversion from X to Y has been set"; embrace the unsettling resonance calls `accept_aura_change(fraction=s)`;
   disown it converts up to the open cap toward the conversion target x s, bounded by what stands past
   who she is (the Mire's excess first), and the cap falls by what converted. Conversions turn toward
   the main-affinity resonance the offering is tied to, else (`fallback_conversion_target`, which the
@@ -2238,7 +2249,8 @@ before accepting; it is what "You become more abyssal." names.
   `SettleAuraDialog` and the sheet's `AuraReflections` (`frontend/src/magic/CLAUDE.md`). #5124 removed
   the separate accept, atone and decline actions with their endpoints and verbs, the scene-page gate
   and the scene-end lapse of the chance. Required
-  content row `drift-correction-config`. Details: `docs/systems/magic.md` "Drift correction".
+  content rows `drift-correction-config` and `affinity-conversion-pairs` (every ordered pair of distinct
+  affinities has a `conversion_multiplier` and `conversion_type`). Details: `docs/systems/magic.md` "Drift correction".
 
 **Thread retune (#4735, slice 6 of #4672; reshaped by #5123).** `services/thread_resonance.py` moves
 part of ONE `ThreadResonance` row of a thread to another resonance's row through the SERVICE

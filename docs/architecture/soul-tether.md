@@ -7,7 +7,7 @@
 - Scope #5 Magical Alteration Resolution (DONE) — `PendingAlteration` lifecycle, constrained-authoring pattern.
 - Scope #5.5 Reactive Foundations (DONE) — `emit_event`, `cancel_event`, `MODIFY_PAYLOAD`, `PROMPT_PLAYER` flow steps and `@reply` resolution.
 - Scope #6 Soulfray Recovery & Decay (DONE) — generalized `passive_decay_per_day` on `ConditionTemplate`, stage-entry conditions, `decay_condition_severity`, scheduler tick patterns, Treatment.
-- Scope #7 Corruption (DONE) — `accrue_corruption` with `redirect_origin` parameter, `reduce_corruption` primitive, `CORRUPTION_ACCRUING` and `CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE` reactive events, `is_protagonism_locked` aggregator, Atonement Rite as service-dispatched Ritual reference, severity-driven stage advancement with HOLD_OVERFLOW + resist check.
+- Scope #7 Corruption (DONE) — `accrue_corruption` with `redirect_origin` parameter, `reduce_corruption` primitive, `CORRUPTION_ACCRUING` and `CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE` reactive events, `is_protagonism_locked` aggregator, (the Atonement Rite once listed here was removed in #4751), severity-driven stage advancement with HOLD_OVERFLOW + resist check.
 
 **Blocks:** None — Spec B's other planned pieces (Ritual of Devotion, Ritual of Betrayal, Relational Resilience) remain post-MVP and are explicitly out of scope here.
 
@@ -162,13 +162,13 @@ The bond's loop, end to end:
 
 ### 3.1 Sineater eligibility
 
-**Sineater must be Celestial-primary or Primal-primary affinity.** Mirrors the Atonement Rite gate (Scope 7 §4): non-Abyssal-primary characters can lead the role. Abyssal-primary characters cannot Sineater — their own corrupted nature is the wrong shape to anchor against.
+**Sineater must be Celestial-primary or Primal-primary affinity.** Non-Abyssal-primary characters can lead the role. (This once mirrored the Rite of Atonement's gate; that rite was removed in #4751.) Abyssal-primary characters cannot Sineater — their own corrupted nature is the wrong shape to anchor against.
 
 ### 3.2 Sinner eligibility
 
 **Sinner must be non-Celestial-primary** — i.e., Abyssal-primary or Primal-primary. Celestial-primary characters cannot be Sinners because they don't accrue Corruption (Scope 7 §3.1: Celestial coefficient is 0).
 
-The canonical case is Abyssal-primary Sinners. Primal-primary characters accrue Corruption much slower (Scope 7: Primal coefficient is 0.2, Abyssal is 1.0) and at low levels are fully cleared by passive decay (see §11). At higher tiers, where their casting outpaces decay, a Primal Sinner becomes mechanically meaningful.
+The canonical case is Abyssal-primary Sinners. Since #4751 the canonical Primal coefficient is 0 (only Abyssal casts corrupt; Abyssal is 1.0), so a Primal-primary character accrues Corruption only from other sources, such as a redirect, and what they carry is cleared by passive decay (see §11). A Primal Sinner is mechanically meaningful only where a redirect or an authored non-zero Primal coefficient puts Corruption on them.
 
 ### 3.3 Multiplicity: many-to-many
 
@@ -562,7 +562,7 @@ This is **not a Soul Tether feature** — it's a small piece of Corruption tunin
 Author `passive_decay_per_day` and `passive_decay_max_severity` values on the existing reference Corruption `ConditionTemplate` rows (one per the first authored Primal and Abyssal Resonance, seeded by `author_reference_corruption_content()`; the named "Wild Hunt"/"Web of Spiders" rows were removed in #2967) and any future Corruption templates. Tuning numbers (settled at implementation, not in this spec):
 
 - Primal-flavored Corruption: decay rate sufficient to fully clear a low-tier Primal-primary character's accrual over a small number of days. *Primal users below mid-tier do not need a Sineater.*
-- Abyssal-flavored Corruption: decay rate slow enough that an Abyssal-primary character past tier 1 cannot rely on decay alone. *Abyssal users post-tier-1 need a Sineater (or rely on Atonement Rite, which is one-shot per scene and only effective at stages 1-2).*
+- Abyssal-flavored Corruption: decay rate slow enough that an Abyssal-primary character past tier 1 cannot rely on decay alone. *Abyssal users post-tier-1 need a Sineater; corruption falls only through a Sineater's rescue or daily decay (the Rite of Atonement was removed in #4751).*
 
 `passive_decay_blocked_in_engagement=False` for Corruption (matches the design — corruption decays during normal life, not just out of combat).
 
