@@ -274,6 +274,10 @@ export interface HarvestOffer {
   opponent_id: number | null;
   opponent_name: string;
   step_name: string;
+  /** The harvest check she rolls; empty while none is set. */
+  check_name: string;
+  /** The played character the offer belongs to; set on a slain foe's offers only. */
+  character_id?: number;
 }
 
 /** The `primum` block of a `room_state` frame, written for one viewer (#5125). */

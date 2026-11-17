@@ -1,70 +1,57 @@
 /**
- * Extracting Primum (#5125): one Harvest button per offer, wherever the server says the
- * viewer perceives Primum she can take: a lair she stands in, or a slain creature. The
- * server answers in one plain sentence either way, so the button only reports it.
+ * Extracting Primum from a slain creature (#5125): what the viewer senses in its remains,
+ * the check she rolls, a Harvest button per offer, and the server's answer. Nothing at all
+ * with no offers and no answer. The caller holds the answer, so it stays after the foe is
+ * no longer offered.
  */
-import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useDispatchPlayerAction } from '@/combat/queries';
-import { isDispatchFailure } from '@/combat/types';
 import type { HarvestOffer } from '@/hooks/types';
-import { primumName } from '../primumName';
+import { primumName, runHarvest, type HarvestAnswer } from '../harvestAnswer';
+import { HarvestAnswerLines } from './HarvestAnswerLines';
 
 interface HarvestRowProps {
   offers: HarvestOffer[];
+  /** The played character who presses Harvest. */
   characterId: number;
-  /** Called after any answer, so a caller can refetch what the harvest changed. */
-  onHarvested?: () => void;
+  answer?: HarvestAnswer | null;
+  onAnswer?: (answer: HarvestAnswer) => void;
 }
 
-export function HarvestRow({ offers, characterId, onHarvested }: HarvestRowProps) {
+export function HarvestRow({ offers, characterId, answer = null, onAnswer }: HarvestRowProps) {
   const dispatch = useDispatchPlayerAction(characterId);
 
-  if (offers.length === 0) {
+  if (offers.length === 0 && !answer) {
     return null;
   }
 
-  const harvest = async (offer: HarvestOffer) => {
-    try {
-      const result = await dispatch.mutateAsync({
-        ref: { backend: 'registry', registry_key: 'harvest_primum' },
-        kwargs: { substance: offer.substance_id, opponent_id: offer.opponent_id },
-      });
-      if (isDispatchFailure(result)) {
-        toast.error(result.message ?? 'You could not extract it.');
-      } else if (result.message) {
-        toast.success(result.message);
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'You could not extract it.');
-    }
-    onHarvested?.();
-  };
+  const checkName = offers.find((offer) => offer.check_name)?.check_name;
+  const names = [...new Set(offers.map((offer) => offer.substance_name))];
 
   return (
-    <ul className="space-y-1" data-testid="harvest-row">
-      {offers.map((offer) => (
-        <li
-          key={`${offer.substance_id}-${offer.opponent_id ?? 'place'}`}
-          className="flex items-center justify-between gap-2 text-xs"
-        >
-          <span>
-            {primumName(offer.substance_name)}
-            {offer.step_name && ` · ${offer.step_name}`}
-            {offer.opponent_id !== null && ` · ${offer.opponent_name}`}
-          </span>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-6 shrink-0 px-2 text-xs"
-            disabled={dispatch.isPending}
-            onClick={() => void harvest(offer)}
-          >
-            Harvest
-          </Button>
-        </li>
+    <div className="space-y-1" data-testid="harvest-row">
+      {names.map((name) => (
+        <p key={name} className="text-xs">
+          You sense {name} Primum in its remains.
+        </p>
       ))}
-    </ul>
+      {checkName && <p className="text-xs text-muted-foreground">Check: {checkName}</p>}
+      {offers.map((offer) => (
+        <Button
+          key={offer.substance_id}
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-6 px-2 text-xs"
+          disabled={dispatch.isPending}
+          onClick={() => {
+            void runHarvest(dispatch.mutateAsync, offer).then((result) => onAnswer?.(result));
+          }}
+        >
+          {offers.length > 1 ? `Harvest ${primumName(offer.substance_name)}` : 'Harvest'}
+        </Button>
+      ))}
+      {answer && <HarvestAnswerLines answer={answer} />}
+    </div>
   );
 }

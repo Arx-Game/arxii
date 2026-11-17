@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { fireEvent, screen, act } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -14,6 +15,11 @@ import { RoomPanel } from './RoomPanel';
 const mockConnect = vi.fn(() => Promise.resolve());
 const mockRequestRoomState = vi.fn();
 const mockSend = vi.fn();
+const mockDispatch = vi.fn();
+
+vi.mock('@/combat/queries', () => ({
+  useDispatchPlayerAction: () => ({ mutateAsync: mockDispatch, isPending: false }),
+}));
 
 vi.mock('@/hooks/useGameSocket', () => ({
   useGameSocket: () => ({
@@ -138,5 +144,66 @@ describe('RoomPanel Primum', () => {
     );
 
     expect(screen.queryByText('You sense')).not.toBeInTheDocument();
+  });
+
+  it('draws out the picked Primum and keeps the answer when the lair empties', async () => {
+    mockDispatch.mockResolvedValue({
+      backend: 'registry',
+      deferred: false,
+      success: true,
+      message: 'Good success. You draw out 2 Fire Primum (Fine).',
+      data: { remaining_line: 'Fire Primum here is now Rich.' },
+    });
+    const offer = {
+      substance_id: 3,
+      substance_name: 'fire',
+      source: 'place',
+      opponent_id: null,
+      opponent_name: '',
+      step_name: 'Massive',
+      check_name: 'Harvesting',
+    };
+    const primum = {
+      sensed: [{ substance_id: 3, substance_name: 'fire', step_name: 'Massive' }],
+      line: 'You sense fire Primum: Massive.',
+      harvestable: [offer],
+    };
+    function Harness() {
+      const [emptied, setEmptied] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setEmptied(true)}>
+            empty the lair
+          </button>
+          <RoomPanel
+            character="Aria"
+            characterId={9}
+            room={{
+              ...room,
+              primum: emptied ? { sensed: [], line: '', harvestable: [] } : primum,
+            }}
+            scene={null}
+          />
+        </>
+      );
+    }
+    renderWithProviders(<Harness />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Harvest Primum' }));
+    expect(screen.getByText('Draw out')).toBeInTheDocument();
+    expect(screen.getByLabelText('Fire Primum · Massive')).toBeChecked();
+    expect(screen.getByText('Check: Harvesting')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Harvest' }));
+
+    expect(
+      await screen.findByText('Good success. You draw out 2 Fire Primum (Fine).')
+    ).toBeInTheDocument();
+    expect(mockDispatch).toHaveBeenCalledWith({
+      ref: { backend: 'registry', registry_key: 'harvest_primum' },
+      kwargs: { substance: 3, opponent_id: null },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'empty the lair' }));
+    expect(screen.getByText('Fire Primum here is now Rich.')).toBeInTheDocument();
   });
 });

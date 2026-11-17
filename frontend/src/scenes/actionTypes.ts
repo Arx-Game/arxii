@@ -214,10 +214,10 @@ export interface CastPreview {
 
 /** One line a cast card shows about where she stands (#5018). */
 export interface SurroundingsLine {
-  /** power | call_up | blocked | needs */
+  /** heading | source | power | call_up | blocked | needs */
   kind: string;
   text: string;
-  /** Signed power for a power line, the penalty for a needs line. */
+  /** Signed points (source), signed power (power), or the penalty (needs). */
   amount: number;
   anima: number;
   /** A call-up line's right-hand cost; empty for the other kinds. */

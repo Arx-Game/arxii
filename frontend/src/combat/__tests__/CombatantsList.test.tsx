@@ -11,7 +11,6 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
 
 import { deepLinkModalSlice } from '@/store/deepLinkModalSlice';
-import { gameSlice, setSessionRoom, startSession } from '@/store/gameSlice';
 import type { components } from '@/generated/api';
 
 type ConditionInstance = components['schemas']['ConditionInstance'];
@@ -49,12 +48,8 @@ vi.mock('../queries', async (importOriginal) => {
   };
 });
 
-// #5125 — Harvest on a slain foe: the room's offers name the substance.
+// #5125 — Harvest on a slain foe.
 const mockHarvestMutateAsync = vi.fn();
-const mockRequestRoomState = vi.fn();
-vi.mock('@/hooks/useGameSocket', () => ({
-  useGameSocket: () => ({ requestRoomState: mockRequestRoomState }),
-}));
 
 const toastErrorMock = vi.fn();
 vi.mock('sonner', () => ({
@@ -156,7 +151,7 @@ function makeOpponent(overrides: Partial<Opponent> = {}): Opponent {
     thumbnail_media_url: null,
     current_square: null,
     current_position: null,
-    harvestable: false,
+    harvest_offers: [],
     mirrors_participant_id: null,
     ...overrides,
   };
@@ -1089,58 +1084,41 @@ describe('ally taunt menu', () => {
 
   it('offers Harvest on a slain foe the viewer perceives Primum on', async () => {
     const user = userEvent.setup();
-    mockHarvestMutateAsync.mockResolvedValue({ success: true, message: 'You draw out 1.' });
-    const store = configureStore({
-      reducer: { deepLinkModal: deepLinkModalSlice.reducer, game: gameSlice.reducer },
+    mockHarvestMutateAsync.mockResolvedValue({
+      success: true,
+      message: 'Success. You draw out 1 Fire Primum (Common).',
+      data: { remaining_line: 'Nothing more can be drawn from Mire Knight.' },
     });
-    store.dispatch(startSession('Aria'));
-    store.dispatch(
-      setSessionRoom({
-        character: 'Aria',
-        room: {
-          id: 1,
-          name: 'Caldera',
-          description: '',
-          thumbnail_url: null,
-          characters: [],
-          objects: [],
-          exits: [],
-          is_owner: false,
-          is_public: true,
-          hub: null,
-          viewer_place_id: null,
-          primum: {
-            sensed: [],
-            line: '',
-            harvestable: [
-              {
-                substance_id: 3,
-                substance_name: 'fire',
-                source: 'creature',
-                opponent_id: 10,
-                opponent_name: 'Mire Knight',
-                step_name: 'Rich',
-              },
-            ],
-          },
-        },
-      })
-    );
+    const offer = {
+      substance_id: 3,
+      substance_name: 'fire',
+      source: 'creature',
+      opponent_id: 10,
+      opponent_name: 'Mire Knight',
+      step_name: 'Rich',
+      check_name: 'Harvesting',
+      character_id: 7,
+    };
     const encounter = makeEncounter(
       [],
-      [makeOpponent({ id: 10, harvestable: true }), makeOpponent({ id: 11 })]
+      [makeOpponent({ id: 10, harvest_offers: [offer] }), makeOpponent({ id: 11 })]
     );
 
-    render(<CombatantsList encounter={encounter} characterId={7} />, {
-      wrapper: createWrapper(store as unknown as ReturnType<typeof makeStore>),
-    });
+    render(<CombatantsList encounter={encounter} characterId={7} />, { wrapper: createWrapper() });
 
+    const row = within(screen.getByTestId('opponent-row-10'));
+    expect(row.getByText('You sense fire Primum in its remains.')).toBeInTheDocument();
+    expect(row.getByText('Check: Harvesting')).toBeInTheDocument();
     expect(within(screen.getByTestId('opponent-row-11')).queryByText('Harvest')).toBeNull();
-    await user.click(within(screen.getByTestId('opponent-row-10')).getByText('Harvest'));
+    await user.click(row.getByText('Harvest'));
 
     expect(mockHarvestMutateAsync).toHaveBeenCalledWith({
       ref: { backend: 'registry', registry_key: 'harvest_primum' },
       kwargs: { substance: 3, opponent_id: 10 },
     });
+    expect(
+      await row.findByText('Success. You draw out 1 Fire Primum (Common).')
+    ).toBeInTheDocument();
+    expect(row.getByText('Nothing more can be drawn from Mire Knight.')).toBeInTheDocument();
   });
 });

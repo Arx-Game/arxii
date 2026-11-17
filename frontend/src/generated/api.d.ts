@@ -41029,8 +41029,7 @@ export interface components {
        *     own ``portrait`` FK via ``fallback_media``.
        */
       readonly thumbnail_media_url: string | null;
-      /** @description Whether the viewer can extract Primum from this slain foe (#5125). */
-      readonly harvestable: boolean;
+      readonly harvest_offers: components['schemas']['OpponentHarvestOffer'][];
       readonly current_position: components['schemas']['PositionSummary'] | null;
       readonly current_square: components['schemas']['Square'] | null;
       readonly mirrors_participant_id: number | null;
@@ -41054,6 +41053,21 @@ export interface components {
       phases: components['schemas']['PhaseSpec'][];
       stakes_ok: boolean;
       stakes_message: string;
+    };
+    /** @description A slain foe's offer to one character: which character presses Harvest. */
+    OpponentHarvestOffer: {
+      readonly substance_id: number;
+      readonly substance_name: string;
+      /** @description place | creature. */
+      readonly source: string;
+      /** @description The slain foe's pk; null for a lair. */
+      readonly opponent_id: number | null;
+      readonly opponent_name: string;
+      readonly step_name: string;
+      /** @description The harvest check she rolls; empty while none is set. */
+      readonly check_name: string;
+      /** @description The played character this offer belongs to. */
+      readonly character_id: number;
     };
     /** @description One drive edit on a placement: a strength, or null to remove the template's drive. */
     OpponentLineDrive: {
@@ -53734,10 +53748,10 @@ export interface components {
     };
     /** @description One line the cast card shows under its cost about where she stands (#5018). */
     SurroundingsLine: {
-      /** @description power | call_up | blocked | needs (an unmet restriction). */
+      /** @description heading | source | power | call_up | blocked | needs (an unmet restriction). */
       readonly kind: string;
       readonly text: string;
-      /** @description Signed power, or the penalty. */
+      /** @description Signed points for a source line, signed power for a power line, or the penalty. */
       readonly amount: number;
       readonly anima: number;
       /** @description A call-up line's right-hand cost; blank otherwise. */

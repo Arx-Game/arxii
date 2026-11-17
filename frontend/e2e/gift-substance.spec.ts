@@ -64,7 +64,8 @@ test.describe('a gift substance in a social scene', () => {
     const lines = page.getByTestId('surroundings-lines').last();
     await expect(lines).toContainText('Calls up shadow', { timeout: 15000 });
     await expect(lines).toContainText(COST);
-    await expect(lines).toContainText('Surroundings: shadow');
+    await expect(lines).toContainText('Shadow around you');
+    await expect(lines).toContainText('Shadow adds');
     await expect(lines).toContainText(/\+\d+ power/);
     await expect(lines).not.toContainText(/resonance/i);
     await page.screenshot({
@@ -132,7 +133,7 @@ test.describe('a gift substance in a social scene', () => {
       .first()
       .click();
     const lines = page.getByTestId('surroundings-lines').last();
-    await expect(lines).toContainText('Surroundings: shadow', { timeout: 15000 });
+    await expect(lines).toContainText('Shadow around you', { timeout: 15000 });
     await expect(lines).not.toContainText('Calls up shadow');
   });
 });
