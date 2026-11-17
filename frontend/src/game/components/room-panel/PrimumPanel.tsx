@@ -1,6 +1,7 @@
 /**
  * The Primum the viewer senses in this place (#5125): "You sense" with one row per
- * substance, and a Harvest Primum block where she can take some. The server writes the block
+ * substance, strongest first (the server's order), a reminder when a row came from a
+ * sighting she loses on leaving, and a Harvest Primum block where she can take some. The server writes the block
  * for the viewer's own eyes, so a substance she has not perceived never reaches it. The
  * block's answer is held here, so it stays on screen after the lair empties.
  */
@@ -43,6 +44,9 @@ export function PrimumPanel({ primum, characterId }: PrimumPanelProps) {
               </li>
             ))}
           </ul>
+          {primum.sensed.some((row) => row.from_sighting) && (
+            <p className="text-xs text-muted-foreground">You see this until you leave the place.</p>
+          )}
         </>
       )}
       {characterId && showHarvest && (

@@ -176,6 +176,10 @@ class _Magesight(ResonanceCacheIsolationMixin, JourneyCase):
         (row,) = [r for r in response.json() if r["id"] == self.frost.pk]
         return [line["text"] for line in row["cast_preview"]["surroundings"]]
 
+    def look_as_mira(self) -> str:
+        """What Mira is told when she looks at the hall over telnet."""
+        return self.telnet(self.mira, "look").rstrip()
+
     def sensed(self, sheet=None) -> set[str]:
         sheet = sheet or self.sheet
         return {
@@ -190,12 +194,18 @@ class SensingPrimumThroughACheck(_Magesight):
     def test_plain_success_names_the_strongest_substance_only(self) -> None:
         self.cast_magesight("Success")
 
-        self.assertEqual(self.sensed(), {"stone"})
+        self.assertTrue(
+            self.look_as_mira().endswith("You sense stone Primum: Massive."), self.look_as_mira()
+        )
+        self.assertNotIn("fire", self.look_as_mira())
 
-    def test_good_success_names_them_all(self) -> None:
+    def test_good_success_names_them_all_strongest_first(self) -> None:
         self.cast_magesight("Critical Success")
 
-        self.assertEqual(self.sensed(), {"fire", "stone"})
+        told = self.look_as_mira()
+        self.assertTrue(
+            told.endswith("You sense stone Primum: Massive. You sense fire Primum: Some."), told
+        )
 
     def test_a_creature_the_party_fights_is_sensed_with_the_place(self) -> None:
         wyrm = CreatureTemplateFactory(name="Cinder wyrm")
@@ -225,14 +235,14 @@ class WhatSheSensesLastsWhileSheStays(_Magesight):
         self.assertNotIn(UNPERCEIVED, self.frost_card_texts())
 
         self.mira.move_to(self.make_room("The Yard"), quiet=True)
-        self.assertEqual(self.sensed(), set())
         self.mira.move_to(self.room, quiet=True)
         self.assertIn(UNPERCEIVED, self.frost_card_texts())
+        self.assertNotIn("Primum", self.look_as_mira())
 
         self.cast_magesight("Critical Success")
-        self.assertEqual(self.sensed(), {"fire", "stone"})
+        self.assertIn("You sense fire Primum: Some.", self.look_as_mira())
         self.mira.at_post_unpuppet()
-        self.assertEqual(self.sensed(), set())
+        self.assertNotIn("Primum", self.look_as_mira())
 
     def test_her_own_gifts_substance_is_always_perceived_without_a_cast(self) -> None:
         self.assertIn(self.ice.pk, perceived_substance_ids(self.mira, self.room))

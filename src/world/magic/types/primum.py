@@ -82,3 +82,5 @@ class PrimumSense:
     substance_id: int
     substance_name: str
     step_name: str
+    #: Sensed through a sighting in this place, not her own gift: gone when she leaves.
+    from_sighting: bool = False

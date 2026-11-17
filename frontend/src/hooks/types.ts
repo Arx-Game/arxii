@@ -262,6 +262,8 @@ export interface PrimumSense {
   substance_id: number;
   substance_name: string;
   step_name: string;
+  /** Sensed through a sighting here, not her own Gift: gone when she leaves. */
+  from_sighting?: boolean;
 }
 
 /** One Primum the viewer can extract: from the lair, or from a slain creature (#5125). */

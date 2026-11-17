@@ -30,6 +30,10 @@ class PrimumSenseSerializer(serializers.Serializer):
     substance_id = serializers.IntegerField(read_only=True)
     substance_name = serializers.CharField(read_only=True)
     step_name = serializers.CharField(read_only=True)
+    from_sighting = serializers.BooleanField(
+        read_only=True,
+        help_text="Sensed through a sighting here, not her own gift: gone when she leaves.",
+    )
 
 
 class HarvestOfferSerializer(serializers.Serializer):

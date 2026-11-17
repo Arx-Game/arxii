@@ -126,7 +126,14 @@ class TheRoomFrame(_Caldera):
 
         self.assertEqual(
             block["sensed"],
-            [{"substance_id": self.fire.pk, "substance_name": "fire", "step_name": "Massive"}],
+            [
+                {
+                    "substance_id": self.fire.pk,
+                    "substance_name": "fire",
+                    "step_name": "Massive",
+                    "from_sighting": True,
+                }
+            ],
         )
         self.assertEqual(block["line"], FIRE_LINE)
         self.assertEqual(
@@ -140,9 +147,13 @@ class TheRoomFrame(_Caldera):
         self.sense(self.mira, self.earth)
         block = self.frame(self.mira)
 
-        self.assertEqual([row["substance_name"] for row in block["sensed"]], ["earth", "fire"])
+        # Strongest first; her own Gift's fire stays with her, the sighted earth does not.
         self.assertEqual(
-            block["line"], "You sense earth Primum: Trace. You sense fire Primum: Massive."
+            [(row["substance_name"], row["from_sighting"]) for row in block["sensed"]],
+            [("fire", False), ("earth", True)],
+        )
+        self.assertEqual(
+            block["line"], "You sense fire Primum: Massive. You sense earth Primum: Trace."
         )
 
     def test_two_viewers_see_different_payloads(self) -> None:
@@ -185,7 +196,7 @@ class TheRoomFrame(_Caldera):
 
         self.assertEqual(
             [row["substance_name"] for row in self.frame(self.mira)["sensed"]],
-            ["air", "fire", "ice", "shadow", "water"],
+            ["fire", "air", "ice", "shadow", "water"],
         )
         self.assertLessEqual(frame_queries(), before)
 
@@ -213,7 +224,7 @@ class Looking(_Caldera):
 
         self.assertTrue(
             told.rstrip().endswith(
-                "You sense earth Primum: Trace. You sense fire Primum: Massive."
+                "You sense fire Primum: Massive. You sense earth Primum: Trace."
             ),
             told,
         )

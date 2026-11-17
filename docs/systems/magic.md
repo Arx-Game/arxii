@@ -5109,7 +5109,9 @@ success names every one (`ALL`), and she keeps sensing it until she leaves. `rev
 `PrimumSighting` rows; `perceived_substance_ids(character, room)` is her sightings plus the
 substance of each gift she holds; `sensed_primum` and `sense_line` build what the web "You
 sense" block lists ("<Name> Primum: <Step>" per substance, the `primum` block of the
-`room_state` frame) and the sentence `look` ends with ("You sense fire Primum: Massive."). It
+`room_state` frame) and the sentence `look` ends with ("You sense fire Primum: Massive."),
+strongest first and then by name. A row she senses only through a sighting carries
+`from_sighting`, and the web block then adds "You see this until you leave the place." It
 never names a substance she has not perceived. What a check can name (`candidate_substances`)
 is the place's amounts and the creatures' amounts, the larger of the two per substance:
 several creatures of one substance in a room add up (a pack of fire elementals reads richer),

@@ -47,11 +47,7 @@ def perceived_substance_ids(character: ObjectDB, room: ObjectDB | None) -> froze
         sheet = character.sheet_data
     except CharacterSheet.DoesNotExist:
         return frozenset()
-    perceived: set[int] = set()
-    for held in CharacterGift.objects.filter(character=sheet).select_related("gift"):
-        substance = gift_substance(held.gift)
-        if substance is not None:
-            perceived.add(substance.pk)
+    perceived = set(_gift_substance_ids(sheet))
     if room is not None:
         try:
             profile = room.room_profile
@@ -63,6 +59,16 @@ def perceived_substance_ids(character: ObjectDB, room: ObjectDB | None) -> froze
             )
         )
     return frozenset(perceived)
+
+
+def _gift_substance_ids(sheet: CharacterSheet) -> frozenset[int]:
+    """The substance of each gift ``sheet`` holds, through the gift's lineage."""
+    found: set[int] = set()
+    for held in CharacterGift.objects.filter(character=sheet).select_related("gift"):
+        substance = gift_substance(held.gift)
+        if substance is not None:
+            found.add(substance.pk)
+    return frozenset(found)
 
 
 def creature_substance_amounts(room: ObjectDB) -> dict[int, int]:
@@ -117,7 +123,9 @@ def sensed_primum(
 
     Never a substance she has not perceived. A perceived substance the place holds none of, or
     less than the first step, is left out; so is any substance when no steps are authored.
-    Ordered by substance name.
+    Ordered strongest first, then by substance name. A row is ``from_sighting`` when she senses
+    it only through a sighting here, not through a gift of her own: she loses it when she
+    leaves.
     """
     if perceived is None:
         perceived = perceived_substance_ids(character, room)
@@ -132,10 +140,22 @@ def sensed_primum(
     }
     if not amounts:
         return []
-    substances = list(Substance.objects.filter(pk__in=amounts).order_by("name"))
+    substances = sorted(
+        Substance.objects.filter(pk__in=amounts),
+        key=lambda substance: (-amounts[substance.pk], substance.name),
+    )
     names = step_names_for([amounts[substance.pk] for substance in substances], steps=steps)
+    try:
+        own = _gift_substance_ids(character.sheet_data)
+    except CharacterSheet.DoesNotExist:
+        own = frozenset()
     return [
-        PrimumSense(substance_id=substance.pk, substance_name=substance.name, step_name=name)
+        PrimumSense(
+            substance_id=substance.pk,
+            substance_name=substance.name,
+            step_name=name,
+            from_sighting=substance.pk not in own,
+        )
         for substance, name in zip(substances, names, strict=True)
         if name
     ]
@@ -144,7 +164,8 @@ def sensed_primum(
 def sense_line(senses: list[PrimumSense]) -> str:
     """The sentence a ``look`` ends with: ``You sense fire Primum: Massive.`` per substance.
 
-    Joined with spaces; empty when she senses nothing.
+    Joined with spaces, in the order ``sensed_primum`` gives (strongest first); empty when she
+    senses nothing.
     """
     return " ".join(
         f"You sense {sense.substance_name} Primum: {sense.step_name}." for sense in senses

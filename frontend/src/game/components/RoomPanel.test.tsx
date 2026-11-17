@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { fireEvent, screen, act } from '@testing-library/react';
+import { fireEvent, screen, act, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
@@ -132,6 +132,38 @@ describe('RoomPanel Primum', () => {
 
     expect(screen.getByText('You sense')).toBeInTheDocument();
     expect(screen.getByText('Fire Primum: Massive')).toBeInTheDocument();
+    // Her own Gift's substance stays with her; no reminder that it fades.
+    expect(screen.queryByText('You see this until you leave the place.')).not.toBeInTheDocument();
+  });
+
+  it('says a sighting lasts until she leaves the place', () => {
+    renderWithProviders(
+      <RoomPanel
+        character="Aria"
+        room={{
+          ...room,
+          primum: {
+            sensed: [
+              {
+                substance_id: 3,
+                substance_name: 'fire',
+                step_name: 'Massive',
+                from_sighting: true,
+              },
+              { substance_id: 4, substance_name: 'earth', step_name: 'Trace', from_sighting: true },
+            ],
+            line: 'You sense fire Primum: Massive. You sense earth Primum: Trace.',
+            harvestable: [],
+          },
+        }}
+        scene={null}
+      />
+    );
+
+    const panel = within(screen.getByTestId('primum-panel'));
+    const rows = panel.getAllByRole('listitem').map((item) => item.textContent);
+    expect(rows).toEqual(['Fire Primum: Massive', 'Earth Primum: Trace']);
+    expect(screen.getByText('You see this until you leave the place.')).toBeInTheDocument();
   });
 
   it('shows nothing about Primum the viewer does not sense', () => {
