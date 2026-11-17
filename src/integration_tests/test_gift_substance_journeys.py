@@ -332,12 +332,14 @@ class CallingUp(_FireField):
         self.assertEqual(self.called_up(), [1])  # nothing to Trace
         self.assertTold(self.tomas, MANIFEST)
 
+        seen_by_telnet = self.said(self.tomas).count(MANIFEST)
         encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, room=self.room)
         begin_engagement(self.mira, EngagementType.COMBAT, source=encounter)
         result = self.web(self.mira, "call_up_substance", gift_id=self.gift.pk)
 
         self.assertTrue(result.detail.success, result.detail.message)
         self.assertEqual(result.detail.message, "You call up fire. Cost: 3 anima.")
+        self.assertGreater(self.said(self.tomas).count(MANIFEST), seen_by_telnet)
         self.assertEqual(self.called_up(), [10])  # Trace to Some
         self.assertEqual((self.anima(), self.resonance()), (27, 10))
 
@@ -348,6 +350,16 @@ class CallingUp(_FireField):
         self.assertEqual(at_top.detail.message, "No more fire can be called up here.")
         self.assertEqual(self.called_up(), [100])
         self.assertEqual(self.resonance(), 10)
+
+    def test_call_up_in_a_room_that_already_leans_lands_on_the_next_step_start(self) -> None:
+        set_room_stat_modifier(self.profile, StatKey.HEAT, source="builder", value=5)
+
+        told = self.telnet(self.mira, "callup fire")
+
+        self.assertIn("You call up fire.", told)
+        some = PrimumStep.objects.get(rank=2)
+        # Held Primum, not the lean's Trace floor, is what the step is measured from.
+        self.assertEqual(self.called_up(), [some.starts_at])
 
     def test_cast_calls_up_only_to_trace(self) -> None:
         result = self.cast()

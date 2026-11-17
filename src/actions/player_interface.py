@@ -2037,6 +2037,7 @@ def _build_enhancement_index(
                 room=character.location,
                 control_surplus=max(stats.control - stats.intensity - technique.anima_cost, 0),
                 to_trace_only=True,
+                with_lines=False,
             )
             stats_cache[technique.pk] = (stats.intensity, stats.control, plan.call_up_anima)
         intensity, control, call_up_anima = stats_cache[technique.pk]

@@ -122,20 +122,23 @@ def _call_up_target(
     return following.starts_at, SubstanceBlock.NONE
 
 
-def plan_substance_call_up(
+def plan_substance_call_up(  # noqa: PLR0913 - keyword-only reads of one plan, no natural grouping
     *,
     character: ObjectDB,  # noqa: OBJECTDB_PARAM - a caster
     gift: Gift | None,
     room: ObjectDB | None,  # noqa: OBJECTDB_PARAM - a room
     control_surplus: int,
     to_trace_only: bool = False,
+    with_lines: bool = True,
 ) -> SubstancePlan:
     """What calling up ``gift``'s substance in ``room`` would take and do. Pure read.
 
     The cast card, the cast's charge, its power lines and the no-technique call-up all read
     this plan. ``control_surplus`` is the control she has left after the rest of what she is
     paying for, which covers that much of the call-up's anima. ``to_trace_only`` is the cast
-    path: it calls up only where the place holds less than the first step.
+    path: it calls up only where the place holds less than the first step. ``with_lines=False``
+    skips the power-line queries for a caller that only reads the call-up (the enhancement
+    index, the combat call-up offers); ``lines`` is then empty.
     """
     from world.magic.services.resonance_environment import (  # noqa: PLC0415
         get_resonance_environment_config,
@@ -178,7 +181,11 @@ def plan_substance_call_up(
         call_up_anima=call_up_anima,
         covered_anima=covered,
         place_shift_pct=shift,
-        lines=tuple(cast_points(character, gift, room, extra_place_amount=call_up_amount)),
+        lines=(
+            tuple(cast_points(character, gift, room, extra_place_amount=call_up_amount))
+            if with_lines
+            else ()
+        ),
     )
 
 
@@ -419,6 +426,7 @@ def call_up_offers(
             gift=thread.target_gift,
             room=character.location,
             control_surplus=surplus,
+            with_lines=False,
         )
         if plan.is_empty:
             continue
