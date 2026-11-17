@@ -2029,13 +2029,14 @@ def _build_enhancement_index(
             continue
         if technique.pk not in stats_cache:
             stats = get_runtime_technique_stats(technique, character)
-            # #5018: a call-up of her gift's substance rides the cost before control, as
-            # in the cast's own cost function. No gift thread with a substance: no query.
+            # #5125: a call-up of her gift's substance (to Trace only) rides the cost before
+            # control, as in the cast's own cost function. No gift thread: no substance query.
             plan = plan_substance_call_up(
                 character=character,
                 gift=technique.gift,
                 room=character.location,
                 control_surplus=max(stats.control - stats.intensity - technique.anima_cost, 0),
+                to_trace_only=True,
             )
             stats_cache[technique.pk] = (stats.intensity, stats.control, plan.call_up_anima)
         intensity, control, call_up_anima = stats_cache[technique.pk]

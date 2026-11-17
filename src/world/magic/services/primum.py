@@ -108,6 +108,19 @@ def _held_amounts(
     return held
 
 
+def held_amount(room: ObjectDB, substance: Substance, *, now: datetime | None = None) -> int:
+    """The Primum of ``substance`` ``room`` actually holds: stock and call-ups, no floor.
+
+    A call-up raising the place to an amount adds the difference from this, not from
+    ``place_amount``, whose ordinary-condition floor is not held Primum. A room with no
+    ``RoomProfile`` holds nothing.
+    """
+    profile = _profile(room)
+    if profile is None:
+        return 0
+    return _held_amounts(profile, now, [substance.pk]).get(substance.pk, 0)
+
+
 def place_amount(
     room: ObjectDB, substance: Substance, *, extra: int = 0, now: datetime | None = None
 ) -> int:

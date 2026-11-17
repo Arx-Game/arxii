@@ -1,7 +1,7 @@
-"""Calling up a gift's substance with no technique (#5018) — the ``callup`` command.
+"""Calling up a gift's substance with no technique (#5018, #5125): the ``callup`` command.
 
 Thin over ``CallUpSubstanceAction`` (``actions/definitions/gift_substance.py``), the same
-seam the web "Call up shadow" buttons dispatch. Bare ``callup`` lists her gifts with what
+seam the web "Call up fire" buttons dispatch. Bare ``callup`` lists her gifts with what
 each would cost here; ``callup <substance>`` calls it up; ``callup/confirm <substance>``
 goes ahead past the soulfray warning.
 """
@@ -25,11 +25,11 @@ class CmdCallUp(DispatchCommand):
 
     Usage:
         callup                      (list your gifts and what each costs here)
-        callup <substance>          (for example: callup shadow)
+        callup <substance>          (for example: callup fire)
         callup/confirm <substance>  (go ahead past the soulfray warning)
 
-    The room changes for everyone while you stay. In a fight it is an immediate act,
-    once a round, and not your action for the round.
+    Each call-up raises the Primum here by one step, for everyone while you stay. In a
+    fight it is an immediate act, once a round, and not your action for the round.
     """
 
     key = "callup"

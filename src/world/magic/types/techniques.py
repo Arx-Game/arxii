@@ -163,7 +163,7 @@ class TechniqueUseResult:
     price_paid: Restriction | None = None
     #: The cast's runtime intensity, so a combat rider can judge an impressive cast (#4147).
     runtime_intensity: int = 0
-    #: #5018: what calling up her gift's substance spent and did on this cast, if any.
+    #: #5125: what calling up her gift's substance (to Trace) spent and did on this cast.
     substance_call_up: SubstanceCallUp | None = None
     #: #5123: the focus roll an unsettled caster made on this cast, or ``None`` when she
     #: was settled (no roll). Its ``lines`` are what telnet printed; the web cast result

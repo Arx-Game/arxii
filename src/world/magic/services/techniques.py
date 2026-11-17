@@ -550,20 +550,20 @@ def _add_environment_stage(
     builder: PowerLedgerBuilder,
     *,
     environment: ResonanceEnvironmentEffect | None,
-    substance_power: int,
-    substance_label: str,
+    substance_lines: Sequence[tuple[str, int]],
 ) -> None:
-    """The ENVIRONMENT stage: the place's resonance reaction (#639) and her substance (#5018).
+    """The ENVIRONMENT stage: the place's resonance reaction (#639) and her Primum (#5125).
 
-    The two lines read different things, so affinity is not counted twice: the first reads
-    the room's resonances, the second the room reading her gift's substance is.
+    The lines read different things, so affinity is not counted twice: the first reads the
+    room's resonances, the rest are one line per Primum source her gift's substance draws on.
     """
     if _environment_amplifies(environment):
         builder.add(
             PowerStage.ENVIRONMENT, RESONANCE_ENVIRONMENT_LEDGER_LABEL, environment.magnitude
         )
-    if substance_power:
-        builder.add(PowerStage.ENVIRONMENT, f"Surroundings: {substance_label}", substance_power)
+    for label, amount in substance_lines:
+        if amount:
+            builder.add(PowerStage.ENVIRONMENT, label, amount)
 
 
 def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogonal cast input
@@ -576,14 +576,13 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
     situation_ctx: object | None = None,
     target_sheet: CharacterSheet | None = None,
     price_payment: PricePayment | None = None,
-    substance_power: int = 0,
-    substance_label: str = "",
+    substance_lines: Sequence[tuple[str, int]] = (),
 ) -> PowerLedger:
     """Derive effective power as an ordered ledger. NEVER stored — recomputed each cast.
 
-    ``substance_power`` / ``substance_label`` (#5018): her gift's substance in the room,
-    after any call-up this cast makes, as one ENVIRONMENT line ("Surroundings: shadow").
-    Computed once in ``use_technique`` from the cast's ``SubstancePlan``; 0 adds no line.
+    ``substance_lines`` (#5125): ``(label, power)`` per Primum source her gift's substance
+    draws on, after any call-up this cast makes, one ENVIRONMENT line each ("Surroundings:
+    fire"). Computed once in ``use_technique`` from the cast's ``SubstancePlan``.
 
     ``price_payment`` (#4099): the cast's one price decision, forwarded unchanged into
     ``PowerTermContext`` for ``price_power_term``. ``None`` (the default, and every
@@ -684,8 +683,7 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
     _add_environment_stage(
         builder,
         environment=environment,
-        substance_power=substance_power,
-        substance_label=substance_label,
+        substance_lines=substance_lines,
     )
 
     return builder.clamp_floor().build()
@@ -1293,10 +1291,10 @@ def _calculate_technique_cost(  # noqa: PLR0913
 ):
     """Calculate runtime stats, anima cost, effective strain and the substance plan.
 
-    #5018: the cast's call-up of its gift's substance is added to the technique's own cost
-    before control is taken off, so her spare control (control over intensity beyond what
-    the technique itself needs) covers it first. The card (``_cast_preview``) and the
-    charge read this one function, so they agree.
+    #5125: the cast's call-up of its gift's substance (only ever to Trace) is added to the
+    technique's own cost before control is taken off, so her spare control (control over
+    intensity beyond what the technique itself needs) covers it first. The card
+    (``_cast_preview``) and the charge read this one function, so they agree.
     """
     from world.magic.services.substance import plan_substance_call_up  # noqa: PLC0415
 
@@ -1310,6 +1308,7 @@ def _calculate_technique_cost(  # noqa: PLR0913
         gift=technique.gift,
         room=character.location,
         control_surplus=max(best_delta - technique.anima_cost, 0),
+        to_trace_only=True,
     )
     total_base_cost = technique.anima_cost + plan.call_up_anima
     anima = CharacterAnima.objects.filter(character_id=character.pk).first()
@@ -1476,7 +1475,7 @@ def _prepare_technique_cast(  # noqa: PLR0913
     substance_plan: SubstancePlan | None = None,
 ) -> _CastPreparation | None:
     """Run the pre-cast event and prepare power and pull effects."""
-    from world.magic.services.substance import substance_power  # noqa: PLC0415
+    from world.magic.services.substance import source_power_lines  # noqa: PLC0415
 
     effective_targets = targets or []
     caster_room = character.location
@@ -1490,8 +1489,11 @@ def _prepare_technique_cast(  # noqa: PLR0913
         situation_ctx=situation_ctx,
         target_sheet=target_sheet,
         price_payment=price_payment,
-        substance_power=substance_power(substance_plan) if substance_plan is not None else 0,
-        substance_label=substance_plan.label if substance_plan is not None else "",
+        substance_lines=(
+            [(source.label, power) for source, power in source_power_lines(substance_plan)]
+            if substance_plan is not None
+            else ()
+        ),
     )
     pre_payload = TechniquePreCastPayload(
         caster=character,
@@ -1622,8 +1624,8 @@ def _complete_technique_cast(  # noqa: PLR0913
 ) -> TechniqueUseResult:
     """Deduct anima, resolve the cast, and emit all post-cast effects."""
     deficit = deduct_anima(character, cost.effective_cost, lethal=lethal)
-    # #5018: the call-up's anima rode the one deduct above; now its room row, its
-    # resonance and the room's unattributed line, before the cast resolves.
+    # #5125: the call-up's anima rode the one deduct above; now its call-up row and the
+    # room's line, before the cast resolves.
     substance_call_up = None
     if substance_plan is not None and substance_plan.calls_up:
         from world.magic.services.substance import apply_substance_plan  # noqa: PLC0415
@@ -1631,20 +1633,6 @@ def _complete_technique_cast(  # noqa: PLR0913
         call_up_sheet = _get_character_sheet(character)
         if call_up_sheet is not None:
             substance_call_up = apply_substance_plan(substance_plan, sheet=call_up_sheet)
-    elif substance_plan is not None and substance_plan.blocked:
-        from world.magic.types.substance import SubstanceCallUp  # noqa: PLC0415
-
-        # Nothing was called up although the room lacked it; the result says why.
-        substance_call_up = SubstanceCallUp(
-            label=substance_plan.label,
-            anima=0,
-            resonance=0,
-            resonance_name=(
-                substance_plan.resonance.name if substance_plan.resonance is not None else ""
-            ),
-            room_changed=False,
-            blocked=substance_plan.blocked,
-        )
     # Unsettled (#4732, #5123): one focus roll per cast, on every cast path, before
     # resolve_fn gathers the cast's modifiers so a conflict it applies reaches this roll.
     from world.magic.services.drift import check_resonance_focus  # noqa: PLC0415
