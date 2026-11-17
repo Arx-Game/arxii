@@ -953,7 +953,7 @@ def perform_soul_tether_rescue(
 
         # 9. Compute budget from check outcome + sinner stage.
         # TODO: Phase 14: surface tuning knobs via SoulTetherConfig singleton.
-        thread_level = _get_sineater_thread_level(sineater_sheet, relationship, resonance)
+        thread_level = _get_sineater_thread_level(sineater_sheet, relationship)
         budget = _compute_rescue_budget(
             check_result.success_level, sinner_stage_at_start, thread_level
         )
@@ -1143,30 +1143,21 @@ def _compute_rescue_budget(
 def _get_sineater_thread_level(
     sineater_sheet: CharacterSheet,
     relationship: CharacterRelationship,
-    resonance: Resonance,
 ) -> int:
-    """Return the Sineater's RELATIONSHIP_CAPSTONE Thread level for this bond + resonance.
+    """Return the level of the Sineater's thread on this bond, or 0 when they have none.
 
-    The Sineater's Thread (if they bought one) is optional per §1.3.2 XP-anti-pattern.
-    Returns 0 if no Sineater-side Thread exists.
+    The Sineater's thread channels the Sineater's own resonance, which is rarely the
+    resonance being rescued, so the lookup goes by the bond and not by resonance (#5177).
 
     Args:
         sineater_sheet: The Sineater's CharacterSheet.
-        relationship: The Sineater→Sinner CharacterRelationship row.
-        resonance: The Resonance to filter on.
-
-    Returns:
-        Thread.level (int) or 0 if no matching Thread exists.
+        relationship: The Sineater's own CharacterRelationship side toward the Sinner.
     """
     from world.magic.models import Thread  # noqa: PLC0415
 
-    # The Sineater's capstone is on the Sineater→Sinner relationship direction.
-    # We look for a RELATIONSHIP_CAPSTONE Thread owned by the Sineater pointing
-    # to a capstone whose relationship == the Sineater→Sinner relationship row.
     thread = Thread.objects.filter(
         owner=sineater_sheet,
         target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
-        resonance=resonance,
         retired_at__isnull=True,
         target_capstone__relationship=relationship,
     ).first()

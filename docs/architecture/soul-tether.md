@@ -233,7 +233,7 @@ A tether formed before #5177 has no Sineater thread. `ensure_sineater_thread` we
 The Sineater's thread does three things:
 - Its resonance is the one the Sineater earns from Sineating and from settling the Mire (§7), so each half of the bond earns in its own resonance.
 - Its presence turns on the Sineater's `CORRUPTION_RESISTANCE` (§10). Resistance applies to a Sineater with any live thread on a tether, in any resonance.
-- Its level feeds the rescue budget (`_get_sineater_thread_level`, §9.4). The lookup is for a thread of the Sineater's on this bond whose resonance is the resonance being rescued, so a thread channelling another resonance contributes level 0.
+- Its level feeds the rescue budget (`_get_sineater_thread_level`, §9.4). The lookup is for the Sineater's thread on this bond, whatever resonance it channels.
 
 Higher-tier pull effects (vital bonuses, social bonuses, etc.) are authored later as concrete content.
 

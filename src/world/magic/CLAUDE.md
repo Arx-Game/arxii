@@ -1455,7 +1455,7 @@ with a roll that moves it onto the Sineater, who carries it as **the Mire** and 
 **The rescue is unchanged** except for three things (#5177): presence is by character (the scene is found
 from where the two stand; a scene passed in must be that one), a fallen Sineater is refused, and the
 Sineater's thread level reaches the rescue budget (`_get_sineater_thread_level` reads a live thread of the
-Sineater's on this bond whose resonance is the rescued resonance).
+Sineater's on this bond, whatever resonance it channels).
 
 **Authored content (factories, not migrations):**
 - `TetherStrainTemplate` — ConditionTemplate applied to the Sineater at dramatic moments
