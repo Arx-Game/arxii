@@ -96,7 +96,7 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
               <tr>
                 <td>{{ row.technique.name }}</td>
                 <td>{{ row.gift_label }} &middot; {{ row.path_label }}</td>
-                <td>{{ row.form.properties.errors }}<span class="pb-boxes">{% for box in row.form.properties %}<label class="pb-box" for="{{ box.id_for_label }}">{{ box.tag }} {{ box.choice_label }}</label>{% endfor %}</span></td>
+                <td>{{ row.form.properties.errors }}{% include "admin/power_builder/_property_boxes.html" %}</td>
                 <td>{{ row.form.grant_base.errors }}{{ row.form.grant_per_power.errors }}
                   base {{ row.form.grant_base }} per power {{ row.form.grant_per_power }}
                   <label class="pb-box" for="{{ row.form.remove_grant.id_for_label }}">{{ row.form.remove_grant }} remove grant</label></td>
@@ -110,7 +110,7 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
           {% else %}
           <p class="help pb-sentence">No technique does it yet.</p>
           {% endif %}
-          <p class="help pb-sentence">Path is the path whose grant of the gift lists the technique.{% if page.required %} Untick {{ page.required.name }} or remove the grant and the row moves to "one step away" on save.{% else %} Remove the grant and the row leaves the page on save.{% endif %}</p>
+          <p class="help pb-sentence">Path is the path whose grant of the gift lists the technique.{% if page.required %} Remove the grant, or untick {{ page.required.name }} on a technique that does not carry it from its gift's substance, and the row moves to "one step away" on save.{% else %} Remove the grant and the row leaves the page on save.{% endif %} A property a gift's substance gives is carried by every technique of that gift and has no tick.</p>
         </div>
 
         <div class="module" id="others-module">
@@ -141,7 +141,7 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
                 </td>
                 <td>
                   {% if row.template %}
-                    {{ row.form.properties.errors }}<span class="pb-boxes">{% for box in row.form.properties %}<label class="pb-box" for="{{ box.id_for_label }}">{{ box.tag }} {{ box.choice_label }}</label>{% endfor %}</span>
+                    {{ row.form.properties.errors }}{% include "admin/power_builder/_property_boxes.html" %}
                   {% elif row.property_names %}
                     {{ row.property_names|join:", " }}
                   {% else %}
@@ -177,7 +177,7 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
               <tr>
                 <td>{{ row.technique.name }}</td>
                 <td>{{ row.gift_label }} &middot; {{ row.path_label }}</td>
-                <td>{{ row.form.properties.errors }}<span class="pb-boxes">{% for box in row.form.properties %}<label class="pb-box" for="{{ box.id_for_label }}">{{ box.tag }} {{ box.choice_label }}</label>{% endfor %}</span></td>
+                <td>{{ row.form.properties.errors }}{% include "admin/power_builder/_property_boxes.html" %}</td>
                 <td>base {{ row.grant.base_value }} per power {{ row.grant.intensity_multiplier|floatformat:"-2" }}
                   <label class="pb-box" for="{{ row.form.remove_grant.id_for_label }}">{{ row.form.remove_grant }} remove grant</label></td>
                 <td><a href="{{ row.edit_url }}">edit all</a></td>
@@ -199,7 +199,7 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
               <tr>
                 <td>{{ row.technique.name }}</td>
                 <td>{{ row.gift_label }} &middot; {{ row.path_label }}</td>
-                <td>{{ row.form.properties.errors }}<span class="pb-boxes">{% for box in row.form.properties %}<label class="pb-box" for="{{ box.id_for_label }}">{{ box.tag }} {{ box.choice_label }}</label>{% endfor %}</span></td>
+                <td>{{ row.form.properties.errors }}{% include "admin/power_builder/_property_boxes.html" %}</td>
                 <td>{{ row.form.grant_base.errors }}{{ row.form.grant_per_power.errors }}
                   <label class="pb-box" for="{{ row.form.grant_it.id_for_label }}">{{ row.form.grant_it }} grant it</label>
                   base {{ row.form.grant_base }} per power {{ row.form.grant_per_power }}</td>

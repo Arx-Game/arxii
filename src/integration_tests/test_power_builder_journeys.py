@@ -363,6 +363,12 @@ class PowerBuilder(JourneyCase):
 
         # The flame gift's substance gives every technique of it the flame property.
         self.assertIn("<td>Bare Flame</td>", near[near.index("but do not grant") :])
+        # It shows as carried: a checked, disabled box with a note, and no tick to untick.
+        row = _row(near[near.index("but do not grant") :], "Bare Flame")
+        self.assertIn('<input type="checkbox" checked disabled> flame', row)
+        self.assertIn("carried from the gift's substance", row)
+        self.assertNotIn('-properties"', row)
+        self.assertNotIn("Untick flame", near)
 
     def test_a_technique_with_two_stored_marks_is_listed_once(self) -> None:
         self._technique("Flare Step", self.flame_gift, [self.teleport, self.shadow])
