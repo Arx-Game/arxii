@@ -11,14 +11,18 @@ from world.magic.constants import ReflectionChoice, ReflectionTargetKind, Sineat
 class ReflectionFieldsMixin(serializers.Serializer):
     """The optional reflection a pose or journal entry carries.
 
-    ``reflect_choice`` with exactly one of ``reflect_grant_id`` (a kindled deed) or
-    ``reflect_resonance_id`` (the resonance unsettling the writer). All three omitted means
-    no reflection. Whether the target is the writer's to reflect on is checked by the action.
+    ``reflect_choice`` with exactly one of ``reflect_grant_id`` (a deed), ``reflect_resonance_id``
+    (the resonance unsettling the writer) or ``reflect_tether_id`` (a burden: the id a burden
+    option carries, the Sineater's own side of the tether). All four omitted means no
+    reflection. ``reflect_choice`` is Embrace or Disown for a deed or the resonance and
+    Absolve, Condemn or Succumb for a burden. Whether the target is the writer's to reflect on,
+    and that the choice fits it, is checked by the action.
     """
 
     reflect_choice = serializers.ChoiceField(choices=ReflectionChoice.choices, required=False)
     reflect_grant_id = serializers.IntegerField(required=False, allow_null=True)
     reflect_resonance_id = serializers.IntegerField(required=False, allow_null=True)
+    reflect_tether_id = serializers.IntegerField(required=False, allow_null=True)
 
 
 class SineatingFieldsMixin(serializers.Serializer):

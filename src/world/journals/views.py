@@ -339,6 +339,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
             reflect_choice=serializer.validated_data.get("reflect_choice"),
             reflect_grant_id=serializer.validated_data.get("reflect_grant_id"),
             reflect_resonance_id=serializer.validated_data.get("reflect_resonance_id"),
+            reflect_tether_id=serializer.validated_data.get("reflect_tether_id"),
         )
         if not result.success:
             return Response(

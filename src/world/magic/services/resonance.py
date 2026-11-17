@@ -152,8 +152,9 @@ def grant_resonance(  # noqa: PLR0913
         worship_rite_performance: Required for WORSHIP_RITE source (#3777).
         kindling_situation: Required for KINDLED_DEED source (#5124); the authored situation
             that held.
-        settling_rite: Required for EMBRACED_DEED source (#5124); the rite that grew the deed.
-        reflection: Required for EMBRACED_DEED source (#5124); the reflection the rite applied.
+        settling_rite: Required for EMBRACED_DEED (#5124) and SUCCUMBED (#5177); the rite that
+            grew the deed or took the Mire.
+        reflection: Required for EMBRACED_DEED and SUCCUMBED; the reflection the rite applied.
         from_mire: True when a Sineater takes the resonance from the Mire (#5123); the
             grant also counts toward the row's ``mire_lifetime``.
         deed_label: What the character did, in her own words, recorded on a KINDLED_DEED
@@ -410,6 +411,10 @@ def _validate_grant_source_shape(  # noqa: PLR0913
         GainSource.SINEATING,
         GainSource.CORRUPTION_CLEANSING,
         GainSource.CHARACTER_CREATION,
+        # #5177: settling the Mire; the Sinner's and the Sineater's payouts name no typed row.
+        GainSource.MIRE_PURIFIED,
+        GainSource.SUCCUMB_BONUS,
+        GainSource.SINEATER_FALL,
     ):
         # No typed source FK — the grant is attributed by discriminator only.
         return
@@ -451,6 +456,11 @@ _SOURCE_REQUIRED_KWARG: dict[str, Callable[..., tuple[object | None, str]]] = {
     # Both the rite and the reflection are required; naming the rite when either is missing
     # keeps the one-value shape of this table (the constraint refuses a row with only one).
     GainSource.EMBRACED_DEED: lambda **kw: (
+        kw["settling_rite"] if kw["reflection"] is not None else None,
+        "settling_rite and reflection",
+    ),
+    # Succumbing to the Mire (#5177) carries the rite and the burden reflection the same way.
+    GainSource.SUCCUMBED: lambda **kw: (
         kw["settling_rite"] if kw["reflection"] is not None else None,
         "settling_rite and reflection",
     ),

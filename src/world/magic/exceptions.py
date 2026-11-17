@@ -1009,6 +1009,12 @@ class ResonanceNotUnsettlingError(ReflectionError):
     user_message = "That resonance is not what is unsettling you."
 
 
+class NotABurdenError(ReflectionError):
+    """Only Mire a Sineater carries for a Sinner can be reflected on as a burden (#5177)."""
+
+    user_message = "That is not Mire you carry."
+
+
 class ThreadResonanceChangeError(MagicError):
     """A thread cannot be moved to the asked-for resonance (slice 6 of #4672).
 

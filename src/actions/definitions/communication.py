@@ -715,9 +715,11 @@ class PoseAction(Action):
     reflection or a Sineating, not both.
 
     An optional reflection (#5124) rides with the pose: ``reflect_choice`` (``EMBRACE`` or
-    ``DISOWN``) with one of ``reflect_grant_id`` (a kindled deed) or ``reflect_resonance_id``
-    (the resonance unsettling the poser). It is checked before anything is posted, recorded
-    once the pose is, and never reaches the room: only the pose text is broadcast.
+    ``DISOWN``, or ``ABSOLVE``, ``CONDEMN`` or ``SUCCUMB`` for a burden) with one of
+    ``reflect_grant_id`` (a kindled or succumbed-to-the-Mire deed), ``reflect_resonance_id``
+    (the resonance unsettling the poser) or ``reflect_tether_id`` (the Mire the poser carries
+    for one Sinner, #5177). It is checked before anything is posted, recorded once the pose
+    is, and never reaches the room: only the pose text is broadcast.
     """
 
     key: str = "pose"
