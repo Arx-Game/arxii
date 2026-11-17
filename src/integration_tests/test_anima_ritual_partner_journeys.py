@@ -111,6 +111,9 @@ class _RitualWithAPartner(JourneyCase):
             service_function_path="",
             flow=None,
             author_account=self.account_of(self.mara),
+            # Mara has no magical profile here; the solo ritual is closed to such a character
+            # unless the rite is a hedge rite (#3001).
+            hedge_accessible=True,
         )
         RitualCheckConfigFactory(
             ritual=self.ritual,
