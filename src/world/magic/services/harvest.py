@@ -247,7 +247,7 @@ def _thread_bonus(
 
 def _require_configured(
     config: ResonanceEnvironmentConfig, substance: Substance
-) -> tuple[ExtraTraitTerm, ...]:
+) -> list[ExtraTraitTerm]:
     """The harvest skill as roll terms; raises ``HarvestNotConfigured`` for unset tuning.
 
     Empty when the harvest check type already weights the skill itself: the roll counts the
@@ -260,8 +260,8 @@ def _require_configured(
     if not ItemTemplate.objects.filter(primum_substance=substance).exists():
         raise HarvestNotConfigured
     if check_type.traits.filter(trait_id=skill.pk).exists():
-        return ()
-    return (ExtraTraitTerm(trait=skill, weight=_SKILL_WEIGHT),)
+        return []
+    return [ExtraTraitTerm(trait=skill, weight=_SKILL_WEIGHT)]
 
 
 def _scaled_quantity(outcome: HarvestOutcome, taken: int) -> int:

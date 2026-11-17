@@ -257,16 +257,50 @@ def cast_points(
     steps = _steps()
     if own is None or not steps:
         return []
-    from world.magic.services.primum_perception import perceived_substance_ids  # noqa: PLC0415
-
     relations = relation_kinds_for(own)
     share_pct = get_resonance_environment_config().substance_related_share_pct
-    if room is None:
-        amounts = {own.pk: extra_place_amount} if extra_place_amount else {}
-    else:
-        amounts = room_substance_amounts(room, steps=steps, extra={own.pk: extra_place_amount})
+    amounts = _cast_place_amounts(own, room, steps, extra_place_amount)
     place_rows = _signed_points(own, amounts, steps, relations, share_pct)
-    item_rows = _item_rows(character, own, relations, share_pct)
+    lines = _place_lines(character, own, room, place_rows, amounts, steps, relations)
+    lines.extend(_item_rows(character, own, relations, share_pct))
+    return lines
+
+
+def _cast_place_amounts(
+    own: Substance,
+    room: ObjectDB | None,
+    steps: Sequence[PrimumStep],
+    extra_place_amount: int,
+) -> dict[int, int]:
+    """Substance pk to the Primum in ``room`` for this cast, the call-up added to ``own``."""
+    if room is None:
+        return {own.pk: extra_place_amount} if extra_place_amount else {}
+    return room_substance_amounts(room, steps=steps, extra={own.pk: extra_place_amount})
+
+
+def _place_label(own: Substance, name: str, points: int, *, hidden: bool) -> str:
+    """The line label for a place source: vague when she cannot perceive what it is."""
+    if hidden and points > 0:
+        return f"Something here strengthens your {own.name}"
+    if hidden:
+        return f"Something here works against your {own.name}"
+    if points < 0:
+        return f"{_capitalised(name)} here works against your {own.name}"
+    return f"Surroundings: {name}"
+
+
+def _place_lines(  # noqa: PLR0913 - the cast's own values, read once by cast_points
+    character: ObjectDB,
+    own: Substance,
+    room: ObjectDB | None,
+    place_rows: Sequence[tuple[int, int]],
+    amounts: Mapping[int, int],
+    steps: Sequence[PrimumStep],
+    relations: Mapping[int, str],
+) -> list[SourcePoints]:
+    """One ``SourcePoints`` per place substance that counts, hidden ones labelled vaguely."""
+    from world.magic.services.primum_perception import perceived_substance_ids  # noqa: PLC0415
+
     names = {
         substance.pk: substance.name
         for substance in Substance.objects.filter(pk__in=[pk for pk, _ in place_rows])
@@ -281,16 +315,8 @@ def cast_points(
     for substance_id, points in place_rows:
         name = names[substance_id]
         step = _step_in(steps, amounts[substance_id])
-        step_name = step.name if step is not None else ""
         hidden = substance_id != own.pk and substance_id not in perceived
-        if hidden and points > 0:
-            label = f"Something here strengthens your {own.name}"
-        elif hidden:
-            label = f"Something here works against your {own.name}"
-        elif points < 0:
-            label = f"{_capitalised(name)} here works against your {own.name}"
-        else:
-            label = f"Surroundings: {name}"
+        label = _place_label(own, name, points, hidden=hidden)
         lines.append(
             SourcePoints(
                 kind=PrimumLineKind.PLACE,
@@ -301,14 +327,17 @@ def cast_points(
                     label
                     if hidden
                     else _place_card_label(
-                        place_name, step_name, name, own, relations.get(substance_id)
+                        place_name,
+                        step.name if step is not None else "",
+                        name,
+                        own,
+                        relations.get(substance_id),
                     )
                 ),
                 relation=_relation_of(own, substance_id, relations),
                 hidden=hidden,
             )
         )
-    lines.extend(item_rows)
     return lines
 
 

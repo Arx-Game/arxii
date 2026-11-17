@@ -8,7 +8,6 @@ The field-food ``harvest`` command (``commands/agriculture.py``) is a different 
 
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING, Any
 
 from actions.constants import ActionBackend
@@ -19,7 +18,7 @@ from commands.exceptions import CommandError
 if TYPE_CHECKING:
     from actions.types import ActionRef, DispatchResult
 
-_FROM = re.compile(r"\s+from\s+", re.IGNORECASE)
+_FROM_WORD = "from"
 
 
 class CmdExtract(DispatchCommand):
@@ -77,8 +76,11 @@ class CmdExtract(DispatchCommand):
 
     def _split(self) -> tuple[str, str]:
         """The substance and the foe's name ("" when none) typed after the verb."""
-        parts = _FROM.split(self.args.strip(), maxsplit=1)
-        return parts[0].strip(), (parts[1].strip() if len(parts) > 1 else "")
+        words = self.args.split()
+        for position, word in enumerate(words):
+            if 0 < position < len(words) - 1 and word.lower() == _FROM_WORD:
+                return " ".join(words[:position]), " ".join(words[position + 1 :])
+        return " ".join(words), ""
 
     def _foe_id(self, name: str) -> int:
         """The slain foe in the room whose name is ``name`` (a foe still on offer wins)."""
