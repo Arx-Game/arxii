@@ -30681,7 +30681,6 @@ export interface components {
       readonly gift_id: number;
       readonly label: string;
       readonly effective_cost: number;
-      readonly resonance_cost: number;
       readonly already_present: boolean;
       readonly can_call_up: boolean;
       readonly cost_line: string;
@@ -32872,6 +32871,8 @@ export interface components {
       max_quality_tier: components['schemas']['QualityTier'] | null;
       failure_risk: components['schemas']['CraftingQuoteRisk'][];
       station_status: components['schemas']['StationStatus'] | null;
+      /** @description The recipe's check, such as Tailoring; empty when it has none. */
+      check_name: string;
     };
     /** @description Resource cost breakdown within a crafting quote. */
     CraftingQuoteCost: {
@@ -32883,10 +32884,15 @@ export interface components {
     };
     /** @description One material requirement row within a crafting quote. */
     CraftingQuoteMaterial: {
-      item_template_id: number;
+      requirement_id: number;
+      material_category_id: number | null;
+      item_template_id: number | null;
       name: string;
       quantity_required: number;
       have: number;
+      is_optional: boolean;
+      /** @description The lowest quality that counts, such as Common; empty for any. */
+      min_quality_name: string;
     };
     /** @description A single failure-risk row within a crafting quote. */
     CraftingQuoteRisk: {
@@ -37860,11 +37866,13 @@ export interface components {
      * @description Write serializer for ItemFacet (POST create) — input validation only.
      *
      *     The viewset drives the crafting service directly; this serializer parses
-     *     and validates the ``item_instance`` and ``facet`` foreign keys.
+     *     and validates the ``item_instance`` and ``facet`` foreign keys, and the optional
+     *     ingredients (pks of the recipe's optional material requirements) the crafter brings.
      */
     ItemFacetWriteRequest: {
       item_instance: number;
       facet: number;
+      optional_requirements?: number[];
     };
     /**
      * @description Read serializer for ItemInstance — used by the inventory listing.
@@ -37932,6 +37940,8 @@ export interface components {
       readonly facet_workers: string[];
       readonly accents: components['schemas']['ItemAccentRead'][];
       readonly silhouette: components['schemas']['SilhouetteRead'] | null;
+      /** @description Names of the substances the piece carries (#5125); every viewer sees them. */
+      readonly carries: string[];
     };
     /**
      * @description What an item means to the character holding it: its signals and their sum. Shown to
@@ -37962,11 +37972,13 @@ export interface components {
      * @description Write serializer for ItemStyle (POST create) — input validation only.
      *
      *     The viewset drives the crafting service directly; this serializer parses
-     *     and validates the ``item_instance`` and ``style`` foreign keys.
+     *     and validates the ``item_instance`` and ``style`` foreign keys, and the optional
+     *     ingredients (pks of the recipe's optional material requirements) the crafter brings.
      */
     ItemStyleWriteRequest: {
       item_instance: number;
       style: number;
+      optional_requirements?: number[];
     };
     /** @description Detail serializer for ItemTemplate with slots and interactions. */
     ItemTemplateDetail: {
@@ -41048,6 +41060,7 @@ export interface components {
        *     own ``portrait`` FK via ``fallback_media``.
        */
       readonly thumbnail_media_url: string | null;
+      readonly harvest_offers: components['schemas']['OpponentHarvestOffer'][];
       readonly current_position: components['schemas']['PositionSummary'] | null;
       readonly current_square: components['schemas']['Square'] | null;
       readonly mirrors_participant_id: number | null;
@@ -41071,6 +41084,27 @@ export interface components {
       phases: components['schemas']['PhaseSpec'][];
       stakes_ok: boolean;
       stakes_message: string;
+    };
+    /** @description A slain foe's offer to one character: which character presses Harvest. */
+    OpponentHarvestOffer: {
+      readonly substance_id: number;
+      readonly substance_name: string;
+      /** @description place | creature. */
+      readonly source: string;
+      /** @description The slain foe's pk; null for a lair. */
+      readonly opponent_id: number | null;
+      readonly opponent_name: string;
+      readonly step_name: string;
+      /** @description The harvest check she rolls; empty while none is set. */
+      readonly check_name: string;
+      /** @description Action points one attempt costs, good roll or bad. */
+      readonly ap_cost: number;
+      /** @description What her thread on a Gift of this substance adds; 0 if none. */
+      readonly thread_bonus: number;
+      /** @description The Gift whose thread adds the bonus; empty if none. */
+      readonly thread_gift_name: string;
+      /** @description The played character this offer belongs to. */
+      readonly character_id: number;
     };
     /** @description One drive edit on a placement: a strength, or null to remove the template's drive. */
     OpponentLineDrive: {
@@ -53773,13 +53807,12 @@ export interface components {
     };
     /** @description One line the cast card shows under its cost about where she stands (#5018). */
     SurroundingsLine: {
-      /** @description power | call_up | blocked | needs (an unmet restriction). */
+      /** @description heading | source | power | call_up | blocked | needs (an unmet restriction). */
       readonly kind: string;
       readonly text: string;
-      /** @description Signed power, or the penalty. */
+      /** @description Signed points for a source line, signed power for a power line, or the penalty. */
       readonly amount: number;
       readonly anima: number;
-      readonly resonance: number;
       /** @description A call-up line's right-hand cost; blank otherwise. */
       readonly detail: string;
     };

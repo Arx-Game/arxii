@@ -12,10 +12,12 @@ handler registry on ``CraftingRecipeKind``.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from django.db import transaction
+from django.db.models import Q
 
 from actions.types import WeightedConsequence
 from world.checks.consequence_resolution import (
@@ -35,13 +37,13 @@ from world.items.crafting.models import (
 from world.items.crafting.quality import resolve_capped_tier
 from world.items.crafting.registry import get_handler
 from world.items.exceptions import (
-    CategoryRequirementsNotQuotable,
     CraftingNotConfigured,
     CraftingStationBroken,
     CraftingStationRequired,
 )
 from world.items.models import EquippedItem, ItemInstance, ItemStyle, ItemTemplate
 from world.items.services.materials import meets_quality_tier
+from world.items.services.primum_items import stamp_primum_substances
 from world.room_features.constants import RoomFeatureServiceStrategy
 
 if TYPE_CHECKING:
@@ -50,7 +52,11 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
-    from world.items.crafting.models import CraftedItemRecipe, LabStationDetails
+    from world.items.crafting.models import (
+        CraftedItemRecipe,
+        CraftingMaterialRequirement,
+        LabStationDetails,
+    )
     from world.items.models import QualityTier
     from world.traits.models import CheckOutcome
 
@@ -152,6 +158,8 @@ class CraftingQuote:
     # tuple (not list) so the frozen snapshot is genuinely immutable (#1243).
     failure_risk: tuple[CraftingQuoteRisk, ...] = ()
     station_status: StationStatus | None = None
+    #: The recipe's check, as the quote names it ("" when the recipe has none).
+    check_name: str = ""
 
 
 def _station_status_snapshot(station: object | None) -> tuple[StationStatus, bool]:
@@ -197,6 +205,78 @@ def _resolve_recipe_for_quote(
     if recipe.check_type is None:
         raise CraftingNotConfigured
     return recipe
+
+
+def _quote_material_rows(
+    recipe: CraftingRecipe, crafter_character_sheet: CharacterSheet
+) -> tuple[list[dict], bool]:
+    """The quote's material rows, and whether every non-optional row is covered.
+
+    A row names a template or a material category (``name`` is the template's or the
+    category's), the lowest quality that counts (``min_quality_name``, "" for any), how many
+    are required, and how many the crafter holds that count: in
+    bulk mode (``required_value``) the required value and the value in her bucket. An
+    optional row is quoted but never holds ``affordable`` back (#5125).
+    """
+    from world.items.gems.buckets import material_value  # noqa: PLC0415
+
+    requirements = list(
+        recipe.material_requirements.all().select_related(
+            "item_template", "min_quality_tier", "material_category"
+        )
+    )
+    instance_reqs = [r for r in requirements if r.required_value is None]
+    held: list[ItemInstance] = list(
+        ItemInstance.objects.in_play()
+        .filter(holder_character_sheet=crafter_character_sheet)
+        .filter(
+            Q(template_id__in=[r.item_template_id for r in instance_reqs if r.item_template_id])
+            | Q(
+                template__material_category_id__in=[
+                    r.material_category_id for r in instance_reqs if r.material_category_id
+                ]
+            )
+        )
+        .select_related("quality_tier", "template")
+    )
+    rows: list[dict] = []
+    all_satisfied = True
+    for req in requirements:
+        if req.required_value is not None:
+            required = req.required_value
+            have = material_value(crafter_character_sheet, req.material_category)
+        else:
+            required = req.quantity
+            have = sum(
+                inst.quantity
+                for inst in held
+                if _holding_matches(inst, req) and meets_quality_tier(inst, req)
+            )
+        target = req.item_template if req.item_template_id else req.material_category
+        rows.append(
+            {
+                "requirement_id": req.pk,
+                "material_category_id": req.material_category_id,
+                "item_template_id": req.item_template_id,
+                "name": target.name,
+                "quantity_required": required,
+                "have": have,
+                "is_optional": req.is_optional,
+                "min_quality_name": (
+                    req.min_quality_tier.name if req.min_quality_tier is not None else ""
+                ),
+            }
+        )
+        if have < required and not req.is_optional:
+            all_satisfied = False
+    return rows, all_satisfied
+
+
+def _holding_matches(inst: ItemInstance, req: CraftingMaterialRequirement) -> bool:
+    """Whether a held item counts toward ``req``: its template, or its template's category."""
+    if req.material_category_id is not None:
+        return inst.template.material_category_id == req.material_category_id
+    return inst.template_id == req.item_template_id
 
 
 def build_crafting_quote(
@@ -251,47 +331,7 @@ def build_crafting_quote(
     anima_have = anima_row.current if anima_row is not None else 0
 
     # 4. Materials availability ---
-    requirements = list(
-        recipe.material_requirements.all().select_related(
-            "item_template", "min_quality_tier", "material_category"
-        )
-    )
-    # Category-requirement quotes need the quote API + FE types to represent a
-    # material class (no single template) in each per-row shape — deferred to the
-    # quote-surface work. Crafting *execution* (stage_and_assert_affordable)
-    # already supports category requirements; no seeded recipe uses them yet, so
-    # this is a forward guard, not a live path.
-    if any(r.material_category_id for r in requirements):
-        raise CategoryRequirementsNotQuotable
-    required_template_ids = [r.item_template_id for r in requirements]
-    available: list[ItemInstance] = list(
-        ItemInstance.objects.in_play()
-        .filter(
-            holder_character_sheet=crafter_character_sheet,
-            template_id__in=required_template_ids,
-        )
-        .select_related("quality_tier")
-    )
-    # Tally held quantities per template that meet min quality.
-    material_rows = []
-    all_materials_satisfied = True
-    for req in requirements:
-        matching = [
-            inst
-            for inst in available
-            if inst.template_id == req.item_template_id and meets_quality_tier(inst, req)
-        ]
-        held_qty = sum(inst.quantity for inst in matching)
-        material_rows.append(
-            {
-                "item_template_id": req.item_template_id,
-                "name": req.item_template.name,
-                "quantity_required": req.quantity,
-                "have": held_qty,
-            }
-        )
-        if held_qty < req.quantity:
-            all_materials_satisfied = False
+    material_rows, all_materials_satisfied = _quote_material_rows(recipe, crafter_character_sheet)
 
     # 5. Affordability ---
     affordable = ap_have >= ap_cost and anima_have >= anima_cost and all_materials_satisfied
@@ -337,6 +377,7 @@ def build_crafting_quote(
         max_quality_tier=max_quality_tier,
         failure_risk=tuple(failure_risk),
         station_status=station_status,
+        check_name=recipe.check_type.name if recipe.check_type_id else "",
     )
 
 
@@ -858,6 +899,7 @@ def run_crafting_recipe(  # noqa: PLR0913
     target: object | None = None,
     output_overrides: dict | None = None,
     accent_targets: list | None = None,
+    optional_requirement_ids: Collection[int] = (),
 ) -> CraftRunResult:
     """Run a crafting attempt end-to-end for ``kind`` against ``target``.
 
@@ -867,6 +909,11 @@ def run_crafting_recipe(  # noqa: PLR0913
     AP/anima cost (#2886 — ambition priced smoothly), then rolls its own
     check after the piece resolves. Credits render from ItemInstance's
     #2066 dual-provenance fields.
+
+    ``optional_requirement_ids`` (#5125) are the pks of the recipe's ``is_optional``
+    material requirements the crafter chose to bring. Only those are staged and consumed.
+    When one is a Primum item, the finished item (or the item a facet or style is worked
+    into) carries its substance, set by the Primum's quality.
 
     Pipeline (all inside one transaction):
 
@@ -953,6 +1000,7 @@ def run_crafting_recipe(  # noqa: PLR0913
         crafter_character=crafter_character,
         crafter_character_sheet=crafter_sheet,
         cost_multiplier=accent_cost_multiplier,
+        optional_requirement_ids=optional_requirement_ids,
     )
 
     # --- 5. Roll (thread edge + accent ambition penalty, #2886) ---
@@ -1029,6 +1077,11 @@ def run_crafting_recipe(  # noqa: PLR0913
             output_overrides=output_overrides,
         )
         attached = True
+        # --- 10a. The Primum used makes the item carry its substance (#5125) ---
+        # ITEM_CREATE hands back the new ItemInstance as ``row``; attach kinds work on
+        # ``item_instance``.
+        stamped_item = item_instance if item_instance is not None else cast("ItemInstance", row)
+        stamp_primum_substances(target_item=stamped_item, staged=staged, consumption=consumption)
     else:
         row = None
         attached = False

@@ -424,7 +424,10 @@ class ItemFacetViewSet(viewsets.ViewSet):
         facet = serializer.validated_data["facet"]
         actor = _live_holder_sheet(item_instance).character
         action_result = AttachFacetAction().run(
-            actor=actor, item_instance=item_instance, facet=facet
+            actor=actor,
+            item_instance=item_instance,
+            facet=facet,
+            optional_requirements=serializer.validated_data["optional_requirements"],
         )
         if not action_result.success:
             raise serializers.ValidationError({"non_field_errors": [action_result.message]})
@@ -575,6 +578,7 @@ class ItemInstanceViewSet(viewsets.ViewSet):
                     "currency_instrument",
                 )
                 .prefetch_related(
+                    "item_substances__substance",  # noqa: PREFETCH_STRING - read through .all(), no to_attr
                     Prefetch(
                         "item_facets",
                         queryset=ItemFacet.attached().select_related(
@@ -993,6 +997,8 @@ class OutfitViewSet(viewsets.ViewSet):
                             "item_instance__template",
                             "item_instance__quality_tier",
                             "item_instance__currency_instrument",
+                        ).prefetch_related(
+                            "item_instance__item_substances__substance",  # noqa: PREFETCH_STRING - read through .all(), no to_attr
                         ),
                         to_attr="cached_outfit_slots",
                     ),
@@ -1146,6 +1152,8 @@ class OutfitSlotViewSet(viewsets.ViewSet):
                             "item_instance__template",
                             "item_instance__quality_tier",
                             "item_instance__currency_instrument",
+                        ).prefetch_related(
+                            "item_instance__item_substances__substance",  # noqa: PREFETCH_STRING - read through .all(), no to_attr
                         ),
                         to_attr="cached_outfit_slots",
                     ),
@@ -1172,14 +1180,20 @@ class OutfitSlotViewSet(viewsets.ViewSet):
         if slot_pk is None:
             raise NotFound
         try:
-            slot = OutfitSlot.objects.select_related(
-                "outfit",
-                "outfit__character_sheet",
-                "item_instance",
-                "item_instance__template",
-                "item_instance__quality_tier",
-                "item_instance__currency_instrument",
-            ).get(pk=slot_pk)
+            slot = (
+                OutfitSlot.objects.select_related(
+                    "outfit",
+                    "outfit__character_sheet",
+                    "item_instance",
+                    "item_instance__template",
+                    "item_instance__quality_tier",
+                    "item_instance__currency_instrument",
+                )
+                .prefetch_related(
+                    "item_instance__item_substances__substance",  # noqa: PREFETCH_STRING - read through .all(), no to_attr
+                )
+                .get(pk=slot_pk)
+            )
         except OutfitSlot.DoesNotExist as exc:
             raise NotFound from exc
 
@@ -1466,6 +1480,7 @@ class VisibleItemDetailViewSet(viewsets.ViewSet):
                     "currency_instrument",
                 )
                 .prefetch_related(
+                    "item_substances__substance",  # noqa: PREFETCH_STRING - read through .all(), no to_attr
                     Prefetch(
                         "item_facets",
                         queryset=ItemFacet.attached().select_related(
@@ -1656,7 +1671,10 @@ class ItemStyleCraftViewSet(viewsets.ViewSet):
         style = serializer.validated_data["style"]
         actor = _live_holder_sheet(item_instance).character
         action_result = AttachStyleAction().run(
-            actor=actor, item_instance=item_instance, style=style
+            actor=actor,
+            item_instance=item_instance,
+            style=style,
+            optional_requirements=serializer.validated_data["optional_requirements"],
         )
         if not action_result.success:
             raise serializers.ValidationError({"non_field_errors": [action_result.message]})
@@ -1879,6 +1897,13 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
         silhouette_id = request.data.get("silhouette")
         made_for_pk = request.data.get("made_for")
         worked_from_pk = request.data.get("worked_from")
+        optional_requirements = request.data.get("optional_requirements") or []
+        if not isinstance(optional_requirements, list) or not all(
+            isinstance(pk, int) and not isinstance(pk, bool) for pk in optional_requirements
+        ):
+            raise serializers.ValidationError(
+                {"optional_requirements": "Send a list of ingredient ids."}
+            )
         if not template_pk:
             raise serializers.ValidationError({"template": "This field is required."})
         try:
@@ -1909,6 +1934,7 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
             styles=styles,
             dedicate_to=dedicate_to,
             worked_from=worked_from,
+            optional_requirements=optional_requirements,
         )
         if not action_result.success:
             raise serializers.ValidationError({"non_field_errors": [action_result.message]})

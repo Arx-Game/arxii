@@ -11,23 +11,36 @@
 
 ### Magic
 
-- **Gift substance (#5018, ADR-5018):** `GiftSubstance` maps a gift onto a room reading
-  (shadow = LIGHTING falling). `world/magic/services/substance.py`: `substance_for_gift`,
-  `plan_substance_call_up` (one pure plan read by the card, the charge and the power line),
-  `substance_power`, `apply_substance_plan`, `call_up_offers`, `mark_substance_present`,
-  `clear_caster_substance`, `clear_scene_substance_marks`; `get_runtime_caster_stats`
-  (`services/techniques.py`). Actions `call_up_substance`, `stage_substance`,
-  `gm_list_substances`; telnet `callup`, `stage present|absent`; REST
-  `GET /api/action-requests/call-up-offers/`; combat participant `call_up`.
-  `Restriction.surroundings_stat/min/max` + `services/surroundings.py` (heavy named
-  penalty, never a refusal). Details: [magic.md](magic.md) "A gift's substance".
+- **Substances and Primum (#5018, #5125, ADR-5018, ADR-5125):** `Substance` is one shared
+  staff-authored list that a major `Gift.substance` (null on a minor gift), a lair's
+  `PlacePrimum`, a creature kind's `CreaturePrimum`, a Primum `ItemTemplate.primum_substance`
+  and an item's `ItemSubstance` all point at; `SubstanceRelation` authors related and opposed
+  pairs once. Tuning rows: `PrimumStep`, `SubstancePowerStep`, `HarvestOutcome`, and the
+  `substance_*` and `harvest_*` columns on `ResonanceEnvironmentConfig`. Transient:
+  `PrimumCallUp`, `PrimumSighting`. Services: `world/magic/services/primum.py`
+  (`gift_substance`, `place_amount`, `step_for`, `cast_points`, `points_to_power`),
+  `substance.py` (`plan_substance_call_up`, `substance_power`, `apply_substance_plan`,
+  `call_up_offers`, `mark_substance_present`, `clear_caster_substance`,
+  `clear_scene_substance_marks`), `primum_perception.py` (`perceived_substance_ids`, `reveal`,
+  `sensed_primum`, `clear_sightings`), `harvest.py` (`harvest_offers`, `harvest`),
+  `substance_relations.py` (`relation_kinds_for`), and `world/items/services/primum_items.py`
+  (`item_substance_rows`, `mint_primum_items`, `stamp_primum_substances`);
+  `get_runtime_caster_stats` (`services/techniques.py`). Effect `EffectType.REVEAL_PRIMUM`.
+  Actions `call_up_substance`, `stage_substance`, `gm_list_substances`, `harvest_primum`;
+  telnet `callup`, `stage present|absent`, `extract` (the field-food `harvest` is separate);
+  REST `GET /api/action-requests/call-up-offers/`, the `primum` block of `room_state`, the
+  combat opponent's `harvest_offers`, the item's `carries`; combat participant `call_up`.
+  `Restriction.surroundings_stat/min/max` + `services/surroundings.py` (heavy named penalty,
+  never a refusal). Spending Primum on a thread or a cast is `[ABSENT]` (not alpha). Details:
+  [magic.md](magic.md) "Substances and Primum" and [items.md](items.md) "Crafting with
+  Primum".
 - **Technique marks (#5066, ADR-5066):** a technique's effect properties are its own
   `Technique.properties`, never its gift's resonances. `world/magic/services/technique_marks.py`:
   `effect_property_ids_by_technique` (read by capability sources, applications and clash
   opposition: `_get_technique_sources`, `world/combat/clash.py` `_technique_effect_property_ids`,
-  `CharacterTechniqueHandler.effect_property_ids_for`), `substance_mark_for`,
-  `tick_substance_mark` (`GiftSubstance.property` pre-ticks a new technique, from
-  `create_technique` and the Technique admin add form opened with `?gift=`). Capability sources
+  `CharacterTechniqueHandler.effect_property_ids_for`); it also unions in the gift lineage's
+  `Substance.property`, so every technique of a major gift always carries it (#5125) and
+  nothing is ticked or stored. Capability sources
   carry their marks (`CapabilitySource.effect_property_ids`): a technique its own, a condition
   its template's and stage's (`_get_condition_sources`, one source per condition instance),
   trained ability, species and distinctions none; `source_matches_application`
@@ -7710,8 +7723,7 @@ holder is never notified a claim exists.
     materials (e.g. "Precious Gemstones"); `ItemTemplate.material_category` FK points into it
     (specific→general, ADR-0010). The *eligibility* axis only; value-denominated requirements
     ("N value of a tier") are Build 0b, gated on the gemstone-value ladder. Crafting
-    *execution* honors category requirements; the read-only quote preview raises
-    `CategoryRequirementsNotQuotable` until the quote surface lands.
+    *execution* and the read-only quote both honor category requirements (#5125).
   - **Gem value model** (`world.items.gems`, Build 0b slice 1) — gem *types* are ordinary
     `ItemTemplate` rows decorated by a `GemDetails` sidecar (`quality_level` 1–15; tier =
     `MaterialCategory`; motif reuses `tied_resonance`), so they stay requirable/consumable like

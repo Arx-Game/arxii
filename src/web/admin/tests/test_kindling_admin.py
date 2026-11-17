@@ -1,10 +1,10 @@
 """The kindled resonances admin pages (#5124, Screen 8) render and save for a staff user."""
 
-from django import forms
 from django.test import TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
+from web.admin.tests.support import form_data
 from world.covenants.perks.constants import Situation
 from world.magic.factories import (
     AffinityFactory,
@@ -29,25 +29,6 @@ from world.missions.factories import MissionTemplateFactory
 from world.traits.factories import CheckOutcomeFactory
 
 PLAY_ROWS = ("kindling", "reflection", "settlingrite")
-
-
-def form_data(response) -> dict[str, str]:
-    """What a browser would post back from a rendered change page: every field as shown."""
-    context = response.context
-    forms_on_page: list[forms.BaseForm] = [context["adminform"].form]
-    data: dict[str, str] = {}
-    for inline in context["inline_admin_formsets"]:
-        formset = inline.formset
-        forms_on_page.append(formset.management_form)
-        forms_on_page.extend(formset.forms)
-    for form in forms_on_page:
-        for name in form.fields:
-            bound = form[name]
-            value = bound.value()
-            if value is None or value is False:
-                continue
-            data[bound.html_name] = value if isinstance(value, list) else str(value)
-    return data
 
 
 class KindlingAdminPagesTests(TestCase):

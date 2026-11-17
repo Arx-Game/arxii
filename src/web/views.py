@@ -3,6 +3,7 @@
 from datetime import UTC, datetime, timedelta
 import logging
 from pathlib import Path
+import re
 
 from django.http import HttpResponse, HttpResponseRedirect
 from django.views import View
@@ -13,6 +14,10 @@ logger = logging.getLogger(__name__)
 
 # The compiled React entry page; tests point this at a small fixture.
 INDEX_PATH = Path(__file__).resolve().parent / "static" / "dist" / "index.html"
+
+# An href or src that starts at the site root: not a full URL, not a
+# protocol-relative one, and not already under /static/dist/.
+ROOT_PATH_ATTRIBUTE = re.compile(r'\b(href|src)="/(?!/|static/dist/)')
 
 
 class PasswordChangeDiscoveryView(View):
@@ -62,10 +67,14 @@ class FrontendAppView(View):
             with INDEX_PATH.open(encoding="utf-8") as f:
                 html = f.read()
 
-            # Fix asset paths to include /static/dist/ prefix
-            html = html.replace('href="/assets/', 'href="/static/dist/assets/')
-            html = html.replace('src="/assets/', 'src="/static/dist/assets/')
-            html = html.replace('href="/vite.svg"', 'href="/static/dist/vite.svg"')
+            # The build is made for the site root and served from /static/dist/, so
+            # every root path the built page links (its scripts, its stylesheet,
+            # the favicon and any other public file) gets that prefix. Naming the
+            # files one by one missed the favicon when it was renamed, and its
+            # request was answered with this page. The scripts and stylesheets
+            # name each other relatively (vite.config.ts), so only this page
+            # needs rewriting.
+            html = ROOT_PATH_ATTRIBUTE.sub(r'\1="/static/dist/', html)
 
             # Strip crossorigin attribute — Vite adds it for CDN deployments but
             # TwistedWeb doesn't send CORS headers on static files, which can cause

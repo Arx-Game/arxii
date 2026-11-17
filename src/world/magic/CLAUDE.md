@@ -350,8 +350,9 @@ still-deferred general targeting model (AoE constraints, frontend target picker)
 properties that say how it works (a blink carries `teleport`, #5066, ADR-5066). They are its
 effect properties for capability sources, applications and clash opposition
 (`services/technique_marks.py`, `effect_property_ids_by_technique`); the gift's resonances
-never count, and `GiftSubstance.property` only pre-ticks one on a new technique
-(`tick_substance_mark`). `Technique.has_property(name)` reads them too; this is
+never count. A major gift's `Substance.property` is carried by every technique of the gift and
+its child gifts, read at call time by the same seam and stored nowhere, so staff cannot untick
+it (#5125). `Technique.has_property(name)` reads through the seam too; this is
 separate from `Character.has_property`, which checks a *character's* Property
 attachments (both the primary persona's authored identity tags and runtime
 `ObjectProperty` rows, #1793) and backs the `has_property` reactive-trigger DSL op.
@@ -359,6 +360,38 @@ attachments (both the primary persona's authored identity tags and runtime
 `get_effective_capability_value(sheet, capability_type) > 0` — and backs the new
 `has_capability` DSL op (both in `flows/filters/evaluator.py` /
 `typeclasses/characters.py`).
+
+### Substances and Primum (#5018, #5125, ADR-5018, ADR-5125)
+
+Full reference: `docs/systems/magic.md` "Substances and Primum". `Substance` is one shared list
+(`models/substance.py`); a major gift points at one (`Gift.substance`, null on a minor gift,
+`primum.gift_substance` walks the lineage), and places (`PlacePrimum`), creature kinds
+(`CreaturePrimum`), call-ups (`PrimumCallUp`), sightings (`PrimumSighting`) and items
+(`ItemSubstance`, in `world/items/`) all name it. Rules for code in this area:
+
+- **Compare rows, never names.** A rule reads a substance row and its `SubstanceRelation` rows
+  (`relation_kinds_for`), never a gift or a substance by name, and relations never chain.
+- **Reads are `primum.py`, writes are not.** `cast_points` returns one `SourcePoints` per source,
+  `points_to_power` runs the staff curve, `plan_substance_call_up` is the one pure plan the card,
+  the charge and the ledger read. Missing tuning (no steps, no curve, no harvest check) adds no
+  line or answers in one plain sentence; it never raises out of a cast.
+- **Creatures never feed a cast.** `cast_points` reads the place and her equipped items only; a
+  creature's Primum (`creature_substance_amounts`) counts for sensing and harvesting alone.
+- **Never name Primum the caster has not perceived.** A source of another substance that is not
+  in `perceived_substance_ids` reads "Something here works against your <own>" or "Something
+  here strengthens your <own>" on the card and the ledger (`SourcePoints.hidden`).
+- **Anima is never a refusal.** A call-up past her anima goes through `deduct_anima` and the
+  soulfray path; no resonance is read or written.
+- **A technique's substance property is derived on read** through
+  `effect_property_ids_by_technique`; never store it or offer a tick.
+- **Harvest writes under lock.** `harvest` takes from a source inside `select_for_update`, and a
+  slain creature yields once in total (`CombatOpponent.primum_harvested_at`). Primum is only ever
+  harvested from a lair or a slain creature. Every attempt, good roll or bad, spends
+  `harvest_ap_cost` and adds `harvest_fatigue_cost` physical fatigue before the roll.
+- **Transient rows go on the leave hook.** `clear_caster_substance` and `clear_sightings` run
+  from `Character.at_post_move` and `_leave_the_grid`; a scene's marks clear in
+  `Scene.finish_scene`.
+- **Spending Primum on a thread or a cast is `[ABSENT]` by decision** (not alpha).
 
 ### Magical skills (#4450, ADR-4450)
 
@@ -386,8 +419,8 @@ Every magical roll adds skills staff chose in admin; no skill is named in code. 
 - **A new cast path** calls `resolve_cast_check(character, technique)` and passes both the
   `check_type` and `extra_traits` to the roll, and the `CastCheck` to its thread pull context.
 - **Anima Check:** the character-creation pick excludes MAGIC-category skills.
-- **Magic skills only (#4547):** the three pickers (activity, casting style, technique) share
-  `limit_choices_to=MAGIC_PICKER_SKILL_CHOICES` (`skill_choices.py`), so admin and `full_clean()`
+- **Magic skills only (#4547):** the four pickers (activity, casting style, technique, harvest
+  roll) share `limit_choices_to=MAGIC_PICKER_SKILL_CHOICES` (`skill_choices.py`), so admin and `full_clean()`
   take Magic-category skills only, and never a combat style's own skill (#4921): that one is
   trained in creation and added by the style. `CombatStyle.clean()` refuses the reverse, a style
   taking a skill a picker already adds. `CombatStyle.skill` itself keeps `MAGIC_SKILL_CHOICES`. No seeder

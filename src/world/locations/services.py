@@ -50,7 +50,7 @@ _UNRESOLVED = object()
 _THUMBNAIL_UNRESOLVED: object = object()
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Sequence
     from datetime import datetime
 
     from django.db.models import QuerySet
@@ -232,16 +232,32 @@ def _cascade_parts(
         .filter(models.Q(room_profile=profile) | models.Q(area_id__in=ancestor_ids))
     )
     if overrides:
-        room_overrides = [o for o in overrides if o.room_profile_id == profile.pk]
-        if room_overrides:
-            return room_overrides[0].value, 0, 0
-        return min(overrides, key=lambda o: o.area.level).value, 0, 0
+        return _fold_cascade(profile, overrides, [])
 
     modifiers = LocationValueModifier.objects.filter(axis_filter).filter(
         models.Q(room_profile=profile) | models.Q(area_id__in=ancestor_ids)
     )
     if exclude is not None:
         modifiers = modifiers.exclude(exclude)
+    return _fold_cascade(profile, [], modifiers)
+
+
+def _fold_cascade(
+    profile: RoomProfile,
+    overrides: Sequence[LocationValueOverride],
+    modifiers: Iterable[LocationValueModifier],
+) -> tuple[int | None, int, int]:
+    """One axis's already-fetched rows folded into ``(override, positive_sum, negative_sum)``.
+
+    The room's own override beats an area's, and the most specific area's beats the rest;
+    any override ignores the modifiers. Shared by ``_cascade_parts`` (one axis, its own
+    queries) and ``felt_readings`` (several axes from one fetch).
+    """
+    if overrides:
+        room_overrides = [o for o in overrides if o.room_profile_id == profile.pk]
+        if room_overrides:
+            return room_overrides[0].value, 0, 0
+        return min(overrides, key=lambda o: o.area.level).value, 0, 0
     positive_sum = 0
     negative_sum = 0
     for mod in modifiers:
@@ -489,10 +505,7 @@ def _felt_reading_for_axis(
     call-up and GM-mark rows still count (#5018, rulings 19 and 22).
     """
     sheltered = stat_key in ctx.sheltered_axes
-    if stat_key in EXPOSURE_STAT_KEYS and not (sheltered and stat_key in WEATHER_EXPOSURE_AXES):
-        base = climate_exposure_base(ctx.climate, stat_key, temperature_shift=ctx.temperature_shift)
-    else:
-        base = STAT_DEFAULTS.get(stat_key, 0)
+    base = _axis_base(ctx, stat_key)
     if ctx.profile is None:
         return FeltReading(stat_key, None, base)
     if sheltered:
@@ -504,6 +517,54 @@ def _felt_reading_for_axis(
         exclude=exclude,
     )
     return FeltReading(stat_key, override_val, base + modifier_sum)
+
+
+def _axis_base(ctx: _ExposureContext, stat_key: StatKey) -> int:
+    """An axis's base before modifiers: the climate's for an exposure axis the room lets the
+    weather reach, else the axis default."""
+    sheltered = stat_key in ctx.sheltered_axes
+    if stat_key in EXPOSURE_STAT_KEYS and not (sheltered and stat_key in WEATHER_EXPOSURE_AXES):
+        return climate_exposure_base(ctx.climate, stat_key, temperature_shift=ctx.temperature_shift)
+    return STAT_DEFAULTS.get(stat_key, 0)
+
+
+def _is_weather_row(modifier: LocationValueModifier) -> bool:
+    """Whether ``modifier`` is one of the weather layer's rows (``_weather_exclusion``)."""
+    return modifier.source.startswith(WEATHER_SOURCE_PREFIX)
+
+
+def felt_readings(room: DefaultObject, stat_keys: Iterable[StatKey]) -> dict[StatKey, FeltReading]:
+    """The room's felt reading on each of ``stat_keys``, as ``felt_reading`` gives one (#5125).
+
+    The room's profile, climate and enclosure are resolved once, and the overrides and
+    modifiers for every axis are read in one query each, so a caller reading several axes
+    (every substance's room condition) costs the same as one.
+    """
+    keys = list(dict.fromkeys(stat_keys))
+    if not keys:
+        return {}
+    ctx = _exposure_context(room)
+    if ctx.profile is None:
+        return {key: FeltReading(key, None, _axis_base(ctx, key)) for key in keys}
+    place = models.Q(room_profile=ctx.profile) | models.Q(area_id__in=ctx.ancestor_ids)
+    axes = models.Q(key_type=KeyType.STAT, stat_key__in=keys)
+    overrides: dict[str, list[LocationValueOverride]] = {}
+    for row in LocationValueOverride.objects.filter(axes).filter(place).select_related("area"):
+        overrides.setdefault(row.stat_key, []).append(row)
+    modifiers: dict[str, list[LocationValueModifier]] = {}
+    for row in LocationValueModifier.objects.filter(axes).filter(place):
+        modifiers.setdefault(row.stat_key, []).append(row)
+    readings: dict[StatKey, FeltReading] = {}
+    for key in keys:
+        rows = modifiers.get(key, [])
+        if key in ctx.sheltered_axes:
+            rows = [row for row in rows if not _is_weather_row(row)]
+        override_val, positive_sum, negative_sum = _fold_cascade(
+            ctx.profile, overrides.get(key, []), rows
+        )
+        raw = _axis_base(ctx, key) + positive_sum - negative_sum
+        readings[key] = FeltReading(key, override_val, raw)
+    return readings
 
 
 def _felt_exposure_for_axis(ctx: _ExposureContext, stat_key: StatKey) -> int:

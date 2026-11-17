@@ -7,7 +7,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0458_remove_mire_share_of_the_aura"),
+        ("arxii", "0462_gift_substance_remove"),
     ]
 
     operations = [

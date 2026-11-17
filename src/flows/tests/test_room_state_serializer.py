@@ -167,7 +167,7 @@ class RoomStateSerializerCharacterSplitTests(TestCase):
     def test_payload_has_all_expected_keys(self):
         """Payload keys: room/characters/objects/exits/scene + heat (#1765) + hub (#1450)
         + npc_givers (#3044) + decorations/comfort_level (#2991)
-        + has_unseen_presence (#3288) + viewer_place_id (#3810)."""
+        + has_unseen_presence (#3288) + viewer_place_id (#3810) + primum (#5125)."""
         payload = build_room_state_payload(self.caller_state, self.room_state)
         assert set(payload.keys()) == {
             "room",
@@ -182,7 +182,10 @@ class RoomStateSerializerCharacterSplitTests(TestCase):
             "decorations",
             "comfort_level",
             "has_unseen_presence",
+            "primum",
         }
+        # Nothing perceived here → an empty Primum block (#5125).
+        assert payload["primum"] == {"sensed": [], "line": "", "harvestable": []}
         # Cold persona → the self-only heat field is None (never another player's data).
         assert payload["heat"] is None
         # No Notice Board / Town Crier feature here → the hub block is None.

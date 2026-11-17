@@ -13,6 +13,7 @@ function makeItem(id: number, name: string, color = '#4ade80'): ItemInstance {
     id,
     game_object_id: id + 1000,
     access_policy: 'open',
+    carries: [],
     is_currency_instrument: false,
     suggested_value: 0,
     can_steal: false,

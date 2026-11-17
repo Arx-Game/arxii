@@ -1387,8 +1387,10 @@ A superuser admin page for "I want people to be able to do X": one page per `App
 - **One step away** - techniques granting the capability without the property (tick it), and
   techniques carrying the property without a grant ("grant it" plus base and per power).
 - **Add a technique that does this** - gift, path (only paths with a `PathGiftGrant` for that
-  gift, or "no path"), name, the application's property and the gift's substance property
-  (`substance_mark_for`) pre-ticked, grant base and per power. Created through
+  gift, or "no path"), name, the application's property pre-ticked, grant base and per power. The gift's substance
+  property is carried by every technique of the gift (#5125), so there is no tick for it; a note
+  on the gift choice names it, and a technique that carries the application's property that way
+  lists as doing it (`technique_marks.substance_property_ids_by_technique`). Created through
   `create_technique` (shared cast template, level 1, intensity 1, control 1, physical, the effect
   type of the first technique that does it, else the first by name, and that type's
   `base_anima_cost`), then the grant, then added to the path grant's techniques.

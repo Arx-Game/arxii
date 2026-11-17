@@ -1060,7 +1060,7 @@ function GrantItemTab({
 type StageMode = 'prop' | 'property' | 'present' | 'kindle';
 
 interface SubstanceEntry {
-  gift_id: number;
+  substance_id: number;
   label: string;
 }
 
@@ -1089,11 +1089,11 @@ function StagePresentHere({ characterId }: { characterId: number }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- load once when the mode opens
   useEffect(load, [characterId]);
 
-  function mark(giftId: number, present: boolean) {
+  function mark(substanceId: number, present: boolean) {
     dispatch
       .mutateAsync({
         ref: { backend: 'registry', registry_key: 'stage_substance' },
-        kwargs: { substance: giftId, present },
+        kwargs: { substance: substanceId, present },
       })
       .then((result) => {
         reportResult(result, present ? 'Marked present.' : 'Mark removed.');
@@ -1115,7 +1115,7 @@ function StagePresentHere({ characterId }: { characterId: number }) {
         >
           <option value="">Select a substance…</option>
           {substances.map((entry) => (
-            <option key={entry.gift_id} value={entry.gift_id}>
+            <option key={entry.substance_id} value={entry.substance_id}>
               {entry.label}
             </option>
           ))}
@@ -1132,13 +1132,13 @@ function StagePresentHere({ characterId }: { characterId: number }) {
         <div className="space-y-1">
           <p className="text-xs font-semibold">Marked in this scene</p>
           {marked.map((entry) => (
-            <div key={entry.gift_id} className="flex items-center justify-between text-sm">
+            <div key={entry.substance_id} className="flex items-center justify-between text-sm">
               <span>{entry.label}</span>
               <Button
                 size="sm"
                 variant="outline"
                 disabled={dispatch.isPending}
-                onClick={() => mark(entry.gift_id, false)}
+                onClick={() => mark(entry.substance_id, false)}
               >
                 Remove
               </Button>

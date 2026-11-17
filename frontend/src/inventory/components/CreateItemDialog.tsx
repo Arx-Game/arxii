@@ -54,6 +54,7 @@ export function CreateItemDialog({
   const [customDescription, setCustomDescription] = useState('');
   const [madeFor, setMadeFor] = useState<DedicatePersona | null>(null);
   const [workedFromId, setWorkedFromId] = useState('');
+  const [chosenOptional, setChosenOptional] = useState<number[]>([]);
 
   const recipesQuery = useCraftableRecipes();
   const craftMutation = useCraftCreateItem();
@@ -71,6 +72,7 @@ export function CreateItemDialog({
       setCustomDescription('');
       setMadeFor(null);
       setWorkedFromId('');
+      setChosenOptional([]);
     }
   }, [open]);
 
@@ -93,6 +95,7 @@ export function CreateItemDialog({
         custom_description: customDescription.trim() || undefined,
         made_for: madeFor?.id,
         worked_from: workedFrom?.id,
+        optional_requirements: chosenOptional.length > 0 ? chosenOptional : undefined,
       },
       {
         onSuccess: (result) => {
@@ -128,7 +131,10 @@ export function CreateItemDialog({
             <Combobox
               items={comboboxItems}
               value={selectedTemplateId}
-              onValueChange={setSelectedTemplateId}
+              onValueChange={(value) => {
+                setSelectedTemplateId(value);
+                setChosenOptional([]);
+              }}
               placeholder={
                 recipesQuery.isLoading ? 'Loading recipes…' : 'Choose something to craft…'
               }
@@ -216,7 +222,12 @@ export function CreateItemDialog({
                   </div>
                 )}
               </div>
-              <CraftingQuotePanel isLoading={quoteQuery.isLoading} quote={quoteQuery.data} />
+              <CraftingQuotePanel
+                isLoading={quoteQuery.isLoading}
+                quote={quoteQuery.data}
+                chosenOptional={chosenOptional}
+                onChosenOptionalChange={setChosenOptional}
+              />
             </>
           )}
         </div>

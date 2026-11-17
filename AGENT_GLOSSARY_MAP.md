@@ -9,7 +9,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 ## Per-app glossaries
 
 - [character_sheets](src/world/character_sheets/AGENT_GLOSSARY.md)
-- [magic](src/world/magic/AGENT_GLOSSARY.md) - also holds Gift substance, Calling up and Present (#5018), technique marks (#5066), Acting aura (#4731), and the Ultimates terms (#4098):
+- [magic](src/world/magic/AGENT_GLOSSARY.md) - also holds Substance, Primum, Primum step, Sighting, Calling up and Present (#5018, #5125), technique marks (#5066), Acting aura (#4731), and the Ultimates terms (#4098):
   Ultimate, Known ultimate, Readied ultimate, Reveal, Owned ultimate, Bond ultimate, Gift
   ultimate (#4118); the manifestation terms (#4118): Manifestation option, Character
   manifestation; the creation-personalization terms (#4099): Hold, Price, Early form,
@@ -96,7 +96,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [beta_reset](src/world/beta_reset/AGENT_GLOSSARY.md)
 - [achievements](src/world/achievements/AGENT_GLOSSARY.md)
 - [goals](src/world/goals/AGENT_GLOSSARY.md)
-- [items](src/world/items/AGENT_GLOSSARY.md) - also holds Keepsake and Trophy (#4530), and natural weapon (#4898), and also protects against and can be thrown (#5026), and item template family (#5041)
+- [items](src/world/items/AGENT_GLOSSARY.md) - also holds Keepsake and Trophy (#4530), and natural weapon (#4898), and also protects against and can be thrown (#5026), and item template family (#5041), and Primum item and Carried substance (#5125)
 - [traits](src/world/traits/AGENT_GLOSSARY.md)
 - [areas](src/world/areas/AGENT_GLOSSARY.md) - also holds Rung (#3983), the canonical
   feudal-ladder-step definition Almanach de Catenys vocabulary (societies glossary) points back to,

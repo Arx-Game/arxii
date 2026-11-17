@@ -11,6 +11,7 @@ imports it — keep it in this module.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from typing import TYPE_CHECKING, cast
 
 from world.items.crafting.constants import CraftingRecipeKind
@@ -56,6 +57,7 @@ def craft_attach_facet(
     crafter_character: ObjectDB,
     item_instance: ItemInstance,
     facet: Facet,
+    optional_requirements: Collection[int] = (),
 ) -> FacetCraftResult:
     """Run the facet-attach recipe and map the result onto ``FacetCraftResult``.
 
@@ -69,6 +71,7 @@ def craft_attach_facet(
         crafter_character: The ObjectDB whose traits roll the Enchanting check.
         item_instance: The ItemInstance receiving the facet.
         facet: The Facet to attach.
+        optional_requirements: Pks of the recipe's optional materials the crafter brings (#5125).
 
     Returns:
         FacetCraftResult with attached=True and a resolved quality_tier on success,
@@ -88,6 +91,7 @@ def craft_attach_facet(
         crafter_character=crafter_character,
         item_instance=item_instance,
         target=facet,
+        optional_requirement_ids=optional_requirements,
     )
     return FacetCraftResult(
         attached=result.attached,
@@ -105,6 +109,7 @@ def craft_attach_style(
     crafter_character: ObjectDB,
     item_instance: ItemInstance,
     style: Style,
+    optional_requirements: Collection[int] = (),
 ) -> StyleCraftResult:
     """Run the style-attach recipe and map the result onto ``StyleCraftResult``.
 
@@ -118,6 +123,7 @@ def craft_attach_style(
         crafter_character: The ObjectDB whose traits roll the Enchanting check.
         item_instance: The ItemInstance receiving the style.
         style: The Style to attach.
+        optional_requirements: Pks of the recipe's optional materials the crafter brings (#5125).
 
     Returns:
         StyleCraftResult with attached=True and a resolved quality_tier on success,
@@ -137,6 +143,7 @@ def craft_attach_style(
         crafter_character=crafter_character,
         item_instance=item_instance,
         target=style,
+        optional_requirement_ids=optional_requirements,
     )
     return StyleCraftResult(
         attached=result.attached,
@@ -160,6 +167,7 @@ def craft_create_item(  # noqa: PLR0913 — orchestrator passthrough (#2878 acce
     styles: list | None = None,
     dedicate_to: Persona | None = None,
     worked_from: ItemInstance | None = None,
+    optional_requirements: Collection[int] = (),
 ) -> ItemCreateResult:
     """Run the ITEM_CREATE recipe and map the result onto ``ItemCreateResult``.
 
@@ -176,6 +184,8 @@ def craft_create_item(  # noqa: PLR0913 — orchestrator passthrough (#2878 acce
         dedicate_to: The persona the piece is made for (#4512); permanent.
         worked_from: One item the crafter holds, used up by the making and recorded as
             the piece's lineage (#4512). A making never fails to make, so it is always used.
+        optional_requirements: Pks of the recipe's optional materials the crafter brings, such
+            as a Primum item that gives the piece its substance (#5125).
 
     Returns:
         ItemCreateResult with created=True and item_instance set on success,
@@ -214,6 +224,7 @@ def craft_create_item(  # noqa: PLR0913 — orchestrator passthrough (#2878 acce
             "worked_from": worked_from,
         },
         accent_targets=accent_targets,
+        optional_requirement_ids=optional_requirements,
     )
     return ItemCreateResult(
         created=result.attached,

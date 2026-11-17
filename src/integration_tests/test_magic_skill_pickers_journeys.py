@@ -4,14 +4,16 @@ The skills a magical roll adds are bespoke Magic skills that staff make and poin
 roll at (ADR-4450). They are never skills a character picks anywhere else, so a cast
 never counts one skill twice.
 
-- Staff set a magic skill in admin: each of the three pickers (a magical activity's
-  skill, a casting style's skill, a technique's own skill) offers Magic skills only and
-  refuses any other skill on save. The Path and Gift forms carry no skill since #5002.
+- Staff set a magic skill in admin: each of the four pickers (a magical activity's
+  skill, a casting style's skill, a technique's own skill, the harvest roll's skill)
+  offers Magic skills only and refuses any other skill on save. The Path and Gift forms
+  carry no skill since #5002.
 - A caster on a Path whose style's skill is a Magic skill casts through
   ``cast_technique`` against the seeded "Technique Cast" fallback check: the roll is
   the check type's stat plus the technique skill once. The seed used to weight an
   "occult" trait into that check as well, so a staff Magic skill called occult
   counted twice.
+- A harvest whose check type already weights the harvest skill counts the skill once.
 - Staff open the Required content dashboard and see each check type that weights a
   Magic skill directly, with a link to those check types in admin.
 """
@@ -28,6 +30,7 @@ from django.forms.widgets import MultiWidget, SelectMultiple
 from django.urls import reverse
 
 from integration_tests.harness import JourneyCase
+from integration_tests.test_primum_harvest_journeys import _Lair
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
 from world.checks.models import CheckType
 from world.checks.services import perform_check
@@ -44,9 +47,10 @@ from world.magic.factories import (
     TechniqueFactory,
     TechniqueStyleFactory,
 )
-from world.magic.models import Technique, TechniqueStyle
+from world.magic.models import ResonanceEnvironmentConfig, Technique, TechniqueStyle
 from world.magic.models.magic_activity import MagicActivitySkill
 from world.magic.seeds_cast import TECHNIQUE_CAST_CHECK_TYPE_NAME, ensure_technique_cast_content
+from world.magic.services.resonance_environment import get_resonance_environment_config
 from world.progression.factories import CharacterPathHistoryFactory
 from world.scenes.factories import SceneFactory
 from world.scenes.tests.cast_test_helpers import grant_technique
@@ -222,6 +226,9 @@ class StaffSetAMagicSkillInAdmin(JourneyCase):
             TechniqueStyle(name="Glass", skill=self.persuasion),
             Technique(gift=GiftFactory(), name="Glass Edge", skill=self.persuasion),
         )
+        harvest = ResonanceEnvironmentConfig(harvest_skill=self.persuasion)
+        errors = self.validation_errors(harvest)
+        self.assertIn("Magic category", " ".join(errors["harvest_skill"]))
         for row in rows:
             with self.subTest(model=type(row).__name__):
                 errors = self.validation_errors(row)
@@ -235,6 +242,9 @@ class StaffSetAMagicSkillInAdmin(JourneyCase):
             TechniqueStyle(name="Steps", skill=self.daring_dance),
             Technique(gift=GiftFactory(), name="Step Edge", skill=self.daring_dance),
         )
+        harvest = ResonanceEnvironmentConfig(harvest_skill=self.daring_dance)
+        errors = self.validation_errors(harvest)
+        self.assertIn("not a combat style's skill", " ".join(errors["harvest_skill"]))
         for row in rows:
             with self.subTest(model=type(row).__name__):
                 errors = self.validation_errors(row)
@@ -252,6 +262,13 @@ class StaffSetAMagicSkillInAdmin(JourneyCase):
         self.assertIn("already adds this skill", " ".join(errors["skill"]))
         style.skill = _magic_skill("Veil and Needle")
         self.assertEqual(self.validation_errors(style), {})
+        # The harvest roll's skill is a picker's skill too.
+        config = get_resonance_environment_config()
+        config.harvest_skill = style.skill
+        config.save(update_fields=["harvest_skill"])
+        # The config row is identity-mapped and outlives this test's rollback; put it back.
+        self.addCleanup(setattr, config, "harvest_skill", None)
+        self.assertIn("already adds this skill", " ".join(self.validation_errors(style)["skill"]))
 
     def test_a_casting_style_refuses_a_combat_style_skill_in_admin(self) -> None:
         style = TechniqueStyleFactory(name="Prayer")
@@ -351,6 +368,45 @@ class ACastCountsItsMagicSkillOnce(JourneyCase):
         self.assertEqual(terms, (ExtraTraitTerm(trait=self.occult, weight=Decimal("1.00")),))
         _, _, untrained = self.cast(self.hobb)
         self.assertEqual(trained.trait_points - untrained.trait_points, SKILL_VALUE)
+
+
+class AHarvestCountsItsMagicSkillOnce(_Lair):
+    """Staff weight the harvest skill on the harvest check type as well as picking it.
+
+    Mira has trained the skill and Tomas has not; the difference between their rolls is the
+    skill's points once.
+    """
+
+    def test_the_harvest_skill_counts_once(self) -> None:
+        PointConversionRange.objects.get_or_create(
+            trait_type=TraitType.SKILL,
+            min_value=1,
+            defaults={"max_value": 100, "points_per_level": 1},
+        )
+        config = get_resonance_environment_config()
+        CheckTypeTraitFactory(
+            check_type=config.harvest_check_type, trait=config.harvest_skill, weight=1
+        )
+        CharacterTraitValue.objects.create(
+            character=self.mira.sheet_data, trait=config.harvest_skill, value=SKILL_VALUE
+        )
+        self.stock(40)
+        rolled: list[CheckResult] = []
+
+        def spy(*args, **kwargs) -> CheckResult:
+            result = perform_check(*args, **kwargs)
+            rolled.append(result)
+            return result
+
+        with patch("world.checks.services.perform_check", side_effect=spy):
+            self.extract(self.mira, "extract fire")
+            self.extract(self.tomas, "extract fire")
+
+        trained, untrained = rolled
+        self.assertEqual(
+            trained.trait_points - untrained.trait_points,
+            PointConversionRange.calculate_points(TraitType.SKILL, SKILL_VALUE),
+        )
 
 
 class StaffSeeWhichCheckTypesWeightAMagicSkill(JourneyCase):

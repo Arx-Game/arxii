@@ -12,8 +12,7 @@ from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
 from world.items.constants import GearArchetype
-from world.locations.constants import STAT_CLAMPS, STAT_DEFAULTS, StatKey
-from world.magic.constants import AcquisitionOrigin, GiftKind, SubstanceDirection
+from world.magic.constants import AcquisitionOrigin, GiftKind
 from world.magic.models.affinity import Resonance
 
 # Lazy model reference (Django app_label.ModelName), extracted to satisfy S1192.
@@ -146,16 +145,40 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         ),
     )
 
+    substance = models.ForeignKey(
+        "arxii.Substance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="gifts",
+        help_text=(
+            "What this gift works through, such as fire or shadow (#5125). Every major gift "
+            "has one; a minor gift has none. A caster of the gift is stronger where Primum of "
+            "this substance is held."
+        ),
+    )
+
     objects = GiftManager()
 
     class NaturalKeyConfig:
         fields = ["name"]
+        dependencies = ["arxii.Substance"]
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(substance__isnull=True) | models.Q(kind=GiftKind.MAJOR),
+                name="magic_gift_substance_major_only",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name
 
     def clean(self) -> None:
         super().clean()
+        if self.kind == GiftKind.MINOR and self.substance_id is not None:
+            raise ValidationError({"substance": "A minor gift has no substance; clear it."})
         if self.kind == GiftKind.MAJOR and self.pk and self.ultimate_techniques.exists():
             raise ValidationError(
                 {
@@ -239,140 +262,6 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                 seen.add(technique.pk)
                 techniques.append(technique)
         return techniques
-
-
-class GiftSubstanceManager(NaturalKeyManager):
-    """Manager for GiftSubstance with natural key support (keyed on its gift)."""
-
-
-class GiftSubstance(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
-    """What a gift is made of: the room condition that is its substance (#5018).
-
-    A shadow gift works through shadow, which is the room's lighting, falling. A caster
-    of the gift is stronger where the room is rich in it, and her casts call it up where
-    it is missing. A child gift with no row of its own uses its parent's. A gift with no
-    row is unchanged: no power line, no call-up.
-
-    ``full_at`` is how far the room condition must sit from an ordinary room's value for
-    the substance to be at full strength; it is *present* from a share of that distance
-    set on ``ResonanceEnvironmentConfig.substance_present_pct``. (Code and the services
-    call the room condition a "reading", one point of it a "step" and ``full_at`` the
-    "measure"; staff-facing text never does.)
-    """
-
-    gift = models.OneToOneField(
-        Gift,
-        on_delete=models.CASCADE,
-        primary_key=True,
-        related_name="substance",
-        help_text="The gift this is the substance of.",
-    )
-    label = models.CharField(
-        verbose_name="Name in lines",
-        max_length=60,
-        help_text='What the cast card and the roll breakdown call it ("shadow", "water").',
-    )
-    stat_key = models.CharField(
-        verbose_name="Which room condition feeds it",
-        max_length=20,
-        choices=StatKey.choices,
-        help_text=(
-            "The room condition this gift draws on. Lighting for shadow: -2 is pitch dark, "
-            "+2 is blazing light."
-        ),
-    )
-    direction = models.CharField(
-        verbose_name="Stronger when it is",
-        max_length=10,
-        choices=SubstanceDirection.choices,
-        help_text=(
-            "Shadow is stronger when lighting is lower (darker). Water, wind and fire are "
-            "stronger when wet, wind and heat are higher."
-        ),
-    )
-    full_at = models.PositiveIntegerField(
-        verbose_name="Full strength at",
-        default=2,
-        help_text=(
-            "How far from an ordinary room counts as full strength. For lighting, 2 means "
-            "pitch dark (an ordinary room is 0). Wet, wind and heat run from 0 to 100000; "
-            "pick the value you treat as soaking, a gale or blazing. It cannot be further "
-            "than the room condition can go."
-        ),
-    )
-    opposed_by = models.CharField(
-        verbose_name="Weakened by",
-        max_length=20,
-        choices=StatKey.choices,
-        blank=True,
-        help_text=(
-            "Another room condition that works against it, such as Dry for water. Leave "
-            "blank if only the opposite of its own condition weakens it (bright light for "
-            "shadow)."
-        ),
-    )
-    arrival_line = models.CharField(
-        verbose_name="When it arrives, the room sees",
-        max_length=200,
-        help_text=(
-            "The line the room sees whenever it is called up, by a cast or with no "
-            'technique ("The shadows in the room deepen."). It never names the caster.'
-        ),
-    )
-
-    property = models.ForeignKey(
-        "arxii.Property",
-        verbose_name="Property new techniques start with",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="gift_substances",
-        help_text=(
-            "The property a new technique on this gift starts with ticked, such as "
-            "'shadow'. Only a convenience: untick it on any technique where it does not "
-            "belong, and nothing reads it in play. Leave blank and new techniques start "
-            "with no property ticked."
-        ),
-    )
-
-    objects = GiftSubstanceManager()
-
-    class NaturalKeyConfig:
-        fields = ["gift"]
-        dependencies = ["magic.Gift"]
-
-    class Meta:
-        verbose_name = "Gift substance"
-        verbose_name_plural = "Gift substances"
-
-    def __str__(self) -> str:
-        return f"{self.label} ({self.gift})"
-
-    def clean(self) -> None:
-        super().clean()
-        errors: dict[str, str] = {}
-        if not self.full_at or self.full_at < 1:
-            errors["full_at"] = "Full strength must be at least 1."
-        if self.opposed_by and self.opposed_by == self.stat_key:
-            errors["opposed_by"] = "A room condition cannot weaken itself; leave this blank."
-        if self.stat_key and self.direction:
-            low, high = STAT_CLAMPS[StatKey(self.stat_key)]
-            ordinary = STAT_DEFAULTS[StatKey(self.stat_key)]
-            reach = (
-                ordinary - low if self.direction == SubstanceDirection.FALLING else high - ordinary
-            )
-            if self.direction == SubstanceDirection.FALLING and reach <= 0:
-                errors["direction"] = (
-                    "This room condition cannot go below an ordinary room, so a gift cannot "
-                    "be stronger when it is lower. Use Lighting for shadow, or pick Higher."
-                )
-            elif self.full_at and self.full_at > reach:
-                errors["full_at"] = (
-                    f"This room condition only goes {reach} from an ordinary room that way, "
-                    "so full strength cannot be more than that."
-                )
-        if errors:
-            raise ValidationError(errors)
 
 
 class CharacterGift(SharedMemoryModel):

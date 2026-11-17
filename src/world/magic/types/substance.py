@@ -1,41 +1,45 @@
-"""Types for a gift's substance (#5018): the plan a call-up reads and what it spent.
+"""Types for calling up a gift's substance (#5018, #5125): the plan a call-up reads and what it did.
 
-A plan is a pure read: the cast card, the cast's charge, the power line and the
-no-technique call-up all read the same plan, so what a player is shown is what she pays.
+A plan is a pure read: the cast card, the cast's charge, the power lines and the no-technique
+call-up all read the same plan, so what a player is shown is what she pays.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from evennia_extensions.models import RoomProfile
-    from world.magic.models import Gift, GiftSubstance, Resonance
+    from world.magic.models import Gift, Substance
+    from world.magic.types.primum import SourcePoints
 
 
 class SubstanceBlock:
-    """Why a plan with steps still to go does not call anything up. Never a refusal."""
+    """Why a plan calls nothing up although she asked to raise the place. Never a refusal."""
 
     NONE = ""
-    #: A warded sanctum (or any fixed setting) holds the reading; nothing can move it.
-    HELD_FIXED = "held_fixed"
-    #: The place has no room profile to write a row on.
+    #: The place has no room profile to hold a call-up.
     NO_PLACE = "no_place"
-    #: Her balance in her gift thread's resonance cannot pay the uncovered share.
-    TOO_LITTLE_RESONANCE = "too_little_resonance"
+    #: The place already holds her substance at the top step; nothing more can be called up.
+    AT_TOP = "at_top"
 
 
 class SurroundingsKind:
     """The kinds of line a cast card shows about where she stands (``SurroundingsLine``)."""
 
     POWER = "power"
+    #: "Fire around you" above the source lines (text only).
+    HEADING = "heading"
+    #: One source of Primum with its signed points in ``amount``.
+    SOURCE = "source"
     CALL_UP = "call_up"
     BLOCKED = "blocked"
     NEEDS = "needs"
+    #: A plain sentence under the total that explains it (text only).
+    HINT = "hint"
 
 
 class MarkOutcome:
@@ -44,40 +48,35 @@ class MarkOutcome:
     MARKED = "marked"
     ALREADY = "already"
     REMOVED = "removed"
-    HELD_FIXED = "held_fixed"
     NO_PLACE = "no_place"
 
 
 @dataclass(frozen=True)
 class SubstancePlan:
-    """What calling up a gift's substance in one room would take and do (#5018).
+    """What calling up a gift's substance in one room would take and do (#5125).
 
-    ``substance`` is ``None`` for an empty plan: the gift has no substance, the caster
-    has no GIFT thread on it, or she stands nowhere. An empty plan changes nothing.
+    ``substance`` is ``None`` for an empty plan: the gift has no substance, the caster has no
+    GIFT thread on it, or she stands nowhere. An empty plan changes nothing. ``lines`` are the
+    cast's Primum sources with any call-up already counted in the place.
     """
 
-    substance: GiftSubstance | None = None
+    substance: Substance | None = None
     gift: Gift | None = None
     thread_level: int = 0
-    resonance: Resonance | None = None
     room: ObjectDB | None = None
     room_profile: RoomProfile | None = None
-    #: Steps the room still needs, in her direction, to count as present.
-    steps_needed: int = 0
-    #: Steps the call-up actually moves the reading (0 when blocked or not needed).
-    steps_moved: int = 0
-    #: Her own row's new value (the full row, not a delta); meaningful when steps_moved.
-    row_value: int = 0
+    #: The Primum of her substance in the place now, before any call-up.
+    current_amount: int = 0
+    #: The Primum the call-up adds (0 when nothing is called up).
+    call_up_amount: int = 0
     blocked: str = SubstanceBlock.NONE
-    #: Anima the call-up adds before control is taken off.
+    #: Anima the call-up adds before control is taken off (0 when nothing is called up).
     call_up_anima: int = 0
     #: How much of ``call_up_anima`` her spare control covers.
     covered_anima: int = 0
-    resonance_cost: int = 0
     #: Percent the place's own magic moves the cost: negative cheaper, positive dearer.
     place_shift_pct: int = 0
-    richness_before: Decimal = Decimal(0)
-    richness_after: Decimal = Decimal(0)
+    lines: tuple[SourcePoints, ...] = ()
 
     @property
     def is_empty(self) -> bool:
@@ -85,12 +84,13 @@ class SubstancePlan:
 
     @property
     def calls_up(self) -> bool:
-        """True when this plan moves the room (and costs what it says)."""
-        return self.steps_moved > 0
+        """True when this plan raises the place (and costs what it says)."""
+        return self.call_up_amount > 0 and not self.blocked
 
     @property
     def already_present(self) -> bool:
-        return not self.is_empty and self.steps_needed == 0
+        """She has her substance here already and the plan raises nothing."""
+        return not self.is_empty and not self.blocked and self.call_up_amount == 0
 
     @property
     def uncovered_anima(self) -> int:
@@ -98,39 +98,36 @@ class SubstancePlan:
 
     @property
     def label(self) -> str:
-        return self.substance.label if self.substance is not None else ""
+        return self.substance.name if self.substance is not None else ""
 
 
 @dataclass(frozen=True)
 class SubstanceCallUp:
-    """What a call-up actually spent and did, for result lines (#5018)."""
+    """What a call-up actually spent and did, for result lines (#5018, #5125)."""
 
     label: str
     anima: int
-    resonance: int
-    resonance_name: str
     room_changed: bool
-    #: Why nothing was called up although the room lacked it (``SubstanceBlock``), so the
-    #: result can say "no resonance left to call up shadow"; blank when it was called up.
+    #: Why nothing was called up although she asked (``SubstanceBlock``); blank when it was.
     blocked: str = ""
 
 
 @dataclass(frozen=True)
 class SurroundingsLine:
-    """One line the cast card shows under its cost (#5018).
+    """One line the cast card shows under its cost (#5018, #5125).
 
-    ``kind``: ``power`` (signed ``amount``), ``call_up`` (``anima`` and ``resonance``;
-    both 0 means control covers it), ``blocked`` (too little resonance, a fixed room),
-    or ``needs`` (a technique's unmet surroundings restriction).
+    ``kind``: ``heading`` (text only), ``source`` (signed points in ``amount``), ``power``
+    (signed power in ``amount``: the total, or a lone unperceived opposing source),
+    ``call_up`` (``anima``; 0 means control covers it), ``blocked``, or ``needs`` (a
+    technique's unmet surroundings restriction).
     """
 
     kind: str
     text: str
     amount: int = 0
     anima: int = 0
-    resonance: int = 0
-    #: The right-hand cost for a call-up line ("free, your control covers it", "3 anima,
-    #: 1 Umbral resonance"); blank for the other kinds.
+    #: The right-hand cost for a call-up line ("free, your control covers it", "3 anima");
+    #: blank for the other kinds.
     detail: str = ""
 
 
@@ -145,38 +142,19 @@ class CallUpOffer:
 
     plan: SubstancePlan
     effective_cost: int
-    #: Her anima now, and her balance in the gift's resonance now, for the row's
-    #: "Anima: 18 · after: 18" line.
+    #: Her anima now, for the row's "Anima: 18 · after: 15" line.
     current_anima: int = 0
-    resonance_balance: int = 0
 
     @property
     def anima_after(self) -> int:
-        return (
-            max(self.current_anima - self.effective_cost, 0)
-            if self.plan.calls_up
-            else (self.current_anima)
-        )
-
-    @property
-    def resonance_after(self) -> int:
         if not self.plan.calls_up:
-            return self.resonance_balance
-        return max(self.resonance_balance - self.plan.resonance_cost, 0)
+            return self.current_anima
+        return max(self.current_anima - self.effective_cost, 0)
 
     @property
     def balance_line(self) -> str:
-        """ "Anima: 18 · after: 18 · Umbral resonance after: unchanged"."""
-        name = self.plan.resonance.name if self.plan.resonance is not None else "gift"
-        after = (
-            "unchanged"
-            if self.resonance_after == self.resonance_balance
-            else str(self.resonance_after)
-        )
-        return (
-            f"Anima: {self.current_anima} · after: {self.anima_after} · "
-            f"{name} resonance after: {after}"
-        )
+        """ "Anima: 18 · after: 15"."""
+        return f"Anima: {self.current_anima} · after: {self.anima_after}"
 
     @property
     def gift_id(self) -> int:
@@ -184,16 +162,12 @@ class CallUpOffer:
 
     @property
     def cost_line(self) -> str:
-        if self.plan.already_present:
-            return f"{self.plan.label} is already here"
+        if self.plan.blocked == SubstanceBlock.AT_TOP:
+            return f"no more {self.plan.label} can be called up here"
+        if self.plan.blocked == SubstanceBlock.NO_PLACE:
+            return "this place cannot hold it"
         if not self.plan.calls_up:
-            if self.plan.blocked == SubstanceBlock.TOO_LITTLE_RESONANCE:
-                return "too little of your resonance"
-            return "this place is held fixed"
-        if self.effective_cost == 0 and self.plan.resonance_cost == 0:
+            return f"{self.plan.label} is already here"
+        if self.effective_cost == 0:
             return "free, your control covers it"
-        resonance = self.plan.resonance.name if self.plan.resonance is not None else ""
-        parts = [f"{self.effective_cost} anima"]
-        if self.plan.resonance_cost:
-            parts.append(f"{self.plan.resonance_cost} {resonance} resonance")
-        return ", ".join(parts)
+        return f"{self.effective_cost} anima"

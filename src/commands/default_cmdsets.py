@@ -153,6 +153,7 @@ from commands.places import CmdPlaces  # #1866
 from commands.portals import CmdPortalAnchor  # #2222
 from commands.positions import CmdPosition  # #2005
 from commands.presence import CmdAfk, CmdHide
+from commands.primum import CmdExtract
 from commands.progression import CmdProgressionUnlock, CmdTraining
 from commands.progression_rewards import CmdKudos, CmdNominate, CmdPathIntent, CmdRandomScene
 from commands.projects import CmdProject
@@ -605,6 +606,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdStage,
             # #5018 - call up a gift's substance with no technique.
             CmdCallUp,
+            # #5125 - extract Primum from a lair or a slain creature (not field-food harvest).
+            CmdExtract,
             CmdMarket,
             # #3292 - tavern games: coin-stakes dice gambling open/join/roll/leave.
             CmdGame,

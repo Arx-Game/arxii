@@ -40,6 +40,7 @@ interface AttachFacetDialogProps {
 
 export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: AttachFacetDialogProps) {
   const [selectedFacetId, setSelectedFacetId] = useState('');
+  const [chosenOptional, setChosenOptional] = useState<number[]>([]);
 
   const qc = useQueryClient();
   const facetsQuery = useFacets();
@@ -67,6 +68,7 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
   useEffect(() => {
     if (open) {
       setSelectedFacetId('');
+      setChosenOptional([]);
     }
   }, [open]);
 
@@ -91,7 +93,11 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
   function handleSubmit() {
     if (!selectedFacetId || craftMutation.isPending) return;
     craftMutation.mutate(
-      { item_instance: itemInstanceId, facet: Number(selectedFacetId) },
+      {
+        item_instance: itemInstanceId,
+        facet: Number(selectedFacetId),
+        optional_requirements: chosenOptional.length > 0 ? chosenOptional : undefined,
+      },
       {
         onSuccess: (result) => {
           if (result.attached) {
@@ -101,6 +107,7 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
             if (result.consequence_label) parts.push(result.consequence_label);
             toast.success(parts.join(' · '));
             setSelectedFacetId('');
+            setChosenOptional([]);
           } else {
             const failParts = ['Your attempt failed; no facet attached.'];
             if (result.consequence_label) failParts.push(result.consequence_label);
@@ -171,7 +178,10 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => setSelectedFacetId('')}
+                  onClick={() => {
+                    setSelectedFacetId('');
+                    setChosenOptional([]);
+                  }}
                   disabled={craftMutation.isPending}
                 >
                   Change
@@ -191,6 +201,8 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
               isLoading={quoteQuery.isLoading}
               quote={quoteQuery.data}
               onStationRepaired={handleStationRepaired}
+              chosenOptional={chosenOptional}
+              onChosenOptionalChange={setChosenOptional}
             />
           )}
         </div>

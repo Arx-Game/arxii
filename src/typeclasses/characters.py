@@ -755,12 +755,17 @@ class Character(ObjectParent, DefaultCharacter):
         self._clear_called_up_substance(keep_room=None)
 
     def _clear_called_up_substance(self, *, keep_room) -> None:
-        """Delete her called-up substance rows outside ``keep_room`` (#5018)."""
+        """Delete her called-up substance rows and Primum sightings outside ``keep_room``.
+
+        What she called up (#5018) and what she sensed (#5125) last only while she stays.
+        """
+        from world.magic.services.primum_perception import clear_sightings
         from world.magic.services.substance import clear_caster_substance
 
         sheet = self.character_sheet
         if sheet is not None:
             clear_caster_substance(sheet, keep_room=keep_room)
+            clear_sightings(sheet, keep_room=keep_room)
 
     def _announce_departure(self, location, *, reason: str) -> None:
         """The room's went-offline line, the logout twin of ``_announce_arrival``.

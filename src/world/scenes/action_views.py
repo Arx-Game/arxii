@@ -981,6 +981,8 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             "character": sheet.character,
             "character_sheet": sheet,
             "character_techniques": {ct.technique_id: ct for ct in links},
+            # #5125: the Primum lines of one gift here, read once for all its techniques.
+            "substance_lines": {},
         }
         return Response(
             CastableTechniqueSerializer(

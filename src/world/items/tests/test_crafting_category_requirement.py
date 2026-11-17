@@ -7,10 +7,8 @@ from django.test import TestCase
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
-from world.items.crafting.constants import CraftingRecipeKind
 from world.items.crafting.cost import stage_and_assert_affordable
-from world.items.crafting.services import build_crafting_quote
-from world.items.exceptions import CategoryRequirementsNotQuotable, CraftingCostUnaffordable
+from world.items.exceptions import CraftingCostUnaffordable
 from world.items.factories import (
     CraftingMaterialRequirementFactory,
     CraftingRecipeFactory,
@@ -62,16 +60,6 @@ class CraftingCategoryRequirementTests(TestCase):
         with self.assertRaises(CraftingCostUnaffordable):
             stage_and_assert_affordable(
                 recipe=self.recipe,
-                crafter_character=self.character,
-                crafter_character_sheet=self.sheet,
-            )
-
-    def test_quote_guards_category_requirements(self) -> None:
-        # The read-only quote preview cannot represent a material class yet; it
-        # raises a clear typed error rather than crashing (execution still works).
-        with self.assertRaises(CategoryRequirementsNotQuotable):
-            build_crafting_quote(
-                kind=CraftingRecipeKind.FACET_ATTACH,
                 crafter_character=self.character,
                 crafter_character_sheet=self.sheet,
             )

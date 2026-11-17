@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from django.db.models import Model
+from django.db.models import Model, Q
 from django.urls import reverse
 
 from web.admin.authoring.links import admin_change_url
@@ -30,12 +30,13 @@ from world.magic.constants import GiftKind
 from world.magic.models import (
     EffectType,
     Gift,
-    GiftSubstance,
     PathGiftGrant,
     Technique,
     TechniqueCapabilityGrant,
 )
 from world.magic.services.capability_curve import get_capability_power_config
+from world.magic.services.primum import substances_by_gift
+from world.magic.services.technique_marks import substance_property_ids_by_technique
 from world.mechanics.models import Application, Property, TraitCapabilityDerivation
 
 #: How each way of moving reads after "by".
@@ -72,6 +73,8 @@ class TechniqueRow:
     property_ids: set[int]
     candidates: list[Property]
     grant: TechniqueCapabilityGrant | None
+    #: The part of ``property_ids`` the gift's substance gives: carried, never stored.
+    carried_ids: frozenset[int] = frozenset()
     strength: int | None = None
     better: int | None = None
     edit_url: str = ""
@@ -320,6 +323,10 @@ def _candidates(
     return sorted(chosen, key=lambda prop: prop.name)
 
 
+def _carried(carried_of: dict[int, int], technique: Technique) -> frozenset[int]:
+    return frozenset({carried_of[technique.pk]}) if technique.pk in carried_of else frozenset()
+
+
 def _technique_row(  # noqa: PLR0913 - one row's parts, named at the call
     technique: Technique,
     grant: TechniqueCapabilityGrant | None,
@@ -349,14 +356,26 @@ def _add_techniques(page: PowerPage, ref: Reference) -> None:
     )
     not_granting: list[Technique] = []
     if required is not None:
+        carrying_gifts = [
+            gift_id
+            for gift_id, substance in substances_by_gift().items()
+            if substance.property_id == required.pk
+        ]
+        # Membership by subquery, not a join: a join returns a technique once per stored mark.
+        ticked = Technique.properties.through.objects.filter(property_id=required.pk).values(
+            "technique_id"
+        )
         not_granting = list(
-            Technique.objects.filter(properties=required)
+            Technique.objects.filter(Q(pk__in=ticked) | Q(gift__in=carrying_gifts))
             .exclude(capability_grants__capability_id=capability.pk)
             .select_related("gift")
             .order_by("gift__name", "name")
         )
     technique_ids = {g.technique_id for g in grants} | {t.pk for t in not_granting}
     properties_of = _group(_m2m_pairs(Technique, "properties", technique_ids))
+    carried_of = substance_property_ids_by_technique(technique_ids)
+    for technique_id, property_id in carried_of.items():
+        properties_of.setdefault(technique_id, set()).add(property_id)
     paths_of = _paths_by_technique(technique_ids)
     names = Property.objects.in_bulk({pk for ids in properties_of.values() for pk in ids})
     config = get_capability_power_config()
@@ -364,14 +383,15 @@ def _add_techniques(page: PowerPage, ref: Reference) -> None:
         technique = grant.technique
         ids = properties_of.get(technique.pk, set())
         row = _technique_row(technique, grant, ids, paths_of.get(technique.pk, []), names, required)
+        row.carried_ids = _carried(carried_of, technique)
         row.strength = grant.calculate_value(effective_power=ref.power, config=config)
         row.better = scaled_strength(row.strength, _ONE_LEVEL_BETTER)
         (page.doing if _carries(required, ids) else page.lacks_property).append(row)
     for technique in not_granting:
         ids = properties_of.get(technique.pk, set())
-        page.lacks_grant.append(
-            _technique_row(technique, None, ids, paths_of.get(technique.pk, []), names, required)
-        )
+        row = _technique_row(technique, None, ids, paths_of.get(technique.pk, []), names, required)
+        row.carried_ids = _carried(carried_of, technique)
+        page.lacks_grant.append(row)
 
 
 def _add_others(page: PowerPage, ref: Reference) -> None:
@@ -515,20 +535,15 @@ def _rail(app: Application, page: PowerPage) -> list[RailApplication]:
 
 
 def substance_by_gift(gifts: list[Gift]) -> dict[int, Property]:
-    """Each gift's substance property (its own, else its nearest ancestor's): one query."""
-    own = {
-        row.gift_id: row.property
-        for row in GiftSubstance.objects.filter(property__isnull=False).select_related("property")
-    }
-    by_pk = {gift.pk: gift for gift in gifts}
+    """Each gift's substance property (its own, else its nearest ancestor's), where it has one.
+
+    Every technique of the gift carries it without being ticked, so the page names it as a
+    note on the gift choice (#5125).
+    """
+    substances = substances_by_gift()
     found: dict[int, Property] = {}
     for gift in gifts:
-        seen: set[int] = set()
-        current: Gift | None = gift
-        while current is not None and current.pk not in seen:
-            seen.add(current.pk)
-            if current.pk in own:
-                found[gift.pk] = own[current.pk]
-                break
-            current = by_pk.get(current.parent_id) if current.parent_id else None
+        substance = substances.get(gift.pk)
+        if substance is not None and substance.property is not None:
+            found[gift.pk] = substance.property
     return found

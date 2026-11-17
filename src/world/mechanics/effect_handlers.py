@@ -1754,6 +1754,52 @@ def _technique_training(
     )
 
 
+def _reveal_primum(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Let the acting character perceive the Primum where she stands (#5125).
+
+    A plain success names the strongest substance, a good success names them all (the scope the
+    consequence carries). The sightings last until she leaves the room or goes offline. Her room
+    state is pushed afterwards so the web client shows what she now senses.
+    """
+    from world.magic.services.primum_perception import reveal  # noqa: PLC0415
+
+    character = context.character
+    try:
+        sheet: CharacterSheet = character.sheet_data
+    except (AttributeError, ObjectDoesNotExist):
+        return AppliedEffect(
+            effect_type=EffectType.REVEAL_PRIMUM,
+            description=_NO_SHEET_DESCRIPTION,
+            applied=False,
+            skip_reason=_NO_SHEET_SKIP_REASON,
+        )
+    room = context.location
+    if room is None:
+        return AppliedEffect(
+            effect_type=EffectType.REVEAL_PRIMUM,
+            description="No place to sense",
+            applied=False,
+            skip_reason="Character has no location",
+        )
+    named = reveal(sheet, room, effect.primum_reveal)
+    if not named:
+        return AppliedEffect(
+            effect_type=EffectType.REVEAL_PRIMUM,
+            description="You sense no Primum here",
+            applied=False,
+            skip_reason="No Primum to sense",
+        )
+    character.send_room_state()
+    return AppliedEffect(
+        effect_type=EffectType.REVEAL_PRIMUM,
+        description="You sense " + ", ".join(f"{substance.name} Primum" for substance in named),
+        applied=True,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Handler registry
 # ---------------------------------------------------------------------------
@@ -1788,4 +1834,5 @@ _HANDLER_REGISTRY: dict[str, type[None] | object] = {
     EffectType.RESTORE_ANIMA: _restore_anima,
     EffectType.INTOXICATE: _intoxicate,
     EffectType.TECHNIQUE_TRAINING: _technique_training,
+    EffectType.REVEAL_PRIMUM: _reveal_primum,
 }

@@ -17,6 +17,18 @@
  */
 import { execSync } from 'node:child_process';
 
+import { checkBuiltUrls } from './check-built-urls.mjs';
+
+// Before the uv test below, so it also runs on CI's build runners: a build that
+// names its own files from the site root loads under `vite preview` and breaks
+// under Django (see check-built-urls.mjs).
+try {
+  checkBuiltUrls();
+} catch (error) {
+  console.error(error.message);
+  process.exit(1);
+}
+
 function uvAvailable() {
   try {
     execSync('uv --version', { stdio: 'ignore' });

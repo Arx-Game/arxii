@@ -39,6 +39,9 @@ Submodules (see Scope 6 §4.4):
 - progression_milestone: MagicProgressionMilestone
 - drift: DriftCorrectionConfig, DriftCorrectionOutcomeShare, DriftConversionOffer,
   DriftConversionCap (#4733)
+- substance: Substance, SubstanceRelation, PrimumStep, SubstancePowerStep, HarvestOutcome
+  (#5125)
+- primum: PlacePrimum, CreaturePrimum, PrimumCallUp, PrimumSighting (#5125)
 - sanctum: SanctumDetails, SanctumOwnerMode, SanctumPendingPayout,
   SanctumHomecomingGainAward, SanctumPurgingRetentionAward,
   SanctumDissolutionRecoveryAward (#1207)
@@ -138,7 +141,6 @@ from world.magic.models.gifts import (
     CharacterTradition,
     Gift,
     GiftManager,
-    GiftSubstance,
     Tradition,
     TraditionManager,
 )
@@ -194,6 +196,12 @@ from world.magic.models.power_config import (
 
 # prepared per-character Audere text (#4101)
 from world.magic.models.prepared_text import CharacterCrossingText, CharacterSurgeText
+from world.magic.models.primum import (
+    CreaturePrimum,
+    PlacePrimum,
+    PrimumCallUp,
+    PrimumSighting,
+)
 from world.magic.models.progression_milestone import MagicProgressionMilestone
 from world.magic.models.reflection import Reflection, SettlingRite
 from world.magic.models.reincarnation import Reincarnation
@@ -234,6 +242,13 @@ from world.magic.models.soul_tether import (
 )
 from world.magic.models.soul_tether_config import SineatingOutcomeAward, SoulTetherConfig
 from world.magic.models.soulfray import AnimaRitualBudgetAward, MishapPoolTier, SoulfrayConfig
+from world.magic.models.substance import (
+    HarvestOutcome,
+    PrimumStep,
+    Substance,
+    SubstancePowerStep,
+    SubstanceRelation,
+)
 from world.magic.models.teaching import TraditionTeachingConfig
 from world.magic.models.technique_builder import (
     TechniqueBudgetConfig,
@@ -363,6 +378,7 @@ __all__ = [
     "CorruptionConfig",
     # covenant-role blend power term tuning (#2529)
     "CovenantRoleBlendConfig",
+    "CreaturePrimum",
     "CrossingChoice",
     "CrossingOption",
     # currency-knob sidecar (#1834)
@@ -399,10 +415,10 @@ __all__ = [
     "Gift",
     "GiftAcquisitionConfig",
     "GiftManager",
-    "GiftSubstance",
     "GiftUnlock",
     # Glimpse guided flow (#2427)
     "GlimpseTag",
+    "HarvestOutcome",
     # rituals
     "ImbuingProseTemplate",
     # impulses (#5177)
@@ -448,6 +464,7 @@ __all__ = [
     "PendingRitualEffect",
     # soul tether (Spec B §14.1, §15.1 — Task 1.7)
     "PendingStageAdvanceOffer",
+    "PlacePrimum",
     # portal travel (#2222)
     "PortalAnchor",
     "PortalAnchorKind",
@@ -457,6 +474,9 @@ __all__ = [
     "PresentationEndorsement",
     # reincarnation
     "PriceComponentRequirement",
+    "PrimumCallUp",
+    "PrimumSighting",
+    "PrimumStep",
     "RallyKindlingStrength",
     "Reflection",
     "Reincarnation",
@@ -513,6 +533,9 @@ __all__ = [
     "StyleCapabilityRequirement",
     # endorsement (Spec C style presentation — #1152)
     "StylePresentationEndorsement",
+    "Substance",
+    "SubstancePowerStep",
+    "SubstanceRelation",
     "Technique",
     "TechniqueAppliedCondition",
     # technique builder config (#537)

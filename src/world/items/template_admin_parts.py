@@ -109,10 +109,16 @@ class ItemTemplateAdminBase(admin.ModelAdmin):
     def formfield_for_dbfield(
         self, db_field: Field, request: HttpRequest, **kwargs: Any
     ) -> FormField | None:
-        """Staff read the throwable flag as the demo names it (#5026)."""
+        """Staff read the throwable flag and the Primum item as the demos name them."""
         formfield = super().formfield_for_dbfield(db_field, request, **kwargs)
         if db_field.name == "can_be_thrown" and formfield is not None:  # noqa: STRING_LITERAL - field name
             formfield.label = "Can also be thrown"
+        if db_field.name == "primum_substance" and formfield is not None:  # noqa: STRING_LITERAL - field name
+            formfield.label = "Item created by harvesting"
+            formfield.help_text = (
+                "Set this on the item a harvest of this substance gives a player. Only one "
+                "item can be made for each substance. Leave it blank on every other item."
+            )
         return formfield
 
 

@@ -247,3 +247,11 @@ _Avoid_: armor resistance (resistance lives on conditions), elemental armor, war
 **Can be thrown** (#5026):
 A one-handed melee weapon template's mark that its wielder may throw it as well as strike with it, picking each Strike (`ItemTemplate.can_be_thrown`). See the combat glossary's Thrown Strike.
 _Avoid_: throwable item, returning weapon
+
+**Primum item** (#5125, ADR-5125):
+An ordinary item whose template names a substance (`ItemTemplate.primum_substance`, one template per substance): the harvested Primum of that substance, typed and tradable. Its quality tier reads back as a Primum step. It is a crafting and facet material in alpha. See the magic glossary's Primum and Primum step.
+_Avoid_: Primum currency, Primum points, essence item
+
+**Carried substance** (#5125):
+The substance an item carries and the Primum step it carries it at (`ItemSubstance`), stamped when a craft or a facet attach consumes a Primum item. Everyone sees "Carries fire" on the item. It helps a cast only while the item is equipped (worn or held in hand) and only a caster whose gift works that substance or a related one. See the magic glossary's Substance.
+_Avoid_: enchantment, infusion, imbued

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -15,6 +17,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.factories import (
     ItemInstanceFactory,
+    ItemSubstanceFactory,
     ItemTemplateFactory,
     OutfitFactory,
     OutfitSlotFactory,
@@ -227,6 +230,43 @@ class OutfitViewSetTests(_OutfitViewSetSetupMixin, TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         names = {r["name"] for r in response.data["results"]}
         self.assertIn("StaffSeesBOutfit", names)
+
+    def test_list_reads_what_slots_carry_in_one_query(self) -> None:
+        """The list reads what every slot carries (#5125) in one query, not one per slot."""
+        outfit = OutfitFactory(
+            character_sheet=self.sheet_a, wardrobe=self.wardrobe, name="CarryingLook"
+        )
+        url = f"/api/items/outfits/?character_sheet={self.sheet_a.pk}"
+
+        def carry_reads() -> int:
+            """How many queries the list makes to read what the pieces carry."""
+            # Rows are identity-mapped, so drop what an earlier read left on them.
+            self.sheet_a.saved_outfits.invalidate()
+            outfit.__dict__.pop("cached_outfit_slots", None)
+            for item in (self.shirt, self.glove):
+                item.__dict__.get("_prefetched_objects_cache", {}).pop("item_substances", None)
+            with CaptureQueriesContext(connection) as queries:
+                response = self.client.get(url)
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            return sum("arxii_itemsubstance" in q["sql"] for q in queries.captured_queries)
+
+        for item in (self.shirt, self.glove):
+            ItemSubstanceFactory(item_instance=item)
+        OutfitSlotFactory(
+            outfit=outfit,
+            item_instance=self.shirt,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        self.assertEqual(carry_reads(), 1)
+        OutfitSlotFactory(
+            outfit=outfit,
+            item_instance=self.glove,
+            body_region=BodyRegion.LEFT_HAND,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+        self.assertEqual(carry_reads(), 1)
 
     def test_retrieve_returns_outfit_with_slots(self) -> None:
         """GET detail includes nested slots with item details."""

@@ -136,6 +136,7 @@ function makeItem(overrides: Partial<ItemInstance> = {}): ItemInstance {
     id: 7,
     game_object_id: 700,
     access_policy: 'open',
+    carries: [],
     is_currency_instrument: false,
     suggested_value: 0,
     can_steal: false,
@@ -240,6 +241,13 @@ describe('ItemDetailPanel', () => {
     expect(screen.getByTestId('item-credits')).toHaveTextContent(
       'Made by Corwen for Linnet. Designed by Linnet. Facet work by Corwen.'
     );
+  });
+
+  it('shows what the piece carries', () => {
+    render(
+      <ItemDetailPanel item={makeItem({ carries: ['fire'] })} open={true} onOpenChange={vi.fn()} />
+    );
+    expect(screen.getByTestId('item-carries')).toHaveTextContent('Carries fire');
   });
 
   it('renders the stats grid (weight, size, value)', () => {

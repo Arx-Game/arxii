@@ -7,11 +7,10 @@ const shadow = {
   gift_id: 7,
   label: 'shadow',
   effective_cost: 3,
-  resonance_cost: 1,
   already_present: false,
   can_call_up: true,
-  cost_line: '3 anima, 1 Umbral resonance',
-  balance_line: 'Anima: 30 · after: 27 · Umbral resonance after: 9',
+  cost_line: '3 anima',
+  balance_line: 'Anima: 30 · after: 27',
 };
 
 describe('CallUpInFight', () => {
@@ -27,7 +26,7 @@ describe('CallUpInFight', () => {
       />
     );
 
-    expect(screen.getByTestId('call-up-cost')).toHaveTextContent('3 anima, 1 Umbral resonance');
+    expect(screen.getByTestId('call-up-cost')).toHaveTextContent('3 anima');
     await userEvent.click(screen.getByTestId('call-up-button'));
 
     expect(dispatchAction).toHaveBeenCalledWith({

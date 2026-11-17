@@ -56,10 +56,11 @@ from world.magic.constants import GiftKind, SubstanceDirection
 from world.magic.factories import (
     GiftFactory,
     PathGiftGrantFactory,
+    SubstanceFactory,
     TechniqueCapabilityGrantFactory,
     TechniqueFactory,
 )
-from world.magic.models import GiftSubstance, Technique, TechniqueCapabilityGrant
+from world.magic.models import Technique, TechniqueCapabilityGrant
 from world.mechanics.factories import (
     ModifierTargetFactory,
     MovementApplicationFactory,
@@ -193,13 +194,14 @@ class PowerBuilder(JourneyCase):
         self.shadow_gift = GiftFactory(name="Shadow")
         self.storm_gift = GiftFactory(name="Storm", kind=GiftKind.MINOR)
         self.flame_gift = GiftFactory(name="Flame")
-        GiftSubstance.objects.create(
-            gift=self.flame_gift,
-            label="flame",
+        flame_substance = SubstanceFactory(
+            name="flame",
             stat_key=StatKey.LIGHTING,
             direction=SubstanceDirection.FALLING,
             property=self.flame,
         )
+        self.flame_gift.substance = flame_substance
+        self.flame_gift.save(update_fields=["substance"])
         skirmisher = PathFactory(name="Skirmisher")
         self.shadow_path = PathGiftGrantFactory(path=skirmisher, gift=self.shadow_gift)
         self.flame_path = PathGiftGrantFactory(path=skirmisher, gift=self.flame_gift)
@@ -343,6 +345,38 @@ class PowerBuilder(JourneyCase):
         self.assertNotIn("Shadow Walk", body)
         self.assertEqual(Technique.objects.get(pk=self.step.pk).written_by, self.writer)
 
+    def _flare_page(self) -> str:
+        flare = MovementApplicationFactory(
+            name="Flare",
+            capability=self.traversal,
+            required_effect_property=self.flame,
+            way_of_moving=CreatureTraversal.LEAPS,
+        )
+        response = self.client.get(reverse("admin_power_builder", args=[flare.pk]))
+        self.assertEqual(response.status_code, 200)
+        return _module(response.content.decode(), "near-module")
+
+    def test_a_technique_that_carries_the_property_from_its_gift_but_lacks_the_grant(self) -> None:
+        self._technique("Bare Flame", self.flame_gift, [])
+
+        near = self._flare_page()
+
+        # The flame gift's substance gives every technique of it the flame property.
+        self.assertIn("<td>Bare Flame</td>", near[near.index("but do not grant") :])
+        # It shows as carried: a checked, disabled box with a note, and no tick to untick.
+        row = _row(near[near.index("but do not grant") :], "Bare Flame")
+        self.assertIn('<input type="checkbox" checked disabled> flame', row)
+        self.assertIn("carried from the gift's substance", row)
+        self.assertNotIn('-properties"', row)
+        self.assertNotIn("Untick flame", near)
+
+    def test_a_technique_with_two_stored_marks_is_listed_once(self) -> None:
+        self._technique("Flare Step", self.flame_gift, [self.teleport, self.shadow])
+
+        near = self._flare_page()
+
+        self.assertEqual(near.count("<td>Flare Step</td>"), 1)
+
     def test_adding_a_technique_on_a_gift_and_path(self) -> None:
         response = self._post(
             {
@@ -356,9 +390,9 @@ class PowerBuilder(JourneyCase):
 
         self.assertEqual(response.status_code, 302, response.content.decode()[:2000])
         added = Technique.objects.get(gift=self.flame_gift, name="Flame Step")
-        self.assertEqual(
-            set(added.properties.values_list("name", flat=True)), {"teleport", "flame"}
-        )
+        # The application's property is ticked; the gift's substance property is carried.
+        self.assertEqual(set(added.properties.values_list("name", flat=True)), {"teleport"})
+        self.assertTrue(added.has_property("flame"))
         grant = TechniqueCapabilityGrant.objects.get(technique=added)
         self.assertEqual((grant.capability_id, grant.base_value), (self.traversal.pk, 3))
         self.assertEqual(grant.intensity_multiplier, Decimal(1))

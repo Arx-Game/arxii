@@ -311,6 +311,13 @@ class ItemTemplateAdmin(ItemTemplateAdminBase):
                 "classes": ["collapse"],
             },
         ),
+        (
+            "Harvesting",
+            {
+                "fields": ["primum_substance"],
+                "classes": ["collapse"],
+            },
+        ),
         CREDIT_FIELDSET,
     ]
     inlines = [

@@ -14,7 +14,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import MaxValueValidator
 from django.db import models
 from django.utils.functional import cached_property
 
@@ -27,6 +27,11 @@ from world.magic.constants import (
     ResonanceValence,
 )
 from world.magic.models.fall_redemption import ConversionType
+from world.magic.skill_choices import (
+    MAGIC_PICKER_SKILL_CHOICES,
+    MAGIC_PICKER_SKILL_ERROR_MESSAGES,
+    MAGIC_PICKER_SKILL_HELP,
+)
 
 if TYPE_CHECKING:
     from world.conditions.models import ConditionTemplate
@@ -317,40 +322,7 @@ class ResonanceEnvironmentConfig(SharedMemoryModel):
         ),
     )
 
-    # --- Gift substance (#5018): one place to tune every gift's substance ---
-    substance_power_at_full = models.PositiveSmallIntegerField(
-        verbose_name="Power at full strength",
-        default=10,
-        help_text=(
-            "Power a caster with a level-10 gift thread gains in a room full of her gift's "
-            "substance (and loses in one full of its opposite). Scaled by her thread level."
-        ),
-    )
-    substance_present_pct = models.PositiveSmallIntegerField(
-        verbose_name="Counts as present at (% of full strength)",
-        default=50,
-        validators=[MinValueValidator(1), MaxValueValidator(100)],
-        help_text=(
-            "How far toward the gift's full strength a room must be, as a percent, for its "
-            "substance to count as present. 1 to 100."
-        ),
-    )
-    substance_anima_per_measure = models.PositiveSmallIntegerField(
-        verbose_name="Anima to call it up to full strength",
-        default=5,
-        help_text=(
-            "Anima to call the substance up from an ordinary room to full strength, before "
-            "control; less for a smaller change. High control covers it."
-        ),
-    )
-    substance_resonance_per_measure = models.PositiveSmallIntegerField(
-        verbose_name="Resonance to call it up to full strength",
-        default=2,
-        help_text=(
-            "Resonance to call the substance up from an ordinary room to full strength. Spent "
-            "only on the share control does not cover."
-        ),
-    )
+    # --- Gift substance (#5018, #5125): place discount and unmet surroundings ---
     substance_place_cap_pct = models.PositiveSmallIntegerField(
         verbose_name="Largest place discount or surcharge (%)",
         default=50,
@@ -366,6 +338,80 @@ class ResonanceEnvironmentConfig(SharedMemoryModel):
         help_text=(
             "A technique's unmet surroundings restriction costs this percent of a typical "
             "roll at the caster's level."
+        ),
+    )
+
+    # --- Substances and Primum (#5125) ---
+    substance_related_share_pct = models.PositiveSmallIntegerField(
+        verbose_name="Related substance gives (% of full benefit)",
+        default=50,
+        validators=[MaxValueValidator(100)],
+        help_text=(
+            "How much of a Primum source's benefit a caster gets from a substance related to "
+            "her gift's own, as a percent. A matching substance gives full benefit. 0 to 100."
+        ),
+    )
+    substance_power_cap = models.PositiveSmallIntegerField(
+        verbose_name="Most power Primum can add",
+        default=12,
+        help_text=(
+            "The most power all of a caster's Primum sources add together, before her gift "
+            "thread scales it."
+        ),
+    )
+    substance_call_up_anima = models.PositiveSmallIntegerField(
+        verbose_name="Anima to call up Primum",
+        default=3,
+        help_text=(
+            "Anima one call-up costs, raising the place's Primum by one step. Shared by every "
+            "caster who calls it up together; never refused for lack of anima."
+        ),
+    )
+    harvest_check_type = models.ForeignKey(
+        "arxii.CheckType",
+        verbose_name="Check rolled to harvest Primum",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The check a harvester rolls to take Primum. Unset: nothing can be harvested.",
+    )
+    harvest_skill = models.ForeignKey(
+        "arxii.Skill",
+        verbose_name="Skill added to the harvest roll",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        limit_choices_to=MAGIC_PICKER_SKILL_CHOICES,
+        error_messages=MAGIC_PICKER_SKILL_ERROR_MESSAGES,
+        help_text=(
+            "The magical skill a harvester adds to the harvest roll. "
+            f"{MAGIC_PICKER_SKILL_HELP} Unset: nothing can be harvested."
+        ),
+    )
+    harvest_thread_bonus = models.PositiveSmallIntegerField(
+        verbose_name="Harvest bonus from the gift thread",
+        default=5,
+        help_text=(
+            "Bonus a harvester gets on the roll for a gift thread of the substance, scaled by "
+            "her thread level."
+        ),
+    )
+    harvest_ap_cost = models.PositiveSmallIntegerField(
+        verbose_name="Action points one harvest attempt costs",
+        default=2,
+        help_text=(
+            "Action points every attempt to harvest Primum costs, good roll or bad. A character "
+            "without them is refused before she rolls. 0: free."
+        ),
+    )
+    harvest_fatigue_cost = models.PositiveSmallIntegerField(
+        verbose_name="Physical fatigue one harvest attempt costs",
+        default=2,
+        help_text=(
+            "Physical fatigue every attempt to harvest Primum adds, good roll or bad, after the "
+            "usual fatigue rules. 0: none."
         ),
     )
 

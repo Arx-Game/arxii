@@ -8,7 +8,9 @@ from typing import ClassVar
 
 from allauth.account.models import EmailAddress, EmailConfirmation
 from allauth.mfa.models import Authenticator
+from django import forms
 from django.contrib import admin, messages
+from django.utils import timezone
 from django.utils.html import format_html
 
 from evennia_extensions.models import (
@@ -23,6 +25,7 @@ from evennia_extensions.models import (
     RoomSizeTier,
 )
 from world.admin_utils import OneRowPerFormSet
+from world.magic.models import PlacePrimum
 
 logger = logging.getLogger(__name__)
 
@@ -321,13 +324,56 @@ class RoomDescVariantInline(admin.TabularInline):
     fields: ClassVar[list[str]] = ["season", "phase", "description"]
 
 
+class PlacePrimumForm(forms.ModelForm):
+    """A lair's Primum row. Editing its stock or refill starts the refill count again."""
+
+    #: The fields whose change restarts the refill clock.
+    CLOCK_FIELDS: ClassVar[frozenset[str]] = frozenset(
+        {"stored_amount", "capacity", "refill_per_day", "is_finite"}
+    )
+
+    class Meta:
+        model = PlacePrimum
+        fields = ["substance", "capacity", "stored_amount", "refill_per_day", "is_finite"]
+
+    def save(self, commit: bool = True) -> PlacePrimum:
+        row = super().save(commit=False)
+        if self.CLOCK_FIELDS & set(self.changed_data):
+            row.stamped_at = timezone.now()
+        if commit:
+            row.save()
+        return row
+
+
+class PlacePrimumInline(admin.TabularInline):
+    """The Primum a lair holds, one row per substance (#5125)."""
+
+    model = PlacePrimum
+    form = PlacePrimumForm
+    formset = OneRowPerFormSet
+    extra = 0
+    verbose_name = "Primum held here"
+    verbose_name_plural = "Primum held here"
+    autocomplete_fields: ClassVar[list[str]] = ["substance"]
+    fields: ClassVar[list[str]] = [
+        "substance",
+        "capacity",
+        "stored_amount",
+        "refill_per_day",
+        "is_finite",
+    ]
+
+
 @admin.register(RoomProfile)
 class RoomProfileAdmin(admin.ModelAdmin):
     list_display: ClassVar[list[str]] = ["objectdb", "area", "size", "is_outdoor", "is_public"]
     list_filter: ClassVar[list[str]] = ["area__level", "is_outdoor", "is_public", "size"]
     search_fields: ClassVar[list[str]] = ["objectdb__db_key"]
     autocomplete_fields: ClassVar[list[str]] = ["area", "objectdb"]
-    inlines: ClassVar[list[type[admin.TabularInline]]] = [RoomDescVariantInline]
+    inlines: ClassVar[list[type[admin.TabularInline]]] = [
+        RoomDescVariantInline,
+        PlacePrimumInline,
+    ]
 
 
 @admin.register(RoomSizeTier)

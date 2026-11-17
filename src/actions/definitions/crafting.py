@@ -65,6 +65,14 @@ _CRAFT_EXCEPTIONS = (
 _NO_ACCOUNT_MSG = "No account plays this character."
 
 
+def _optional_requirement_pks(raw: object) -> list[int]:
+    """The optional-ingredient pks a crafter named (#5125); client data, so anything else is
+    dropped rather than trusted."""
+    if not isinstance(raw, list | tuple):
+        return []
+    return [pk for pk in raw if isinstance(pk, int) and not isinstance(pk, bool)]
+
+
 @dataclass
 class AttachFacetAction(Action):
     """Roll the facet-attach crafting recipe and (on success) attach it."""
@@ -97,6 +105,9 @@ class AttachFacetAction(Action):
                 crafter_character=actor,
                 item_instance=item_instance,
                 facet=facet,
+                optional_requirements=_optional_requirement_pks(
+                    kwargs.get("optional_requirements")
+                ),
             )
         except _CRAFT_EXCEPTIONS as exc:
             return ActionResult(success=False, message=exc.user_message)
@@ -250,6 +261,9 @@ class AttachStyleAction(Action):
                 crafter_character=actor,
                 item_instance=item_instance,
                 style=style,
+                optional_requirements=_optional_requirement_pks(
+                    kwargs.get("optional_requirements")
+                ),
             )
         except _CRAFT_EXCEPTIONS as exc:
             return ActionResult(success=False, message=exc.user_message)
@@ -313,6 +327,9 @@ class CreateItemAction(Action):
                 styles=styles,
                 dedicate_to=dedicate_to,
                 worked_from=worked_from,
+                optional_requirements=_optional_requirement_pks(
+                    kwargs.get("optional_requirements")
+                ),
             )
         except _CRAFT_EXCEPTIONS as exc:
             return ActionResult(success=False, message=exc.user_message)

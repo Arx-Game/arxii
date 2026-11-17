@@ -341,8 +341,9 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   the DB, matched through the shared `gather_consumable_pks` seam. This is the *eligibility*
   axis. **Value-denominated requirements** ("a bounty = N value of a tier") and per-stone
   size/value individuation are **Build 0b**, gated on the gemstone-value ladder brainstorm.
-  Crafting execution honors category requirements end-to-end; the quote preview is guarded
-  (`CategoryRequirementsNotQuotable`) until the quote surface lands.
+  Crafting execution and the quote both honor category requirements end-to-end (#5125: a quote
+  row carries `requirement_id`, `material_category_id`, `item_template_id`, `name`,
+  `is_optional`; the old `CategoryRequirementsNotQuotable` guard is gone).
 
 - **Gem value model (Build 0b, slice 1) — DONE.** Gem *types* are `ItemTemplate` rows + a
   `GemDetails` sidecar (`quality_level` 1–15; tier = `MaterialCategory`; motif reuses
