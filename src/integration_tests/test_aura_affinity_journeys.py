@@ -161,6 +161,12 @@ class AuraAffinityAtTheAcademy(_AcademyCourseCase):
                 "description": self.dawn.description,
                 "corruption_coefficient": self.dawn.corruption_coefficient,
                 "burn_value": self.dawn.burn_value,
+                # The earn and learn rates and the ritual's partner effect (#5181) are
+                # required fields a browser posts with their current values.
+                "claim_verb": self.dawn.claim_verb,
+                "earn_rate_percent": self.dawn.earn_rate_percent,
+                "learn_rate_percent": self.dawn.learn_rate_percent,
+                "ritual_partner_fatigue": self.dawn.ritual_partner_fatigue,
                 # The page carries the affinity's kindling situations inline (#5124); a
                 # browser posts the inline's management form with an empty set of rows.
                 "kindling_situations-TOTAL_FORMS": "0",
