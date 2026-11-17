@@ -1074,6 +1074,7 @@ class CharacterResonanceAdmin(admin.ModelAdmin):
         "resonance",
         "balance",
         "lifetime_earned",
+        "kindled_unclaimed",
         "claimed_at",
     ]
     search_fields = ["character_sheet__character__db_key", "resonance__name"]

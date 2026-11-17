@@ -2449,8 +2449,9 @@ the tether.
   called explicitly: after a pose posts (web `_refresh_impulses_after_pose`, telnet pose), before a cast's
   modifiers are gathered, and when the kindled panel or telnet `resonances` is shown.
 - **Giving in.** `grant_resonance` calls `give_in_to_compulsion(grant, row)`: for a grant whose source is in
-  `COMPULSION_INDULGING_SOURCES` (`constants.py`; today only `KINDLED_DEED`, the character's own act, and the
-  later claiming pose joins it; a grant from another player, a GM or a cron, and `SUCCUMBED`, never counts) of a resonance the character is compelled by, in a live scene
+  `COMPULSION_INDULGING_SOURCES` (`constants.py`; only `KINDLED_DEED`, the instant share of the character's own
+  deed; a claim (`KINDLED_CLAIM`) and an Anima ritual (`ANIMA_RITUAL`) do not join it, since the Compulsion
+  lifts when the deed is done; a grant from another player, a GM or a cron, and `SUCCUMBED`, never counts) of a resonance the character is compelled by, in a live scene
   and the first such deed there, it lifts the Compulsion for the scene, accrues
   `compulsion_indulge_corruption` (`CorruptionSource.INDULGED`: exact, no resistance, the Hollow absorbs none)
   and, for a Sineater, assigns it to their largest holding (`add_to_largest_holding`). The line goes out in
