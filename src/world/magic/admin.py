@@ -751,7 +751,7 @@ class TechniqueAdmin(admin.ModelAdmin):
     ]
     filter_horizontal = ["restrictions", "target_prerequisites", "properties"]
     search_fields = ["name", "description"]
-    readonly_fields = ["get_tier", "get_effect_summary"]
+    readonly_fields = ["get_tier", "get_effect_summary", "get_carried_property"]
     autocomplete_fields = ["creator", "effect_type", "gift", "skill"]
     list_select_related = ["gift", "effect_type"]
     inlines = [
@@ -785,6 +785,31 @@ class TechniqueAdmin(admin.ModelAdmin):
     @admin.display(description="Tier")
     def get_tier(self, obj: Technique) -> int:
         return obj.tier
+
+    @admin.display(description="Property carried from its gift's substance")
+    def get_carried_property(self, obj: Technique) -> str:
+        """The property every technique of this gift carries, read as the cast reads it (#5125).
+
+        It is not a stored mark, so the Properties widget cannot remove it. Shows "None" for a
+        technique whose gift has no substance (or is minor), and for one not yet saved.
+        """
+        from world.magic.services.technique_marks import (  # noqa: PLC0415
+            substance_property_ids_by_technique,
+        )
+        from world.mechanics.models import Property  # noqa: PLC0415
+
+        property_id = (
+            substance_property_ids_by_technique([obj.pk]).get(obj.pk)
+            if obj.pk is not None
+            else None
+        )
+        name = Property.objects.get(pk=property_id).name if property_id is not None else "None"
+        return format_html(
+            '{}<div class="help">{}</div>',
+            name,
+            "Every technique of this gift carries it. "
+            "It is not stored here and cannot be unticked.",
+        )
 
     @admin.display(description="Targets")
     def get_relationship(self, obj: Technique) -> str:
