@@ -380,7 +380,7 @@ class SineatingRitualTests(SineatingCase):
         # A declined plea does not count as a performance: they may plead again.
         request_sineating(self.sinner, self.sineater, 3)
 
-    def test_the_gain_source_is_sineating_with_no_mire_share(self) -> None:
+    def test_the_gain_source_is_sineating(self) -> None:
         request_sineating(self.sinner, self.sineater, 2)
         self.perform(2)
         from world.magic.models import ResonanceGrant

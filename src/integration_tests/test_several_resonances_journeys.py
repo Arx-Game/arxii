@@ -13,7 +13,7 @@ is unsettled and Ruin is what did it. Hand-worked from the shipped thresholds (t
   thread; the leading resonance's balance is untouched.
 
 The second half walks the spec's Verification flows (creation, imbue and pull, unsettled,
-atone and accept, Sineater, retune) through the REST API and the web dispatch seam. The
+atone and accept, retune) through the REST API and the web dispatch seam. The
 creation intro text, the halo drawing and the dialogs are the frontend's (vitest covers
 them); what the browser is told about them is read here as the API payload they draw from.
 """
@@ -52,7 +52,7 @@ from world.checks.test_helpers import force_check_outcome
 from world.classes.factories import CharacterClassFactory
 from world.classes.services import set_primary_class_level
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
-from world.magic.constants import EffectKind, GainSource, ReflectionChoice, TargetKind
+from world.magic.constants import EffectKind, ReflectionChoice, TargetKind
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterAuraFactory,
@@ -80,7 +80,6 @@ from world.magic.models import (
 from world.magic.models.aura import CharacterAuraShare
 from world.magic.services.drift import get_drift_config, get_drift_correction_config
 from world.magic.services.reflection import record_reflection
-from world.magic.services.resonance import grant_resonance
 from world.magic.specialization.services import provision_latent_gift_thread
 from world.scenes.factories import SceneFactory
 from world.scenes.models import Scene
@@ -964,67 +963,6 @@ class DisowningOrEmbracing(DriftJourneyCase):
         # 40 of 540 is 7.41: who she is moved up to where she has got to, the line with it.
         self.assertEqual(_share_rows(after)["Abyssal"], (Decimal("7.41"), Decimal("7.41")))
         self.assertEqual(after["dominant_affinity"], "Celestial")
-
-
-class ASineaterTakesTheMire(JourneyCase):
-    """Flow 5. Ysmay is settled wholly Celestial, with 700 Dawnlight lifetime, and as a bonded
-    Sineater takes Ruin (Abyssal) from her Sinner's Mire the way a Sineating does: a grant
-    from the Sineating source flagged as Mire.
-
-    Hand-worked with the shipped allowance of 30 percent of all lifetime resonance: 200 Mire
-    of 900 is 22 percent, a fifth, inside it, and the Mire is kept apart from her own share
-    (her own Abyssal is 0), so she is not unsettled. A further 200 makes 400 of 1100, 36 percent,
-    6 past the allowance: unsettled by her Ruin. Accepting makes the Mire her own: the aura
-    shows it as her Abyssal share (36.36) and no Mire remains.
-    """
-
-    def setUp(self) -> None:
-        super().setUp()
-        Affinity.objects.clear_cache()
-        self.celestial, _primal, self.abyssal = ensure_canonical_affinities()
-        self.dawnlight = ResonanceFactory(name="Dawnlight", affinity=self.celestial)
-        self.ruin = ResonanceFactory(name="Ruin", affinity=self.abyssal)
-        self.room = self.make_room("The Mire Edge")
-        self.ysmay = self.make_player("Ysmay", room=self.room)
-        self.sheet = self.ysmay.sheet_data
-        set_aura_split(
-            CharacterAuraFactory(character=self.sheet), celestial="100", primal="0", abyssal="0"
-        )
-        _hold(self.sheet, self.dawnlight, 700)
-        self.client = self.api(self.account_of(self.ysmay))
-
-    def take(self, units: int) -> None:
-        grant_resonance(self.sheet, self.ruin, units, source=GainSource.SINEATING, from_mire=True)
-
-    def aura(self) -> dict:
-        return _aura_payload(self.client, self.ysmay)
-
-    def test_the_mire_shows_apart_and_unsettles_only_past_the_allowance(self) -> None:
-        self.take(200)
-
-        inside = self.aura()
-        self.assertEqual(inside["mire_share_words"], "a fifth")
-        self.assertIs(inside["unsettled"], False)
-        self.assertEqual(inside["unsettled_line"], "")
-
-        self.take(200)
-
-        past = self.aura()
-        self.assertEqual(past["mire_share_words"], "a third")
-        self.assertIs(past["unsettled"], True)
-        self.assertEqual(
-            past["unsettled_line"], "Your Ruin has grown strong enough to make you unsettled."
-        )
-
-        done = embrace_through_the_rite(self, self.ysmay, self.ruin)
-
-        self.assertEqual(done.status_code, status.HTTP_200_OK, done.data)
-        after = self.aura()
-        self.assertIs(after["unsettled"], False)
-        self.assertEqual(after["mire_share_words"], "none")
-        self.assertEqual(_share_rows(after)["Abyssal"], (Decimal("36.36"), Decimal("36.36")))
-        row = CharacterResonance.objects.get(character_sheet=self.sheet, resonance=self.ruin)
-        self.assertEqual((row.lifetime_earned, row.mire_lifetime), (400, 0))
 
 
 class RetuningAThreadOnTheWeb(ThreadRetuneCase):

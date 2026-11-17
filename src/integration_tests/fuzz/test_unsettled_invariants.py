@@ -4,23 +4,23 @@ Two properties of the aura, and of a thread's resonance rows, that no hand-picke
 exhaust, judged on what the database holds after each step of a random history.
 
 The aura. Hypothesis seeds a character who is settled somewhere (a random split of 100), holds
-random lifetime resonance in six resonances (two per affinity), some of it Mire (a Sineater's
-burden), then runs up to five steps: a grant, a Mire grant, an atone (moving lifetime from
-one resonance to another) or an accept. After every step:
+random lifetime resonance in six resonances (two per affinity), then runs up to five steps: a
+grant, an atone (moving lifetime from one resonance to another) or an accept. After every step:
 
 - her settled shares sum to exactly 100;
-- every row's ``mire_lifetime`` is at most its ``lifetime_earned``;
 - an atone moves lifetime and creates none (the total lifetime is unchanged);
 - a grant of the main affinity (the largest settled share) never raises ``steps_past``;
-- an accept leaves her with ``steps_past == 0`` and no Mire, whoever she was (a Sineater past
-  the Mire allowance included), and refuses when she was not unsettled.
+- an accept leaves her with ``steps_past == 0``, whoever she was, and refuses when she was not
+  unsettled.
 
 The rite of settling disowning her Ruin (``perform_settling_rite``, the service the web dialog
-and ``aura settle`` reach) is fuzzed on a Sineater: whatever the cap lets her convert, the
-Mire excess goes first (her Mire shrinks by the amount up to the excess, her own lifetime is
-untouched while the Mire excess covers it), the Mire never exceeds the lifetime left, and
-total lifetime is conserved. The random atone in the history above is the conversion
-primitive alone, with a random Mire amount, for the clamp.
+and ``aura settle`` reach) is fuzzed too: whatever the cap lets her convert, she converts
+exactly the least of the cap, what she holds of Ruin and what stands past who she is, and total
+lifetime is conserved.
+
+The Mire. A Sineater's Mire is corruption she carries for her Sinners (``MireHolding``). Over any
+sequence of taking a Sinner's corruption on, releasing some of it, daily decay and giving in to
+a Compulsion, the holdings in a resonance never sum to more than her corruption in it.
 
 The thread. A thread's ``ThreadResonance`` amounts are cumulative per resonance (the total
 ever imbued), NOT the points still in the bucket: ``developed_points`` is what is left after
@@ -62,6 +62,8 @@ from world.magic.constants import GainSource, ReflectionChoice
 from world.magic.exceptions import NotUnsettledError
 from world.magic.factories import (
     CharacterAuraFactory,
+    CharacterResonanceFactory,
+    CorruptionConditionTemplateFactory,
     DriftConversionCapFactory,
     DriftConversionOfferFactory,
     DriftCorrectionRiteFactory,
@@ -80,12 +82,14 @@ from world.magic.models import (
     CharacterAuraShare,
     CharacterResonance,
     DriftCorrectionOutcomeShare,
+    MireHolding,
     ResonanceConversion,
     Thread,
     ThreadResonance,
 )
 from world.magic.services.aura import recompute_aura, set_settled_shares
 from world.magic.services.conversion import convert_resonance, convert_resonance_amount
+from world.magic.services.corruption import accrue_corruption, reduce_corruption
 from world.magic.services.drift import (
     accept_aura_change,
     drift_for,
@@ -93,12 +97,15 @@ from world.magic.services.drift import (
     get_drift_correction_config,
 )
 from world.magic.services.drift_correction import perform_settling_rite
+from world.magic.services.mire import add_to_largest_holding, release_mire, take_on_corruption
 from world.magic.services.resonance import grant_resonance, spend_resonance_for_imbuing
 from world.magic.services.thread_resonance import (
     ThreadResonanceChangeError,
     change_thread_resonance,
 )
 from world.magic.types import AffinityShare
+from world.magic.types.corruption import CorruptionRecoverySource, CorruptionSource
+from world.relationships.factories import CharacterRelationshipFactory
 from world.scenes.factories import SceneFactory
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 from world.traits.services import ensure_canonical_check_outcome
@@ -106,17 +113,15 @@ from world.traits.services import ensure_canonical_check_outcome
 # --- the aura ----------------------------------------------------------------------------
 
 ONE_HUNDRED = Decimal(100)
-KINDS = ("grant", "mire", "atone", "accept")
+KINDS = ("grant", "atone", "accept")
 
 
 @st.composite
-def auras(draw: st.DrawFn) -> tuple[tuple[int, int, int], list[tuple[int, int]]]:
-    """Settled weights for Celestial / Primal / Abyssal, and (lifetime, mire percent) per
-    resonance, two resonances per affinity in that order."""
+def auras(draw: st.DrawFn) -> tuple[tuple[int, int, int], list[int]]:
+    """Settled weights for Celestial / Primal / Abyssal, and the lifetime held in each of six
+    resonances, two per affinity in that order."""
     weights = draw(st.tuples(*[st.integers(0, 10)] * 3).filter(lambda w: sum(w) > 0))
-    held = draw(
-        st.lists(st.tuples(st.integers(0, 300), st.integers(0, 100)), min_size=6, max_size=6)
-    )
+    held = draw(st.lists(st.integers(0, 300), min_size=6, max_size=6))
     return weights, held
 
 
@@ -125,13 +130,8 @@ steps = st.tuples(
     st.integers(0, 5),  # which resonance (or source row)
     st.integers(0, 5),  # which resonance (the atone's target)
     st.integers(1, 200),  # an amount, or a percent of the source's lifetime
-    st.integers(0, 100),  # the atone's Mire percent
     st.sampled_from([Decimal("0.5"), Decimal(1), Decimal("1.5")]),
 )
-
-# A Sineater's Mire (the Soul Tether bond is not modelled) far past the allowance (400 of
-# 1100 is 36 percent against 30), who accepts: she must come out with nothing past anything.
-SINEATER = ((10, 0, 0), [(700, 0), (0, 0), (0, 0), (0, 0), (400, 100), (0, 0)])
 
 
 class UnsettledAuraInvariants(HypothesisTestCase):
@@ -158,25 +158,21 @@ class UnsettledAuraInvariants(HypothesisTestCase):
                 if weight
             ],
         )
-        for resonance, (lifetime, mire_percent) in zip(self.resonances, held, strict=True):
+        for resonance, lifetime in zip(self.resonances, held, strict=True):
             CharacterResonance.objects.create(
                 character_sheet=sheet,
                 resonance=resonance,
                 balance=lifetime,
                 lifetime_earned=lifetime,
-                mire_lifetime=lifetime * mire_percent // 100,
             )
         recompute_aura(sheet)
         return sheet, aura
 
-    def assert_sound(self, sheet, aura) -> None:
+    def assert_sound(self, aura) -> None:
         settled = CharacterAuraShare.objects.filter(aura=aura).values_list(
             "settled_percent", flat=True
         )
         self.assertEqual(sum(settled, Decimal(0)), ONE_HUNDRED)
-        for row in CharacterResonance.objects.filter(character_sheet=sheet):
-            self.assertLessEqual(row.mire_lifetime, row.lifetime_earned)
-            self.assertGreaterEqual(row.mire_lifetime, 0)
 
     def lifetime(self, sheet) -> int:
         return sum(
@@ -185,7 +181,7 @@ class UnsettledAuraInvariants(HypothesisTestCase):
             )
         )
 
-    def step(self, sheet, kind, i, j, n, m, rate) -> None:  # noqa: PLR0913 - the drawn step
+    def step(self, sheet, kind, i, j, n, rate) -> None:  # noqa: PLR0913 - the drawn step
         resonance = self.resonances[i]
         if kind == "grant":
             before = drift_for(sheet)
@@ -195,8 +191,6 @@ class UnsettledAuraInvariants(HypothesisTestCase):
                 and resonance.affinity_id == before.main_affinity.pk
             ):
                 self.assertLessEqual(drift_for(sheet).steps_past, before.steps_past)
-        elif kind == "mire":
-            grant_resonance(sheet, resonance, n, source=GainSource.SINEATING, from_mire=True)
         elif kind == "atone":
             rows = list(
                 CharacterResonance.objects.filter(character_sheet=sheet, lifetime_earned__gt=0)
@@ -214,7 +208,6 @@ class UnsettledAuraInvariants(HypothesisTestCase):
                 amount=amount,
                 multiplier=rate,
                 gain_source=GainSource.DRIFT_CORRECTION,
-                mire_amount=amount * m // 100,
             )
             self.assertEqual(self.lifetime(sheet), total)
         else:
@@ -222,50 +215,34 @@ class UnsettledAuraInvariants(HypothesisTestCase):
             if before.steps_past > 0:
                 accept_aura_change(sheet)
                 self.assertEqual(drift_for(sheet).steps_past, 0)
-                self.assertFalse(
-                    CharacterResonance.objects.filter(
-                        character_sheet=sheet, mire_lifetime__gt=0
-                    ).exists()
-                )
             else:
                 with self.assertRaises(NotUnsettledError):
                     accept_aura_change(sheet)
 
     def run_history(self, aura_spec, history) -> None:
         sheet, aura = self.character(aura_spec)
-        self.assert_sound(sheet, aura)
-        for kind, i, j, n, m, rate in history:
-            self.step(sheet, kind, i, j, n, m, rate)
-            self.assert_sound(sheet, aura)
+        self.assert_sound(aura)
+        for kind, i, j, n, rate in history:
+            self.step(sheet, kind, i, j, n, rate)
+            self.assert_sound(aura)
 
     @given(aura_spec=auras(), history=st.lists(steps, max_size=5))
     def test_any_history_keeps_the_aura_sound(self, aura_spec, history) -> None:
         self.run_history(aura_spec, history)
 
-    def test_a_sineater_past_the_mire_allowance_accepts_into_nothing_past(self) -> None:
-        sheet, _aura = self.character(SINEATER)
-        before = drift_for(sheet)
-        self.assertGreater(before.steps_past, 0)
-
-        accept_aura_change(sheet)
-
-        self.assertEqual(drift_for(sheet).steps_past, 0)
-
 
 # --- the atone rite on a Sineater ---------------------------------------------------------
 
 
-class AtoningTakesTheMireFirst(HypothesisTestCase):
-    """A Sineater is settled Celestial with Dawnlight lifetime D and Ruin (Abyssal) lifetime R,
-    of which M is Mire. She atones Ruin into Dawnlight through the real rite, the check forced
-    to a full-share Success.
+class AtoningConvertsWhatStandsPast(HypothesisTestCase):
+    """A character is settled Celestial with Dawnlight lifetime D and Ruin (Abyssal) lifetime R.
+    She atones Ruin into Dawnlight through the real rite, the check forced to a full-share
+    Success.
 
-    The rule (#5123): the Mire's excess converts first. With the shipped allowance, the Mire
-    excess is the Mire's share of all lifetime past the allowance, in points rounded up. The
-    amount she converts comes off her Mire up to that excess, and only then off her own
-    lifetime; so her Mire is M less the converted amount (up to the excess, never below zero),
-    capped by the lifetime she has left. What the rite refuses (more than is past who she is)
-    changes nothing.
+    She converts the least of the open cap, what she holds of Ruin, and what stands past who
+    she is: the Abyssal share of all her lifetime, less the shipped range before Unsettled,
+    in points rounded up. Total lifetime is conserved. What the rite refuses (more than is
+    past who she is) changes nothing.
     """
 
     @classmethod
@@ -291,7 +268,7 @@ class AtoningTakesTheMireFirst(HypothesisTestCase):
                 outcome_tier=outcome, defaults={"converted_share": Decimal("1.00")}
             )
 
-    def sineater(self, dawn: int, ruin: int, mire: int):
+    def character(self, dawn: int, ruin: int):
         sheet = CharacterSheetFactory()
         set_aura_split(
             CharacterAuraFactory(character=sheet), celestial="100", primal="0", abyssal="0"
@@ -300,22 +277,14 @@ class AtoningTakesTheMireFirst(HypothesisTestCase):
             character_sheet=sheet, resonance=self.dawnlight, balance=dawn, lifetime_earned=dawn
         )
         CharacterResonance.objects.create(
-            character_sheet=sheet,
-            resonance=self.ruin,
-            balance=ruin,
-            lifetime_earned=ruin,
-            mire_lifetime=mire,
+            character_sheet=sheet, resonance=self.ruin, balance=ruin, lifetime_earned=ruin
         )
         recompute_aura(sheet)
         return sheet
 
-    def atone(self, dawn: int, ruin: int, mire: int, amount: int) -> int:
-        """Settle with an open cap of ``amount``, disowning her Ruin; return what converted.
-
-        The rite converts the cap at a full share, no more than she holds of Ruin and no more
-        than stands past who she is; a cap past that clamps, and moves nothing it should not.
-        """
-        sheet = self.sineater(dawn, ruin, mire)
+    def atone(self, dawn: int, ruin: int, amount: int) -> int:
+        """Settle with an open cap of ``amount``, disowning her Ruin; return what converted."""
+        sheet = self.character(dawn, ruin)
         offer = DriftConversionOfferFactory(character_sheet=sheet, scene=self.scene)
         DriftConversionCapFactory(offer=offer, target_resonance=self.dawnlight, cap=amount)
         ReflectionFactory(
@@ -327,24 +296,16 @@ class AtoningTakesTheMireFirst(HypothesisTestCase):
             )
         )
         total = dawn + ruin
-        allowance = get_drift_config().mire_allowance_percent
-        past = Decimal(mire) * ONE_HUNDRED / total - allowance
-        mire_excess = ceil(past * total / ONE_HUNDRED) if past > 0 else 0
-        convertible = drift_for(sheet).convertible_points(self.abyssal.pk, mire)
-        moved = min(amount, ruin, convertible)
+        # Ruin is all of the Abyssal, which she settled at nothing.
+        past = Decimal(ruin) * ONE_HUNDRED / total - get_drift_config().unsettled_tolerance_percent
+        past_points = ceil(past * total / ONE_HUNDRED) if past > 0 else 0
+        moved = min(amount, ruin, past_points)
 
         with force_check_outcome(self.outcomes["Success"]):
             perform_settling_rite(sheet, components=[offering])
 
         row = CharacterResonance.objects.get(character_sheet=sheet, resonance=self.ruin)
         self.assertEqual(row.lifetime_earned, ruin - moved)
-        # The Mire's excess is taken first: up to the excess, the amount comes off the Mire.
-        taken = min(moved, mire_excess, mire)
-        self.assertEqual(row.mire_lifetime, min(mire - taken, ruin - moved))
-        if moved <= min(mire_excess, mire):
-            own_before = ruin - mire
-            self.assertEqual(row.lifetime_earned - row.mire_lifetime, own_before)
-        self.assertLessEqual(row.mire_lifetime, row.lifetime_earned)
         self.assertEqual(
             sum(
                 CharacterResonance.objects.filter(character_sheet=sheet).values_list(
@@ -355,31 +316,104 @@ class AtoningTakesTheMireFirst(HypothesisTestCase):
         )
         return moved
 
-    @given(
-        dawn=st.integers(100, 700),
-        ruin=st.integers(1, 300),
-        mire_percent=st.integers(0, 100),
-        amount=st.integers(1, 300),
-    )
-    @example(dawn=600, ruin=300, mire_percent=100, amount=20)
-    @example(dawn=600, ruin=300, mire_percent=100, amount=30)
-    @example(dawn=500, ruin=300, mire_percent=50, amount=40)
-    def test_the_mire_excess_goes_first(self, dawn, ruin, mire_percent, amount) -> None:
-        self.atone(dawn, ruin, ruin * mire_percent // 100, min(amount, ruin))
+    @given(dawn=st.integers(100, 700), ruin=st.integers(1, 300), amount=st.integers(1, 300))
+    @example(dawn=500, ruin=300, amount=40)
+    def test_she_converts_the_least_of_the_cap_her_ruin_and_what_stands_past(
+        self, dawn, ruin, amount
+    ) -> None:
+        self.atone(dawn, ruin, min(amount, ruin))
 
-    def test_a_sineater_past_the_allowance_is_able_to_atone(self) -> None:
-        # 300 Mire of 900 is 33.3 percent against 30: 30 points of Mire excess, and no
-        # share of her own Ruin: the rite converts exactly the excess, all of it Mire.
-        self.assertEqual(self.atone(600, 300, 300, 30), 30)
-        # A cap past the excess clamps to it: there is nothing of her own to convert.
-        self.assertEqual(self.atone(600, 300, 300, 31), 30)
+    def test_a_cap_past_what_stands_past_her_line_clamps_to_it(self) -> None:
+        # 500 Ruin of 1000 is 50 percent against a range of 5: 450 points stand past.
+        self.assertEqual(self.atone(500, 500, 300), 300)
+        self.assertEqual(self.atone(500, 500, 500), 450)
 
-    def test_her_own_ruin_goes_after_the_mires_excess(self) -> None:
-        # 200 Mire of 300 Ruin, 300 Dawnlight: the Mire is 33.3 percent of 600, 20 points past
-        # the allowance, and her own 100 Ruin is past her line too. Converting 50 takes the
-        # Mire's 20 first and 30 of her own (the atone asserts the Mire falls to 180 and
-        # her own lifetime from 100 to 70).
-        self.assertEqual(self.atone(300, 300, 200, 50), 50)
+
+# --- the Mire a Sineater carries ----------------------------------------------------------
+
+MIRE_OPERATIONS = ("take", "release", "decay", "indulge")
+
+mire_steps = st.tuples(
+    st.sampled_from(MIRE_OPERATIONS),
+    st.integers(0, 1),  # which of her two Sinners
+    st.integers(1, 120),  # an amount
+)
+
+
+class MireNeverExceedsTheSineatersCorruption(HypothesisTestCase):
+    """Corvin carries Ruin for two Sinners, each of whom carries 500 of it.
+
+    Whatever order she takes a Sinner's corruption on, releases some of what she holds, lets
+    daily decay take some off, or gives in to a Compulsion (which adds to the Sinner she holds
+    the most for), the holdings in Ruin never sum to more than her corruption in it.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        Affinity.objects.clear_cache()
+        cls.abyssal = ensure_canonical_affinities()[2]
+        cls.ruin = ResonanceFactory(name="Mire Fuzz Ruin", affinity=cls.abyssal)
+        CorruptionConditionTemplateFactory(corruption_resonance=cls.ruin)
+
+    def cast(self):
+        """Corvin, her two Sinners, and the Sinners' corruption, built inside the example."""
+        sineater = CharacterSheetFactory()
+        CharacterResonanceFactory(character_sheet=sineater, resonance=self.ruin)
+        sinners = [CharacterSheetFactory() for _ in range(2)]
+        for sinner in sinners:
+            CharacterResonanceFactory(
+                character_sheet=sinner, resonance=self.ruin, corruption_current=500
+            )
+            CharacterRelationshipFactory(source=sineater, target=sinner)
+        return sineater, sinners
+
+    def assert_within(self, sineater) -> None:
+        held = sum(
+            MireHolding.objects.filter(
+                relationship__source=sineater, resonance=self.ruin
+            ).values_list("amount", flat=True)
+        )
+        carried = CharacterResonance.objects.get(
+            character_sheet=sineater, resonance=self.ruin
+        ).corruption_current
+        self.assertLessEqual(held, carried)
+
+    def operate(self, sineater, sinners, operation: str, who: int, amount: int) -> None:
+        sinner = sinners[who]
+        if operation == "take":
+            take_on_corruption(
+                sineater_sheet=sineater, sinner_sheet=sinner, resonance=self.ruin, amount=amount
+            )
+        elif operation == "release":
+            holding = MireHolding.objects.filter(
+                relationship__source=sineater, relationship__target=sinner, resonance=self.ruin
+            ).first()
+            if holding is not None:
+                release_mire(holding=holding, amount=amount)
+        elif operation == "decay":
+            reduce_corruption(
+                character_sheet=sineater,
+                resonance=self.ruin,
+                amount=amount,
+                source=CorruptionRecoverySource.PASSIVE_DECAY,
+                _from_decay=True,
+                grant_resonance_back=False,
+            )
+        else:
+            added = accrue_corruption(
+                character_sheet=sineater,
+                resonance=self.ruin,
+                amount=amount,
+                source=CorruptionSource.INDULGED,
+            ).amount_applied
+            add_to_largest_holding(sineater, self.ruin, added)
+
+    @given(history=st.lists(mire_steps, max_size=12))
+    def test_the_holdings_never_sum_to_more_than_her_corruption(self, history) -> None:
+        sineater, sinners = self.cast()
+        for operation, who, amount in history:
+            self.operate(sineater, sinners, operation, who, amount)
+            self.assert_within(sineater)
 
 
 # --- a thread's resonance rows -----------------------------------------------------------

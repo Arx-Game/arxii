@@ -254,8 +254,48 @@ class SoulTetherDetailViewTests(APITestCase):
         self.assertIn("sineater_lifetime_helped", data)
         self.assertIn("sinner_corruption_stage", data)
         self.assertIn("sineater_strain_stage", data)
+        self.assertEqual(data["mire"], [])
         self.assertEqual(data["sinner_sheet_id"], self.sinner_sheet.pk)
         self.assertEqual(data["sineater_sheet_id"], self.sineater_sheet.pk)
+
+    def test_the_sineater_sees_the_mire_they_carry_and_the_sinner_sees_none_of_it(self) -> None:
+        """The Mire per Sinner is the Sineater's alone (#5177): the Sinner is never told."""
+        from world.conditions.factories import ConditionInstanceFactory
+        from world.magic.factories import CorruptionConditionTemplateFactory
+        from world.magic.models import CharacterResonance, MireHolding
+        from world.relationships.models import CharacterRelationship
+
+        side = CharacterRelationship.objects.get(
+            source=self.sineater_sheet, target=self.sinner_sheet, is_soul_tether=True
+        )
+        MireHolding.objects.create(relationship=side, resonance=self.resonance, amount=120)
+        CharacterResonance.objects.update_or_create(
+            character_sheet=self.sineater_sheet,
+            resonance=self.resonance,
+            defaults={"corruption_current": 120},
+        )
+        template = CorruptionConditionTemplateFactory(corruption_resonance=self.resonance)
+        ConditionInstanceFactory(
+            target=self.sineater_sheet.character,
+            condition=template,
+            current_stage=template.stages.get(stage_order=1),
+            severity=120,
+        )
+        url = f"/api/magic/soul-tether/{self.relationship.pk}/"
+
+        self.client.force_authenticate(user=self.sineater_tenure.player_data.account)
+        sineater_view = self.client.get(url).data["mire"]
+        self.client.force_authenticate(user=self.sinner_account)
+        sinner_view = self.client.get(url).data["mire"]
+
+        (entry,) = sineater_view
+        self.assertEqual(entry["sinner_sheet_id"], self.sinner_sheet.pk)
+        self.assertEqual(entry["sinner_name"], self.sinner_sheet.primary_persona.name)
+        self.assertEqual(entry["total"], 120)
+        (row,) = entry["rows"]
+        self.assertEqual((row["resonance_name"], row["amount"]), (self.resonance.name, 120))
+        self.assertTrue(row["label"])
+        self.assertEqual(sinner_view, [])
 
     def test_unauthenticated_returns_403(self) -> None:
         """Unauthenticated requests are rejected."""

@@ -42,7 +42,7 @@ from world.magic.models import (
     Reflection,
     ResonanceGrant,
 )
-from world.magic.services.drift import get_drift_correction_config
+from world.magic.services.drift import drift_for, get_drift_correction_config
 from world.magic.services.drift_correction import perform_settling_rite
 from world.magic.services.reflection import (
     deed_label,
@@ -232,6 +232,22 @@ class AbsolvingAndCondemningTheMire(MireSettlingCase):
 
 
 class SuccumbingToTheMire(MireSettlingCase):
+    def test_a_sineater_is_unsettled_only_once_a_succumbing_puts_the_resonance_in_their_aura(
+        self,
+    ) -> None:
+        self.carry(self.ysmay_side, 100)
+        self.assertEqual(drift_for(self.sineater).steps_past, 0)
+
+        self.set_share("Success", "1.00")
+        self.reflect(self.ysmay_side, ReflectionChoice.SUCCUMB)
+        self.settle()
+
+        # 100 Ruin is now 100 of Corvin's 600 lifetime: 16.67 percent Abyssal, against a
+        # settled share of 10 and a range of 5. That is 1.67 past, which is one step of 5.
+        reading = drift_for(self.sineater)
+        self.assertEqual(reading.steps_past, 1)
+        self.assertEqual(reading.leading_excess_resonance, self.ruin)
+
     def test_succumbing_pays_the_jackpot_and_becomes_a_deed_to_atone_for(self) -> None:
         holding = self.carry(self.ysmay_side, 100, purified_since_payout=400)
         before = self.side()

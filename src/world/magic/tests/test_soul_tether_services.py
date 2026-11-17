@@ -52,7 +52,7 @@ from world.magic.factories import (
 from world.magic.models import CharacterAura, CharacterResonance, MireHolding, Thread
 from world.magic.models.soul_tether import Sineating
 from world.magic.services.corruption import accrue_corruption, reduce_corruption
-from world.magic.services.mire import release_mire, take_on_corruption
+from world.magic.services.mire import mire_carried_by, release_mire, take_on_corruption
 from world.magic.services.sineating import request_sineating
 from world.magic.services.soul_tether import (
     _compute_per_scene_sineating_cap,
@@ -565,6 +565,32 @@ class MireServicesTests(TestCase):
         )
         self.assertEqual(release_mire(holding=holding, amount=99), 99)
         self.assertEqual((holding.amount, self._corruption(self.sineater)), (100, 100))
+
+    def test_what_a_sineater_carries_is_read_with_the_stage_it_has_reached(self) -> None:
+        take_on_corruption(
+            sineater_sheet=self.sineater,
+            sinner_sheet=self.sinner,
+            resonance=self.abyssal,
+            amount=100,
+        )
+        name = self.sinner.primary_persona.name
+        # Naming the stage reads the corruption config, whose row the game keeps cached.
+        mire_carried_by(self.sineater)
+        mire_carried_by(self.sineater)
+
+        # The holdings and the Sineater's corruption conditions: the same however many Sinners
+        # they carry for.
+        with self.assertNumQueries(2):
+            carried = mire_carried_by(self.sineater)
+
+        # 90 arrived after resistance, which is past the first stage's 50.
+        (row,) = carried
+        self.assertEqual(
+            (row.sinner_sheet_id, row.sinner_name, row.resonance_name, row.amount, row.stage_order),
+            (self.sinner.pk, name, self.abyssal.name, 90, 1),
+        )
+        self.assertTrue(row.label)
+        self.assertEqual(mire_carried_by(self.sinner), [])
 
     def test_nothing_moves_when_the_ceiling_leaves_no_space(self) -> None:
         row = CharacterResonance.objects.get(character_sheet=self.sineater, resonance=self.abyssal)

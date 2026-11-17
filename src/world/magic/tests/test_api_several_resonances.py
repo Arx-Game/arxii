@@ -58,21 +58,20 @@ class _CharacterWithResonances(APITestCase):
         )
         self.client.force_authenticate(user=self.account)
 
-    def _hold(self, resonance, *, balance=0, lifetime=0, mire=0) -> CharacterResonance:
+    def _hold(self, resonance, *, balance=0, lifetime=0) -> CharacterResonance:
         return CharacterResonanceFactory(
             character_sheet=self.sheet,
             resonance=resonance,
             balance=balance,
             lifetime_earned=lifetime,
-            mire_lifetime=mire,
         )
 
-    def _primal_character_who_has_grown_abyssal(self, *, mire: int = 0) -> None:
+    def _primal_character_who_has_grown_abyssal(self) -> None:
         """Settled wholly Primal, with 30 of 100 lifetime resonance now Abyssal."""
         aura = CharacterAuraFactory(character=self.sheet)
         set_aura_split(aura, celestial="0", primal="100", abyssal="0")
         self._hold(self.fury, balance=70, lifetime=70)
-        self._hold(self.domination, balance=30, lifetime=30, mire=mire)
+        self._hold(self.domination, balance=30, lifetime=30)
         self.aura = aura
 
     def _aura_url(self, action: str = "") -> str:
@@ -108,7 +107,7 @@ class ThreadPayloadTests(_CharacterWithResonances):
 
 class AuraPayloadTests(_CharacterWithResonances):
     def test_aura_payload_unsettled_line(self) -> None:
-        self._primal_character_who_has_grown_abyssal(mire=10)
+        self._primal_character_who_has_grown_abyssal()
 
         response = self.client.get(self._aura_url())
 
@@ -118,8 +117,7 @@ class AuraPayloadTests(_CharacterWithResonances):
             response.data["unsettled_line"],
             "Your Domination has grown strong enough to make you unsettled.",
         )
-        # Ten of a hundred lifetime points are the Mire's: said in words, never a number.
-        self.assertEqual(response.data["mire_share_words"], "a tenth")
+        self.assertNotIn("mire_share_words", response.data)
         shares = {row["affinity_name"]: row for row in response.data["shares"]}
         self.assertEqual(float(shares[self.primal.name]["settled_percent"]), 100.0)
         # No Abyssal share has been settled, so it has no row at all.
@@ -143,7 +141,7 @@ class AuraPayloadTests(_CharacterWithResonances):
         self.assertEqual(response.data["unsettled_affinity_name"], self.abyssal.name)
 
     def test_each_aura_reads_its_resonances_once(self) -> None:
-        self._primal_character_who_has_grown_abyssal(mire=10)
+        self._primal_character_who_has_grown_abyssal()
         table = CharacterResonance._meta.db_table
         with CaptureQueriesContext(connection) as queries:
             response = self.client.get(self._aura_url())
@@ -162,7 +160,6 @@ class AuraPayloadTests(_CharacterWithResonances):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertIs(response.data["unsettled"], False)
         self.assertEqual(response.data["unsettled_line"], "")
-        self.assertEqual(response.data["mire_share_words"], "none")
 
 
 class PreviewPayloadTests(_CharacterWithResonances):
