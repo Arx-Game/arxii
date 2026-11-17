@@ -176,12 +176,16 @@ character-creation/
         │                         #   under each parent's gender in LineageStage
         │                         #   (ParentFateRow; draft_data.line_parent_fate /
         │                         #   other_parent_fate)
-        ├── LifeGrids.tsx         # The life as an accordion (#4874, slice 9 of #4813, built
+        ├── LifeGrids.tsx         # The life in folds (#4874, slice 9 of #4813, built
         │                         #   against the demo): one fold per stage (heading + "N of
-        │                         #   M" or Unknown, one open at a time, a click on the open one
-        │                         #   folds it), one section per beat inside (a closed one reads
-        │                         #   its answers with signed points or the prompt with the
-        │                         #   first name; Next walks down and into the next stage);
+        │                         #   M" or Unknown) and one section per beat inside. Every
+        │                         #   stage and section is open on arrival and each folds by
+        │                         #   itself (owner ruling 2026-11-16, #5160: "everything
+        │                         #   should start as expanded"; no one-open-at-a-time). A
+        │                         #   closed section reads its answers with signed points or
+        │                         #   the prompt with the first name; an open one prints the
+        │                         #   prompt in its body only. Next folds its section and
+        │                         #   opens the one below if the player had folded it;
         │                         #   every grid ends on an Amnesiac card (#5102: no cost, not a
         │                         #   distinction, copy life_amnesiac_name/_text) that marks
         │                         #   its own beat unknown; the secret marks under a grid, the Cover story box
@@ -189,8 +193,12 @@ character-creation/
         │                         #   the secret is marked, until a click on another card;
         │                         #   clicking the real pick drops both)
         │                         #   and a cover select on an any row; a figure's name input
-        │                         #   on a picked person card; Description (Optional) per stage
-        │                         #   (draft_data.stage_descriptions); the list of choices,
+        │                         #   on a picked person card; Background Notes per stage
+        │                         #   (draft_data.stage_descriptions; copy
+        │                         #   `life_stage_notes_label` and the italic placeholder
+        │                         #   `life_stage_notes_placeholder`, the owner's sentence,
+        │                         #   #5160; the retired `life_stage_description_label` is
+        │                         #   not read); the list of choices,
         │                         #   sent to the slot under the chapter's "CG selections"
         │                         #   (#5148); the testament paragraph.
         │                         #   Earlier shape, still true underneath: grids by stage

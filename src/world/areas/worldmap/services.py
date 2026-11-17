@@ -337,11 +337,13 @@ def set_footprint(
     ancestor of ``area``); on remove, a pip a descendant stands on. Water is taken
     like land: a realm's footprint includes its waters (ApostateCD, 2026-10-12).
 
-    ``take_from_siblings`` is the map's Adjust (#4988): a pip held by a sibling rung
-    under the same ladder parent, or by one of that sibling's counties, moves sideways
-    into ``area`` instead of being skipped, so a border is corrected in one stroke. A
-    barony's single pip is its seat and is never taken this way; the seat drag
-    (``move_seat``) is how a barony moves."""
+    ``take_from_siblings`` is the map's Adjust (#4988, widened by #5157): a pip held by
+    any rung of the same kingdom moves sideways into ``area`` instead of being skipped,
+    so a county reaches a coast another duchy held in one stroke and both duchies'
+    borders follow, since an ancestor's footprint is derived from its children's. A
+    kingdom, or an area with no kingdom above it, takes only from beneath its own
+    ladder parent. A barony's single pip is its seat and is never taken this way; the
+    seat drag (``move_seat``) is how a barony moves."""
     to_add = _unique_pips(add, MAX_FOOTPRINT_PIPS_PER_CALL)
     to_remove = _unique_pips(remove, MAX_FOOTPRINT_PIPS_PER_CALL)
     if not to_add and not to_remove:
@@ -503,11 +505,11 @@ def _claim(
 ) -> int:
     """Give ``pips`` to ``area``: open ground is taken; an ancestor's pip moves
     down to this area; a pip held by this area or a descendant is already inside;
-    with ``take_from_siblings`` a sibling's (or a sibling's county's) pip moves
+    with ``take_from_siblings`` a pip held elsewhere in the same kingdom moves
     sideways; any other holder's pip is skipped and counted against that holder's name.
     Every row taken or moved is appended to ``changed`` with its prior holder."""
     held = _rows_at(pips)
-    parent = _ladder_parent(area) if take_from_siblings else None
+    parent = _adjust_scope(area) if take_from_siblings else None
     moving: list[AreaFootprintPip] = []
     for row in held.values():
         holder = row.area
@@ -533,9 +535,21 @@ def _claim(
     return len(fresh) + len(moving)
 
 
+def _adjust_scope(area: Area) -> Area | None:
+    """The area Adjust may take land beneath (#5157): the carved area's kingdom, so a
+    county's border can cross a duchy line; its ladder parent when no kingdom stands
+    above it, which keeps a kingdom to its sibling kingdoms' land."""
+    node = area.parent
+    while node is not None:
+        if node.level == AreaLevel.KINGDOM:
+            return node
+        node = node.parent
+    return _ladder_parent(area)
+
+
 def _is_sibling_side(holder: Area, parent: Area | None) -> bool:
-    """Whether ``holder`` lies beneath ``parent`` (a sibling of the carved area or one
-    of a sibling's counties) and is not a barony, whose one pip is its seat."""
+    """Whether ``holder`` lies beneath ``parent`` (Adjust's scope for the carved area)
+    and is not a barony, whose one pip is its seat."""
     if parent is None or holder.level <= AreaLevel.BARONY:
         return False
     return _is_ancestor(parent, holder)
@@ -703,13 +717,14 @@ def region_read(region: RegionMap) -> RegionRead:
                 areas[node.pk] = node
             node = node.parent
     titles = _title_by_area(areas.values())
-    seats = _seat_by_area(areas, by_area)
-    charters = _charters_by_title(set(titles.values()))
+    seats = _seat_by_area(areas, by_area, titles)
+    charters = _charters_by_title({title.pk for title in titles.values()})
     footprints = []
     for area_id, area_pips in by_area.items():
         area = areas[area_id]
         org = _holder_of(area)
-        title_id = titles.get(area.pk)
+        title = titles.get(area.pk)
+        title_id = title.pk if title is not None else None
         footprints.append(
             FootprintRead(
                 area_id=area.pk,
@@ -805,7 +820,7 @@ def _holder_of(area: Area) -> Organization | None:
     return house_holding_area(area)
 
 
-def _title_by_area(areas: Iterable[Area]) -> dict[int, int]:
+def _title_by_area(areas: Iterable[Area]) -> dict[int, Title]:
     """The Almanach title standing on each area, by the title's own rung level (the
     walk ``_rung_area`` does, done once for every title with a seat)."""
     from world.societies.houses.constants import TIER_TO_AREA_LEVEL  # noqa: PLC0415
@@ -814,7 +829,7 @@ def _title_by_area(areas: Iterable[Area]) -> dict[int, int]:
     wanted = {a.pk for a in areas}
     if not wanted:
         return {}
-    out: dict[int, int] = {}
+    out: dict[int, Title] = {}
     titles: Iterable[Title] = Title.objects.filter(seat_domain__isnull=False).select_related(
         "seat_domain__area"
     )
@@ -824,19 +839,31 @@ def _title_by_area(areas: Iterable[Area]) -> dict[int, int]:
         while area is not None and area.level != level:
             area = area.parent
         if area is not None and area.pk in wanted and area.pk not in out:
-            out[area.pk] = title.pk
+            out[area.pk] = title
     return out
 
 
-def _seat_by_area(areas: dict[int, Area], by_area: dict[int, list[Pip]]) -> dict[int, Pip]:
-    """A footprint's seat pip: the first pip of its seat barony's own footprint, for
-    every area the barony sits inside. A barony's seat is its own pip."""
+def _seat_by_area(
+    areas: dict[int, Area], by_area: dict[int, list[Pip]], titles: dict[int, Title]
+) -> dict[int, Pip]:
+    """A footprint's seat pip: the pip of its capital, the barony its title is seated in
+    (#5157: it was the northernmost barony inside the area, which is the capital only by
+    luck). An area no title stands on, or whose capital holds no pip yet, falls back to
+    the first barony found inside it. A barony's seat is its own pip."""
     seats: dict[int, Pip] = {}
+    for area_id, title in titles.items():
+        barony: Area | None = title.seat_domain.area
+        while barony is not None and barony.level != AreaLevel.BARONY:
+            barony = barony.parent
+        pips = by_area.get(barony.pk) if barony is not None else None
+        if pips:
+            seats[area_id] = pips[0]
     for barony_id, pips in by_area.items():
         barony = areas[barony_id]
         if barony.level != AreaLevel.BARONY or not pips:
             continue
-        node: Area | None = barony
+        seats[barony_id] = pips[0]
+        node: Area | None = barony.parent
         while node is not None:
             seats.setdefault(node.pk, pips[0])
             node = node.parent

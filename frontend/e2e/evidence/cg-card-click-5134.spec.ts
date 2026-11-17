@@ -245,8 +245,9 @@ test.describe('character creation: a clicked card shows at once (#5134)', () => 
     await expect(first).toBeVisible({ timeout: 15000 });
     await first.click();
 
-    // Open the second beat while the first beat's save is still in flight.
-    await page.getByRole('button', { name: /What you were taught/ }).click();
+    // The second beat's cards, while the first beat's save is still in flight. Since
+    // #5160 every section is open on arrival; the build before #5134 had to open it.
+    if (oldBuild) await page.getByRole('button', { name: /What you were taught/ }).click();
     const second = page.getByRole('button', { name: /^Apprenticed/ });
     await expect(second).toBeVisible();
     expect(answered).toBe(0);

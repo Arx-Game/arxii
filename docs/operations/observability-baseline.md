@@ -83,16 +83,28 @@ In-process exporter exposing Prometheus metrics on `/metrics`. Lives in Arx II s
   - *Recommended escalation (named, optional — deferred by default for cost/solo):* a CI job that runs the **previous release's** smoke tests against a DB migrated to the new head — the only *empirical* proof of old-code/new-schema compatibility. The gold standard if classifier+marker discipline ever proves insufficient.
   Together these are the **sole DB safety net**; auto-rollback can revert code, never data.
 
-  **Status (2026-08-26): (1) and (2) are DESIGNED, NOT BUILT.** There is no
-  `tools/check_release_safety.py`, no `# release-safety:` marker anywhere in the tree,
-  and no CI step — the text above describes intent, not a gate that exists. What *is*
-  built is the **pre-migration dump** (`roles/app_deploy`, ADR-0237): a verified local
-  `pg_dump` taken immediately before `migrate`, gated on `migrate --check` and failing
-  closed. It addresses a different axis from (1) — data recoverability rather than
-  old-code/new-schema compatibility — and it is strictly a net, not a gate: it makes a
-  destructive migration *recoverable*, it does not stop one. Building (1) is tracked
-  separately; until it exists, PR review is the only thing standing between a
-  `RemoveField` on an authored-content table and production.
+  **Implementation:** deployment now checks the pending Django migration plan
+  before touching a database associated with a previously running release. It
+  uses the last successful reload stamp, including when the unit is stopped,
+  because the watchdog can restart it. An active service without a stamp fails
+  closed. A new installation without a prior stamp can bootstrap normally.
+  The release checkout is unshallowed before comparing commit ancestry.
+
+  A pending operation outside the conservative safe list needs a standalone
+  comment in its migration file: `# release-safety: expand <40-character-sha>`
+  or `# release-safety: contract <40-character-sha>`. The named commit must
+  be an ancestor of the last reloaded release. For a contract it is the commit
+  that stopped the old code using the removed schema, which must be deployed
+  before the contract migration. Remove/rename operations cannot be declared
+  expand. Reviewers must verify the declaration: the gate checks ancestry, not
+  whether arbitrary SQL or Python is compatible. If there is no compatible
+  running release yet, deploy an expand/switch release first; do not add a
+  misleading marker just to pass. The check fails closed if history or the
+  stamp cannot be read. Existing unmarked pending migrations also require review.
+
+  This is a deploy-time declaration and ancestry gate, not the planned CI
+  classifier or the restore-against-production-data rehearsal. Those remain
+  separate safeguards. The pre-migration dump remains the data-recovery net.
 
 ### 4.5.1 Rollback model (operational — the actual mechanics)
 

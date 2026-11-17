@@ -1282,6 +1282,20 @@
   color: var(--cg-muted);
   font-style: italic;
 }
+/* Background Notes at the end of a stage (#5160): the placeholder is the box's only
+   explanation, so it is italic and in an ink that reads, not the browser's pale grey. */
+.interview .life .stage-description textarea::placeholder {
+  font-style: italic;
+  color: var(--cg-text-soft);
+  opacity: 1;
+}
+/* At a phone's width the sentence runs to five or six lines, and a placeholder cannot
+   be scrolled: the box is tall enough to show all of it. */
+@media (max-width: 40rem) {
+  .interview .life .stage-description textarea {
+    min-height: 12rem;
+  }
+}
 /* The Recent History box (#4830) sits under the last stage, before the footer. */
 .interview .life .recent-history {
   margin-top: 1.6rem;

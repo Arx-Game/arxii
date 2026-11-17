@@ -12,7 +12,6 @@ export const PIP_PX = 6;
 /** Zoomed out past this the per-cell lines would be a solid wash, so they are not drawn (#5009). */
 export const MAP_CELL_LINES_HIDE_BELOW = 0.3;
 /** A seat dot's radius on the names layer, in screen pixels at every zoom. */
-export const SEAT_DOT_PX = 3;
 
 /** Flat colour per terrain: the first pass the owner ruled; tile art is a later styling pass. */
 export const TERRAIN_COLORS: Record<string, string> = {
@@ -165,22 +164,35 @@ export function drawRegionMap(
   drawPendingPips(ctx, b, options);
 }
 
+/** A seat marker in screen pixels: its centre and radius. */
+export interface ScreenMarker {
+  x: number;
+  y: number;
+  r: number;
+}
+
 /**
  * The names layer (#5030): a viewport-sized canvas over the map, untransformed, redrawn on
- * every view, zoom or pan change. `seats` and `labels` are already in screen pixels.
+ * every view, zoom or pan change. `markers` and `labels` are already in screen pixels; a
+ * capital's marker is larger than a plain barony's (#5157). `ghost` is the marker a seat
+ * drag carries under the pointer.
  */
 export function drawNamesLayer(
   ctx: CanvasRenderingContext2D,
   size: { width: number; height: number },
-  seats: [number, number][],
-  labels: Label[]
+  markers: ScreenMarker[],
+  labels: Label[],
+  ghost: ScreenMarker | null = null
 ): void {
   ctx.clearRect(0, 0, size.width, size.height);
   ctx.fillStyle = '#1a140c';
-  for (const [sx, sy] of seats) {
+  ctx.strokeStyle = 'rgba(255, 250, 240, 0.9)';
+  ctx.lineWidth = 1.5;
+  for (const marker of markers) {
     ctx.beginPath();
-    ctx.arc(sx, sy, SEAT_DOT_PX, 0, Math.PI * 2);
+    ctx.arc(marker.x, marker.y, marker.r, 0, Math.PI * 2);
     ctx.fill();
+    ctx.stroke();
   }
   ctx.font = '12px "Cormorant Garamond", Georgia, serif';
   ctx.textAlign = 'center';
@@ -191,6 +203,12 @@ export function drawNamesLayer(
   for (const label of labels) {
     ctx.strokeText(label.text, label.x, label.y);
     ctx.fillText(label.text, label.x, label.y);
+  }
+  if (ghost) {
+    ctx.fillStyle = 'rgba(26, 94, 42, 0.75)';
+    ctx.beginPath();
+    ctx.arc(ghost.x, ghost.y, ghost.r, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
@@ -228,7 +246,7 @@ function drawGhost(ctx: CanvasRenderingContext2D, b: RegionBounds, options: Draw
   ctx.restore();
 }
 
-type RegionBounds = ReturnType<typeof regionBounds>;
+export type RegionBounds = ReturnType<typeof regionBounds>;
 
 function drawTerrain(ctx: CanvasRenderingContext2D, data: RegionMapPips, b: RegionBounds) {
   const terrainAt = new Map<string, string>();
