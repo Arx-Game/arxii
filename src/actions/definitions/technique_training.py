@@ -171,7 +171,14 @@ class TrainTechniqueAction(Action):
                 ),
             )
 
-        points_after = min(points_before + result.dev_points_contributed, total_required)
+        # Report the meter as stored: the affinity's learn rate scales the points once, inside
+        # credit_technique_progress, so the session's unscaled dev points are not the change.
+        if result.technique_acquired is not None:
+            points_after = total_required
+        else:
+            points_after = TechniqueProgress.objects.values_list(
+                "points_accumulated", flat=True
+            ).get(pk=progress.pk)
 
         if result.technique_acquired is not None:
             message = f"Your training pays off — you've learned {technique_name}!"
