@@ -585,8 +585,12 @@ Journey: `src/integration_tests/test_performing_the_anima_ritual_journeys.py`.
 and earns no resonance. With a partner it also earns the resonance the ritual names
 (`RitualCheckConfig.resonance`) and moves the partner's fatigue. A player asks a partner with
 `start_partner_ritual(scene=, initiator_persona=, target_persona=)` (`services/anima_ritual_action.py`),
-which `check_partner_ritual` guards (no ritual or one not set up, no partner or yourself, already
-performed in this scene, or already asked of someone and waiting) and which opens the ordinary
+which `check_partner_ritual` guards (no ritual or one not set up, no partner or yourself, a partner who
+is not in the scene and the same place as the performer (`shared_active_scene`, the rule Sineating
+uses; `resolve_ritual_request` checks it again at resolve time and resolves a request whose partner has
+left with no effect), a partner the same account plays ("You cannot perform your ritual with another
+character you play.", `played_by_one_account`), already performed in this scene, or already asked of
+someone and waiting) and which opens the ordinary
 `SceneActionRequest` consent request with `action_key` `anima_ritual` and the ritual's check snapshotted
 on it. The ritual is always the initiator's own, found on the server: the client never names it. Web:
 `POST /api/action-requests/` (`SceneActionRequestViewSet._ritual_kwargs`) and the persona menu's "Anima
@@ -600,7 +604,16 @@ snapshotted check, `apply_anima_ritual_outcome` restores anima, and `apply_ritua
 partner_sheet, ritual, outcome, resonance)` (`services/ritual_bond.py`) pays
 `AnimaRitualResonanceAward` for the roll's tier (no row, no pay) plus that amount times the kindled
 strength's `earn_percent` when the ritual's resonance is kindled at that moment, in full at once through
-`grant_resonance(source=GainSource.ANIMA_RITUAL)`, so the earn rate applies. The partner's fatigue
+`grant_resonance(source=GainSource.ANIMA_RITUAL)`, so the earn rate applies. Both the earning and the
+partner effect apply only when the performer already holds the ritual's resonance (a `CharacterResonance`
+row, `performer_holds`); a ritual naming one they do not hold restores anima and does nothing else, the
+partner's consent sentence is blank, and `RitualCheckConfigPatchSerializer` refuses a resonance a
+non-staff player's character does not hold. Once per scene holds under concurrency: after
+`apply_anima_ritual_outcome` locks the `CharacterAnima` row it re-reads the scene's performances and
+raises `RitualAlreadyPerformedThisScene`, which `resolve_ritual_request` turns into a request resolved
+with no effect and no payment. The web request records the partner's worn persona
+(`_worn_ritual_partner`), and telnet tells the partner through `send_stored_notice`, so an offline
+partner reads it at login. The partner's fatigue
 follows `ritual_partner_fatigue` of the affinity of the ritual's resonance (not the performer's leading
 affinity): positive calls `apply_fatigue` in the social category, negative `recover_fatigue`. The
 performer reads "Your ritual feeds on Tobin. Your Ruin grows by 13." (lifts, or "is done" when the
@@ -2403,9 +2416,15 @@ one situation among many: `docs/adr/adr-5124-furys-anchor-person-became-a-kindle
   distinction rate, unless the source is in `AFFINITY_RATE_EXEMPT_SOURCES` (`STAFF_GRANT`,
   `CHARACTER_CREATION`, `DRIFT_CORRECTION`, `FALL_CONVERSION`, `EMBRACED_DEED`, `CORRUPTION_CLEANSING`,
   `SANCTUM_DISSOLUTION_RECOVERY`, `SUCCUMBED`: resonance that is moved, converted or granted, not newly
-  earned). A character with no aura earns at 100. `Affinity.learn_rate_percent` scales technique
+  earned; and `DISTINCTION`, because `distinction_resonance` reconciles the seed against the sum of its
+  ledger rows). Every other source is listed in `AFFINITY_RATE_SCALED_SOURCES`, and
+  `test_deed_classification` fails when a `GainSource` is in neither set. Every caller that reports or
+  stores a granted amount reads it back from the ledger row (`ledger_out`): Sineating's result and
+  audit row, the mire-settling lines, the weekly pot's `granted_amount` (the pot itself is a budget of
+  unscaled shares, the earn rate is the character's bonus on top), scene entry, style presentation,
+  entry flourish and a worship rite's `resonance_granted`. A character with no aura earns at 100. `Affinity.learn_rate_percent` scales technique
   training: `credit_technique_progress`, the one writer of `points_accumulated`, multiplies the points
-  it is handed by `learn_rate_percent(sheet)` once; the weekly limit and the action point cost keep
+  it is handed by `learn_rate_percent(sheet)` once (a positive award is never scaled below 1); the weekly limit and the action point cost keep
   counting unscaled points.
 - **Reflecting and settling.** A `KINDLED_DEED` grant is a deed a character can reflect on once,
   Embrace or Disown, in a pose or journal entry; the rite of settling carries every waiting
