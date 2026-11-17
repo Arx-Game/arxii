@@ -2636,8 +2636,16 @@ class SineatingFactory(factory.django.DjangoModelFactory):
     resonance = factory.SubFactory(ResonanceFactory)
     units_offered = 5
     units_accepted = 5
-    anima_cost = 10
-    fatigue_cost = 5
+
+
+class SineatingOutcomeAwardFactory(factory.django.DjangoModelFactory):
+    """The share of full resonance a Sineating earns each party at one outcome tier (#5177)."""
+
+    class Meta:
+        model = "arxii.SineatingOutcomeAward"
+
+    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    earned_share = Decimal("1.00")
 
 
 def place_in_active_scene(*sheets: Any) -> Any:

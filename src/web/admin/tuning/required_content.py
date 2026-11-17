@@ -2199,6 +2199,40 @@ def _probe_drift_correction_config() -> ProbeResult:
     return ProbeResult(present=True)
 
 
+def _probe_sineating_config() -> ProbeResult:
+    """Sineating has a check type and an award for every outcome tier (#5177).
+
+    Consumer: `world/magic/services/sineating.py perform_sineating()`. It refuses with
+    "Sineating has not been set up yet." unless `sineating_is_ready()`:
+    `SoulTetherConfig.sineating_check_type` set and a `SineatingOutcomeAward` row for every
+    `CheckOutcome` (`outcome_tiers_without_a_sineating_award()` empty), since the roll can land
+    on any of them. The probe reads the same conditions, through the same tier query.
+    """
+    from world.magic.services.sineating import (  # noqa: PLC0415
+        outcome_tiers_without_a_sineating_award,
+    )
+    from world.magic.services.soul_tether import get_soul_tether_config  # noqa: PLC0415
+
+    if get_soul_tether_config().sineating_check_type_id is None:
+        return ProbeResult(
+            present=False,
+            missing=("the check type",),
+            detail="The Soul Tether configuration has no Sineating check type.",
+        )
+    missing = tuple(
+        outcome_tiers_without_a_sineating_award()
+        .order_by("success_level")
+        .values_list("name", flat=True)
+    )
+    if missing:
+        return ProbeResult(
+            present=False,
+            missing=missing,
+            detail=f"No Sineating award for outcome(s): {', '.join(missing)}.",
+        )
+    return ProbeResult(present=True)
+
+
 def _probe_affinity_conversion_pairs() -> ProbeResult:
     """Every ordered pair of distinct affinities has an authored conversion (#4751).
 
@@ -4014,6 +4048,21 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_drift_correction_config),
             admin_model="DriftCorrectionConfig",
+        ),
+        ContentDependency(
+            key="sineating-config",
+            label="Sineating check and outcome awards",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/magic/services/sineating.py sineating_is_ready(), perform_sineating()"
+            ),
+            consequence=(
+                "A Sinner can still ask by pose, but a Sineater's ritual says 'Sineating has "
+                "not been set up yet' while the check type or any outcome tier's award is "
+                "missing; no corruption moves and nothing is earned until staff author them."
+            ),
+            probe=CustomProbe(fn=_probe_sineating_config),
+            admin_model="SoulTetherConfig",
         ),
         ContentDependency(
             key="affinity-conversion-pairs",

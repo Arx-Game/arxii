@@ -1943,6 +1943,38 @@ class TestDriftCorrectionConfigProbe(TestCase):
         self.assertEqual(result.missing, ())
 
 
+class TestSineatingConfigProbe(TestCase):
+    """Sineating refuses until a check type is set and every outcome tier has an award (#5177)."""
+
+    def test_names_what_is_missing_then_clears_when_authored(self) -> None:
+        from world.checks.factories import CheckTypeFactory
+        from world.magic.factories import SineatingOutcomeAwardFactory
+        from world.magic.models import SineatingOutcomeAward
+        from world.magic.services.soul_tether import get_soul_tether_config
+        from world.traits.models import CheckOutcome
+
+        result = _probe_for("sineating-config").resolve(None)
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("the check type",))
+
+        config = get_soul_tether_config()
+        config.sineating_check_type = CheckTypeFactory(name="RC Sineating Check")
+        config.save()
+        covered = CheckOutcome.objects.create(name="RC Sineat Covered", success_level=1)
+        CheckOutcome.objects.create(name="RC Sineat Uncovered", success_level=2)
+        SineatingOutcomeAwardFactory(outcome_tier=covered)
+        result = _probe_for("sineating-config").resolve(None)
+        self.assertFalse(result.present)
+        self.assertIn("RC Sineat Uncovered", result.missing)
+        self.assertNotIn("RC Sineat Covered", result.missing)
+
+        for outcome in CheckOutcome.objects.all():
+            SineatingOutcomeAward.objects.get_or_create(
+                outcome_tier=outcome, defaults={"earned_share": 1}
+            )
+        self.assertTrue(_probe_for("sineating-config").resolve(None).present)
+
+
 class TestFuryTradeProbes(TestCase):
     """Fury's trade reads a share per outcome tier and a rate on StrainConfig (#4738).
 
