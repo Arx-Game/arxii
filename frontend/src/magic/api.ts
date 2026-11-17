@@ -16,6 +16,7 @@ import { readErrorDetail } from '@/lib/errors';
 import { dispatchCanvasAction, type DispatchResult } from '@/map-canvas/dispatch';
 import { getRituals } from '@/rituals/api';
 import type { components } from '@/generated/api';
+import type { SineatingOption } from '@/magic/sineating';
 import type {
   KindledResonance,
   ManifestChoice,
@@ -67,6 +68,7 @@ import type {
   ReadiedUltimate,
   RescueOutcome,
   RescueRequest,
+  SineatingDeclineRequest,
   SetGlimpseProseRequest,
   SetGlimpseTagsRequest,
   SoulTetherDetail,
@@ -1400,4 +1402,35 @@ export async function getReflectionOptions(characterSheetId: number): Promise<Re
   if (!res.ok) await readErrorDetail(res, 'Failed to load what you can reflect on');
   const page = (await res.json()) as { results: ReflectionOption[] };
   return page.results;
+}
+
+// ---------------------------------------------------------------------------
+// Sineating by pose (#5177)
+// ---------------------------------------------------------------------------
+
+const SINEATING_OPTIONS_URL = '/api/magic/sineating-options/';
+
+/**
+ * GET /api/magic/sineating-options/?character_sheet=<id>: every Sineater present the
+ * character can entreat, and every plea they can answer. Only a character the caller plays.
+ */
+export async function getSineatingOptions(characterSheetId: number): Promise<SineatingOption[]> {
+  const res = await apiFetch(`${SINEATING_OPTIONS_URL}?character_sheet=${characterSheetId}`);
+  if (!res.ok) await readErrorDetail(res, 'Failed to load Sineating options');
+  const page = (await res.json()) as { results: SineatingOption[] };
+  return page.results;
+}
+
+/**
+ * POST /api/magic/soul-tether/sineating/decline/: the Sineater turns a waiting plea down.
+ * Answers `{detail}`, the line the Sineater is told.
+ */
+export async function declineSineating(body: SineatingDeclineRequest): Promise<{ detail: string }> {
+  const res = await apiFetch(`${SOUL_TETHER_URL}/sineating/decline/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await readErrorDetail(res, 'Failed to decline the plea');
+  return res.json() as Promise<{ detail: string }>;
 }

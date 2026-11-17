@@ -33,6 +33,7 @@ import type {
   PatchThreadRequest,
   PullPreviewRequest,
   RescueRequest,
+  SineatingDeclineRequest,
   SetGlimpseProseRequest,
   SetGlimpseTagsRequest,
   StageAdvanceRespondRequest,
@@ -109,6 +110,9 @@ export const magicKeys = {
   reflectionOptionsAll: () => [...magicKeys.all, 'reflection-options'] as const,
   reflectionOptions: (characterSheetId: number) =>
     [...magicKeys.all, 'reflection-options', characterSheetId] as const,
+
+  sineatingOptions: (characterSheetId: number) =>
+    [...magicKeys.all, 'sineating-options', characterSheetId] as const,
 
   audereUltimates: (characterSheetId: number) =>
     [...magicKeys.all, 'audere', 'ultimates', characterSheetId] as const,
@@ -1189,6 +1193,50 @@ export function useRefreshReflectionOptions(characterSheetId: number | null) {
       queryKey: magicKeys.reflectionOptions(characterSheetId),
     });
   };
+}
+
+/**
+ * What a pose can carry as a Sineating (#5177): a plea to make to each Sineater here, and a
+ * plea to answer for each one waiting. Polled, so a plea made in the scene shows up on the
+ * Sineater's composer without a reload. Empty until `characterSheetId` is known, and off while
+ * `enabled` is false (no active scene).
+ */
+export function useSineatingOptions(characterSheetId: number | null, enabled = true) {
+  return useQuery({
+    queryKey: magicKeys.sineatingOptions(characterSheetId ?? 0),
+    queryFn: () => api.getSineatingOptions(characterSheetId ?? 0),
+    enabled: enabled && characterSheetId != null && characterSheetId > 0,
+    refetchInterval: 5_000,
+  });
+}
+
+/**
+ * Re-read what a Sineating changes once a pose carrying one posts: the options themselves,
+ * the Soul Tether (Hollow and the Mire carried), and what a reflection can name (a Sineater
+ * now carries a Mire to reflect on).
+ */
+export function useRefreshSineating(characterSheetId: number | null) {
+  const queryClient = useQueryClient();
+  return () => {
+    if (characterSheetId != null) {
+      void queryClient.invalidateQueries({
+        queryKey: magicKeys.sineatingOptions(characterSheetId),
+      });
+    }
+    void queryClient.invalidateQueries({ queryKey: magicKeys.soulTether() });
+    void queryClient.invalidateQueries({ queryKey: magicKeys.reflectionOptionsAll() });
+  };
+}
+
+/** A Sineater turns a waiting plea down; the options re-read so it leaves the row. */
+export function useDeclineSineating() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SineatingDeclineRequest) => api.declineSineating(body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: [...magicKeys.all, 'sineating-options'] });
+    },
+  });
 }
 
 /** Each resonance the character holds, kindled or not, with the strength word and reasons. */

@@ -42,6 +42,8 @@ export type PaginatedPendingStageAdvanceOfferList =
 export type SoulTetherDetail = components['schemas']['SoulTetherDetail'];
 export type DissolveRequest = components['schemas']['DissolveRequest'];
 
+export type SineatingDeclineRequest = components['schemas']['SineatingDeclineRequest'];
+
 // RescueRequest maps to the generated SoulTetherRescueRequest component.
 export type RescueRequest = components['schemas']['SoulTetherRescueRequest'];
 export type RescueOutcome = components['schemas']['RescueOutcome'];

@@ -31,7 +31,11 @@ export function AuraReflections({ characterSheetId }: Props) {
   const { data: offers } = usePendingDriftConversionOffers();
 
   const reflections = rite?.reflections ?? [];
-  const deeds = (options ?? []).filter((option) => option.kind === 'deed');
+  // The unsettling resonance is the aura itself; a burden already waiting on a reflection
+  // is reflected on.
+  const deeds = (options ?? []).filter(
+    (option) => option.kind !== 'resonance' && !option.replaces_waiting
+  );
   const chance = atoneChanceLine(
     offers?.results?.find((offer) => offer.character_id === characterSheetId)
   );

@@ -10,7 +10,7 @@ import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import type { ReflectionDraft } from '@/magic/reflection';
-import { NO_REFLECTION, REFLECTION_INCOMPLETE_LINE, reflectionFields } from '@/magic/reflection';
+import { NO_REFLECTION, reflectionFields, reflectionIncompleteLine } from '@/magic/reflection';
 import type { ReflectionOption } from '@/magic/types';
 import { ReflectingOnRow } from './ReflectingOnRow';
 
@@ -29,6 +29,7 @@ const options: ReflectionOption[] = [
     label: 'Your Domination · unsettling you',
     replaces_waiting: true,
   },
+  { kind: 'burden', id: 61, label: 'The Mire you carry for Ysmay', replaces_waiting: false },
 ];
 
 let latest: ReflectionDraft = NO_REFLECTION;
@@ -57,13 +58,16 @@ describe('ReflectingOnRow', () => {
     expect(pills).toEqual([
       "Barred the overseers' door · 5 Wonder",
       'Your Domination · unsettling you',
+      'The Mire you carry for Ysmay',
     ]);
     expect(screen.getByTestId('reflect-choice-EMBRACE')).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByTestId('reflect-choice-DISOWN')).toHaveAttribute('aria-pressed', 'false');
     expect(reflectionFields(latest)).toEqual({});
 
     await user.click(screen.getByTestId('reflect-option-deed-33'));
-    expect(screen.getByTestId('reflect-incomplete')).toHaveTextContent(REFLECTION_INCOMPLETE_LINE);
+    expect(screen.getByTestId('reflect-incomplete')).toHaveTextContent(
+      'Choose Embrace or Disown, or clear them.'
+    );
     expect(reflectionFields(latest)).toEqual({});
     await user.click(screen.getByTestId('reflect-choice-DISOWN'));
     expect(screen.queryByTestId('reflect-incomplete')).toBeNull();
@@ -89,6 +93,47 @@ describe('ReflectingOnRow', () => {
     await user.click(screen.getByTestId('reflect-choice-EMBRACE'));
     expect(latest).toEqual(NO_REFLECTION);
     expect(screen.queryByTestId('reflect-replaces-warning')).toBeNull();
+  });
+
+  it('offers Absolve, Condemn and Succumb for a burden and sends its tether id', async () => {
+    vi.mocked(api.getReflectionOptions).mockResolvedValue(options);
+    const user = userEvent.setup();
+    renderWithProviders(<Harness />);
+
+    await user.click(await screen.findByTestId('reflect-option-burden-61'));
+
+    expect(screen.getAllByTestId(/^reflect-choice-/).map((el) => el.textContent)).toEqual([
+      'Absolve',
+      'Condemn',
+      'Succumb',
+    ]);
+    expect(screen.getByTestId('reflect-incomplete')).toHaveTextContent(
+      'Choose Absolve, Condemn or Succumb, or clear them.'
+    );
+    await user.click(screen.getByTestId('reflect-choice-SUCCUMB'));
+    expect(reflectionFields(latest)).toEqual({ reflect_choice: 'SUCCUMB', reflect_tether_id: 61 });
+    expect(screen.queryByTestId('reflect-incomplete')).toBeNull();
+  });
+
+  it('drops a choice the newly picked thing does not take', async () => {
+    vi.mocked(api.getReflectionOptions).mockResolvedValue(options);
+    const user = userEvent.setup();
+    renderWithProviders(<Harness />);
+
+    await user.click(await screen.findByTestId('reflect-option-deed-33'));
+    await user.click(screen.getByTestId('reflect-choice-EMBRACE'));
+    await user.click(screen.getByTestId('reflect-option-burden-61'));
+
+    expect(latest.option?.kind).toBe('burden');
+    expect(latest.choice).toBeNull();
+    expect(reflectionFields(latest)).toEqual({});
+    expect(reflectionIncompleteLine(latest)).toBe(
+      'Choose Absolve, Condemn or Succumb, or clear them.'
+    );
+
+    await user.click(screen.getByTestId('reflect-choice-ABSOLVE'));
+    await user.click(screen.getByTestId('reflect-option-deed-33'));
+    expect(latest.choice).toBeNull();
   });
 
   it('renders nothing when there is nothing to reflect on', async () => {

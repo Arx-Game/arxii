@@ -460,6 +460,8 @@ describe('SpellbookTab', () => {
       ],
       deeds: [
         { kind: 'deed', id: 9, label: 'Strike the chains loose · 3 Fury', replaces_waiting: false },
+        { kind: 'burden', id: 61, label: 'The Mire you carry for Ysmay', replaces_waiting: false },
+        { kind: 'burden', id: 62, label: 'The Mire you carry for Hobb', replaces_waiting: true },
         {
           kind: 'resonance',
           id: 4,
@@ -483,9 +485,12 @@ describe('SpellbookTab', () => {
     const waiting = screen.getByTestId('aura-reflections-waiting');
     expect(waiting).toHaveTextContent('"The collar" · journal · Disown your Domination');
     expect(waiting).toHaveTextContent("Pose in The Quarry · Embrace Barred the overseers' door");
-    // Only deeds are "not yet reflected on"; the unsettling resonance is a reflection target.
+    // Deeds and burdens nobody has reflected on are "not yet reflected on"; the unsettling
+    // resonance is a reflection target, and a burden with a reflection waiting is reflected on.
     const deeds = screen.getByTestId('aura-reflections-deeds');
     expect(deeds).toHaveTextContent('Strike the chains loose · 3 Fury');
+    expect(deeds).toHaveTextContent('The Mire you carry for Ysmay');
+    expect(deeds).not.toHaveTextContent('Hobb');
     expect(deeds).not.toHaveTextContent('unsettling you');
     expect(screen.getByTestId('aura-atone-chance')).toHaveTextContent(
       'A chance to atone is open: up to 3 toward Fury.'
