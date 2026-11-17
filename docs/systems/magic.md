@@ -5033,7 +5033,7 @@ Tuning is staff-owned. `PrimumStep` rows (`rank`, `name`, `starts_at`, `points`,
 Massive) say how much Primum reads as which step. `SubstancePowerStep` rows
 (`points_reached`, `power`) are the curve that turns summed points into power.
 `HarvestOutcome` rows (one per rolled `CheckOutcome`) say what a harvest takes and yields.
-All three are inlines on the resonance-environment config admin. Migration 0449
+All three are inlines on the resonance-environment config admin. Migration 0461
 inserted four starter steps and six curve points so no gift casts at zero before staff tune
 them; it holds its own local copies of the numbers and does not import
 `STARTER_PRIMUM_STEPS` or `STARTER_POWER_CURVE` from `constants.py`. `seed_primum_tuning` in
@@ -5149,7 +5149,7 @@ Tuning on `ResonanceEnvironmentConfig`: `substance_related_share_pct`, `substanc
 `substance_call_up_anima`, `substance_place_cap_pct`, `harvest_check_type`, `harvest_skill`,
 `harvest_thread_bonus`, `unmet_surroundings_penalty_pct`. The four #5018 columns (the present
 share, the anima and resonance per measure, and the power at full strength) are gone
-(migration 0450).
+(migration 0462).
 
 Journeys: `test_gift_substance_journeys`, `test_primum_perception_journeys`,
 `test_primum_harvest_journeys`, `test_primum_payload_journeys` and `test_primum_craft_journeys`,

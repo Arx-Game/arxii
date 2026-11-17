@@ -1,6 +1,6 @@
 """Only a major gift may hold a substance (#5125). Schema-only.
 
-Held apart from 0447 because it pairs ``Gift.substance`` with ``kind``. The column is new
+Held apart from 0459 because it pairs ``Gift.substance`` with ``kind``. The column is new
 and NULL on every row, so the check holds on every row already there.
 """
 

@@ -412,9 +412,9 @@ Design record #5121. Built in one PR, in this order:
 
 1. **One shared list.** `Substance`, `SubstanceRelation` (related or opposed, one row per pair,
    never chained) and `Gift.substance` (major gifts only, a database check) replace
-   the old per-gift mapping. Migration 0449 carried every old row into the new list (merging
+   the old per-gift mapping. Migration 0461 carried every old row into the new list (merging
    gifts that described the same substance, printing every discarded per-gift value so staff
-   can re-author the relations) and 0450 dropped the old table and four config columns
+   can re-author the relations) and 0462 dropped the old table and four config columns
    (ADR-0237: restructure; the per-gift full-strength number, weakened-by reading and arrival
    line are a deliberate discard).
 2. **Primum in places and creatures.** `PlacePrimum` (a lair: capacity, stock, slow refill,

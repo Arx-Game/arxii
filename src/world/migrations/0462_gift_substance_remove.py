@@ -2,14 +2,14 @@
 
 """Remove ``GiftSubstance`` and four retired tuning columns (#5125). Schema-only.
 
-ADR-0237 disposition: restructure, carried by 0449. Each gift's substance row was copied onto
+ADR-0237 disposition: restructure, carried by 0461. Each gift's substance row was copied onto
 a shared ``Substance`` row and ``Gift.substance`` there; read-time code now resolves the
 property and room condition through them. ``full_at``, ``opposed_by`` and ``arrival_line`` are
 a deliberate discard (owner rulings 19 to 21 on #5125): a place is rich in a substance by
 holding its Primum, an opposed substance is a relation row, and the call-up line is fixed.
-0449 prints each old row's three values in the migrate log, so the staff-written text is kept
+0461 prints each old row's three values in the migrate log, so the staff-written text is kept
 there. The four ``ResonanceEnvironmentConfig`` columns (power at full, present percent, anima
-and resonance per measure) are tuning numbers the Primum steps and power curve replaced; 0449
+and resonance per measure) are tuning numbers the Primum steps and power curve replaced; 0461
 prints their values in the same log.
 """
 

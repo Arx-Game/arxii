@@ -186,7 +186,7 @@ def _insert_starter_tuning(apps):
     return written
 
 
-#: The tuning columns migration 0450 drops from ``ResonanceEnvironmentConfig``.
+#: The tuning columns migration 0462 drops from ``ResonanceEnvironmentConfig``.
 RETIRED_CONFIG_FIELDS = (
     "substance_power_at_full",
     "substance_present_pct",
@@ -196,7 +196,7 @@ RETIRED_CONFIG_FIELDS = (
 
 
 def _retired_config_lines(apps):
-    """One line per config row naming the four values 0450 drops, for the migrate log."""
+    """One line per config row naming the four values 0462 drops, for the migrate log."""
     Config = apps.get_model("arxii", "ResonanceEnvironmentConfig")
     return [
         f"    {', '.join(f'{name}={row[name]}' for name in RETIRED_CONFIG_FIELDS)}"
@@ -230,7 +230,7 @@ def carry_gift_substances(apps, schema_editor) -> None:
             f"    {row.gift.name!r}, {row.full_at}, {str(row.opposed_by)!r}, {row.arrival_line!r}"
             for row in rows
         ],
-        "  tuning values dropped from the resonance environment config by 0450:",
+        "  tuning values dropped from the resonance environment config by 0462:",
         *(_retired_config_lines(apps) or ["    (no config row)"]),
     ]
     sys.stdout.write("\n".join(lines) + "\n")
