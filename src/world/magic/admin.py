@@ -3583,7 +3583,7 @@ class KindlingAdmin(PlayRowAdmin):
 
 @admin.register(Reflection)
 class ReflectionAdmin(PlayRowAdmin):
-    """What a piece of writing reflects on, and Embrace or Disown (#5124)."""
+    """What a piece of writing reflects on, and what the writer does with it (#5124, #5177)."""
 
     list_display = [
         "id",
@@ -3591,12 +3591,13 @@ class ReflectionAdmin(PlayRowAdmin):
         "choice",
         "resonance",
         "grant",
+        "tether",
         "rite",
         "created_at",
     ]
     list_filter = ["choice", "resonance"]
-    list_select_related = ["character_sheet", "resonance", "grant", "rite"]
-    raw_id_fields = ["character_sheet", "grant", "interaction", "journal_entry", "rite"]
+    list_select_related = ["character_sheet", "resonance", "grant", "tether", "rite"]
+    raw_id_fields = ["character_sheet", "grant", "tether", "interaction", "journal_entry", "rite"]
     date_hierarchy = "created_at"
 
 

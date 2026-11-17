@@ -3045,7 +3045,7 @@ def wire_soul_tether_active_template(_template: object) -> tuple:
 def wire_soul_tether_stat_definitions() -> None:
     """Idempotent seed for Soul Tether achievement stat definitions (Spec B §14.3).
 
-    Creates StatDefinition rows for all 7 stats fired by Soul Tether services:
+    Creates StatDefinition rows for all 10 stats fired by Soul Tether services:
     - sineating.units_accepted: Units accepted in a Sineating (fired by perform_sineating)
     - sineating.units_declined: Sineating requests declined (fired by decline_sineating)
     - sineating.requests_made: Sineating requests initiated (fired by request_sineating)
@@ -3053,6 +3053,8 @@ def wire_soul_tether_stat_definitions() -> None:
     - rescue.stage5_save: Rescues from stage 5 Subsumption (fired by perform_soul_tether_rescue)
     - rescue.severity_reduced: Corruption severity reduced (fired by perform_soul_tether_rescue)
     - tether.formed: Soul Tethers formed (fired by accept_soul_tether)
+    - sineater.succumbed / sineater.succumbed_amount / sineater.broken: fired on the Sinner
+      when their Sineater succumbs at a settling rite and when that Sineater falls (#5177)
 
     ``achievements.StatDefinition`` is content-repo-owned (#2698) — each is
     looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. A
@@ -3100,6 +3102,21 @@ def wire_soul_tether_stat_definitions() -> None:
             "key": "tether.formed",
             "name": "Soul Tethers Formed",
             "description": "Soul Tether bonds formed with other players",
+        },
+        {
+            "key": "sineater.succumbed",
+            "name": "Sineater Succumbed",
+            "description": "Times a Sineater succumbed to the Mire they carried for this Sinner",
+        },
+        {
+            "key": "sineater.succumbed_amount",
+            "name": "Mire Succumbed To",
+            "description": "Total Mire Sineaters succumbed to that they carried for this Sinner",
+        },
+        {
+            "key": "sineater.broken",
+            "name": "Sineater Broken",
+            "description": "Times a Sineater this Sinner tempted fell to the Abyss",
         },
     ]
 

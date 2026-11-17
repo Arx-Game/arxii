@@ -663,6 +663,50 @@ def _get_sinner_tether_thread(
     ).first()
 
 
+def sineater_thread_resonance(sineater_side: CharacterRelationship) -> Resonance | None:
+    """The resonance the Sineater's thread on this tether channels (#5177), or None.
+
+    ``sineater_side`` is the Sineater's own side toward the Sinner. It is the resonance of their
+    live thread when they have one, else the one ``ensure_sineater_thread`` would weave
+    (``default_sineater_resonance``). None when the tether is dissolved or the Sineater holds no
+    resonance. Reads only; nothing is woven.
+    """
+    if not sineater_side.is_soul_tether:
+        return None
+    thread = _live_sineater_thread(sineater_side)
+    if thread is not None:
+        return thread.resonance
+    return default_sineater_resonance(sineater_side.source)
+
+
+def sinner_thread_resonance(sineater_side: CharacterRelationship) -> Resonance | None:
+    """The resonance of the Sinner's live thread on this tether (#5177), or None.
+
+    ``sineater_side`` is the Sineater's own side toward the Sinner; the Sinner's side is the
+    row pointing back. None when the tether is dissolved or the Sinner's thread is gone.
+    """
+    from world.magic.models import Thread  # noqa: PLC0415
+
+    sinner_side = CharacterRelationship.objects.filter(
+        source=sineater_side.target, target=sineater_side.source, is_soul_tether=True
+    ).first()
+    if sinner_side is None:
+        return None
+    thread = (
+        Thread.objects.filter(
+            owner_id=sinner_side.source_id,
+            target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+            target_capstone__relationship=sinner_side,
+            target_capstone__is_ritual_capstone=True,
+            retired_at__isnull=True,
+        )
+        .select_related("resonance")
+        .order_by("pk")
+        .first()
+    )
+    return thread.resonance if thread is not None else None
+
+
 def _compute_per_scene_sineating_cap(
     sinner_thread: Thread | None,
     relationship: CharacterRelationship,  # noqa: ARG001

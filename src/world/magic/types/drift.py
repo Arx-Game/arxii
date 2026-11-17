@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from decimal import Decimal
 
+    from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
     from world.magic.constants import ComponentMode
     from world.magic.models import Affinity
@@ -104,12 +105,23 @@ class ReflectionEffect:
 
 
 @dataclass(frozen=True)
+class RiteNotice:
+    """A line the rite tells another character privately (#5177): a Sinner learns that their
+    Sineater succumbed or fell, and what it paid them. Sent by the action once the rite has
+    committed, never from inside it."""
+
+    sheet: CharacterSheet
+    line: str
+
+
+@dataclass(frozen=True)
 class SettlingRiteResult:
     """The outcome of one rite of settling (#5124).
 
     ``share`` is the fraction of each reflection the rite carried out, from the rolled
     tier's ``DriftCorrectionOutcomeShare``. ``effects`` holds one entry per reflection the
-    rite took, in the order it applied them.
+    rite took, in the order it applied them. ``notices`` are the private lines for other
+    characters (#5177).
     """
 
     outcome_name: str
@@ -117,6 +129,7 @@ class SettlingRiteResult:
     share: Decimal
     focus_bonus: int
     effects: tuple[ReflectionEffect, ...]
+    notices: tuple[RiteNotice, ...] = ()
 
     @property
     def lines(self) -> tuple[str, ...]:
@@ -140,7 +153,9 @@ class RiteOffering:
 class ReflectionReading:
     """One waiting reflection as the sheet's aura card and the rite dialog show it.
 
-    ``title`` is "Embrace <what>" or "Disown <what>"; ``where`` names the writing that carries
+    ``kind`` is ``deed``, ``resonance`` or ``burden`` (the Mire a Sineater carries for one
+    Sinner, #5177); ``title`` is "Embrace <what>", "Disown <what>", "Absolve the Mire you carry
+    for <Sinner>", "Condemn ..." or "Succumb to ..."; ``where`` names the writing that carries
     it for the sheet's list (a journal entry's title, or the scene a pose was in) and
     ``from_line`` says the same as the rite dialog's "from ..." clause; ``excerpt`` is the start
     of that writing. All three are blank when the writing is gone. ``effect_line`` says what

@@ -34,7 +34,8 @@ class PerformSettlingRiteAction(Action):
             the actor's own sheet.
 
     Refused, writing nothing, with no waiting reflection or no qualifying offering. The
-    result lines are the actor's alone.
+    result lines are the actor's alone. A Sinner whose Sineater succumbed or fell at the rite is
+    told privately once the rite has committed (``result.notices``, #5177).
     """
 
     key: str = "perform_settling_rite"
@@ -75,5 +76,7 @@ class PerformSettlingRiteAction(Action):
             result = perform_settling_rite(sheet, components=components)
         except (DriftCorrectionError, RitualComponentError) as exc:
             return ActionResult(success=False, message=exc.user_message)
+        for notice in result.notices:
+            notice.sheet.character.msg(notice.line)
         message = "\n".join((f"{result.outcome_name}.", *result.lines))
         return ActionResult(success=True, message=message, data={"settling_rite_result": result})
