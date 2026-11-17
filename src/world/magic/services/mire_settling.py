@@ -240,7 +240,7 @@ def apply_fall(sheet: CharacterSheet, last: CharacterRelationship) -> FallOutcom
     if not sineater_has_fallen(sheet):
         return None
     tethers = list(
-        CharacterRelationship.objects.select_for_update()
+        CharacterRelationship.objects.select_for_update(of=("self",))
         .select_related("target")
         .filter(source=sheet, mire_succumbed_since_fall__gt=0)
         .order_by("pk")
