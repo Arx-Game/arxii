@@ -873,6 +873,13 @@ class PreparedByRole(models.TextChoices):
     TABLE_GM = "table_gm", "Table GM"
 
 
+class SineatingPoseRole(models.TextChoices):
+    """Which part of a Sineating the writer of a pose plays (#5177)."""
+
+    ENTREAT = "entreat", "Entreat a Sineater"
+    PERFORM = "perform", "Perform Sineating"
+
+
 class MagicActivity(models.TextChoices):
     """A kind of magical roll that adds staff-chosen skills (#4450).
 

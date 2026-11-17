@@ -327,6 +327,12 @@ class SineatingValidationError(SoulTetherError):
             "Per-scene Sineating cap reached for this bond.",
             "No pending Sineating offer found.",
             "This offer expired because you are no longer in the same scene.",
+            "Sineating has not been set up yet.",
+            "You carry too much of the Mire to take on more. Settle some of it first.",
+            "The Soul Tether is missing its resonance thread.",
+            "That character cannot be found.",
+            "Sineating needs a role, a partner and a number of units.",
+            "A pose can carry a reflection or a Sineating, not both.",
         },
     )
 

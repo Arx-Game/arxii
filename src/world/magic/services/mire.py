@@ -59,6 +59,36 @@ def _largest_shed_arriving_within(
     return low
 
 
+def corruption_that_can_move(
+    *,
+    sineater_sheet: CharacterSheet,
+    sinner_sheet: CharacterSheet,
+    resonance: Resonance,
+    amount: int,
+    max_stage: int | None = None,
+) -> tuple[int, int]:
+    """What ``take_on_corruption`` would shed for ``amount``, without writing anything.
+
+    Returns ``(carried, fits)``: ``carried`` is the most the Sinner could shed (``amount``
+    capped at what they carry), and ``fits`` is how much of that the Sineater can take on
+    before their corruption in ``resonance`` reaches the stage after ``max_stage``. ``fits``
+    is below ``carried`` exactly when the cap cuts the move.
+    """
+    sinner_row = CharacterResonance.objects.filter(
+        character_sheet=sinner_sheet, resonance=resonance
+    ).first()
+    carried = min(amount, sinner_row.corruption_current if sinner_row is not None else 0)
+    ceiling = corruption_ceiling(resonance, max_stage)
+    if ceiling is None or carried <= 0:
+        return carried, carried
+    sineater_row = CharacterResonance.objects.filter(
+        character_sheet=sineater_sheet, resonance=resonance
+    ).first()
+    held = sineater_row.corruption_current if sineater_row is not None else 0
+    fits = _largest_shed_arriving_within(sineater_sheet, resonance, carried, max(0, ceiling - held))
+    return carried, fits
+
+
 @transaction.atomic
 def take_on_corruption(
     *,
@@ -86,21 +116,13 @@ def take_on_corruption(
         msg = f"amount must be > 0, got {amount}"
         raise ValueError(msg)
     relationship = CharacterRelationship.objects.get(source=sineater_sheet, target=sinner_sheet)
-
-    sinner_row = CharacterResonance.objects.filter(
-        character_sheet=sinner_sheet, resonance=resonance
-    ).first()
-    shed = min(amount, sinner_row.corruption_current if sinner_row is not None else 0)
-
-    ceiling = corruption_ceiling(resonance, max_stage)
-    if ceiling is not None and shed > 0:
-        sineater_row = CharacterResonance.objects.filter(
-            character_sheet=sineater_sheet, resonance=resonance
-        ).first()
-        carried = sineater_row.corruption_current if sineater_row is not None else 0
-        shed = _largest_shed_arriving_within(
-            sineater_sheet, resonance, shed, max(0, ceiling - carried)
-        )
+    _, shed = corruption_that_can_move(
+        sineater_sheet=sineater_sheet,
+        sinner_sheet=sinner_sheet,
+        resonance=resonance,
+        amount=amount,
+        max_stage=max_stage,
+    )
 
     holding = MireHolding.objects.filter(relationship=relationship, resonance=resonance).first()
     if shed <= 0:

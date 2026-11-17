@@ -39,15 +39,13 @@ class MireTransfer:
 
 @dataclass(frozen=True, slots=True)
 class SineatingOffer:
-    """Payload sent to the Sineater in the PROMPT_PLAYER prompt (Spec B §7.2)."""
+    """A Sinner's plea for Sineating, as recorded (#5177)."""
 
     sinner_sheet: CharacterSheet
     sineater_sheet: CharacterSheet
     relationship: CharacterRelationship
     resonance: Resonance
     max_units_offered: int
-    anima_cost_per_unit: int
-    fatigue_cost_per_unit: int
     current_hollow: int
     hollow_max: int
     sineater_current_strain_stage: int
@@ -56,13 +54,57 @@ class SineatingOffer:
 
 @dataclass(frozen=True, slots=True)
 class SineatingResult:
-    """Result of resolving a Sineating prompt (Spec B §7.2)."""
+    """What a Sineating did, or a declined plea (#5177).
+
+    ``resonance`` is the tether's resonance, the one the Sinner's corruption was in and the
+    Sinner's thread channels. ``sineater_resonance`` is the resonance of the Sineater's own
+    thread, None when they hold no resonance for it to channel, in which case they earned
+    nothing. ``cut_by_ceiling`` is True when the Sineater could take on only part of the
+    corruption the units would have moved.
+    """
 
     audit_row: Sineating
     units_accepted: int
     declined: bool
     new_hollow_current: int
     new_lifetime_helped: int
+    sinner_sheet: CharacterSheet
+    sineater_sheet: CharacterSheet
+    resonance: Resonance
+    corruption_left_sinner: int = 0
+    corruption_taken: int = 0
+    cut_by_ceiling: bool = False
+    outcome_name: str = ""
+    sinner_resonance_earned: int = 0
+    sineater_resonance: Resonance | None = None
+    sineater_resonance_earned: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class SineatingLines:
+    """What each party is told about a Sineating, in the order they read it (#5177).
+
+    One function builds both, so telnet and the web say the same thing. A line is plain text
+    with no colour codes.
+    """
+
+    sinner: tuple[str, ...]
+    sineater: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PendingSineating:
+    """The Sineating a pose asked for, checked and not yet carried out (#5177).
+
+    ``role`` is the pose writer's part: ``SineatingPoseRole.ENTREAT`` (the Sinner's plea) or
+    ``PERFORM`` (the Sineater's ritual). ``units`` is the amount after clamping to what the
+    plea allows, so the writer is told what will happen.
+    """
+
+    role: str
+    sinner_sheet: CharacterSheet
+    sineater_sheet: CharacterSheet
+    units: int
 
 
 @dataclass(frozen=True, slots=True)
